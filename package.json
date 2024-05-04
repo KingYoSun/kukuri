@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "common": "pnpm --filter common",
+    "node": "pnpm -F \"node\"",
+    "common": "pnpm -F \"common\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -36,6 +37,6 @@
     "prettier": "^3.2.5"
   },
   "dependencies": {
-    "zod": "^3.23.4"
+    "zod": "^3.23.6"
   }
 }
