@@ -15,7 +15,7 @@
   git clone https://github.com/KingYoSun/kukuri.git
   cd kukuri
   cp .env.default .env
-  docker compose up --build -d
+  docker compose up --build -d --scale simple_webapp=2
 ```
 
 ## Features

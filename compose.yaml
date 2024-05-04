@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: .
+      target: simple_webapp
+      dockerfile: Dockerfile.dev
+    image: kukuri-simple_webapp:latest
+    ports:
+      - 3000-3001:5173
+    volumes:
+      - .:/app
+    depends_on:
+      backend:
+        condition: service_healthy
