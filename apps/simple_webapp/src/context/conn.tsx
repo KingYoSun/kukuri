@@ -1,5 +1,5 @@
 import { type ReactNode, useReducer, createContext, Dispatch } from "react";
-import Connection from "@/class/connection";
+import Connection from "@/class/Libp2pConnection";
 
 interface Action {
   type: "reset";

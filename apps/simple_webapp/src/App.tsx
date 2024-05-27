@@ -14,10 +14,9 @@ import { Input } from "@/components/ui/input";
 // import { DbContext } from "./context/db";
 import { ConnContext } from "./context/conn";
 import { z } from "zod";
-import { DecodedMessage } from "@waku/sdk";
 
 type Message = {
-  timestamp: string;
+  timestamp: number;
   sender: string;
   message: string;
 };
@@ -26,6 +25,8 @@ interface MsgAction {
   type: "add" | "reset";
   payload?: Message;
 }
+
+const topic = "test";
 
 function App() {
   function MsgReducer(state: Message[], action: MsgAction): Message[] {
@@ -43,12 +44,11 @@ function App() {
   // const dbContext = useContext(DbContext);
   const connContext = useContext(ConnContext);
 
-  function receiver(wakuMessage: DecodedMessage) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function receiver(msgStr: string) {
     console.log("receive message!");
-    if (!wakuMessage.payload) return;
-    const messageObj = connContext.conn?.Message.decode(
-      wakuMessage.payload,
-    ).toJSON() as Message;
+    if (!msgStr) return;
+    const messageObj = JSON.parse(msgStr) as Message;
     console.log(messageObj);
     dispatchMessages({
       type: "add",
@@ -66,13 +66,10 @@ function App() {
         console.log("conn has been initialized");
         return;
       }
-      if (connContext.conn?.started) {
-        console.log("conn has been started");
-        return;
-      }
       console.log("init conn");
-      const initialized = await connContext.conn.init(receiver);
-      setStarted(initialized);
+      await connContext.conn.init();
+      await connContext.conn.subscribe(topic);
+      setStarted(connContext.conn.initialized);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -98,8 +95,12 @@ function App() {
       return;
     }
 
-    connContext.conn.send(body.msg);
-    console.log("send message!");
+    const message: Message = {
+      timestamp: new Date().getTime(),
+      sender: "kingyosun",
+      message: body.msg,
+    };
+    connContext.conn.send(topic, JSON.stringify(message));
     MsgForm.setValue("msg", "");
   }
 
@@ -135,6 +136,14 @@ function App() {
               <Button type="submit" variant="default" disabled={!started}>
                 Send Message
               </Button>
+              <Button
+                type="button"
+                variant="default"
+                disabled={!started}
+                onClick={() => connContext.conn?.status()}
+              >
+                Get Node Status
+              </Button>
             </div>
           </form>
         </Form>
@@ -144,7 +153,7 @@ function App() {
           return (
             <p key={idx}>
               {message.sender}: {message.message} at{" "}
-              {new Date(Number(message.timestamp)).toLocaleTimeString()}
+              {new Date(message.timestamp).toLocaleTimeString()}
             </p>
           );
         })}
