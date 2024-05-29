@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 // import { DbContext } from "./context/db";
 import { ConnContext } from "./context/conn";
 import { z } from "zod";
+import { multiaddr } from "@multiformats/multiaddr";
 
 type Message = {
   timestamp: number;
@@ -26,7 +27,7 @@ interface MsgAction {
   payload?: Message;
 }
 
-const topic = "test";
+const topic = "main";
 
 function App() {
   function MsgReducer(state: Message[], action: MsgAction): Message[] {
@@ -41,6 +42,7 @@ function App() {
 
   const [messages, dispatchMessages] = useReducer(MsgReducer, []);
   const [started, setStarted] = useState<boolean>(false);
+  const [connected, setConnected] = useState<boolean>(false);
   // const dbContext = useContext(DbContext);
   const connContext = useContext(ConnContext);
 
@@ -73,6 +75,32 @@ function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const maddr = z.object({
+    maddr: z.string(),
+  });
+
+  const MaddrForm = useForm({
+    resolver: zodResolver(maddr),
+    defaultValues: {
+      maddr: "",
+    },
+  });
+
+  async function onSubmitMaddrForm(body: z.infer<typeof maddr>) {
+    if (!body.maddr || body.maddr.length === 0) {
+      console.log("maddr is empty");
+      return;
+    }
+    if (!connContext.conn) {
+      console.log("connection has not init yet");
+      return;
+    }
+
+    await connContext.conn.dial(multiaddr(body.maddr));
+    MaddrForm.setValue("maddr", "");
+    setConnected(true);
+  }
 
   const msg = z.object({
     msg: z.string(),
@@ -108,6 +136,39 @@ function App() {
     <>
       <h1>Kukuri Simple WebApp</h1>
       <div className="card">
+        <Form {...MaddrForm}>
+          <form onSubmit={MaddrForm.handleSubmit(onSubmitMaddrForm)}>
+            <div
+              className={cn(
+                "flex flex-row h-fit justify-center items-center my-2 space-x-3",
+              )}
+            >
+              <FormField
+                control={MaddrForm.control}
+                name="maddr"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div
+              className={cn(
+                "flex flex-row h-fit justify-center items-center my-2 space-x-3",
+              )}
+            >
+              <Button type="submit" variant="default" disabled={!started}>
+                Dial Peer
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </div>
+      <div className="card">
         <Form {...MsgForm}>
           <form onSubmit={MsgForm.handleSubmit(onSubmitMsgForm)}>
             <div
@@ -133,13 +194,13 @@ function App() {
                 "flex flex-row h-fit justify-center items-center my-2 space-x-3",
               )}
             >
-              <Button type="submit" variant="default" disabled={!started}>
+              <Button type="submit" variant="default" disabled={!connected}>
                 Send Message
               </Button>
               <Button
                 type="button"
                 variant="default"
-                disabled={!started}
+                disabled={!connected}
                 onClick={() => connContext.conn?.status()}
               >
                 Get Node Status

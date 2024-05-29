@@ -1,6 +1,5 @@
 // ref: https://github.com/libp2p/universal-connectivity/blob/main/js-peer/src/lib/libp2p.ts
 
-import { kadDHT, removePrivateAddressesMapper } from "@libp2p/kad-dht";
 import { createLibp2p, type Libp2p } from "libp2p";
 import { bootstrap } from "@libp2p/bootstrap";
 import { yamux } from "@chainsafe/libp2p-yamux";
@@ -23,7 +22,7 @@ import { identify } from "@libp2p/identify";
 import { pubsubPeerDiscovery } from "@libp2p/pubsub-peer-discovery";
 import { sha256 } from "multiformats/hashes/sha2";
 
-const baseTopic = "/kukuri/main/";
+const baseTopic = "kukuri-chat/";
 
 export default class Libp2pConnection {
   node: Libp2p | undefined;
@@ -79,7 +78,7 @@ export default class Libp2pConnection {
         }),
         webRTCDirect(),
         circuitRelayTransport({
-          discoverRelays: 1,
+          discoverRelays: 0,
         }),
       ],
       peerDiscovery: [
@@ -98,10 +97,6 @@ export default class Libp2pConnection {
         denyDialMultiaddr: async () => false,
       },
       services: {
-        aminoDHT: kadDHT({
-          protocol: "/ipfs/kad/1.0.0",
-          peerInfoMapper: removePrivateAddressesMapper,
-        }),
         pubsub: gossipsub(this.gossipsubOpts),
         delegatedClient: () => delegatedClient,
         identify: identify(),
@@ -176,6 +171,23 @@ export default class Libp2pConnection {
     const connections = this.node.getConnections();
     console.log("connections!");
     console.log(connections);
+  }
+
+  async dial(multiaddr: Multiaddr) {
+    if (this.node == undefined) {
+      console.log("node is not created");
+      return;
+    }
+
+    console.log(`dialling: %a`, multiaddr);
+    try {
+      const conn = await this.node.dial(multiaddr);
+      console.log("connected to %p on %a", conn.remotePeer, conn.remoteAddr);
+      return conn;
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
   }
 }
 

@@ -3,3 +3,7 @@ dist/
 .env
 output/*.*
 data/*
+apps/rust_peer/target/
+apps/rust_peer/*.pem
+apps/rust_peer/local_key
+apps/go_peer/identity.key
