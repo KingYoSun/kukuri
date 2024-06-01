@@ -12,7 +12,7 @@ use libp2p::{
     kad::{Kademlia, KademliaConfig},
     memory_connection_limits,
     multiaddr::{Multiaddr, Protocol},
-    quic, relay,
+    quic, relay, yamux,
     swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
     PeerId, StreamProtocol, Transport,
 };
@@ -42,6 +42,7 @@ const LOCAL_KEY_PATH: &str = "./local_key";
 const LOCAL_CERT_PATH: &str = "./cert.pem";
 const GOSSIPSUB_CHAT_TOPIC: &str = "kukuri-chat/main";
 const GOSSIPSUB_CHAT_FILE_TOPIC: &str = "kukuri-file";
+const GOSSIPSUB_DISCOVERY_TOPIC: &str = "kukuri-browser-peer-discovery";
 const BOOTSTRAP_NODES: [&str; 4] = [
     "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
@@ -59,13 +60,6 @@ struct Opt {
     /// If known, the external address of this node. Will be used to correctly advertise our external address across all transports.
     #[clap(long, env)]
     external_address: Option<IpAddr>,
-
-    /// Nodes to connect to on startup. Can be specified several times.
-    #[clap(
-        long,
-        default_value = "/dns/kukuri-rust-peer.fly.dev/udp/9091/quic-v1"
-    )]
-    connect: Vec<Multiaddr>,
 }
 
 /// An example WebRTC peer that will accept connections
@@ -97,12 +91,6 @@ async fn main() -> Result<()> {
     swarm
         .listen_on(address_quic.clone())
         .expect("listen on quic");
-
-    for addr in opt.connect {
-        if let Err(e) = swarm.dial(addr.clone()) {
-            debug!("Failed to dial {addr}: {e}");
-        }
-    }
 
     for peer in &BOOTSTRAP_NODES {
         let multiaddr: Multiaddr = peer.parse().expect("Failed to parse Multiaddr");
@@ -333,6 +321,7 @@ fn create_swarm(
     .expect("Correct configuration");
 
     // Create/subscribe Gossipsub topics
+    gossipsub.subscribe(&gossipsub::IdentTopic::new(GOSSIPSUB_DISCOVERY_TOPIC))?;
     gossipsub.subscribe(&gossipsub::IdentTopic::new(GOSSIPSUB_CHAT_TOPIC))?;
     gossipsub.subscribe(&gossipsub::IdentTopic::new(GOSSIPSUB_CHAT_FILE_TOPIC))?;
 
