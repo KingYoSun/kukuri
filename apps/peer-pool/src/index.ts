@@ -14,6 +14,6 @@
 export default {
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
+		return new Response('Hello World!2');
 	},
 };
