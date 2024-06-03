@@ -1,5 +1,5 @@
 [package]
-name = "rust_peer"
+name = "rust-peer"
 version = "0.1.0"
 edition = "2021"
 

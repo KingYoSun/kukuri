@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "simple_webapp": "pnpm -F \"simple_webapp\"",
+    "simple-webapp": "pnpm -F \"simple-webapp\"",
     "common": "pnpm -F \"common\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint .",

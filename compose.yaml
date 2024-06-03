@@ -4,9 +4,9 @@ services:
   frontend:
     build:
       context: .
-      target: simple_webapp
+      target: simple-webapp
       dockerfile: Dockerfile.dev
-    image: kukuri-simple_webapp:latest
+    image: kukuri-simple-webapp:latest
     ports:
       - 3000-3001:5173
     volumes:

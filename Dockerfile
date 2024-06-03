@@ -7,7 +7,7 @@ WORKDIR /app
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
-FROM base AS simple_webapp
-WORKDIR /app/apps/simple_webapp
+FROM base AS simple-webapp
+WORKDIR /app/apps/simple-webapp
 EXPOSE 5173
 CMD [ "pnpm", "run", "dev", "--host" ]
