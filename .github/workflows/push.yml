@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - "apps/peer-pool**"
+      - ".github/workflows/push.yml"
 jobs:
   deploy:
     runs-on: ubuntu-latest
