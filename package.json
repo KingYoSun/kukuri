@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "simple-webapp": "pnpm -F \"simple-webapp\"",
+    "peer-pool": "pnpm -F \"peer-pool\"",
     "common": "pnpm -F \"common\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint .",
