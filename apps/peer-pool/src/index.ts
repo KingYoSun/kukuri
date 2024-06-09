@@ -11,9 +11,10 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-export default {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
-	},
-};
+import { Hono } from 'hono';
+
+const app = new Hono();
+app.get('/', (c) => c.text('Hello World!'));
+app.get('/hono', (c) => c.text('Hono!'));
+
+export default app;
