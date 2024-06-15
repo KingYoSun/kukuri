@@ -7,16 +7,21 @@
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
 		"test": "vitest",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"migrate": "drizzle-kit generate && drizzle-kit migrate",
+		"migrate:local": "drizzle-kit generate && drizzle-kit migrate --local",
+		"studio": "drizzle-kit studio"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.1.19",
-		"@cloudflare/workers-types": "^4.20240605.0",
+		"@cloudflare/workers-types": "^4.20240614.0",
+		"drizzle-kit": "^0.22.7",
 		"typescript": "^5.4.5",
 		"vitest": "1.3.0",
-		"wrangler": "^3.60.0"
+		"wrangler": "^3.60.3"
 	},
 	"dependencies": {
-		"hono": "^4.4.4"
+		"drizzle-orm": "^0.31.2",
+		"hono": "^4.4.6"
 	}
 }

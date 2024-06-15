@@ -39,7 +39,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB" # i.e. available in your Worker on env.DB
 database_name = "peer-pool"
-database_id = "ed59ddf9-baa6-4350-964b-6186ceccd9c5"
+database_id = ""
 migrations_dir = "./drizzle/migrations"
 
 # Bind a dispatch namespace. Use Workers for Platforms to deploy serverless functions programmatically on behalf of your customers.
