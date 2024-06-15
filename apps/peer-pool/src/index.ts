@@ -15,7 +15,6 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { peers } from './schema';
 import { eq, and, lt } from 'drizzle-orm';
-import { PeerPoolIndexReq, PeerPoolCreateReq } from 'common/types/PeerPool';
 import { D1Database, type ExportedHandlerScheduledHandler } from '@cloudflare/workers-types';
 import dayjs from 'dayjs';
 
@@ -27,19 +26,23 @@ type Env = {
 	DB: D1Database;
 };
 
+type IndexRequest = {
+	topic: string;
+};
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.get('/', (c) => c.text('Hello World!'));
 
 app.get('/peers', async (c) => {
-	const params = await c.req.json<PeerPoolIndexReq>();
+	const params = await c.req.json<IndexRequest>();
 	const db = drizzle(c.env.DB);
 	const result = await db.select().from(peers).where(eq(peers.topic, params.topic));
 	return c.json(result);
 });
 
 app.post('/peers', async (c) => {
-	const params = await c.req.json<PeerPoolCreateReq>();
+	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
 	const result = await db.insert(peers).values({ topic: params.topic, maddr: params.maddr });
 	return c.json(result);
@@ -50,7 +53,7 @@ app.put('/peers/:id', async (c) => {
 
 	if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
 
-	const params = await c.req.json<PeerPoolCreateReq>();
+	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
 	const result = db.update(peers).set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount });
 	return c.json(result);
