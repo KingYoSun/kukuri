@@ -22,6 +22,7 @@
 	},
 	"dependencies": {
 		"drizzle-orm": "^0.31.2",
-		"hono": "^4.4.6"
+		"hono": "^4.4.6",
+		"dayjs": "^1.11.11"
 	}
 }
