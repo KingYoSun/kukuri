@@ -30,19 +30,6 @@ type IndexRequest = {
 	topic: string;
 };
 
-const getCircularReplacer = () => {
-	const seen = new WeakSet();
-	return (_key: unknown, value: object | null) => {
-		if (typeof value === 'object' && value !== null) {
-			if (seen.has(value)) {
-				return;
-			}
-			seen.add(value);
-		}
-		return value;
-	};
-};
-
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.get('/', (c) => c.text('Hello World!'));
@@ -68,13 +55,11 @@ app.put('/peers/:id', async (c) => {
 
 	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
-	const result = db
-		.update(peers)
+	db.update(peers)
 		.set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount })
 		.where(eq(peers.id, id))
 		.returning();
-	const json = JSON.stringify(result, getCircularReplacer());
-	return c.body(json);
+	return c.json([{ id: id }]);
 });
 
 const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env) => {
