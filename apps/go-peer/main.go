@@ -1,13 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +37,8 @@ const DiscoveryInterval = time.Hour
 
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "kukuri"
+
+const PeerPoolDomain = "https://peer-pool.kingyosun.com"
 
 var SysMsgChan chan *ChatMessage
 
@@ -112,6 +119,90 @@ func Discover(ctx context.Context, h host.Host, dht *dht.IpfsDHT) {
 
 func LogMsgf(f string, msg ...any) {
 	SysMsgChan <- &ChatMessage{Message: fmt.Sprintf(f, msg...), SenderID: "system", SenderNick: "system"}
+}
+
+type PeerPoolRecord struct {
+	id int
+	topic string
+	maddr string
+	connectionCount int
+	createdAt string
+	updatedAt string
+}
+
+func SetPeerPoolRecord(ctx context.Context, maddr string, ps *pubsub.PubSub) {
+	var id *int
+	var resp *http.Response
+	var req *http.Request
+	var err error
+	var body []byte
+	var record PeerPoolRecord
+
+	client := &http.Client{}
+
+	for {
+		if id == nil {
+			fmt.Println("create record")
+			payload := map[string]string{"topic": ChatTopic, "maddr": maddr}
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+				fmt.Println("json.Marshal failed: ")
+				fmt.Println(err)
+			}
+
+			req, err = http.NewRequest("POST", PeerPoolDomain + "/peers", bytes.NewBuffer(jsonData))
+		} else {
+			fmt.Println("update record")
+			payload := map[string]any{"topic": ChatTopic, "maddr": maddr, "connectionCount": len(ps.ListPeers(ChatTopic))}
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+				fmt.Println("json.Marshal failed: ")
+				fmt.Println(err)
+			}
+
+			req, err = http.NewRequest("PUT", PeerPoolDomain + "/peers/" + strconv.Itoa(*id), bytes.NewBuffer(jsonData))
+		}
+
+		if err != nil {
+			log.Fatal(err)
+			fmt.Println("http.NewRequest failed: ")
+			fmt.Println(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		fmt.Println("exeute request")
+		resp, err = client.Do(req)
+		if err != nil {
+			log.Fatal(err)
+			fmt.Println("client.Do failed: ")
+			fmt.Println(err)
+		}
+
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+			fmt.Println("io.ReadAll failed: ")
+			fmt.Println(err)
+		}
+
+		fmt.Println(string(body))
+
+		if err := json.Unmarshal(body, &record); err != nil {
+			log.Fatal(err)
+			fmt.Println("json.Unmarshal failed: ")
+			fmt.Println(err)
+			return
+		}
+
+		id = &record.id
+
+		resp.Body.Close()
+		time.Sleep(30 * time.Second)
+	}
 }
 
 func main() {
@@ -237,13 +328,23 @@ func main() {
 	}
 
 	LogMsgf("PeerID: %s", h.ID().String())
+
+	var listeningMaddr string
+
 	for _, addr := range h.Addrs() {
+		if !strings.Contains(addr.String(), "127.0.0.1") &&
+				strings.Contains(addr.String(), "certhash") &&
+				strings.Contains(addr.String(), "ip4") {
+			listeningMaddr = fmt.Sprintf("%s/p2p/%s", addr.String(), h.ID())
+		}
 		if *headless {
 			fmt.Printf("Listening on: %s/p2p/%s\n", addr.String(), h.ID())
 		} else {
 			LogMsgf("Listening on: %s/p2p/%s", addr.String(), h.ID())
 		}
 	}
+
+	go SetPeerPoolRecord(ctx, listeningMaddr, ps)
 
 	if *headless {
 		select {}

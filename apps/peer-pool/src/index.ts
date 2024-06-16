@@ -15,7 +15,7 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { peers } from './schema';
 import { eq, and, lt } from 'drizzle-orm';
-import { D1Database, type ExportedHandlerScheduledHandler } from '@cloudflare/workers-types';
+import { type D1Database, type ExportedHandlerScheduledHandler } from '@cloudflare/workers-types';
 import dayjs from 'dayjs';
 
 type Bindings = {
@@ -44,7 +44,7 @@ app.get('/peers', async (c) => {
 app.post('/peers', async (c) => {
 	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
-	const result = await db.insert(peers).values({ topic: params.topic, maddr: params.maddr });
+	const result = await db.insert(peers).values({ topic: params.topic, maddr: params.maddr }).returning();
 	return c.json(result);
 });
 
@@ -55,7 +55,11 @@ app.put('/peers/:id', async (c) => {
 
 	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
-	const result = db.update(peers).set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount });
+	const result = db
+		.update(peers)
+		.set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount })
+		.where(eq(peers.id, id))
+		.returning();
 	return c.json(result);
 });
 
