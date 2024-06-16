@@ -157,7 +157,6 @@ func PeerPoolReq(method string, url string, payload io.Reader) []PeerPoolRecord 
 		fmt.Println(err)
 	}
 
-	fmt.Println(string(body))
 	if err := json.Unmarshal(body, &records); err != nil {
 		log.Fatal(err)
 		fmt.Println(err)
@@ -195,11 +194,9 @@ func SetPeerPoolRecord(ctx context.Context, maddr string, ps *pubsub.PubSub) {
 			records = PeerPoolReq("PUT", PeerPoolDomain + "/peers/" + strconv.Itoa(*id), bytes.NewBuffer(jsonData))
 		}
 
-		fmt.Printf("records is : %+v\n", records)
 		id = &(records[0].Id)
-		fmt.Println("id copy : ", *id)
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(5 * time.Minute)
 	}
 }
 
