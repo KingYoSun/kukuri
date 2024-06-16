@@ -30,6 +30,19 @@ type IndexRequest = {
 	topic: string;
 };
 
+const getCircularReplacer = () => {
+	const seen = new WeakSet();
+	return (_key: unknown, value: object | null) => {
+		if (typeof value === 'object' && value !== null) {
+			if (seen.has(value)) {
+				return;
+			}
+			seen.add(value);
+		}
+		return value;
+	};
+};
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.get('/', (c) => c.text('Hello World!'));
@@ -60,7 +73,8 @@ app.put('/peers/:id', async (c) => {
 		.set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount })
 		.where(eq(peers.id, id))
 		.returning();
-	return c.json(result);
+	const json = JSON.stringify(result, getCircularReplacer());
+	return c.body(json);
 });
 
 const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env) => {

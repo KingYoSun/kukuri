@@ -122,86 +122,84 @@ func LogMsgf(f string, msg ...any) {
 }
 
 type PeerPoolRecord struct {
-	id int
-	topic string
-	maddr string
-	connectionCount int
-	createdAt string
-	updatedAt string
+	Id int `json:"id"`
+	Topic string `json:"topic"`
+	Maddr string `json:"maddr"`
+	ConnectionCount int `json:"connectionCount"`
+	CreatedAt *string `json:"createdAt"`
+	UpdatedAt *string `json:"updatedAt"`
+}
+
+func PeerPoolReq(method string, url string, payload io.Reader) []PeerPoolRecord {
+	var records []PeerPoolRecord
+
+	client := &http.Client{}
+
+	req, err := http.NewRequest(method, url, payload)
+	if err != nil {
+		log.Fatal(err)
+		fmt.Println(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+		fmt.Println(err)
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+		fmt.Println(err)
+	}
+
+	fmt.Println(string(body))
+	if err := json.Unmarshal(body, &records); err != nil {
+		log.Fatal(err)
+		fmt.Println(err)
+	}
+
+	return records
 }
 
 func SetPeerPoolRecord(ctx context.Context, maddr string, ps *pubsub.PubSub) {
 	var id *int
-	var resp *http.Response
-	var req *http.Request
-	var err error
-	var body []byte
-	var record PeerPoolRecord
-
-	client := &http.Client{}
+	var records []PeerPoolRecord
 
 	for {
 		if id == nil {
 			fmt.Println("create record")
-			payload := map[string]string{"topic": ChatTopic, "maddr": maddr}
+			payload := map[string]any{"topic": ChatTopic, "maddr": maddr}
 
 			jsonData, err := json.Marshal(payload)
 			if err != nil {
 				log.Fatal(err)
-				fmt.Println("json.Marshal failed: ")
 				fmt.Println(err)
 			}
 
-			req, err = http.NewRequest("POST", PeerPoolDomain + "/peers", bytes.NewBuffer(jsonData))
+			records = PeerPoolReq("POST", PeerPoolDomain + "/peers", bytes.NewBuffer(jsonData))
 		} else {
-			fmt.Println("update record")
+			fmt.Println("update record id: ", *id)
 			payload := map[string]any{"topic": ChatTopic, "maddr": maddr, "connectionCount": len(ps.ListPeers(ChatTopic))}
 
 			jsonData, err := json.Marshal(payload)
 			if err != nil {
 				log.Fatal(err)
-				fmt.Println("json.Marshal failed: ")
 				fmt.Println(err)
 			}
 
-			req, err = http.NewRequest("PUT", PeerPoolDomain + "/peers/" + strconv.Itoa(*id), bytes.NewBuffer(jsonData))
+			records = PeerPoolReq("PUT", PeerPoolDomain + "/peers/" + strconv.Itoa(*id), bytes.NewBuffer(jsonData))
 		}
 
-		if err != nil {
-			log.Fatal(err)
-			fmt.Println("http.NewRequest failed: ")
-			fmt.Println(err)
-		}
-		req.Header.Set("Content-Type", "application/json")
+		fmt.Printf("records is : %+v\n", records)
+		id = &(records[0].Id)
+		fmt.Println("id copy : ", *id)
 
-		fmt.Println("exeute request")
-		resp, err = client.Do(req)
-		if err != nil {
-			log.Fatal(err)
-			fmt.Println("client.Do failed: ")
-			fmt.Println(err)
-		}
-
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-			fmt.Println("io.ReadAll failed: ")
-			fmt.Println(err)
-		}
-
-		fmt.Println(string(body))
-
-		if err := json.Unmarshal(body, &record); err != nil {
-			log.Fatal(err)
-			fmt.Println("json.Unmarshal failed: ")
-			fmt.Println(err)
-			return
-		}
-
-		id = &record.id
-
-		resp.Body.Close()
-		time.Sleep(30 * time.Second)
+		time.Sleep(3 * time.Second)
 	}
 }
 
