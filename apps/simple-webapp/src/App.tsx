@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { ConnContext } from "./context/conn";
 import { z } from "zod";
 import { multiaddr } from "@multiformats/multiaddr";
+import { DEFAULT_PEER_POOL_URL } from "./lib/constraints";
 
 type Message = {
   timestamp: number;
@@ -43,6 +44,7 @@ function App() {
   const [messages, dispatchMessages] = useReducer(MsgReducer, []);
   const [started, setStarted] = useState<boolean>(false);
   const [connected, setConnected] = useState<boolean>(false);
+  const [peerCount, setPeerCount] = useState<number>(0);
   // const dbContext = useContext(DbContext);
   const connContext = useContext(ConnContext);
 
@@ -68,13 +70,42 @@ function App() {
         console.log("conn has been initialized");
         return;
       }
+      console.log("get peer count of topic");
+      const query = new URLSearchParams({ topic: topic });
+      const res = await fetch(`${DEFAULT_PEER_POOL_URL}/peers/count?${query}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await res.json();
+      console.log(data);
+      setPeerCount(0);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (!connContext.conn) {
+        console.log("conn is null");
+        return;
+      }
+      if (connContext.conn?.initialized) {
+        console.log("conn has been initialized");
+        return;
+      }
+      if (peerCount == 0) {
+        console.log(`${topic} topic has no peer`);
+        return;
+      }
       console.log("init conn");
       await connContext.conn.init();
       await connContext.conn.subscribe(topic);
       setStarted(connContext.conn.initialized);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [peerCount]);
 
   const maddr = z.object({
     maddr: z.string(),

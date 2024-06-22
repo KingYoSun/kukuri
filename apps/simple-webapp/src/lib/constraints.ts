@@ -28,3 +28,5 @@ export const BOOTSTRAP_PEER_IDS = [
 */
 
 export const PUBSUB_PEER_DISCOVERY = "kukuri-browser-peer-discovery";
+
+export const DEFAULT_PEER_POOL_URL = "https://peer-pool.kingyosun.com/";

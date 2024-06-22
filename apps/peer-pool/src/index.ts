@@ -11,7 +11,8 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
+import { cors } from 'hono/cors';
 import { drizzle } from 'drizzle-orm/d1';
 import { peers } from './schema';
 import { eq, and, lt, count } from 'drizzle-orm';
@@ -31,6 +32,16 @@ type IndexRequest = {
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+app.use('/peers/*', async (c: Context<{ Bindings: Bindings }>, next: Next) =>
+	cors({
+		origin: '*',
+		allowHeaders: ['Content-Type', 'Authorization'],
+		allowMethods: ['GET', 'POST', 'OPTIONS'],
+		maxAge: 600,
+		credentials: true,
+	})(c, next),
+);
 
 app.get('/', (c) => c.text('Hello World!'));
 
