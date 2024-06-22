@@ -13,6 +13,7 @@
 
 import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
 import { drizzle } from 'drizzle-orm/d1';
 import { peers } from './schema';
 import { eq, and, lt, count } from 'drizzle-orm';
@@ -25,10 +26,6 @@ type Bindings = {
 
 type Env = {
 	DB: D1Database;
-};
-
-type IndexRequest = {
-	topic: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -46,16 +43,24 @@ app.use('/peers/*', async (c: Context<{ Bindings: Bindings }>, next: Next) =>
 app.get('/', (c) => c.text('Hello World!'));
 
 app.get('/peers', async (c) => {
-	const params = await c.req.json<IndexRequest>();
+	const topic = await c.req.param('topic');
+	if (!topic) {
+		throw new HTTPException(500, { message: 'topic is not valid' });
+	}
+
 	const db = drizzle(c.env.DB);
-	const result = await db.select().from(peers).where(eq(peers.topic, params.topic));
+	const result = await db.select().from(peers).where(eq(peers.topic, topic));
 	return c.json(result);
 });
 
 app.get('/peers/count', async (c) => {
-	const params = await c.req.json<IndexRequest>();
+	const topic = await c.req.param('topic');
+	if (!topic) {
+		throw new HTTPException(500, { message: 'topic is not valid' });
+	}
+
 	const db = drizzle(c.env.DB);
-	const result = await db.select({ count: count() }).from(peers).where(eq(peers.topic, params.topic));
+	const result = await db.select({ count: count() }).from(peers).where(eq(peers.topic, topic));
 	return c.json(result);
 });
 

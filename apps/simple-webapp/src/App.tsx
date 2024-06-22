@@ -71,12 +71,13 @@ function App() {
         return;
       }
       console.log("get peer count of topic");
-      const query = new URLSearchParams({ topic: topic });
+      const query = new URLSearchParams({ topic: `kukuri-chat/${topic}` });
       const res = await fetch(`${DEFAULT_PEER_POOL_URL}/peers/count?${query}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
+        mode: "no-cors",
       });
       const data = await res.json();
       console.log(data);
