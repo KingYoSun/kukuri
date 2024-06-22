@@ -61,7 +61,7 @@ app.get('/peers/count', async (c) => {
 
 	const db = drizzle(c.env.DB);
 	const result = await db.select({ count: count() }).from(peers).where(eq(peers.topic, topic));
-	return c.json(result[0]);
+	return c.json(result);
 });
 
 app.post('/peers', async (c) => {

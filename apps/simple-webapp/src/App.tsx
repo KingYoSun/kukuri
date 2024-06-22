@@ -79,8 +79,9 @@ function App() {
         },
         mode: "no-cors",
       });
+      console.log(res);
       const data = await res.json();
-      console.log(data);
+      console.log(data?.count);
       setPeerCount(0);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
