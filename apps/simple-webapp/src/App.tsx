@@ -50,7 +50,6 @@ function App() {
 
   const [messages, dispatchMessages] = useReducer(MsgReducer, []);
   const [started, setStarted] = useState<boolean>(false);
-  const [connected, setConnected] = useState<boolean>(false);
   const [peerCount, setPeerCount] = useState<number>(0);
   // const dbContext = useContext(DbContext);
   const connContext = useContext(ConnContext);
@@ -67,7 +66,7 @@ function App() {
     });
   }
 
-  async function getPeerCount() {
+  const getPeerCount = useCallback(async () => {
     const query = new URLSearchParams({ topic: `kukuri-chat/${topic}` });
     const res = await fetch(`${DEFAULT_PEER_POOL_URL}/peers/count?${query}`, {
       method: "GET",
@@ -79,11 +78,12 @@ function App() {
     });
     const data = await res.json();
     if (data) setPeerCount(data[0].count);
-  }
+    return data[0].count;
+  }, []);
 
   const getPeers = useCallback(async () => {
     if (peerCount == 0) {
-      console.log("this topic has no peer");
+      console.log("this topic has no peers");
       return;
     }
 
@@ -99,12 +99,51 @@ function App() {
     return (await res.json()) as Peer[];
   }, [peerCount]);
 
+  const reloadPeers = useCallback(async () => {
+    if (
+      !connContext.conn ||
+      !connContext.conn.initialized ||
+      !connContext.conn.node
+    ) {
+      console.log("conn has not been initialized");
+      return;
+    }
+
+    const newCount = await getPeerCount();
+    if (newCount == 0) {
+      console.log("this topic has no peers");
+      return;
+    }
+
+    const oldPeerIds = connContext.conn.node.getPeers();
+    const oldPeers = oldPeerIds.map((peerId) => peerId.toString());
+    const peers = await getPeers();
+    if (!peers || peers.length == 0) {
+      console.log("this topic has no peers");
+      return;
+    }
+
+    const newPeers = peers.filter((peer) => {
+      const matches = oldPeers.map((oldPeer) => {
+        peer.maddr.endsWith(oldPeer);
+      });
+      return matches.length == 0;
+    });
+    if (newPeers.length > 0) {
+      newPeers.map((newPeer) =>
+        connContext.conn
+          ? connContext.conn.dial(multiaddr(newPeer.maddr))
+          : null,
+      );
+    }
+  }, [connContext.conn, getPeerCount, getPeers]);
+
   useEffect(() => {
     if (!connContext.conn) {
       console.log("conn is null");
       return;
     }
-    if (connContext.conn?.initialized) {
+    if (connContext.conn.initialized) {
       console.log("conn has been initialized");
       return;
     }
@@ -133,32 +172,6 @@ function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peerCount, getPeers]);
-
-  const maddr = z.object({
-    maddr: z.string(),
-  });
-
-  const MaddrForm = useForm({
-    resolver: zodResolver(maddr),
-    defaultValues: {
-      maddr: "",
-    },
-  });
-
-  async function onSubmitMaddrForm(body: z.infer<typeof maddr>) {
-    if (!body.maddr || body.maddr.length === 0) {
-      console.log("maddr is empty");
-      return;
-    }
-    if (!connContext.conn) {
-      console.log("connection has not init yet");
-      return;
-    }
-
-    await connContext.conn.dial(multiaddr(body.maddr));
-    MaddrForm.setValue("maddr", "");
-    setConnected(true);
-  }
 
   const msg = z.object({
     msg: z.string(),
@@ -194,39 +207,6 @@ function App() {
     <>
       <h1>Kukuri Simple WebApp</h1>
       <div className="card">
-        <Form {...MaddrForm}>
-          <form onSubmit={MaddrForm.handleSubmit(onSubmitMaddrForm)}>
-            <div
-              className={cn(
-                "flex flex-row h-fit justify-center items-center my-2 space-x-3",
-              )}
-            >
-              <FormField
-                control={MaddrForm.control}
-                name="maddr"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div
-              className={cn(
-                "flex flex-row h-fit justify-center items-center my-2 space-x-3",
-              )}
-            >
-              <Button type="submit" variant="default" disabled={!started}>
-                Dial Peer
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </div>
-      <div className="card">
         <Form {...MsgForm}>
           <form onSubmit={MsgForm.handleSubmit(onSubmitMsgForm)}>
             <div
@@ -252,16 +232,24 @@ function App() {
                 "flex flex-row h-fit justify-center items-center my-2 space-x-3",
               )}
             >
-              <Button type="submit" variant="default" disabled={!connected}>
+              <Button type="submit" variant="default" disabled={!started}>
                 Send Message
               </Button>
               <Button
                 type="button"
                 variant="default"
-                disabled={!connected}
+                disabled={!started}
                 onClick={() => connContext.conn?.status()}
               >
                 Get Node Status
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                disabled={!started}
+                onClick={() => reloadPeers()}
+              >
+                Reload Peers
               </Button>
             </div>
           </form>

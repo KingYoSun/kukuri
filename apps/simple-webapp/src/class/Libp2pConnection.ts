@@ -26,8 +26,6 @@ export default class Libp2pConnection {
   initialized: boolean;
   started: boolean;
   subscribes: string[];
-  peers: Peer[];
-
   constructor() {
     this.node = undefined;
     this.initialized = false;
@@ -38,7 +36,6 @@ export default class Libp2pConnection {
       ignoreDuplicatePublishError: true,
       msgIdFn: msgIdFnStrictNoSign,
     };
-    this.peers = [];
   }
 
   async init(peers: Peer[]) {
