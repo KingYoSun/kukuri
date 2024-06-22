@@ -14,7 +14,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { peers } from './schema';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, lt, count } from 'drizzle-orm';
 import { type D1Database, type ExportedHandlerScheduledHandler } from '@cloudflare/workers-types';
 import dayjs from 'dayjs';
 
@@ -38,6 +38,13 @@ app.get('/peers', async (c) => {
 	const params = await c.req.json<IndexRequest>();
 	const db = drizzle(c.env.DB);
 	const result = await db.select().from(peers).where(eq(peers.topic, params.topic));
+	return c.json(result);
+});
+
+app.get('/peers/count', async (c) => {
+	const params = await c.req.json<IndexRequest>();
+	const db = drizzle(c.env.DB);
+	const result = await db.select({ count: count() }).from(peers).where(eq(peers.topic, params.topic));
 	return c.json(result);
 });
 
