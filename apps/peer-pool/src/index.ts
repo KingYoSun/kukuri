@@ -16,7 +16,7 @@ import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { drizzle } from 'drizzle-orm/d1';
 import { peers } from './schema';
-import { eq, and, lt, count } from 'drizzle-orm';
+import { eq, lt, count } from 'drizzle-orm';
 import { type D1Database, type ExportedHandlerScheduledHandler } from '@cloudflare/workers-types';
 import dayjs from 'dayjs';
 
@@ -79,7 +79,7 @@ app.put('/peers/:id', async (c) => {
 	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
 	db.update(peers)
-		.set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount })
+		.set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount, updatedAt: new Date() })
 		.where(eq(peers.id, id))
 		.returning();
 	return c.json([{ id: id }]);
@@ -88,9 +88,7 @@ app.put('/peers/:id', async (c) => {
 const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env) => {
 	const db = drizzle(env.DB);
 
-	const result = await db
-		.delete(peers)
-		.where(and(eq(peers.connectionCount, 0), lt(peers.updatedAt, dayjs().subtract(5, 'minutes').toDate())));
+	const result = await db.delete(peers).where(lt(peers.updatedAt, dayjs().subtract(5, 'minutes').toDate()));
 	console.log(`cron delete finished: ${result.success ? JSON.stringify(result.results) : JSON.stringify(result.error)}`);
 };
 

@@ -77,12 +77,11 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        mode: "no-cors",
+        mode: "cors",
+        credentials: "omit",
       });
-      console.log(res);
       const data = await res.json();
-      console.log(data?.count);
-      setPeerCount(0);
+      if (data) setPeerCount(data[0].count);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
