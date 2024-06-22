@@ -43,7 +43,7 @@ app.use('/peers/*', async (c: Context<{ Bindings: Bindings }>, next: Next) =>
 app.get('/', (c) => c.text('Hello World!'));
 
 app.get('/peers', async (c) => {
-	const topic = await c.req.param('topic');
+	const topic = await c.req.query('topic');
 	if (!topic) {
 		throw new HTTPException(500, { message: 'topic is not valid' });
 	}
@@ -54,7 +54,7 @@ app.get('/peers', async (c) => {
 });
 
 app.get('/peers/count', async (c) => {
-	const topic = await c.req.param('topic');
+	const topic = await c.req.query('topic');
 	if (!topic) {
 		throw new HTTPException(500, { message: 'topic is not valid' });
 	}
