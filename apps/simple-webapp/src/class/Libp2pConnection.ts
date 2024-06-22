@@ -5,22 +5,18 @@ import { bootstrap } from "@libp2p/bootstrap";
 import { yamux } from "@chainsafe/libp2p-yamux";
 import { noise } from "@chainsafe/libp2p-noise";
 import { gossipsub } from "@chainsafe/libp2p-gossipsub";
-import { BOOTSTRAP_PEER_IDS, PUBSUB_PEER_DISCOVERY } from "@/lib/constraints";
-import type { PubSub, PeerId, Message, SignedMessage } from "@libp2p/interface";
+import { PUBSUB_PEER_DISCOVERY } from "@/lib/constraints";
+import type { PubSub, Message, SignedMessage } from "@libp2p/interface";
 import { webRTC, webRTCDirect } from "@libp2p/webrtc";
 import { webSockets } from "@libp2p/websockets";
 import { webTransport } from "@libp2p/webtransport";
 import { circuitRelayTransport } from "@libp2p/circuit-relay-v2";
-import {
-  createDelegatedRoutingV1HttpApiClient,
-  DelegatedRoutingV1HttpApiClient,
-} from "@helia/delegated-routing-v1-http-api-client";
+import { createDelegatedRoutingV1HttpApiClient } from "@helia/delegated-routing-v1-http-api-client";
 import { Multiaddr } from "@multiformats/multiaddr";
-import first from "it-first";
-import { peerIdFromString } from "@libp2p/peer-id";
 import { identify } from "@libp2p/identify";
 import { pubsubPeerDiscovery } from "@libp2p/pubsub-peer-discovery";
 import { sha256 } from "multiformats/hashes/sha2";
+import { type Peer } from "common/types/PeerPool";
 
 const baseTopic = "kukuri-chat/";
 
@@ -30,6 +26,7 @@ export default class Libp2pConnection {
   initialized: boolean;
   started: boolean;
   subscribes: string[];
+  peers: Peer[];
 
   constructor() {
     this.node = undefined;
@@ -41,24 +38,21 @@ export default class Libp2pConnection {
       ignoreDuplicatePublishError: true,
       msgIdFn: msgIdFnStrictNoSign,
     };
+    this.peers = [];
   }
 
-  async init() {
+  async init(peers: Peer[]) {
     this.initialized = true;
 
     const delegatedClient = createDelegatedRoutingV1HttpApiClient(
       "https://delegated-ipfs.dev",
     );
-    const { bootstrapAddrs, relayListenAddrs } =
-      await getBootstrapMultiaddrs(delegatedClient);
 
-    console.log(
-      `start with ${bootstrapAddrs.length} bootstrapAddrs and ${relayListenAddrs.length} relayListenAddrs.`,
-    );
+    console.log(`start with ${peers.length} bootstrapAddrs.`);
 
     this.node = await createLibp2p({
       addresses: {
-        listen: ["/webrtc", ...relayListenAddrs],
+        listen: ["/webrtc"],
       },
       transports: [
         webTransport(),
@@ -88,7 +82,7 @@ export default class Libp2pConnection {
           listenOnly: false,
         }),
         bootstrap({
-          list: bootstrapAddrs,
+          list: peers.map((peer) => peer.maddr),
         }),
       ],
       connectionEncryption: [noise()],
@@ -201,47 +195,3 @@ export async function msgIdFnStrictNoSign(msg: Message): Promise<Uint8Array> {
   const encodedSeqNum = enc.encode(signedMessage.sequenceNumber.toString());
   return await sha256.encode(encodedSeqNum);
 }
-
-// Function which resolves PeerIDs of rust/go bootstrap nodes to multiaddrs dialable from the browser
-// Returns both the dialable multiaddrs in addition to the relay
-async function getBootstrapMultiaddrs(
-  client: DelegatedRoutingV1HttpApiClient,
-): Promise<BootstrapsMultiaddrs> {
-  const peers = await Promise.all(
-    BOOTSTRAP_PEER_IDS.map((peerId) =>
-      first(client.getPeers(peerIdFromString(peerId))),
-    ),
-  );
-
-  const bootstrapAddrs = [];
-  const relayListenAddrs = [];
-  for (const p of peers) {
-    if (p && p.Addrs.length > 0) {
-      for (const maddr of p.Addrs) {
-        const protos = maddr.protoNames();
-        if (
-          (protos.includes("webtransport") ||
-            protos.includes("webrtc-direct")) &&
-          protos.includes("certhash")
-        ) {
-          if (maddr.nodeAddress().address === "127.0.0.1") continue; // skip loopback
-          bootstrapAddrs.push(maddr.toString());
-          relayListenAddrs.push(getRelayListenAddr(maddr, p.ID));
-        }
-      }
-    }
-  }
-  return { bootstrapAddrs, relayListenAddrs };
-}
-
-interface BootstrapsMultiaddrs {
-  // Multiaddrs that are dialable from the browser
-  bootstrapAddrs: string[];
-
-  // multiaddr string representing the circuit relay v2 listen addr
-  relayListenAddrs: string[];
-}
-
-// Constructs a multiaddr string representing the circuit relay v2 listen address for a relayed connection to the given peer.
-const getRelayListenAddr = (maddr: Multiaddr, peer: PeerId): string =>
-  `${maddr.toString()}/p2p/${peer.toString()}/p2p-circuit`;

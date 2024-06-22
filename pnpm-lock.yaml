@@ -112,9 +112,6 @@ importers:
       '@libp2p/kad-dht':
         specifier: ^12.1.0
         version: 12.1.0
-      '@libp2p/peer-id':
-        specifier: ^4.1.4
-        version: 4.1.4
       '@libp2p/pubsub-peer-discovery':
         specifier: ^10.0.2
         version: 10.0.2
@@ -145,9 +142,6 @@ importers:
       common:
         specifier: workspace:*
         version: link:../../packages/common
-      it-first:
-        specifier: ^3.0.6
-        version: 3.0.6
       libp2p:
         specifier: ^1.7.0
         version: 1.7.0

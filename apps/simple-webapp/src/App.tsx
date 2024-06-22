@@ -1,4 +1,10 @@
-import { useEffect, useState, useContext, useReducer } from "react";
+import {
+  useEffect,
+  useState,
+  useContext,
+  useReducer,
+  useCallback,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,6 +22,7 @@ import { ConnContext } from "./context/conn";
 import { z } from "zod";
 import { multiaddr } from "@multiformats/multiaddr";
 import { DEFAULT_PEER_POOL_URL } from "./lib/constraints";
+import { type Peer } from "common/types/PeerPool";
 
 type Message = {
   timestamp: number;
@@ -60,53 +67,72 @@ function App() {
     });
   }
 
+  async function getPeerCount() {
+    const query = new URLSearchParams({ topic: `kukuri-chat/${topic}` });
+    const res = await fetch(`${DEFAULT_PEER_POOL_URL}/peers/count?${query}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
+      credentials: "omit",
+    });
+    const data = await res.json();
+    if (data) setPeerCount(data[0].count);
+  }
+
+  const getPeers = useCallback(async () => {
+    if (peerCount == 0) {
+      console.log("this topic has no peer");
+      return;
+    }
+
+    const query = new URLSearchParams({ topic: `kukuri-chat/${topic}` });
+    const res = await fetch(`${DEFAULT_PEER_POOL_URL}/peers?${query}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
+      credentials: "omit",
+    });
+    return (await res.json()) as Peer[];
+  }, [peerCount]);
+
   useEffect(() => {
-    (async () => {
-      if (!connContext.conn) {
-        console.log("conn is null");
-        return;
-      }
-      if (connContext.conn?.initialized) {
-        console.log("conn has been initialized");
-        return;
-      }
-      console.log("get peer count of topic");
-      const query = new URLSearchParams({ topic: `kukuri-chat/${topic}` });
-      const res = await fetch(`${DEFAULT_PEER_POOL_URL}/peers/count?${query}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-        credentials: "omit",
-      });
-      const data = await res.json();
-      if (data) setPeerCount(data[0].count);
-    })();
+    if (!connContext.conn) {
+      console.log("conn is null");
+      return;
+    }
+    if (connContext.conn?.initialized) {
+      console.log("conn has been initialized");
+      return;
+    }
+    getPeerCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     (async () => {
-      if (!connContext.conn) {
-        console.log("conn is null");
-        return;
-      }
-      if (connContext.conn?.initialized) {
-        console.log("conn has been initialized");
-        return;
-      }
       if (peerCount == 0) {
         console.log(`${topic} topic has no peer`);
         return;
       }
-      console.log("init conn");
-      await connContext.conn.init();
-      await connContext.conn.subscribe(topic);
-      setStarted(connContext.conn.initialized);
+      const peers = await getPeers();
+      if (
+        peers &&
+        peers.length > 0 &&
+        connContext.conn &&
+        !connContext.conn.initialized
+      ) {
+        console.log("init conn");
+        await connContext.conn.init(peers);
+        await connContext.conn.subscribe(topic);
+        setStarted(connContext.conn.initialized);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peerCount]);
+  }, [peerCount, getPeers]);
 
   const maddr = z.object({
     maddr: z.string(),

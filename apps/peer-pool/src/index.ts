@@ -78,7 +78,8 @@ app.put('/peers/:id', async (c) => {
 
 	const params = await c.req.json<typeof peers.$inferInsert>();
 	const db = drizzle(c.env.DB);
-	db.update(peers)
+	await db
+		.update(peers)
 		.set({ topic: params.topic, maddr: params.maddr, connectionCount: params.connectionCount, updatedAt: new Date() })
 		.where(eq(peers.id, id))
 		.returning();

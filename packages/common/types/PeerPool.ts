@@ -13,3 +13,12 @@ export const PeerPoolCreateReqSchema = z.object({
 });
 
 export type PeerPoolCreateReq = z.infer<typeof PeerPoolCreateReqSchema>;
+
+export type Peer = {
+  id: number;
+  connectionCount: number;
+  maddr: string;
+  topic: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
