@@ -5,7 +5,7 @@ import { bootstrap } from "@libp2p/bootstrap";
 import { yamux } from "@chainsafe/libp2p-yamux";
 import { noise } from "@chainsafe/libp2p-noise";
 import { gossipsub } from "@chainsafe/libp2p-gossipsub";
-import { PUBSUB_PEER_DISCOVERY } from "@/lib/constraints";
+import { PUBSUB_PEER_DISCOVERY } from "../lib/constraints";
 import type { PubSub, Message, SignedMessage } from "@libp2p/interface";
 import { webRTC, webRTCDirect } from "@libp2p/webrtc";
 import { webSockets } from "@libp2p/websockets";

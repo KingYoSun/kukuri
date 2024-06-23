@@ -82,48 +82,9 @@ importers:
 
   apps/simple-webapp:
     dependencies:
-      '@chainsafe/libp2p-gossipsub':
-        specifier: ^13.0.0
-        version: 13.0.0
-      '@chainsafe/libp2p-noise':
-        specifier: ^15.0.0
-        version: 15.0.0
-      '@chainsafe/libp2p-yamux':
-        specifier: ^6.0.2
-        version: 6.0.2
-      '@helia/delegated-routing-v1-http-api-client':
-        specifier: ^3.0.1
-        version: 3.0.1
       '@hookform/resolvers':
         specifier: ^3.6.0
         version: 3.6.0(react-hook-form@7.52.0(react@18.3.1))
-      '@libp2p/bootstrap':
-        specifier: ^10.1.0
-        version: 10.1.0
-      '@libp2p/circuit-relay-v2':
-        specifier: ^1.1.0
-        version: 1.1.0
-      '@libp2p/identify':
-        specifier: ^2.1.0
-        version: 2.1.0
-      '@libp2p/interface':
-        specifier: ^1.5.0
-        version: 1.5.0
-      '@libp2p/kad-dht':
-        specifier: ^12.1.0
-        version: 12.1.0
-      '@libp2p/pubsub-peer-discovery':
-        specifier: ^10.0.2
-        version: 10.0.2
-      '@libp2p/webrtc':
-        specifier: ^4.1.0
-        version: 4.1.0(react-native@0.74.1(@babel/core@7.24.7)(@babel/preset-env@7.24.6(@babel/core@7.24.7))(@types/react@18.3.3)(react@18.3.1))
-      '@libp2p/websockets':
-        specifier: ^8.1.0
-        version: 8.1.0
-      '@libp2p/webtransport':
-        specifier: ^4.1.0
-        version: 4.1.0
       '@multiformats/multiaddr':
         specifier: ^12.3.0
         version: 12.3.0
@@ -142,15 +103,12 @@ importers:
       common:
         specifier: workspace:*
         version: link:../../packages/common
-      libp2p:
-        specifier: ^1.7.0
-        version: 1.7.0
+      connection:
+        specifier: workspace:*
+        version: link:../../packages/connection
       lucide-react:
         specifier: ^0.378.0
         version: 0.378.0(react@18.3.1)
-      multiformats:
-        specifier: ^13.1.1
-        version: 13.1.1
       protobufjs:
         specifier: ^7.3.2
         version: 7.3.2
@@ -220,6 +178,57 @@ importers:
         version: 5.3.1(@types/node@20.14.8)(terser@5.31.0)
 
   packages/common: {}
+
+  packages/connection:
+    dependencies:
+      '@chainsafe/libp2p-gossipsub':
+        specifier: ^13.0.0
+        version: 13.0.0
+      '@chainsafe/libp2p-noise':
+        specifier: ^15.0.0
+        version: 15.0.0
+      '@chainsafe/libp2p-yamux':
+        specifier: ^6.0.2
+        version: 6.0.2
+      '@helia/delegated-routing-v1-http-api-client':
+        specifier: ^3.0.1
+        version: 3.0.1
+      '@libp2p/bootstrap':
+        specifier: ^10.1.0
+        version: 10.1.0
+      '@libp2p/circuit-relay-v2':
+        specifier: ^1.1.0
+        version: 1.1.0
+      '@libp2p/identify':
+        specifier: ^2.1.0
+        version: 2.1.0
+      '@libp2p/interface':
+        specifier: ^1.5.0
+        version: 1.5.0
+      '@libp2p/pubsub-peer-discovery':
+        specifier: ^10.0.2
+        version: 10.0.2
+      '@libp2p/webrtc':
+        specifier: ^4.1.0
+        version: 4.1.0(react-native@0.74.1(@babel/core@7.24.7)(@babel/preset-env@7.24.6(@babel/core@7.24.7))(@types/react@18.3.3)(react@18.3.1))
+      '@libp2p/websockets':
+        specifier: ^8.1.0
+        version: 8.1.0
+      '@libp2p/webtransport':
+        specifier: ^4.1.0
+        version: 4.1.0
+      '@multiformats/multiaddr':
+        specifier: ^12.3.0
+        version: 12.3.0
+      common:
+        specifier: workspace:*
+        version: link:../common
+      libp2p:
+        specifier: ^1.7.0
+        version: 1.7.0
+      multiformats:
+        specifier: ^13.1.1
+        version: 13.1.1
 
 packages:
 
@@ -1806,9 +1815,6 @@ packages:
   '@libp2p/interface@1.5.0':
     resolution: {integrity: sha512-SivVvZ+7r7Vgnv+Y88nGZTpG449PYZAPgfLhVqTXn6T4NAFt47InzC7UMFnVqSQuT21YmI9DoeaVXH73CsHNrg==}
 
-  '@libp2p/kad-dht@12.1.0':
-    resolution: {integrity: sha512-E04IBVyufu9TwqKwhVVxrjXNnHjaLW6r5GSmzL+gxo9yeZMLoN1ZSTWC5s5o/gT00SpsxYoD3M1O3Km/dpeL8g==}
-
   '@libp2p/logger@4.0.15':
     resolution: {integrity: sha512-Xi8Ud5EOtJE5gRp9EUBbtJpNqh39+J5WUZJ05fiQUwv8Q3r5xbXYnff2cOXKDVpY8c71cg+nfQNqRRqKDyu3jQ==}
 
@@ -1835,9 +1841,6 @@ packages:
 
   '@libp2p/pubsub@9.0.21':
     resolution: {integrity: sha512-rNrMXfH0UQZqCSF6sACqqYMYDMLE4n1Ky+OKQdX2Ruw6fEU2IxBuW8MVZ0Xzj0NS2lavcBi8Hn6ouNsFIJT1MA==}
-
-  '@libp2p/record@4.0.3':
-    resolution: {integrity: sha512-UiyC4MFasDwQHw+7CVUsCqvu4y5pYDZER9wPm9Rm8dlmlOn8GoXKF6CSKWx5rOk744EPaCNjwAMv9sD0u3IfUw==}
 
   '@libp2p/utils@5.4.4':
     resolution: {integrity: sha512-7hppKcVZ0smBTDMwIdEO7Lqn26f7XZFXSPLs4anxr0EQ1dpax8xWTiHU1cRk7cD3KpUXLGMaqYoz7ko+kj8oSw==}
@@ -3778,9 +3781,6 @@ packages:
   it-length-prefixed@9.0.4:
     resolution: {integrity: sha512-lz28fykbG0jq7s5XtvlzGxO5BeSOw6ikymkRllxjL21V5VKLcvB4pHr9wPvEnsAJ2et1xpOk3BRTMq9XrhgKsg==}
     engines: {node: '>=16.0.0', npm: '>=7.0.0'}
-
-  it-length@3.0.6:
-    resolution: {integrity: sha512-R7bxHAzpRzYz7vghc2DDH7x4KXvEkeLfN/h316++jzbkEHIRXbEPLbE20p5yrqqBdOeK6/FRUDuHlTJ0H1hysw==}
 
   it-map@3.1.1:
     resolution: {integrity: sha512-9bCSwKD1yN1wCOgJ9UOl+46NQtdatosPWzxxUk2NdTLwRPXLh+L7iwCC9QKsbgM60RQxT/nH8bKMqm3H/o8IHQ==}
@@ -7367,41 +7367,6 @@ snapshots:
       progress-events: 1.0.0
       uint8arraylist: 2.4.8
 
-  '@libp2p/kad-dht@12.1.0':
-    dependencies:
-      '@libp2p/crypto': 4.1.4
-      '@libp2p/interface': 1.5.0
-      '@libp2p/interface-internal': 1.2.4
-      '@libp2p/peer-collections': 5.2.4
-      '@libp2p/peer-id': 4.1.4
-      '@libp2p/record': 4.0.3
-      '@libp2p/utils': 5.4.4
-      '@multiformats/multiaddr': 12.3.0
-      any-signal: 4.1.1
-      hashlru: 2.3.0
-      interface-datastore: 8.2.11
-      it-drain: 3.0.7
-      it-length: 3.0.6
-      it-length-prefixed: 9.0.4
-      it-map: 3.1.1
-      it-merge: 3.0.5
-      it-parallel: 3.0.8
-      it-pipe: 3.0.1
-      it-protobuf-stream: 1.1.4
-      it-take: 3.0.6
-      multiformats: 13.1.1
-      p-defer: 4.0.1
-      p-event: 6.0.1
-      p-queue: 8.0.1
-      progress-events: 1.0.0
-      protons-runtime: 5.4.0
-      race-signal: 1.0.2
-      uint8-varint: 2.0.4
-      uint8arraylist: 2.4.8
-      uint8arrays: 5.1.0
-    transitivePeerDependencies:
-      - supports-color
-
   '@libp2p/logger@4.0.15':
     dependencies:
       '@libp2p/interface': 1.5.0
@@ -7507,12 +7472,6 @@ snapshots:
       uint8arrays: 5.1.0
     transitivePeerDependencies:
       - supports-color
-
-  '@libp2p/record@4.0.3':
-    dependencies:
-      protons-runtime: 5.4.0
-      uint8arraylist: 2.4.8
-      uint8arrays: 5.1.0
 
   '@libp2p/utils@5.4.4':
     dependencies:
@@ -9709,8 +9668,6 @@ snapshots:
       uint8-varint: 2.0.4
       uint8arraylist: 2.4.8
       uint8arrays: 5.1.0
-
-  it-length@3.0.6: {}
 
   it-map@3.1.1:
     dependencies:

@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useState,
-  useContext,
-  useReducer,
-  useCallback,
-} from "react";
+import { useEffect, useState, useContext, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,25 +24,9 @@ type Message = {
   message: string;
 };
 
-interface MsgAction {
-  type: "add" | "reset";
-  payload?: Message;
-}
-
 const topic = "main";
 
 function App() {
-  function MsgReducer(state: Message[], action: MsgAction): Message[] {
-    switch (action?.type) {
-      case "add":
-        if (!action?.payload) return state;
-        return [...state, action.payload];
-      case "reset":
-        return [];
-    }
-  }
-
-  const [messages, dispatchMessages] = useReducer(MsgReducer, []);
   const [started, setStarted] = useState<boolean>(false);
   const [peerCount, setPeerCount] = useState<number>(0);
   // const dbContext = useContext(DbContext);
@@ -60,10 +38,6 @@ function App() {
     if (!msgStr) return;
     const messageObj = JSON.parse(msgStr) as Message;
     console.log(messageObj);
-    dispatchMessages({
-      type: "add",
-      payload: messageObj,
-    });
   }
 
   const getPeerCount = useCallback(async () => {
@@ -255,16 +229,7 @@ function App() {
           </form>
         </Form>
       </div>
-      <div className={cn("my-2")}>
-        {messages.map((message, idx) => {
-          return (
-            <p key={idx}>
-              {message.sender}: {message.message} at{" "}
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </p>
-          );
-        })}
-      </div>
+      <div className={cn("my-2")}></div>
     </>
   );
 }
