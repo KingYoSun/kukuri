@@ -11,8 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@chainsafe/libp2p-gossipsub": "^13.0.0",
-    "@chainsafe/libp2p-noise": "^15.0.0",
+    "@chainsafe/libp2p-gossipsub": "^13.1.0",
+    "@chainsafe/libp2p-noise": "^15.1.0",
     "@chainsafe/libp2p-yamux": "^6.0.2",
     "@helia/delegated-routing-v1-http-api-client": "^3.0.1",
     "@libp2p/bootstrap": "^10.1.0",
@@ -24,8 +24,8 @@
     "@libp2p/websockets": "^8.1.0",
     "@libp2p/webtransport": "^4.1.0",
     "@multiformats/multiaddr": "^12.3.0",
+    "common": "workspace:*",
     "libp2p": "^1.7.0",
-    "multiformats": "^13.1.1",
-    "common": "workspace:*"
+    "multiformats": "^13.1.1"
   }
 }
