@@ -8,6 +8,7 @@
     "peer-pool": "pnpm -F \"peer-pool\"",
     "common": "pnpm -F \"common\"",
     "connection": "pnpm -F \"connection\"",
+    "electron-peer": "pnpm -F \"electron-peer\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -37,7 +38,7 @@
     "husky": "^8.0.3",
     "lint-staged": "^15.2.7",
     "prettier": "^3.3.2",
-    "typescript": "^5.5.2"
+    "typescript": "^5.5.3"
   },
   "dependencies": {
     "dayjs": "^1.11.11",
