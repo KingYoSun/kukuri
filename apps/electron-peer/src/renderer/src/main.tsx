@@ -1,4 +1,4 @@
-import './assets/main.css'
+import './assets/input.css'
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
