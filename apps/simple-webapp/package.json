@@ -7,10 +7,11 @@
     "component": "pnpm dlx shadcn-ui@latest add",
     "dev": "vite",
     "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@eslint/compat": "^1.2.4",
     "@hookform/resolvers": "^3.9.1",
     "@multiformats/multiaddr": "^12.3.4",
     "@radix-ui/react-label": "^2.1.1",
@@ -35,16 +36,12 @@
     "@types/react": "^18.3.16",
     "@types/react-dom": "^18.3.5",
     "@types/uuid": "^9.0.8",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react-swc": "^3.7.2",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.16",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
-    "typescript": "^5.7.2",
     "vite": "^5.4.11"
   }
 }
