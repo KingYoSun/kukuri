@@ -291,8 +291,8 @@ importers:
         specifier: ^2.1.5
         version: 2.1.5
       '@libp2p/interface':
-        specifier: ^1.7.0
-        version: 1.7.0
+        specifier: ^2.3.0
+        version: 2.3.0
       '@libp2p/pubsub-peer-discovery':
         specifier: ^10.0.3
         version: 10.0.3
