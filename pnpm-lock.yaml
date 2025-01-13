@@ -2334,11 +2334,17 @@ packages:
   '@libp2p/interface@2.3.0':
     resolution: {integrity: sha512-lodc8jxw32fkY2m2bsS6yzzozua6EDr5rJvahJaJVC36jZWFW5sBmOW8jBoKfoZyRwgD6uoOXP39miWQhEaUcg==}
 
+  '@libp2p/interface@2.4.0':
+    resolution: {integrity: sha512-PfzxOaz7dU4sdnUNByGLoEk9iqhD0IS+LQMQB12CXh6VyYLA7J8oaoHk3yRBZze3Y4FPa5DHMm5Oi9O/IhreaQ==}
+
   '@libp2p/logger@4.0.20':
     resolution: {integrity: sha512-TTh2dhHsOTAlMPxSa9ncFPHa/0jTt+0AQxwHdlxg/OGLAgc9VRhnrhHUbJZp07Crcw4T/MOfS4KhjlxgqYgJRw==}
 
   '@libp2p/logger@5.1.5':
     resolution: {integrity: sha512-Qe8B/Mja0myaArPvuI5iKVi3o2Z55Rir+RDkkEU/m9TkKDkHVFmGKnPlWDzHehi18GALjLxOsTE9TJASxjDTCA==}
+
+  '@libp2p/logger@5.1.6':
+    resolution: {integrity: sha512-As84zQYwveKfg47lV1pvEQO0mNsMfY/+fWQN6UGw0Pe465uIFJhDVsfacBrqYnLbyHfPxtlNUjCWYaFclvoPTQ==}
 
   '@libp2p/multistream-select@6.0.10':
     resolution: {integrity: sha512-u2sxsPk18cmJl1GLbfKgV+HXcFP2e873411PPwfQgMqTuNYXvJZheJWxV/nz7LjB3XelHxgYPpDVkMvK/kjMyw==}
@@ -10211,6 +10217,15 @@ snapshots:
       progress-events: 1.0.1
       uint8arraylist: 2.4.8
 
+  '@libp2p/interface@2.4.0':
+    dependencies:
+      '@multiformats/multiaddr': 12.3.4
+      it-pushable: 3.2.3
+      it-stream-types: 2.0.2
+      multiformats: 13.3.1
+      progress-events: 1.0.1
+      uint8arraylist: 2.4.8
+
   '@libp2p/logger@4.0.20':
     dependencies:
       '@libp2p/interface': 1.7.0
@@ -10222,6 +10237,14 @@ snapshots:
   '@libp2p/logger@5.1.5':
     dependencies:
       '@libp2p/interface': 2.3.0
+      '@multiformats/multiaddr': 12.3.4
+      interface-datastore: 8.3.1
+      multiformats: 13.3.1
+      weald: 1.0.4
+
+  '@libp2p/logger@5.1.6':
+    dependencies:
+      '@libp2p/interface': 2.4.0
       '@multiformats/multiaddr': 12.3.4
       interface-datastore: 8.3.1
       multiformats: 13.3.1
@@ -12619,7 +12642,7 @@ snapshots:
 
   datastore-core@10.0.2:
     dependencies:
-      '@libp2p/logger': 5.1.5
+      '@libp2p/logger': 5.1.6
       interface-datastore: 8.3.1
       interface-store: 6.0.2
       it-drain: 3.0.7
