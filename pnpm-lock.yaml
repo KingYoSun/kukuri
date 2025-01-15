@@ -8891,7 +8891,7 @@ snapshots:
     dependencies:
       '@chainsafe/as-chacha20poly1305': 0.1.0
       '@chainsafe/as-sha256': 0.4.2
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
       '@libp2p/peer-id': 5.0.10
       '@noble/ciphers': 0.6.0
@@ -10195,7 +10195,7 @@ snapshots:
 
   '@libp2p/identify@3.0.14':
     dependencies:
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
       '@libp2p/interface-internal': 2.2.2
       '@libp2p/peer-id': 5.0.10
@@ -10222,7 +10222,7 @@ snapshots:
   '@libp2p/interface-internal@2.2.1':
     dependencies:
       '@libp2p/interface': 2.4.0
-      '@libp2p/peer-collections': 6.0.13
+      '@libp2p/peer-collections': 6.0.14
       '@multiformats/multiaddr': 12.3.4
       progress-events: 1.0.1
       uint8arraylist: 2.4.8
@@ -10308,7 +10308,7 @@ snapshots:
     dependencies:
       '@libp2p/interface': 2.4.0
       '@libp2p/peer-id': 5.0.10
-      '@libp2p/utils': 6.3.0
+      '@libp2p/utils': 6.3.1
       multiformats: 13.3.1
 
   '@libp2p/peer-collections@6.0.14':
@@ -10333,7 +10333,7 @@ snapshots:
 
   '@libp2p/peer-id@5.0.9':
     dependencies:
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
       multiformats: 13.3.1
       uint8arrays: 5.1.0
@@ -10352,10 +10352,10 @@ snapshots:
 
   '@libp2p/peer-record@8.0.13':
     dependencies:
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
       '@libp2p/peer-id': 5.0.10
-      '@libp2p/utils': 6.3.0
+      '@libp2p/utils': 6.3.1
       '@multiformats/multiaddr': 12.3.4
       multiformats: 13.3.1
       protons-runtime: 5.5.0
@@ -10365,7 +10365,7 @@ snapshots:
 
   '@libp2p/peer-store@11.0.13':
     dependencies:
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
       '@libp2p/peer-id': 5.0.10
       '@libp2p/peer-record': 8.0.13
@@ -10446,9 +10446,9 @@ snapshots:
     dependencies:
       '@chainsafe/is-ip': 2.0.2
       '@chainsafe/netmask': 2.0.0
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
-      '@libp2p/logger': 5.1.5
+      '@libp2p/logger': 5.1.6
       '@multiformats/multiaddr': 12.3.4
       '@sindresorhus/fnv1a': 3.1.0
       '@types/murmurhash3js-revisited': 3.0.3
@@ -10684,7 +10684,7 @@ snapshots:
     dependencies:
       '@dao-xyz/borsh': 5.2.3
       '@ethersproject/wallet': 5.7.0
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/peer-id': 5.0.10
       '@peerbit/cache': 2.1.0
       '@stablelib/sha256': 2.0.0
@@ -13969,9 +13969,9 @@ snapshots:
 
   ipns@10.0.0:
     dependencies:
-      '@libp2p/crypto': 5.0.8
+      '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
-      '@libp2p/logger': 5.1.5
+      '@libp2p/logger': 5.1.6
       cborg: 4.2.7
       interface-datastore: 8.3.1
       multiformats: 13.3.1
