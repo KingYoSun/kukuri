@@ -276,8 +276,8 @@ importers:
         specifier: ^15.1.2
         version: 15.1.2
       '@chainsafe/libp2p-yamux':
-        specifier: ^6.0.2
-        version: 6.0.2
+        specifier: ^7.0.1
+        version: 7.0.1
       '@helia/delegated-routing-v1-http-api-client':
         specifier: ^4.2.1
         version: 4.2.1
@@ -1113,9 +1113,6 @@ packages:
 
   '@chainsafe/libp2p-noise@16.0.0':
     resolution: {integrity: sha512-8rqr8V1RD2/lVbfL0Bb//N8iPOFof11cUe8v8z8xJT7fUhCAbtCCSM4jbwI4HCnw0MvHLmcpmAfDCFRwcWzoeA==}
-
-  '@chainsafe/libp2p-yamux@6.0.2':
-    resolution: {integrity: sha512-S5OkLHqYhEVMQQ4BTgnRANEIbGTQhaC23glCgBwGdeoTRtMpIozwDiPfljFLCm0RYWdCRJw9oFztO95KUHjptA==}
 
   '@chainsafe/libp2p-yamux@7.0.1':
     resolution: {integrity: sha512-949MI0Ll0AsYq1gUETZmL/MijwX0jilOQ1i4s8wDEXGiMhuPWWiMsPgEnX6n+VzFmTrfNYyGaaJj5/MqxV9y/g==}
@@ -9016,16 +9013,6 @@ snapshots:
       uint8arraylist: 2.4.8
       uint8arrays: 5.1.0
       wherearewe: 2.0.1
-
-  '@chainsafe/libp2p-yamux@6.0.2':
-    dependencies:
-      '@libp2p/interface': 1.7.0
-      '@libp2p/utils': 5.4.9
-      get-iterator: 2.0.1
-      it-foreach: 2.1.1
-      it-pipe: 3.0.1
-      it-pushable: 3.2.3
-      uint8arraylist: 2.4.8
 
   '@chainsafe/libp2p-yamux@7.0.1':
     dependencies:
