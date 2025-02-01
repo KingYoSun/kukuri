@@ -14,21 +14,28 @@
     "LICENSE"
   ],
   "devDependencies": {
-    "@types/jest": "^29.5.14",
     "@types/node": "^18.19.68",
-    "jest": "^29.7.0",
     "shx": "^0.3.4",
-    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2"
   },
   "dependencies": {
+    "@chainsafe/libp2p-noise": "^15.1.2",
+    "@chainsafe/libp2p-yamux": "^7.0.1",
+    "@libp2p/circuit-relay-v2": "^3.1.6",
+    "@libp2p/webrtc": "^5.0.22",
+    "@libp2p/websockets": "^9.1.2",
+    "@libp2p/webtransport": "^4.1.9",
+    "@multiformats/multiaddr": "^12.3.4",
+    "@peerbit/crypto": "^2.3.3",
     "@peerbit/document": "^7.1.16",
+    "@peerbit/proxy-window": "^3.0.61",
+    "@peerbit/pubsub": "^3.0.16",
     "peerbit": "^4.0.27",
     "uuid": "^9.0.1"
   },
   "scripts": {
     "clean": "shx rm -rf lib/*",
-    "test": "node --experimental-vm-modules ./node_modules/.bin/jest test  -c  jest.config.ts",
+    "test": "node --experimental-vm-modules ~/kukuri/node_modules/jest/bin/jest.js test  -c  jest.config.ts",
     "build": "pnpm store prune && tsc -p tsconfig.json",
     "lint": "eslint . ",
     "lint:fix": "eslint --fix .",
