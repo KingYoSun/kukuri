@@ -10,7 +10,6 @@ import * as filters from "@libp2p/websockets/filters";
 import { circuitRelayTransport } from "@libp2p/circuit-relay-v2";
 import { DirectSub } from "@peerbit/pubsub";
 import { identify } from "@libp2p/identify";
-import { createHost } from "@peerbit/proxy-window";
 
 type NodeOptions = {
   type?: "node";
@@ -23,19 +22,21 @@ type NodeOptions = {
 };
 
 export default class PeerbitClient {
-  client: Peerbit;
+  client: Peerbit | undefined;
+  nodeOptions: NodeOptions;
 
-  constructor() {
+  constructor(nodeOptions: NodeOptions) {
     this.client = undefined;
+    this.nodeOptions = nodeOptions;
   }
 
-  async init(nodeOptions: NodeOptions) {
-    this.client = new Peerbit({
+  async init() {
+    this.client = await Peerbit.create({
       libp2p: {
         addresses: {
           listen: ["p2p-circuit", "/webrtc"],
         },
-        connectionEncryption: [noise()],
+        connectionEncrypters: [noise()],
         connectionManager: {
           maxConnections: 100,
         },
@@ -47,7 +48,7 @@ export default class PeerbitClient {
             }),
           identify: identify(),
         },
-        ...(nodeOptions.network === "local"
+        ...(this.nodeOptions.network === "local"
           ? {
               connectionGater: {
                 denyDialMultiaddr: () => false,
@@ -75,40 +76,48 @@ export default class PeerbitClient {
                 webSockets({ filter: filters.wss }),
                 webTransport(),
                 webRTCDirect(),
-                circuitRelayTransport({ discoverRelays: 0 }),
+                circuitRelayTransport(),
               ],
             }),
       },
-      ...(nodeOptions.directory ? { directory: nodeOptions.directory } : {}),
+      ...(this.nodeOptions.directory
+        ? { directory: this.nodeOptions.directory }
+        : {}),
     });
-    this.client.libp2p.node.addEventListener("peer:connect", (evt) => {
+    this.client.libp2p.addEventListener("peer:connect", (evt) => {
       console.log(`Connection established to: ${evt.detail.toString()}`);
     });
-    this.client.libp2p.node.addEventListener("peer:discovery", (evt) => {
+    this.client.libp2p.addEventListener("peer:discovery", (evt) => {
       console.log(`Peer is discovered: ${evt.detail.id.toString()}`);
     });
+    if (this.client === undefined) {
+      console.log("Failed to create Peerbit client.");
+    }
+
     const connectFn = async () => {
       try {
-        if (nodeOptions.network === "local") {
+        if (this.client === undefined) {
+          throw new Error("Failed to create Peerbit client.");
+        }
+
+        if (this.nodeOptions.network === "local") {
           await this.client.dial(
             "/ip4/127.0.0.1/tcp/8002/ws/p2p/" +
               (await (await fetch("http://localhost:8002/peers")).text()),
           );
         } else {
-          if (nodeOptions.bootstrap) {
-            for (const addr of nodeOptions.bootstrap) {
+          if (this.nodeOptions.bootstrap) {
+            for (const addr of this.nodeOptions.bootstrap) {
               await this.client.dial(addr);
             }
           } else {
             await this.client["bootstrap"]?.();
           }
         }
-      } catch (err) {
-        console.error("Failed to resolve relay addresses. " + err?.message);
-      }
-
-      if (nodeOptions.host) {
-        this.client = await createHost(this.client);
+      } catch (err: unknown) {
+        console.error(
+          "Failed to resolve relay addresses. " + JSON.stringify(err),
+        );
       }
     };
 
@@ -118,7 +127,7 @@ export default class PeerbitClient {
       console.log("Bootstrap done.");
     });
 
-    if (nodeOptions.waitForConnected) {
+    if (this.nodeOptions.waitForConnected) {
       await promise;
     }
   }

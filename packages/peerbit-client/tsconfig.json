@@ -1,19 +1,12 @@
 {
-  "include": ["src"],
-  "exclude": ["node_modules"],
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "lib": ["ES2022", "DOM"],
-    "outDir": "dist",
-    "strictNullChecks": true,
-    "experimentalDecorators": true,
-    "moduleResolution": "node",
-    "noUnusedLocals": false,
-    "strictFunctionTypes": true,
-    "esModuleInterop": true,
-    "emitDecoratorMetadata": true,
-    "skipLibCheck": true,
-    "declaration": true
-  }
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "outDir": "./dist",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext"
+  },
+  "extends": "../../tsconfig.base.json"
 }

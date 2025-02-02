@@ -1,1 +1,1 @@
-export * as PeerbitClient from "./PeerbitClient";
+export * as PeerbitClient from "./class/PeerbitClient.ts";

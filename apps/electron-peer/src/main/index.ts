@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { PeerbitClient } from 'peerbit-client'
 
 function createWindow(): void {
   // Create the browser window.
@@ -35,6 +36,13 @@ function createWindow(): void {
   }
 }
 
+let peerbitClient: PeerbitClient
+
+function initPeerbit(): void {
+  peerbitClient = new PeerbitClient({ network: 'remote' })
+  peerbitClient.init()
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -53,6 +61,7 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
+  initPeerbit()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
