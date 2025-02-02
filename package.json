@@ -9,8 +9,6 @@
     "peer-pool": "pnpm -F \"peer-pool\"",
     "common": "pnpm -F \"common\"",
     "connection": "pnpm -F \"connection\"",
-    "peerbit-client": "pnpm -F \"peerbit-client\"",
-    "electron-peer": "pnpm -F \"electron-peer\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "pnpm -F \"simple-webapp\" lint && pnpm -F \"peer-pool\" lint && pnpm -F \"common\" lint && pnpm -F \"connection\" lint && pnpm -F \"peerbit-client\" lint && pnpm -F \"electron-peer\" lint",
     "format": "prettier --write .",
