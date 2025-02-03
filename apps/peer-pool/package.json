@@ -24,6 +24,6 @@
 	},
 	"dependencies": {
 		"dayjs": "^1.11.13",
-		"drizzle-orm": "^0.31.4"
+		"drizzle-orm": "^0.39.1"
 	}
 }
