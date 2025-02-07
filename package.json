@@ -7,6 +7,7 @@
     "all-upgrade": "pnpm upgrade && pnpm -F \"simple-webapp\" upgrade && pnpm -F \"peer-pool\" upgrade && pnpm -F \"common\" upgrade && pnpm -F \"connection\" upgrade",
     "simple-webapp": "pnpm -F \"simple-webapp\"",
     "peer-pool": "pnpm -F \"peer-pool\"",
+    "tauri-client": "pnpm -F \"tauri-client\"",
     "common": "pnpm -F \"common\"",
     "connection": "pnpm -F \"connection\"",
     "test": "echo \"Error: no test specified\" && exit 1",
