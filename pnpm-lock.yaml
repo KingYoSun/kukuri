@@ -147,7 +147,7 @@ importers:
         version: 2.6.0
       tailwindcss-animate:
         specifier: ^1.0.7
-        version: 1.0.7(tailwindcss@4.0.3)
+        version: 1.0.7(tailwindcss@4.0.6)
       uuid:
         specifier: ^11.0.5
         version: 11.0.5
@@ -181,7 +181,7 @@ importers:
         version: 8.5.1
       tailwindcss:
         specifier: ^4.0.3
-        version: 4.0.3
+        version: 4.0.6
       vite:
         specifier: ^6.0.11
         version: 6.0.11(@types/node@20.17.16)(jiti@2.4.2)(terser@5.39.0)(yaml@2.7.0)
@@ -4870,8 +4870,8 @@ packages:
     peerDependencies:
       tailwindcss: '>=3.0.0 || insiders'
 
-  tailwindcss@4.0.3:
-    resolution: {integrity: sha512-ImmZF0Lon5RrQpsEAKGxRvHwCvMgSC4XVlFRqmbzTEDb/3wvin9zfEZrMwgsa3yqBbPqahYcVI6lulM2S7IZAA==}
+  tailwindcss@4.0.6:
+    resolution: {integrity: sha512-mysewHYJKaXgNOW6pp5xon/emCsfAMnO8WMaGKZZ35fomnR/T5gYnRg2/yRTTrtXiEl1tiVkeRt0eMO6HxEZqw==}
 
   tar-fs@2.1.2:
     resolution: {integrity: sha512-EsaAXwxmx8UB7FRKqeozqEPop69DXcmYwTQwXvyAPF352HJsPdkVhvTaDPYqfNgruveJIJy3TA2l+2zj8LJIJA==}
@@ -10922,11 +10922,11 @@ snapshots:
 
   tailwind-merge@2.6.0: {}
 
-  tailwindcss-animate@1.0.7(tailwindcss@4.0.3):
+  tailwindcss-animate@1.0.7(tailwindcss@4.0.6):
     dependencies:
-      tailwindcss: 4.0.3
+      tailwindcss: 4.0.6
 
-  tailwindcss@4.0.3: {}
+  tailwindcss@4.0.6: {}
 
   tar-fs@2.1.2:
     dependencies:
