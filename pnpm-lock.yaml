@@ -235,7 +235,7 @@ importers:
         version: 7.0.1
       '@helia/delegated-routing-v1-http-api-client':
         specifier: ^4.2.1
-        version: 4.2.1
+        version: 4.2.2
       '@libp2p/bootstrap':
         specifier: ^11.0.17
         version: 11.0.17
@@ -1319,8 +1319,8 @@ packages:
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
     engines: {node: '>=14'}
 
-  '@helia/delegated-routing-v1-http-api-client@4.2.1':
-    resolution: {integrity: sha512-Gc149HTv/ufhNfcrQnEN3j9cqLSY+2AXMiIzNjQM1yF+wniN05yYzSYLxCtDlPfyi2TzODgdK/Kql3mRJLnGUg==}
+  '@helia/delegated-routing-v1-http-api-client@4.2.2':
+    resolution: {integrity: sha512-SQuyIZAbfvXUkGiralGI7sWq44Ztd1Cf+3pz/paCzq1J3Jvl7JnofWB0spsZjwSu0jYPdwAL60Nmg1TSTm6ZVg==}
 
   '@hookform/resolvers@3.10.0':
     resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
@@ -2343,8 +2343,8 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  browser-readablestream-to-it@2.0.7:
-    resolution: {integrity: sha512-g1Aznml3HmqTLSXylZhGwdfnAa67+vlNAYhT9ROJZkAxY7yYmWusND10olvCMPe4sVhZyVwn5tPkRzOg85kBEg==}
+  browser-readablestream-to-it@2.0.8:
+    resolution: {integrity: sha512-+aDq+8QoTxIklc9m21oVg96Bm18EpeVke4/8vWPNu+9Ktd+G4PYavitE4gv/pjIndw1q+vxE/Rcnv1zYHrEQbQ==}
 
   browserslist@4.24.4:
     resolution: {integrity: sha512-KDi1Ny1gSePi1vm0q4oxSF8b4DR44GF4BbmS2YdhPLOEqd8pDviZOGH/GsmRwoWJ2+5Lr085X7naowMwKHDG1A==}
@@ -3233,8 +3233,8 @@ packages:
   invariant@2.2.4:
     resolution: {integrity: sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==}
 
-  ipns@10.0.0:
-    resolution: {integrity: sha512-f0jnIr5apdKPYElbfupR3mpYgKf+/qhWNtD8aZxoryB+aZXV0Xk4vgpM5ZPDIr9mdu99ccBnxR+ILBVlP515uQ==}
+  ipns@10.0.1:
+    resolution: {integrity: sha512-NbM+IojcMSsTuvgcstzUwXb1l9ZNTDMLGPuK0MED490l56z58KP7NiR6LizFSln9vBMo6ywzE2PHk+utnFby2A==}
 
   is-arrayish@0.2.1:
     resolution: {integrity: sha512-zz06S8t0ozoDXMG+ube26zeCTNXcKIPJZJi8hBrF4idCLms4CG9QtK7qBl1boi5ODzFpjswb5JPmHCbMpjaYzg==}
@@ -3364,8 +3364,8 @@ packages:
   it-filter@3.1.1:
     resolution: {integrity: sha512-TOXmVuaSkxlLp2hXKoMTra0WMZMKVFxE3vSsbIA+PbADNCBAHhjJ/lM31vBOUTddHMO34Ku++vU8T9PLlBxQtg==}
 
-  it-first@3.0.6:
-    resolution: {integrity: sha512-ExIewyK9kXKNAplg2GMeWfgjUcfC1FnUXz/RPfAvIXby+w7U4b3//5Lic0NV03gXT8O/isj5Nmp6KiY0d45pIQ==}
+  it-first@3.0.7:
+    resolution: {integrity: sha512-e2dVSlOP+pAxPYPVJBF4fX7au8cvGfvLhIrGCMc5aWDnCvwgOo94xHbi3Da6eXQ2jPL5FGEM8sJMn5uE8Seu+g==}
 
   it-foreach@2.1.1:
     resolution: {integrity: sha512-ID4Gxnavk/LVQLQESAQ9hR6dR63Ih6X+8VdxEktX8rpz2dCGAbZpey/eljTNbMfV2UKXHiu6UsneoNBZuac97g==}
@@ -3387,14 +3387,14 @@ packages:
     resolution: {integrity: sha512-O88nBweT6M9ozsmok68/auKH7ik/slNM4pYbM9lrfy2z5QnpokW5SlrepHZDKtN71llhG2sZvd6uY4SAl+lAQg==}
     engines: {node: '>=16.0.0', npm: '>=7.0.0'}
 
-  it-map@3.1.1:
-    resolution: {integrity: sha512-9bCSwKD1yN1wCOgJ9UOl+46NQtdatosPWzxxUk2NdTLwRPXLh+L7iwCC9QKsbgM60RQxT/nH8bKMqm3H/o8IHQ==}
+  it-map@3.1.2:
+    resolution: {integrity: sha512-G3dzFUjTYHKumJJ8wa9dSDS3yKm8L7qDUnAgzemOD0UMztwm54Qc2v97SuUCiAgbOz/aibkSLImfoFK09RlSFQ==}
 
   it-merge@3.0.5:
     resolution: {integrity: sha512-2l7+mPf85pyRF5pqi0dKcA54E5Jm/2FyY5GsOaN51Ta0ipC7YZ3szuAsH8wOoB6eKY4XsU4k2X+mzPmFBMayEA==}
 
-  it-ndjson@1.1.1:
-    resolution: {integrity: sha512-BnrucXWzX5xz1SDo5B4ayVqQ+Qa0LKsuXiOiVidqaT7hvEqi/qIi8teCTSa9m81V7dADrVKjpWvqvWDvmf30mA==}
+  it-ndjson@1.1.2:
+    resolution: {integrity: sha512-TPKpdYSNKjDdroCPnLamM5Up6XnPQ7F1KgNP3Ib5y5O4ayOVP+DHac/pzjUigcg9Kf9gkGVXDz8+FFKpWwoB3w==}
 
   it-pair@2.0.6:
     resolution: {integrity: sha512-5M0t5RAcYEQYNG5BV7d7cqbdwbCAp5yLdzvkxsZmkuZsLbTdZzah6MQySYfaAQjNDCq6PUnDt0hqBZ4NwMfW6g==}
@@ -6439,18 +6439,18 @@ snapshots:
 
   '@fastify/busboy@2.1.1': {}
 
-  '@helia/delegated-routing-v1-http-api-client@4.2.1':
+  '@helia/delegated-routing-v1-http-api-client@4.2.2':
     dependencies:
       '@libp2p/interface': 2.4.0
-      '@libp2p/logger': 5.1.6
-      '@libp2p/peer-id': 5.0.10
+      '@libp2p/logger': 5.1.12
+      '@libp2p/peer-id': 5.0.16
       '@multiformats/multiaddr': 12.3.4
       any-signal: 4.1.1
-      browser-readablestream-to-it: 2.0.7
-      ipns: 10.0.0
-      it-first: 3.0.6
-      it-map: 3.1.1
-      it-ndjson: 1.1.1
+      browser-readablestream-to-it: 2.0.8
+      ipns: 10.0.1
+      it-first: 3.0.7
+      it-map: 3.1.2
+      it-ndjson: 1.1.2
       multiformats: 13.3.1
       p-defer: 4.0.1
       p-queue: 8.1.0
@@ -6903,7 +6903,7 @@ snapshots:
       '@chainsafe/netmask': 2.0.0
       '@libp2p/crypto': 5.0.9
       '@libp2p/interface': 2.4.0
-      '@libp2p/logger': 5.1.6
+      '@libp2p/logger': 5.1.12
       '@multiformats/multiaddr': 12.3.4
       '@sindresorhus/fnv1a': 3.1.0
       '@types/murmurhash3js-revisited': 3.0.3
@@ -8021,7 +8021,7 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  browser-readablestream-to-it@2.0.7: {}
+  browser-readablestream-to-it@2.0.8: {}
 
   browserslist@4.24.4:
     dependencies:
@@ -8264,7 +8264,7 @@ snapshots:
       interface-store: 6.0.2
       it-drain: 3.0.7
       it-filter: 3.1.1
-      it-map: 3.1.1
+      it-map: 3.1.2
       it-merge: 3.0.5
       it-pipe: 3.0.1
       it-pushable: 3.2.3
@@ -8803,11 +8803,11 @@ snapshots:
     dependencies:
       loose-envify: 1.4.0
 
-  ipns@10.0.0:
+  ipns@10.0.1:
     dependencies:
-      '@libp2p/crypto': 5.0.9
+      '@libp2p/crypto': 5.0.15
       '@libp2p/interface': 2.4.0
-      '@libp2p/logger': 5.1.6
+      '@libp2p/logger': 5.1.12
       cborg: 4.2.8
       interface-datastore: 8.3.1
       multiformats: 13.3.1
@@ -8933,9 +8933,9 @@ snapshots:
 
   it-filter@3.1.1:
     dependencies:
-      it-peekable: 3.0.5
+      it-peekable: 3.0.6
 
-  it-first@3.0.6: {}
+  it-first@3.0.7: {}
 
   it-foreach@2.1.1:
     dependencies:
@@ -8975,15 +8975,15 @@ snapshots:
       uint8arraylist: 2.4.8
       uint8arrays: 5.1.0
 
-  it-map@3.1.1:
+  it-map@3.1.2:
     dependencies:
-      it-peekable: 3.0.5
+      it-peekable: 3.0.6
 
   it-merge@3.0.5:
     dependencies:
       it-pushable: 3.2.3
 
-  it-ndjson@1.1.1:
+  it-ndjson@1.1.2:
     dependencies:
       uint8arraylist: 2.4.8
 
