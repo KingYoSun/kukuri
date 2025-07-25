@@ -24,6 +24,22 @@
   - [x] CLAUDE.mdのReactバージョン表記を修正（19→18）
   - [x] implementation_plan.mdのディレクトリ構造を実際のプロジェクトに合わせて更新
   - [x] workersの配置場所を明確化（kukuri/workers/）
+- [x] UIコンポーネント基盤の実装
+  - [x] shadcn/uiの導入（Tailwind CSS設定含む）
+  - [x] 基本レイアウトコンポーネントの実装
+    - [x] MainLayout（メインレイアウト構造）
+    - [x] Header（ヘッダーコンポーネント）
+    - [x] Sidebar（サイドバーコンポーネント）
+  - [x] Homeページの実装（タイムライン表示）
+- [x] テスト環境の構築
+  - [x] Vitestの設定
+  - [x] React Testing Libraryの導入
+  - [x] 全コンポーネントのテスト作成
+  - [x] テストエラーの修正（ResizeObserver、CSS関連）
+- [x] 開発ツールの設定
+  - [x] ESLintの設定（TypeScript、React対応）
+  - [x] 型チェック・リントスクリプトの追加
+  - [x] 全てのリント・型エラーの解消
 
 ### 2025年7月25日
 - [x] design_doc.mdのプロジェクト名をkukuriに更新

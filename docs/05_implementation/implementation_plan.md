@@ -23,12 +23,12 @@
 ### 2.1 月1: 基盤構築
 
 #### Week 1-2: プロジェクトセットアップ
-- [ ] Tauri v2プロジェクト初期化
-- [ ] React + TypeScript + Vite環境構築
-- [ ] shadcn UIコンポーネントライブラリ導入
+- [x] Tauri v2プロジェクト初期化
+- [x] React + TypeScript + Vite環境構築
+- [x] shadcn UIコンポーネントライブラリ導入
 - [ ] Zustand状態管理セットアップ
 - [ ] Tanstack Query/Router設定
-- [ ] ESLint/Prettier設定
+- [x] ESLint/Prettier設定
 - [ ] Git hooks（Husky）設定
 
 ```bash

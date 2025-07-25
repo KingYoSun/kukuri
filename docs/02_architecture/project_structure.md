@@ -39,24 +39,50 @@ kukuri-tauri/
 src/
 ├── main.tsx            # アプリケーションエントリーポイント
 ├── App.tsx             # ルートコンポーネント
-├── App.css             # アプリケーションスタイル
+├── App.css             # アプリケーションスタイル（Tailwind CSS）
 ├── vite-env.d.ts       # Vite TypeScript定義
-└── assets/             # 画像・フォント等のアセット
-    └── react.svg       # Reactロゴ
+├── __tests__/          # Appコンポーネントのテスト
+│   └── App.test.tsx
+├── assets/             # 画像・フォント等のアセット
+│   └── react.svg       # Reactロゴ
+├── components/         # UIコンポーネント
+│   ├── layout/         # レイアウトコンポーネント
+│   │   ├── Header.tsx
+│   │   ├── MainLayout.tsx
+│   │   ├── Sidebar.tsx
+│   │   └── __tests__/
+│   └── ui/             # shadcn/ui コンポーネント
+│       ├── avatar.tsx
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dialog.tsx
+│       ├── dropdown-menu.tsx
+│       ├── input.tsx
+│       ├── label.tsx
+│       ├── scroll-area.tsx
+│       ├── separator.tsx
+│       ├── sonner.tsx
+│       └── tabs.tsx
+├── lib/                # ユーティリティ関数
+│   └── utils.ts        # clsx/tailwind-merge ユーティリティ
+├── pages/              # ページコンポーネント
+│   ├── Home.tsx        # ホームページ（タイムライン）
+│   └── __tests__/
+└── test/               # テストユーティリティ
+    ├── setup.ts        # テスト環境セットアップ
+    ├── test-utils.tsx  # カスタムレンダー関数
+    └── README.md       # テストガイド
 ```
 
 #### 今後追加予定の構造
 ```
 src/
-├── components/         # UIコンポーネント
+├── components/         # UIコンポーネント（追加予定）
 │   ├── auth/          # 認証関連
-│   ├── common/        # 共通コンポーネント
 │   ├── profile/       # プロフィール関連
-│   ├── topics/        # トピック関連
-│   └── ui/            # shadcn/ui コンポーネント
+│   └── topics/        # トピック関連
 ├── hooks/             # カスタムフック
-├── lib/               # ユーティリティ関数
-├── pages/             # ページコンポーネント
+├── pages/             # ページコンポーネント（追加予定）
 ├── services/          # API・サービス層
 ├── stores/            # Zustand ストア
 ├── styles/            # グローバルスタイル
@@ -155,9 +181,10 @@ Tauriのセキュリティ権限設定：
 1. **UIコンポーネント追加**
    ```
    src/components/[機能名]/
-   ├── index.ts            # エクスポート
+   ├── index.ts            # エクスポート（必要に応じて）
    ├── [Component].tsx     # コンポーネント本体
-   └── [Component].test.tsx # テストファイル
+   └── __tests__/          # テストファイル
+       └── [Component].test.tsx
    ```
 
 2. **Tauriコマンド追加**
