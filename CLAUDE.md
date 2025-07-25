@@ -65,6 +65,12 @@ pnpm tauri dev
 # ビルド
 pnpm tauri build
 
+# ビルド(Windows)
+pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc
+
+# ビルド(Android)
+pnpm tauri android build
+
 # テスト実行
 pnpm test
 cargo test
