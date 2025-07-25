@@ -1,8 +1,40 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MainLayout } from '../MainLayout'
+import { useAuthStore, useTopicStore, useUIStore } from '@/stores'
+
+// モック
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: vi.fn(() => vi.fn()),
+}))
 
 describe('MainLayout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    
+    // デフォルトのストア状態
+    useAuthStore.setState({
+      isAuthenticated: false,
+      currentUser: null,
+      privateKey: null,
+      logout: vi.fn(),
+    })
+    
+    useTopicStore.setState({
+      topics: new Map(),
+      currentTopic: null,
+      joinedTopics: [],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+      toggleSidebar: vi.fn(),
+    })
+  })
   it('レイアウトが正しくレンダリングされること', () => {
     render(
       <MainLayout>

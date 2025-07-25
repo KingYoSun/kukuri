@@ -1,29 +1,37 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render } from '@testing-library/react'
 import App from '../App'
 
+// モック - シンプルにプロバイダーとルーターの存在のみチェック
+vi.mock('@tanstack/react-query', () => ({
+  QueryClientProvider: ({ children }: { children: React.ReactNode }) => 
+    <div data-testid="query-provider">{children}</div>,
+  QueryClient: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  RouterProvider: () => <div data-testid="router-provider">App Content</div>,
+}))
+
+vi.mock('@/lib/queryClient', () => ({
+  queryClient: {},
+}))
+
+vi.mock('@/router', () => ({
+  router: {},
+}))
+
 describe('App', () => {
-  it('アプリケーションが正しくレンダリングされること', () => {
-    render(<App />)
+  it('QueryClientProviderがレンダリングされること', () => {
+    const { container } = render(<App />)
     
-    // ヘッダーのロゴが表示されること
-    expect(screen.getByText('kukuri')).toBeInTheDocument()
-    
-    // タイムラインが表示されること
-    expect(screen.getByRole('heading', { name: 'タイムライン' })).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="query-provider"]')).toBeInTheDocument()
   })
 
-  it('メインレイアウトが適用されていること', () => {
-    render(<App />)
+  it('RouterProviderがレンダリングされること', () => {
+    const { container } = render(<App />)
     
-    // ヘッダーが存在すること
-    expect(screen.getByRole('banner')).toBeInTheDocument()
-    
-    // サイドバーが存在すること
-    expect(screen.getByRole('complementary')).toBeInTheDocument()
-    
-    // メインコンテンツエリアが存在すること
-    expect(screen.getByRole('main')).toBeInTheDocument()
+    expect(container.querySelector('[data-testid="router-provider"]')).toBeInTheDocument()
   })
 
   it('Toasterコンポーネントが含まれていること', () => {

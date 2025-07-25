@@ -1,10 +1,56 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Sidebar } from '../Sidebar'
+import { useTopicStore, useUIStore } from '@/stores'
+import { useNavigate } from '@tanstack/react-router'
+import type { Topic } from '@/stores'
+
+// モック
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: vi.fn(() => vi.fn()),
+}))
 
 describe('Sidebar', () => {
+  const mockNavigate = vi.fn()
+  const mockTopic1: Topic = {
+    id: 'topic1',
+    name: 'technology',
+    memberCount: 1234,
+    tags: [],
+    lastActive: Date.now(),
+  }
+  const mockTopic2: Topic = {
+    id: 'topic2',
+    name: 'nostr',
+    memberCount: 456,
+    tags: [],
+    lastActive: Date.now(),
+  }
+  
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate)
+  })
   it('サイドバーの基本要素が表示されること', () => {
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
     render(<Sidebar />)
 
     // 新規投稿ボタンが表示されること
@@ -20,23 +66,77 @@ describe('Sidebar', () => {
   })
 
   it('トピックリストが正しく表示されること', () => {
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
     render(<Sidebar />)
 
     // 各トピックが表示されること
     expect(screen.getByRole('button', { name: /technology/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /programming/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /nostr/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /bitcoin/i })).toBeInTheDocument()
     
-    // トピックの投稿数が表示されること
+    // トピックのメンバー数が表示されること
     expect(screen.getByText('1234')).toBeInTheDocument()
-    expect(screen.getByText('892')).toBeInTheDocument()
     expect(screen.getByText('456')).toBeInTheDocument()
-    expect(screen.getByText('789')).toBeInTheDocument()
+  })
+
+  it('参加中のトピックがない場合の表示', () => {
+    // 空のトピックリストを設定
+    useTopicStore.setState({
+      topics: new Map(),
+      currentTopic: null,
+      joinedTopics: [],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
+    render(<Sidebar />)
+    
+    expect(screen.getByText('参加中のトピックはありません')).toBeInTheDocument()
   })
 
   it('新規投稿ボタンがクリック可能であること', async () => {
     const user = userEvent.setup()
+    
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
     render(<Sidebar />)
 
     const newPostButton = screen.getByRole('button', { name: /新規投稿/i })
@@ -48,6 +148,25 @@ describe('Sidebar', () => {
 
   it('カテゴリーボタンがクリック可能であること', async () => {
     const user = userEvent.setup()
+    
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
     render(<Sidebar />)
 
     const trendButton = screen.getByRole('button', { name: /トレンド/i })
@@ -61,22 +180,126 @@ describe('Sidebar', () => {
     expect(followingButton).toBeEnabled()
   })
 
-  it('トピックボタンがクリック可能であること', async () => {
+  it('トピックボタンクリックでナビゲートされること', async () => {
     const user = userEvent.setup()
+    const setCurrentTopic = vi.fn()
+    
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic,
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
     render(<Sidebar />)
 
     const technologyButton = screen.getByRole('button', { name: /technology/i })
-    
-    // トピックボタンがクリック可能であることを確認
     await user.click(technologyButton)
-    expect(technologyButton).toBeEnabled()
+    
+    expect(setCurrentTopic).toHaveBeenCalledWith(mockTopic1)
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/topics/topic1' })
+  })
+
+  it('現在のトピックがハイライトされること', () => {
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: mockTopic1,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
+    render(<Sidebar />)
+    
+    // 現在のトピックのボタンを取得
+    const technologyButton = screen.getByRole('button', { name: /technology/i })
+    const nostrButton = screen.getByRole('button', { name: /nostr/i })
+    
+    // 現在のトピック（technology）はsecondaryスタイルを持つ
+    // shadcn/uiのButtonコンポーネントのsecondaryバリアントのクラスを確認
+    expect(technologyButton.className).toContain('bg-secondary')
+    
+    // 他のトピックはghostスタイルを持つ  
+    expect(nostrButton.className).not.toContain('bg-secondary')
+  })
+
+  it('サイドバーの開閉状態が反映されること', () => {
+    // 必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
+    const { rerender } = render(<Sidebar />)
+    
+    // 開いている状態
+    expect(screen.getByRole('complementary')).toHaveClass('w-64')
+    
+    // 閉じている状態に変更
+    act(() => {
+      useUIStore.setState({ sidebarOpen: false })
+    })
+    
+    rerender(<Sidebar />)
+    expect(screen.getByRole('complementary')).toHaveClass('w-0')
   })
 
   it('適切なスタイリングとレイアウトが適用されていること', () => {
+    // テストに必要なストア状態を設定
+    useTopicStore.setState({
+      topics: new Map([
+        ['topic1', mockTopic1],
+        ['topic2', mockTopic2],
+      ]),
+      currentTopic: null,
+      joinedTopics: ['topic1', 'topic2'],
+      setCurrentTopic: vi.fn(),
+    })
+    
+    useUIStore.setState({
+      sidebarOpen: true,
+      theme: 'system',
+      isLoading: false,
+      error: null,
+    })
+    
     const { container } = render(<Sidebar />)
     
     const aside = container.querySelector('aside')
-    expect(aside).toHaveClass('w-64', 'border-r', 'bg-background')
+    expect(aside).toHaveClass('border-r', 'bg-background')
     
     // ScrollAreaが存在することを確認
     expect(container.querySelector('[data-radix-scroll-area-viewport]')).toBeInTheDocument()
