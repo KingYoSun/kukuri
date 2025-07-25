@@ -47,18 +47,44 @@ pnpm add -D wrangler @cloudflare/workers-types
 
 #### Week 3-4: Rust基盤実装
 - [ ] Nostrライブラリ統合（nostr-sdk）
-- [ ] 鍵管理モジュール実装
-- [ ] ローカルストレージ（SQLite）セットアップ
+- [x] 鍵管理モジュール実装
+- [x] ローカルストレージ（SQLite）セットアップ
 - [ ] 基本的なTauri IPC API実装
 
 ```rust
-// Cargo.toml依存関係
+// Cargo.toml依存関係（実装済み）
 [dependencies]
-tauri = { version = "2.7.0", features = ["api-all"] }
-nostr-sdk = "0.42.0"
-sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio-native-tls"] }
-argon2 = "0.5.3"
-aes-gcm = "0.10.3"
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Nostr Protocol
+nostr-sdk = "0.42"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "migrate"] }
+tokio = { version = "1.44", features = ["full"] }
+
+# P2P Networking
+iroh = "0.90"
+iroh-gossip = "0.90"
+
+# Cryptography
+secp256k1 = { version = "0.29", features = ["rand", "serde"] }
+aes-gcm = "0.10"
+sha2 = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+base64 = "0.22"
+
+# Utilities
+anyhow = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
 ```
 
 ### 2.2 月2: コア機能実装
