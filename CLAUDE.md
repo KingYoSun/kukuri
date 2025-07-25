@@ -1,0 +1,105 @@
+# CLAUDE.md
+
+## 作業開始時の確認事項
+1. **TodoReadツールで現在のタスク状況を確認**
+2. `docs/01_project/activeContext/current_tasks.md` で最新タスクを把握
+3. ドキュメントの最終更新日を確認（古い情報に注意）
+
+## 基本ルール
+- **言語**: 必ず日本語で回答
+- **コミット**: ユーザーから明示的に要求されない限り、絶対にコミットしない
+- **日付**: ドキュメント作成/更新の前に必ず`date "+%Y年%m月%d日"`コマンドで今日の日付を確認
+
+## 技術的ルール
+
+### 重複実装の防止
+- DRY原則: 新しいクラス・新しいメソッド・新しい型を実装する際は同じ機能を持ったものが既にないかを必ず調査する
+- 依存は最新に: 依存ライブラリを追加する際は、webから最新バージョンを確認する
+
+### Nostr互換性の確認
+- **NIP準拠**: Nostr関連の実装を行う際は、`docs/nips/`内の該当するNIPを必ず参照
+- **標準仕様の確認**: 新機能実装前に関連するNIPが存在しないか確認
+- **互換性チェック**: 実装がNIP仕様に準拠しているか検証
+- **拡張時の注意**: 独自拡張を行う場合は、NIPs標準との違いを明確に文書化
+
+### 作業完了時のチェック
+- [ ] current_tasks.mdの更新（完了タスクを反映）
+- [ ] TodoWriteツールでタスクリストを更新
+- [ ] 重要な変更は進捗レポート作成
+
+## プロジェクト概要
+
+**kukuri** - Nostrプロトコルベースの分散型トピック中心ソーシャルアプリケーション
+
+トピックベースのタイムラインでユーザーが情報を共有・発見できる、検閲耐性を持つP2Pソーシャルプラットフォーム。Nostrの分散性とハイブリッドP2Pアプローチを組み合わせ、優れたユーザー体験を提供。
+
+### 技術スタック
+
+#### フロントエンド
+- **Framework**: React 19 + TypeScript
+- **Build Tool**: Vite
+- **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
+- **State Management**: Zustand
+- **Data Fetching**: Tanstack Query
+- **Routing**: Tanstack Router
+
+#### バックエンド
+- **Desktop Framework**: Tauri v2 (Rust)
+- **P2P Network**: iroh (QUIC-based)
+- **Event Distribution**: iroh-gossip (トピックベース配信)
+- **Protocol**: Nostr (nostr-sdk)
+- **Database**: SQLite (sqlx)
+- **Cryptography**: secp256k1, AES-256-GCM
+
+#### インフラ
+- **Discovery Service**: Cloudflare Workers (OSS) / Docker
+- **Marketplace**: 分散ノード（検索・サジェスト）
+
+## 必須コマンド
+
+### 開発
+```bash
+# 開発サーバー起動
+pnpm tauri dev
+
+# ビルド
+pnpm tauri build
+
+# テスト実行
+pnpm test
+cargo test
+
+# リント
+pnpm lint
+cargo clippy
+
+# フォーマット
+pnpm format
+cargo fmt
+```
+
+## アーキテクチャ
+
+### レイヤー構成
+1. **Client Layer**: Tauri App (UI + Business Logic)
+2. **Discovery Layer**: ピア発見サービス (Workers/Container)
+3. **P2P Network**: irohによる直接通信
+4. **Marketplace**: 専門機能ノード (検索/推薦)
+
+## ドキュメント構成
+
+### 優先参照順
+1. `docs/SUMMARY.md` - 全体概要
+2. `docs/01_project/activeContext/` - 現在の状況
+3. 各ディレクトリのsummary.md - カテゴリー概要
+4. 詳細ドキュメント - 実装時のみ
+
+### 主要ディレクトリ
+- `01_project/`: プロジェクト管理、進捗
+- `02_architecture/`: 設計、技術決定
+- `05_implementation/`: 実装ガイド
+
+## 詳細参照先
+- 環境情報: `docs/01_project/activeContext/current_environment.md`
+- 既知の問題: `docs/01_project/activeContext/issuesAndNotes.md`
+- 開発進捗: `docs/01_project/progressReports/`
