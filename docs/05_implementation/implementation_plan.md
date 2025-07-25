@@ -33,11 +33,16 @@
 
 ```bash
 # プロジェクト初期化コマンド
-pnpm create tauri-app@latest --template react-ts
-cd kukuri
+# Tauriアプリケーションは既に初期化済み
+cd kukuri-tauri
 pnpm add @tanstack/react-query @tanstack/react-router
 pnpm add zustand
 pnpm dlx shadcn-ui@latest init
+
+# Workersプロジェクトの初期化
+cd ../workers/discovery
+pnpm init
+pnpm add -D wrangler @cloudflare/workers-types
 ```
 
 #### Week 3-4: Rust基盤実装
@@ -66,7 +71,7 @@ aes-gcm = "0.10.3"
 
 ```typescript
 // UIコンポーネント構造
-src/
+kukuri-tauri/src/
   components/
     auth/
       LoginForm.tsx
@@ -92,13 +97,19 @@ src/
 - [ ] WebSocket接続実装
 
 ```javascript
-// Workers設定例
+// Workers設定例 (workers/discovery/src/index.js)
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     
     if (url.pathname === "/api/v1/peers/register") {
       return handlePeerRegistration(request, env);
+    }
+    if (url.pathname === "/api/v1/peers/search") {
+      return handlePeerSearch(request, env);
+    }
+    if (url.pathname === "/api/v1/topics/discover") {
+      return handleTopicDiscovery(request, env);
     }
     // ... 他のエンドポイント
   }
@@ -237,24 +248,50 @@ pnpm add -D @types/node vite vitest playwright
 
 ### 5.2 ディレクトリ構造
 ```
-kukuri/
-├── src/                    # フロントエンドソース
-│   ├── components/         # UIコンポーネント
-│   ├── hooks/              # カスタムフック
-│   ├── lib/                # ユーティリティ
-│   ├── pages/              # ルートページ
-│   └── stores/             # Zustandストア
-├── src-tauri/              # Rustバックエンド
-│   ├── src/
-│   │   ├── commands/       # Tauriコマンド
-│   │   ├── crypto/         # 暗号処理
-│   │   ├── db/             # データベース
-│   │   ├── nostr/          # Nostr実装
-│   │   └── p2p/            # P2P通信
-│   └── Cargo.toml
-├── workers/                # Cloudflare Workers
-├── docker/                 # Dockerファイル
-└── docs/                   # ドキュメント
+kukuri/                     # プロジェクトルート
+├── kukuri-tauri/           # Tauriアプリケーション本体
+│   ├── src/                # フロントエンドソース
+│   │   ├── components/     # UIコンポーネント
+│   │   ├── hooks/          # カスタムフック
+│   │   ├── lib/            # ユーティリティ
+│   │   ├── pages/          # ルートページ
+│   │   ├── services/       # API・サービス層
+│   │   ├── stores/         # Zustandストア
+│   │   ├── types/          # TypeScript型定義
+│   │   └── utils/          # ヘルパー関数
+│   ├── src-tauri/          # Rustバックエンド
+│   │   ├── src/
+│   │   │   ├── commands/   # Tauriコマンド（IPC）
+│   │   │   ├── crypto/     # 暗号処理
+│   │   │   ├── db/         # データベース層
+│   │   │   ├── nostr/      # Nostrプロトコル実装
+│   │   │   ├── p2p/        # P2P通信（iroh統合）
+│   │   │   ├── state/      # アプリケーション状態
+│   │   │   └── utils/      # ユーティリティ
+│   │   ├── Cargo.toml      # Rust依存関係
+│   │   └── tauri.conf.json # Tauri設定
+│   ├── public/             # 静的ファイル
+│   ├── package.json        # Node.js依存関係
+│   └── vite.config.ts      # Vite設定
+├── workers/                # Cloudflare Workers（発見層）
+│   ├── discovery/          # ピア発見サービス
+│   │   ├── src/            # Workerソースコード
+│   │   ├── wrangler.toml   # Wrangler設定
+│   │   └── package.json    # 依存関係
+│   └── shared/             # 共有コード
+├── docker/                 # Docker関連ファイル
+│   ├── discovery/          # 発見層コンテナ
+│   │   └── Dockerfile      
+│   └── docker-compose.yml  # 開発環境用
+├── scripts/                # ユーティリティスクリプト
+│   ├── install-dev-tools.sh
+│   └── setup-environment.sh
+├── docs/                   # プロジェクトドキュメント
+│   ├── 01_project/         # プロジェクト管理
+│   ├── 02_architecture/    # アーキテクチャ設計
+│   ├── 05_implementation/  # 実装ガイド
+│   └── nips/               # Nostr改善提案
+└── README.md               # プロジェクトREADME
 ```
 
 ## 6. テスト戦略

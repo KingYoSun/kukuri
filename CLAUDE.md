@@ -36,7 +36,7 @@
 ### 技術スタック
 
 #### フロントエンド
-- **Framework**: React 19 + TypeScript
+- **Framework**: React 18 + TypeScript
 - **Build Tool**: Vite
 - **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
 - **State Management**: Zustand

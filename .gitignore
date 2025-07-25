@@ -1,6 +1,7 @@
 # Tauri
-src-tauri/target/
-src-tauri/WixTools/
+kukuri-tauri/src-tauri/target/
+kukuri-tauri/src-tauri/WixTools/
+kukuri-tauri/src-tauri/gen/
 
 # Node
 node_modules/
