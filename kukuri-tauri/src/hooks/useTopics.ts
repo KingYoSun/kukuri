@@ -12,7 +12,10 @@ const fetchTopics = async (): Promise<Topic[]> => {
       description: '技術全般について議論するトピック',
       tags: ['tech', 'programming', 'ai'],
       memberCount: 1234,
+      postCount: 567,
       lastActive: Date.now(),
+      isActive: true,
+      createdAt: new Date()
     },
     {
       id: 'nostr',
@@ -20,7 +23,10 @@ const fetchTopics = async (): Promise<Topic[]> => {
       description: 'Nostrプロトコルについて',
       tags: ['nostr', 'decentralized', 'social'],
       memberCount: 456,
+      postCount: 234,
       lastActive: Date.now(),
+      isActive: true,
+      createdAt: new Date()
     },
   ]
 }

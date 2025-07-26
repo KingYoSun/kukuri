@@ -9,7 +9,10 @@ describe('topicStore', () => {
     description: '説明1',
     tags: ['tag1'],
     memberCount: 100,
+    postCount: 50,
     lastActive: Date.now(),
+    isActive: true,
+    createdAt: new Date()
   }
 
   const mockTopic2: Topic = {
@@ -18,7 +21,10 @@ describe('topicStore', () => {
     description: '説明2',
     tags: ['tag2'],
     memberCount: 200,
+    postCount: 100,
     lastActive: Date.now(),
+    isActive: true,
+    createdAt: new Date()
   }
 
   beforeEach(() => {

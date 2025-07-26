@@ -1,9 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useLogin, useGenerateKeyPair, useLogout } from '../useAuth'
 import { useAuthStore } from '@/stores'
 import { ReactNode } from 'react'
+
+// TauriApiをモック
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    logout: vi.fn().mockResolvedValue(undefined),
+    login: vi.fn(),
+    generateKeypair: vi.fn()
+  }
+}))
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -64,13 +73,18 @@ describe('useAuth hooks', () => {
   })
 
   describe('useLogout', () => {
-    it('ログアウト時にauthStoreがクリアされること', () => {
+    it('ログアウト時にauthStoreがクリアされること', async () => {
       useAuthStore.setState({
         isAuthenticated: true,
         currentUser: {
-          pubkey: 'npub123',
+          id: 'test123',
+          pubkey: 'pubkey123',
+          npub: 'npub123',
           name: 'テストユーザー',
-          created_at: Date.now(),
+          displayName: 'テストユーザー',
+          picture: '',
+          about: '',
+          nip05: ''
         },
         privateKey: 'nsec123',
       })
@@ -81,10 +95,12 @@ describe('useAuth hooks', () => {
 
       result.current()
 
-      const state = useAuthStore.getState()
-      expect(state.isAuthenticated).toBe(false)
-      expect(state.currentUser).toBeNull()
-      expect(state.privateKey).toBeNull()
+      await waitFor(() => {
+        const state = useAuthStore.getState()
+        expect(state.isAuthenticated).toBe(false)
+        expect(state.currentUser).toBeNull()
+        expect(state.privateKey).toBeNull()
+      })
     })
   })
 })

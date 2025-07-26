@@ -4,6 +4,24 @@
 
 ## 完了済みタスク
 
+### 2025年7月26日（更新）
+- [x] Tauriコマンドの実装
+  - [x] 認証関連コマンド（generate_keypair、login、logout）
+  - [x] トピック関連コマンド（get_topics、create_topic、update_topic、delete_topic）
+  - [x] ポスト関連コマンド（get_posts、create_post、delete_post、like_post）
+  - [x] フロントエンドTauri APIインターフェース作成
+  - [x] ストアとTauri APIの統合
+  - [x] AppState構造体の実装
+- [x] 型定義の更新
+  - [x] User型の拡張（id、npub、displayName等）
+  - [x] Topic型の拡張（postCount、isActive、createdAt等）
+  - [x] Post型の構造変更（author、likes追加）
+- [x] テスト・型・リントエラーの完全解消
+  - [x] フロントエンドテスト65件すべて成功
+  - [x] TypeScript型チェックエラー解消
+  - [x] ESLintエラー・警告解消
+  - [x] Rustビルド・テスト成功
+
 ### 2025年7月26日
 - [x] iroh-gossipのNostr互換性レビューを実施
 - [x] P2Pイベント共有の設計評価ドキュメント(iroh_gossip_review.md)を作成
@@ -100,10 +118,18 @@
    - ~~鍵管理モジュール~~ ✓完了
    - ~~暗号化モジュール~~ ✓完了
    - ~~SQLiteデータベース設定~~ ✓完了
-6. フロントエンド・バックエンド統合
-   - Tauriコマンドの実装
-   - Nostr SDKの統合
-   - イベント処理基盤
+6. ~~フロントエンド・バックエンド統合~~ ✓完了
+   - ~~Tauriコマンドの実装~~ ✓完了
+   - Nostr SDKの統合（次のタスク）
+   - イベント処理基盤（次のタスク）
+7. Nostr機能の実装
+   - Nostrイベントの作成・署名
+   - リレーへの接続と通信
+   - イベントの送受信処理
+8. P2P通信の実装
+   - iroh-gossipの統合
+   - トピックベースのイベント配信
+   - ピア発見とメッシュネットワーク構築
 
 ### ドキュメント整備（優先度: 中）
 - [ ] 開発環境セットアップガイドの作成
@@ -119,4 +145,5 @@
 - プロジェクトは実装フェーズに突入
 - フロントエンド基盤（UI、状態管理、ルーティング）は完成
 - Rust側の基盤実装も完了（認証、暗号化、DB）
-- 次はフロントエンド・バックエンドの統合とNostr機能の実装
+- フロントエンド・バックエンドの統合（Tauriコマンド）も完了
+- 次はNostr SDKの統合とイベント処理機能の実装

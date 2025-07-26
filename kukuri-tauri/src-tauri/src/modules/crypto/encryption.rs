@@ -7,6 +7,25 @@ use base64::{engine::general_purpose, Engine as _};
 use sha2::{Digest, Sha256};
 
 #[allow(dead_code)]
+#[derive(Clone)]
+pub struct EncryptionManager;
+
+#[allow(dead_code)]
+impl EncryptionManager {
+    pub fn new() -> Self {
+        Self
+    }
+    
+    pub fn encrypt(&self, plaintext: &[u8], password: &str) -> Result<String> {
+        encrypt(plaintext, password)
+    }
+    
+    pub fn decrypt(&self, encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
+        decrypt(encrypted_data, password)
+    }
+}
+
+#[allow(dead_code)]
 pub fn encrypt(plaintext: &[u8], password: &str) -> Result<String> {
     // Derive key from password
     let key = derive_key_from_password(password);

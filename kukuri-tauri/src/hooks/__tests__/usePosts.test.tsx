@@ -62,10 +62,8 @@ describe('usePosts hooks', () => {
       })
 
       const newPost = {
-        pubkey: 'npub123',
         content: '新しい投稿',
-        topicId: 'tech',
-        tags: [],
+        topicId: 'tech'
       }
 
       await result.current.mutateAsync(newPost)
@@ -75,7 +73,7 @@ describe('usePosts hooks', () => {
         const posts = Array.from(state.posts.values())
         const createdPost = posts.find(p => p.content === '新しい投稿')
         expect(createdPost).toBeDefined()
-        expect(createdPost?.pubkey).toBe('npub123')
+        expect(createdPost?.author).toBeDefined()
         expect(createdPost?.topicId).toBe('tech')
       })
     })

@@ -8,29 +8,65 @@ const fetchPostsByTopic = async (topicId: string): Promise<Post[]> => {
   return [
     {
       id: '1',
-      pubkey: 'npub1...',
       content: 'Nostrプロトコルを使った分散型SNSの可能性について考えています。',
+      author: {
+        id: 'user1',
+        pubkey: 'pubkey1',
+        npub: 'npub1...',
+        name: 'ユーザー1',
+        displayName: 'ユーザー1',
+        picture: '',
+        about: '',
+        nip05: ''
+      },
       topicId,
       created_at: Math.floor(Date.now() / 1000) - 7200,
       tags: [],
+      likes: 10,
+      replies: []
     },
     {
       id: '2',
-      pubkey: 'npub2...',
       content: 'kukuriの開発進捗：P2P通信レイヤーの実装が完了しました！',
+      author: {
+        id: 'user2',
+        pubkey: 'pubkey2',
+        npub: 'npub2...',
+        name: 'ユーザー2',
+        displayName: 'ユーザー2',
+        picture: '',
+        about: '',
+        nip05: ''
+      },
       topicId,
       created_at: Math.floor(Date.now() / 1000) - 14400,
       tags: [],
+      likes: 25,
+      replies: []
     },
   ]
 }
 
-const createPost = async (post: Omit<Post, 'id' | 'created_at'>): Promise<Post> => {
+const createPost = async (postData: { content: string; topicId: string }): Promise<Post> => {
   // TODO: Tauriバックエンドに投稿を送信
   return {
-    ...post,
     id: Date.now().toString(),
+    content: postData.content,
+    author: {
+      id: 'currentUser',
+      pubkey: 'currentPubkey',
+      npub: 'currentNpub',
+      name: '現在のユーザー',
+      displayName: '現在のユーザー',
+      picture: '',
+      about: '',
+      nip05: ''
+    },
+    topicId: postData.topicId,
     created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    likes: 0,
+    replies: []
   }
 }
 

@@ -4,3 +4,5 @@ pub mod database;
 pub mod event;
 pub mod p2p;
 pub mod storage;
+pub mod topic;
+pub mod post;

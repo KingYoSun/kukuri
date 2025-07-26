@@ -1,6 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useAuthStore } from '../authStore'
 import type { User } from '../types'
+
+// TauriApiをモック
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    logout: vi.fn().mockResolvedValue(undefined),
+    login: vi.fn(),
+    generateKeypair: vi.fn()
+  }
+}))
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -20,9 +29,14 @@ describe('authStore', () => {
 
   it('loginメソッドが正しく動作すること', () => {
     const testUser: User = {
-      pubkey: 'npub123',
+      id: 'test123',
+      pubkey: 'pubkey123',
+      npub: 'npub123',
       name: 'テストユーザー',
-      created_at: Date.now(),
+      displayName: 'テストユーザー',
+      picture: '',
+      about: '',
+      nip05: ''
     }
     const testPrivateKey = 'nsec123'
 
@@ -34,11 +48,16 @@ describe('authStore', () => {
     expect(state.privateKey).toBe(testPrivateKey)
   })
 
-  it('logoutメソッドが正しく動作すること', () => {
+  it('logoutメソッドが正しく動作すること', async () => {
     const testUser: User = {
-      pubkey: 'npub123',
+      id: 'test123',
+      pubkey: 'pubkey123',
+      npub: 'npub123',
       name: 'テストユーザー',
-      created_at: Date.now(),
+      displayName: 'テストユーザー',
+      picture: '',
+      about: '',
+      nip05: ''
     }
     useAuthStore.setState({
       isAuthenticated: true,
@@ -46,7 +65,7 @@ describe('authStore', () => {
       privateKey: 'nsec123',
     })
 
-    useAuthStore.getState().logout()
+    await useAuthStore.getState().logout()
     
     const state = useAuthStore.getState()
     expect(state.isAuthenticated).toBe(false)
@@ -56,9 +75,14 @@ describe('authStore', () => {
 
   it('updateUserメソッドが正しく動作すること', () => {
     const testUser: User = {
-      pubkey: 'npub123',
+      id: 'test123',
+      pubkey: 'pubkey123',
+      npub: 'npub123',
       name: 'テストユーザー',
-      created_at: Date.now(),
+      displayName: 'テストユーザー',
+      picture: '',
+      about: '',
+      nip05: ''
     }
     useAuthStore.setState({
       isAuthenticated: true,

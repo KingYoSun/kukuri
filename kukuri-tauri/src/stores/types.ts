@@ -1,29 +1,35 @@
 export interface User {
+  id: string
   pubkey: string
-  name?: string
-  picture?: string
-  about?: string
-  nip05?: string
-  created_at: number
+  npub: string
+  name: string
+  displayName: string
+  picture: string
+  about: string
+  nip05: string
 }
 
 export interface Topic {
   id: string
   name: string
-  description?: string
+  description: string
   tags: string[]
   memberCount: number
-  lastActive: number
+  postCount: number
+  lastActive?: number
+  isActive: boolean
+  createdAt: Date
 }
 
 export interface Post {
   id: string
-  pubkey: string
   content: string
+  author: User
   topicId: string
   created_at: number
-  tags: string[][]
-  replies?: Post[]
+  tags: string[]
+  likes: number
+  replies: Post[]
 }
 
 export interface AuthState {

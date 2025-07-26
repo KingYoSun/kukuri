@@ -79,10 +79,14 @@ describe('Header', () => {
     const user = userEvent.setup()
     useAuthStore.setState({
       currentUser: {
-        pubkey: 'npub123',
+        id: 'test123',
+        pubkey: 'pubkey123',
+        npub: 'npub123',
         name: 'テストユーザー',
+        displayName: 'テストユーザー',
         picture: 'https://example.com/avatar.jpg',
-        created_at: Date.now(),
+        about: '',
+        nip05: ''
       },
     })
     
@@ -117,9 +121,14 @@ describe('Header', () => {
     const logout = vi.fn()
     useAuthStore.setState({
       currentUser: {
-        pubkey: 'npub123',
+        id: 'test123',
+        pubkey: 'pubkey123',
+        npub: 'npub123',
         name: 'テストユーザー',
-        created_at: Date.now(),
+        displayName: 'テストユーザー',
+        picture: '',
+        about: '',
+        nip05: ''
       },
       logout,
     })

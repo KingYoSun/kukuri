@@ -16,16 +16,24 @@ describe('Sidebar', () => {
   const mockTopic1: Topic = {
     id: 'topic1',
     name: 'technology',
+    description: '技術関連のトピック',
     memberCount: 1234,
+    postCount: 567,
     tags: [],
     lastActive: Date.now(),
+    isActive: true,
+    createdAt: new Date()
   }
   const mockTopic2: Topic = {
     id: 'topic2',
     name: 'nostr',
+    description: 'Nostr関連のトピック',
     memberCount: 456,
+    postCount: 234,
     tags: [],
     lastActive: Date.now(),
+    isActive: true,
+    createdAt: new Date()
   }
   
   beforeEach(() => {

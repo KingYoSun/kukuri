@@ -3,31 +3,70 @@ import { usePostStore } from '../postStore'
 import type { Post } from '../types'
 
 describe('postStore', () => {
+  const mockUser1 = {
+    id: 'user1',
+    pubkey: 'pubkey123',
+    npub: 'npub123',
+    name: 'ユーザー1',
+    displayName: 'ユーザー1',
+    picture: '',
+    about: '',
+    nip05: ''
+  }
+
+  const mockUser2 = {
+    id: 'user2',
+    pubkey: 'pubkey456',
+    npub: 'npub456',
+    name: 'ユーザー2',
+    displayName: 'ユーザー2',
+    picture: '',
+    about: '',
+    nip05: ''
+  }
+
+  const mockUser3 = {
+    id: 'user3',
+    pubkey: 'pubkey789',
+    npub: 'npub789',
+    name: 'ユーザー3',
+    displayName: 'ユーザー3',
+    picture: '',
+    about: '',
+    nip05: ''
+  }
+
   const mockPost1: Post = {
     id: 'post1',
-    pubkey: 'npub123',
     content: 'テスト投稿1',
+    author: mockUser1,
     topicId: 'topic1',
     created_at: Date.now(),
     tags: [],
+    likes: 0,
+    replies: []
   }
 
   const mockPost2: Post = {
     id: 'post2',
-    pubkey: 'npub456',
     content: 'テスト投稿2',
+    author: mockUser2,
     topicId: 'topic1',
     created_at: Date.now() - 1000,
     tags: [],
+    likes: 5,
+    replies: []
   }
 
   const mockPost3: Post = {
     id: 'post3',
-    pubkey: 'npub789',
     content: 'テスト投稿3',
+    author: mockUser3,
     topicId: 'topic2',
     created_at: Date.now() - 2000,
     tags: [],
+    likes: 10,
+    replies: []
   }
 
   beforeEach(() => {
@@ -87,13 +126,26 @@ describe('postStore', () => {
   })
 
   it('addReplyメソッドが正しく動作すること', () => {
+    const mockReplyUser = {
+      id: 'user999',
+      pubkey: 'pubkey999',
+      npub: 'npub999',
+      name: 'リプライユーザー',
+      displayName: 'リプライユーザー',
+      picture: '',
+      about: '',
+      nip05: ''
+    }
+    
     const reply: Post = {
       id: 'reply1',
-      pubkey: 'npub999',
       content: '返信テスト',
+      author: mockReplyUser,
       topicId: 'topic1',
       created_at: Date.now(),
       tags: [],
+      likes: 0,
+      replies: []
     }
 
     usePostStore.setState({

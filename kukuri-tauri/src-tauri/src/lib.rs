@@ -1,10 +1,15 @@
 use tracing::info;
+use tauri::Manager;
 
 // モジュール定義
 mod modules;
+mod state;
 
 // Tauriコマンドのインポート
 use modules::auth::commands as auth_commands;
+use modules::topic::commands as topic_commands;
+use modules::post::commands as post_commands;
+use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Run the Tauri application
@@ -25,9 +30,27 @@ pub fn run() {
             auth_commands::generate_keypair,
             auth_commands::login,
             auth_commands::logout,
+            // トピック関連コマンド
+            topic_commands::get_topics,
+            topic_commands::create_topic,
+            topic_commands::update_topic,
+            topic_commands::delete_topic,
+            // ポスト関連コマンド
+            post_commands::get_posts,
+            post_commands::create_post,
+            post_commands::delete_post,
+            post_commands::like_post,
         ])
-        .setup(|_app| {
+        .setup(|app| {
             // アプリケーション初期化処理
+            let app_handle = app.handle();
+            
+            tauri::async_runtime::block_on(async move {
+                let app_state = AppState::new().await
+                    .expect("Failed to initialize app state");
+                app_handle.manage(app_state);
+            });
+            
             info!("Application setup complete");
             Ok(())
         })
