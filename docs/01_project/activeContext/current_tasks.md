@@ -105,6 +105,17 @@
     - [x] Rust統合テスト削除（内部実装依存のため不適切）
     - [x] Rust clippyリント修正（型複雑さ、フォーマット文字列）
     - [x] 全てのテスト成功確認（フロント132件、Rust 52件）
+- [x] iroh-gossip統合設計と実装計画の策定
+  - [x] iroh-gossipとirohの技術調査（公式ドキュメント確認）
+  - [x] 統合設計書作成（`iroh_gossip_integration_design.md`）
+    - [x] アーキテクチャ設計（GossipManager、TopicMesh、EventSync）
+    - [x] メッセージフォーマット定義
+    - [x] セキュリティ考慮事項とテスト計画
+  - [x] 実装計画書作成（`iroh_gossip_implementation_plan.md`）
+    - [x] 10日間の詳細実装スケジュール
+    - [x] Tauriコマンドインターフェース定義
+    - [x] TypeScript APIインターフェース設計
+  - [x] CLAUDE.mdとREADME.mdに公式ドキュメントURL追加
 - [x] iroh-gossipのNostr互換性レビューを実施
 - [x] P2Pイベント共有の設計評価ドキュメント(iroh_gossip_review.md)を作成
 - [x] iroh-gossip採用決定に伴うドキュメント更新

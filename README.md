@@ -16,7 +16,7 @@ kukuriは、Nostrプロトコルを基盤とした分散型ソーシャルアプ
 
 ## 技術スタック
 
-- **フロントエンド**: React 19 + TypeScript + Vite
+- **フロントエンド**: React 18 + TypeScript + Vite
 - **デスクトップフレームワーク**: Tauri v2
 - **UI**: shadcn/ui (Radix UI + Tailwind CSS)
 - **状態管理**: Zustand
@@ -121,6 +121,14 @@ kukuri/
 ## ライセンス
 
 このプロジェクトはMITライセンスの下で公開されています。詳細は[LICENSE](LICENSE)ファイルを参照してください。
+
+## 外部リソース
+
+### 技術ドキュメント
+- [iroh公式ドキュメント](https://docs.rs/iroh/latest/iroh/)
+- [iroh-gossip公式ドキュメント](https://docs.rs/iroh-gossip/latest/iroh_gossip/)
+- [Nostr NIPs](https://github.com/nostr-protocol/nips)
+- [Tauri公式ドキュメント](https://tauri.app/)
 
 ## お問い合わせ
 

@@ -109,3 +109,8 @@ cargo fmt
 - 環境情報: `docs/01_project/activeContext/current_environment.md`
 - 既知の問題: `docs/01_project/activeContext/issuesAndNotes.md`
 - 開発進捗: `docs/01_project/progressReports/`
+
+## 外部ドキュメント
+- **iroh**: https://docs.rs/iroh/latest/iroh/
+- **iroh-gossip**: https://docs.rs/iroh-gossip/latest/iroh_gossip/
+- **Nostr NIPs**: https://github.com/nostr-protocol/nips
