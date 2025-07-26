@@ -31,8 +31,9 @@ sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "mig
 tokio = { version = "1.44", features = ["full"] }
 
 # P2P Networking
-iroh = "0.90"
-iroh-gossip = "0.90"
+iroh = "0.90.0"
+iroh-gossip = "0.90.0"
+lru = "0.16.0"
 
 # Cryptography
 secp256k1 = { version = "0.29", features = ["rand", "serde"] }

@@ -10,6 +10,7 @@ use modules::auth::commands as auth_commands;
 use modules::topic::commands as topic_commands;
 use modules::post::commands as post_commands;
 use modules::event::commands as event_commands;
+use modules::p2p::commands as p2p_commands;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -54,6 +55,14 @@ pub fn run() {
             event_commands::delete_events,
             event_commands::disconnect_nostr,
             event_commands::get_relay_status,
+            // P2P関連コマンド
+            p2p_commands::initialize_p2p,
+            p2p_commands::join_p2p_topic,
+            p2p_commands::leave_p2p_topic,
+            p2p_commands::broadcast_to_topic,
+            p2p_commands::get_p2p_status,
+            p2p_commands::get_node_address,
+            p2p_commands::join_topic_by_name,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

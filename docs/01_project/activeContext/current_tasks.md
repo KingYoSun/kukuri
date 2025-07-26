@@ -122,6 +122,34 @@
   - [x] system_design.mdのP2P通信部分を更新
   - [x] implementation_plan.mdにiroh-gossip統合タスクを追加
   - [x] SUMMARY.mdとCLAUDE.mdの技術スタックを更新
+- [x] P2P通信基礎実装（Day 1-2）
+  - [x] 依存関係の追加（iroh、iroh-gossip、lru）
+  - [x] P2Pモジュール構造の作成
+    - [x] error.rs - P2P固有のエラー型定義
+    - [x] message.rs - GossipMessageとメッセージ型定義
+    - [x] gossip_manager.rs - GossipManager基本実装
+    - [x] topic_mesh.rs - TopicMeshとメッセージキャッシュ実装
+    - [x] event_sync.rs - Nostr/P2P連携基盤
+    - [x] peer_discovery.rs - ピア発見機能基盤
+    - [x] commands.rs - Tauriコマンド実装
+  - [x] AppStateへのP2P状態統合
+    - [x] P2PState構造体定義
+    - [x] イベントチャネル設定
+    - [x] initialize_p2pメソッド追加
+  - [x] Tauriコマンドの実装と登録
+    - [x] initialize_p2p - P2P機能初期化
+    - [x] join_p2p_topic - トピック参加
+    - [x] leave_p2p_topic - トピック離脱
+    - [x] broadcast_to_topic - メッセージ配信
+    - [x] get_p2p_status - 状態取得
+    - [x] get_node_address - ノードアドレス取得
+  - [x] TypeScript APIの作成（src/lib/api/p2p.ts）
+  - [x] iroh APIの調査と正しい使用方法の確認
+  - [x] コンパイルエラーの完全解消
+  - [x] 包括的なテストスイートの作成
+    - [x] Rustテスト41件（全モジュール）
+    - [x] TypeScriptテスト14件（p2p.ts）
+    - [x] 全テスト成功確認
 - [x] 開発環境準備の実施
   - [x] 開発ツール自動インストールスクリプト作成
   - [x] プロジェクト設定ファイル一式作成（.gitignore, README.md等）
@@ -228,10 +256,22 @@
    - ~~Nostrイベントの作成・署名~~ ✓完了
    - ~~リレーへの接続と通信~~ ✓完了
    - ~~イベントの送受信処理~~ ✓完了
-8. P2P通信の実装（次のフェーズ）
-   - iroh-gossipの統合
-   - トピックベースのイベント配信
-   - ピア発見とメッシュネットワーク構築
+8. P2P通信の実装（進行中）
+   - ~~基礎実装（Day 1-2）~~ ✓完了
+   - トピック管理機能（Day 3-5）
+     - [ ] TopicHandleの完全実装
+     - [ ] 実際のsubscribe/broadcast実装
+     - [ ] メッセージ署名・検証機能
+     - [ ] 重複排除メカニズムの動作確認
+   - Nostr統合（Day 6-8）
+     - [ ] EventManagerとの双方向統合
+     - [ ] ハイブリッド配信メカニズム
+     - [ ] フォールバック処理
+   - UI統合と最適化（Day 9-10）
+     - [ ] P2P状態管理Store（p2pStore）
+     - [ ] 接続状態表示コンポーネント
+     - [ ] トピックメッシュ可視化
+     - [ ] パフォーマンステスト
 
 ### ドキュメント整備（優先度: 中）
 - [ ] 開発環境セットアップガイドの作成
@@ -251,4 +291,6 @@
 - Nostr SDKの統合とイベント処理基盤も完了
 - リレーへの接続とヘルスチェック機能も完了
 - Nostrイベントの送受信テスト機能も完了
-- 次はP2P通信の実装（iroh-gossip統合）
+- P2P通信の基礎実装（Day 1-2）が完了
+- 次はトピック管理機能の実装（Day 3-5）
+- P2P基礎実装完了レポート作成済み（2025-07-26_p2p_basic_implementation.md）
