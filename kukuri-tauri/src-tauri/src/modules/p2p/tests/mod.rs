@@ -10,3 +10,5 @@ mod topic_mesh_tests;
 mod peer_discovery_tests;
 #[cfg(test)]
 mod event_sync_tests;
+#[cfg(test)]
+mod integration_tests;

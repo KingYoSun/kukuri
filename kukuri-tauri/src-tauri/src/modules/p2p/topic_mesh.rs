@@ -115,18 +115,75 @@ mod tests {
     
     #[tokio::test]
     async fn test_duplicate_detection() {
-        // テスト用のGossipSubscriptionは後で実装
-        // let subscription = create_test_subscription();
-        // let mesh = TopicMesh::new("test-topic".to_string(), subscription);
+        let mesh = TopicMesh::new("test-topic".to_string());
         
-        // let message = GossipMessage::new(
-        //     MessageType::NostrEvent,
-        //     vec![1, 2, 3],
-        //     vec![0; 32],
-        // );
+        let message = GossipMessage::new(
+            MessageType::NostrEvent,
+            vec![1, 2, 3],
+            vec![0; 33], // 公開鍵は33バイト
+        );
         
-        // assert!(!mesh.is_duplicate(&message.id).await);
-        // mesh.handle_message(message.clone()).await.unwrap();
-        // assert!(mesh.is_duplicate(&message.id).await);
+        // 最初のメッセージは重複ではない
+        assert!(!mesh.is_duplicate(&message.id).await);
+        
+        // メッセージを処理
+        mesh.handle_message(message.clone()).await.unwrap();
+        
+        // 同じメッセージは重複として検出される
+        assert!(mesh.is_duplicate(&message.id).await);
+    }
+    
+    #[tokio::test]
+    async fn test_peer_management() {
+        let mesh = TopicMesh::new("test-topic".to_string());
+        
+        let peer1 = vec![1; 33];
+        let peer2 = vec![2; 33];
+        
+        // ピアを追加
+        mesh.update_peer_status(peer1.clone(), true).await;
+        mesh.update_peer_status(peer2.clone(), true).await;
+        
+        let peers = mesh.get_peers().await;
+        assert_eq!(peers.len(), 2);
+        assert!(peers.contains(&peer1));
+        assert!(peers.contains(&peer2));
+        
+        // ピアを削除
+        mesh.update_peer_status(peer1.clone(), false).await;
+        
+        let peers = mesh.get_peers().await;
+        assert_eq!(peers.len(), 1);
+        assert!(!peers.contains(&peer1));
+        assert!(peers.contains(&peer2));
+    }
+    
+    #[tokio::test]
+    async fn test_message_cache() {
+        let mesh = TopicMesh::new("test-topic".to_string());
+        
+        // 複数のメッセージを追加
+        for i in 0..5 {
+            let message = GossipMessage::new(
+                MessageType::NostrEvent,
+                vec![i],
+                vec![i; 33],
+            );
+            mesh.handle_message(message).await.unwrap();
+        }
+        
+        // 統計情報を確認
+        let stats = mesh.get_stats().await;
+        assert_eq!(stats.message_count, 5);
+        assert_eq!(stats.peer_count, 5); // 各メッセージは異なる送信者から
+        
+        // 最新のメッセージを取得
+        let recent = mesh.get_recent_messages(3).await;
+        assert_eq!(recent.len(), 3);
+        
+        // キャッシュをクリア
+        mesh.clear_cache().await;
+        let stats = mesh.get_stats().await;
+        assert_eq!(stats.message_count, 0);
     }
 }

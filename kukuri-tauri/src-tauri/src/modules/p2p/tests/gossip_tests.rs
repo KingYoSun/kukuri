@@ -2,10 +2,13 @@
 mod tests {
     use crate::modules::p2p::*;
     use iroh::SecretKey;
+    use tokio::sync::mpsc;
     
     async fn create_test_manager() -> GossipManager {
-        let secret_key = SecretKey::generate(rand::thread_rng());
-        GossipManager::new(secret_key).await.unwrap()
+        let iroh_secret_key = SecretKey::generate(rand::thread_rng());
+        let secp_secret_key = secp256k1::SecretKey::new(&mut rand::thread_rng());
+        let (event_tx, _) = mpsc::unbounded_channel();
+        GossipManager::new(iroh_secret_key, secp_secret_key, event_tx).await.unwrap()
     }
     
     #[tokio::test]

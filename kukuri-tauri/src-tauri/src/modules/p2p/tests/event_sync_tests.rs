@@ -10,13 +10,15 @@ mod tests {
     
     async fn create_test_event_sync() -> EventSync {
         // テスト用のキー生成
-        let secret_key = iroh::SecretKey::generate(rand::thread_rng());
+        let iroh_secret_key = iroh::SecretKey::generate(rand::thread_rng());
+        let secp_secret_key = secp256k1::SecretKey::new(&mut rand::thread_rng());
+        let (event_tx, _) = tokio::sync::mpsc::unbounded_channel();
         
         // EventManagerとGossipManagerのモック作成
         let event_manager = Arc::new(EventManager::new());
         
         let gossip_manager = Arc::new(
-            GossipManager::new(secret_key).await.unwrap()
+            GossipManager::new(iroh_secret_key, secp_secret_key, event_tx).await.unwrap()
         );
         
         EventSync::new(event_manager, gossip_manager)

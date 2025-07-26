@@ -11,7 +11,7 @@ mod tests;
 
 pub use error::{P2PError, Result};
 pub use message::{GossipMessage, MessageType, generate_topic_id, GLOBAL_TOPIC, user_topic_id};
-pub use gossip_manager::GossipManager;
+pub use gossip_manager::{GossipManager, P2PEvent};
 pub use topic_mesh::{TopicMesh, TopicStats};
 pub use event_sync::EventSync;
 pub use peer_discovery::PeerDiscovery;

@@ -6,46 +6,15 @@ use crate::modules::auth::key_manager::KeyManager;
 use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::event::manager::EventManager;
-use crate::modules::p2p::{GossipManager, GossipMessage};
+use crate::modules::p2p::{GossipManager, P2PEvent};
 
 /// P2P関連の状態
 pub struct P2PState {
     /// GossipManager instance
     pub manager: Option<Arc<GossipManager>>,
     
-    /// Active topic subscriptions
-    pub topics: Arc<RwLock<HashMap<String, TopicState>>>,
-    
     /// Message event channel
-    pub event_tx: mpsc::UnboundedSender<P2PEvent>,
     pub event_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<P2PEvent>>>>,
-}
-
-pub struct TopicState {
-    pub peers: Vec<String>,
-    pub stats: TopicStats,
-}
-
-#[derive(Clone, Debug)]
-pub enum P2PEvent {
-    MessageReceived {
-        topic_id: String,
-        message: GossipMessage,
-    },
-    PeerJoined {
-        topic_id: String,
-        peer_id: String,
-    },
-    PeerLeft {
-        topic_id: String,
-        peer_id: String,
-    },
-}
-
-#[derive(Clone)]
-pub struct TopicStats {
-    pub message_count: usize,
-    pub last_activity: i64,
 }
 
 /// アプリケーション全体の状態を管理する構造体
@@ -69,12 +38,9 @@ impl AppState {
         let event_manager = Arc::new(EventManager::new());
         
         // P2P状態の初期化
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
         let p2p_state = Arc::new(RwLock::new(P2PState {
             manager: None,
-            topics: Arc::new(RwLock::new(HashMap::new())),
-            event_tx,
-            event_rx: Arc::new(RwLock::new(Some(event_rx))),
+            event_rx: Arc::new(RwLock::new(None)),
         }));
 
         Ok(Self {
@@ -88,19 +54,22 @@ impl AppState {
     
     /// P2P機能を初期化
     pub async fn initialize_p2p(&self) -> anyhow::Result<()> {
-        use iroh::SecretKey;
-        
         // 秘密鍵の生成または取得
-        let secret_key = SecretKey::generate(rand::thread_rng());
+        let iroh_secret_key = iroh::SecretKey::generate(rand::thread_rng());
+        let secp_secret_key = secp256k1::SecretKey::new(&mut rand::thread_rng());
+        
+        // イベントチャネルを作成
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
         
         // GossipManagerを作成
-        let manager = GossipManager::new(secret_key)
+        let manager = GossipManager::new(iroh_secret_key, secp_secret_key, event_tx)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create GossipManager: {}", e))?;
         
         // P2P状態を更新
         let mut p2p_state = self.p2p_state.write().await;
         p2p_state.manager = Some(Arc::new(manager));
+        *p2p_state.event_rx.write().await = Some(event_rx);
         
         Ok(())
     }

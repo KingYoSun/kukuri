@@ -91,7 +91,7 @@ pub async fn broadcast_to_topic(
             let message = GossipMessage::new(
                 MessageType::NostrEvent,
                 content.into_bytes(),
-                vec![0; 32], // 送信者の公開鍵は後で適切に設定
+                vec![], // 送信者の公開鍵はbroadcast時に自動設定される
             );
             
             manager.broadcast(&topicId, message)
@@ -110,14 +110,25 @@ pub async fn get_p2p_status(
     
     match &p2p_state.manager {
         Some(manager) => {
-            let _active_topics = manager.active_topics().await;
-            let topic_statuses = vec![]; // TODO: 各トピックの詳細ステータスを取得
+            let topic_stats = manager.get_all_topic_stats().await;
+            let mut topic_statuses = Vec::new();
+            let mut total_peer_count = 0;
+            
+            for (topic_id, stats) in topic_stats {
+                topic_statuses.push(TopicStatus {
+                    topic_id,
+                    peer_count: stats.peer_count,
+                    message_count: stats.message_count,
+                    last_activity: stats.last_activity,
+                });
+                total_peer_count += stats.peer_count;
+            }
             
             Ok(P2PStatus {
                 connected: true,
                 endpoint_id: manager.node_id(),
                 active_topics: topic_statuses,
-                peer_count: 0, // TODO: 実際のピア数を取得
+                peer_count: total_peer_count,
             })
         },
         None => {
