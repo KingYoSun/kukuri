@@ -1,17 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
-import { useUIStore } from '@/stores'
-import { NostrTestPanel } from '@/components/NostrTestPanel'
+import { createFileRoute } from '@tanstack/react-router';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { useUIStore } from '@/stores';
+import { NostrTestPanel } from '@/components/NostrTestPanel';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
-})
+});
 
 function SettingsPage() {
-  const { theme, setTheme } = useUIStore()
+  const { theme, setTheme } = useUIStore();
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -20,9 +20,7 @@ function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>外観</CardTitle>
-          <CardDescription>
-            アプリケーションの見た目をカスタマイズします
-          </CardDescription>
+          <CardDescription>アプリケーションの見た目をカスタマイズします</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -39,26 +37,20 @@ function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>アカウント</CardTitle>
-          <CardDescription>
-            アカウント情報と設定を管理します
-          </CardDescription>
+          <CardDescription>アカウント情報と設定を管理します</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">プロフィール編集</p>
-              <p className="text-sm text-muted-foreground">
-                表示名、自己紹介、アバター画像を編集
-              </p>
+              <p className="text-sm text-muted-foreground">表示名、自己紹介、アバター画像を編集</p>
             </div>
             <Button variant="outline">編集</Button>
           </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">鍵管理</p>
-              <p className="text-sm text-muted-foreground">
-                秘密鍵のバックアップとインポート
-              </p>
+              <p className="text-sm text-muted-foreground">秘密鍵のバックアップとインポート</p>
             </div>
             <Button variant="outline">管理</Button>
           </div>
@@ -68,9 +60,7 @@ function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>プライバシー</CardTitle>
-          <CardDescription>
-            プライバシー設定を管理します
-          </CardDescription>
+          <CardDescription>プライバシー設定を管理します</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -90,9 +80,7 @@ function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>開発者ツール</CardTitle>
-              <CardDescription>
-                開発・デバッグ用の機能
-              </CardDescription>
+              <CardDescription>開発・デバッグ用の機能</CardDescription>
             </CardHeader>
             <CardContent>
               <NostrTestPanel />
@@ -101,5 +89,5 @@ function SettingsPage() {
         </>
       )}
     </div>
-  )
+  );
 }

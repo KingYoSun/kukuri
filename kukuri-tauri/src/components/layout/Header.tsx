@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,10 +7,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Bell, Settings, LogOut, Menu } from "lucide-react";
-import { useAuthStore, useUIStore } from "@/stores";
-import { useNavigate } from "@tanstack/react-router";
+} from '@/components/ui/dropdown-menu';
+import { Bell, Settings, LogOut, Menu } from 'lucide-react';
+import { useAuthStore, useUIStore } from '@/stores';
+import { useNavigate } from '@tanstack/react-router';
 
 export function Header() {
   const { currentUser, logout } = useAuthStore();
@@ -26,22 +26,20 @@ export function Header() {
   };
 
   const getUserInitials = () => {
-    if (!currentUser?.name) return "U";
+    if (!currentUser?.name) return 'U';
     return currentUser.name.slice(0, 2).toUpperCase();
   };
 
   return (
-    <header role="banner" className="h-16 border-b bg-background px-6 flex items-center justify-between">
+    <header
+      role="banner"
+      className="h-16 border-b bg-background px-6 flex items-center justify-between"
+    >
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleSidebar}
-          aria-label="メニュー切り替え"
-        >
+        <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="メニュー切り替え">
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 
+        <h1
           className="text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => navigate({ to: '/' })}
         >
@@ -58,15 +56,13 @@ export function Header() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full">
               <Avatar className="h-10 w-10">
-                <AvatarImage src={currentUser?.picture} alt={currentUser?.name || "User"} />
+                <AvatarImage src={currentUser?.picture} alt={currentUser?.name || 'User'} />
                 <AvatarFallback>{getUserInitials()}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
-            <DropdownMenuLabel>
-              {currentUser?.name || "マイアカウント"}
-            </DropdownMenuLabel>
+            <DropdownMenuLabel>{currentUser?.name || 'マイアカウント'}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSettings}>
               <Settings className="mr-2 h-4 w-4" />

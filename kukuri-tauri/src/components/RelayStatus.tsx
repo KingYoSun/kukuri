@@ -9,7 +9,7 @@ export function RelayStatus() {
     // 初回読み込み時とその後30秒ごとにリレー状態を更新
     updateRelayStatus();
     const interval = setInterval(updateRelayStatus, 30000);
-    
+
     return () => clearInterval(interval);
   }, [updateRelayStatus]);
 
@@ -34,19 +34,19 @@ export function RelayStatus() {
                   relay.status === 'connected'
                     ? 'bg-green-100 text-green-800'
                     : relay.status === 'connecting'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : relay.status === 'disconnected'
-                    ? 'bg-gray-100 text-gray-800'
-                    : 'bg-red-100 text-red-800'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : relay.status === 'disconnected'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-red-100 text-red-800'
                 }`}
               >
                 {relay.status === 'connected'
                   ? '接続済み'
                   : relay.status === 'connecting'
-                  ? '接続中'
-                  : relay.status === 'disconnected'
-                  ? '切断'
-                  : 'エラー'}
+                    ? '接続中'
+                    : relay.status === 'disconnected'
+                      ? '切断'
+                      : 'エラー'}
               </span>
             </div>
           ))}

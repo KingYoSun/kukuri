@@ -1,18 +1,18 @@
-import { AppHelper } from './app'
+import { AppHelper } from './app';
 
 /**
  * E2Eテストのセットアップ
  */
 export async function setupE2ETest() {
   // ブラウザのビューポートサイズを設定
-  await browser.setWindowSize(1280, 800)
-  
+  await browser.setWindowSize(1280, 800);
+
   // アプリの起動を待つ
-  await AppHelper.waitForAppReady()
-  
+  await AppHelper.waitForAppReady();
+
   // 初期状態のスクリーンショットを撮影（デバッグ用）
   if (process.env.E2E_SCREENSHOT) {
-    await AppHelper.takeScreenshot('initial-state')
+    await AppHelper.takeScreenshot('initial-state');
   }
 }
 
@@ -24,14 +24,14 @@ export async function beforeEachTest() {
   // 注: 実際のアプリでは、テスト用のリセットコマンドを実装する必要があります
   await browser.execute(() => {
     // localStorageをクリア
-    window.localStorage.clear()
-  })
-  
+    window.localStorage.clear();
+  });
+
   // ページをリロード
-  await browser.refresh()
-  
+  await browser.refresh();
+
   // アプリの再起動を待つ
-  await AppHelper.waitForAppReady()
+  await AppHelper.waitForAppReady();
 }
 
 /**
@@ -42,11 +42,11 @@ export async function afterEachTest(testName: string) {
   if (browser.capabilities && testName) {
     const testStatus = await browser.execute(() => {
       // テストのステータスを取得する実装
-      return 'passed' // 実際にはテストフレームワークから取得
-    })
-    
+      return 'passed'; // 実際にはテストフレームワークから取得
+    });
+
     if (testStatus !== 'passed') {
-      await AppHelper.takeScreenshot(`error-${testName}`)
+      await AppHelper.takeScreenshot(`error-${testName}`);
     }
   }
 }
@@ -60,13 +60,13 @@ export async function cleanupTestData() {
   await browser.execute(() => {
     // IndexedDBのクリア
     if ('indexedDB' in window) {
-      indexedDB.databases().then(databases => {
-        databases.forEach(db => {
+      indexedDB.databases().then((databases) => {
+        databases.forEach((db) => {
           if (db.name) {
-            indexedDB.deleteDatabase(db.name)
+            indexedDB.deleteDatabase(db.name);
           }
-        })
-      })
+        });
+      });
     }
-  })
+  });
 }

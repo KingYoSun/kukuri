@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { usePostStore } from '@/stores'
-import type { Post } from '@/stores'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { usePostStore } from '@/stores';
+import type { Post } from '@/stores';
 
 // 仮のAPI関数（後でTauriコマンドに置き換え）
 const fetchPostsByTopic = async (topicId: string): Promise<Post[]> => {
@@ -17,13 +17,13 @@ const fetchPostsByTopic = async (topicId: string): Promise<Post[]> => {
         displayName: 'ユーザー1',
         picture: '',
         about: '',
-        nip05: ''
+        nip05: '',
       },
       topicId,
       created_at: Math.floor(Date.now() / 1000) - 7200,
       tags: [],
       likes: 10,
-      replies: []
+      replies: [],
     },
     {
       id: '2',
@@ -36,16 +36,16 @@ const fetchPostsByTopic = async (topicId: string): Promise<Post[]> => {
         displayName: 'ユーザー2',
         picture: '',
         about: '',
-        nip05: ''
+        nip05: '',
       },
       topicId,
       created_at: Math.floor(Date.now() / 1000) - 14400,
       tags: [],
       likes: 25,
-      replies: []
+      replies: [],
     },
-  ]
-}
+  ];
+};
 
 const createPost = async (postData: { content: string; topicId: string }): Promise<Post> => {
   // TODO: Tauriバックエンドに投稿を送信
@@ -60,39 +60,39 @@ const createPost = async (postData: { content: string; topicId: string }): Promi
       displayName: '現在のユーザー',
       picture: '',
       about: '',
-      nip05: ''
+      nip05: '',
     },
     topicId: postData.topicId,
     created_at: Math.floor(Date.now() / 1000),
     tags: [],
     likes: 0,
-    replies: []
-  }
-}
+    replies: [],
+  };
+};
 
 export const usePostsByTopic = (topicId: string) => {
-  const { setPosts } = usePostStore()
+  const { setPosts } = usePostStore();
 
   return useQuery({
     queryKey: ['posts', topicId],
     queryFn: async () => {
-      const posts = await fetchPostsByTopic(topicId)
-      setPosts(posts)
-      return posts
+      const posts = await fetchPostsByTopic(topicId);
+      setPosts(posts);
+      return posts;
     },
     enabled: !!topicId,
-  })
-}
+  });
+};
 
 export const useCreatePost = () => {
-  const queryClient = useQueryClient()
-  const { addPost } = usePostStore()
+  const queryClient = useQueryClient();
+  const { addPost } = usePostStore();
 
   return useMutation({
     mutationFn: createPost,
     onSuccess: (newPost) => {
-      addPost(newPost)
-      queryClient.invalidateQueries({ queryKey: ['posts', newPost.topicId] })
+      addPost(newPost);
+      queryClient.invalidateQueries({ queryKey: ['posts', newPost.topicId] });
     },
-  })
-}
+  });
+};

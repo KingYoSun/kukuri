@@ -1,8 +1,8 @@
-import { ReactNode } from "react";
-import { Header } from "./Header";
-import { Sidebar } from "./Sidebar";
-import { useUIStore } from "@/stores";
-import { cn } from "@/lib/utils";
+import { ReactNode } from 'react';
+import { Header } from './Header';
+import { Sidebar } from './Sidebar';
+import { useUIStore } from '@/stores';
+import { cn } from '@/lib/utils';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -15,12 +15,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     <div className="h-screen flex flex-col bg-background">
       <Header />
       <div className="flex flex-1 overflow-hidden">
-        <div
-          className={cn(
-            "transition-all duration-300",
-            sidebarOpen ? "w-64" : "w-0"
-          )}
-        >
+        <div className={cn('transition-all duration-300', sidebarOpen ? 'w-64' : 'w-0')}>
           <Sidebar />
         </div>
         <main className="flex-1 overflow-auto">

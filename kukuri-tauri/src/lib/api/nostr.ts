@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core';
 
 // Types
 export interface NostrMetadata {
@@ -28,65 +28,57 @@ export interface NostrEvent {
 
 // Nostr Commands
 export async function initializeNostr(): Promise<void> {
-  return invoke("initialize_nostr");
+  return invoke('initialize_nostr');
 }
 
 export async function addRelay(url: string): Promise<void> {
-  return invoke("add_relay", { url });
+  return invoke('add_relay', { url });
 }
 
 export async function publishTextNote(content: string): Promise<string> {
-  return invoke("publish_text_note", { content });
+  return invoke('publish_text_note', { content });
 }
 
 export async function publishTopicPost(
   topicId: string,
   content: string,
-  replyTo?: string
+  replyTo?: string,
 ): Promise<string> {
-  return invoke("publish_topic_post", {
+  return invoke('publish_topic_post', {
     topicId,
     content,
     replyTo: replyTo || null,
   });
 }
 
-export async function sendReaction(
-  eventId: string,
-  reaction: string
-): Promise<string> {
-  return invoke("send_reaction", { eventId, reaction });
+export async function sendReaction(eventId: string, reaction: string): Promise<string> {
+  return invoke('send_reaction', { eventId, reaction });
 }
 
-export async function updateNostrMetadata(
-  metadata: NostrMetadata
-): Promise<string> {
-  return invoke("update_nostr_metadata", { metadata });
+export async function updateNostrMetadata(metadata: NostrMetadata): Promise<string> {
+  return invoke('update_nostr_metadata', { metadata });
 }
 
 export async function subscribeToTopic(topicId: string): Promise<void> {
-  return invoke("subscribe_to_topic", { topicId });
+  return invoke('subscribe_to_topic', { topicId });
 }
 
 export async function subscribeToUser(pubkey: string): Promise<void> {
-  return invoke("subscribe_to_user", { pubkey });
+  return invoke('subscribe_to_user', { pubkey });
 }
 
 export async function getNostrPubkey(): Promise<string | null> {
-  return invoke("get_nostr_pubkey");
+  return invoke('get_nostr_pubkey');
 }
 
-export async function deleteEvents(
-  eventIds: string[],
-  reason?: string
-): Promise<string> {
-  return invoke("delete_events", { eventIds, reason });
+export async function deleteEvents(eventIds: string[], reason?: string): Promise<string> {
+  return invoke('delete_events', { eventIds, reason });
 }
 
 export async function disconnectNostr(): Promise<void> {
-  return invoke("disconnect_nostr");
+  return invoke('disconnect_nostr');
 }
 
 export async function getRelayStatus(): Promise<RelayInfo[]> {
-  return invoke("get_relay_status");
+  return invoke('get_relay_status');
 }

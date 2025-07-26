@@ -1,3 +1,3 @@
-export * from './useAuth'
-export * from './useTopics'
-export * from './usePosts'
+export * from './useAuth';
+export * from './useTopics';
+export * from './usePosts';

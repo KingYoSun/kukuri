@@ -27,7 +27,7 @@ export function NostrTestPanel() {
 
   const addResult = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setResults(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 9)]);
+    setResults((prev) => [`[${timestamp}] ${message}`, ...prev.slice(0, 9)]);
   };
 
   useEffect(() => {
@@ -36,11 +36,11 @@ export function NostrTestPanel() {
     // Nostrイベントをリッスン
     const unlisten = listen<NostrEventPayload>('nostr://event', (event) => {
       addResult(`📨 イベント受信: ${event.payload.id}`);
-      setReceivedEvents(prev => [event.payload, ...prev.slice(0, 19)]);
+      setReceivedEvents((prev) => [event.payload, ...prev.slice(0, 19)]);
     });
 
     return () => {
-      unlisten.then(fn => fn());
+      unlisten.then((fn) => fn());
     };
   }, [isAuthenticated]);
 
@@ -142,7 +142,7 @@ export function NostrTestPanel() {
             <TabsTrigger value="log">実行ログ</TabsTrigger>
             <TabsTrigger value="received">受信イベント</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="send" className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">テスト内容</label>
@@ -153,7 +153,7 @@ export function NostrTestPanel() {
                 disabled={isLoading}
               />
             </div>
-            
+
             <div className="space-y-2">
               <label className="text-sm font-medium">トピックID（トピック投稿用）</label>
               <Input
@@ -163,33 +163,28 @@ export function NostrTestPanel() {
                 disabled={isLoading}
               />
             </div>
-            
+
             <div className="flex flex-wrap gap-2">
-              <Button 
-                onClick={handleTestTextNote} 
+              <Button
+                onClick={handleTestTextNote}
                 disabled={isLoading || !testContent.trim()}
                 size="sm"
               >
                 テキストノート送信
               </Button>
-              <Button 
-                onClick={handleTestTopicPost} 
+              <Button
+                onClick={handleTestTopicPost}
                 disabled={isLoading || !testContent.trim()}
                 size="sm"
               >
                 トピック投稿送信
               </Button>
-              <Button 
-                onClick={handleTestReaction} 
-                disabled={isLoading}
-                size="sm"
-                variant="outline"
-              >
+              <Button onClick={handleTestReaction} disabled={isLoading} size="sm" variant="outline">
                 リアクション送信
               </Button>
             </div>
           </TabsContent>
-          
+
           <TabsContent value="subscribe" className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">購読するトピックID</label>
@@ -200,16 +195,16 @@ export function NostrTestPanel() {
                 disabled={isLoading}
               />
             </div>
-            
-            <Button 
-              onClick={handleSubscribeTopic} 
+
+            <Button
+              onClick={handleSubscribeTopic}
               disabled={isLoading || !topicId.trim()}
               size="sm"
             >
               トピックを購読
             </Button>
           </TabsContent>
-          
+
           <TabsContent value="log">
             <div className="space-y-2">
               <div className="text-sm font-medium mb-2">実行結果ログ</div>
@@ -226,10 +221,12 @@ export function NostrTestPanel() {
               </div>
             </div>
           </TabsContent>
-          
+
           <TabsContent value="received">
             <div className="space-y-2">
-              <div className="text-sm font-medium mb-2">受信イベント ({receivedEvents.length}件)</div>
+              <div className="text-sm font-medium mb-2">
+                受信イベント ({receivedEvents.length}件)
+              </div>
               <div className="bg-muted p-3 rounded-md h-64 overflow-y-auto">
                 {receivedEvents.length === 0 ? (
                   <p className="text-muted-foreground text-sm">まだイベントを受信していません</p>
@@ -238,18 +235,21 @@ export function NostrTestPanel() {
                     {receivedEvents.map((event, index) => (
                       <div key={index} className="bg-background p-3 rounded border text-xs">
                         <div className="font-mono mb-1">
-                          <span className="text-muted-foreground">ID:</span> {event.id.slice(0, 16)}...
+                          <span className="text-muted-foreground">ID:</span> {event.id.slice(0, 16)}
+                          ...
                         </div>
                         <div>
-                          <span className="text-muted-foreground">著者:</span> {event.author.slice(0, 16)}...
+                          <span className="text-muted-foreground">著者:</span>{' '}
+                          {event.author.slice(0, 16)}...
                         </div>
                         <div>
-                          <span className="text-muted-foreground">種類:</span> {event.kind} 
+                          <span className="text-muted-foreground">種類:</span> {event.kind}
                           {event.kind === 1 && ' (TextNote)'}
                           {event.kind === 7 && ' (Reaction)'}
                         </div>
                         <div className="mt-1">
-                          <span className="text-muted-foreground">内容:</span> {event.content.slice(0, 100)}
+                          <span className="text-muted-foreground">内容:</span>{' '}
+                          {event.content.slice(0, 100)}
                           {event.content.length > 100 && '...'}
                         </div>
                         <div className="text-muted-foreground text-xs mt-1">

@@ -182,6 +182,15 @@
   - [x] ESLint警告の解消（未使用変数、any型）
   - [x] Rust未使用import/dead code警告の修正
   - [x] 全てのテスト成功を確認（フロント65件、バックエンド15件）
+- [x] Prettierの導入と設定
+  - [x] prettier v3.6.2をインストール
+  - [x] .prettierrc設定ファイルを作成（プロジェクト標準のコーディングスタイル定義）
+  - [x] .prettierignoreファイルを作成（ビルド成果物、生成コード除外）
+  - [x] package.jsonにformat/format:checkスクリプトを追加
+  - [x] ESLintとPrettierの競合を解決（eslint-config-prettier v10.1.8導入）
+  - [x] ESLint設定でprettierConfigを統合
+  - [x] 全ソースコードのフォーマット実行（71ファイル）
+  - [x] CLAUDE.mdにformatコマンドを追加
 
 ### 2025年7月25日
 - [x] design_doc.mdのプロジェクト名をkukuriに更新

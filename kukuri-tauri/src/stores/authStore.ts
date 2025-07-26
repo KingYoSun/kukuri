@@ -1,19 +1,19 @@
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import type { AuthState, User } from './types'
-import { TauriApi } from '@/lib/api/tauri'
-import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr'
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { AuthState, User } from './types';
+import { TauriApi } from '@/lib/api/tauri';
+import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr';
 
 interface AuthStore extends AuthState {
-  relayStatus: RelayInfo[]
-  login: (privateKey: string, user: User) => Promise<void>
-  loginWithNsec: (nsec: string) => Promise<void>
-  generateNewKeypair: () => Promise<{ nsec: string }>
-  logout: () => Promise<void>
-  updateUser: (user: Partial<User>) => void
-  updateRelayStatus: () => Promise<void>
-  setRelayStatus: (status: RelayInfo[]) => void
-  get isLoggedIn(): boolean
+  relayStatus: RelayInfo[];
+  login: (privateKey: string, user: User) => Promise<void>;
+  loginWithNsec: (nsec: string) => Promise<void>;
+  generateNewKeypair: () => Promise<{ nsec: string }>;
+  logout: () => Promise<void>;
+  updateUser: (user: Partial<User>) => void;
+  updateRelayStatus: () => Promise<void>;
+  setRelayStatus: (status: RelayInfo[]) => void;
+  get isLoggedIn(): boolean;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -28,7 +28,7 @@ export const useAuthStore = create<AuthStore>()(
         set({
           isAuthenticated: true,
           currentUser: user,
-          privateKey
+          privateKey,
         });
         try {
           await initializeNostr();
@@ -48,14 +48,14 @@ export const useAuthStore = create<AuthStore>()(
             displayName: 'ユーザー',
             about: '',
             picture: '',
-            nip05: ''
+            nip05: '',
           };
           set({
             isAuthenticated: true,
             currentUser: user,
-            privateKey: nsec
+            privateKey: nsec,
           });
-          
+
           // Nostrクライアントを初期化
           await initializeNostr();
           // リレー状態を更新
@@ -77,19 +77,19 @@ export const useAuthStore = create<AuthStore>()(
             displayName: '新規ユーザー',
             about: '',
             picture: '',
-            nip05: ''
+            nip05: '',
           };
           set({
             isAuthenticated: true,
             currentUser: user,
-            privateKey: response.nsec
+            privateKey: response.nsec,
           });
-          
+
           // Nostrクライアントを初期化
           await initializeNostr();
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
-          
+
           return { nsec: response.nsec };
         } catch (error) {
           console.error('Keypair generation failed:', error);
@@ -112,18 +112,20 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: false,
           currentUser: null,
           privateKey: null,
-          relayStatus: []
+          relayStatus: [],
         });
       },
 
       updateUser: (userUpdate: Partial<User>) =>
         set((state) => ({
-          currentUser: state.currentUser ? {
-            ...state.currentUser,
-            ...userUpdate
-          } : null
+          currentUser: state.currentUser
+            ? {
+                ...state.currentUser,
+                ...userUpdate,
+              }
+            : null,
         })),
-      
+
       updateRelayStatus: async () => {
         try {
           const status = await getRelayStatus();
@@ -132,22 +134,22 @@ export const useAuthStore = create<AuthStore>()(
           console.error('Failed to get relay status:', error);
         }
       },
-      
+
       setRelayStatus: (status: RelayInfo[]) => {
         set({ relayStatus: status });
       },
-      
+
       get isLoggedIn() {
         return get().isAuthenticated;
-      }
+      },
     }),
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
-        currentUser: state.currentUser
-      })
-    }
-  )
-)
+        currentUser: state.currentUser,
+      }),
+    },
+  ),
+);

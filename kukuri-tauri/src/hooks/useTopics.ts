@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTopicStore } from '@/stores'
-import type { Topic } from '@/stores'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTopicStore } from '@/stores';
+import type { Topic } from '@/stores';
 
 // 仮のAPI関数（後でTauriコマンドに置き換え）
 const fetchTopics = async (): Promise<Topic[]> => {
@@ -15,7 +15,7 @@ const fetchTopics = async (): Promise<Topic[]> => {
       postCount: 567,
       lastActive: Date.now(),
       isActive: true,
-      createdAt: new Date()
+      createdAt: new Date(),
     },
     {
       id: 'nostr',
@@ -26,56 +26,56 @@ const fetchTopics = async (): Promise<Topic[]> => {
       postCount: 234,
       lastActive: Date.now(),
       isActive: true,
-      createdAt: new Date()
+      createdAt: new Date(),
     },
-  ]
-}
+  ];
+};
 
 const joinTopic = async (topicId: string): Promise<void> => {
   // TODO: Tauriバックエンドに参加をリクエスト
-  console.log('Joining topic:', topicId)
-}
+  console.log('Joining topic:', topicId);
+};
 
 const leaveTopic = async (topicId: string): Promise<void> => {
   // TODO: Tauriバックエンドに退出をリクエスト
-  console.log('Leaving topic:', topicId)
-}
+  console.log('Leaving topic:', topicId);
+};
 
 export const useTopics = () => {
-  const { setTopics } = useTopicStore()
+  const { setTopics } = useTopicStore();
 
   return useQuery({
     queryKey: ['topics'],
     queryFn: async () => {
-      const topics = await fetchTopics()
-      setTopics(topics)
-      return topics
+      const topics = await fetchTopics();
+      setTopics(topics);
+      return topics;
     },
-  })
-}
+  });
+};
 
 export const useJoinTopic = () => {
-  const queryClient = useQueryClient()
-  const { joinTopic: joinTopicStore } = useTopicStore()
+  const queryClient = useQueryClient();
+  const { joinTopic: joinTopicStore } = useTopicStore();
 
   return useMutation({
     mutationFn: joinTopic,
     onSuccess: (_, topicId) => {
-      joinTopicStore(topicId)
-      queryClient.invalidateQueries({ queryKey: ['topics'] })
+      joinTopicStore(topicId);
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
     },
-  })
-}
+  });
+};
 
 export const useLeaveTopic = () => {
-  const queryClient = useQueryClient()
-  const { leaveTopic: leaveTopicStore } = useTopicStore()
+  const queryClient = useQueryClient();
+  const { leaveTopic: leaveTopicStore } = useTopicStore();
 
   return useMutation({
     mutationFn: leaveTopic,
     onSuccess: (_, topicId) => {
-      leaveTopicStore(topicId)
-      queryClient.invalidateQueries({ queryKey: ['topics'] })
+      leaveTopicStore(topicId);
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
     },
-  })
-}
+  });
+};

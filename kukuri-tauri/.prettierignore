@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+target/
+gen/
+
+# Generated files
+routeTree.gen.ts
+*.generated.*
+
+# Android build files
+src-tauri/gen/android/
+
+# SQLite
+*.db
+*.sqlite
+sqlite:/
+
+# Coverage
+coverage/
+
+# Environment files
+.env
+.env.*
+
+# Tauri icons
+icons/
+
+# Migration files
+migrations/
+
+# External documentation
+docs/nips/

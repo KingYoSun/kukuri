@@ -82,6 +82,9 @@ cargo clippy
 # フォーマット
 pnpm format
 cargo fmt
+
+# フォーマットチェック
+pnpm format:check
 ```
 
 ## アーキテクチャ

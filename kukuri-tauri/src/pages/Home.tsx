@@ -1,18 +1,19 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Heart, MessageCircle, Repeat2, Share } from "lucide-react";
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Heart, MessageCircle, Repeat2, Share } from 'lucide-react';
 
 const posts = [
   {
     id: 1,
     author: {
-      name: "Alice",
-      avatar: "",
-      pubkey: "npub1...",
+      name: 'Alice',
+      avatar: '',
+      pubkey: 'npub1...',
     },
-    content: "Nostrプロトコルを使った分散型SNSの可能性について考えています。中央集権的なプラットフォームからの脱却が実現できるかもしれません。",
-    timestamp: "2時間前",
+    content:
+      'Nostrプロトコルを使った分散型SNSの可能性について考えています。中央集権的なプラットフォームからの脱却が実現できるかもしれません。',
+    timestamp: '2時間前',
     likes: 12,
     comments: 3,
     reposts: 2,
@@ -20,12 +21,13 @@ const posts = [
   {
     id: 2,
     author: {
-      name: "Bob",
-      avatar: "",
-      pubkey: "npub2...",
+      name: 'Bob',
+      avatar: '',
+      pubkey: 'npub2...',
     },
-    content: "kukuriの開発進捗：P2P通信レイヤーの実装が完了しました！次はトピック機能の実装に取り掛かります。",
-    timestamp: "4時間前",
+    content:
+      'kukuriの開発進捗：P2P通信レイヤーの実装が完了しました！次はトピック機能の実装に取り掛かります。',
+    timestamp: '4時間前',
     likes: 24,
     comments: 8,
     reposts: 5,
@@ -36,7 +38,7 @@ function Home() {
   return (
     <div className="max-w-2xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">タイムライン</h2>
-      
+
       <div className="space-y-4">
         {posts.map((post) => (
           <Card key={post.id} data-testid="card">
@@ -49,13 +51,9 @@ function Home() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="font-semibold">{post.author.name}</h4>
-                    <span className="text-sm text-muted-foreground">
-                      {post.timestamp}
-                    </span>
+                    <span className="text-sm text-muted-foreground">{post.timestamp}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {post.author.pubkey}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{post.author.pubkey}</p>
                 </div>
               </div>
             </CardHeader>

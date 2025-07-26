@@ -150,7 +150,7 @@ export class NostrAPI {
   static async publishTopicPost(
     topicId: string,
     content: string,
-    replyTo?: string
+    replyTo?: string,
   ): Promise<string> {
     return await invoke('publish_topic_post', { topicId, content, replyTo });
   }

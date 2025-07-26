@@ -1,20 +1,20 @@
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import type { TopicState, Topic } from './types'
-import { TauriApi } from '@/lib/api/tauri'
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { TopicState, Topic } from './types';
+import { TauriApi } from '@/lib/api/tauri';
 
 interface TopicStore extends TopicState {
-  setTopics: (topics: Topic[]) => void
-  fetchTopics: () => Promise<void>
-  addTopic: (topic: Topic) => void
-  createTopic: (name: string, description: string) => Promise<Topic>
-  updateTopic: (id: string, update: Partial<Topic>) => void
-  updateTopicRemote: (id: string, name: string, description: string) => Promise<void>
-  removeTopic: (id: string) => void
-  deleteTopicRemote: (id: string) => Promise<void>
-  setCurrentTopic: (topic: Topic | null) => void
-  joinTopic: (topicId: string) => void
-  leaveTopic: (topicId: string) => void
+  setTopics: (topics: Topic[]) => void;
+  fetchTopics: () => Promise<void>;
+  addTopic: (topic: Topic) => void;
+  createTopic: (name: string, description: string) => Promise<Topic>;
+  updateTopic: (id: string, update: Partial<Topic>) => void;
+  updateTopicRemote: (id: string, name: string, description: string) => Promise<void>;
+  removeTopic: (id: string) => void;
+  deleteTopicRemote: (id: string) => Promise<void>;
+  setCurrentTopic: (topic: Topic | null) => void;
+  joinTopic: (topicId: string) => void;
+  leaveTopic: (topicId: string) => void;
 }
 
 export const useTopicStore = create<TopicStore>()(
@@ -24,15 +24,15 @@ export const useTopicStore = create<TopicStore>()(
       currentTopic: null,
       joinedTopics: [],
 
-      setTopics: (topics: Topic[]) => 
+      setTopics: (topics: Topic[]) =>
         set({
-          topics: new Map(topics.map(t => [t.id, t]))
+          topics: new Map(topics.map((t) => [t.id, t])),
         }),
 
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
-          const topics: Topic[] = apiTopics.map(t => ({
+          const topics: Topic[] = apiTopics.map((t) => ({
             id: t.id,
             name: t.name,
             description: t.description,
@@ -40,10 +40,10 @@ export const useTopicStore = create<TopicStore>()(
             memberCount: 0,
             postCount: 0,
             isActive: true,
-            tags: []
+            tags: [],
           }));
           set({
-            topics: new Map(topics.map(t => [t.id, t]))
+            topics: new Map(topics.map((t) => [t.id, t])),
           });
         } catch (error) {
           console.error('Failed to fetch topics:', error);
@@ -53,9 +53,9 @@ export const useTopicStore = create<TopicStore>()(
 
       addTopic: (topic: Topic) =>
         set((state) => {
-          const newTopics = new Map(state.topics)
-          newTopics.set(topic.id, topic)
-          return { topics: newTopics }
+          const newTopics = new Map(state.topics);
+          newTopics.set(topic.id, topic);
+          return { topics: newTopics };
         }),
 
       createTopic: async (name: string, description: string) => {
@@ -69,7 +69,7 @@ export const useTopicStore = create<TopicStore>()(
             memberCount: 0,
             postCount: 0,
             isActive: true,
-            tags: []
+            tags: [],
           };
           set((state) => {
             const newTopics = new Map(state.topics);
@@ -85,12 +85,12 @@ export const useTopicStore = create<TopicStore>()(
 
       updateTopic: (id: string, update: Partial<Topic>) =>
         set((state) => {
-          const newTopics = new Map(state.topics)
-          const existing = newTopics.get(id)
+          const newTopics = new Map(state.topics);
+          const existing = newTopics.get(id);
           if (existing) {
-            newTopics.set(id, { ...existing, ...update })
+            newTopics.set(id, { ...existing, ...update });
           }
-          return { topics: newTopics }
+          return { topics: newTopics };
         }),
 
       updateTopicRemote: async (id: string, name: string, description: string) => {
@@ -103,7 +103,7 @@ export const useTopicStore = create<TopicStore>()(
               newTopics.set(id, {
                 ...existing,
                 name: apiTopic.name,
-                description: apiTopic.description
+                description: apiTopic.description,
               });
             }
             return { topics: newTopics };
@@ -116,12 +116,12 @@ export const useTopicStore = create<TopicStore>()(
 
       removeTopic: (id: string) =>
         set((state) => {
-          const newTopics = new Map(state.topics)
-          newTopics.delete(id)
-          return { 
+          const newTopics = new Map(state.topics);
+          newTopics.delete(id);
+          return {
             topics: newTopics,
-            currentTopic: state.currentTopic?.id === id ? null : state.currentTopic
-          }
+            currentTopic: state.currentTopic?.id === id ? null : state.currentTopic,
+          };
         }),
 
       deleteTopicRemote: async (id: string) => {
@@ -130,9 +130,9 @@ export const useTopicStore = create<TopicStore>()(
           set((state) => {
             const newTopics = new Map(state.topics);
             newTopics.delete(id);
-            return { 
+            return {
               topics: newTopics,
-              currentTopic: state.currentTopic?.id === id ? null : state.currentTopic
+              currentTopic: state.currentTopic?.id === id ? null : state.currentTopic,
             };
           });
         } catch (error) {
@@ -141,26 +141,25 @@ export const useTopicStore = create<TopicStore>()(
         }
       },
 
-      setCurrentTopic: (topic: Topic | null) =>
-        set({ currentTopic: topic }),
+      setCurrentTopic: (topic: Topic | null) => set({ currentTopic: topic }),
 
       joinTopic: (topicId: string) =>
         set((state) => ({
-          joinedTopics: [...new Set([...state.joinedTopics, topicId])]
+          joinedTopics: [...new Set([...state.joinedTopics, topicId])],
         })),
 
       leaveTopic: (topicId: string) =>
         set((state) => ({
-          joinedTopics: state.joinedTopics.filter(id => id !== topicId),
-          currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic
-        }))
+          joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
+          currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
+        })),
     }),
     {
       name: 'topic-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        joinedTopics: state.joinedTopics
-      })
-    }
-  )
-)
+        joinedTopics: state.joinedTopics,
+      }),
+    },
+  ),
+);
