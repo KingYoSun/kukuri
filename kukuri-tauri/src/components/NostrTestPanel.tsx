@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { NostrAPI } from '@/lib/api/tauri';
+import * as nostrApi from '@/lib/api/nostr';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +52,7 @@ export function NostrTestPanel() {
 
     setIsLoading(true);
     try {
-      const eventId = await NostrAPI.publishTextNote(testContent);
+      const eventId = await nostrApi.publishTextNote(testContent);
       addResult(`✅ テキストノート送信成功: ${eventId}`);
       toast.success('テキストノートを送信しました');
       setTestContent('');
@@ -73,7 +73,7 @@ export function NostrTestPanel() {
 
     setIsLoading(true);
     try {
-      const eventId = await NostrAPI.publishTopicPost(topicId, testContent);
+      const eventId = await nostrApi.publishTopicPost(topicId, testContent);
       addResult(`✅ トピック投稿送信成功 (${topicId}): ${eventId}`);
       toast.success('トピック投稿を送信しました');
       setTestContent('');
@@ -89,7 +89,7 @@ export function NostrTestPanel() {
   const handleSubscribeTopic = async () => {
     setIsLoading(true);
     try {
-      await NostrAPI.subscribeToTopic(topicId);
+      await nostrApi.subscribeToTopic(topicId);
       addResult(`✅ トピック購読成功: ${topicId}`);
       toast.success('トピックを購読しました');
     } catch (error) {
@@ -107,7 +107,7 @@ export function NostrTestPanel() {
 
     setIsLoading(true);
     try {
-      const reactionId = await NostrAPI.sendReaction(testEventId, '+');
+      const reactionId = await nostrApi.sendReaction(testEventId, '+');
       addResult(`✅ リアクション送信成功: ${reactionId}`);
       toast.success('リアクションを送信しました');
     } catch (error) {
@@ -147,7 +147,7 @@ export function NostrTestPanel() {
             <div className="space-y-2">
               <label className="text-sm font-medium">テスト内容</label>
               <Input
-                placeholder="送信するテキストを入力..."
+                placeholder="テストメッセージを入力"
                 value={testContent}
                 onChange={(e) => setTestContent(e.target.value)}
                 disabled={isLoading}

@@ -297,4 +297,140 @@ mod tests {
         assert!(manager.initialize_with_key_manager(&key_manager).await.is_ok());
         assert!(manager.get_public_key().await.is_some());
     }
+
+    #[tokio::test]
+    async fn test_event_manager_not_initialized() {
+        let manager = EventManager::new();
+        
+        // 初期化前はエラーになることを確認
+        assert!(manager.publish_text_note("test").await.is_err());
+        assert!(manager.publish_topic_post("topic", "content", None).await.is_err());
+        assert!(manager.subscribe_to_topic("topic").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_initialize_and_disconnect() {
+        let manager = EventManager::new();
+        let key_manager = KeyManager::new();
+        
+        // 鍵ペアを生成
+        key_manager.generate_keypair().await.unwrap();
+        
+        // 初期化
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        assert!(*manager.is_initialized.read().await);
+        
+        // 切断
+        manager.disconnect().await.unwrap();
+        assert!(!*manager.is_initialized.read().await);
+    }
+
+    #[tokio::test]
+    async fn test_get_public_key() {
+        let manager = EventManager::new();
+        let key_manager = KeyManager::new();
+        
+        // 初期化前は公開鍵がない
+        assert!(manager.get_public_key().await.is_none());
+        
+        // 初期化後は公開鍵が取得できる
+        key_manager.generate_keypair().await.unwrap();
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        
+        let public_key = manager.get_public_key().await.unwrap();
+        assert_eq!(public_key, key_manager.get_keys().await.unwrap().public_key());
+    }
+
+    #[tokio::test]
+    async fn test_relay_operations() {
+        let manager = EventManager::new();
+        let key_manager = KeyManager::new();
+        
+        // 初期化
+        key_manager.generate_keypair().await.unwrap();
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        
+        // リレーを追加
+        // 注: 実際のリレーに接続しないようにテスト用URLを使用
+        assert!(manager.add_relay("wss://test.relay").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_events() {
+        let manager = EventManager::new();
+        let key_manager = KeyManager::new();
+        
+        // 初期化
+        key_manager.generate_keypair().await.unwrap();
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        
+        // 各種イベントの作成をテスト
+        let publisher = manager.event_publisher.read().await;
+        
+        // テキストノート
+        let text_event = publisher.create_text_note("Test note", vec![]).unwrap();
+        assert_eq!(text_event.kind, Kind::TextNote);
+        
+        // メタデータ
+        let metadata = Metadata::new().name("Test User");
+        let metadata_event = publisher.create_metadata(metadata).unwrap();
+        assert_eq!(metadata_event.kind, Kind::Metadata);
+        
+        // リアクション
+        let event_id = EventId::from_slice(&[1; 32]).unwrap();
+        let reaction_event = publisher.create_reaction(&event_id, "+").unwrap();
+        assert_eq!(reaction_event.kind, Kind::Reaction);
+    }
+
+    #[tokio::test]
+    async fn test_get_relay_status() {
+        let manager = EventManager::new();
+        let key_manager = KeyManager::new();
+        
+        // 初期化
+        key_manager.generate_keypair().await.unwrap();
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        
+        // リレーステータスを取得
+        let status = manager.get_relay_status().await.unwrap();
+        assert!(status.is_empty()); // 初期状態は空
+    }
+
+    #[tokio::test]
+    async fn test_ensure_initialized() {
+        let manager = EventManager::new();
+        
+        // 初期化前
+        assert!(manager.ensure_initialized().await.is_err());
+        
+        // 初期化後
+        let key_manager = KeyManager::new();
+        key_manager.generate_keypair().await.unwrap();
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        
+        assert!(manager.ensure_initialized().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_event_payload_creation() {
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("Test content")
+            .tags(vec![Tag::hashtag("test")])
+            .sign_with_keys(&keys)
+            .unwrap();
+        
+        let payload = NostrEventPayload {
+            id: event.id.to_string(),
+            author: event.pubkey.to_string(),
+            content: event.content.clone(),
+            created_at: event.created_at.as_u64(),
+            kind: event.kind.as_u16() as u32,
+            tags: event.tags.iter().map(|tag| tag.clone().to_vec()).collect(),
+        };
+        
+        assert_eq!(payload.id, event.id.to_string());
+        assert_eq!(payload.content, "Test content");
+        assert_eq!(payload.kind, 1); // TextNote
+        assert!(!payload.tags.is_empty());
+    }
 }

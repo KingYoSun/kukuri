@@ -4,6 +4,41 @@
 
 ## 解決済みの問題
 
+### nostr-sdk v0.42 API変更（2025年7月26日）
+**問題**: nostr-sdk v0.42でEventBuilderのAPIが変更され、多くのメソッドが破壊的変更を受けた
+
+**症状**:
+- EventBuilder::text_note()の第2引数（空配列）が不要になった
+- Eventのフィールドがメソッドからフィールドアクセスに変更
+- 52件のRustテストが全てコンパイルエラー
+
+**解決策**:
+1. EventBuilder APIの更新
+```rust
+// 変更前
+EventBuilder::text_note("Test message", [])
+EventBuilder::metadata(&metadata)
+
+// 変更後
+EventBuilder::text_note("Test message")
+EventBuilder::metadata(metadata)
+```
+
+2. フィールドアクセスへの変更
+```rust
+// 変更前
+event.kind()
+event.author()
+event.content()
+
+// 変更後
+event.kind
+event.author
+event.content
+```
+
+**影響範囲**: event/handler.rs、event/publisher.rs、event/manager.rsの全テスト
+
 ### zustand v5テストモックの問題（2025年7月26日）
 **問題**: zustand v5では`create`関数がフック関数を返すが、テストのモック実装が古いバージョンを想定していた
 
@@ -79,6 +114,15 @@ vi.mock('zustand', async () => {
 
 ## 現在の注意事項
 
+### テスト関連
+- **テストカバレッジ**: 合計158件（Rust 52件、TypeScript 106件）のテストを実装
+- **act警告**: 一部のReactコンポーネントテストでact警告が発生する場合がある
+  - 主に非同期state更新時に発生
+  - 実害はないが、将来的に対応が必要
+- **any型の使用**: テストファイル内で35箇所のany型警告
+  - モックの柔軟性のため意図的に使用
+  - production codeでは使用していない
+
 ### フロントエンド
 - **ESLint設定**: src/test/setup.tsで`@typescript-eslint/no-explicit-any`を無効化
   - テストモック実装では型の厳密性よりも柔軟性を優先
@@ -89,6 +133,12 @@ vi.mock('zustand', async () => {
 - **未使用コード**: 多くのモジュールに`#[allow(dead_code)]`が付与されている
   - 実装時に随時削除する必要がある
 - **データベース接続**: 現在は初期化コードのみで、実際の接続処理は未実装
+- **Rustリント警告**: clippy実行時に15件の警告
+  - 未使用メソッド: add_callback、verify_event、create_repost等
+  - 未使用フィールド: db_pool、encryption_manager
+  - format!マクロでの変数展開（uninlined_format_args）
+  - 複雑な型定義（type_complexity）
+  - いずれも実装進行に伴い解消予定
 
 ### 開発環境
 - **formatコマンド**: package.jsonにformatスクリプトが定義されていない

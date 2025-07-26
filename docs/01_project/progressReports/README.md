@@ -10,6 +10,10 @@
 - [状態管理とルーティング基盤実装](./2025-07-26_state_management_implementation.md) - Zustand、Tanstack Router/Query設定
 - [Rust基盤実装](./2025-07-26_rust_foundation_implementation.md) - 認証、暗号化、データベースモジュール実装
 - [テスト・リント・型チェックエラー解消](./2025-07-26_test_lint_fix.md) - zustand v5対応、全エラー修正
+- [Tauriコマンド実装](./2025-07-26_tauri_commands_implementation.md) - フロントエンド・バックエンド統合
+- [Nostr SDK統合](./2025-07-26_nostr_sdk_integration.md) - Nostrイベント処理基盤実装
+- [Nostrリレー接続とイベント送受信](./2025-07-26_nostr_relay_connection.md) - リレー接続、ヘルスチェック、テストパネル実装
+- [包括的なテスト実装](./2025-07-26_comprehensive_test_implementation.md) - Rust/TypeScript全コンポーネントのテスト作成（158件）
 
 ## レポート作成ガイドライン
 

@@ -1,32 +1,41 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { AuthState, User } from './types'
-import { TauriApi, NostrAPI, RelayInfo } from '@/lib/api/tauri'
+import { TauriApi } from '@/lib/api/tauri'
+import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr'
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[]
-  login: (privateKey: string, user: User) => void
+  login: (privateKey: string, user: User) => Promise<void>
   loginWithNsec: (nsec: string) => Promise<void>
   generateNewKeypair: () => Promise<{ nsec: string }>
-  logout: () => void
+  logout: () => Promise<void>
   updateUser: (user: Partial<User>) => void
   updateRelayStatus: () => Promise<void>
+  setRelayStatus: (status: RelayInfo[]) => void
+  get isLoggedIn(): boolean
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       isAuthenticated: false,
       currentUser: null,
       privateKey: null,
       relayStatus: [],
 
-      login: (privateKey: string, user: User) => 
+      login: async (privateKey: string, user: User) => {
         set({
           isAuthenticated: true,
           currentUser: user,
           privateKey
-        }),
+        });
+        try {
+          await initializeNostr();
+        } catch (error) {
+          console.error('Failed to initialize Nostr:', error);
+        }
+      },
 
       loginWithNsec: async (nsec: string) => {
         try {
@@ -48,7 +57,7 @@ export const useAuthStore = create<AuthStore>()(
           });
           
           // Nostrクライアントを初期化
-          await NostrAPI.initialize();
+          await initializeNostr();
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
         } catch (error) {
@@ -77,7 +86,7 @@ export const useAuthStore = create<AuthStore>()(
           });
           
           // Nostrクライアントを初期化
-          await NostrAPI.initialize();
+          await initializeNostr();
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
           
@@ -90,7 +99,11 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         try {
-          await NostrAPI.disconnect();
+          await disconnectNostr();
+        } catch (error) {
+          console.error('Failed to disconnect Nostr:', error);
+        }
+        try {
           await TauriApi.logout();
         } catch (error) {
           console.error('Logout failed:', error);
@@ -98,7 +111,8 @@ export const useAuthStore = create<AuthStore>()(
         set({
           isAuthenticated: false,
           currentUser: null,
-          privateKey: null
+          privateKey: null,
+          relayStatus: []
         });
       },
 
@@ -112,11 +126,19 @@ export const useAuthStore = create<AuthStore>()(
       
       updateRelayStatus: async () => {
         try {
-          const status = await NostrAPI.getRelayStatus();
+          const status = await getRelayStatus();
           set({ relayStatus: status });
         } catch (error) {
           console.error('Failed to get relay status:', error);
         }
+      },
+      
+      setRelayStatus: (status: RelayInfo[]) => {
+        set({ relayStatus: status });
+      },
+      
+      get isLoggedIn() {
+        return get().isAuthenticated;
       }
     }),
     {

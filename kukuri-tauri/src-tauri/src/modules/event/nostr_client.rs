@@ -242,4 +242,74 @@ mod tests {
         assert!(manager.init_with_keys(&secret_key).await.is_ok());
         assert!(manager.get_public_key().is_some());
     }
+
+    #[tokio::test]
+    async fn test_client_not_initialized_error() {
+        let manager = NostrClientManager::new();
+        
+        // クライアントが初期化されていない状態でのテスト
+        assert!(manager.add_relay("wss://relay.test").await.is_err());
+        assert!(manager.connect().await.is_err());
+        assert!(manager.disconnect().await.is_err());
+        assert!(manager.publish_text_note("test", vec![]).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_relay_status_management() {
+        let mut manager = NostrClientManager::new();
+        let secret_key = SecretKey::generate();
+        
+        // クライアントを初期化
+        manager.init_with_keys(&secret_key).await.unwrap();
+        
+        // リレーステータスの初期状態を確認
+        let status = manager.get_relay_status().await;
+        assert!(status.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_public_key_generation() {
+        let mut manager = NostrClientManager::new();
+        let secret_key = SecretKey::generate();
+        
+        // 初期化前は公開鍵がない
+        assert!(manager.get_public_key().is_none());
+        
+        // 初期化後は公開鍵が取得できる
+        manager.init_with_keys(&secret_key).await.unwrap();
+        let public_key = manager.get_public_key().unwrap();
+        assert_eq!(public_key, Keys::new(secret_key).public_key());
+    }
+
+    #[tokio::test]
+    async fn test_client_reinitialization() {
+        let mut manager = NostrClientManager::new();
+        let secret_key1 = SecretKey::generate();
+        let secret_key2 = SecretKey::generate();
+        
+        // 最初の初期化
+        manager.init_with_keys(&secret_key1).await.unwrap();
+        let public_key1 = manager.get_public_key().unwrap();
+        
+        // 再初期化
+        manager.init_with_keys(&secret_key2).await.unwrap();
+        let public_key2 = manager.get_public_key().unwrap();
+        
+        // 公開鍵が更新されていることを確認
+        assert_ne!(public_key1, public_key2);
+        assert_eq!(public_key2, Keys::new(secret_key2).public_key());
+    }
+
+    #[tokio::test]
+    async fn test_get_client() {
+        let mut manager = NostrClientManager::new();
+        let secret_key = SecretKey::generate();
+        
+        // 初期化前はクライアントがない
+        assert!(manager.get_client().await.is_none());
+        
+        // 初期化後はクライアントが取得できる
+        manager.init_with_keys(&secret_key).await.unwrap();
+        assert!(manager.get_client().await.is_some());
+    }
 }
