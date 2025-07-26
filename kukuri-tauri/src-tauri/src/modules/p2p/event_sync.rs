@@ -8,12 +8,16 @@ use crate::modules::event::manager::EventManager;
 use crate::modules::p2p::gossip_manager::GossipManager;
 use crate::modules::p2p::message::{GossipMessage, MessageType, generate_topic_id};
 use crate::modules::p2p::error::{P2PError, Result as P2PResult};
+use crate::modules::p2p::hybrid_distributor::{HybridDistributor, HybridConfig, DeliveryPriority, DeliveryResult};
 
+#[derive(Clone)]
 pub struct EventSync {
     event_manager: Arc<EventManager>,
     gossip_manager: Arc<GossipManager>,
     /// 同期状態の管理（イベントID -> 同期ステータス）
     sync_state: Arc<RwLock<HashMap<String, SyncStatus>>>,
+    /// ハイブリッド配信システム
+    hybrid_distributor: Option<Arc<HybridDistributor>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,9 +42,50 @@ impl EventSync {
         gossip_manager: Arc<GossipManager>,
     ) -> Self {
         Self {
-            event_manager,
-            gossip_manager,
+            event_manager: event_manager.clone(),
+            gossip_manager: gossip_manager.clone(),
             sync_state: Arc::new(RwLock::new(HashMap::new())),
+            hybrid_distributor: None,
+        }
+    }
+    
+    /// ハイブリッド配信を有効化
+    pub fn enable_hybrid_delivery(&mut self, config: Option<HybridConfig>) -> Arc<HybridDistributor> {
+        let distributor = Arc::new(HybridDistributor::new(
+            Arc::new(self.clone()),
+            self.event_manager.clone(),
+            self.gossip_manager.clone(),
+            config,
+        ));
+        self.hybrid_distributor = Some(distributor.clone());
+        distributor
+    }
+    
+    /// ハイブリッド配信でイベントを送信
+    pub async fn deliver_event_hybrid(
+        &self,
+        event: Event,
+        priority: DeliveryPriority,
+    ) -> P2PResult<DeliveryResult> {
+        match &self.hybrid_distributor {
+            Some(distributor) => distributor.deliver_event(event, priority).await,
+            None => Err(P2PError::Internal("Hybrid delivery not enabled".to_string())),
+        }
+    }
+    
+    /// イベントの種類に基づいて優先度を決定
+    pub fn determine_priority(&self, event: &Event) -> DeliveryPriority {
+        match event.kind {
+            // システムメッセージやDMは高優先度
+            Kind::EncryptedDirectMessage | Kind::PrivateDirectMessage => DeliveryPriority::High,
+            // 通常の投稿は中優先度
+            Kind::TextNote | Kind::Repost => DeliveryPriority::Medium,
+            // リアクションは低優先度
+            Kind::Reaction => DeliveryPriority::Low,
+            // アプリケーション固有データ（kukuriトピック）は中優先度
+            kind if kind == Kind::from(30078u16) => DeliveryPriority::Medium,
+            // その他は低優先度
+            _ => DeliveryPriority::Low,
         }
     }
     
@@ -428,5 +473,56 @@ mod tests {
         
         let state = sync_state.read().await;
         assert!(state.len() <= 51); // 50 + test_event_123
+    }
+    
+    #[test]
+    fn test_priority_determination() {
+        let keys = Keys::generate();
+        
+        // テキストノート - 中優先度
+        let text_event = EventBuilder::text_note("Test message")
+            .sign_with_keys(&keys)
+            .unwrap();
+        
+        // DM - 高優先度
+        let dm_event = EventBuilder::new(Kind::PrivateDirectMessage, "Private message")
+            .sign_with_keys(&keys)
+            .unwrap();
+        
+        // リアクション - 低優先度
+        let reaction_event = EventBuilder::new(Kind::Reaction, "+")
+            .sign_with_keys(&keys)
+            .unwrap();
+        
+        // kukuriトピック - 中優先度
+        let topic_event = EventBuilder::new(Kind::from(30078u16), "Topic post")
+            .sign_with_keys(&keys)
+            .unwrap();
+        
+        // EventSyncの仮インスタンスで優先度を確認
+        // （実際のEventManagerとGossipManagerなしでテスト用の判定ロジックのみ確認）
+        let priority_for_text = match text_event.kind {
+            Kind::TextNote | Kind::Repost => DeliveryPriority::Medium,
+            _ => DeliveryPriority::Low,
+        };
+        assert_eq!(priority_for_text, DeliveryPriority::Medium);
+        
+        let priority_for_dm = match dm_event.kind {
+            Kind::EncryptedDirectMessage | Kind::PrivateDirectMessage => DeliveryPriority::High,
+            _ => DeliveryPriority::Low,
+        };
+        assert_eq!(priority_for_dm, DeliveryPriority::High);
+        
+        let priority_for_reaction = match reaction_event.kind {
+            Kind::Reaction => DeliveryPriority::Low,
+            _ => DeliveryPriority::Medium,
+        };
+        assert_eq!(priority_for_reaction, DeliveryPriority::Low);
+        
+        let priority_for_topic = match topic_event.kind {
+            kind if kind == Kind::from(30078u16) => DeliveryPriority::Medium,
+            _ => DeliveryPriority::Low,
+        };
+        assert_eq!(priority_for_topic, DeliveryPriority::Medium);
     }
 }

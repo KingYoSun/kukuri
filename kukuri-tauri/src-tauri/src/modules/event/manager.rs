@@ -166,6 +166,23 @@ impl EventManager {
         
         Ok(result_id)
     }
+    
+    /// 任意のイベントを発行
+    pub async fn publish_event(&self, event: Event) -> Result<EventId> {
+        self.ensure_initialized().await?;
+        
+        let client_manager = self.client_manager.read().await;
+        let event_id = client_manager.publish_event(event.clone()).await?;
+        
+        // P2Pネットワークに配信
+        if let Some(ref event_sync) = *self.event_sync.read().await {
+            if let Err(e) = event_sync.propagate_nostr_event(event).await {
+                error!("Failed to propagate event to P2P network: {}", e);
+            }
+        }
+        
+        Ok(event_id)
+    }
 
     /// メタデータを更新
     pub async fn update_metadata(&self, metadata: Metadata) -> Result<EventId> {

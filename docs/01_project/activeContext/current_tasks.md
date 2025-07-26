@@ -4,6 +4,31 @@
 
 ## 完了済みタスク
 
+### 2025年7月27日（Nostr統合 Day 8）
+- [x] Nostr統合 Day 8: ハイブリッド配信機能の実装
+  - [x] HybridDistributorモジュールの作成
+    - [x] 配信優先度システム（DeliveryPriority enum）
+    - [x] 配信戦略（DeliveryStrategy enum）
+    - [x] 配信メトリクス収集機能
+  - [x] 並列配信メカニズムの実装
+    - [x] P2PとNostrリレーへの同時配信
+    - [x] 結果の集約とレポート
+  - [x] フォールバック処理の実装
+    - [x] P2P失敗時の自動Nostrリレー配信
+    - [x] 設定可能なタイムアウト処理
+  - [x] 配信優先度管理の実装
+    - [x] イベント種類による自動優先度判定
+    - [x] 優先度別の配信戦略マッピング
+  - [x] EventSyncとの統合
+    - [x] enable_hybrid_delivery()メソッド
+    - [x] deliver_event_hybrid()メソッド
+    - [x] determine_priority()メソッド
+  - [x] EventManagerへのpublish_eventメソッド追加
+  - [x] 統合テスト構造の作成
+  - [x] コンパイルエラーの解消
+    - [x] Hashトレイトの追加
+    - [x] Deserializeトレイトの追加
+
 ### 2025年7月27日（Nostr統合 Day 7）
 - [x] Nostr統合 Day 7: 双方向同期の実装
   - [x] EventSync構造体とインターフェースの実装
@@ -389,10 +414,10 @@
      - [x] 双方向同期機能（Day 7） ✓完了
        - [x] Nostrイベント送信時の自動P2P配信
        - [x] EventManagerへのフック実装
-     - [ ] ハイブリッド配信メカニズム（Day 8）
-       - [ ] 並列配信実装
-       - [ ] 配信優先度管理
-       - [ ] フォールバック処理
+     - [x] ハイブリッド配信メカニズム（Day 8） ✓完了
+       - [x] 並列配信実装
+       - [x] 配信優先度管理
+       - [x] フォールバック処理
    - UI統合と最適化（Day 9-10）
      - [ ] P2P状態管理Store（p2pStore）
      - [ ] 接続状態表示コンポーネント
@@ -424,4 +449,7 @@
 - EventSyncによるNostr/P2P双方向同期が完全に実装済み
 - Nostrイベント送信時の自動P2P配信が動作
 - P2P受信イベントのNostrリレー転送が動作
-- 次はハイブリッド配信メカニズム（Day 8）の実装
+- Nostr統合 Day 8（ハイブリッド配信）が完了
+- HybridDistributorによる並列配信・フォールバック処理が実装済み
+- 配信優先度に基づく戦略的なメッセージ配信が可能
+- 次はUI統合と最適化（Day 9-10）の実装
