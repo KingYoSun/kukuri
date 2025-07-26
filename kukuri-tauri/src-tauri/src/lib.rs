@@ -53,6 +53,7 @@ pub fn run() {
             event_commands::get_nostr_pubkey,
             event_commands::delete_events,
             event_commands::disconnect_nostr,
+            event_commands::get_relay_status,
         ])
         .setup(|app| {
             // アプリケーション初期化処理
@@ -61,6 +62,10 @@ pub fn run() {
             tauri::async_runtime::block_on(async move {
                 let app_state = AppState::new().await
                     .expect("Failed to initialize app state");
+                
+                // EventManagerにAppHandleを設定
+                app_state.event_manager.set_app_handle(app_handle.clone()).await;
+                
                 app_handle.manage(app_state);
             });
             

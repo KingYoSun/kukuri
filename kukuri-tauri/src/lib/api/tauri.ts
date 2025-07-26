@@ -182,4 +182,8 @@ export class NostrAPI {
   static async disconnect(): Promise<void> {
     return await invoke('disconnect_nostr');
   }
+
+  static async getRelayStatus(): Promise<RelayInfo[]> {
+    return await invoke('get_relay_status');
+  }
 }

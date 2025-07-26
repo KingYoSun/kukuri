@@ -215,3 +215,18 @@ pub async fn disconnect_nostr(state: State<'_, AppState>) -> Result<(), String> 
         .await
         .map_err(|e| e.to_string())
 }
+
+/// リレーの接続状態を取得
+#[tauri::command]
+pub async fn get_relay_status(state: State<'_, AppState>) -> Result<Vec<RelayInfo>, String> {
+    let status = state.event_manager.get_relay_status()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let relay_info: Vec<RelayInfo> = status
+        .into_iter()
+        .map(|(url, status)| RelayInfo { url, status })
+        .collect();
+    
+    Ok(relay_info)
+}

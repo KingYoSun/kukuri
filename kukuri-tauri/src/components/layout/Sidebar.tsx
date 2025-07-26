@@ -5,6 +5,7 @@ import { Hash, Plus, TrendingUp, Users } from "lucide-react";
 import { useTopicStore, useUIStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
+import { RelayStatus } from "@/components/RelayStatus";
 
 const categories = [
   { name: "トレンド", icon: TrendingUp },
@@ -95,6 +96,12 @@ export function Sidebar() {
             </div>
           </div>
         </ScrollArea>
+
+        <Separator />
+
+        <div className="p-4">
+          <RelayStatus />
+        </div>
       </div>
     </aside>
   );

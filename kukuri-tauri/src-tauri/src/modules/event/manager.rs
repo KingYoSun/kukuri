@@ -5,6 +5,21 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, error, debug};
+use std::time::Duration;
+use tokio::time;
+use tauri::{AppHandle, Emitter};
+use serde::Serialize;
+
+/// フロントエンドに送信するイベントペイロード
+#[derive(Debug, Serialize, Clone)]
+pub struct NostrEventPayload {
+    pub id: String,
+    pub author: String,
+    pub content: String,
+    pub created_at: u64,
+    pub kind: u32,
+    pub tags: Vec<Vec<String>>,
+}
 
 /// Nostrイベントマネージャー - イベント処理の中心的な管理者
 pub struct EventManager {
@@ -12,6 +27,7 @@ pub struct EventManager {
     pub(crate) event_handler: Arc<EventHandler>,
     pub(crate) event_publisher: Arc<RwLock<EventPublisher>>,
     is_initialized: Arc<RwLock<bool>>,
+    app_handle: Arc<RwLock<Option<AppHandle>>>,
 }
 
 impl EventManager {
@@ -22,7 +38,14 @@ impl EventManager {
             event_handler: Arc::new(EventHandler::new()),
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
+            app_handle: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// AppHandleを設定
+    pub async fn set_app_handle(&self, app_handle: AppHandle) {
+        let mut handle = self.app_handle.write().await;
+        *handle = Some(app_handle);
     }
 
     /// KeyManagerからの秘密鍵でマネージャーを初期化
@@ -153,10 +176,27 @@ impl EventManager {
         let event_handler = Arc::clone(&self.event_handler);
         
         // イベントストリームを非同期で処理
+        let app_handle = Arc::clone(&self.app_handle);
         tokio::spawn(async move {
-            client.handle_notifications(|notification| async {
+            let _ = client.handle_notifications(|notification| async {
                 if let RelayPoolNotification::Event { event, .. } = notification {
                     debug!("Received event: {}", event.id);
+                    
+                    // フロントエンドにイベントを送信
+                    if let Some(ref handle) = *app_handle.read().await {
+                        let payload = NostrEventPayload {
+                            id: event.id.to_string(),
+                            author: event.pubkey.to_string(),
+                            content: event.content.clone(),
+                            created_at: event.created_at.as_u64(),
+                            kind: event.kind.as_u16() as u32,
+                            tags: event.tags.iter().map(|tag| {
+                                tag.clone().to_vec()
+                            }).collect(),
+                        };
+                        let _ = handle.emit("nostr://event", payload);
+                    }
+                    
                     if let Err(e) = event_handler.handle_event(*event).await {
                         error!("Error handling event: {}", e);
                     }
@@ -165,7 +205,35 @@ impl EventManager {
             }).await;
         });
         
+        // 定期的なヘルスチェックを開始
+        self.start_health_check_loop().await?;
+        
         info!("Event stream started");
+        Ok(())
+    }
+
+    /// 定期的なヘルスチェックループを開始
+    async fn start_health_check_loop(&self) -> Result<()> {
+        let client_manager = Arc::clone(&self.client_manager);
+        
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(60)); // 60秒ごとにチェック
+            
+            loop {
+                interval.tick().await;
+                
+                let manager = client_manager.read().await;
+                if let Err(e) = manager.health_check().await {
+                    error!("Health check failed: {}", e);
+                }
+                
+                // 失敗したリレーに再接続を試みる
+                if let Err(e) = manager.reconnect_failed_relays().await {
+                    error!("Failed to reconnect to relays: {}", e);
+                }
+            }
+        });
+        
         Ok(())
     }
 
@@ -190,6 +258,27 @@ impl EventManager {
         client_manager.disconnect().await?;
         *self.is_initialized.write().await = false;
         Ok(())
+    }
+
+    /// リレーの接続状態を取得
+    pub async fn get_relay_status(&self) -> Result<Vec<(String, String)>> {
+        let client_manager = self.client_manager.read().await;
+        let status = client_manager.get_relay_status().await;
+        
+        let result: Vec<(String, String)> = status
+            .into_iter()
+            .map(|(url, status)| {
+                let status_str = match status {
+                    super::nostr_client::RelayStatus::Connecting => "connecting".to_string(),
+                    super::nostr_client::RelayStatus::Connected => "connected".to_string(),
+                    super::nostr_client::RelayStatus::Disconnected => "disconnected".to_string(),
+                    super::nostr_client::RelayStatus::Error(e) => format!("error: {}", e),
+                };
+                (url, status_str)
+            })
+            .collect();
+        
+        Ok(result)
     }
 }
 

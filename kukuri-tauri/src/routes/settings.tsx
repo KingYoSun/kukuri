@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { useUIStore } from '@/stores'
+import { NostrTestPanel } from '@/components/NostrTestPanel'
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -82,6 +83,23 @@ function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 開発環境でのみ表示 */}
+      {import.meta.env.DEV && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>開発者ツール</CardTitle>
+              <CardDescription>
+                開発・デバッグ用の機能
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <NostrTestPanel />
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   )
 }

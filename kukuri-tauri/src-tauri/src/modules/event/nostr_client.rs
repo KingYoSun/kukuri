@@ -2,12 +2,23 @@ use nostr_sdk::prelude::*;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, error};
+use tracing::{info, error, warn};
+use std::collections::HashMap;
+
+/// リレーの接続状態
+#[derive(Debug, Clone, PartialEq)]
+pub enum RelayStatus {
+    Connecting,
+    Connected,
+    Disconnected,
+    Error(String),
+}
 
 /// Nostrクライアントの管理構造体
 pub struct NostrClientManager {
     client: Arc<RwLock<Option<Client>>>,
     keys: Option<Keys>,
+    relay_status: Arc<RwLock<HashMap<String, RelayStatus>>>,
 }
 
 impl NostrClientManager {
@@ -16,6 +27,7 @@ impl NostrClientManager {
         Self {
             client: Arc::new(RwLock::new(None)),
             keys: None,
+            relay_status: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -36,9 +48,28 @@ impl NostrClientManager {
     pub async fn add_relay(&self, url: &str) -> Result<()> {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
-            client.add_relay(url).await?;
-            info!("Added relay: {}", url);
-            Ok(())
+            // 接続状態を「接続中」に設定
+            {
+                let mut status = self.relay_status.write().await;
+                status.insert(url.to_string(), RelayStatus::Connecting);
+            }
+            
+            match client.add_relay(url).await {
+                Ok(_) => {
+                    info!("Added relay: {}", url);
+                    // 接続状態を「接続済み」に設定
+                    let mut status = self.relay_status.write().await;
+                    status.insert(url.to_string(), RelayStatus::Connected);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to add relay {}: {}", url, e);
+                    // 接続状態を「エラー」に設定
+                    let mut status = self.relay_status.write().await;
+                    status.insert(url.to_string(), RelayStatus::Error(e.to_string()));
+                    Err(e.into())
+                }
+            }
         } else {
             Err(anyhow::anyhow!("Client not initialized"))
         }
@@ -139,6 +170,63 @@ impl NostrClientManager {
     /// Clientへの参照を取得
     pub async fn get_client(&self) -> Option<Client> {
         self.client.read().await.clone()
+    }
+
+    /// リレーの接続状態を取得
+    pub async fn get_relay_status(&self) -> HashMap<String, RelayStatus> {
+        self.relay_status.read().await.clone()
+    }
+
+    /// 全リレーのヘルスチェックを実行
+    pub async fn health_check(&self) -> Result<HashMap<String, bool>> {
+        let client_guard = self.client.read().await;
+        let mut health_status = HashMap::new();
+        
+        if let Some(client) = client_guard.as_ref() {
+            let relays = client.pool().relays().await;
+            
+            for (url, relay) in relays {
+                // リレーの接続状態を確認
+                let is_connected = relay.is_connected();
+                
+                if is_connected {
+                    info!("Relay {} is healthy", url);
+                    health_status.insert(url.to_string(), true);
+                    
+                    let mut status = self.relay_status.write().await;
+                    status.insert(url.to_string(), RelayStatus::Connected);
+                } else {
+                    warn!("Relay {} is not connected", url);
+                    health_status.insert(url.to_string(), false);
+                    
+                    let mut status = self.relay_status.write().await;
+                    status.insert(url.to_string(), RelayStatus::Disconnected);
+                }
+            }
+            
+            Ok(health_status)
+        } else {
+            Err(anyhow::anyhow!("Client not initialized"))
+        }
+    }
+
+    /// 切断されたリレーに再接続を試みる
+    pub async fn reconnect_failed_relays(&self) -> Result<()> {
+        let status = self.relay_status.read().await.clone();
+        let failed_relays: Vec<String> = status
+            .iter()
+            .filter(|(_, s)| matches!(s, RelayStatus::Disconnected | RelayStatus::Error(_)))
+            .map(|(url, _)| url.clone())
+            .collect();
+        
+        for url in failed_relays {
+            info!("Attempting to reconnect to relay: {}", url);
+            if let Err(e) = self.add_relay(&url).await {
+                error!("Failed to reconnect to relay {}: {}", url, e);
+            }
+        }
+        
+        Ok(())
     }
 }
 

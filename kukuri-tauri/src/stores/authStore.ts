@@ -1,14 +1,16 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { AuthState, User } from './types'
-import { TauriApi, NostrAPI } from '@/lib/api/tauri'
+import { TauriApi, NostrAPI, RelayInfo } from '@/lib/api/tauri'
 
 interface AuthStore extends AuthState {
+  relayStatus: RelayInfo[]
   login: (privateKey: string, user: User) => void
   loginWithNsec: (nsec: string) => Promise<void>
   generateNewKeypair: () => Promise<{ nsec: string }>
   logout: () => void
   updateUser: (user: Partial<User>) => void
+  updateRelayStatus: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -17,6 +19,7 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       currentUser: null,
       privateKey: null,
+      relayStatus: [],
 
       login: (privateKey: string, user: User) => 
         set({
@@ -46,6 +49,8 @@ export const useAuthStore = create<AuthStore>()(
           
           // Nostrクライアントを初期化
           await NostrAPI.initialize();
+          // リレー状態を更新
+          await useAuthStore.getState().updateRelayStatus();
         } catch (error) {
           console.error('Login failed:', error);
           throw error;
@@ -73,6 +78,8 @@ export const useAuthStore = create<AuthStore>()(
           
           // Nostrクライアントを初期化
           await NostrAPI.initialize();
+          // リレー状態を更新
+          await useAuthStore.getState().updateRelayStatus();
           
           return { nsec: response.nsec };
         } catch (error) {
@@ -101,7 +108,16 @@ export const useAuthStore = create<AuthStore>()(
             ...state.currentUser,
             ...userUpdate
           } : null
-        }))
+        })),
+      
+      updateRelayStatus: async () => {
+        try {
+          const status = await NostrAPI.getRelayStatus();
+          set({ relayStatus: status });
+        } catch (error) {
+          console.error('Failed to get relay status:', error);
+        }
+      }
     }),
     {
       name: 'auth-storage',
