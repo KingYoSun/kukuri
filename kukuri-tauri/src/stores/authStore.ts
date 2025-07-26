@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { AuthState, User } from './types'
-import { TauriApi } from '@/lib/api/tauri'
+import { TauriApi, NostrAPI } from '@/lib/api/tauri'
 
 interface AuthStore extends AuthState {
   login: (privateKey: string, user: User) => void
@@ -43,6 +43,9 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: nsec
           });
+          
+          // Nostrクライアントを初期化
+          await NostrAPI.initialize();
         } catch (error) {
           console.error('Login failed:', error);
           throw error;
@@ -67,6 +70,10 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: response.nsec
           });
+          
+          // Nostrクライアントを初期化
+          await NostrAPI.initialize();
+          
           return { nsec: response.nsec };
         } catch (error) {
           console.error('Keypair generation failed:', error);
@@ -76,6 +83,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         try {
+          await NostrAPI.disconnect();
           await TauriApi.logout();
         } catch (error) {
           console.error('Logout failed:', error);

@@ -9,6 +9,7 @@ mod state;
 use modules::auth::commands as auth_commands;
 use modules::topic::commands as topic_commands;
 use modules::post::commands as post_commands;
+use modules::event::commands as event_commands;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,6 +41,18 @@ pub fn run() {
             post_commands::create_post,
             post_commands::delete_post,
             post_commands::like_post,
+            // Nostr関連コマンド
+            event_commands::initialize_nostr,
+            event_commands::add_relay,
+            event_commands::publish_text_note,
+            event_commands::publish_topic_post,
+            event_commands::send_reaction,
+            event_commands::update_nostr_metadata,
+            event_commands::subscribe_to_topic,
+            event_commands::subscribe_to_user,
+            event_commands::get_nostr_pubkey,
+            event_commands::delete_events,
+            event_commands::disconnect_nostr,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

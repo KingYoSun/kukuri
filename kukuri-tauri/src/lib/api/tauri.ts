@@ -106,3 +106,80 @@ export class TauriApi {
     return await invoke('like_post', { postId });
   }
 }
+
+// Nostr関連の型定義
+export interface NostrMetadata {
+  name?: string;
+  display_name?: string;
+  about?: string;
+  picture?: string;
+  banner?: string;
+  nip05?: string;
+  lud16?: string;
+  website?: string;
+}
+
+export interface RelayInfo {
+  url: string;
+  status: string;
+}
+
+export interface NostrEvent {
+  id: string;
+  author: string;
+  content: string;
+  created_at: number;
+  kind: number;
+  tags: string[][];
+}
+
+// Nostr API
+export class NostrAPI {
+  static async initialize(): Promise<void> {
+    return await invoke('initialize_nostr');
+  }
+
+  static async addRelay(url: string): Promise<void> {
+    return await invoke('add_relay', { url });
+  }
+
+  static async publishTextNote(content: string): Promise<string> {
+    return await invoke('publish_text_note', { content });
+  }
+
+  static async publishTopicPost(
+    topicId: string,
+    content: string,
+    replyTo?: string
+  ): Promise<string> {
+    return await invoke('publish_topic_post', { topicId, content, replyTo });
+  }
+
+  static async sendReaction(eventId: string, reaction: string): Promise<string> {
+    return await invoke('send_reaction', { eventId, reaction });
+  }
+
+  static async updateMetadata(metadata: NostrMetadata): Promise<string> {
+    return await invoke('update_nostr_metadata', { metadata });
+  }
+
+  static async subscribeToTopic(topicId: string): Promise<void> {
+    return await invoke('subscribe_to_topic', { topicId });
+  }
+
+  static async subscribeToUser(pubkey: string): Promise<void> {
+    return await invoke('subscribe_to_user', { pubkey });
+  }
+
+  static async getNostrPubkey(): Promise<string | null> {
+    return await invoke('get_nostr_pubkey');
+  }
+
+  static async deleteEvents(eventIds: string[], reason?: string): Promise<string> {
+    return await invoke('delete_events', { eventIds, reason });
+  }
+
+  static async disconnect(): Promise<void> {
+    return await invoke('disconnect_nostr');
+  }
+}

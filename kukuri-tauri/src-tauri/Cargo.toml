@@ -24,7 +24,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Nostr Protocol
-nostr-sdk = "0.42"
+nostr-sdk = "0.42.0"
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "migrate"] }

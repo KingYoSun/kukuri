@@ -21,6 +21,32 @@
   - [x] TypeScript型チェックエラー解消
   - [x] ESLintエラー・警告解消
   - [x] Rustビルド・テスト成功
+- [x] Nostr SDKの統合
+  - [x] nostr-sdk 0.42.0の依存関係追加
+  - [x] NostrClientManagerの実装（リレー接続、イベント送受信）
+  - [x] EventHandlerの実装（イベント処理、検証）
+  - [x] EventPublisherの実装（イベント作成、署名）
+  - [x] EventManagerの実装（統合管理）
+- [x] Nostr関連Tauriコマンドの実装
+  - [x] initialize_nostr（Nostrクライアント初期化）
+  - [x] add_relay（リレー追加）
+  - [x] publish_text_note（テキストノート投稿）
+  - [x] publish_topic_post（トピック投稿）
+  - [x] send_reaction（リアクション送信）
+  - [x] update_nostr_metadata（メタデータ更新）
+  - [x] subscribe_to_topic/user（購読機能）
+  - [x] delete_events（イベント削除）
+  - [x] disconnect_nostr（切断）
+- [x] フロントエンド統合
+  - [x] NostrAPI TypeScriptインターフェース作成
+  - [x] authStoreにNostr初期化処理追加（ログイン/ログアウト時）
+- [x] ビルド・型チェック・リントエラーの解消
+  - [x] nostr-sdk APIの修正（メソッド→フィールドアクセス）
+  - [x] EventBuilder APIの更新
+  - [x] 型エラーの修正（URL型、Output<EventId>等）
+  - [x] Rustビルド成功（警告のみ）
+  - [x] TypeScript型チェック成功
+  - [x] ESLintチェック成功
 
 ### 2025年7月26日
 - [x] iroh-gossipのNostr互換性レビューを実施
@@ -120,8 +146,8 @@
    - ~~SQLiteデータベース設定~~ ✓完了
 6. ~~フロントエンド・バックエンド統合~~ ✓完了
    - ~~Tauriコマンドの実装~~ ✓完了
-   - Nostr SDKの統合（次のタスク）
-   - イベント処理基盤（次のタスク）
+   - ~~Nostr SDKの統合~~ ✓完了
+   - ~~イベント処理基盤~~ ✓完了
 7. Nostr機能の実装
    - Nostrイベントの作成・署名
    - リレーへの接続と通信
@@ -146,4 +172,5 @@
 - フロントエンド基盤（UI、状態管理、ルーティング）は完成
 - Rust側の基盤実装も完了（認証、暗号化、DB）
 - フロントエンド・バックエンドの統合（Tauriコマンド）も完了
-- 次はNostr SDKの統合とイベント処理機能の実装
+- Nostr SDKの統合とイベント処理基盤も完了
+- 次はリレーへの実際の接続とP2P通信の実装
