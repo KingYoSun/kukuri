@@ -41,6 +41,12 @@ impl EventManager {
             app_handle: Arc::new(RwLock::new(None)),
         }
     }
+    
+    /// テスト用のモックEventManagerを作成
+    #[cfg(test)]
+    pub fn new_mock() -> Self {
+        Self::new()
+    }
 
     /// AppHandleを設定
     pub async fn set_app_handle(&self, app_handle: AppHandle) {
@@ -252,6 +258,45 @@ impl EventManager {
         publisher.get_public_key()
     }
 
+    /// P2Pネットワークから受信したNostrイベントを処理
+    pub async fn handle_p2p_event(&self, event: Event) -> Result<()> {
+        // 既に処理済みのイベントでないか確認（重複チェックはEventHandlerで行う）
+        if let Err(e) = self.event_handler.handle_event(event.clone()).await {
+            error!("Error handling P2P event: {}", e);
+            return Err(e);
+        }
+        
+        // フロントエンドにイベントを送信
+        if let Some(ref handle) = *self.app_handle.read().await {
+            let payload = NostrEventPayload {
+                id: event.id.to_string(),
+                author: event.pubkey.to_string(),
+                content: event.content.clone(),
+                created_at: event.created_at.as_u64(),
+                kind: event.kind.as_u16() as u32,
+                tags: event.tags.iter().map(|tag| {
+                    tag.clone().to_vec()
+                }).collect(),
+            };
+            let _ = handle.emit("nostr://event/p2p", payload);
+        }
+        
+        // 既存のリレーにも転送（オプション）
+        // Note: これにより、P2P経由で受信したイベントがNostrリレーにも配信される
+        // 実装によってはこの動作を設定可能にすることも検討
+        if *self.is_initialized.read().await {
+            let client_manager = self.client_manager.read().await;
+            if let Some(client) = client_manager.get_client().await {
+                if let Err(e) = client.send_event(&event).await {
+                    debug!("Failed to relay P2P event to Nostr relays: {}", e);
+                    // リレーへの転送失敗はエラーとしない（P2Pでの配信が成功していれば十分）
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
     /// 切断
     pub async fn disconnect(&self) -> Result<()> {
         let client_manager = self.client_manager.read().await;

@@ -24,16 +24,19 @@ mod tests {
         EventSync::new(event_manager, gossip_manager)
     }
     
-    async fn create_test_event_with_hashtags(hashtags: Vec<String>) -> Event {
+    fn create_test_event_with_hashtags(hashtags: Vec<String>) -> Event {
         let keys = Keys::generate();
-        let mut builder = EventBuilder::text_note("Test event with hashtags");
+        let mut tags = Vec::new();
         
         // ハッシュタグを追加
         for hashtag in hashtags {
-            builder = builder.tag(Tag::hashtag(hashtag));
+            tags.push(Tag::hashtag(hashtag));
         }
         
-        builder.sign(&keys).await.unwrap()
+        EventBuilder::text_note("Test event with hashtags")
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .unwrap()
     }
     
     #[tokio::test]
@@ -45,7 +48,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_nostr_event_payload_serialization() {
-        let event = create_test_event_with_hashtags(vec![]).await;
+        let event = create_test_event_with_hashtags(vec![]);
         let payload = NostrEventPayload { event: event.clone() };
         
         // シリアライズ
@@ -64,7 +67,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_to_gossip_message() {
         let event_sync = create_test_event_sync().await;
-        let event = create_test_event_with_hashtags(vec!["bitcoin".to_string()]).await;
+        let event = create_test_event_with_hashtags(vec!["bitcoin".to_string()]);
         
         let result = event_sync.convert_to_gossip_message(event.clone());
         assert!(result.is_ok());
@@ -80,7 +83,7 @@ mod tests {
     async fn test_extract_topic_ids_with_hashtags() {
         let event_sync = create_test_event_sync().await;
         let hashtags = vec!["bitcoin".to_string(), "nostr".to_string()];
-        let event = create_test_event_with_hashtags(hashtags.clone()).await;
+        let event = create_test_event_with_hashtags(hashtags.clone());
         
         let result = event_sync.extract_topic_ids(&event);
         assert!(result.is_ok());
@@ -102,7 +105,7 @@ mod tests {
     #[tokio::test]
     async fn test_extract_topic_ids_without_hashtags() {
         let event_sync = create_test_event_sync().await;
-        let event = create_test_event_with_hashtags(vec![]).await;
+        let event = create_test_event_with_hashtags(vec![]);
         
         let result = event_sync.extract_topic_ids(&event);
         assert!(result.is_ok());
@@ -118,7 +121,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_gossip_message_nostr_event() {
         let event_sync = create_test_event_sync().await;
-        let event = create_test_event_with_hashtags(vec!["test".to_string()]).await;
+        let event = create_test_event_with_hashtags(vec!["test".to_string()]);
         
         // GossipMessageの作成
         let payload = NostrEventPayload { event: event.clone() };
@@ -177,7 +180,7 @@ mod tests {
     async fn test_propagate_nostr_event() {
         let event_sync = create_test_event_sync().await;
         let hashtags = vec!["bitcoin".to_string(), "test".to_string()];
-        let event = create_test_event_with_hashtags(hashtags.clone()).await;
+        let event = create_test_event_with_hashtags(hashtags.clone());
         
         // 現時点ではGossipManagerのjoin_topicの実装が不完全なため、
         // propagate_nostr_eventはTopicNotFoundエラーを返す可能性がある
@@ -196,7 +199,7 @@ mod tests {
             "p2p".to_string(),
             "kukuri".to_string(),
         ];
-        let event = create_test_event_with_hashtags(hashtags.clone()).await;
+        let event = create_test_event_with_hashtags(hashtags.clone());
         
         let result = event_sync.extract_topic_ids(&event);
         assert!(result.is_ok());

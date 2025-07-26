@@ -58,10 +58,10 @@
 ### Day 6-8: Nostr統合（進行中）
 
 #### Day 6: イベント変換
-- [ ] NostrイベントからGossipMessageへの変換
-- [ ] GossipMessageからNostrイベントへの変換
-- [ ] トピックID抽出ロジック（kind:30078使用）
-- [ ] 変換テスト作成
+- [x] NostrイベントからGossipMessageへの変換
+- [x] GossipMessageからNostrイベントへの変換
+- [x] トピックID抽出ロジック（kind:30078使用）
+- [x] 変換テスト作成
 
 #### Day 7: 双方向同期
 - [ ] EventSync実装
