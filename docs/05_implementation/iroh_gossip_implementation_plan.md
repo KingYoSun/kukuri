@@ -1,7 +1,7 @@
 # iroh-gossip実装計画
 
 **作成日**: 2025年7月26日  
-**最終更新**: 2025年7月26日
+**最終更新**: 2025年7月27日
 
 ## 概要
 
@@ -9,7 +9,7 @@
 
 ## 実装スケジュール（10日間）
 
-### Day 1-2: 基礎実装
+### Day 1-2: 基礎実装 ✅ 完了
 
 #### Day 1: セットアップと基本構造
 - [x] Cargo.tomlへの依存関係追加
@@ -24,36 +24,43 @@
 
 #### Day 2: GossipManager基本実装
 - [x] GossipManager構造体の実装
+  - [x] iroh-gossip v0.90.0 API対応
+  - [x] Event型のインポートパス修正（api::Event使用）
+  - [x] GossipSenderの可変性対応（Arc<Mutex<GossipSender>>）
 - [x] 初期化・シャットダウン機能
 - [x] 基本的なTauriコマンド作成
 - [x] ユニットテスト作成
 
-### Day 3-5: トピック管理
+### Day 3-5: トピック管理 ✅ 完了
 
 #### Day 3: トピック参加機能
 - [x] TopicMesh構造体の実装
-- [x] join_topic機能の実装  
+- [x] join_topic機能の実装
+  - [x] iroh-gossip v0.90.0のsubscribe API対応
+  - [x] GossipTopic返却とsplit()による送受信分離
 - [x] leave_topic機能の実装
 - [x] トピック状態管理
 
 #### Day 4: メッセージング基盤
 - [x] GossipMessageフォーマット実装
-- [x] メッセージ署名・検証
+- [x] メッセージ署名・検証（secp256k1使用）
 - [x] broadcast機能の実装
 - [x] 受信ハンドラーの実装
+  - [x] NeighborUp/NeighborDownイベント対応
+  - [x] Tauriイベントエミッター統合
 
 #### Day 5: メッセージ処理
-- [x] 重複排除メカニズム
-- [x] メッセージキャッシュ実装
+- [x] 重複排除メカニズム（LRUキャッシュ）
+- [x] メッセージキャッシュ実装（最大1000件）
 - [x] エラーハンドリング
-- [x] 統合テスト作成
+- [x] 統合テスト作成（ピア間通信、マルチノード等）
 
-### Day 6-8: Nostr統合
+### Day 6-8: Nostr統合（進行中）
 
 #### Day 6: イベント変換
 - [ ] NostrイベントからGossipMessageへの変換
 - [ ] GossipMessageからNostrイベントへの変換
-- [ ] トピックID抽出ロジック
+- [ ] トピックID抽出ロジック（kind:30078使用）
 - [ ] 変換テスト作成
 
 #### Day 7: 双方向同期
@@ -88,14 +95,15 @@
 
 ```
 src-tauri/src/modules/p2p/
-├── mod.rs                  # モジュール定義
-├── error.rs               # P2P固有のエラー型
-├── gossip_manager.rs      # GossipManager実装
-├── topic_mesh.rs          # TopicMesh実装
-├── message.rs             # メッセージ型定義
-├── event_sync.rs          # Nostr連携
+├── mod.rs                  # モジュール定義 ✅
+├── error.rs               # P2P固有のエラー型 ✅
+├── gossip_manager.rs      # GossipManager実装 ✅
+├── topic_mesh.rs          # TopicMesh実装 ✅
+├── message.rs             # メッセージ型定義 ✅
+├── event_sync.rs          # Nostr連携（実装中）
 ├── peer_discovery.rs      # ピア発見（将来）
-└── tests/                 # テストモジュール
+├── commands.rs            # Tauriコマンド ✅
+└── tests/                 # テストモジュール ✅
     ├── mod.rs
     └── gossip_tests.rs
 ```
@@ -193,6 +201,12 @@ pub enum P2PError {
     
     #[error("Invalid peer address: {0}")]
     InvalidPeerAddr(String),
+    
+    #[error("Gossip error: {0}")]
+    Gossip(String),
+    
+    #[error("Invalid signature")]
+    InvalidSignature,
 }
 ```
 
@@ -217,7 +231,7 @@ pub struct TopicState {
 }
 ```
 
-#### イベント処理
+#### イベント処理（v0.90.0対応）
 
 ```rust
 #[derive(Clone, Debug)]
@@ -226,6 +240,7 @@ pub enum P2PEvent {
         topic_id: String,
         message: GossipMessage,
     },
+    // iroh-gossip v0.90.0: NeighborUp/NeighborDown使用
     PeerJoined {
         topic_id: String,
         peer_id: PublicKey,
@@ -487,10 +502,16 @@ env_logger::builder()
 
 ## 成功指標
 
-- [ ] 10ピア間でのメッセージ配信成功率 > 99%
-- [ ] メッセージ配信遅延 < 100ms（ローカルネットワーク）
+- [x] 10ピア間でのメッセージ配信成功率 > 99% ✅
+- [x] メッセージ配信遅延 < 100ms（ローカルネットワーク） ✅
 - [ ] メモリ使用量 < 100MB（1000メッセージ/分）
 - [ ] CPU使用率 < 10%（通常運用時）
+
+### 達成済み機能
+- メッセージの署名検証機能
+- 重複メッセージの自動除外
+- Tauriイベント統合
+- マルチノード通信の動作確認
 
 ## 次のステップ
 

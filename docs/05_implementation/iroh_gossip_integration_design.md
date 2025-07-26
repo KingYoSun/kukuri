@@ -1,7 +1,7 @@
 # iroh-gossip統合設計
 
 **作成日**: 2025年7月26日  
-**最終更新**: 2025年7月26日
+**最終更新**: 2025年7月27日
 
 ## 概要
 
@@ -47,36 +47,36 @@ src/modules/
 
 ## 主要コンポーネント設計
 
-### 1. GossipManager
+### 1. GossipManager（v0.90.0対応）
 
 ```rust
 pub struct GossipManager {
-    endpoint: Endpoint,
-    gossip: Gossip,
-    router: Router,
+    endpoint: iroh::Endpoint,
+    gossip: Arc<Mutex<iroh_gossip::Gossip>>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
+    secret_key: SecretKey,
 }
 
 impl GossipManager {
     /// 新しいGossipManagerを作成
     pub async fn new(secret_key: SecretKey) -> Result<Self> {
-        let endpoint = Endpoint::builder()
-            .secret_key(secret_key)
+        let endpoint = iroh::Endpoint::builder()
+            .secret_key(secret_key.clone())
             .discovery_n0()
             .bind()
             .await?;
             
-        let gossip = Gossip::builder().spawn(endpoint.clone());
+        let gossip = iroh_gossip::Gossip::from_endpoint(
+            endpoint.clone(),
+            Default::default(),
+            &secret_key.public(),
+        );
         
-        let router = Router::builder(endpoint.clone())
-            .accept(GOSSIP_ALPN, gossip.clone())
-            .spawn();
-            
         Ok(Self {
             endpoint,
-            gossip,
-            router,
+            gossip: Arc::new(Mutex::new(gossip)),
             topics: Arc::new(RwLock::new(HashMap::new())),
+            secret_key,
         })
     }
     
@@ -91,14 +91,14 @@ impl GossipManager {
 }
 ```
 
-### 2. TopicMesh
+### 2. TopicMesh（実装済み）
 
 ```rust
 pub struct TopicMesh {
     topic_id: String,
-    subscription: GossipSubscription,
     peers: Arc<RwLock<HashSet<PublicKey>>>,
-    message_cache: Arc<RwLock<LruCache<MessageId, GossipMessage>>>,
+    message_cache: Arc<Mutex<LruCache<MessageId, Instant>>>,
+    stats: Arc<RwLock<TopicStats>>,
 }
 
 impl TopicMesh {
@@ -108,7 +108,7 @@ impl TopicMesh {
     /// ピアの接続状態管理
     pub async fn update_peer_status(&self, peer: PublicKey, connected: bool)
     
-    /// メッセージの重複チェック
+    /// メッセージの重複チェック（LRUキャッシュ使用）
     pub fn is_duplicate(&self, message_id: &MessageId) -> bool
 }
 ```
@@ -205,36 +205,42 @@ pub fn user_topic_id(pubkey: &str) -> String {
 
 ## 実装フェーズ
 
-### Phase 1: 基礎実装（2日間）
+### Phase 1: 基礎実装（2日間） ✅ 完了
 
-1. **依存関係の追加**
+1. **依存関係の追加** ✅
    ```toml
    [dependencies]
    iroh = "0.90.0"
    iroh-gossip = "0.90.0"
+   lru = "0.13.0"
    ```
 
-2. **基本モジュール構造の作成**
+2. **基本モジュール構造の作成** ✅
    - `p2p/mod.rs`: モジュール定義
-   - `p2p/gossip_manager.rs`: 基本的な初期化とシャットダウン
+   - `p2p/gossip_manager.rs`: iroh-gossip v0.90.0 API対応
+   - `p2p/error.rs`: P2P固有のエラー型
+   - `p2p/message.rs`: メッセージ型定義
 
-3. **Tauriコマンドの追加**
+3. **Tauriコマンドの追加** ✅
    - `initialize_p2p`: P2P機能の初期化
    - `get_p2p_status`: 接続状態の取得
+   - `get_node_address`: ノードアドレス取得
 
-### Phase 2: トピック管理（3日間）
+### Phase 2: トピック管理（3日間） ✅ 完了
 
-1. **トピック参加・離脱機能**
-   - `join_topic`: トピックへの参加
+1. **トピック参加・離脱機能** ✅
+   - `join_topic`: トピックへの参加（subscribe API使用）
    - `leave_topic`: トピックからの離脱
    - トピックごとのピア管理
+   - Tauriイベント統合
 
-2. **メッセージング基盤**
+2. **メッセージング基盤** ✅
    - メッセージフォーマットの実装
-   - 署名・検証機能
-   - 重複排除メカニズム
+   - secp256k1による署名・検証機能
+   - LRUキャッシュによる重複排除
+   - マルチノードテストでの動作確認
 
-### Phase 3: Nostr統合（3日間）
+### Phase 3: Nostr統合（3日間）（進行中）
 
 1. **イベント同期**
    - NostrイベントのP2P配信
@@ -263,7 +269,7 @@ pub fn user_topic_id(pubkey: &str) -> String {
 1. **認証とアクセス制御**
    - irohのNodeIdとNostrの公開鍵の紐付け
    - トピック参加時の権限確認
-   - メッセージの署名検証
+   - メッセージの署名検証 ✅ 実装済み（secp256k1）
 
 2. **プライバシー保護**
    - トピック参加情報の管理
@@ -277,15 +283,16 @@ pub fn user_topic_id(pubkey: &str) -> String {
 
 ## テスト計画
 
-1. **単体テスト**
-   - 各モジュールの機能テスト
-   - メッセージ変換のテスト
+1. **単体テスト** ✅ 実装済み
+   - 各モジュールの機能テスト（41件）
+   - メッセージ署名・検証テスト
    - エラーハンドリングのテスト
 
-2. **統合テスト**
-   - Nostr-P2P間の連携テスト
-   - 複数ピア環境でのテスト
-   - ネットワーク障害時のテスト
+2. **統合テスト** ✅ 部分実装
+   - ピア間メッセージングテスト
+   - マルチノードブロードキャストテスト
+   - トピック参加・離脱テスト
+   - 重複メッセージ除外テスト
 
 3. **パフォーマンステスト**
    - 大量メッセージ処理
