@@ -297,6 +297,12 @@ impl GossipManager {
         stats
     }
     
+    /// メッセージに署名を付ける（EventSync用）
+    pub fn sign_message(&self, message: &mut GossipMessage) -> P2PResult<()> {
+        message.sign(&self.secret_key)
+            .map_err(|e| P2PError::SerializationError(format!("Failed to sign message: {}", e)))
+    }
+    
     /// シャットダウン
     pub async fn shutdown(&self) -> P2PResult<()> {
         // すべてのトピックから離脱

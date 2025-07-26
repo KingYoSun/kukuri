@@ -28,6 +28,8 @@ pub struct EventManager {
     pub(crate) event_publisher: Arc<RwLock<EventPublisher>>,
     is_initialized: Arc<RwLock<bool>>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
+    /// EventSync for P2P integration (set after initialization)
+    event_sync: Arc<RwLock<Option<Arc<crate::modules::p2p::EventSync>>>>,
 }
 
 impl EventManager {
@@ -39,6 +41,7 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
+            event_sync: Arc::new(RwLock::new(None)),
         }
     }
     
@@ -52,6 +55,12 @@ impl EventManager {
     pub async fn set_app_handle(&self, app_handle: AppHandle) {
         let mut handle = self.app_handle.write().await;
         *handle = Some(app_handle);
+    }
+    
+    /// EventSyncを設定（P2P統合用）
+    pub async fn set_event_sync(&self, event_sync: Arc<crate::modules::p2p::EventSync>) {
+        let mut sync = self.event_sync.write().await;
+        *sync = Some(event_sync);
     }
 
     /// KeyManagerからの秘密鍵でマネージャーを初期化
@@ -105,7 +114,17 @@ impl EventManager {
         let event = publisher.create_text_note(content, vec![])?;
         
         let client_manager = self.client_manager.read().await;
-        client_manager.publish_event(event.clone()).await
+        let event_id = client_manager.publish_event(event.clone()).await?;
+        
+        // P2Pネットワークに配信
+        if let Some(ref event_sync) = *self.event_sync.read().await {
+            if let Err(e) = event_sync.propagate_nostr_event(event).await {
+                error!("Failed to propagate event to P2P network: {}", e);
+                // P2P配信の失敗はエラーとしない（Nostrリレーへの送信が成功していれば十分）
+            }
+        }
+        
+        Ok(event_id)
     }
 
     /// トピック投稿を作成・送信
@@ -116,7 +135,16 @@ impl EventManager {
         let event = publisher.create_topic_post(topic_id, content, reply_to)?;
         
         let client_manager = self.client_manager.read().await;
-        client_manager.publish_event(event.clone()).await
+        let event_id = client_manager.publish_event(event.clone()).await?;
+        
+        // P2Pネットワークに配信
+        if let Some(ref event_sync) = *self.event_sync.read().await {
+            if let Err(e) = event_sync.propagate_nostr_event(event).await {
+                error!("Failed to propagate event to P2P network: {}", e);
+            }
+        }
+        
+        Ok(event_id)
     }
 
     /// リアクションを送信
@@ -127,7 +155,16 @@ impl EventManager {
         let event = publisher.create_reaction(event_id, reaction)?;
         
         let client_manager = self.client_manager.read().await;
-        client_manager.publish_event(event.clone()).await
+        let result_id = client_manager.publish_event(event.clone()).await?;
+        
+        // P2Pネットワークに配信
+        if let Some(ref event_sync) = *self.event_sync.read().await {
+            if let Err(e) = event_sync.propagate_nostr_event(event).await {
+                error!("Failed to propagate event to P2P network: {}", e);
+            }
+        }
+        
+        Ok(result_id)
     }
 
     /// メタデータを更新
@@ -138,7 +175,16 @@ impl EventManager {
         let event = publisher.create_metadata(metadata)?;
         
         let client_manager = self.client_manager.read().await;
-        client_manager.publish_event(event.clone()).await
+        let result_id = client_manager.publish_event(event.clone()).await?;
+        
+        // P2Pネットワークに配信
+        if let Some(ref event_sync) = *self.event_sync.read().await {
+            if let Err(e) = event_sync.propagate_nostr_event(event).await {
+                error!("Failed to propagate event to P2P network: {}", e);
+            }
+        }
+        
+        Ok(result_id)
     }
 
     /// 特定のトピックをサブスクライブ

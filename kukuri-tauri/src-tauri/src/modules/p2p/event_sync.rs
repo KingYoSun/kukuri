@@ -156,13 +156,14 @@ impl EventSync {
         // 送信者の公開鍵を取得 (Nostr公開鍵は32バイト)
         let sender = event.pubkey.to_bytes().to_vec();
         
-        let message = GossipMessage::new(
+        let mut message = GossipMessage::new(
             MessageType::NostrEvent,
             payload_bytes,
             sender,
         );
         
-        // TODO: メッセージに署名を追加
+        // GossipManagerを使用してメッセージに署名
+        self.gossip_manager.sign_message(&mut message)?;
         
         Ok(message)
     }
@@ -251,6 +252,20 @@ impl EventSync {
             }
         }
         Ok(())
+    }
+    
+    /// テスト用：同期状態に直接アクセス
+    #[cfg(test)]
+    pub async fn test_set_sync_status(&self, event_id: String, status: SyncStatus) {
+        let mut sync_state = self.sync_state.write().await;
+        sync_state.insert(event_id, status);
+    }
+    
+    /// テスト用：同期状態のサイズを取得
+    #[cfg(test)]
+    pub async fn test_get_sync_state_size(&self) -> usize {
+        let sync_state = self.sync_state.read().await;
+        sync_state.len()
     }
 }
 

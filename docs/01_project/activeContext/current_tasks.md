@@ -4,6 +4,30 @@
 
 ## 完了済みタスク
 
+### 2025年7月27日（Nostr統合 Day 7）
+- [x] Nostr統合 Day 7: 双方向同期の実装
+  - [x] EventSync構造体とインターフェースの実装
+    - [x] EventManagerとGossipManagerの統合
+    - [x] 同期状態管理（SyncStatus）の実装
+    - [x] 重複イベント処理の防止
+  - [x] Nostrイベント送信時のP2P配信機能実装
+    - [x] EventManagerへのEventSync統合
+    - [x] set_event_syncメソッドの追加
+    - [x] 全イベント送信メソッドでのP2P自動配信
+  - [x] P2P受信イベントのNostr処理機能実装
+    - [x] AppStateでのP2Pイベントループ実装
+    - [x] handle_gossip_messageによるイベント処理
+    - [x] EventManager::handle_p2p_eventとの統合
+  - [x] メッセージ署名処理の実装
+    - [x] GossipManager::sign_messageメソッド追加
+    - [x] EventSyncでの署名付きメッセージ生成
+  - [x] 包括的なテストスイート実装（15件）
+    - [x] イベント変換テスト
+    - [x] トピックID抽出テスト（ハッシュタグ、kind:30078）
+    - [x] 同期状態管理テスト
+    - [x] 署名検証テスト
+    - [x] 並行処理安全性テスト
+
 ### 2025年7月27日（更新）
 - [x] Nostr統合 Day 6: イベント変換機能の実装
   - [x] NostrイベントからGossipMessageへの変換実装
@@ -362,9 +386,9 @@
      - [x] 重複排除メカニズムの動作確認
    - Nostr統合（Day 6-8）
      - [x] イベント変換機能（Day 6） ✓完了
-     - [ ] 双方向同期機能（Day 7）
-       - [ ] Nostrイベント送信時の自動P2P配信
-       - [ ] EventManagerへのフック実装
+     - [x] 双方向同期機能（Day 7） ✓完了
+       - [x] Nostrイベント送信時の自動P2P配信
+       - [x] EventManagerへのフック実装
      - [ ] ハイブリッド配信メカニズム（Day 8）
        - [ ] 並列配信実装
        - [ ] 配信優先度管理
@@ -396,5 +420,8 @@
 - P2P通信の基礎実装（Day 1-2）が完了
 - P2P通信のトピック管理機能（Day 3-5）が完了
 - Nostr統合 Day 6（イベント変換機能）が完了
-- EventSyncによるNostr/P2P双方向変換の仕組みが実装済み
-- 次は双方向同期機能（Day 7）の実装
+- Nostr統合 Day 7（双方向同期）が完了
+- EventSyncによるNostr/P2P双方向同期が完全に実装済み
+- Nostrイベント送信時の自動P2P配信が動作
+- P2P受信イベントのNostrリレー転送が動作
+- 次はハイブリッド配信メカニズム（Day 8）の実装
