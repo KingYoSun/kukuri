@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach, MockedFunction } from 'vitest';
 import { RelayStatus } from '../RelayStatus';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -15,6 +15,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 // import { invoke } from "@tauri-apps/api/core";
 
+const mockUseAuthStore = useAuthStore as MockedFunction<typeof useAuthStore>;
+
 describe('RelayStatus', () => {
   const mockSetRelayStatus = vi.fn();
   const mockUpdateRelayStatus = vi.fn();
@@ -24,7 +26,7 @@ describe('RelayStatus', () => {
     vi.useFakeTimers();
 
     // デフォルトのストア状態を設定
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: [],
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,
@@ -37,7 +39,7 @@ describe('RelayStatus', () => {
   });
 
   it('renders when relays are connected', () => {
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: [{ url: 'wss://relay.test', status: 'connected' }],
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,
@@ -50,7 +52,7 @@ describe('RelayStatus', () => {
   });
 
   it('does not render when no relays connected', () => {
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: [],
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,
@@ -69,7 +71,7 @@ describe('RelayStatus', () => {
       { url: 'wss://relay3.test', status: 'error: Connection timeout' },
     ];
 
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: mockRelayStatus,
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,
@@ -90,7 +92,7 @@ describe('RelayStatus', () => {
       { url: 'wss://relay3.test', status: 'connecting' },
     ];
 
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: mockRelayStatus,
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,
@@ -151,7 +153,7 @@ describe('RelayStatus', () => {
   });
 
   it('shows empty state when no relays', () => {
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: [],
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,
@@ -167,7 +169,7 @@ describe('RelayStatus', () => {
   it('handles error status with message', () => {
     const mockRelayStatus = [{ url: 'wss://relay.test', status: 'error: Connection refused' }];
 
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       relayStatus: mockRelayStatus,
       isLoggedIn: true,
       setRelayStatus: mockSetRelayStatus,

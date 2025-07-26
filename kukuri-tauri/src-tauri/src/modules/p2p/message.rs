@@ -78,7 +78,7 @@ impl GossipMessage {
         bytes.extend_from_slice(&(self.msg_type as u8).to_le_bytes());
         bytes.extend_from_slice(&self.payload);
         bytes.extend_from_slice(&self.timestamp.to_le_bytes());
-        bytes.extend_from_slice(&self.sender);
+        // 注意: senderは署名に含めない（署名作成時にはまだ設定されていないため）
         bytes
     }
     

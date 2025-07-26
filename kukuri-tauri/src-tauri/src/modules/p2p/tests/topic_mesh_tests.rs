@@ -141,4 +141,119 @@ mod tests {
         // キャッシュサイズは1000以下
         assert!(stats.message_count <= 1000);
     }
+    
+    #[tokio::test]
+    async fn test_concurrent_message_handling() {
+        use std::sync::Arc;
+        use tokio::task;
+        
+        let mesh = Arc::new(create_test_mesh());
+        let mut handles = vec![];
+        
+        // 10個の並行タスクでメッセージを送信
+        for i in 0..10 {
+            let mesh_clone = mesh.clone();
+            let handle = task::spawn(async move {
+                for j in 0..100 {
+                    let mut message = create_test_message((i * 100 + j) as u8);
+                    // より一意なメッセージIDを設定
+                    message.id[0] = ((i * 100 + j) % 256) as u8;
+                    message.id[1] = ((i * 100 + j) / 256) as u8;
+                    mesh_clone.handle_message(message).await.unwrap();
+                }
+            });
+            handles.push(handle);
+        }
+        
+        // すべてのタスクが完了するのを待つ
+        for handle in handles {
+            handle.await.unwrap();
+        }
+        
+        // 統計情報を確認
+        let stats = mesh.get_stats().await;
+        // 1000メッセージ送信したが、重複があるため実際のメッセージ数は少ない
+        assert!(stats.message_count > 0);
+        assert!(stats.message_count <= 1000); // キャッシュ制限を超えない
+        assert!(stats.peer_count > 0);
+        assert!(stats.peer_count <= 1000);
+    }
+    
+    #[tokio::test]
+    async fn test_concurrent_peer_updates() {
+        use std::sync::Arc;
+        use tokio::task;
+        
+        let mesh = Arc::new(create_test_mesh());
+        let mut handles = vec![];
+        
+        // 並行してピアの追加/削除を行う
+        for i in 0..5 {
+            let mesh_clone = mesh.clone();
+            let handle = task::spawn(async move {
+                for j in 0..20 {
+                    let peer = vec![(i * 20 + j) as u8; 32];
+                    mesh_clone.update_peer_status(peer.clone(), true).await;
+                    if j % 2 == 0 {
+                        mesh_clone.update_peer_status(peer, false).await;
+                    }
+                }
+            });
+            handles.push(handle);
+        }
+        
+        // すべてのタスクが完了するのを待つ
+        for handle in handles {
+            handle.await.unwrap();
+        }
+        
+        // 最終的なピア数を確認
+        let peers = mesh.get_peers().await;
+        assert_eq!(peers.len(), 50); // 奇数番号のピアのみ残る
+    }
+    
+    #[tokio::test]
+    async fn test_concurrent_cache_operations() {
+        use std::sync::Arc;
+        use tokio::task;
+        
+        let mesh = Arc::new(create_test_mesh());
+        
+        // メッセージ追加タスク
+        let mesh_add = mesh.clone();
+        let add_task = task::spawn(async move {
+            for i in 0..500 {
+                let message = create_test_message(i as u8);
+                mesh_add.handle_message(message).await.unwrap();
+                tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+            }
+        });
+        
+        // 統計情報取得タスク
+        let mesh_stats = mesh.clone();
+        let stats_task = task::spawn(async move {
+            let mut last_count = 0;
+            for _ in 0..50 {
+                let stats = mesh_stats.get_stats().await;
+                assert!(stats.message_count >= last_count); // 単調増加
+                last_count = stats.message_count;
+                tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+            }
+        });
+        
+        // 最新メッセージ取得タスク
+        let mesh_recent = mesh.clone();
+        let recent_task = task::spawn(async move {
+            for _ in 0..30 {
+                let messages = mesh_recent.get_recent_messages(10).await;
+                assert!(messages.len() <= 10);
+                tokio::time::sleep(tokio::time::Duration::from_millis(8)).await;
+            }
+        });
+        
+        // すべてのタスクが完了するのを待つ
+        add_task.await.unwrap();
+        stats_task.await.unwrap();
+        recent_task.await.unwrap();
+    }
 }

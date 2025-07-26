@@ -1,8 +1,51 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年7月26日
+**最終更新**: 2025年7月27日
 
 ## 解決済みの問題
+
+### フロントエンドany型警告（2025年7月27日）
+**問題**: テストファイルで37個のany型警告が発生
+
+**症状**:
+- `@typescript-eslint/no-explicit-any`ルールによる警告
+- テストのモック実装で`as any`が多用されていた
+
+**解決策**: Vitestの`MockedFunction`型を活用
+```typescript
+import { MockedFunction } from 'vitest';
+const mockInvoke = invoke as MockedFunction<typeof invoke>;
+// 以降はmockInvokeを使用
+mockInvoke.mockResolvedValueOnce(result);
+```
+
+**影響範囲**: 
+- NostrTestPanel.test.tsx
+- RelayStatus.test.tsx  
+- nostr.test.ts
+- authStore.test.ts
+- wdio.conf.ts
+
+### P2Pメッセージ署名検証エラー（2025年7月27日）
+**問題**: メッセージ署名検証テストが失敗
+
+**症状**:
+- `test_message_signing_and_verification`で署名検証が常にfalseを返す
+
+**解決策**: 署名生成時のバイト列からsenderフィールドを除外
+```rust
+pub fn to_signing_bytes(&self) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&self.id);
+    bytes.extend_from_slice(&(self.msg_type as u8).to_le_bytes());
+    bytes.extend_from_slice(&self.payload);
+    bytes.extend_from_slice(&self.timestamp.to_le_bytes());
+    // 注意: senderは署名に含めない（署名作成時にはまだ設定されていないため）
+    bytes
+}
+```
+
+**理由**: 署名作成時点ではsenderフィールドが未設定のため、検証時との不整合が発生していた
 
 ### nostr-sdk v0.42 API変更（2025年7月26日）
 **問題**: nostr-sdk v0.42でEventBuilderのAPIが変更され、多くのメソッドが破壊的変更を受けた
@@ -115,13 +158,22 @@ vi.mock('zustand', async () => {
 ## 現在の注意事項
 
 ### テスト関連
-- **テストカバレッジ**: 合計158件（Rust 52件、TypeScript 106件）のテストを実装
+- **テストカバレッジ**: 合計180件以上のテストを実装
 - **act警告**: 一部のReactコンポーネントテストでact警告が発生する場合がある
   - 主に非同期state更新時に発生
   - 実害はないが、将来的に対応が必要
-- **any型の使用**: テストファイル内で35箇所のany型警告
-  - モックの柔軟性のため意図的に使用
-  - production codeでは使用していない
+- **フロントエンド統合テスト失敗**: 7件のテストが失敗（2025年7月27日）
+  - 投稿リストとトピックリストの表示に関するテスト
+  - コンポーネントの実装が未完成のため発生
+  - 実装が進めば自然に解消される見込み
+- **バックエンド統合テスト失敗**: 6件のP2P通信関連テストが失敗（2025年7月27日）
+  - test_peer_to_peer_messaging
+  - test_multi_node_broadcast
+  - test_topic_join_leave_events
+  - test_event_buffering_and_lagged
+  - test_peer_connection_stability
+  - test_message_ordering
+  - ノード間の実際の通信機能が未実装のため発生
 
 ### フロントエンド
 - **ESLint設定**: src/test/setup.tsで`@typescript-eslint/no-explicit-any`を無効化
@@ -133,11 +185,13 @@ vi.mock('zustand', async () => {
 - **未使用コード**: 多くのモジュールに`#[allow(dead_code)]`が付与されている
   - 実装時に随時削除する必要がある
 - **データベース接続**: 現在は初期化コードのみで、実際の接続処理は未実装
-- **Rustリント警告**: clippy実行時に15件の警告
-  - 未使用メソッド: add_callback、verify_event、create_repost等
-  - 未使用フィールド: db_pool、encryption_manager
+- **Rustリント警告**: clippy実行時に42件の警告（2025年7月27日更新）
+  - 未使用インポート: P2PError、Result、TopicMesh、EventSync等
+  - 未使用メソッド: add_callback、verify_event、create_repost、active_topics、shutdown等
+  - 未使用フィールド: db_pool、encryption_manager、router、topic_id、from_peer
+  - 未使用構造体: EventSync、PeerDiscovery
   - format!マクロでの変数展開（uninlined_format_args）
-  - 複雑な型定義（type_complexity）
+  - 変数命名規則違反（topicId → topic_id）
   - いずれも実装進行に伴い解消予定
 
 ### 開発環境

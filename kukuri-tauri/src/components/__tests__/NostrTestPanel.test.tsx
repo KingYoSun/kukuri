@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, MockedFunction } from 'vitest';
 import { NostrTestPanel } from '../NostrTestPanel';
 
 // Tauri APIをモック
@@ -30,18 +30,22 @@ import { listen } from '@tauri-apps/api/event';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 
+const mockInvoke = invoke as MockedFunction<typeof invoke>;
+const mockListen = listen as MockedFunction<typeof listen>;
+const mockUseAuthStore = useAuthStore as MockedFunction<typeof useAuthStore>;
+
 describe('NostrTestPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
     // デフォルトでログイン状態をモック
-    (useAuthStore as any).mockReturnValue({
+    mockUseAuthStore.mockReturnValue({
       isAuthenticated: true,
     });
 
     // listenモックのデフォルト実装
     const mockUnlisten = vi.fn();
-    (listen as any).mockResolvedValue(mockUnlisten);
+    mockListen.mockResolvedValue(mockUnlisten);
   });
 
   it('renders test panel with all sections', () => {
@@ -56,7 +60,7 @@ describe('NostrTestPanel', () => {
 
   it('sends text note when button is clicked', async () => {
     const mockEventId = 'test-event-id-123';
-    (invoke as any).mockResolvedValueOnce(mockEventId);
+    mockInvoke.mockResolvedValueOnce(mockEventId);
 
     render(<NostrTestPanel />);
 
@@ -81,7 +85,7 @@ describe('NostrTestPanel', () => {
 
   it('sends topic post with form data', async () => {
     const mockEventId = 'topic-event-id-456';
-    (invoke as any).mockResolvedValueOnce(mockEventId);
+    mockInvoke.mockResolvedValueOnce(mockEventId);
 
     render(<NostrTestPanel />);
 
@@ -112,7 +116,7 @@ describe('NostrTestPanel', () => {
 
   it('sends reaction with form data', async () => {
     const mockReactionId = 'reaction-id-789';
-    (invoke as any).mockResolvedValueOnce(mockReactionId);
+    mockInvoke.mockResolvedValueOnce(mockReactionId);
 
     render(<NostrTestPanel />);
 
@@ -137,7 +141,7 @@ describe('NostrTestPanel', () => {
   });
 
   it('subscribes to topic', async () => {
-    (invoke as any).mockResolvedValueOnce(undefined);
+    mockInvoke.mockResolvedValueOnce(undefined);
 
     render(<NostrTestPanel />);
 
@@ -167,7 +171,7 @@ describe('NostrTestPanel', () => {
 
   it('displays received events', async () => {
     const mockUnlisten = vi.fn();
-    (listen as any).mockResolvedValueOnce(mockUnlisten);
+    mockListen.mockResolvedValueOnce(mockUnlisten);
 
     render(<NostrTestPanel />);
 
@@ -175,7 +179,7 @@ describe('NostrTestPanel', () => {
     expect(listen).toHaveBeenCalledWith('nostr://event', expect.any(Function));
 
     // リスナーコールバックを取得してテスト
-    const listenerCallback = (listen as any).mock.calls[0][1];
+    const listenerCallback = mockListen.mock.calls[0][1] as (event: unknown) => void;
 
     const mockEvent = {
       payload: {
@@ -216,7 +220,7 @@ describe('NostrTestPanel', () => {
     expect(sendNoteButton).not.toBeDisabled();
 
     // APIエラーをモック
-    (invoke as any).mockRejectedValueOnce(new Error('Network error'));
+    mockInvoke.mockRejectedValueOnce(new Error('Network error'));
 
     // 送信ボタンをクリック
     await userEvent.click(sendNoteButton);
@@ -228,7 +232,7 @@ describe('NostrTestPanel', () => {
 
   it('cleans up event listener on unmount', async () => {
     const mockUnlisten = vi.fn();
-    (listen as any).mockResolvedValueOnce(mockUnlisten);
+    mockListen.mockResolvedValueOnce(mockUnlisten);
 
     const { unmount } = render(<NostrTestPanel />);
 

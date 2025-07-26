@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, MockedFunction } from 'vitest';
 import { useAuthStore } from '../authStore';
 import type { User } from '../types';
 
@@ -19,6 +19,9 @@ vi.mock('@/lib/api/nostr', () => ({
 }));
 
 import { initializeNostr, disconnectNostr } from '@/lib/api/nostr';
+
+const mockInitializeNostr = initializeNostr as MockedFunction<typeof initializeNostr>;
+const mockDisconnectNostr = disconnectNostr as MockedFunction<typeof disconnectNostr>;
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -198,7 +201,7 @@ describe('authStore', () => {
 
   it('Nostr初期化エラーが処理されること', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    (initializeNostr as any).mockRejectedValueOnce(new Error('Nostr init failed'));
+    mockInitializeNostr.mockRejectedValueOnce(new Error('Nostr init failed'));
 
     const testUser: User = {
       id: 'test123',
@@ -222,7 +225,7 @@ describe('authStore', () => {
 
   it('Nostr切断エラーが処理されること', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    (disconnectNostr as any).mockRejectedValueOnce(new Error('Disconnect failed'));
+    mockDisconnectNostr.mockRejectedValueOnce(new Error('Disconnect failed'));
 
     const testUser: User = {
       id: 'test123',

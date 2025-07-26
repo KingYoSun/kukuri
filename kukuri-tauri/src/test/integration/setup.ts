@@ -25,6 +25,9 @@ export function setupTauriMocks() {
       case 'get_public_key':
         return 'npub1testpublickey123456789abcdef';
 
+      case 'initialize_nostr':
+        return { success: true };
+
       case 'list_topics':
         return [
           { id: 1, name: 'test-topic-1', description: 'Test Topic 1' },

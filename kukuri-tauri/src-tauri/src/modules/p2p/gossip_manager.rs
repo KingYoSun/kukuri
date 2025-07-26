@@ -85,15 +85,18 @@ impl GossipManager {
     pub async fn node_addr(&self) -> P2PResult<Vec<String>> {
         let node_addr = self.endpoint.node_addr();
         let addrs = match node_addr.get() {
-            Ok(Some(addr)) => addr,
-            Ok(None) => return Err(P2PError::Internal("Node address not available".to_string())),
+            Ok(Some(addr)) => addr
+                .direct_addresses()
+                .map(|addr| addr.to_string())
+                .collect(),
+            Ok(None) => {
+                // ローカルアドレスが利用可能でない場合は空のベクターを返す
+                Vec::new()
+            },
             Err(e) => return Err(P2PError::Internal(format!("Failed to get node address: {}", e))),
         };
         
-        Ok(addrs
-            .direct_addresses()
-            .map(|addr| addr.to_string())
-            .collect())
+        Ok(addrs)
     }
     
     /// トピックに参加

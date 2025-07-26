@@ -4,6 +4,12 @@ import { spawn, spawnSync } from 'child_process';
 // Tauriアプリのパスを環境に応じて設定
 const tauriDriver = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver';
 
+interface TauriCapability extends WebdriverIO.Capabilities {
+  'tauri:options': {
+    application: string;
+  };
+}
+
 export const config: Options.Testrunner = {
   specs: ['./tests/e2e/specs/**/*.e2e.ts'],
   exclude: [],
@@ -14,7 +20,7 @@ export const config: Options.Testrunner = {
       'tauri:options': {
         application: '../../src-tauri/target/release/kukuri-tauri',
       },
-    } as any,
+    } as TauriCapability,
   ],
   logLevel: 'info',
   bail: 0,

@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, MockedFunction } from 'vitest';
 import * as nostrApi from '../nostr';
 
 // Tauri APIをモック
@@ -8,6 +8,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 import { invoke } from '@tauri-apps/api/core';
 
+const mockInvoke = invoke as MockedFunction<typeof invoke>;
+
 describe('Nostr API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -15,7 +17,7 @@ describe('Nostr API', () => {
 
   describe('initializeNostr', () => {
     it('calls invoke with correct command', async () => {
-      (invoke as any).mockResolvedValueOnce(undefined);
+      mockInvoke.mockResolvedValueOnce(undefined);
 
       await nostrApi.initializeNostr();
 
@@ -23,7 +25,7 @@ describe('Nostr API', () => {
     });
 
     it('throws error when initialization fails', async () => {
-      (invoke as any).mockRejectedValueOnce(new Error('Initialization failed'));
+      mockInvoke.mockRejectedValueOnce(new Error('Initialization failed'));
 
       await expect(nostrApi.initializeNostr()).rejects.toThrow('Initialization failed');
     });
@@ -31,7 +33,7 @@ describe('Nostr API', () => {
 
   describe('addRelay', () => {
     it('calls invoke with relay URL', async () => {
-      (invoke as any).mockResolvedValueOnce(undefined);
+      mockInvoke.mockResolvedValueOnce(undefined);
       const url = 'wss://relay.test';
 
       await nostrApi.addRelay(url);
@@ -43,7 +45,7 @@ describe('Nostr API', () => {
   describe('publishTextNote', () => {
     it('returns event ID on success', async () => {
       const mockEventId = 'test-event-id-123';
-      (invoke as any).mockResolvedValueOnce(mockEventId);
+      mockInvoke.mockResolvedValueOnce(mockEventId);
 
       const result = await nostrApi.publishTextNote('Test content');
 
@@ -57,7 +59,7 @@ describe('Nostr API', () => {
   describe('publishTopicPost', () => {
     it('calls invoke with topic data without reply', async () => {
       const mockEventId = 'topic-event-id-456';
-      (invoke as any).mockResolvedValueOnce(mockEventId);
+      mockInvoke.mockResolvedValueOnce(mockEventId);
 
       const result = await nostrApi.publishTopicPost('bitcoin', 'Bitcoin discussion');
 
@@ -72,7 +74,7 @@ describe('Nostr API', () => {
     it('calls invoke with topic data with reply', async () => {
       const mockEventId = 'topic-event-id-789';
       const replyToId = 'parent-event-id';
-      (invoke as any).mockResolvedValueOnce(mockEventId);
+      mockInvoke.mockResolvedValueOnce(mockEventId);
 
       const result = await nostrApi.publishTopicPost('nostr', 'Reply content', replyToId);
 
@@ -89,7 +91,7 @@ describe('Nostr API', () => {
     it('sends reaction to event', async () => {
       const mockReactionId = 'reaction-id-123';
       const targetEventId = 'target-event-id';
-      (invoke as any).mockResolvedValueOnce(mockReactionId);
+      mockInvoke.mockResolvedValueOnce(mockReactionId);
 
       const result = await nostrApi.sendReaction(targetEventId, '+');
 
@@ -109,7 +111,7 @@ describe('Nostr API', () => {
         about: 'Test about',
         picture: 'https://example.com/pic.jpg',
       };
-      (invoke as any).mockResolvedValueOnce(mockEventId);
+      mockInvoke.mockResolvedValueOnce(mockEventId);
 
       const result = await nostrApi.updateNostrMetadata(metadata);
 
@@ -122,7 +124,7 @@ describe('Nostr API', () => {
 
   describe('subscribeToTopic', () => {
     it('subscribes to topic', async () => {
-      (invoke as any).mockResolvedValueOnce(undefined);
+      mockInvoke.mockResolvedValueOnce(undefined);
 
       await nostrApi.subscribeToTopic('technology');
 
@@ -134,7 +136,7 @@ describe('Nostr API', () => {
 
   describe('subscribeToUser', () => {
     it('subscribes to user by public key', async () => {
-      (invoke as any).mockResolvedValueOnce(undefined);
+      mockInvoke.mockResolvedValueOnce(undefined);
       const pubkey = 'test-public-key-hex';
 
       await nostrApi.subscribeToUser(pubkey);
@@ -146,7 +148,7 @@ describe('Nostr API', () => {
   describe('getNostrPubkey', () => {
     it('returns public key when available', async () => {
       const mockPubkey = 'public-key-hex';
-      (invoke as any).mockResolvedValueOnce(mockPubkey);
+      mockInvoke.mockResolvedValueOnce(mockPubkey);
 
       const result = await nostrApi.getNostrPubkey();
 
@@ -155,7 +157,7 @@ describe('Nostr API', () => {
     });
 
     it('returns null when no public key', async () => {
-      (invoke as any).mockResolvedValueOnce(null);
+      mockInvoke.mockResolvedValueOnce(null);
 
       const result = await nostrApi.getNostrPubkey();
 
@@ -168,7 +170,7 @@ describe('Nostr API', () => {
       const mockDeletionId = 'deletion-event-id';
       const eventIds = ['event1', 'event2'];
       const reason = 'Spam';
-      (invoke as any).mockResolvedValueOnce(mockDeletionId);
+      mockInvoke.mockResolvedValueOnce(mockDeletionId);
 
       const result = await nostrApi.deleteEvents(eventIds, reason);
 
@@ -182,7 +184,7 @@ describe('Nostr API', () => {
     it('deletes events without reason', async () => {
       const mockDeletionId = 'deletion-event-id';
       const eventIds = ['event1'];
-      (invoke as any).mockResolvedValueOnce(mockDeletionId);
+      mockInvoke.mockResolvedValueOnce(mockDeletionId);
 
       const result = await nostrApi.deleteEvents(eventIds);
 
@@ -196,7 +198,7 @@ describe('Nostr API', () => {
 
   describe('disconnectNostr', () => {
     it('disconnects from Nostr', async () => {
-      (invoke as any).mockResolvedValueOnce(undefined);
+      mockInvoke.mockResolvedValueOnce(undefined);
 
       await nostrApi.disconnectNostr();
 
@@ -210,7 +212,7 @@ describe('Nostr API', () => {
         { url: 'wss://relay1.test', status: 'connected' },
         { url: 'wss://relay2.test', status: 'disconnected' },
       ];
-      (invoke as any).mockResolvedValueOnce(mockRelayStatus);
+      mockInvoke.mockResolvedValueOnce(mockRelayStatus);
 
       const result = await nostrApi.getRelayStatus();
 
@@ -219,7 +221,7 @@ describe('Nostr API', () => {
     });
 
     it('returns empty array when no relays', async () => {
-      (invoke as any).mockResolvedValueOnce([]);
+      mockInvoke.mockResolvedValueOnce([]);
 
       const result = await nostrApi.getRelayStatus();
 

@@ -39,6 +39,9 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
   - Phase 3: 正式リリース
 - **storage_implementation_guide.md**: ストレージ実装ガイド
 - **testing_guide.md**: テスト戦略と実装ガイド
+- **iroh_gossip_integration_design.md**: iroh-gossip統合設計
+- **iroh_gossip_implementation_plan.md**: iroh-gossip実装計画
+- **iroh_gossip_test_implementation.md**: P2P機能テスト実装詳細
 
 ## 技術スタック
 
@@ -86,6 +89,8 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
 - **開発者フレンドリー**: OSSファーストでコミュニティ駆動の開発
 
 ## 更新履歴
+- 2025年7月27日: テスト・型・リント修正作業（any型警告解消、署名検証修正）
+- 2025年7月27日: P2Pトピック管理機能の包括的テスト実装
 - 2025年7月26日: Prettier導入と開発環境改善
 - 2025年7月26日: インテグレーションテスト実装、テストガイド追加
 - 2025年7月26日: iroh-gossip採用に伴う技術スタック更新
