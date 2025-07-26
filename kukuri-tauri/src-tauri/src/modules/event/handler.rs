@@ -5,9 +5,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, debug, error};
 
+/// イベントコールバックの型エイリアス
+type EventCallback = Box<dyn Fn(Event) + Send + Sync>;
+
 /// Nostrイベントハンドラー
 pub struct EventHandler {
-    event_callbacks: Arc<RwLock<Vec<Box<dyn Fn(Event) + Send + Sync>>>>,
+    event_callbacks: Arc<RwLock<Vec<EventCallback>>>,
 }
 
 impl EventHandler {

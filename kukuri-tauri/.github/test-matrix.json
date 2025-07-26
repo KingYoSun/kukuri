@@ -1,0 +1,19 @@
+{
+  "include": [
+    {
+      "os": "ubuntu-latest",
+      "rust_target": "x86_64-unknown-linux-gnu",
+      "tauri_target": "linux"
+    },
+    {
+      "os": "windows-latest",
+      "rust_target": "x86_64-pc-windows-msvc",
+      "tauri_target": "windows"
+    },
+    {
+      "os": "macos-latest",
+      "rust_target": "x86_64-apple-darwin",
+      "tauri_target": "macos"
+    }
+  ]
+}

@@ -38,8 +38,8 @@ pub async fn get_posts(
     
     for i in 0..limit.min(5) {
         posts.push(Post {
-            id: format!("post_{}", i),
-            content: format!("これはテスト投稿 {} です。", i),
+            id: format!("post_{i}"),
+            content: format!("これはテスト投稿 {i} です。"),
             author_pubkey: "test_pubkey".to_string(),
             topic_id: request.topic_id.clone().unwrap_or_else(|| "1".to_string()),
             created_at: 1722000000 + (i as i64 * 100),
@@ -62,7 +62,7 @@ pub async fn create_post(
     let keys = state.key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?;
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
     
     let post = Post {
         id: uuid::Uuid::new_v4().to_string(),
@@ -88,9 +88,9 @@ pub async fn delete_post(
     let _keys = state.key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?;
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
     
-    println!("Deleting post: {}", id);
+    println!("Deleting post: {id}");
     Ok(())
 }
 
@@ -105,8 +105,8 @@ pub async fn like_post(
     let _keys = state.key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?;
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
     
-    println!("Liking post: {}", post_id);
+    println!("Liking post: {post_id}");
     Ok(())
 }

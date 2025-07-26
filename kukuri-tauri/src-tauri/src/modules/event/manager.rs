@@ -55,7 +55,7 @@ impl EventManager {
         
         // クライアントマネージャーを初期化
         let mut client_manager = self.client_manager.write().await;
-        client_manager.init_with_keys(&secret_key).await?;
+        client_manager.init_with_keys(secret_key).await?;
         
         // パブリッシャーに鍵を設定
         let mut publisher = self.event_publisher.write().await;
@@ -272,7 +272,7 @@ impl EventManager {
                     super::nostr_client::RelayStatus::Connecting => "connecting".to_string(),
                     super::nostr_client::RelayStatus::Connected => "connected".to_string(),
                     super::nostr_client::RelayStatus::Disconnected => "disconnected".to_string(),
-                    super::nostr_client::RelayStatus::Error(e) => format!("error: {}", e),
+                    super::nostr_client::RelayStatus::Error(e) => format!("error: {e}"),
                 };
                 (url, status_str)
             })

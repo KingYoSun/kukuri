@@ -88,6 +88,6 @@ pub async fn delete_topic(
     id: String
 ) -> Result<(), String> {
     // TODO: データベースから削除する実装
-    println!("Deleting topic: {}", id);
+    println!("Deleting topic: {id}");
     Ok(())
 }
