@@ -85,9 +85,10 @@ describe('topicStore', () => {
   })
 
   it('joinTopicメソッドが正しく動作すること', () => {
-    useTopicStore.getState().joinTopic('topic1')
-    useTopicStore.getState().joinTopic('topic2')
-    useTopicStore.getState().joinTopic('topic1') // 重複
+    const { joinTopic } = useTopicStore.getState()
+    joinTopic('topic1')
+    joinTopic('topic2')
+    joinTopic('topic1') // 重複
     
     const state = useTopicStore.getState()
     expect(state.joinedTopics).toEqual(['topic1', 'topic2'])

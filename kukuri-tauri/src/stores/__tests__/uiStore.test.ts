@@ -20,53 +20,59 @@ describe('uiStore', () => {
   })
 
   it('toggleSidebarメソッドが正しく動作すること', () => {
-    useUIStore.getState().toggleSidebar()
+    const { toggleSidebar } = useUIStore.getState()
+    toggleSidebar()
     expect(useUIStore.getState().sidebarOpen).toBe(false)
     
-    useUIStore.getState().toggleSidebar()
+    toggleSidebar()
     expect(useUIStore.getState().sidebarOpen).toBe(true)
   })
 
   it('setSidebarOpenメソッドが正しく動作すること', () => {
-    useUIStore.getState().setSidebarOpen(false)
+    const { setSidebarOpen } = useUIStore.getState()
+    setSidebarOpen(false)
     expect(useUIStore.getState().sidebarOpen).toBe(false)
     
-    useUIStore.getState().setSidebarOpen(true)
+    setSidebarOpen(true)
     expect(useUIStore.getState().sidebarOpen).toBe(true)
   })
 
   it('setThemeメソッドが正しく動作すること', () => {
-    useUIStore.getState().setTheme('dark')
+    const { setTheme } = useUIStore.getState()
+    setTheme('dark')
     expect(useUIStore.getState().theme).toBe('dark')
     
-    useUIStore.getState().setTheme('light')
+    setTheme('light')
     expect(useUIStore.getState().theme).toBe('light')
     
-    useUIStore.getState().setTheme('system')
+    setTheme('system')
     expect(useUIStore.getState().theme).toBe('system')
   })
 
   it('setLoadingメソッドが正しく動作すること', () => {
-    useUIStore.getState().setLoading(true)
+    const { setLoading } = useUIStore.getState()
+    setLoading(true)
     expect(useUIStore.getState().isLoading).toBe(true)
     
-    useUIStore.getState().setLoading(false)
+    setLoading(false)
     expect(useUIStore.getState().isLoading).toBe(false)
   })
 
   it('setErrorメソッドが正しく動作すること', () => {
     const errorMessage = 'エラーが発生しました'
-    useUIStore.getState().setError(errorMessage)
+    const { setError } = useUIStore.getState()
+    setError(errorMessage)
     expect(useUIStore.getState().error).toBe(errorMessage)
     
-    useUIStore.getState().setError(null)
+    setError(null)
     expect(useUIStore.getState().error).toBeNull()
   })
 
   it('clearErrorメソッドが正しく動作すること', () => {
     useUIStore.setState({ error: 'テストエラー' })
     
-    useUIStore.getState().clearError()
+    const { clearError } = useUIStore.getState()
+    clearError()
     expect(useUIStore.getState().error).toBeNull()
   })
 })

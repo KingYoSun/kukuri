@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@testing-library/jest-dom'
 import { vi, afterEach } from 'vitest'
 import { act } from '@testing-library/react'
@@ -5,36 +6,62 @@ import { act } from '@testing-library/react'
 // リセット関数のセット
 const storeResetFns = new Set<() => void>()
 
-// zustandをモック
+// zustand/middlewareをモック
+vi.mock('zustand/middleware', () => ({
+  persist: vi.fn((config) => config),
+  createJSONStorage: vi.fn(() => ({
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  })),
+}))
+
+// zustandをモック - v5対応
 vi.mock('zustand', async () => {
-  const zustand = await vi.importActual('zustand') as typeof import('zustand')
-  const { create: actualCreate, createStore: actualCreateStore } = zustand
-
-  // カスタムcreate関数
-  const create: typeof actualCreate = (stateCreator) => {
-    const store = actualCreate(stateCreator)
-    const initialState = store.getState()
+  const { create: _actualCreate } = await vi.importActual<typeof import('zustand')>('zustand')
+  
+  const createMockStore = (createState: any) => {
+    // 初期状態を作成
+    let state: any
+    const setState = (partial: any, replace?: any) => {
+      const nextState = typeof partial === 'function' ? partial(state) : partial
+      if (replace ?? typeof partial !== 'object') {
+        state = nextState
+      } else {
+        state = Object.assign({}, state, nextState)
+      }
+    }
+    const getState = () => state
+    const subscribe = () => () => {}
+    const destroy = () => {}
+    
+    const api = { setState, getState, subscribe, destroy }
+    state = createState(setState, getState, api)
+    
+    // フック関数を作成
+    const useStore = Object.assign(
+      (selector = (state: any) => state) => selector(state),
+      api
+    )
+    
+    // 初期状態を保存してリセット可能にする
+    const initialState = { ...state }
     storeResetFns.add(() => {
-      store.setState(initialState, true)
+      setState(initialState, true)
     })
-    return store
+    
+    return useStore
   }
-
-  // カスタムcreateStore関数
-  const createStore: typeof actualCreateStore = (stateCreator) => {
-    const store = actualCreateStore(stateCreator)
-    const initialState = store.getInitialState()
-    storeResetFns.add(() => {
-      store.setState(initialState, true)
-    })
-    return store
-  }
-
-  return {
-    ...await vi.importActual('zustand'),
-    create,
-    createStore,
-  }
+  
+  // カリー化されたcreate関数をサポート
+  const create = ((createState?: any) => {
+    if (!createState) {
+      return (createState: any) => createMockStore(createState)
+    }
+    return createMockStore(createState)
+  }) as typeof _actualCreate
+  
+  return { create }
 })
 
 // 各テスト後にストアをリセット

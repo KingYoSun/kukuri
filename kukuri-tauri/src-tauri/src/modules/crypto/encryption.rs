@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
 use sha2::{Digest, Sha256};
 
+#[allow(dead_code)]
 pub fn encrypt(plaintext: &[u8], password: &str) -> Result<String> {
     // Derive key from password
     let key = derive_key_from_password(password);
@@ -26,6 +27,7 @@ pub fn encrypt(plaintext: &[u8], password: &str) -> Result<String> {
     Ok(general_purpose::STANDARD.encode(&combined))
 }
 
+#[allow(dead_code)]
 pub fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
     // Base64 decode
     let combined = general_purpose::STANDARD
@@ -50,6 +52,7 @@ pub fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
         .map_err(|e| anyhow!("Decryption failed: {}", e))
 }
 
+#[allow(dead_code)]
 fn derive_key_from_password(password: &str) -> Key<Aes256Gcm> {
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());

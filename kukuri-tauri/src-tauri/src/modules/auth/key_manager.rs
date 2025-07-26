@@ -3,15 +3,18 @@ use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct KeyManager {
     inner: Arc<RwLock<KeyManagerInner>>,
 }
 
+#[allow(dead_code)]
 struct KeyManagerInner {
     keys: Option<Keys>,
 }
 
+#[allow(dead_code)]
 impl KeyManager {
     pub fn new() -> Self {
         Self {

@@ -3,10 +3,13 @@ use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::path::Path;
 use tracing::info;
 
+#[allow(dead_code)]
 pub type DbPool = Pool<Sqlite>;
 
+#[allow(dead_code)]
 pub struct Database;
 
+#[allow(dead_code)]
 impl Database {
     pub async fn initialize(database_url: &str) -> Result<DbPool> {
         // Create database directory
