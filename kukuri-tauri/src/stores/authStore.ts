@@ -13,6 +13,7 @@ interface AuthStore extends AuthState {
   updateUser: (user: Partial<User>) => void;
   updateRelayStatus: () => Promise<void>;
   setRelayStatus: (status: RelayInfo[]) => void;
+  initialize: () => Promise<void>;
   get isLoggedIn(): boolean;
 }
 
@@ -139,6 +140,42 @@ export const useAuthStore = create<AuthStore>()(
         set({ relayStatus: status });
       },
 
+      initialize: async () => {
+        // localStorageから状態を読み込む
+        const stored = localStorage.getItem('auth-storage');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            if (parsed.state?.isAuthenticated && parsed.state?.currentUser) {
+              // 保存された認証状態がある場合、鍵の有効性を確認
+              const currentUser = parsed.state.currentUser;
+              
+              // privateKeyはpersist対象外なので、ここで復元はできない
+              // ユーザーはログイン画面から再度ログインする必要がある
+              console.log('Previous session found, but re-authentication required');
+              
+              // 認証状態をクリア
+              set({
+                isAuthenticated: false,
+                currentUser: null,
+                privateKey: null,
+                relayStatus: [],
+              });
+            }
+          } catch (error) {
+            console.error('Failed to parse auth storage:', error);
+            // エラーの場合は初期状態のまま
+          }
+        }
+        // 初期状態は常にログアウト状態
+        set({
+          isAuthenticated: false,
+          currentUser: null,
+          privateKey: null,
+          relayStatus: [],
+        });
+      },
+
       get isLoggedIn() {
         return get().isAuthenticated;
       },
@@ -147,7 +184,8 @@ export const useAuthStore = create<AuthStore>()(
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        isAuthenticated: state.isAuthenticated,
+        // privateKeyは保存しない（セキュリティのため）
+        isAuthenticated: false, // 常にfalseで保存
         currentUser: state.currentUser,
       }),
     },

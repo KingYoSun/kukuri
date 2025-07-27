@@ -8,17 +8,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Bell, Settings, LogOut, Menu } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 
 export function Header() {
   const { currentUser, logout } = useAuthStore();
   const { toggleSidebar } = useUIStore();
   const navigate = useNavigate();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
+    setShowLogoutDialog(false);
+    navigate({ to: '/welcome' });
   };
 
   const handleSettings = () => {
@@ -68,13 +80,37 @@ export function Header() {
               <Settings className="mr-2 h-4 w-4" />
               <span>設定</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuItem onClick={() => setShowLogoutDialog(true)}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>ログアウト</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>ログアウトの確認</DialogTitle>
+            <DialogDescription>
+              本当にログアウトしますか？
+              <br />
+              再度ログインするには秘密鍵（nsec）が必要になります。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowLogoutDialog(false)}
+            >
+              キャンセル
+            </Button>
+            <Button variant="destructive" onClick={handleLogout}>
+              ログアウト
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

@@ -546,6 +546,22 @@
 
 ## 現在進行中のタスク
 
+### 2025年7月28日（Tauriアプリケーション Phase 1 実装）
+- [ ] Tauriアプリケーション改善 Phase 1
+  - [x] Phase 1.1: ウェルカム画面の実装
+    - [x] welcome.tsx、login.tsx、profile-setup.tsxのルート作成
+    - [x] WelcomeScreenコンポーネント（アプリ紹介、新規/既存選択）
+    - [x] LoginFormコンポーネント（NIP-19準拠のnsec入力）
+    - [x] ProfileSetupコンポーネント（プロフィール設定）
+  - [x] Phase 1.2: 認証状態の適切な管理
+    - [x] authStore修正（初期状態false固定、initializeメソッド）
+    - [x] __root.tsxに認証ガード実装
+    - [x] useAuthフックの改善
+  - [x] Phase 1.3: ログアウト機能の修正
+    - [x] Headerにログアウト確認ダイアログ追加
+    - [x] 状態クリアとウェルカム画面へのリダイレクト
+  - [ ] Phase 1の動作確認とテスト
+
 ### 2025年7月28日（Tauriアプリ体験設計）
 - [x] Tauriアプリケーションの体験設計と実装計画
   - [x] 現在のフロントエンド実装状況の分析
