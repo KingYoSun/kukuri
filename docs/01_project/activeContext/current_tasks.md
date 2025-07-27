@@ -4,6 +4,32 @@
 
 ## 完了済みタスク
 
+### 2025年7月27日（Zustandモック実装修正）
+- [x] Zustandテストモック実装の問題解決
+  - [x] P2P APIモックの正しい実装
+    - [x] `p2pApi.p2pApi`の二重構造を`p2pApi`直接アクセスに修正
+    - [x] 実際のインポート構造に合わせたモック作成
+  - [x] ストアの状態リセット改善
+    - [x] `renderHook`を使用しつつ`useStore.setState`で状態管理
+    - [x] 初期状態の完全なリセット実装
+    - [x] `activeTopics`、`messages`、`peers`を含む全プロパティの初期化
+  - [x] フック使用パターンの統一
+    - [x] `renderHook`を使用した一貫性のあるテスト実装
+    - [x] `act`によるストア更新の適切なラップ
+  - [x] nullチェックの追加
+    - [x] p2pStore.tsで`nodeAddr`と`endpoint_id`の安全なアクセス
+    - [x] `nodeAddr ? nodeAddr.join(', ') : ''`形式の実装
+  - [x] 構文エラーとタイプエラーの修正
+    - [x] P2PDebugPanel.test.tsxの不正な括弧修正
+    - [x] `topics`から`activeTopics`への変更反映
+  - [x] テスト結果
+    - [x] 186/200テスト成功（93%）
+    - [x] リントエラー: 0
+    - [x] タイプエラー: 0
+  - [x] ドキュメント作成
+    - [x] 進捗レポート作成（2025-07-27_zustand_mock_fix.md）
+    - [x] 修正内容と教訓の文書化
+
 ### 2025年7月27日（フロントエンド最終修正）
 - [x] フロントエンドのテスト・型・リント完全修正
   - [x] Prettierによるフォーマット修正

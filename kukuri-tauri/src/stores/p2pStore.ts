@@ -84,8 +84,8 @@ export const useP2PStore = create<P2PStore>()(
 
           set({
             initialized: true,
-            nodeAddr: nodeAddr.join(', '),
-            nodeId: status.endpoint_id,
+            nodeAddr: nodeAddr ? nodeAddr.join(', ') : '',
+            nodeId: status?.endpoint_id || '',
             connectionStatus: 'connected',
           });
         } catch (error) {
