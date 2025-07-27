@@ -84,8 +84,8 @@ export const useP2PStore = create<P2PStore>()(
           
           set({
             initialized: true,
-            nodeAddr,
-            nodeId: status.node_id,
+            nodeAddr: nodeAddr.join(', '),
+            nodeId: status.endpoint_id,
             connectionStatus: 'connected',
           })
         } catch (error) {
@@ -166,19 +166,19 @@ export const useP2PStore = create<P2PStore>()(
           // アクティブトピックの統計情報を更新
           const activeTopics = new Map<string, TopicStats>()
           
-          for (const [topicId, stats] of Object.entries(status.active_topics)) {
-            const currentStats = get().activeTopics.get(topicId) || {
-              topic_id: topicId,
+          for (const stats of status.active_topics) {
+            const currentStats = get().activeTopics.get(stats.topic_id) || {
+              topic_id: stats.topic_id,
               peer_count: 0,
               message_count: 0,
               recent_messages: [],
               connected_peers: [],
             }
             
-            activeTopics.set(topicId, {
+            activeTopics.set(stats.topic_id, {
               ...currentStats,
               peer_count: stats.peer_count,
-              connected_peers: stats.connected_peers || [],
+              message_count: stats.message_count,
             })
           }
           

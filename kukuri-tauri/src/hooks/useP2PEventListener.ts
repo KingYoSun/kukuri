@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { useP2PStore, type P2PMessage, type PeerInfo } from '@/store/p2pStore'
+import { useP2PStore, type P2PMessage, type PeerInfo } from '@/stores/p2pStore'
 
 // P2Pイベントの型定義
 interface P2PMessageEvent {

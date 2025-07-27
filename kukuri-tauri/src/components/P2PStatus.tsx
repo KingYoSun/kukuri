@@ -11,7 +11,6 @@ import {
   ServerIcon,
   NetworkIcon,
   AlertCircleIcon,
-  CheckCircle2Icon,
   CircleIcon,
 } from 'lucide-react'
 

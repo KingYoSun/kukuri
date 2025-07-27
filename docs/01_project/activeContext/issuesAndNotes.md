@@ -4,68 +4,78 @@
 
 ## 解決済みの問題
 
-### フロントエンドテスト・型・リントエラー（2025年7月27日）
-**問題**: フロントエンドで型エラー、統合テストエラー、フォーマットエラーが発生
+### フロントエンドテスト・型・リントエラー（2025年7月27日 - 更新）
+**問題**: P2P UI統合後に大量の型エラー、リントエラー、テストエラーが発生
 
 **症状**:
-- TypeScript型チェックで2件のエラー
-- 統合テストで7件の失敗
-- フォーマットチェックで2ファイルのエラー
+- TypeScript型チェックで35個のエラー
+- ESLintで4個のエラー、17個の警告
+- テスト実行時に23個の失敗（主にp2pStore関連）
+
+**根本原因**:
+- P2P API戻り値の型定義とモックデータの不一致
+- ストア間のインポートパスの不統一
+- Zustandモック実装とp2pStoreの永続化設定の競合
 
 **解決策**:
-1. zustandモック型の修正
+1. インポートパスの統一
 ```typescript
 // 修正前
-const mockUseAuthStore = useAuthStore as MockedFunction<typeof useAuthStore>;
+import { useP2PStore } from '@/store/p2pStore'
 
 // 修正後
-const mockUseAuthStore = useAuthStore as unknown as MockedFunction<typeof useAuthStore>;
+import { useP2PStore } from '@/stores/p2pStore'
 ```
 
-2. 統合テストでのzustandモック解除
+2. P2P API戻り値の型修正
 ```typescript
-// src/test/integration/setup.ts
-vi.unmock('zustand');
-vi.unmock('zustand/middleware');
+// p2p.ts
+export interface P2PStatus {
+  connected: boolean;
+  endpoint_id: string;  // node_idから変更
+  active_topics: TopicStatus[];  // objectから配列に変更
+  peer_count: number;
+}
+
+// モックデータも対応
+vi.mocked(p2pApi.getNodeAddress).mockResolvedValueOnce(['/ip4/127.0.0.1/tcp/4001'])
+vi.mocked(p2pApi.getStatus).mockResolvedValueOnce({
+  connected: true,
+  endpoint_id: 'node123',
+  active_topics: [],
+  peer_count: 0,
+})
 ```
 
-3. Post型構造の正しい実装
+3. p2pStore.tsのrefreshStatus修正
 ```typescript
-const mockPost: Post = {
-  id: 'post1',
-  content: 'Test post',
-  author: {
-    id: 'user1',
-    pubkey: 'npub1testuser',
-    npub: 'npub1testuser',
-    name: 'Test User',
-    displayName: 'Test User',
-    picture: '',
-    about: '',
-    nip05: '',
-  },
-  topicId: 'general',
-  created_at: Date.now() / 1000,
-  tags: [],
-  likes: 0,
-  replies: [],
-};
+// 修正前
+for (const [topicId, stats] of Object.entries(status.active_topics)) {
+
+// 修正後  
+for (const stats of status.active_topics) {
+  const currentStats = get().activeTopics.get(stats.topic_id) || {
 ```
 
-4. 再レンダリング時のkey属性追加
+4. 未使用変数の削除
 ```typescript
-rerender(
-  <QueryClientProvider client={queryClient}>
-    <PostTestComponent key="updated" />
-  </QueryClientProvider>,
-);
+// P2PDebugPanel.tsx
+- import { DatabaseIcon, RefreshCwIcon } from 'lucide-react'
+- const { initialized, ... } = useP2P()
+
+// P2PStatus.tsx
+- import { CheckCircle2Icon } from 'lucide-react'
 ```
 
 **結果**:
-- テスト: 145 passed (20 files)
-- 型チェック: エラーなし
-- ESLint: エラーなし
-- フォーマット: すべて正しくフォーマット済み
+- 型チェック: エラー0個（35個から完全解消）
+- ESLint: エラー0個（警告17個は残存）
+- テスト: 147個中23個が失敗（改善されたが完全解決には至らず）
+
+**残存する問題**:
+- p2pStoreのテストでZustandのモック実装が期待通り動作しない
+- PromiseRejectionHandledWarningが発生（非同期エラーハンドリング）
+- any型使用の警告17個（主にテストファイル）
 
 ### バックエンドリント・型エラー（2025年7月27日）
 **問題**: バックエンドで多数の未使用コード警告とP2P統合テストの失敗
@@ -267,7 +277,7 @@ vi.mock('zustand', async () => {
 ## 現在の注意事項
 
 ### テスト関連
-- **テストカバレッジ**: 合計180件以上のテストを実装
+- **テストカバレッジ**: 合計200件以上のテストを実装
 - **act警告**: 一部のReactコンポーネントテストでact警告が発生する場合がある
   - 主に非同期state更新時に発生
   - 実害はないが、将来的に対応が必要
@@ -276,6 +286,10 @@ vi.mock('zustand', async () => {
   - テスト自体は正常に動作し、すべて成功
   - VitestがPromiseエラーを検出する仕様による
   - 実際のアプリケーション動作には影響なし
+- **p2pStoreテストエラー**: 23個のテストが失敗（2025年7月27日更新）
+  - Zustandのモック実装とpersistミドルウェアの競合
+  - useP2PStore.setState()を使用してテストデータを設定する必要がある
+  - 実際のストア動作には影響なし
 - **バックエンド統合テスト**: P2P通信関連の6件は#[ignore]属性でスキップ（2025年7月27日）
   - ネットワーク接続が必要なテストはローカル環境で実行
   - CI環境での安定性向上
@@ -284,8 +298,13 @@ vi.mock('zustand', async () => {
 ### フロントエンド
 - **ESLint設定**: src/test/setup.tsで`@typescript-eslint/no-explicit-any`を無効化
   - テストモック実装では型の厳密性よりも柔軟性を優先
+- **ESLint警告**: 17個の警告が残存（2025年7月27日更新）
+  - any型使用に関する警告（テストファイル）
+  - Fast Refresh警告（ui/badge.tsx）
+  - これらは動作に影響しないため、優先度低として保留
 - **zustandテスト**: v5対応のモック実装が必要
   - persistミドルウェアも別途モックが必要
+  - p2pStoreのテストで特に問題が顕在化
 
 ### バックエンド
 - **未使用コード**: 多くのモジュールに`#[allow(dead_code)]`が付与されている

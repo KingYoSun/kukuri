@@ -40,10 +40,12 @@ describe('useP2P', () => {
   describe('自動初期化', () => {
     it('未初期化の場合、自動的に初期化を開始する', async () => {
       vi.mocked(p2pApi.p2pApi.initialize).mockResolvedValueOnce(undefined)
-      vi.mocked(p2pApi.p2pApi.getNodeAddress).mockResolvedValueOnce('/ip4/127.0.0.1/tcp/4001')
+      vi.mocked(p2pApi.p2pApi.getNodeAddress).mockResolvedValueOnce(['/ip4/127.0.0.1/tcp/4001'])
       vi.mocked(p2pApi.p2pApi.getStatus).mockResolvedValueOnce({
-        node_id: 'node123',
-        active_topics: {},
+        connected: true,
+        endpoint_id: 'node123',
+        active_topics: [],
+        peer_count: 0,
       })
 
       const { result } = renderHook(() => useP2P())
@@ -63,15 +65,19 @@ describe('useP2P', () => {
 
       // 初期化を成功させる
       vi.mocked(p2pApi.p2pApi.initialize).mockResolvedValueOnce(undefined)
-      vi.mocked(p2pApi.p2pApi.getNodeAddress).mockResolvedValueOnce('/ip4/127.0.0.1/tcp/4001')
+      vi.mocked(p2pApi.p2pApi.getNodeAddress).mockResolvedValueOnce(['/ip4/127.0.0.1/tcp/4001'])
       vi.mocked(p2pApi.p2pApi.getStatus).mockResolvedValue({
-        node_id: 'node123',
-        active_topics: {
-          'topic1': {
+        connected: true,
+        endpoint_id: 'node123',
+        active_topics: [
+          {
+            topic_id: 'topic1',
             peer_count: 2,
-            connected_peers: ['peer1', 'peer2'],
+            message_count: 10,
+            last_activity: Date.now(),
           }
-        },
+        ],
+        peer_count: 2,
       })
 
       const { result } = renderHook(() => useP2P())
@@ -210,13 +216,17 @@ describe('useP2P', () => {
     it('joinTopic - トピックに参加できる', async () => {
       vi.mocked(p2pApi.p2pApi.joinTopic).mockResolvedValueOnce(undefined)
       vi.mocked(p2pApi.p2pApi.getStatus).mockResolvedValueOnce({
-        node_id: 'node123',
-        active_topics: {
-          'new-topic': {
+        connected: true,
+        endpoint_id: 'node123',
+        active_topics: [
+          {
+            topic_id: 'new-topic',
             peer_count: 1,
-            connected_peers: ['node123'],
+            message_count: 0,
+            last_activity: Date.now(),
           }
-        },
+        ],
+        peer_count: 1,
       })
 
       const { result } = renderHook(() => useP2P())

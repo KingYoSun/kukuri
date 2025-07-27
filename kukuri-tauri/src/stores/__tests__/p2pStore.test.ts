@@ -17,22 +17,29 @@ vi.mock('@/lib/api/p2p', () => ({
 
 describe('p2pStore', () => {
   beforeEach(() => {
-    // ストアをリセット
-    const { result } = renderHook(() => useP2PStore())
-    act(() => {
-      result.current.reset()
-    })
-    
     // モックをリセット
     vi.clearAllMocks()
+    // ストアの状態をリセット
+    useP2PStore.setState({
+      initialized: false,
+      nodeId: null,
+      nodeAddr: null,
+      activeTopics: new Map(),
+      peers: new Map(),
+      messages: new Map(),
+      connectionStatus: 'disconnected',
+      error: null,
+    })
   })
 
   describe('initialize', () => {
     it('P2P機能を正常に初期化できる', async () => {
-      const mockNodeAddr = '/ip4/127.0.0.1/tcp/4001/p2p/QmNodeId123'
+      const mockNodeAddr = ['/ip4/127.0.0.1/tcp/4001/p2p/QmNodeId123']
       const mockStatus = {
-        node_id: 'QmNodeId123',
-        active_topics: {},
+        connected: true,
+        endpoint_id: 'QmNodeId123',
+        active_topics: [],
+        peer_count: 0,
       }
 
       vi.mocked(p2pApi.p2pApi.initialize).mockResolvedValueOnce(undefined)
@@ -50,7 +57,7 @@ describe('p2pStore', () => {
 
       expect(result.current.initialized).toBe(true)
       expect(result.current.nodeId).toBe('QmNodeId123')
-      expect(result.current.nodeAddr).toBe(mockNodeAddr)
+      expect(result.current.nodeAddr).toBe(mockNodeAddr.join(', '))
       expect(result.current.connectionStatus).toBe('connected')
     })
 
@@ -74,13 +81,17 @@ describe('p2pStore', () => {
     it('トピックに正常に参加できる', async () => {
       vi.mocked(p2pApi.p2pApi.joinTopic).mockResolvedValueOnce(undefined)
       vi.mocked(p2pApi.p2pApi.getStatus).mockResolvedValueOnce({
-        node_id: 'QmNodeId123',
-        active_topics: {
-          'test-topic': {
+        connected: true,
+        endpoint_id: 'QmNodeId123',
+        active_topics: [
+          {
+            topic_id: 'test-topic',
             peer_count: 3,
-            connected_peers: ['peer1', 'peer2', 'peer3'],
+            message_count: 10,
+            last_activity: Date.now(),
           }
-        }
+        ],
+        peer_count: 3
       })
 
       const { result } = renderHook(() => useP2PStore())
@@ -113,20 +124,14 @@ describe('p2pStore', () => {
 
   describe('leaveTopic', () => {
     it('トピックから正常に離脱できる', async () => {
+      vi.mocked(p2pApi.p2pApi.joinTopic).mockResolvedValueOnce(undefined)
       vi.mocked(p2pApi.p2pApi.leaveTopic).mockResolvedValueOnce(undefined)
 
       const { result } = renderHook(() => useP2PStore())
 
-      // 事前にトピックを追加
-      act(() => {
-        result.current.activeTopics.set('test-topic', {
-          topic_id: 'test-topic',
-          peer_count: 3,
-          message_count: 10,
-          recent_messages: [],
-          connected_peers: [],
-        })
-        result.current.messages.set('test-topic', [])
+      // 事前にトピックに参加
+      await act(async () => {
+        await result.current.joinTopic('test-topic')
       })
 
       await act(async () => {
@@ -235,6 +240,7 @@ describe('p2pStore', () => {
     it('ピアを削除できる', () => {
       const { result } = renderHook(() => useP2PStore())
 
+      // 事前にピアを追加
       const peer = {
         node_id: 'peer1',
         node_addr: '/ip4/192.168.1.1/tcp/4001',
@@ -256,10 +262,9 @@ describe('p2pStore', () => {
     it('エラーをクリアできる', () => {
       const { result } = renderHook(() => useP2PStore())
 
+      // エラーを設定
       act(() => {
-        // エラーを設定
-        result.current.activeTopics.clear()
-        result.current.error = 'Test error'
+        useP2PStore.setState({ error: 'Test error' })
       })
 
       expect(result.current.error).toBe('Test error')
@@ -278,16 +283,21 @@ describe('p2pStore', () => {
 
       // データを設定
       act(() => {
-        result.current.initialized = true
-        result.current.nodeId = 'node123'
-        result.current.nodeAddr = '/ip4/127.0.0.1/tcp/4001'
-        result.current.connectionStatus = 'connected'
-        result.current.activeTopics.set('topic1', {
+        const activeTopics = new Map()
+        activeTopics.set('topic1', {
           topic_id: 'topic1',
           peer_count: 1,
           message_count: 1,
           recent_messages: [],
           connected_peers: [],
+        })
+        
+        useP2PStore.setState({
+          initialized: true,
+          nodeId: 'node123',
+          nodeAddr: '/ip4/127.0.0.1/tcp/4001',
+          connectionStatus: 'connected',
+          activeTopics,
         })
       })
 

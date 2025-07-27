@@ -11,8 +11,6 @@ import { Separator } from '@/components/ui/separator'
 import { 
   SendIcon,
   NetworkIcon,
-  DatabaseIcon,
-  RefreshCwIcon,
   TrashIcon,
   WifiIcon,
   WifiOffIcon,
@@ -20,7 +18,6 @@ import {
 
 export function P2PDebugPanel() {
   const {
-    initialized,
     nodeId,
     nodeAddr,
     activeTopics,

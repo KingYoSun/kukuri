@@ -1,4 +1,5 @@
 import { useP2P } from '@/hooks/useP2P'
+import type { P2PMessage } from '@/stores/p2pStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -156,7 +157,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
             <h4 className="text-sm font-medium text-muted-foreground">接続中のピア</h4>
             <ScrollArea className="h-32 w-full rounded-md border">
               <div className="p-2 space-y-2">
-                {topicStats.connected_peers.map((peerId) => (
+                {topicStats.connected_peers.map((peerId: string) => (
                   <div
                     key={peerId}
                     className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50"
@@ -183,7 +184,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
               <h4 className="text-sm font-medium text-muted-foreground">最近のP2Pメッセージ</h4>
               <ScrollArea className="h-48 w-full rounded-md border">
                 <div className="p-2 space-y-2">
-                  {messages.slice(0, 10).map((message) => (
+                  {messages.slice(0, 10).map((message: P2PMessage) => (
                     <div
                       key={message.id}
                       className="space-y-1 p-2 rounded-md hover:bg-muted/50"

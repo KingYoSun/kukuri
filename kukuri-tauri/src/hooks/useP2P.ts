@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react'
-import { useP2PStore } from '@/store/p2pStore'
+import { useP2PStore } from '@/stores/p2pStore'
 import { useP2PEventListener } from './useP2PEventListener'
 
 // P2P機能へのアクセスを提供するフック

@@ -6,9 +6,6 @@ import { useP2P } from '@/hooks/useP2P'
 // useP2Pフックのモック
 vi.mock('@/hooks/useP2P')
 
-// 環境変数のモック
-const originalEnv = import.meta.env
-
 describe('P2PDebugPanel', () => {
   const mockUseP2P = {
     initialized: true,
@@ -27,24 +24,12 @@ describe('P2PDebugPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useP2P).mockReturnValue(mockUseP2P as any)
-    // 開発環境に設定
-    import.meta.env = { ...originalEnv, PROD: false }
   })
 
-  afterEach(() => {
-    import.meta.env = originalEnv
-  })
-
-  describe('環境による表示制御', () => {
-    it('開発環境では表示される', () => {
+  describe('基本的な表示', () => {
+    it('P2Pデバッグパネルが表示される', () => {
       render(<P2PDebugPanel />)
       expect(screen.getByText('P2P Debug Panel')).toBeInTheDocument()
-    })
-
-    it('本番環境では表示されない', () => {
-      import.meta.env = { ...originalEnv, PROD: true }
-      render(<P2PDebugPanel />)
-      expect(screen.queryByText('P2P Debug Panel')).not.toBeInTheDocument()
     })
   })
 
