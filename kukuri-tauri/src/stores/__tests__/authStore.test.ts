@@ -251,4 +251,113 @@ describe('authStore', () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  describe('initialize', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      vi.clearAllMocks();
+    });
+
+    it('初期化時に常に未認証状態になること', async () => {
+      // 既存の認証状態を設定
+      useAuthStore.setState({
+        isAuthenticated: true,
+        currentUser: {
+          id: 'test123',
+          pubkey: 'pubkey123',
+          npub: 'npub123',
+          name: 'テストユーザー',
+          displayName: 'テストユーザー',
+          picture: '',
+          about: '',
+          nip05: '',
+        },
+        privateKey: 'nsec123',
+      });
+
+      // initialize実行
+      await useAuthStore.getState().initialize();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.currentUser).toBeNull();
+      expect(state.privateKey).toBeNull();
+      expect(state.relayStatus).toEqual([]);
+    });
+
+    it('localStorageに保存された状態があっても未認証状態になること', async () => {
+      // localStorageに認証状態を保存
+      const savedState = {
+        state: {
+          isAuthenticated: true,
+          currentUser: {
+            id: 'test123',
+            pubkey: 'pubkey123',
+            npub: 'npub123',
+            name: '保存されたユーザー',
+            displayName: '保存されたユーザー',
+            picture: 'https://example.com/saved.jpg',
+            about: '保存された自己紹介',
+            nip05: 'saved@example.com',
+          },
+        },
+      };
+      localStorage.setItem('auth-storage', JSON.stringify(savedState));
+
+      // initialize実行
+      await useAuthStore.getState().initialize();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.currentUser).toBeNull();
+      expect(state.privateKey).toBeNull();
+    });
+
+    it('localStorageのパースエラーが処理されること', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      
+      // 不正なJSONを保存
+      localStorage.setItem('auth-storage', 'invalid json');
+
+      // initialize実行
+      await useAuthStore.getState().initialize();
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to parse auth storage:', expect.any(Error));
+      
+      // エラーがあっても初期状態になること
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.currentUser).toBeNull();
+      expect(state.privateKey).toBeNull();
+
+      consoleErrorSpy.mockRestore();
+      consoleLogSpy.mockRestore();
+    });
+
+    it('保存された認証状態がある場合、コンソールログが出力されること', async () => {
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      
+      // localStorageに認証状態を保存
+      const savedState = {
+        state: {
+          isAuthenticated: true,
+          currentUser: {
+            id: 'test123',
+            pubkey: 'pubkey123',
+            npub: 'npub123',
+            name: 'ユーザー',
+          },
+        },
+      };
+      localStorage.setItem('auth-storage', JSON.stringify(savedState));
+
+      // initialize実行
+      await useAuthStore.getState().initialize();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith('Previous session found, but re-authentication required');
+
+      consoleLogSpy.mockRestore();
+    });
+  });
 });

@@ -4,6 +4,13 @@
 
 ## レポート一覧
 
+### 2025年7月28日
+- [Phase 1 認証フローテスト実装](./2025-07-28_phase1_auth_tests.md) - Tauriアプリケーション Phase 1の包括的テスト作成（37テスト）
+- [Tauriアプリケーション Phase 1 実装](./2025-07-28_tauri_app_phase1_implementation.md) - 認証フロー（ウェルカム、ログイン、プロフィール設定）実装
+- [Tauriアプリケーション体験設計](./2025-07-28_tauri_app_experience_design.md) - ユーザー体験改善の設計と実装計画
+- [実装優先順位の決定](./2025-07-28_implementation_priority_decision.md) - Tauriアプリ優先、手動P2P接続機能追加
+- [ドキュメント全体更新](./2025-07-28_documentation_update.md) - プロジェクトドキュメントの整理と更新
+
 ### 2025年7月27日
 - [フロントエンドテスト非同期初期化問題の修正](./2025-07-27_frontend_test_async_fix.md) - Zustand非同期初期化、Radix UIテスト問題の解決
 - [バックエンドのテスト・型・リント修正](./2025-07-27_backend_test_lint_fix.md) - 未使用コード対応、P2P統合テスト修正
