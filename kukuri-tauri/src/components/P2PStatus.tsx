@@ -1,18 +1,18 @@
-import { useP2P } from '@/hooks/useP2P'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { 
-  WifiIcon, 
-  WifiOffIcon, 
-  UsersIcon, 
+import { useP2P } from '@/hooks/useP2P';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  WifiIcon,
+  WifiOffIcon,
+  UsersIcon,
   ServerIcon,
   NetworkIcon,
   AlertCircleIcon,
   CircleIcon,
-} from 'lucide-react'
+} from 'lucide-react';
 
 export function P2PStatus() {
   const {
@@ -24,37 +24,41 @@ export function P2PStatus() {
     connectionStatus,
     error,
     clearError,
-  } = useP2P()
+  } = useP2P();
 
   // 接続状態のアイコンとカラーを取得
   const getConnectionIcon = () => {
     switch (connectionStatus) {
       case 'connected':
-        return <WifiIcon className="h-4 w-4 text-green-500" />
+        return <WifiIcon className="h-4 w-4 text-green-500" />;
       case 'connecting':
-        return <CircleIcon className="h-4 w-4 text-yellow-500 animate-pulse" />
+        return <CircleIcon className="h-4 w-4 text-yellow-500 animate-pulse" />;
       case 'error':
-        return <AlertCircleIcon className="h-4 w-4 text-red-500" />
+        return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
       default:
-        return <WifiOffIcon className="h-4 w-4 text-gray-500" />
+        return <WifiOffIcon className="h-4 w-4 text-gray-500" />;
     }
-  }
+  };
 
   const getConnectionBadge = () => {
     switch (connectionStatus) {
       case 'connected':
-        return <Badge variant="default" className="bg-green-500">接続中</Badge>
+        return (
+          <Badge variant="default" className="bg-green-500">
+            接続中
+          </Badge>
+        );
       case 'connecting':
-        return <Badge variant="secondary">接続中...</Badge>
+        return <Badge variant="secondary">接続中...</Badge>;
       case 'error':
-        return <Badge variant="destructive">エラー</Badge>
+        return <Badge variant="destructive">エラー</Badge>;
       default:
-        return <Badge variant="outline">未接続</Badge>
+        return <Badge variant="outline">未接続</Badge>;
     }
-  }
+  };
 
   // 接続中のピア数を計算
-  const connectedPeerCount = peers.filter(p => p.connection_status === 'connected').length
+  const connectedPeerCount = peers.filter((p) => p.connection_status === 'connected').length;
 
   return (
     <Card className="w-full">
@@ -63,9 +67,7 @@ export function P2PStatus() {
           <CardTitle className="text-sm font-medium">P2P ネットワーク</CardTitle>
           {getConnectionIcon()}
         </div>
-        <CardDescription className="text-xs">
-          分散型ネットワーク接続状態
-        </CardDescription>
+        <CardDescription className="text-xs">分散型ネットワーク接続状態</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* 接続状態 */}
@@ -81,12 +83,7 @@ export function P2PStatus() {
               <AlertCircleIcon className="h-4 w-4 text-red-500 mt-0.5" />
               <div className="flex-1">
                 <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-1 h-6 text-xs"
-                  onClick={clearError}
-                >
+                <Button variant="ghost" size="sm" className="mt-1 h-6 text-xs" onClick={clearError}>
                   閉じる
                 </Button>
               </div>
@@ -173,21 +170,17 @@ export function P2PStatus() {
         {!initialized && connectionStatus === 'disconnected' && (
           <div className="text-center py-4">
             <WifiOffIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              P2Pネットワークに接続していません
-            </p>
+            <p className="text-sm text-muted-foreground">P2Pネットワークに接続していません</p>
           </div>
         )}
 
         {connectionStatus === 'connecting' && (
           <div className="text-center py-4">
             <CircleIcon className="h-8 w-8 text-yellow-500 animate-pulse mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              ネットワークに接続中...
-            </p>
+            <p className="text-sm text-muted-foreground">ネットワークに接続中...</p>
           </div>
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

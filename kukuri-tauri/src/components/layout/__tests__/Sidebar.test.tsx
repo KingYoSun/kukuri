@@ -11,6 +11,23 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
+// P2P APIのモック
+vi.mock('@/lib/api/p2p', () => ({
+  p2pApi: {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    getNodeAddress: vi.fn().mockResolvedValue(['/ip4/127.0.0.1/tcp/4001']),
+    getStatus: vi.fn().mockResolvedValue({
+      connected: true,
+      endpoint_id: 'test-node',
+      active_topics: [],
+      peer_count: 0,
+    }),
+    joinTopic: vi.fn().mockResolvedValue(undefined),
+    leaveTopic: vi.fn().mockResolvedValue(undefined),
+    broadcast: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe('Sidebar', () => {
   const mockNavigate = vi.fn();
   const mockTopic1: Topic = {

@@ -41,8 +41,34 @@ vi.mock('zustand', async () => {
     // フック関数を作成
     const useStore = Object.assign((selector = (state: any) => state) => selector(state), api);
 
+    // 初期状態のディープコピー関数
+    const deepCopyState = (obj: any): any => {
+      if (obj instanceof Map) {
+        return new Map(Array.from(obj.entries()).map(([k, v]) => [k, deepCopyState(v)]));
+      }
+      if (obj instanceof Set) {
+        return new Set(Array.from(obj));
+      }
+      if (obj instanceof Date) {
+        return new Date(obj);
+      }
+      if (obj === null || typeof obj !== 'object') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(deepCopyState);
+      }
+      const copy: any = {};
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          copy[key] = deepCopyState(obj[key]);
+        }
+      }
+      return copy;
+    };
+
     // 初期状態を保存してリセット可能にする
-    const initialState = { ...state };
+    const initialState = deepCopyState(state);
     storeResetFns.add(() => {
       setState(initialState, true);
     });
@@ -82,6 +108,11 @@ vi.mock('*.css', () => ({}));
 // Tauri APIのモック
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+}));
+
+// P2PEventListenerのモック
+vi.mock('@/hooks/useP2PEventListener', () => ({
+  useP2PEventListener: vi.fn(),
 }));
 
 // Window matchMediaのモック

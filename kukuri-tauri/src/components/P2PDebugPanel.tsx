@@ -1,20 +1,14 @@
-import { useState, useCallback } from 'react'
-import { useP2P } from '@/hooks/useP2P'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { 
-  SendIcon,
-  NetworkIcon,
-  TrashIcon,
-  WifiIcon,
-  WifiOffIcon,
-} from 'lucide-react'
+import { useState, useCallback } from 'react';
+import { useP2P } from '@/hooks/useP2P';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { SendIcon, NetworkIcon, TrashIcon, WifiIcon, WifiOffIcon } from 'lucide-react';
 
 export function P2PDebugPanel() {
   const {
@@ -28,78 +22,81 @@ export function P2PDebugPanel() {
     leaveTopic,
     broadcast,
     clearError,
-  } = useP2P()
+  } = useP2P();
 
-  const [newTopicId, setNewTopicId] = useState('')
-  const [selectedTopic, setSelectedTopic] = useState('')
-  const [messageContent, setMessageContent] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [logs, setLogs] = useState<string[]>([])
+  const [newTopicId, setNewTopicId] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [messageContent, setMessageContent] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
 
   // ログを追加
   const addLog = useCallback((message: string) => {
-    const timestamp = new Date().toISOString()
-    setLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 100))
-  }, [])
+    const timestamp = new Date().toISOString();
+    setLogs((prev) => [`[${timestamp}] ${message}`, ...prev].slice(0, 100));
+  }, []);
 
   // トピック参加
   const handleJoinTopic = useCallback(async () => {
-    if (!newTopicId.trim()) return
-    
-    setIsLoading(true)
-    addLog(`Joining topic: ${newTopicId}`)
-    
+    if (!newTopicId.trim()) return;
+
+    setIsLoading(true);
+    addLog(`Joining topic: ${newTopicId}`);
+
     try {
-      await joinTopic(newTopicId.trim())
-      addLog(`Successfully joined topic: ${newTopicId}`)
-      setNewTopicId('')
-      setSelectedTopic(newTopicId.trim())
+      await joinTopic(newTopicId.trim());
+      addLog(`Successfully joined topic: ${newTopicId}`);
+      setNewTopicId('');
+      setSelectedTopic(newTopicId.trim());
     } catch (error) {
-      addLog(`Failed to join topic: ${error}`)
+      addLog(`Failed to join topic: ${error}`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [newTopicId, joinTopic, addLog])
+  }, [newTopicId, joinTopic, addLog]);
 
   // トピック離脱
-  const handleLeaveTopic = useCallback(async (topicId: string) => {
-    setIsLoading(true)
-    addLog(`Leaving topic: ${topicId}`)
-    
-    try {
-      await leaveTopic(topicId)
-      addLog(`Successfully left topic: ${topicId}`)
-      if (selectedTopic === topicId) {
-        setSelectedTopic('')
+  const handleLeaveTopic = useCallback(
+    async (topicId: string) => {
+      setIsLoading(true);
+      addLog(`Leaving topic: ${topicId}`);
+
+      try {
+        await leaveTopic(topicId);
+        addLog(`Successfully left topic: ${topicId}`);
+        if (selectedTopic === topicId) {
+          setSelectedTopic('');
+        }
+      } catch (error) {
+        addLog(`Failed to leave topic: ${error}`);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      addLog(`Failed to leave topic: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [leaveTopic, selectedTopic, addLog])
+    },
+    [leaveTopic, selectedTopic, addLog],
+  );
 
   // メッセージ送信
   const handleBroadcast = useCallback(async () => {
-    if (!selectedTopic || !messageContent.trim()) return
-    
-    setIsLoading(true)
-    addLog(`Broadcasting to ${selectedTopic}: ${messageContent}`)
-    
+    if (!selectedTopic || !messageContent.trim()) return;
+
+    setIsLoading(true);
+    addLog(`Broadcasting to ${selectedTopic}: ${messageContent}`);
+
     try {
-      await broadcast(selectedTopic, messageContent.trim())
-      addLog(`Message broadcast successfully`)
-      setMessageContent('')
+      await broadcast(selectedTopic, messageContent.trim());
+      addLog(`Message broadcast successfully`);
+      setMessageContent('');
     } catch (error) {
-      addLog(`Failed to broadcast: ${error}`)
+      addLog(`Failed to broadcast: ${error}`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [selectedTopic, messageContent, broadcast, addLog])
+  }, [selectedTopic, messageContent, broadcast, addLog]);
 
   // 開発環境チェック
   if (import.meta.env.PROD) {
-    return null
+    return null;
   }
 
   return (
@@ -109,9 +106,7 @@ export function P2PDebugPanel() {
           <NetworkIcon className="h-5 w-5" />
           <span>P2P Debug Panel</span>
         </CardTitle>
-        <CardDescription>
-          P2P機能のテストとデバッグ（開発環境のみ）
-        </CardDescription>
+        <CardDescription>P2P機能のテストとデバッグ（開発環境のみ）</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="status" className="w-full">
@@ -166,11 +161,7 @@ export function P2PDebugPanel() {
               {error && (
                 <div className="bg-red-50 dark:bg-red-950 rounded p-3 space-y-2">
                   <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearError}
-                  >
+                  <Button variant="ghost" size="sm" onClick={clearError}>
                     エラーをクリア
                   </Button>
                 </div>
@@ -190,10 +181,7 @@ export function P2PDebugPanel() {
                   onChange={(e) => setNewTopicId(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleJoinTopic()}
                 />
-                <Button
-                  onClick={handleJoinTopic}
-                  disabled={!newTopicId.trim() || isLoading}
-                >
+                <Button onClick={handleJoinTopic} disabled={!newTopicId.trim() || isLoading}>
                   参加
                 </Button>
               </div>
@@ -279,9 +267,7 @@ export function P2PDebugPanel() {
               </>
             ) : (
               <div className="text-center py-8">
-                <p className="text-sm text-muted-foreground">
-                  トピックを選択してください
-                </p>
+                <p className="text-sm text-muted-foreground">トピックを選択してください</p>
               </div>
             )}
           </TabsContent>
@@ -290,20 +276,14 @@ export function P2PDebugPanel() {
           <TabsContent value="logs" className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium">デバッグログ</h4>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setLogs([])}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setLogs([])}>
                 クリア
               </Button>
             </div>
             <ScrollArea className="h-64 w-full rounded-md border">
               <div className="p-2 space-y-1">
                 {logs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-4">
-                    ログはありません
-                  </p>
+                  <p className="text-xs text-muted-foreground text-center py-4">ログはありません</p>
                 ) : (
                   logs.map((log, index) => (
                     <pre key={index} className="text-xs font-mono text-muted-foreground">
@@ -317,5 +297,5 @@ export function P2PDebugPanel() {
         </Tabs>
       </CardContent>
     </Card>
-  )
+  );
 }
