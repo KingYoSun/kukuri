@@ -136,7 +136,7 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
         if let Some(mut rx) = rx {
             while let Some(event) = rx.recv().await {
                 match event {
-                    modules::p2p::P2PEvent::MessageReceived { topic_id, message, from_peer: _ } => {
+                    modules::p2p::P2PEvent::MessageReceived { topic_id, message, _from_peer: _ } => {
                         let event_data = P2PMessageEvent {
                             topic_id,
                             message_type: format!("{:?}", message.msg_type),

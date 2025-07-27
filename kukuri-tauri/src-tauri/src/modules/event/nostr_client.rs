@@ -116,6 +116,7 @@ impl NostrClientManager {
     }
 
     /// テキストノートを投稿
+    #[allow(dead_code)]
     pub async fn publish_text_note(&self, content: &str, tags: Vec<Tag>) -> Result<EventId> {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
@@ -163,6 +164,7 @@ impl NostrClientManager {
     }
 
     /// 公開鍵を取得
+    #[allow(dead_code)]
     pub fn get_public_key(&self) -> Option<PublicKey> {
         self.keys.as_ref().map(|k| k.public_key())
     }

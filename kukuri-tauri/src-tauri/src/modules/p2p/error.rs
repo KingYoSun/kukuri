@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum P2PError {
     #[error("Failed to initialize endpoint: {0}")]
     EndpointInit(String),

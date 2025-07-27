@@ -62,6 +62,7 @@ impl GossipMessage {
     }
     
     /// メッセージIDを生成
+    #[allow(dead_code)]
     fn generate_message_id() -> MessageId {
         let uuid = Uuid::new_v4();
         let mut id = [0u8; 32];
@@ -86,13 +87,13 @@ impl GossipMessage {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
         bincode::decode_from_slice(bytes, bincode::config::standard())
             .map(|(msg, _)| msg)
-            .map_err(|e| format!("Failed to deserialize message: {}", e))
+            .map_err(|e| format!("Failed to deserialize message: {e}"))
     }
     
     /// メッセージをバイト列に変換
     pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
         bincode::encode_to_vec(self, bincode::config::standard())
-            .map_err(|e| format!("Failed to serialize message: {}", e))
+            .map_err(|e| format!("Failed to serialize message: {e}"))
     }
     
     /// メッセージに署名を付ける
@@ -106,14 +107,14 @@ impl GossipMessage {
         
         // ハッシュからSecp256k1メッセージを作成
         let message = Secp256k1Message::from_digest_slice(&hash)
-            .map_err(|e| format!("Failed to create message: {}", e))?;
+            .map_err(|e| format!("Failed to create message: {e}"))?;
         
         // 署名
         let signature = SECP256K1.sign_ecdsa(&message, secret_key);
         self.signature = signature.serialize_compact().to_vec();
         
         // 公開鍵を設定（圧縮形式）
-        let public_key = PublicKey::from_secret_key(&SECP256K1, secret_key);
+        let public_key = PublicKey::from_secret_key(SECP256K1, secret_key);
         self.sender = public_key.serialize().to_vec();
         
         Ok(())
@@ -127,11 +128,11 @@ impl GossipMessage {
         
         // 公開鍵を復元
         let public_key = PublicKey::from_slice(&self.sender)
-            .map_err(|e| format!("Invalid public key: {}", e))?;
+            .map_err(|e| format!("Invalid public key: {e}"))?;
         
         // 署名を復元
         let signature = Signature::from_compact(&self.signature)
-            .map_err(|e| format!("Invalid signature: {}", e))?;
+            .map_err(|e| format!("Invalid signature: {e}"))?;
         
         // 署名対象のバイト列を作成
         let mut message_for_verification = self.clone();
@@ -145,7 +146,7 @@ impl GossipMessage {
         
         // ハッシュからSecp256k1メッセージを作成
         let message = Secp256k1Message::from_digest_slice(&hash)
-            .map_err(|e| format!("Failed to create message: {}", e))?;
+            .map_err(|e| format!("Failed to create message: {e}"))?;
         
         // 署名を検証
         Ok(SECP256K1.verify_ecdsa(&message, &signature, &public_key).is_ok())
@@ -162,7 +163,7 @@ pub const GLOBAL_TOPIC: &str = "kukuri:global";
 
 /// ユーザー固有トピック
 pub fn user_topic_id(pubkey: &str) -> String {
-    format!("kukuri:user:{}", pubkey)
+    format!("kukuri:user:{pubkey}")
 }
 
 fn generate_message_id() -> MessageId {

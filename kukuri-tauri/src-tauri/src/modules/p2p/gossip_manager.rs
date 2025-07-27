@@ -14,6 +14,7 @@ use crate::modules::p2p::message::GossipMessage;
 pub struct GossipManager {
     endpoint: Endpoint,
     gossip: Gossip,
+    #[allow(dead_code)]
     router: Router,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
     secret_key: secp256k1::SecretKey,
@@ -21,7 +22,9 @@ pub struct GossipManager {
 }
 
 pub struct TopicHandle {
+    #[allow(dead_code)]
     topic_id: String,
+    #[allow(dead_code)]
     iroh_topic_id: TopicId,
     // gossip APIハンドルを保持
     sender: Arc<Mutex<GossipSender>>,
@@ -34,7 +37,7 @@ pub enum P2PEvent {
     MessageReceived {
         topic_id: String,
         message: GossipMessage,
-        from_peer: Vec<u8>,
+        _from_peer: Vec<u8>,
     },
     PeerJoined {
         topic_id: String,
@@ -63,7 +66,7 @@ impl GossipManager {
         
         // Routerの作成
         let router = Router::builder(endpoint.clone())
-            .accept(GOSSIP_ALPN_BYTES.to_vec(), gossip.clone())
+            .accept(GOSSIP_ALPN_BYTES, gossip.clone())
             .spawn();
         
         Ok(Self {
@@ -115,7 +118,7 @@ impl GossipManager {
                 // ローカルアドレスが利用可能でない場合は空のベクターを返す
                 Vec::new()
             },
-            Err(e) => return Err(P2PError::Internal(format!("Failed to get node address: {}", e))),
+            Err(e) => return Err(P2PError::Internal(format!("Failed to get node address: {e}"))),
         };
         
         Ok(addrs)
@@ -142,7 +145,7 @@ impl GossipManager {
         // トピックに参加
         let gossip_topic: GossipTopic = self.gossip.subscribe(iroh_topic_id, bootstrap_peers)
             .await
-            .map_err(|e| P2PError::JoinTopicFailed(format!("Failed to subscribe to topic: {}", e)))?;
+            .map_err(|e| P2PError::JoinTopicFailed(format!("Failed to subscribe to topic: {e}")))?;
         
         // 送信と受信を分離
         let (sender, mut receiver) = gossip_topic.split();
@@ -170,7 +173,7 @@ impl GossipManager {
                                     let _ = event_tx.send(P2PEvent::MessageReceived {
                                         topic_id: topic_id_clone.clone(),
                                         message,
-                                        from_peer: msg.delivered_from.as_bytes().to_vec(),
+                                        _from_peer: msg.delivered_from.as_bytes().to_vec(),
                                     });
                                 },
                                 Ok(false) => {
@@ -246,11 +249,11 @@ impl GossipManager {
         if let Some(handle) = topics.get(topic_id) {
             // メッセージに署名
             message.sign(&self.secret_key)
-                .map_err(|e| P2PError::SerializationError(format!("Failed to sign message: {}", e)))?;
+                .map_err(|e| P2PError::SerializationError(format!("Failed to sign message: {e}")))?;
             
             // メッセージをバイト列に変換
             let bytes = message.to_bytes()
-                .map_err(|e| P2PError::SerializationError(e))?;
+                .map_err(P2PError::SerializationError)?;
             
             // Arc<Mutex<GossipSender>>をクローンしてブロードキャスト
             let sender = handle.sender.clone();
@@ -259,7 +262,7 @@ impl GossipManager {
             let mut sender_guard = sender.lock().await;
             sender_guard.broadcast(bytes.into())
                 .await
-                .map_err(|e| P2PError::BroadcastFailed(format!("Failed to broadcast message: {}", e)))?;
+                .map_err(|e| P2PError::BroadcastFailed(format!("Failed to broadcast message: {e}")))?;
             
             tracing::debug!("Broadcast message to topic: {}", topic_id);
             Ok(())
@@ -300,7 +303,7 @@ impl GossipManager {
     /// メッセージに署名を付ける（EventSync用）
     pub fn sign_message(&self, message: &mut GossipMessage) -> P2PResult<()> {
         message.sign(&self.secret_key)
-            .map_err(|e| P2PError::SerializationError(format!("Failed to sign message: {}", e)))
+            .map_err(|e| P2PError::SerializationError(format!("Failed to sign message: {e}")))
     }
     
     /// シャットダウン
@@ -316,8 +319,8 @@ impl GossipManager {
         }
         
         // Routerとエンドポイントのシャットダウン
-        self.router.shutdown().await;
-        self.endpoint.close().await;
+        let _ = self.router.shutdown().await;
+        let _ = self.endpoint.close().await;
         
         tracing::info!("GossipManager shutdown complete");
         Ok(())

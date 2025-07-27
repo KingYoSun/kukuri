@@ -166,6 +166,6 @@ pub async fn join_topic_by_name(
     #[allow(non_snake_case)]
     initialPeers: Vec<String>,
 ) -> Result<(), String> {
-    let topicId = generate_topic_id(&topicName);
-    join_p2p_topic(state, topicId, initialPeers).await
+    let topic_id = generate_topic_id(&topicName);
+    join_p2p_topic(state, topic_id, initialPeers).await
 }

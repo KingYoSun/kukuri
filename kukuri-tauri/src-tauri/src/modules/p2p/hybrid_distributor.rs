@@ -131,7 +131,7 @@ impl HybridDistributor {
     ) -> P2PResult<DeliveryResult> {
         // 同時配信数を制限
         let _permit = self.semaphore.acquire().await
-            .map_err(|e| P2PError::Internal(format!("Semaphore error: {}", e)))?;
+            .map_err(|e| P2PError::Internal(format!("Semaphore error: {e}")))?;
         
         let start_time = Instant::now();
         let config = self.config.read().await;
@@ -276,7 +276,7 @@ impl HybridDistributor {
             self.event_sync.propagate_nostr_event(event.clone())
         ).await;
         
-        let mut p2p_success = matches!(p2p_result, Ok(Ok(())));
+        let p2p_success = matches!(p2p_result, Ok(Ok(())));
         let mut relay_success = false;
         let mut error = None;
         

@@ -46,7 +46,7 @@ async fn test_peer_to_peer_messaging() {
     // ノード2でメッセージを受信
     let timeout = tokio::time::timeout(Duration::from_secs(5), async {
         while let Some(event) = event_rx2.recv().await {
-            if let P2PEvent::MessageReceived { topic_id: _, message, from_peer: _ } = event {
+            if let P2PEvent::MessageReceived { topic_id: _, message, _from_peer: _ } = event {
                 assert_eq!(message.payload, test_payload);
                 assert!(message.verify_signature().unwrap());
                 return Ok(());
@@ -109,7 +109,7 @@ async fn test_multi_node_broadcast() {
         
         let timeout = tokio::time::timeout(Duration::from_secs(5), async {
             while let Some(event) = rx.recv().await {
-                if let P2PEvent::MessageReceived { topic_id: _, message, from_peer: _ } = event {
+                if let P2PEvent::MessageReceived { topic_id: _, message, _from_peer: _ } = event {
                     assert_eq!(message.payload, test_payload);
                     return Ok(());
                 }

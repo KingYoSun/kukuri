@@ -65,6 +65,7 @@ impl EventPublisher {
     }
 
     /// リポストイベントを作成
+    #[allow(dead_code)]
     pub fn create_repost(&self, event_id: &EventId, relay_url: Option<String>) -> Result<Event> {
         let keys = self.keys.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Keys not set"))?;
@@ -90,6 +91,7 @@ impl EventPublisher {
     }
 
     /// カスタムイベントを作成
+    #[allow(dead_code)]
     pub fn create_custom_event(&self, kind: Kind, content: &str, tags: Vec<Tag>) -> Result<Event> {
         let keys = self.keys.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Keys not set"))?;

@@ -238,17 +238,15 @@ impl EventSync {
             for tag in event.tags.iter() {
                 if let Some(TagStandard::Identifier(identifier)) = tag.as_standardized() {
                     // identifierがトピックIDとして使用される
-                    topic_ids.push(generate_topic_id(&identifier));
+                    topic_ids.push(generate_topic_id(identifier));
                 }
             }
         }
         
         // ハッシュタグをトピックとして扱う
         for tag in event.tags.iter() {
-            if let Some(tag_kind) = tag.as_standardized() {
-                if let TagStandard::Hashtag(topic_name) = tag_kind {
-                    topic_ids.push(generate_topic_id(&topic_name));
-                }
+            if let Some(TagStandard::Hashtag(topic_name)) = tag.as_standardized() {
+                topic_ids.push(generate_topic_id(topic_name));
             }
         }
         
@@ -362,10 +360,8 @@ mod tests {
         
         // ハッシュタグ
         for tag in event.tags.iter() {
-            if let Some(tag_kind) = tag.as_standardized() {
-                if let TagStandard::Hashtag(topic_name) = tag_kind {
-                    topic_ids.push(generate_topic_id(&topic_name));
-                }
+            if let Some(TagStandard::Hashtag(topic_name)) = tag.as_standardized() {
+                topic_ids.push(generate_topic_id(topic_name));
             }
         }
         
@@ -405,7 +401,7 @@ mod tests {
         if event.kind == Kind::from(30078u16) {
             for tag in event.tags.iter() {
                 if let Some(TagStandard::Identifier(identifier)) = tag.as_standardized() {
-                    topic_ids.push(generate_topic_id(&identifier));
+                    topic_ids.push(generate_topic_id(identifier));
                 }
             }
         }

@@ -22,6 +22,7 @@ impl EventHandler {
     }
 
     /// イベントコールバックを追加
+    #[allow(dead_code)]
     pub async fn add_callback<F>(&self, callback: F)
     where
         F: Fn(Event) + Send + Sync + 'static,
@@ -90,6 +91,7 @@ impl EventHandler {
     }
 
     /// イベントを検証
+    #[allow(dead_code)]
     pub fn verify_event(&self, event: &Event) -> Result<bool> {
         match event.verify() {
             Ok(_) => {
