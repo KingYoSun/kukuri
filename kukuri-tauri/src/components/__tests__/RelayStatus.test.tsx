@@ -15,7 +15,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 // import { invoke } from "@tauri-apps/api/core";
 
-const mockUseAuthStore = useAuthStore as MockedFunction<typeof useAuthStore>;
+const mockUseAuthStore = useAuthStore as unknown as MockedFunction<typeof useAuthStore>;
 
 describe('RelayStatus', () => {
   const mockSetRelayStatus = vi.fn();

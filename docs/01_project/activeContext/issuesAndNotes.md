@@ -4,6 +4,69 @@
 
 ## 解決済みの問題
 
+### フロントエンドテスト・型・リントエラー（2025年7月27日）
+**問題**: フロントエンドで型エラー、統合テストエラー、フォーマットエラーが発生
+
+**症状**:
+- TypeScript型チェックで2件のエラー
+- 統合テストで7件の失敗
+- フォーマットチェックで2ファイルのエラー
+
+**解決策**:
+1. zustandモック型の修正
+```typescript
+// 修正前
+const mockUseAuthStore = useAuthStore as MockedFunction<typeof useAuthStore>;
+
+// 修正後
+const mockUseAuthStore = useAuthStore as unknown as MockedFunction<typeof useAuthStore>;
+```
+
+2. 統合テストでのzustandモック解除
+```typescript
+// src/test/integration/setup.ts
+vi.unmock('zustand');
+vi.unmock('zustand/middleware');
+```
+
+3. Post型構造の正しい実装
+```typescript
+const mockPost: Post = {
+  id: 'post1',
+  content: 'Test post',
+  author: {
+    id: 'user1',
+    pubkey: 'npub1testuser',
+    npub: 'npub1testuser',
+    name: 'Test User',
+    displayName: 'Test User',
+    picture: '',
+    about: '',
+    nip05: '',
+  },
+  topicId: 'general',
+  created_at: Date.now() / 1000,
+  tags: [],
+  likes: 0,
+  replies: [],
+};
+```
+
+4. 再レンダリング時のkey属性追加
+```typescript
+rerender(
+  <QueryClientProvider client={queryClient}>
+    <PostTestComponent key="updated" />
+  </QueryClientProvider>,
+);
+```
+
+**結果**:
+- テスト: 145 passed (20 files)
+- 型チェック: エラーなし
+- ESLint: エラーなし
+- フォーマット: すべて正しくフォーマット済み
+
 ### バックエンドリント・型エラー（2025年7月27日）
 **問題**: バックエンドで多数の未使用コード警告とP2P統合テストの失敗
 
@@ -208,10 +271,11 @@ vi.mock('zustand', async () => {
 - **act警告**: 一部のReactコンポーネントテストでact警告が発生する場合がある
   - 主に非同期state更新時に発生
   - 実害はないが、将来的に対応が必要
-- **フロントエンド統合テスト失敗**: 7件のテストが失敗（2025年7月27日）
-  - 投稿リストとトピックリストの表示に関するテスト
-  - コンポーネントの実装が未完成のため発生
-  - 実装が進めば自然に解消される見込み
+- **Unhandled Promise Rejection警告**: エラーハンドリングテストで発生（2025年7月27日）
+  - Promise.rejectを使用するテストで警告が表示される
+  - テスト自体は正常に動作し、すべて成功
+  - VitestがPromiseエラーを検出する仕様による
+  - 実際のアプリケーション動作には影響なし
 - **バックエンド統合テスト**: P2P通信関連の6件は#[ignore]属性でスキップ（2025年7月27日）
   - ネットワーク接続が必要なテストはローカル環境で実行
   - CI環境での安定性向上

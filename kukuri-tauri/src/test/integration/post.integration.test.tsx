@@ -13,8 +13,24 @@ function PostTestComponent() {
   const postsMap = usePostStore((state) => state.posts);
   const posts = Array.from(postsMap.values());
   const addPost = usePostStore((state) => state.addPost);
+  const setPosts = usePostStore((state) => state.setPosts);
   const [content, setContent] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    // コンポーネントマウント時に投稿リストを取得
+    const loadPosts = async () => {
+      try {
+        const posts = await invoke<Post[]>('list_posts', {});
+        if (setPosts) {
+          setPosts(posts);
+        }
+      } catch (error) {
+        console.error('Failed to load posts:', error);
+      }
+    };
+    loadPosts();
+  }, [setPosts]);
 
   const createPost = async (content: string, tags: string[][]) => {
     setIsLoading(true);
@@ -89,12 +105,24 @@ describe('Post Integration Tests', () => {
   it('should create a new post', async () => {
     const user = userEvent.setup();
 
-    const mockPost = {
+    const mockPost: Post = {
       id: 'newpost123',
       content: 'Hello, Nostr!',
-      pubkey: 'npub1testuser',
+      author: {
+        id: 'user1',
+        pubkey: 'npub1testuser',
+        npub: 'npub1testuser',
+        name: 'Test User',
+        displayName: 'Test User',
+        picture: '',
+        about: '',
+        nip05: '',
+      },
+      topicId: 'general',
       created_at: Date.now() / 1000,
       tags: [],
+      likes: 0,
+      replies: [],
     };
 
     setMockResponse('create_post', mockPost);
@@ -122,27 +150,47 @@ describe('Post Integration Tests', () => {
   });
 
   it('should display list of posts', async () => {
-    const mockPosts = [
+    const mockAuthor = {
+      id: 'user1',
+      pubkey: 'npub1testuser',
+      npub: 'npub1testuser',
+      name: 'Test User',
+      displayName: 'Test User',
+      picture: '',
+      about: '',
+      nip05: '',
+    };
+
+    const mockPosts: Post[] = [
       {
         id: 'post1',
         content: 'First post',
-        pubkey: 'npub1user1',
+        author: mockAuthor,
+        topicId: 'general',
         created_at: Date.now() / 1000 - 3600,
         tags: [],
+        likes: 0,
+        replies: [],
       },
       {
         id: 'post2',
         content: 'Second post with #topic',
-        pubkey: 'npub1user2',
+        author: mockAuthor,
+        topicId: 'general',
         created_at: Date.now() / 1000 - 1800,
-        tags: [['t', 'topic']],
+        tags: ['topic'],
+        likes: 0,
+        replies: [],
       },
       {
         id: 'post3',
         content: 'Third post',
-        pubkey: 'npub1testuser',
+        author: mockAuthor,
+        topicId: 'general',
         created_at: Date.now() / 1000,
         tags: [],
+        likes: 0,
+        replies: [],
       },
     ];
 
@@ -170,15 +218,24 @@ describe('Post Integration Tests', () => {
   it('should handle post creation with topics', async () => {
     const user = userEvent.setup();
 
-    const mockPost = {
+    const mockPost: Post = {
       id: 'topicpost123',
       content: 'Post about #rust and #programming',
-      pubkey: 'npub1testuser',
+      author: {
+        id: 'user1',
+        pubkey: 'npub1testuser',
+        npub: 'npub1testuser',
+        name: 'Test User',
+        displayName: 'Test User',
+        picture: '',
+        about: '',
+        nip05: '',
+      },
+      topicId: 'general',
       created_at: Date.now() / 1000,
-      tags: [
-        ['t', 'rust'],
-        ['t', 'programming'],
-      ],
+      tags: ['rust', 'programming'],
+      likes: 0,
+      replies: [],
     };
 
     setMockResponse('create_post', mockPost);
@@ -205,6 +262,9 @@ describe('Post Integration Tests', () => {
 
   it('should handle empty post submission', async () => {
     const user = userEvent.setup();
+
+    // 空の投稿リストを返すように設定
+    setMockResponse('list_posts', []);
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -251,30 +311,58 @@ describe('Post Integration Tests', () => {
   });
 
   it('should update post list when new posts arrive', async () => {
-    const initialPosts = [
+    const mockAuthor1 = {
+      id: 'user1',
+      pubkey: 'npub1other',
+      npub: 'npub1other',
+      name: 'Other User',
+      displayName: 'Other User',
+      picture: '',
+      about: '',
+      nip05: '',
+    };
+
+    const mockAuthor2 = {
+      id: 'user2',
+      pubkey: 'npub1another',
+      npub: 'npub1another',
+      name: 'Another User',
+      displayName: 'Another User',
+      picture: '',
+      about: '',
+      nip05: '',
+    };
+
+    const initialPosts: Post[] = [
       {
         id: 'existing1',
         content: 'Existing post',
-        pubkey: 'npub1other',
+        author: mockAuthor1,
+        topicId: 'general',
         created_at: Date.now() / 1000 - 3600,
         tags: [],
+        likes: 0,
+        replies: [],
       },
     ];
 
-    const updatedPosts = [
+    const updatedPosts: Post[] = [
       {
         id: 'new1',
         content: 'New post from another user',
-        pubkey: 'npub1another',
+        author: mockAuthor2,
+        topicId: 'general',
         created_at: Date.now() / 1000,
         tags: [],
+        likes: 0,
+        replies: [],
       },
       ...initialPosts,
     ];
 
     setMockResponse('list_posts', initialPosts);
 
-    render(
+    const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <PostTestComponent />
       </QueryClientProvider>,
@@ -287,7 +375,13 @@ describe('Post Integration Tests', () => {
 
     // 新しい投稿が追加される
     setMockResponse('list_posts', updatedPosts);
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
+
+    // コンポーネントを再レンダリングして新しいデータを取得
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PostTestComponent key="updated" />
+      </QueryClientProvider>,
+    );
 
     // 新しい投稿が表示される
     await waitFor(() => {

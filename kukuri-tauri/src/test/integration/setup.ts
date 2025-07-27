@@ -1,5 +1,9 @@
-import { Mock } from 'vitest';
+import { vi, Mock } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
+
+// zustandのモックを解除して実際の実装を使用
+vi.unmock('zustand');
+vi.unmock('zustand/middleware');
 
 // Tauriコマンドのモック用のレスポンスを定義
 export const mockTauriResponses = new Map<string, unknown>();

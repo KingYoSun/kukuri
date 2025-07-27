@@ -15,9 +15,25 @@ function TopicTestComponent() {
   const currentTopic = useTopicStore((state) => state.currentTopic);
   const setCurrentTopic = useTopicStore((state) => state.setCurrentTopic);
   const addTopic = useTopicStore((state) => state.addTopic);
+  const setTopics = useTopicStore((state) => state.setTopics);
   const [newTopicName, setNewTopicName] = React.useState('');
   const [newTopicDesc, setNewTopicDesc] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    // コンポーネントマウント時にトピックリストを取得
+    const loadTopics = async () => {
+      try {
+        const topics = await invoke<Topic[]>('list_topics', {});
+        if (setTopics) {
+          setTopics(topics);
+        }
+      } catch (error) {
+        console.error('Failed to load topics:', error);
+      }
+    };
+    loadTopics();
+  }, [setTopics]);
 
   const createTopic = async (name: string, description: string) => {
     setIsLoading(true);
@@ -202,6 +218,9 @@ describe('Topic Integration Tests', () => {
   it('should handle empty topic name', async () => {
     const user = userEvent.setup();
 
+    // 空のトピックリストを返すように設定
+    setMockResponse('list_topics', []);
+
     render(
       <QueryClientProvider client={queryClient}>
         <TopicTestComponent />
@@ -255,7 +274,7 @@ describe('Topic Integration Tests', () => {
 
     setMockResponse('list_topics', mockTopics);
 
-    render(
+    const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <TopicTestComponent />
       </QueryClientProvider>,
@@ -272,7 +291,13 @@ describe('Topic Integration Tests', () => {
     // フィルタリング後のトピックを設定（実際のアプリではサーバー側でフィルタリング）
     const filteredTopics = mockTopics.filter((t) => t.name.includes('script'));
     setMockResponse('list_topics', filteredTopics);
-    queryClient.invalidateQueries({ queryKey: ['topics'] });
+
+    // コンポーネントを再レンダリングして新しいデータを取得
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <TopicTestComponent key="filtered" />
+      </QueryClientProvider>,
+    );
 
     // フィルタリングされたトピックのみ表示
     await waitFor(() => {

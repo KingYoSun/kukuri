@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 
 const mockInvoke = invoke as MockedFunction<typeof invoke>;
 const mockListen = listen as MockedFunction<typeof listen>;
-const mockUseAuthStore = useAuthStore as MockedFunction<typeof useAuthStore>;
+const mockUseAuthStore = useAuthStore as unknown as MockedFunction<typeof useAuthStore>;
 
 describe('NostrTestPanel', () => {
   beforeEach(() => {

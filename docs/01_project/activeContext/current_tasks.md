@@ -4,6 +4,25 @@
 
 ## 完了済みタスク
 
+### 2025年7月27日（フロントエンド修正）
+- [x] フロントエンドのテスト・型・リント修正
+  - [x] TypeScript型エラーの修正（2件）
+    - [x] NostrTestPanel.test.tsx: zustandモック型の修正
+    - [x] RelayStatus.test.tsx: zustandモック型の修正
+  - [x] 統合テストエラーの修正（7件）
+    - [x] setup.ts: zustandモックを統合テストで解除
+    - [x] post.integration.test.tsx: Post型構造の修正
+    - [x] post.integration.test.tsx: useEffectでの初期データ読み込み追加
+    - [x] topic.integration.test.tsx: useEffectでの初期データ読み込み追加
+    - [x] 再レンダリング時のkeyプロパティ追加
+  - [x] フォーマットエラーの修正（2ファイル）
+    - [x] pnpm formatで自動修正
+  - [x] 最終チェックとテスト実行
+    - [x] テスト: 145 passed (20 files)
+    - [x] 型チェック: エラーなし
+    - [x] ESLint: エラーなし
+    - [x] フォーマット: すべて正しくフォーマット済み
+
 ### 2025年7月27日（バックエンド修正）
 - [x] バックエンドのテスト・型・リント修正
   - [x] 未使用importの削除
