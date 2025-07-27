@@ -40,6 +40,7 @@ pub enum DeliveryStrategy {
 
 /// 配信結果
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DeliveryResult {
     pub strategy: DeliveryStrategy,
     pub p2p_success: bool,
@@ -51,11 +52,17 @@ pub struct DeliveryResult {
 /// 配信メトリクス
 #[derive(Debug, Clone, Default)]
 pub struct DeliveryMetrics {
+    #[allow(dead_code)]
     pub total_attempts: u64,
+    #[allow(dead_code)]
     pub p2p_successes: u64,
+    #[allow(dead_code)]
     pub relay_successes: u64,
+    #[allow(dead_code)]
     pub parallel_successes: u64,
+    #[allow(dead_code)]
     pub fallback_attempts: u64,
+    #[allow(dead_code)]
     pub average_latency_ms: f64,
 }
 
@@ -94,16 +101,23 @@ impl Default for HybridConfig {
 
 /// ハイブリッド配信システム
 pub struct HybridDistributor {
+    #[allow(dead_code)]
     event_sync: Arc<EventSync>,
+    #[allow(dead_code)]
     event_manager: Arc<EventManager>,
+    #[allow(dead_code)]
     gossip_manager: Arc<GossipManager>,
+    #[allow(dead_code)]
     config: Arc<RwLock<HybridConfig>>,
+    #[allow(dead_code)]
     metrics: Arc<RwLock<DeliveryMetrics>>,
+    #[allow(dead_code)]
     semaphore: Arc<Semaphore>,
 }
 
 impl HybridDistributor {
     /// 新しいHybridDistributorインスタンスを作成
+    #[allow(dead_code)]
     pub fn new(
         event_sync: Arc<EventSync>,
         event_manager: Arc<EventManager>,
@@ -124,6 +138,7 @@ impl HybridDistributor {
     }
     
     /// イベントを配信（優先度付き）
+    #[allow(dead_code)]
     pub async fn deliver_event(
         &self,
         event: Event,
@@ -175,6 +190,7 @@ impl HybridDistributor {
     }
     
     /// P2Pのみで配信
+    #[allow(dead_code)]
     async fn deliver_p2p_only(&self, event: Event) -> P2PResult<DeliveryResult> {
         let config = self.config.read().await;
         let timeout_duration = Duration::from_millis(config.p2p_timeout_ms);
@@ -200,6 +216,7 @@ impl HybridDistributor {
     }
     
     /// Nostrリレーのみで配信
+    #[allow(dead_code)]
     async fn deliver_relay_only(&self, event: Event) -> P2PResult<DeliveryResult> {
         let config = self.config.read().await;
         let timeout_duration = Duration::from_millis(config.relay_timeout_ms);
@@ -225,6 +242,7 @@ impl HybridDistributor {
     }
     
     /// 並列配信（P2PとNostrリレー同時）
+    #[allow(dead_code)]
     async fn deliver_parallel(&self, event: Event) -> P2PResult<DeliveryResult> {
         let config = self.config.read().await;
         let p2p_timeout = Duration::from_millis(config.p2p_timeout_ms);
@@ -262,6 +280,7 @@ impl HybridDistributor {
     }
     
     /// 順次配信（P2P優先、失敗時はフォールバック）
+    #[allow(dead_code)]
     async fn deliver_sequential(
         &self,
         event: Event,
@@ -309,6 +328,7 @@ impl HybridDistributor {
     }
     
     /// メトリクスを更新
+    #[allow(dead_code)]
     async fn update_metrics(&self, result: &DeliveryResult, duration: Duration) {
         let mut metrics = self.metrics.write().await;
         
@@ -339,17 +359,20 @@ impl HybridDistributor {
     }
     
     /// 配信メトリクスを取得
+    #[allow(dead_code)]
     pub async fn get_metrics(&self) -> DeliveryMetrics {
         self.metrics.read().await.clone()
     }
     
     /// 配信設定を更新
+    #[allow(dead_code)]
     pub async fn update_config(&self, config: HybridConfig) -> P2PResult<()> {
         *self.config.write().await = config;
         Ok(())
     }
     
     /// 優先度に基づく配信戦略を設定
+    #[allow(dead_code)]
     pub async fn set_priority_strategy(
         &self,
         priority: DeliveryPriority,
@@ -361,6 +384,7 @@ impl HybridDistributor {
     }
     
     /// バッチ配信（複数イベントを効率的に配信）
+    #[allow(dead_code)]
     pub async fn deliver_batch(
         &self,
         events: Vec<(Event, DeliveryPriority)>,
@@ -393,7 +417,6 @@ impl HybridDistributor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::{EventBuilder, Keys};
     
     #[test]
     fn test_delivery_priority_ordering() {
@@ -427,7 +450,7 @@ mod tests {
         let metrics = Arc::new(RwLock::new(DeliveryMetrics::default()));
         
         // 成功した配信結果をシミュレート
-        let result = DeliveryResult {
+        let _result = DeliveryResult {
             strategy: DeliveryStrategy::Parallel,
             p2p_success: true,
             relay_success: true,

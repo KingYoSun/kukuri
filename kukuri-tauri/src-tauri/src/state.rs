@@ -23,7 +23,9 @@ pub struct P2PState {
 #[derive(Clone)]
 pub struct AppState {
     pub key_manager: Arc<KeyManager>,
+    #[allow(dead_code)]
     pub db_pool: Arc<DbPool>,
+    #[allow(dead_code)]
     pub encryption_manager: Arc<EncryptionManager>,
     pub event_manager: Arc<EventManager>,
     pub p2p_state: Arc<RwLock<P2PState>>,

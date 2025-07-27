@@ -1,14 +1,10 @@
 use std::sync::Arc;
-use std::time::Duration;
 use nostr_sdk::{EventBuilder, Keys, Event};
 use tokio::sync::RwLock;
 
 use crate::modules::p2p::{
     HybridDistributor, HybridConfig, DeliveryPriority, DeliveryStrategy,
-    EventSync, GossipManager,
 };
-use crate::modules::event::manager::EventManager;
-use crate::modules::p2p::error::Result as P2PResult;
 
 /// テスト用のモックEventManager
 struct MockEventManager {
@@ -136,7 +132,7 @@ mod tests {
     async fn test_batch_delivery() {
         // バッチ配信のテスト
         let keys = Keys::generate();
-        let events: Vec<(Event, DeliveryPriority)> = (0..5).map(|i| {
+        let _events: Vec<(Event, DeliveryPriority)> = (0..5).map(|i| {
             let event = EventBuilder::text_note(format!("Test message {}", i))
                 .sign_with_keys(&keys)
                 .unwrap();
@@ -201,11 +197,11 @@ mod integration_tests {
         let keys = Keys::generate();
         
         // 異なる優先度のイベントを作成
-        let critical_event = EventBuilder::text_note("CRITICAL: System alert")
+        let _critical_event = EventBuilder::text_note("CRITICAL: System alert")
             .sign_with_keys(&keys)
             .unwrap();
         
-        let normal_event = EventBuilder::text_note("Normal message")
+        let _normal_event = EventBuilder::text_note("Normal message")
             .sign_with_keys(&keys)
             .unwrap();
         
@@ -236,7 +232,7 @@ mod performance_tests {
         let keys = Keys::generate();
         let event_count = 1000;
         
-        let events: Vec<Event> = (0..event_count).map(|i| {
+        let _events: Vec<Event> = (0..event_count).map(|i| {
             EventBuilder::text_note(format!("Performance test message {}", i))
                 .sign_with_keys(&keys)
                 .unwrap()

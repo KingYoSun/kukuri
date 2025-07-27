@@ -8,6 +8,7 @@ use crate::modules::p2p::message::{GossipMessage, MessageId};
 use crate::modules::p2p::error::Result as P2PResult;
 
 pub struct TopicMesh {
+    #[allow(dead_code)]
     topic_id: String,
     // TODO: iroh-gossipのsubscription実装
     peers: Arc<RwLock<HashSet<Vec<u8>>>>, // PublicKeyのバイト表現
@@ -85,12 +86,14 @@ impl TopicMesh {
     }
     
     /// 接続中のピアのリストを取得
+    #[allow(dead_code)]
     pub async fn get_peers(&self) -> Vec<Vec<u8>> {
         let peers = self.peers.read().await;
         peers.iter().cloned().collect()
     }
     
     /// キャッシュされたメッセージを取得（最新順）
+    #[allow(dead_code)]
     pub async fn get_recent_messages(&self, limit: usize) -> Vec<GossipMessage> {
         let cache = self.message_cache.read().await;
         let mut messages: Vec<_> = cache.iter()
@@ -102,6 +105,7 @@ impl TopicMesh {
     }
     
     /// キャッシュをクリア
+    #[allow(dead_code)]
     pub async fn clear_cache(&self) {
         let mut cache = self.message_cache.write().await;
         cache.clear();

@@ -272,12 +272,14 @@ impl GossipManager {
     }
     
     /// アクティブなトピックのリストを取得
+    #[allow(dead_code)]
     pub async fn active_topics(&self) -> Vec<String> {
         let topics = self.topics.read().await;
         topics.keys().cloned().collect()
     }
     
     /// 特定のトピックのステータスを取得
+    #[allow(dead_code)]
     pub async fn get_topic_status(&self, topic_id: &str) -> Option<crate::modules::p2p::topic_mesh::TopicStats> {
         let topics = self.topics.read().await;
         
@@ -307,6 +309,7 @@ impl GossipManager {
     }
     
     /// シャットダウン
+    #[allow(dead_code)]
     pub async fn shutdown(&self) -> P2PResult<()> {
         // すべてのトピックから離脱
         let topic_ids: Vec<String> = {

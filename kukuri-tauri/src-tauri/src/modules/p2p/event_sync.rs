@@ -17,6 +17,7 @@ pub struct EventSync {
     /// 同期状態の管理（イベントID -> 同期ステータス）
     sync_state: Arc<RwLock<HashMap<String, SyncStatus>>>,
     /// ハイブリッド配信システム
+    #[allow(dead_code)]
     hybrid_distributor: Option<Arc<HybridDistributor>>,
 }
 
@@ -50,6 +51,7 @@ impl EventSync {
     }
     
     /// ハイブリッド配信を有効化
+    #[allow(dead_code)]
     pub fn enable_hybrid_delivery(&mut self, config: Option<HybridConfig>) -> Arc<HybridDistributor> {
         let distributor = Arc::new(HybridDistributor::new(
             Arc::new(self.clone()),
@@ -62,6 +64,7 @@ impl EventSync {
     }
     
     /// ハイブリッド配信でイベントを送信
+    #[allow(dead_code)]
     pub async fn deliver_event_hybrid(
         &self,
         event: Event,
@@ -74,6 +77,7 @@ impl EventSync {
     }
     
     /// イベントの種類に基づいて優先度を決定
+    #[allow(dead_code)]
     pub fn determine_priority(&self, event: &Event) -> DeliveryPriority {
         match event.kind {
             // システムメッセージやDMは高優先度
@@ -193,6 +197,7 @@ impl EventSync {
         self.convert_to_gossip_message_internal(event)
     }
     
+    #[allow(dead_code)]
     fn convert_to_gossip_message_internal(&self, event: Event) -> P2PResult<GossipMessage> {
         let payload = NostrEventPayload { event: event.clone() };
         let payload_bytes = serde_json::to_vec(&payload)
@@ -224,6 +229,7 @@ impl EventSync {
         self.extract_topic_ids_internal(event)
     }
     
+    #[allow(dead_code)]
     fn extract_topic_ids_internal(&self, event: &Event) -> P2PResult<Vec<String>> {
         let mut topic_ids = Vec::new();
         
@@ -270,6 +276,7 @@ impl EventSync {
     }
     
     /// Nostrイベント送信時のP2P配信を有効化
+    #[allow(dead_code)]
     pub async fn enable_nostr_to_p2p_sync(&self, enabled: bool) -> P2PResult<()> {
         // TODO: EventManagerとの統合時に実装
         // EventManagerにフックを設定し、Nostrイベント送信時に自動的にP2P配信を行う
@@ -278,12 +285,14 @@ impl EventSync {
     }
     
     /// 同期状態の取得
+    #[allow(dead_code)]
     pub async fn get_sync_status(&self, event_id: &str) -> Option<SyncStatus> {
         let sync_state = self.sync_state.read().await;
         sync_state.get(event_id).copied()
     }
     
     /// 同期状態のクリーンアップ（古いエントリを削除）
+    #[allow(dead_code)]
     pub async fn cleanup_sync_state(&self, keep_recent: usize) -> P2PResult<()> {
         let mut sync_state = self.sync_state.write().await;
         if sync_state.len() > keep_recent * 2 {
