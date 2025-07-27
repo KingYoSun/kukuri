@@ -15,6 +15,7 @@
 
 ### 実装のリファレンス
 - **zustand**: storeのモックを実装/変更する前にzustand公式のドキュメント( https://zustand.docs.pmnd.rs/guides/testing )を必ず参照する
+- **zustandテスト**: Zustandストアのテスト実装時は必ず `docs/05_implementation/zustand_testing_best_practices.md` を参照する
 - **iroh-gossip**: iroh-gossipを用いる機能を実装/変更する前にiroh-gossipの公式ドキュメント ( https://docs.rs/iroh-gossip/latest/iroh_gossip/ )を必ず参照する
 - **iroh**: irohを用いる機能を実装/変更する前にirohの公式ドキュメント ( https://docs.rs/iroh/latest/iroh/)を必ず参照する
 
