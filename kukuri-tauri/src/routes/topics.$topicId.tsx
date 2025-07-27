@@ -4,6 +4,7 @@ import { usePostsByTopic } from '@/hooks';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Hash, MessageCircle, Heart } from 'lucide-react';
+import { TopicMeshVisualization } from '@/components/TopicMeshVisualization';
 
 export const Route = createFileRoute('/topics/$topicId')({
   component: TopicPage,
@@ -41,6 +42,8 @@ function TopicPage() {
           </span>
         </div>
       </div>
+
+      <TopicMeshVisualization topicId={topicId} />
 
       <div className="space-y-4">
         {isLoading ? (

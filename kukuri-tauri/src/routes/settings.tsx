@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/stores';
 import { NostrTestPanel } from '@/components/NostrTestPanel';
+import { P2PDebugPanel } from '@/components/P2PDebugPanel';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -79,13 +80,15 @@ function SettingsPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>開発者ツール</CardTitle>
-              <CardDescription>開発・デバッグ用の機能</CardDescription>
+              <CardTitle>開発者ツール - Nostr</CardTitle>
+              <CardDescription>Nostrプロトコルのテストとデバッグ</CardDescription>
             </CardHeader>
             <CardContent>
               <NostrTestPanel />
             </CardContent>
           </Card>
+
+          <P2PDebugPanel />
         </>
       )}
     </div>

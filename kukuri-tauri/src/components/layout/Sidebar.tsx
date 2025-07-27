@@ -6,6 +6,7 @@ import { useTopicStore, useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
 import { RelayStatus } from '@/components/RelayStatus';
+import { P2PStatus } from '@/components/P2PStatus';
 
 const categories = [
   { name: 'トレンド', icon: TrendingUp },
@@ -87,8 +88,9 @@ export function Sidebar() {
 
         <Separator />
 
-        <div className="p-4">
+        <div className="p-4 space-y-4">
           <RelayStatus />
+          <P2PStatus />
         </div>
       </div>
     </aside>
