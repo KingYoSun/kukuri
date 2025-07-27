@@ -136,3 +136,20 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }));
+
+// PointerEventのモック - Radix UIコンポーネントのテスト用
+class PointerEvent extends MouseEvent {
+  constructor(name: string, init?: PointerEventInit) {
+    super(name, init);
+  }
+}
+
+global.PointerEvent = PointerEvent as any;
+
+// requestAnimationFrameのモック
+global.requestAnimationFrame = (cb: any) => {
+  setTimeout(cb, 0);
+  return 0;
+};
+
+global.cancelAnimationFrame = () => {};

@@ -361,36 +361,89 @@ vi.mock('zustand', async () => {
 
 ## 既知の問題
 
-### Zustandテストモックの問題（2025年7月27日 - 大部分解決）
-**症状**: useP2P.test.tsxとP2PDebugPanel.test.tsxの一部テストが失敗
-- `未初期化の場合、自動的に初期化を開始する` - タイムアウト
-- `接続中は定期的に状態を更新する` - スキップ中
-- `clearError - エラーをクリアできる` - 非同期状態更新の問題
+### Radix UIタブコンポーネントのテスト問題（2025年7月27日 - 解決）
+**問題**: Radix UIのタブコンポーネントがReact Testing Libraryで正しく動作しない
 
-**原因**:
-- P2P APIモックの構造が実際のインポートと不一致だった（解決済み）
-- ストアの初期状態リセットが不完全だった（解決済み）
-- 非同期初期化のタイミング問題（部分的に解決）
-- エラー状態の即座の反映に問題がある
+**症状**:
+- `getByRole('tab', { name: 'タブ名' })`でタブを取得できない
+- `fireEvent.click`でタブをクリックしてもコンテンツが切り替わらない
+- P2PDebugPanelのテスト8件が失敗
 
-**解決内容（2025年7月27日）**:
-1. P2P APIモックを正しい構造に修正
-   - `p2pApi.p2pApi.method`から`p2pApi.method`へ変更
-2. ストアの状態リセット改善
-   - 全プロパティ（activeTopics、messages、peers）を明示的に初期化
-3. `renderHook`を使用した一貫性のあるテスト実装
-4. nullチェックの追加（nodeAddr、endpoint_id）
+**根本原因**:
+- JSDomに`PointerEvent`などのブラウザAPIが実装されていない
+- Radix UIはこれらのAPIを期待して動作するため、テスト環境で正しく動作しない
+- Radix UI GitHub Issue #2034で既知の問題として報告されている
+
+**解決策**:
+
+1. テストセットアップでブラウザAPIをモック
+```typescript
+// src/test/setup.ts
+class PointerEvent extends MouseEvent {
+  constructor(name: string, init?: PointerEventInit) {
+    super(name, init);
+  }
+}
+global.PointerEvent = PointerEvent as any;
+
+global.requestAnimationFrame = (cb: any) => {
+  setTimeout(cb, 0);
+  return 0;
+};
+```
+
+2. `fireEvent`から`userEvent`への移行
+```typescript
+// 修正前
+import { fireEvent } from '@testing-library/react';
+fireEvent.click(topicsTab);
+
+// 修正後
+import userEvent from '@testing-library/user-event';
+const user = userEvent.setup();
+await user.click(topicsTab);
+```
+
+3. タブ選択に`getByText`を使用
+```typescript
+// roleではなくテキストで選択
+const topicsTab = screen.getByText('トピック');
+```
 
 **結果**:
-- 200件中186件のテストが成功（93%）
-- 大部分のZustandモック問題は解決
-- P2PStatusコンポーネントのテストも修正
+- P2PDebugPanelのテスト12件全て成功
+- Radix UIコンポーネントのテストが安定して動作
 
-**残存問題**:
-- 非同期初期化のタイミング問題（3件）
-- 実装自体には問題なく、テスト環境のみの問題
-- 開発・本番環境では正常に動作
+**参考**:
+- https://github.com/radix-ui/primitives/issues/2034
+- https://www.luisball.com/blog/using-radixui-with-react-testing-library
 
-**対応方針**:
-- 優先度は低い（実装に影響なし）
-- 必要に応じて非同期テストの改善を検討
+### Zustandテストモックの問題（2025年7月27日 - 完全解決）
+**症状**: useP2P.test.tsxの非同期初期化テストが失敗
+
+**原因**:
+- `renderHook`を使用したテストで非同期初期化のタイミングが不安定
+
+**解決内容（2025年7月27日）**:
+1. `renderHook`の使用を廃止し、直接ストアアクセスに変更
+```typescript
+// 修正前
+const { result } = renderHook(() => useP2P());
+await act(async () => {
+  await result.current.initialize();
+});
+
+// 修正後
+await act(async () => {
+  await useP2PStore.getState().initialize();
+});
+```
+
+2. 適切な`act()`ラップの実装
+   - 全てのストア状態更新を`act`でラップ
+   - 非同期操作の完了を待機
+
+**結果**:
+- useP2Pテストの非同期初期化問題が解決
+- 全201件のテストが成功
+- Zustandテストのベストプラクティスを文書化

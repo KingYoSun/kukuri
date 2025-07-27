@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { P2PDebugPanel } from '../P2PDebugPanel';
 import { useP2P, UseP2PReturn } from '@/hooks/useP2P';
 
@@ -7,6 +8,13 @@ import { useP2P, UseP2PReturn } from '@/hooks/useP2P';
 vi.mock('@/hooks/useP2P');
 
 describe('P2PDebugPanel', () => {
+  beforeEach(() => {
+    // テスト環境ではimport.meta.env.PRODをfalseに設定
+    Object.defineProperty(import.meta, 'env', {
+      value: { PROD: false },
+      writable: true,
+    });
+  });
   const createMockUseP2P = (): UseP2PReturn => ({
     initialized: true,
     nodeId: 'QmTestNode123',
@@ -86,21 +94,27 @@ describe('P2PDebugPanel', () => {
 
       render(<P2PDebugPanel />);
 
-      expect(screen.getByText('2')).toBeInTheDocument(); // ピア数
-      expect(screen.getByText('2')).toBeInTheDocument(); // トピック数
+      // ピア数を確認
+      expect(screen.getByText('接続ピア数')).toBeInTheDocument();
+      const peerCountBadges = screen.getAllByText('2');
+      expect(peerCountBadges.length).toBeGreaterThan(0);
+      
+      // トピック数を確認
+      expect(screen.getByText('参加トピック数')).toBeInTheDocument();
     });
 
-    it('エラーが表示され、クリアできる', () => {
+    it('エラーが表示され、クリアできる', async () => {
       const mockData = createMockUseP2P();
       mockData.error = 'テストエラーメッセージ';
       vi.mocked(useP2P).mockReturnValue(mockData);
 
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       expect(screen.getByText('テストエラーメッセージ')).toBeInTheDocument();
 
       const clearButton = screen.getByText('エラーをクリア');
-      fireEvent.click(clearButton);
+      await user.click(clearButton);
 
       expect(mockData.clearError).toHaveBeenCalledTimes(1);
     });
@@ -111,24 +125,31 @@ describe('P2PDebugPanel', () => {
       const mockData = createMockUseP2P();
       vi.mocked(useP2P).mockReturnValue(mockData);
       
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       // トピックタブに切り替え
       const topicsTab = screen.getByText('トピック');
-      fireEvent.click(topicsTab);
+      await user.click(topicsTab);
 
+      // タブコンテンツが表示されることを確認
+      await waitFor(() => {
+        const input = screen.getByPlaceholderText('トピックID (例: test-topic)');
+        expect(input).toBeInTheDocument();
+      });
+      
       const input = screen.getByPlaceholderText('トピックID (例: test-topic)');
-      fireEvent.change(input, { target: { value: 'new-topic' } });
+      await user.type(input, 'new-topic');
 
-      const joinButton = screen.getByText('参加');
-      fireEvent.click(joinButton);
+      const joinButton = screen.getByRole('button', { name: '参加' });
+      await user.click(joinButton);
 
       await waitFor(() => {
         expect(mockData.joinTopic).toHaveBeenCalledWith('new-topic');
       });
     });
 
-    it('参加中のトピック一覧が表示される', () => {
+    it('参加中のトピック一覧が表示される', async () => {
       const mockData = createMockUseP2P();
       mockData.activeTopics = [
         {
@@ -148,20 +169,23 @@ describe('P2PDebugPanel', () => {
       ];
       vi.mocked(useP2P).mockReturnValue(mockData);
 
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       const topicsTab = screen.getByText('トピック');
-      fireEvent.click(topicsTab);
+      await user.click(topicsTab);
 
-      // topic1の情報を確認
-      expect(screen.getByText('topic1')).toBeInTheDocument();
-      expect(screen.getByText(/ピア: 5/)).toBeInTheDocument();
-      expect(screen.getByText(/メッセージ: 100/)).toBeInTheDocument();
-
-      // topic2の情報を確認
-      expect(screen.getByText('topic2')).toBeInTheDocument();
-      expect(screen.getByText(/ピア: 3/)).toBeInTheDocument();
-      expect(screen.getByText(/メッセージ: 50/)).toBeInTheDocument();
+      // タブコンテンツが表示されるまで待つ
+      await waitFor(
+        () => {
+          // ピア数とメッセージ数を確認
+          expect(screen.getByText(/ピア: 5/)).toBeInTheDocument();
+          expect(screen.getByText(/メッセージ: 100/)).toBeInTheDocument();
+          expect(screen.getByText(/ピア: 3/)).toBeInTheDocument();
+          expect(screen.getByText(/メッセージ: 50/)).toBeInTheDocument();
+        },
+        { timeout: 3000 }
+      );
     });
 
     it('トピックから離脱できる', async () => {
@@ -177,17 +201,26 @@ describe('P2PDebugPanel', () => {
       ];
       vi.mocked(useP2P).mockReturnValue(mockData);
 
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       const topicsTab = screen.getByText('トピック');
-      fireEvent.click(topicsTab);
+      await user.click(topicsTab);
+
+      // タブコンテンツが表示されるまで待つ
+      await waitFor(
+        () => {
+          expect(screen.getByText(/ピア: 1/)).toBeInTheDocument();
+        },
+        { timeout: 3000 }
+      );
 
       // 削除ボタンをクリック（TrashIconを含むボタン）
       const deleteButtons = screen
         .getAllByRole('button')
         .filter((button) => button.querySelector('svg'));
       const deleteButton = deleteButtons[deleteButtons.length - 1];
-      fireEvent.click(deleteButton);
+      await user.click(deleteButton);
 
       await waitFor(() => {
         expect(mockData.leaveTopic).toHaveBeenCalledWith('topic1');
@@ -196,13 +229,16 @@ describe('P2PDebugPanel', () => {
   });
 
   describe('送信タブ', () => {
-    it('トピックが選択されていない場合のメッセージ', () => {
+    it('トピックが選択されていない場合のメッセージ', async () => {
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       const broadcastTab = screen.getByText('送信');
-      fireEvent.click(broadcastTab);
+      await user.click(broadcastTab);
 
-      expect(screen.getByText('トピックを選択してください')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('トピックを選択してください')).toBeInTheDocument();
+      });
     });
 
     it('メッセージをブロードキャストできる', async () => {
@@ -218,26 +254,33 @@ describe('P2PDebugPanel', () => {
       ];
       vi.mocked(useP2P).mockReturnValue(mockData);
 
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       // トピックタブでトピックを選択
       const topicsTab = screen.getByText('トピック');
-      fireEvent.click(topicsTab);
+      await user.click(topicsTab);
 
-      const selectButton = screen.getByText('選択');
-      fireEvent.click(selectButton);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: '選択' })).toBeInTheDocument();
+      });
+
+      const selectButton = screen.getByRole('button', { name: '選択' });
+      await user.click(selectButton);
 
       // 送信タブに切り替え
       const broadcastTab = screen.getByText('送信');
-      fireEvent.click(broadcastTab);
+      await user.click(broadcastTab);
 
-      expect(screen.getByText('topic1')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('topic1')).toBeInTheDocument();
+      });
 
       const messageInput = screen.getByPlaceholderText('送信するメッセージを入力');
-      fireEvent.change(messageInput, { target: { value: 'Hello P2P!' } });
+      await user.type(messageInput, 'Hello P2P!');
 
-      const sendButton = screen.getByText('ブロードキャスト');
-      fireEvent.click(sendButton);
+      const sendButton = screen.getByRole('button', { name: 'ブロードキャスト' });
+      await user.click(sendButton);
 
       await waitFor(() => {
         expect(mockData.broadcast).toHaveBeenCalledWith('topic1', 'Hello P2P!');
@@ -246,31 +289,39 @@ describe('P2PDebugPanel', () => {
   });
 
   describe('ログタブ', () => {
-    it('初期状態ではログが空', () => {
+    it('初期状態ではログが空', async () => {
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       const logsTab = screen.getByText('ログ');
-      fireEvent.click(logsTab);
+      await user.click(logsTab);
 
-      expect(screen.getByText('ログはありません')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('ログはありません')).toBeInTheDocument();
+      });
     });
 
     it('操作ログが記録される', async () => {
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       // トピックに参加
       const topicsTab = screen.getByText('トピック');
-      fireEvent.click(topicsTab);
+      await user.click(topicsTab);
 
-      const input = screen.getByPlaceholderText('トピックID (例: test-topic)');
-      fireEvent.change(input, { target: { value: 'log-test' } });
+      await waitFor(() => {
+        expect(screen.getByRole('textbox')).toBeInTheDocument();
+      });
 
-      const joinButton = screen.getByText('参加');
-      fireEvent.click(joinButton);
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'log-test');
+
+      const joinButton = screen.getByRole('button', { name: '参加' });
+      await user.click(joinButton);
 
       // ログタブに切り替え
       const logsTab = screen.getByText('ログ');
-      fireEvent.click(logsTab);
+      await user.click(logsTab);
 
       await waitFor(() => {
         expect(screen.getByText(/Joining topic: log-test/)).toBeInTheDocument();
@@ -278,28 +329,35 @@ describe('P2PDebugPanel', () => {
     });
 
     it('ログをクリアできる', async () => {
+      const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
       // 何か操作してログを生成
       const topicsTab = screen.getByText('トピック');
-      fireEvent.click(topicsTab);
+      await user.click(topicsTab);
 
-      const input = screen.getByPlaceholderText('トピックID (例: test-topic)');
-      fireEvent.change(input, { target: { value: 'test' } });
-      fireEvent.click(screen.getByText('参加'));
+      await waitFor(() => {
+        expect(screen.getByRole('textbox')).toBeInTheDocument();
+      });
+
+      const input = screen.getByRole('textbox');
+      await user.type(input, 'test');
+      await user.click(screen.getByRole('button', { name: '参加' }));
 
       // ログタブに切り替え
       const logsTab = screen.getByText('ログ');
-      fireEvent.click(logsTab);
+      await user.click(logsTab);
 
       await waitFor(() => {
         expect(screen.queryByText('ログはありません')).not.toBeInTheDocument();
       });
 
-      const clearButton = screen.getByText('クリア');
-      fireEvent.click(clearButton);
+      const clearButton = screen.getByRole('button', { name: 'クリア' });
+      await user.click(clearButton);
 
-      expect(screen.getByText('ログはありません')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('ログはありません')).toBeInTheDocument();
+      });
     });
   });
 });

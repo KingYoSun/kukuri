@@ -5,6 +5,7 @@
 ## レポート一覧
 
 ### 2025年7月27日
+- [フロントエンドテスト非同期初期化問題の修正](./2025-07-27_frontend_test_async_fix.md) - Zustand非同期初期化、Radix UIテスト問題の解決
 - [バックエンドのテスト・型・リント修正](./2025-07-27_backend_test_lint_fix.md) - 未使用コード対応、P2P統合テスト修正
 - [P2Pトピック管理テスト](./2025-07-27_p2p_topic_management_tests.md) - 包括的なテスト実装（19件追加）
 - [Nostr統合 Day 6 実装](./2025-07-27_nostr_integration_day6.md) - イベント変換機能実装
