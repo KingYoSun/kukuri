@@ -1,81 +1,124 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTopicStore } from '@/stores';
 import type { Topic } from '@/stores';
+import { TauriApi } from '@/lib/api/tauri';
 
-// 仮のAPI関数（後でTauriコマンドに置き換え）
-const fetchTopics = async (): Promise<Topic[]> => {
-  // TODO: Tauriバックエンドから取得
-  return [
-    {
-      id: 'tech',
-      name: 'technology',
-      description: '技術全般について議論するトピック',
-      tags: ['tech', 'programming', 'ai'],
-      memberCount: 1234,
-      postCount: 567,
-      lastActive: Date.now(),
-      isActive: true,
-      createdAt: new Date(),
-    },
-    {
-      id: 'nostr',
-      name: 'nostr',
-      description: 'Nostrプロトコルについて',
-      tags: ['nostr', 'decentralized', 'social'],
-      memberCount: 456,
-      postCount: 234,
-      lastActive: Date.now(),
-      isActive: true,
-      createdAt: new Date(),
-    },
-  ];
-};
-
-const joinTopic = async (topicId: string): Promise<void> => {
-  // TODO: Tauriバックエンドに参加をリクエスト
-  console.log('Joining topic:', topicId);
-};
-
-const leaveTopic = async (topicId: string): Promise<void> => {
-  // TODO: Tauriバックエンドに退出をリクエスト
-  console.log('Leaving topic:', topicId);
-};
-
+// トピック一覧を取得するフック
 export const useTopics = () => {
   const { setTopics } = useTopicStore();
 
   return useQuery({
     queryKey: ['topics'],
     queryFn: async () => {
-      const topics = await fetchTopics();
+      const apiTopics = await TauriApi.getTopics();
+      // APIレスポンスをフロントエンドの型に変換
+      const topics: Topic[] = apiTopics.map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        description: topic.description,
+        tags: [], // APIにタグ情報がない場合は空配列
+        memberCount: 0, // TODO: 実際のメンバー数を取得
+        postCount: 0, // TODO: 実際の投稿数を取得
+        lastActive: topic.updated_at,
+        isActive: true,
+        createdAt: new Date(topic.created_at * 1000),
+      }));
       setTopics(topics);
       return topics;
     },
+    refetchInterval: 30000, // 30秒ごとに更新
   });
 };
 
-export const useJoinTopic = () => {
+// 単一トピックを取得するフック
+export const useTopic = (topicId: string) => {
+  const { topics } = useTopicStore();
+
+  return useQuery({
+    queryKey: ['topic', topicId],
+    queryFn: async () => {
+      // まずストアから取得を試みる
+      const cachedTopic = topics.get(topicId);
+      if (cachedTopic) {
+        return cachedTopic;
+      }
+
+      // なければAPIから取得
+      const apiTopics = await TauriApi.getTopics();
+      const apiTopic = apiTopics.find((t) => t.id === topicId);
+
+      if (!apiTopic) {
+        throw new Error('Topic not found');
+      }
+
+      return {
+        id: apiTopic.id,
+        name: apiTopic.name,
+        description: apiTopic.description,
+        tags: [],
+        memberCount: 0,
+        postCount: 0,
+        lastActive: apiTopic.updated_at,
+        isActive: true,
+        createdAt: new Date(apiTopic.created_at * 1000),
+      } as Topic;
+    },
+    enabled: !!topicId,
+  });
+};
+
+// トピック作成用のミューテーション
+export const useCreateTopic = () => {
   const queryClient = useQueryClient();
-  const { joinTopic: joinTopicStore } = useTopicStore();
+  const { createTopic } = useTopicStore();
 
   return useMutation({
-    mutationFn: joinTopic,
-    onSuccess: (_, topicId) => {
-      joinTopicStore(topicId);
+    mutationFn: async ({ name, description }: { name: string; description: string }) => {
+      return await createTopic(name, description);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['topics'] });
     },
   });
 };
 
-export const useLeaveTopic = () => {
+// トピック更新用のミューテーション
+export const useUpdateTopic = () => {
   const queryClient = useQueryClient();
-  const { leaveTopic: leaveTopicStore } = useTopicStore();
+  const { updateTopicRemote } = useTopicStore();
 
   return useMutation({
-    mutationFn: leaveTopic,
-    onSuccess: (_, topicId) => {
-      leaveTopicStore(topicId);
+    mutationFn: async ({
+      id,
+      name,
+      description,
+    }: {
+      id: string;
+      name: string;
+      description: string;
+    }) => {
+      return await updateTopicRemote(id, name, description);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['topic', variables.id] });
+    },
+  });
+};
+
+// トピック削除用のミューテーション
+export const useDeleteTopic = () => {
+  const queryClient = useQueryClient();
+  const { deleteTopicRemote } = useTopicStore();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return await deleteTopicRemote(id);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['topics'] });
     },
   });
 };
+
+// P2Pトピック参加はTopicCard内で直接storeのメソッドを使用

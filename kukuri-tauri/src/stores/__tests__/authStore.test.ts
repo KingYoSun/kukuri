@@ -238,7 +238,7 @@ describe('authStore', () => {
       expect.any(Error),
       expect.objectContaining({
         context: 'AuthStore.login',
-      })
+      }),
     );
     // ログイン自体は成功する
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
@@ -270,7 +270,7 @@ describe('authStore', () => {
       expect.any(Error),
       expect.objectContaining({
         context: 'AuthStore.logout',
-      })
+      }),
     );
     // ログアウト自体は成功する
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
@@ -352,7 +352,7 @@ describe('authStore', () => {
         expect.any(Error),
         expect.objectContaining({
           context: 'AuthStore.initialize',
-        })
+        }),
       );
 
       // エラーがあっても初期状態になること

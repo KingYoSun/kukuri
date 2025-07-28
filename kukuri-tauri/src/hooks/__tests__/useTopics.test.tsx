@@ -1,9 +1,40 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useTopics, useJoinTopic, useLeaveTopic } from '../useTopics';
+import { useTopics, useTopic, useCreateTopic, useUpdateTopic, useDeleteTopic } from '../useTopics';
 import { useTopicStore } from '@/stores';
 import { ReactNode } from 'react';
+
+// TauriAPIのモック
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    getTopics: vi.fn().mockResolvedValue([
+      {
+        id: 'tech',
+        name: 'technology',
+        description: '技術全般について議論するトピック',
+        created_at: Math.floor(Date.now() / 1000),
+        updated_at: Math.floor(Date.now() / 1000),
+      },
+      {
+        id: 'nostr',
+        name: 'nostr',
+        description: 'Nostrプロトコルについて',
+        created_at: Math.floor(Date.now() / 1000),
+        updated_at: Math.floor(Date.now() / 1000),
+      },
+    ]),
+    createTopic: vi.fn().mockResolvedValue({
+      id: 'new-topic',
+      name: '新しいトピック',
+      description: '新しいトピックの説明',
+      created_at: Math.floor(Date.now() / 1000),
+      updated_at: Math.floor(Date.now() / 1000),
+    }),
+    updateTopic: vi.fn().mockResolvedValue(undefined),
+    deleteTopic: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -20,6 +51,7 @@ const createWrapper = () => {
 
 describe('useTopics hooks', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useTopicStore.setState({
       topics: new Map(),
       currentTopic: null,
@@ -38,44 +70,127 @@ describe('useTopics hooks', () => {
       });
 
       const state = useTopicStore.getState();
-      expect(state.topics.size).toBeGreaterThan(0);
+      expect(state.topics.size).toBe(2);
       expect(state.topics.has('tech')).toBe(true);
       expect(state.topics.has('nostr')).toBe(true);
+      
+      const techTopic = state.topics.get('tech');
+      expect(techTopic?.name).toBe('technology');
+      expect(techTopic?.description).toBe('技術全般について議論するトピック');
     });
-  });
 
-  describe('useJoinTopic', () => {
-    it('トピック参加成功時にjoinedTopicsが更新されること', async () => {
-      const { result } = renderHook(() => useJoinTopic(), {
+    it('データがフロントエンドの型に正しく変換されること', async () => {
+      const { result } = renderHook(() => useTopics(), {
         wrapper: createWrapper(),
       });
 
-      await result.current.mutateAsync('tech');
-
       await waitFor(() => {
-        const state = useTopicStore.getState();
-        expect(state.joinedTopics).toContain('tech');
+        expect(result.current.data).toBeDefined();
       });
+
+      const topics = result.current.data!;
+      expect(topics[0]).toMatchObject({
+        id: 'tech',
+        name: 'technology',
+        description: '技術全般について議論するトピック',
+        tags: [],
+        memberCount: 0,
+        postCount: 0,
+        isActive: true,
+      });
+      expect(topics[0].createdAt).toBeInstanceOf(Date);
     });
   });
 
-  describe('useLeaveTopic', () => {
-    it('トピック退出成功時にjoinedTopicsから削除されること', async () => {
+  describe('useTopic', () => {
+    it('ストアにキャッシュがある場合はそれを返すこと', async () => {
+      const cachedTopic = {
+        id: 'cached',
+        name: 'キャッシュされたトピック',
+        description: 'キャッシュテスト',
+        tags: [],
+        memberCount: 10,
+        postCount: 50,
+        lastActive: Date.now() / 1000,
+        isActive: true,
+        createdAt: new Date(),
+      };
+
       useTopicStore.setState({
-        joinedTopics: ['tech', 'nostr'],
+        topics: new Map([['cached', cachedTopic]]),
       });
 
-      const { result } = renderHook(() => useLeaveTopic(), {
+      const { result } = renderHook(() => useTopic('cached'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data).toEqual(cachedTopic);
+    });
+
+    it('ストアにない場合はAPIから取得すること', async () => {
+      const { result } = renderHook(() => useTopic('tech'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(result.current.data?.id).toBe('tech');
+      expect(result.current.data?.name).toBe('technology');
+    });
+  });
+
+  describe('useCreateTopic', () => {
+    it('トピック作成が成功すること', async () => {
+      const mockCreateTopic = vi.spyOn(useTopicStore.getState(), 'createTopic');
+      
+      const { result } = renderHook(() => useCreateTopic(), {
+        wrapper: createWrapper(),
+      });
+
+      await result.current.mutateAsync({
+        name: '新しいトピック',
+        description: '新しいトピックの説明',
+      });
+
+      expect(mockCreateTopic).toHaveBeenCalledWith('新しいトピック', '新しいトピックの説明');
+    });
+  });
+
+  describe('useUpdateTopic', () => {
+    it('トピック更新が成功すること', async () => {
+      const mockUpdateTopic = vi.spyOn(useTopicStore.getState(), 'updateTopicRemote');
+      
+      const { result } = renderHook(() => useUpdateTopic(), {
+        wrapper: createWrapper(),
+      });
+
+      await result.current.mutateAsync({
+        id: 'tech',
+        name: '更新されたトピック',
+        description: '更新された説明',
+      });
+
+      expect(mockUpdateTopic).toHaveBeenCalledWith('tech', '更新されたトピック', '更新された説明');
+    });
+  });
+
+  describe('useDeleteTopic', () => {
+    it('トピック削除が成功すること', async () => {
+      const mockDeleteTopic = vi.spyOn(useTopicStore.getState(), 'deleteTopicRemote');
+      
+      const { result } = renderHook(() => useDeleteTopic(), {
         wrapper: createWrapper(),
       });
 
       await result.current.mutateAsync('tech');
 
-      await waitFor(() => {
-        const state = useTopicStore.getState();
-        expect(state.joinedTopics).not.toContain('tech');
-        expect(state.joinedTopics).toContain('nostr');
-      });
+      expect(mockDeleteTopic).toHaveBeenCalledWith('tech');
     });
   });
 });

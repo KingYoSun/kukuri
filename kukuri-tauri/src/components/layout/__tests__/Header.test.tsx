@@ -51,7 +51,7 @@ describe('Header', () => {
 
   it('ユーザーメニューが正しく動作すること', async () => {
     const user = userEvent.setup();
-    
+
     // デフォルトのユーザーを設定
     useAuthStore.setState({
       currentUser: {

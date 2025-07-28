@@ -102,24 +102,25 @@ initialize: async () => {
    - 状態のクリア
    - ウェルカム画面へのリダイレクト
 
-## Phase 2: データ連携の確立
+## Phase 2: データ連携の確立 ✓ 完了
 
-### 2.1 ホームページの実データ表示
+### 2.1 ホームページの実データ表示 ✓ 完了
 
-#### タスク
-1. `src/pages/Home.tsx` の修正
+#### 完了したタスク
+1. `src/pages/Home.tsx` の修正 ✓
    - ハードコードされた投稿を削除
    - useQueryを使用した実データ取得
-2. `src/hooks/usePosts.ts` の改善
+2. `src/hooks/usePosts.ts` の改善 ✓
    - タイムライン用の投稿取得ロジック
-   - ページネーション対応
-3. `src/components/posts/PostCard.tsx` の作成
+   - 30秒ごとの自動更新
+3. `src/components/posts/PostCard.tsx` の作成 ✓
    - 投稿表示コンポーネント
-   - リアクションボタンの動作実装
+   - いいね機能の実装
+   - 日本語の相対時刻表示
 
 #### 実装詳細
 ```typescript
-// usePosts.ts
+// usePosts.ts（実装済み）
 export function useTimelinePosts() {
   return useQuery({
     queryKey: ['timeline'],
@@ -132,18 +133,19 @@ export function useTimelinePosts() {
 }
 ```
 
-### 2.2 トピック一覧の実装
+### 2.2 トピック一覧の実装 ✓ 完了
 
-#### タスク
-1. `src/routes/topics.tsx` の作成
+#### 完了したタスク
+1. `src/routes/topics.tsx` の作成 ✓
    - トピック探索ページ
-2. `src/components/topics/TopicList.tsx` の実装
-   - トピック一覧表示
-   - 検索機能
-   - ソート機能
-3. `src/components/topics/TopicCard.tsx` の作成
+   - リアルタイム検索機能
+2. `src/components/topics/TopicCard.tsx` の作成 ✓
    - トピック情報表示
-   - 参加ボタン
+   - 参加/退出ボタン
+   - メンバー数、投稿数、最終活動時刻の表示
+3. `src/hooks/useTopics.ts` の実装 ✓
+   - TauriAPIを使用した実データ取得
+   - CRUD操作用のミューテーション
 
 ### 2.3 リアルタイム更新の実装
 
@@ -276,18 +278,25 @@ export function PeerConnectionPanel() {
 ## 開発スケジュール
 
 ### 工数見積もり
-- Phase 1: 2-3日
-- Phase 2: 3-4日（手動P2P接続機能を含む）
-- Phase 3: 3-4日
+- Phase 1: ✓ 完了（2日）
+- Phase 2: ✓ 完了（2日 - 手動P2P接続機能は保留）
+- Phase 3: 3-4日（次フェーズ）
 - Phase 4: 2-3日
+
+### 実績
+- Phase 1: 2025年7月28日完了（認証フロー実装とテスト）
+- Phase 2: 2025年7月28日完了（データ連携基盤）
+  - 2.1: 投稿の実データ表示機能
+  - 2.2: トピック一覧の実データ表示機能
 
 ### 発見層実装との連携
 - Phase 1-2完了後、並行して発見層実装を開始
 - 手動接続機能により、発見層完成前でもP2P機能をテスト可能
 
 ### 優先順位による調整
-- 最初にMVPとしてPhase 1-2を完成させる
-- ユーザーテストの結果に基づいてPhase 3-4を調整
+- Phase 1-2は完了 ✓
+- Phase 3（主要機能の実装）に着手
+- ユーザーテストの結果に基づいてPhase 4を調整
 
 ## テスト計画
 

@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Hash, Plus, TrendingUp, Users } from 'lucide-react';
+import { Hash, Plus, TrendingUp, Users, List } from 'lucide-react';
 import { useTopicStore, useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
@@ -9,6 +9,7 @@ import { RelayStatus } from '@/components/RelayStatus';
 import { P2PStatus } from '@/components/P2PStatus';
 
 const categories = [
+  { name: 'トピック一覧', icon: List, path: '/topics' },
   { name: 'トレンド', icon: TrendingUp },
   { name: 'フォロー中', icon: Users },
 ];
@@ -52,7 +53,12 @@ export function Sidebar() {
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground">カテゴリー</h3>
           <div className="space-y-1">
             {categories.map((category) => (
-              <Button key={category.name} variant="ghost" className="w-full justify-start">
+              <Button
+                key={category.name}
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => category.path && navigate({ to: category.path })}
+              >
                 <category.icon className="mr-2 h-4 w-4" />
                 {category.name}
               </Button>

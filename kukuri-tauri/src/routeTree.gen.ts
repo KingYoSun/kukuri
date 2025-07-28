@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ProfileSetupRouteImport } from './routes/profile-setup'
 import { Route as LoginRouteImport } from './routes/login'
@@ -19,6 +20,11 @@ import { Route as TopicsTopicIdRouteImport } from './routes/topics.$topicId'
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TopicsRoute = TopicsRouteImport.update({
+  id: '/topics',
+  path: '/topics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -42,9 +48,9 @@ const IndexRoute = IndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const TopicsTopicIdRoute = TopicsTopicIdRouteImport.update({
-  id: '/topics/$topicId',
-  path: '/topics/$topicId',
-  getParentRoute: () => rootRouteImport,
+  id: '/$topicId',
+  path: '/$topicId',
+  getParentRoute: () => TopicsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
   '/settings': typeof SettingsRoute
+  '/topics': typeof TopicsRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
   '/settings': typeof SettingsRoute
+  '/topics': typeof TopicsRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
   '/settings': typeof SettingsRoute
+  '/topics': typeof TopicsRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
@@ -79,6 +88,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/profile-setup'
     | '/settings'
+    | '/topics'
     | '/welcome'
     | '/topics/$topicId'
   fileRoutesByTo: FileRoutesByTo
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/profile-setup'
     | '/settings'
+    | '/topics'
     | '/welcome'
     | '/topics/$topicId'
   id:
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/profile-setup'
     | '/settings'
+    | '/topics'
     | '/welcome'
     | '/topics/$topicId'
   fileRoutesById: FileRoutesById
@@ -104,8 +116,8 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ProfileSetupRoute: typeof ProfileSetupRoute
   SettingsRoute: typeof SettingsRoute
+  TopicsRoute: typeof TopicsRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
-  TopicsTopicIdRoute: typeof TopicsTopicIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -115,6 +127,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/topics': {
+      id: '/topics'
+      path: '/topics'
+      fullPath: '/topics'
+      preLoaderRoute: typeof TopicsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -147,21 +166,32 @@ declare module '@tanstack/react-router' {
     }
     '/topics/$topicId': {
       id: '/topics/$topicId'
-      path: '/topics/$topicId'
+      path: '/$topicId'
       fullPath: '/topics/$topicId'
       preLoaderRoute: typeof TopicsTopicIdRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof TopicsRoute
     }
   }
 }
+
+interface TopicsRouteChildren {
+  TopicsTopicIdRoute: typeof TopicsTopicIdRoute
+}
+
+const TopicsRouteChildren: TopicsRouteChildren = {
+  TopicsTopicIdRoute: TopicsTopicIdRoute,
+}
+
+const TopicsRouteWithChildren =
+  TopicsRoute._addFileChildren(TopicsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   ProfileSetupRoute: ProfileSetupRoute,
   SettingsRoute: SettingsRoute,
+  TopicsRoute: TopicsRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
-  TopicsTopicIdRoute: TopicsTopicIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

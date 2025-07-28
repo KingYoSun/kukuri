@@ -9,7 +9,15 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [TanStackRouterVite(), react(), tailwindcss()],
+  plugins: [
+    TanStackRouterVite({
+      routesDirectory: './src/routes',
+      generatedRouteTree: './src/routeTree.gen.ts',
+      routeFileIgnorePattern: '(__tests__|test|spec)\\.(ts|tsx|js|jsx)$',
+    }), 
+    react(), 
+    tailwindcss()
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src")
