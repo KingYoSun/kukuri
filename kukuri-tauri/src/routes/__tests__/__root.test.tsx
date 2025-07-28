@@ -2,14 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { Route } from '../__root';
 import { useAuthStore } from '@/stores/authStore';
-import { useTopics, useP2P } from '@/hooks';
+import { useTopics, useP2P, useAuth } from '@/hooks';
 
 // モック
 const mockNavigate = vi.fn();
+const mockPathname = vi.fn(() => '/');
+const mockLocation = { pathname: '/' };
+
 vi.mock('@tanstack/react-router', () => ({
-  createRootRoute: vi.fn((config: any) => ({ component: config.component })),
+  createRootRoute: vi.fn((config: { component: React.ComponentType }) => ({ component: config.component })),
   Outlet: () => <div data-testid="outlet">Outlet</div>,
   useNavigate: () => mockNavigate,
+  useLocation: () => mockLocation,
 }));
 
 vi.mock('@/components/layout/MainLayout', () => ({
@@ -20,9 +24,6 @@ vi.mock('@/components/layout/MainLayout', () => ({
 
 vi.mock('@/stores/authStore');
 vi.mock('@/hooks');
-
-// window.location.pathnameのモック
-const mockPathname = vi.fn();
 Object.defineProperty(window, 'location', {
   value: {
     get pathname() {
@@ -38,7 +39,7 @@ describe('__root (Authentication Guard)', () => {
   
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPathname.mockReturnValue('/');
+    mockLocation.pathname = '/';
     
     // デフォルトのモック設定
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
@@ -76,7 +77,7 @@ describe('__root (Authentication Guard)', () => {
 
   it('初期化完了後、未認証で保護されたページにアクセスするとウェルカム画面にリダイレクトする', async () => {
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/');
+    mockLocation.pathname = '/';
     
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       isAuthenticated: false,
@@ -93,7 +94,7 @@ describe('__root (Authentication Guard)', () => {
 
   it('初期化完了後、認証済みで認証ページにアクセスするとホーム画面にリダイレクトする', async () => {
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/welcome');
+    mockLocation.pathname =('/welcome');
     
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       isAuthenticated: true,
@@ -110,7 +111,7 @@ describe('__root (Authentication Guard)', () => {
 
   it('未認証で保護されたページにアクセスするとリダイレクト中メッセージを表示する', async () => {
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/topics');
+    mockLocation.pathname =('/topics');
     
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       isAuthenticated: false,
@@ -127,7 +128,7 @@ describe('__root (Authentication Guard)', () => {
 
   it('認証済みで通常ページにアクセスするとレイアウトありで表示される', async () => {
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/');
+    mockLocation.pathname =('/');
     
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       isAuthenticated: true,
@@ -144,7 +145,7 @@ describe('__root (Authentication Guard)', () => {
 
   it('トピックデータ読み込み中は読み込み中メッセージを表示する', async () => {
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/');
+    mockLocation.pathname =('/');
     
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       isAuthenticated: true,
@@ -170,7 +171,7 @@ describe('__root (Authentication Guard)', () => {
     
     for (const path of protectedPaths) {
       vi.clearAllMocks();
-      mockPathname.mockReturnValue(path);
+      mockLocation.pathname = path;
       
       (useAuthStore as unknown as vi.Mock).mockReturnValue({
         isAuthenticated: false,
@@ -192,7 +193,7 @@ describe('__root (Authentication Guard)', () => {
     
     for (const path of authPaths) {
       vi.clearAllMocks();
-      mockPathname.mockReturnValue(path);
+      mockLocation.pathname = path;
       
       (useAuthStore as unknown as vi.Mock).mockReturnValue({
         isAuthenticated: true,
@@ -210,7 +211,7 @@ describe('__root (Authentication Guard)', () => {
   it('トピックデータが読み込まれた時にコンソールログが出力される', async () => {
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/');
+    mockLocation.pathname =('/');
     
     const mockTopics = [{ id: '1', name: 'Test Topic' }];
     
@@ -236,7 +237,7 @@ describe('__root (Authentication Guard)', () => {
   it('P2P初期化状態がコンソールログに出力される', async () => {
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockInitialize.mockResolvedValue(undefined);
-    mockPathname.mockReturnValue('/');
+    mockLocation.pathname =('/');
     
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       isAuthenticated: true,

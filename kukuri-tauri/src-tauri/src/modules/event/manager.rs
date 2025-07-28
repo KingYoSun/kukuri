@@ -5,8 +5,6 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, error, debug};
-use std::time::Duration;
-use tokio::time;
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
 

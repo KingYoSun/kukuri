@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, error, warn};
+use tracing::{info, warn};
 use std::collections::HashMap;
 
 /// リレーの接続状態
@@ -46,6 +46,11 @@ impl NostrClientManager {
 
     /// リレーに接続
     pub async fn add_relay(&self, url: &str) -> Result<()> {
+        // クライアントが初期化されているかチェック
+        if self.client.read().await.is_none() {
+            return Err(anyhow::anyhow!("Client not initialized"));
+        }
+        
         // 既存のNostrリレーへの接続を無効化
         info!("Skipping relay connection to {} (disabled)", url);
         
@@ -73,6 +78,11 @@ impl NostrClientManager {
 
     /// 全てのリレーに接続
     pub async fn connect(&self) -> Result<()> {
+        // クライアントが初期化されているかチェック
+        if self.client.read().await.is_none() {
+            return Err(anyhow::anyhow!("Client not initialized"));
+        }
+        
         // 既存のNostrリレーへの接続を無効化
         info!("Skipping connection to all relays (disabled)");
         Ok(())

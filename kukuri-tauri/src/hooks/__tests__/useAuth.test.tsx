@@ -9,8 +9,14 @@ import { ReactNode } from 'react';
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     logout: vi.fn().mockResolvedValue(undefined),
-    login: vi.fn(),
-    generateKeypair: vi.fn(),
+    login: vi.fn().mockResolvedValue({
+      public_key: 'pubkey123',
+      npub: 'npub123',
+    }),
+    generateKeypair: vi.fn().mockResolvedValue({
+      public_key: 'pubkey123',
+      nsec: 'nsec123',
+    }),
   },
 }));
 

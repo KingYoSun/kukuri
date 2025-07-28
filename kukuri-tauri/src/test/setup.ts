@@ -130,12 +130,49 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// ResizeObserverのモック
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// ResizeObserverのモック - Radix UI互換
+class ResizeObserverMock {
+  callback: ResizeObserverCallback;
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    // グローバルなインスタンスに自身を登録
+    (global as any).__resizeObserverInstances = (global as any).__resizeObserverInstances || [];
+    (global as any).__resizeObserverInstances.push(this);
+  }
+}
+
+global.ResizeObserver = ResizeObserverMock as any;
+
+// ResizeObserverEntryのモック
+global.ResizeObserverEntry = class ResizeObserverEntry {
+  target: Element;
+  contentRect: DOMRectReadOnly;
+  borderBoxSize: ReadonlyArray<ResizeObserverSize>;
+  contentBoxSize: ReadonlyArray<ResizeObserverSize>;
+  devicePixelContentBoxSize: ReadonlyArray<ResizeObserverSize>;
+  
+  constructor(target: Element) {
+    this.target = target;
+    this.contentRect = {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      toJSON: () => ({})
+    };
+    this.borderBoxSize = [];
+    this.contentBoxSize = [];
+    this.devicePixelContentBoxSize = [];
+  }
+} as any;
 
 // PointerEventのモック - Radix UIコンポーネントのテスト用
 class PointerEvent extends MouseEvent {

@@ -18,6 +18,14 @@ vi.mock('@/lib/api/nostr', () => ({
   getRelayStatus: vi.fn().mockResolvedValue([]),
 }));
 
+// SecureStorage APIをモック
+vi.mock('@/lib/api/secureStorage', () => ({
+  SecureStorageApi: {
+    getCurrentAccount: vi.fn().mockResolvedValue(null),
+    listAccounts: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 import { initializeNostr, disconnectNostr } from '@/lib/api/nostr';
 
 const mockInitializeNostr = initializeNostr as MockedFunction<typeof initializeNostr>;
@@ -313,17 +321,17 @@ describe('authStore', () => {
       expect(state.privateKey).toBeNull();
     });
 
-    it('localStorageのパースエラーが処理されること', async () => {
+    it('SecureStorageのエラーが処理されること', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       
-      // 不正なJSONを保存
-      localStorage.setItem('auth-storage', 'invalid json');
+      // SecureStorageApiにエラーを発生させる
+      const { SecureStorageApi } = await import('@/lib/api/secureStorage');
+      (SecureStorageApi.getCurrentAccount as vi.Mock).mockRejectedValueOnce(new Error('Storage error'));
 
       // initialize実行
       await useAuthStore.getState().initialize();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to parse auth storage:', expect.any(Error));
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to initialize auth store:', expect.any(Error));
       
       // エラーがあっても初期状態になること
       const state = useAuthStore.getState();
@@ -332,32 +340,31 @@ describe('authStore', () => {
       expect(state.privateKey).toBeNull();
 
       consoleErrorSpy.mockRestore();
-      consoleLogSpy.mockRestore();
     });
 
-    it('保存された認証状態がある場合、コンソールログが出力されること', async () => {
-      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      
-      // localStorageに認証状態を保存
-      const savedState = {
-        state: {
-          isAuthenticated: true,
-          currentUser: {
-            id: 'test123',
-            pubkey: 'pubkey123',
-            npub: 'npub123',
-            name: 'ユーザー',
-          },
+    it('SecureStorageにアカウントがある場合、自動ログインすること', async () => {
+      const mockAccount = {
+        npub: 'npub123',
+        nsec: 'nsec123',
+        pubkey: 'pubkey123',
+        metadata: {
+          name: 'テストユーザー',
+          display_name: 'テストユーザー',
+          picture: 'https://example.com/avatar.png',
         },
       };
-      localStorage.setItem('auth-storage', JSON.stringify(savedState));
+      
+      const { SecureStorageApi } = await import('@/lib/api/secureStorage');
+      (SecureStorageApi.getCurrentAccount as vi.Mock).mockResolvedValueOnce(mockAccount);
 
       // initialize実行
       await useAuthStore.getState().initialize();
 
-      expect(consoleLogSpy).toHaveBeenCalledWith('Previous session found, but re-authentication required');
-
-      consoleLogSpy.mockRestore();
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.currentUser).not.toBeNull();
+      expect(state.currentUser?.npub).toBe('npub123');
+      expect(mockInitializeNostr).toHaveBeenCalled();
     });
   });
 });

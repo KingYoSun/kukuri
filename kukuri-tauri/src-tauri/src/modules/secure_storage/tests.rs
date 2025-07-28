@@ -2,37 +2,51 @@
 mod tests {
     use super::super::*;
     use std::sync::Mutex;
-    use once_cell::sync::Lazy;
+    use std::collections::HashMap;
     
-    // テスト用のモックストレージ
-    static MOCK_STORAGE: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| {
-        Mutex::new(HashMap::new())
-    });
+    // テスト用のモックストレージ - thread_localを使用して各テストスレッドで独立
+    thread_local! {
+        static MOCK_STORAGE: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
+    }
+    
+    fn with_mock_storage<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut HashMap<String, String>) -> R,
+    {
+        MOCK_STORAGE.with(|storage| {
+            let mut storage = storage.lock().unwrap();
+            f(&mut *storage)
+        })
+    }
     
     // テスト用のSecureStorageラッパー
     pub struct TestSecureStorage;
     
     impl TestSecureStorage {
         fn save_to_mock(key: &str, value: &str) -> Result<()> {
-            let mut storage = MOCK_STORAGE.lock().unwrap();
-            storage.insert(key.to_string(), value.to_string());
+            with_mock_storage(|storage| {
+                storage.insert(key.to_string(), value.to_string());
+            });
             Ok(())
         }
         
         fn get_from_mock(key: &str) -> Result<Option<String>> {
-            let storage = MOCK_STORAGE.lock().unwrap();
-            Ok(storage.get(key).cloned())
+            Ok(with_mock_storage(|storage| {
+                storage.get(key).cloned()
+            }))
         }
         
         fn delete_from_mock(key: &str) -> Result<()> {
-            let mut storage = MOCK_STORAGE.lock().unwrap();
-            storage.remove(key);
+            with_mock_storage(|storage| {
+                storage.remove(key);
+            });
             Ok(())
         }
         
         fn clear_mock() {
-            let mut storage = MOCK_STORAGE.lock().unwrap();
-            storage.clear();
+            with_mock_storage(|storage| {
+                storage.clear();
+            });
         }
     }
     
@@ -195,7 +209,7 @@ mod tests {
         // 各アカウントの秘密鍵が取得できることを確認
         for (npub, nsec, _, _) in &accounts {
             let retrieved_nsec = TestSecureStorage::get_from_mock(npub).unwrap();
-            assert_eq!(retrieved_nsec, Some(nsec.to_string()));
+            assert_eq!(retrieved_nsec, Some(nsec.to_string()), "Failed to retrieve nsec for {}", npub);
         }
     }
     
