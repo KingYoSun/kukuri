@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { LoginForm } from '../LoginForm';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode } from 'react';
 
 // モック
 const mockNavigate = vi.fn();
@@ -20,6 +22,19 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/stores/authStore');
 
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+};
+
 describe('LoginForm', () => {
   const mockLoginWithNsec = vi.fn();
   
@@ -35,7 +50,7 @@ describe('LoginForm', () => {
   });
 
   it('ログインフォームが正しく表示される', () => {
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
 
     // ヘッダー
     expect(screen.getByRole('button', { name: /戻る/ })).toBeInTheDocument();
@@ -60,7 +75,7 @@ describe('LoginForm', () => {
   it('戻るボタンがクリックされた時、ウェルカム画面に遷移する', async () => {
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const backButton = screen.getByRole('button', { name: /戻る/ });
     await user.click(backButton);
@@ -71,7 +86,7 @@ describe('LoginForm', () => {
   it('パスワード表示/非表示の切り替えが動作する', async () => {
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const input = screen.getByLabelText('秘密鍵（nsec）');
     const toggleButton = screen.getByRole('button', { name: '' }); // アイコンボタン
@@ -91,7 +106,7 @@ describe('LoginForm', () => {
   it('空の秘密鍵でログインしようとするとエラーを表示する', async () => {
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const loginButton = screen.getByRole('button', { name: 'ログイン' });
     await user.click(loginButton);
@@ -103,7 +118,7 @@ describe('LoginForm', () => {
   it('無効な形式の秘密鍵でログインしようとするとエラーを表示する', async () => {
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const input = screen.getByLabelText('秘密鍵（nsec）');
     await user.type(input, 'invalid-nsec');
@@ -119,7 +134,7 @@ describe('LoginForm', () => {
     mockLoginWithNsec.mockResolvedValue(undefined);
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const input = screen.getByLabelText('秘密鍵（nsec）');
     await user.type(input, 'nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
@@ -151,7 +166,7 @@ describe('LoginForm', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const input = screen.getByLabelText('秘密鍵（nsec）');
     await user.type(input, 'nsec1invalid');
@@ -179,7 +194,7 @@ describe('LoginForm', () => {
   it('空の秘密鍵でエンターキーを押してもエラーが表示される', async () => {
     const user = userEvent.setup();
     
-    render(<LoginForm />);
+    render(<LoginForm />, { wrapper: createWrapper() });
     
     const input = screen.getByLabelText('秘密鍵（nsec）');
     

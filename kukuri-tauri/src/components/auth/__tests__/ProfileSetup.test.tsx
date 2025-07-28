@@ -5,6 +5,8 @@ import { ProfileSetup } from '../ProfileSetup';
 import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode } from 'react';
 
 // モック
 const mockNavigate = vi.fn();
@@ -21,6 +23,19 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/stores/authStore');
 vi.mock('@/lib/api/nostr');
+
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+};
 
 describe('ProfileSetup', () => {
   const mockUpdateUser = vi.fn();
@@ -48,7 +63,7 @@ describe('ProfileSetup', () => {
   });
 
   it('プロフィール設定フォームが正しく表示される', () => {
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
 
     // ヘッダー
     const cardTitle = screen.getByText('プロフィール設定').closest('[data-slot="card-title"]');
@@ -86,7 +101,7 @@ describe('ProfileSetup', () => {
       updateUser: mockUpdateUser,
     });
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
 
     expect(screen.getByDisplayValue('既存ユーザー')).toBeInTheDocument();
     expect(screen.getByDisplayValue('@existing')).toBeInTheDocument();
@@ -98,7 +113,7 @@ describe('ProfileSetup', () => {
   it('後で設定ボタンがクリックされた時、ホーム画面に遷移する', async () => {
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     const skipButton = screen.getByRole('button', { name: '後で設定' });
     await user.click(skipButton);
@@ -109,7 +124,7 @@ describe('ProfileSetup', () => {
   it('名前が未入力の場合、エラーを表示する', async () => {
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     const submitButton = screen.getByRole('button', { name: '設定を完了' });
     await user.click(submitButton);
@@ -122,7 +137,7 @@ describe('ProfileSetup', () => {
     (updateNostrMetadata as vi.Mock).mockResolvedValue(undefined);
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     // フォーム入力
     await user.type(screen.getByLabelText('名前 *'), 'テストユーザー');
@@ -171,7 +186,7 @@ describe('ProfileSetup', () => {
     (updateNostrMetadata as vi.Mock).mockResolvedValue(undefined);
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     // 名前のみ入力
     await user.type(screen.getByLabelText('名前 *'), 'テストユーザー');
@@ -206,7 +221,7 @@ describe('ProfileSetup', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     await user.type(screen.getByLabelText('名前 *'), 'テストユーザー');
     
@@ -233,7 +248,7 @@ describe('ProfileSetup', () => {
   it('アバターのイニシャルが正しく表示される', async () => {
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     // 名前を入力
     await user.type(screen.getByLabelText('名前 *'), 'Test User');
@@ -246,7 +261,7 @@ describe('ProfileSetup', () => {
   it('複数単語の名前から正しくイニシャルを生成する', async () => {
     const user = userEvent.setup();
     
-    render(<ProfileSetup />);
+    render(<ProfileSetup />, { wrapper: createWrapper() });
     
     // 3単語以上の名前
     await user.type(screen.getByLabelText('名前 *'), 'John Paul Smith');
