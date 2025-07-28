@@ -108,7 +108,7 @@ kukuri/
 
 - [プロジェクト設計書](docs/01_project/design_doc.md)
 - [システム設計書](docs/02_architecture/system_design.md)
-- [実装計画](docs/05_implementation/implementation_plan.md)
+- [実装計画](docs/03_implementation/implementation_plan.md)
 - [開発環境セットアップガイド](docs/01_project/setup_guide.md)
 
 ## コントリビューション

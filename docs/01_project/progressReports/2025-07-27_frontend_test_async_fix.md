@@ -102,7 +102,7 @@ await user.click(topicsTab);
 ### 1. Zustandテストのベストプラクティス
 - `renderHook`より直接ストアアクセスが安定
 - 非同期操作は必ず`act()`でラップ
-- 詳細は`docs/05_implementation/zustand_testing_best_practices.md`参照
+- 詳細は`docs/03_implementation/zustand_testing_best_practices.md`参照
 
 ### 2. Radix UIコンポーネントのテスト
 - JSDom環境では追加のブラウザAPIモックが必要
@@ -119,6 +119,6 @@ await user.click(topicsTab);
 統合テストで発生している`PromiseRejectionHandledWarning`は、エラーハンドリングテストの仕様によるもので、テスト自体は正常に動作しています。
 
 ## 関連ドキュメント
-- `docs/05_implementation/zustand_testing_best_practices.md`
+- `docs/03_implementation/zustand_testing_best_practices.md`
 - Radix UI GitHub Issue #2034
 - Testing Library UserEvent Documentation

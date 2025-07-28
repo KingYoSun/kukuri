@@ -34,7 +34,7 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
 - データベーススキーマ
 - Nostrイベント仕様（作成予定）
 
-### 05_implementation/ - 実装ガイド
+### 03_implementation/ - 実装ガイド
 - **implementation_plan.md**: 段階的実装計画
   - Phase 1: MVP (3ヶ月)
   - Phase 2: ベータ版 (3ヶ月)

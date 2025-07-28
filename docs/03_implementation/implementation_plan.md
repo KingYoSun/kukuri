@@ -344,7 +344,7 @@ kukuri/                     # プロジェクトルート
 ├── docs/                   # プロジェクトドキュメント
 │   ├── 01_project/         # プロジェクト管理
 │   ├── 02_architecture/    # アーキテクチャ設計
-│   ├── 05_implementation/  # 実装ガイド
+│   ├── 03_implementation/  # 実装ガイド
 │   └── nips/               # Nostr改善提案
 └── README.md               # プロジェクトREADME
 ```

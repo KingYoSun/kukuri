@@ -49,7 +49,7 @@
 
 ### 4. ドキュメントの更新
 
-- `docs/05_implementation/error_handling_guidelines.md` - ガイドライン文書を新規作成
+- `docs/03_implementation/error_handling_guidelines.md` - ガイドライン文書を新規作成
 - `CLAUDE.md` - 基本ルールにエラーハンドリングルールを追加
 
 ## 技術的な決定事項
@@ -115,6 +115,6 @@ errorHandler.info(message: string, context?: string): void
 
 ## 参考資料
 
-- [エラーハンドリングガイドライン](/docs/05_implementation/error_handling_guidelines.md)
+- [エラーハンドリングガイドライン](/docs/03_implementation/error_handling_guidelines.md)
 - [Sonner (Toast Library)](https://sonner.emilkowal.ski/)
 - [Vitest Testing](https://vitest.dev/)

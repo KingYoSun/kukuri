@@ -12,11 +12,11 @@
 - **日付**: ドキュメント作成/更新の前に必ず`date "+%Y年%m月%d日"`コマンドで今日の日付を確認
 - **DRY原則**: 新しいクラス・新しいメソッド・新しい型を実装する際は同じ機能を持ったものが既にないかを必ず調査する
 - **依存最新化**: 依存ライブラリを追加する際は、webから最新バージョンを確認する
-- **エラーハンドリング**: フロントエンドでの`console.error`使用は禁止。代わりに`errorHandler`を使用する（`docs/05_implementation/error_handling_guidelines.md`参照）
+- **エラーハンドリング**: フロントエンドでの`console.error`使用は禁止。代わりに`errorHandler`を使用する（`docs/03_implementation/error_handling_guidelines.md`参照）
 
 ### 実装のリファレンス
 - **zustand**: storeのモックを実装/変更する前にzustand公式のドキュメント( https://zustand.docs.pmnd.rs/guides/testing )を必ず参照する
-- **zustandテスト**: Zustandストアのテスト実装時は必ず `docs/05_implementation/zustand_testing_best_practices.md` を参照する
+- **zustandテスト**: Zustandストアのテスト実装時は必ず `docs/03_implementation/zustand_testing_best_practices.md` を参照する
 - **iroh-gossip**: iroh-gossipを用いる機能を実装/変更する前にiroh-gossipの公式ドキュメント ( https://docs.rs/iroh-gossip/latest/iroh_gossip/ )を必ず参照する
 - **iroh**: irohを用いる機能を実装/変更する前にirohの公式ドキュメント ( https://docs.rs/iroh/latest/iroh/)を必ず参照する
 
@@ -107,10 +107,38 @@ pnpm format:check
 3. 各ディレクトリのsummary.md - カテゴリー概要
 4. 詳細ドキュメント - 実装時のみ
 
-### 主要ディレクトリ
-- `01_project/`: プロジェクト管理、進捗
-- `02_architecture/`: 設計、技術決定
-- `05_implementation/`: 実装ガイド
+## プロジェクトディレクトリ構造
+
+### 重要：ドキュメントは必ず`./docs`以下に配置
+```
+kukuri/
+│── .claude
+│── .github
+│── .vscode
+├── docs/                     # すべてのドキュメントはここに配置
+│   ├── 01_project/           # プロジェクト管理
+│   ├── 02_architecture/      # 設計ドキュメント
+│   ├── 03_implementation/    # 実装ガイドライン
+│   ├── nips/                 # Nostr Implementation Possibilities
+│   └── SUMMARY.md            # ドキュメント全体の概要
+├── kukuri-tauri/             # Tauriアプリケーション本体
+│   ├── src/                  # フロントエンドソースコード
+│   ├── src-tauri/            # Rustバックエンドコード
+│   ├── tests/                # E2Eテスト
+│   └── ※ docsディレクトリは作成しない
+│── workers/                  # Cloudflare Workers（今後実装）
+│── scripts/                  # 便利なスクリプト集
+│── .gitignore
+│── CLAUDE.md                 # ClaudeCodeのルール
+└── README.md
+```
+
+### ドキュメント配置ルール
+- **禁止事項**: `kukuri-tauri/docs/`のようなサブディレクトリ内にドキュメントを作成しない
+- **すべてのドキュメント**: `./docs/`以下の適切なカテゴリに配置
+- **進捗レポート**: `./docs/01_project/progressReports/`に作成
+- **実装ガイド**: `./docs/03_implementation/`に作成
+- **アーキテクチャ文書**: `./docs/02_architecture/`に作成
 
 ## 詳細参照先
 - 環境情報: `docs/01_project/activeContext/current_environment.md`

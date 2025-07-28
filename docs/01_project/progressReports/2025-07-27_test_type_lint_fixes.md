@@ -83,4 +83,4 @@ pub fn to_signing_bytes(&self) -> Vec<u8> {
 ## 関連ドキュメント
 
 - [P2Pトピック管理テスト実装](./2025-07-27_p2p_topic_management_tests.md)
-- [テスト実装ガイド](../../05_implementation/testing_guide.md)
+- [テスト実装ガイド](../../03_implementation/testing_guide.md)
