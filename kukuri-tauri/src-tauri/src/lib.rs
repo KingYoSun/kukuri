@@ -11,6 +11,7 @@ use modules::topic::commands as topic_commands;
 use modules::post::commands as post_commands;
 use modules::event::commands as event_commands;
 use modules::p2p::commands as p2p_commands;
+use modules::secure_storage as secure_storage_commands;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +33,13 @@ pub fn run() {
             auth_commands::generate_keypair,
             auth_commands::login,
             auth_commands::logout,
+            // セキュアストレージ関連コマンド
+            secure_storage_commands::add_account,
+            secure_storage_commands::list_accounts,
+            secure_storage_commands::switch_account,
+            secure_storage_commands::remove_account,
+            secure_storage_commands::get_current_account,
+            secure_storage_commands::secure_login,
             // トピック関連コマンド
             topic_commands::get_topics,
             topic_commands::create_topic,

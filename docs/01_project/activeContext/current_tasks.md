@@ -4,6 +4,36 @@
 
 ## 完了済みタスク
 
+### 2025年7月28日（セキュアストレージと複数アカウント管理）
+- [x] セキュアストレージによる複数アカウント管理機能の実装
+  - [x] Rustバックエンドのセキュアストレージ実装
+    - [x] keyring crateによるプラットフォーム固有セキュアストレージアクセス
+    - [x] macOS Keychain、Windows Credential Manager、Linux Secret Service対応
+    - [x] 秘密鍵の個別暗号化保存（npubごと）
+    - [x] アカウントメタデータ管理（公開情報のみ）
+  - [x] Tauriコマンドの実装
+    - [x] add_account - アカウント追加とセキュア保存
+    - [x] list_accounts - 保存済みアカウント一覧
+    - [x] switch_account - アカウント切り替え
+    - [x] remove_account - アカウント削除
+    - [x] get_current_account - 現在のアカウント取得（自動ログイン用）
+    - [x] secure_login - セキュアストレージからのログイン
+  - [x] フロントエンドの複数アカウント対応
+    - [x] SecureStorageApi TypeScriptラッパー実装
+    - [x] authStoreの拡張（複数アカウント管理機能）
+    - [x] 自動ログイン機能（起動時の自動認証）
+    - [x] AccountSwitcherコンポーネント（アカウント切り替えUI）
+    - [x] LoginFormの改良（セキュア保存オプション）
+  - [x] セキュリティの改善
+    - [x] privateKeyはLocalStorageに保存されない
+    - [x] 秘密鍵はメモリに保持せず必要時のみ取得
+    - [x] プラットフォームのセキュリティ機能を活用
+  - [x] 包括的なテストの作成
+    - [x] Rustバックエンドテスト（8件）
+    - [x] フロントエンドAPIテスト（6テストスイート）
+    - [x] authStore統合テスト（5テストスイート）
+    - [x] 統合テスト（3テストスイート）
+
 ### 2025年7月28日（Phase 1 認証フローテスト実装）
 - [x] Tauriアプリケーション改善 Phase 1 認証フローのテスト作成
   - [x] WelcomeScreenコンポーネントのテスト作成（5件）

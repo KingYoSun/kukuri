@@ -1,4 +1,4 @@
-import { createRootRoute, Outlet, useNavigate } from '@tanstack/react-router';
+import { createRootRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useTopics, useP2P, useAuth } from '@/hooks';
 import { useEffect, useState } from 'react';
@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 
 function RootComponent() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, initialize } = useAuthStore();
   const { data: topics, isLoading } = useTopics();
   const { initialized: p2pInitialized } = useP2P();
@@ -23,13 +24,17 @@ function RootComponent() {
   useEffect(() => {
     // 初期化完了後、認証状態によるリダイレクト
     if (!isInitializing) {
-      const pathname = window.location.pathname;
+      const pathname = location.pathname;
       
       // 認証が必要なページのリスト
-      const authRequiredPaths = ['/', '/topics', '/settings'];
+      const authRequiredPaths = ['/topics', '/settings'];
       const authPaths = ['/welcome', '/login', '/profile-setup'];
       
-      if (!isAuthenticated && authRequiredPaths.some(path => pathname.startsWith(path))) {
+      // ルートパスの特別な処理
+      const isRootPath = pathname === '/';
+      const isAuthRequiredPath = isRootPath || authRequiredPaths.some(path => pathname.startsWith(path));
+      
+      if (!isAuthenticated && isAuthRequiredPath) {
         // 未認証でprotectedページにアクセスしようとした場合
         navigate({ to: '/welcome' });
       } else if (isAuthenticated && authPaths.includes(pathname)) {
@@ -37,7 +42,7 @@ function RootComponent() {
         navigate({ to: '/' });
       }
     }
-  }, [isAuthenticated, isInitializing, navigate]);
+  }, [isAuthenticated, isInitializing, navigate, location.pathname]);
 
   useEffect(() => {
     // 初期トピックデータの読み込み
@@ -60,8 +65,9 @@ function RootComponent() {
   }
 
   // 認証が必要なページで未認証の場合
-  const pathname = window.location.pathname;
-  const isProtectedRoute = ['/', '/topics', '/settings'].some(path => pathname.startsWith(path));
+  const pathname = location.pathname;
+  const isRootPath = pathname === '/';
+  const isProtectedRoute = isRootPath || ['/topics', '/settings'].some(path => pathname.startsWith(path));
   
   if (!isAuthenticated && isProtectedRoute) {
     return (

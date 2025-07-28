@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
@@ -13,6 +14,7 @@ export function LoginForm() {
   const { loginWithNsec } = useAuthStore();
   const [nsec, setNsec] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [saveToSecureStorage, setSaveToSecureStorage] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,7 +33,7 @@ export function LoginForm() {
 
     setIsLoading(true);
     try {
-      await loginWithNsec(nsec);
+      await loginWithNsec(nsec, saveToSecureStorage);
       toast.success('ログインしました');
       await navigate({ to: '/' });
     } catch (error) {
@@ -95,6 +97,20 @@ export function LoginForm() {
               <p className="text-xs text-muted-foreground">
                 nsec1で始まるNostr秘密鍵を入力してください
               </p>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="save-to-secure-storage"
+                checked={saveToSecureStorage}
+                onCheckedChange={(checked) => setSaveToSecureStorage(checked as boolean)}
+              />
+              <Label
+                htmlFor="save-to-secure-storage"
+                className="text-sm font-normal cursor-pointer"
+              >
+                アカウントを安全に保存して、次回から自動的にログインする
+              </Label>
             </div>
             
             <div className="bg-warning/10 border border-warning rounded-md p-3">

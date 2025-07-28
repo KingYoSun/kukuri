@@ -3,17 +3,22 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr';
+import { SecureStorageApi, type AccountMetadata } from '@/lib/api/secureStorage';
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
+  accounts: AccountMetadata[];
   login: (privateKey: string, user: User) => Promise<void>;
-  loginWithNsec: (nsec: string) => Promise<void>;
-  generateNewKeypair: () => Promise<{ nsec: string }>;
+  loginWithNsec: (nsec: string, saveToSecureStorage?: boolean) => Promise<void>;
+  generateNewKeypair: (saveToSecureStorage?: boolean) => Promise<{ nsec: string }>;
   logout: () => Promise<void>;
   updateUser: (user: Partial<User>) => void;
   updateRelayStatus: () => Promise<void>;
   setRelayStatus: (status: RelayInfo[]) => void;
   initialize: () => Promise<void>;
+  switchAccount: (npub: string) => Promise<void>;
+  removeAccount: (npub: string) => Promise<void>;
+  loadAccounts: () => Promise<void>;
   get isLoggedIn(): boolean;
 }
 
@@ -24,6 +29,7 @@ export const useAuthStore = create<AuthStore>()(
       currentUser: null,
       privateKey: null,
       relayStatus: [],
+      accounts: [],
 
       login: async (privateKey: string, user: User) => {
         set({
@@ -38,7 +44,7 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      loginWithNsec: async (nsec: string) => {
+      loginWithNsec: async (nsec: string, saveToSecureStorage = false) => {
         try {
           const response = await TauriApi.login({ nsec });
           const user: User = {
@@ -51,6 +57,17 @@ export const useAuthStore = create<AuthStore>()(
             picture: '',
             nip05: '',
           };
+          
+          // セキュアストレージに保存
+          if (saveToSecureStorage) {
+            await SecureStorageApi.addAccount({
+              nsec,
+              name: user.name,
+              display_name: user.displayName,
+              picture: user.picture,
+            });
+          }
+          
           set({
             isAuthenticated: true,
             currentUser: user,
@@ -61,13 +78,15 @@ export const useAuthStore = create<AuthStore>()(
           await initializeNostr();
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
+          // アカウントリストを更新
+          await useAuthStore.getState().loadAccounts();
         } catch (error) {
           console.error('Login failed:', error);
           throw error;
         }
       },
 
-      generateNewKeypair: async () => {
+      generateNewKeypair: async (saveToSecureStorage = true) => {
         try {
           const response = await TauriApi.generateKeypair();
           const user: User = {
@@ -80,6 +99,17 @@ export const useAuthStore = create<AuthStore>()(
             picture: '',
             nip05: '',
           };
+          
+          // セキュアストレージに保存
+          if (saveToSecureStorage) {
+            await SecureStorageApi.addAccount({
+              nsec: response.nsec,
+              name: user.name,
+              display_name: user.displayName,
+              picture: user.picture,
+            });
+          }
+          
           set({
             isAuthenticated: true,
             currentUser: user,
@@ -90,6 +120,8 @@ export const useAuthStore = create<AuthStore>()(
           await initializeNostr();
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
+          // アカウントリストを更新
+          await useAuthStore.getState().loadAccounts();
 
           return { nsec: response.nsec };
         } catch (error) {
@@ -141,39 +173,124 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       initialize: async () => {
-        // localStorageから状態を読み込む
-        const stored = localStorage.getItem('auth-storage');
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            if (parsed.state?.isAuthenticated && parsed.state?.currentUser) {
-              // 保存された認証状態がある場合、鍵の有効性を確認
-              const currentUser = parsed.state.currentUser;
-              
-              // privateKeyはpersist対象外なので、ここで復元はできない
-              // ユーザーはログイン画面から再度ログインする必要がある
-              console.log('Previous session found, but re-authentication required');
-              
-              // 認証状態をクリア
-              set({
-                isAuthenticated: false,
-                currentUser: null,
-                privateKey: null,
-                relayStatus: [],
-              });
-            }
-          } catch (error) {
-            console.error('Failed to parse auth storage:', error);
-            // エラーの場合は初期状態のまま
+        try {
+          // セキュアストレージから現在のアカウントを取得
+          const currentAccount = await SecureStorageApi.getCurrentAccount();
+          
+          if (currentAccount) {
+            // 自動ログイン
+            const user: User = {
+              id: currentAccount.pubkey,
+              pubkey: currentAccount.pubkey,
+              npub: currentAccount.npub,
+              name: currentAccount.metadata.name,
+              displayName: currentAccount.metadata.display_name,
+              about: '',
+              picture: currentAccount.metadata.picture || '',
+              nip05: '',
+            };
+            
+            set({
+              isAuthenticated: true,
+              currentUser: user,
+              privateKey: currentAccount.nsec,
+            });
+            
+            // Nostrクライアントを初期化
+            await initializeNostr();
+            // リレー状態を更新
+            await useAuthStore.getState().updateRelayStatus();
+          } else {
+            // アカウントが見つからない場合は初期状態
+            set({
+              isAuthenticated: false,
+              currentUser: null,
+              privateKey: null,
+              relayStatus: [],
+            });
           }
+          
+          // アカウントリストを読み込み
+          await useAuthStore.getState().loadAccounts();
+        } catch (error) {
+          console.error('Failed to initialize auth store:', error);
+          // エラー時は初期状態にリセット
+          set({
+            isAuthenticated: false,
+            currentUser: null,
+            privateKey: null,
+            relayStatus: [],
+            accounts: [],
+          });
         }
-        // 初期状態は常にログアウト状態
-        set({
-          isAuthenticated: false,
-          currentUser: null,
-          privateKey: null,
-          relayStatus: [],
-        });
+      },
+
+      switchAccount: async (npub: string) => {
+        try {
+          // セキュアストレージからログイン
+          const response = await SecureStorageApi.secureLogin(npub);
+          
+          // アカウント情報を取得
+          const accounts = await SecureStorageApi.listAccounts();
+          const account = accounts.find(a => a.npub === npub);
+          
+          if (!account) {
+            throw new Error('Account not found');
+          }
+          
+          const user: User = {
+            id: response.public_key,
+            pubkey: response.public_key,
+            npub: response.npub,
+            name: account.name,
+            displayName: account.display_name,
+            about: '',
+            picture: account.picture || '',
+            nip05: '',
+          };
+          
+          set({
+            isAuthenticated: true,
+            currentUser: user,
+            privateKey: null, // セキュアストレージから取得したものは保持しない
+          });
+          
+          // Nostrクライアントを初期化
+          await initializeNostr();
+          // リレー状態を更新
+          await useAuthStore.getState().updateRelayStatus();
+        } catch (error) {
+          console.error('Failed to switch account:', error);
+          throw error;
+        }
+      },
+      
+      removeAccount: async (npub: string) => {
+        try {
+          await SecureStorageApi.removeAccount(npub);
+          
+          // 現在のアカウントが削除された場合はログアウト
+          const currentUser = get().currentUser;
+          if (currentUser?.npub === npub) {
+            await get().logout();
+          }
+          
+          // アカウントリストを更新
+          await get().loadAccounts();
+        } catch (error) {
+          console.error('Failed to remove account:', error);
+          throw error;
+        }
+      },
+      
+      loadAccounts: async () => {
+        try {
+          const accounts = await SecureStorageApi.listAccounts();
+          set({ accounts });
+        } catch (error) {
+          console.error('Failed to load accounts:', error);
+          set({ accounts: [] });
+        }
       },
 
       get isLoggedIn() {
