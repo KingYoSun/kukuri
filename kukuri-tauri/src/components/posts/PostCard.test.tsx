@@ -46,11 +46,7 @@ const renderWithQueryClient = (ui: React.ReactElement) => {
     },
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      {ui}
-    </QueryClientProvider>
-  );
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 };
 
 describe('PostCard', () => {
@@ -60,7 +56,7 @@ describe('PostCard', () => {
 
   it('投稿内容を表示する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     expect(screen.getByText('テスト投稿です')).toBeInTheDocument();
     expect(screen.getByText('Test User')).toBeInTheDocument();
     expect(screen.getByText('npub1test...')).toBeInTheDocument();
@@ -68,13 +64,13 @@ describe('PostCard', () => {
 
   it('いいねの数を表示する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     expect(screen.getByText('10')).toBeInTheDocument();
   });
 
   it('返信の数を表示する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     // すべてのボタンを取得して、最初のボタン（メッセージボタン）を確認
     const buttons = screen.getAllByRole('button');
     expect(buttons[0]).toHaveTextContent('0');
@@ -82,7 +78,7 @@ describe('PostCard', () => {
 
   it('アバターのイニシャルを表示する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     const avatarFallback = screen.getByText('TU');
     expect(avatarFallback).toBeInTheDocument();
   });
@@ -95,9 +91,9 @@ describe('PostCard', () => {
         picture: 'https://example.com/avatar.jpg',
       },
     };
-    
+
     renderWithQueryClient(<PostCard post={postWithAvatar} />);
-    
+
     // PostCardコンポーネントが正しく画像URLを渡していることを確認
     // 実際の画像読み込みはテスト環境では確認できないため、
     // AvatarImageに正しいpropsが渡されていることを間接的に確認
@@ -108,12 +104,12 @@ describe('PostCard', () => {
   it('いいねボタンをクリックできる', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.likePost).mockResolvedValue(undefined);
-    
+
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     const likeButton = screen.getByRole('button', { name: /10/ });
     fireEvent.click(likeButton);
-    
+
     await waitFor(() => {
       expect(TauriApi.likePost).toHaveBeenCalledWith('1');
     });
@@ -122,14 +118,14 @@ describe('PostCard', () => {
   it('いいねに失敗した場合はエラーメッセージを表示する', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     const { toast } = await import('sonner');
-    
+
     vi.mocked(TauriApi.likePost).mockRejectedValue(new Error('Failed'));
-    
+
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     const likeButton = screen.getByRole('button', { name: /10/ });
     fireEvent.click(likeButton);
-    
+
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('いいねに失敗しました');
     });
@@ -140,9 +136,9 @@ describe('PostCard', () => {
       ...mockPost,
       content: '1行目\n2行目\n3行目',
     };
-    
+
     const { container } = renderWithQueryClient(<PostCard post={postWithNewlines} />);
-    
+
     // whitespace-pre-wrapクラスを持つp要素を探す
     const content = container.querySelector('.whitespace-pre-wrap');
     expect(content).toBeTruthy();
@@ -151,7 +147,7 @@ describe('PostCard', () => {
 
   it('時間を日本語で表示する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
-    
+
     // 約1時間前
     expect(screen.getByText(/前$/)).toBeInTheDocument();
   });

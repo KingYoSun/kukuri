@@ -97,24 +97,25 @@ export function setupTauriMocks() {
 
       case 'logout':
         return { success: true };
-        
+
       // Secure Storage commands
       case 'add_account':
         return { npub: 'npub1' + Math.random().toString(36).substring(7), pubkey: 'pubkey123' };
-        
+
       case 'list_accounts':
         return [];
-        
+
       case 'get_current_account':
         return null;
-        
-      case 'secure_login':
+
+      case 'secure_login': {
         const loginArgs = args as { npub: string } | undefined;
-        return { 
+        return {
           public_key: 'pubkey_' + loginArgs?.npub,
-          npub: loginArgs?.npub || 'npub1test'
+          npub: loginArgs?.npub || 'npub1test',
         };
-        
+      }
+
       case 'remove_account':
         return { success: true };
 

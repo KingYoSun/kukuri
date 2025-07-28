@@ -60,7 +60,7 @@ export const useAuthStore = create<AuthStore>()(
             picture: '',
             nip05: '',
           };
-          
+
           // セキュアストレージに保存
           if (saveToSecureStorage) {
             await SecureStorageApi.addAccount({
@@ -70,7 +70,7 @@ export const useAuthStore = create<AuthStore>()(
               picture: user.picture,
             });
           }
-          
+
           set({
             isAuthenticated: true,
             currentUser: user,
@@ -106,7 +106,7 @@ export const useAuthStore = create<AuthStore>()(
             picture: '',
             nip05: '',
           };
-          
+
           // セキュアストレージに保存
           if (saveToSecureStorage) {
             await SecureStorageApi.addAccount({
@@ -116,7 +116,7 @@ export const useAuthStore = create<AuthStore>()(
               picture: user.picture,
             });
           }
-          
+
           set({
             isAuthenticated: true,
             currentUser: user,
@@ -193,7 +193,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           // セキュアストレージから現在のアカウントを取得
           const currentAccount = await SecureStorageApi.getCurrentAccount();
-          
+
           if (currentAccount) {
             // 自動ログイン
             const user: User = {
@@ -206,13 +206,13 @@ export const useAuthStore = create<AuthStore>()(
               picture: currentAccount.metadata.picture || '',
               nip05: '',
             };
-            
+
             set({
               isAuthenticated: true,
               currentUser: user,
               privateKey: currentAccount.nsec,
             });
-            
+
             // Nostrクライアントを初期化
             await initializeNostr();
             // リレー状態を更新
@@ -226,7 +226,7 @@ export const useAuthStore = create<AuthStore>()(
               relayStatus: [],
             });
           }
-          
+
           // アカウントリストを読み込み
           await useAuthStore.getState().loadAccounts();
         } catch (error) {
@@ -248,15 +248,15 @@ export const useAuthStore = create<AuthStore>()(
         try {
           // セキュアストレージからログイン
           const response = await SecureStorageApi.secureLogin(npub);
-          
+
           // アカウント情報を取得
           const accounts = await SecureStorageApi.listAccounts();
-          const account = accounts.find(a => a.npub === npub);
-          
+          const account = accounts.find((a) => a.npub === npub);
+
           if (!account) {
             throw new Error('Account not found');
           }
-          
+
           const user: User = {
             id: response.public_key,
             pubkey: response.public_key,
@@ -267,13 +267,13 @@ export const useAuthStore = create<AuthStore>()(
             picture: account.picture || '',
             nip05: '',
           };
-          
+
           set({
             isAuthenticated: true,
             currentUser: user,
             privateKey: null, // セキュアストレージから取得したものは保持しない
           });
-          
+
           // Nostrクライアントを初期化
           await initializeNostr();
           // リレー状態を更新
@@ -287,17 +287,17 @@ export const useAuthStore = create<AuthStore>()(
           throw error;
         }
       },
-      
+
       removeAccount: async (npub: string) => {
         try {
           await SecureStorageApi.removeAccount(npub);
-          
+
           // 現在のアカウントが削除された場合はログアウト
           const currentUser = get().currentUser;
           if (currentUser?.npub === npub) {
             await get().logout();
           }
-          
+
           // アカウントリストを更新
           await get().loadAccounts();
         } catch (error) {
@@ -309,7 +309,7 @@ export const useAuthStore = create<AuthStore>()(
           throw error;
         }
       },
-      
+
       loadAccounts: async () => {
         try {
           const accounts = await SecureStorageApi.listAccounts();

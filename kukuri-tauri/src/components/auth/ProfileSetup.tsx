@@ -16,7 +16,7 @@ export function ProfileSetup() {
   const navigate = useNavigate();
   const { currentUser, updateUser } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [profile, setProfile] = useState({
     name: currentUser?.name || '',
     displayName: currentUser?.displayName || '',
@@ -27,7 +27,7 @@ export function ProfileSetup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!profile.name.trim()) {
       toast.error('名前を入力してください');
       return;
@@ -72,7 +72,7 @@ export function ProfileSetup() {
   const getInitials = (name: string) => {
     return name
       .split(' ')
-      .map(word => word[0])
+      .map((word) => word[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
@@ -83,9 +83,7 @@ export function ProfileSetup() {
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>プロフィール設定</CardTitle>
-          <CardDescription>
-            あなたの情報を設定しましょう
-          </CardDescription>
+          <CardDescription>あなたの情報を設定しましょう</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -101,9 +99,7 @@ export function ProfileSetup() {
                 <Upload className="w-4 h-4 mr-2" />
                 画像をアップロード
               </Button>
-              <p className="text-xs text-muted-foreground">
-                またはURLを下に入力
-              </p>
+              <p className="text-xs text-muted-foreground">またはURLを下に入力</p>
             </div>
 
             {/* 基本情報 */}
@@ -166,12 +162,7 @@ export function ProfileSetup() {
 
             {/* ボタン */}
             <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSkip}
-                className="flex-1"
-              >
+              <Button type="button" variant="outline" onClick={handleSkip} className="flex-1">
                 後で設定
               </Button>
               <Button type="submit" className="flex-1" disabled={isLoading}>

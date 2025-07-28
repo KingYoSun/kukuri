@@ -25,7 +25,7 @@ function RelayTestComponent() {
         });
         setRelayStatuses({ ...relayStatuses, [relayUrl]: 'connected' });
         setRelayUrl('');
-      } catch (error) {
+      } catch {
         // Errors are handled by the store
       }
     }
@@ -36,7 +36,7 @@ function RelayTestComponent() {
       await invoke('disconnect_relay', { url });
       setConnectedRelays(connectedRelays.filter((r) => r !== url));
       setRelayStatuses({ ...relayStatuses, [url]: 'disconnected' });
-    } catch (error) {
+    } catch {
       // Errors are handled by the store
     }
   };

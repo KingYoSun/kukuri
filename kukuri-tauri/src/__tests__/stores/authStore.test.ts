@@ -40,10 +40,10 @@ describe('authStore - Multiple Account Management', () => {
       relayStatus: [],
       accounts: [],
     });
-    
+
     // モックをクリア
     vi.clearAllMocks();
-    
+
     // デフォルトのモック実装
     mockNostrApi.initializeNostr = vi.fn().mockResolvedValue(undefined);
     mockNostrApi.disconnectNostr = vi.fn().mockResolvedValue(undefined);
@@ -121,7 +121,9 @@ describe('authStore - Multiple Account Management', () => {
     });
 
     it('should handle errors during initialization', async () => {
-      mockSecureStorageApi.getCurrentAccount = vi.fn().mockRejectedValue(new Error('Storage error'));
+      mockSecureStorageApi.getCurrentAccount = vi
+        .fn()
+        .mockRejectedValue(new Error('Storage error'));
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
 
       await useAuthStore.getState().initialize();
@@ -230,14 +232,16 @@ describe('authStore - Multiple Account Management', () => {
         npub: 'npub1alice',
       };
 
-      const mockAccounts = [{
-        npub: 'npub1alice',
-        pubkey: 'pubkey_alice',
-        name: 'Alice',
-        display_name: 'Alice Smith',
-        picture: 'https://example.com/alice.png',
-        last_used: '2024-01-01T00:00:00Z',
-      }];
+      const mockAccounts = [
+        {
+          npub: 'npub1alice',
+          pubkey: 'pubkey_alice',
+          name: 'Alice',
+          display_name: 'Alice Smith',
+          picture: 'https://example.com/alice.png',
+          last_used: '2024-01-01T00:00:00Z',
+        },
+      ];
 
       mockSecureStorageApi.secureLogin = vi.fn().mockResolvedValue(mockLoginResponse);
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue(mockAccounts);
@@ -293,7 +297,7 @@ describe('authStore - Multiple Account Management', () => {
 
       expect(mockSecureStorageApi.removeAccount).toHaveBeenCalledWith('npub1current');
       expect(mockTauriApi.logout).toHaveBeenCalled();
-      
+
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(false);
       expect(state.currentUser).toBeNull();
@@ -322,7 +326,7 @@ describe('authStore - Multiple Account Management', () => {
 
       expect(mockSecureStorageApi.removeAccount).toHaveBeenCalledWith('npub1alice');
       expect(mockTauriApi.logout).not.toHaveBeenCalled();
-      
+
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(true);
       expect(state.currentUser?.npub).toBe('npub1other');

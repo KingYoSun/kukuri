@@ -20,7 +20,7 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!nsec.trim()) {
       toast.error('秘密鍵（nsec）を入力してください');
       return;
@@ -55,19 +55,12 @@ export function LoginForm() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleBack}
-            className="w-fit -ml-2 mb-2"
-          >
+          <Button variant="ghost" size="sm" onClick={handleBack} className="w-fit -ml-2 mb-2">
             <ArrowLeft className="w-4 h-4 mr-2" />
             戻る
           </Button>
           <CardTitle>ログイン</CardTitle>
-          <CardDescription>
-            既存のアカウントでログインします
-          </CardDescription>
+          <CardDescription>既存のアカウントでログインします</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -90,18 +83,14 @@ export function LoginForm() {
                   className="absolute right-0 top-0 h-full px-3"
                   onClick={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 nsec1で始まるNostr秘密鍵を入力してください
               </p>
             </div>
-            
+
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="save-to-secure-storage"
@@ -115,7 +104,7 @@ export function LoginForm() {
                 アカウントを安全に保存して、次回から自動的にログインする
               </Label>
             </div>
-            
+
             <div className="bg-warning/10 border border-warning rounded-md p-3">
               <p className="text-sm text-warning-foreground">
                 ⚠️ 秘密鍵は絶対に他人に教えないでください

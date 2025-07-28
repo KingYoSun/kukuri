@@ -16,7 +16,7 @@ function AuthTestComponent() {
   const handleGenerateKeypair = async () => {
     try {
       await generateNewKeypair();
-    } catch (error) {
+    } catch {
       // Errors are handled by the store
     }
   };
@@ -24,10 +24,10 @@ function AuthTestComponent() {
   const login = async (secretKey: string) => {
     try {
       await invoke('import_key', { nsec: secretKey });
-      const pubKey = await invoke<string>('get_public_key');
+      const _pubKey = await invoke<string>('get_public_key');
       // テスト用のダミーユーザーデータ
-      // Login with pubkey: pubKey
-    } catch (error) {
+      // Login with pubkey: _pubKey
+    } catch {
       // Errors are handled by the store
     }
   };

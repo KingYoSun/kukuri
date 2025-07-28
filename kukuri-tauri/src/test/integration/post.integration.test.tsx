@@ -25,7 +25,7 @@ function PostTestComponent() {
         if (setPosts) {
           setPosts(posts);
         }
-      } catch (error) {
+      } catch {
         // Errors are handled by the store
       }
     };
@@ -37,7 +37,7 @@ function PostTestComponent() {
     try {
       const post = await invoke<Post>('create_post', { content, tags });
       addPost(post);
-    } catch (error) {
+    } catch {
       // Errors are handled by the store
     } finally {
       setIsLoading(false);

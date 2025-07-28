@@ -22,7 +22,7 @@ export function AccountSwitcher() {
   const getInitials = (name: string) => {
     return name
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
@@ -65,7 +65,7 @@ export function AccountSwitcher() {
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>アカウント</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        
+
         {/* 現在のアカウント */}
         <DropdownMenuItem disabled className="opacity-100">
           <div className="flex items-center gap-3 w-full">
@@ -80,13 +80,13 @@ export function AccountSwitcher() {
             <div className="text-xs text-muted-foreground">現在</div>
           </div>
         </DropdownMenuItem>
-        
+
         <DropdownMenuSeparator />
-        
+
         {/* 他のアカウント */}
         {accounts
-          .filter(account => account.npub !== currentUser.npub)
-          .map(account => (
+          .filter((account) => account.npub !== currentUser.npub)
+          .map((account) => (
             <DropdownMenuItem
               key={account.npub}
               className="cursor-pointer"
@@ -104,21 +104,21 @@ export function AccountSwitcher() {
               </div>
             </DropdownMenuItem>
           ))}
-        
+
         {accounts.length === 1 && (
           <DropdownMenuItem disabled>
             <p className="text-sm text-muted-foreground">他のアカウントがありません</p>
           </DropdownMenuItem>
         )}
-        
+
         <DropdownMenuSeparator />
-        
+
         {/* アクション */}
-        <DropdownMenuItem onSelect={() => window.location.href = '/login'}>
+        <DropdownMenuItem onSelect={() => (window.location.href = '/login')}>
           <User className="mr-2 h-4 w-4" />
           <span>別のアカウントを追加</span>
         </DropdownMenuItem>
-        
+
         <DropdownMenuItem
           onSelect={() => handleRemoveAccount(currentUser.npub)}
           className="text-destructive"
@@ -126,7 +126,7 @@ export function AccountSwitcher() {
           <Trash2 className="mr-2 h-4 w-4" />
           <span>アカウントを削除</span>
         </DropdownMenuItem>
-        
+
         <DropdownMenuItem onSelect={logout}>
           <LogOut className="mr-2 h-4 w-4" />
           <span>ログアウト</span>

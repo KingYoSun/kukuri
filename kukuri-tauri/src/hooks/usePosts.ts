@@ -13,7 +13,7 @@ export const useTimelinePosts = () => {
     queryFn: async () => {
       const apiPosts = await TauriApi.getPosts({ limit: 50 });
       // APIレスポンスをフロントエンドの型に変換
-      const posts: Post[] = apiPosts.map(post => ({
+      const posts: Post[] = apiPosts.map((post) => ({
         id: post.id,
         content: post.content,
         author: {
@@ -43,9 +43,9 @@ const createPost = async (postData: { content: string; topicId: string }): Promi
   const currentUser = useAuthStore.getState().currentUser;
   if (!currentUser) throw new Error('Not authenticated');
 
-  const apiPost = await TauriApi.createPost({ 
-    content: postData.content, 
-    topic_id: postData.topicId 
+  const apiPost = await TauriApi.createPost({
+    content: postData.content,
+    topic_id: postData.topicId,
   });
 
   return {
@@ -67,7 +67,7 @@ export const usePostsByTopic = (topicId: string) => {
     queryKey: ['posts', topicId],
     queryFn: async () => {
       const apiPosts = await TauriApi.getPosts({ topic_id: topicId, limit: 50 });
-      const posts: Post[] = apiPosts.map(post => ({
+      const posts: Post[] = apiPosts.map((post) => ({
         id: post.id,
         content: post.content,
         author: {

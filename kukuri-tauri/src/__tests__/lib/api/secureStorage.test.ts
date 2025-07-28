@@ -1,5 +1,9 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { SecureStorageApi, type AccountMetadata, type AddAccountRequest } from '@/lib/api/secureStorage';
+import {
+  SecureStorageApi,
+  type AccountMetadata,
+  type AddAccountRequest,
+} from '@/lib/api/secureStorage';
 
 // @tauri-apps/api/coreのモック
 vi.mock('@tauri-apps/api/core', () => ({
@@ -128,7 +132,9 @@ describe('SecureStorageApi', () => {
 
       mockInvoke.mockRejectedValueOnce(new Error('Failed to remove account'));
 
-      await expect(SecureStorageApi.removeAccount(npub)).rejects.toThrow('Failed to remove account');
+      await expect(SecureStorageApi.removeAccount(npub)).rejects.toThrow(
+        'Failed to remove account',
+      );
     });
   });
 

@@ -17,7 +17,9 @@ vi.mock('@/lib/api/p2p', () => ({
 
 // useP2Pフックのモック - 初期化処理のタイミング問題を回避
 vi.mock('../useP2P', async () => {
-  const actual = await vi.importActual<{ useP2P: () => ReturnType<typeof useP2PStore> }>('../useP2P');
+  const actual = await vi.importActual<{ useP2P: () => ReturnType<typeof useP2PStore> }>(
+    '../useP2P',
+  );
   return {
     ...actual,
     useP2P: () => {
@@ -35,7 +37,8 @@ vi.mock('../useP2P', async () => {
           return store.activeTopics.has(topicId);
         },
         getConnectedPeerCount: () => {
-          return Array.from(store.peers.values()).filter((p) => p.connection_status === 'connected').length;
+          return Array.from(store.peers.values()).filter((p) => p.connection_status === 'connected')
+            .length;
         },
         getTopicPeerCount: (topicId: string) => {
           const stats = store.activeTopics.get(topicId);
@@ -55,7 +58,7 @@ describe('useP2P', () => {
   beforeEach(() => {
     // モックをリセット
     vi.clearAllMocks();
-    
+
     // ストアの状態をリセット
     act(() => {
       useP2PStore.setState({
@@ -238,8 +241,9 @@ describe('useP2P', () => {
         useP2PStore.setState({ peers });
       });
 
-      const connectedCount = Array.from(useP2PStore.getState().peers.values())
-        .filter((p) => p.connection_status === 'connected').length;
+      const connectedCount = Array.from(useP2PStore.getState().peers.values()).filter(
+        (p) => p.connection_status === 'connected',
+      ).length;
       expect(connectedCount).toBe(2);
     });
 
@@ -284,9 +288,7 @@ describe('useP2P', () => {
         await useP2PStore.getState().joinTopic('new-topic', ['initial-peer']);
       });
 
-      expect(vi.mocked(p2pApi.joinTopic)).toHaveBeenCalledWith('new-topic', [
-        'initial-peer',
-      ]);
+      expect(vi.mocked(p2pApi.joinTopic)).toHaveBeenCalledWith('new-topic', ['initial-peer']);
       expect(useP2PStore.getState().activeTopics.has('new-topic')).toBe(true);
     });
 

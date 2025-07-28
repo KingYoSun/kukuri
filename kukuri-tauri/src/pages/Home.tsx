@@ -22,9 +22,7 @@ function Home() {
       <div className="max-w-2xl mx-auto">
         <h2 className="text-2xl font-bold mb-6">タイムライン</h2>
         <Alert variant="destructive">
-          <AlertDescription>
-            投稿の取得に失敗しました。リロードしてください。
-          </AlertDescription>
+          <AlertDescription>投稿の取得に失敗しました。リロードしてください。</AlertDescription>
         </Alert>
       </div>
     );
@@ -36,14 +34,10 @@ function Home() {
 
       <div className="space-y-4">
         {posts && posts.length > 0 ? (
-          posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))
+          posts.map((post) => <PostCard key={post.id} post={post} />)
         ) : (
           <Alert>
-            <AlertDescription>
-              まだ投稿がありません。最初の投稿をしてみましょう！
-            </AlertDescription>
+            <AlertDescription>まだ投稿がありません。最初の投稿をしてみましょう！</AlertDescription>
           </Alert>
         )}
       </div>

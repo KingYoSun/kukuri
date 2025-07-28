@@ -49,12 +49,7 @@ export function WelcomeScreen() {
             <Button onClick={handleCreateAccount} className="w-full" size="lg">
               新規アカウント作成
             </Button>
-            <Button
-              onClick={handleLogin}
-              variant="outline"
-              className="w-full"
-              size="lg"
-            >
+            <Button onClick={handleLogin} variant="outline" className="w-full" size="lg">
               既存アカウントでログイン
             </Button>
           </div>

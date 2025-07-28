@@ -98,7 +98,7 @@ describe('P2PDebugPanel', () => {
       expect(screen.getByText('接続ピア数')).toBeInTheDocument();
       const peerCountBadges = screen.getAllByText('2');
       expect(peerCountBadges.length).toBeGreaterThan(0);
-      
+
       // トピック数を確認
       expect(screen.getByText('参加トピック数')).toBeInTheDocument();
     });
@@ -124,7 +124,7 @@ describe('P2PDebugPanel', () => {
     it('新しいトピックに参加できる', async () => {
       const mockData = createMockUseP2P();
       vi.mocked(useP2P).mockReturnValue(mockData);
-      
+
       const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
@@ -137,7 +137,7 @@ describe('P2PDebugPanel', () => {
         const input = screen.getByPlaceholderText('トピックID (例: test-topic)');
         expect(input).toBeInTheDocument();
       });
-      
+
       const input = screen.getByPlaceholderText('トピックID (例: test-topic)');
       await user.type(input, 'new-topic');
 
@@ -184,7 +184,7 @@ describe('P2PDebugPanel', () => {
           expect(screen.getByText(/ピア: 3/)).toBeInTheDocument();
           expect(screen.getByText(/メッセージ: 50/)).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     });
 
@@ -212,7 +212,7 @@ describe('P2PDebugPanel', () => {
         () => {
           expect(screen.getByText(/ピア: 1/)).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
 
       // 削除ボタンをクリック（TrashIconを含むボタン）

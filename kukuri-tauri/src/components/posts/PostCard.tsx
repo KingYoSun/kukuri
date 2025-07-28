@@ -15,7 +15,7 @@ interface PostCardProps {
 
 export function PostCard({ post }: PostCardProps) {
   const queryClient = useQueryClient();
-  
+
   // いいね機能
   const likeMutation = useMutation({
     mutationFn: async () => {
@@ -45,7 +45,7 @@ export function PostCard({ post }: PostCardProps) {
   const getInitials = (name: string) => {
     return name
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
@@ -80,15 +80,9 @@ export function PostCard({ post }: PostCardProps) {
             {post.replies.length}
           </Button>
           <Button variant="ghost" size="sm" disabled>
-            <Repeat2 className="mr-2 h-4 w-4" />
-            0
+            <Repeat2 className="mr-2 h-4 w-4" />0
           </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={handleLike}
-            disabled={likeMutation.isPending}
-          >
+          <Button variant="ghost" size="sm" onClick={handleLike} disabled={likeMutation.isPending}>
             <Heart className="mr-2 h-4 w-4" />
             {post.likes}
           </Button>

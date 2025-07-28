@@ -25,15 +25,16 @@ function RootComponent() {
     // 初期化完了後、認証状態によるリダイレクト
     if (!isInitializing) {
       const pathname = location.pathname;
-      
+
       // 認証が必要なページのリスト
       const authRequiredPaths = ['/topics', '/settings'];
       const authPaths = ['/welcome', '/login', '/profile-setup'];
-      
+
       // ルートパスの特別な処理
       const isRootPath = pathname === '/';
-      const isAuthRequiredPath = isRootPath || authRequiredPaths.some(path => pathname.startsWith(path));
-      
+      const isAuthRequiredPath =
+        isRootPath || authRequiredPaths.some((path) => pathname.startsWith(path));
+
       if (!isAuthenticated && isAuthRequiredPath) {
         // 未認証でprotectedページにアクセスしようとした場合
         navigate({ to: '/welcome' });
@@ -67,8 +68,9 @@ function RootComponent() {
   // 認証が必要なページで未認証の場合
   const pathname = location.pathname;
   const isRootPath = pathname === '/';
-  const isProtectedRoute = isRootPath || ['/topics', '/settings'].some(path => pathname.startsWith(path));
-  
+  const isProtectedRoute =
+    isRootPath || ['/topics', '/settings'].some((path) => pathname.startsWith(path));
+
   if (!isAuthenticated && isProtectedRoute) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -79,7 +81,7 @@ function RootComponent() {
 
   // 認証ページの場合はレイアウトなしで表示
   const isAuthPage = ['/welcome', '/login', '/profile-setup'].includes(pathname);
-  
+
   if (isAuthPage) {
     return <Outlet />;
   }

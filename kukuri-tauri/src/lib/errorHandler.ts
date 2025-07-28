@@ -7,8 +7,27 @@ export interface ErrorLogOptions {
 }
 
 class ErrorHandler {
-  private isDevelopment = import.meta.env.DEV;
-  private isTest = import.meta.env.MODE === 'test' || process.env.NODE_ENV === 'test';
+  // テスト時に環境を強制的に変更できるようにする
+  private _forceEnvironment: 'development' | 'production' | 'test' | null = null;
+
+  private get isDevelopment() {
+    if (this._forceEnvironment) {
+      return this._forceEnvironment === 'development';
+    }
+    return import.meta.env.DEV;
+  }
+
+  private get isTest() {
+    if (this._forceEnvironment) {
+      return this._forceEnvironment === 'test';
+    }
+    return import.meta.env.MODE === 'test';
+  }
+
+  // テスト用メソッド
+  setTestEnvironment(env: 'development' | 'production' | 'test' | null) {
+    this._forceEnvironment = env;
+  }
 
   log(message: string, error?: unknown, options?: ErrorLogOptions): void {
     // テスト環境では何もしない（テストエラーとの混同を避けるため）
@@ -57,3 +76,6 @@ class ErrorHandler {
 }
 
 export const errorHandler = new ErrorHandler();
+
+// テスト用のエクスポート
+export { ErrorHandler };

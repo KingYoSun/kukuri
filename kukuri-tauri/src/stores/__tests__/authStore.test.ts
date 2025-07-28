@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeEach, vi, MockedFunction } from 'vitest';
 import { useAuthStore } from '../authStore';
 import type { User } from '../types';
+import { errorHandler } from '@/lib/errorHandler';
+
+// errorHandlerをモック
+vi.mock('@/lib/errorHandler', () => ({
+  errorHandler: {
+    log: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
+}));
 
 // TauriApiをモック
 vi.mock('@/lib/api/tauri', () => ({
@@ -208,7 +218,6 @@ describe('authStore', () => {
   });
 
   it('Nostr初期化エラーが処理されること', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockInitializeNostr.mockRejectedValueOnce(new Error('Nostr init failed'));
 
     const testUser: User = {
@@ -224,15 +233,18 @@ describe('authStore', () => {
 
     await useAuthStore.getState().login('nsec123', testUser);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to initialize Nostr:', expect.any(Error));
+    expect(errorHandler.log).toHaveBeenCalledWith(
+      'Failed to initialize Nostr',
+      expect.any(Error),
+      expect.objectContaining({
+        context: 'AuthStore.login',
+      })
+    );
     // ログイン自体は成功する
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
-
-    consoleErrorSpy.mockRestore();
   });
 
   it('Nostr切断エラーが処理されること', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockDisconnectNostr.mockRejectedValueOnce(new Error('Disconnect failed'));
 
     const testUser: User = {
@@ -253,11 +265,15 @@ describe('authStore', () => {
 
     await useAuthStore.getState().logout();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to disconnect Nostr:', expect.any(Error));
+    expect(errorHandler.log).toHaveBeenCalledWith(
+      'Failed to disconnect Nostr',
+      expect.any(Error),
+      expect.objectContaining({
+        context: 'AuthStore.logout',
+      })
+    );
     // ログアウト自体は成功する
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
-
-    consoleErrorSpy.mockRestore();
   });
 
   describe('initialize', () => {
@@ -322,24 +338,28 @@ describe('authStore', () => {
     });
 
     it('SecureStorageのエラーが処理されること', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
       // SecureStorageApiにエラーを発生させる
       const { SecureStorageApi } = await import('@/lib/api/secureStorage');
-      (SecureStorageApi.getCurrentAccount as vi.Mock).mockRejectedValueOnce(new Error('Storage error'));
+      (SecureStorageApi.getCurrentAccount as vi.Mock).mockRejectedValueOnce(
+        new Error('Storage error'),
+      );
 
       // initialize実行
       await useAuthStore.getState().initialize();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to initialize auth store:', expect.any(Error));
-      
+      expect(errorHandler.log).toHaveBeenCalledWith(
+        'Failed to initialize auth store',
+        expect.any(Error),
+        expect.objectContaining({
+          context: 'AuthStore.initialize',
+        })
+      );
+
       // エラーがあっても初期状態になること
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(false);
       expect(state.currentUser).toBeNull();
       expect(state.privateKey).toBeNull();
-
-      consoleErrorSpy.mockRestore();
     });
 
     it('SecureStorageにアカウントがある場合、自動ログインすること', async () => {
@@ -353,7 +373,7 @@ describe('authStore', () => {
           picture: 'https://example.com/avatar.png',
         },
       };
-      
+
       const { SecureStorageApi } = await import('@/lib/api/secureStorage');
       (SecureStorageApi.getCurrentAccount as vi.Mock).mockResolvedValueOnce(mockAccount);
 

@@ -28,7 +28,7 @@ function TopicTestComponent() {
         if (setTopics) {
           setTopics(topics);
         }
-      } catch (error) {
+      } catch {
         // Errors are handled by the store
       }
     };
@@ -40,7 +40,7 @@ function TopicTestComponent() {
     try {
       const topic = await invoke<Topic>('create_topic', { name, description });
       addTopic(topic);
-    } catch (error) {
+    } catch {
       // Errors are handled by the store
     } finally {
       setIsLoading(false);

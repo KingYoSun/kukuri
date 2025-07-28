@@ -35,7 +35,8 @@ const mockNostrApi = nostrApi as unknown as {
 
 // テスト用コンポーネント
 function AccountSwitcher() {
-  const { isAuthenticated, currentUser, accounts, switchAccount, removeAccount, loadAccounts } = useAuthStore();
+  const { isAuthenticated, currentUser, accounts, switchAccount, removeAccount, loadAccounts } =
+    useAuthStore();
 
   React.useEffect(() => {
     loadAccounts();
@@ -48,22 +49,24 @@ function AccountSwitcher() {
   return (
     <div>
       <h2>現在のアカウント</h2>
-      <p data-testid="current-account">{currentUser?.displayName} ({currentUser?.npub})</p>
-      
+      <p data-testid="current-account">
+        {currentUser?.displayName} ({currentUser?.npub})
+      </p>
+
       <h3>アカウント一覧</h3>
       <ul>
-        {accounts.map(account => (
+        {accounts.map((account) => (
           <li key={account.npub}>
             <span>{account.display_name}</span>
             {account.npub !== currentUser?.npub && (
-              <button 
+              <button
                 data-testid={`switch-${account.npub}`}
                 onClick={() => switchAccount(account.npub)}
               >
                 切り替え
               </button>
             )}
-            <button 
+            <button
               data-testid={`remove-${account.npub}`}
               onClick={() => removeAccount(account.npub)}
             >
@@ -88,10 +91,10 @@ describe('Multiple Accounts Integration', () => {
       relayStatus: [],
       accounts: [],
     });
-    
+
     // モックをクリア
     vi.clearAllMocks();
-    
+
     // デフォルトのモック実装
     mockNostrApi.initializeNostr = vi.fn().mockResolvedValue(undefined);
     mockNostrApi.disconnectNostr = vi.fn().mockResolvedValue(undefined);
@@ -196,7 +199,8 @@ describe('Multiple Accounts Integration', () => {
         accounts: mockAccounts,
       });
 
-      mockSecureStorageApi.listAccounts = vi.fn()
+      mockSecureStorageApi.listAccounts = vi
+        .fn()
         .mockResolvedValueOnce(mockAccounts)
         .mockResolvedValueOnce([mockAccounts[0]]); // Bob削除後
       mockSecureStorageApi.removeAccount = vi.fn().mockResolvedValue(undefined);
@@ -221,13 +225,15 @@ describe('Multiple Accounts Integration', () => {
     });
 
     it('should logout when removing current account', async () => {
-      const mockAccounts = [{
-        npub: 'npub1alice',
-        pubkey: 'pubkey_alice',
-        name: 'Alice',
-        display_name: 'Alice Smith',
-        last_used: '2024-01-01T00:00:00Z',
-      }];
+      const mockAccounts = [
+        {
+          npub: 'npub1alice',
+          pubkey: 'pubkey_alice',
+          name: 'Alice',
+          display_name: 'Alice Smith',
+          last_used: '2024-01-01T00:00:00Z',
+        },
+      ];
 
       // Aliceでログイン中
       useAuthStore.setState({
@@ -246,7 +252,8 @@ describe('Multiple Accounts Integration', () => {
         accounts: mockAccounts,
       });
 
-      mockSecureStorageApi.listAccounts = vi.fn()
+      mockSecureStorageApi.listAccounts = vi
+        .fn()
         .mockResolvedValueOnce(mockAccounts)
         .mockResolvedValueOnce([]); // 削除後
       mockSecureStorageApi.removeAccount = vi.fn().mockResolvedValue(undefined);
@@ -282,13 +289,15 @@ describe('Multiple Accounts Integration', () => {
         npub: 'pubkey_new',
         pubkey: 'pubkey_new',
       });
-      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([{
-        npub: 'pubkey_new',
-        pubkey: 'pubkey_new',
-        name: '新規ユーザー',
-        display_name: '新規ユーザー',
-        last_used: new Date().toISOString(),
-      }]);
+      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([
+        {
+          npub: 'pubkey_new',
+          pubkey: 'pubkey_new',
+          name: '新規ユーザー',
+          display_name: '新規ユーザー',
+          last_used: new Date().toISOString(),
+        },
+      ]);
 
       // 新規アカウント作成
       const result = await useAuthStore.getState().generateNewKeypair(true);
