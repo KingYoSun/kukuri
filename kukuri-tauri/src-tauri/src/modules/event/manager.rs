@@ -84,26 +84,30 @@ impl EventManager {
 
     /// デフォルトリレーに接続
     pub async fn connect_to_default_relays(&self) -> Result<()> {
-        let default_relays = vec![
-            "wss://relay.damus.io",
-            "wss://relay.nostr.band",
-            "wss://nos.lol",
-            "wss://relay.snort.social",
-            "wss://relay.current.fyi",
-        ];
+        // 既存のNostrリレーへの接続を無効化
+        // let default_relays = vec![
+        //     "wss://relay.damus.io",
+        //     "wss://relay.nostr.band",
+        //     "wss://nos.lol",
+        //     "wss://relay.snort.social",
+        //     "wss://relay.current.fyi",
+        // ];
+        // 
+        // let client_manager = self.client_manager.read().await;
+        // client_manager.add_relays(default_relays).await?;
+        // client_manager.connect().await?;
         
-        let client_manager = self.client_manager.read().await;
-        client_manager.add_relays(default_relays).await?;
-        client_manager.connect().await?;
-        
-        info!("Connected to default relays");
+        info!("Skipping connection to default relays (disabled)");
         Ok(())
     }
 
     /// カスタムリレーに接続
     pub async fn add_relay(&self, url: &str) -> Result<()> {
-        let client_manager = self.client_manager.read().await;
-        client_manager.add_relay(url).await
+        // 既存のNostrリレーへの接続を無効化
+        // let client_manager = self.client_manager.read().await;
+        // client_manager.add_relay(url).await
+        info!("Skipping relay connection to {} (disabled)", url);
+        Ok(())
     }
 
     /// テキストノートを投稿
@@ -237,73 +241,15 @@ impl EventManager {
 
     /// イベントストリームを開始
     pub async fn start_event_stream(&self) -> Result<()> {
-        self.ensure_initialized().await?;
-        
-        let client_manager = self.client_manager.read().await;
-        let client = client_manager.get_client().await
-            .ok_or_else(|| anyhow::anyhow!("Client not initialized"))?;
-        
-        let event_handler = Arc::clone(&self.event_handler);
-        
-        // イベントストリームを非同期で処理
-        let app_handle = Arc::clone(&self.app_handle);
-        tokio::spawn(async move {
-            let _ = client.handle_notifications(|notification| async {
-                if let RelayPoolNotification::Event { event, .. } = notification {
-                    debug!("Received event: {}", event.id);
-                    
-                    // フロントエンドにイベントを送信
-                    if let Some(ref handle) = *app_handle.read().await {
-                        let payload = NostrEventPayload {
-                            id: event.id.to_string(),
-                            author: event.pubkey.to_string(),
-                            content: event.content.clone(),
-                            created_at: event.created_at.as_u64(),
-                            kind: event.kind.as_u16() as u32,
-                            tags: event.tags.iter().map(|tag| {
-                                tag.clone().to_vec()
-                            }).collect(),
-                        };
-                        let _ = handle.emit("nostr://event", payload);
-                    }
-                    
-                    if let Err(e) = event_handler.handle_event(*event).await {
-                        error!("Error handling event: {}", e);
-                    }
-                }
-                Ok(false) // Continue listening
-            }).await;
-        });
-        
-        // 定期的なヘルスチェックを開始
-        self.start_health_check_loop().await?;
-        
-        info!("Event stream started");
+        // 既存のNostrリレーへの接続を無効化しているため、イベントストリームも無効化
+        info!("Skipping event stream (Nostr relay connection disabled)");
         Ok(())
     }
 
     /// 定期的なヘルスチェックループを開始
     async fn start_health_check_loop(&self) -> Result<()> {
-        let client_manager = Arc::clone(&self.client_manager);
-        
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(60)); // 60秒ごとにチェック
-            
-            loop {
-                interval.tick().await;
-                
-                let manager = client_manager.read().await;
-                if let Err(e) = manager.health_check().await {
-                    error!("Health check failed: {}", e);
-                }
-                
-                // 失敗したリレーに再接続を試みる
-                if let Err(e) = manager.reconnect_failed_relays().await {
-                    error!("Failed to reconnect to relays: {}", e);
-                }
-            }
-        });
-        
+        // 既存のNostrリレーへの接続を無効化しているため、ヘルスチェックも無効化
+        info!("Skipping health check loop (Nostr relay connection disabled)");
         Ok(())
     }
 

@@ -615,6 +615,24 @@
 - [x] データストレージ設計レビュー(storage_comparison_report.md)を実施
 - [x] ストレージ実装ガイドライン(storage_implementation_guide.md)を作成
 
+### 2025年7月28日（Nostrリレー接続の無効化）
+- [x] 既存のNostrリレーへの接続を無効化
+  - [x] EventManager (`manager.rs`)
+    - [x] `connect_to_default_relays()` - デフォルトリレーへの接続をコメントアウト
+    - [x] `add_relay()` - カスタムリレーへの接続を無効化
+    - [x] `start_event_stream()` - イベントストリームを無効化
+    - [x] `start_health_check_loop()` - ヘルスチェックループを無効化
+  - [x] NostrClientManager (`nostr_client.rs`)
+    - [x] `add_relay()` - 単一リレーへの接続を無効化（モック状態を返す）
+    - [x] `add_relays()` - 複数リレーへの接続を無効化（モック状態を返す）
+    - [x] `connect()` - 全リレーへの接続を無効化
+    - [x] `reconnect_failed_relays()` - 再接続を無効化
+  - [x] Tauriコマンド (`commands.rs`)
+    - [x] `initialize_nostr` - リレー接続とイベントストリーム開始をコメントアウト
+  - [x] フロントエンド
+    - [x] 変更不要（リレーステータスは空配列として扱われる）
+  - [x] 進捗レポート作成（2025-07-28_nostr_relay_disconnection.md）
+
 ## 現在進行中のタスク
 
 ### Tauriアプリケーション改善 Phase 2（データ連携の確立）

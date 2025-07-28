@@ -46,61 +46,36 @@ impl NostrClientManager {
 
     /// リレーに接続
     pub async fn add_relay(&self, url: &str) -> Result<()> {
-        let client_guard = self.client.read().await;
-        if let Some(client) = client_guard.as_ref() {
-            // 接続状態を「接続中」に設定
-            {
-                let mut status = self.relay_status.write().await;
-                status.insert(url.to_string(), RelayStatus::Connecting);
-            }
-            
-            match client.add_relay(url).await {
-                Ok(_) => {
-                    info!("Added relay: {}", url);
-                    // 接続状態を「接続済み」に設定
-                    let mut status = self.relay_status.write().await;
-                    status.insert(url.to_string(), RelayStatus::Connected);
-                    Ok(())
-                }
-                Err(e) => {
-                    error!("Failed to add relay {}: {}", url, e);
-                    // 接続状態を「エラー」に設定
-                    let mut status = self.relay_status.write().await;
-                    status.insert(url.to_string(), RelayStatus::Error(e.to_string()));
-                    Err(e.into())
-                }
-            }
-        } else {
-            Err(anyhow::anyhow!("Client not initialized"))
+        // 既存のNostrリレーへの接続を無効化
+        info!("Skipping relay connection to {} (disabled)", url);
+        
+        // 接続状態を「接続済み」に設定（モック）
+        {
+            let mut status = self.relay_status.write().await;
+            status.insert(url.to_string(), RelayStatus::Connected);
         }
+        
+        Ok(())
     }
 
     /// 複数のリレーに接続
     pub async fn add_relays(&self, urls: Vec<&str>) -> Result<()> {
-        let client_guard = self.client.read().await;
-        if let Some(client) = client_guard.as_ref() {
-            for url in urls {
-                match client.add_relay(url).await {
-                    Ok(_) => info!("Added relay: {}", url),
-                    Err(e) => error!("Failed to add relay {}: {}", url, e),
-                }
-            }
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Client not initialized"))
+        // 既存のNostrリレーへの接続を無効化
+        for url in urls {
+            info!("Skipping relay connection to {} (disabled)", url);
+            
+            // 接続状態を「接続済み」に設定（モック）
+            let mut status = self.relay_status.write().await;
+            status.insert(url.to_string(), RelayStatus::Connected);
         }
+        Ok(())
     }
 
     /// 全てのリレーに接続
     pub async fn connect(&self) -> Result<()> {
-        let client_guard = self.client.read().await;
-        if let Some(client) = client_guard.as_ref() {
-            client.connect().await;
-            info!("Connected to all relays");
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Client not initialized"))
-        }
+        // 既存のNostrリレーへの接続を無効化
+        info!("Skipping connection to all relays (disabled)");
+        Ok(())
     }
 
     /// 全てのリレーから切断
@@ -214,20 +189,8 @@ impl NostrClientManager {
 
     /// 切断されたリレーに再接続を試みる
     pub async fn reconnect_failed_relays(&self) -> Result<()> {
-        let status = self.relay_status.read().await.clone();
-        let failed_relays: Vec<String> = status
-            .iter()
-            .filter(|(_, s)| matches!(s, RelayStatus::Disconnected | RelayStatus::Error(_)))
-            .map(|(url, _)| url.clone())
-            .collect();
-        
-        for url in failed_relays {
-            info!("Attempting to reconnect to relay: {}", url);
-            if let Err(e) = self.add_relay(&url).await {
-                error!("Failed to reconnect to relay {}: {}", url, e);
-            }
-        }
-        
+        // 既存のNostrリレーへの再接続を無効化
+        info!("Skipping reconnection to failed relays (disabled)");
         Ok(())
     }
 }

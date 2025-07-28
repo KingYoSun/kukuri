@@ -42,15 +42,16 @@ pub async fn initialize_nostr(state: State<'_, AppState>) -> Result<(), String> 
         .await
         .map_err(|e| e.to_string())?;
     
+    // 既存のNostrリレーへの接続を無効化
     // デフォルトリレーに接続
-    event_manager.connect_to_default_relays()
-        .await
-        .map_err(|e| e.to_string())?;
+    // event_manager.connect_to_default_relays()
+    //     .await
+    //     .map_err(|e| e.to_string())?;
     
     // イベントストリームを開始
-    event_manager.start_event_stream()
-        .await
-        .map_err(|e| e.to_string())?;
+    // event_manager.start_event_stream()
+    //     .await
+    //     .map_err(|e| e.to_string())?;
     
     Ok(())
 }
