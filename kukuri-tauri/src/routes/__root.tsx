@@ -1,6 +1,6 @@
 import { createRootRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useTopics, useP2P, useAuth } from '@/hooks';
+import { useTopics, useP2P } from '@/hooks';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 

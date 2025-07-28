@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useLogin, useGenerateKeyPair, useLogout } from '../useAuth';
+import { useAuth, useLogout } from '../useAuth';
 import { useAuthStore } from '@/stores';
 import { ReactNode } from 'react';
 
@@ -36,13 +36,13 @@ describe('useAuth hooks', () => {
     });
   });
 
-  describe('useLogin', () => {
+  describe('useAuth', () => {
     it('ログイン成功時にauthStoreが更新されること', async () => {
-      const { result } = renderHook(() => useLogin(), {
+      const { result } = renderHook(() => useAuth(), {
         wrapper: createWrapper(),
       });
 
-      await result.current.mutateAsync('test-private-key');
+      await result.current.loginWithNsec('test-private-key');
 
       await waitFor(() => {
         const state = useAuthStore.getState();
@@ -53,13 +53,13 @@ describe('useAuth hooks', () => {
     });
   });
 
-  describe('useGenerateKeyPair', () => {
+  describe('useAuth - generateNewKeypair', () => {
     it('鍵ペア生成成功時にauthStoreが更新されること', async () => {
-      const { result } = renderHook(() => useGenerateKeyPair(), {
+      const { result } = renderHook(() => useAuth(), {
         wrapper: createWrapper(),
       });
 
-      await result.current.mutateAsync();
+      await result.current.generateNewKeypair();
 
       await waitFor(() => {
         const state = useAuthStore.getState();

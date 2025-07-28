@@ -34,6 +34,25 @@
     - [x] authStore統合テスト（5テストスイート）
     - [x] 統合テスト（3テストスイート）
 
+### 2025年7月28日（Tauriビルドエラー修正）
+- [x] TypeScriptビルドエラーの修正
+  - [x] Vitestタイプ定義問題の解決（tsconfig.jsonに`types: ["vitest/globals"]`追加）
+  - [x] テストファイルをビルドから除外（tsconfig.jsonのexclude設定）
+  - [x] checkboxコンポーネントの追加（@radix-ui/react-checkbox導入）
+  - [x] 未使用変数とインポートエラーの修正
+    - [x] multipleAccounts.test.tsx: initialAccount削除
+    - [x] AccountSwitcher.tsx: 未使用React削除
+    - [x] __root.tsx: 未使用useAuth削除
+    - [x] useAuth.test.tsx: フック呼び出し方法の修正
+- [x] Rustコンパイルエラーの修正
+  - [x] LoginResponse型のインポート追加
+  - [x] keyring v3.6.3のAPI変更対応（delete_password → delete_credential）
+- [x] ビルド成功確認
+  - [x] TypeScriptビルド成功
+  - [x] Rustコンパイル成功（警告2件のみ）
+  - [x] debおよびrpmパッケージ生成成功
+  - [x] 進捗レポート作成（2025-07-28_build_error_fix.md）
+
 ### 2025年7月28日（Phase 1 認証フローテスト実装）
 - [x] Tauriアプリケーション改善 Phase 1 認証フローのテスト作成
   - [x] WelcomeScreenコンポーネントのテスト作成（5件）
@@ -644,7 +663,7 @@
   - [x] SUMMARY.mdに現在の開発状況セクション追加
   - [x] current_tasks.mdの更新
   - [ ] 実装関連ドキュメントの最新化
-  - [ ] 進捗レポートの作成
+  - [x] 進捗レポートの作成（2025-07-28_build_error_fix.md）
 
 ### P2P通信実装（Day 10）
 - [ ] パフォーマンステストの実装

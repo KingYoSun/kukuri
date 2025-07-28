@@ -1,8 +1,67 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年7月27日
+**最終更新**: 2025年7月28日
 
 ## 解決済みの問題
+
+### Tauriビルドエラー（2025年7月28日）
+**問題**: Tauriアプリケーションのビルド時にTypeScriptとRustのコンパイルエラーが発生
+
+**症状**:
+- TypeScriptビルド時に`vi`が見つからないエラー（Vitestタイプ定義問題）
+- `@/components/ui/checkbox`が存在しないエラー
+- 未使用変数やエクスポートエラー
+- Rustで`LoginResponse`型が見つからないエラー
+- keyring crateの`delete_password`メソッドが存在しない
+
+**解決策**:
+
+1. Vitestタイプ定義問題の修正
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "types": ["vitest/globals"]
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/test/**", "src/**/__tests__/**"]
+}
+```
+
+2. checkboxコンポーネントの追加
+```bash
+pnpm add @radix-ui/react-checkbox
+```
+```typescript
+// src/components/ui/checkbox.tsxを作成
+```
+
+3. 未使用変数とインポートエラーの修正
+- `multipleAccounts.test.tsx`: `initialAccount`を削除
+- `AccountSwitcher.tsx`: 未使用の`React`インポートを削除
+- `__root.tsx`: 未使用の`useAuth`インポートを削除
+- `useAuth.test.tsx`: `useLogin`と`useGenerateKeyPair`を`useAuth`フックのメソッド呼び出しに変更
+
+4. Rustコンパイルエラーの修正
+```rust
+// secure_storage/commands.rs
+use crate::modules::auth::commands::LoginResponse;
+```
+
+5. keyring APIの変更対応
+```rust
+// keyring v3.6.3ではdelete_credential()に変更
+// 修正前
+match entry.delete_password() {
+
+// 修正後
+match entry.delete_credential() {
+```
+
+**結果**:
+- TypeScriptビルド成功
+- Rustコンパイル成功（警告2件のみ）
+- debおよびrpmパッケージの生成に成功
+- AppImageバンドル時のネットワークエラーは環境固有の問題
 
 ### フロントエンドテスト・型・リントエラー（2025年7月27日 - 最終解決）
 **問題**: P2P UI統合後に大量の型エラー、リントエラー、テストエラーが発生
@@ -294,6 +353,12 @@ vi.mock('zustand', async () => {
 
 ## 現在の注意事項
 
+### Tauriビルド関連
+- **Bundle identifier警告**: `com.kukuri.app`が`.app`で終わっているためmacOSでの競合の可能性
+  - 推奨: `com.kukuri.desktop`などに変更
+- **未使用メソッド警告**: P2Pモジュールの`convert_to_gossip_message`と`extract_topic_ids`
+  - 削除または`#[allow(dead_code)]`の追加を検討
+
 ### テスト関連
 - **テストカバレッジ**: 合計200件以上のテストを実装
 - **act警告**: 一部のReactコンポーネントテストでact警告が発生する場合がある
@@ -333,8 +398,9 @@ vi.mock('zustand', async () => {
   - P2P統合テストは#[ignore]属性でスキップ
 
 ### 開発環境
-- **formatコマンド**: package.jsonにformatスクリプトが定義されていない
-  - 必要に応じて追加する
+- **formatコマンド**: CLAUDE.mdに記載されている（2025年7月28日確認済み）
+  - `pnpm format`でフォーマット実行
+  - `pnpm format:check`でフォーマットチェック
 
 ## 技術的な決定事項
 

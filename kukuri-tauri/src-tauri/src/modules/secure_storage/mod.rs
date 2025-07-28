@@ -53,7 +53,7 @@ impl SecureStorage {
     pub fn delete_private_key(npub: &str) -> Result<()> {
         let entry = Entry::new(SERVICE_NAME, npub)
             .context("Failed to create keyring entry")?;
-        match entry.delete_password() {
+        match entry.delete_credential() {
             Ok(()) => Ok(()),
             Err(keyring::Error::NoEntry) => Ok(()), // 既に削除されている場合もOK
             Err(e) => Err(anyhow::anyhow!("Failed to delete private key: {}", e)),

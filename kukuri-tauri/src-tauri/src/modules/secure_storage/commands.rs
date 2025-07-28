@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use crate::state::AppState;
 use crate::modules::secure_storage::{SecureStorage, AccountMetadata};
+use crate::modules::auth::commands::LoginResponse;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddAccountRequest {
@@ -130,8 +131,6 @@ pub async fn secure_login(
     state: State<'_, AppState>,
     npub: String,
 ) -> Result<LoginResponse, String> {
-    use crate::modules::auth::commands::LoginResponse;
-    
     // セキュアストレージから秘密鍵を取得
     let nsec = SecureStorage::get_private_key(&npub)
         .map_err(|e| e.to_string())?

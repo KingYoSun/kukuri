@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { createRootRoute } from '@tanstack/react-router';
 import { Route } from '../__root';
 import { useAuthStore } from '@/stores/authStore';
-import { useTopics, useP2P, useAuth } from '@/hooks';
+import { useTopics, useP2P } from '@/hooks';
 
 // モック
 const mockNavigate = vi.fn();

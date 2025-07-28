@@ -101,21 +101,6 @@ describe('Multiple Accounts Integration', () => {
 
   describe('Account Switching Workflow', () => {
     it('should handle complete account switching workflow', async () => {
-      // 初期アカウントでログイン
-      const initialAccount = {
-        npub: 'npub1alice',
-        nsec: 'nsec1alice',
-        pubkey: 'pubkey_alice',
-        metadata: {
-          npub: 'npub1alice',
-          pubkey: 'pubkey_alice',
-          name: 'Alice',
-          display_name: 'Alice Smith',
-          picture: 'https://example.com/alice.png',
-          last_used: '2024-01-01T00:00:00Z',
-        },
-      };
-
       // 複数アカウントのリスト
       const mockAccounts = [
         {
