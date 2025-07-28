@@ -38,7 +38,8 @@ export const config: Options.Testrunner = {
     // tauri-driverが利用可能か確認
     const checkDriver = spawnSync(tauriDriver, ['--version']);
     if (checkDriver.error) {
-      console.error('tauri-driver is not installed. Please run: cargo install tauri-driver');
+      // E2E test configuration error - direct output to stderr is appropriate here
+      process.stderr.write('ERROR: tauri-driver is not installed. Please run: cargo install tauri-driver\n');
       process.exit(1);
     }
   },

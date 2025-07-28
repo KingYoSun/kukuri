@@ -26,7 +26,7 @@ function PostTestComponent() {
           setPosts(posts);
         }
       } catch (error) {
-        console.error('Failed to load posts:', error);
+        // Errors are handled by the store
       }
     };
     loadPosts();
@@ -38,7 +38,7 @@ function PostTestComponent() {
       const post = await invoke<Post>('create_post', { content, tags });
       addPost(post);
     } catch (error) {
-      console.error('Failed to create post:', error);
+      // Errors are handled by the store
     } finally {
       setIsLoading(false);
     }

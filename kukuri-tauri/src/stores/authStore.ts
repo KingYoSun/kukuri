@@ -4,6 +4,7 @@ import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr';
 import { SecureStorageApi, type AccountMetadata } from '@/lib/api/secureStorage';
+import { errorHandler } from '@/lib/errorHandler';
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
@@ -40,7 +41,9 @@ export const useAuthStore = create<AuthStore>()(
         try {
           await initializeNostr();
         } catch (error) {
-          console.error('Failed to initialize Nostr:', error);
+          errorHandler.log('Failed to initialize Nostr', error, {
+            context: 'AuthStore.login',
+          });
         }
       },
 
@@ -81,7 +84,11 @@ export const useAuthStore = create<AuthStore>()(
           // アカウントリストを更新
           await useAuthStore.getState().loadAccounts();
         } catch (error) {
-          console.error('Login failed:', error);
+          errorHandler.log('Login failed', error, {
+            context: 'AuthStore.loginWithNsec',
+            showToast: true,
+            toastTitle: 'ログインに失敗しました',
+          });
           throw error;
         }
       },
@@ -125,7 +132,11 @@ export const useAuthStore = create<AuthStore>()(
 
           return { nsec: response.nsec };
         } catch (error) {
-          console.error('Keypair generation failed:', error);
+          errorHandler.log('Keypair generation failed', error, {
+            context: 'AuthStore.generateNewKeypair',
+            showToast: true,
+            toastTitle: 'キーペアの生成に失敗しました',
+          });
           throw error;
         }
       },
@@ -134,12 +145,16 @@ export const useAuthStore = create<AuthStore>()(
         try {
           await disconnectNostr();
         } catch (error) {
-          console.error('Failed to disconnect Nostr:', error);
+          errorHandler.log('Failed to disconnect Nostr', error, {
+            context: 'AuthStore.logout',
+          });
         }
         try {
           await TauriApi.logout();
         } catch (error) {
-          console.error('Logout failed:', error);
+          errorHandler.log('Logout failed', error, {
+            context: 'AuthStore.logout',
+          });
         }
         set({
           isAuthenticated: false,
@@ -164,7 +179,9 @@ export const useAuthStore = create<AuthStore>()(
           const status = await getRelayStatus();
           set({ relayStatus: status });
         } catch (error) {
-          console.error('Failed to get relay status:', error);
+          errorHandler.log('Failed to get relay status', error, {
+            context: 'AuthStore.updateRelayStatus',
+          });
         }
       },
 
@@ -213,7 +230,9 @@ export const useAuthStore = create<AuthStore>()(
           // アカウントリストを読み込み
           await useAuthStore.getState().loadAccounts();
         } catch (error) {
-          console.error('Failed to initialize auth store:', error);
+          errorHandler.log('Failed to initialize auth store', error, {
+            context: 'AuthStore.initialize',
+          });
           // エラー時は初期状態にリセット
           set({
             isAuthenticated: false,
@@ -260,7 +279,11 @@ export const useAuthStore = create<AuthStore>()(
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
         } catch (error) {
-          console.error('Failed to switch account:', error);
+          errorHandler.log('Failed to switch account', error, {
+            context: 'AuthStore.switchAccount',
+            showToast: true,
+            toastTitle: 'アカウントの切り替えに失敗しました',
+          });
           throw error;
         }
       },
@@ -278,7 +301,11 @@ export const useAuthStore = create<AuthStore>()(
           // アカウントリストを更新
           await get().loadAccounts();
         } catch (error) {
-          console.error('Failed to remove account:', error);
+          errorHandler.log('Failed to remove account', error, {
+            context: 'AuthStore.removeAccount',
+            showToast: true,
+            toastTitle: 'アカウントの削除に失敗しました',
+          });
           throw error;
         }
       },
@@ -288,7 +315,9 @@ export const useAuthStore = create<AuthStore>()(
           const accounts = await SecureStorageApi.listAccounts();
           set({ accounts });
         } catch (error) {
-          console.error('Failed to load accounts:', error);
+          errorHandler.log('Failed to load accounts', error, {
+            context: 'AuthStore.loadAccounts',
+          });
           set({ accounts: [] });
         }
       },

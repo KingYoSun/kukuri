@@ -17,7 +17,7 @@ function AuthTestComponent() {
     try {
       await generateNewKeypair();
     } catch (error) {
-      console.error('Failed to generate keypair:', error);
+      // Errors are handled by the store
     }
   };
 
@@ -26,9 +26,9 @@ function AuthTestComponent() {
       await invoke('import_key', { nsec: secretKey });
       const pubKey = await invoke<string>('get_public_key');
       // テスト用のダミーユーザーデータ
-      console.log('Login with pubkey:', pubKey);
+      // Login with pubkey: pubKey
     } catch (error) {
-      console.error('Failed to login:', error);
+      // Errors are handled by the store
     }
   };
 
@@ -137,7 +137,7 @@ describe('Auth Integration Tests', () => {
 
   it('should handle authentication errors gracefully', async () => {
     const user = userEvent.setup();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Remove console.error spy as we're not using console.error anymore
 
     // エラーレスポンスを設定
     setMockResponse('generate_keypair', Promise.reject(new Error('Key generation failed')));
@@ -157,7 +157,7 @@ describe('Auth Integration Tests', () => {
       expect(screen.getByTestId('public-key')).toHaveTextContent('No public key');
     });
 
-    consoleSpy.mockRestore();
+    // No need to restore console spy anymore
   });
 
   it('should persist authentication state across reloads', async () => {

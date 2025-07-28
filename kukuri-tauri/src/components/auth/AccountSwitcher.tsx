@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ChevronDown, User, LogOut, Trash2 } from 'lucide-react';
+import { errorHandler } from '@/lib/errorHandler';
 
 export function AccountSwitcher() {
   const { currentUser, accounts, switchAccount, removeAccount, logout } = useAuthStore();
@@ -31,7 +32,9 @@ export function AccountSwitcher() {
     try {
       await switchAccount(npub);
     } catch (error) {
-      console.error('Failed to switch account:', error);
+      errorHandler.log('Failed to switch account', error, {
+        context: 'AccountSwitcher.handleSwitchAccount',
+      });
     }
   };
 
@@ -40,7 +43,9 @@ export function AccountSwitcher() {
       try {
         await removeAccount(npub);
       } catch (error) {
-        console.error('Failed to remove account:', error);
+        errorHandler.log('Failed to remove account', error, {
+          context: 'AccountSwitcher.handleRemoveAccount',
+        });
       }
     }
   };

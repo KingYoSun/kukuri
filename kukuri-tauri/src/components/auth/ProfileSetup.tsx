@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { Upload, User } from 'lucide-react';
+import { errorHandler } from '@/lib/errorHandler';
 
 export function ProfileSetup() {
   const navigate = useNavigate();
@@ -56,7 +57,9 @@ export function ProfileSetup() {
       await navigate({ to: '/' });
     } catch (error) {
       toast.error('プロフィールの設定に失敗しました');
-      console.error('Profile setup failed:', error);
+      errorHandler.log('Profile setup failed', error, {
+        context: 'ProfileSetup.handleSubmit',
+      });
     } finally {
       setIsLoading(false);
     }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useP2PStore, type P2PMessage, type PeerInfo } from '@/stores/p2pStore';
+import { errorHandler } from '@/lib/errorHandler';
 
 // P2Pイベントの型定義
 interface P2PMessageEvent {
@@ -95,7 +96,11 @@ export function useP2PEventListener() {
     // エラーイベント
     unlisteners.push(
       listen<{ error: string }>('p2p://error', (event) => {
-        console.error('P2P error:', event.payload.error);
+        errorHandler.log('P2P error', event.payload.error, {
+          context: 'useP2PEventListener',
+          showToast: true,
+          toastTitle: 'P2Pネットワークエラー',
+        });
         useP2PStore.getState().clearError();
       }),
     );

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { p2pApi } from '@/lib/api/p2p';
+import { errorHandler } from '@/lib/errorHandler';
 
 // P2Pメッセージ
 export interface P2PMessage {
@@ -89,7 +90,11 @@ export const useP2PStore = create<P2PStore>()(
             connectionStatus: 'connected',
           });
         } catch (error) {
-          console.error('Failed to initialize P2P:', error);
+          errorHandler.log('Failed to initialize P2P', error, {
+            context: 'P2PStore.initialize',
+            showToast: true,
+            toastTitle: 'P2P接続に失敗しました',
+          });
           set({
             connectionStatus: 'error',
             error: error instanceof Error ? error.message : 'P2P initialization failed',
@@ -117,7 +122,11 @@ export const useP2PStore = create<P2PStore>()(
           // 状態を更新
           await get().refreshStatus();
         } catch (error) {
-          console.error('Failed to join topic:', error);
+          errorHandler.log('Failed to join topic', error, {
+            context: 'P2PStore.joinTopic',
+            showToast: true,
+            toastTitle: 'トピックへの参加に失敗しました',
+          });
           set({
             error: error instanceof Error ? error.message : 'Failed to join topic',
           });
@@ -139,7 +148,11 @@ export const useP2PStore = create<P2PStore>()(
 
           set({ activeTopics, messages });
         } catch (error) {
-          console.error('Failed to leave topic:', error);
+          errorHandler.log('Failed to leave topic', error, {
+            context: 'P2PStore.leaveTopic',
+            showToast: true,
+            toastTitle: 'トピックからの離脱に失敗しました',
+          });
           set({
             error: error instanceof Error ? error.message : 'Failed to leave topic',
           });
@@ -151,7 +164,11 @@ export const useP2PStore = create<P2PStore>()(
         try {
           await p2pApi.broadcast(topicId, content);
         } catch (error) {
-          console.error('Failed to broadcast message:', error);
+          errorHandler.log('Failed to broadcast message', error, {
+            context: 'P2PStore.broadcast',
+            showToast: true,
+            toastTitle: 'メッセージの送信に失敗しました',
+          });
           set({
             error: error instanceof Error ? error.message : 'Failed to broadcast message',
           });
@@ -184,7 +201,9 @@ export const useP2PStore = create<P2PStore>()(
 
           set({ activeTopics });
         } catch (error) {
-          console.error('Failed to refresh P2P status:', error);
+          errorHandler.log('Failed to refresh P2P status', error, {
+            context: 'P2PStore.refreshStatus',
+          });
         }
       },
 

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
 
 export function WelcomeScreen() {
   const navigate = useNavigate();
@@ -14,7 +15,9 @@ export function WelcomeScreen() {
       await navigate({ to: '/profile-setup' });
     } catch (error) {
       toast.error('アカウントの作成に失敗しました');
-      console.error('Failed to create account:', error);
+      errorHandler.log('Failed to create account', error, {
+        context: 'WelcomeScreen.handleCreateAccount',
+      });
     }
   };
 

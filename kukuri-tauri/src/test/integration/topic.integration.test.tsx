@@ -29,7 +29,7 @@ function TopicTestComponent() {
           setTopics(topics);
         }
       } catch (error) {
-        console.error('Failed to load topics:', error);
+        // Errors are handled by the store
       }
     };
     loadTopics();
@@ -41,7 +41,7 @@ function TopicTestComponent() {
       const topic = await invoke<Topic>('create_topic', { name, description });
       addTopic(topic);
     } catch (error) {
-      console.error('Failed to create topic:', error);
+      // Errors are handled by the store
     } finally {
       setIsLoading(false);
     }

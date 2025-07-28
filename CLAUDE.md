@@ -12,6 +12,7 @@
 - **日付**: ドキュメント作成/更新の前に必ず`date "+%Y年%m月%d日"`コマンドで今日の日付を確認
 - **DRY原則**: 新しいクラス・新しいメソッド・新しい型を実装する際は同じ機能を持ったものが既にないかを必ず調査する
 - **依存最新化**: 依存ライブラリを追加する際は、webから最新バージョンを確認する
+- **エラーハンドリング**: フロントエンドでの`console.error`使用は禁止。代わりに`errorHandler`を使用する（`docs/05_implementation/error_handling_guidelines.md`参照）
 
 ### 実装のリファレンス
 - **zustand**: storeのモックを実装/変更する前にzustand公式のドキュメント( https://zustand.docs.pmnd.rs/guides/testing )を必ず参照する

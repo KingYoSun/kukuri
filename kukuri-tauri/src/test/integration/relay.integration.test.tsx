@@ -26,7 +26,7 @@ function RelayTestComponent() {
         setRelayStatuses({ ...relayStatuses, [relayUrl]: 'connected' });
         setRelayUrl('');
       } catch (error) {
-        console.error('Failed to connect:', error);
+        // Errors are handled by the store
       }
     }
   };
@@ -37,7 +37,7 @@ function RelayTestComponent() {
       setConnectedRelays(connectedRelays.filter((r) => r !== url));
       setRelayStatuses({ ...relayStatuses, [url]: 'disconnected' });
     } catch (error) {
-      console.error('Failed to disconnect:', error);
+      // Errors are handled by the store
     }
   };
 

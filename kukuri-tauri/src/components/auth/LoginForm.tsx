@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { errorHandler } from '@/lib/errorHandler';
 
 export function LoginForm() {
   const navigate = useNavigate();
@@ -38,7 +39,9 @@ export function LoginForm() {
       await navigate({ to: '/' });
     } catch (error) {
       toast.error('ログインに失敗しました。秘密鍵を確認してください');
-      console.error('Login failed:', error);
+      errorHandler.log('Login failed', error, {
+        context: 'LoginForm.handleSubmit',
+      });
     } finally {
       setIsLoading(false);
     }

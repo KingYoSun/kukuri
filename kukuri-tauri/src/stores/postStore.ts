@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { PostState, Post } from './types';
 import { TauriApi } from '@/lib/api/tauri';
+import { errorHandler } from '@/lib/errorHandler';
 
 interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
@@ -70,7 +71,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         postsByTopic: postsByTopicMap,
       });
     } catch (error) {
-      console.error('Failed to fetch posts:', error);
+      errorHandler.log('Failed to fetch posts', error, {
+        context: 'PostStore.fetchPosts',
+        showToast: true,
+        toastTitle: '投稿の取得に失敗しました',
+      });
       throw error;
     }
   },
@@ -129,7 +134,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
       return post;
     } catch (error) {
-      console.error('Failed to create post:', error);
+      errorHandler.log('Failed to create post', error, {
+        context: 'PostStore.createPost',
+        showToast: true,
+        toastTitle: '投稿の作成に失敗しました',
+      });
       throw error;
     }
   },
@@ -188,7 +197,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         };
       });
     } catch (error) {
-      console.error('Failed to delete post:', error);
+      errorHandler.log('Failed to delete post', error, {
+        context: 'PostStore.deletePostRemote',
+        showToast: true,
+        toastTitle: '投稿の削除に失敗しました',
+      });
       throw error;
     }
   },
@@ -208,7 +221,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         return { posts: newPosts };
       });
     } catch (error) {
-      console.error('Failed to like post:', error);
+      errorHandler.log('Failed to like post', error, {
+        context: 'PostStore.likePost',
+        showToast: true,
+        toastTitle: 'いいねに失敗しました',
+      });
       throw error;
     }
   },

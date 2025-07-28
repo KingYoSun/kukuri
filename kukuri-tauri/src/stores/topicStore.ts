@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TopicState, Topic } from './types';
 import { TauriApi } from '@/lib/api/tauri';
+import { errorHandler } from '@/lib/errorHandler';
 
 interface TopicStore extends TopicState {
   setTopics: (topics: Topic[]) => void;
@@ -46,7 +47,11 @@ export const useTopicStore = create<TopicStore>()(
             topics: new Map(topics.map((t) => [t.id, t])),
           });
         } catch (error) {
-          console.error('Failed to fetch topics:', error);
+          errorHandler.log('Failed to fetch topics', error, {
+            context: 'TopicStore.fetchTopics',
+            showToast: true,
+            toastTitle: 'トピックの取得に失敗しました',
+          });
           throw error;
         }
       },
@@ -78,7 +83,11 @@ export const useTopicStore = create<TopicStore>()(
           });
           return topic;
         } catch (error) {
-          console.error('Failed to create topic:', error);
+          errorHandler.log('Failed to create topic', error, {
+            context: 'TopicStore.createTopic',
+            showToast: true,
+            toastTitle: 'トピックの作成に失敗しました',
+          });
           throw error;
         }
       },
@@ -109,7 +118,11 @@ export const useTopicStore = create<TopicStore>()(
             return { topics: newTopics };
           });
         } catch (error) {
-          console.error('Failed to update topic:', error);
+          errorHandler.log('Failed to update topic', error, {
+            context: 'TopicStore.updateTopicRemote',
+            showToast: true,
+            toastTitle: 'トピックの更新に失敗しました',
+          });
           throw error;
         }
       },
@@ -136,7 +149,11 @@ export const useTopicStore = create<TopicStore>()(
             };
           });
         } catch (error) {
-          console.error('Failed to delete topic:', error);
+          errorHandler.log('Failed to delete topic', error, {
+            context: 'TopicStore.deleteTopicRemote',
+            showToast: true,
+            toastTitle: 'トピックの削除に失敗しました',
+          });
           throw error;
         }
       },

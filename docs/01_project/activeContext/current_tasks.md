@@ -653,6 +653,26 @@
   - [x] 最終結果: 147テスト全てパス、リントエラー0
 - [x] 進捗レポート作成（2025-07-28_test_type_lint_final_fix.md）
 
+### 2025年7月28日（フロントエンドエラーハンドリング改善）
+- [x] console.error使用の全面的な禁止と代替実装
+  - [x] カスタムエラーハンドラー（errorHandler）の実装
+    - [x] 環境別動作（テスト/開発/本番）の実装
+    - [x] Toast通知オプション機能
+    - [x] コンテキスト情報付加機能
+  - [x] console.errorの置き換え作業（合計33箇所）
+    - [x] Zustandストア: authStore、postStore、topicStore、p2pStore
+    - [x] コンポーネント: AccountSwitcher、ProfileSetup、LoginForm、WelcomeScreen
+    - [x] フック: useP2PEventListener
+    - [x] E2Eテスト設定: wdio.conf.ts（process.stderr.writeに変更）
+    - [x] 統合テスト: エラー処理をストアに委譲
+  - [x] エラーハンドラーのテスト実装
+    - [x] 環境ごとの動作テスト
+    - [x] Toast通知の検証
+  - [x] ドキュメント作成
+    - [x] error_handling_guidelines.md作成
+    - [x] CLAUDE.md基本ルールに追加
+    - [x] 進捗レポート作成（2025-07-28_error_handling_improvement.md）
+
 ## 現在進行中のタスク
 
 ### Tauriアプリケーション改善 Phase 2（データ連携の確立）
