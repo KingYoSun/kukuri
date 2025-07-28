@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useTopicStore } from '@/stores';
 import { usePostsByTopic } from '@/hooks';
-import { Card } from '@/components/ui/card';
+import { PostCard } from '@/components/posts/PostCard';
+import { PostComposer } from '@/components/posts/PostComposer';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Hash, MessageCircle, Heart } from 'lucide-react';
+import { Hash, PlusCircle, Loader2 } from 'lucide-react';
 import { TopicMeshVisualization } from '@/components/TopicMeshVisualization';
 
 export const Route = createFileRoute('/topics/$topicId')({
@@ -12,10 +15,12 @@ export const Route = createFileRoute('/topics/$topicId')({
 
 function TopicPage() {
   const { topicId } = Route.useParams();
-  const { topics } = useTopicStore();
-  const { data: posts, isLoading } = usePostsByTopic(topicId);
+  const { topics, joinedTopics } = useTopicStore();
+  const { data: posts, isLoading, refetch } = usePostsByTopic(topicId);
+  const [showComposer, setShowComposer] = useState(false);
 
   const topic = topics.get(topicId);
+  const isJoined = joinedTopics.includes(topicId);
 
   if (!topic) {
     return (
@@ -25,6 +30,11 @@ function TopicPage() {
     );
   }
 
+  const handlePostSuccess = () => {
+    setShowComposer(false);
+    refetch();
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-card rounded-lg p-6 border">
@@ -33,53 +43,87 @@ function TopicPage() {
           <h1 className="text-3xl font-bold">{topic.name}</h1>
         </div>
         {topic.description && <p className="text-muted-foreground mb-4">{topic.description}</p>}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <span>{topic.memberCount} メンバー</span>
-          <span>•</span>
-          <span>
-            最終更新:{' '}
-            {topic.lastActive ? new Date(topic.lastActive).toLocaleDateString('ja-JP') : '-'}
-          </span>
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>{topic.memberCount} メンバー</span>
+            <span>•</span>
+            <span>
+              最終更新:{' '}
+              {topic.lastActive ? new Date(topic.lastActive).toLocaleDateString('ja-JP') : '-'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {isJoined && !showComposer && (
+              <Button onClick={() => setShowComposer(true)} size="sm">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                投稿する
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowEditModal(true)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  編集
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  削除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
       <TopicMeshVisualization topicId={topicId} />
 
+      {showComposer && (
+        <PostComposer
+          topicId={topicId}
+          onSuccess={handlePostSuccess}
+          onCancel={() => setShowComposer(false)}
+        />
+      )}
+
       <div className="space-y-4">
         {isLoading ? (
-          <Card className="p-6 text-center">
-            <p className="text-muted-foreground">読み込み中...</p>
-          </Card>
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
         ) : !posts || posts.length === 0 ? (
-          <Card className="p-6 text-center">
-            <p className="text-muted-foreground">まだ投稿がありません</p>
-          </Card>
+          <Alert>
+            <AlertDescription>
+              {isJoined
+                ? 'まだ投稿がありません。最初の投稿をしてみましょう！'
+                : 'このトピックに参加すると投稿が表示されます。'}
+            </AlertDescription>
+          </Alert>
         ) : (
-          posts.map((post) => (
-            <Card key={post.id} className="p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {post.author.name || post.author.npub.slice(0, 8) + '...'} •{' '}
-                    {new Date(post.created_at * 1000).toLocaleString('ja-JP')}
-                  </p>
-                  <p className="whitespace-pre-wrap">{post.content}</p>
-                  <div className="flex items-center gap-4 mt-4">
-                    <Button variant="ghost" size="sm">
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      返信
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      <Heart className="h-4 w-4 mr-2" />
-                      いいね
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))
+          posts.map((post) => <PostCard key={post.id} post={post} />)
         )}
       </div>
+
+      <TopicFormModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        topic={topic}
+        mode="edit"
+      />
+
+      <TopicDeleteDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        topic={topic}
+      />
     </div>
   );
 }

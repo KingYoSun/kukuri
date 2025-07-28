@@ -1,12 +1,15 @@
 import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, MessageSquare, Clock, Hash } from 'lucide-react';
+import { Users, MessageSquare, Clock, Hash, Loader2 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import type { Topic } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useTopicStore } from '@/stores';
+import { p2pApi } from '@/lib/api/p2p';
+import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react';
 
 interface TopicCardProps {
   topic: Topic;
@@ -15,6 +18,8 @@ interface TopicCardProps {
 export function TopicCard({ topic }: TopicCardProps) {
   const { joinedTopics, joinTopic, leaveTopic } = useTopicStore();
   const isJoined = joinedTopics.includes(topic.id);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   // 最終アクティブ時刻の表示
   const lastActiveText = topic.lastActive
@@ -24,11 +29,34 @@ export function TopicCard({ topic }: TopicCardProps) {
       })
     : '活動なし';
 
-  const handleJoinToggle = () => {
-    if (isJoined) {
-      leaveTopic(topic.id);
-    } else {
-      joinTopic(topic.id);
+  const handleJoinToggle = async () => {
+    setIsLoading(true);
+    try {
+      if (isJoined) {
+        // トピックから離脱
+        await p2pApi.leaveTopic(topic.id);
+        leaveTopic(topic.id);
+        toast({
+          title: 'トピックから離脱しました',
+          description: `「${topic.name}」から離脱しました`,
+        });
+      } else {
+        // トピックに参加
+        await p2pApi.joinTopic(topic.id);
+        joinTopic(topic.id);
+        toast({
+          title: 'トピックに参加しました',
+          description: `「${topic.name}」に参加しました`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'エラー',
+        description: isJoined ? 'トピックから離脱できませんでした' : 'トピックに参加できませんでした',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -45,7 +73,13 @@ export function TopicCard({ topic }: TopicCardProps) {
             </Link>
             <CardDescription className="mt-1">{topic.description}</CardDescription>
           </div>
-          <Button variant={isJoined ? 'secondary' : 'default'} size="sm" onClick={handleJoinToggle}>
+          <Button 
+            variant={isJoined ? 'secondary' : 'default'} 
+            size="sm" 
+            onClick={handleJoinToggle}
+            disabled={isLoading}
+          >
+            {isLoading && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
             {isJoined ? '参加中' : '参加'}
           </Button>
         </div>
