@@ -3,23 +3,28 @@
 **作成日**: 2025年7月28日
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール
 
-## Phase 1: 認証フローの修正（最優先）
+## Phase 1: 認証フローの修正 ✓ 完了
 
-### 1.1 ウェルカム画面の実装
+### 1.1 ウェルカム画面の実装 ✓ 完了
 
-#### タスク
-1. `src/routes/welcome.tsx` の作成
-2. `src/components/auth/WelcomeScreen.tsx` の実装
+#### 完了したタスク
+1. `src/routes/welcome.tsx` の作成 ✓
+2. `src/components/auth/WelcomeScreen.tsx` の実装 ✓
    - アプリケーションの説明
    - 新規アカウント作成ボタン
    - 既存アカウントでログインボタン
-3. `src/components/auth/LoginForm.tsx` の作成
+   - テスト作成（5件）
+3. `src/components/auth/LoginForm.tsx` の作成 ✓
    - nsec入力フォーム
-   - バリデーション
+   - バリデーション（nsec形式の秘密鍵検証）
    - エラーハンドリング
-4. `src/components/auth/ProfileSetup.tsx` の作成
+   - セキュア保存オプション
+   - テスト作成（8件）
+4. `src/components/auth/ProfileSetup.tsx` の作成 ✓
    - 名前、自己紹介の入力
-   - アバター設定
+   - アバター設定（イニシャル生成）
+   - スキップ機能
+   - テスト作成（9件）
 
 #### 実装詳細
 ```typescript
@@ -50,73 +55,86 @@ export function WelcomeScreen() {
 }
 ```
 
-### 1.2 認証状態の適切な管理
+### 1.2 認証状態の適切な管理 ✓ 完了
 
-#### タスク
-1. `authStore.ts` の修正
+#### 完了したタスク
+1. `authStore.ts` の修正 ✓
    - 初期状態を `isAuthenticated: false` に固定
    - 起動時に鍵の有効性を確認するロジック追加
-2. `src/hooks/useAuth.ts` の改善
+   - initializeメソッドの実装（自動ログイン）
+   - 複数アカウント管理機能の追加
+   - テスト作成（initializeメソッド4件、統合テスト5件）
+2. `src/hooks/useAuth.ts` の改善 ✓
    - 初期化ロジックの実装
    - 認証ガードの実装
-3. `src/routes/__root.tsx` の修正
+3. `src/routes/__root.tsx` の修正 ✓
    - 認証状態によるリダイレクト
+   - 認証ガードテストの作成
 
-#### 実装詳細
-```typescript
-// authStore.ts の修正
-const initialState: AuthState = {
-  isAuthenticated: false,
-  currentUser: null,
-  privateKey: null,
-};
+#### 実装の特徴
+- **セキュアな鍵管理**: プラットフォーム固有のセキュアストレージを使用し、秘密鍵をメモリに保持しない
+- **複数アカウント対応**: 複数のアカウントを安全に管理し、簡単に切り替え可能
+- **自動ログイン**: 起動時に前回使用したアカウントで自動的にログイン
+- **包括的なテスト**: 全37件のテストによる品質保証
 
-// 起動時の初期化メソッド追加
-initialize: async () => {
-  const stored = localStorage.getItem('auth-storage');
-  if (stored) {
-    const parsed = JSON.parse(stored);
-    if (parsed.state?.privateKey) {
-      try {
-        // 鍵の有効性を確認
-        await TauriApi.login({ nsec: parsed.state.privateKey });
-        // 成功したらそのまま
-      } catch {
-        // 失敗したらログアウト
-        set(initialState);
-      }
-    }
-  }
-}
-```
+### 1.3 ログアウト機能の修正 ✓ 完了
 
-### 1.3 ログアウト機能の修正
-
-#### タスク
-1. Headerコンポーネントにユーザーメニュー追加
+#### 完了したタスク
+1. Headerコンポーネントにユーザーメニュー追加 ✓
    - プロフィール表示
    - 設定メニュー
    - ログアウトボタン
-2. ログアウト処理の実装
+2. ログアウト処理の実装 ✓
    - 確認ダイアログ
    - 状態のクリア
    - ウェルカム画面へのリダイレクト
+3. AccountSwitcherコンポーネントの実装 ✓
+   - 複数アカウント切り替えUI
+   - 現在のアカウント表示
+   - アカウント追加・削除機能
+
+### 1.4 セキュアストレージ実装 ✓ 完了
+
+#### 完了したタスク
+1. Rustバックエンドのセキュアストレージ実装 ✓
+   - keyring crateによるプラットフォーム固有セキュアストレージアクセス
+   - macOS Keychain、Windows Credential Manager、Linux Secret Service対応
+   - 秘密鍵の個別暗号化保存（npubごと）
+   - アカウントメタデータ管理（公開情報のみ）
+2. Tauriコマンドの実装 ✓
+   - add_account - アカウント追加とセキュア保存
+   - list_accounts - 保存済みアカウント一覧
+   - switch_account - アカウント切り替え
+   - remove_account - アカウント削除
+   - get_current_account - 現在のアカウント取得（自動ログイン用）
+   - secure_login - セキュアストレージからのログイン
+3. フロントエンドの複数アカウント対応 ✓
+   - SecureStorageApi TypeScriptラッパー実装
+   - authStoreの拡張（複数アカウント管理機能）
+   - 自動ログイン機能（起動時の自動認証）
+4. 包括的なテストの作成 ✓
+   - Rustバックエンドテスト（8件）
+   - フロントエンドAPIテスト（6テストスイート）
+   - 統合テスト（3テストスイート）
 
 ## Phase 2: データ連携の確立 ✓ 完了
 
 ### 2.1 ホームページの実データ表示 ✓ 完了
 
 #### 完了したタスク
-1. `src/pages/Home.tsx` の修正 ✓
-   - ハードコードされた投稿を削除
-   - useQueryを使用した実データ取得
-2. `src/hooks/usePosts.ts` の改善 ✓
-   - タイムライン用の投稿取得ロジック
-   - 30秒ごとの自動更新
-3. `src/components/posts/PostCard.tsx` の作成 ✓
-   - 投稿表示コンポーネント
-   - いいね機能の実装
-   - 日本語の相対時刻表示
+1. 投稿の実データ表示 ✓
+   - `src/pages/Home.tsx` の修正
+   - `src/hooks/usePosts.ts` の改善（タイムライン用投稿取得、30秒ごとの自動更新）
+   - `src/components/posts/PostCard.tsx` の作成（いいね機能、日本語相対時刻表示）
+   - PostCardコンポーネントのテスト作成（9件）
+2. トピック一覧の実データ表示 ✓
+   - `src/routes/topics.tsx` の作成（トピック探索ページ、リアルタイム検索機能）
+   - `src/components/topics/TopicCard.tsx` の作成（参加/退出ボタン、統計情報表示）
+   - `src/hooks/useTopics.ts` の実装（TauriAPI連携、CRUD操作ミューテーション）
+   - TopicCardコンポーネントのテスト作成（9件）
+   - Topics.tsxページのテスト作成（12件）
+   - useTopicsフックのテスト作成（7件）
+3. 既存テストの修正（QueryClientProvider対応）
 
 #### 実装詳細
 ```typescript
@@ -133,44 +151,75 @@ export function useTimelinePosts() {
 }
 ```
 
-### 2.2 トピック一覧の実装 ✓ 完了
+### 2.2 トピック機能の実装 ✓ 完了
 
 #### 完了したタスク
-1. `src/routes/topics.tsx` の作成 ✓
-   - トピック探索ページ
-   - リアルタイム検索機能
-2. `src/components/topics/TopicCard.tsx` の作成 ✓
-   - トピック情報表示
-   - 参加/退出ボタン
-   - メンバー数、投稿数、最終活動時刻の表示
-3. `src/hooks/useTopics.ts` の実装 ✓
-   - TauriAPIを使用した実データ取得
-   - CRUD操作用のミューテーション
+1. 投稿作成機能 ✓
+   - `src/components/PostComposer.tsx` の実装（投稿作成フォーム）
+   - `src/components/TopicSelector.tsx` の実装（トピック選択コンポーネント）
+   - Home画面とトピック詳細画面への統合
+   - PostComposerのテスト作成（11件）
+   - TopicSelectorのテスト作成（12件）
+2. トピック管理機能 ✓
+   - `src/components/topics/TopicFormModal.tsx` の実装（作成/編集フォーム）
+   - `src/components/topics/TopicDeleteDialog.tsx` の実装（削除確認ダイアログ）
+   - トピック一覧・詳細ページへの統合
+   - react-hook-formを使用したフォームバリデーション
+3. P2P連携実装 ✓
+   - トピック参加時のP2Pトピック自動参加
+   - トピック離脱時のP2Pトピック自動離脱
+   - TauriAPIとP2P APIの完全統合
 
-### 2.3 リアルタイム更新の実装
+### 2.3 リアルタイム更新の実装 ✓ 完了
+
+#### 完了したタスク
+1. Nostrイベントのリアルタイム処理 ✓
+   - `src/hooks/useNostrEvents.ts` の作成
+   - Tauriイベントリスナーの設定（nostr://event）
+   - イベント受信時の自動ストア更新
+   - 新規投稿、トピック更新、いいねの即座反映
+2. P2Pイベントのリアルタイム処理 ✓
+   - `src/hooks/useP2PEventListener.ts` の改善
+   - P2Pメッセージの即座反映
+   - トピック参加/離脱の自動更新
+3. データ同期機能 ✓
+   - `src/hooks/useDataSync.ts` の実装
+   - 定期的なデータ更新（30秒間隔）
+   - イベント駆動とポーリングのハイブリッド方式
+4. UI表示機能 ✓
+   - `src/components/RealtimeIndicator.tsx` の実装
+   - Nostr/P2P接続状態の可視化
+   - 最新データ受信時刻の表示
+5. 包括的なテスト ✓
+   - useNostrEventsのテスト（10件）
+   - useDataSyncのテスト（8件）
+   - RealtimeIndicatorのテスト（6件）
+   - 合計24件の新規テスト追加
+
+### 2.4 追加機能
 
 #### タスク
-1. `src/hooks/useNostrEvents.ts` の作成
-   - Tauriイベントリスナーの設定
-   - イベント受信時のストア更新
-2. `src/hooks/useP2PEvents.ts` の改善
-   - P2Pメッセージのリアルタイム反映
-
-### 2.4 手動P2P接続機能
-
-#### タスク
-1. `src/components/p2p/PeerConnectionPanel.tsx` の作成
-   - 自分のピアアドレス表示
-   - コピーボタン
-   - 手動ピアアドレス入力フォーム
-   - 接続ボタン
-2. P2P接続処理の実装
-   - アドレスのバリデーション
-   - 接続試行とエラーハンドリング
-   - 接続成功時の通知
-3. 接続履歴管理
-   - 最近接続したピアの保存
-   - ピアリストの表示
+1. 手動P2P接続機能
+   - `src/components/p2p/PeerConnectionPanel.tsx` の作成
+     - 自分のピアアドレス表示
+     - コピーボタン
+     - 手動ピアアドレス入力フォーム
+     - 接続ボタン
+   - P2P接続処理の実装
+     - アドレスのバリデーション
+     - 接続試行とエラーハンドリング
+     - 接続成功時の通知
+   - 接続履歴管理
+     - 最近接続したピアの保存
+     - ピアリストの表示
+2. リアクション機能の実装
+   - 返信機能
+   - 引用機能
+   - その他のリアクション
+3. 検索機能の基本実装
+   - 投稿検索
+   - トピック検索
+   - ユーザー検索
 
 #### 実装詳細
 ```typescript
@@ -279,15 +328,16 @@ export function PeerConnectionPanel() {
 
 ### 工数見積もり
 - Phase 1: ✓ 完了（2日）
-- Phase 2: ✓ 完了（2日 - 手動P2P接続機能は保留）
+- Phase 2: ✓ 完了（2日）
 - Phase 3: 3-4日（次フェーズ）
 - Phase 4: 2-3日
 
 ### 実績
 - Phase 1: 2025年7月28日完了（認証フロー実装とテスト）
-- Phase 2: 2025年7月28日完了（データ連携基盤）
-  - 2.1: 投稿の実データ表示機能
-  - 2.2: トピック一覧の実データ表示機能
+- Phase 2: 2025年7月29日完了（データ連携基盤）
+  - 2.1: ホームページの実データ表示（投稿＋トピック一覧）
+  - 2.2: トピック機能の実装（投稿作成、トピック管理、P2P連携）
+  - 2.3: リアルタイム更新の実装（Nostr/P2Pイベント、データ同期）
 
 ### 発見層実装との連携
 - Phase 1-2完了後、並行して発見層実装を開始
