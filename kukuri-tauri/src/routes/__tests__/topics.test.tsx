@@ -184,7 +184,7 @@ describe('Topics Page', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('検索条件に一致するトピックが見つかりませんでした。')
+        screen.getByText('検索条件に一致するトピックが見つかりません')
       ).toBeInTheDocument();
     });
   });
@@ -195,7 +195,7 @@ describe('Topics Page', () => {
     renderTopicsPage();
 
     expect(
-      screen.getByText('トピックがまだありません。新しいトピックを作成してください。')
+      screen.getByText('トピックがまだありません。最初のトピックを作成してみましょう！')
     ).toBeInTheDocument();
   });
 

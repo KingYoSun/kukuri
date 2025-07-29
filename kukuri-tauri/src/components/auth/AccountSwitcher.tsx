@@ -11,9 +11,11 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ChevronDown, User, LogOut, Trash2 } from 'lucide-react';
 import { errorHandler } from '@/lib/errorHandler';
+import { useNavigate } from '@tanstack/react-router';
 
 export function AccountSwitcher() {
   const { currentUser, accounts, switchAccount, removeAccount, logout } = useAuthStore();
+  const navigate = useNavigate();
 
   if (!currentUser) {
     return null;
@@ -114,7 +116,7 @@ export function AccountSwitcher() {
         <DropdownMenuSeparator />
 
         {/* アクション */}
-        <DropdownMenuItem onSelect={() => (window.location.href = '/login')}>
+        <DropdownMenuItem onSelect={() => navigate({ to: '/login' })}>
           <User className="mr-2 h-4 w-4" />
           <span>別のアカウントを追加</span>
         </DropdownMenuItem>

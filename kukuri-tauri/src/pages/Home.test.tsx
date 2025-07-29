@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
@@ -28,13 +28,20 @@ vi.mock('@/components/posts/PostCard', () => ({
 vi.mock('@/components/posts/PostComposer', () => ({
   PostComposer: ({ onSuccess, onCancel }: any) => (
     <div data-testid="post-composer">
-      <button onClick={() => {
-        // onSuccessをPromiseでラップして非同期にする
-        Promise.resolve().then(() => onSuccess?.());
-      }}>投稿する</button>
-      <button onClick={() => {
-        Promise.resolve().then(() => onCancel?.());
-      }}>キャンセル</button>
+      <button 
+        data-testid="post-composer-submit"
+        onClick={() => {
+          onSuccess?.();
+        }}
+      >
+        投稿する
+      </button>
+      <button 
+        data-testid="post-composer-cancel"
+        onClick={() => onCancel?.()}
+      >
+        キャンセル
+      </button>
     </div>
   ),
 }));
@@ -227,7 +234,7 @@ describe('Home', () => {
     await user.click(screen.getByRole('button', { name: /投稿する/i }));
     expect(screen.getByTestId('post-composer')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /キャンセル/i }));
+    await user.click(screen.getByTestId('post-composer-cancel'));
     expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
   });
 
@@ -235,6 +242,15 @@ describe('Home', () => {
     const user = userEvent.setup();
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
+    vi.mocked(TauriApi.createPost).mockResolvedValue({
+      id: '3',
+      content: '新しい投稿',
+      author_pubkey: 'pubkey3',
+      topic_id: 'topic1',
+      created_at: Math.floor(Date.now() / 1000),
+      likes: 0,
+      replies: 0,
+    });
     mockUseTopicStore.mockReturnValue({
       joinedTopics: ['topic1'],
     } as any);
@@ -245,17 +261,22 @@ describe('Home', () => {
       expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
     });
 
+    // 投稿ボタンをクリックしてフォームを表示
     await user.click(screen.getByRole('button', { name: /投稿する/i }));
     expect(screen.getByTestId('post-composer')).toBeInTheDocument();
 
     // PostComposerのモック内で定義した「投稿する」ボタンをクリック
-    const submitButton = screen.getAllByRole('button', { name: /投稿する/i })[1];
+    const submitButton = screen.getByTestId('post-composer-submit');
+    
+    // クリックイベントを実行
     await user.click(submitButton);
 
+    // フォームが閉じることを確認
     await waitFor(() => {
       expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
     });
     
+    // 投稿ボタンが再表示されることを確認
     expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
   });
 });
