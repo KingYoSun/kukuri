@@ -1,6 +1,45 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年7月28日
+**最終更新**: 2025年7月29日
+
+## 現在の問題
+
+### テストエラー（2025年7月29日）
+**問題**: フロントエンドテストで4件のエラーが残存
+
+**詳細**:
+1. **Home.test.tsx**
+   - テスト名: `投稿が成功するとフォームが閉じて投稿ボタンが再度表示される`
+   - エラー: `expect(element).not.toBeInTheDocument()`
+   - 原因: PostComposerモックのonSuccess呼び出し後も、post-composerが画面に残っている
+
+2. **PostComposer.test.tsx**
+   - テスト名: `投稿内容が空の場合、エラーメッセージが表示される`
+   - エラー: `expected "spy" to be called with arguments`
+   - 原因: 空白のみの投稿でtoastが呼ばれることを期待しているが、実装では送信ボタンが無効化される仕様
+
+3. **topics.test.tsx**
+   - テスト名: `新規トピックボタンクリックでモーダルが開く`
+   - エラー: `Unable to find an element with the text: 新しいトピックを作成`
+   - 原因: TopicFormModalのモック実装が正しくない
+
+4. **auth.integration.test.tsx**
+   - テスト名: `should handle authentication errors gracefully`
+   - エラー: `Error: Key generation failed`
+   - 原因: テスト内でエラーをthrowしているが、適切にハンドリングされていない
+
+### リント警告（2025年7月29日）
+**問題**: ESLintで14件の警告（`--max-warnings 0`の制約により、ビルドエラーになる）
+
+**詳細**:
+- **@typescript-eslint/no-explicit-any**: 13箇所
+  - PostComposer.test.tsx: 4箇所
+  - TopicSelector.test.tsx: 2箇所
+  - Home.test.tsx: 7箇所
+  - 主にモック関数の型定義で使用
+
+- **react-refresh/only-export-components**: 1箇所
+  - form.tsx: badgeVariants定数のエクスポート
 
 ## 解決済みの問題
 

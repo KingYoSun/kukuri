@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TopicCard } from './TopicCard';
 import type { Topic } from '@/stores';
-import { BrowserRouter } from 'react-router-dom';
 
 // zustand storeのモック
 const mockJoinedTopics: string[] = [];
@@ -15,6 +14,14 @@ vi.mock('@/stores', () => ({
     joinTopic: mockJoinTopic,
     leaveTopic: mockLeaveTopic,
   }),
+}));
+
+// p2p APIのモック
+vi.mock('@/lib/api/p2p', () => ({
+  p2pApi: {
+    joinTopic: vi.fn().mockResolvedValue(undefined),
+    leaveTopic: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // Tanstack Routerのモック
@@ -85,17 +92,19 @@ describe('TopicCard', () => {
     expect(joinedButton).toBeInTheDocument();
   });
 
-  it('参加ボタンをクリックするとjoinTopicが呼ばれる', () => {
+  it('参加ボタンをクリックするとjoinTopicが呼ばれる', async () => {
     render(<TopicCard topic={mockTopic} />);
 
     const joinButton = screen.getByText('参加');
     fireEvent.click(joinButton);
 
-    expect(mockJoinTopic).toHaveBeenCalledWith(mockTopic.id);
+    await waitFor(() => {
+      expect(mockJoinTopic).toHaveBeenCalledWith(mockTopic.id);
+    });
     expect(mockLeaveTopic).not.toHaveBeenCalled();
   });
 
-  it('参加中ボタンをクリックするとleaveTopicが呼ばれる', () => {
+  it('参加中ボタンをクリックするとleaveTopicが呼ばれる', async () => {
     mockJoinedTopics.push(mockTopic.id);
     
     render(<TopicCard topic={mockTopic} />);
@@ -103,7 +112,9 @@ describe('TopicCard', () => {
     const joinedButton = screen.getByText('参加中');
     fireEvent.click(joinedButton);
 
-    expect(mockLeaveTopic).toHaveBeenCalledWith(mockTopic.id);
+    await waitFor(() => {
+      expect(mockLeaveTopic).toHaveBeenCalledWith(mockTopic.id);
+    });
     expect(mockJoinTopic).not.toHaveBeenCalled();
   });
 

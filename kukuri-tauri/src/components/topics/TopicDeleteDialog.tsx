@@ -43,7 +43,7 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
       onOpenChange(false);
       // トピック一覧ページへリダイレクト
       navigate({ to: '/topics' });
-    } catch (error) {
+    } catch {
       // エラーハンドリングはストアで行われる
     } finally {
       setIsDeleting(false);

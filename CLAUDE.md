@@ -1,9 +1,8 @@
 # CLAUDE.md
 
 ## 作業開始時の確認事項
-1. 回答ごとに現在自分が何のモデルかを必ず宣言する
-2. `docs/01_project/activeContext/current_tasks.md` で最新タスクを把握
-3. ドキュメントの最終更新日を確認（古い情報に注意）
+1. `docs/01_project/activeContext/current_tasks.md` で最新タスクを把握
+2. ドキュメントの最終更新日を確認（古い情報に注意）
 
 ## 基本ルール
 - **言語**: 必ず日本語で回答

@@ -199,8 +199,9 @@ describe('TopicSelector', () => {
     const button = screen.getByRole('combobox');
     await user.click(button);
 
-    // topic1の項目を探す
-    const topic1Item = screen.getByText('プログラミング').closest('[role="option"]');
+    // topic1の項目を探す（複数見つかる可能性があるので、role="option"の要素内で探す）
+    const options = screen.getAllByRole('option');
+    const topic1Item = options.find(option => option.textContent?.includes('プログラミング'));
     expect(topic1Item).toBeInTheDocument();
 
     // チェックマークが表示されている（opacity-100クラス）

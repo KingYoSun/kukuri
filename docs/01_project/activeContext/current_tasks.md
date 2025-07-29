@@ -1,8 +1,34 @@
 # 現在のタスク状況
 
-**最終更新**: 2025年7月28日
+**最終更新**: 2025年7月29日
 
 ## 完了済みタスク
+
+### 2025年7月29日（テスト・型・リントエラーの修正）
+- [x] フロントエンドの型エラー修正（全て解消）
+  - [x] 欠落UIコンポーネントの作成
+    - [x] alert-dialog.tsx: RadixUI互換のAlertDialogコンポーネント作成
+    - [x] popover.tsx: RadixUI互換のPopoverコンポーネント作成
+  - [x] インポートエラーの修正
+    - [x] topics.$topicId.tsx: DropdownMenu関連のインポート追加、状態変数追加
+    - [x] TopicSelector.tsx: 未使用のTopic型インポート削除
+- [x] フロントエンドのリントエラー修正（全て解消）
+  - [x] 未使用変数の削除（catch (error) → catch {}）
+    - [x] PostComposer.tsx、TopicCard.tsx、TopicDeleteDialog.tsx、TopicFormModal.tsx
+  - [x] 未使用インポートの削除
+    - [x] TopicCard.test.tsx: BrowserRouterの削除
+- [x] テストエラーの部分修正
+  - [x] scrollIntoViewモックの追加（Radix UI Select互換）
+  - [x] TopicCard.test.tsx: p2p APIモックの追加
+  - [x] 非同期処理の修正（TopicCard、Home.test）
+  - [x] テストアサーションの修正（topics.test、PostComposer.test）
+- [x] Rustのビルド・テスト確認
+  - [x] Rustテスト: 全156テストがパス
+  - [x] Rust Clippy: エラーなし（警告のみ）
+- [x] 残課題の文書化
+  - [x] テストエラー4個の詳細記録
+  - [x] リント警告14個の内容記録
+  - [x] 進捗レポート作成（2025-07-29_test_lint_fixes.md）
 
 ### 2025年7月28日（Tauriアプリ Phase 2.2完了）
 - [x] Phase 2.2: トピック機能の実装
@@ -745,6 +771,20 @@
 
 ## 現在進行中のタスク
 
+### テスト・リント改善作業
+- [ ] 残りのテストエラー修正（4個）
+  - [ ] Home.test.tsx: 投稿成功後のPostComposer非表示
+  - [ ] PostComposer.test.tsx: 空白投稿時のtoast呼び出し
+  - [ ] topics.test.tsx: TopicFormModalモック実装
+  - [ ] auth.integration.test.tsx: エラーハンドリング
+- [ ] リント警告の解消（14個）
+  - [ ] @typescript-eslint/no-explicit-any: 13箇所
+    - [ ] PostComposer.test.tsx: 4箇所
+    - [ ] TopicSelector.test.tsx: 2箇所
+    - [ ] Home.test.tsx: 7箇所
+  - [ ] react-refresh/only-export-components: 1箇所
+    - [ ] form.tsx: badgeVariants定数のエクスポート
+
 ### Tauriアプリケーション改善 Phase 2（データ連携の確立）
 - [x] Phase 2.1: ホームページの実データ表示 ✓ 完了
   - [x] Tauriコマンドとフロントエンドの接続確認
@@ -910,12 +950,12 @@
 - [ ] 開発用Dockerイメージの作成
 
 ## 備考
-- **実装状況**: Phase 2.2 完了、Phase 2.3 開始準備
+- **実装状況**: Phase 2.2 完了、テスト・リント改善作業進行中
 - **品質状況**: 
-  - フロントエンドテスト: 339件（Phase 2.2完了時点、一部Radix UIテストは除く）
-  - バックエンドテスト: 147件全て成功
-  - 型チェック: エラーなし
-  - リント: エラーなし（warningは最小限）
+  - フロントエンドテスト: 335件成功、4件失敗（2025年7月29日時点）
+  - バックエンドテスト: 156件全て成功
+  - 型チェック: エラーなし ✅
+  - リント: エラーなし ✅、警告14個（any型使用）
   - フォーマット: エラーなし
 - **主要機能の完成度**:
   - ✅ フロントエンド基盤（UI、状態管理、ルーティング）
@@ -929,6 +969,11 @@
   - ✅ データ連携基盤（Phase 2.1）
   - ✅ トピック管理機能（Phase 2.2）
 - **最近の成果**:
+  - 2025年7月29日: テスト・型・リントエラーの修正
+    - 型エラーを全て解消（UIコンポーネント作成、インポート修正）
+    - リントエラーを全て解消（未使用変数・インポートの削除）
+    - テストエラーを部分修正（scrollIntoViewモック、非同期処理改善）
+    - 残課題の明確化（テスト4件、リント警告14件）
   - 2025年7月28日: Phase 2.2 完全完了
     - 投稿作成フォーム（PostComposer）の実装
     - トピック選択コンポーネント（TopicSelector）の実装

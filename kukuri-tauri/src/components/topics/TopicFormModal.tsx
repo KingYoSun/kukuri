@@ -88,7 +88,7 @@ export function TopicFormModal({ open, onOpenChange, topic, mode }: TopicFormMod
       }
       onOpenChange(false);
       form.reset();
-    } catch (error) {
+    } catch {
       // エラーハンドリングはストアで行われる
     } finally {
       setIsSubmitting(false);

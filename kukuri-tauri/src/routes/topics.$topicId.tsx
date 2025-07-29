@@ -6,8 +6,17 @@ import { PostCard } from '@/components/posts/PostCard';
 import { PostComposer } from '@/components/posts/PostComposer';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Hash, PlusCircle, Loader2 } from 'lucide-react';
+import { Hash, PlusCircle, Loader2, MoreVertical, Edit, Trash2 } from 'lucide-react';
 import { TopicMeshVisualization } from '@/components/TopicMeshVisualization';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { TopicFormModal } from '@/components/topics/TopicFormModal';
+import { TopicDeleteDialog } from '@/components/topics/TopicDeleteDialog';
 
 export const Route = createFileRoute('/topics/$topicId')({
   component: TopicPage,
@@ -18,6 +27,8 @@ function TopicPage() {
   const { topics, joinedTopics } = useTopicStore();
   const { data: posts, isLoading, refetch } = usePostsByTopic(topicId);
   const [showComposer, setShowComposer] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const topic = topics.get(topicId);
   const isJoined = joinedTopics.includes(topicId);

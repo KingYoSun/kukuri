@@ -156,7 +156,7 @@ describe('PostComposer', () => {
     });
   });
 
-  it('投稿内容が空の場合、エラーメッセージが表示される', async () => {
+  it('投稿内容が空の場合、送信ボタンが無効になる', async () => {
     const user = userEvent.setup();
     render(<PostComposer topicId="topic1" />);
 
@@ -164,15 +164,7 @@ describe('PostComposer', () => {
     await user.type(textarea, '   '); // 空白のみ
 
     const submitButton = screen.getByRole('button', { name: /投稿する/i });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith({
-        title: 'エラー',
-        description: '投稿内容を入力してください',
-        variant: 'destructive',
-      });
-    });
+    expect(submitButton).toBeDisabled();
   });
 
   it('トピックが選択されていない場合、エラーメッセージが表示される', async () => {

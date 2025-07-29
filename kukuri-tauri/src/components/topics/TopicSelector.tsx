@@ -14,8 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { useTopicStore } from '@/stores/topicStore';
-import type { Topic } from '@/stores';
+import { useTopicStore } from '@/stores';
 
 interface TopicSelectorProps {
   value?: string;

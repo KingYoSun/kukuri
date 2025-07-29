@@ -28,8 +28,13 @@ vi.mock('@/components/posts/PostCard', () => ({
 vi.mock('@/components/posts/PostComposer', () => ({
   PostComposer: ({ onSuccess, onCancel }: any) => (
     <div data-testid="post-composer">
-      <button onClick={onSuccess}>投稿する</button>
-      <button onClick={onCancel}>キャンセル</button>
+      <button onClick={() => {
+        // onSuccessをPromiseでラップして非同期にする
+        Promise.resolve().then(() => onSuccess?.());
+      }}>投稿する</button>
+      <button onClick={() => {
+        Promise.resolve().then(() => onCancel?.());
+      }}>キャンセル</button>
     </div>
   ),
 }));
@@ -247,7 +252,10 @@ describe('Home', () => {
     const submitButton = screen.getAllByRole('button', { name: /投稿する/i })[1];
     await user.click(submitButton);
 
-    expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
+    });
+    
     expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
   });
 });

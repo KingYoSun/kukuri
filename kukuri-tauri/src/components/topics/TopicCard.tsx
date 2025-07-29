@@ -49,7 +49,7 @@ export function TopicCard({ topic }: TopicCardProps) {
           description: `「${topic.name}」に参加しました`,
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'エラー',
         description: isJoined ? 'トピックから離脱できませんでした' : 'トピックに参加できませんでした',

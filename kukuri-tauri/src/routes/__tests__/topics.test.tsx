@@ -86,7 +86,7 @@ describe('Topics Page', () => {
 
   it('ページタイトルが表示される', () => {
     renderTopicsPage();
-    expect(screen.getByText('トピック')).toBeInTheDocument();
+    expect(screen.getByText('トピック一覧')).toBeInTheDocument();
   });
 
   it('検索入力フィールドが表示される', () => {
@@ -96,7 +96,7 @@ describe('Topics Page', () => {
 
   it('新規トピックボタンが表示される', () => {
     renderTopicsPage();
-    expect(screen.getByText('新規トピック')).toBeInTheDocument();
+    expect(screen.getByText('新しいトピック')).toBeInTheDocument();
   });
 
   it('トピック一覧が表示される', () => {

@@ -57,7 +57,7 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
       });
       setContent('');
       onSuccess?.();
-    } catch (error) {
+    } catch {
       // エラーハンドリングはストアで行われる
     } finally {
       setIsSubmitting(false);
