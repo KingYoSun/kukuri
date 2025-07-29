@@ -14,6 +14,8 @@ interface PostStore extends PostState {
   likePost: (postId: string) => Promise<void>;
   addReply: (parentId: string, reply: Post) => void;
   getPostsByTopic: (topicId: string) => Post[];
+  incrementLikes: (postId: string) => void;
+  updatePostLikes: (postId: string, likes: number) => void;
 }
 
 export const usePostStore = create<PostStore>()((set, get) => ({
@@ -252,4 +254,30 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       .filter((post): post is Post => post !== undefined)
       .sort((a, b) => b.created_at - a.created_at);
   },
+
+  incrementLikes: (postId: string) =>
+    set((state) => {
+      const newPosts = new Map(state.posts);
+      const post = newPosts.get(postId);
+      if (post) {
+        newPosts.set(postId, {
+          ...post,
+          likes: post.likes + 1,
+        });
+      }
+      return { posts: newPosts };
+    }),
+
+  updatePostLikes: (postId: string, likes: number) =>
+    set((state) => {
+      const newPosts = new Map(state.posts);
+      const post = newPosts.get(postId);
+      if (post) {
+        newPosts.set(postId, {
+          ...post,
+          likes,
+        });
+      }
+      return { posts: newPosts };
+    }),
 }));

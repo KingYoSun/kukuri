@@ -16,6 +16,7 @@ interface TopicStore extends TopicState {
   setCurrentTopic: (topic: Topic | null) => void;
   joinTopic: (topicId: string) => void;
   leaveTopic: (topicId: string) => void;
+  updateTopicPostCount: (topicId: string, delta: number) => void;
 }
 
 export const useTopicStore = create<TopicStore>()(
@@ -170,6 +171,19 @@ export const useTopicStore = create<TopicStore>()(
           joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
           currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
         })),
+
+      updateTopicPostCount: (topicId: string, delta: number) =>
+        set((state) => {
+          const newTopics = new Map(state.topics);
+          const topic = newTopics.get(topicId);
+          if (topic) {
+            newTopics.set(topicId, {
+              ...topic,
+              postCount: topic.postCount + delta,
+            });
+          }
+          return { topics: newTopics };
+        }),
     }),
     {
       name: 'topic-storage',

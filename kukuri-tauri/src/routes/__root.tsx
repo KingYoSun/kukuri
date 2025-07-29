@@ -1,6 +1,9 @@
 import { createRootRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useTopics, useP2P } from '@/hooks';
+import { useNostrEvents } from '@/hooks/useNostrEvents';
+import { useP2PEventListener } from '@/hooks/useP2PEventListener';
+import { useDataSync } from '@/hooks/useDataSync';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -11,6 +14,13 @@ function RootComponent() {
   const { data: topics, isLoading } = useTopics();
   const { initialized: p2pInitialized } = useP2P();
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // グローバルイベントリスナーの設定
+  useNostrEvents();
+  useP2PEventListener();
+  
+  // データ同期の設定
+  useDataSync();
 
   useEffect(() => {
     // アプリ起動時の初期化

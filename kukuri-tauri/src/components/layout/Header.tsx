@@ -3,6 +3,7 @@ import { Bell, Menu } from 'lucide-react';
 import { useUIStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
 import { AccountSwitcher } from '@/components/auth/AccountSwitcher';
+import { RealtimeIndicator } from '@/components/RealtimeIndicator';
 
 export function Header() {
   const { toggleSidebar } = useUIStore();
@@ -26,6 +27,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
+        <RealtimeIndicator />
+        
         <Button variant="ghost" size="icon" aria-label="通知">
           <Bell className="h-5 w-5" />
         </Button>
