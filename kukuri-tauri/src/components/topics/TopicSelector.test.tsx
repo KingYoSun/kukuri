@@ -47,10 +47,10 @@ describe('TopicSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // デフォルトのモック設定
     vi.mocked(useTopicStore).mockReturnValue({
-      topics: new Map(mockTopics.map(t => [t.id, t])),
+      topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: ['topic1', 'topic2'], // topic1とtopic2に参加している
     } as any);
   });
@@ -72,10 +72,7 @@ describe('TopicSelector', () => {
 
   it('カスタムプレースホルダーが表示される', () => {
     render(
-      <TopicSelector 
-        onValueChange={mockOnValueChange} 
-        placeholder="カスタムプレースホルダー"
-      />
+      <TopicSelector onValueChange={mockOnValueChange} placeholder="カスタムプレースホルダー" />,
     );
 
     const button = screen.getByRole('combobox');
@@ -110,7 +107,7 @@ describe('TopicSelector', () => {
     // 参加しているトピックが表示される
     expect(await screen.findByText('プログラミング')).toBeInTheDocument();
     expect(await screen.findByText('雑談')).toBeInTheDocument();
-    
+
     // 参加していないトピックは表示されない
     expect(screen.queryByText('音楽')).not.toBeInTheDocument();
   });
@@ -128,7 +125,7 @@ describe('TopicSelector', () => {
 
   it('参加しているトピックがない場合、メッセージが表示される', async () => {
     vi.mocked(useTopicStore).mockReturnValue({
-      topics: new Map(mockTopics.map(t => [t.id, t])),
+      topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: [], // どのトピックにも参加していない
     } as any);
 
@@ -185,7 +182,7 @@ describe('TopicSelector', () => {
 
     // 部分一致するトピックが表示される
     expect(await screen.findByText('プログラミング')).toBeInTheDocument();
-    
+
     // 一致しないトピックは表示されない
     await waitFor(() => {
       expect(screen.queryByText('雑談')).not.toBeInTheDocument();
@@ -201,7 +198,7 @@ describe('TopicSelector', () => {
 
     // topic1の項目を探す（複数見つかる可能性があるので、role="option"の要素内で探す）
     const options = screen.getAllByRole('option');
-    const topic1Item = options.find(option => option.textContent?.includes('プログラミング'));
+    const topic1Item = options.find((option) => option.textContent?.includes('プログラミング'));
     expect(topic1Item).toBeInTheDocument();
 
     // チェックマークが表示されている（opacity-100クラス）

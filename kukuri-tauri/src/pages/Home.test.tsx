@@ -28,7 +28,7 @@ vi.mock('@/components/posts/PostCard', () => ({
 vi.mock('@/components/posts/PostComposer', () => ({
   PostComposer: ({ onSuccess, onCancel }: any) => (
     <div data-testid="post-composer">
-      <button 
+      <button
         data-testid="post-composer-submit"
         onClick={() => {
           onSuccess?.();
@@ -36,10 +36,7 @@ vi.mock('@/components/posts/PostComposer', () => ({
       >
         投稿する
       </button>
-      <button 
-        data-testid="post-composer-cancel"
-        onClick={() => onCancel?.()}
-      >
+      <button data-testid="post-composer-cancel" onClick={() => onCancel?.()}>
         キャンセル
       </button>
     </div>
@@ -127,9 +124,7 @@ describe('Home', () => {
     renderWithQueryClient(<Home />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText('トピックに参加すると、投稿が表示されます。'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('トピックに参加すると、投稿が表示されます。')).toBeInTheDocument();
     });
   });
 
@@ -267,7 +262,7 @@ describe('Home', () => {
 
     // PostComposerのモック内で定義した「投稿する」ボタンをクリック
     const submitButton = screen.getByTestId('post-composer-submit');
-    
+
     // クリックイベントを実行
     await user.click(submitButton);
 
@@ -275,7 +270,7 @@ describe('Home', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
     });
-    
+
     // 投稿ボタンが再表示されることを確認
     expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
   });

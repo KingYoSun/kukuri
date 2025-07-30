@@ -33,7 +33,10 @@ export function TopicsPage() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-center py-16">
-          <Loader2 data-testid="loading-spinner" className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2
+            data-testid="loading-spinner"
+            className="h-8 w-8 animate-spin text-muted-foreground"
+          />
         </div>
       </div>
     );
@@ -94,11 +97,7 @@ export function TopicsPage() {
         )}
       </div>
 
-      <TopicFormModal
-        open={showCreateModal}
-        onOpenChange={setShowCreateModal}
-        mode="create"
-      />
+      <TopicFormModal open={showCreateModal} onOpenChange={setShowCreateModal} mode="create" />
     </div>
   );
 }

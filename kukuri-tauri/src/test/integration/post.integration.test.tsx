@@ -287,7 +287,7 @@ describe('Post Integration Tests', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // エラーレスポンスを設定
-    setMockResponse('create_post', Promise.reject(new Error('Failed to create post')));
+    setMockResponse('create_post', () => Promise.reject(new Error('Failed to create post')));
     setMockResponse('list_posts', []);
 
     render(

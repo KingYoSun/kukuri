@@ -28,7 +28,7 @@ export function Header() {
 
       <div className="flex items-center gap-4">
         <RealtimeIndicator />
-        
+
         <Button variant="ghost" size="icon" aria-label="通知">
           <Bell className="h-5 w-5" />
         </Button>

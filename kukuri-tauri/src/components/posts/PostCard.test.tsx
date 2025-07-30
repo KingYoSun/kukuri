@@ -8,6 +8,7 @@ import type { Post } from '@/stores';
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     likePost: vi.fn(),
+    createPost: vi.fn(),
   },
 }));
 
@@ -15,7 +16,21 @@ vi.mock('@/lib/api/tauri', () => ({
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
+    success: vi.fn(),
   },
+}));
+
+// Mock auth store
+vi.mock('@/stores', () => ({
+  useAuthStore: vi.fn(() => ({
+    currentUser: {
+      pubkey: 'user-pubkey',
+      npub: 'npub1user',
+      name: 'Current User',
+      displayName: 'Current User Display',
+      picture: 'https://example.com/current-user.jpg',
+    },
+  })),
 }));
 
 const mockPost: Post = {
@@ -150,5 +165,255 @@ describe('PostCard', () => {
 
     // 約1時間前
     expect(screen.getByText(/前$/)).toBeInTheDocument();
+  });
+
+  describe('返信機能', () => {
+    it('返信ボタンをクリックすると返信フォームが表示される', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // 返信ボタンをクリック
+      const replyButton = screen.getAllByRole('button')[0]; // MessageCircleボタン
+      expect(replyButton).toHaveTextContent('0');
+
+      fireEvent.click(replyButton);
+
+      // 返信フォームが表示される
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('返信を入力...')).toBeInTheDocument();
+        expect(screen.getByText('返信する')).toBeInTheDocument();
+      });
+    });
+
+    it('返信フォームが開いているときは返信ボタンがアクティブ状態になる', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      const replyButton = screen.getAllByRole('button')[0];
+      fireEvent.click(replyButton);
+
+      await waitFor(() => {
+        expect(replyButton).toHaveClass('text-primary');
+      });
+    });
+
+    it('返信フォームをキャンセルできる', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      const replyButton = screen.getAllByRole('button')[0];
+      fireEvent.click(replyButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('返信を入力...')).toBeInTheDocument();
+      });
+
+      // キャンセルボタンをクリック
+      const cancelButton = screen.getByText('キャンセル');
+      fireEvent.click(cancelButton);
+
+      // 返信フォームが非表示になる
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
+      });
+    });
+
+    it('返信を送信できる', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      const { toast } = await import('sonner');
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'reply-id' } as any);
+
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // 返信フォームを開く
+      const replyButton = screen.getAllByRole('button')[0];
+      fireEvent.click(replyButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('返信を入力...')).toBeInTheDocument();
+      });
+
+      // 返信を入力
+      const textarea = screen.getByPlaceholderText('返信を入力...');
+      fireEvent.change(textarea, { target: { value: 'これは返信です' } });
+
+      // 送信ボタンをクリック
+      const submitButton = screen.getByText('返信する');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(TauriApi.createPost).toHaveBeenCalledWith({
+          content: 'これは返信です',
+          topic_id: 'topic1',
+          tags: [
+            ['e', '1', '', 'reply'],
+            ['t', 'topic1'],
+          ],
+        });
+        expect(toast.success).toHaveBeenCalledWith('返信を投稿しました');
+      });
+    });
+
+    it('返信成功後にフォームが閉じる', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'reply-id' } as any);
+
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // 返信フォームを開く
+      const replyButton = screen.getAllByRole('button')[0];
+      fireEvent.click(replyButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('返信を入力...')).toBeInTheDocument();
+      });
+
+      // 返信を入力して送信
+      const textarea = screen.getByPlaceholderText('返信を入力...');
+      fireEvent.change(textarea, { target: { value: 'これは返信です' } });
+
+      const submitButton = screen.getByText('返信する');
+      fireEvent.click(submitButton);
+
+      // フォームが閉じる
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('引用機能', () => {
+    it('引用ボタンをクリックすると引用フォームが表示される', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // 引用ボタンをクリック（2番目のボタン）
+      const quoteButton = screen.getAllByRole('button')[1]; // Repeat2ボタン
+      expect(quoteButton).toHaveTextContent('0');
+
+      fireEvent.click(quoteButton);
+
+      // 引用フォームが表示される
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+        expect(screen.getByText('引用して投稿')).toBeInTheDocument();
+        // 引用元の投稿内容が表示される（元の投稿と引用カード内の2つ）
+        const postContents = screen.getAllByText('テスト投稿です');
+        expect(postContents).toHaveLength(2);
+      });
+    });
+
+    it('引用フォームが開いているときは引用ボタンがアクティブ状態になる', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      const quoteButton = screen.getAllByRole('button')[1];
+      fireEvent.click(quoteButton);
+
+      await waitFor(() => {
+        expect(quoteButton).toHaveClass('text-primary');
+      });
+    });
+
+    it('引用フォームをキャンセルできる', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      const quoteButton = screen.getAllByRole('button')[1];
+      fireEvent.click(quoteButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+      });
+
+      // キャンセルボタンをクリック
+      const cancelButton = screen.getByText('キャンセル');
+      fireEvent.click(cancelButton);
+
+      // 引用フォームが非表示になる
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
+      });
+    });
+
+    it('引用投稿を送信できる', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      const { toast } = await import('sonner');
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'quote-id' } as any);
+
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // 引用フォームを開く
+      const quoteButton = screen.getAllByRole('button')[1];
+      fireEvent.click(quoteButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+      });
+
+      // コメントを入力
+      const textarea = screen.getByPlaceholderText('コメントを追加...');
+      fireEvent.change(textarea, { target: { value: 'これは引用コメントです' } });
+
+      // 送信ボタンをクリック
+      const submitButton = screen.getByText('引用して投稿');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(TauriApi.createPost).toHaveBeenCalledWith({
+          content: 'これは引用コメントです\n\nnostr:1',
+          topic_id: 'topic1',
+          tags: [
+            ['e', '1', '', 'mention'],
+            ['q', '1'],
+            ['t', 'topic1'],
+          ],
+        });
+        expect(toast.success).toHaveBeenCalledWith('引用投稿を作成しました');
+      });
+    });
+
+    it('引用成功後にフォームが閉じる', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'quote-id' } as any);
+
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // 引用フォームを開く
+      const quoteButton = screen.getAllByRole('button')[1];
+      fireEvent.click(quoteButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+      });
+
+      // コメントを入力して送信
+      const textarea = screen.getByPlaceholderText('コメントを追加...');
+      fireEvent.change(textarea, { target: { value: 'これは引用コメントです' } });
+
+      const submitButton = screen.getByText('引用して投稿');
+      fireEvent.click(submitButton);
+
+      // フォームが閉じる
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
+      });
+    });
+
+    it('返信フォームと引用フォームは同時に開かない', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      // まず返信フォームを開く
+      const replyButton = screen.getAllByRole('button')[0];
+      fireEvent.click(replyButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('返信を入力...')).toBeInTheDocument();
+      });
+
+      // 引用ボタンをクリック
+      const quoteButton = screen.getAllByRole('button')[1];
+      fireEvent.click(quoteButton);
+
+      // 返信フォームが閉じて引用フォームが開く
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
+        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+      });
+    });
   });
 });

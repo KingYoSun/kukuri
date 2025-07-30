@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePostStore } from '@/stores/postStore';
@@ -19,16 +25,16 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
   const [content, setContent] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState(topicId || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const { createPost } = usePostStore();
   const { topics, joinedTopics } = useTopicStore();
   const { toast } = useToast();
-  
+
   // 参加しているトピックのみフィルタリング
-  const availableTopics = Array.from(topics.values()).filter(
-    (topic) => joinedTopics.includes(topic.id)
+  const availableTopics = Array.from(topics.values()).filter((topic) =>
+    joinedTopics.includes(topic.id),
   );
-  
+
   const handleSubmit = async () => {
     if (!content.trim()) {
       toast({
@@ -38,7 +44,7 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
       });
       return;
     }
-    
+
     if (!selectedTopicId) {
       toast({
         title: 'エラー',
@@ -47,7 +53,7 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
       });
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       await createPost(content, selectedTopicId);
@@ -63,12 +69,12 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
       setIsSubmitting(false);
     }
   };
-  
+
   const handleCancel = () => {
     setContent('');
     onCancel?.();
   };
-  
+
   return (
     <Card className="w-full">
       <CardContent className="pt-6">
@@ -98,7 +104,7 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
               </SelectContent>
             </Select>
           </div>
-          
+
           <div>
             <Label htmlFor="post-content">投稿内容</Label>
             <Textarea
@@ -111,13 +117,9 @@ export function PostComposer({ topicId, onSuccess, onCancel }: PostComposerProps
               className="resize-none"
             />
           </div>
-          
+
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              disabled={isSubmitting}
-            >
+            <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
               キャンセル
             </Button>
             <Button

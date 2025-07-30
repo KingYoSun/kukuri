@@ -53,10 +53,7 @@ function Home() {
 
       {showComposer && (
         <div className="mb-6">
-          <PostComposer
-            onSuccess={handlePostSuccess}
-            onCancel={() => setShowComposer(false)}
-          />
+          <PostComposer onSuccess={handlePostSuccess} onCancel={() => setShowComposer(false)} />
         </div>
       )}
 

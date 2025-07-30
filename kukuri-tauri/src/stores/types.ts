@@ -9,6 +9,9 @@ export interface User {
   nip05: string;
 }
 
+// Profile は User のエイリアス
+export type Profile = User;
+
 export interface Topic {
   id: string;
   name: string;

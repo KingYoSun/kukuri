@@ -155,6 +155,36 @@ describe('p2pApi', () => {
     });
   });
 
+  describe('connectToPeer', () => {
+    it('should connect to a peer with valid address', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+      await p2pApi.connectToPeer('/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample');
+
+      expect(invoke).toHaveBeenCalledWith('connect_to_peer', {
+        peerAddress: '/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample',
+      });
+    });
+
+    it('should handle connection error', async () => {
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('Connection refused'));
+
+      await expect(
+        p2pApi.connectToPeer('/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample'),
+      ).rejects.toThrow('Connection refused');
+    });
+
+    it('should connect to IPv6 peer', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+      await p2pApi.connectToPeer('/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWExample');
+
+      expect(invoke).toHaveBeenCalledWith('connect_to_peer', {
+        peerAddress: '/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWExample',
+      });
+    });
+  });
+
   describe('Error handling', () => {
     it('should propagate errors from Tauri commands', async () => {
       const errorMessage = 'P2P manager not initialized';

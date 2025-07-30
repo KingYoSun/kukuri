@@ -79,7 +79,7 @@ export function useP2PEventListener() {
         });
       }
     },
-    [addPost, queryClient, updateTopicPostCount]
+    [addPost, queryClient, updateTopicPostCount],
   );
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export function useP2PEventListener() {
 
         // 投稿として処理（リアルタイム更新）
         handleP2PMessageAsPost(p2pMessage, topic_id);
-        
+
         // リアルタイム更新イベントを発火
         window.dispatchEvent(new Event('realtime-update'));
       }),

@@ -34,12 +34,12 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
       await leaveTopic(topic.id);
       // データベースから削除
       await deleteTopicRemote(topic.id);
-      
+
       toast({
         title: '成功',
         description: 'トピックを削除しました',
       });
-      
+
       onOpenChange(false);
       // トピック一覧ページへリダイレクト
       navigate({ to: '/topics' });

@@ -80,7 +80,7 @@ describe('Topics Page', () => {
     return render(
       <QueryClientProvider client={queryClient}>
         <TopicsPage />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
   }
 
@@ -125,7 +125,7 @@ describe('Topics Page', () => {
     renderTopicsPage();
 
     expect(
-      screen.getByText('トピックの読み込みに失敗しました。しばらくしてから再度お試しください。')
+      screen.getByText('トピックの読み込みに失敗しました。しばらくしてから再度お試しください。'),
     ).toBeInTheDocument();
   });
 
@@ -183,9 +183,7 @@ describe('Topics Page', () => {
     fireEvent.change(searchInput, { target: { value: '存在しないトピック' } });
 
     await waitFor(() => {
-      expect(
-        screen.getByText('検索条件に一致するトピックが見つかりません')
-      ).toBeInTheDocument();
+      expect(screen.getByText('検索条件に一致するトピックが見つかりません')).toBeInTheDocument();
     });
   });
 
@@ -195,7 +193,7 @@ describe('Topics Page', () => {
     renderTopicsPage();
 
     expect(
-      screen.getByText('トピックがまだありません。最初のトピックを作成してみましょう！')
+      screen.getByText('トピックがまだありません。最初のトピックを作成してみましょう！'),
     ).toBeInTheDocument();
   });
 

@@ -10,7 +10,7 @@ export function useToast() {
   const toast = (options: ToastOptions) => {
     const { title, description, variant } = options;
     const message = title || description || '';
-    
+
     if (variant === 'destructive') {
       sonnerToast.error(message, {
         description: title && description ? description : undefined,

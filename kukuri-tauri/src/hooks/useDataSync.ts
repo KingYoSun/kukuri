@@ -26,9 +26,7 @@ export function useDataSync() {
         return {
           pages: [
             {
-              posts: Array.from(posts.values()).sort(
-                (a, b) => b.created_at - a.created_at
-              ),
+              posts: Array.from(posts.values()).sort((a, b) => b.created_at - a.created_at),
             },
           ],
           pageParams: [],
@@ -59,19 +57,22 @@ export function useDataSync() {
     }
 
     // 5分ごとに全データを再取得（念のため）
-    const interval = setInterval(() => {
-      // React Queryのstaleデータを再取得
-      queryClient.refetchQueries({
-        queryKey: ['posts'],
-        type: 'active',
-        stale: true,
-      });
-      queryClient.refetchQueries({
-        queryKey: ['topics'],
-        type: 'active',
-        stale: true,
-      });
-    }, 5 * 60 * 1000); // 5分
+    const interval = setInterval(
+      () => {
+        // React Queryのstaleデータを再取得
+        queryClient.refetchQueries({
+          queryKey: ['posts'],
+          type: 'active',
+          stale: true,
+        });
+        queryClient.refetchQueries({
+          queryKey: ['topics'],
+          type: 'active',
+          stale: true,
+        });
+      },
+      5 * 60 * 1000,
+    ); // 5分
 
     return () => {
       clearInterval(interval);

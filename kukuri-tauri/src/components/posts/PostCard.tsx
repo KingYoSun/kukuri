@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -8,12 +9,17 @@ import { ja } from 'date-fns/locale';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
+import { ReplyForm } from './ReplyForm';
+import { QuoteForm } from './QuoteForm';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface PostCardProps {
   post: Post;
 }
 
 export function PostCard({ post }: PostCardProps) {
+  const [showReplyForm, setShowReplyForm] = useState(false);
+  const [showQuoteForm, setShowQuoteForm] = useState(false);
   const queryClient = useQueryClient();
 
   // いいね機能
@@ -33,6 +39,16 @@ export function PostCard({ post }: PostCardProps) {
 
   const handleLike = () => {
     likeMutation.mutate();
+  };
+
+  const handleReply = () => {
+    setShowReplyForm(!showReplyForm);
+    setShowQuoteForm(false);
+  };
+
+  const handleQuote = () => {
+    setShowQuoteForm(!showQuoteForm);
+    setShowReplyForm(false);
   };
 
   // 時間表示のフォーマット
@@ -75,11 +91,21 @@ export function PostCard({ post }: PostCardProps) {
       <CardContent>
         <p className="mb-4 whitespace-pre-wrap">{post.content}</p>
         <div className="flex items-center gap-6">
-          <Button variant="ghost" size="sm" disabled>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReply}
+            className={showReplyForm ? 'text-primary' : ''}
+          >
             <MessageCircle className="mr-2 h-4 w-4" />
             {post.replies.length}
           </Button>
-          <Button variant="ghost" size="sm" disabled>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleQuote}
+            className={showQuoteForm ? 'text-primary' : ''}
+          >
             <Repeat2 className="mr-2 h-4 w-4" />0
           </Button>
           <Button variant="ghost" size="sm" onClick={handleLike} disabled={likeMutation.isPending}>
@@ -90,6 +116,33 @@ export function PostCard({ post }: PostCardProps) {
             <Share className="h-4 w-4" />
           </Button>
         </div>
+
+        {/* 返信フォーム */}
+        <Collapsible open={showReplyForm}>
+          <CollapsibleContent>
+            <div className="mt-4 pt-4 border-t">
+              <ReplyForm
+                postId={post.id}
+                topicId={post.topicId}
+                onCancel={() => setShowReplyForm(false)}
+                onSuccess={() => setShowReplyForm(false)}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* 引用フォーム */}
+        <Collapsible open={showQuoteForm}>
+          <CollapsibleContent>
+            <div className="mt-4 pt-4 border-t">
+              <QuoteForm
+                post={post}
+                onCancel={() => setShowQuoteForm(false)}
+                onSuccess={() => setShowQuoteForm(false)}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </CardContent>
     </Card>
   );

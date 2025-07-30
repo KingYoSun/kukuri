@@ -26,16 +26,18 @@ vi.mock('@/lib/api/p2p', () => ({
 
 // Tanstack Routerのモック
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to, params, className }: {
+  Link: ({
+    children,
+    to,
+    params,
+    className,
+  }: {
     children: React.ReactNode;
     to: string;
     params?: Record<string, string>;
     className?: string;
   }) => (
-    <a 
-      href={to.replace('$topicId', params?.topicId || '')} 
-      className={className}
-    >
+    <a href={to.replace('$topicId', params?.topicId || '')} className={className}>
       {children}
     </a>
   ),
@@ -85,7 +87,7 @@ describe('TopicCard', () => {
 
   it('参加済みの場合「参加中」ボタンが表示される', () => {
     mockJoinedTopics.push(mockTopic.id);
-    
+
     render(<TopicCard topic={mockTopic} />);
 
     const joinedButton = screen.getByText('参加中');
@@ -106,7 +108,7 @@ describe('TopicCard', () => {
 
   it('参加中ボタンをクリックするとleaveTopicが呼ばれる', async () => {
     mockJoinedTopics.push(mockTopic.id);
-    
+
     render(<TopicCard topic={mockTopic} />);
 
     const joinedButton = screen.getByText('参加中');

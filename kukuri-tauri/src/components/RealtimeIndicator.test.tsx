@@ -19,21 +19,21 @@ describe('RealtimeIndicator', () => {
 
   it('should show online status when connected', () => {
     render(<RealtimeIndicator />);
-    
+
     expect(screen.getByText('接続中')).toBeInTheDocument();
   });
 
   it('should show offline status when disconnected', () => {
     (window.navigator as any).onLine = false;
-    
+
     render(<RealtimeIndicator />);
-    
+
     expect(screen.getByText('オフライン')).toBeInTheDocument();
   });
 
   it('should update status when connection changes', () => {
     const { rerender } = render(<RealtimeIndicator />);
-    
+
     expect(screen.getByText('接続中')).toBeInTheDocument();
 
     // オフラインイベントを発火
@@ -42,7 +42,7 @@ describe('RealtimeIndicator', () => {
       window.dispatchEvent(new Event('offline'));
     });
     rerender(<RealtimeIndicator />);
-    
+
     expect(screen.getByText('オフライン')).toBeInTheDocument();
 
     // オンラインイベントを発火
@@ -51,7 +51,7 @@ describe('RealtimeIndicator', () => {
       window.dispatchEvent(new Event('online'));
     });
     rerender(<RealtimeIndicator />);
-    
+
     expect(screen.getByText('接続中')).toBeInTheDocument();
   });
 
@@ -60,7 +60,7 @@ describe('RealtimeIndicator', () => {
     render(<RealtimeIndicator />);
 
     const indicator = screen.getByText('接続中').parentElement!;
-    
+
     // ホバーしてツールチップを表示
     await user.hover(indicator);
 
@@ -73,7 +73,7 @@ describe('RealtimeIndicator', () => {
   it('should update time display after realtime update event', () => {
     vi.useFakeTimers();
     const { rerender } = render(<RealtimeIndicator />);
-    
+
     expect(screen.getByText('接続中')).toBeInTheDocument();
 
     // 15秒経過
@@ -82,7 +82,7 @@ describe('RealtimeIndicator', () => {
       window.dispatchEvent(new Event('realtime-update'));
     });
     rerender(<RealtimeIndicator />);
-    
+
     // 再び接続中と表示される
     expect(screen.getByText('接続中')).toBeInTheDocument();
 
@@ -113,7 +113,7 @@ describe('RealtimeIndicator', () => {
 
   it('should apply correct styling for online state', () => {
     render(<RealtimeIndicator />);
-    
+
     const indicator = screen.getByText('接続中').parentElement!;
     expect(indicator).toHaveClass('bg-green-100', 'text-green-800');
   });
@@ -121,14 +121,14 @@ describe('RealtimeIndicator', () => {
   it('should apply correct styling for offline state', () => {
     (window.navigator as any).onLine = false;
     render(<RealtimeIndicator />);
-    
+
     const indicator = screen.getByText('オフライン').parentElement!;
     expect(indicator).toHaveClass('bg-red-100', 'text-red-800');
   });
 
   it('should cleanup event listeners on unmount', () => {
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
-    
+
     const { unmount } = render(<RealtimeIndicator />);
     unmount();
 

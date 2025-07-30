@@ -56,12 +56,8 @@ describe('useDataSync', () => {
   it('should setup store subscriptions when authenticated', () => {
     renderHook(() => useDataSync(), { wrapper });
 
-    expect(mockPostStoreSubscribe).toHaveBeenCalledWith(
-      expect.any(Function)
-    );
-    expect(mockTopicStoreSubscribe).toHaveBeenCalledWith(
-      expect.any(Function)
-    );
+    expect(mockPostStoreSubscribe).toHaveBeenCalledWith(expect.any(Function));
+    expect(mockTopicStoreSubscribe).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it('should update query cache when post store changes', () => {
@@ -150,7 +146,7 @@ describe('useDataSync', () => {
 
   it('should cleanup online event listener on unmount', () => {
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
-    
+
     const { unmount } = renderHook(() => useDataSync(), { wrapper });
 
     unmount();

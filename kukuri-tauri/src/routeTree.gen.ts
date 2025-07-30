@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileSetupRouteImport } from './routes/profile-setup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
@@ -30,6 +31,11 @@ const TopicsRoute = TopicsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfileSetupRoute = ProfileSetupRouteImport.update({
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
   '/welcome': typeof WelcomeRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
   '/welcome': typeof WelcomeRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
   '/welcome': typeof WelcomeRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/profile-setup'
+    | '/search'
     | '/settings'
     | '/topics'
     | '/welcome'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/profile-setup'
+    | '/search'
     | '/settings'
     | '/topics'
     | '/welcome'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/profile-setup'
+    | '/search'
     | '/settings'
     | '/topics'
     | '/welcome'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   ProfileSetupRoute: typeof ProfileSetupRoute
+  SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   TopicsRoute: typeof TopicsRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile-setup': {
@@ -189,6 +209,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   ProfileSetupRoute: ProfileSetupRoute,
+  SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   TopicsRoute: TopicsRouteWithChildren,
   WelcomeRoute: WelcomeRoute,

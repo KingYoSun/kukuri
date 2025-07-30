@@ -48,7 +48,8 @@ export interface Post {
 
 export interface CreatePostRequest {
   content: string;
-  topic_id: string;
+  topic_id?: string;
+  tags?: string[][];
 }
 
 export interface GetPostsRequest {

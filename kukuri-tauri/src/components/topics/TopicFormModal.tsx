@@ -32,10 +32,7 @@ const topicFormSchema = z.object({
     .string()
     .min(1, 'トピック名は必須です')
     .max(50, 'トピック名は50文字以内で入力してください'),
-  description: z
-    .string()
-    .max(200, '説明は200文字以内で入力してください')
-    .optional(),
+  description: z.string().max(200, '説明は200文字以内で入力してください').optional(),
 });
 
 type TopicFormValues = z.infer<typeof topicFormSchema>;
@@ -99,9 +96,7 @@ export function TopicFormModal({ open, onOpenChange, topic, mode }: TopicFormMod
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {mode === 'create' ? '新しいトピックを作成' : 'トピックを編集'}
-          </DialogTitle>
+          <DialogTitle>{mode === 'create' ? '新しいトピックを作成' : 'トピックを編集'}</DialogTitle>
           <DialogDescription>
             {mode === 'create'
               ? 'トピックの名前と説明を入力してください'
@@ -118,11 +113,7 @@ export function TopicFormModal({ open, onOpenChange, topic, mode }: TopicFormMod
                 <FormItem>
                   <FormLabel>トピック名 *</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="例: プログラミング"
-                      {...field}
-                      disabled={isSubmitting}
-                    />
+                    <Input placeholder="例: プログラミング" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

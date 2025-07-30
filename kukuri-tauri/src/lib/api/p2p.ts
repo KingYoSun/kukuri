@@ -52,4 +52,9 @@ export const p2pApi = {
    * ノードアドレスを取得
    */
   getNodeAddress: () => invoke<string[]>('get_node_address'),
+
+  /**
+   * 指定されたピアアドレスに手動で接続
+   */
+  connectToPeer: (peerAddress: string) => invoke<void>('connect_to_peer', { peerAddress }),
 };

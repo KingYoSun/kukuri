@@ -18,7 +18,7 @@ function RootComponent() {
   // グローバルイベントリスナーの設定
   useNostrEvents();
   useP2PEventListener();
-  
+
   // データ同期の設定
   useDataSync();
 

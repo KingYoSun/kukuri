@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Hash, Plus, TrendingUp, Users, List } from 'lucide-react';
+import { Hash, Plus, TrendingUp, Users, List, Search } from 'lucide-react';
 import { useTopicStore, useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
@@ -10,6 +10,7 @@ import { P2PStatus } from '@/components/P2PStatus';
 
 const categories = [
   { name: 'トピック一覧', icon: List, path: '/topics' },
+  { name: '検索', icon: Search, path: '/search' },
   { name: 'トレンド', icon: TrendingUp },
   { name: 'フォロー中', icon: Users },
 ];

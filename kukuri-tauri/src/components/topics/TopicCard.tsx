@@ -52,7 +52,9 @@ export function TopicCard({ topic }: TopicCardProps) {
     } catch {
       toast({
         title: 'エラー',
-        description: isJoined ? 'トピックから離脱できませんでした' : 'トピックに参加できませんでした',
+        description: isJoined
+          ? 'トピックから離脱できませんでした'
+          : 'トピックに参加できませんでした',
         variant: 'destructive',
       });
     } finally {
@@ -73,9 +75,9 @@ export function TopicCard({ topic }: TopicCardProps) {
             </Link>
             <CardDescription className="mt-1">{topic.description}</CardDescription>
           </div>
-          <Button 
-            variant={isJoined ? 'secondary' : 'default'} 
-            size="sm" 
+          <Button
+            variant={isJoined ? 'secondary' : 'default'}
+            size="sm"
             onClick={handleJoinToggle}
             disabled={isLoading}
           >

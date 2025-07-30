@@ -41,10 +41,10 @@ describe('useNostrEvents', () => {
 
     listeners = new Map();
     mockUnlisten = vi.fn();
-    
+
     const { listen } = await import('@tauri-apps/api/event');
     mockListen = listen as MockedFunction<any>;
-    
+
     mockListen.mockImplementation((event: string, handler: (event: any) => void) => {
       listeners.set(event, handler);
       return Promise.resolve(mockUnlisten);
@@ -80,7 +80,7 @@ describe('useNostrEvents', () => {
 
     // アンマウント時にクリーンアップされることを確認
     unmount();
-    
+
     // クリーンアップ関数が呼ばれるのを待つ
     await vi.waitFor(() => {
       expect(mockUnlisten).toHaveBeenCalled();
@@ -109,9 +109,11 @@ describe('useNostrEvents', () => {
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['posts'] });
 
     // リアルタイム更新イベントが発火されることを確認
-    expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'realtime-update',
-    }));
+    expect(dispatchEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'realtime-update',
+      }),
+    );
   });
 
   it('should handle topic post events (kind: 30078)', async () => {
@@ -192,7 +194,10 @@ describe('useNostrEvents', () => {
       content: '',
       created_at: Date.now(),
       kind: 5,
-      tags: [['e', 'event-1'], ['e', 'event-2']],
+      tags: [
+        ['e', 'event-1'],
+        ['e', 'event-2'],
+      ],
     };
 
     handler?.({ payload });

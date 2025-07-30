@@ -140,7 +140,7 @@ describe('Auth Integration Tests', () => {
     // Remove console.error spy as we're not using console.error anymore
 
     // エラーレスポンスを設定
-    setMockResponse('generate_keypair', Promise.reject(new Error('Key generation failed')));
+    setMockResponse('generate_keypair', () => Promise.reject(new Error('Key generation failed')));
 
     render(
       <QueryClientProvider client={queryClient}>

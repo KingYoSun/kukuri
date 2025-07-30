@@ -223,7 +223,7 @@ describe('Relay Integration Tests', () => {
     setMockResponse('get_relay_status', {});
 
     // エラーレスポンスを設定
-    setMockResponse('connect_relay', Promise.reject(new Error('Connection failed')));
+    setMockResponse('connect_relay', () => Promise.reject(new Error('Connection failed')));
 
     render(
       <QueryClientProvider client={queryClient}>

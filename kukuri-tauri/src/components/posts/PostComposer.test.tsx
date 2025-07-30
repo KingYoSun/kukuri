@@ -44,7 +44,7 @@ describe('PostComposer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // usePostStoreのモック
     vi.mocked(usePostStore).mockReturnValue({
       createPost: mockCreatePost,
@@ -52,7 +52,7 @@ describe('PostComposer', () => {
 
     // useTopicStoreのモック
     vi.mocked(useTopicStore).mockReturnValue({
-      topics: new Map(mockTopics.map(t => [t.id, t])),
+      topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: ['topic1', 'topic2'],
     } as any);
 
@@ -191,9 +191,9 @@ describe('PostComposer', () => {
 
   it('送信中は入力フィールドとボタンが無効になる', async () => {
     const user = userEvent.setup();
-    
+
     // 送信を遅延させる
-    mockCreatePost.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
+    mockCreatePost.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 100)));
 
     render(<PostComposer topicId="topic1" />);
 

@@ -6,7 +6,7 @@ vi.unmock('zustand');
 vi.unmock('zustand/middleware');
 
 // Tauriコマンドのモック用のレスポンスを定義
-export const mockTauriResponses = new Map<string, unknown>();
+export const mockTauriResponses = new Map<string, unknown | (() => unknown)>();
 
 // Tauriコマンドをモック
 export function setupTauriMocks() {
@@ -15,7 +15,16 @@ export function setupTauriMocks() {
   mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
     // モックレスポンスが設定されている場合はそれを返す
     if (mockTauriResponses.has(cmd)) {
-      return mockTauriResponses.get(cmd);
+      const response = mockTauriResponses.get(cmd);
+      // 関数の場合は実行する
+      if (typeof response === 'function') {
+        return await response();
+      }
+      // Promise.rejectの場合は、適切にawaitして例外を投げる
+      if (response instanceof Promise) {
+        return await response;
+      }
+      return response;
     }
 
     // デフォルトのモックレスポンス

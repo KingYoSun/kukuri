@@ -59,14 +59,10 @@ export function RealtimeIndicator() {
               'flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium transition-colors',
               isOnline
                 ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
             )}
           >
-            {isOnline ? (
-              <Wifi className="h-3 w-3" />
-            ) : (
-              <WifiOff className="h-3 w-3" />
-            )}
+            {isOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
             <span>{isOnline ? getRelativeTime() : 'オフライン'}</span>
           </div>
         </TooltipTrigger>

@@ -73,7 +73,7 @@ describe('useTopics hooks', () => {
       expect(state.topics.size).toBe(2);
       expect(state.topics.has('tech')).toBe(true);
       expect(state.topics.has('nostr')).toBe(true);
-      
+
       const techTopic = state.topics.get('tech');
       expect(techTopic?.name).toBe('technology');
       expect(techTopic?.description).toBe('技術全般について議論するトピック');
@@ -148,7 +148,7 @@ describe('useTopics hooks', () => {
   describe('useCreateTopic', () => {
     it('トピック作成が成功すること', async () => {
       const mockCreateTopic = vi.spyOn(useTopicStore.getState(), 'createTopic');
-      
+
       const { result } = renderHook(() => useCreateTopic(), {
         wrapper: createWrapper(),
       });
@@ -165,7 +165,7 @@ describe('useTopics hooks', () => {
   describe('useUpdateTopic', () => {
     it('トピック更新が成功すること', async () => {
       const mockUpdateTopic = vi.spyOn(useTopicStore.getState(), 'updateTopicRemote');
-      
+
       const { result } = renderHook(() => useUpdateTopic(), {
         wrapper: createWrapper(),
       });
@@ -183,7 +183,7 @@ describe('useTopics hooks', () => {
   describe('useDeleteTopic', () => {
     it('トピック削除が成功すること', async () => {
       const mockDeleteTopic = vi.spyOn(useTopicStore.getState(), 'deleteTopicRemote');
-      
+
       const { result } = renderHook(() => useDeleteTopic(), {
         wrapper: createWrapper(),
       });

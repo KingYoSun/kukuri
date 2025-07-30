@@ -130,11 +130,7 @@ function TopicPage() {
         mode="edit"
       />
 
-      <TopicDeleteDialog
-        open={showDeleteDialog}
-        onOpenChange={setShowDeleteDialog}
-        topic={topic}
-      />
+      <TopicDeleteDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog} topic={topic} />
     </div>
   );
 }

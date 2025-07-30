@@ -242,7 +242,7 @@ describe('Topic Integration Tests', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // エラーレスポンスを設定
-    setMockResponse('create_topic', Promise.reject(new Error('Failed to create topic')));
+    setMockResponse('create_topic', () => Promise.reject(new Error('Failed to create topic')));
     setMockResponse('list_topics', []);
 
     render(
