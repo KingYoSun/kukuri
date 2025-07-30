@@ -1,5 +1,5 @@
+use tauri::{Emitter, Manager};
 use tracing::info;
-use tauri::{Manager, Emitter};
 
 // モジュール定義
 mod modules;
@@ -7,11 +7,11 @@ mod state;
 
 // Tauriコマンドのインポート
 use modules::auth::commands as auth_commands;
-use modules::topic::commands as topic_commands;
-use modules::post::commands as post_commands;
 use modules::event::commands as event_commands;
 use modules::p2p::commands as p2p_commands;
+use modules::post::commands as post_commands;
 use modules::secure_storage as secure_storage_commands;
+use modules::topic::commands as topic_commands;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -75,25 +75,29 @@ pub fn run() {
         .setup(|app| {
             // アプリケーション初期化処理
             let app_handle = app.handle();
-            
+
             tauri::async_runtime::block_on(async move {
-                let app_state = AppState::new().await
+                let app_state = AppState::new()
+                    .await
                     .expect("Failed to initialize app state");
-                
+
                 // EventManagerにAppHandleを設定
-                app_state.event_manager.set_app_handle(app_handle.clone()).await;
-                
+                app_state
+                    .event_manager
+                    .set_app_handle(app_handle.clone())
+                    .await;
+
                 // P2P機能を初期化
                 if let Err(e) = app_state.initialize_p2p().await {
                     tracing::warn!("Failed to initialize P2P: {}", e);
                 }
-                
+
                 // P2Pイベントハンドラーを起動
                 spawn_p2p_event_handler(app_handle.clone(), app_state.clone());
-                
+
                 app_handle.manage(app_state);
             });
-            
+
             info!("Application setup complete");
             Ok(())
         })
@@ -116,7 +120,7 @@ fn init_logging() {
 /// P2Pイベントハンドラーを起動
 fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
     use serde::Serialize;
-    
+
     #[derive(Debug, Clone, Serialize)]
     struct P2PMessageEvent {
         topic_id: String,
@@ -125,14 +129,14 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
         sender: Vec<u8>,
         timestamp: i64,
     }
-    
+
     #[derive(Debug, Clone, Serialize)]
     struct P2PPeerEvent {
         topic_id: String,
         peer_id: Vec<u8>,
         event_type: String, // "joined" or "left"
     }
-    
+
     tauri::async_runtime::spawn(async move {
         // event_rxを取得してRwLockを即座に解放
         let rx = {
@@ -140,11 +144,15 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
             let mut event_rx = p2p_state.event_rx.write().await;
             event_rx.take()
         };
-        
+
         if let Some(mut rx) = rx {
             while let Some(event) = rx.recv().await {
                 match event {
-                    modules::p2p::P2PEvent::MessageReceived { topic_id, message, _from_peer: _ } => {
+                    modules::p2p::P2PEvent::MessageReceived {
+                        topic_id,
+                        message,
+                        _from_peer: _,
+                    } => {
                         let event_data = P2PMessageEvent {
                             topic_id,
                             message_type: format!("{:?}", message.msg_type),
@@ -152,36 +160,36 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
                             sender: message.sender,
                             timestamp: message.timestamp,
                         };
-                        
+
                         if let Err(e) = app_handle.emit("p2p://message", event_data) {
                             tracing::error!("Failed to emit P2P message event: {}", e);
                         }
-                    },
+                    }
                     modules::p2p::P2PEvent::PeerJoined { topic_id, peer_id } => {
                         let event_data = P2PPeerEvent {
                             topic_id,
                             peer_id,
                             event_type: "joined".to_string(),
                         };
-                        
+
                         if let Err(e) = app_handle.emit("p2p://peer", event_data) {
                             tracing::error!("Failed to emit P2P peer joined event: {}", e);
                         }
-                    },
+                    }
                     modules::p2p::P2PEvent::PeerLeft { topic_id, peer_id } => {
                         let event_data = P2PPeerEvent {
                             topic_id,
                             peer_id,
                             event_type: "left".to_string(),
                         };
-                        
+
                         if let Err(e) = app_handle.emit("p2p://peer", event_data) {
                             tracing::error!("Failed to emit P2P peer left event: {}", e);
                         }
-                    },
+                    }
                 }
             }
-            
+
             tracing::info!("P2P event handler terminated");
         }
     });

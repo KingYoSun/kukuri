@@ -15,11 +15,11 @@ impl EncryptionManager {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub fn encrypt(&self, plaintext: &[u8], password: &str) -> Result<String> {
         encrypt(plaintext, password)
     }
-    
+
     pub fn decrypt(&self, encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
         decrypt(encrypted_data, password)
     }

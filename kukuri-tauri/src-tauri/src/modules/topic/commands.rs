@@ -1,6 +1,6 @@
+use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Topic {
@@ -25,9 +25,7 @@ pub struct UpdateTopicRequest {
 }
 
 #[tauri::command]
-pub async fn get_topics(
-    _state: State<'_, AppState>
-) -> Result<Vec<Topic>, String> {
+pub async fn get_topics(_state: State<'_, AppState>) -> Result<Vec<Topic>, String> {
     // TODO: データベースから取得する実装
     // 現在はモックデータを返す
     Ok(vec![
@@ -51,7 +49,7 @@ pub async fn get_topics(
 #[tauri::command]
 pub async fn create_topic(
     _state: State<'_, AppState>,
-    request: CreateTopicRequest
+    request: CreateTopicRequest,
 ) -> Result<Topic, String> {
     // TODO: データベースに保存する実装
     let topic = Topic {
@@ -61,14 +59,14 @@ pub async fn create_topic(
         created_at: chrono::Utc::now().timestamp(),
         updated_at: chrono::Utc::now().timestamp(),
     };
-    
+
     Ok(topic)
 }
 
 #[tauri::command]
 pub async fn update_topic(
     _state: State<'_, AppState>,
-    request: UpdateTopicRequest
+    request: UpdateTopicRequest,
 ) -> Result<Topic, String> {
     // TODO: データベースを更新する実装
     let topic = Topic {
@@ -78,15 +76,12 @@ pub async fn update_topic(
         created_at: 1722000000, // TODO: 実際の値を取得
         updated_at: chrono::Utc::now().timestamp(),
     };
-    
+
     Ok(topic)
 }
 
 #[tauri::command]
-pub async fn delete_topic(
-    _state: State<'_, AppState>,
-    id: String
-) -> Result<(), String> {
+pub async fn delete_topic(_state: State<'_, AppState>, id: String) -> Result<(), String> {
     // TODO: データベースから削除する実装
     println!("Deleting topic: {id}");
     Ok(())

@@ -1,6 +1,5 @@
-pub mod handler;
-pub mod publisher;
-pub mod nostr_client;
-pub mod manager;
 pub mod commands;
-
+pub mod handler;
+pub mod manager;
+pub mod nostr_client;
+pub mod publisher;

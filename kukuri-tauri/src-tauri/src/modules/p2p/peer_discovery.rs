@@ -1,6 +1,6 @@
+use iroh::NodeAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use iroh::NodeAddr;
 
 use crate::modules::p2p::error::{P2PError, Result as P2PResult};
 
@@ -19,14 +19,14 @@ impl PeerDiscovery {
             bootstrap_peers,
         }
     }
-    
+
     /// ブートストラップピアを追加
     #[allow(dead_code)]
     pub async fn add_bootstrap_peer(&mut self, peer: NodeAddr) {
         self.bootstrap_peers.push(peer.clone());
         self.add_peer(peer).await;
     }
-    
+
     /// ピアを追加
     #[allow(dead_code)]
     pub async fn add_peer(&self, peer: NodeAddr) {
@@ -35,21 +35,21 @@ impl PeerDiscovery {
             peers.push(peer);
         }
     }
-    
+
     /// ピアを削除
     #[allow(dead_code)]
     pub async fn remove_peer(&self, peer: &NodeAddr) {
         let mut peers = self.known_peers.write().await;
         peers.retain(|p| p.node_id != peer.node_id);
     }
-    
+
     /// 既知のピアリストを取得
     #[allow(dead_code)]
     pub async fn get_peers(&self) -> Vec<NodeAddr> {
         let peers = self.known_peers.read().await;
         peers.iter().cloned().collect()
     }
-    
+
     /// トピック用の初期ピアを取得
     #[allow(dead_code)]
     pub async fn get_initial_peers_for_topic(&self, _topic_id: &str) -> Vec<NodeAddr> {
@@ -57,14 +57,16 @@ impl PeerDiscovery {
         // 将来的にはトピック別のピア管理を実装
         self.get_peers().await
     }
-    
+
     /// ピア情報を文字列から解析
     #[allow(dead_code)]
     pub fn parse_peer_addr(_addr_str: &str) -> P2PResult<NodeAddr> {
         // TODO: NodeAddrのパース実装
-        Err(P2PError::InvalidPeerAddr("NodeAddr parsing not yet implemented".to_string()))
+        Err(P2PError::InvalidPeerAddr(
+            "NodeAddr parsing not yet implemented".to_string(),
+        ))
     }
-    
+
     /// ピア交換メッセージを処理
     #[allow(dead_code)]
     pub async fn handle_peer_exchange(&self, new_peers: Vec<NodeAddr>) {
@@ -72,7 +74,7 @@ impl PeerDiscovery {
             self.add_peer(peer).await;
         }
     }
-    
+
     /// アクティブなピア数を取得
     #[allow(dead_code)]
     pub async fn peer_count(&self) -> usize {
@@ -84,12 +86,12 @@ impl PeerDiscovery {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_peer_management() {
         let discovery = PeerDiscovery::new(vec![]);
         assert_eq!(discovery.peer_count().await, 0);
-        
+
         // テスト用のNodeAddrは実際のアドレスパース実装後に追加
     }
 }

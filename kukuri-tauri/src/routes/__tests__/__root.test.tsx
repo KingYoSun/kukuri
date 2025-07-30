@@ -26,6 +26,15 @@ vi.mock('@/components/layout/MainLayout', () => ({
 
 vi.mock('@/stores/authStore');
 vi.mock('@/hooks');
+vi.mock('@/hooks/useNostrEvents', () => ({
+  useNostrEvents: vi.fn(() => {})
+}));
+vi.mock('@/hooks/useP2PEventListener', () => ({
+  useP2PEventListener: vi.fn(() => {})
+}));
+vi.mock('@/hooks/useDataSync', () => ({
+  useDataSync: vi.fn(() => {})
+}));
 Object.defineProperty(window, 'location', {
   value: {
     get pathname() {

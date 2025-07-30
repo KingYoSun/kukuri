@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use bincode::{Decode, Encode};
 use chrono::Utc;
-use uuid::Uuid;
-use secp256k1::{PublicKey, SecretKey, Message as Secp256k1Message};
 use secp256k1::ecdsa::Signature;
 use secp256k1::SECP256K1;
-use sha2::{Sha256, Digest};
-use bincode::{Decode, Encode};
+use secp256k1::{Message as Secp256k1Message, PublicKey, SecretKey};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 pub type MessageId = [u8; 32];
 
@@ -13,19 +13,19 @@ pub type MessageId = [u8; 32];
 pub struct GossipMessage {
     /// メッセージID（重複チェック用）
     pub id: MessageId,
-    
+
     /// メッセージタイプ
     pub msg_type: MessageType,
-    
+
     /// ペイロード
     pub payload: Vec<u8>,
-    
+
     /// タイムスタンプ
     pub timestamp: i64,
-    
+
     /// 送信者の公開鍵（33バイト - 圧縮形式）
     pub sender: Vec<u8>,
-    
+
     /// 署名
     pub signature: Vec<u8>,
 }
@@ -34,13 +34,13 @@ pub struct GossipMessage {
 pub enum MessageType {
     /// Nostrイベント
     NostrEvent,
-    
+
     /// トピック情報の同期
     TopicSync,
-    
+
     /// ピア情報の交換
     PeerExchange,
-    
+
     /// ハートビート
     Heartbeat,
 }
@@ -50,7 +50,7 @@ impl GossipMessage {
     pub fn new(msg_type: MessageType, payload: Vec<u8>, sender: Vec<u8>) -> Self {
         let id = generate_message_id();
         let timestamp = Utc::now().timestamp();
-        
+
         Self {
             id,
             msg_type,
@@ -60,7 +60,7 @@ impl GossipMessage {
             signature: Vec::new(), // 署名は後で追加
         }
     }
-    
+
     /// メッセージIDを生成
     #[allow(dead_code)]
     fn generate_message_id() -> MessageId {
@@ -71,7 +71,7 @@ impl GossipMessage {
         id[16..].copy_from_slice(uuid_bytes);
         id
     }
-    
+
     /// メッセージを署名用のバイト列に変換
     pub fn to_signing_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -82,74 +82,76 @@ impl GossipMessage {
         // 注意: senderは署名に含めない（署名作成時にはまだ設定されていないため）
         bytes
     }
-    
+
     /// バイト列からメッセージを復元
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
         bincode::decode_from_slice(bytes, bincode::config::standard())
             .map(|(msg, _)| msg)
             .map_err(|e| format!("Failed to deserialize message: {e}"))
     }
-    
+
     /// メッセージをバイト列に変換
     pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
         bincode::encode_to_vec(self, bincode::config::standard())
             .map_err(|e| format!("Failed to serialize message: {e}"))
     }
-    
+
     /// メッセージに署名を付ける
     pub fn sign(&mut self, secret_key: &SecretKey) -> Result<(), String> {
         let signing_bytes = self.to_signing_bytes();
-        
+
         // SHA256ハッシュを計算
         let mut hasher = Sha256::new();
         hasher.update(&signing_bytes);
         let hash = hasher.finalize();
-        
+
         // ハッシュからSecp256k1メッセージを作成
         let message = Secp256k1Message::from_digest_slice(&hash)
             .map_err(|e| format!("Failed to create message: {e}"))?;
-        
+
         // 署名
         let signature = SECP256K1.sign_ecdsa(&message, secret_key);
         self.signature = signature.serialize_compact().to_vec();
-        
+
         // 公開鍵を設定（圧縮形式）
         let public_key = PublicKey::from_secret_key(SECP256K1, secret_key);
         self.sender = public_key.serialize().to_vec();
-        
+
         Ok(())
     }
-    
+
     /// 署名を検証
     pub fn verify_signature(&self) -> Result<bool, String> {
         if self.signature.is_empty() || self.sender.is_empty() {
             return Ok(false);
         }
-        
+
         // 公開鍵を復元
-        let public_key = PublicKey::from_slice(&self.sender)
-            .map_err(|e| format!("Invalid public key: {e}"))?;
-        
+        let public_key =
+            PublicKey::from_slice(&self.sender).map_err(|e| format!("Invalid public key: {e}"))?;
+
         // 署名を復元
         let signature = Signature::from_compact(&self.signature)
             .map_err(|e| format!("Invalid signature: {e}"))?;
-        
+
         // 署名対象のバイト列を作成
         let mut message_for_verification = self.clone();
         message_for_verification.signature = Vec::new(); // 署名フィールドを空にする
         let signing_bytes = message_for_verification.to_signing_bytes();
-        
+
         // SHA256ハッシュを計算
         let mut hasher = Sha256::new();
         hasher.update(&signing_bytes);
         let hash = hasher.finalize();
-        
+
         // ハッシュからSecp256k1メッセージを作成
         let message = Secp256k1Message::from_digest_slice(&hash)
             .map_err(|e| format!("Failed to create message: {e}"))?;
-        
+
         // 署名を検証
-        Ok(SECP256K1.verify_ecdsa(&message, &signature, &public_key).is_ok())
+        Ok(SECP256K1
+            .verify_ecdsa(&message, &signature, &public_key)
+            .is_ok())
     }
 }
 
@@ -180,31 +182,27 @@ fn generate_message_id() -> MessageId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_message_signing_and_verification() {
         // 秘密鍵を生成
         let secret_key = SecretKey::new(&mut rand::thread_rng());
-        
+
         // メッセージを作成
-        let mut message = GossipMessage::new(
-            MessageType::NostrEvent,
-            vec![1, 2, 3, 4, 5],
-            vec![],
-        );
-        
+        let mut message = GossipMessage::new(MessageType::NostrEvent, vec![1, 2, 3, 4, 5], vec![]);
+
         // 署名
         assert!(message.sign(&secret_key).is_ok());
         assert!(!message.signature.is_empty());
         assert!(!message.sender.is_empty());
-        
+
         // 検証 - 正しい署名
         assert_eq!(message.verify_signature().unwrap(), true);
-        
+
         // ペイロードを改ざん
         message.payload.push(6);
         assert_eq!(message.verify_signature().unwrap(), false);
-        
+
         // 署名を改ざん
         message.payload.pop(); // 元に戻す
         if !message.signature.is_empty() {
@@ -212,7 +210,7 @@ mod tests {
         }
         assert_eq!(message.verify_signature().unwrap(), false);
     }
-    
+
     #[test]
     fn test_message_serialization() {
         let message = GossipMessage::new(
@@ -220,13 +218,13 @@ mod tests {
             vec![10, 20, 30],
             vec![1; 33], // 公開鍵は33バイト
         );
-        
+
         // シリアライズ
         let bytes = message.to_bytes().unwrap();
-        
+
         // デシリアライズ
         let deserialized = GossipMessage::from_bytes(&bytes).unwrap();
-        
+
         assert_eq!(message.id, deserialized.id);
         assert_eq!(message.msg_type as u8, deserialized.msg_type as u8);
         assert_eq!(message.payload, deserialized.payload);

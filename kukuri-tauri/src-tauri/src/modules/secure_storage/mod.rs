@@ -31,17 +31,16 @@ pub struct SecureStorage;
 impl SecureStorage {
     /// 秘密鍵を保存（npubごとに個別保存）
     pub fn save_private_key(npub: &str, nsec: &str) -> Result<()> {
-        let entry = Entry::new(SERVICE_NAME, npub)
-            .context("Failed to create keyring entry")?;
-        entry.set_password(nsec)
+        let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
+        entry
+            .set_password(nsec)
             .context("Failed to save private key to keyring")?;
         Ok(())
     }
 
     /// 秘密鍵を取得
     pub fn get_private_key(npub: &str) -> Result<Option<String>> {
-        let entry = Entry::new(SERVICE_NAME, npub)
-            .context("Failed to create keyring entry")?;
+        let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(keyring::Error::NoEntry) => Ok(None),
@@ -51,8 +50,7 @@ impl SecureStorage {
 
     /// 秘密鍵を削除
     pub fn delete_private_key(npub: &str) -> Result<()> {
-        let entry = Entry::new(SERVICE_NAME, npub)
-            .context("Failed to create keyring entry")?;
+        let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
         match entry.delete_credential() {
             Ok(()) => Ok(()),
             Err(keyring::Error::NoEntry) => Ok(()), // 既に削除されている場合もOK
@@ -62,19 +60,20 @@ impl SecureStorage {
 
     /// アカウントメタデータを保存（公開情報のみ）
     pub fn save_accounts_metadata(metadata: &AccountsMetadata) -> Result<()> {
-        let json = serde_json::to_string(metadata)
-            .context("Failed to serialize accounts metadata")?;
-        let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY)
-            .context("Failed to create keyring entry")?;
-        entry.set_password(&json)
+        let json =
+            serde_json::to_string(metadata).context("Failed to serialize accounts metadata")?;
+        let entry =
+            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
+        entry
+            .set_password(&json)
             .context("Failed to save accounts metadata")?;
         Ok(())
     }
 
     /// アカウントメタデータを取得
     pub fn get_accounts_metadata() -> Result<AccountsMetadata> {
-        let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY)
-            .context("Failed to create keyring entry")?;
+        let entry =
+            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
         match entry.get_password() {
             Ok(json) => {
                 let metadata: AccountsMetadata = serde_json::from_str(&json)

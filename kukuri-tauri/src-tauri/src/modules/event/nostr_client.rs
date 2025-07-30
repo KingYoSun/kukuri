@@ -1,9 +1,9 @@
-use nostr_sdk::prelude::*;
 use anyhow::Result;
+use nostr_sdk::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
-use std::collections::HashMap;
 
 /// リレーの接続状態
 #[derive(Debug, Clone, PartialEq)]
@@ -37,9 +37,9 @@ impl NostrClientManager {
         self.keys = Some(keys.clone());
 
         let client = Client::new(keys.clone());
-        
+
         *self.client.write().await = Some(client);
-        
+
         info!("Nostr client initialized with keys");
         Ok(())
     }
@@ -50,16 +50,16 @@ impl NostrClientManager {
         if self.client.read().await.is_none() {
             return Err(anyhow::anyhow!("Client not initialized"));
         }
-        
+
         // 既存のNostrリレーへの接続を無効化
         info!("Skipping relay connection to {} (disabled)", url);
-        
+
         // 接続状態を「接続済み」に設定（モック）
         {
             let mut status = self.relay_status.write().await;
             status.insert(url.to_string(), RelayStatus::Connected);
         }
-        
+
         Ok(())
     }
 
@@ -68,7 +68,7 @@ impl NostrClientManager {
         // 既存のNostrリレーへの接続を無効化
         for url in urls {
             info!("Skipping relay connection to {} (disabled)", url);
-            
+
             // 接続状態を「接続済み」に設定（モック）
             let mut status = self.relay_status.write().await;
             status.insert(url.to_string(), RelayStatus::Connected);
@@ -82,7 +82,7 @@ impl NostrClientManager {
         if self.client.read().await.is_none() {
             return Err(anyhow::anyhow!("Client not initialized"));
         }
-        
+
         // 既存のNostrリレーへの接続を無効化
         info!("Skipping connection to all relays (disabled)");
         Ok(())
@@ -106,12 +106,14 @@ impl NostrClientManager {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
             // イベントを作成
-            let keys = self.keys.as_ref()
+            let keys = self
+                .keys
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Keys not set"))?;
             let event = EventBuilder::text_note(content)
                 .tags(tags)
                 .sign_with_keys(keys)?;
-            
+
             let output = client.send_event(&event).await?;
             let event_id = output.id();
             info!("Published text note: {}", event_id);
@@ -168,29 +170,29 @@ impl NostrClientManager {
     pub async fn health_check(&self) -> Result<HashMap<String, bool>> {
         let client_guard = self.client.read().await;
         let mut health_status = HashMap::new();
-        
+
         if let Some(client) = client_guard.as_ref() {
             let relays = client.pool().relays().await;
-            
+
             for (url, relay) in relays {
                 // リレーの接続状態を確認
                 let is_connected = relay.is_connected();
-                
+
                 if is_connected {
                     info!("Relay {} is healthy", url);
                     health_status.insert(url.to_string(), true);
-                    
+
                     let mut status = self.relay_status.write().await;
                     status.insert(url.to_string(), RelayStatus::Connected);
                 } else {
                     warn!("Relay {} is not connected", url);
                     health_status.insert(url.to_string(), false);
-                    
+
                     let mut status = self.relay_status.write().await;
                     status.insert(url.to_string(), RelayStatus::Disconnected);
                 }
             }
-            
+
             Ok(health_status)
         } else {
             Err(anyhow::anyhow!("Client not initialized"))
@@ -213,7 +215,7 @@ mod tests {
     async fn test_client_initialization() {
         let mut manager = NostrClientManager::new();
         let secret_key = SecretKey::generate();
-        
+
         assert!(manager.init_with_keys(&secret_key).await.is_ok());
         assert!(manager.get_public_key().is_some());
     }
@@ -221,7 +223,7 @@ mod tests {
     #[tokio::test]
     async fn test_client_not_initialized_error() {
         let manager = NostrClientManager::new();
-        
+
         // クライアントが初期化されていない状態でのテスト
         assert!(manager.add_relay("wss://relay.test").await.is_err());
         assert!(manager.connect().await.is_err());
@@ -233,10 +235,10 @@ mod tests {
     async fn test_relay_status_management() {
         let mut manager = NostrClientManager::new();
         let secret_key = SecretKey::generate();
-        
+
         // クライアントを初期化
         manager.init_with_keys(&secret_key).await.unwrap();
-        
+
         // リレーステータスの初期状態を確認
         let status = manager.get_relay_status().await;
         assert!(status.is_empty());
@@ -246,10 +248,10 @@ mod tests {
     async fn test_public_key_generation() {
         let mut manager = NostrClientManager::new();
         let secret_key = SecretKey::generate();
-        
+
         // 初期化前は公開鍵がない
         assert!(manager.get_public_key().is_none());
-        
+
         // 初期化後は公開鍵が取得できる
         manager.init_with_keys(&secret_key).await.unwrap();
         let public_key = manager.get_public_key().unwrap();
@@ -261,15 +263,15 @@ mod tests {
         let mut manager = NostrClientManager::new();
         let secret_key1 = SecretKey::generate();
         let secret_key2 = SecretKey::generate();
-        
+
         // 最初の初期化
         manager.init_with_keys(&secret_key1).await.unwrap();
         let public_key1 = manager.get_public_key().unwrap();
-        
+
         // 再初期化
         manager.init_with_keys(&secret_key2).await.unwrap();
         let public_key2 = manager.get_public_key().unwrap();
-        
+
         // 公開鍵が更新されていることを確認
         assert_ne!(public_key1, public_key2);
         assert_eq!(public_key2, Keys::new(secret_key2).public_key());
@@ -279,10 +281,10 @@ mod tests {
     async fn test_get_client() {
         let mut manager = NostrClientManager::new();
         let secret_key = SecretKey::generate();
-        
+
         // 初期化前はクライアントがない
         assert!(manager.get_client().await.is_none());
-        
+
         // 初期化後はクライアントが取得できる
         manager.init_with_keys(&secret_key).await.unwrap();
         assert!(manager.get_client().await.is_some());
