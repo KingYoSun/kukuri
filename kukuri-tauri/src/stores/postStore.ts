@@ -7,7 +7,11 @@ interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
   fetchPosts: (topicId?: string, limit?: number, offset?: number) => Promise<void>;
   addPost: (post: Post) => void;
-  createPost: (content: string, topicId: string) => Promise<Post>;
+  createPost: (content: string, topicId: string, options?: {
+    scheduledDate?: Date | null;
+    replyTo?: string;
+    quotedPost?: string;
+  }) => Promise<Post>;
   updatePost: (id: string, update: Partial<Post>) => void;
   removePost: (id: string) => void;
   deletePostRemote: (id: string) => Promise<void>;
@@ -97,9 +101,19 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       };
     }),
 
-  createPost: async (content: string, topicId: string) => {
+  createPost: async (content: string, topicId: string, options?: {
+    scheduledDate?: Date | null;
+    replyTo?: string;
+    quotedPost?: string;
+  }) => {
     try {
-      const apiPost = await TauriApi.createPost({ content, topic_id: topicId });
+      const apiPost = await TauriApi.createPost({ 
+        content, 
+        topic_id: topicId,
+        scheduled_date: options?.scheduledDate?.toISOString(),
+        reply_to: options?.replyTo,
+        quoted_post: options?.quotedPost,
+      });
       const post: Post = {
         id: apiPost.id,
         content: apiPost.content,
