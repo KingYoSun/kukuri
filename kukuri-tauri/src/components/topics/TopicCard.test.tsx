@@ -16,13 +16,8 @@ vi.mock('@/stores', () => ({
   }),
 }));
 
-// p2p APIのモック
-vi.mock('@/lib/api/p2p', () => ({
-  p2pApi: {
-    joinTopic: vi.fn().mockResolvedValue(undefined),
-    leaveTopic: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+// p2p APIのモック - TopicCardでは使用しなくなったので削除
+// joinTopic/leaveTopicの処理はtopicStore内で行われるようになった
 
 // Tanstack Routerのモック
 vi.mock('@tanstack/react-router', () => ({
@@ -104,6 +99,60 @@ describe('TopicCard', () => {
       expect(mockJoinTopic).toHaveBeenCalledWith(mockTopic.id);
     });
     expect(mockLeaveTopic).not.toHaveBeenCalled();
+  });
+
+  it('参加ボタンにアクセシビリティ属性が設定される', () => {
+    render(<TopicCard topic={mockTopic} />);
+
+    const joinButton = screen.getByText('参加');
+    expect(joinButton).toHaveAttribute('aria-pressed', 'false');
+    expect(joinButton).toHaveAttribute('aria-label', `「${mockTopic.name}」に参加`);
+  });
+
+  it('参加中ボタンにアクセシビリティ属性が設定される', () => {
+    mockJoinedTopics.push(mockTopic.id);
+
+    render(<TopicCard topic={mockTopic} />);
+
+    const joinedButton = screen.getByText('参加中');
+    expect(joinedButton).toHaveAttribute('aria-pressed', 'true');
+    expect(joinedButton).toHaveAttribute('aria-label', `「${mockTopic.name}」から離脱`);
+  });
+
+  it('ローディング中はボタンが無効化される', async () => {
+    // joinTopicを遅延させる
+    mockJoinTopic.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
+
+    render(<TopicCard topic={mockTopic} />);
+
+    const joinButton = screen.getByText('参加');
+    fireEvent.click(joinButton);
+
+    // ローディング中の確認
+    await waitFor(() => {
+      expect(joinButton).toBeDisabled();
+      expect(screen.getByRole('button')).toHaveTextContent('参加');
+    });
+
+    // 完了後の確認
+    await waitFor(() => {
+      expect(joinButton).not.toBeDisabled();
+    });
+  });
+
+  it('エラー時はトーストが表示される', async () => {
+    // joinTopicがエラーを投げるようにモック
+    mockJoinTopic.mockRejectedValueOnce(new Error('Network error'));
+
+    render(<TopicCard topic={mockTopic} />);
+
+    const joinButton = screen.getByText('参加');
+    fireEvent.click(joinButton);
+
+    // エラー処理の確認
+    await waitFor(() => {
+      expect(mockJoinTopic).toHaveBeenCalledWith(mockTopic.id);
+    });
   });
 
   it('参加中ボタンをクリックするとleaveTopicが呼ばれる', async () => {

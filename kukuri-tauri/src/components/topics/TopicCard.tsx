@@ -7,9 +7,8 @@ import type { Topic } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useTopicStore } from '@/stores';
-import { p2pApi } from '@/lib/api/p2p';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 interface TopicCardProps {
   topic: Topic;
@@ -17,7 +16,11 @@ interface TopicCardProps {
 
 export function TopicCard({ topic }: TopicCardProps) {
   const { joinedTopics, joinTopic, leaveTopic } = useTopicStore();
-  const isJoined = joinedTopics.includes(topic.id);
+  // joinedTopicsが変更されたときのみ再計算
+  const isJoined = useMemo(
+    () => joinedTopics.includes(topic.id),
+    [joinedTopics, topic.id]
+  );
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -34,16 +37,14 @@ export function TopicCard({ topic }: TopicCardProps) {
     try {
       if (isJoined) {
         // トピックから離脱
-        await p2pApi.leaveTopic(topic.id);
-        leaveTopic(topic.id);
+        await leaveTopic(topic.id);
         toast({
           title: 'トピックから離脱しました',
           description: `「${topic.name}」から離脱しました`,
         });
       } else {
         // トピックに参加
-        await p2pApi.joinTopic(topic.id);
-        joinTopic(topic.id);
+        await joinTopic(topic.id);
         toast({
           title: 'トピックに参加しました',
           description: `「${topic.name}」に参加しました`,
@@ -80,6 +81,8 @@ export function TopicCard({ topic }: TopicCardProps) {
             size="sm"
             onClick={handleJoinToggle}
             disabled={isLoading}
+            aria-pressed={isJoined}
+            aria-label={isJoined ? `「${topic.name}」から離脱` : `「${topic.name}」に参加`}
           >
             {isLoading && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
             {isJoined ? '参加中' : '参加'}

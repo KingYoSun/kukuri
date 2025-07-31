@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TopicState, Topic } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
+import { p2pApi } from '@/lib/api/p2p';
+import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 
 interface TopicStore extends TopicState {
   setTopics: (topics: Topic[]) => void;
@@ -14,8 +16,8 @@ interface TopicStore extends TopicState {
   removeTopic: (id: string) => void;
   deleteTopicRemote: (id: string) => Promise<void>;
   setCurrentTopic: (topic: Topic | null) => void;
-  joinTopic: (topicId: string) => void;
-  leaveTopic: (topicId: string) => void;
+  joinTopic: (topicId: string) => Promise<void>;
+  leaveTopic: (topicId: string) => Promise<void>;
   updateTopicPostCount: (topicId: string, delta: number) => void;
 }
 
@@ -161,16 +163,75 @@ export const useTopicStore = create<TopicStore>()(
 
       setCurrentTopic: (topic: Topic | null) => set({ currentTopic: topic }),
 
-      joinTopic: (topicId: string) =>
+      joinTopic: async (topicId: string) => {
+        // 既に参加している場合は何もしない
+        const currentState = useTopicStore.getState();
+        if (currentState.joinedTopics.includes(topicId)) {
+          return;
+        }
+
+        // 先にUIを更新（楽観的UI更新）
         set((state) => ({
           joinedTopics: [...new Set([...state.joinedTopics, topicId])],
-        })),
+        }));
 
-      leaveTopic: (topicId: string) =>
+        try {
+          // P2P接続を先に実行
+          await p2pApi.joinTopic(topicId);
+          
+          // P2P接続が安定した後にNostrサブスクリプションを開始
+          // リレー接続が無効化されている場合でも、将来的な互換性のために呼び出しは維持
+          setTimeout(() => {
+            nostrSubscribe(topicId).catch((error) => {
+              errorHandler.log('Failed to subscribe to Nostr topic', error, {
+                context: 'TopicStore.joinTopic.nostrSubscribe',
+                showToast: false, // P2Pが成功していればエラーは表示しない
+              });
+            });
+          }, 500); // 500msの遅延
+        } catch (error) {
+          // エラーが発生した場合は状態を元に戻す
+          set((state) => ({
+            joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
+          }));
+          errorHandler.log('Failed to join topic', error, {
+            context: 'TopicStore.joinTopic',
+            showToast: true,
+            toastTitle: 'トピックへの参加に失敗しました',
+          });
+          throw error;
+        }
+      },
+
+      leaveTopic: async (topicId: string) => {
+        // 参加していない場合は何もしない
+        const currentState = useTopicStore.getState();
+        if (!currentState.joinedTopics.includes(topicId)) {
+          return;
+        }
+
+        // 先にUIを更新（楽観的UI更新）
         set((state) => ({
           joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
           currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
-        })),
+        }));
+
+        try {
+          // P2P切断を実行（Nostrは現在アンサブスクライブAPIがない）
+          await p2pApi.leaveTopic(topicId);
+        } catch (error) {
+          // エラーが発生した場合は状態を元に戻す
+          set((state) => ({
+            joinedTopics: [...new Set([...state.joinedTopics, topicId])],
+          }));
+          errorHandler.log('Failed to leave topic', error, {
+            context: 'TopicStore.leaveTopic',
+            showToast: true,
+            toastTitle: 'トピックからの離脱に失敗しました',
+          });
+          throw error;
+        }
+      },
 
       updateTopicPostCount: (topicId: string, delta: number) =>
         set((state) => {

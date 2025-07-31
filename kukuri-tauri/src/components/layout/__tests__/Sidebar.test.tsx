@@ -28,6 +28,22 @@ vi.mock('@/lib/api/p2p', () => ({
   },
 }));
 
+// useP2Pフックのモック
+vi.mock('@/hooks/useP2P', () => ({
+  useP2P: vi.fn(() => ({
+    getTopicMessages: vi.fn(() => []),
+  })),
+}));
+
+// コンポーネントのモック
+vi.mock('@/components/RelayStatus', () => ({
+  RelayStatus: () => <div>Relay Status</div>,
+}));
+
+vi.mock('@/components/P2PStatus', () => ({
+  P2PStatus: () => <div>P2P Status</div>,
+}));
+
 describe('Sidebar', () => {
   const mockNavigate = vi.fn();
   const mockTopic1: Topic = {
@@ -115,9 +131,9 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: /technology/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /nostr/i })).toBeInTheDocument();
 
-    // トピックのメンバー数が表示されること
-    expect(screen.getByText('1234')).toBeInTheDocument();
-    expect(screen.getByText('456')).toBeInTheDocument();
+    // トピックの投稿数が表示されること
+    expect(screen.getByText('567')).toBeInTheDocument();
+    expect(screen.getByText('234')).toBeInTheDocument();
   });
 
   it('参加中のトピックがない場合の表示', () => {

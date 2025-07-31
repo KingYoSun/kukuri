@@ -25,6 +25,22 @@ vi.mock('@/lib/api/p2p', () => ({
   },
 }));
 
+// useP2Pフックのモック
+vi.mock('@/hooks/useP2P', () => ({
+  useP2P: vi.fn(() => ({
+    getTopicMessages: vi.fn(() => []),
+  })),
+}));
+
+// コンポーネントのモック
+vi.mock('@/components/RelayStatus', () => ({
+  RelayStatus: () => <div>Relay Status</div>,
+}));
+
+vi.mock('@/components/P2PStatus', () => ({
+  P2PStatus: () => <div>P2P Status</div>,
+}));
+
 describe('MainLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks();

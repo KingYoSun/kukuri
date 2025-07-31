@@ -1,12 +1,17 @@
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Hash, Plus, TrendingUp, Users, List, Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Hash, Plus, TrendingUp, Users, List, Search, MessageSquare } from 'lucide-react';
 import { useTopicStore, useUIStore } from '@/stores';
+import { useP2P } from '@/hooks/useP2P';
 import { cn } from '@/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
 import { RelayStatus } from '@/components/RelayStatus';
 import { P2PStatus } from '@/components/P2PStatus';
+import { formatDistanceToNow } from 'date-fns';
+import { ja } from 'date-fns/locale';
+import { useMemo } from 'react';
 
 const categories = [
   { name: 'トピック一覧', icon: List, path: '/topics' },
@@ -20,9 +25,36 @@ export function Sidebar() {
   const { sidebarOpen } = useUIStore();
   const navigate = useNavigate();
 
-  const joinedTopicsList = joinedTopics.map((id) => topics.get(id)).filter(Boolean) as NonNullable<
-    ReturnType<typeof topics.get>
-  >[];
+  const { getTopicMessages } = useP2P();
+  
+  // 参加中トピックを最終活動時刻でソート
+  const joinedTopicsList = useMemo(() => {
+    const topicsList = joinedTopics
+      .map((id) => {
+        const topic = topics.get(id);
+        if (!topic) return null;
+        
+        // P2Pメッセージから最終活動時刻を取得
+        const messages = getTopicMessages(id);
+        const lastMessageTime = messages.length > 0
+          ? Math.max(...messages.map((m) => m.timestamp))
+          : topic.lastActive || 0;
+        
+        return {
+          ...topic,
+          lastActive: lastMessageTime,
+          unreadCount: 0, // TODO: 将来的に未読カウントを実装
+        };
+      })
+      .filter(Boolean) as NonNullable<ReturnType<typeof topics.get> & { unreadCount: number }>[];
+    
+    // 最終活動時刻の新しい順にソート
+    return topicsList.sort((a, b) => {
+      const aTime = a.lastActive || 0;
+      const bTime = b.lastActive || 0;
+      return bTime - aTime;
+    });
+  }, [joinedTopics, topics, getTopicMessages]);
 
   const handleTopicClick = (topicId: string) => {
     const topic = topics.get(topicId);
@@ -76,18 +108,39 @@ export function Sidebar() {
               {joinedTopicsList.length === 0 ? (
                 <p className="text-sm text-muted-foreground">参加中のトピックはありません</p>
               ) : (
-                joinedTopicsList.map((topic) => (
-                  <Button
-                    key={topic.id}
-                    variant={currentTopic?.id === topic.id ? 'secondary' : 'ghost'}
-                    className="w-full justify-start"
-                    onClick={() => handleTopicClick(topic.id)}
-                  >
-                    <Hash className="mr-2 h-4 w-4" />
-                    <span className="flex-1 text-left">{topic.name}</span>
-                    <span className="text-xs text-muted-foreground">{topic.memberCount}</span>
-                  </Button>
-                ))
+                joinedTopicsList.map((topic) => {
+                  const lastActiveText = topic.lastActive
+                    ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
+                        addSuffix: false,
+                        locale: ja,
+                      })
+                    : '未投稿';
+                  
+                  return (
+                    <Button
+                      key={topic.id}
+                      variant={currentTopic?.id === topic.id ? 'secondary' : 'ghost'}
+                      className="w-full justify-start p-2 h-auto"
+                      onClick={() => handleTopicClick(topic.id)}
+                    >
+                      <Hash className="mr-2 h-4 w-4 flex-shrink-0" />
+                      <div className="flex-1 text-left min-w-0">
+                        <div className="font-medium truncate">{topic.name}</div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <MessageSquare className="h-3 w-3" />
+                          <span>{topic.postCount}</span>
+                          <span className="mx-1">·</span>
+                          <span className="truncate">{lastActiveText}</span>
+                        </div>
+                      </div>
+                      {topic.unreadCount > 0 && (
+                        <Badge variant="default" className="ml-2 h-5 px-1.5 text-xs">
+                          {topic.unreadCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  );
+                })
               )}
             </div>
           </div>

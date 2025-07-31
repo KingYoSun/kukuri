@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTopicStore } from '@/stores';
 import { usePostsByTopic } from '@/hooks';
 import { PostCard } from '@/components/posts/PostCard';
@@ -31,7 +31,10 @@ function TopicPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const topic = topics.get(topicId);
-  const isJoined = joinedTopics.includes(topicId);
+  const isJoined = useMemo(
+    () => joinedTopics.includes(topicId),
+    [joinedTopics, topicId]
+  );
 
   if (!topic) {
     return (
