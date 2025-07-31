@@ -1,9 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
-import MDEditor from '@uiw/react-md-editor';
-import { Button } from '@/components/ui/button';
+import MDEditor, { commands } from '@uiw/react-md-editor';
 import { cn } from '@/lib/utils';
 import { errorHandler } from '@/lib/errorHandler';
-import { Upload, X } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import MarkdownPreview from './MarkdownPreview';
@@ -46,14 +45,14 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       // Validate file type
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
       if (!validTypes.includes(file.type)) {
-        errorHandler.handle('Invalid file type. Please upload an image.', { showToast: true });
+        errorHandler.log('Invalid file type. Please upload an image.', undefined, { showToast: true });
         return;
       }
 
       // Validate file size (max 10MB)
       const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
-        errorHandler.handle('File size too large. Maximum size is 10MB.', { showToast: true });
+        errorHandler.log('File size too large. Maximum size is 10MB.', undefined, { showToast: true });
         return;
       }
 
@@ -79,7 +78,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           onChange(value + '\n' + imageMarkdown);
         }
       } catch (error) {
-        errorHandler.handle(error, { 
+        errorHandler.log('Failed to upload image', error, { 
           context: 'Image upload failed',
           showToast: true 
         });
@@ -105,8 +104,23 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     [onChange, maxLength]
   );
 
-  const commands = React.useMemo(() => {
-    const defaultCommands = MDEditor.commands || [];
+  const customCommands = React.useMemo(() => {
+    const defaultCommands = [
+      commands.bold,
+      commands.italic,
+      commands.strikethrough,
+      commands.hr,
+      commands.title,
+      commands.divider,
+      commands.link,
+      commands.quote,
+      commands.code,
+      commands.image,
+      commands.divider,
+      commands.unorderedListCommand,
+      commands.orderedListCommand,
+      commands.checkedListCommand,
+    ].filter(Boolean);
     
     if (onImageUpload) {
       // Add custom image upload command
@@ -129,7 +143,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       };
       
       // Insert after the image command
-      const imageIndex = defaultCommands.findIndex(cmd => cmd.name === 'image');
+      const imageIndex = defaultCommands.findIndex((cmd: any) => cmd.name === 'image');
       if (imageIndex >= 0) {
         const newCommands = [...defaultCommands];
         newCommands.splice(imageIndex + 1, 0, imageCommand);
@@ -148,7 +162,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         preview={preview}
         height={height}
         hideToolbar={hideToolbar}
-        commands={commands}
+        commands={customCommands}
         textareaProps={{
           placeholder,
         }}

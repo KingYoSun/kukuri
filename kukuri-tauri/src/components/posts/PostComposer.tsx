@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -7,10 +7,9 @@ import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
 import { useDraftStore } from '@/stores/draftStore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileText, Send, Save, Calendar, Trash2 } from 'lucide-react';
+import { Loader2, FileText, Send, Save, Trash2 } from 'lucide-react';
 import { TopicSelector } from '../topics/TopicSelector';
 import MarkdownEditor from './MarkdownEditor';
-import PostScheduler from './PostScheduler';
 import DraftManager from './DraftManager';
 import type { PostDraft } from '@/types/draft';
 import { debounce } from 'lodash';
@@ -33,7 +32,6 @@ export function PostComposer({
 }: PostComposerProps) {
   const [content, setContent] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState(topicId || '');
-  const [scheduledDate, setScheduledDate] = useState<Date | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [showDrafts, setShowDrafts] = useState(false);
@@ -43,13 +41,10 @@ export function PostComposer({
   const { topics } = useTopicStore();
   const { 
     createDraft, 
-    updateDraft, 
     deleteDraft, 
     autosaveDraft 
   } = useDraftStore();
   const { toast } = useToast();
-
-  const autosaveTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Get topic name for draft
   const getTopicName = () => {
@@ -68,7 +63,6 @@ export function PostComposer({
         content,
         topicId: selectedTopicId || null,
         topicName: getTopicName(),
-        scheduledDate,
         metadata: {
           replyTo,
           quotedPost,
@@ -80,7 +74,6 @@ export function PostComposer({
         content,
         topicId: selectedTopicId || null,
         topicName: getTopicName(),
-        scheduledDate,
         metadata: {
           replyTo,
           quotedPost,
@@ -88,13 +81,11 @@ export function PostComposer({
       });
       setCurrentDraftId(draft.id);
     }
-  }, [content, selectedTopicId, scheduledDate, currentDraftId, replyTo, quotedPost, createDraft, autosaveDraft]);
+  }, [content, selectedTopicId, currentDraftId, replyTo, quotedPost, createDraft, autosaveDraft, getTopicName]);
 
   // Debounced autosave
   const debouncedAutosave = useCallback(
-    debounce(() => {
-      autosave();
-    }, 2000),
+    debounce(autosave, 2000),
     [autosave]
   );
 
@@ -106,7 +97,7 @@ export function PostComposer({
     return () => {
       debouncedAutosave.cancel();
     };
-  }, [content, selectedTopicId, scheduledDate, debouncedAutosave, currentDraftId]);
+  }, [content, selectedTopicId, debouncedAutosave, currentDraftId]);
 
   const handleSubmit = async () => {
     if (!content.trim()) {
@@ -130,16 +121,13 @@ export function PostComposer({
     setIsSubmitting(true);
     try {
       await createPost(content, selectedTopicId, {
-        scheduledDate,
         replyTo,
         quotedPost,
       });
       
       toast({
         title: '成功',
-        description: scheduledDate 
-          ? '投稿を予約しました' 
-          : '投稿を作成しました',
+        description: '投稿を作成しました',
       });
       
       // Clean up
@@ -150,7 +138,7 @@ export function PostComposer({
       resetForm();
       onSuccess?.();
     } catch (error) {
-      errorHandler.handle(error, {
+      errorHandler.log('Failed to create post', error, {
         context: 'Failed to create post',
         showToast: true,
       });
@@ -183,7 +171,6 @@ export function PostComposer({
   const handleSelectDraft = (draft: PostDraft) => {
     setContent(draft.content);
     setSelectedTopicId(draft.topicId || '');
-    setScheduledDate(draft.scheduledDate);
     setCurrentDraftId(draft.id);
     setShowDrafts(false);
   };
@@ -201,7 +188,6 @@ export function PostComposer({
   const resetForm = () => {
     setContent('');
     setSelectedTopicId(topicId || '');
-    setScheduledDate(null);
     setCurrentDraftId(null);
   };
 
@@ -261,7 +247,7 @@ export function PostComposer({
             {/* Topic selector */}
             <TopicSelector
               value={selectedTopicId}
-              onChange={setSelectedTopicId}
+              onValueChange={setSelectedTopicId}
               disabled={!!topicId || isSubmitting}
               placeholder="トピックを選択"
             />
@@ -307,11 +293,6 @@ export function PostComposer({
 
       <CardFooter className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <PostScheduler
-            scheduledDate={scheduledDate}
-            onSchedule={setScheduledDate}
-          />
-          
           {currentDraftId && (
             <span className="text-xs text-muted-foreground">
               下書きを自動保存中...
@@ -343,12 +324,10 @@ export function PostComposer({
           >
             {isSubmitting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : scheduledDate ? (
-              <Calendar className="mr-2 h-4 w-4" />
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            {scheduledDate ? '予約投稿' : '投稿する'}
+            投稿する
           </Button>
         </div>
       </CardFooter>

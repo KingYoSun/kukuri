@@ -50,7 +50,6 @@ export interface CreatePostRequest {
   content: string;
   topic_id?: string;
   tags?: string[][];
-  scheduled_date?: string;
   reply_to?: string;
   quoted_post?: string;
 }

@@ -8,7 +8,6 @@ interface PostStore extends PostState {
   fetchPosts: (topicId?: string, limit?: number, offset?: number) => Promise<void>;
   addPost: (post: Post) => void;
   createPost: (content: string, topicId: string, options?: {
-    scheduledDate?: Date | null;
     replyTo?: string;
     quotedPost?: string;
   }) => Promise<Post>;
@@ -102,7 +101,6 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     }),
 
   createPost: async (content: string, topicId: string, options?: {
-    scheduledDate?: Date | null;
     replyTo?: string;
     quotedPost?: string;
   }) => {
@@ -110,7 +108,6 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       const apiPost = await TauriApi.createPost({ 
         content, 
         topic_id: topicId,
-        scheduled_date: options?.scheduledDate?.toISOString(),
         reply_to: options?.replyTo,
         quoted_post: options?.quotedPost,
       });

@@ -18,7 +18,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
       rehypePlugins={[rehypeRaw]}
       components={{
         // Custom link renderer to detect media URLs
-        a: ({ node, href, children, ...props }) => {
+        a: ({ node: _node, href, children, ...props }) => {
           if (!href) return <a {...props}>{children}</a>;
 
           // Check if this is a media URL that should be embedded
@@ -49,7 +49,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Override paragraph to handle media embeds properly
-        p: ({ node, children, ...props }) => {
+        p: ({ node: _node, children, ...props }) => {
           // Check if the paragraph contains only a media embed
           const childrenArray = React.Children.toArray(children);
           if (childrenArray.length === 1) {
@@ -63,7 +63,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           return <p {...props}>{children}</p>;
         },
         // Custom image renderer
-        img: ({ node, src, alt, ...props }) => {
+        img: ({ node: _node, src, alt, ...props }) => {
           if (!src) return null;
           
           return (
@@ -77,7 +77,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Custom code block renderer
-        code: ({ node, inline, className, children, ...props }) => {
+        code: ({ node: _node, inline, className, children, ...props }: any) => {
           const match = /language-(\w+)/.exec(className || '');
           
           if (!inline && match) {
@@ -97,7 +97,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Custom blockquote renderer
-        blockquote: ({ node, children, ...props }) => {
+        blockquote: ({ node: _node, children, ...props }) => {
           return (
             <blockquote
               className="border-l-4 border-primary pl-4 my-4 italic"
@@ -108,7 +108,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Custom table renderer
-        table: ({ node, children, ...props }) => {
+        table: ({ node: _node, children, ...props }) => {
           return (
             <div className="overflow-x-auto my-4">
               <table className="min-w-full divide-y divide-border" {...props}>
@@ -118,7 +118,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Style table headers
-        th: ({ node, children, ...props }) => {
+        th: ({ node: _node, children, ...props }) => {
           return (
             <th
               className="px-4 py-2 text-left text-sm font-medium text-muted-foreground"
@@ -129,7 +129,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Style table cells
-        td: ({ node, children, ...props }) => {
+        td: ({ node: _node, children, ...props }) => {
           return (
             <td className="px-4 py-2 text-sm" {...props}>
               {children}

@@ -102,12 +102,6 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
                           </div>
                         )}
                         
-                        {draft.scheduledDate && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            <span>予約: {formatDate(draft.scheduledDate)}</span>
-                          </div>
-                        )}
                         
                         <div className="flex items-center gap-1 ml-auto">
                           <Clock className="w-3 h-3" />

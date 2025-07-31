@@ -6,7 +6,6 @@ export interface PostDraft {
   content: string;
   topicId: string | null;
   topicName?: string;
-  scheduledDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
   metadata?: {
@@ -23,7 +22,6 @@ export interface CreateDraftParams {
   content: string;
   topicId: string | null;
   topicName?: string;
-  scheduledDate?: Date | null;
   metadata?: PostDraft['metadata'];
 }
 

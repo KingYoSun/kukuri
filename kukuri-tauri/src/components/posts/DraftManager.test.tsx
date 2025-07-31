@@ -14,7 +14,6 @@ const mockDrafts: PostDraft[] = [
     content: 'This is the first draft content',
     topicId: 'topic1',
     topicName: 'Technology',
-    scheduledDate: new Date('2025-08-01T10:00:00'),
     createdAt: new Date('2025-07-30T08:00:00'),
     updatedAt: new Date('2025-07-30T09:00:00'),
   },
@@ -22,7 +21,6 @@ const mockDrafts: PostDraft[] = [
     id: 'draft2',
     content: 'Second draft without topic',
     topicId: null,
-    scheduledDate: null,
     createdAt: new Date('2025-07-29T10:00:00'),
     updatedAt: new Date('2025-07-29T11:00:00'),
   },
@@ -31,7 +29,6 @@ const mockDrafts: PostDraft[] = [
     content: 'A very long draft content that should be truncated in the preview. '.repeat(5),
     topicId: 'topic2',
     topicName: 'Life',
-    scheduledDate: null,
     createdAt: new Date('2025-07-28T12:00:00'),
     updatedAt: new Date('2025-07-31T13:00:00'),
   },
@@ -94,11 +91,6 @@ describe('DraftManager', () => {
     expect(screen.getByText('Life')).toBeInTheDocument();
   });
 
-  it('displays scheduled date when available', () => {
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
-    
-    expect(screen.getByText(/予約: 8月1日 10:00/)).toBeInTheDocument();
-  });
 
   it('truncates long content in preview', () => {
     render(<DraftManager onSelectDraft={mockOnSelectDraft} />);

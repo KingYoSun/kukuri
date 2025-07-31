@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PostComposer } from './PostComposer';
 import { usePostStore } from '@/stores/postStore';
@@ -15,11 +15,11 @@ vi.mock('@/stores/draftStore');
 vi.mock('@/hooks/use-toast');
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
-    handle: vi.fn(),
+    log: vi.fn(),
   },
 }));
 vi.mock('lodash', () => ({
-  debounce: (fn: Function) => {
+  debounce: (fn: (...args: any[]) => any) => {
     const debounced = fn;
     debounced.cancel = vi.fn();
     return debounced;
@@ -28,11 +28,11 @@ vi.mock('lodash', () => ({
 
 // Mock components
 vi.mock('../topics/TopicSelector', () => ({
-  TopicSelector: ({ value, onChange, disabled, placeholder }: any) => (
+  TopicSelector: ({ value, onValueChange, disabled, placeholder }: any) => (
     <select
       data-testid="topic-selector"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onValueChange(e.target.value)}
       disabled={disabled}
     >
       <option value="">{placeholder}</option>
@@ -61,24 +61,6 @@ vi.mock('./MarkdownEditor', () => ({
   ),
 }));
 
-vi.mock('./PostScheduler', () => ({
-  __esModule: true,
-  default: ({ scheduledDate, onSchedule }: any) => (
-    <div>
-      <button
-        data-testid="schedule-button"
-        onClick={() => onSchedule(new Date('2025-08-01T10:00:00'))}
-      >
-        {scheduledDate ? 'Scheduled' : 'Schedule'}
-      </button>
-      {scheduledDate && (
-        <button data-testid="clear-schedule" onClick={() => onSchedule(null)}>
-          Clear
-        </button>
-      )}
-    </div>
-  ),
-}));
 
 vi.mock('./DraftManager', () => ({
   __esModule: true,
@@ -91,7 +73,6 @@ vi.mock('./DraftManager', () => ({
           content: 'Draft content',
           topicId: 'topic1',
           topicName: 'Technology',
-          scheduledDate: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })}
@@ -220,7 +201,6 @@ describe('PostComposer', () => {
     
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith('Test post content', 'topic1', {
-        scheduledDate: null,
         replyTo: undefined,
         quotedPost: undefined,
       });
@@ -232,37 +212,6 @@ describe('PostComposer', () => {
     });
   });
 
-  it('creates scheduled post', async () => {
-    const user = userEvent.setup();
-    mockCreatePost.mockResolvedValue({ id: 'new-post-id' });
-    
-    render(<PostComposer onSuccess={mockOnSuccess} />);
-    
-    // Fill in form
-    const textarea = screen.getByPlaceholderText('今何を考えていますか？');
-    await user.type(textarea, 'Scheduled post');
-    
-    const topicSelector = screen.getByTestId('topic-selector');
-    await user.selectOptions(topicSelector, 'topic1');
-    
-    // Schedule post
-    await user.click(screen.getByTestId('schedule-button'));
-    
-    // Submit
-    await user.click(screen.getByText('予約投稿'));
-    
-    await waitFor(() => {
-      expect(mockCreatePost).toHaveBeenCalledWith('Scheduled post', 'topic1', {
-        scheduledDate: new Date('2025-08-01T10:00:00'),
-        replyTo: undefined,
-        quotedPost: undefined,
-      });
-      expect(mockToast).toHaveBeenCalledWith({
-        title: '成功',
-        description: '投稿を予約しました',
-      });
-    });
-  });
 
   it('shows draft manager when draft button clicked', async () => {
     const user = userEvent.setup();
@@ -403,9 +352,6 @@ describe('PostComposer', () => {
 
   it('uploads image in markdown mode', async () => {
     const user = userEvent.setup();
-    
-    // Mock the handleImageUpload to be called
-    const mockHandleImageUpload = vi.fn().mockResolvedValue('https://placeholder.com/uploaded/test.jpg');
     
     render(<PostComposer />);
     

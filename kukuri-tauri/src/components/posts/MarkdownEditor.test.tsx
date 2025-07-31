@@ -7,21 +7,19 @@ import MarkdownEditor from './MarkdownEditor';
 // Mock errorHandler
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
-    handle: vi.fn(),
+    log: vi.fn(),
   },
 }));
 
 // Mock @uiw/react-md-editor
 vi.mock('@uiw/react-md-editor', () => {
-  return {
-    __esModule: true,
-    default: ({ value, onChange, preview, height, hideToolbar, commands, textareaProps }: any) => {
-      const React = require('react');
-      const [internalValue, setInternalValue] = React.useState(value || '');
-      
-      React.useEffect(() => {
-        setInternalValue(value || '');
-      }, [value]);
+  const MockMDEditor = ({ value, onChange, preview, height, hideToolbar, commands, textareaProps }: any) => {
+    const React = require('react');
+    const [internalValue, setInternalValue] = React.useState(value || '');
+    
+    React.useEffect(() => {
+      setInternalValue(value || '');
+    }, [value]);
       
       const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newValue = e.target.value;
@@ -57,7 +55,11 @@ vi.mock('@uiw/react-md-editor', () => {
           )}
         </div>
       );
-    },
+  };
+  
+  return {
+    __esModule: true,
+    default: MockMDEditor,
     commands: [
       { name: 'bold', keyCommand: 'bold' },
       { name: 'italic', keyCommand: 'italic' },

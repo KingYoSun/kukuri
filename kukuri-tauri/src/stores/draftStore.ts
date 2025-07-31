@@ -37,7 +37,6 @@ export const useDraftStore = create<DraftStore>()(
           content: params.content,
           topicId: params.topicId,
           topicName: params.topicName,
-          scheduledDate: params.scheduledDate || null,
           createdAt: new Date(),
           updatedAt: new Date(),
           metadata: params.metadata,
@@ -105,8 +104,7 @@ export const useDraftStore = create<DraftStore>()(
           if (existingDraft) {
             // Only update if content has changed
             const shouldUpdate = existingDraft.content !== params.content ||
-                existingDraft.topicId !== params.topicId ||
-                existingDraft.scheduledDate !== params.scheduledDate;
+                existingDraft.topicId !== params.topicId;
             
             if (shouldUpdate) {
               // Update draft directly by manipulating state
@@ -124,7 +122,7 @@ export const useDraftStore = create<DraftStore>()(
             }
           }
         } catch (error) {
-          errorHandler.handle(error, {
+          errorHandler.log('Autosave draft failed', error, {
             context: 'Autosave draft failed',
           });
         }

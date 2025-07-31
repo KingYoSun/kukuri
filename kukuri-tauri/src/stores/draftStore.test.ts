@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDraftStore } from './draftStore';
-import type { PostDraft } from '@/types/draft';
 
 // Mock errorHandler
 vi.mock('@/lib/errorHandler', () => ({
@@ -56,7 +55,6 @@ describe('draftStore', () => {
         content: 'Test content',
         topicId: 'topic1',
         topicName: 'Test Topic',
-        scheduledDate: null,
       });
       
       expect(draft.id).toBeDefined();
@@ -292,7 +290,7 @@ describe('draftStore', () => {
       const store = useDraftStore.getState();
       
       // Manually trigger persist by creating draft and checking state
-      const draft = store.createDraft({ content: 'Persistent draft', topicId: null });
+      store.createDraft({ content: 'Persistent draft', topicId: null });
       
       // Since Zustand persist is async, we check the state directly
       const state = useDraftStore.getState();
