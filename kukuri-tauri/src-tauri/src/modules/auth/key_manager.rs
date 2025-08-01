@@ -22,16 +22,17 @@ impl KeyManager {
         }
     }
 
-    pub async fn generate_keypair(&self) -> Result<(String, String)> {
+    pub async fn generate_keypair(&self) -> Result<(String, String, String)> {
         let keys = Keys::generate();
         let public_key = keys.public_key().to_hex();
         let secret_key = keys.secret_key().to_bech32()?;
+        let npub = keys.public_key().to_bech32()?;
 
         // Save generated keys
         let mut inner = self.inner.write().await;
         inner.keys = Some(keys);
 
-        Ok((public_key, secret_key))
+        Ok((public_key, secret_key, npub))
     }
 
     pub async fn login(&self, nsec: &str) -> Result<(String, String)> {
@@ -78,9 +79,10 @@ mod tests {
         let result = key_manager.generate_keypair().await;
         assert!(result.is_ok());
 
-        let (public_key, secret_key) = result.unwrap();
+        let (public_key, secret_key, npub) = result.unwrap();
         assert_eq!(public_key.len(), 64); // Hex public key is 64 characters
         assert!(secret_key.starts_with("nsec1")); // Bech32 secret key starts with nsec1
+        assert!(npub.starts_with("npub1")); // Bech32 public key starts with npub1
 
         // Verify keys are stored
         let stored_keys = key_manager.get_keys().await;

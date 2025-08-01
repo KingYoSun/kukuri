@@ -44,6 +44,8 @@ pub async fn add_account(
         .await
         .map_err(|e| e.to_string())?;
 
+    println!("Adding account: npub={}, pubkey={}", npub, pubkey);
+
     // セキュアストレージに保存
     SecureStorage::add_account(
         &npub,
@@ -54,6 +56,8 @@ pub async fn add_account(
         request.picture,
     )
     .map_err(|e| e.to_string())?;
+
+    println!("Account saved to secure storage successfully");
 
     Ok(AddAccountResponse { npub, pubkey })
 }
@@ -94,10 +98,14 @@ pub async fn remove_account(npub: String) -> Result<(), String> {
 pub async fn get_current_account(
     state: State<'_, AppState>,
 ) -> Result<Option<GetCurrentAccountResponse>, String> {
+    println!("Getting current account from secure storage...");
+    
     // 現在のアカウント情報を取得
     if let Some((npub, nsec)) =
         SecureStorage::get_current_private_key().map_err(|e| e.to_string())?
     {
+        println!("Found current account: npub={}", npub);
+        
         // メタデータを取得
         let metadata = SecureStorage::get_accounts_metadata().map_err(|e| e.to_string())?;
 
@@ -109,6 +117,8 @@ pub async fn get_current_account(
                 .await
                 .map_err(|e| e.to_string())?;
 
+            println!("Successfully loaded account metadata for npub={}", npub);
+
             Ok(Some(GetCurrentAccountResponse {
                 npub,
                 nsec,
@@ -116,9 +126,11 @@ pub async fn get_current_account(
                 metadata: account_metadata.clone(),
             }))
         } else {
+            println!("No metadata found for npub={}", npub);
             Ok(None)
         }
     } else {
+        println!("No current account found in secure storage");
         Ok(None)
     }
 }

@@ -1,6 +1,6 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年7月29日
+**最終更新**: 2025年8月1日
 
 ## 現在の問題
 
@@ -42,6 +42,77 @@
   - form.tsx: badgeVariants定数のエクスポート
 
 ## 解決済みの問題
+
+### WSL環境でのアカウント永続化問題（2025年8月1日）
+**問題**: WSL環境でアカウント作成後、アプリケーションをリロードするとログイン状態が維持されない
+
+**症状**:
+- アカウント作成は成功するが、リロード時に`getCurrentAccount`が`null`を返す
+- `keyring`クレートがWSL環境でSecret Serviceにアクセスできない
+- コンソールログに「No current account found in secure storage」と表示される
+
+**根本原因**:
+1. `authStore`のpersist設定で`isAuthenticated`が常に`false`で保存されていた
+2. `generate_keypair`コマンドが`npub`を返していなかったため、不正な形式のキーで保存されていた
+3. WSL環境ではLinuxの標準的なセキュアストレージ（Secret Service）が利用できない
+
+**解決策**:
+
+1. authStoreのpersist設定を修正
+```typescript
+// 修正前
+partialize: (state) => ({
+  isAuthenticated: false, // 常にfalseで保存
+  currentUser: state.currentUser,
+}),
+
+// 修正後
+partialize: (state) => ({
+  // isAuthenticatedはセキュアストレージからの復元で管理するため保存しない
+  currentUser: state.currentUser,
+}),
+```
+
+2. Rustバックエンドの修正
+```rust
+// key_manager.rs
+pub async fn generate_keypair(&self) -> Result<(String, String, String)> {
+    let keys = Keys::generate();
+    let public_key = keys.public_key().to_hex();
+    let secret_key = keys.secret_key().to_bech32()?;
+    let npub = keys.public_key().to_bech32()?; // npubを追加
+    // ...
+    Ok((public_key, secret_key, npub))
+}
+```
+
+3. WSL環境検出とフォールバック実装
+```rust
+// secure_storage/mod.rs
+fn is_wsl() -> bool {
+    if cfg!(target_os = "linux") {
+        if let Ok(osrelease) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
+            return osrelease.to_lowercase().contains("microsoft");
+        }
+    }
+    false
+}
+```
+
+4. フォールバックストレージの実装
+- `secure_storage/fallback.rs`を作成
+- WSL環境では`~/.local/share/kukuri-dev/secure_storage/`にファイルとして保存
+- 開発環境専用（本番環境では使用しない）
+
+**結果**:
+- アカウント作成後のリロードでログイン状態が維持される
+- WSL環境でも正常に動作することを確認
+- デバッグログで保存・読み込み処理の診断が可能
+
+**注意事項**:
+- フォールバック実装は開発環境専用（セキュリティリスクあり）
+- 本番環境でのWSL対応は別途検討が必要
+- Windows、macOS、Linux（非WSL）では引き続き標準のセキュアストレージを使用
 
 ### Tauriビルドエラー（2025年7月28日）
 **問題**: Tauriアプリケーションのビルド時にTypeScriptとRustのコンパイルエラーが発生

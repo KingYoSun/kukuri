@@ -99,7 +99,7 @@ export const useAuthStore = create<AuthStore>()(
           const user: User = {
             id: response.public_key,
             pubkey: response.public_key,
-            npub: response.public_key, // TODO: Convert to npub format
+            npub: response.npub,
             name: '新規ユーザー',
             displayName: '新規ユーザー',
             about: '',
@@ -109,12 +109,14 @@ export const useAuthStore = create<AuthStore>()(
 
           // セキュアストレージに保存
           if (saveToSecureStorage) {
+            console.log('Saving new account to secure storage...');
             await SecureStorageApi.addAccount({
               nsec: response.nsec,
               name: user.name,
               display_name: user.displayName,
               picture: user.picture,
             });
+            console.log('Account saved successfully');
           }
 
           set({
@@ -190,11 +192,14 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       initialize: async () => {
+        console.log('Auth store initialization started...');
         try {
           // セキュアストレージから現在のアカウントを取得
           const currentAccount = await SecureStorageApi.getCurrentAccount();
+          console.log('Current account from secure storage:', currentAccount);
 
           if (currentAccount) {
+            console.log('Auto-login with account:', currentAccount.npub);
             // 自動ログイン
             const user: User = {
               id: currentAccount.pubkey,
@@ -217,7 +222,9 @@ export const useAuthStore = create<AuthStore>()(
             await initializeNostr();
             // リレー状態を更新
             await useAuthStore.getState().updateRelayStatus();
+            console.log('Auto-login completed successfully');
           } else {
+            console.log('No current account found in secure storage');
             // アカウントが見つからない場合は初期状態
             set({
               isAuthenticated: false,
@@ -229,6 +236,7 @@ export const useAuthStore = create<AuthStore>()(
 
           // アカウントリストを読み込み
           await useAuthStore.getState().loadAccounts();
+          console.log('Auth store initialization completed');
         } catch (error) {
           errorHandler.log('Failed to initialize auth store', error, {
             context: 'AuthStore.initialize',
@@ -331,7 +339,7 @@ export const useAuthStore = create<AuthStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         // privateKeyは保存しない（セキュリティのため）
-        isAuthenticated: false, // 常にfalseで保存
+        // isAuthenticatedはセキュアストレージからの復元で管理するため保存しない
         currentUser: state.currentUser,
       }),
     },

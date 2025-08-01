@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 export interface GenerateKeypairResponse {
   public_key: string;
   nsec: string;
+  npub: string;
 }
 
 export interface LoginRequest {
