@@ -1,6 +1,6 @@
 # 現在の開発環境
 
-**最終更新**: 2025年8月1日
+**最終更新**: 2025年8月2日
 
 ## 動作確認済み環境
 
@@ -9,11 +9,13 @@
 - **Node.js**: v20.x以上
 - **pnpm**: v8.x以上
 - **Rust**: 1.80.0以上
-- **動作確認日**: 2025年8月1日
+- **動作確認日**: 2025年8月2日
 - **特記事項**: 
   - アプリケーションデータは`C:\Users\{username}\AppData\Roaming\com.kukuri.app`に保存
   - SQLiteデータベースは正常に作成・接続可能
   - Tauri v2環境で正常動作
+  - アカウント永続化はWindows Credential Managerで正常動作
+  - keyringライブラリの`windows-native`フィーチャーを使用
 
 ### WSL環境（Ubuntu on Windows）
 - **OS**: Ubuntu 22.04 on WSL2
@@ -118,11 +120,13 @@ cargo fmt -- --check
 - パス処理では`tauri::Manager` traitのインポートが必要
 - SQLiteのURL形式は`sqlite:C:/path/to/db`（スラッシュなし）
 - バックスラッシュはスラッシュに変換する必要がある
+- keyringライブラリはCargo.tomlで`windows-native`フィーチャーを有効化
 
 ### WSL
-- セキュアストレージのフォールバック実装が自動的に有効化
+- セキュアストレージは標準のkeyringライブラリを使用
 - GUI表示にはWSLgまたはX11サーバーが必要
 - ファイルシステムの権限に注意
+- 注：フォールバック実装はセキュリティ上の理由から削除済み
 
 ### 共通
 - 初回起動時はRustの依存関係ダウンロードに時間がかかる

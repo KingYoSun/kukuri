@@ -1,6 +1,6 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月1日
+**最終更新**: 2025年8月2日
 
 ## 現在の問題
 
@@ -42,6 +42,49 @@
   - form.tsx: badgeVariants定数のエクスポート
 
 ## 解決済みの問題
+
+### Windows環境でのアカウント永続化問題（2025年8月2日）
+**問題**: Windows環境で新規アカウント作成後、リロードするとログイン状態が維持されない
+
+**症状**:
+- アカウント作成は成功するが、リロード後に「No metadata entry found in keyring」となる
+- 保存直後の読み取りテストで「NoEntry」エラーが発生
+- Windows Credential Managerへのアクセスが正しく機能しない
+
+**根本原因**:
+1. `Entry::new_with_target()`の使い方が複雑すぎた
+2. Windows専用のtarget名の設定が適切でなかった
+3. `windows-native`フィーチャーが有効化されていなかった
+
+**解決策**:
+
+1. シンプルなアプローチへの変更
+```rust
+// 以前の複雑な実装を削除
+// 全プラットフォームで統一的なシンプルな実装に変更
+let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
+```
+
+2. windows-nativeフィーチャーの有効化
+```toml
+# Cargo.toml
+keyring = { version = "3.6.3", features = ["windows-native"] }
+```
+
+3. 不要なコードの削除
+- fallback storageの完全削除（セキュリティリスク）
+- WSL検出機能の削除
+- Windows専用の条件分岐を削除
+
+**結果**:
+- 新規アカウント作成後のリロードでログイン状態が維持される
+- Windows環境での正常動作を確認
+- デバッグログで保存・読み取りの成功を確認
+
+**注意事項**:
+- Windows、macOS、Linuxで統一的な実装が可能
+- `Entry::new()`を使用することでコードがシンプルに
+- keyringライブラリが各プラットフォームの特性を適切に処理
 
 ### Windows環境での起動エラー（2025年8月1日）
 **問題**: Windows環境で`pnpm tauri dev`実行時に「ファイル名、ディレクトリ名、またはボリューム ラベルの構文が間違っています。 (os error 123)」エラーが発生

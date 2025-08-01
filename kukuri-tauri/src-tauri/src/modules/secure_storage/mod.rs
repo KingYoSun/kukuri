@@ -1,5 +1,4 @@
 mod commands;
-mod fallback;
 
 pub use commands::*;
 
@@ -7,7 +6,6 @@ use anyhow::{Context, Result};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use fallback::FallbackStorage;
 
 const SERVICE_NAME: &str = "kukuri";
 const ACCOUNTS_KEY: &str = "accounts_metadata";
@@ -31,23 +29,9 @@ pub struct AccountsMetadata {
 pub struct SecureStorage;
 
 impl SecureStorage {
-    /// WSL環境かどうかを検出
-    fn is_wsl() -> bool {
-        if cfg!(target_os = "linux") {
-            if let Ok(osrelease) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
-                return osrelease.to_lowercase().contains("microsoft");
-            }
-        }
-        false
-    }
     /// 秘密鍵を保存（npubごとに個別保存）
     pub fn save_private_key(npub: &str, nsec: &str) -> Result<()> {
         println!("SecureStorage: Saving private key for npub={}", npub);
-        
-        if Self::is_wsl() {
-            println!("SecureStorage: WSL detected, using fallback storage");
-            return FallbackStorage::save_data(&format!("key_{}", npub), nsec);
-        }
         
         let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
         
@@ -65,10 +49,6 @@ impl SecureStorage {
 
     /// 秘密鍵を取得
     pub fn get_private_key(npub: &str) -> Result<Option<String>> {
-        if Self::is_wsl() {
-            return FallbackStorage::get_data(&format!("key_{}", npub));
-        }
-        
         let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
@@ -79,10 +59,6 @@ impl SecureStorage {
 
     /// 秘密鍵を削除
     pub fn delete_private_key(npub: &str) -> Result<()> {
-        if Self::is_wsl() {
-            return FallbackStorage::delete_data(&format!("key_{}", npub));
-        }
-        
         let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
         match entry.delete_credential() {
             Ok(()) => Ok(()),
@@ -97,17 +73,26 @@ impl SecureStorage {
             serde_json::to_string(metadata).context("Failed to serialize accounts metadata")?;
         println!("SecureStorage: Saving metadata JSON: {}", json);
         
-        if Self::is_wsl() {
-            println!("SecureStorage: WSL detected, using fallback storage for metadata");
-            return FallbackStorage::save_data(ACCOUNTS_KEY, &json);
-        }
-        
-        let entry =
-            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
+        let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
         
         match entry.set_password(&json) {
             Ok(_) => {
                 println!("SecureStorage: Metadata saved to keyring successfully");
+                
+                // デバッグ: 保存直後に読み取りテスト
+                println!("SecureStorage: Testing immediate read after save...");
+                let test_entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY)
+                    .context("Failed to create test entry")?;
+                
+                match test_entry.get_password() {
+                    Ok(test_json) => {
+                        println!("SecureStorage: Immediate read test succeeded, data length: {}", test_json.len());
+                    }
+                    Err(e) => {
+                        eprintln!("SecureStorage: Immediate read test failed: {:?}", e);
+                    }
+                }
+                
                 Ok(())
             }
             Err(e) => {
@@ -121,23 +106,7 @@ impl SecureStorage {
     pub fn get_accounts_metadata() -> Result<AccountsMetadata> {
         println!("SecureStorage: Getting accounts metadata from keyring...");
         
-        if Self::is_wsl() {
-            println!("SecureStorage: WSL detected, using fallback storage for metadata");
-            if let Some(json) = FallbackStorage::get_data(ACCOUNTS_KEY)? {
-                println!("SecureStorage: Retrieved metadata JSON: {}", json);
-                let metadata: AccountsMetadata = serde_json::from_str(&json)
-                    .context("Failed to deserialize accounts metadata")?;
-                println!("SecureStorage: Deserialized metadata - current_npub: {:?}, accounts: {}", 
-                    metadata.current_npub, metadata.accounts.len());
-                return Ok(metadata);
-            } else {
-                println!("SecureStorage: No metadata found in fallback storage, returning default");
-                return Ok(AccountsMetadata::default());
-            }
-        }
-        
-        let entry =
-            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
+        let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
         
         match entry.get_password() {
             Ok(json) => {
