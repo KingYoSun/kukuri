@@ -87,3 +87,5 @@ secrets/
 /workers/node_modules/
 /workers/dist/
 /docker/data/
+
+.claude/
