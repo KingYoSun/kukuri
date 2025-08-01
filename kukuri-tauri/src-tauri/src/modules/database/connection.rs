@@ -12,8 +12,23 @@ pub struct Database;
 #[allow(dead_code)]
 impl Database {
     pub async fn initialize(database_url: &str) -> Result<DbPool> {
+        // Extract file path from database URL and create directory
+        // Handle different URL formats: "sqlite:path" or "sqlite://path" or "sqlite:///path"
+        let file_path = if database_url.starts_with("sqlite:///") {
+            &database_url[10..] // Remove "sqlite:///"
+        } else if database_url.starts_with("sqlite://") {
+            &database_url[9..] // Remove "sqlite://"
+        } else if database_url.starts_with("sqlite:") {
+            &database_url[7..] // Remove "sqlite:"
+        } else {
+            database_url
+        };
+        
+        // Remove query parameters if present
+        let file_path = file_path.split('?').next().unwrap_or(file_path);
+        
         // Create database directory
-        if let Some(parent) = Path::new(database_url).parent() {
+        if let Some(parent) = Path::new(file_path).parent() {
             std::fs::create_dir_all(parent)?;
         }
 

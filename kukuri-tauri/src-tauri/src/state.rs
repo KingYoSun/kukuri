@@ -4,6 +4,7 @@ use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
 use crate::modules::p2p::{EventSync, GossipManager, P2PEvent};
 use std::sync::Arc;
+use tauri::Manager;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
@@ -32,12 +33,52 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
+        // Get app data directory
+        let app_data_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| anyhow::anyhow!("Failed to get app data dir: {}", e))?;
+        
+        // Debug logging
+        tracing::info!("App data directory: {:?}", app_data_dir);
+        
         // Create data directory if it doesn't exist
-        std::fs::create_dir_all("./data")?;
+        if !app_data_dir.exists() {
+            tracing::info!("Creating app data directory...");
+            std::fs::create_dir_all(&app_data_dir)
+                .map_err(|e| anyhow::anyhow!("Failed to create app data dir: {}", e))?;
+            tracing::info!("App data directory created successfully");
+        } else {
+            tracing::info!("App data directory already exists");
+        }
 
         let key_manager = Arc::new(KeyManager::new());
-        let db_pool = Arc::new(Database::initialize("sqlite://./data/kukuri.db?mode=rwc").await?);
+        
+        // Use absolute path for database
+        let db_path = app_data_dir.join("kukuri.db");
+        
+        // Debug logging
+        tracing::info!("Database path: {:?}", db_path);
+        
+        // Ensure the database file path is canonical
+        let db_path_str = db_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid database path encoding"))?;
+        
+        // Format database URL for sqlx
+        // On Windows, sqlx may need a specific format
+        let db_url = if cfg!(windows) {
+            // Try Windows-specific format
+            tracing::info!("Using Windows database URL format");
+            format!("sqlite:{}?mode=rwc", db_path_str.replace('\\', "/"))
+        } else {
+            format!("sqlite://{}?mode=rwc", db_path_str)
+        };
+        
+        tracing::info!("Database URL: {}", db_url);
+        
+        let db_pool = Arc::new(Database::initialize(&db_url).await?);
         let encryption_manager = Arc::new(EncryptionManager::new());
         let event_manager = Arc::new(EventManager::new());
 

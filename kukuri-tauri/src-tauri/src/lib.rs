@@ -77,7 +77,7 @@ pub fn run() {
             let app_handle = app.handle();
 
             tauri::async_runtime::block_on(async move {
-                let app_state = AppState::new()
+                let app_state = AppState::new(&app_handle)
                     .await
                     .expect("Failed to initialize app state");
 

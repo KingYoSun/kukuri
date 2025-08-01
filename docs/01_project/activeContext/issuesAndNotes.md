@@ -43,6 +43,70 @@
 
 ## 解決済みの問題
 
+### Windows環境での起動エラー（2025年8月1日）
+**問題**: Windows環境で`pnpm tauri dev`実行時に「ファイル名、ディレクトリ名、またはボリューム ラベルの構文が間違っています。 (os error 123)」エラーが発生
+
+**症状**:
+- `AppState::new()`の初期化時にパニック
+- 相対パス`./data`の使用がWindows環境で無効なパスとして認識される
+- SQLiteのデータベースURL形式がWindows非対応
+
+**根本原因**:
+1. 相対パス`./data`の使用がプラットフォーム非依存でない
+2. SQLiteのURL形式がOSによって異なる（Windows: `sqlite:C:/path/to/db`, Unix: `sqlite://path/to/db`）
+3. `tauri::Manager` traitのインポートが必要（`path()`メソッド使用のため）
+
+**解決策**:
+
+1. Tauri AppHandleを使用したプラットフォーム固有パスの取得
+```rust
+// state.rs
+pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| anyhow::anyhow!("Failed to get app data dir: {}", e))?;
+```
+
+2. `tauri::Manager` traitのインポート追加
+```rust
+use tauri::Manager;
+```
+
+3. Windows用SQLite URL形式の実装
+```rust
+// Windows環境では特別な形式を使用
+let db_url = if cfg!(windows) {
+    format!("sqlite:{}?mode=rwc", db_path_str.replace('\\', "/"))
+} else {
+    format!("sqlite://{}?mode=rwc", db_path_str)
+};
+```
+
+4. Database::initializeメソッドの改善
+```rust
+// URL形式に関わらず正しくファイルパスを抽出
+let file_path = if database_url.starts_with("sqlite:///") {
+    &database_url[10..]
+} else if database_url.starts_with("sqlite://") {
+    &database_url[9..]
+} else if database_url.starts_with("sqlite:") {
+    &database_url[7..]
+} else {
+    database_url
+};
+```
+
+**結果**:
+- Windows環境でアプリケーションが正常に起動
+- データディレクトリは`C:\Users\{username}\AppData\Roaming\com.kukuri.app`に作成
+- プラットフォーム依存のパス処理が正しく動作
+
+**注意事項**:
+- Windowsでは`sqlite:C:/path/to/db?mode=rwc`形式を使用（スラッシュなし）
+- パス区切り文字はスラッシュに統一する必要がある
+- `tauri::Manager` traitのインポートを忘れないこと
+
 ### WSL環境でのアカウント永続化問題（2025年8月1日）
 **問題**: WSL環境でアカウント作成後、アプリケーションをリロードするとログイン状態が維持されない
 
