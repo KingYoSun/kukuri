@@ -1,12 +1,13 @@
 import { Button } from '@/components/ui/button';
 import { Bell, Menu } from 'lucide-react';
-import { useUIStore } from '@/stores';
+import { useUIStore, useTopicStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
 import { AccountSwitcher } from '@/components/auth/AccountSwitcher';
 import { RealtimeIndicator } from '@/components/RealtimeIndicator';
 
 export function Header() {
   const { toggleSidebar } = useUIStore();
+  const { setCurrentTopic } = useTopicStore();
   const navigate = useNavigate();
 
   return (
@@ -20,7 +21,10 @@ export function Header() {
         </Button>
         <h1
           className="text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={() => navigate({ to: '/' })}
+          onClick={() => {
+            setCurrentTopic(null); // 全体のタイムラインを表示
+            navigate({ to: '/' });
+          }}
         >
           kukuri
         </h1>

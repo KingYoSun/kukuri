@@ -5,6 +5,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr';
 import { SecureStorageApi, type AccountMetadata } from '@/lib/api/secureStorage';
 import { errorHandler } from '@/lib/errorHandler';
+import { useTopicStore } from './topicStore';
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
@@ -83,6 +84,21 @@ export const useAuthStore = create<AuthStore>()(
           await useAuthStore.getState().updateRelayStatus();
           // アカウントリストを更新
           await useAuthStore.getState().loadAccounts();
+          
+          // 初回ログイン時（アカウント追加時）は#publicトピックに参加
+          if (saveToSecureStorage) {
+            const topicStore = useTopicStore.getState();
+            // トピック一覧を取得
+            await topicStore.fetchTopics();
+            // #publicトピックを探す
+            const publicTopic = Array.from(topicStore.topics.values()).find(t => t.id === 'public');
+            if (publicTopic) {
+              // #publicトピックに参加
+              await topicStore.joinTopic('public');
+              // #publicトピックをデフォルト表示に設定
+              topicStore.setCurrentTopic(publicTopic);
+            }
+          }
         } catch (error) {
           errorHandler.log('Login failed', error, {
             context: 'AuthStore.loginWithNsec',
@@ -131,6 +147,21 @@ export const useAuthStore = create<AuthStore>()(
           await useAuthStore.getState().updateRelayStatus();
           // アカウントリストを更新
           await useAuthStore.getState().loadAccounts();
+          
+          // 新規アカウント作成時は#publicトピックに参加
+          if (saveToSecureStorage) {
+            const topicStore = useTopicStore.getState();
+            // トピック一覧を取得
+            await topicStore.fetchTopics();
+            // #publicトピックを探す
+            const publicTopic = Array.from(topicStore.topics.values()).find(t => t.id === 'public');
+            if (publicTopic) {
+              // #publicトピックに参加
+              await topicStore.joinTopic('public');
+              // #publicトピックをデフォルト表示に設定
+              topicStore.setCurrentTopic(publicTopic);
+            }
+          }
 
           return { nsec: response.nsec };
         } catch (error) {

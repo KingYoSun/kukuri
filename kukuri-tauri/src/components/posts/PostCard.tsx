@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Heart, MessageCircle, Repeat2, Share } from 'lucide-react';
 import type { Post } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
@@ -83,6 +84,11 @@ export function PostCard({ post }: PostCardProps) {
                 {post.author.displayName || post.author.name || 'ユーザー'}
               </h4>
               <span className="text-sm text-muted-foreground">{timeAgo}</span>
+              {post.isSynced === false && (
+                <Badge variant="outline" className="text-xs">
+                  未同期
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">{post.author.npub}</p>
           </div>

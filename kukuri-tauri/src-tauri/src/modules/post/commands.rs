@@ -11,6 +11,7 @@ pub struct Post {
     pub created_at: i64,
     pub likes: u32,
     pub replies: u32,
+    pub is_synced: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,24 +32,9 @@ pub async fn get_posts(
     _state: State<'_, AppState>,
     request: GetPostsRequest,
 ) -> Result<Vec<Post>, String> {
-    // TODO: データベースから取得する実装
-    // 現在はモックデータを返す
-    let limit = request.limit.unwrap_or(20);
-    let mut posts = vec![];
-
-    for i in 0..limit.min(5) {
-        posts.push(Post {
-            id: format!("post_{i}"),
-            content: format!("これはテスト投稿 {i} です。"),
-            author_pubkey: "test_pubkey".to_string(),
-            topic_id: request.topic_id.clone().unwrap_or_else(|| "1".to_string()),
-            created_at: 1722000000 + (i as i64 * 100),
-            likes: i * 2,
-            replies: i,
-        });
-    }
-
-    Ok(posts)
+    // TODO: ローカルのデータベースから取得する実装（ローカルファースト）
+    // 現在は空の配列を返す
+    Ok(vec![])
 }
 
 #[tauri::command]
@@ -73,6 +59,7 @@ pub async fn create_post(
         created_at: chrono::Utc::now().timestamp(),
         likes: 0,
         replies: 0,
+        is_synced: false, // 新規作成時は未同期
     };
 
     Ok(post)

@@ -33,6 +33,7 @@ export interface Post {
   tags: string[];
   likes: number;
   replies: Post[];
+  isSynced?: boolean; // P2Pネットワークに同期済みかどうか
 }
 
 export interface AuthState {

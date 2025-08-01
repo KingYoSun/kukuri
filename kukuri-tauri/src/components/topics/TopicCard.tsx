@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Users, MessageSquare, Clock, Hash, Loader2 } from 'lucide-react';
-import { Link } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import type { Topic } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -15,7 +15,8 @@ interface TopicCardProps {
 }
 
 export function TopicCard({ topic }: TopicCardProps) {
-  const { joinedTopics, joinTopic, leaveTopic } = useTopicStore();
+  const { joinedTopics, joinTopic, leaveTopic, setCurrentTopic } = useTopicStore();
+  const navigate = useNavigate();
   // joinedTopicsが変更されたときのみ再計算
   const isJoined = useMemo(
     () => joinedTopics.includes(topic.id),
@@ -31,6 +32,11 @@ export function TopicCard({ topic }: TopicCardProps) {
         locale: ja,
       })
     : '活動なし';
+
+  const handleTopicClick = () => {
+    setCurrentTopic(topic);
+    navigate({ to: '/' }); // ホーム（タイムライン）に遷移
+  };
 
   const handleJoinToggle = async () => {
     setIsLoading(true);
@@ -68,12 +74,13 @@ export function TopicCard({ topic }: TopicCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <Link to="/topics/$topicId" params={{ topicId: topic.id }} className="hover:underline">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Hash className="h-4 w-4 text-muted-foreground" />
-                {topic.name}
-              </h3>
-            </Link>
+            <h3 
+              className="text-lg font-semibold flex items-center gap-2 hover:underline cursor-pointer"
+              onClick={handleTopicClick}
+            >
+              <Hash className="h-4 w-4 text-muted-foreground" />
+              {topic.name}
+            </h3>
             <CardDescription className="mt-1">{topic.description}</CardDescription>
           </div>
           <Button

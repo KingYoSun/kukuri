@@ -60,7 +60,7 @@ export function Sidebar() {
     const topic = topics.get(topicId);
     if (topic) {
       setCurrentTopic(topic);
-      navigate({ to: `/topics/${topicId}` });
+      navigate({ to: '/' }); // ホーム（タイムライン）に遷移
     }
   };
 

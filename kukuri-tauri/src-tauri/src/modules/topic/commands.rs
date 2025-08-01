@@ -30,6 +30,13 @@ pub async fn get_topics(_state: State<'_, AppState>) -> Result<Vec<Topic>, Strin
     // 現在はモックデータを返す
     Ok(vec![
         Topic {
+            id: "public".to_string(),
+            name: "#public".to_string(),
+            description: "公開トピック - すべてのユーザーが参加できるメインのトピック".to_string(),
+            created_at: 1720000000,
+            updated_at: 1720000000,
+        },
+        Topic {
             id: "1".to_string(),
             name: "Nostr開発".to_string(),
             description: "Nostrプロトコルに関する開発の話題".to_string(),

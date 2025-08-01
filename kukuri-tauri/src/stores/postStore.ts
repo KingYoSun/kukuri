@@ -61,6 +61,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         tags: [],
         likes: p.likes,
         replies: [],
+        isSynced: p.is_synced ?? true, // DBのis_syncedフィールドを使用（未定義の場合はtrue）
       }));
 
       const postsMap = new Map(posts.map((p) => [p.id, p]));
@@ -129,6 +130,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         tags: [],
         likes: apiPost.likes,
         replies: [],
+        isSynced: false, // 初期状態は未同期
       };
 
       set((state) => {

@@ -251,6 +251,7 @@ export const useTopicStore = create<TopicStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         joinedTopics: state.joinedTopics,
+        currentTopic: state.currentTopic,
       }),
     },
   ),
