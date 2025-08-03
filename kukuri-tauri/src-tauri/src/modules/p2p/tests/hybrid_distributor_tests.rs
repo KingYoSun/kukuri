@@ -5,12 +5,14 @@ use tokio::sync::RwLock;
 use crate::modules::p2p::{DeliveryPriority, DeliveryStrategy, HybridConfig, HybridDistributor};
 
 /// テスト用のモックEventManager
+#[allow(dead_code)]
 struct MockEventManager {
     published_events: Arc<RwLock<Vec<Event>>>,
     should_fail: Arc<RwLock<bool>>,
 }
 
 impl MockEventManager {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             published_events: Arc::new(RwLock::new(Vec::new())),
@@ -18,10 +20,12 @@ impl MockEventManager {
         }
     }
 
+    #[allow(dead_code)]
     async fn set_should_fail(&self, fail: bool) {
         *self.should_fail.write().await = fail;
     }
 
+    #[allow(dead_code)]
     async fn get_published_events(&self) -> Vec<Event> {
         self.published_events.read().await.clone()
     }
@@ -29,6 +33,7 @@ impl MockEventManager {
 
 // EventManagerのモック実装
 impl MockEventManager {
+    #[allow(dead_code)]
     async fn publish_event(&self, event: Event) -> Result<Event, String> {
         if *self.should_fail.read().await {
             return Err("Mock relay failure".to_string());
@@ -40,12 +45,14 @@ impl MockEventManager {
 }
 
 /// テスト用のモックGossipManager
+#[allow(dead_code)]
 struct MockGossipManager {
     broadcast_count: Arc<RwLock<usize>>,
     should_fail: Arc<RwLock<bool>>,
 }
 
 impl MockGossipManager {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             broadcast_count: Arc::new(RwLock::new(0)),
@@ -53,10 +60,12 @@ impl MockGossipManager {
         }
     }
 
+    #[allow(dead_code)]
     async fn set_should_fail(&self, fail: bool) {
         *self.should_fail.write().await = fail;
     }
 
+    #[allow(dead_code)]
     async fn get_broadcast_count(&self) -> usize {
         *self.broadcast_count.read().await
     }
@@ -67,6 +76,7 @@ mod tests {
     use super::*;
 
     /// テスト用のHybridDistributorセットアップ
+    #[allow(dead_code)]
     async fn setup_test_distributor() -> (
         HybridDistributor,
         Arc<MockEventManager>,

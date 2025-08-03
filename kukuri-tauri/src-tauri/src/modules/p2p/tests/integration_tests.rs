@@ -252,7 +252,7 @@ async fn test_event_buffering_and_lagged() {
     for i in 0..message_count {
         let message = GossipMessage::new(
             MessageType::NostrEvent,
-            format!("Message {}", i).into_bytes(),
+            format!("Message {i}").into_bytes(),
             vec![],
         );
         node.broadcast(&topic_id, message).await.unwrap();
@@ -264,14 +264,11 @@ async fn test_event_buffering_and_lagged() {
 
     let timeout = tokio::time::timeout(Duration::from_secs(5), async {
         while let Some(event) = event_rx.recv().await {
-            match event {
-                P2PEvent::MessageReceived { .. } => {
-                    received_count += 1;
-                    if received_count >= message_count {
-                        break;
-                    }
+            if let P2PEvent::MessageReceived { .. } = event {
+                received_count += 1;
+                if received_count >= message_count {
+                    break;
                 }
-                _ => {}
             }
         }
     });
@@ -370,7 +367,7 @@ async fn test_peer_connection_stability() {
     for i in 0..5 {
         let message = GossipMessage::new(
             MessageType::NostrEvent,
-            format!("Stability test {}", i).into_bytes(),
+            format!("Stability test {i}").into_bytes(),
             vec![],
         );
 

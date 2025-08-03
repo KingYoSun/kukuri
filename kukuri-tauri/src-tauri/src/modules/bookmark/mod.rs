@@ -5,4 +5,4 @@ pub mod types;
 mod tests;
 
 pub use manager::BookmarkManager;
-pub use types::{Bookmark, CreateBookmarkRequest, BookmarkResponse};
+pub use types::{CreateBookmarkRequest};

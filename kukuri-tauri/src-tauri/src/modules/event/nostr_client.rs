@@ -7,6 +7,7 @@ use tracing::{info, warn};
 
 /// リレーの接続状態
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum RelayStatus {
     Connecting,
     Connected,
@@ -45,6 +46,7 @@ impl NostrClientManager {
     }
 
     /// リレーに接続
+    #[allow(dead_code)]
     pub async fn add_relay(&self, url: &str) -> Result<()> {
         // クライアントが初期化されているかチェック
         if self.client.read().await.is_none() {
@@ -64,6 +66,7 @@ impl NostrClientManager {
     }
 
     /// 複数のリレーに接続
+    #[allow(dead_code)]
     pub async fn add_relays(&self, urls: Vec<&str>) -> Result<()> {
         // 既存のNostrリレーへの接続を無効化
         for url in urls {
@@ -77,6 +80,7 @@ impl NostrClientManager {
     }
 
     /// 全てのリレーに接続
+    #[allow(dead_code)]
     pub async fn connect(&self) -> Result<()> {
         // クライアントが初期化されているかチェック
         if self.client.read().await.is_none() {
@@ -167,6 +171,7 @@ impl NostrClientManager {
     }
 
     /// 全リレーのヘルスチェックを実行
+    #[allow(dead_code)]
     pub async fn health_check(&self) -> Result<HashMap<String, bool>> {
         let client_guard = self.client.read().await;
         let mut health_status = HashMap::new();
@@ -200,6 +205,7 @@ impl NostrClientManager {
     }
 
     /// 切断されたリレーに再接続を試みる
+    #[allow(dead_code)]
     pub async fn reconnect_failed_relays(&self) -> Result<()> {
         // 既存のNostrリレーへの再接続を無効化
         info!("Skipping reconnection to failed relays (disabled)");

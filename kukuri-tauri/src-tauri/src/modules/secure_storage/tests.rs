@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod secure_storage_tests {
     use super::super::*;
     use std::collections::HashMap;
     use std::sync::Mutex;
@@ -15,7 +15,7 @@ mod tests {
     {
         MOCK_STORAGE.with(|storage| {
             let mut storage = storage.lock().unwrap();
-            f(&mut *storage)
+            f(&mut storage)
         })
     }
 
@@ -219,8 +219,7 @@ mod tests {
             assert_eq!(
                 retrieved_nsec,
                 Some(nsec.to_string()),
-                "Failed to retrieve nsec for {}",
-                npub
+                "Failed to retrieve nsec for {npub}"
             );
         }
     }
@@ -233,14 +232,14 @@ mod tests {
         let mut metadata = AccountsMetadata::default();
 
         for i in 1..=3 {
-            let npub = format!("npub{}", i);
+            let npub = format!("npub{i}");
             metadata.accounts.insert(
                 npub.clone(),
                 AccountMetadata {
                     npub: npub.clone(),
-                    pubkey: format!("pubkey{}", i),
-                    name: format!("User{}", i),
-                    display_name: format!("User {}", i),
+                    pubkey: format!("pubkey{i}"),
+                    name: format!("User{i}"),
+                    display_name: format!("User {i}"),
                     picture: None,
                     last_used: chrono::Utc::now() - chrono::Duration::seconds(i * 60),
                 },

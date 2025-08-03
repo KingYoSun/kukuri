@@ -81,27 +81,7 @@ impl GossipManager {
         })
     }
 
-    /// テスト用のモックGossipManagerを作成
-    #[cfg(test)]
-    pub fn new_mock() -> Self {
-        use secp256k1::rand::thread_rng;
 
-        // テスト用のダミー実装
-        // 実際のネットワーク接続は行わない
-        let (event_tx, _) = mpsc::unbounded_channel();
-        let secret_key = secp256k1::SecretKey::new(&mut thread_rng());
-
-        // このモックはasync newを使わずに同期的に作成
-        // 実際の使用時はテスト内でArcでラップする
-        Self {
-            endpoint: unsafe { std::mem::zeroed() }, // テスト用ダミー
-            gossip: unsafe { std::mem::zeroed() },   // テスト用ダミー
-            router: unsafe { std::mem::zeroed() },   // テスト用ダミー
-            topics: Arc::new(RwLock::new(HashMap::new())),
-            secret_key,
-            event_tx,
-        }
-    }
 
     /// 自身のNodeIDを取得
     pub fn node_id(&self) -> String {

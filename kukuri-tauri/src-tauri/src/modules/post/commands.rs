@@ -31,7 +31,7 @@ pub struct GetPostsRequest {
 #[tauri::command]
 pub async fn get_posts(
     _state: State<'_, AppState>,
-    request: GetPostsRequest,
+    _request: GetPostsRequest,
 ) -> Result<Vec<Post>, String> {
     // TODO: ローカルのデータベースから取得する実装（ローカルファースト）
     // 現在は空の配列を返す

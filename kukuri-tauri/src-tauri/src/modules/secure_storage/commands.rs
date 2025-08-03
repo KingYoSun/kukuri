@@ -44,7 +44,7 @@ pub async fn add_account(
         .await
         .map_err(|e| e.to_string())?;
 
-    println!("Adding account: npub={}, pubkey={}", npub, pubkey);
+    println!("Adding account: npub={npub}, pubkey={pubkey}");
 
     // セキュアストレージに保存
     SecureStorage::add_account(
@@ -104,7 +104,7 @@ pub async fn get_current_account(
     if let Some((npub, nsec)) =
         SecureStorage::get_current_private_key().map_err(|e| e.to_string())?
     {
-        println!("Found current account: npub={}", npub);
+        println!("Found current account: npub={npub}");
         
         // メタデータを取得
         let metadata = SecureStorage::get_accounts_metadata().map_err(|e| e.to_string())?;
@@ -117,7 +117,7 @@ pub async fn get_current_account(
                 .await
                 .map_err(|e| e.to_string())?;
 
-            println!("Successfully loaded account metadata for npub={}", npub);
+            println!("Successfully loaded account metadata for npub={npub}");
 
             Ok(Some(GetCurrentAccountResponse {
                 npub,
@@ -126,7 +126,7 @@ pub async fn get_current_account(
                 metadata: account_metadata.clone(),
             }))
         } else {
-            println!("No metadata found for npub={}", npub);
+            println!("No metadata found for npub={npub}");
             Ok(None)
         }
     } else {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth, useLogout } from '../useAuth';
-import { useAuthStore, useTopicStore } from '@/stores';
+import { useAuthStore } from '@/stores';
 import { ReactNode } from 'react';
 
 // TauriApiをモック

@@ -43,11 +43,7 @@ impl EventManager {
         }
     }
 
-    /// テスト用のモックEventManagerを作成
-    #[cfg(test)]
-    pub fn new_mock() -> Self {
-        Self::new()
-    }
+
 
     /// AppHandleを設定
     pub async fn set_app_handle(&self, app_handle: AppHandle) {
@@ -81,6 +77,7 @@ impl EventManager {
     }
 
     /// デフォルトリレーに接続
+    #[allow(dead_code)]
     pub async fn connect_to_default_relays(&self) -> Result<()> {
         // 既存のNostrリレーへの接続を無効化
         // let default_relays = vec![
@@ -259,6 +256,7 @@ impl EventManager {
     }
 
     /// イベントストリームを開始
+    #[allow(dead_code)]
     pub async fn start_event_stream(&self) -> Result<()> {
         // 既存のNostrリレーへの接続を無効化しているため、イベントストリームも無効化
         info!("Skipping event stream (Nostr relay connection disabled)");
@@ -266,6 +264,7 @@ impl EventManager {
     }
 
     /// 定期的なヘルスチェックループを開始
+    #[allow(dead_code)]
     async fn start_health_check_loop(&self) -> Result<()> {
         // 既存のNostrリレーへの接続を無効化しているため、ヘルスチェックも無効化
         info!("Skipping health check loop (Nostr relay connection disabled)");

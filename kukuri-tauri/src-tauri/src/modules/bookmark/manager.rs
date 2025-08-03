@@ -61,6 +61,7 @@ impl BookmarkManager {
     }
 
     /// ユーザーのブックマーク一覧を取得
+    #[allow(dead_code)]
     pub async fn get_user_bookmarks(&self, user_pubkey: &str) -> Result<Vec<Bookmark>> {
         let bookmarks = sqlx::query_as::<_, Bookmark>(
             r#"
@@ -79,6 +80,7 @@ impl BookmarkManager {
     }
 
     /// 特定の投稿がブックマークされているかチェック
+    #[allow(dead_code)]
     pub async fn is_bookmarked(&self, user_pubkey: &str, post_id: &str) -> Result<bool> {
         let count = sqlx::query_scalar::<_, i64>(
             r#"
