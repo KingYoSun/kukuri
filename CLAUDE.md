@@ -90,6 +90,19 @@ cargo fmt
 pnpm format:check
 ```
 
+### Windows環境（WSLなし）での実行
+pnpmコマンドでBashエラーが発生する場合は、npm runを使用してください：
+```bash
+# テスト実行
+npm run test
+
+# 型チェック
+npx tsc --noEmit
+
+# リント
+npm run lint
+```
+
 ## アーキテクチャ
 
 ### レイヤー構成

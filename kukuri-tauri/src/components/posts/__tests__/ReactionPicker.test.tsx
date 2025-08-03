@@ -5,12 +5,18 @@ import { ReactionPicker } from '../ReactionPicker';
 import { NostrAPI } from '@/lib/api/tauri';
 import { toast } from 'sonner';
 
-vi.mock('@/lib/api/tauri');
-vi.mock('sonner');
+vi.mock('@/lib/api/tauri', () => ({
+  NostrAPI: {
+    sendReaction: vi.fn(),
+  },
+}));
 
-const mockNostrAPI = NostrAPI as unknown as {
-  sendReaction: ReturnType<typeof vi.fn>;
-};
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 const mockToast = toast as unknown as {
   success: ReturnType<typeof vi.fn>;
@@ -57,7 +63,7 @@ describe('ReactionPicker', () => {
   });
 
   it('should send reaction when emoji is clicked', async () => {
-    mockNostrAPI.sendReaction = vi.fn().mockResolvedValue('event123');
+    vi.mocked(NostrAPI.sendReaction).mockResolvedValue('event123');
     mockToast.success = vi.fn();
 
     renderReactionPicker();
@@ -68,13 +74,13 @@ describe('ReactionPicker', () => {
     fireEvent.click(reactionButton);
 
     await waitFor(() => {
-      expect(mockNostrAPI.sendReaction).toHaveBeenCalledWith('post1', '👍');
+      expect(NostrAPI.sendReaction).toHaveBeenCalledWith('post1', '👍');
       expect(mockToast.success).toHaveBeenCalledWith('リアクションを送信しました');
     });
   });
 
   it('should handle reaction error', async () => {
-    mockNostrAPI.sendReaction = vi.fn().mockRejectedValue(new Error('Failed'));
+    vi.mocked(NostrAPI.sendReaction).mockRejectedValue(new Error('Failed'));
     mockToast.error = vi.fn();
 
     renderReactionPicker();
@@ -85,13 +91,13 @@ describe('ReactionPicker', () => {
     fireEvent.click(reactionButton);
 
     await waitFor(() => {
-      expect(mockNostrAPI.sendReaction).toHaveBeenCalledWith('post1', '👍');
+      expect(NostrAPI.sendReaction).toHaveBeenCalledWith('post1', '👍');
       expect(mockToast.error).toHaveBeenCalledWith('リアクションの送信に失敗しました');
     });
   });
 
   it('should close popover after successful reaction', async () => {
-    mockNostrAPI.sendReaction = vi.fn().mockResolvedValue('event123');
+    vi.mocked(NostrAPI.sendReaction).mockResolvedValue('event123');
     mockToast.success = vi.fn();
 
     renderReactionPicker();
@@ -110,7 +116,7 @@ describe('ReactionPicker', () => {
   });
 
   it('should disable button while sending reaction', async () => {
-    mockNostrAPI.sendReaction = vi.fn().mockImplementation(
+    vi.mocked(NostrAPI.sendReaction).mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve('event123'), 100))
     );
 
@@ -145,7 +151,7 @@ describe('ReactionPicker', () => {
   });
 
   it('should invalidate queries after successful reaction', async () => {
-    mockNostrAPI.sendReaction = vi.fn().mockResolvedValue('event123');
+    vi.mocked(NostrAPI.sendReaction).mockResolvedValue('event123');
     const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
     renderReactionPicker('post1', 'topic123');

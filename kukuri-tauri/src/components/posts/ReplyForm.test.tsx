@@ -8,8 +8,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 // モック
-vi.mock('@/stores');
-vi.mock('@/lib/api/tauri');
+vi.mock('@/stores', () => ({
+  useAuthStore: vi.fn(() => ({
+    currentUser: null,
+  })),
+  useBookmarkStore: vi.fn(() => ({
+    bookmarks: [],
+    fetchBookmarks: vi.fn(),
+    addBookmark: vi.fn(),
+    removeBookmark: vi.fn(),
+    isBookmarked: vi.fn(() => false),
+  })),
+}));
+
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    createPost: vi.fn(),
+  },
+}));
+
 vi.mock('sonner');
 
 const mockUseAuthStore = vi.mocked(useAuthStore);

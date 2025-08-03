@@ -14,7 +14,6 @@ vi.mock('@/lib/errorHandler', () => ({
 // Mock @uiw/react-md-editor
 vi.mock('@uiw/react-md-editor', () => {
   const MockMDEditor = ({ value, onChange, preview, height, hideToolbar, commands, textareaProps }: any) => {
-    const React = require('react');
     const [internalValue, setInternalValue] = React.useState(value || '');
     
     React.useEffect(() => {

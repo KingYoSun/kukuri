@@ -2,17 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TopicCard } from './TopicCard';
 import type { Topic } from '@/stores';
+import { useNavigate } from '@tanstack/react-router';
 
 // zustand storeのモック
 const mockJoinedTopics: string[] = [];
 const mockJoinTopic = vi.fn();
 const mockLeaveTopic = vi.fn();
+const mockSetCurrentTopic = vi.fn();
 
 vi.mock('@/stores', () => ({
   useTopicStore: () => ({
     joinedTopics: mockJoinedTopics,
     joinTopic: mockJoinTopic,
     leaveTopic: mockLeaveTopic,
+    setCurrentTopic: mockSetCurrentTopic,
   }),
 }));
 
@@ -36,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
+  useNavigate: vi.fn(() => vi.fn()),
 }));
 
 describe('TopicCard', () => {
@@ -189,10 +193,16 @@ describe('TopicCard', () => {
     expect(screen.getByText('活動なし')).toBeInTheDocument();
   });
 
-  it('トピック名のリンクが正しく設定される', () => {
+  it('トピック名をクリックするとナビゲートされる', async () => {
+    const mockNavigate = vi.fn();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+    
     render(<TopicCard topic={mockTopic} />);
 
-    const link = screen.getByRole('link');
-    expect(link).toHaveAttribute('href', `/topics/${mockTopic.id}`);
+    const topicTitle = screen.getByText(mockTopic.name);
+    fireEvent.click(topicTitle);
+
+    expect(mockSetCurrentTopic).toHaveBeenCalledWith(mockTopic);
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
   });
 });

@@ -20,7 +20,15 @@ vi.mock('sonner', () => ({
   },
 }));
 
-// Mock auth store
+// Mock Collapsible components
+vi.mock('@/components/ui/collapsible', () => ({
+  Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
+    <div data-state={open ? 'open' : 'closed'}>{children}</div>
+  ),
+  CollapsibleContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+// Mock stores
 vi.mock('@/stores', () => ({
   useAuthStore: vi.fn(() => ({
     currentUser: {
@@ -30,6 +38,13 @@ vi.mock('@/stores', () => ({
       displayName: 'Current User Display',
       picture: 'https://example.com/current-user.jpg',
     },
+  })),
+  useBookmarkStore: vi.fn(() => ({
+    bookmarks: [],
+    fetchBookmarks: vi.fn(),
+    addBookmark: vi.fn(),
+    removeBookmark: vi.fn(),
+    isBookmarked: vi.fn(() => false),
   })),
 }));
 

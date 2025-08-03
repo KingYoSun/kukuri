@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth, useLogout } from '../useAuth';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useTopicStore } from '@/stores';
 import { ReactNode } from 'react';
 
 // TauriApiをモック
@@ -17,8 +17,34 @@ vi.mock('@/lib/api/tauri', () => ({
       public_key: 'pubkey123',
       nsec: 'nsec123',
     }),
+    getTopics: vi.fn().mockResolvedValue([]),
   },
 }));
+
+// SecureStorageApiをモック
+vi.mock('@/lib/api/secureStorage', () => ({
+  SecureStorageApi: {
+    addAccount: vi.fn().mockResolvedValue(undefined),
+    getAccounts: vi.fn().mockResolvedValue([]),
+    getCurrentAccount: vi.fn().mockResolvedValue(null),
+  },
+}));
+
+// topicStoreをモック
+vi.mock('@/stores', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/stores')>();
+  return {
+    ...actual,
+    useTopicStore: {
+      getState: () => ({
+        topics: new Map(),
+        fetchTopics: vi.fn().mockResolvedValue(undefined),
+        joinTopic: vi.fn().mockResolvedValue(undefined),
+        setCurrentTopic: vi.fn(),
+      }),
+    },
+  };
+});
 
 const createWrapper = () => {
   const queryClient = new QueryClient({

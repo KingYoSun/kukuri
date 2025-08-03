@@ -125,6 +125,7 @@ export const usePostsByTopic = (topicId: string) => {
         created_at: post.created_at,
         tags: [],
         likes: post.likes,
+        boosts: 0,
         replies: [],
       }));
       setPosts(posts);

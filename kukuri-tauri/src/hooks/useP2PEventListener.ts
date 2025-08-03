@@ -60,6 +60,7 @@ export function useP2PEventListener() {
           created_at: Math.floor(message.timestamp / 1000), // ミリ秒から秒に変換
           tags: [],
           likes: 0,
+          boosts: 0,
           replies: [],
         };
 

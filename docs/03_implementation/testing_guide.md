@@ -181,6 +181,45 @@ cargo clippy           # Rustリントチェック
 pnpm test:e2e          # E2Eテスト実行
 ```
 
+## Windows環境でのテスト実行（WSLなし）
+
+### 重要な注意事項
+
+Windows環境（WSLを使用しない場合）では、`pnpm`コマンド実行時にBashエラーが発生する場合があります。この場合は`npm run`を使用してください。
+
+```bash
+# pnpmでエラーが出る場合
+npm run test           # pnpm test の代わりに
+npm run lint           # pnpm lint の代わりに
+npm run type-check     # pnpm type-check の代わりに
+```
+
+### Windows環境での推奨コマンド
+
+```bash
+# テスト実行
+npm run test
+
+# 型チェック
+npx tsc --noEmit
+
+# リント実行
+npm run lint
+
+# ビルド（Windows向け）
+pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc
+```
+
+### Windows環境特有の問題と対処法
+
+1. **Bashパスエラー**
+   - エラー例: `/usr/bin/bash: Files\Git\bin\bash.exe: No such file or directory`
+   - 対処法: `pnpm`の代わりに`npm run`を使用
+
+2. **パス区切り文字**
+   - Windows環境では`\`が使用されるが、テストでは`/`を期待する場合がある
+   - 必要に応じてパスを正規化
+
 ## トラブルシューティング
 
 ### よくある問題
@@ -196,6 +235,9 @@ pnpm test:e2e          # E2Eテスト実行
 
 4. **E2Eテストのタイムアウト**
    - `waitForDisplayed`のタイムアウトを調整
+
+5. **Windows環境でのpnpmエラー**
+   - `npm run`を使用するか、WSL環境を使用
 
 ## テストカバレッジ目標
 
