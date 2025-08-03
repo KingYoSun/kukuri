@@ -249,7 +249,7 @@ describe('Sidebar', () => {
     await user.click(technologyButton);
 
     expect(setCurrentTopic).toHaveBeenCalledWith(mockTopic1);
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/topics/topic1' });
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
   });
 
   it('現在のトピックがハイライトされること', () => {

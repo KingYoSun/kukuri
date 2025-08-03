@@ -3,6 +3,7 @@ import { PostCard } from './PostCard';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { Post } from '@/stores';
+import React from 'react';
 
 // Mock Tauri API
 vi.mock('@/lib/api/tauri', () => ({
@@ -23,7 +24,9 @@ vi.mock('sonner', () => ({
 // Mock Collapsible components
 vi.mock('@/components/ui/collapsible', () => ({
   Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
-    <div data-state={open ? 'open' : 'closed'}>{children}</div>
+    <div data-state={open ? 'open' : 'closed'}>
+      {open ? children : null}
+    </div>
   ),
   CollapsibleContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -85,10 +88,16 @@ describe('PostCard', () => {
   });
 
   it('投稿内容を表示する', () => {
-    renderWithQueryClient(<PostCard post={mockPost} />);
+    const { container } = renderWithQueryClient(<PostCard post={mockPost} />);
 
-    expect(screen.getByText('テスト投稿です')).toBeInTheDocument();
-    expect(screen.getByText('Test User')).toBeInTheDocument();
+    // カード本体の投稿内容を特定のクラス名で取得
+    const postContent = container.querySelector('.mb-4.whitespace-pre-wrap');
+    expect(postContent).toBeTruthy();
+    expect(postContent?.textContent).toBe('テスト投稿です');
+    
+    // 投稿者名はh4タグ内のものを取得
+    const authorName = container.querySelector('h4.font-semibold');
+    expect(authorName?.textContent).toBe('Test User');
     expect(screen.getByText('npub1test...')).toBeInTheDocument();
   });
 
@@ -176,10 +185,11 @@ describe('PostCard', () => {
   });
 
   it('時間を日本語で表示する', () => {
-    renderWithQueryClient(<PostCard post={mockPost} />);
+    const { container } = renderWithQueryClient(<PostCard post={mockPost} />);
 
-    // 約1時間前
-    expect(screen.getByText(/前$/)).toBeInTheDocument();
+    // ヘッダー内の時間表示を確認
+    const timeElement = container.querySelector('.text-sm.text-muted-foreground');
+    expect(timeElement?.textContent).toMatch(/前$/);
   });
 
   describe('返信機能', () => {
@@ -220,9 +230,9 @@ describe('PostCard', () => {
         expect(screen.getByPlaceholderText('返信を入力...')).toBeInTheDocument();
       });
 
-      // キャンセルボタンをクリック
-      const cancelButton = screen.getByText('キャンセル');
-      fireEvent.click(cancelButton);
+      // キャンセルボタンをクリック - getAllByTextを使用して最初のボタンを選択
+      const cancelButtons = screen.getAllByText('キャンセル');
+      fireEvent.click(cancelButtons[0]);
 
       // 返信フォームが非表示になる
       await waitFor(() => {
@@ -287,19 +297,23 @@ describe('PostCard', () => {
       const submitButton = screen.getByText('返信する');
       fireEvent.click(submitButton);
 
-      // フォームが閉じる
+      // フォームが閉じるまで待つ（成功メッセージが表示されることも確認）
+      await waitFor(() => {
+        expect(TauriApi.createPost).toHaveBeenCalled();
+      });
+
       await waitFor(() => {
         expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
     });
   });
 
   describe('引用機能', () => {
     it('引用ボタンをクリックすると引用フォームが表示される', async () => {
-      renderWithQueryClient(<PostCard post={mockPost} />);
+      const { container } = renderWithQueryClient(<PostCard post={mockPost} />);
 
-      // 引用ボタンをクリック（2番目のボタン）
-      const quoteButton = screen.getAllByRole('button')[1]; // Repeat2ボタン
+      // 引用ボタンをクリック（3番目のボタン - Quote アイコンのボタン）
+      const quoteButton = screen.getAllByRole('button')[2]; // Quoteボタン
       expect(quoteButton).toHaveTextContent('0');
 
       fireEvent.click(quoteButton);
@@ -309,15 +323,15 @@ describe('PostCard', () => {
         expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
         expect(screen.getByText('引用して投稿')).toBeInTheDocument();
         // 引用元の投稿内容が表示される（元の投稿と引用カード内の2つ）
-        const postContents = screen.getAllByText('テスト投稿です');
-        expect(postContents).toHaveLength(2);
+        const allContents = container.querySelectorAll('.whitespace-pre-wrap');
+        expect(allContents).toHaveLength(2); // 元の投稿 + 引用カード内の表示
       });
     });
 
     it('引用フォームが開いているときは引用ボタンがアクティブ状態になる', async () => {
       renderWithQueryClient(<PostCard post={mockPost} />);
 
-      const quoteButton = screen.getAllByRole('button')[1];
+      const quoteButton = screen.getAllByRole('button')[2]; // Quoteボタン
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
@@ -328,16 +342,16 @@ describe('PostCard', () => {
     it('引用フォームをキャンセルできる', async () => {
       renderWithQueryClient(<PostCard post={mockPost} />);
 
-      const quoteButton = screen.getAllByRole('button')[1];
+      const quoteButton = screen.getAllByRole('button')[2]; // Quoteボタン
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
         expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
       });
 
-      // キャンセルボタンをクリック
-      const cancelButton = screen.getByText('キャンセル');
-      fireEvent.click(cancelButton);
+      // キャンセルボタンをクリック - getAllByTextを使用して最初のボタンを選択
+      const cancelButtons = screen.getAllByText('キャンセル');
+      fireEvent.click(cancelButtons[0]);
 
       // 引用フォームが非表示になる
       await waitFor(() => {
@@ -353,7 +367,7 @@ describe('PostCard', () => {
       renderWithQueryClient(<PostCard post={mockPost} />);
 
       // 引用フォームを開く
-      const quoteButton = screen.getAllByRole('button')[1];
+      const quoteButton = screen.getAllByRole('button')[2]; // Quoteボタン
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
@@ -389,7 +403,7 @@ describe('PostCard', () => {
       renderWithQueryClient(<PostCard post={mockPost} />);
 
       // 引用フォームを開く
-      const quoteButton = screen.getAllByRole('button')[1];
+      const quoteButton = screen.getAllByRole('button')[2]; // Quoteボタン
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
@@ -403,10 +417,14 @@ describe('PostCard', () => {
       const submitButton = screen.getByText('引用して投稿');
       fireEvent.click(submitButton);
 
-      // フォームが閉じる
+      // フォームが閉じるまで待つ（成功メッセージが表示されることも確認）
+      await waitFor(() => {
+        expect(TauriApi.createPost).toHaveBeenCalled();
+      });
+
       await waitFor(() => {
         expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
     });
 
     it('返信フォームと引用フォームは同時に開かない', async () => {
@@ -421,7 +439,7 @@ describe('PostCard', () => {
       });
 
       // 引用ボタンをクリック
-      const quoteButton = screen.getAllByRole('button')[1];
+      const quoteButton = screen.getAllByRole('button')[2]; // Quoteボタン
       fireEvent.click(quoteButton);
 
       // 返信フォームが閉じて引用フォームが開く

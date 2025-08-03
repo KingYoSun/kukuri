@@ -36,6 +36,10 @@ export const useTopicStore = create<TopicStore>()(
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
+          if (!apiTopics) {
+            set({ topics: new Map() });
+            return;
+          }
           const topics: Topic[] = apiTopics.map((t) => ({
             id: t.id,
             name: t.name,
