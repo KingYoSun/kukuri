@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bookmark;
 pub mod crypto;
 pub mod database;
 pub mod event;

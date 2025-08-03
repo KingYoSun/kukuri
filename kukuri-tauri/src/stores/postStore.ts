@@ -60,6 +60,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         created_at: p.created_at,
         tags: [],
         likes: p.likes,
+        boosts: p.boosts || 0,
         replies: [],
         isSynced: p.is_synced ?? true, // DBのis_syncedフィールドを使用（未定義の場合はtrue）
       }));
@@ -129,6 +130,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         created_at: apiPost.created_at,
         tags: [],
         likes: apiPost.likes,
+        boosts: apiPost.boosts || 0,
         replies: [],
         isSynced: false, // 初期状態は未同期
       };

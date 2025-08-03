@@ -44,7 +44,9 @@ export interface Post {
   topic_id: string;
   created_at: number;
   likes: number;
+  boosts: number;
   replies: number;
+  is_synced: boolean;
 }
 
 export interface CreatePostRequest {
@@ -108,6 +110,22 @@ export class TauriApi {
 
   static async likePost(postId: string): Promise<void> {
     return await invoke('like_post', { postId });
+  }
+
+  static async boostPost(postId: string): Promise<void> {
+    return await invoke('boost_post', { postId });
+  }
+
+  static async bookmarkPost(postId: string): Promise<void> {
+    return await invoke('bookmark_post', { postId });
+  }
+
+  static async unbookmarkPost(postId: string): Promise<void> {
+    return await invoke('unbookmark_post', { postId });
+  }
+
+  static async getBookmarkedPostIds(): Promise<string[]> {
+    return await invoke('get_bookmarked_post_ids');
   }
 }
 

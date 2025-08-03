@@ -32,8 +32,11 @@ export interface Post {
   created_at: number;
   tags: string[];
   likes: number;
+  boosts: number;
   replies: Post[];
   isSynced?: boolean; // P2Pネットワークに同期済みかどうか
+  isBoosted?: boolean; // 現在のユーザーがブーストしたか
+  isBookmarked?: boolean; // 現在のユーザーがブックマークしたか
 }
 
 export interface AuthState {

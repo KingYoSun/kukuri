@@ -110,6 +110,20 @@ CREATE TABLE IF NOT EXISTS read_markers (
     FOREIGN KEY (pubkey) REFERENCES users(pubkey),
     FOREIGN KEY (topic_id) REFERENCES topics(id)
 );
+
+-- ブックマーク管理（2025年8月3日追加）
+CREATE TABLE IF NOT EXISTS bookmarks (
+    id TEXT PRIMARY KEY,
+    user_pubkey TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(user_pubkey, post_id)
+);
+
+-- ブックマークのインデックス
+CREATE INDEX idx_bookmarks_user_pubkey ON bookmarks(user_pubkey);
+CREATE INDEX idx_bookmarks_post_id ON bookmarks(post_id);
+CREATE INDEX idx_bookmarks_created_at ON bookmarks(created_at DESC);
 ```
 
 ### 1.3 Nostrイベント処理実装

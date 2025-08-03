@@ -30,7 +30,9 @@ export const usePosts = () => {
         created_at: post.created_at,
         tags: [],
         likes: post.likes,
+        boosts: post.boosts || 0,
         replies: [],
+        isSynced: post.is_synced,
       }));
       setPosts(posts);
       return posts;
@@ -65,7 +67,9 @@ export const useTimelinePosts = () => {
         created_at: post.created_at,
         tags: [],
         likes: post.likes,
+        boosts: post.boosts || 0,
         replies: [],
+        isSynced: post.is_synced,
       }));
       setPosts(posts);
       return posts;
@@ -91,7 +95,9 @@ const createPost = async (postData: { content: string; topicId: string }): Promi
     created_at: apiPost.created_at,
     tags: [],
     likes: apiPost.likes,
+    boosts: apiPost.boosts || 0,
     replies: [],
+    isSynced: apiPost.is_synced,
   };
 };
 

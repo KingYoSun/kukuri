@@ -10,6 +10,7 @@ pub struct Post {
     pub topic_id: String,
     pub created_at: i64,
     pub likes: u32,
+    pub boosts: u32,
     pub replies: u32,
     pub is_synced: bool,
 }
@@ -58,6 +59,7 @@ pub async fn create_post(
         topic_id: request.topic_id,
         created_at: chrono::Utc::now().timestamp(),
         likes: 0,
+        boosts: 0,
         replies: 0,
         is_synced: false, // 新規作成時は未同期
     };
@@ -82,8 +84,8 @@ pub async fn delete_post(state: State<'_, AppState>, id: String) -> Result<(), S
 
 #[tauri::command]
 pub async fn like_post(state: State<'_, AppState>, post_id: String) -> Result<(), String> {
-    // TODO: Nostrリアクションイベントを発行する実装
-
+    use nostr_sdk::EventId;
+    
     // 現在のユーザーの確認
     let _keys = state
         .key_manager
@@ -91,6 +93,106 @@ pub async fn like_post(state: State<'_, AppState>, post_id: String) -> Result<()
         .await
         .map_err(|e| format!("ログインが必要です: {e}"))?;
 
-    println!("Liking post: {post_id}");
+    // EventId型に変換
+    let event_id = EventId::from_hex(&post_id).map_err(|e| format!("無効なイベントID: {e}"))?;
+
+    // Nostrリアクションイベントを発行（「+」はNIP-25で定義された標準的ないいね）
+    state
+        .event_manager
+        .send_reaction(&event_id, "+")
+        .await
+        .map_err(|e| format!("いいねに失敗しました: {e}"))?;
+
+    println!("Liked post: {post_id}");
     Ok(())
+}
+
+#[tauri::command]
+pub async fn boost_post(state: State<'_, AppState>, post_id: String) -> Result<(), String> {
+    use nostr_sdk::EventId;
+    
+    // 現在のユーザーの確認
+    let _keys = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
+
+    // EventId型に変換
+    let event_id = EventId::from_hex(&post_id).map_err(|e| format!("無効なイベントID: {e}"))?;
+
+    // Nostrリポストイベントを発行
+    state
+        .event_manager
+        .send_repost(&event_id)
+        .await
+        .map_err(|e| format!("ブーストに失敗しました: {e}"))?;
+
+    println!("Boosted post: {post_id}");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn bookmark_post(state: State<'_, AppState>, post_id: String) -> Result<(), String> {
+    // 現在のユーザーの確認
+    let keys = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
+
+    let user_pubkey = keys.public_key().to_hex();
+
+    // ブックマークを追加
+    state
+        .bookmark_manager
+        .add_bookmark(&user_pubkey, &post_id)
+        .await
+        .map_err(|e| format!("ブックマークの追加に失敗しました: {e}"))?;
+
+    println!("Bookmarked post: {post_id}");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn unbookmark_post(state: State<'_, AppState>, post_id: String) -> Result<(), String> {
+    // 現在のユーザーの確認
+    let keys = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
+
+    let user_pubkey = keys.public_key().to_hex();
+
+    // ブックマークを削除
+    state
+        .bookmark_manager
+        .remove_bookmark(&user_pubkey, &post_id)
+        .await
+        .map_err(|e| format!("ブックマークの削除に失敗しました: {e}"))?;
+
+    println!("Unbookmarked post: {post_id}");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_bookmarked_post_ids(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    // 現在のユーザーの確認
+    let keys = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {e}"))?;
+
+    let user_pubkey = keys.public_key().to_hex();
+
+    // ブックマークされた投稿IDのリストを取得
+    let post_ids = state
+        .bookmark_manager
+        .get_bookmarked_post_ids(&user_pubkey)
+        .await
+        .map_err(|e| format!("ブックマークの取得に失敗しました: {e}"))?;
+
+    Ok(post_ids)
 }

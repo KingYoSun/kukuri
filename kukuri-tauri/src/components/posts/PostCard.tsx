@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Repeat2, Share } from 'lucide-react';
+import { Heart, MessageCircle, Repeat2, Share, Bookmark, Quote } from 'lucide-react';
 import type { Post } from '@/stores';
+import { useBookmarkStore } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +13,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
 import { ReplyForm } from './ReplyForm';
 import { QuoteForm } from './QuoteForm';
+import { ReactionPicker } from './ReactionPicker';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface PostCardProps {
@@ -22,6 +24,13 @@ export function PostCard({ post }: PostCardProps) {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const queryClient = useQueryClient();
+  const { isBookmarked, toggleBookmark, fetchBookmarks } = useBookmarkStore();
+  const isPostBookmarked = isBookmarked(post.id);
+
+  // 初回レンダリング時にブックマーク情報を取得
+  useEffect(() => {
+    fetchBookmarks();
+  }, []);
 
   // いいね機能
   const likeMutation = useMutation({
@@ -50,6 +59,44 @@ export function PostCard({ post }: PostCardProps) {
   const handleQuote = () => {
     setShowQuoteForm(!showQuoteForm);
     setShowReplyForm(false);
+  };
+
+  // ブースト機能
+  const boostMutation = useMutation({
+    mutationFn: async () => {
+      await TauriApi.boostPost(post.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
+      toast.success('ブーストしました');
+    },
+    onError: () => {
+      toast.error('ブーストに失敗しました');
+    },
+  });
+
+  const handleBoost = () => {
+    boostMutation.mutate();
+  };
+
+  // ブックマーク機能
+  const bookmarkMutation = useMutation({
+    mutationFn: async () => {
+      await toggleBookmark(post.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
+      toast.success(isPostBookmarked ? 'ブックマークを解除しました' : 'ブックマークしました');
+    },
+    onError: () => {
+      toast.error('ブックマークの操作に失敗しました');
+    },
+  });
+
+  const handleBookmark = () => {
+    bookmarkMutation.mutate();
   };
 
   // 時間表示のフォーマット
@@ -109,15 +156,35 @@ export function PostCard({ post }: PostCardProps) {
           <Button
             variant="ghost"
             size="sm"
+            onClick={handleBoost}
+            disabled={boostMutation.isPending}
+            className={post.isBoosted ? 'text-primary' : ''}
+          >
+            <Repeat2 className="mr-2 h-4 w-4" />
+            {post.boosts || 0}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleQuote}
             className={showQuoteForm ? 'text-primary' : ''}
           >
-            <Repeat2 className="mr-2 h-4 w-4" />0
+            <Quote className="mr-2 h-4 w-4" />0
           </Button>
           <Button variant="ghost" size="sm" onClick={handleLike} disabled={likeMutation.isPending}>
             <Heart className="mr-2 h-4 w-4" />
             {post.likes}
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBookmark}
+            disabled={bookmarkMutation.isPending}
+            className={isPostBookmarked ? 'text-yellow-500' : ''}
+          >
+            <Bookmark className={`h-4 w-4 ${isPostBookmarked ? 'fill-current' : ''}`} />
+          </Button>
+          <ReactionPicker postId={post.id} topicId={post.topicId} />
           <Button variant="ghost" size="sm" aria-label="share" disabled>
             <Share className="h-4 w-4" />
           </Button>

@@ -4,3 +4,4 @@ export { useTopicStore } from './topicStore';
 export { usePostStore } from './postStore';
 export { useUIStore } from './uiStore';
 export { useP2PStore } from './p2pStore';
+export { useBookmarkStore } from './bookmarkStore';

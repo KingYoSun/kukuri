@@ -50,6 +50,10 @@ pub fn run() {
             post_commands::create_post,
             post_commands::delete_post,
             post_commands::like_post,
+            post_commands::boost_post,
+            post_commands::bookmark_post,
+            post_commands::unbookmark_post,
+            post_commands::get_bookmarked_post_ids,
             // Nostr関連コマンド
             event_commands::initialize_nostr,
             event_commands::add_relay,
