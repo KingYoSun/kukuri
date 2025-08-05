@@ -17,7 +17,7 @@ impl BookmarkManager {
     /// ブックマークを追加
     pub async fn add_bookmark(&self, user_pubkey: &str, post_id: &str) -> Result<Bookmark> {
         let id = Uuid::new_v4().to_string();
-        let created_at = chrono::Utc::now().timestamp();
+        let created_at = chrono::Utc::now().timestamp_millis();
 
         sqlx::query(
             r#"

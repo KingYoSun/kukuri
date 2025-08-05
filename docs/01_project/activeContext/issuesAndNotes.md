@@ -1,25 +1,10 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月5日
+**最終更新**: 2025年8月6日
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
 ## 現在の問題
-
-### Windows環境でのテスト実行エラー（2025年8月3日）→ Docker環境で解決（2025年8月5日）
-**問題**: Windows環境でRustのテスト実行時にDLLエラーが発生
-
-**詳細**:
-- エラーコード: `STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)`
-- 原因: Windows環境でのDLL依存関係の問題
-- 影響: ネイティブ環境でテストが実行できない（コード自体には問題なし）
-- 優先度: 低（Docker環境で解決済み）
-
-**解決策**（2025年8月5日）:
-- Docker環境でのテスト実行環境を構築
-- `.\scripts\test-docker.ps1`コマンドでテスト実行可能
-- CI/CDでも同じDocker環境を使用
-- 詳細は`docs/03_implementation/docker_test_environment.md`を参照
 
 ### DOM検証警告（2025年8月3日）
 **問題**: MarkdownPreview.test.tsxでDOM検証の警告が発生
@@ -44,6 +29,56 @@
   - form.tsx: badgeVariants定数のエクスポート
 
 ## 解決済みの問題
+
+### Docker環境の最適化とテストエラー修正（2025年8月6日）
+**問題**: Docker環境でのテスト実行が毎回5分以上かかり、開発効率が低下
+
+**症状**:
+- 毎回Rust依存関係を再ビルド（約5分）
+- キャッシュが効かない
+- bookmark関連のテストで順序の期待値エラー
+
+**解決策**:
+
+1. **Rustテストエラーの修正**
+```rust
+// BookmarkManager::add_bookmarkの修正
+// 修正前
+let created_at = chrono::Utc::now().timestamp();
+// 修正後
+let created_at = chrono::Utc::now().timestamp_millis(); // ミリ秒精度に変更
+```
+- テスト内のsleep時間を10msから100msに増加して順序を保証
+
+2. **Dockerfileの最適化**
+- レイヤーキャッシュを活用する構成に変更
+- 依存関係のみを先にビルドしてキャッシュ
+- 必要なファイルの早期コピー（build.rs、tauri.conf.json）
+
+3. **名前付きボリュームによるキャッシュ永続化**
+```yaml
+volumes:
+  cargo-registry:    # Cargoレジストリキャッシュ
+  cargo-git:         # CargoのGit依存関係キャッシュ
+  cargo-target:      # ビルド成果物のキャッシュ
+  pnpm-store:        # pnpmパッケージキャッシュ
+```
+
+4. **PowerShellスクリプトの機能拡張**
+```powershell
+.\scripts\test-docker.ps1 rust -NoBuild  # ビルドをスキップして高速実行
+.\scripts\test-docker.ps1 cache-clean    # キャッシュを完全クリア
+```
+
+5. **権限エラーの修正**
+- targetディレクトリへの書き込み権限問題を解決
+- ソースファイルは読み取り専用、targetは書き込み可能に設定
+
+**結果**:
+- 初回ビルド: 約5-8分
+- 2回目以降: 約30秒（約90%の時間短縮）
+- 全154件のRustテストが成功
+- 開発効率が大幅に向上
 
 ### Windows環境でのテスト実行問題の解決（2025年8月5日）
 **問題**: Windows環境でのDLLエラーによりRustテストが実行できない

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # テスト実行サービス
   test-runner:
@@ -14,10 +12,17 @@ services:
       - ./kukuri-tauri/tests:/app/kukuri-tauri/tests:ro
       # テスト結果の出力用
       - ./test-results:/app/test-results
+      # Cargoキャッシュの永続化
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+      # pnpmキャッシュの永続化
+      - pnpm-store:/root/.local/share/pnpm/store
     environment:
       # Rust環境変数
       RUST_BACKTRACE: 1
       RUST_LOG: debug
+      CARGO_HOME: /usr/local/cargo
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
@@ -34,11 +39,21 @@ services:
     working_dir: /app/kukuri-tauri/src-tauri
     command: cargo test --workspace --all-features -- --nocapture
     volumes:
-      - ./kukuri-tauri/src-tauri:/app/kukuri-tauri/src-tauri:ro
+      - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
+      - ./kukuri-tauri/src-tauri/Cargo.lock:/app/kukuri-tauri/src-tauri/Cargo.lock:ro
+      - ./kukuri-tauri/src-tauri/build.rs:/app/kukuri-tauri/src-tauri/build.rs:ro
+      - ./kukuri-tauri/src-tauri/tauri.conf.json:/app/kukuri-tauri/src-tauri/tauri.conf.json:ro
+      - ./kukuri-tauri/src-tauri/migrations:/app/kukuri-tauri/src-tauri/migrations:ro
       - ./test-results:/app/test-results
+      # Cargoキャッシュの永続化
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
     environment:
       RUST_BACKTRACE: full
       RUST_LOG: debug
+      CARGO_HOME: /usr/local/cargo
     networks:
       - test-network
 
@@ -53,6 +68,8 @@ services:
     volumes:
       - ./kukuri-tauri:/app/kukuri-tauri:ro
       - ./test-results:/app/test-results
+      # pnpmキャッシュの永続化
+      - pnpm-store:/root/.local/share/pnpm/store
     environment:
       NODE_ENV: test
       CI: true
@@ -81,8 +98,25 @@ services:
       "
     volumes:
       - ./kukuri-tauri:/app/kukuri-tauri:ro
+      # Cargoキャッシュの永続化（clippyのため）
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      CARGO_HOME: /usr/local/cargo
     networks:
       - test-network
+
+# 名前付きボリューム（キャッシュの永続化）
+volumes:
+  cargo-registry:
+    name: kukuri-cargo-registry
+  cargo-git:
+    name: kukuri-cargo-git
+  cargo-target:
+    name: kukuri-cargo-target
+  pnpm-store:
+    name: kukuri-pnpm-store
 
 networks:
   test-network:
