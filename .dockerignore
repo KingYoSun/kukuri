@@ -1,0 +1,84 @@
+# Node modules
+**/node_modules
+**/.pnpm-store
+**/dist
+**/build
+
+# Rust target
+**/target
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+test-results/
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Documentation
+docs/
+README.md
+*.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Keys and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Scripts (we'll copy only what we need)
+scripts/
+
+# Tauri generated files
+kukuri-tauri/src-tauri/gen/
+kukuri-tauri/src-tauri/WixTools/
+
+# Other project-specific
+workers/
+.serena/
+.claude/

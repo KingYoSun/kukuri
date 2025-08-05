@@ -60,6 +60,9 @@ coverage/
 *.lcov
 .nyc_output/
 
+# Test results
+test-results/
+
 # Temporary files
 *.tmp
 *.temp

@@ -1,0 +1,78 @@
+# kukuri テスト環境用 Dockerfile
+# Rust と Node.js の両方の環境を含むマルチステージビルド
+
+FROM rust:1.85-bookworm AS test-env
+
+# 基本的なシステムパッケージのインストール
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libsqlite3-dev \
+    libwebkit2gtk-4.1-dev \
+    libgtk-3-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    curl \
+    wget \
+    file \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 20.x のインストール
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
+# pnpm のインストール
+RUN npm install -g pnpm@9
+
+# Rust の追加コンポーネント
+RUN rustup component add rustfmt clippy
+
+# 作業ディレクトリの設定
+WORKDIR /app
+
+# プロジェクトファイルのコピー（キャッシュ効率を考慮）
+# package.json と lockfile を先にコピー
+COPY kukuri-tauri/package.json kukuri-tauri/pnpm-lock.yaml ./kukuri-tauri/
+
+# Node.js 依存関係のインストール
+WORKDIR /app/kukuri-tauri
+RUN pnpm install --frozen-lockfile --ignore-workspace
+
+# Cargo.toml と Cargo.lock を先にコピー（Rust依存関係のキャッシュ）
+WORKDIR /app
+COPY kukuri-tauri/src-tauri/Cargo.toml kukuri-tauri/src-tauri/Cargo.lock ./kukuri-tauri/src-tauri/
+
+# Rust依存関係のビルド（ダミーのmain.rsで）
+WORKDIR /app/kukuri-tauri/src-tauri
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "pub fn lib() {}" > src/lib.rs && \
+    cargo build --release && \
+    rm -rf src
+
+# 残りのプロジェクトファイルをコピー（.dockerignoreで除外されたものを除く）
+WORKDIR /app
+COPY . .
+
+# テスト実行用のスクリプトを作成
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "=== Running Rust tests ==="\n\
+cd /app/kukuri-tauri/src-tauri\n\
+cargo test --workspace --all-features\n\
+echo "=== Running Rust clippy ==="\n\
+cargo clippy --workspace --all-features -- -D warnings\n\
+echo "=== Running TypeScript tests ==="\n\
+cd /app/kukuri-tauri\n\
+pnpm test\n\
+echo "=== Running TypeScript type check ==="\n\
+pnpm typecheck\n\
+echo "=== Running ESLint ==="\n\
+pnpm lint\n\
+echo "=== All tests passed! ===" \
+' > /app/run-tests.sh && chmod +x /app/run-tests.sh
+
+# デフォルトコマンド
+CMD ["/app/run-tests.sh"]

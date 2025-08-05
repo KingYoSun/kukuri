@@ -1,23 +1,25 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月3日
+**最終更新**: 2025年8月5日
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
 ## 現在の問題
 
-### Windows環境でのテスト実行エラー（2025年8月3日）
+### Windows環境でのテスト実行エラー（2025年8月3日）→ Docker環境で解決（2025年8月5日）
 **問題**: Windows環境でRustのテスト実行時にDLLエラーが発生
 
 **詳細**:
 - エラーコード: `STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)`
 - 原因: Windows環境でのDLL依存関係の問題
-- 影響: テストが実行できない（コード自体には問題なし）
-- 優先度: 中（開発環境固有の問題）
+- 影響: ネイティブ環境でテストが実行できない（コード自体には問題なし）
+- 優先度: 低（Docker環境で解決済み）
 
-**回避策**:
-- 他の環境（Linux、macOS、WSL）でテストを実行
-- CI/CD環境でのテスト実行を検討
+**解決策**（2025年8月5日）:
+- Docker環境でのテスト実行環境を構築
+- `.\scripts\test-docker.ps1`コマンドでテスト実行可能
+- CI/CDでも同じDocker環境を使用
+- 詳細は`docs/03_implementation/docker_test_environment.md`を参照
 
 ### DOM検証警告（2025年8月3日）
 **問題**: MarkdownPreview.test.tsxでDOM検証の警告が発生
@@ -42,6 +44,40 @@
   - form.tsx: badgeVariants定数のエクスポート
 
 ## 解決済みの問題
+
+### Windows環境でのテスト実行問題の解決（2025年8月5日）
+**問題**: Windows環境でのDLLエラーによりRustテストが実行できない
+
+**症状**:
+- `cargo test`実行時に`STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)`エラー
+- DLL依存関係の問題により、ネイティブ環境でテストが実行不可
+
+**解決策**:
+Docker環境でのテスト実行環境を構築
+
+1. **環境構築**
+- `Dockerfile.test`: Rust 1.85 + Node.js 20の環境
+- `docker-compose.test.yml`: テストサービスの定義
+- `.dockerignore`: node_modulesなど不要ファイルの除外
+
+2. **実行スクリプト**
+```powershell
+# Windows環境での実行
+.\scripts\test-docker.ps1       # 全テスト実行
+.\scripts\test-docker.ps1 rust   # Rustテストのみ
+.\scripts\test-docker.ps1 ts     # TypeScriptテストのみ
+```
+
+3. **解決した問題**
+- PowerShellスクリプトのBOM問題
+- pnpmのシンボリックリンクエラー
+- pnpmワークスペース設定の問題
+- Rust edition2024のサポート（Rust 1.85が必要）
+
+**結果**:
+- Windows環境でも安定してテストが実行可能
+- CI/CDと同じ環境で開発者がローカルテスト可能
+- 全プラットフォームで一貫したテスト結果
 
 ### バックエンド・フロントエンドのテスト・型・リントエラーの修正（2025年8月3日）
 **問題**: バックエンドでunsafe codeによるundefined behaviorと多数のリント警告、フロントエンドでリントエラーが発生

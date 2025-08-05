@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # テスト実行サービス
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-test-runner
+    volumes:
+      # ソースコードをマウント（開発時の変更を即座に反映）
+      - ./kukuri-tauri/src:/app/kukuri-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/tests:/app/kukuri-tauri/tests:ro
+      # テスト結果の出力用
+      - ./test-results:/app/test-results
+    environment:
+      # Rust環境変数
+      RUST_BACKTRACE: 1
+      RUST_LOG: debug
+      # Node.js環境変数
+      NODE_ENV: test
+      # CI環境を示す（一部のテストで必要）
+      CI: true
+    networks:
+      - test-network
+
+  # 個別のRustテスト実行
+  rust-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-rust-test
+    working_dir: /app/kukuri-tauri/src-tauri
+    command: cargo test --workspace --all-features -- --nocapture
+    volumes:
+      - ./kukuri-tauri/src-tauri:/app/kukuri-tauri/src-tauri:ro
+      - ./test-results:/app/test-results
+    environment:
+      RUST_BACKTRACE: full
+      RUST_LOG: debug
+    networks:
+      - test-network
+
+  # 個別のTypeScriptテスト実行
+  ts-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-ts-test
+    working_dir: /app/kukuri-tauri
+    command: pnpm test
+    volumes:
+      - ./kukuri-tauri:/app/kukuri-tauri:ro
+      - ./test-results:/app/test-results
+    environment:
+      NODE_ENV: test
+      CI: true
+    networks:
+      - test-network
+
+  # リントとフォーマットチェック
+  lint-check:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-lint-check
+    working_dir: /app
+    command: |
+      bash -c "
+        echo '=== Rust format check ===' &&
+        cd kukuri-tauri/src-tauri &&
+        cargo fmt -- --check &&
+        echo '=== Rust clippy ===' &&
+        cargo clippy --workspace --all-features -- -D warnings &&
+        echo '=== TypeScript lint ===' &&
+        cd /app/kukuri-tauri &&
+        pnpm lint &&
+        echo '=== TypeScript format check ===' &&
+        pnpm format:check
+      "
+    volumes:
+      - ./kukuri-tauri:/app/kukuri-tauri:ro
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

@@ -12,6 +12,7 @@
 - **DRY原則**: 新しいクラス・新しいメソッド・新しい型を実装する際は同じ機能を持ったものが既にないかを必ず調査する
 - **依存最新化**: 依存ライブラリを追加する際は、webから最新バージョンを確認する
 - **エラーハンドリング**: フロントエンドでの`console.error`使用は禁止。代わりに`errorHandler`を使用する（`docs/03_implementation/error_handling_guidelines.md`参照）
+- **テスト実行**: Windows環境では必ず`.\scripts\test-docker.ps1`を使用してテストを実行する
 
 ### 実装のリファレンス
 - **zustand**: storeのモックを実装/変更する前にzustand公式のドキュメント( https://zustand.docs.pmnd.rs/guides/testing )を必ず参照する
@@ -90,10 +91,26 @@ cargo fmt
 pnpm format:check
 ```
 
-### Windows環境（WSLなし）での実行
+### Windows環境での推奨実行方法（Docker使用）
+DLLエラーによりネイティブ環境でテストが実行できない場合は、Docker環境を使用してください：
+```powershell
+# Docker環境で全テスト実行（推奨）
+.\scripts\test-docker.ps1
+
+# Rustテストのみ
+.\scripts\test-docker.ps1 rust
+
+# TypeScriptテストのみ
+.\scripts\test-docker.ps1 ts
+
+# リントとフォーマットチェック
+.\scripts\test-docker.ps1 lint
+```
+
+### Windows環境（WSLなし）でのネイティブ実行
 pnpmコマンドでBashエラーが発生する場合は、npm runを使用してください：
 ```bash
-# テスト実行
+# テスト実行（TypeScriptのみ）
 npm run test
 
 # 型チェック
@@ -102,6 +119,7 @@ npx tsc --noEmit
 # リント
 npm run lint
 ```
+**注意**: Rustテストはネイティブ環境では実行できないため、必ずDockerを使用してください。
 
 ## アーキテクチャ
 
