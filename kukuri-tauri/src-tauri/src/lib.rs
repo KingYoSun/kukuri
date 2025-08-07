@@ -8,6 +8,7 @@ mod state;
 // Tauriコマンドのインポート
 use modules::auth::commands as auth_commands;
 use modules::event::commands as event_commands;
+use modules::offline::commands as offline_commands;
 use modules::p2p::commands as p2p_commands;
 use modules::post::commands as post_commands;
 use modules::secure_storage as secure_storage_commands;
@@ -75,6 +76,18 @@ pub fn run() {
             p2p_commands::get_p2p_status,
             p2p_commands::get_node_address,
             p2p_commands::join_topic_by_name,
+            // オフライン関連コマンド
+            offline_commands::save_offline_action,
+            offline_commands::get_offline_actions,
+            offline_commands::sync_offline_actions,
+            offline_commands::get_cache_status,
+            offline_commands::add_to_sync_queue,
+            offline_commands::update_cache_metadata,
+            offline_commands::save_optimistic_update,
+            offline_commands::confirm_optimistic_update,
+            offline_commands::rollback_optimistic_update,
+            offline_commands::cleanup_expired_cache,
+            offline_commands::update_sync_status,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

@@ -3,6 +3,7 @@ use crate::modules::bookmark::BookmarkManager;
 use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
+use crate::modules::offline::OfflineManager;
 use crate::modules::p2p::{EventSync, GossipManager, P2PEvent};
 use std::sync::Arc;
 use tauri::Manager;
@@ -32,6 +33,7 @@ pub struct AppState {
     pub event_manager: Arc<EventManager>,
     pub p2p_state: Arc<RwLock<P2PState>>,
     pub bookmark_manager: Arc<BookmarkManager>,
+    pub offline_manager: Arc<OfflineManager>,
 }
 
 impl AppState {
@@ -84,6 +86,7 @@ impl AppState {
         let encryption_manager = Arc::new(EncryptionManager::new());
         let event_manager = Arc::new(EventManager::new());
         let bookmark_manager = Arc::new(BookmarkManager::new((*db_pool).clone()));
+        let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
 
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {
@@ -99,6 +102,7 @@ impl AppState {
             event_manager,
             p2p_state,
             bookmark_manager,
+            offline_manager,
         })
     }
 

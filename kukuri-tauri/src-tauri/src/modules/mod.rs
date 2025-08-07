@@ -3,6 +3,7 @@ pub mod bookmark;
 pub mod crypto;
 pub mod database;
 pub mod event;
+pub mod offline;
 pub mod p2p;
 pub mod post;
 pub mod secure_storage;
