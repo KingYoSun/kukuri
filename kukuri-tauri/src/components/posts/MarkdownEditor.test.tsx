@@ -13,7 +13,7 @@ vi.mock('@/lib/errorHandler', () => ({
 
 // Mock @uiw/react-md-editor
 vi.mock('@uiw/react-md-editor', () => {
-  const MockMDEditor = ({ value, onChange, preview, height, hideToolbar, commands, textareaProps }: any) => {
+  const MockMDEditor = ({ value, onChange, preview, height, hideToolbar, commands, textareaProps }: { value?: string; onChange?: (value: string) => void; preview?: string; height?: number; hideToolbar?: boolean; commands?: Array<{ name: string; icon?: React.ReactNode; execute?: () => void; buttonProps?: Record<string, string> }>; textareaProps?: { placeholder?: string } }) => {
     const [internalValue, setInternalValue] = React.useState(value || '');
     
     React.useEffect(() => {
@@ -30,7 +30,7 @@ vi.mock('@uiw/react-md-editor', () => {
         <div data-testid="md-editor" style={{ height }}>
           {!hideToolbar && (
             <div data-testid="toolbar">
-              {commands?.map((cmd: any, index: number) => (
+              {commands?.map((cmd, index: number) => (
                 <button
                   key={index}
                   data-testid={`toolbar-${cmd.name}`}

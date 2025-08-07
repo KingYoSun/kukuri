@@ -142,7 +142,7 @@ mod tests {
         let keys = Keys::generate();
         let _events: Vec<(Event, DeliveryPriority)> = (0..5)
             .map(|i| {
-                let event = EventBuilder::text_note(format!("Test message {}", i))
+                let event = EventBuilder::text_note(format!("Test message {i}"))
                     .sign_with_keys(&keys)
                     .unwrap();
                 let priority = match i % 3 {
@@ -160,9 +160,11 @@ mod tests {
     #[tokio::test]
     async fn test_delivery_timeout() {
         // タイムアウトのテスト
-        let mut config = HybridConfig::default();
-        config.p2p_timeout_ms = 100; // 100msでタイムアウト
-        config.relay_timeout_ms = 100;
+        let _config = HybridConfig {
+            p2p_timeout_ms: 100, // 100msでタイムアウト
+            relay_timeout_ms: 100,
+            ..Default::default()
+        };
 
         // TODO: タイムアウト処理のテスト
     }
@@ -170,8 +172,10 @@ mod tests {
     #[tokio::test]
     async fn test_concurrent_delivery_limit() {
         // 同時配信数制限のテスト
-        let mut config = HybridConfig::default();
-        config.max_concurrent_deliveries = 2;
+        let _config = HybridConfig {
+            max_concurrent_deliveries: 2,
+            ..Default::default()
+        };
 
         // TODO: 同時実行数制限のテスト
     }
@@ -244,7 +248,7 @@ mod performance_tests {
 
         let _events: Vec<Event> = (0..event_count)
             .map(|i| {
-                EventBuilder::text_note(format!("Performance test message {}", i))
+                EventBuilder::text_note(format!("Performance test message {i}"))
                     .sign_with_keys(&keys)
                     .unwrap()
             })

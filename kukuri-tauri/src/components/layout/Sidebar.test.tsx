@@ -76,11 +76,11 @@ describe('Sidebar', () => {
     
     vi.mocked(useUIStore).mockReturnValue({
       sidebarOpen: true,
-    } as any);
+    } as Partial<ReturnType<typeof useUIStore>>);
 
     vi.mocked(useP2P).mockReturnValue({
       getTopicMessages: mockGetTopicMessages,
-    } as any);
+    } as Partial<ReturnType<typeof useP2P>>);
 
     // デフォルトで空のメッセージを返す
     mockGetTopicMessages.mockReturnValue([]);
@@ -98,7 +98,7 @@ describe('Sidebar', () => {
       joinedTopics: ['topic-1', 'topic-2', 'topic-3'],
       currentTopic: null,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
 
     render(<Sidebar />);
 
@@ -125,7 +125,7 @@ describe('Sidebar', () => {
       joinedTopics: ['topic-1', 'topic-2'],
       currentTopic: null,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useUIStore>>);
 
     // topic-2に最新のP2Pメッセージがある
     mockGetTopicMessages.mockImplementation((topicId: string) => {
@@ -158,7 +158,7 @@ describe('Sidebar', () => {
       joinedTopics: [],
       currentTopic: null,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
 
     render(<Sidebar />);
 
@@ -173,7 +173,7 @@ describe('Sidebar', () => {
       joinedTopics: ['topic-1'],
       currentTopic: mockTopic1,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
 
     render(<Sidebar />);
 
@@ -189,7 +189,7 @@ describe('Sidebar', () => {
       joinedTopics: ['topic-1'],
       currentTopic: null,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
 
     render(<Sidebar />);
 
@@ -210,7 +210,7 @@ describe('Sidebar', () => {
       joinedTopics: ['topic-3'],
       currentTopic: null,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
 
     render(<Sidebar />);
 
@@ -220,14 +220,14 @@ describe('Sidebar', () => {
   it('サイドバーが閉じている場合は内容が表示されない', () => {
     vi.mocked(useUIStore).mockReturnValue({
       sidebarOpen: false,
-    } as any);
+    } as Partial<ReturnType<typeof useUIStore>>);
 
     vi.mocked(useTopicStore).mockReturnValue({
       topics: new Map([['topic-1', mockTopic1]]),
       joinedTopics: ['topic-1'],
       currentTopic: null,
       setCurrentTopic: mockSetCurrentTopic,
-    } as any);
+    } as Partial<ReturnType<typeof useUIStore>>);
 
     const { container } = render(<Sidebar />);
 

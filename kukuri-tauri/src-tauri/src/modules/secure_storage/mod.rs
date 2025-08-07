@@ -31,7 +31,7 @@ pub struct SecureStorage;
 impl SecureStorage {
     /// 秘密鍵を保存（npubごとに個別保存）
     pub fn save_private_key(npub: &str, nsec: &str) -> Result<()> {
-        println!("SecureStorage: Saving private key for npub={}", npub);
+        println!("SecureStorage: Saving private key for npub={npub}");
         
         let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
         

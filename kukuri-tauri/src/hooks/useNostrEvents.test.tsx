@@ -23,9 +23,9 @@ vi.mock('@/lib/errorHandler', () => ({
 
 describe('useNostrEvents', () => {
   let queryClient: QueryClient;
-  let mockListen: MockedFunction<any>;
+  let mockListen: MockedFunction<typeof import('@tauri-apps/api/event').listen>;
   let mockUnlisten: vi.Mock;
-  let listeners: Map<string, (event: any) => void>;
+  let listeners: Map<string, (event: { payload: NostrEventPayload }) => void>;
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -43,9 +43,9 @@ describe('useNostrEvents', () => {
     mockUnlisten = vi.fn();
 
     const { listen } = await import('@tauri-apps/api/event');
-    mockListen = listen as MockedFunction<any>;
+    mockListen = listen as MockedFunction<typeof import('@tauri-apps/api/event').listen>;
 
-    mockListen.mockImplementation((event: string, handler: (event: any) => void) => {
+    mockListen.mockImplementation((event: string, handler: (event: { payload: NostrEventPayload }) => void) => {
       listeners.set(event, handler);
       return Promise.resolve(mockUnlisten);
     });
@@ -55,14 +55,14 @@ describe('useNostrEvents', () => {
     const mockUpdatePostLikes = vi.fn();
     const mockUpdateTopicPostCount = vi.fn();
 
-    (usePostStore as unknown as MockedFunction<any>).mockReturnValue({
+    vi.mocked(usePostStore).mockReturnValue({
       incrementLikes: mockIncrementLikes,
       updatePostLikes: mockUpdatePostLikes,
-    });
+    } as Partial<ReturnType<typeof usePostStore>> as ReturnType<typeof usePostStore>);
 
-    (useTopicStore as unknown as MockedFunction<any>).mockReturnValue({
+    vi.mocked(useTopicStore).mockReturnValue({
       updateTopicPostCount: mockUpdateTopicPostCount,
-    });
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
   });
 
   afterEach(() => {

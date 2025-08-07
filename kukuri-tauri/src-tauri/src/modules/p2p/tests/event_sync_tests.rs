@@ -308,7 +308,7 @@ mod tests {
         // 多数のエントリを追加
         for i in 0..200 {
             event_sync
-                .test_set_sync_status(format!("event_{}", i), SyncStatus::FullySynced)
+                .test_set_sync_status(format!("event_{i}"), SyncStatus::FullySynced)
                 .await;
         }
 

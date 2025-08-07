@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -47,10 +47,10 @@ export function PostComposer({
   const { toast } = useToast();
 
   // Get topic name for draft
-  const getTopicName = () => {
+  const getTopicName = useCallback(() => {
     if (!selectedTopicId) return undefined;
     return topics.get(selectedTopicId)?.name;
-  };
+  }, [selectedTopicId, topics]);
 
   // Autosave logic
   const autosave = useCallback(() => {
@@ -84,8 +84,8 @@ export function PostComposer({
   }, [content, selectedTopicId, currentDraftId, replyTo, quotedPost, createDraft, autosaveDraft, getTopicName]);
 
   // Debounced autosave
-  const debouncedAutosave = useCallback(
-    debounce(autosave, 2000),
+  const debouncedAutosave = useMemo(
+    () => debounce(autosave, 2000),
     [autosave]
   );
 

@@ -50,7 +50,7 @@ describe('PeerConnectionPanel', () => {
       nodeAddr: '/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample',
       connectionStatus: 'connected',
       initialize: mockInitialize,
-    } as any);
+    } as Partial<ReturnType<typeof useP2P>>);
 
     // mockToastをクリア
     mockToast.mockClear();
@@ -78,7 +78,7 @@ describe('PeerConnectionPanel', () => {
       nodeAddr: null,
       connectionStatus: 'disconnected',
       initialize: mockInitialize,
-    } as any);
+    } as Partial<ReturnType<typeof useP2P>>);
 
     render(<PeerConnectionPanel />);
 
@@ -290,7 +290,7 @@ describe('PeerConnectionPanel', () => {
       nodeAddr: null,
       connectionStatus: 'connected',
       initialize: mockInitialize,
-    } as any);
+    } as Partial<ReturnType<typeof useP2P>>);
 
     render(<PeerConnectionPanel />);
 

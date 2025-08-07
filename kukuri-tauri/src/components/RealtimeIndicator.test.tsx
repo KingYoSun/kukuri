@@ -14,7 +14,7 @@ Object.defineProperty(window, 'navigator', {
 describe('RealtimeIndicator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (window.navigator as any).onLine = true;
+    (window.navigator as Navigator & { onLine: boolean }).onLine = true;
   });
 
   it('should show online status when connected', () => {
@@ -24,7 +24,7 @@ describe('RealtimeIndicator', () => {
   });
 
   it('should show offline status when disconnected', () => {
-    (window.navigator as any).onLine = false;
+    (window.navigator as Navigator & { onLine: boolean }).onLine = false;
 
     render(<RealtimeIndicator />);
 
@@ -38,7 +38,7 @@ describe('RealtimeIndicator', () => {
 
     // オフラインイベントを発火
     act(() => {
-      (window.navigator as any).onLine = false;
+      (window.navigator as Navigator & { onLine: boolean }).onLine = false;
       window.dispatchEvent(new Event('offline'));
     });
     rerender(<RealtimeIndicator />);
@@ -47,7 +47,7 @@ describe('RealtimeIndicator', () => {
 
     // オンラインイベントを発火
     act(() => {
-      (window.navigator as any).onLine = true;
+      (window.navigator as Navigator & { onLine: boolean }).onLine = true;
       window.dispatchEvent(new Event('online'));
     });
     rerender(<RealtimeIndicator />);
@@ -119,7 +119,7 @@ describe('RealtimeIndicator', () => {
   });
 
   it('should apply correct styling for offline state', () => {
-    (window.navigator as any).onLine = false;
+    (window.navigator as Navigator & { onLine: boolean }).onLine = false;
     render(<RealtimeIndicator />);
 
     const indicator = screen.getByText('オフライン').parentElement!;

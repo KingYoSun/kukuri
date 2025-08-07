@@ -52,7 +52,7 @@ describe('TopicSelector', () => {
     vi.mocked(useTopicStore).mockReturnValue({
       topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: ['topic1', 'topic2'], // topic1とtopic2に参加している
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
   });
 
   it('コンポーネントが正しくレンダリングされる', () => {
@@ -127,7 +127,7 @@ describe('TopicSelector', () => {
     vi.mocked(useTopicStore).mockReturnValue({
       topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: [], // どのトピックにも参加していない
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>>);
 
     const user = userEvent.setup();
     render(<TopicSelector onValueChange={mockOnValueChange} />);

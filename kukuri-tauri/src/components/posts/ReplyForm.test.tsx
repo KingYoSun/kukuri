@@ -60,7 +60,7 @@ describe('ReplyForm', () => {
     // useAuthStore のモック
     mockUseAuthStore.mockReturnValue({
       currentUser: mockProfile,
-    } as any);
+    } as Partial<ReturnType<typeof useAuthStore>>);
 
     // TauriApi のモック
     mockTauriApi.createPost = vi.fn().mockResolvedValue({ id: 'new-post-id' });
@@ -264,7 +264,7 @@ describe('ReplyForm', () => {
   it('認証されていない場合は表示しない', () => {
     mockUseAuthStore.mockReturnValue({
       currentUser: null,
-    } as any);
+    } as Partial<ReturnType<typeof useAuthStore>>);
 
     const { container } = renderWithQueryClient(<ReplyForm {...defaultProps} />);
 

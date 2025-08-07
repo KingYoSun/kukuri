@@ -26,7 +26,7 @@ vi.mock('@/components/posts/PostCard', () => ({
 
 // Mock PostComposer component
 vi.mock('@/components/posts/PostComposer', () => ({
-  PostComposer: ({ onSuccess, onCancel }: any) => (
+  PostComposer: ({ onSuccess, onCancel }: { onSuccess?: () => void; onCancel?: () => void }) => (
     <div data-testid="post-composer">
       <button
         data-testid="post-composer-submit"
@@ -85,7 +85,7 @@ describe('Home', () => {
     // デフォルトのトピック状態
     mockUseTopicStore.mockReturnValue({
       joinedTopics: [],
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
   });
 
   it('タイトルを表示する', () => {
@@ -133,7 +133,7 @@ describe('Home', () => {
     vi.mocked(TauriApi.getPosts).mockResolvedValue([]);
     mockUseTopicStore.mockReturnValue({
       joinedTopics: ['topic1'],
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
     renderWithQueryClient(<Home />);
 
@@ -173,7 +173,7 @@ describe('Home', () => {
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
     mockUseTopicStore.mockReturnValue({
       joinedTopics: ['topic1'],
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
     renderWithQueryClient(<Home />);
 
@@ -199,7 +199,7 @@ describe('Home', () => {
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
     mockUseTopicStore.mockReturnValue({
       joinedTopics: ['topic1'],
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
     renderWithQueryClient(<Home />);
 
@@ -218,7 +218,7 @@ describe('Home', () => {
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
     mockUseTopicStore.mockReturnValue({
       joinedTopics: ['topic1'],
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
     renderWithQueryClient(<Home />);
 
@@ -248,7 +248,7 @@ describe('Home', () => {
     });
     mockUseTopicStore.mockReturnValue({
       joinedTopics: ['topic1'],
-    } as any);
+    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
     renderWithQueryClient(<Home />);
 

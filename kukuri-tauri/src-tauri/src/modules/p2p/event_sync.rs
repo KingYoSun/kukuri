@@ -209,6 +209,7 @@ impl EventSync {
     }
 
     #[cfg(not(test))]
+    #[allow(dead_code)]
     fn convert_to_gossip_message(&self, event: Event) -> P2PResult<GossipMessage> {
         self.convert_to_gossip_message_internal(event)
     }
@@ -239,6 +240,7 @@ impl EventSync {
     }
 
     #[cfg(not(test))]
+    #[allow(dead_code)]
     fn extract_topic_ids(&self, event: &Event) -> P2PResult<Vec<String>> {
         self.extract_topic_ids_internal(event)
     }

@@ -5,4 +5,4 @@ pub mod types;
 mod tests;
 
 pub use manager::BookmarkManager;
-pub use types::{CreateBookmarkRequest};
+// pub use types::{CreateBookmarkRequest}; // Currently unused

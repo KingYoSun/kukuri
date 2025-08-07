@@ -77,6 +77,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Custom code block renderer
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         code: ({ node: _node, inline, className, children, ...props }: any) => {
           const match = /language-(\w+)/.exec(className || '');
           

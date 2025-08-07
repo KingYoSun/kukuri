@@ -19,7 +19,7 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 vi.mock('lodash', () => ({
-  debounce: (fn: (...args: any[]) => any) => {
+  debounce: <T extends (...args: unknown[]) => unknown>(fn: T) => {
     const debounced = fn;
     debounced.cancel = vi.fn();
     return debounced;
@@ -28,7 +28,7 @@ vi.mock('lodash', () => ({
 
 // Mock components
 vi.mock('../topics/TopicSelector', () => ({
-  TopicSelector: ({ value, onValueChange, disabled, placeholder }: any) => (
+  TopicSelector: ({ value, onValueChange, disabled, placeholder }: { value?: string; onValueChange: (value: string) => void; disabled?: boolean; placeholder?: string }) => (
     <select
       data-testid="topic-selector"
       value={value}
@@ -44,7 +44,7 @@ vi.mock('../topics/TopicSelector', () => ({
 
 vi.mock('./MarkdownEditor', () => ({
   __esModule: true,
-  default: ({ value, onChange, placeholder, onImageUpload }: any) => (
+  default: ({ value, onChange, placeholder, onImageUpload }: { value: string; onChange: (value: string) => void; placeholder?: string; onImageUpload?: (file: File) => Promise<string> }) => (
     <div>
       <textarea
         data-testid="markdown-editor"
@@ -64,7 +64,7 @@ vi.mock('./MarkdownEditor', () => ({
 
 vi.mock('./DraftManager', () => ({
   __esModule: true,
-  default: ({ onSelectDraft }: any) => (
+  default: ({ onSelectDraft }: { onSelectDraft: (draft: import('@/types/draft').PostDraft) => void }) => (
     <div data-testid="draft-manager">
       <button
         data-testid="select-draft"

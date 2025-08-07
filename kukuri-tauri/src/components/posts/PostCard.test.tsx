@@ -243,7 +243,17 @@ describe('PostCard', () => {
     it('返信を送信できる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
       const { toast } = await import('sonner');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'reply-id' } as any);
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+        id: 'reply-id',
+        content: '',
+        author_pubkey: '',
+        topic_id: '',
+        created_at: Date.now(),
+        likes: 0,
+        boosts: 0,
+        replies: 0,
+        is_synced: false
+      });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -278,7 +288,17 @@ describe('PostCard', () => {
 
     it('返信成功後にフォームが閉じる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'reply-id' } as any);
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+        id: 'reply-id',
+        content: '',
+        author_pubkey: '',
+        topic_id: '',
+        created_at: Date.now(),
+        likes: 0,
+        boosts: 0,
+        replies: 0,
+        is_synced: false
+      });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -362,7 +382,17 @@ describe('PostCard', () => {
     it('引用投稿を送信できる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
       const { toast } = await import('sonner');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'quote-id' } as any);
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+        id: 'quote-id',
+        content: '',
+        author_pubkey: '',
+        topic_id: '',
+        created_at: Date.now(),
+        likes: 0,
+        boosts: 0,
+        replies: 0,
+        is_synced: false
+      });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -398,7 +428,17 @@ describe('PostCard', () => {
 
     it('引用成功後にフォームが閉じる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ id: 'quote-id' } as any);
+      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+        id: 'quote-id',
+        content: '',
+        author_pubkey: '',
+        topic_id: '',
+        created_at: Date.now(),
+        likes: 0,
+        boosts: 0,
+        replies: 0,
+        is_synced: false
+      });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 

@@ -1,6 +1,6 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月6日
+**最終更新**: 2025年1月7日
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
@@ -15,20 +15,42 @@
 - 影響: テストは成功するが、警告が表示される
 - 優先度: 低（実際の機能には影響なし）
 
-### リント警告（2025年7月29日）
-**問題**: ESLintで14件の警告（`--max-warnings 0`の制約により、ビルドエラーになる）
 
-**詳細**:
-- **@typescript-eslint/no-explicit-any**: 13箇所
-  - PostComposer.test.tsx: 4箇所
-  - TopicSelector.test.tsx: 2箇所
-  - Home.test.tsx: 7箇所
-  - 主にモック関数の型定義で使用
-
-- **react-refresh/only-export-components**: 1箇所
-  - form.tsx: badgeVariants定数のエクスポート
 
 ## 解決済みの問題
+
+### テスト・型・リントエラーの完全解消（2025年8月7日）
+**問題**: プロジェクト全体で多数のテスト・型・リントエラーが存在
+
+**症状**:
+- TypeScript: PostComposerのdebouncedAutosaveエラー、any型の多用、pnpm設定エラー
+- Rust: 未使用インポート、dead code警告、clippy警告多数
+- テスト: TopicCardテストの失敗、bookmarkテストのタイムスタンプ問題
+
+**解決策**:
+
+1. **TypeScript修正**
+   - PostComposer.tsx: `useCallback`から`useMemo`に変更してdebounce関数を正しく作成
+   - 型定義の改善: any型を適切な型定義に置き換え
+   - pnpm-workspace.yaml: packagesフィールドを追加
+   - Dockerfile.test: `pnpm typecheck`を`pnpm type-check`に修正
+
+2. **Rust修正**
+   - 未使用インポートの削除・コメントアウト
+   - `#[allow(dead_code)]`の適切な使用
+   - Clippy推奨パターンの採用（format!マクロ、strip_prefix等）
+   - bookmarkテスト: タイムスタンプ制御の改善
+
+3. **テスト修正**
+   - TopicCard.test.tsx: 相対時間表示テストを`getAllByText`で複数要素対応
+
+**結果**:
+- Rustテスト: 154 passed, 0 failed, 9 ignored
+- Rust clippy: 警告0
+- TypeScriptテスト: 533 passed, 4 skipped
+- TypeScript型チェック: エラー0
+- ESLint: エラー0
+- 全てのチェックが通る状態を達成
 
 ### Docker環境の最適化とテストエラー修正（2025年8月6日）
 **問題**: Docker環境でのテスト実行が毎回5分以上かかり、開発効率が低下

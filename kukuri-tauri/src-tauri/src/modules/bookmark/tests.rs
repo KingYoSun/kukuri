@@ -3,6 +3,7 @@ mod tests {
     use super::super::*;
     use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
     use tempfile::TempDir;
+    use uuid::Uuid;
 
     async fn setup_test_db() -> (SqlitePool, TempDir) {
         let temp_dir = TempDir::new().unwrap();
@@ -130,15 +131,57 @@ mod tests {
     #[tokio::test]
     async fn test_get_bookmarked_post_ids() {
         let (pool, _temp_dir) = setup_test_db().await;
+        
+        // 手動でcreated_atを制御するためにSQLを直接実行
+        let base_time = chrono::Utc::now().timestamp_millis();
+        
+        // 最初のブックマーク（一番古い）
+        sqlx::query(
+            r#"
+            INSERT INTO bookmarks (id, user_pubkey, post_id, created_at)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind("user1")
+        .bind("post3")
+        .bind(base_time - 200)
+        .execute(&pool)
+        .await
+        .unwrap();
+        
+        // 2番目のブックマーク
+        sqlx::query(
+            r#"
+            INSERT INTO bookmarks (id, user_pubkey, post_id, created_at)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind("user1")
+        .bind("post1")
+        .bind(base_time - 100)
+        .execute(&pool)
+        .await
+        .unwrap();
+        
+        // 3番目のブックマーク（一番新しい）
+        sqlx::query(
+            r#"
+            INSERT INTO bookmarks (id, user_pubkey, post_id, created_at)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind("user1")
+        .bind("post2")
+        .bind(base_time)
+        .execute(&pool)
+        .await
+        .unwrap();
+        
         let manager = BookmarkManager::new(pool);
-
-        // 複数のブックマークを追加
-        manager.add_bookmark("user1", "post3").await.unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        manager.add_bookmark("user1", "post1").await.unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        manager.add_bookmark("user1", "post2").await.unwrap();
-
+        
         // 投稿IDのリストを取得
         let post_ids = manager.get_bookmarked_post_ids("user1").await.unwrap();
         assert_eq!(post_ids.len(), 3);

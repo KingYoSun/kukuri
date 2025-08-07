@@ -204,7 +204,7 @@ mod tests {
         for i in 0..5 {
             let manager_clone = manager.clone();
             let handle = task::spawn(async move {
-                let topic_id = format!("concurrent-topic-{}", i);
+                let topic_id = format!("concurrent-topic-{i}");
 
                 // Join
                 manager_clone.join_topic(&topic_id, vec![]).await.unwrap();

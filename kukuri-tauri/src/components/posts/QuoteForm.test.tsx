@@ -76,7 +76,7 @@ describe('QuoteForm', () => {
     // useAuthStore のモック
     mockUseAuthStore.mockReturnValue({
       currentUser: mockProfile,
-    } as any);
+    } as Partial<ReturnType<typeof useAuthStore>>);
 
     // TauriApi のモック
     mockTauriApi.createPost = vi.fn().mockResolvedValue({ id: 'new-quote-id' });
@@ -292,7 +292,7 @@ describe('QuoteForm', () => {
   it('認証されていない場合は表示しない', () => {
     mockUseAuthStore.mockReturnValue({
       currentUser: null,
-    } as any);
+    } as Partial<ReturnType<typeof useAuthStore>>);
 
     const { container } = renderWithQueryClient(<QuoteForm post={mockPost} />);
 

@@ -30,7 +30,7 @@ export function PostCard({ post }: PostCardProps) {
   // 初回レンダリング時にブックマーク情報を取得
   useEffect(() => {
     fetchBookmarks();
-  }, []);
+  }, [fetchBookmarks]);
 
   // いいね機能
   const likeMutation = useMutation({

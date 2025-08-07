@@ -14,12 +14,12 @@ impl Database {
     pub async fn initialize(database_url: &str) -> Result<DbPool> {
         // Extract file path from database URL and create directory
         // Handle different URL formats: "sqlite:path" or "sqlite://path" or "sqlite:///path"
-        let file_path = if database_url.starts_with("sqlite:///") {
-            &database_url[10..] // Remove "sqlite:///"
-        } else if database_url.starts_with("sqlite://") {
-            &database_url[9..] // Remove "sqlite://"
-        } else if database_url.starts_with("sqlite:") {
-            &database_url[7..] // Remove "sqlite:"
+        let file_path = if let Some(stripped) = database_url.strip_prefix("sqlite:///") {
+            stripped
+        } else if let Some(stripped) = database_url.strip_prefix("sqlite://") {
+            stripped
+        } else if let Some(stripped) = database_url.strip_prefix("sqlite:") {
+            stripped
         } else {
             database_url
         };

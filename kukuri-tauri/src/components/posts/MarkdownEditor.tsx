@@ -143,7 +143,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       };
       
       // Insert after the image command
-      const imageIndex = defaultCommands.findIndex((cmd: any) => cmd.name === 'image');
+      const imageIndex = defaultCommands.findIndex((cmd) => cmd && 'name' in cmd && cmd.name === 'image');
       if (imageIndex >= 0) {
         const newCommands = [...defaultCommands];
         newCommands.splice(imageIndex + 1, 0, imageCommand);
@@ -171,8 +171,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           rehypePlugins: [[rehypeRaw]],
         }}
         components={{
-          preview: (source: any) => {
-            const text = source?.value || source || '';
+          preview: (source: { value?: string } | string) => {
+            const text = typeof source === 'string' ? source : (source?.value || '');
             return <MarkdownPreview content={text} />;
           },
         }}

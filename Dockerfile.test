@@ -63,7 +63,7 @@ echo "=== Running TypeScript tests ==="\n\
 cd /app/kukuri-tauri\n\
 pnpm test\n\
 echo "=== Running TypeScript type check ==="\n\
-pnpm typecheck\n\
+pnpm type-check\n\
 echo "=== Running ESLint ==="\n\
 pnpm lint\n\
 echo "=== All tests passed! ===" \
