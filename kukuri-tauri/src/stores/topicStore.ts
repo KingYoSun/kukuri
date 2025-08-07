@@ -5,6 +5,8 @@ import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { p2pApi } from '@/lib/api/p2p';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
+import { useOfflineStore } from './offlineStore';
+import { OfflineActionType, EntityType } from '@/types/offline';
 
 interface TopicStore extends TopicState {
   setTopics: (topics: Topic[]) => void;
@@ -174,10 +176,26 @@ export const useTopicStore = create<TopicStore>()(
           return;
         }
 
+        const offlineStore = useOfflineStore.getState();
+        const isOnline = offlineStore.isOnline;
+
         // 先にUIを更新（楽観的UI更新）
         set((state) => ({
           joinedTopics: [...new Set([...state.joinedTopics, topicId])],
         }));
+
+        // オフラインの場合、アクションを保存して後で同期
+        if (!isOnline) {
+          const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
+          await offlineStore.saveOfflineAction({
+            userPubkey,
+            actionType: OfflineActionType.JOIN_TOPIC,
+            entityType: EntityType.TOPIC,
+            entityId: topicId,
+            data: JSON.stringify({ topicId }),
+          });
+          return;
+        }
 
         try {
           // P2P接続を先に実行
@@ -214,11 +232,27 @@ export const useTopicStore = create<TopicStore>()(
           return;
         }
 
+        const offlineStore = useOfflineStore.getState();
+        const isOnline = offlineStore.isOnline;
+
         // 先にUIを更新（楽観的UI更新）
         set((state) => ({
           joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
           currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
         }));
+
+        // オフラインの場合、アクションを保存して後で同期
+        if (!isOnline) {
+          const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
+          await offlineStore.saveOfflineAction({
+            userPubkey,
+            actionType: OfflineActionType.LEAVE_TOPIC,
+            entityType: EntityType.TOPIC,
+            entityId: topicId,
+            data: JSON.stringify({ topicId }),
+          });
+          return;
+        }
 
         try {
           // P2P切断を実行（Nostrは現在アンサブスクライブAPIがない）

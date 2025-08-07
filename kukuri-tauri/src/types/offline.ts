@@ -15,9 +15,10 @@ export interface OfflineAction {
 
 export interface SaveOfflineActionRequest {
   userPubkey: string;
-  actionType: string;
-  targetId?: string;
-  actionData: Record<string, any>;
+  actionType: OfflineActionType;
+  entityType: EntityType;
+  entityId: string;
+  data: string;
 }
 
 export interface SaveOfflineActionResponse {
@@ -116,12 +117,15 @@ export interface OfflineState {
 // アクションタイプの列挙
 export enum OfflineActionType {
   CREATE_POST = 'create_post',
+  LIKE_POST = 'like_post',
   LIKE = 'like',
   BOOST = 'boost',
   BOOKMARK = 'bookmark',
   UNBOOKMARK = 'unbookmark',
   FOLLOW = 'follow',
   UNFOLLOW = 'unfollow',
+  JOIN_TOPIC = 'join_topic',
+  LEAVE_TOPIC = 'leave_topic',
   TOPIC_JOIN = 'topic_join',
   TOPIC_LEAVE = 'topic_leave',
   TOPIC_CREATE = 'topic_create',

@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { PostState, Post } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
+import { useOfflineStore } from './offlineStore';
+import { OfflineActionType, EntityType } from '@/types/offline';
+import { v4 as uuidv4 } from 'uuid';
 
 interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
@@ -106,6 +109,69 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     replyTo?: string;
     quotedPost?: string;
   }) => {
+    const offlineStore = useOfflineStore.getState();
+    const isOnline = offlineStore.isOnline;
+    
+    // 楽観的投稿データを作成
+    const tempId = `temp-${uuidv4()}`;
+    const optimisticPost: Post = {
+      id: tempId,
+      content,
+      author: {
+        id: 'current-user', // 実際のユーザー情報を取得する必要があります
+        pubkey: 'current-user',
+        npub: 'current-user',
+        name: 'あなた',
+        displayName: 'あなた',
+        about: '',
+        picture: '',
+        nip05: '',
+      },
+      topicId,
+      created_at: Date.now(),
+      tags: [],
+      likes: 0,
+      boosts: 0,
+      replies: [],
+      isSynced: false, // 未同期として表示
+    };
+
+    // 楽観的更新: 即座にUIに反映
+    set((state) => {
+      const newPosts = new Map(state.posts);
+      newPosts.set(tempId, optimisticPost);
+
+      const newPostsByTopic = new Map(state.postsByTopic);
+      const topicPosts = newPostsByTopic.get(topicId) || [];
+      // 新しい投稿を先頭に追加（最新の投稿が上に表示されるように）
+      newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
+
+      return {
+        posts: newPosts,
+        postsByTopic: newPostsByTopic,
+      };
+    });
+
+    // オフラインの場合、アクションを保存して後で同期
+    if (!isOnline) {
+      const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
+      await offlineStore.saveOfflineAction({
+        userPubkey,
+        actionType: OfflineActionType.CREATE_POST,
+        entityType: EntityType.POST,
+        entityId: tempId,
+        data: JSON.stringify({
+          content,
+          topicId,
+          replyTo: options?.replyTo,
+          quotedPost: options?.quotedPost,
+        }),
+      });
+      
+      return optimisticPost;
+    }
+
+    // オンラインの場合、バックグラウンドでサーバーに送信
     try {
       const apiPost = await TauriApi.createPost({ 
         content, 
@@ -113,13 +179,14 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         reply_to: options?.replyTo,
         quoted_post: options?.quotedPost,
       });
-      const post: Post = {
+      
+      const realPost: Post = {
         id: apiPost.id,
         content: apiPost.content,
         author: {
           id: apiPost.author_pubkey,
           pubkey: apiPost.author_pubkey,
-          npub: apiPost.author_pubkey, // TODO: Convert to npub
+          npub: apiPost.author_pubkey,
           name: 'あなた',
           displayName: 'あなた',
           about: '',
@@ -132,16 +199,19 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         likes: apiPost.likes,
         boosts: apiPost.boosts || 0,
         replies: [],
-        isSynced: false, // 初期状態は未同期
+        isSynced: true, // サーバーに送信成功
       };
 
+      // 一時IDを実際のIDに置き換え
       set((state) => {
         const newPosts = new Map(state.posts);
-        newPosts.set(post.id, post);
+        newPosts.delete(tempId);
+        newPosts.set(realPost.id, realPost);
 
         const newPostsByTopic = new Map(state.postsByTopic);
-        const topicPosts = newPostsByTopic.get(post.topicId) || [];
-        newPostsByTopic.set(post.topicId, [...topicPosts, post.id]);
+        const topicPosts = newPostsByTopic.get(topicId) || [];
+        const updatedTopicPosts = topicPosts.map(id => id === tempId ? realPost.id : id);
+        newPostsByTopic.set(topicId, updatedTopicPosts);
 
         return {
           posts: newPosts,
@@ -149,8 +219,24 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         };
       });
 
-      return post;
+      return realPost;
     } catch (error) {
+      // 失敗した場合、ロールバック
+      set((state) => {
+        const newPosts = new Map(state.posts);
+        newPosts.delete(tempId);
+
+        const newPostsByTopic = new Map(state.postsByTopic);
+        const topicPosts = newPostsByTopic.get(topicId) || [];
+        const updatedTopicPosts = topicPosts.filter(id => id !== tempId);
+        newPostsByTopic.set(topicId, updatedTopicPosts);
+
+        return {
+          posts: newPosts,
+          postsByTopic: newPostsByTopic,
+        };
+      });
+
       errorHandler.log('Failed to create post', error, {
         context: 'PostStore.createPost',
         showToast: true,
@@ -224,20 +310,54 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   },
 
   likePost: async (postId: string) => {
+    const offlineStore = useOfflineStore.getState();
+    const isOnline = offlineStore.isOnline;
+    
+    // 楽観的更新: 即座にUIに反映
+    const previousLikes = get().posts.get(postId)?.likes || 0;
+    set((state) => {
+      const newPosts = new Map(state.posts);
+      const post = newPosts.get(postId);
+      if (post) {
+        newPosts.set(postId, {
+          ...post,
+          likes: post.likes + 1,
+        });
+      }
+      return { posts: newPosts };
+    });
+
+    // オフラインの場合、アクションを保存して後で同期
+    if (!isOnline) {
+      const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
+      await offlineStore.saveOfflineAction({
+        userPubkey,
+        actionType: OfflineActionType.LIKE_POST,
+        entityType: EntityType.POST,
+        entityId: postId,
+        data: JSON.stringify({ postId }),
+      });
+      return;
+    }
+
+    // オンラインの場合、バックグラウンドでサーバーに送信
     try {
       await TauriApi.likePost(postId);
+      // 成功した場合は特に何もしない（既に楽観的更新済み）
+    } catch (error) {
+      // 失敗した場合、ロールバック
       set((state) => {
         const newPosts = new Map(state.posts);
         const post = newPosts.get(postId);
         if (post) {
           newPosts.set(postId, {
             ...post,
-            likes: post.likes + 1,
+            likes: previousLikes,
           });
         }
         return { posts: newPosts };
       });
-    } catch (error) {
+
       errorHandler.log('Failed to like post', error, {
         context: 'PostStore.likePost',
         showToast: true,
