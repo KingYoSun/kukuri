@@ -1,18 +1,17 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
-    use super::super::*;
+    use super::super::BookmarkManager;
     use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
-    use tempfile::TempDir;
     use uuid::Uuid;
 
-    async fn setup_test_db() -> (SqlitePool, TempDir) {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
+    async fn setup_test_db() -> (SqlitePool, Option<()>) {
+        // メモリ内SQLiteデータベースを使用（Docker環境での権限問題を回避）
+        let db_url = "sqlite::memory:";
         
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
-            .connect(&db_url)
+            .connect(db_url)
             .await
             .unwrap();
 
@@ -32,12 +31,12 @@ mod tests {
         .await
         .unwrap();
 
-        (pool, temp_dir)
+        (pool, None)
     }
 
     #[tokio::test]
     async fn test_add_bookmark() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         let manager = BookmarkManager::new(pool);
 
         let result = manager.add_bookmark("user1", "post1").await;
@@ -51,7 +50,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_duplicate_bookmark() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         let manager = BookmarkManager::new(pool);
 
         // 最初のブックマーク
@@ -65,7 +64,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_bookmark() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         let manager = BookmarkManager::new(pool);
 
         // ブックマークを追加
@@ -82,7 +81,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_nonexistent_bookmark() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         let manager = BookmarkManager::new(pool);
 
         // 存在しないブックマークを削除（エラーにはならない）
@@ -92,7 +91,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_bookmarks() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         let manager = BookmarkManager::new(pool);
 
         // 複数のブックマークを追加
@@ -110,7 +109,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_is_bookmarked() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         let manager = BookmarkManager::new(pool);
 
         // ブックマークを追加
@@ -130,7 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_bookmarked_post_ids() {
-        let (pool, _temp_dir) = setup_test_db().await;
+        let (pool, _) = setup_test_db().await;
         
         // 手動でcreated_atを制御するためにSQLを直接実行
         let base_time = chrono::Utc::now().timestamp_millis();

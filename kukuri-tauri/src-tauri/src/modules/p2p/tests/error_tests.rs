@@ -73,7 +73,7 @@ mod tests {
 
         for err in errors {
             // すべてのエラーがDebugとDisplayを実装していることを確認
-            let _ = format!("{:?}", err);
+            let _ = format!("{err:?}");
             let _ = err.to_string();
         }
     }

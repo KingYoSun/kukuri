@@ -77,10 +77,10 @@ impl AppState {
             tracing::info!("Using Windows database URL format");
             format!("sqlite:{}?mode=rwc", db_path_str.replace('\\', "/"))
         } else {
-            format!("sqlite://{}?mode=rwc", db_path_str)
+            format!("sqlite://{db_path_str}?mode=rwc")
         };
         
-        tracing::info!("Database URL: {}", db_url);
+        tracing::info!("Database URL: {db_url}");
         
         let db_pool = Arc::new(Database::initialize(&db_url).await?);
         let encryption_manager = Arc::new(EncryptionManager::new());

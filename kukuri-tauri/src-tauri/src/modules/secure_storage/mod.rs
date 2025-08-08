@@ -37,12 +37,12 @@ impl SecureStorage {
         
         match entry.set_password(nsec) {
             Ok(_) => {
-                println!("SecureStorage: Private key saved successfully for npub={}", npub);
+                println!("SecureStorage: Private key saved successfully for npub={npub}");
                 Ok(())
             }
             Err(e) => {
-                eprintln!("SecureStorage: Failed to save private key: {:?}", e);
-                Err(anyhow::anyhow!("Failed to save private key to keyring: {}", e))
+                eprintln!("SecureStorage: Failed to save private key: {e:?}");
+                Err(anyhow::anyhow!("Failed to save private key to keyring: {e}"))
             }
         }
     }
@@ -53,7 +53,7 @@ impl SecureStorage {
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(anyhow::anyhow!("Failed to get private key: {}", e)),
+            Err(e) => Err(anyhow::anyhow!("Failed to get private key: {e}")),
         }
     }
 
@@ -63,7 +63,7 @@ impl SecureStorage {
         match entry.delete_credential() {
             Ok(()) => Ok(()),
             Err(keyring::Error::NoEntry) => Ok(()), // 既に削除されている場合もOK
-            Err(e) => Err(anyhow::anyhow!("Failed to delete private key: {}", e)),
+            Err(e) => Err(anyhow::anyhow!("Failed to delete private key: {e}")),
         }
     }
 
@@ -71,7 +71,7 @@ impl SecureStorage {
     pub fn save_accounts_metadata(metadata: &AccountsMetadata) -> Result<()> {
         let json =
             serde_json::to_string(metadata).context("Failed to serialize accounts metadata")?;
-        println!("SecureStorage: Saving metadata JSON: {}", json);
+        println!("SecureStorage: Saving metadata JSON: {json}");
         
         let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
         
@@ -89,15 +89,15 @@ impl SecureStorage {
                         println!("SecureStorage: Immediate read test succeeded, data length: {}", test_json.len());
                     }
                     Err(e) => {
-                        eprintln!("SecureStorage: Immediate read test failed: {:?}", e);
+                        eprintln!("SecureStorage: Immediate read test failed: {e:?}");
                     }
                 }
                 
                 Ok(())
             }
             Err(e) => {
-                eprintln!("SecureStorage: Failed to save metadata to keyring: {:?}", e);
-                Err(anyhow::anyhow!("Failed to save accounts metadata: {}", e))
+                eprintln!("SecureStorage: Failed to save metadata to keyring: {e:?}");
+                Err(anyhow::anyhow!("Failed to save accounts metadata: {e}"))
             }
         }
     }
@@ -110,7 +110,7 @@ impl SecureStorage {
         
         match entry.get_password() {
             Ok(json) => {
-                println!("SecureStorage: Retrieved metadata JSON: {}", json);
+                println!("SecureStorage: Retrieved metadata JSON: {json}");
                 let metadata: AccountsMetadata = serde_json::from_str(&json)
                     .context("Failed to deserialize accounts metadata")?;
                 println!("SecureStorage: Deserialized metadata - current_npub: {:?}, accounts: {}", 
@@ -122,8 +122,8 @@ impl SecureStorage {
                 Ok(AccountsMetadata::default())
             }
             Err(e) => {
-                eprintln!("SecureStorage: Failed to get metadata from keyring: {:?}", e);
-                Err(anyhow::anyhow!("Failed to get accounts metadata: {}", e))
+                eprintln!("SecureStorage: Failed to get metadata from keyring: {e:?}");
+                Err(anyhow::anyhow!("Failed to get accounts metadata: {e}"))
             }
         }
     }
@@ -137,7 +137,7 @@ impl SecureStorage {
         display_name: &str,
         picture: Option<String>,
     ) -> Result<()> {
-        println!("SecureStorage: Adding account npub={}", npub);
+        println!("SecureStorage: Adding account npub={npub}");
         
         // 秘密鍵を保存
         Self::save_private_key(npub, nsec)?;
@@ -158,7 +158,7 @@ impl SecureStorage {
         );
         metadata.current_npub = Some(npub.to_string());
         Self::save_accounts_metadata(&metadata)?;
-        println!("SecureStorage: Metadata saved with current_npub={}", npub);
+        println!("SecureStorage: Metadata saved with current_npub={npub}");
 
         Ok(())
     }
@@ -191,7 +191,7 @@ impl SecureStorage {
             Self::save_accounts_metadata(&metadata)?;
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Account not found: {}", npub))
+            Err(anyhow::anyhow!("Account not found: {npub}"))
         }
     }
 
@@ -212,10 +212,10 @@ impl SecureStorage {
         
         if let Some(npub) = metadata.current_npub {
             if let Some(nsec) = Self::get_private_key(&npub)? {
-                println!("SecureStorage: Found private key for npub={}", npub);
+                println!("SecureStorage: Found private key for npub={npub}");
                 Ok(Some((npub, nsec)))
             } else {
-                println!("SecureStorage: No private key found for npub={}", npub);
+                println!("SecureStorage: No private key found for npub={npub}");
                 Ok(None)
             }
         } else {

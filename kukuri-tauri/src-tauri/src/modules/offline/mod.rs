@@ -6,4 +6,3 @@ pub mod models;
 mod tests;
 
 pub use manager::OfflineManager;
-pub use models::*;

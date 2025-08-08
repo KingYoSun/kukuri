@@ -197,18 +197,18 @@ mod tests {
         assert!(!message.sender.is_empty());
 
         // 検証 - 正しい署名
-        assert_eq!(message.verify_signature().unwrap(), true);
+        assert!(message.verify_signature().unwrap());
 
         // ペイロードを改ざん
         message.payload.push(6);
-        assert_eq!(message.verify_signature().unwrap(), false);
+        assert!(!message.verify_signature().unwrap());
 
         // 署名を改ざん
         message.payload.pop(); // 元に戻す
         if !message.signature.is_empty() {
             message.signature[0] ^= 0xFF;
         }
-        assert_eq!(message.verify_signature().unwrap(), false);
+        assert!(!message.verify_signature().unwrap());
     }
 
     #[test]

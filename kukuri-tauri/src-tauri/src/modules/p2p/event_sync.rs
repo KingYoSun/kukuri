@@ -481,7 +481,7 @@ mod tests {
         {
             let mut state = sync_state.write().await;
             for i in 0..100 {
-                state.insert(format!("event_{}", i), SyncStatus::FullySynced);
+                state.insert(format!("event_{i}"), SyncStatus::FullySynced);
             }
         }
 

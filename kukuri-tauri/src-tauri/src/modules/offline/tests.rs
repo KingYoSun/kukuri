@@ -1,17 +1,16 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
-    use super::super::*;
+    use super::super::{OfflineManager, models};
     use sqlx::sqlite::SqlitePoolOptions;
-    use tempfile::tempdir;
 
     async fn setup_test_db() -> sqlx::Pool<sqlx::Sqlite> {
-        let temp_dir = tempdir().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
+        // メモリ内SQLiteデータベースを使用（Docker環境での権限問題を回避）
+        let db_url = "sqlite::memory:";
 
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
-            .connect(&db_url)
+            .connect(db_url)
             .await
             .unwrap();
 
@@ -27,7 +26,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_offline_action() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         let request = models::SaveOfflineActionRequest {
             user_pubkey: "test_user".to_string(),
@@ -51,13 +50,13 @@ mod tests {
     #[tokio::test]
     async fn test_get_offline_actions() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         // 複数のアクションを保存
         for i in 0..3 {
             let request = models::SaveOfflineActionRequest {
                 user_pubkey: "test_user".to_string(),
-                action_type: format!("action_{}", i),
+                action_type: format!("action_{i}"),
                 target_id: None,
                 action_data: serde_json::json!({"index": i}),
             };
@@ -79,7 +78,7 @@ mod tests {
     #[tokio::test]
     async fn test_sync_queue_operations() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         let request = models::AddToSyncQueueRequest {
             action_type: "test_action".to_string(),
@@ -96,7 +95,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_metadata_operations() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         let request = models::UpdateCacheMetadataRequest {
             cache_key: "test_cache".to_string(),
@@ -119,7 +118,7 @@ mod tests {
     #[tokio::test]
     async fn test_optimistic_update_lifecycle() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         let original_data = serde_json::json!({"likes": 10}).to_string();
         let updated_data = serde_json::json!({"likes": 11}).to_string();
@@ -162,7 +161,7 @@ mod tests {
     #[tokio::test]
     async fn test_sync_status_update() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         // 同期ステータスを更新
         manager
@@ -196,7 +195,7 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup_expired_cache() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool.clone());
+        let manager = OfflineManager::new(pool.clone());
 
         // 期限切れのキャッシュを作成
         let expired_time = chrono::Utc::now().timestamp() - 3600; // 1時間前
@@ -242,13 +241,13 @@ mod tests {
     #[tokio::test]
     async fn test_sync_offline_actions() {
         let pool = setup_test_db().await;
-        let manager = manager::OfflineManager::new(pool);
+        let manager = OfflineManager::new(pool);
 
         // オフラインアクションを作成
         for i in 0..5 {
             let request = models::SaveOfflineActionRequest {
                 user_pubkey: "sync_test_user".to_string(),
-                action_type: format!("action_{}", i),
+                action_type: format!("action_{i}"),
                 target_id: None,
                 action_data: serde_json::json!({"index": i}),
             };

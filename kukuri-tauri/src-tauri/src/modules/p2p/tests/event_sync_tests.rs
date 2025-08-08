@@ -47,7 +47,7 @@ mod tests {
     async fn test_event_sync_creation() {
         let _event_sync = create_test_event_sync().await;
         // 作成されることを確認（パニックしないこと）
-        assert!(true);
+        // Test passes if no panic occurs
     }
 
     #[tokio::test]

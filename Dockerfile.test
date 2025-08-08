@@ -51,6 +51,10 @@ COPY kukuri-tauri/src-tauri/migrations ./kukuri-tauri/src-tauri/migrations
 WORKDIR /app
 COPY . .
 
+# SQLiteテスト用のディレクトリ設定と権限付与
+RUN mkdir -p /tmp && chmod 777 /tmp
+ENV DOCKER_ENV=1
+
 # テスト実行用のスクリプトを作成
 RUN echo '#!/bin/bash\n\
 set -e\n\
