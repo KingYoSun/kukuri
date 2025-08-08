@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Wifi, WifiOff } from 'lucide-react';
+import { useOfflineStore } from '@/stores/offlineStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +28,13 @@ export function PostCard({ post }: PostCardProps) {
   const queryClient = useQueryClient();
   const { isBookmarked, toggleBookmark, fetchBookmarks } = useBookmarkStore();
   const isPostBookmarked = isBookmarked(post.id);
+  const { isOnline, pendingActions } = useOfflineStore();
+  
+  // この投稿が未同期かどうかを確認
+  const isPostPending = pendingActions.some(
+    action => action.action.type === 'create_post' && 
+    action.localId === post.localId
+  );
 
   // 初回レンダリング時にブックマーク情報を取得
   useEffect(() => {
@@ -131,9 +140,25 @@ export function PostCard({ post }: PostCardProps) {
                 {post.author.displayName || post.author.name || 'ユーザー'}
               </h4>
               <span className="text-sm text-muted-foreground">{timeAgo}</span>
-              {post.isSynced === false && (
-                <Badge variant="outline" className="text-xs">
-                  未同期
+              {(post.isSynced === false || isPostPending) && (
+                <Badge 
+                  variant="outline" 
+                  className={`text-xs flex items-center gap-1 ${
+                    !isOnline ? 'border-orange-500 text-orange-600 dark:text-orange-400' : 
+                    'border-yellow-500 text-yellow-600 dark:text-yellow-400'
+                  }`}
+                >
+                  {!isOnline ? (
+                    <>
+                      <WifiOff className="h-3 w-3" />
+                      オフライン保存
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                      同期待ち
+                    </>
+                  )}
                 </Badge>
               )}
             </div>

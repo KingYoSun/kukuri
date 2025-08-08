@@ -37,6 +37,7 @@ export interface Post {
   isSynced?: boolean; // P2Pネットワークに同期済みかどうか
   isBoosted?: boolean; // 現在のユーザーがブーストしたか
   isBookmarked?: boolean; // 現在のユーザーがブックマークしたか
+  localId?: string; // ローカルで生成されたID（オフライン時の追跡用）
 }
 
 export interface AuthState {
