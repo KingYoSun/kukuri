@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 /// フロントエンドに送信するイベントペイロード
 #[derive(Debug, Serialize, Clone)]
@@ -76,34 +76,9 @@ impl EventManager {
         Ok(())
     }
 
-    /// デフォルトリレーに接続
-    #[allow(dead_code)]
-    pub async fn connect_to_default_relays(&self) -> Result<()> {
-        // 既存のNostrリレーへの接続を無効化
-        // let default_relays = vec![
-        //     "wss://relay.damus.io",
-        //     "wss://relay.nostr.band",
-        //     "wss://nos.lol",
-        //     "wss://relay.snort.social",
-        //     "wss://relay.current.fyi",
-        // ];
-        //
-        // let client_manager = self.client_manager.read().await;
-        // client_manager.add_relays(default_relays).await?;
-        // client_manager.connect().await?;
 
-        info!("Skipping connection to default relays (disabled)");
-        Ok(())
-    }
 
-    /// カスタムリレーに接続
-    pub async fn add_relay(&self, url: &str) -> Result<()> {
-        // 既存のNostrリレーへの接続を無効化
-        // let client_manager = self.client_manager.read().await;
-        // client_manager.add_relay(url).await
-        info!("Skipping relay connection to {} (disabled)", url);
-        Ok(())
-    }
+
 
     /// テキストノートを投稿
     pub async fn publish_text_note(&self, content: &str) -> Result<EventId> {
@@ -255,21 +230,9 @@ impl EventManager {
         Ok(())
     }
 
-    /// イベントストリームを開始
-    #[allow(dead_code)]
-    pub async fn start_event_stream(&self) -> Result<()> {
-        // 既存のNostrリレーへの接続を無効化しているため、イベントストリームも無効化
-        info!("Skipping event stream (Nostr relay connection disabled)");
-        Ok(())
-    }
 
-    /// 定期的なヘルスチェックループを開始
-    #[allow(dead_code)]
-    async fn start_health_check_loop(&self) -> Result<()> {
-        // 既存のNostrリレーへの接続を無効化しているため、ヘルスチェックも無効化
-        info!("Skipping health check loop (Nostr relay connection disabled)");
-        Ok(())
-    }
+
+
 
     /// 初期化状態を確認
     async fn ensure_initialized(&self) -> Result<()> {
@@ -307,18 +270,7 @@ impl EventManager {
             let _ = handle.emit("nostr://event/p2p", payload);
         }
 
-        // 既存のリレーにも転送（オプション）
-        // Note: これにより、P2P経由で受信したイベントがNostrリレーにも配信される
-        // 実装によってはこの動作を設定可能にすることも検討
-        if *self.is_initialized.read().await {
-            let client_manager = self.client_manager.read().await;
-            if let Some(client) = client_manager.get_client().await {
-                if let Err(e) = client.send_event(&event).await {
-                    debug!("Failed to relay P2P event to Nostr relays: {}", e);
-                    // リレーへの転送失敗はエラーとしない（P2Pでの配信が成功していれば十分）
-                }
-            }
-        }
+
 
         Ok(())
     }
@@ -329,27 +281,6 @@ impl EventManager {
         client_manager.disconnect().await?;
         *self.is_initialized.write().await = false;
         Ok(())
-    }
-
-    /// リレーの接続状態を取得
-    pub async fn get_relay_status(&self) -> Result<Vec<(String, String)>> {
-        let client_manager = self.client_manager.read().await;
-        let status = client_manager.get_relay_status().await;
-
-        let result: Vec<(String, String)> = status
-            .into_iter()
-            .map(|(url, status)| {
-                let status_str = match status {
-                    super::nostr_client::RelayStatus::Connecting => "connecting".to_string(),
-                    super::nostr_client::RelayStatus::Connected => "connected".to_string(),
-                    super::nostr_client::RelayStatus::Disconnected => "disconnected".to_string(),
-                    super::nostr_client::RelayStatus::Error(e) => format!("error: {e}"),
-                };
-                (url, status_str)
-            })
-            .collect();
-
-        Ok(result)
     }
 }
 
@@ -427,22 +358,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_relay_operations() {
-        let manager = EventManager::new();
-        let key_manager = KeyManager::new();
 
-        // 初期化
-        key_manager.generate_keypair().await.unwrap();
-        manager
-            .initialize_with_key_manager(&key_manager)
-            .await
-            .unwrap();
-
-        // リレーを追加
-        // 注: 実際のリレーに接続しないようにテスト用URLを使用
-        assert!(manager.add_relay("wss://test.relay").await.is_ok());
-    }
 
     #[tokio::test]
     async fn test_create_events() {
@@ -472,23 +388,6 @@ mod tests {
         let event_id = EventId::from_slice(&[1; 32]).unwrap();
         let reaction_event = publisher.create_reaction(&event_id, "+").unwrap();
         assert_eq!(reaction_event.kind, Kind::Reaction);
-    }
-
-    #[tokio::test]
-    async fn test_get_relay_status() {
-        let manager = EventManager::new();
-        let key_manager = KeyManager::new();
-
-        // 初期化
-        key_manager.generate_keypair().await.unwrap();
-        manager
-            .initialize_with_key_manager(&key_manager)
-            .await
-            .unwrap();
-
-        // リレーステータスを取得
-        let status = manager.get_relay_status().await.unwrap();
-        assert!(status.is_empty()); // 初期状態は空
     }
 
     #[tokio::test]

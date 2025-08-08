@@ -57,7 +57,6 @@ pub fn run() {
             post_commands::get_bookmarked_post_ids,
             // Nostr関連コマンド
             event_commands::initialize_nostr,
-            event_commands::add_relay,
             event_commands::publish_text_note,
             event_commands::publish_topic_post,
             event_commands::send_reaction,
@@ -67,7 +66,6 @@ pub fn run() {
             event_commands::get_nostr_pubkey,
             event_commands::delete_events,
             event_commands::disconnect_nostr,
-            event_commands::get_relay_status,
             // P2P関連コマンド
             p2p_commands::initialize_p2p,
             p2p_commands::join_p2p_topic,

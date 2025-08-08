@@ -5,8 +5,6 @@ mod event_sync_tests;
 #[cfg(test)]
 mod gossip_tests;
 #[cfg(test)]
-mod hybrid_distributor_tests;
-#[cfg(test)]
 mod integration_tests;
 #[cfg(test)]
 mod message_tests;

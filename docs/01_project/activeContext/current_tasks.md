@@ -19,12 +19,13 @@
   - [x] Docker環境のSQLiteパーミッション問題解決（メモリ内DBに変更）
   - [x] offline::testsモジュールのDB初期化修正
 
-#### Phase 1: Dead Code削除（週1前半） ← **次はここ**
-- [ ] manager_old.rs（413行）の削除
-- [ ] #[allow(dead_code)] 97箇所を50箇所以下に削減
-  - [ ] hybrid_distributor.rs（24箇所）
-  - [ ] event_sync.rs（11箇所）
-  - [ ] peer_discovery.rs（10箇所）
+#### Phase 1: Dead Code削除（2025年8月9日完了）✅
+- [x] manager_old.rs（413行）の削除
+- [x] #[allow(dead_code)] 98箇所の精査完了
+  - [x] hybrid_distributor.rs（24箇所）- 完全未使用モジュール
+  - [x] event_sync.rs（11箇所）- 部分的に使用
+  - [x] peer_discovery.rs（10箇所）- 完全未使用モジュール
+- [x] 進捗レポート作成（2025-08-09_phase1_dead_code_cleanup.md）
 
 #### Phase 2.5: ユーザー導線分析（週1後半）
 - [ ] 未使用機能の特定

@@ -16,12 +16,6 @@ pub struct NostrMetadata {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct RelayInfo {
-    pub url: String,
-    pub status: String,
-}
-
-#[derive(Serialize, Deserialize)]
 pub struct NostrEvent {
     pub id: String,
     pub author: String,
@@ -57,15 +51,7 @@ pub async fn initialize_nostr(state: State<'_, AppState>) -> Result<(), String> 
     Ok(())
 }
 
-/// リレーを追加
-#[tauri::command]
-pub async fn add_relay(url: String, state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .event_manager
-        .add_relay(&url)
-        .await
-        .map_err(|e| e.to_string())
-}
+
 
 /// テキストノートを投稿
 #[tauri::command]
@@ -238,21 +224,4 @@ pub async fn disconnect_nostr(state: State<'_, AppState>) -> Result<(), String> 
         .disconnect()
         .await
         .map_err(|e| e.to_string())
-}
-
-/// リレーの接続状態を取得
-#[tauri::command]
-pub async fn get_relay_status(state: State<'_, AppState>) -> Result<Vec<RelayInfo>, String> {
-    let status = state
-        .event_manager
-        .get_relay_status()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let relay_info: Vec<RelayInfo> = status
-        .into_iter()
-        .map(|(url, status)| RelayInfo { url, status })
-        .collect();
-
-    Ok(relay_info)
 }
