@@ -84,7 +84,7 @@ impl AppState {
         
         let db_pool = Arc::new(Database::initialize(&db_url).await?);
         let encryption_manager = Arc::new(EncryptionManager::new());
-        let event_manager = Arc::new(EventManager::new());
+        let event_manager = Arc::new(EventManager::new_with_db(db_pool.clone()));
         let bookmark_manager = Arc::new(BookmarkManager::new((*db_pool).clone()));
         let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
 

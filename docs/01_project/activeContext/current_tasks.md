@@ -37,14 +37,16 @@
 - [x] 機能使用状況マップの作成
 - [x] 削除・統合計画の策定（550行削減計画）
 
-#### Phase 2: TODO実装（週2）
-- [ ] 高優先度TODO（4件）
-  - [ ] event/handler.rs - データベース保存処理
-  - [ ] p2p/event_sync.rs - EventManager統合
-  - [ ] useSyncManager.ts - 競合解決UI
-  - [ ] syncEngine.ts - メタデータ取得ロジック
-- [ ] 中優先度TODO（3件）
-- [ ] 低優先度TODO（残り28件）
+#### Phase 2: TODO実装（2025年8月9日完了）✅
+- [x] 高優先度TODO（4件）
+  - [x] event/handler.rs - データベース保存処理
+  - [x] p2p/event_sync.rs - EventManager統合
+  - [x] useSyncManager.ts - 競合解決UI
+  - [x] syncEngine.ts - メタデータ取得ロジック
+- [x] 中優先度TODO（2件）
+  - [x] useTopics.ts - カウント機能実装
+  - [x] p2p/gossip_manager.rs - NodeIdパース実装
+- [ ] 低優先度TODO（残り27件）
 
 #### Phase 4: DRY原則適用（週3）
 - [ ] Zustandストア共通化（8箇所）
@@ -58,15 +60,30 @@
 - [ ] テスト構造の改善
 
 **成功指標:**
-- Clippyエラー: 13件 → 0件
-- TODOコメント: 39件 → 20件以下
-- #[allow(dead_code)]: 97箇所 → 50箇所以下
-- 未使用APIエンドポイント: 未調査 → 0件
-- 孤立コンポーネント: 未調査 → 0件
+- Clippyエラー: 13件 → 0件 ✅（Phase 0で達成）
+- TODOコメント: 39件 → 33件（6件削減、15.4%減）
+- #[allow(dead_code)]: 97箇所 → 50箇所 ✅（Phase 1で達成）
+- 未使用APIエンドポイント: 11件特定 → 削除予定
+- 孤立コンポーネント: 2件特定 → 削除予定
 
 ---
 
 ## 完了済みタスク
+
+### 2025年8月9日（Phase 2 TODO実装完了）
+- [x] Phase 2: TODO実装（高優先度・中優先度）
+  - [x] 高優先度Rust実装（2件）
+    - [x] event/handler.rs - データベース保存処理（テキストノート、メタデータ、フォロー、リアクション）
+    - [x] p2p/event_sync.rs - EventManager統合（P2P同期制御機能）
+  - [x] 高優先度TypeScript実装（2件）
+    - [x] useSyncManager.ts - 競合解決UI（ConflictResolutionDialog新規作成）
+    - [x] syncEngine.ts - メタデータ取得ロジック（4エンティティタイプ対応）
+  - [x] 中優先度実装（2件）
+    - [x] useTopics.ts - カウント機能実装（メンバー数・投稿数の統計取得）
+    - [x] gossip_manager.rs - NodeIdパース実装（16進数文字列変換処理）
+  - [x] SQLマイグレーション追加（follows、reactionsテーブル）
+  - [x] TODO削減: 39件 → 33件（15.4%削減）
+- [x] 進捗レポート作成（2025-08-09_phase2_todo_implementation.md）
 
 ### 2025年8月9日（Phase 0リファクタリング完了）
 - [x] Phase 0: 緊急対応

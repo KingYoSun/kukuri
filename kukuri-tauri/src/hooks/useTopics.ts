@@ -11,20 +11,43 @@ export const useTopics = () => {
     queryKey: ['topics'],
     queryFn: async () => {
       const apiTopics = await TauriApi.getTopics();
-      // APIレスポンスをフロントエンドの型に変換
-      const topics: Topic[] = apiTopics.map((topic) => ({
-        id: topic.id,
-        name: topic.name,
-        description: topic.description,
-        tags: [], // APIにタグ情報がない場合は空配列
-        memberCount: 0, // TODO: 実際のメンバー数を取得
-        postCount: 0, // TODO: 実際の投稿数を取得
-        lastActive: topic.updated_at,
-        isActive: true,
-        createdAt: new Date(topic.created_at * 1000),
-      }));
-      setTopics(topics);
-      return topics;
+      
+      // 各トピックの統計情報を並列で取得
+      const topicsWithStats = await Promise.all(
+        apiTopics.map(async (topic) => {
+          try {
+            const stats = await TauriApi.getTopicStats(topic.id);
+            return {
+              id: topic.id,
+              name: topic.name,
+              description: topic.description,
+              tags: [], // APIにタグ情報がない場合は空配列
+              memberCount: stats.member_count,
+              postCount: stats.post_count,
+              lastActive: topic.updated_at,
+              isActive: true,
+              createdAt: new Date(topic.created_at * 1000),
+            } as Topic;
+          } catch (error) {
+            // 統計情報の取得に失敗した場合はデフォルト値を使用
+            console.error(`Failed to get stats for topic ${topic.id}:`, error);
+            return {
+              id: topic.id,
+              name: topic.name,
+              description: topic.description,
+              tags: [],
+              memberCount: 0,
+              postCount: 0,
+              lastActive: topic.updated_at,
+              isActive: true,
+              createdAt: new Date(topic.created_at * 1000),
+            } as Topic;
+          }
+        })
+      );
+      
+      setTopics(topicsWithStats);
+      return topicsWithStats;
     },
     refetchInterval: 30000, // 30秒ごとに更新
   });
@@ -51,13 +74,19 @@ export const useTopic = (topicId: string) => {
         throw new Error('Topic not found');
       }
 
+      // 統計情報を取得
+      const stats = await TauriApi.getTopicStats(apiTopic.id).catch(() => ({
+        member_count: 0,
+        post_count: 0,
+      }));
+
       return {
         id: apiTopic.id,
         name: apiTopic.name,
         description: apiTopic.description,
         tags: [],
-        memberCount: 0,
-        postCount: 0,
+        memberCount: stats.member_count,
+        postCount: stats.post_count,
         lastActive: apiTopic.updated_at,
         isActive: true,
         createdAt: new Date(apiTopic.created_at * 1000),

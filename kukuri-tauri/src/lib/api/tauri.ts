@@ -23,6 +23,8 @@ export interface Topic {
   description: string;
   created_at: number;
   updated_at: number;
+  member_count?: number;
+  post_count?: number;
 }
 
 export interface CreateTopicRequest {
@@ -81,6 +83,10 @@ export class TauriApi {
   // トピック関連
   static async getTopics(): Promise<Topic[]> {
     return await invoke('get_topics');
+  }
+
+  static async getTopicStats(topicId: string): Promise<{ member_count: number; post_count: number }> {
+    return await invoke('get_topic_stats', { topicId });
   }
 
   static async createTopic(request: CreateTopicRequest): Promise<Topic> {

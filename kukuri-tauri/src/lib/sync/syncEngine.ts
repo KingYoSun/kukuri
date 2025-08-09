@@ -305,9 +305,49 @@ export class SyncEngine {
     }
     
     try {
-      // TODO: 実際のエンティティメタデータ取得ロジックを実装
-      // 現在はモック実装
-      return null;
+      // エンティティタイプに応じてメタデータを取得
+      switch (entityType) {
+        case 'post': {
+          // 投稿のメタデータを取得
+          const { invoke } = await import('@tauri-apps/api/core');
+          const result = await invoke<{ updated_at: string }>('get_post_metadata', {
+            postId: entityId
+          }).catch(() => null);
+          return result?.updated_at || null;
+        }
+        
+        case 'topic': {
+          // トピックのメタデータを取得
+          const { invoke } = await import('@tauri-apps/api/core');
+          const result = await invoke<{ updated_at: string }>('get_topic_metadata', {
+            topicId: entityId
+          }).catch(() => null);
+          return result?.updated_at || null;
+        }
+        
+        case 'user': {
+          // ユーザーのメタデータを取得
+          const { invoke } = await import('@tauri-apps/api/core');
+          const result = await invoke<{ updated_at: string }>('get_user_metadata', {
+            userId: entityId
+          }).catch(() => null);
+          return result?.updated_at || null;
+        }
+        
+        case 'reaction': {
+          // リアクションのメタデータを取得
+          const { invoke } = await import('@tauri-apps/api/core');
+          const result = await invoke<{ created_at: string }>('get_reaction_metadata', {
+            reactionId: entityId
+          }).catch(() => null);
+          return result?.created_at || null;
+        }
+        
+        default:
+          // その他のエンティティタイプ
+          console.warn(`未対応のエンティティタイプ: ${entityType}`);
+          return null;
+      }
     } catch (error) {
       console.error('エンティティメタデータ取得エラー:', error);
       return null;

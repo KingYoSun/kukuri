@@ -15,21 +15,8 @@ pub struct EventSync {
     gossip_manager: Arc<GossipManager>,
     /// 同期状態の管理（イベントID -> 同期ステータス）
     sync_state: Arc<RwLock<HashMap<String, SyncStatus>>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SyncStatus {
-    /// Nostrリレーに送信済み
-    SentToNostr,
-    /// P2Pネットワークに送信済み
-    SentToP2P,
-    /// 両方に送信済み
-    FullySynced,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NostrEventPayload {
-    pub event: Event,
+    /// P2P同期が有効かどうか
+    p2p_sync_enabled: Arc<RwLock<bool>>,
 }
 
 impl EventSync {
@@ -39,11 +26,17 @@ impl EventSync {
             event_manager: event_manager.clone(),
             gossip_manager: gossip_manager.clone(),
             sync_state: Arc::new(RwLock::new(HashMap::new())),
+            p2p_sync_enabled: Arc::new(RwLock::new(true)), // デフォルトで有効
         }
     }
 
     /// NostrイベントをP2Pネットワークに配信
     pub async fn propagate_nostr_event(&self, event: Event) -> P2PResult<()> {
+        // P2P同期が無効の場合はスキップ
+        if !*self.p2p_sync_enabled.read().await {
+            tracing::debug!("P2P sync is disabled, skipping propagation");
+            return Ok(());
+        }
         let event_id = event.id.to_string();
 
         // 1. 同期状態を確認
@@ -239,14 +232,18 @@ impl EventSync {
     }
 
     /// Nostrイベント送信時のP2P配信を有効化
-    #[allow(dead_code)]
     pub async fn enable_nostr_to_p2p_sync(&self, enabled: bool) -> P2PResult<()> {
-        // TODO: EventManagerとの統合時に実装
-        // EventManagerにフックを設定し、Nostrイベント送信時に自動的にP2P配信を行う
+        // P2P同期の有効/無効を設定
+        *self.p2p_sync_enabled.write().await = enabled;
+        
         tracing::info!(
             "Nostr to P2P sync: {}",
             if enabled { "enabled" } else { "disabled" }
         );
+        
+        // EventManagerとの統合はpropagate_nostr_eventメソッドで既に実装済み
+        // EventManagerがpublish_*メソッドで自動的にpropagate_nostr_eventを呼び出している
+        
         Ok(())
     }
 

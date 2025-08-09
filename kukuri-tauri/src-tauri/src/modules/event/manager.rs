@@ -1,5 +1,6 @@
 use super::{handler::EventHandler, nostr_client::NostrClientManager, publisher::EventPublisher};
 use crate::modules::auth::key_manager::KeyManager;
+use crate::modules::database::DbPool;
 use anyhow::Result;
 use nostr_sdk::prelude::*;
 use serde::Serialize;
@@ -36,6 +37,21 @@ impl EventManager {
         Self {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
             event_handler: Arc::new(EventHandler::new()),
+            event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
+            is_initialized: Arc::new(RwLock::new(false)),
+            app_handle: Arc::new(RwLock::new(None)),
+            event_sync: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// 新しいEventManagerインスタンスをDbPoolと共に作成
+    pub fn new_with_db(db_pool: Arc<DbPool>) -> Self {
+        let mut event_handler = EventHandler::new();
+        event_handler.set_db_pool(db_pool);
+        
+        Self {
+            client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
+            event_handler: Arc::new(event_handler),
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),

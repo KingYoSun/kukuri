@@ -36,6 +36,8 @@ export function useSyncManager() {
     lastSyncTime: lastSyncedAt ? new Date(lastSyncedAt) : undefined,
   });
 
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+
   /**
    * 手動同期トリガー
    */
@@ -118,8 +120,12 @@ export function useSyncManager() {
     // 競合の手動解決が必要な場合
     const manualConflicts = result.conflicts.filter(c => c.resolution === 'manual');
     if (manualConflicts.length > 0) {
-      // TODO: 競合解決UIを表示
-      console.log('手動解決が必要な競合:', manualConflicts);
+      // 競合解決UIのためにステートを更新
+      setSyncStatus(prev => ({
+        ...prev,
+        conflicts: manualConflicts,
+      }));
+      setShowConflictDialog(true);
     }
     
     // Zustandストアの同期処理を呼び出し
@@ -148,7 +154,12 @@ export function useSyncManager() {
         toast.success('リモートの変更を適用しました');
       } else if (resolution === 'merge' && conflict.mergedData) {
         // マージしたデータを適用
-        // TODO: マージ適用ロジックを実装
+        const mergedAction = {
+          ...conflict.localAction,
+          data: conflict.mergedData,
+          timestamp: Date.now(),
+        };
+        await syncEngine['applyAction'](mergedAction);
         toast.success('変更をマージしました');
       }
       
@@ -218,5 +229,7 @@ export function useSyncManager() {
     updateProgress,
     pendingActionsCount: pendingActions.length,
     isOnline,
+    showConflictDialog,
+    setShowConflictDialog,
   };
 }

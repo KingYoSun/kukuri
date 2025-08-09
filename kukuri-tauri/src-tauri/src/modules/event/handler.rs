@@ -3,6 +3,8 @@ use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
+use crate::modules::database::DbPool;
+use crate::modules::database::models;
 
 /// イベントコールバックの型エイリアス
 type EventCallback = Box<dyn Fn(Event) + Send + Sync>;
@@ -10,6 +12,7 @@ type EventCallback = Box<dyn Fn(Event) + Send + Sync>;
 /// Nostrイベントハンドラー
 pub struct EventHandler {
     event_callbacks: Arc<RwLock<Vec<EventCallback>>>,
+    db_pool: Option<Arc<DbPool>>,
 }
 
 impl EventHandler {
@@ -17,7 +20,13 @@ impl EventHandler {
     pub fn new() -> Self {
         Self {
             event_callbacks: Arc::new(RwLock::new(Vec::new())),
+            db_pool: None,
         }
+    }
+
+    /// データベースプールを設定
+    pub fn set_db_pool(&mut self, db_pool: Arc<DbPool>) {
+        self.db_pool = Some(db_pool);
     }
 
 
@@ -59,28 +68,170 @@ impl EventHandler {
             "Received text note from {}: {}",
             event.pubkey, event.content
         );
-        // TODO: データベースに保存する処理を実装
+        
+        // データベースに保存
+        if let Some(pool) = &self.db_pool {
+            let event_model = models::Event {
+                id: 0, // Auto-increment
+                event_id: event.id.to_string(),
+                public_key: event.pubkey.to_string(),
+                created_at: event.created_at.as_u64() as i64,
+                kind: event.kind.as_u16() as i64,
+                content: event.content.clone(),
+                tags: serde_json::to_string(&event.tags)?,
+                sig: event.sig.to_string(),
+                saved_at: chrono::Utc::now().timestamp(),
+            };
+            
+            sqlx::query!(
+                r#"
+                INSERT INTO events (event_id, public_key, created_at, kind, content, tags, sig, saved_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                ON CONFLICT(event_id) DO NOTHING
+                "#,
+                event_model.event_id,
+                event_model.public_key,
+                event_model.created_at,
+                event_model.kind,
+                event_model.content,
+                event_model.tags,
+                event_model.sig,
+                event_model.saved_at
+            )
+            .execute(pool.as_ref())
+            .await?;
+            
+            debug!("Text note saved to database: {}", event.id);
+        }
+        
         Ok(())
     }
 
     /// メタデータイベントを処理
     async fn handle_metadata(&self, event: &Event) -> Result<()> {
         info!("Received metadata update from {}", event.pubkey);
-        // TODO: ユーザーメタデータを更新する処理を実装
+        
+        // メタデータをパースしてデータベースに保存
+        if let Some(pool) = &self.db_pool {
+            let metadata: serde_json::Value = serde_json::from_str(&event.content)?;
+            
+            let profile = models::Profile {
+                id: 0, // Auto-increment
+                public_key: event.pubkey.to_string(),
+                display_name: metadata.get("name").and_then(|v| v.as_str()).map(String::from),
+                about: metadata.get("about").and_then(|v| v.as_str()).map(String::from),
+                picture_url: metadata.get("picture").and_then(|v| v.as_str()).map(String::from),
+                banner_url: metadata.get("banner").and_then(|v| v.as_str()).map(String::from),
+                nip05: metadata.get("nip05").and_then(|v| v.as_str()).map(String::from),
+                created_at: event.created_at.as_u64() as i64,
+                updated_at: chrono::Utc::now().timestamp(),
+            };
+            
+            sqlx::query!(
+                r#"
+                INSERT INTO profiles (public_key, display_name, about, picture_url, banner_url, nip05, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                ON CONFLICT(public_key) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    about = excluded.about,
+                    picture_url = excluded.picture_url,
+                    banner_url = excluded.banner_url,
+                    nip05 = excluded.nip05,
+                    updated_at = excluded.updated_at
+                "#,
+                profile.public_key,
+                profile.display_name,
+                profile.about,
+                profile.picture_url,
+                profile.banner_url,
+                profile.nip05,
+                profile.created_at,
+                profile.updated_at
+            )
+            .execute(pool.as_ref())
+            .await?;
+            
+            debug!("Profile metadata saved to database for: {}", event.pubkey);
+        }
+        
         Ok(())
     }
 
     /// コンタクトリストイベントを処理
     async fn handle_contact_list(&self, event: &Event) -> Result<()> {
         info!("Received contact list from {}", event.pubkey);
-        // TODO: フォロー関係を更新する処理を実装
+        
+        // フォロー関係をデータベースに保存
+        if let Some(pool) = &self.db_pool {
+            // 既存のフォロー関係を削除
+            sqlx::query!(
+                "DELETE FROM follows WHERE follower_pubkey = ?1",
+                event.pubkey.to_string()
+            )
+            .execute(pool.as_ref())
+            .await?;
+            
+            // 新しいフォロー関係を保存
+            for tag in &event.tags {
+                if tag.len() >= 2 && tag[0] == "p" {
+                    let followed_pubkey = &tag[1];
+                    
+                    sqlx::query!(
+                        r#"
+                        INSERT INTO follows (follower_pubkey, followed_pubkey, created_at)
+                        VALUES (?1, ?2, ?3)
+                        "#,
+                        event.pubkey.to_string(),
+                        followed_pubkey,
+                        chrono::Utc::now().timestamp()
+                    )
+                    .execute(pool.as_ref())
+                    .await?;
+                }
+            }
+            
+            debug!("Contact list saved to database for: {}", event.pubkey);
+        }
+        
         Ok(())
     }
 
     /// リアクションイベントを処理
     async fn handle_reaction(&self, event: &Event) -> Result<()> {
         info!("Received reaction from {}: {}", event.pubkey, event.content);
-        // TODO: リアクションを処理する実装
+        
+        // リアクションをデータベースに保存
+        if let Some(pool) = &self.db_pool {
+            // リアクション対象のイベントIDを取得
+            let mut target_event_id: Option<String> = None;
+            for tag in &event.tags {
+                if tag.len() >= 2 && tag[0] == "e" {
+                    target_event_id = Some(tag[1].clone());
+                    break;
+                }
+            }
+            
+            if let Some(target_id) = target_event_id {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO reactions (reactor_pubkey, target_event_id, reaction_content, created_at)
+                    VALUES (?1, ?2, ?3, ?4)
+                    ON CONFLICT(reactor_pubkey, target_event_id) DO UPDATE SET
+                        reaction_content = excluded.reaction_content,
+                        created_at = excluded.created_at
+                    "#,
+                    event.pubkey.to_string(),
+                    target_id,
+                    event.content,
+                    event.created_at.as_u64() as i64
+                )
+                .execute(pool.as_ref())
+                .await?;
+                
+                debug!("Reaction saved to database: {} -> {}", event.pubkey, target_id);
+            }
+        }
+        
         Ok(())
     }
 

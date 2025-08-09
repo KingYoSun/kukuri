@@ -111,11 +111,13 @@ impl GossipManager {
     }
 
     /// トピックに参加
-    pub async fn join_topic(&self, topic_id: &str, _initial_peers: Vec<String>) -> P2PResult<()> {
-        let mut topics = self.topics.write().await;
-
-        if topics.contains_key(topic_id) {
-            return Ok(()); // 既に参加済み
+    pub async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> P2PResult<()> {
+        // すでに参加しているか確認
+        {
+            let topics = self.topics.read().await;
+            if topics.contains_key(topic_id) {
+                return Ok(());
+            }
         }
 
         // トピックIDを作成
@@ -126,7 +128,22 @@ impl GossipManager {
         let iroh_topic_id = TopicId::from_bytes(topic_bytes);
 
         // ピアアドレスをパース
-        let bootstrap_peers: Vec<iroh::NodeId> = Vec::new(); // TODO: initial_peersからNodeIdをパース
+        let mut bootstrap_peers: Vec<iroh::NodeId> = Vec::new();
+        for peer_str in initial_peers {
+            // NodeIdは32バイトの公開鍵として表現される
+            // peer_strは16進数文字列として想定
+            if let Ok(bytes) = hex::decode(peer_str.trim()) {
+                if bytes.len() == 32 {
+                    let mut node_id_bytes = [0u8; 32];
+                    node_id_bytes.copy_from_slice(&bytes);
+                    bootstrap_peers.push(iroh::NodeId::from_bytes(&node_id_bytes));
+                } else {
+                    tracing::warn!("Invalid NodeId length: {} (expected 32 bytes)", bytes.len());
+                }
+            } else {
+                tracing::warn!("Failed to parse NodeId from hex string: {}", peer_str);
+            }
+        }
 
         // トピックに参加
         let gossip_topic: GossipTopic = self
