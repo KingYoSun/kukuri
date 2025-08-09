@@ -147,24 +147,7 @@ impl EventManager {
     }
 
     /// リポスト（ブースト）を送信
-    pub async fn send_repost(&self, event_id: &EventId) -> Result<EventId> {
-        self.ensure_initialized().await?;
 
-        let publisher = self.event_publisher.read().await;
-        let event = publisher.create_repost(event_id, None)?;
-
-        let client_manager = self.client_manager.read().await;
-        let result_id = client_manager.publish_event(event.clone()).await?;
-
-        // P2Pネットワークに配信
-        if let Some(ref event_sync) = *self.event_sync.read().await {
-            if let Err(e) = event_sync.propagate_nostr_event(event).await {
-                error!("Failed to propagate event to P2P network: {}", e);
-            }
-        }
-
-        Ok(result_id)
-    }
 
     /// 任意のイベントを発行
     #[allow(dead_code)]

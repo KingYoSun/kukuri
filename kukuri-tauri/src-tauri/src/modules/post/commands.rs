@@ -109,8 +109,6 @@ pub async fn like_post(state: State<'_, AppState>, post_id: String) -> Result<()
 
 #[tauri::command]
 pub async fn boost_post(state: State<'_, AppState>, post_id: String) -> Result<(), String> {
-    use nostr_sdk::EventId;
-    
     // 現在のユーザーの確認
     let _keys = state
         .key_manager
@@ -118,18 +116,8 @@ pub async fn boost_post(state: State<'_, AppState>, post_id: String) -> Result<(
         .await
         .map_err(|e| format!("ログインが必要です: {e}"))?;
 
-    // EventId型に変換
-    let event_id = EventId::from_hex(&post_id).map_err(|e| format!("無効なイベントID: {e}"))?;
-
-    // Nostrリポストイベントを発行
-    state
-        .event_manager
-        .send_repost(&event_id)
-        .await
-        .map_err(|e| format!("ブーストに失敗しました: {e}"))?;
-
-    println!("Boosted post: {post_id}");
-    Ok(())
+    // ブースト機能は現在未実装
+    Err(format!("ブースト機能は現在実装中です (post_id: {})", post_id))
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
-use tracing::{debug, info};
+use tracing::info;
 use uuid::Uuid;
 
 use super::types::Bookmark;
@@ -60,42 +60,6 @@ impl BookmarkManager {
         Ok(())
     }
 
-    /// ユーザーのブックマーク一覧を取得
-    #[allow(dead_code)]
-    pub async fn get_user_bookmarks(&self, user_pubkey: &str) -> Result<Vec<Bookmark>> {
-        let bookmarks = sqlx::query_as::<_, Bookmark>(
-            r#"
-            SELECT id, user_pubkey, post_id, created_at
-            FROM bookmarks
-            WHERE user_pubkey = ?1
-            ORDER BY created_at DESC
-            "#,
-        )
-        .bind(user_pubkey)
-        .fetch_all(&self.pool)
-        .await?;
-
-        debug!("Found {} bookmarks for user: {}", bookmarks.len(), user_pubkey);
-        Ok(bookmarks)
-    }
-
-    /// 特定の投稿がブックマークされているかチェック
-    #[allow(dead_code)]
-    pub async fn is_bookmarked(&self, user_pubkey: &str, post_id: &str) -> Result<bool> {
-        let count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COUNT(*) 
-            FROM bookmarks
-            WHERE user_pubkey = ?1 AND post_id = ?2
-            "#,
-        )
-        .bind(user_pubkey)
-        .bind(post_id)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count > 0)
-    }
 
     /// ユーザーがブックマークした投稿IDのリストを取得
     pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>> {

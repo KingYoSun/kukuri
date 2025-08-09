@@ -1,5 +1,4 @@
 use anyhow::Result;
-use chrono::Utc;
 use nostr_sdk::prelude::*;
 use tracing::{debug, info};
 
@@ -65,49 +64,7 @@ impl EventPublisher {
         Ok(event)
     }
 
-    /// リポストイベントを作成
-    #[allow(dead_code)]
-    pub fn create_repost(&self, event_id: &EventId, relay_url: Option<String>) -> Result<Event> {
-        let keys = self
-            .keys
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Keys not set"))?;
 
-        // リポストイベント用のタグを作成
-        let tags = vec![Tag::event(*event_id), Tag::public_key(keys.public_key())];
-
-        let mut tags_with_relay = tags;
-
-        if let Some(url) = relay_url {
-            tags_with_relay.push(Tag::custom(TagKind::Custom("relay".into()), vec![url]));
-        }
-
-        let event = EventBuilder::new(Kind::Repost, "")
-            .tags(tags_with_relay)
-            .sign_with_keys(keys)?;
-
-        debug!("Created repost event: {}", event.id);
-        Ok(event)
-    }
-
-    /// カスタムイベントを作成
-    #[allow(dead_code)]
-    pub fn create_custom_event(&self, kind: Kind, content: &str, tags: Vec<Tag>) -> Result<Event> {
-        let keys = self
-            .keys
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Keys not set"))?;
-
-        let timestamp = Timestamp::from(Utc::now().timestamp() as u64);
-
-        let event = EventBuilder::new(kind, content)
-            .tags(tags)
-            .custom_created_at(timestamp)
-            .sign_with_keys(keys)?;
-
-        debug!("Created custom event: {} (kind: {})", event.id, kind);
-        Ok(event)
-    }
 
     /// 削除イベントを作成
     pub fn create_deletion(&self, event_ids: Vec<EventId>, reason: Option<&str>) -> Result<Event> {
@@ -251,41 +208,6 @@ mod tests {
         assert!(tags.iter().any(|t| matches!(t.as_standardized(), Some(nostr_sdk::TagStandard::Event { event_id: id, .. }) if id == &event_id)));
     }
 
-    #[test]
-    fn test_create_repost() {
-        let mut publisher = EventPublisher::new();
-        let keys = Keys::generate();
-        publisher.set_keys(keys);
-
-        let event_id = EventId::from_slice(&[1; 32]).unwrap();
-        let event = publisher
-            .create_repost(&event_id, Some("wss://relay.test".to_string()))
-            .unwrap();
-
-        assert_eq!(event.kind, Kind::Repost);
-        assert_eq!(event.content, "");
-
-        // タグを確認
-        let tags: Vec<_> = event.tags.into_iter().collect();
-        assert!(tags.iter().any(|t| matches!(t.as_standardized(), Some(nostr_sdk::TagStandard::Event { event_id: id, .. }) if id == &event_id)));
-    }
-
-    #[test]
-    fn test_create_custom_event() {
-        let mut publisher = EventPublisher::new();
-        let keys = Keys::generate();
-        publisher.set_keys(keys);
-
-        let custom_kind = Kind::Custom(30000);
-        let content = "Custom content";
-        let tags = vec![Tag::hashtag("custom")];
-
-        let event = publisher
-            .create_custom_event(custom_kind, content, tags)
-            .unwrap();
-        assert_eq!(event.kind, custom_kind);
-        assert_eq!(event.content, content);
-    }
 
     #[test]
     fn test_create_deletion() {
@@ -358,12 +280,6 @@ mod tests {
         assert!(publisher.create_metadata(Metadata::new()).is_err());
         assert!(publisher
             .create_reaction(&EventId::from_slice(&[1; 32]).unwrap(), "+")
-            .is_err());
-        assert!(publisher
-            .create_repost(&EventId::from_slice(&[1; 32]).unwrap(), None)
-            .is_err());
-        assert!(publisher
-            .create_custom_event(Kind::Custom(1), "test", vec![])
             .is_err());
         assert!(publisher.create_deletion(vec![], None).is_err());
         assert!(publisher

@@ -25,8 +25,7 @@ impl EncryptionManager {
     }
 }
 
-#[allow(dead_code)]
-pub fn encrypt(plaintext: &[u8], password: &str) -> Result<String> {
+fn encrypt(plaintext: &[u8], password: &str) -> Result<String> {
     // Derive key from password
     let key = derive_key_from_password(password);
     let cipher = Aes256Gcm::new(&key);
@@ -46,8 +45,7 @@ pub fn encrypt(plaintext: &[u8], password: &str) -> Result<String> {
     Ok(general_purpose::STANDARD.encode(&combined))
 }
 
-#[allow(dead_code)]
-pub fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
+fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
     // Base64 decode
     let combined = general_purpose::STANDARD
         .decode(encrypted_data)
@@ -71,7 +69,6 @@ pub fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
         .map_err(|e| anyhow!("Decryption failed: {}", e))
 }
 
-#[allow(dead_code)]
 fn derive_key_from_password(password: &str) -> Key<Aes256Gcm> {
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());
