@@ -192,15 +192,37 @@ export function PostComposer({
   };
 
   const handleImageUpload = async (file: File): Promise<string> => {
-    // TODO: Implement actual image upload
-    // This would typically upload to a cloud storage service
-    // and return the URL
+    // 画像サイズの制限（5MB）
+    const MAX_SIZE = 5 * 1024 * 1024;
     
-    // For now, return a placeholder
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(`https://placeholder.com/uploaded/${file.name}`);
-      }, 1000);
+    if (file.size > MAX_SIZE) {
+      throw new Error('画像サイズは5MB以下にしてください');
+    }
+    
+    // 画像形式の確認
+    if (!file.type.startsWith('image/')) {
+      throw new Error('画像ファイルを選択してください');
+    }
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (typeof result === 'string') {
+          // データURLとして返す（base64エンコードされた画像）
+          resolve(result);
+        } else {
+          reject(new Error('画像の読み込みに失敗しました'));
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('画像の読み込みに失敗しました'));
+      };
+      
+      // Base64エンコードされたデータURLとして読み込む
+      reader.readAsDataURL(file);
     });
   };
 

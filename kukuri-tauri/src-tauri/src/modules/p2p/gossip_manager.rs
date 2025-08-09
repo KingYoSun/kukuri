@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use iroh::{protocol::Router, Endpoint, Watcher};
+use nostr_sdk::util::hex;
 use iroh_gossip::api::{Event, GossipSender, GossipTopic};
 use iroh_gossip::proto::TopicId;
 use iroh_gossip::{net::Gossip, ALPN as GOSSIP_ALPN_BYTES};
@@ -136,7 +137,9 @@ impl GossipManager {
                 if bytes.len() == 32 {
                     let mut node_id_bytes = [0u8; 32];
                     node_id_bytes.copy_from_slice(&bytes);
-                    bootstrap_peers.push(iroh::NodeId::from_bytes(&node_id_bytes));
+                    if let Ok(node_id) = iroh::NodeId::from_bytes(&node_id_bytes) {
+                        bootstrap_peers.push(node_id);
+                    }
                 } else {
                     tracing::warn!("Invalid NodeId length: {} (expected 32 bytes)", bytes.len());
                 }
@@ -237,7 +240,7 @@ impl GossipManager {
             mesh,
         };
 
-        topics.insert(topic_id.to_string(), handle);
+        self.topics.write().await.insert(topic_id.to_string(), handle);
 
         tracing::info!("Joined topic: {}", topic_id);
         Ok(())

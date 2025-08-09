@@ -5,6 +5,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { useOfflineStore } from './offlineStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
 import { v4 as uuidv4 } from 'uuid';
+import { pubkeyToNpub } from '@/lib/utils/nostr';
 
 interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
@@ -46,13 +47,13 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   fetchPosts: async (topicId?: string, limit?: number, offset?: number) => {
     try {
       const apiPosts = await TauriApi.getPosts({ topic_id: topicId, limit, offset });
-      const posts: Post[] = apiPosts.map((p) => ({
+      const posts: Post[] = await Promise.all(apiPosts.map(async (p) => ({
         id: p.id,
         content: p.content,
         author: {
           id: p.author_pubkey,
           pubkey: p.author_pubkey,
-          npub: p.author_pubkey, // TODO: Convert to npub
+          npub: await pubkeyToNpub(p.author_pubkey),
           name: '匿名ユーザー',
           displayName: '匿名ユーザー',
           about: '',

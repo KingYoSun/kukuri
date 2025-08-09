@@ -1,6 +1,6 @@
 use super::{handler::EventHandler, nostr_client::NostrClientManager, publisher::EventPublisher};
 use crate::modules::auth::key_manager::KeyManager;
-use crate::modules::database::DbPool;
+use crate::modules::database::connection::DbPool;
 use anyhow::Result;
 use nostr_sdk::prelude::*;
 use serde::Serialize;

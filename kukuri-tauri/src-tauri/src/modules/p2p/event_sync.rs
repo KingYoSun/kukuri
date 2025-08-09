@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::modules::event::manager::EventManager;
+use crate::modules::event::manager::{EventManager, NostrEventPayload};
+use crate::modules::offline::models::SyncStatus;
 use crate::modules::p2p::error::{P2PError, Result as P2PResult};
 use crate::modules::p2p::gossip_manager::GossipManager;
 use crate::modules::p2p::message::{generate_topic_id, GossipMessage, MessageType};

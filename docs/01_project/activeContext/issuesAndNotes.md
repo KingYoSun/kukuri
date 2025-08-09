@@ -6,6 +6,44 @@
 
 ## 現在の問題
 
+### SQLxマクロのコンパイルエラー（2025年8月9日）
+**問題**: SQLxのquery!マクロがオフライン環境でコンパイルエラーを発生
+
+**症状**:
+- エラーメッセージ: `set DATABASE_URL to use query macros online`
+- 原因: SQLxのcompile-time verificationがオフライン環境で動作しない
+- 影響範囲:
+  - `post/commands.rs`: get_posts実装
+  - `topic/commands.rs`: CRUD操作実装
+- 暫定対応: `sqlx::query!`マクロを`sqlx::query`に置き換えて使用
+
+**解決策（推奨）**:
+1. **即時対応（実装済み）**:
+   - `sqlx::query!`マクロを`sqlx::query`に置き換え
+   - 手動でResultのマッピングを実装
+   - 型安全性はRustの型システムで保証
+
+2. **恒久対応（今後実装）**:
+   - `sqlx prepare`でオフライン用のスキーマファイル生成
+   - `DATABASE_URL`環境変数の設定
+   - CI/CDパイプラインでのスキーマ管理
+
+**技術的詳細**:
+```rust
+// 修正前（コンパイルエラー）
+sqlx::query!(
+    "SELECT * FROM events WHERE kind = ? LIMIT ?",
+    1, limit
+)
+
+// 修正後（動作する）
+sqlx::query(
+    "SELECT * FROM events WHERE kind = ? LIMIT ?"
+)
+.bind(1)
+.bind(limit)
+```
+
 ### DOM検証警告（2025年8月3日）
 **問題**: MarkdownPreview.test.tsxでDOM検証の警告が発生
 

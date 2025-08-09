@@ -1,6 +1,7 @@
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use sqlx::Row;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Topic {
@@ -25,46 +26,105 @@ pub struct UpdateTopicRequest {
 }
 
 #[tauri::command]
-pub async fn get_topics(_state: State<'_, AppState>) -> Result<Vec<Topic>, String> {
-    // TODO: データベースから取得する実装
-    // 現在はモックデータを返す
-    Ok(vec![
-        Topic {
-            id: "public".to_string(),
-            name: "#public".to_string(),
-            description: "公開トピック - すべてのユーザーが参加できるメインのトピック".to_string(),
-            created_at: 1720000000,
-            updated_at: 1720000000,
-        },
-        Topic {
-            id: "1".to_string(),
-            name: "Nostr開発".to_string(),
-            description: "Nostrプロトコルに関する開発の話題".to_string(),
-            created_at: 1722000000,
-            updated_at: 1722000000,
-        },
-        Topic {
-            id: "2".to_string(),
-            name: "暗号技術".to_string(),
-            description: "暗号化と分散システムについて".to_string(),
-            created_at: 1722000100,
-            updated_at: 1722000100,
-        },
-    ])
+pub async fn get_topics(state: State<'_, AppState>) -> Result<Vec<Topic>, String> {
+    // データベースから取得する実装
+    let pool = &state.db_pool;
+    
+    // まずテーブルが存在するか確認し、存在しない場合は作成
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_id TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            description TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        "#
+    )
+    .execute(pool.as_ref())
+    .await
+    .map_err(|e| format!("テーブル作成エラー: {}", e))?;
+    
+    // デフォルトトピックが存在しない場合は追加
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM topics WHERE topic_id = 'public'")
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap_or(0);
+        
+    if count == 0 {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            r#"
+            INSERT INTO topics (topic_id, name, description, created_at, updated_at)
+            VALUES ('public', '#public', '公開トピック - すべてのユーザーが参加できるメインのトピック', ?, ?)
+            "#
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool.as_ref())
+        .await
+        .ok();
+    }
+    
+    // 全トピックを取得
+    let rows = sqlx::query(
+        r#"
+        SELECT topic_id, name, description, created_at, updated_at
+        FROM topics
+        ORDER BY created_at ASC
+        "#
+    )
+    .fetch_all(pool.as_ref())
+    .await
+    .map_err(|e| format!("データベースエラー: {}", e))?;
+    
+    let topics = rows
+        .iter()
+        .map(|row| Topic {
+            id: row.try_get("topic_id").unwrap_or_default(),
+            name: row.try_get("name").unwrap_or_default(),
+            description: row.try_get("description").unwrap_or_default(),
+            created_at: row.try_get("created_at").unwrap_or(0),
+            updated_at: row.try_get("updated_at").unwrap_or(0),
+        })
+        .collect();
+    
+    Ok(topics)
 }
 
 #[tauri::command]
 pub async fn create_topic(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     request: CreateTopicRequest,
 ) -> Result<Topic, String> {
-    // TODO: データベースに保存する実装
+    // データベースに保存する実装
+    let pool = &state.db_pool;
+    let topic_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+    
+    sqlx::query(
+        r#"
+        INSERT INTO topics (topic_id, name, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        "#
+    )
+    .bind(&topic_id)
+    .bind(&request.name)
+    .bind(&request.description)
+    .bind(now)
+    .bind(now)
+    .execute(pool.as_ref())
+    .await
+    .map_err(|e| format!("データベースエラー: {}", e))?;
+    
     let topic = Topic {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: topic_id,
         name: request.name,
         description: request.description,
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: now,
+        updated_at: now,
     };
 
     Ok(topic)
@@ -72,24 +132,71 @@ pub async fn create_topic(
 
 #[tauri::command]
 pub async fn update_topic(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     request: UpdateTopicRequest,
 ) -> Result<Topic, String> {
-    // TODO: データベースを更新する実装
+    // データベースを更新する実装
+    let pool = &state.db_pool;
+    let now = chrono::Utc::now().timestamp();
+    
+    // 既存のcreated_atを取得
+    let created_at: i64 = sqlx::query_scalar(
+        "SELECT created_at FROM topics WHERE topic_id = ?"
+    )
+    .bind(&request.id)
+    .fetch_one(pool.as_ref())
+    .await
+    .map_err(|e| format!("トピックが見つかりません: {}", e))?;
+    
+    // 更新
+    sqlx::query(
+        r#"
+        UPDATE topics
+        SET name = ?, description = ?, updated_at = ?
+        WHERE topic_id = ?
+        "#
+    )
+    .bind(&request.name)
+    .bind(&request.description)
+    .bind(now)
+    .bind(&request.id)
+    .execute(pool.as_ref())
+    .await
+    .map_err(|e| format!("データベースエラー: {}", e))?;
+    
     let topic = Topic {
         id: request.id,
         name: request.name,
         description: request.description,
-        created_at: 1722000000, // TODO: 実際の値を取得
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at,
+        updated_at: now,
     };
 
     Ok(topic)
 }
 
 #[tauri::command]
-pub async fn delete_topic(_state: State<'_, AppState>, id: String) -> Result<(), String> {
-    // TODO: データベースから削除する実装
-    println!("Deleting topic: {id}");
+pub async fn delete_topic(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    // データベースから削除する実装
+    let pool = &state.db_pool;
+    
+    // publicトピックは削除できない
+    if id == "public" {
+        return Err("デフォルトトピックは削除できません".to_string());
+    }
+    
+    let result = sqlx::query(
+        "DELETE FROM topics WHERE topic_id = ?"
+    )
+    .bind(&id)
+    .execute(pool.as_ref())
+    .await
+    .map_err(|e| format!("データベースエラー: {}", e))?;
+    
+    if result.rows_affected() == 0 {
+        return Err("トピックが見つかりません".to_string());
+    }
+    
+    println!("Deleted topic: {id}");
     Ok(())
 }

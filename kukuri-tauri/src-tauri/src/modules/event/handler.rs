@@ -3,7 +3,7 @@ use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use crate::modules::database::DbPool;
+use crate::modules::database::connection::DbPool;
 use crate::modules::database::models;
 
 /// イベントコールバックの型エイリアス
@@ -172,7 +172,7 @@ impl EventHandler {
             .await?;
             
             // 新しいフォロー関係を保存
-            for tag in &event.tags {
+            for tag in event.tags.iter() {
                 if tag.len() >= 2 && tag[0] == "p" {
                     let followed_pubkey = &tag[1];
                     
@@ -204,7 +204,7 @@ impl EventHandler {
         if let Some(pool) = &self.db_pool {
             // リアクション対象のイベントIDを取得
             let mut target_event_id: Option<String> = None;
-            for tag in &event.tags {
+            for tag in event.tags.iter() {
                 if tag.len() >= 2 && tag[0] == "e" {
                     target_event_id = Some(tag[1].clone());
                     break;

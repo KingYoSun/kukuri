@@ -8,3 +8,4 @@ pub mod p2p;
 pub mod post;
 pub mod secure_storage;
 pub mod topic;
+pub mod utils;

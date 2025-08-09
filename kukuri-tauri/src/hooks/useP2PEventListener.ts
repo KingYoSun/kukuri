@@ -6,6 +6,7 @@ import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
 import { errorHandler } from '@/lib/errorHandler';
 import type { Post } from '@/stores/types';
+import { pubkeyToNpub } from '@/lib/utils/nostr';
 
 // P2Pイベントの型定義
 interface P2PMessageEvent {
@@ -40,7 +41,7 @@ export function useP2PEventListener() {
 
   // P2Pメッセージを投稿として処理
   const handleP2PMessageAsPost = useCallback(
-    (message: P2PMessage, topicId: string) => {
+    async (message: P2PMessage, topicId: string) => {
       try {
         // P2Pメッセージを投稿形式に変換
         const post: Post = {
@@ -49,7 +50,7 @@ export function useP2PEventListener() {
           author: {
             id: message.author,
             pubkey: message.author,
-            npub: message.author, // TODO: Convert to npub
+            npub: await pubkeyToNpub(message.author),
             name: 'P2Pユーザー',
             displayName: 'P2Pユーザー',
             about: '',

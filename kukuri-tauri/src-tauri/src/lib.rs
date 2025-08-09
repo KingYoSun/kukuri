@@ -13,6 +13,7 @@ use modules::p2p::commands as p2p_commands;
 use modules::post::commands as post_commands;
 use modules::secure_storage as secure_storage_commands;
 use modules::topic::commands as topic_commands;
+use modules::utils::commands as utils_commands;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -86,6 +87,9 @@ pub fn run() {
             offline_commands::rollback_optimistic_update,
             offline_commands::cleanup_expired_cache,
             offline_commands::update_sync_status,
+            // ユーティリティコマンド
+            utils_commands::pubkey_to_npub,
+            utils_commands::npub_to_pubkey,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

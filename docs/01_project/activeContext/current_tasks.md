@@ -1,6 +1,6 @@
 # 現在のタスク状況
 
-**最終更新**: 2025年8月9日（Phase 0リファクタリング完了）
+**最終更新**: 2025年8月9日（Phase 2低優先度TODO実装完了）
 
 > **注記**: 2025年7月のタスク履歴は`archives/current_tasks_2025-07.md`にアーカイブされました。
 
@@ -46,7 +46,13 @@
 - [x] 中優先度TODO（2件）
   - [x] useTopics.ts - カウント機能実装
   - [x] p2p/gossip_manager.rs - NodeIdパース実装
-- [ ] 低優先度TODO（残り27件）
+- [x] 低優先度TODO（12件実装、2件保留）
+  - [x] post/commands.rs - get_posts、create_post、delete_postのDB実装
+  - [x] topic/commands.rs - CRUD操作5箇所のDB実装
+  - [x] npub変換ユーティリティの実装（TypeScript/Rust）
+  - [x] 画像アップロード機能の改善（Base64変換）
+  - [ ] p2p/topic_mesh.rs - iroh-gossip subscription（技術的複雑性により保留）
+  - [ ] Sidebar.tsx - 未読カウント機能（将来実装）
 
 #### Phase 4: DRY原則適用（週3）
 - [ ] Zustandストア共通化（8箇所）
@@ -61,7 +67,7 @@
 
 **成功指標:**
 - Clippyエラー: 13件 → 0件 ✅（Phase 0で達成）
-- TODOコメント: 39件 → 33件（6件削減、15.4%減）
+- TODOコメント: 39件 → 14件（25件削減、64.1%減）✅（Phase 2で達成）
 - #[allow(dead_code)]: 97箇所 → 50箇所 ✅（Phase 1で達成）
 - 未使用APIエンドポイント: 11件特定 → 削除予定
 - 孤立コンポーネント: 2件特定 → 削除予定
@@ -70,7 +76,28 @@
 
 ## 完了済みタスク
 
-### 2025年8月9日（Phase 2 TODO実装完了）
+### 2025年8月9日（Phase 2 低優先度TODO実装完了）
+- [x] Phase 2: 低優先度TODO実装（12件実装、2件保留）
+  - [x] データベース操作の実装（Rust）
+    - [x] post/commands.rs - get_posts（SQLiteからの投稿取得、トピックフィルタリング）
+    - [x] post/commands.rs - create_post（EventManager統合、P2P自動配信）
+    - [x] post/commands.rs - delete_post（Nostr Kind 5削除イベント発行）
+    - [x] topic/commands.rs - get_topics（テーブル自動作成、デフォルトトピック挿入）
+    - [x] topic/commands.rs - create_topic（UUID生成、タイムスタンプ自動設定）
+    - [x] topic/commands.rs - update_topic（created_at保持、updated_at更新）
+    - [x] topic/commands.rs - delete_topic（#public削除防止、存在チェック）
+  - [x] npub変換ユーティリティ（TypeScript/Rust）
+    - [x] Rustコマンド実装（pubkey_to_npub、npub_to_pubkey）
+    - [x] TypeScriptユーティリティ作成（lib/utils/nostr.ts）
+    - [x] 既存コードへの適用（postStore.ts、useP2PEventListener.ts）
+  - [x] 画像アップロード機能の改善
+    - [x] ファイルサイズ制限（5MB）とフォーマット検証
+    - [x] Base64データURL変換実装
+    - [x] FileReader APIによる非同期処理
+  - [x] TODO削減: 39件 → 14件（64.1%削減）
+- [x] 進捗レポート作成（2025-08-09_phase2_low_priority_todos.md）
+
+### 2025年8月9日（Phase 2 高優先度・中優先度TODO実装完了）
 - [x] Phase 2: TODO実装（高優先度・中優先度）
   - [x] 高優先度Rust実装（2件）
     - [x] event/handler.rs - データベース保存処理（テキストノート、メタデータ、フォロー、リアクション）
@@ -446,13 +473,13 @@
 
 ### 技術的負債の状況（2025年8月9日時点）
 - **TypeScript:**
-  - TODOコメント: 8件
+  - TODOコメント: 2件（削減率: 75%）
   - 型エラー: 0件 ✅
   - リントエラー: 0件 ✅（警告64件は`any`型使用）
   - テスト: 625件中609件成功（12件失敗）
   
 - **Rust:**
-  - TODOコメント: 31件
+  - TODOコメント: 12件（削減率: 61.3%）
   - #[allow(dead_code)]: 97箇所
   - Clippyエラー: 0件 ✅（Phase 0で解消）
   - テストエラー: 0件 ✅（Phase 0で解消）
@@ -477,6 +504,12 @@
 - ✅ オフラインファースト機能（Phase 4.1-4.4）- 完全実装
 
 ### 最近の成果
+- 2025年8月9日: **Phase 2低優先度TODO実装完了**
+  - 低優先度TODO 12件を実装（技術的複雑性により2件は保留）
+  - データベース操作機能の完全実装（post/topic CRUD）
+  - npub変換ユーティリティの実装（TypeScript/Rust両対応）
+  - 画像アップロード機能の改善（Base64変換、5MB制限）
+  - TODOコメント総数: 39件→14件（64.1%削減）
 - 2025年8月9日: **Phase 0リファクタリング完了**
   - Clippyエラー13件を全て解消
   - Rustテストエラー8件を全て解消（Docker環境対応）
