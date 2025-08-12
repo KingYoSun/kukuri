@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from '@/lib/api/nostr';
@@ -365,14 +366,13 @@ export const useAuthStore = create<AuthStore>()(
         return get().isAuthenticated;
       },
     }),
-    {
-      name: 'auth-storage',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
+    createLocalStoragePersist(
+      'auth-storage',
+      (state) => ({
         // privateKeyは保存しない（セキュリティのため）
         // isAuthenticatedはセキュアストレージからの復元で管理するため保存しない
         currentUser: state.currentUser,
       }),
-    },
+    ),
   ),
 );

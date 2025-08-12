@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createLocalStoragePersist, createPartializer } from './utils/persistHelpers';
 import type { TopicState, Topic } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
@@ -284,13 +285,9 @@ export const useTopicStore = create<TopicStore>()(
           return { topics: newTopics };
         }),
     }),
-    {
-      name: 'topic-storage',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        joinedTopics: state.joinedTopics,
-        currentTopic: state.currentTopic,
-      }),
-    },
+    createLocalStoragePersist(
+      'topic-storage',
+      createPartializer(['joinedTopics', 'currentTopic']),
+    ),
   ),
 );

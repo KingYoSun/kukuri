@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createLocalStoragePersist, createPartializer } from './utils/persistHelpers';
 import { offlineApi } from '@/api/offline';
 import type {
   OfflineState,
@@ -239,14 +240,10 @@ export const useOfflineStore = create<OfflineStore>()(
         return originalData;
       },
     }),
-    {
-      name: 'offline-store',
-      partialize: (state) => ({
-        lastSyncedAt: state.lastSyncedAt,
-        pendingActions: state.pendingActions,
-        syncQueue: state.syncQueue,
-      }),
-    }
+    createLocalStoragePersist(
+      'offline-store',
+      createPartializer(['lastSyncedAt', 'pendingActions', 'syncQueue']),
+    )
   )
 );
 

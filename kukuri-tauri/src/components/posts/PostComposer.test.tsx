@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createStoreMock, createStoreWithMapMock } from '@/stores/utils/testHelpers';
 import { PostComposer } from './PostComposer';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
@@ -101,50 +102,56 @@ describe('PostComposer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    vi.mocked(usePostStore).mockReturnValue({
-      createPost: mockCreatePost,
-      posts: new Map(),
-      postsByTopic: new Map(),
-      setPosts: vi.fn(),
-      fetchPosts: vi.fn(),
-      addPost: vi.fn(),
-      updatePost: vi.fn(),
-      removePost: vi.fn(),
-      deletePostRemote: vi.fn(),
-      likePost: vi.fn(),
-      addReply: vi.fn(),
-      getPostsByTopic: vi.fn(),
-      incrementLikes: vi.fn(),
-      updatePostLikes: vi.fn(),
-    });
+    vi.mocked(usePostStore).mockReturnValue(
+      createStoreWithMapMock({
+        posts: [],
+        postsByTopic: [],
+        createPost: mockCreatePost,
+        setPosts: vi.fn(),
+        fetchPosts: vi.fn(),
+        addPost: vi.fn(),
+        updatePost: vi.fn(),
+        removePost: vi.fn(),
+        deletePostRemote: vi.fn(),
+        likePost: vi.fn(),
+        addReply: vi.fn(),
+        getPostsByTopic: vi.fn(),
+        incrementLikes: vi.fn(),
+        updatePostLikes: vi.fn(),
+      })
+    );
 
-    vi.mocked(useTopicStore).mockReturnValue({
-      topics: mockTopics,
-      joinedTopics: ['topic1', 'topic2'],
-      activeTopics: [],
-      addTopic: vi.fn(),
-      updateTopic: vi.fn(),
-      removeTopic: vi.fn(),
-      setJoinedTopics: vi.fn(),
-      joinTopic: vi.fn(),
-      leaveTopic: vi.fn(),
-      isJoinedTopic: vi.fn(),
-      getTopicById: vi.fn(),
-    });
+    vi.mocked(useTopicStore).mockReturnValue(
+      createStoreWithMapMock({
+        topics: Array.from(mockTopics.entries()),
+        joinedTopics: ['topic1', 'topic2'],
+        activeTopics: [],
+        addTopic: vi.fn(),
+        updateTopic: vi.fn(),
+        removeTopic: vi.fn(),
+        setJoinedTopics: vi.fn(),
+        joinTopic: vi.fn(),
+        leaveTopic: vi.fn(),
+        isJoinedTopic: vi.fn(),
+        getTopicById: vi.fn(),
+      })
+    );
 
-    vi.mocked(useDraftStore).mockReturnValue({
-      drafts: [],
-      currentDraftId: null,
-      createDraft: mockCreateDraft,
-      updateDraft: mockUpdateDraft,
-      deleteDraft: mockDeleteDraft,
-      autosaveDraft: mockAutosaveDraft,
-      getDraft: vi.fn(),
-      setCurrentDraft: vi.fn(),
-      getCurrentDraft: vi.fn(),
-      listDrafts: vi.fn(),
-      clearAllDrafts: vi.fn(),
-    });
+    vi.mocked(useDraftStore).mockReturnValue(
+      createStoreMock({
+        drafts: [],
+        currentDraftId: null,
+        createDraft: mockCreateDraft,
+        updateDraft: mockUpdateDraft,
+        deleteDraft: mockDeleteDraft,
+        autosaveDraft: mockAutosaveDraft,
+        getDraft: vi.fn(),
+        setCurrentDraft: vi.fn(),
+        getCurrentDraft: vi.fn(),
+        listDrafts: vi.fn(),
+        clearAllDrafts: vi.fn(),
+      })
+    );
 
     vi.mocked(useToast).mockReturnValue({ toast: mockToast });
   });

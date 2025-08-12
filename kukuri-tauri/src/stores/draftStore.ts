@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 import type { PostDraft, CreateDraftParams, UpdateDraftParams } from '@/types/draft';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -128,13 +129,12 @@ export const useDraftStore = create<DraftStore>()(
         }
       },
     }),
-    {
-      name: 'kukuri-drafts',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
+    createLocalStoragePersist(
+      'kukuri-drafts',
+      (state) => ({
         drafts: state.drafts,
         // Don't persist currentDraftId to avoid confusion on reload
       }),
-    }
+    )
   )
 );

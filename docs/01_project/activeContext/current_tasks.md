@@ -54,11 +54,14 @@
   - [ ] p2p/topic_mesh.rs - iroh-gossip subscription（技術的複雑性により保留）
   - [ ] Sidebar.tsx - 未読カウント機能（将来実装）
 
-#### Phase 4: DRY原則適用（週3）
-- [ ] Zustandストア共通化（8箇所）
-- [ ] テストモック共通化
-- [ ] エラーハンドリング統一
-  - [ ] Rust: logging crateの導入
+#### Phase 4: DRY原則適用（2025年8月12日部分完了）✅
+- [x] Zustandストア共通化（5ストア完了）
+  - [x] persistHelpers.ts作成（永続化設定の共通化）
+  - [x] testHelpers.ts作成（テストモックの共通化）
+  - [x] 5つのストアに適用（topic, auth, draft, offline, p2p）
+- [x] テストモック共通化（PostComposer.test.tsx適用済み）
+- [ ] エラーハンドリング統一（今後の優先度に応じて実施）
+  - [ ] Rust: logging crateの導入（推奨：tracing）
   - [ ] TypeScript: errorHandler統一
 
 #### Phase 5: アーキテクチャ改善（週4-5）
