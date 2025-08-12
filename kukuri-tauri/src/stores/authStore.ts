@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { createLocalStoragePersist } from './utils/persistHelpers';
 import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';

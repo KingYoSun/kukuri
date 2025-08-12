@@ -4,10 +4,10 @@ use nostr_sdk::prelude::*;
 #[tauri::command]
 pub fn pubkey_to_npub(pubkey: String) -> Result<String, String> {
     let public_key = PublicKey::from_hex(&pubkey)
-        .map_err(|e| format!("無効な公開鍵: {}", e))?;
+        .map_err(|e| format!("無効な公開鍵: {e}"))?;
     
     let npub = public_key.to_bech32()
-        .map_err(|e| format!("Bech32変換エラー: {}", e))?;
+        .map_err(|e| format!("Bech32変換エラー: {e}"))?;
     
     Ok(npub)
 }
@@ -16,7 +16,7 @@ pub fn pubkey_to_npub(pubkey: String) -> Result<String, String> {
 #[tauri::command]
 pub fn npub_to_pubkey(npub: String) -> Result<String, String> {
     let public_key = PublicKey::from_bech32(&npub)
-        .map_err(|e| format!("無効なnpub: {}", e))?;
+        .map_err(|e| format!("無効なnpub: {e}"))?;
     
     Ok(public_key.to_hex())
 }

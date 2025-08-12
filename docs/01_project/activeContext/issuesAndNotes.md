@@ -1,10 +1,10 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月13日（UIコンポーネント不足エラー修正）
+**最終更新**: 2025年8月12日（コード品質エラー全般の解消）
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
-## 現在の問題
+## 現在の問題huro
 
 ### TypeScriptテストの一部失敗（2025年8月13日更新）
 **問題**: テスト固有の設定問題により一部のテストが失敗
@@ -36,6 +36,63 @@
 
 
 ## 解決済みの問題
+
+### コード品質エラー全般の解消（2025年8月12日）
+**問題**: プロジェクト全体でコンパイルエラー、型エラー、リントエラーが多数存在
+
+**症状**:
+- Rust: Clippyエラー13件（format!マクロのインライン化警告）
+- Rust: 空行削除警告（event/manager.rs）
+- TypeScript: 未使用変数・インポート20件
+- TypeScript: Function型の不適切な使用4件
+- TypeScript: async/await構文エラー
+- Vitest実行時の依存パッケージ不足
+
+**解決内容**:
+
+1. **Rustリントエラーの修正（13件）**
+   - format!マクロでのインライン変数展開を使用
+   ```rust
+   // 修正前
+   format!("エラー: {}", e)
+   // 修正後
+   format!("エラー: {e}")
+   ```
+   - post/commands.rs: 4件
+   - topic/commands.rs: 6件
+   - utils/commands.rs: 3件
+
+2. **TypeScript未使用コードの削除（20件）**
+   - PostCard.tsx: Wifiインポート削除
+   - authStore.ts: createJSONStorage削除
+   - offlineStore.ts: OfflineActionType削除
+   - p2pStore.ts: createPartializer削除
+   - useSyncManager.ts: clearPendingActions削除
+   - syncEngine.test.ts: 未使用のAPIインポート削除
+
+3. **TypeScript型エラーの修正（4件）**
+   ```typescript
+   // 修正前
+   as Function
+   // 修正後
+   as ((failureCount: number, error: unknown) => boolean)
+   ```
+
+4. **依存パッケージの追加**
+   - @radix-ui/react-progress: Progress UIコンポーネント用
+   - @vitest/utils: Vitestユーティリティ
+
+**結果**:
+- Rust Clippy: エラー0件（`-D warnings`フラグでの厳格チェックもパス）
+- Rustテスト: 全123件成功
+- TypeScript型チェック: エラー0件
+- TypeScriptリント: エラー0件
+- Docker環境での全テスト実行が正常に完了
+
+**教訓**:
+- CI/CDパイプラインでのエラーを事前に解消することで開発効率が向上
+- format!マクロのインライン変数展開はRust 2021エディションの推奨パターン
+- 未使用コードの定期的な削除がコードベースの健全性を保つ
 
 ### SQLxオフラインモード問題の解決（2025年8月13日）
 **問題**: `.sqlx`ディレクトリは存在していたが、クエリキャッシュが古くてDocker環境でRustテストが実行できなかった

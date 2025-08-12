@@ -74,7 +74,7 @@ describe('useOffline', () => {
   });
 
   describe('オンライン/オフライン状態の監視', () => {
-    it('オフライン時に通知を表示する', () => {
+    it('オフライン時に通知を表示する', async () => {
       const { toast } = await import('sonner');
       vi.mocked(useOfflineStore).mockReturnValue({
         ...defaultOfflineState,
@@ -331,7 +331,7 @@ describe('useOptimisticUpdate', () => {
           onSuccess,
           onError
         );
-      } catch (error) {
+      } catch {
         // エラーが期待される
       }
     });

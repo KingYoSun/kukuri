@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { createLocalStoragePersist, createPartializer } from './utils/persistHelpers';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 

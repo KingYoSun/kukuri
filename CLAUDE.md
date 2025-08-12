@@ -13,6 +13,7 @@
 - **依存最新化**: 依存ライブラリを追加する際は、webから最新バージョンを確認する
 - **エラーハンドリング**: フロントエンドでの`console.error`使用は禁止。代わりに`errorHandler`を使用する（`docs/03_implementation/error_handling_guidelines.md`参照）
 - **テスト実行**: Windows環境では必ず`.\scripts\test-docker.ps1`を使用してテストを実行する
+- **確認必須**: テスト・型・リントのエラーの修正タスクは、コマンドを実行してエラーが出ないことを確認しない限り「完了」にしてはならない
 
 ### 実装のリファレンス
 - **zustand**: storeのモックを実装/変更する前にzustand公式のドキュメント( https://zustand.docs.pmnd.rs/guides/testing )を必ず参照する

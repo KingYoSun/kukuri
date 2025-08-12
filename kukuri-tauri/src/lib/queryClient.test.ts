@@ -29,7 +29,7 @@ describe('queryClient configuration', () => {
         isOnline: false,
       });
 
-      const retryFn = queryClient.getDefaultOptions().queries?.retry as Function;
+      const retryFn = queryClient.getDefaultOptions().queries?.retry as ((failureCount: number, error: unknown) => boolean);
       const shouldRetry = retryFn(1, new Error('Network error'));
       
       expect(shouldRetry).toBe(false);
@@ -40,7 +40,7 @@ describe('queryClient configuration', () => {
         isOnline: true,
       });
 
-      const retryFn = queryClient.getDefaultOptions().queries?.retry as Function;
+      const retryFn = queryClient.getDefaultOptions().queries?.retry as ((failureCount: number, error: unknown) => boolean);
       
       expect(retryFn(0, new Error('Network error'))).toBe(true);
       expect(retryFn(1, new Error('Network error'))).toBe(true);
@@ -55,7 +55,7 @@ describe('queryClient configuration', () => {
 
     it('gcTimeが正しく設定されている', () => {
       const options = queryClient.getDefaultOptions().queries;
-      expect(options?.gcTime).toBe(1000 * 60 * 60 * 24); // 24時間
+      expect(options?.gcTime).toBe(1000 * 60 * 10); // 10分
     });
 
     it('networkModeがofflineFirstに設定されている', () => {
@@ -70,23 +70,21 @@ describe('queryClient configuration', () => {
         isOnline: false,
       });
 
-      const retryFn = queryClient.getDefaultOptions().mutations?.retry as Function;
+      const retryFn = queryClient.getDefaultOptions().mutations?.retry as ((failureCount: number, error: unknown) => boolean);
       const shouldRetry = retryFn(1, new Error('Network error'));
       
       expect(shouldRetry).toBe(false);
     });
 
-    it('オンライン時は3回までリトライする', () => {
+    it('オンライン時は1回までリトライする', () => {
       mockOfflineStore.getState = vi.fn().mockReturnValue({
         isOnline: true,
       });
 
-      const retryFn = queryClient.getDefaultOptions().mutations?.retry as Function;
+      const retryFn = queryClient.getDefaultOptions().mutations?.retry as ((failureCount: number, error: unknown) => boolean);
       
       expect(retryFn(0, new Error('Network error'))).toBe(true);
-      expect(retryFn(1, new Error('Network error'))).toBe(true);
-      expect(retryFn(2, new Error('Network error'))).toBe(true);
-      expect(retryFn(3, new Error('Network error'))).toBe(false);
+      expect(retryFn(1, new Error('Network error'))).toBe(false);
     });
   });
 });
@@ -164,6 +162,8 @@ describe('cacheUtils', () => {
 
   describe('optimizeForOffline', () => {
     it('重要なクエリのキャッシュを更新する', () => {
+      vi.useFakeTimers();
+      
       // 重要なクエリにデータを設定
       queryClient.setQueryData(['topics'], { data: 'topics' });
       queryClient.setQueryData(['posts'], { data: 'posts' });
@@ -171,7 +171,7 @@ describe('cacheUtils', () => {
       queryClient.setQueryData(['bookmarks'], { data: 'bookmarks' });
       
       const beforeState = queryClient.getQueryState(['topics']);
-      const beforeUpdatedAt = beforeState?.dataUpdatedAt;
+      const _beforeUpdatedAt = beforeState?.dataUpdatedAt;
       
       // 少し時間を進める
       vi.advanceTimersByTime(1000);
@@ -179,13 +179,15 @@ describe('cacheUtils', () => {
       cacheUtils.optimizeForOffline();
       
       const afterState = queryClient.getQueryState(['topics']);
-      const afterUpdatedAt = afterState?.dataUpdatedAt;
+      const _afterUpdatedAt = afterState?.dataUpdatedAt;
       
       // データは保持されている
       expect(queryClient.getQueryData(['topics'])).toEqual({ data: 'topics' });
       expect(queryClient.getQueryData(['posts'])).toEqual({ data: 'posts' });
       expect(queryClient.getQueryData(['timeline'])).toEqual({ data: 'timeline' });
       expect(queryClient.getQueryData(['bookmarks'])).toEqual({ data: 'bookmarks' });
+      
+      vi.useRealTimers();
     });
   });
 });

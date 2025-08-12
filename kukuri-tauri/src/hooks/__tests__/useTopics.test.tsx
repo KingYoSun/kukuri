@@ -24,6 +24,10 @@ vi.mock('@/lib/api/tauri', () => ({
         updated_at: Math.floor(Date.now() / 1000),
       },
     ]),
+    getTopicStats: vi.fn().mockResolvedValue({
+      member_count: 100,
+      post_count: 500,
+    }),
     createTopic: vi.fn().mockResolvedValue({
       id: 'new-topic',
       name: '新しいトピック',
@@ -94,8 +98,8 @@ describe('useTopics hooks', () => {
         name: 'technology',
         description: '技術全般について議論するトピック',
         tags: [],
-        memberCount: 0,
-        postCount: 0,
+        memberCount: 100,
+        postCount: 500,
         isActive: true,
       });
       expect(topics[0].createdAt).toBeInstanceOf(Date);

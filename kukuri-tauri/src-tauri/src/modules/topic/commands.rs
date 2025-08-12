@@ -46,7 +46,7 @@ pub async fn get_topics(state: State<'_, AppState>) -> Result<Vec<Topic>, String
     )
     .execute(pool.as_ref())
     .await
-    .map_err(|e| format!("テーブル作成エラー: {}", e))?;
+    .map_err(|e| format!("テーブル作成エラー: {e}"))?;
     
     // デフォルトトピックが存在しない場合は追加
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM topics WHERE topic_id = 'public'")
@@ -79,7 +79,7 @@ pub async fn get_topics(state: State<'_, AppState>) -> Result<Vec<Topic>, String
     )
     .fetch_all(pool.as_ref())
     .await
-    .map_err(|e| format!("データベースエラー: {}", e))?;
+    .map_err(|e| format!("データベースエラー: {e}"))?;
     
     let topics = rows
         .iter()
@@ -118,7 +118,7 @@ pub async fn create_topic(
     .bind(now)
     .execute(pool.as_ref())
     .await
-    .map_err(|e| format!("データベースエラー: {}", e))?;
+    .map_err(|e| format!("データベースエラー: {e}"))?;
     
     let topic = Topic {
         id: topic_id,
@@ -147,7 +147,7 @@ pub async fn update_topic(
     .bind(&request.id)
     .fetch_one(pool.as_ref())
     .await
-    .map_err(|e| format!("トピックが見つかりません: {}", e))?;
+    .map_err(|e| format!("トピックが見つかりません: {e}"))?;
     
     // 更新
     sqlx::query(
@@ -163,7 +163,7 @@ pub async fn update_topic(
     .bind(&request.id)
     .execute(pool.as_ref())
     .await
-    .map_err(|e| format!("データベースエラー: {}", e))?;
+    .map_err(|e| format!("データベースエラー: {e}"))?;
     
     let topic = Topic {
         id: request.id,
@@ -192,7 +192,7 @@ pub async fn delete_topic(state: State<'_, AppState>, id: String) -> Result<(), 
     .bind(&id)
     .execute(pool.as_ref())
     .await
-    .map_err(|e| format!("データベースエラー: {}", e))?;
+    .map_err(|e| format!("データベースエラー: {e}"))?;
     
     if result.rows_affected() == 0 {
         return Err("トピックが見つかりません".to_string());

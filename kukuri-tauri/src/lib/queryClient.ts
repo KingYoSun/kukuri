@@ -7,7 +7,7 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 5, // 5分
       gcTime: 1000 * 60 * 10, // 10分（以前のcacheTime）
-      retry: (failureCount, error) => {
+      retry: (failureCount, _error) => {
         // オフラインの場合はリトライしない
         const isOnline = useOfflineStore.getState().isOnline;
         if (!isOnline) return false;
@@ -21,7 +21,7 @@ export const queryClient = new QueryClient({
       networkMode: 'offlineFirst',
     },
     mutations: {
-      retry: (failureCount, error) => {
+      retry: (failureCount, _error) => {
         // オフラインの場合はリトライしない
         const isOnline = useOfflineStore.getState().isOnline;
         if (!isOnline) return false;

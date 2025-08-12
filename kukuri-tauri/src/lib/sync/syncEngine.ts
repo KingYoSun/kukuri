@@ -41,7 +41,7 @@ export class SyncEngine {
    */
   async performDifferentialSync(
     localActions: OfflineAction[], 
-    remoteCheckpoint?: string
+    _remoteCheckpoint?: string
   ): Promise<SyncResult> {
     const result: SyncResult = {
       syncedActions: [],

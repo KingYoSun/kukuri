@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { syncEngine } from './syncEngine';
 import type { OfflineAction, SyncConflict } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
-import { TauriApi } from '@/lib/api/tauri';
-import { p2pApi } from '@/lib/api/p2p';
-import * as nostrApi from '@/lib/api/nostr';
+
 
 // モックの設定
 vi.mock('@/lib/api/tauri');

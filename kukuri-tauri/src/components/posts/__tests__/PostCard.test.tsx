@@ -93,7 +93,7 @@ describe('PostCard', () => {
   it('should show unsync badge when post is not synced', () => {
     renderPostCard({ ...mockPost, isSynced: false });
     
-    expect(screen.getByText('未同期')).toBeInTheDocument();
+    expect(screen.getByText('同期待ち')).toBeInTheDocument();
   });
 
   it('should handle like action', async () => {

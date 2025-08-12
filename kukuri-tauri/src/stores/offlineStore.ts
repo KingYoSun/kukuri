@@ -9,7 +9,7 @@ import type {
   SaveOfflineActionRequest,
   OptimisticUpdate,
 } from '@/types/offline';
-import { OfflineActionType, EntityType } from '@/types/offline';
+import { EntityType } from '@/types/offline';
 
 interface OfflineStore extends OfflineState {
   // アクション

@@ -46,7 +46,7 @@ describe('OfflineSyncService', () => {
     it('初期化時にネットワークリスナーと定期同期を設定する', async () => {
       const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
       
-      service.initialize();
+      await service.initialize();
       
       expect(addEventListenerSpy).toHaveBeenCalledWith('online', expect.any(Function));
       expect(addEventListenerSpy).toHaveBeenCalledWith('offline', expect.any(Function));
@@ -62,8 +62,9 @@ describe('OfflineSyncService', () => {
         cleanupExpiredCache: vi.fn(),
       });
       
-      service.initialize();
-      await vi.runAllTimersAsync();
+      await service.initialize();
+      // runOnlyPendingTimersAsyncを使用して無限ループを回避
+      await vi.runOnlyPendingTimersAsync();
       
       expect(loadPendingActionsMock).toHaveBeenCalledWith('test-pubkey');
     });
@@ -78,24 +79,28 @@ describe('OfflineSyncService', () => {
         cleanupExpiredCache: cleanupExpiredCacheMock,
       });
       
-      service.initialize();
-      await vi.runAllTimersAsync();
+      await service.initialize();
+      // runOnlyPendingTimersAsyncを使用して無限ループを回避
+      await vi.runOnlyPendingTimersAsync();
       
       expect(cleanupExpiredCacheMock).toHaveBeenCalled();
     });
   });
 
   describe('ネットワーク状態の監視', () => {
-    it('オンライン復帰時に同期を開始する', () => {
+    it('オンライン復帰時に同期を開始する', async () => {
       const setOnlineStatusMock = vi.fn();
       mockOfflineStore.getState = vi.fn().mockReturnValue({
         isOnline: false,
         setOnlineStatus: setOnlineStatusMock,
         pendingActions: [{ localId: '1', action: {}, createdAt: Date.now() }],
         isSyncing: false,
+        loadPendingActions: vi.fn(),
+        cleanupExpiredCache: vi.fn(),
+        syncPendingActions: vi.fn(),
       });
       
-      service.initialize();
+      await service.initialize();
       
       // オンラインイベントを発火
       window.dispatchEvent(new Event('online'));
@@ -103,14 +108,18 @@ describe('OfflineSyncService', () => {
       expect(setOnlineStatusMock).toHaveBeenCalledWith(true);
     });
 
-    it('オフライン時に定期同期を停止する', () => {
+    it('オフライン時に定期同期を停止する', async () => {
       const setOnlineStatusMock = vi.fn();
       mockOfflineStore.getState = vi.fn().mockReturnValue({
         isOnline: true,
         setOnlineStatus: setOnlineStatusMock,
+        loadPendingActions: vi.fn(),
+        cleanupExpiredCache: vi.fn(),
+        syncPendingActions: vi.fn(),
+        pendingActions: [],
       });
       
-      service.initialize();
+      await service.initialize();
       
       // オフラインイベントを発火
       window.dispatchEvent(new Event('offline'));
@@ -178,15 +187,17 @@ describe('OfflineSyncService', () => {
   });
 
   describe('定期同期', () => {
-    it('30秒ごとに同期を試行する', () => {
+    it('30秒ごとに同期を試行する', async () => {
       mockOfflineStore.getState = vi.fn().mockReturnValue({
         isOnline: true,
         isSyncing: false,
         pendingActions: [{ localId: '1', action: {}, createdAt: Date.now() }],
         syncPendingActions: vi.fn(),
+        loadPendingActions: vi.fn(),
+        cleanupExpiredCache: vi.fn(),
       });
       
-      service.initialize();
+      await service.initialize();
       
       // 30秒経過
       vi.advanceTimersByTime(30000);
@@ -199,7 +210,10 @@ describe('OfflineSyncService', () => {
 
   describe('リトライ処理', () => {
     it('同期エラー時に指数バックオフでリトライする', async () => {
-      const syncPendingActionsMock = vi.fn().mockRejectedValue(new Error('Sync failed'));
+      const syncPendingActionsMock = vi.fn()
+        .mockRejectedValueOnce(new Error('Sync failed'))
+        .mockResolvedValueOnce(undefined);
+        
       mockOfflineStore.getState = vi.fn().mockReturnValue({
         isOnline: true,
         isSyncing: false,
@@ -209,19 +223,20 @@ describe('OfflineSyncService', () => {
       });
       
       await service.triggerSync();
+      expect(syncPendingActionsMock).toHaveBeenCalledTimes(1);
       
       // 5秒後にリトライ
-      vi.advanceTimersByTime(5000);
+      await vi.advanceTimersByTimeAsync(5000);
       
-      expect(syncPendingActionsMock).toHaveBeenCalledTimes(1);
+      expect(syncPendingActionsMock).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('cleanup', () => {
-    it('クリーンアップ時にタイマーとリスナーを削除する', () => {
+    it('クリーンアップ時にタイマーとリスナーを削除する', async () => {
       const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
       
-      service.initialize();
+      await service.initialize();
       service.cleanup();
       
       expect(removeEventListenerSpy).toHaveBeenCalledWith('online', expect.any(Function));

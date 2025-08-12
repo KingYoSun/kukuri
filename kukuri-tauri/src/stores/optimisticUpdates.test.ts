@@ -116,7 +116,7 @@ describe('楽観的UI更新', () => {
       expect(tempPost?.isSynced).toBe(false);
       
       // サーバー応答を待つ
-      const result = await createPromise;
+      await createPromise;
       
       // 実際のIDに置き換えられているか確認
       const finalState = usePostStore.getState();

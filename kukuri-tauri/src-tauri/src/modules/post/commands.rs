@@ -45,7 +45,7 @@ pub async fn get_posts(
     // トピックIDでフィルタリングするかどうか
     let rows = if let Some(topic_id) = &request.topic_id {
         // トピックタグを含む投稿を検索
-        let topic_tag = format!(r#"["t","{}"]"#, topic_id);
+        let topic_tag = format!(r#"["t","{topic_id}"]"#);
         sqlx::query(
             r#"
             SELECT event_id, public_key, content, created_at, tags
@@ -61,7 +61,7 @@ pub async fn get_posts(
         .bind(offset)
         .fetch_all(pool.as_ref())
         .await
-        .map_err(|e| format!("データベースエラー: {}", e))?
+        .map_err(|e| format!("データベースエラー: {e}"))?
     } else {
         // 全ての投稿を取得
         sqlx::query(
@@ -77,7 +77,7 @@ pub async fn get_posts(
         .bind(offset)
         .fetch_all(pool.as_ref())
         .await
-        .map_err(|e| format!("データベースエラー: {}", e))?
+        .map_err(|e| format!("データベースエラー: {e}"))?
     };
     
     // 結果をPost構造体に変換
@@ -220,7 +220,7 @@ pub async fn boost_post(state: State<'_, AppState>, post_id: String) -> Result<(
         .map_err(|e| format!("ログインが必要です: {e}"))?;
 
     // ブースト機能は現在未実装
-    Err(format!("ブースト機能は現在実装中です (post_id: {})", post_id))
+    Err(format!("ブースト機能は現在実装中です (post_id: {post_id})"))
 }
 
 #[tauri::command]

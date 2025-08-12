@@ -15,18 +15,22 @@ import { Badge } from '@/components/ui/badge';
 export function OfflineIndicator() {
   const { isOnline, lastSyncedAt, pendingActions, isSyncing } = useOfflineStore();
   const [showBanner, setShowBanner] = React.useState(!isOnline);
+  const [wasOffline, setWasOffline] = React.useState(!isOnline);
 
   React.useEffect(() => {
-    const wasOffline = !isOnline;
-    setShowBanner(!isOnline);
-
-    if (isOnline && wasOffline) {
+    if (!isOnline) {
+      setShowBanner(true);
+      setWasOffline(true);
+    } else if (wasOffline) {
+      // オンライン復帰時
+      setShowBanner(true);
       const timer = setTimeout(() => {
         setShowBanner(false);
+        setWasOffline(false);
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [isOnline]);
+  }, [isOnline, wasOffline]);
 
   const getLastSyncText = () => {
     if (!lastSyncedAt) return '未同期';
@@ -38,13 +42,9 @@ export function OfflineIndicator() {
 
   const pendingCount = pendingActions.length;
 
-  if (isOnline && !showBanner && pendingCount === 0) {
-    return null;
-  }
-
   return (
     <>
-      {/* ヘッダーバナー（オフライン時のみ表示） */}
+      {/* ヘッダーバナー */}
       {showBanner && (
         <div
           className={cn(
@@ -82,62 +82,60 @@ export function OfflineIndicator() {
         </div>
       )}
 
-      {/* 永続的なステータスインジケーター */}
-      <div className="fixed bottom-4 right-4 z-40">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-3 py-1.5 shadow-lg transition-all',
-                  isOnline
-                    ? pendingCount > 0
-                      ? 'bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700'
-                      : 'bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700'
-                    : 'bg-orange-100 dark:bg-orange-900/20 border border-orange-300 dark:border-orange-700'
-                )}
-              >
-                {isOnline ? (
-                  pendingCount > 0 ? (
-                    <>
-                      <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                      <Badge variant="secondary" className="h-5 px-1.5">
-                        {pendingCount}
-                      </Badge>
-                    </>
+      {/* 常設インジケーター */}
+      {(pendingCount > 0 || !isOnline || isSyncing) && (
+        <div className="fixed bottom-4 right-4 z-40">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={cn(
+                    "relative flex items-center justify-center h-12 w-12 rounded-full shadow-lg transition-all",
+                    isOnline 
+                      ? "bg-white border-2 border-gray-200"
+                      : "bg-orange-100 border-2 border-orange-300"
+                  )}
+                >
+                  {isOnline ? (
+                    <Wifi className="h-5 w-5 text-gray-600" />
                   ) : (
-                    <Wifi className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  )
-                ) : (
-                  <>
-                    <WifiOff className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                    {pendingCount > 0 && (
-                      <Badge variant="secondary" className="h-5 px-1.5">
-                        {pendingCount}
-                      </Badge>
-                    )}
-                  </>
-                )}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="max-w-xs">
-              <div className="space-y-1">
-                <div className="font-medium">
-                  {isOnline ? 'オンライン' : 'オフライン'}
+                    <WifiOff className="h-5 w-5 text-orange-600" />
+                  )}
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                      {pendingCount}
+                    </span>
+                  )}
+                  {isSyncing && (
+                    <span className="absolute -bottom-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                    </span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    {isOnline ? 'オンライン' : 'オフライン'}
+                  </p>
+                  {isSyncing && (
+                    <p className="text-xs text-gray-500">（同期中...）</p>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    最終同期: {getLastSyncText()}
+                  </p>
+                  {pendingCount > 0 && (
+                    <p className="text-xs text-gray-500">
+                      未同期: {pendingCount}件
+                    </p>
+                  )}
                 </div>
-                {pendingCount > 0 && (
-                  <div className="text-sm">
-                    {pendingCount}件の未同期アクション
-                  </div>
-                )}
-                <div className="text-xs text-muted-foreground">
-                  最終同期: {getLastSyncText()}
-                </div>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
     </>
   );
 }

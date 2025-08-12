@@ -21,7 +21,6 @@ export function useSyncManager() {
     isOnline, 
     lastSyncedAt,
     syncPendingActions,
-    clearPendingActions,
     setSyncError,
     clearSyncError,
   } = useOfflineStore();

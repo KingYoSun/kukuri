@@ -221,8 +221,8 @@ describe('SyncStatusIndicator', () => {
       
       await waitFor(() => {
         expect(screen.getByText('競合検出')).toBeInTheDocument();
-        expect(screen.getByText('CREATE_POST')).toBeInTheDocument();
-        expect(screen.getByText('LIKE_POST')).toBeInTheDocument();
+        expect(screen.getByText('create_post')).toBeInTheDocument();
+        expect(screen.getByText('like_post')).toBeInTheDocument();
       });
     });
 
@@ -351,7 +351,7 @@ describe('SyncStatusIndicator', () => {
       
       // 競合をクリック
       await waitFor(() => {
-        const conflictItem = screen.getByText('CREATE_POST');
+        const conflictItem = screen.getByText('create_post');
         fireEvent.click(conflictItem);
       });
       
@@ -392,7 +392,7 @@ describe('SyncStatusIndicator', () => {
       
       // 競合をクリック
       await waitFor(() => {
-        const conflictItem = screen.getByText('CREATE_POST');
+        const conflictItem = screen.getByText('create_post');
         fireEvent.click(conflictItem);
       });
       
@@ -444,7 +444,7 @@ describe('SyncStatusIndicator', () => {
       
       // 競合をクリック
       await waitFor(() => {
-        const conflictItem = screen.getByText('CREATE_POST');
+        const conflictItem = screen.getByText('create_post');
         fireEvent.click(conflictItem);
       });
       
