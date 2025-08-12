@@ -67,7 +67,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         boosts: p.boosts || 0,
         replies: [],
         isSynced: p.is_synced ?? true, // DBのis_syncedフィールドを使用（未定義の場合はtrue）
-      }));
+      })));
 
       const postsMap = new Map(posts.map((p) => [p.id, p]));
       const postsByTopicMap = new Map<string, string[]>();
