@@ -1,10 +1,10 @@
 use nostr_sdk::{Event, Kind, TagStandard};
-use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::modules::event::manager::{EventManager, NostrEventPayload};
+use crate::modules::event::manager::EventManager;
 use crate::modules::offline::models::SyncStatus;
 use crate::modules::p2p::error::{P2PError, Result as P2PResult};
 use crate::modules::p2p::gossip_manager::GossipManager;
@@ -92,10 +92,9 @@ impl EventSync {
         match message.msg_type {
             MessageType::NostrEvent => {
                 // ペイロードからNostrイベントを復元
-                let payload: NostrEventPayload = serde_json::from_slice(&message.payload)
+                let event: Event = serde_json::from_slice(&message.payload)
                     .map_err(|e| P2PError::SerializationError(e.to_string()))?;
 
-                let event = payload.event;
                 let event_id = event.id.to_string();
 
                 // 重複チェック
@@ -155,10 +154,8 @@ impl EventSync {
 
     #[allow(dead_code)]
     fn convert_to_gossip_message_internal(&self, event: Event) -> P2PResult<GossipMessage> {
-        let payload = NostrEventPayload {
-            event: event.clone(),
-        };
-        let payload_bytes = serde_json::to_vec(&payload)
+        // Eventを直接シリアライズ
+        let payload_bytes = serde_json::to_vec(&event)
             .map_err(|e| P2PError::SerializationError(e.to_string()))?;
 
         // 送信者の公開鍵を取得 (Nostr公開鍵は32バイト)
@@ -288,6 +285,7 @@ impl EventSync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::modules::event::manager::NostrEventPayload;
     use crate::modules::p2p::message::{user_topic_id, GLOBAL_TOPIC};
     use nostr_sdk::{EventBuilder, Keys};
 

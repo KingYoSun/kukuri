@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::modules::event::manager::EventManager;
+    use crate::modules::offline::models::SyncStatus;
     use crate::modules::p2p::error::P2PError;
     use crate::modules::p2p::event_sync::*;
     use crate::modules::p2p::gossip_manager::GossipManager;
@@ -53,21 +54,18 @@ mod tests {
     #[tokio::test]
     async fn test_nostr_event_payload_serialization() {
         let event = create_test_event_with_hashtags(vec![]);
-        let payload = NostrEventPayload {
-            event: event.clone(),
-        };
 
-        // シリアライズ
-        let serialized = serde_json::to_vec(&payload);
+        // シリアライズ (Eventを直接シリアライズ)
+        let serialized = serde_json::to_vec(&event);
         assert!(serialized.is_ok());
 
         // デシリアライズ
-        let deserialized: Result<NostrEventPayload, _> =
+        let deserialized: Result<Event, _> =
             serde_json::from_slice(&serialized.unwrap());
         assert!(deserialized.is_ok());
 
-        let restored_payload = deserialized.unwrap();
-        assert_eq!(restored_payload.event.id, event.id);
+        let restored_event = deserialized.unwrap();
+        assert_eq!(restored_event.id, event.id);
     }
 
     #[tokio::test]
@@ -138,10 +136,7 @@ mod tests {
         let event = create_test_event_with_hashtags(vec!["test".to_string()]);
 
         // GossipMessageの作成
-        let payload = NostrEventPayload {
-            event: event.clone(),
-        };
-        let payload_bytes = serde_json::to_vec(&payload).unwrap();
+        let payload_bytes = serde_json::to_vec(&event).unwrap();
         let mut message = GossipMessage::new(
             MessageType::NostrEvent,
             payload_bytes,
@@ -256,12 +251,9 @@ mod tests {
 
         // イベントを処理
         let _message = event_sync.convert_to_gossip_message(event.clone()).unwrap();
-        let payload = NostrEventPayload {
-            event: event.clone(),
-        };
         let mut gossip_message = GossipMessage::new(
             MessageType::NostrEvent,
-            serde_json::to_vec(&payload).unwrap(),
+            serde_json::to_vec(&event).unwrap(),
             vec![0; 33],
         );
 

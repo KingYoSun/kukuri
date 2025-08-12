@@ -55,8 +55,16 @@ pub struct OptimisticUpdate {
     pub confirmed_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SyncStatus {
+    Pending,
+    SentToNostr,
+    SentToP2P,
+    FullySynced,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct SyncStatus {
+pub struct SyncStatusRecord {
     pub id: i64,
     pub entity_type: String,
     pub entity_id: String,

@@ -1,48 +1,10 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月9日
+**最終更新**: 2025年8月13日
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
 ## 現在の問題
-
-### SQLxマクロのコンパイルエラー（2025年8月9日）
-**問題**: SQLxのquery!マクロがオフライン環境でコンパイルエラーを発生
-
-**症状**:
-- エラーメッセージ: `set DATABASE_URL to use query macros online`
-- 原因: SQLxのcompile-time verificationがオフライン環境で動作しない
-- 影響範囲:
-  - `post/commands.rs`: get_posts実装
-  - `topic/commands.rs`: CRUD操作実装
-- 暫定対応: `sqlx::query!`マクロを`sqlx::query`に置き換えて使用
-
-**解決策（推奨）**:
-1. **即時対応（実装済み）**:
-   - `sqlx::query!`マクロを`sqlx::query`に置き換え
-   - 手動でResultのマッピングを実装
-   - 型安全性はRustの型システムで保証
-
-2. **恒久対応（今後実装）**:
-   - `sqlx prepare`でオフライン用のスキーマファイル生成
-   - `DATABASE_URL`環境変数の設定
-   - CI/CDパイプラインでのスキーマ管理
-
-**技術的詳細**:
-```rust
-// 修正前（コンパイルエラー）
-sqlx::query!(
-    "SELECT * FROM events WHERE kind = ? LIMIT ?",
-    1, limit
-)
-
-// 修正後（動作する）
-sqlx::query(
-    "SELECT * FROM events WHERE kind = ? LIMIT ?"
-)
-.bind(1)
-.bind(limit)
-```
 
 ### DOM検証警告（2025年8月3日）
 **問題**: MarkdownPreview.test.tsxでDOM検証の警告が発生
@@ -56,6 +18,68 @@ sqlx::query(
 
 
 ## 解決済みの問題
+
+### SQLxマクロのコンパイルエラー解決（2025年8月13日）
+**問題**: SQLxのquery!マクロがオフライン環境でコンパイルエラーを発生していた
+
+**症状**:
+- エラーメッセージ: `set DATABASE_URL to use query macros online`
+- Nostr SDK Tag enumのパターンマッチングエラー
+- sqlx::query!マクロ内での一時変数のライフタイムエラー
+- NostrEventPayloadのシリアライゼーションエラー
+
+**解決内容**:
+
+1. **Nostr SDK Tag enumの修正**
+   ```rust
+   // 修正前（エラー）
+   if let nostr_sdk::Tag::PubKey(pubkey, _, _) = tag {
+   
+   // 修正後（正常）
+   if let Some(nostr_sdk::TagStandard::PublicKey { public_key: pubkey, .. }) = tag.as_standardized() {
+   ```
+
+2. **sqlx::query!マクロのライフタイムエラー修正**
+   ```rust
+   // 修正前（ライフタイムエラー）
+   sqlx::query!(
+       "DELETE FROM follows WHERE follower_pubkey = ?1",
+       event.pubkey.to_string()  // 一時変数が早期に破棄される
+   )
+   
+   // 修正後（正常）
+   let follower_pubkey = event.pubkey.to_string();
+   sqlx::query!(
+       "DELETE FROM follows WHERE follower_pubkey = ?1",
+       follower_pubkey
+   )
+   ```
+
+3. **SyncStatusの型定義修正**
+   ```rust
+   // 修正前（struct）
+   pub struct SyncStatus { ... }
+   
+   // 修正後（enum with Copy trait）
+   #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+   pub enum SyncStatus {
+       Pending,
+       SentToNostr,
+       SentToP2P,
+       FullySynced,
+   }
+   ```
+
+4. **SQLxオフラインモードのサポート**
+   - `cargo sqlx prepare`コマンドでスキーマファイル生成（.sqlxディレクトリ）
+   - Dockerfileに`.sqlx`ディレクトリのコピーを追加
+   - オフライン環境でも`sqlx::query!`マクロが動作可能に
+
+**結果**:
+- すべてのコンパイルエラーが解消
+- ビルドが正常に完了
+- SQLxマクロがオフラインモードで動作
+- Docker環境でのテストも考慮した設定
 
 ### Phase 0リファクタリング - Clippyエラーとテストエラーの解消（2025年8月9日）
 **問題**: リファクタリング開始時点でClippyエラー13件、Docker環境でのRustテストエラー8件が存在

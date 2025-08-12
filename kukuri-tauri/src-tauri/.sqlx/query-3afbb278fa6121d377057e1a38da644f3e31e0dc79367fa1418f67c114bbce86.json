@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO profiles (public_key, display_name, about, picture_url, banner_url, nip05, created_at, updated_at)\n                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)\n                ON CONFLICT(public_key) DO UPDATE SET\n                    display_name = excluded.display_name,\n                    about = excluded.about,\n                    picture_url = excluded.picture_url,\n                    banner_url = excluded.banner_url,\n                    nip05 = excluded.nip05,\n                    updated_at = excluded.updated_at\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "3afbb278fa6121d377057e1a38da644f3e31e0dc79367fa1418f67c114bbce86"
+}

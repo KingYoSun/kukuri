@@ -3,14 +3,14 @@ use crate::modules::auth::key_manager::KeyManager;
 use crate::modules::database::connection::DbPool;
 use anyhow::Result;
 use nostr_sdk::prelude::*;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
 /// フロントエンドに送信するイベントペイロード
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NostrEventPayload {
     pub id: String,
     pub author: String,

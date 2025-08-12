@@ -164,26 +164,29 @@ impl EventHandler {
         // フォロー関係をデータベースに保存
         if let Some(pool) = &self.db_pool {
             // 既存のフォロー関係を削除
+            let follower_pubkey = event.pubkey.to_string();
             sqlx::query!(
                 "DELETE FROM follows WHERE follower_pubkey = ?1",
-                event.pubkey.to_string()
+                follower_pubkey
             )
             .execute(pool.as_ref())
             .await?;
             
             // 新しいフォロー関係を保存
+            let follower_pubkey_str = event.pubkey.to_string();
             for tag in event.tags.iter() {
-                if tag.len() >= 2 && tag[0] == "p" {
-                    let followed_pubkey = &tag[1];
+                if let Some(nostr_sdk::TagStandard::PublicKey { public_key: pubkey, .. }) = tag.as_standardized() {
+                    let followed_pubkey = pubkey.to_hex();
+                    let created_at = chrono::Utc::now().timestamp();
                     
                     sqlx::query!(
                         r#"
                         INSERT INTO follows (follower_pubkey, followed_pubkey, created_at)
                         VALUES (?1, ?2, ?3)
                         "#,
-                        event.pubkey.to_string(),
+                        follower_pubkey_str,
                         followed_pubkey,
-                        chrono::Utc::now().timestamp()
+                        created_at
                     )
                     .execute(pool.as_ref())
                     .await?;
@@ -205,13 +208,17 @@ impl EventHandler {
             // リアクション対象のイベントIDを取得
             let mut target_event_id: Option<String> = None;
             for tag in event.tags.iter() {
-                if tag.len() >= 2 && tag[0] == "e" {
-                    target_event_id = Some(tag[1].clone());
+                if let Some(nostr_sdk::TagStandard::Event { event_id, .. }) = tag.as_standardized() {
+                    target_event_id = Some(event_id.to_hex());
                     break;
                 }
             }
             
             if let Some(target_id) = target_event_id {
+                let reactor_pubkey = event.pubkey.to_string();
+                let reaction_content = event.content.clone();
+                let created_at = event.created_at.as_u64() as i64;
+                
                 sqlx::query!(
                     r#"
                     INSERT INTO reactions (reactor_pubkey, target_event_id, reaction_content, created_at)
@@ -220,10 +227,10 @@ impl EventHandler {
                         reaction_content = excluded.reaction_content,
                         created_at = excluded.created_at
                     "#,
-                    event.pubkey.to_string(),
+                    reactor_pubkey,
                     target_id,
-                    event.content,
-                    event.created_at.as_u64() as i64
+                    reaction_content,
+                    created_at
                 )
                 .execute(pool.as_ref())
                 .await?;

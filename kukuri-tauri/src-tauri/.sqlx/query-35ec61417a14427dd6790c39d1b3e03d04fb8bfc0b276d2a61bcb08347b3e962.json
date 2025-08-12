@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO reactions (reactor_pubkey, target_event_id, reaction_content, created_at)\n                    VALUES (?1, ?2, ?3, ?4)\n                    ON CONFLICT(reactor_pubkey, target_event_id) DO UPDATE SET\n                        reaction_content = excluded.reaction_content,\n                        created_at = excluded.created_at\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "35ec61417a14427dd6790c39d1b3e03d04fb8bfc0b276d2a61bcb08347b3e962"
+}

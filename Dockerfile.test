@@ -46,6 +46,7 @@ COPY kukuri-tauri/src-tauri/Cargo.toml kukuri-tauri/src-tauri/Cargo.lock ./kukur
 COPY kukuri-tauri/src-tauri/build.rs ./kukuri-tauri/src-tauri/
 COPY kukuri-tauri/src-tauri/tauri.conf.json ./kukuri-tauri/src-tauri/
 COPY kukuri-tauri/src-tauri/migrations ./kukuri-tauri/src-tauri/migrations
+COPY kukuri-tauri/src-tauri/.sqlx ./kukuri-tauri/src-tauri/.sqlx
 
 # 残りのプロジェクトファイルをコピー（.dockerignoreで除外されたものを除く）
 WORKDIR /app

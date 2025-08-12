@@ -59,6 +59,23 @@
 - **Discovery Service**: Cloudflare Workers (OSS) / Docker
 - **Marketplace**: 分散ノード（検索・サジェスト）
 
+## SQLx開発環境
+
+### オフラインモード設定
+SQLxのquery!マクロを使用する場合、以下の手順でオフラインモードを設定：
+
+```bash
+# データベース作成とマイグレーション
+cd kukuri-tauri/src-tauri
+DATABASE_URL="sqlite:data/kukuri.db" sqlx database create
+DATABASE_URL="sqlite:data/kukuri.db" sqlx migrate run
+
+# オフライン用スキーマファイル生成（.sqlxディレクトリに保存）
+DATABASE_URL="sqlite:data/kukuri.db" cargo sqlx prepare
+```
+
+**注意**: `.sqlx`ディレクトリはGitにコミットする必要があります
+
 ## 必須コマンド
 
 ### 開発
