@@ -230,6 +230,7 @@ impl EventSync {
     }
 
     /// Nostrイベント送信時のP2P配信を有効化
+    #[allow(dead_code)]
     pub async fn enable_nostr_to_p2p_sync(&self, enabled: bool) -> P2PResult<()> {
         // P2P同期の有効/無効を設定
         *self.p2p_sync_enabled.write().await = enabled;
@@ -297,7 +298,12 @@ mod tests {
             .unwrap();
 
         let payload = NostrEventPayload {
-            event: event.clone(),
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            content: event.content.clone(),
+            created_at: event.created_at.as_u64(),
+            kind: event.kind.as_u16() as u32,
+            tags: event.tags.iter().map(|t| t.clone().to_vec()).collect(),
         };
 
         // シリアライズ
@@ -306,8 +312,8 @@ mod tests {
         // デシリアライズ
         let deserialized: NostrEventPayload = serde_json::from_slice(&serialized).unwrap();
 
-        assert_eq!(deserialized.event.id, event.id);
-        assert_eq!(deserialized.event.content, event.content);
+        assert_eq!(deserialized.id, event.id.to_hex());
+        assert_eq!(deserialized.content, event.content);
     }
 
     #[test]

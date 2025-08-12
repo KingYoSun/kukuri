@@ -3,6 +3,7 @@ import { OfflineActionType } from '@/types/offline';
 import { TauriApi } from '@/lib/api/tauri';
 import { p2pApi } from '@/lib/api/p2p';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
+import { errorHandler } from '@/lib/errorHandler';
 
 export interface SyncConflict {
   localAction: OfflineAction;
@@ -74,7 +75,9 @@ export class SyncEngine {
           result.failedActions.push(...topicResult.value.failedActions);
           result.totalProcessed += topicResult.value.totalProcessed;
         } else {
-          console.error('トピック同期エラー:', topicResult.reason);
+          errorHandler.log('トピック同期エラー', topicResult.reason, {
+            context: 'SyncEngine.performDifferentialSync'
+          });
         }
       }
       
@@ -136,7 +139,9 @@ export class SyncEngine {
           result.syncedActions.push(action);
         }
       } catch (error) {
-        console.error(`アクション同期エラー (${action.localId}):`, error);
+        errorHandler.log(`アクション同期エラー (${action.localId})`, error, {
+          context: 'SyncEngine.syncTopicActions'
+        });
         result.failedActions.push(action);
       }
     }
@@ -345,11 +350,13 @@ export class SyncEngine {
         
         default:
           // その他のエンティティタイプ
-          console.warn(`未対応のエンティティタイプ: ${entityType}`);
+          errorHandler.warn(`未対応のエンティティタイプ: ${entityType}`, 'SyncEngine.getEntityLastModified');
           return null;
       }
     } catch (error) {
-      console.error('エンティティメタデータ取得エラー:', error);
+      errorHandler.log('エンティティメタデータ取得エラー', error, {
+        context: 'SyncEngine.getEntityLastModified'
+      });
       return null;
     }
   }

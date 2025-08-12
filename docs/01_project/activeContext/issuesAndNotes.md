@@ -6,6 +6,15 @@
 
 ## 現在の問題
 
+### TypeScriptテストの一部失敗（2025年8月13日）
+**問題**: UIコンポーネントのインポートエラーでテストの一部が失敗
+
+**詳細**:
+- エラー: `Failed to resolve import "@/components/ui/progress"`など
+- 影響: 22個のテストファイルが失敗（ただし483個のテストは成功）
+- 原因: `@/components/ui/progress`、`BadgeVariantsContext`等が未実装
+- 優先度: 低（既存テストの大部分は動作）
+
 ### DOM検証警告（2025年8月3日）
 **問題**: MarkdownPreview.test.tsxでDOM検証の警告が発生
 
@@ -18,6 +27,41 @@
 
 
 ## 解決済みの問題
+
+### SQLxオフラインモード問題の解決（2025年8月13日）
+**問題**: `.sqlx`ディレクトリは存在していたが、クエリキャッシュが古くてDocker環境でRustテストが実行できなかった
+
+**症状**:
+- エラーメッセージ: `set DATABASE_URL to use query macros online, or run cargo sqlx prepare to update the query cache`
+- `.sqlx`ディレクトリ自体は存在（5つのキャッシュファイル）
+- Docker環境でSQLX_OFFLINE=trueでもエラーが発生
+
+**根本原因**:
+1. `.sqlx`ディレクトリのクエリキャッシュが最新のクエリと同期していなかった
+2. event/handler.rsの新しいクエリ（follows、reactions等）がキャッシュされていなかった
+
+**解決策**:
+1. `cargo sqlx prepare`を実行してクエリキャッシュを更新
+```bash
+cd kukuri-tauri/src-tauri
+DATABASE_URL="sqlite:data/kukuri.db" cargo sqlx prepare --workspace
+```
+
+2. Dockerイメージの再ビルド
+```bash
+.\scripts\test-docker.ps1 clean  # 古いイメージをクリーンアップ
+.\scripts\test-docker.ps1 rust   # 新しいイメージでテスト実行
+```
+
+**結果**:
+- 全123件のRustテストが成功
+- Docker環境でのテスト実行が正常に動作
+- CI/CD環境でも同様に動作可能
+
+**教訓**:
+- SQLxのquery!マクロを使用する場合、データベーススキーマやクエリを変更したら必ず`cargo sqlx prepare`を実行する必要がある
+- `.sqlx`ディレクトリはバージョン管理に含めて、チーム全体で共有する
+- Dockerイメージのキャッシュに注意（cleanが必要な場合がある）
 
 ### SQLxマクロのコンパイルエラー解決（2025年8月13日）
 **問題**: SQLxのquery!マクロがオフライン環境でコンパイルエラーを発生していた

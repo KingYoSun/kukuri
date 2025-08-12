@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { errorHandler } from '@/lib/errorHandler';
 
 /**
  * 16進数の公開鍵をnpub（Bech32形式）に変換
@@ -9,7 +10,9 @@ export async function pubkeyToNpub(pubkey: string): Promise<string> {
   try {
     return await invoke('pubkey_to_npub', { pubkey });
   } catch (error) {
-    console.error('Failed to convert pubkey to npub:', error);
+    errorHandler.log('Failed to convert pubkey to npub', error, {
+      context: 'nostr.pubkeyToNpub'
+    });
     // エラー時はそのまま返す（fallback）
     return pubkey;
   }
@@ -24,7 +27,9 @@ export async function npubToPubkey(npub: string): Promise<string> {
   try {
     return await invoke('npub_to_pubkey', { npub });
   } catch (error) {
-    console.error('Failed to convert npub to pubkey:', error);
+    errorHandler.log('Failed to convert npub to pubkey', error, {
+      context: 'nostr.npubToPubkey'
+    });
     // エラー時はそのまま返す（fallback）
     return npub;
   }

@@ -3,6 +3,7 @@ import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncEngine';
 import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
 
 export interface SyncStatus {
   isSyncing: boolean;
@@ -98,7 +99,9 @@ export function useSyncManager() {
       }
       
     } catch (error) {
-      console.error('同期エラー:', error);
+      errorHandler.log('同期エラー', error, {
+        context: 'useSyncManager.triggerManualSync'
+      });
       setSyncStatus(prev => ({
         ...prev,
         isSyncing: false,
@@ -169,7 +172,9 @@ export function useSyncManager() {
         conflicts: prev.conflicts.filter(c => c !== conflict),
       }));
     } catch (error) {
-      console.error('競合解決エラー:', error);
+      errorHandler.log('競合解決エラー', error, {
+        context: 'useSyncManager.resolveConflict'
+      });
       toast.error('競合の解決に失敗しました');
     }
   }, []);

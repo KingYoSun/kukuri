@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLocalStoragePersist, createPartializer } from './utils/persistHelpers';
 import { offlineApi } from '@/api/offline';
+import { errorHandler } from '@/lib/errorHandler';
 import type {
   OfflineState,
   OfflineAction,
@@ -126,7 +127,9 @@ export const useOfflineStore = create<OfflineStore>()(
             await get().syncPendingActions(request.userPubkey);
           }
         } catch (error) {
-          console.error('Failed to save offline action:', error);
+          errorHandler.log('Failed to save offline action', error, {
+            context: 'offlineStore.saveOfflineAction'
+          });
           throw error;
         }
       },
@@ -163,7 +166,9 @@ export const useOfflineStore = create<OfflineStore>()(
             }, 30000); // 30秒後に再試行
           }
         } catch (error) {
-          console.error('Sync failed:', error);
+          errorHandler.log('Sync failed', error, {
+            context: 'offlineStore.syncPendingActions'
+          });
         } finally {
           set({ isSyncing: false });
         }
@@ -177,16 +182,20 @@ export const useOfflineStore = create<OfflineStore>()(
           });
           set({ pendingActions: actions });
         } catch (error) {
-          console.error('Failed to load pending actions:', error);
+          errorHandler.log('Failed to load pending actions', error, {
+            context: 'offlineStore.loadPendingActions'
+          });
         }
       },
 
       cleanupExpiredCache: async () => {
         try {
           const cleanedCount = await offlineApi.cleanupExpiredCache();
-          console.log(`Cleaned up ${cleanedCount} expired cache entries`);
+          errorHandler.info(`Cleaned up ${cleanedCount} expired cache entries`, 'offlineStore.cleanupExpiredCache');
         } catch (error) {
-          console.error('Failed to cleanup cache:', error);
+          errorHandler.log('Failed to cleanup cache', error, {
+            context: 'offlineStore.cleanupExpiredCache'
+          });
         }
       },
 

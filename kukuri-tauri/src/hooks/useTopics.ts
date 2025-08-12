@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTopicStore } from '@/stores';
 import type { Topic } from '@/stores';
 import { TauriApi } from '@/lib/api/tauri';
+import { errorHandler } from '@/lib/errorHandler';
 
 // トピック一覧を取得するフック
 export const useTopics = () => {
@@ -30,7 +31,9 @@ export const useTopics = () => {
             } as Topic;
           } catch (error) {
             // 統計情報の取得に失敗した場合はデフォルト値を使用
-            console.error(`Failed to get stats for topic ${topic.id}:`, error);
+            errorHandler.log(`Failed to get stats for topic ${topic.id}`, error, {
+              context: 'useTopics.getTopicStats'
+            });
             return {
               id: topic.id,
               name: topic.name,

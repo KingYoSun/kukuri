@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SyncConflict } from '@/lib/sync/syncEngine';
+import { errorHandler } from '@/lib/errorHandler';
 import {
   Dialog,
   DialogContent,
@@ -49,7 +50,11 @@ export function ConflictResolutionDialog({
         onClose();
       }
     } catch (error) {
-      console.error('競合解決エラー:', error);
+      errorHandler.log('競合解決エラー', error, {
+        context: 'ConflictResolutionDialog.handleResolve',
+        showToast: true,
+        toastTitle: '競合の解決に失敗しました'
+      });
     } finally {
       setIsResolving(false);
     }

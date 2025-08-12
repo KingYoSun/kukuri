@@ -1,5 +1,6 @@
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
+import { errorHandler } from '@/lib/errorHandler';
 
 export class OfflineSyncService {
   private syncInterval: NodeJS.Timeout | null = null;
@@ -126,7 +127,9 @@ export class OfflineSyncService {
         this.retryTimeout = null;
       }
     } catch (error) {
-      console.error('Sync failed:', error);
+      errorHandler.log('Sync failed', error, {
+        context: 'OfflineSyncService.sync'
+      });
       
       // エラー時は指数バックオフでリトライ
       this.scheduleRetry();

@@ -2,6 +2,7 @@ use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use sqlx::Row;
+use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Topic {
@@ -197,6 +198,6 @@ pub async fn delete_topic(state: State<'_, AppState>, id: String) -> Result<(), 
         return Err("トピックが見つかりません".to_string());
     }
     
-    println!("Deleted topic: {id}");
+    info!("Deleted topic: {id}");
     Ok(())
 }

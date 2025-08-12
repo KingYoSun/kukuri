@@ -1,6 +1,6 @@
 # 現在のタスク状況
 
-**最終更新**: 2025年8月9日（Phase 2低優先度TODO実装完了）
+**最終更新**: 2025年8月13日（Phase 4 エラーハンドリング統一完了）
 
 > **注記**: 2025年7月のタスク履歴は`archives/current_tasks_2025-07.md`にアーカイブされました。
 
@@ -54,15 +54,15 @@
   - [ ] p2p/topic_mesh.rs - iroh-gossip subscription（技術的複雑性により保留）
   - [ ] Sidebar.tsx - 未読カウント機能（将来実装）
 
-#### Phase 4: DRY原則適用（2025年8月12日部分完了）✅
+#### Phase 4: DRY原則適用（2025年8月13日完了）✅
 - [x] Zustandストア共通化（5ストア完了）
   - [x] persistHelpers.ts作成（永続化設定の共通化）
   - [x] testHelpers.ts作成（テストモックの共通化）
   - [x] 5つのストアに適用（topic, auth, draft, offline, p2p）
 - [x] テストモック共通化（PostComposer.test.tsx適用済み）
-- [ ] エラーハンドリング統一（今後の優先度に応じて実施）
-  - [ ] Rust: logging crateの導入（推奨：tracing）
-  - [ ] TypeScript: errorHandler統一
+- [x] エラーハンドリング統一（2025年8月13日完了）
+  - [x] Rust: tracingクレート導入済み、println!/eprintln!を34箇所置き換え
+  - [x] TypeScript: errorHandler統一、console.errorを14箇所置き換え
 
 #### Phase 5: アーキテクチャ改善（週4-5）
 - [ ] Rustモジュール再構成
@@ -78,6 +78,25 @@
 ---
 
 ## 完了済みタスク
+
+### 2025年8月13日（Phase 4 エラーハンドリング統一完了）
+- [x] Phase 4: DRY原則適用 - エラーハンドリング部分
+  - [x] TypeScript側のエラーハンドリング統一
+    - [x] errorHandlerユーティリティの確認（既に実装済み）
+    - [x] console.error → errorHandler.logへの移行（14箇所）
+    - [x] 8つのファイルで統一的なエラーハンドリングを実現
+  - [x] Rust側のロギング統一
+    - [x] tracingクレートの確認（既に導入済み）
+    - [x] println!/eprintln! → tracing::debug!/error!/info!への移行（34箇所）
+    - [x] 4つのモジュールでログ出力を統一
+  - [x] コンパイルエラーと警告の修正
+    - [x] NostrEventPayload構造体のフィールド不一致修正
+    - [x] メソッド呼び出しエラー修正（as_u32(), as_vec()）
+    - [x] 未使用import・dead_code警告の対処
+  - [x] テスト環境の問題を記録
+    - [x] SQLxオフラインモード問題をissuesAndNotes.mdに記録
+    - [x] TypeScriptテストの一部失敗を記録
+- [x] 進捗レポート作成（phase4_completion_report.md）
 
 ### 2025年8月9日（Phase 2 低優先度TODO実装完了）
 - [x] Phase 2: 低優先度TODO実装（12件実装、2件保留）

@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
 import type { SaveOfflineActionRequest } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 
@@ -120,7 +121,9 @@ export function useOffline() {
       toast.success('同期が完了しました');
     } catch (error) {
       toast.error('同期に失敗しました');
-      console.error('Sync failed:', error);
+      errorHandler.log('Sync failed', error, {
+        context: 'useOffline.triggerSync'
+      });
     }
   }, [currentAccount?.npub, isOnline, isSyncing, pendingActions.length, syncPendingActions]);
 
@@ -180,7 +183,9 @@ export function useOptimisticUpdate<T = any>() {
 
         return updateId;
       } catch (error) {
-        console.error('Optimistic update failed:', error);
+        errorHandler.log('Optimistic update failed', error, {
+          context: 'useOptimisticUpdate.apply'
+        });
         throw error;
       }
     },

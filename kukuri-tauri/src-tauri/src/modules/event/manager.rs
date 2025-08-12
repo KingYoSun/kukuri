@@ -33,6 +33,7 @@ pub struct EventManager {
 
 impl EventManager {
     /// 新しいEventManagerインスタンスを作成
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
@@ -163,7 +164,6 @@ impl EventManager {
     }
 
     /// リポスト（ブースト）を送信
-
 
     /// 任意のイベントを発行
     #[allow(dead_code)]

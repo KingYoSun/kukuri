@@ -2,6 +2,7 @@ use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use sqlx::Row;
+use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Post {
@@ -180,7 +181,7 @@ pub async fn delete_post(state: State<'_, AppState>, id: String) -> Result<(), S
         .await
         .map_err(|e| format!("削除イベントの送信に失敗しました: {e}"))?;
     
-    println!("Deleted post: {id}");
+    info!("Deleted post: {id}");
     Ok(())
 }
 
@@ -205,7 +206,7 @@ pub async fn like_post(state: State<'_, AppState>, post_id: String) -> Result<()
         .await
         .map_err(|e| format!("いいねに失敗しました: {e}"))?;
 
-    println!("Liked post: {post_id}");
+    info!("Liked post: {post_id}");
     Ok(())
 }
 
@@ -240,7 +241,7 @@ pub async fn bookmark_post(state: State<'_, AppState>, post_id: String) -> Resul
         .await
         .map_err(|e| format!("ブックマークの追加に失敗しました: {e}"))?;
 
-    println!("Bookmarked post: {post_id}");
+    info!("Bookmarked post: {post_id}");
     Ok(())
 }
 
@@ -262,7 +263,7 @@ pub async fn unbookmark_post(state: State<'_, AppState>, post_id: String) -> Res
         .await
         .map_err(|e| format!("ブックマークの削除に失敗しました: {e}"))?;
 
-    println!("Unbookmarked post: {post_id}");
+    info!("Unbookmarked post: {post_id}");
     Ok(())
 }
 
