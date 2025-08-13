@@ -4,6 +4,11 @@ use tracing::info;
 // モジュール定義
 mod modules;
 mod state;
+mod application;
+mod infrastructure;
+mod domain;
+mod presentation;
+mod shared;
 
 // Tauriコマンドのインポート
 use modules::auth::commands as auth_commands;

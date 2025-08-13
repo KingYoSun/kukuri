@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+// Type alias for compatibility
+pub type UserProfile = User;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct User {
     pub npub: String,

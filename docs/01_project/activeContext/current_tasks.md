@@ -1,10 +1,40 @@
 # 現在のタスク状況
 
-**最終更新**: 2025年8月13日（UIコンポーネント不足エラー修正完了）
+**最終更新**: 2025年8月13日（新アーキテクチャへの既存コード移行実施）
 
 > **注記**: 2025年7月のタスク履歴は`archives/current_tasks_2025-07.md`にアーカイブされました。
 
 ## 現在進行中のタスク
+
+### 新アーキテクチャ移行（Phase 6 - 2025年8月13日進行中）🏗️
+
+> **Phase 6完了報告**: [2025-08-13_presentation_layer_integration.md](../progressReports/2025-08-13_presentation_layer_integration.md)
+
+#### Phase 6: プレゼンテーション層への統合（2025年8月13日部分完了）⚡
+- [x] DTOレイヤーの構築
+  - [x] 共通DTO（ApiResponse、PaginationRequest、Validate trait）
+  - [x] 機能別DTO 8種類（post、topic、auth、user、event、offline、p2p）
+  - [x] 入力検証ロジックの実装（10種類以上）
+- [x] ハンドラーレイヤーの実装
+  - [x] PostHandler（投稿CRUD、リアクション、ブックマーク）
+  - [x] TopicHandler（トピック管理、参加/離脱、統計）
+  - [x] AuthHandler（認証、アカウント管理）
+  - [x] UserHandler（プロファイル、フォロー/フォロワー）
+- [x] 依存性注入パターンの実装
+  - [x] AppStateへのサービス層統合
+  - [x] リポジトリとサービスの初期化
+  - [x] インターフェースによる疎結合実現
+- [x] エラーハンドリングの統一
+  - [x] shared/error::AppError活用
+  - [x] Validateトレイト実装
+  - [x] 統一エラーレスポンス形式
+- [x] 既存コマンドの移行
+  - [x] v2コマンドによる互換性維持
+  - [x] post_commands_v2.rs実装
+- [ ] 非同期処理とキャッシュ戦略の最適化（保留中）
+  - [ ] バッチ処理の実装
+  - [ ] キャッシュ戦略の改善
+  - [ ] 並行処理の最適化
 
 ### コードリファクタリング（2025年8月8日開始）🔧
 
@@ -87,6 +117,30 @@
 ---
 
 ## 完了済みタスク
+
+### 2025年8月13日（新アーキテクチャへの既存コード移行 - 完了）
+- [x] インフラストラクチャ層の実装
+  - [x] SqliteRepositoryの完全実装（31メソッド）
+    - [x] PostRepository: 8メソッド（create_post、get_post、get_posts_by_topic等）
+    - [x] TopicRepository: 9メソッド（create_topic、join_topic、leave_topic等）
+    - [x] UserRepository: 7メソッド（create_user、get_followers、get_following等）
+    - [x] EventRepository: 7メソッド（create_event、get_events_by_kind等）
+  - [x] P2Pサービスの実装
+    - [x] IrohNetworkService（130行）- ネットワーク管理、ピア接続
+    - [x] IrohGossipService（192行）- Gossipプロトコル、トピックメッセージング
+- [x] アプリケーション層の強化
+  - [x] PostServiceの完全実装（166行）
+    - [x] Nostrイベントとの統合
+    - [x] P2P配信メカニズム（DistributionStrategy）
+    - [x] いいね・ブースト・削除機能
+    - [x] オフライン投稿の同期処理
+  - [x] TopicService実装確認（Gossip統合済み）
+  - [x] AuthService実装確認（認証フロー完備）
+- [x] 実装統計
+  - [x] 新規作成: 4ファイル（計1,329行）
+  - [x] 実装メソッド: 44個（リポジトリ31個 + サービス13個）
+  - [x] 移行完了モジュール: 8個
+- [x] 進捗レポート作成（2025-08-13_architecture_migration.md）
 
 ### 2025年8月12日（テスト・型・リントエラー修正作業 - 完了）
 - [x] フロントエンドテストエラーの修正完了
@@ -507,23 +561,35 @@
 
 ### Phase 5後の重要課題（2025年8月13日更新）🔧
 
-#### 1. 新アーキテクチャへの既存コード移行（最優先）
-- [ ] 旧modules/からドメイン層への段階的移行
-  - [ ] 既存のビジネスロジックを新エンティティに統合
-  - [ ] 値オブジェクトの活用による型安全性向上
-- [ ] インフラ層の実装詳細
-  - [ ] SqliteRepositoryの各メソッド実装
-  - [ ] NetworkService/GossipServiceの実装
-  - [ ] KeyManager/SecureStorageの既存実装統合
-- [ ] サービス層のビジネスロジック実装
-  - [ ] PostService: 投稿の作成・取得・同期
-  - [ ] TopicService: トピック管理・Gossip統合
-  - [ ] AuthService: 認証フローの完全実装
-- [ ] Tauriコマンドの統合
-  - [ ] 既存コマンドを新プレゼンテーション層へ移行
-  - [ ] 入力検証とエラーハンドリングの強化
+#### 1. プレゼンテーション層への統合（部分完了）✅
+- [x] Tauriコマンドの新アーキテクチャ統合
+  - [x] v2コマンドとして新実装を追加（互換性維持）
+  - [x] 依存性注入パターンの実装（AppStateからサービス層への接続）
+  - [x] エラーハンドリングの統一（shared/error活用）
+- [x] 入力検証層の実装
+  - [x] DTOとバリデーションルールの定義（8種類のDTO、20種類以上の型）
+  - [x] Validateトレイトによる統一検証
+  - [x] 型安全なリクエスト/レスポンス構造（ApiResponse型）
+- [ ] コマンドの最適化（今後の改善として保留）
+  - [ ] 非同期処理の改善
+  - [ ] キャッシュ戦略の実装
+  - [ ] バッチ処理の導入
 
-#### 2. テスト戦略の実装
+#### 2. インフラ層の補完実装（高優先）
+- [ ] KeyManager実装の統合
+  - [ ] 既存のauth/key_manager.rsを新インフラ層に移行
+  - [ ] インターフェース準拠の確認
+  - [ ] セキュアな鍵管理の保証
+- [ ] SecureStorage実装の統合
+  - [ ] 既存のsecure_storage/mod.rsを移行
+  - [ ] プラットフォーム別実装の維持
+  - [ ] フォールバック機構の実装
+- [ ] EventDistributor実装の完成
+  - [ ] DistributionStrategyの実装（Hybrid、Nostr、P2P）
+  - [ ] イベントルーティングロジック
+  - [ ] 配信失敗時のリトライ機構
+
+#### 3. テスト戦略の実装
 - [ ] ユニットテストの追加
   - [ ] ドメインエンティティのテスト
   - [ ] サービス層のテスト（モック使用）
@@ -534,13 +600,78 @@
   - [ ] 大規模データ処理のベンチマーク
   - [ ] 並行処理の効率測定
 
-#### 3. 技術的負債の解消
+#### 4. 技術的負債の解消
 - [ ] #[allow(dead_code)]の削減（97箇所 → 0を目指す）
 - [ ] 未使用APIエンドポイント11件の削除
 - [ ] 孤立コンポーネント2件の削除
 - [ ] TypeScript any型の削減（64箇所）
 
 詳細は[リファクタリング計画](../refactoring_plan_2025-08-08_v3.md)と[Phase 5完了報告](../progressReports/2025-08-13_phase5_architecture_refactoring.md)を参照。
+
+### 🎯 本日（2025年8月13日）完了した新アーキテクチャ移行の成果
+
+#### ✅ Phase 5完了項目（インフラ・アプリケーション層）
+1. **インフラストラクチャ層** - 全リポジトリ実装完了
+   - SqliteRepository: 31メソッド実装
+   - IrohNetworkService: P2Pネットワーク管理
+   - IrohGossipService: Gossipプロトコル実装
+
+2. **アプリケーション層** - サービス実装完了
+   - PostService: Nostr統合、P2P配信、いいね/ブースト機能
+   - TopicService: Gossip統合確認
+   - AuthService: 認証フロー確認
+
+#### ✅ Phase 6完了項目（プレゼンテーション層）
+1. **DTOレイヤー** - 完全実装
+   - 8種類のDTO（post、topic、auth、user、event、offline、p2p）
+   - 20種類以上の型定義
+   - Validateトレイトによる入力検証
+
+2. **ハンドラーレイヤー** - 5種類実装
+   - PostHandler、TopicHandler、AuthHandler、UserHandler
+   - ビジネスロジックとプレゼンテーションの分離
+   - エラーハンドリングの統一
+
+3. **依存性注入** - 完了
+   - AppStateへのサービス層統合
+   - リポジトリインターフェース定義
+   - v2コマンドによる段階的移行
+
+詳細は以下を参照：
+- [Phase 5: アーキテクチャ移行](../progressReports/2025-08-13_architecture_migration.md)
+- [Phase 6: プレゼンテーション層統合](../progressReports/2025-08-13_presentation_layer_integration.md)
+
+#### ⚠️ 残タスク（優先度順）
+
+##### 最優先 - インフラ層の補完 🚨
+1. **既存モジュールの移行**
+   - [ ] KeyManager移行（auth/key_manager.rs → infrastructure/crypto/）
+   - [ ] SecureStorage移行（secure_storage/mod.rs → infrastructure/storage/）
+   - [ ] EventDistributor完成（DistributionStrategy実装）
+
+##### 高優先 - 完全移行の完了
+2. **旧コマンドの置き換え**
+   - [ ] v2コマンドへの完全切り替え
+   - [ ] modules/*の廃止と削除
+   - [ ] 依存関係の整理
+
+##### 中優先 - 品質保証
+3. **テスト実装**
+   - [ ] ハンドラー層のユニットテスト
+   - [ ] DTOバリデーションテスト
+   - [ ] 統合テスト（層間の連携）
+   - [ ] E2Eテスト
+
+4. **パフォーマンス最適化**
+   - [ ] 非同期処理の改善
+   - [ ] キャッシュ戦略の実装
+   - [ ] バッチ処理の導入
+
+##### 低優先 - 技術的負債
+5. **コード品質改善**
+   - [ ] #[allow(dead_code)]の削減（97箇所）
+   - [ ] 未使用APIエンドポイント11件の削除
+   - [ ] TypeScript any型の削減（64箇所）
 
 ### Tauriアプリケーション改善
 **Phase 5: P2P機能の拡張**（リファクタリング後）

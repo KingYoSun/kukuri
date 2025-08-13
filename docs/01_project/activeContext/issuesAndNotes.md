@@ -24,28 +24,38 @@
 - ✅ 22個のテストファイル失敗 → 10個に削減
 - ✅ ビルドエラーが完全に解消
 
-### 新アーキテクチャへの既存コード移行（2025年8月13日追加）
-**問題**: Phase 5で新しいクリーンアーキテクチャ構造を作成したが、既存コードはまだ旧modules/に残っている
+### 新アーキテクチャへの既存コード移行（2025年8月13日更新）
+**背景**: Phase 5で新しいクリーンアーキテクチャ構造を作成し、既存コードの移行を実施中
 
 **現在の状況**:
-- 新アーキテクチャ（domain/infrastructure/application/presentation）は作成済み
-- 既存のmodules/ディレクトリのコードは動作中
-- 新旧の構造が並存している状態
+- ✅ 新アーキテクチャ（domain/infrastructure/application/presentation）は作成済み
+- ⚠️ 既存のmodules/ディレクトリのコードは動作中だが、段階的に新アーキテクチャへ移行中
+- ⚠️ 新旧の構造が並存している状態（移行期間中）
 
-**必要な作業**:
-1. **リポジトリ実装の詳細化**
-   - SqliteRepositoryの各メソッドを実装（現在は空実装）
-   - 既存のデータベース処理を新リポジトリに移行
+**完了した作業（2025年8月13日）**:
+1. **リポジトリ実装の詳細化** ✅
+   - SqliteRepositoryの全31メソッドを実装完了
+   - PostRepository、TopicRepository、UserRepository、EventRepository
    
-2. **サービス層の実装**
-   - PostService: 既存のpost/commands.rsから移行
-   - TopicService: topic/commands.rsから移行
-   - AuthService: auth/commands.rsから移行
+2. **サービス層の実装** ✅
+   - PostService: Nostr統合、P2P配信機能を含む完全実装
+   - TopicService: Gossip統合確認済み
+   - AuthService: 認証フロー確認済み
    
-3. **インフラ層の統合**
-   - NetworkService: 既存のp2p/connection.rsを統合
-   - GossipService: p2p/gossip_manager.rsを統合
-   - KeyManager: crypto/key_manager.rsを統合
+3. **インフラ層の統合** ✅（一部）
+   - IrohNetworkService: P2Pネットワーク管理実装
+   - IrohGossipService: Gossipプロトコル実装
+   
+**残作業**:
+1. **プレゼンテーション層統合** 🚨 最優先
+   - modules/*/commands.rsを新presentation/commands/へ移行
+   - AppStateとサービス層の接続
+   - 統一エラーハンドリング
+   
+2. **インフラ層の補完**
+   - KeyManager: auth/key_manager.rsをinfrastructure/crypto/へ移行
+   - SecureStorage: secure_storage/mod.rsをinfrastructure/storage/へ移行
+   - EventDistributor: DistributionStrategy実装
 
 **リスク**:
 - 段階的移行中に新旧コードの不整合が発生する可能性

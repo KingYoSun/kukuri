@@ -30,161 +30,812 @@ impl Repository for SqliteRepository {
 #[async_trait]
 impl PostRepository for SqliteRepository {
     async fn create_post(&self, post: &Post) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+        // NostrイベントとしてDBに保存
+        let tags_json = serde_json::to_string(&vec![vec!["t".to_string(), post.topic_id.clone()]])
+            .unwrap_or_else(|_| "[]".to_string());
+
+        sqlx::query(
+            r#"
+            INSERT INTO events (event_id, public_key, content, kind, tags, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&post.id)
+        .bind(&post.author.pubkey())
+        .bind(&post.content)
+        .bind(1) // Kind 1 for text notes
+        .bind(&tags_json)
+        .bind(post.created_at.timestamp_millis())
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn get_post(&self, _id: &str) -> Result<Option<Post>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(None)
+    async fn get_post(&self, id: &str) -> Result<Option<Post>, Box<dyn std::error::Error>> {
+        let row = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, created_at, tags
+            FROM events
+            WHERE event_id = ? AND kind = 1
+            "#
+        )
+        .bind(id)
+        .fetch_optional(self.pool.get_pool())
+        .await?;
+
+        match row {
+            Some(row) => {
+                use sqlx::Row;
+                let event_id: String = row.try_get("event_id")?;
+                let public_key: String = row.try_get("public_key")?;
+                let content: String = row.try_get("content")?;
+                let created_at: i64 = row.try_get("created_at")?;
+                let tags_json: String = row.try_get("tags").unwrap_or_default();
+                
+                // タグからトピックIDを抽出
+                let mut topic_id = String::new();
+                if let Ok(tags) = serde_json::from_str::<Vec<Vec<String>>>(&tags_json) {
+                    for tag in tags {
+                        if tag.len() >= 2 && tag[0] == "t" {
+                            topic_id = tag[1].clone();
+                            break;
+                        }
+                    }
+                }
+
+                let user = User::from_pubkey(&public_key);
+                let post = Post::new_with_id(
+                    event_id,
+                    content,
+                    user,
+                    topic_id,
+                    chrono::DateTime::from_timestamp_millis(created_at)
+                        .unwrap_or_else(chrono::Utc::now)
+                );
+                
+                Ok(Some(post))
+            }
+            None => Ok(None)
+        }
     }
 
-    async fn get_posts_by_topic(&self, _topic_id: &str, _limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+    async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error>> {
+        let topic_tag = format!(r#"["t","{}"]"#, topic_id);
+        let rows = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, created_at, tags
+            FROM events
+            WHERE kind = 1
+            AND tags LIKE '%' || ? || '%'
+            ORDER BY created_at DESC
+            LIMIT ?
+            "#
+        )
+        .bind(&topic_tag)
+        .bind(limit as i64)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut posts = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let event_id: String = row.try_get("event_id")?;
+            let public_key: String = row.try_get("public_key")?;
+            let content: String = row.try_get("content")?;
+            let created_at: i64 = row.try_get("created_at")?;
+            
+            let user = User::from_pubkey(&public_key);
+            let post = Post::new_with_id(
+                event_id,
+                content,
+                user,
+                topic_id.to_string(),
+                chrono::DateTime::from_timestamp_millis(created_at)
+                    .unwrap_or_else(chrono::Utc::now)
+            );
+            posts.push(post);
+        }
+
+        Ok(posts)
     }
 
-    async fn update_post(&self, _post: &Post) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn update_post(&self, post: &Post) -> Result<(), Box<dyn std::error::Error>> {
+        // 投稿の更新（主にいいね数、ブースト数などのメタデータ更新用）
+        sqlx::query(
+            r#"
+            UPDATE events 
+            SET content = ?, updated_at = ?
+            WHERE event_id = ?
+            "#
+        )
+        .bind(&post.content)
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(&post.id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn delete_post(&self, _id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn delete_post(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Nostrでは削除イベント(Kind 5)を発行するが、元のイベントは残す
+        // ここではフラグを立てるか、別テーブルで管理
+        sqlx::query(
+            r#"
+            UPDATE events 
+            SET deleted = 1, updated_at = ?
+            WHERE event_id = ?
+            "#
+        )
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
     async fn get_unsync_posts(&self) -> Result<Vec<Post>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+        // sync_statusカラムがない場合は、オフライン中に作成されたものを取得
+        let rows = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, created_at, tags
+            FROM events
+            WHERE kind = 1
+            AND (sync_status IS NULL OR sync_status = 0)
+            ORDER BY created_at DESC
+            "#
+        )
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut posts = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let event_id: String = row.try_get("event_id")?;
+            let public_key: String = row.try_get("public_key")?;
+            let content: String = row.try_get("content")?;
+            let created_at: i64 = row.try_get("created_at")?;
+            let tags_json: String = row.try_get("tags").unwrap_or_default();
+            
+            // タグからトピックIDを抽出
+            let mut topic_id = String::new();
+            if let Ok(tags) = serde_json::from_str::<Vec<Vec<String>>>(&tags_json) {
+                for tag in tags {
+                    if tag.len() >= 2 && tag[0] == "t" {
+                        topic_id = tag[1].clone();
+                        break;
+                    }
+                }
+            }
+            
+            let user = User::from_pubkey(&public_key);
+            let mut post = Post::new_with_id(
+                event_id,
+                content,
+                user,
+                topic_id,
+                chrono::DateTime::from_timestamp_millis(created_at)
+                    .unwrap_or_else(chrono::Utc::now)
+            );
+            post.mark_as_unsynced();
+            posts.push(post);
+        }
+
+        Ok(posts)
     }
 
-    async fn mark_post_synced(&self, _id: &str, _event_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn mark_post_synced(&self, id: &str, event_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            UPDATE events 
+            SET sync_status = 1, sync_event_id = ?, synced_at = ?
+            WHERE event_id = ?
+            "#
+        )
+        .bind(event_id)
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 }
 
 #[async_trait]
 impl TopicRepository for SqliteRepository {
-    async fn create_topic(&self, _topic: &Topic) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn create_topic(&self, topic: &Topic) -> Result<(), Box<dyn std::error::Error>> {
+        // トピックの作成
+        sqlx::query(
+            r#"
+            INSERT INTO topics (topic_id, name, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&topic.id)
+        .bind(&topic.name)
+        .bind(&topic.description)
+        .bind(topic.created_at.timestamp_millis())
+        .bind(topic.updated_at.timestamp_millis())
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn get_topic(&self, _id: &str) -> Result<Option<Topic>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(None)
+    async fn get_topic(&self, id: &str) -> Result<Option<Topic>, Box<dyn std::error::Error>> {
+        let row = sqlx::query(
+            r#"
+            SELECT topic_id, name, description, created_at, updated_at
+            FROM topics
+            WHERE topic_id = ?
+            "#
+        )
+        .bind(id)
+        .fetch_optional(self.pool.get_pool())
+        .await?;
+
+        match row {
+            Some(row) => {
+                use sqlx::Row;
+                let topic = Topic::new_with_id(
+                    row.try_get("topic_id")?,
+                    row.try_get("name")?,
+                    row.try_get("description")?,
+                    chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                        .unwrap_or_else(chrono::Utc::now),
+                );
+                Ok(Some(topic))
+            }
+            None => Ok(None)
+        }
     }
 
     async fn get_all_topics(&self) -> Result<Vec<Topic>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+        let rows = sqlx::query(
+            r#"
+            SELECT topic_id, name, description, created_at, updated_at
+            FROM topics
+            ORDER BY created_at ASC
+            "#
+        )
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut topics = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let topic = Topic::new_with_id(
+                row.try_get("topic_id")?,
+                row.try_get("name")?,
+                row.try_get("description")?,
+                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                    .unwrap_or_else(chrono::Utc::now),
+            );
+            topics.push(topic);
+        }
+
+        Ok(topics)
     }
 
     async fn get_joined_topics(&self) -> Result<Vec<Topic>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+        // ユーザーが参加しているトピックを取得
+        let rows = sqlx::query(
+            r#"
+            SELECT t.topic_id, t.name, t.description, t.created_at, t.updated_at
+            FROM topics t
+            INNER JOIN user_topics ut ON t.topic_id = ut.topic_id
+            WHERE ut.is_joined = 1
+            ORDER BY t.created_at ASC
+            "#
+        )
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut topics = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let topic = Topic::new_with_id(
+                row.try_get("topic_id")?,
+                row.try_get("name")?,
+                row.try_get("description")?,
+                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                    .unwrap_or_else(chrono::Utc::now),
+            );
+            topics.push(topic);
+        }
+
+        Ok(topics)
     }
 
-    async fn update_topic(&self, _topic: &Topic) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn update_topic(&self, topic: &Topic) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            UPDATE topics 
+            SET name = ?, description = ?, updated_at = ?
+            WHERE topic_id = ?
+            "#
+        )
+        .bind(&topic.name)
+        .bind(&topic.description)
+        .bind(topic.updated_at.timestamp_millis())
+        .bind(&topic.id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn delete_topic(&self, _id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn delete_topic(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // #publicトピックは削除できない
+        if id == "public" {
+            return Err("デフォルトトピックは削除できません".into());
+        }
+
+        sqlx::query(
+            r#"
+            DELETE FROM topics 
+            WHERE topic_id = ?
+            "#
+        )
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn join_topic(&self, _id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn join_topic(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // ユーザーのトピック参加を記録
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO user_topics (topic_id, is_joined, joined_at)
+            VALUES (?, 1, ?)
+            "#
+        )
+        .bind(id)
+        .bind(chrono::Utc::now().timestamp_millis())
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn leave_topic(&self, _id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn leave_topic(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // #publicトピックからは離脱できない
+        if id == "public" {
+            return Err("デフォルトトピックから離脱することはできません".into());
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE user_topics 
+            SET is_joined = 0, left_at = ?
+            WHERE topic_id = ?
+            "#
+        )
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn update_topic_stats(&self, _id: &str, _member_count: u32, _post_count: u32) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn update_topic_stats(&self, id: &str, member_count: u32, post_count: u32) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            UPDATE topics 
+            SET member_count = ?, post_count = ?, updated_at = ?
+            WHERE topic_id = ?
+            "#
+        )
+        .bind(member_count as i64)
+        .bind(post_count as i64)
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 }
 
 #[async_trait]
 impl UserRepository for SqliteRepository {
-    async fn create_user(&self, _user: &User) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn create_user(&self, user: &User) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            INSERT INTO users (npub, pubkey, display_name, bio, avatar_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(user.npub())
+        .bind(user.pubkey())
+        .bind(&user.profile.display_name)
+        .bind(&user.profile.bio)
+        .bind(&user.profile.avatar_url)
+        .bind(user.created_at.timestamp_millis())
+        .bind(user.updated_at.timestamp_millis())
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn get_user(&self, _npub: &str) -> Result<Option<User>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(None)
+    async fn get_user(&self, npub: &str) -> Result<Option<User>, Box<dyn std::error::Error>> {
+        let row = sqlx::query(
+            r#"
+            SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
+            FROM users
+            WHERE npub = ?
+            "#
+        )
+        .bind(npub)
+        .fetch_optional(self.pool.get_pool())
+        .await?;
+
+        match row {
+            Some(row) => {
+                use sqlx::Row;
+                use crate::domain::entities::UserProfile;
+                
+                let user = User::new_with_profile(
+                    row.try_get("npub")?,
+                    UserProfile {
+                        display_name: row.try_get("display_name").unwrap_or_default(),
+                        bio: row.try_get("bio").unwrap_or_default(),
+                        avatar_url: row.try_get("avatar_url").ok(),
+                    }
+                );
+                Ok(Some(user))
+            }
+            None => Ok(None)
+        }
     }
 
-    async fn get_user_by_pubkey(&self, _pubkey: &str) -> Result<Option<User>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(None)
+    async fn get_user_by_pubkey(&self, pubkey: &str) -> Result<Option<User>, Box<dyn std::error::Error>> {
+        let row = sqlx::query(
+            r#"
+            SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
+            FROM users
+            WHERE pubkey = ?
+            "#
+        )
+        .bind(pubkey)
+        .fetch_optional(self.pool.get_pool())
+        .await?;
+
+        match row {
+            Some(row) => {
+                use sqlx::Row;
+                use crate::domain::entities::UserProfile;
+                
+                let user = User::new_with_profile(
+                    row.try_get("npub")?,
+                    UserProfile {
+                        display_name: row.try_get("display_name").unwrap_or_default(),
+                        bio: row.try_get("bio").unwrap_or_default(),
+                        avatar_url: row.try_get("avatar_url").ok(),
+                    }
+                );
+                Ok(Some(user))
+            }
+            None => Ok(None)
+        }
     }
 
-    async fn update_user(&self, _user: &User) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn update_user(&self, user: &User) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            UPDATE users 
+            SET display_name = ?, bio = ?, avatar_url = ?, updated_at = ?
+            WHERE npub = ?
+            "#
+        )
+        .bind(&user.profile.display_name)
+        .bind(&user.profile.bio)
+        .bind(&user.profile.avatar_url)
+        .bind(user.updated_at.timestamp_millis())
+        .bind(user.npub())
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn delete_user(&self, _npub: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn delete_user(&self, npub: &str) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            DELETE FROM users 
+            WHERE npub = ?
+            "#
+        )
+        .bind(npub)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn get_followers(&self, _npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+    async fn get_followers(&self, npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error>> {
+        // フォロワーを取得（followsテーブルから）
+        let rows = sqlx::query(
+            r#"
+            SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at
+            FROM users u
+            INNER JOIN follows f ON u.pubkey = f.follower_pubkey
+            WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
+            "#
+        )
+        .bind(npub)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut users = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            use crate::domain::entities::UserProfile;
+            
+            let user = User::new_with_profile(
+                row.try_get("npub")?,
+                UserProfile {
+                    display_name: row.try_get("display_name").unwrap_or_default(),
+                    bio: row.try_get("bio").unwrap_or_default(),
+                    avatar_url: row.try_get("avatar_url").ok(),
+                }
+            );
+            users.push(user);
+        }
+
+        Ok(users)
     }
 
-    async fn get_following(&self, _npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+    async fn get_following(&self, npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error>> {
+        // フォロー中のユーザーを取得
+        let rows = sqlx::query(
+            r#"
+            SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at
+            FROM users u
+            INNER JOIN follows f ON u.pubkey = f.followed_pubkey
+            WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
+            "#
+        )
+        .bind(npub)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut users = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            use crate::domain::entities::UserProfile;
+            
+            let user = User::new_with_profile(
+                row.try_get("npub")?,
+                UserProfile {
+                    display_name: row.try_get("display_name").unwrap_or_default(),
+                    bio: row.try_get("bio").unwrap_or_default(),
+                    avatar_url: row.try_get("avatar_url").ok(),
+                }
+            );
+            users.push(user);
+        }
+
+        Ok(users)
     }
 }
 
 #[async_trait]
 impl EventRepository for SqliteRepository {
-    async fn create_event(&self, _event: &Event) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn create_event(&self, event: &Event) -> Result<(), Box<dyn std::error::Error>> {
+        let tags_json = serde_json::to_string(&event.tags).unwrap_or_else(|_| "[]".to_string());
+        
+        sqlx::query(
+            r#"
+            INSERT INTO events (event_id, public_key, content, kind, tags, created_at, sig)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&event.id.to_string())
+        .bind(&event.pubkey)
+        .bind(&event.content)
+        .bind(event.kind as i64)
+        .bind(&tags_json)
+        .bind(event.created_at.timestamp_millis())
+        .bind(&event.sig)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
-    async fn get_event(&self, _id: &str) -> Result<Option<Event>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(None)
+    async fn get_event(&self, id: &str) -> Result<Option<Event>, Box<dyn std::error::Error>> {
+        let row = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, kind, tags, created_at, sig
+            FROM events
+            WHERE event_id = ?
+            "#
+        )
+        .bind(id)
+        .fetch_optional(self.pool.get_pool())
+        .await?;
+
+        match row {
+            Some(row) => {
+                use sqlx::Row;
+                use crate::domain::value_objects::EventId;
+                
+                let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
+                let tags_json: String = row.try_get("tags").unwrap_or_default();
+                let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
+                
+                let event = Event::new_with_id(
+                    event_id,
+                    row.try_get("public_key")?,
+                    row.try_get("content")?,
+                    row.try_get::<i64, _>("kind")? as u32,
+                    tags,
+                    chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                        .unwrap_or_else(chrono::Utc::now),
+                    row.try_get("sig")?,
+                );
+                
+                Ok(Some(event))
+            }
+            None => Ok(None)
+        }
     }
 
-    async fn get_events_by_kind(&self, _kind: u32, _limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+    async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, kind, tags, created_at, sig
+            FROM events
+            WHERE kind = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            "#
+        )
+        .bind(kind as i64)
+        .bind(limit as i64)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            use crate::domain::value_objects::EventId;
+            
+            let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
+            let tags_json: String = row.try_get("tags").unwrap_or_default();
+            let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
+            
+            let event = Event::new_with_id(
+                event_id,
+                row.try_get("public_key")?,
+                row.try_get("content")?,
+                row.try_get::<i64, _>("kind")? as u32,
+                tags,
+                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                    .unwrap_or_else(chrono::Utc::now),
+                row.try_get("sig")?,
+            );
+            events.push(event);
+        }
+
+        Ok(events)
     }
 
-    async fn get_events_by_author(&self, _pubkey: &str, _limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+    async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, kind, tags, created_at, sig
+            FROM events
+            WHERE public_key = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            "#
+        )
+        .bind(pubkey)
+        .bind(limit as i64)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            use crate::domain::value_objects::EventId;
+            
+            let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
+            let tags_json: String = row.try_get("tags").unwrap_or_default();
+            let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
+            
+            let event = Event::new_with_id(
+                event_id,
+                row.try_get("public_key")?,
+                row.try_get("content")?,
+                row.try_get::<i64, _>("kind")? as u32,
+                tags,
+                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                    .unwrap_or_else(chrono::Utc::now),
+                row.try_get("sig")?,
+            );
+            events.push(event);
+        }
+
+        Ok(events)
     }
 
-    async fn delete_event(&self, _id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn delete_event(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Nostrでは削除イベント(Kind 5)を発行するが、元のイベントは残す
+        sqlx::query(
+            r#"
+            UPDATE events 
+            SET deleted = 1, updated_at = ?
+            WHERE event_id = ?
+            "#
+        )
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 
     async fn get_unsync_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
-        // Implementation would go here
-        Ok(Vec::new())
+        let rows = sqlx::query(
+            r#"
+            SELECT event_id, public_key, content, kind, tags, created_at, sig
+            FROM events
+            WHERE sync_status IS NULL OR sync_status = 0
+            ORDER BY created_at DESC
+            "#
+        )
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            use crate::domain::value_objects::EventId;
+            
+            let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
+            let tags_json: String = row.try_get("tags").unwrap_or_default();
+            let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
+            
+            let event = Event::new_with_id(
+                event_id,
+                row.try_get("public_key")?,
+                row.try_get("content")?,
+                row.try_get::<i64, _>("kind")? as u32,
+                tags,
+                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                    .unwrap_or_else(chrono::Utc::now),
+                row.try_get("sig")?,
+            );
+            events.push(event);
+        }
+
+        Ok(events)
     }
 
-    async fn mark_event_synced(&self, _id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would go here
+    async fn mark_event_synced(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        sqlx::query(
+            r#"
+            UPDATE events 
+            SET sync_status = 1, synced_at = ?
+            WHERE event_id = ?
+            "#
+        )
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
         Ok(())
     }
 }

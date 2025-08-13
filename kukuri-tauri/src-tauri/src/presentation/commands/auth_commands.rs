@@ -61,7 +61,7 @@ pub async fn login_with_npub(
 }
 
 #[tauri::command]
-pub async fn logout(auth_service: State<'_, Arc<AuthService>>) -> Result<(), String> {
+pub async fn logout_v2(auth_service: State<'_, Arc<AuthService>>) -> Result<(), String> {
     auth_service.logout().await.map_err(|e| e.to_string())
 }
 
@@ -94,7 +94,7 @@ pub async fn export_private_key(
 }
 
 #[tauri::command]
-pub async fn list_accounts(
+pub async fn list_accounts_v2(
     auth_service: State<'_, Arc<AuthService>>,
 ) -> Result<Vec<String>, String> {
     auth_service
@@ -104,7 +104,7 @@ pub async fn list_accounts(
 }
 
 #[tauri::command]
-pub async fn switch_account(
+pub async fn switch_account_v2(
     npub: String,
     auth_service: State<'_, Arc<AuthService>>,
 ) -> Result<LoginResponse, String> {

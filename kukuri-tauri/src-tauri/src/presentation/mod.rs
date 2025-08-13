@@ -1,4 +1,6 @@
 pub mod commands;
+pub mod dto;
+pub mod handlers;
 
 pub use commands::{
     auth_commands,

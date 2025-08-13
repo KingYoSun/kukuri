@@ -46,6 +46,10 @@ argon2 = "0.5"
 rand = "0.8"
 base64 = "0.22"
 
+# Architecture support
+async-trait = "0.1"
+blake3 = "1.5"
+
 # Utilities
 anyhow = "1.0"
 thiserror = "2.0"

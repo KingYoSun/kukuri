@@ -1,5 +1,6 @@
 pub mod auth_commands;
 pub mod post_commands;
+pub mod post_commands_v2;
 pub mod topic_commands;
 pub mod user_commands;
 pub mod sync_commands;

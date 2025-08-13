@@ -5,6 +5,16 @@ use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
 use crate::modules::offline::OfflineManager;
 use crate::modules::p2p::{EventSync, GossipManager, P2PEvent};
+
+// アプリケーションサービスのインポート
+use crate::application::services::{
+    AuthService, EventService, PostService, SyncService, TopicService, UserService,
+};
+use crate::infrastructure::{
+    database::sqlite_repository::SqliteRepository,
+    p2p::{iroh_gossip_service::IrohGossipService, iroh_network_service::IrohNetworkService},
+};
+
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::mpsc;
@@ -25,6 +35,7 @@ pub struct P2PState {
 /// アプリケーション全体の状態を管理する構造体
 #[derive(Clone)]
 pub struct AppState {
+    // 既存のマネージャー（後で移行予定）
     pub key_manager: Arc<KeyManager>,
     #[allow(dead_code)]
     pub db_pool: Arc<DbPool>,
@@ -34,6 +45,14 @@ pub struct AppState {
     pub p2p_state: Arc<RwLock<P2PState>>,
     pub bookmark_manager: Arc<BookmarkManager>,
     pub offline_manager: Arc<OfflineManager>,
+    
+    // 新アーキテクチャのサービス層
+    pub auth_service: Arc<AuthService>,
+    pub post_service: Arc<PostService>,
+    pub topic_service: Arc<TopicService>,
+    pub user_service: Arc<UserService>,
+    pub event_service: Arc<EventService>,
+    pub sync_service: Arc<SyncService>,
 }
 
 impl AppState {
@@ -88,6 +107,37 @@ impl AppState {
         let bookmark_manager = Arc::new(BookmarkManager::new((*db_pool).clone()));
         let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
 
+        // 新アーキテクチャのリポジトリとサービスを初期化
+        let repository = Arc::new(SqliteRepository::new((*db_pool).clone()));
+        
+        // サービス層の初期化
+        let auth_service = Arc::new(AuthService::new(
+            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::UserRepository>,
+            Arc::clone(&key_manager),
+        ));
+        
+        let post_service = Arc::new(PostService::new(
+            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::PostRepository>,
+            Arc::clone(&event_manager),
+        ));
+        
+        let topic_service = Arc::new(TopicService::new(
+            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::TopicRepository>,
+        ));
+        
+        let user_service = Arc::new(UserService::new(
+            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::UserRepository>,
+        ));
+        
+        let event_service = Arc::new(EventService::new(
+            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::EventRepository>,
+            Arc::clone(&event_manager),
+        ));
+        
+        let sync_service = Arc::new(SyncService::new(
+            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::EventRepository>,
+        ));
+
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {
             manager: None,
@@ -103,6 +153,12 @@ impl AppState {
             p2p_state,
             bookmark_manager,
             offline_manager,
+            auth_service,
+            post_service,
+            topic_service,
+            user_service,
+            event_service,
+            sync_service,
         })
     }
 
