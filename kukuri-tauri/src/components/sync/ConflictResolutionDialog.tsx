@@ -152,7 +152,7 @@ export function ConflictResolutionDialog({
               <CardContent>
                 <RadioGroup
                   value={selectedResolution}
-                  onValueChange={(value) => setSelectedResolution(value as 'local' | 'remote' | 'merge')}
+                  onValueChange={(value: string) => setSelectedResolution(value as 'local' | 'remote' | 'merge')}
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="local" id="local" />

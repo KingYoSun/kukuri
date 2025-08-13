@@ -4,46 +4,32 @@
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
+## 解決済みの問題
+
+### ✅ コンパイルエラー175件（2025年8月13日解決）
+**問題**: インフラ層の補完実装後、アプリケーションが起動不可能な状態だった
+
+**解決方法（第4回作業）**:
+1. **TypeScriptコンパイルエラーの修正**:
+   - `currentAccount` → `currentUser`への統一（authStore使用箇所3ファイル）
+   - Zustand永続化設定を新形式に移行:
+     ```typescript
+     // 旧: createLocalStoragePersist('name', partialize)
+     // 新: { name: 'name', partialize: (state) => ({...}) }
+     ```
+   - `SaveOfflineActionRequest`インターフェース修正（EntityType追加）
+   - radio-group UIコンポーネント作成（@radix-ui/react-radio-group依存追加）
+   - syncEngine.tsのTauriApi呼び出し修正（静的メソッド化、CreatePostRequestインターフェース対応）
+
+2. **Rust側の対応**:
+   - 実際にはRust側にコンパイルエラーはなく、警告14件のみ
+   - 未使用インポートの警告は残存（今後のクリーンアップ対象）
+
+**結果**: 
+- TypeScript/Rustともにビルド成功
+- アプリケーション起動可能状態に復帰
+
 ## 現在の問題
-
-### 🚨🚨🚨 コンパイルエラー175件（2025年8月13日発生）- 最重要
-**問題**: インフラ層の補完実装後、アプリケーションが起動不可能な状態
-
-**エラーの詳細**:
-1. **state.rs内のサービス初期化エラー（最も深刻）**:
-   - AuthService::new() - 引数不一致（期待4、実際2）
-   - TopicService::new() - 引数不一致（期待2、実際1）
-   - EventService::new() - 引数不一致（期待3、実際2）
-   - SyncService::new() - 引数不一致（期待3、実際1）
-   - PostService::new() - 型のミスマッチ
-   - UserService::new() - 型のミスマッチ
-
-2. **型のミスマッチ**:
-   - SqliteRepository::new()の初期化方法が不正
-   - Arc<T>の型不一致（key_manager、event_manager等）
-   - サービス間の依存関係の型整合性が取れていない
-
-3. **重複コマンド定義（部分的に解消済み）**:
-   - ✅ presentation/commands内の重複はコメントアウト済み
-   - ⚠️ modules/post/commands.rsとの競合が残存
-   - ⚠️ modules/topic/commands.rsとの競合が残存
-
-**原因**:
-- 新旧アーキテクチャの移行期間中で、サービス層のインターフェースが不一致
-- infrastructure層の実装は完了したが、application層との統合が未完了
-- 依存性注入パターンの実装が不完全
-
-**影響**:
-- アプリケーションがビルドできない
-- テストが実行できない
-- 開発作業が完全にブロックされている
-
-**解決策**:
-1. state.rsの各サービス初期化を正しい引数で修正
-2. 依存性の型を統一（Arc<dyn Trait>の使用を検討）
-3. modules/*のコマンドを完全に無効化またはv2へ移行
-
-**優先度**: 🚨最高（他のすべての作業をブロック）
 
 ### TypeScriptテストの一部失敗（2025年8月13日更新）
 **問題**: テスト固有の設定問題により一部のテストが失敗

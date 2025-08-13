@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import type { SaveOfflineActionRequest } from '@/types/offline';
-import { OfflineActionType } from '@/types/offline';
+import { OfflineActionType, EntityType } from '@/types/offline';
 
 /**
  * オフライン状態を監視し、オフライン機能を提供するフック
@@ -20,21 +20,21 @@ export function useOffline() {
     loadPendingActions,
   } = useOfflineStore();
 
-  const { currentAccount } = useAuthStore();
+  const { currentUser } = useAuthStore();
 
   // コンポーネントマウント時に保留中のアクションを読み込む
   useEffect(() => {
-    if (currentAccount?.npub) {
-      loadPendingActions(currentAccount.npub);
+    if (currentUser?.npub) {
+      loadPendingActions(currentUser.npub);
     }
-  }, [currentAccount?.npub, loadPendingActions]);
+  }, [currentUser?.npub, loadPendingActions]);
 
   // オンライン/オフライン状態の変化を監視
   useEffect(() => {
     const handleOnline = () => {
       toast.success('オンラインになりました。データを同期しています...');
-      if (currentAccount?.npub && pendingActions.length > 0) {
-        syncPendingActions(currentAccount.npub);
+      if (currentUser?.npub && pendingActions.length > 0) {
+        syncPendingActions(currentUser.npub);
       }
     };
 
@@ -55,33 +55,34 @@ export function useOffline() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [isOnline, currentAccount?.npub, pendingActions.length, syncPendingActions]);
+  }, [isOnline, currentUser?.npub, pendingActions.length, syncPendingActions]);
 
   // 定期的な同期（5分ごと）
   useEffect(() => {
-    if (!isOnline || !currentAccount?.npub) return;
+    if (!isOnline || !currentUser?.npub) return;
 
     const interval = setInterval(() => {
       if (pendingActions.length > 0 && !isSyncing) {
-        syncPendingActions(currentAccount.npub);
+        syncPendingActions(currentUser.npub);
       }
     }, 5 * 60 * 1000); // 5分
 
     return () => clearInterval(interval);
-  }, [isOnline, currentAccount?.npub, pendingActions.length, isSyncing, syncPendingActions]);
+  }, [isOnline, currentUser?.npub, pendingActions.length, isSyncing, syncPendingActions]);
 
   // オフラインアクションを保存するヘルパー
   const saveAction = useCallback(
     async (actionType: OfflineActionType, targetId?: string, actionData?: Record<string, any>) => {
-      if (!currentAccount?.npub) {
+      if (!currentUser?.npub) {
         throw new Error('User not authenticated');
       }
 
       const request: SaveOfflineActionRequest = {
-        userPubkey: currentAccount.npub,
+        userPubkey: currentUser.npub,
         actionType,
-        targetId,
-        actionData: actionData || {},
+        entityType: EntityType.POST, // デフォルト値、必要に応じて調整
+        entityId: targetId || '',
+        data: JSON.stringify(actionData || {}),
       };
 
       await saveOfflineAction(request);
@@ -91,12 +92,12 @@ export function useOffline() {
         toast.info('アクションが保存されました。オンライン時に同期されます。');
       }
     },
-    [currentAccount?.npub, saveOfflineAction, isOnline]
+    [currentUser?.npub, saveOfflineAction, isOnline]
   );
 
   // 手動同期トリガー
   const triggerSync = useCallback(async () => {
-    if (!currentAccount?.npub) {
+    if (!currentUser?.npub) {
       toast.error('ログインが必要です');
       return;
     }
@@ -117,7 +118,7 @@ export function useOffline() {
     }
 
     try {
-      await syncPendingActions(currentAccount.npub);
+      await syncPendingActions(currentUser.npub);
       toast.success('同期が完了しました');
     } catch (error) {
       toast.error('同期に失敗しました');
@@ -125,7 +126,7 @@ export function useOffline() {
         context: 'useOffline.triggerSync'
       });
     }
-  }, [currentAccount?.npub, isOnline, isSyncing, pendingActions.length, syncPendingActions]);
+  }, [currentUser?.npub, isOnline, isSyncing, pendingActions.length, syncPendingActions]);
 
   return {
     isOnline,

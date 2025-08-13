@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { createLocalStoragePersist, createPartializer } from './utils/persistHelpers';
+
 import { offlineApi } from '@/api/offline';
 import { errorHandler } from '@/lib/errorHandler';
 import type {
@@ -240,19 +240,22 @@ export const useOfflineStore = create<OfflineStore>()(
       },
 
       rollbackUpdate: async (updateId) => {
-        const originalData = await offlineApi.rollbackOptimisticUpdate(updateId);
+        await offlineApi.rollbackOptimisticUpdate(updateId);
         set((state) => {
           const updates = new Map(state.optimisticUpdates);
           updates.delete(updateId);
           return { optimisticUpdates: updates };
         });
-        return originalData;
       },
     }),
-    createLocalStoragePersist(
-      'offline-store',
-      createPartializer(['lastSyncedAt', 'pendingActions', 'syncQueue']),
-    )
+    {
+      name: 'offline-store',
+      partialize: (state) => ({
+        lastSyncedAt: state.lastSyncedAt,
+        pendingActions: state.pendingActions,
+        syncQueue: state.syncQueue,
+      }),
+    }
   )
 );
 

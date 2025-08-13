@@ -28,12 +28,10 @@ export interface DiffPatch {
 }
 
 export class SyncEngine {
-  private api: TauriApi;
   private isSyncing = false;
-  private syncQueue: Map<string, OfflineAction[]> = new Map();
   
   constructor() {
-    this.api = new TauriApi();
+    // TauriApiは静的メソッドを使用
   }
 
   /**
@@ -94,7 +92,14 @@ export class SyncEngine {
     const grouped = new Map<string, OfflineAction[]>();
     
     for (const action of actions) {
-      const topicId = action.actionData?.topicId || 'default';
+      const topicId = (() => {
+      try {
+        const data = typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
+        return data?.topicId || 'default';
+      } catch {
+        return 'default';
+      }
+    })();
       if (!grouped.has(topicId)) {
         grouped.set(topicId, []);
       }
@@ -108,7 +113,7 @@ export class SyncEngine {
    * トピック単位でアクションを同期
    */
   private async syncTopicActions(
-    topicId: string, 
+    _topicId: string, 
     actions: OfflineAction[]
   ): Promise<SyncResult> {
     const result: SyncResult = {
@@ -154,9 +159,10 @@ export class SyncEngine {
    */
   async detectConflict(action: OfflineAction): Promise<SyncConflict | null> {
     // エンティティの最終更新時刻を取得
+    const actionData = typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
     const lastModified = await this.getEntityLastModified(
-      action.actionData?.entityType, 
-      action.actionData?.entityId
+      actionData?.entityType, 
+      actionData?.entityId
     );
     
     if (!lastModified) {
@@ -205,9 +211,9 @@ export class SyncEngine {
    * Last-Write-Wins (LWW) 競合解決
    */
   private resolveLWW(conflict: SyncConflict): SyncConflict {
-    const localTime = new Date(conflict.localAction.createdAt).getTime();
+    const localTime = conflict.localAction.createdAt;
     const remoteTime = conflict.remoteAction 
-      ? new Date(conflict.remoteAction.createdAt).getTime() 
+      ? conflict.remoteAction.createdAt 
       : 0;
     
     if (localTime >= remoteTime) {
@@ -224,8 +230,10 @@ export class SyncEngine {
    */
   private resolveVersionConflict(conflict: SyncConflict): SyncConflict {
     // バージョン番号の比較ロジック
-    const localVersion = conflict.localAction.actionData?.version || 0;
-    const remoteVersion = conflict.remoteAction?.actionData?.version || 0;
+    const localData = typeof conflict.localAction.actionData === 'string' ? JSON.parse(conflict.localAction.actionData) : conflict.localAction.actionData;
+    const remoteData = conflict.remoteAction ? (typeof conflict.remoteAction.actionData === 'string' ? JSON.parse(conflict.remoteAction.actionData) : conflict.remoteAction.actionData) : null;
+    const localVersion = localData?.version || 0;
+    const remoteVersion = remoteData?.version || 0;
     
     if (localVersion >= remoteVersion) {
       conflict.resolution = 'local';
@@ -270,27 +278,29 @@ export class SyncEngine {
    * アクションを適用
    */
   private async applyAction(action: OfflineAction): Promise<void> {
+    const actionData = typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
+    
     switch (action.actionType) {
       case OfflineActionType.CREATE_POST:
-        await this.api.createPost(
-          action.actionData.content,
-          action.actionData.topicId,
-          action.actionData.replyTo,
-          action.actionData.quotedPost
-        );
+        await TauriApi.createPost({
+          content: actionData.content,
+          topic_id: actionData.topicId,
+          reply_to: actionData.replyTo,
+          quoted_post: actionData.quotedPost
+        });
         break;
         
       case OfflineActionType.LIKE_POST:
-        await this.api.likePost(action.actionData.postId);
+        await TauriApi.likePost(actionData.postId);
         break;
         
       case OfflineActionType.JOIN_TOPIC:
-        await p2pApi.joinTopic(action.actionData.topicId);
-        await nostrSubscribe(action.actionData.topicId);
+        await p2pApi.joinTopic(actionData.topicId);
+        await nostrSubscribe(actionData.topicId);
         break;
         
       case OfflineActionType.LEAVE_TOPIC:
-        await p2pApi.leaveTopic(action.actionData.topicId);
+        await p2pApi.leaveTopic(actionData.topicId);
         break;
         
       default:

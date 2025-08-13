@@ -6,10 +6,10 @@ import { createJSONStorage, StateStorage } from 'zustand/middleware';
 export const createPersistConfig = <T>(
   name: string,
   partialize?: (state: T) => Partial<T>,
-  storage: StateStorage = createJSONStorage(() => localStorage),
+  storage?: StateStorage,
 ) => ({
   name,
-  storage,
+  storage: storage || createJSONStorage(() => localStorage),
   partialize,
 });
 

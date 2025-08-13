@@ -32,7 +32,7 @@ export function PostCard({ post }: PostCardProps) {
   
   // この投稿が未同期かどうかを確認
   const isPostPending = pendingActions.some(
-    action => action.action.type === 'create_post' && 
+    action => action.actionType === 'CREATE_POST' && 
     action.localId === post.localId
   );
 

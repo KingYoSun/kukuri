@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { createLocalStoragePersist } from './utils/persistHelpers';
+
 import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -267,14 +267,14 @@ export const useP2PStore = create<P2PStore>()(
         });
       },
     }),
-    createLocalStoragePersist(
-      'p2p-storage',
-      (state) => ({
+    {
+      name: 'p2p-storage',
+      partialize: (state) => ({
         // 永続化する状態を選択（Mapは除外）
         initialized: state.initialized,
         nodeId: state.nodeId,
         nodeAddr: state.nodeAddr,
       }),
-    ),
+    },
   ),
 );

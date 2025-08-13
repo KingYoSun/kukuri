@@ -83,12 +83,12 @@ export class OfflineSyncService {
     const authStore = useAuthStore.getState();
     const offlineStore = useOfflineStore.getState();
     
-    if (!authStore.currentAccount?.pubkey) {
+    if (!authStore.currentUser?.pubkey) {
       return;
     }
     
     // 保存済みの未同期アクションを読み込み
-    await offlineStore.loadPendingActions(authStore.currentAccount.pubkey);
+    await offlineStore.loadPendingActions(authStore.currentUser.pubkey);
     
     // オンラインの場合は同期を実行
     if (offlineStore.isOnline) {
@@ -106,7 +106,7 @@ export class OfflineSyncService {
     const authStore = useAuthStore.getState();
     const offlineStore = useOfflineStore.getState();
     
-    if (!authStore.currentAccount?.pubkey || !offlineStore.isOnline || offlineStore.isSyncing) {
+    if (!authStore.currentUser?.pubkey || !offlineStore.isOnline || offlineStore.isSyncing) {
       return;
     }
     
@@ -118,7 +118,7 @@ export class OfflineSyncService {
     console.log(`Starting sync for ${pendingCount} pending actions`);
     
     try {
-      await offlineStore.syncPendingActions(authStore.currentAccount.pubkey);
+      await offlineStore.syncPendingActions(authStore.currentUser.pubkey);
       console.log('Sync completed successfully');
       
       // 成功時はリトライタイマーをクリア

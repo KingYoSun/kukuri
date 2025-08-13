@@ -1,5 +1,5 @@
 import React from 'react';
-import { WifiOff, Wifi, Clock } from 'lucide-react';
+import { WifiOff, Wifi } from 'lucide-react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Badge } from '@/components/ui/badge';
+
 
 export function OfflineIndicator() {
   const { isOnline, lastSyncedAt, pendingActions, isSyncing } = useOfflineStore();

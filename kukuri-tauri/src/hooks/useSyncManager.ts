@@ -25,7 +25,7 @@ export function useSyncManager() {
     clearSyncError,
   } = useOfflineStore();
   
-  const { currentAccount } = useAuthStore();
+  const { currentUser } = useAuthStore();
   
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     isSyncing: false,
@@ -131,8 +131,8 @@ export function useSyncManager() {
     }
     
     // Zustandストアの同期処理を呼び出し
-    if (currentAccount?.npub) {
-      await syncPendingActions(currentAccount.npub);
+    if (currentUser?.npub) {
+      await syncPendingActions(currentUser.npub);
     }
   };
 
