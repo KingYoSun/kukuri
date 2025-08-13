@@ -2,6 +2,7 @@ use crate::{
     presentation::{
         dto::{
             post_dto::{
+                BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest,
                 BookmarkPostRequest, CreatePostRequest, DeletePostRequest, GetPostsRequest,
                 PostResponse, ReactToPostRequest,
             },
@@ -27,12 +28,9 @@ pub async fn create_post_v2(
         .map_err(|e| format!("ログインが必要です: {}", e))?
         .public_key()
         .to_hex();
-
-    // ハンドラーを作成
-    let handler = PostHandler::new(state.post_service.clone());
     
-    // 処理を実行
-    match handler.create_post(request).await {
+    // 処理を実行（ハンドラーは再利用）
+    match state.post_handler.create_post(request).await {
         Ok(post) => Ok(ApiResponse::success(post)),
         Err(e) => Ok(ApiResponse::error(e.to_string())),
     }
@@ -44,9 +42,7 @@ pub async fn get_posts_v2(
     state: State<'_, AppState>,
     request: GetPostsRequest,
 ) -> Result<ApiResponse<Vec<PostResponse>>, String> {
-    let handler = PostHandler::new(state.post_service.clone());
-    
-    match handler.get_posts(request).await {
+    match state.post_handler.get_posts(request).await {
         Ok(posts) => Ok(ApiResponse::success(posts)),
         Err(e) => Ok(ApiResponse::error(e.to_string())),
     }
@@ -66,10 +62,8 @@ pub async fn delete_post_v2(
         .map_err(|e| format!("ログインが必要です: {}", e))?
         .public_key()
         .to_hex();
-
-    let handler = PostHandler::new(state.post_service.clone());
     
-    match handler.delete_post(request).await {
+    match state.post_handler.delete_post(request).await {
         Ok(_) => Ok(ApiResponse::success(())),
         Err(e) => Ok(ApiResponse::error(e.to_string())),
     }
@@ -89,10 +83,8 @@ pub async fn react_to_post_v2(
         .map_err(|e| format!("ログインが必要です: {}", e))?
         .public_key()
         .to_hex();
-
-    let handler = PostHandler::new(state.post_service.clone());
     
-    match handler.react_to_post(request).await {
+    match state.post_handler.react_to_post(request).await {
         Ok(_) => Ok(ApiResponse::success(())),
         Err(e) => Ok(ApiResponse::error(e.to_string())),
     }
@@ -113,9 +105,7 @@ pub async fn bookmark_post_v2(
         .public_key()
         .to_hex();
 
-    let handler = PostHandler::new(state.post_service.clone());
-    
-    match handler.bookmark_post(request, &user_pubkey).await {
+    match state.post_handler.bookmark_post(request, &user_pubkey).await {
         Ok(_) => Ok(ApiResponse::success(())),
         Err(e) => Ok(ApiResponse::error(e.to_string())),
     }
@@ -136,9 +126,7 @@ pub async fn unbookmark_post_v2(
         .public_key()
         .to_hex();
 
-    let handler = PostHandler::new(state.post_service.clone());
-    
-    match handler.unbookmark_post(request, &user_pubkey).await {
+    match state.post_handler.unbookmark_post(request, &user_pubkey).await {
         Ok(_) => Ok(ApiResponse::success(())),
         Err(e) => Ok(ApiResponse::error(e.to_string())),
     }
@@ -156,6 +144,62 @@ pub async fn like_post_v2(
     };
     
     react_to_post_v2(state, request).await
+}
+
+// バッチ処理コマンド
+
+/// 複数の投稿を一括取得する
+#[tauri::command]
+pub async fn batch_get_posts_v2(
+    state: State<'_, AppState>,
+    request: BatchGetPostsRequest,
+) -> Result<ApiResponse<Vec<PostResponse>>, String> {
+    match state.post_handler.batch_get_posts(request).await {
+        Ok(posts) => Ok(ApiResponse::success(posts)),
+        Err(e) => Ok(ApiResponse::error(e.to_string())),
+    }
+}
+
+/// 複数のリアクションを一括処理する
+#[tauri::command]
+pub async fn batch_react_v2(
+    state: State<'_, AppState>,
+    request: BatchReactRequest,
+) -> Result<ApiResponse<Vec<Result<(), String>>>, String> {
+    // 認証チェック
+    let _user_pubkey = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .public_key()
+        .to_hex();
+    
+    match state.post_handler.batch_react(request).await {
+        Ok(results) => Ok(ApiResponse::success(results)),
+        Err(e) => Ok(ApiResponse::error(e.to_string())),
+    }
+}
+
+/// 複数のブックマークを一括処理する
+#[tauri::command]
+pub async fn batch_bookmark_v2(
+    state: State<'_, AppState>,
+    request: BatchBookmarkRequest,
+) -> Result<ApiResponse<Vec<Result<(), String>>>, String> {
+    // 認証チェック
+    let user_pubkey = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .public_key()
+        .to_hex();
+    
+    match state.post_handler.batch_bookmark(request, &user_pubkey).await {
+        Ok(results) => Ok(ApiResponse::success(results)),
+        Err(e) => Ok(ApiResponse::error(e.to_string())),
+    }
 }
 
 /// 投稿をブーストする（旧APIとの互換性のため）

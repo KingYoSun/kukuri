@@ -133,23 +133,6 @@ impl Event {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventKind {
-    Metadata = 0,
-    TextNote = 1,
-    RecommendRelay = 2,
-    Contacts = 3,
-    EncryptedDirectMessage = 4,
-    EventDeletion = 5,
-    Repost = 6,
-    Reaction = 7,
-    BadgeAward = 8,
-    ChannelCreation = 40,
-    ChannelMetadata = 41,
-    ChannelMessage = 42,
-    ChannelHideMessage = 43,
-    ChannelMuteUser = 44,
-}
 
 impl EventKind {
     pub fn as_u32(&self) -> u32 {

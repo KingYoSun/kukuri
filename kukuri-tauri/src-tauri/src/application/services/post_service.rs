@@ -2,12 +2,14 @@ use crate::domain::entities::{Event, Post, User};
 use crate::domain::value_objects::EventId;
 use crate::infrastructure::database::PostRepository;
 use crate::infrastructure::p2p::{EventDistributor, DistributionStrategy};
+use crate::infrastructure::cache::PostCacheService;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 
 pub struct PostService {
     repository: Arc<dyn PostRepository>,
     distributor: Arc<dyn EventDistributor>,
+    cache: Arc<PostCacheService>,
     keys: Option<Keys>,
 }
 
@@ -16,6 +18,7 @@ impl PostService {
         Self {
             repository,
             distributor,
+            cache: Arc::new(PostCacheService::new()),
             keys: None,
         }
     }
@@ -57,21 +60,49 @@ impl PostService {
             self.repository.update_post(&post).await?;
         }
         
+        // 新規作成した投稿をキャッシュに保存
+        self.cache.cache_post(post.clone()).await;
+        
         Ok(post)
     }
 
     pub async fn get_post(&self, id: &str) -> Result<Option<Post>, Box<dyn std::error::Error>> {
-        self.repository.get_post(id).await
+        // キャッシュから取得を試みる
+        if let Some(post) = self.cache.get_post(id).await {
+            return Ok(Some(post));
+        }
+        
+        // キャッシュにない場合はDBから取得
+        let post = self.repository.get_post(id).await?;
+        
+        // キャッシュに保存
+        if let Some(ref p) = post {
+            self.cache.cache_post(p.clone()).await;
+        }
+        
+        Ok(post)
     }
 
     pub async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error>> {
-        self.repository.get_posts_by_topic(topic_id, limit).await
+        // TODO: トピック別の投稿キャッシュを実装
+        // 現在は直接DBから取得（キャッシュの無効化が複雑なため）
+        let posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
+        
+        // 個別の投稿をキャッシュに保存
+        for post in &posts {
+            self.cache.cache_post(post.clone()).await;
+        }
+        
+        Ok(posts)
     }
 
     pub async fn like_post(&self, post_id: &str) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_likes();
             self.repository.update_post(&post).await?;
+            
+            // キャッシュを無効化
+            self.cache.invalidate_post(post_id).await;
             
             // Send like event (Nostr reaction)
             if let Some(ref keys) = self.keys {
@@ -97,6 +128,9 @@ impl PostService {
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_boosts();
             self.repository.update_post(&post).await?;
+            
+            // キャッシュを無効化
+            self.cache.invalidate_post(post_id).await;
             
             // Send boost event (Nostr repost)
             if let Some(ref keys) = self.keys {

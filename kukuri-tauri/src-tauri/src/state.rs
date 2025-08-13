@@ -10,6 +10,11 @@ use crate::modules::p2p::{EventSync, GossipManager, P2PEvent};
 use crate::application::services::{
     AuthService, EventService, PostService, SyncService, TopicService, UserService,
 };
+// プレゼンテーション層のハンドラーのインポート
+use crate::presentation::handlers::{
+    post_handler::PostHandler, topic_handler::TopicHandler, 
+    auth_handler::AuthHandler, user_handler::UserHandler,
+};
 use crate::infrastructure::{
     database::sqlite_repository::SqliteRepository,
     p2p::{iroh_gossip_service::IrohGossipService, iroh_network_service::IrohNetworkService},
@@ -53,6 +58,12 @@ pub struct AppState {
     pub user_service: Arc<UserService>,
     pub event_service: Arc<EventService>,
     pub sync_service: Arc<SyncService>,
+    
+    // プレゼンテーション層のハンドラー（最適化用）
+    pub post_handler: Arc<PostHandler>,
+    pub topic_handler: Arc<TopicHandler>,
+    pub auth_handler: Arc<AuthHandler>,
+    pub user_handler: Arc<UserHandler>,
 }
 
 impl AppState {
@@ -137,6 +148,12 @@ impl AppState {
         let sync_service = Arc::new(SyncService::new(
             Arc::clone(&repository) as Arc<dyn crate::domain::repositories::EventRepository>,
         ));
+        
+        // プレゼンテーション層のハンドラーを初期化
+        let post_handler = Arc::new(PostHandler::new(Arc::clone(&post_service)));
+        let topic_handler = Arc::new(TopicHandler::new(Arc::clone(&topic_service)));
+        let auth_handler = Arc::new(AuthHandler::new(Arc::clone(&auth_service)));
+        let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
 
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {
@@ -159,6 +176,10 @@ impl AppState {
             user_service,
             event_service,
             sync_service,
+            post_handler,
+            topic_handler,
+            auth_handler,
+            user_handler,
         })
     }
 
