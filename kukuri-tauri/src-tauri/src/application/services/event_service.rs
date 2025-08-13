@@ -5,6 +5,7 @@ use crate::infrastructure::p2p::EventDistributor;
 use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
 use crate::presentation::dto::event::NostrMetadataDto;
 use crate::shared::error::AppError;
+use crate::modules::event::manager::EventManager;
 use std::sync::Arc;
 use async_trait::async_trait;
 use nostr_sdk::prelude::*;
@@ -56,6 +57,7 @@ pub struct EventService {
     repository: Arc<dyn EventRepository>,
     signature_service: Arc<dyn SignatureService>,
     distributor: Arc<dyn EventDistributor>,
+    event_manager: Option<Arc<EventManager>>,
 }
 
 impl EventService {
@@ -68,7 +70,13 @@ impl EventService {
             repository,
             signature_service,
             distributor,
+            event_manager: None,
         }
+    }
+    
+    /// EventManagerを設定する
+    pub fn set_event_manager(&mut self, event_manager: Arc<EventManager>) {
+        self.event_manager = Some(event_manager);
     }
 
     pub async fn create_event(&self, kind: u32, content: String, pubkey: String, private_key: &str) -> Result<Event, AppError> {
@@ -159,58 +167,111 @@ impl EventService {
 #[async_trait]
 impl EventServiceTrait for EventService {
     async fn initialize(&self) -> Result<(), AppError> {
-        // Nostrクライアントの初期化処理
-        // 実際の初期化はEventManagerで行われている場合はチェックのみ
+        // EventManagerが設定されていることを確認
+        if self.event_manager.is_none() {
+            return Err(AppError::ConfigurationError("EventManager not set".to_string()));
+        }
+        // 実際の初期化はEventManagerで既に行われているため、ここでは確認のみ
         Ok(())
     }
     
     async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        // 仮の実装
-        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000001")
-            .map_err(|e| AppError::NostrError(e.to_string()))?;
-        Ok(event_id)
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        event_manager.publish_text_note(content)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
     }
     
     async fn publish_topic_post(
         &self,
-        _topic_id: &str,
-        _content: &str,
-        _reply_to: Option<&str>,
+        topic_id: &str,
+        content: &str,
+        reply_to: Option<&str>,
     ) -> Result<EventId, AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000002")
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        let reply_to_id = if let Some(reply_id) = reply_to {
+            Some(EventId::from_hex(reply_id).map_err(|e| AppError::NostrError(e.to_string()))?)
+        } else {
+            None
+        };
+        
+        event_manager.publish_topic_post(topic_id, content, reply_to_id)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
+    }
+    
+    async fn send_reaction(&self, event_id: &str, reaction: &str) -> Result<EventId, AppError> {
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        let event_id = EventId::from_hex(event_id)
             .map_err(|e| AppError::NostrError(e.to_string()))?;
-        Ok(event_id)
+        
+        event_manager.send_reaction(&event_id, reaction)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
     }
     
-    async fn send_reaction(&self, _event_id: &str, _reaction: &str) -> Result<EventId, AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000003")
+    async fn update_metadata(&self, metadata: NostrMetadataDto) -> Result<EventId, AppError> {
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        // DTOからnostr_sdkのMetadataに変換
+        let mut nostr_metadata = Metadata::new();
+        if let Some(name) = metadata.name {
+            nostr_metadata = nostr_metadata.name(name);
+        }
+        if let Some(display_name) = metadata.display_name {
+            nostr_metadata = nostr_metadata.display_name(display_name);
+        }
+        if let Some(about) = metadata.about {
+            nostr_metadata = nostr_metadata.about(about);
+        }
+        if let Some(picture) = metadata.picture {
+            if let Ok(pic_url) = picture.parse() {
+                nostr_metadata = nostr_metadata.picture(pic_url);
+            }
+        }
+        if let Some(website) = metadata.website {
+            nostr_metadata = nostr_metadata.website(website.parse().map_err(|_| AppError::ValidationError("Invalid website URL".to_string()))?);
+        }
+        
+        event_manager.update_metadata(nostr_metadata)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
+    }
+    
+    async fn subscribe_to_topic(&self, topic_id: &str) -> Result<(), AppError> {
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        event_manager.subscribe_to_topic(topic_id)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
+    }
+    
+    async fn subscribe_to_user(&self, pubkey: &str) -> Result<(), AppError> {
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        let public_key = PublicKey::from_hex(pubkey)
             .map_err(|e| AppError::NostrError(e.to_string()))?;
-        Ok(event_id)
-    }
-    
-    async fn update_metadata(&self, _metadata: NostrMetadataDto) -> Result<EventId, AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000004")
-            .map_err(|e| AppError::NostrError(e.to_string()))?;
-        Ok(event_id)
-    }
-    
-    async fn subscribe_to_topic(&self, _topic_id: &str) -> Result<(), AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        Ok(())
-    }
-    
-    async fn subscribe_to_user(&self, _pubkey: &str) -> Result<(), AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        Ok(())
+        
+        event_manager.subscribe_to_user(public_key)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
     }
     
     async fn get_public_key(&self) -> Result<Option<String>, AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        Ok(None)
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        let public_key = event_manager.get_public_key().await;
+        Ok(public_key.map(|pk| pk.to_hex()))
     }
     
     async fn delete_events(
@@ -228,7 +289,11 @@ impl EventServiceTrait for EventService {
     }
     
     async fn disconnect(&self) -> Result<(), AppError> {
-        // TODO: 実際のEventManagerを使用して実装
-        Ok(())
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        
+        event_manager.disconnect()
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
     }
 }

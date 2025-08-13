@@ -93,15 +93,32 @@ impl P2PServiceTrait for P2PService {
         let endpoint_id = self.network_service.get_node_id().await
             .map_err(|e| AppError::P2PError(e.to_string()))?;
             
-        // TODO: 実際のトピック情報を取得
-        let active_topics = vec![];
-        let peer_count = 0;
+        // 実際のトピック情報を取得
+        let joined_topics = self.gossip_service.get_joined_topics().await
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+        
+        let mut active_topics = Vec::new();
+        let mut total_peer_count = 0;
+        
+        for topic_id in joined_topics {
+            let peers = self.gossip_service.get_topic_peers(&topic_id).await
+                .map_err(|e| AppError::P2PError(e.to_string()))?;
+            let peer_count = peers.len();
+            total_peer_count += peer_count;
+            
+            active_topics.push(TopicInfo {
+                id: topic_id,
+                peer_count,
+                message_count: 0, // TODO: メッセージカウントの実装
+                last_activity: chrono::Utc::now().timestamp(),
+            });
+        }
         
         Ok(P2PStatus {
             connected: true,
             endpoint_id,
             active_topics,
-            peer_count,
+            peer_count: total_peer_count,
         })
     }
     

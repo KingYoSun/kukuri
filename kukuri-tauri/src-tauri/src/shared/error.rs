@@ -13,6 +13,7 @@ pub enum AppError {
     ValidationError(String),
     NostrError(String),
     P2PError(String),
+    ConfigurationError(String),
     Internal(String),
 }
 
@@ -30,6 +31,7 @@ impl fmt::Display for AppError {
             AppError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             AppError::NostrError(msg) => write!(f, "Nostr error: {}", msg),
             AppError::P2PError(msg) => write!(f, "P2P error: {}", msg),
+            AppError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
             AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
         }
     }

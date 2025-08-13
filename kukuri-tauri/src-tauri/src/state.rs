@@ -189,11 +189,14 @@ impl AppState {
         ));
         
         // EventServiceの初期化
-        let event_service = Arc::new(EventService::new(
+        let mut event_service_inner = EventService::new(
             Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::EventRepository>,
             Arc::clone(&signature_service),
             Arc::clone(&event_distributor),
-        ));
+        );
+        // EventManagerを設定
+        event_service_inner.set_event_manager(Arc::clone(&event_manager));
+        let event_service = Arc::new(event_service_inner);
         
         // SyncServiceの初期化（PostServiceとEventServiceが必要）
         let sync_service = Arc::new(SyncService::new(

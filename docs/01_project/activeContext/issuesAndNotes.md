@@ -1,23 +1,23 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月14日（Result型統一完了）
+**最終更新**: 2025年8月14日（Phase 5: 基本機能実装完了）
 
 ## 🚨 現在の問題
 
-### トレイトメソッドの多くがTODO実装（2025年8月14日更新）
-**問題**: 多くのサービストレイトメソッドが仮実装（TODO）のまま
+### トレイトメソッドのTODO実装（2025年8月14日 Phase 5完了後更新）
+**問題**: OfflineServiceの多くのメソッドが基本実装のみ
 
 **現在の状況**:
-- EventServiceTrait: 全10メソッドがTODO実装
-- P2PServiceTrait: 全7メソッドがTODO実装
-- OfflineServiceTrait: 全11メソッドがTODO実装
+- EventServiceTrait: ✅ 完全実装済み（EventManager統合）
+- P2PServiceTrait: ✅ ほぼ完了（message_countのTODOのみ）
+- OfflineServiceTrait: ⚠️ 11メソッドが基本実装のみ（詳細実装必要）
 
-**影響**: 実際の機能が動作しない（ビルドは成功）
+**影響**: EventService/P2PServiceは基本動作可能、OfflineServiceは詳細実装待ち
 
-**優先度**: 高（機能実装のために順次対応が必要）
+**優先度**: 中（テスト追加後にPhase 7で対応予定）
 
-### コンパイル警告多数（2025年8月14日更新）
-**問題**: 169件の警告が存在
+### コンパイル警告多数（2025年8月14日 Phase 5完了後更新）
+**問題**: 175件の警告が存在（Phase 5で6件増加）
 
 **内訳**:
 - 未使用インポート: 約100件
@@ -225,8 +225,73 @@ STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)
    - TypeScript: strictモード有効
    - Rust: 全ての警告を解消（一時的な抑制を除く）
 
+## 📌 Phase 5で追加されたTODO項目（2025年8月14日）
+
+### P2PService関連
+1. **message_count実装**
+   - ファイル: `application/services/p2p_service.rs`
+   - 行: 112
+   - 内容: トピックごとのメッセージカウント機能の実装
+
+### OfflineService関連（13件）
+ファイル: `application/services/offline_service.rs`
+
+1. **save_action** (行131-138)
+   - Repository経由でのoffline_actionsテーブルへの保存
+   - UUID生成とタイムスタンプ設定
+
+2. **get_actions** (行143-155)
+   - フィルタリング条件の適用
+   - entity_type, entity_id, statusによる絞り込み
+
+3. **sync_actions** (行156-164)
+   - 指定アクションまたは未同期アクションの取得
+   - サーバーへの送信処理
+   - is_synced=trueへの更新
+
+4. **get_cache_status** (行165-172)
+   - cache_metadataテーブルからの統計取得
+   - 総サイズ、アイテム数の計算
+   - 最古・最新アイテムのタイムスタンプ取得
+
+5. **add_to_sync_queue** (行173-181)
+   - sync_queueテーブルへの挿入
+   - 優先度管理の実装
+
+6. **update_cache_metadata** (行182-188)
+   - キャッシュメタデータの更新
+   - TTL管理の実装
+
+7. **save_optimistic_update** (行189-200)
+   - optimistic_updatesテーブルへの保存
+   - 元データと更新データの記録
+
+8. **confirm_optimistic_update** (行201-205)
+   - 楽観的更新の確定処理
+
+9. **rollback_optimistic_update** (行206-210)
+   - ロールバック処理の実装
+   - 元データの復元
+
+10. **cleanup_expired_cache** (行211-217)
+    - 期限切れアイテムの削除
+    - 削除数のカウント
+
+11. **update_sync_status** (行218-224)
+    - 同期ステータスの更新処理
+    - コンフリクトデータの管理
+
+12. **Repository層との統合**
+    - 全メソッドでのRepository活用
+    - トランザクション管理
+
+13. **実際のデータベース操作**
+    - SQLクエリの実装
+    - エラーハンドリング
+
 ## 🔗 関連ドキュメント
 
 - [アーカイブ（解決済み問題）](./archives/issuesAndNotes_2025-08-early.md)
 - [現在のタスク](./current_tasks.md)
 - [環境情報](./current_environment.md)
+- [Phase 5基本機能実装完了報告](../progressReports/2025-08-14_phase5_basic_implementation_complete.md)

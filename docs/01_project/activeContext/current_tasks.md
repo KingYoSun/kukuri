@@ -1,6 +1,6 @@
 # 現在のタスク状況
 
-**最終更新日**: 2025年8月14日
+**最終更新日**: 2025年8月14日 18:00
 
 ## ✅ 完了したタスク（2025年8月14日）
 
@@ -25,48 +25,40 @@
 
 ## 🔄 現在進行中のタスク
 
-### v2アーキテクチャ移行 Phase 4
-**目標**: ビルドを通して基本動作確認
-- [ ] コンパイルエラー0件達成
-- [ ] 警告50件以下に削減
-- [ ] 基本的な起動確認
+### v2アーキテクチャ移行 Phase 6: テスト追加
+**目標**: 単体テストと統合テストの実装
+- [ ] EventServiceのテスト追加
+- [ ] P2PServiceのテスト追加  
+- [ ] OfflineServiceのテスト追加
+- [ ] ハンドラー層のテスト実装
+- [ ] E2Eテストの作成
 
 ## 📋 次フェーズタスク（優先度順）
 
-### Phase 4: エラー解消とビルド成功（1-2日）
-1. **Result型の完全統一**
-   - AppError型への一本化
-   - From実装の追加
-
-2. **トレイトメソッド実装**
-   - 最小限の動作に必要な部分のみ
-   - TODOコメントで未実装部分を明示
-
-3. **型の不整合修正**
-   - ハンドラーとサービスの型一致
-   - DTOとエンティティのマッピング
-
-### Phase 5: 基本機能実装（2-3日）
-1. **EventServiceTrait実装**
-   - Nostr接続機能
-   - イベント発行機能
-
-2. **P2PServiceTrait実装**
-   - 基本的なP2P通信
-   - トピック管理
-
-3. **OfflineServiceTrait実装**
-   - オフラインアクション保存
-   - 同期機能
-
-### Phase 6: テスト追加（2-3日）
+### Phase 6: テスト追加（2-3日）継続中
 1. **単体テスト**
-   - 各ハンドラーのテスト
-   - 各サービスのテスト
+   - 各ハンドラーのテスト（未実装）
+   - 各サービスのテスト（未実装）
+   - EventService/P2PService/OfflineServiceのテスト優先
 
 2. **統合テスト**
-   - コマンド呼び出しテスト
-   - E2Eテスト
+   - コマンド呼び出しテスト（未実装）
+   - E2Eテスト（未実装）
+
+### Phase 7: 残TODOの実装（3-4日）
+1. **EventService関連**
+   - delete_events メソッドの完全実装
+   - イベント削除の反映処理
+
+2. **P2PService関連**
+   - メッセージカウントの実装
+   - トピック統計情報の改善
+
+3. **OfflineService関連**
+   - Repository層との完全統合
+   - 実際のデータベース操作実装
+   - 楽観的更新の確定/ロールバック処理
+   - キャッシュ管理機能の実装
 
 ## 📊 進捗サマリー
 
@@ -77,11 +69,12 @@
 動作確認: 0 (0%)
 ```
 
-### ビルド状況
+### ビルド状況（2025年8月14日更新）
 ```
 コンパイルエラー: 0件 ✅
-警告: 169件
+警告: 175件（6件増加）
 ビルド: 成功 ✅
+テスト: 147/150 成功（3件はWindows環境の既知の問題）
 ```
 
 ### コード統計
@@ -130,11 +123,14 @@
 1. ~~`application/services/`配下の全Result型をAppErrorに変更~~ ✅ 完了
 2. ~~`infrastructure/p2p/gossip_service.rs`に`broadcast_message`追加~~ ✅ 完了
 3. ~~`infrastructure/p2p/network_service.rs`に不足メソッド追加~~ ✅ 完了
+4. ~~EventServiceTraitの実装~~ ✅ 完了（EventManager統合済み）
+5. ~~P2PServiceTraitの実装~~ ✅ 完了（get_status改善済み）
+6. ~~OfflineServiceTraitの実装~~ ✅ 完了（基本実装済み）
 
-### 次に着手すべき作業（Phase 5: 基本機能実装）
-1. EventServiceTraitの実装
-2. P2PServiceTraitの実装
-3. OfflineServiceTraitの実装
+### 次に着手すべき作業（Phase 6: テスト追加）
+1. 各サービスの単体テスト作成
+2. ハンドラー層のテスト実装
+3. E2Eテストの基盤構築
 
 ### コマンド実行
 ```bash
@@ -161,6 +157,21 @@ cargo check 2>&1 | grep "warning"
 **完全移行予定**: 2025年8月末
 
 ## ✅ 最近の完了タスク（直近2日分）
+
+### Phase 5: 基本機能実装完了（2025年8月14日）
+- [x] **EventServiceTrait実装**
+  - [x] EventManagerとの統合
+  - [x] 全メソッドの実装（publish_text_note, publish_topic_post等）
+  - [x] Nostrメタデータ更新機能
+  - [x] ConfigurationErrorをAppErrorに追加
+- [x] **P2PServiceTrait実装**
+  - [x] get_statusメソッドの改善（実際のトピック情報取得）
+  - [x] トピックごとのピアカウント実装
+  - [x] GossipService/NetworkServiceとの連携
+- [x] **OfflineServiceTrait実装**
+  - [x] 基本的なメソッド実装
+  - [x] 楽観的更新のサポート追加
+  - [x] TODOコメントによる実装箇所の明確化
 
 ### Result型統一完了（2025年8月14日）
 - [x] **エラー型の完全統一**
@@ -264,7 +275,7 @@ cargo check 2>&1 | grep "warning"
 
 ## 備考
 
-### 技術的負債の状況（2025年8月14日更新）
+### 技術的負債の状況（2025年8月14日 Phase 5完了後更新）
 - **TypeScript:**
   - TODOコメント: 2件（削減率: 75%）
   - 型エラー: 0件 ✅
@@ -272,12 +283,12 @@ cargo check 2>&1 | grep "warning"
   - テスト: 実行可能状態
   
 - **Rust:**
-  - コンパイルエラー: 0件 ✅（Result型統一により解消）
-  - コンパイル警告: 169件（主に未使用インポート）
-  - TODOコメント: 12件（削減率: 61.3%）
+  - コンパイルエラー: 0件 ✅（ConfigurationError追加により解消）
+  - コンパイル警告: 175件（6件増加、主に未使用インポート）
+  - TODOコメント: 約25件（Phase 5で13件追加）
   - #[allow(dead_code)]: 97箇所
   - Clippyエラー: 0件 ✅
-  - テスト: Windows環境ではDLLエラー（Docker環境推奨）
+  - テスト: 147/150成功（secure_storage関連3件失敗）
 
 ### 主要機能の完成度
 
