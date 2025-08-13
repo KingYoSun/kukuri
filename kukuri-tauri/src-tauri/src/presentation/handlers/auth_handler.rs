@@ -2,7 +2,7 @@ use crate::{
     application::services::AuthService,
     presentation::dto::{
         auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
-        ApiResponse, Validate,
+        Validate,
     },
     shared::error::AppError,
 };

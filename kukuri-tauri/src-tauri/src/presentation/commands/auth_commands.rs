@@ -60,10 +60,10 @@ pub async fn login_with_npub(
     })
 }
 
-#[tauri::command]
-pub async fn logout_v2(auth_service: State<'_, Arc<AuthService>>) -> Result<(), String> {
-    auth_service.logout().await.map_err(|e| e.to_string())
-}
+// #[tauri::command]
+// pub async fn logout_v2(auth_service: State<'_, Arc<AuthService>>) -> Result<(), String> {
+//     auth_service.logout().await.map_err(|e| e.to_string())
+// }
 
 #[tauri::command]
 pub async fn get_current_user(
@@ -93,29 +93,29 @@ pub async fn export_private_key(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub async fn list_accounts_v2(
-    auth_service: State<'_, Arc<AuthService>>,
-) -> Result<Vec<String>, String> {
-    auth_service
-        .list_accounts()
-        .await
-        .map_err(|e| e.to_string())
-}
+// #[tauri::command]
+// pub async fn list_accounts_v2(
+//     auth_service: State<'_, Arc<AuthService>>,
+// ) -> Result<Vec<String>, String> {
+//     auth_service
+//         .list_accounts()
+//         .await
+//         .map_err(|e| e.to_string())
+// }
 
-#[tauri::command]
-pub async fn switch_account_v2(
-    npub: String,
-    auth_service: State<'_, Arc<AuthService>>,
-) -> Result<LoginResponse, String> {
-    let user = auth_service
-        .switch_account(&npub)
-        .await
-        .map_err(|e| e.to_string())?;
+// #[tauri::command]
+// pub async fn switch_account_v2(
+//     npub: String,
+//     auth_service: State<'_, Arc<AuthService>>,
+// ) -> Result<LoginResponse, String> {
+//     let user = auth_service
+//         .switch_account(&npub)
+//         .await
+//         .map_err(|e| e.to_string())?;
 
-    Ok(LoginResponse {
-        success: true,
-        npub: user.npub,
-        pubkey: user.pubkey,
-    })
-}
+//     Ok(LoginResponse {
+//         success: true,
+//         npub: user.npub,
+//         pubkey: user.pubkey,
+//     })
+// }

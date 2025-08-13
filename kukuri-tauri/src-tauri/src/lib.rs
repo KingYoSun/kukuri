@@ -36,17 +36,28 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            // 認証関連コマンド
-            auth_commands::generate_keypair,
-            auth_commands::login,
-            auth_commands::logout,
-            // セキュアストレージ関連コマンド
-            secure_storage_commands::add_account,
-            secure_storage_commands::list_accounts,
-            secure_storage_commands::switch_account,
-            secure_storage_commands::remove_account,
-            secure_storage_commands::get_current_account,
-            secure_storage_commands::secure_login,
+            // 認証関連コマンド（旧）
+            // auth_commands::generate_keypair,  // v2に移行済み
+            // auth_commands::login,  // v2に移行済み
+            // auth_commands::logout,  // v2に移行済み
+            // v2認証コマンド
+            presentation::commands::generate_keypair_v2,
+            presentation::commands::login_v2,
+            presentation::commands::logout_v2,
+            // セキュアストレージ関連コマンド（旧）
+            // secure_storage_commands::add_account,  // v2に移行済み
+            // secure_storage_commands::list_accounts,  // v2に移行済み
+            // secure_storage_commands::switch_account,  // v2に移行済み
+            // secure_storage_commands::remove_account,  // v2に移行済み
+            // secure_storage_commands::get_current_account,  // v2に移行済み
+            // secure_storage_commands::secure_login,  // v2に移行済み
+            // v2セキュアストレージコマンド
+            presentation::commands::add_account_v2,
+            presentation::commands::list_accounts_v2,
+            presentation::commands::switch_account_v2,
+            presentation::commands::remove_account_v2,
+            presentation::commands::get_current_account_v2,
+            presentation::commands::secure_login_v2,
             // トピック関連コマンド（旧）
             // topic_commands::get_topics,  // v2に移行済み
             // topic_commands::update_topic,  // v2に移行済み

@@ -2,9 +2,15 @@ pub mod post_handler;
 pub mod topic_handler;
 pub mod auth_handler;
 pub mod user_handler;
+pub mod secure_storage_handler;
+
+pub use auth_handler::AuthHandler;
+pub use post_handler::PostHandler;
+pub use topic_handler::TopicHandler;
+pub use user_handler::UserHandler;
+pub use secure_storage_handler::SecureStorageHandler;
 
 use crate::shared::error::AppError;
-use super::dto::ApiResponse;
 
 /// エラーをAPIレスポンスに変換
 pub fn handle_error<T>(result: Result<T, AppError>) -> Result<T, String> {
