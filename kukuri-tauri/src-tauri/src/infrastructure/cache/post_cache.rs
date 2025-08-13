@@ -84,17 +84,38 @@ mod tests {
     use super::*;
 
     fn create_test_post(id: &str, topic_id: &str) -> Post {
+        use crate::domain::entities::user::User;
+        
+        let author = User {
+            npub: "npub1test".to_string(),
+            pubkey: "test_pubkey".to_string(),
+            profile: crate::domain::entities::user::UserProfile {
+                display_name: "Test User".to_string(),
+                bio: "Test bio".to_string(),
+                avatar_url: None,
+            },
+            name: Some("Test User".to_string()),
+            nip05: None,
+            lud16: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        
         Post {
             id: id.to_string(),
-            pubkey: "test_pubkey".to_string(),
             content: "Test content".to_string(),
-            created_at: chrono::Utc::now().timestamp(),
+            author,
             topic_id: topic_id.to_string(),
-            reply_to: None,
+            created_at: chrono::Utc::now(),
+            tags: Vec::new(),
+            likes: 0,
+            boosts: 0,
+            replies: Vec::new(),
             is_synced: true,
-            reactions: 0,
-            replies: 0,
-            reposts: 0,
+            is_boosted: false,
+            is_bookmarked: false,
+            local_id: None,
+            event_id: None,
         }
     }
 

@@ -47,20 +47,34 @@ pub fn run() {
             secure_storage_commands::remove_account,
             secure_storage_commands::get_current_account,
             secure_storage_commands::secure_login,
-            // トピック関連コマンド
-            topic_commands::get_topics,
-            // topic_commands::create_topic,  // v2コマンドに移行
-            topic_commands::update_topic,
-            // topic_commands::delete_topic,  // v2コマンドに移行
-            // ポスト関連コマンド
-            post_commands::get_posts,
-            // post_commands::create_post,  // v2コマンドに移行
-            // post_commands::delete_post,  // v2コマンドに移行
-            // post_commands::like_post,    // v2コマンドに移行
-            // post_commands::boost_post,   // v2コマンドに移行
-            post_commands::bookmark_post,
-            post_commands::unbookmark_post,
-            post_commands::get_bookmarked_post_ids,
+            // トピック関連コマンド（旧）
+            // topic_commands::get_topics,  // v2に移行済み
+            // topic_commands::update_topic,  // v2に移行済み
+            // v2トピックコマンド
+            presentation::commands::create_topic_v2,
+            presentation::commands::get_topics_v2,
+            presentation::commands::update_topic_v2,
+            presentation::commands::delete_topic_v2,
+            presentation::commands::join_topic_v2,
+            presentation::commands::leave_topic_v2,
+            presentation::commands::get_topic_stats_v2,
+            // ポスト関連コマンド（旧）
+            // post_commands::get_posts,  // v2に移行済み
+            // post_commands::bookmark_post,  // v2に移行済み
+            // post_commands::unbookmark_post,  // v2に移行済み
+            post_commands::get_bookmarked_post_ids,  // TODO: v2に移行予定
+            // v2コマンド
+            presentation::commands::create_post_v2,
+            presentation::commands::get_posts_v2,
+            presentation::commands::delete_post_v2,
+            presentation::commands::react_to_post_v2,
+            presentation::commands::bookmark_post_v2,
+            presentation::commands::unbookmark_post_v2,
+            presentation::commands::like_post_v2,
+            presentation::commands::boost_post_v2,
+            presentation::commands::batch_get_posts_v2,
+            presentation::commands::batch_react_v2,
+            presentation::commands::batch_bookmark_v2,
             // Nostr関連コマンド
             event_commands::initialize_nostr,
             event_commands::publish_text_note,

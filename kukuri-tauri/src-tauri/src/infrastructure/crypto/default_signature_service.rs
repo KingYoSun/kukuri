@@ -93,8 +93,8 @@ mod tests {
     async fn test_sign_and_verify_message() {
         let service = DefaultSignatureService::new();
         let keys = Keys::generate();
-        let private_key = keys.secret_key().to_hex();
-        let public_key = keys.public_key().to_hex();
+        let private_key = keys.secret_key().display_secret().to_string();
+        let public_key = keys.public_key().to_string();
         
         let message = "Test message";
         let signature = service.sign_message(message, &private_key).await.unwrap();

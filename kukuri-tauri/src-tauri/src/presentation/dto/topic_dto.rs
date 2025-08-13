@@ -105,6 +105,20 @@ impl Validate for GetTopicStatsRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct DeleteTopicRequest {
+    pub id: String,
+}
+
+impl Validate for DeleteTopicRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.id.trim().is_empty() {
+            return Err("トピックIDが必要です".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TopicStatsResponse {
     pub topic_id: String,
     pub member_count: u32,

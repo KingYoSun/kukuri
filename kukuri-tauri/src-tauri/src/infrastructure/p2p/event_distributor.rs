@@ -283,14 +283,14 @@ impl EventDistributor for NostrEventDistributor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::value_objects::EventKind;
+    use crate::domain::entities::EventKind;
 
     fn create_test_event() -> Event {
         Event {
             id: "test_event_123".to_string(),
             pubkey: "test_pubkey".to_string(),
             created_at: chrono::Utc::now(),
-            kind: EventKind::TextNote,
+            kind: EventKind::TextNote.into(),
             tags: vec![],
             content: "Test event content".to_string(),
             sig: "test_signature".to_string(),
