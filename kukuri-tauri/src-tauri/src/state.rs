@@ -221,7 +221,7 @@ impl AppState {
         let topic_handler = Arc::new(TopicHandler::new(Arc::clone(&topic_service)));
         let auth_handler = Arc::new(AuthHandler::new(Arc::clone(&auth_service)));
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
-        let secure_storage_handler = Arc::new(SecureStorageHandler::new(Arc::clone(&secure_storage) as Arc<dyn SecureStorage>));
+        let secure_storage_handler = Arc::new(SecureStorageHandler::new(Arc::clone(&auth_service)));
         let event_handler = Arc::new(EventHandler::new(Arc::clone(&event_service) as Arc<dyn crate::application::services::event_service::EventServiceTrait>));
         let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service) as Arc<dyn crate::application::services::p2p_service::P2PServiceTrait>));
         let offline_handler = Arc::new(OfflineHandler::new(Arc::clone(&offline_service) as Arc<dyn crate::application::services::offline_service::OfflineServiceTrait>));

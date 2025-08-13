@@ -1,4 +1,5 @@
 use crate::domain::entities::User;
+use crate::shared::error::AppError;
 use crate::infrastructure::crypto::KeyManager;
 use crate::infrastructure::storage::SecureStorage;
 use std::sync::Arc;
@@ -32,7 +33,7 @@ impl AuthService {
         }
     }
 
-    pub async fn create_account(&self) -> Result<User, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn create_account(&self) -> Result<User, AppError> {
         // Generate new keypair
         let keypair = self.key_manager.generate_keypair().await?;
         
@@ -50,7 +51,7 @@ impl AuthService {
         Ok(user)
     }
 
-    pub async fn login_with_nsec(&self, nsec: &str) -> Result<User, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn login_with_nsec(&self, nsec: &str) -> Result<User, AppError> {
         // Import private key
         let keypair = self.key_manager.import_private_key(nsec).await?;
         
@@ -71,7 +72,7 @@ impl AuthService {
         Ok(user)
     }
 
-    pub async fn login_with_npub(&self, npub: &str) -> Result<User, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn login_with_npub(&self, npub: &str) -> Result<User, AppError> {
         // Check if we have the private key stored
         let _private_key = self.key_manager.export_private_key(npub).await?;
         
@@ -84,12 +85,12 @@ impl AuthService {
         Ok(user)
     }
 
-    pub async fn logout(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn logout(&self) -> Result<(), AppError> {
         self.secure_storage.delete("current_npub").await?;
         Ok(())
     }
 
-    pub async fn get_current_user(&self) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_current_user(&self) -> Result<Option<User>, AppError> {
         if let Some(npub) = self.secure_storage.retrieve("current_npub").await? {
             self.user_service.get_user(&npub).await
         } else {
@@ -101,7 +102,7 @@ impl AuthService {
         self.secure_storage.retrieve("current_npub").await.unwrap_or(None).is_some()
     }
 
-    pub async fn get_auth_status(&self) -> Result<AuthStatus, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_auth_status(&self) -> Result<AuthStatus, AppError> {
         let current_user = self.get_current_user().await?;
         let npub = self.secure_storage.retrieve("current_npub").await?;
         
@@ -112,15 +113,15 @@ impl AuthService {
         })
     }
 
-    pub async fn export_private_key(&self, npub: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn export_private_key(&self, npub: &str) -> Result<String, AppError> {
         self.key_manager.export_private_key(npub).await
     }
 
-    pub async fn list_accounts(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn list_accounts(&self) -> Result<Vec<String>, AppError> {
         self.key_manager.list_npubs().await
     }
 
-    pub async fn switch_account(&self, npub: &str) -> Result<User, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn switch_account(&self, npub: &str) -> Result<User, AppError> {
         self.login_with_npub(npub).await
     }
 }

@@ -67,4 +67,66 @@ impl From<&str> for AppError {
     }
 }
 
+impl From<nostr_sdk::prelude::EventId> for AppError {
+    fn from(_: nostr_sdk::prelude::EventId) -> Self {
+        AppError::NostrError("Invalid EventId conversion".to_string())
+    }
+}
+
+impl From<nostr_sdk::event::Error> for AppError {
+    fn from(err: nostr_sdk::event::Error) -> Self {
+        AppError::NostrError(err.to_string())
+    }
+}
+
+impl From<nostr_sdk::prelude::secp256k1::Error> for AppError {
+    fn from(err: nostr_sdk::prelude::secp256k1::Error) -> Self {
+        AppError::Crypto(err.to_string())
+    }
+}
+
+impl From<nostr_sdk::key::Error> for AppError {
+    fn from(err: nostr_sdk::key::Error) -> Self {
+        AppError::NostrError(err.to_string())
+    }
+}
+
+impl From<nostr_sdk::event::builder::Error> for AppError {
+    fn from(err: nostr_sdk::event::builder::Error) -> Self {
+        AppError::NostrError(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::Internal(err.to_string())
+    }
+}
+
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        AppError::P2PError(err.to_string())
+    }
+}
+
+impl From<sqlx::migrate::MigrateError> for AppError {
+    fn from(err: sqlx::migrate::MigrateError) -> Self {
+        AppError::Database(err.to_string())
+    }
+}
+
+
+
+impl From<iroh::endpoint::Builder> for AppError {
+    fn from(err: iroh::endpoint::Builder) -> Self {
+        AppError::P2PError(format!("Endpoint builder error: {:?}", err))
+    }
+}
+
+impl From<nostr_sdk::key::vanity::Error> for AppError {
+    fn from(err: nostr_sdk::key::vanity::Error) -> Self {
+        AppError::NostrError(err.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, AppError>;

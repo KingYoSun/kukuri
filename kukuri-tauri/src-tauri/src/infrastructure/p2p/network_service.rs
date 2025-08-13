@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use crate::shared::error::AppError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,11 +24,13 @@ pub trait NetworkService: Send + Sync {
     // Type conversion helper for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
     
-    async fn connect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn get_peers(&self) -> Result<Vec<Peer>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn add_peer(&self, address: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn remove_peer(&self, peer_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn get_stats(&self) -> Result<NetworkStats, Box<dyn std::error::Error + Send + Sync>>;
+    async fn connect(&self) -> Result<(), AppError>;
+    async fn disconnect(&self) -> Result<(), AppError>;
+    async fn get_peers(&self) -> Result<Vec<Peer>, AppError>;
+    async fn add_peer(&self, address: &str) -> Result<(), AppError>;
+    async fn remove_peer(&self, peer_id: &str) -> Result<(), AppError>;
+    async fn get_stats(&self) -> Result<NetworkStats, AppError>;
     async fn is_connected(&self) -> bool;
+    async fn get_node_id(&self) -> Result<String, AppError>;
+    async fn get_addresses(&self) -> Result<Vec<String>, AppError>;
 }

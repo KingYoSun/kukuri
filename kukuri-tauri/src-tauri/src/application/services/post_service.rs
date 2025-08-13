@@ -1,4 +1,5 @@
 use crate::domain::entities::{Event, Post, User};
+use crate::shared::error::AppError;
 use crate::infrastructure::database::PostRepository;
 use crate::infrastructure::p2p::EventDistributor;
 use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
@@ -28,7 +29,7 @@ impl PostService {
         self
     }
 
-    pub async fn create_post(&self, content: String, author: User, topic_id: String) -> Result<Post, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn create_post(&self, content: String, author: User, topic_id: String) -> Result<Post, AppError> {
         let mut post = Post::new(content.clone(), author.clone(), topic_id.clone());
         
         // Save to database
@@ -65,7 +66,7 @@ impl PostService {
         Ok(post)
     }
 
-    pub async fn get_post(&self, id: &str) -> Result<Option<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_post(&self, id: &str) -> Result<Option<Post>, AppError> {
         // キャッシュから取得を試みる
         if let Some(post) = self.cache.get(id).await {
             return Ok(Some(post));
@@ -82,7 +83,7 @@ impl PostService {
         Ok(post)
     }
 
-    pub async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, AppError> {
         // TODO: トピック別の投稿キャッシュを実装
         // 現在は直接DBから取得（キャッシュの無効化が複雑なため）
         let posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
@@ -95,7 +96,7 @@ impl PostService {
         Ok(posts)
     }
 
-    pub async fn like_post(&self, post_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn like_post(&self, post_id: &str) -> Result<(), AppError> {
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_likes();
             self.repository.update_post(&post).await?;
@@ -125,7 +126,7 @@ impl PostService {
         Ok(())
     }
 
-    pub async fn boost_post(&self, post_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn boost_post(&self, post_id: &str) -> Result<(), AppError> {
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_boosts();
             self.repository.update_post(&post).await?;
@@ -155,7 +156,7 @@ impl PostService {
         Ok(())
     }
 
-    pub async fn delete_post(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn delete_post(&self, id: &str) -> Result<(), AppError> {
         // Send deletion event
         if let Some(ref keys) = self.keys {
             let event_id = nostr_sdk::EventId::from_hex(id)?;
@@ -179,15 +180,15 @@ impl PostService {
         self.repository.delete_post(id).await
     }
 
-    pub async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, AppError> {
         self.repository.get_posts_by_author(author_pubkey, limit).await
     }
 
-    pub async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, AppError> {
         self.repository.get_recent_posts(limit).await
     }
 
-    pub async fn react_to_post(&self, post_id: &str, reaction: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn react_to_post(&self, post_id: &str, reaction: &str) -> Result<(), AppError> {
         // TODO: Implement reaction logic
         if reaction == "+" {
             self.like_post(post_id).await
@@ -197,22 +198,22 @@ impl PostService {
         }
     }
 
-    pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
         // TODO: Implement bookmark logic with user_pubkey
         Ok(())
     }
 
-    pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
         // TODO: Implement unbookmark logic with user_pubkey
         Ok(())
     }
     
-    pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, AppError> {
         // TODO: Implement get bookmarked posts logic with user_pubkey
         Ok(Vec::new())
     }
 
-    pub async fn sync_pending_posts(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn sync_pending_posts(&self) -> Result<u32, AppError> {
         let unsync_posts = self.repository.get_unsync_posts().await?;
         let mut synced_count = 0;
         

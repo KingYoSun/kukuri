@@ -4,6 +4,7 @@ use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use crate::shared::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyPair {
@@ -16,13 +17,13 @@ pub struct KeyPair {
 /// 鍵管理のトレイト
 #[async_trait]
 pub trait KeyManager: Send + Sync {
-    async fn generate_keypair(&self) -> Result<KeyPair, Box<dyn std::error::Error + Send + Sync>>;
-    async fn import_private_key(&self, nsec: &str) -> Result<KeyPair, Box<dyn std::error::Error + Send + Sync>>;
-    async fn export_private_key(&self, npub: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
-    async fn get_public_key(&self, npub: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
-    async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn delete_keypair(&self, npub: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_npubs(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn generate_keypair(&self) -> Result<KeyPair, AppError>;
+    async fn import_private_key(&self, nsec: &str) -> Result<KeyPair, AppError>;
+    async fn export_private_key(&self, npub: &str) -> Result<String, AppError>;
+    async fn get_public_key(&self, npub: &str) -> Result<String, AppError>;
+    async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), AppError>;
+    async fn delete_keypair(&self, npub: &str) -> Result<(), AppError>;
+    async fn list_npubs(&self) -> Result<Vec<String>, AppError>;
 }
 
 /// デフォルトのKeyManager実装
@@ -97,12 +98,14 @@ impl Default for DefaultKeyManager {
 
 #[async_trait]
 impl KeyManager for DefaultKeyManager {
-    async fn generate_keypair(&self) -> Result<KeyPair, Box<dyn std::error::Error + Send + Sync>> {
+    async fn generate_keypair(&self) -> Result<KeyPair, AppError> {
         let keys = Keys::generate();
         let public_key = keys.public_key().to_hex();
         let private_key = keys.secret_key().display_secret().to_string();
-        let npub = keys.public_key().to_bech32()?;
-        let nsec = keys.secret_key().to_bech32()?;
+        let npub = keys.public_key().to_bech32()
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?;
+        let nsec = keys.secret_key().to_bech32()
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?;
 
         let keypair = KeyPair {
             public_key,
@@ -119,13 +122,15 @@ impl KeyManager for DefaultKeyManager {
         Ok(keypair)
     }
 
-    async fn import_private_key(&self, nsec: &str) -> Result<KeyPair, Box<dyn std::error::Error + Send + Sync>> {
-        let secret_key = SecretKey::from_bech32(nsec)?;
+    async fn import_private_key(&self, nsec: &str) -> Result<KeyPair, AppError> {
+        let secret_key = SecretKey::from_bech32(nsec)
+            .map_err(|e| AppError::Crypto(format!("Invalid nsec: {:?}", e)))?;
         let keys = Keys::new(secret_key);
 
         let public_key = keys.public_key().to_hex();
         let private_key = keys.secret_key().display_secret().to_string();
-        let npub = keys.public_key().to_bech32()?;
+        let npub = keys.public_key().to_bech32()
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?;
 
         let keypair = KeyPair {
             public_key,
@@ -142,43 +147,44 @@ impl KeyManager for DefaultKeyManager {
         Ok(keypair)
     }
 
-    async fn export_private_key(&self, npub: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn export_private_key(&self, npub: &str) -> Result<String, AppError> {
         let inner = self.inner.read().await;
         inner
             .stored_keys
             .get(npub)
             .map(|kp| kp.nsec.clone())
-            .ok_or_else(|| "Key not found".to_string().into())
+            .ok_or_else(|| AppError::NotFound(format!("Key not found: {}", npub)))
     }
 
-    async fn get_public_key(&self, npub: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_public_key(&self, npub: &str) -> Result<String, AppError> {
         let inner = self.inner.read().await;
         inner
             .stored_keys
             .get(npub)
             .map(|kp| kp.public_key.clone())
-            .ok_or_else(|| "Key not found".to_string().into())
+            .ok_or_else(|| AppError::NotFound(format!("Key not found: {}", npub)))
     }
 
-    async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), AppError> {
         let mut inner = self.inner.write().await;
         inner.stored_keys.insert(keypair.npub.clone(), keypair.clone());
         Ok(())
     }
 
-    async fn delete_keypair(&self, npub: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_keypair(&self, npub: &str) -> Result<(), AppError> {
         let mut inner = self.inner.write().await;
         inner.stored_keys.remove(npub);
         // If this was the current key, clear it
         if let Some(keys) = &inner.keys {
-            if keys.public_key().to_bech32()? == npub {
+            if keys.public_key().to_bech32()
+                .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))? == npub {
                 inner.keys = None;
             }
         }
         Ok(())
     }
 
-    async fn list_npubs(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn list_npubs(&self) -> Result<Vec<String>, AppError> {
         let inner = self.inner.read().await;
         Ok(inner.stored_keys.keys().cloned().collect())
     }

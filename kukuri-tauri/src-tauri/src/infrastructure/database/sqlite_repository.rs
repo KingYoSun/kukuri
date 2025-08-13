@@ -1,4 +1,5 @@
 use super::{ConnectionPool, EventRepository, PostRepository, Repository, TopicRepository, UserRepository};
+use crate::shared::error::AppError;
 use crate::domain::entities::{Event, Post, Topic, User};
 use async_trait::async_trait;
 
@@ -14,12 +15,12 @@ impl SqliteRepository {
 
 #[async_trait]
 impl Repository for SqliteRepository {
-    async fn initialize(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn initialize(&self) -> Result<(), AppError> {
         self.pool.migrate().await?;
         Ok(())
     }
 
-    async fn health_check(&self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    async fn health_check(&self) -> Result<bool, AppError> {
         let result = sqlx::query("SELECT 1")
             .fetch_one(self.pool.get_pool())
             .await;
@@ -29,7 +30,7 @@ impl Repository for SqliteRepository {
 
 #[async_trait]
 impl PostRepository for SqliteRepository {
-    async fn create_post(&self, post: &Post) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn create_post(&self, post: &Post) -> Result<(), AppError> {
         // NostrイベントとしてDBに保存
         let tags_json = serde_json::to_string(&vec![vec!["t".to_string(), post.topic_id.clone()]])
             .unwrap_or_else(|_| "[]".to_string());
@@ -52,7 +53,7 @@ impl PostRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_post(&self, id: &str) -> Result<Option<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_post(&self, id: &str) -> Result<Option<Post>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT event_id, public_key, content, created_at, tags
@@ -100,7 +101,7 @@ impl PostRepository for SqliteRepository {
         }
     }
 
-    async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, AppError> {
         let topic_tag = format!(r#"["t","{}"]"#, topic_id);
         let rows = sqlx::query(
             r#"
@@ -140,7 +141,7 @@ impl PostRepository for SqliteRepository {
         Ok(posts)
     }
 
-    async fn update_post(&self, post: &Post) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn update_post(&self, post: &Post) -> Result<(), AppError> {
         // 投稿の更新（主にいいね数、ブースト数などのメタデータ更新用）
         sqlx::query(
             r#"
@@ -158,7 +159,7 @@ impl PostRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn delete_post(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_post(&self, id: &str) -> Result<(), AppError> {
         // Nostrでは削除イベント(Kind 5)を発行するが、元のイベントは残す
         // ここではフラグを立てるか、別テーブルで管理
         sqlx::query(
@@ -176,7 +177,7 @@ impl PostRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_unsync_posts(&self) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_unsync_posts(&self) -> Result<Vec<Post>, AppError> {
         // sync_statusカラムがない場合は、オフライン中に作成されたものを取得
         let rows = sqlx::query(
             r#"
@@ -226,7 +227,7 @@ impl PostRepository for SqliteRepository {
         Ok(posts)
     }
 
-    async fn mark_post_synced(&self, id: &str, event_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn mark_post_synced(&self, id: &str, event_id: &str) -> Result<(), AppError> {
         sqlx::query(
             r#"
             UPDATE events 
@@ -243,7 +244,7 @@ impl PostRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, created_at, tags
@@ -293,7 +294,7 @@ impl PostRepository for SqliteRepository {
         Ok(posts)
     }
 
-    async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, created_at, tags
@@ -345,7 +346,7 @@ impl PostRepository for SqliteRepository {
 
 #[async_trait]
 impl TopicRepository for SqliteRepository {
-    async fn create_topic(&self, topic: &Topic) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn create_topic(&self, topic: &Topic) -> Result<(), AppError> {
         // トピックの作成
         sqlx::query(
             r#"
@@ -364,7 +365,7 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_topic(&self, id: &str) -> Result<Option<Topic>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT topic_id, name, description, created_at, updated_at
@@ -392,7 +393,7 @@ impl TopicRepository for SqliteRepository {
         }
     }
 
-    async fn get_all_topics(&self) -> Result<Vec<Topic>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT topic_id, name, description, created_at, updated_at
@@ -419,7 +420,7 @@ impl TopicRepository for SqliteRepository {
         Ok(topics)
     }
 
-    async fn get_joined_topics(&self) -> Result<Vec<Topic>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_joined_topics(&self) -> Result<Vec<Topic>, AppError> {
         // ユーザーが参加しているトピックを取得
         let rows = sqlx::query(
             r#"
@@ -449,7 +450,7 @@ impl TopicRepository for SqliteRepository {
         Ok(topics)
     }
 
-    async fn update_topic(&self, topic: &Topic) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn update_topic(&self, topic: &Topic) -> Result<(), AppError> {
         sqlx::query(
             r#"
             UPDATE topics 
@@ -467,7 +468,7 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn delete_topic(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_topic(&self, id: &str) -> Result<(), AppError> {
         // #publicトピックは削除できない
         if id == "public" {
             return Err("デフォルトトピックは削除できません".into());
@@ -486,7 +487,7 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn join_topic(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn join_topic(&self, id: &str) -> Result<(), AppError> {
         // ユーザーのトピック参加を記録
         sqlx::query(
             r#"
@@ -502,7 +503,7 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn leave_topic(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn leave_topic(&self, id: &str) -> Result<(), AppError> {
         // #publicトピックからは離脱できない
         if id == "public" {
             return Err("デフォルトトピックから離脱することはできません".into());
@@ -523,7 +524,7 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn update_topic_stats(&self, id: &str, member_count: u32, post_count: u32) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn update_topic_stats(&self, id: &str, member_count: u32, post_count: u32) -> Result<(), AppError> {
         sqlx::query(
             r#"
             UPDATE topics 
@@ -544,7 +545,7 @@ impl TopicRepository for SqliteRepository {
 
 #[async_trait]
 impl UserRepository for SqliteRepository {
-    async fn create_user(&self, user: &User) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn create_user(&self, user: &User) -> Result<(), AppError> {
         sqlx::query(
             r#"
             INSERT INTO users (npub, pubkey, display_name, bio, avatar_url, created_at, updated_at)
@@ -564,7 +565,7 @@ impl UserRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_user(&self, npub: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_user(&self, npub: &str) -> Result<Option<User>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
@@ -595,7 +596,7 @@ impl UserRepository for SqliteRepository {
         }
     }
 
-    async fn get_user_by_pubkey(&self, pubkey: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_user_by_pubkey(&self, pubkey: &str) -> Result<Option<User>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
@@ -626,7 +627,7 @@ impl UserRepository for SqliteRepository {
         }
     }
 
-    async fn update_user(&self, user: &User) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn update_user(&self, user: &User) -> Result<(), AppError> {
         sqlx::query(
             r#"
             UPDATE users 
@@ -645,7 +646,7 @@ impl UserRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn delete_user(&self, npub: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_user(&self, npub: &str) -> Result<(), AppError> {
         sqlx::query(
             r#"
             DELETE FROM users 
@@ -659,7 +660,7 @@ impl UserRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_followers(&self, npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError> {
         // フォロワーを取得（followsテーブルから）
         let rows = sqlx::query(
             r#"
@@ -692,7 +693,7 @@ impl UserRepository for SqliteRepository {
         Ok(users)
     }
 
-    async fn get_following(&self, npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_following(&self, npub: &str) -> Result<Vec<User>, AppError> {
         // フォロー中のユーザーを取得
         let rows = sqlx::query(
             r#"
@@ -728,7 +729,7 @@ impl UserRepository for SqliteRepository {
 
 #[async_trait]
 impl EventRepository for SqliteRepository {
-    async fn create_event(&self, event: &Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn create_event(&self, event: &Event) -> Result<(), AppError> {
         let tags_json = serde_json::to_string(&event.tags).unwrap_or_else(|_| "[]".to_string());
         
         sqlx::query(
@@ -750,7 +751,7 @@ impl EventRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_event(&self, id: &str) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_event(&self, id: &str) -> Result<Option<Event>, AppError> {
         let row = sqlx::query(
             r#"
             SELECT event_id, public_key, content, kind, tags, created_at, sig
@@ -788,7 +789,7 @@ impl EventRepository for SqliteRepository {
         }
     }
 
-    async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, kind, tags, created_at, sig
@@ -828,7 +829,7 @@ impl EventRepository for SqliteRepository {
         Ok(events)
     }
 
-    async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, kind, tags, created_at, sig
@@ -868,7 +869,7 @@ impl EventRepository for SqliteRepository {
         Ok(events)
     }
 
-    async fn delete_event(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_event(&self, id: &str) -> Result<(), AppError> {
         // Nostrでは削除イベント(Kind 5)を発行するが、元のイベントは残す
         sqlx::query(
             r#"
@@ -885,7 +886,7 @@ impl EventRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_unsync_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_unsync_events(&self) -> Result<Vec<Event>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, kind, tags, created_at, sig
@@ -922,7 +923,7 @@ impl EventRepository for SqliteRepository {
         Ok(events)
     }
 
-    async fn mark_event_synced(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn mark_event_synced(&self, id: &str) -> Result<(), AppError> {
         sqlx::query(
             r#"
             UPDATE events 

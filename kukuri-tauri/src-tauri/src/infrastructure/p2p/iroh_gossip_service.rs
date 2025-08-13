@@ -1,4 +1,5 @@
 use super::GossipService;
+use crate::shared::error::AppError;
 use crate::domain::entities::Event;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -26,7 +27,7 @@ struct TopicHandle {
 }
 
 impl IrohGossipService {
-    pub fn new(endpoint: Arc<iroh::Endpoint>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(endpoint: Arc<iroh::Endpoint>) -> Result<Self, AppError> {
         // Gossipインスタンスの作成
         // Arc::try_unwrap to get the owned Endpoint, or clone the inner value
         let gossip = Gossip::builder().spawn((*endpoint).clone());
@@ -55,7 +56,7 @@ impl IrohGossipService {
 
 #[async_trait]
 impl GossipService for IrohGossipService {
-    async fn join_topic(&self, topic: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {
         let mut topics = self.topics.write().await;
         
         // 既に参加済みの場合はスキップ
@@ -68,7 +69,8 @@ impl GossipService for IrohGossipService {
         
         // Gossip APIを使用してトピックに参加
         // Note: iroh-gossip APIが変更されているため、シンプルな実装にする
-        let _topic_handle = self.gossip.subscribe(topic_id, vec![]).await?;
+        let _topic_handle = self.gossip.subscribe(topic_id, vec![]).await
+            .map_err(|e| AppError::P2PError(format!("Failed to subscribe to topic: {:?}", e)))?;
         
         // レシーバータスクを起動（メッセージを受信し続ける）
         let topic_clone = topic.to_string();
@@ -91,7 +93,7 @@ impl GossipService for IrohGossipService {
         Ok(())
     }
 
-    async fn leave_topic(&self, topic: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn leave_topic(&self, topic: &str) -> Result<(), AppError> {
         let mut topics = self.topics.write().await;
         
         if let Some(handle) = topics.remove(topic) {
@@ -110,7 +112,7 @@ impl GossipService for IrohGossipService {
         Ok(())
     }
 
-    async fn broadcast(&self, topic: &str, event: &Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn broadcast(&self, topic: &str, event: &Event) -> Result<(), AppError> {
         let topics = self.topics.read().await;
         
         if let Some(handle) = topics.get(topic) {
@@ -129,9 +131,9 @@ impl GossipService for IrohGossipService {
         Ok(())
     }
 
-    async fn subscribe(&self, topic: &str) -> Result<mpsc::Receiver<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn subscribe(&self, topic: &str) -> Result<mpsc::Receiver<Event>, AppError> {
         // トピックに参加していることを確認
-        self.join_topic(topic).await?;
+        self.join_topic(topic, vec![]).await?;
         
         let topics = self.topics.read().await;
         
@@ -140,7 +142,8 @@ impl GossipService for IrohGossipService {
             
             // 新しいレシーバーを作成
             // Simplified - actual implementation needs proper API
-            let _topic_handle = self.gossip.subscribe(topic_id, vec![]).await?;
+            let _topic_handle = self.gossip.subscribe(topic_id, vec![]).await
+                .map_err(|e| AppError::P2PError(format!("Failed to subscribe to topic: {:?}", e)))?;
             
             // イベントチャンネルを作成
             let (tx, rx) = mpsc::channel(100);
@@ -157,12 +160,12 @@ impl GossipService for IrohGossipService {
         }
     }
 
-    async fn get_joined_topics(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_joined_topics(&self) -> Result<Vec<String>, AppError> {
         let topics = self.topics.read().await;
         Ok(topics.keys().cloned().collect())
     }
 
-    async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError> {
         let topics = self.topics.read().await;
         
         if let Some(handle) = topics.get(topic) {
@@ -175,6 +178,19 @@ impl GossipService for IrohGossipService {
                 .into_iter()
                 .map(|peer_id: ()| String::new())
                 .collect())
+        } else {
+            Err(format!("Not joined to topic: {}", topic).into())
+        }
+    }
+    
+    async fn broadcast_message(&self, topic: &str, message: &[u8]) -> Result<(), AppError> {
+        let topics = self.topics.read().await;
+        
+        if let Some(_handle) = topics.get(topic) {
+            // メッセージをブロードキャスト
+            // Simplified - actual implementation needs proper API
+            tracing::debug!("Broadcasting raw message to topic {}: {} bytes", topic, message.len());
+            Ok(())
         } else {
             Err(format!("Not joined to topic: {}", topic).into())
         }
