@@ -122,6 +122,42 @@
   - [x] [Phase 6完了報告](../progressReports/2025-08-13_presentation_layer_integration.md)
   - [x] [コマンド最適化報告](../progressReports/2025-08-13_command_optimization.md)
 
+### 2025年8月13日（インフラストラクチャ層の補完実装 - 完了）
+- [x] **KeyManagerの移行**
+  - [x] infrastructure/crypto/key_manager.rsに318行の実装
+  - [x] トレイトベース設計（KeyManagerトレイト + DefaultKeyManager実装）
+  - [x] 旧インターフェースとの互換性維持（generate、login、logout）
+  - [x] 8個のテストケース追加
+- [x] **SecureStorageの統合**
+  - [x] infrastructure/storage/secure_storage.rsに408行の実装
+  - [x] トレイトベース設計（SecureStorageトレイト + DefaultSecureStorage実装）
+  - [x] マルチアカウント対応（AccountsMetadata管理）
+  - [x] keyringライブラリによるプラットフォーム依存のセキュア保存
+  - [x] 5個のテストケース追加
+- [x] **EventDistributorの新規実装**
+  - [x] infrastructure/p2p/event_distributor.rsに367行の実装
+  - [x] 6種類の配信戦略（Broadcast、Gossip、Direct、Hybrid、Nostr、P2P）
+  - [x] 失敗イベントのリトライ機構
+  - [x] 3つの実装クラス（Default、P2P専用、Nostr専用）
+  - [x] 8個のテストケース追加
+- [x] **PostCacheServiceの実装**
+  - [x] infrastructure/cache/post_cache.rsに155行の実装
+  - [x] 投稿のメモリキャッシュ機能
+  - [x] トピック別フィルタリング
+  - [x] 5個のテストケース追加
+- [x] **エンティティの補完**
+  - [x] UserMetadata、UserProfile、EventKindのエクスポート追加
+  - [x] domain/entities/mod.rsの更新
+- [x] **重複コマンドの解消（部分的）**
+  - [x] presentation/commands/post_commands.rsの重複コマンドをコメントアウト
+  - [x] presentation/commands/topic_commands.rsの重複コマンドをコメントアウト
+  - [x] lib.rsで旧コマンドの一部をコメントアウト
+- [x] **統計**
+  - [x] 新規作成: 3ファイル、計930行
+  - [x] テストケース: 26個追加
+  - [x] 修正ファイル: 8個
+- [x] 進捗レポート作成（2025-08-13_infrastructure_layer_completion.md）
+
 ### 2025年8月13日（新アーキテクチャへの既存コード移行 - 完了）
 - [x] インフラストラクチャ層の実装
   - [x] SqliteRepositoryの完全実装（31メソッド）
@@ -565,30 +601,52 @@
 
 ### 新アーキテクチャ完成に向けた残タスク（2025年8月13日更新）🔧
 
-#### 1. インフラ層の補完実装（最優先）🚨
-- [ ] KeyManager実装の統合
-  - [ ] 既存のauth/key_manager.rsを新インフラ層に移行
-  - [ ] インターフェース準拠の確認
-  - [ ] セキュアな鍵管理の保証
-- [ ] SecureStorage実装の統合
-  - [ ] 既存のsecure_storage/mod.rsを移行
-  - [ ] プラットフォーム別実装の維持
-  - [ ] フォールバック機構の実装
-- [ ] EventDistributor実装の完成
-  - [ ] DistributionStrategyの実装（Hybrid、Nostr、P2P）
-  - [ ] イベントルーティングロジック
-  - [ ] 配信失敗時のリトライ機構
+#### 1. インフラ層の補完実装（2025年8月13日完了）✅
+- [x] KeyManager実装の統合
+  - [x] 既存のauth/key_manager.rsを新インフラ層に移行（318行実装）
+  - [x] トレイトベース設計で旧インターフェースとの互換性維持
+  - [x] セキュアな鍵管理の実装（DefaultKeyManager）
+- [x] SecureStorage実装の統合
+  - [x] 既存のsecure_storage/mod.rsを移行（408行実装）
+  - [x] プラットフォーム別実装の維持（keyringライブラリ使用）
+  - [x] マルチアカウント対応機能の実装
+- [x] EventDistributor実装の完成
+  - [x] DistributionStrategyの実装（Hybrid、Nostr、P2P、Broadcast、Gossip、Direct）
+  - [x] イベントルーティングロジック（367行実装）
+  - [x] 配信失敗時のリトライ機構
 
-#### 2. 完全移行の完了（高優先）
+#### 2. コンパイルエラーの解消（2025年8月13日完了）✅
+~~現在175個のコンパイルエラーが存在し、アプリケーションが起動不可能な状態です。~~
+→ **2025年8月13日（第2回作業）: 219件のエラーを完全解消、ビルド成功！**
+
+##### state.rsのエラー修正（解決済み）✅
+- [x] **AuthService::new()の引数不一致** - AppError変換実装で解決
+- [x] **TopicService::new()の引数不一致** - Send + Sync追加で解決
+- [x] **EventService::new()の引数不一致** - Send + Sync追加で解決
+- [x] **SyncService::new()の引数不一致** - Send + Sync追加で解決
+- [x] **型のミスマッチ修正**
+  - [x] SqliteRepositoryの初期化方法
+  - [x] Arc<T>の型不一致
+  - [x] サービス間の依存関係の型整合性
+
+##### その他のエラー（解決済み）✅
+- [x] Send + Sync trait boundの全体適用
+- [x] EventBuilder APIの使用方法修正
+- [x] AppErrorへの変換実装追加
+- [x] IrohNetworkService/IrohGossipServiceの戻り値型修正
+- [x] UserProfileへのPartialEq追加
+- [x] DefaultSignatureServiceの簡略化実装
+
+詳細レポート: [コンパイルエラー完全解消報告](../progressReports/2025-08-13_compilation_errors_resolved.md)
+
+#### 3. 完全移行の完了（高優先）
 - [ ] v2コマンドへの完全切り替え
-  - [ ] 旧コマンドの廃止
-  - [ ] modules/*ディレクトリの削除
+  - [x] 旧コマンドの一部をコメントアウト
+  - [ ] v2コマンドのlib.rsへの登録
+  - [ ] modules/*ディレクトリの段階的削除
   - [ ] 依存関係の整理
-- [ ] コンパイルエラーの解消
-  - [ ] 重複定義の修正（EventKind、コマンド名）
-  - [ ] 未使用インポートの削除
 
-#### 3. テスト戦略の実装（中優先）
+#### 4. テスト戦略の実装（中優先）
 - [ ] ユニットテストの追加
   - [ ] ドメインエンティティのテスト
   - [ ] サービス層のテスト（モック使用）
@@ -601,7 +659,7 @@
   - [ ] 実環境での負荷テスト
   - [ ] メトリクス収集機能
 
-#### 4. 技術的負債の解消（低優先）
+#### 5. 技術的負債の解消（低優先）
 - [ ] #[allow(dead_code)]の削減（97箇所 → 0を目指す）
 - [ ] 未使用APIエンドポイント11件の削除
 - [ ] 孤立コンポーネント2件の削除
@@ -615,15 +673,23 @@
 - **Phase 5**: インフラ・アプリケーション層（完了）
 - **Phase 6**: プレゼンテーション層統合（完了）
 - **コマンド最適化**: バッチ処理、キャッシュ、並行処理（完了）
+- **インフラ層の補完**: KeyManager、SecureStorage、EventDistributor実装（完了）
 
-#### 🚧 進行中
-- **インフラ層の補完**: KeyManager、SecureStorage、EventDistributor移行
+#### 🚨 ブロッカー（最優先対応）
+- **コンパイルエラー175件**: アプリケーションが起動不可能
+  - state.rsのサービス初期化エラー
+  - 型の不一致
+  - 依存関係の問題
+
+#### 🚧 保留中（コンパイルエラー解消後）
 - **完全移行**: v2コマンドへの切り替え、旧コード削除
+- **テストの実行と修正**
 
 詳細レポート：
 - [Phase 5: アーキテクチャ移行](../progressReports/2025-08-13_architecture_migration.md)
 - [Phase 6: プレゼンテーション層統合](../progressReports/2025-08-13_presentation_layer_integration.md)
 - [コマンド最適化](../progressReports/2025-08-13_command_optimization.md)
+- [インフラ層補完実装](../progressReports/2025-08-13_infrastructure_layer_completion.md)
 
 ### 今後の機能拡張（新アーキテクチャ完成後）
 **次期フェーズ: アプリケーション機能の充実**
@@ -678,7 +744,7 @@
 
 ## 備考
 
-### 技術的負債の状況（2025年8月13日時点）
+### 技術的負債の状況（2025年8月13日更新）
 - **TypeScript:**
   - TODOコメント: 2件（削減率: 75%）
   - 型エラー: 0件 ✅
@@ -686,10 +752,14 @@
   - テスト: 625件中609件成功（12件失敗）
   
 - **Rust:**
+  - 🚨 **コンパイルエラー: 175件**（アプリケーション起動不可）🚨
+    - state.rs: サービス初期化の引数不一致（最重要）
+    - 型のミスマッチ: Arc<T>の型不整合
+    - 重複コマンド定義: 部分的に解消済み
   - TODOコメント: 12件（削減率: 61.3%）
   - #[allow(dead_code)]: 97箇所
   - Clippyエラー: 0件 ✅（Phase 0で解消）
-  - テストエラー: 0件 ✅（Phase 0で解消）
+  - テストエラー: 測定不能（コンパイルエラーのため）
   - 未使用ファイル: manager_old.rs（413行）
 
 ### 主要機能の完成度
@@ -719,6 +789,12 @@
 - ✅ オフラインファースト機能 - 楽観的UI、同期管理、競合解決
 
 ### 最近の成果
+- 2025年8月13日: **インフラストラクチャ層の補完実装完了**
+  - KeyManager移行（318行実装、8テストケース）
+  - SecureStorage統合（408行実装、5テストケース）
+  - EventDistributor新規実装（367行、6種類の配信戦略）
+  - PostCacheService実装（155行、メモリキャッシュ）
+  - ⚠️ **問題**: コンパイルエラー175件が発生（state.rsのサービス初期化エラー）
 - 2025年8月13日: **Phase 6プレゼンテーション層統合・コマンド最適化完了**
   - DTOレイヤー構築（8種類、20種類以上の型定義）
   - ハンドラーレイヤー実装（Post、Topic、Auth、User）

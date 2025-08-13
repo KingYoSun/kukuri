@@ -6,6 +6,45 @@
 
 ## 現在の問題
 
+### 🚨🚨🚨 コンパイルエラー175件（2025年8月13日発生）- 最重要
+**問題**: インフラ層の補完実装後、アプリケーションが起動不可能な状態
+
+**エラーの詳細**:
+1. **state.rs内のサービス初期化エラー（最も深刻）**:
+   - AuthService::new() - 引数不一致（期待4、実際2）
+   - TopicService::new() - 引数不一致（期待2、実際1）
+   - EventService::new() - 引数不一致（期待3、実際2）
+   - SyncService::new() - 引数不一致（期待3、実際1）
+   - PostService::new() - 型のミスマッチ
+   - UserService::new() - 型のミスマッチ
+
+2. **型のミスマッチ**:
+   - SqliteRepository::new()の初期化方法が不正
+   - Arc<T>の型不一致（key_manager、event_manager等）
+   - サービス間の依存関係の型整合性が取れていない
+
+3. **重複コマンド定義（部分的に解消済み）**:
+   - ✅ presentation/commands内の重複はコメントアウト済み
+   - ⚠️ modules/post/commands.rsとの競合が残存
+   - ⚠️ modules/topic/commands.rsとの競合が残存
+
+**原因**:
+- 新旧アーキテクチャの移行期間中で、サービス層のインターフェースが不一致
+- infrastructure層の実装は完了したが、application層との統合が未完了
+- 依存性注入パターンの実装が不完全
+
+**影響**:
+- アプリケーションがビルドできない
+- テストが実行できない
+- 開発作業が完全にブロックされている
+
+**解決策**:
+1. state.rsの各サービス初期化を正しい引数で修正
+2. 依存性の型を統一（Arc<dyn Trait>の使用を検討）
+3. modules/*のコマンドを完全に無効化またはv2へ移行
+
+**優先度**: 🚨最高（他のすべての作業をブロック）
+
 ### TypeScriptテストの一部失敗（2025年8月13日更新）
 **問題**: テスト固有の設定問題により一部のテストが失敗
 
@@ -58,11 +97,18 @@
    - 並行処理の最適化（npub変換5倍高速化）
    - パフォーマンステスト（5種類のテスト、4種類のベンチマーク）
 
+**完了した作業（2025年8月13日インフラ層補完）**:
+1. **インフラ層の補完** ✅
+   - KeyManager: infrastructure/crypto/key_manager.rsに移行完了（318行）
+   - SecureStorage: infrastructure/storage/secure_storage.rsに移行完了（408行）
+   - EventDistributor: infrastructure/p2p/event_distributor.rsに実装完了（367行）
+   - PostCacheService: infrastructure/cache/post_cache.rsに実装完了（155行）
+
 **残作業**:
-1. **インフラ層の補完** 🚨 最優先
-   - KeyManager: auth/key_manager.rsをinfrastructure/crypto/へ移行
-   - SecureStorage: secure_storage/mod.rsをinfrastructure/storage/へ移行
-   - EventDistributor: DistributionStrategy実装
+1. **コンパイルエラーの解消** 🚨 最優先
+   - state.rsのサービス初期化修正（175個のエラー）
+   - 型の不一致解消
+   - 依存関係の整理
 
 **リスク**:
 - 段階的移行中に新旧コードの不整合が発生する可能性
