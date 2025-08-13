@@ -1,0 +1,57 @@
+use crate::domain::entities::{User, UserMetadata};
+use crate::infrastructure::database::UserRepository;
+use std::sync::Arc;
+
+pub struct UserService {
+    repository: Arc<dyn UserRepository>,
+}
+
+impl UserService {
+    pub fn new(repository: Arc<dyn UserRepository>) -> Self {
+        Self { repository }
+    }
+
+    pub async fn create_user(&self, npub: String, pubkey: String) -> Result<User, Box<dyn std::error::Error>> {
+        let user = User::new(npub, pubkey);
+        self.repository.create_user(&user).await?;
+        Ok(user)
+    }
+
+    pub async fn get_user(&self, npub: &str) -> Result<Option<User>, Box<dyn std::error::Error>> {
+        self.repository.get_user(npub).await
+    }
+
+    pub async fn get_user_by_pubkey(&self, pubkey: &str) -> Result<Option<User>, Box<dyn std::error::Error>> {
+        self.repository.get_user_by_pubkey(pubkey).await
+    }
+
+    pub async fn update_profile(&self, npub: &str, metadata: UserMetadata) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(mut user) = self.repository.get_user(npub).await? {
+            user.update_metadata(metadata);
+            self.repository.update_user(&user).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn follow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: Implement follow relationship
+        Ok(())
+    }
+
+    pub async fn unfollow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: Implement unfollow
+        Ok(())
+    }
+
+    pub async fn get_followers(&self, npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error>> {
+        self.repository.get_followers(npub).await
+    }
+
+    pub async fn get_following(&self, npub: &str) -> Result<Vec<User>, Box<dyn std::error::Error>> {
+        self.repository.get_following(npub).await
+    }
+
+    pub async fn delete_user(&self, npub: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.repository.delete_user(npub).await
+    }
+}
