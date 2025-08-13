@@ -49,15 +49,15 @@ pub fn run() {
             secure_storage_commands::secure_login,
             // トピック関連コマンド
             topic_commands::get_topics,
-            topic_commands::create_topic,
+            // topic_commands::create_topic,  // v2コマンドに移行
             topic_commands::update_topic,
-            topic_commands::delete_topic,
+            // topic_commands::delete_topic,  // v2コマンドに移行
             // ポスト関連コマンド
             post_commands::get_posts,
-            post_commands::create_post,
-            post_commands::delete_post,
-            post_commands::like_post,
-            post_commands::boost_post,
+            // post_commands::create_post,  // v2コマンドに移行
+            // post_commands::delete_post,  // v2コマンドに移行
+            // post_commands::like_post,    // v2コマンドに移行
+            // post_commands::boost_post,   // v2コマンドに移行
             post_commands::bookmark_post,
             post_commands::unbookmark_post,
             post_commands::get_bookmarked_post_ids,

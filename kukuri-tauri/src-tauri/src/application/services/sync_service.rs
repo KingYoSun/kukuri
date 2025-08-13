@@ -2,7 +2,7 @@ use crate::infrastructure::p2p::NetworkService;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SyncStatus {
     pub is_syncing: bool,
     pub pending_posts: u32,
@@ -38,7 +38,7 @@ impl SyncService {
         }
     }
 
-    pub async fn start_sync(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start_sync(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut status = self.status.write().await;
         
         if status.is_syncing {

@@ -10,29 +10,30 @@ pub struct CreatePostRequest {
     pub tags: Vec<String>,
 }
 
-#[tauri::command]
-pub async fn create_post(
-    request: CreatePostRequest,
-    post_service: State<'_, Arc<PostService>>,
-    auth_service: State<'_, Arc<AuthService>>,
-) -> Result<serde_json::Value, String> {
-    let current_user = auth_service
-        .get_current_user()
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or("Not authenticated")?;
+// v2コマンドに移行
+// #[tauri::command]
+// pub async fn create_post(
+//     request: CreatePostRequest,
+//     post_service: State<'_, Arc<PostService>>,
+//     auth_service: State<'_, Arc<AuthService>>,
+// ) -> Result<serde_json::Value, String> {
+//     let current_user = auth_service
+//         .get_current_user()
+//         .await
+//         .map_err(|e| e.to_string())?
+//         .ok_or("Not authenticated")?;
 
-    let mut post = post_service
-        .create_post(request.content, current_user, request.topic_id)
-        .await
-        .map_err(|e| e.to_string())?;
+//     let mut post = post_service
+//         .create_post(request.content, current_user, request.topic_id)
+//         .await
+//         .map_err(|e| e.to_string())?;
 
-    if !request.tags.is_empty() {
-        post = post.with_tags(request.tags);
-    }
+//     if !request.tags.is_empty() {
+//         post = post.with_tags(request.tags);
+//     }
 
-    serde_json::to_value(post).map_err(|e| e.to_string())
-}
+//     serde_json::to_value(post).map_err(|e| e.to_string())
+// }
 
 #[tauri::command]
 pub async fn get_post(
@@ -64,38 +65,41 @@ pub async fn get_posts_by_topic(
         .collect())
 }
 
-#[tauri::command]
-pub async fn like_post(
-    post_id: String,
-    post_service: State<'_, Arc<PostService>>,
-) -> Result<(), String> {
-    post_service
-        .like_post(&post_id)
-        .await
-        .map_err(|e| e.to_string())
-}
+// v2コマンドに移行
+// #[tauri::command]
+// pub async fn like_post(
+//     post_id: String,
+//     post_service: State<'_, Arc<PostService>>,
+// ) -> Result<(), String> {
+//     post_service
+//         .like_post(&post_id)
+//         .await
+//         .map_err(|e| e.to_string())
+// }
 
-#[tauri::command]
-pub async fn boost_post(
-    post_id: String,
-    post_service: State<'_, Arc<PostService>>,
-) -> Result<(), String> {
-    post_service
-        .boost_post(&post_id)
-        .await
-        .map_err(|e| e.to_string())
-}
+// v2コマンドに移行
+// #[tauri::command]
+// pub async fn boost_post(
+//     post_id: String,
+//     post_service: State<'_, Arc<PostService>>,
+// ) -> Result<(), String> {
+//     post_service
+//         .boost_post(&post_id)
+//         .await
+//         .map_err(|e| e.to_string())
+// }
 
-#[tauri::command]
-pub async fn delete_post(
-    id: String,
-    post_service: State<'_, Arc<PostService>>,
-) -> Result<(), String> {
-    post_service
-        .delete_post(&id)
-        .await
-        .map_err(|e| e.to_string())
-}
+// v2コマンドに移行
+// #[tauri::command]
+// pub async fn delete_post(
+//     id: String,
+//     post_service: State<'_, Arc<PostService>>,
+// ) -> Result<(), String> {
+//     post_service
+//         .delete_post(&id)
+//         .await
+//         .map_err(|e| e.to_string())
+// }
 
 #[tauri::command]
 pub async fn sync_posts(

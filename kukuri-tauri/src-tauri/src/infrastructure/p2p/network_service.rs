@@ -20,11 +20,14 @@ pub struct NetworkStats {
 
 #[async_trait]
 pub trait NetworkService: Send + Sync {
-    async fn connect(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn get_peers(&self) -> Result<Vec<Peer>, Box<dyn std::error::Error>>;
-    async fn add_peer(&self, address: &str) -> Result<(), Box<dyn std::error::Error>>;
-    async fn remove_peer(&self, peer_id: &str) -> Result<(), Box<dyn std::error::Error>>;
-    async fn get_stats(&self) -> Result<NetworkStats, Box<dyn std::error::Error>>;
+    // Type conversion helper for downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
+    
+    async fn connect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_peers(&self) -> Result<Vec<Peer>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn add_peer(&self, address: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn remove_peer(&self, peer_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_stats(&self) -> Result<NetworkStats, Box<dyn std::error::Error + Send + Sync>>;
     async fn is_connected(&self) -> bool;
 }

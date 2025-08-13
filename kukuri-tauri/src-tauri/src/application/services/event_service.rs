@@ -1,7 +1,8 @@
 use crate::domain::entities::{Event, EventKind};
 use crate::infrastructure::database::EventRepository;
 use crate::infrastructure::crypto::SignatureService;
-use crate::infrastructure::p2p::{EventDistributor, DistributionStrategy};
+use crate::infrastructure::p2p::EventDistributor;
+use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
 use std::sync::Arc;
 
 pub struct EventService {
@@ -23,7 +24,7 @@ impl EventService {
         }
     }
 
-    pub async fn create_event(&self, kind: u32, content: String, pubkey: String, private_key: &str) -> Result<Event, Box<dyn std::error::Error>> {
+    pub async fn create_event(&self, kind: u32, content: String, pubkey: String, private_key: &str) -> Result<Event, Box<dyn std::error::Error + Send + Sync>> {
         let mut event = Event::new(kind, content, pubkey);
         
         // Sign the event
@@ -38,7 +39,7 @@ impl EventService {
         Ok(event)
     }
 
-    pub async fn process_received_event(&self, event: Event) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn process_received_event(&self, event: Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Verify signature
         if !self.signature_service.verify_event(&event).await? {
             return Err("Invalid event signature".into());
@@ -69,21 +70,21 @@ impl EventService {
         Ok(())
     }
 
-    pub async fn get_event(&self, id: &str) -> Result<Option<Event>, Box<dyn std::error::Error>> {
+    pub async fn get_event(&self, id: &str) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
         self.repository.get_event(id).await
     }
 
-    pub async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+    pub async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
         self.repository.get_events_by_kind(kind, limit).await
     }
 
-    pub async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+    pub async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
         self.repository.get_events_by_author(pubkey, limit).await
     }
 
-    pub async fn delete_event(&self, id: &str, pubkey: String, private_key: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn delete_event(&self, id: &str, pubkey: String, private_key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Create deletion event (Kind 5)
-        let mut deletion_event = Event::new(EventKind::EventDeletion.as_u32(), "", pubkey);
+        let mut deletion_event = Event::new(EventKind::EventDeletion.as_u32(), String::new(), pubkey);
         deletion_event.add_e_tag(id.to_string());
         
         self.signature_service.sign_event(&mut deletion_event, private_key).await?;
@@ -94,7 +95,7 @@ impl EventService {
         self.repository.delete_event(id).await
     }
 
-    pub async fn sync_pending_events(&self) -> Result<u32, Box<dyn std::error::Error>> {
+    pub async fn sync_pending_events(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
         let unsync_events = self.repository.get_unsync_events().await?;
         let mut synced_count = 0;
         

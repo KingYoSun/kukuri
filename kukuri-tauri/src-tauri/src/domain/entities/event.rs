@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+use crate::domain::value_objects::EventId;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[repr(u32)]
 pub enum EventKind {
     Metadata = 0,
     TextNote = 1,
@@ -67,7 +70,7 @@ impl From<EventKind> for u32 {
 pub struct Event {
     pub id: String,
     pub pubkey: String,
-    pub created_at: i64,
+    pub created_at: DateTime<Utc>,
     pub kind: u32,
     pub tags: Vec<Vec<String>>,
     pub content: String,
@@ -79,7 +82,7 @@ impl Event {
         Self {
             id: String::new(),
             pubkey,
-            created_at: chrono::Utc::now().timestamp(),
+            created_at: chrono::Utc::now(),
             kind,
             tags: Vec::new(),
             content,
@@ -131,12 +134,32 @@ impl Event {
             .map(|tag| tag[1].clone())
             .collect()
     }
+    
+    pub fn new_with_id(
+        id: EventId,
+        pubkey: String,
+        content: String,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        created_at: DateTime<Utc>,
+        sig: String,
+    ) -> Self {
+        Self {
+            id: id.to_hex(),
+            pubkey,
+            created_at,
+            kind,
+            tags,
+            content,
+            sig,
+        }
+    }
 }
 
 
 impl EventKind {
     pub fn as_u32(&self) -> u32 {
-        *self as u32
+        u32::from(*self)
     }
 
     pub fn from_u32(value: u32) -> Option<Self> {

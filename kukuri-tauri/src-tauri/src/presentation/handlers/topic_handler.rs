@@ -26,19 +26,19 @@ impl TopicHandler {
 
         let topic = self
             .topic_service
-            .create_topic(&request.name, &request.description, request.image_url)
+            .create_topic(request.name, Some(request.description))
             .await?;
 
         Ok(TopicResponse {
             id: topic.id.to_string(),
             name: topic.name,
-            description: topic.description,
+            description: topic.description.unwrap_or_default(),
             image_url: topic.image_url,
             member_count: 0,
             post_count: 0,
             is_joined: false,
-            created_at: topic.created_at.timestamp(),
-            updated_at: topic.updated_at.timestamp(),
+            created_at: topic.created_at.timestamp_millis(),
+            updated_at: topic.updated_at.timestamp_millis(),
         })
     }
 
@@ -50,7 +50,7 @@ impl TopicHandler {
             .map(|topic| TopicResponse {
                 id: topic.id.to_string(),
                 name: topic.name,
-                description: topic.description,
+                description: topic.description.unwrap_or_default(),
                 image_url: topic.image_url,
                 member_count: 0,
                 post_count: 0,
@@ -66,8 +66,9 @@ impl TopicHandler {
             .map_err(|e| AppError::InvalidInput(e))?;
 
         self.topic_service
-            .join_topic(&request.topic_id, user_pubkey)
-            .await
+            .join_topic(&request.topic_id)
+            .await?;
+        Ok(())
     }
 
     pub async fn leave_topic(&self, request: JoinTopicRequest, user_pubkey: &str) -> Result<(), AppError> {
@@ -75,8 +76,9 @@ impl TopicHandler {
             .map_err(|e| AppError::InvalidInput(e))?;
 
         self.topic_service
-            .leave_topic(&request.topic_id, user_pubkey)
-            .await
+            .leave_topic(&request.topic_id)
+            .await?;
+        Ok(())
     }
 
     pub async fn get_topic_stats(&self, request: GetTopicStatsRequest) -> Result<TopicStatsResponse, AppError> {

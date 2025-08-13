@@ -26,6 +26,14 @@ impl EventId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+    
+    pub fn from_hex(hex: &str) -> Result<Self, String> {
+        Self::new(hex.to_string())
+    }
+    
+    pub fn to_hex(&self) -> String {
+        self.0.clone()
+    }
 }
 
 impl fmt::Display for EventId {

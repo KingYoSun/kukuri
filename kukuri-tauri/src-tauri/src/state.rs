@@ -1,4 +1,4 @@
-use crate::modules::auth::key_manager::KeyManager;
+use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use crate::modules::bookmark::BookmarkManager;
 use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::database::connection::{Database, DbPool};
@@ -16,8 +16,20 @@ use crate::presentation::handlers::{
     auth_handler::AuthHandler, user_handler::UserHandler,
 };
 use crate::infrastructure::{
-    database::sqlite_repository::SqliteRepository,
-    p2p::{iroh_gossip_service::IrohGossipService, iroh_network_service::IrohNetworkService},
+    database::{sqlite_repository::SqliteRepository, connection_pool::ConnectionPool},
+    p2p::{
+        iroh_gossip_service::IrohGossipService, 
+        iroh_network_service::IrohNetworkService,
+        event_distributor::{DefaultEventDistributor, EventDistributor},
+        GossipService, NetworkService,
+    },
+    crypto::{
+        key_manager::DefaultKeyManager, 
+        SignatureService, 
+        DefaultSignatureService,
+        KeyManager,
+    },
+    storage::{secure_storage::DefaultSecureStorage, SecureStorage},
 };
 
 use std::sync::Arc;
@@ -41,7 +53,7 @@ pub struct P2PState {
 #[derive(Clone)]
 pub struct AppState {
     // 既存のマネージャー（後で移行予定）
-    pub key_manager: Arc<KeyManager>,
+    pub key_manager: Arc<OldKeyManager>,
     #[allow(dead_code)]
     pub db_pool: Arc<DbPool>,
     #[allow(dead_code)]
@@ -87,7 +99,7 @@ impl AppState {
             tracing::info!("App data directory already exists");
         }
 
-        let key_manager = Arc::new(KeyManager::new());
+        let key_manager = Arc::new(OldKeyManager::new());
         
         // Use absolute path for database
         let db_path = app_data_dir.join("kukuri.db");
@@ -119,38 +131,72 @@ impl AppState {
         let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
 
         // 新アーキテクチャのリポジトリとサービスを初期化
-        let repository = Arc::new(SqliteRepository::new((*db_pool).clone()));
+        let pool = ConnectionPool::new(&db_url).await?;
+        let repository = Arc::new(SqliteRepository::new(pool));
         
-        // サービス層の初期化
-        let auth_service = Arc::new(AuthService::new(
-            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::UserRepository>,
-            Arc::clone(&key_manager),
-        ));
+        // インフラストラクチャサービスの初期化
+        let key_manager_service: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());
+        let secure_storage: Arc<dyn SecureStorage> = Arc::new(DefaultSecureStorage::new());
+        let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());
+        let event_distributor: Arc<dyn EventDistributor> = Arc::new(DefaultEventDistributor::new());
         
-        let post_service = Arc::new(PostService::new(
-            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::PostRepository>,
-            Arc::clone(&event_manager),
-        ));
+        // P2Pサービスの初期化（後で実際に初期化）
+        let iroh_secret_key = iroh::SecretKey::generate(rand::thread_rng());
+        let network_service: Arc<dyn NetworkService> = Arc::new(
+            IrohNetworkService::new(iroh_secret_key).await
+                .map_err(|e| anyhow::anyhow!("Failed to create NetworkService: {}", e))?
+        );
+        let gossip_service: Arc<dyn GossipService> = Arc::new(
+            IrohGossipService::new(network_service.as_any().downcast_ref::<IrohNetworkService>()
+                .ok_or_else(|| anyhow::anyhow!("Failed to downcast NetworkService"))?
+                .endpoint().clone())
+                .map_err(|e| anyhow::anyhow!("Failed to create GossipService: {}", e))?
+        );
         
-        let topic_service = Arc::new(TopicService::new(
-            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::TopicRepository>,
-        ));
-        
+        // UserServiceを先に初期化（他のサービスの依存）
         let user_service = Arc::new(UserService::new(
-            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::UserRepository>,
+            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::UserRepository>,
         ));
         
+        // TopicServiceを初期化（AuthServiceの依存）
+        let topic_service = Arc::new(TopicService::new(
+            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::TopicRepository>,
+            Arc::clone(&gossip_service),
+        ));
+        
+        // AuthServiceの初期化（UserServiceとTopicServiceが必要）
+        let auth_service = Arc::new(AuthService::new(
+            Arc::clone(&key_manager_service),
+            Arc::clone(&secure_storage),
+            Arc::clone(&user_service),
+            Arc::clone(&topic_service),
+        ));
+        
+        // PostServiceの初期化
+        let post_service = Arc::new(PostService::new(
+            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::PostRepository>,
+            Arc::clone(&event_distributor),
+        ));
+        
+        // EventServiceの初期化
         let event_service = Arc::new(EventService::new(
-            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::EventRepository>,
-            Arc::clone(&event_manager),
+            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::EventRepository>,
+            Arc::clone(&signature_service),
+            Arc::clone(&event_distributor),
         ));
         
+        // SyncServiceの初期化（PostServiceとEventServiceが必要）
         let sync_service = Arc::new(SyncService::new(
-            Arc::clone(&repository) as Arc<dyn crate::domain::repositories::EventRepository>,
+            Arc::clone(&network_service),
+            Arc::clone(&post_service),
+            Arc::clone(&event_service),
         ));
         
         // プレゼンテーション層のハンドラーを初期化
-        let post_handler = Arc::new(PostHandler::new(Arc::clone(&post_service)));
+        let post_handler = Arc::new(PostHandler::with_auth(
+            Arc::clone(&post_service),
+            Arc::clone(&auth_service),
+        ));
         let topic_handler = Arc::new(TopicHandler::new(Arc::clone(&topic_service)));
         let auth_handler = Arc::new(AuthHandler::new(Arc::clone(&auth_service)));
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));

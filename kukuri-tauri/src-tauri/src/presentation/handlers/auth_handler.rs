@@ -53,8 +53,9 @@ impl AuthHandler {
         })
     }
 
-    pub async fn logout(&self, npub: String) -> Result<(), AppError> {
-        self.auth_service.logout(&npub).await
+    pub async fn logout(&self, _npub: String) -> Result<(), AppError> {
+        self.auth_service.logout().await?;
+        Ok(())
     }
 
     pub async fn get_current_user(&self) -> Result<Option<LoginResponse>, AppError> {

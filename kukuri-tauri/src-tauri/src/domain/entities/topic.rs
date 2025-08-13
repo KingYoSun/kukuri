@@ -1,22 +1,24 @@
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Topic {
     pub id: String,
     pub name: String,
     pub description: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub is_joined: bool,
     pub member_count: u32,
     pub post_count: u32,
     pub is_public: bool,
     pub owner: Option<String>,
+    pub image_url: Option<String>,
 }
 
 impl Topic {
     pub fn new(name: String, description: Option<String>) -> Self {
-        let now = chrono::Utc::now().timestamp();
+        let now = chrono::Utc::now();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             name,
@@ -28,11 +30,12 @@ impl Topic {
             post_count: 0,
             is_public: true,
             owner: None,
+            image_url: None,
         }
     }
 
     pub fn public_topic() -> Self {
-        let now = chrono::Utc::now().timestamp();
+        let now = chrono::Utc::now();
         Self {
             id: "public".to_string(),
             name: "#public".to_string(),
@@ -44,13 +47,14 @@ impl Topic {
             post_count: 0,
             is_public: true,
             owner: None,
+            image_url: None,
         }
     }
 
     pub fn join(&mut self) {
         self.is_joined = true;
         self.member_count += 1;
-        self.updated_at = chrono::Utc::now().timestamp();
+        self.updated_at = chrono::Utc::now();
     }
 
     pub fn leave(&mut self) {
@@ -58,29 +62,45 @@ impl Topic {
         if self.member_count > 0 {
             self.member_count -= 1;
         }
-        self.updated_at = chrono::Utc::now().timestamp();
+        self.updated_at = chrono::Utc::now();
     }
 
     pub fn increment_post_count(&mut self) {
         self.post_count += 1;
-        self.updated_at = chrono::Utc::now().timestamp();
+        self.updated_at = chrono::Utc::now();
     }
 
     pub fn decrement_post_count(&mut self) {
         if self.post_count > 0 {
             self.post_count -= 1;
-            self.updated_at = chrono::Utc::now().timestamp();
+            self.updated_at = chrono::Utc::now();
         }
     }
 
     pub fn update_description(&mut self, description: String) {
         self.description = Some(description);
-        self.updated_at = chrono::Utc::now().timestamp();
+        self.updated_at = chrono::Utc::now();
     }
 
     pub fn set_owner(&mut self, owner: String) {
         self.owner = Some(owner);
-        self.updated_at = chrono::Utc::now().timestamp();
+        self.updated_at = chrono::Utc::now();
+    }
+    
+    pub fn new_with_id(id: String, name: String, description: String, created_at: DateTime<Utc>) -> Self {
+        Self {
+            id,
+            name,
+            description: Some(description),
+            created_at,
+            updated_at: created_at,
+            is_joined: false,
+            member_count: 0,
+            post_count: 0,
+            is_public: true,
+            owner: None,
+            image_url: None,
+        }
     }
 }
 

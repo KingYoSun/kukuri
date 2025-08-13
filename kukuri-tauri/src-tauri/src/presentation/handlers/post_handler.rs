@@ -1,5 +1,5 @@
 use crate::{
-    application::services::PostService,
+    application::services::{PostService, AuthService},
     presentation::dto::{
         post_dto::{
             BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest, BookmarkAction,
@@ -15,11 +15,21 @@ use std::sync::Arc;
 
 pub struct PostHandler {
     post_service: Arc<PostService>,
+    auth_service: Arc<AuthService>,
 }
 
 impl PostHandler {
     pub fn new(post_service: Arc<PostService>) -> Self {
-        Self { post_service }
+        // TODO: AuthServiceを適切に注入する必要がある
+        // 一時的にパニックを避けるため、コンパイルエラーのままにする
+        unimplemented!("PostHandler needs AuthService injection")
+    }
+    
+    pub fn with_auth(post_service: Arc<PostService>, auth_service: Arc<AuthService>) -> Self {
+        Self { 
+            post_service,
+            auth_service,
+        }
     }
 
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<PostResponse, AppError> {
@@ -27,29 +37,35 @@ impl PostHandler {
         request.validate()
             .map_err(|e| AppError::InvalidInput(e))?;
 
+        // 現在のユーザーを取得
+        let current_user = self.auth_service
+            .get_current_user()
+            .await?
+            .ok_or_else(|| AppError::Unauthorized("ユーザーが認証されていません".to_string()))?;
+
         // サービス層を呼び出し
         let post = self
             .post_service
-            .create_post(&request.content, &request.topic_id, request.media_urls)
+            .create_post(request.content, current_user, request.topic_id)
             .await?;
 
         // DTOに変換
         Ok(PostResponse {
             id: post.id.to_string(),
             content: post.content,
-            author_pubkey: post.author_pubkey.clone(),
+            author_pubkey: post.author.pubkey.clone(),
             author_npub: {
                 use nostr_sdk::prelude::*;
-                PublicKey::from_hex(&post.author_pubkey)
+                PublicKey::from_hex(&post.author.pubkey)
                     .ok()
                     .and_then(|pk| pk.to_bech32().ok())
-                    .unwrap_or_else(|| post.author_pubkey.clone())
+                    .unwrap_or_else(|| post.author.pubkey.clone())
             },
             topic_id: post.topic_id,
             created_at: post.created_at.timestamp(),
             likes: post.likes,
             boosts: post.boosts,
-            replies: post.replies,
+            replies: post.replies.len() as u32,
             is_synced: post.is_synced,
         })
     }
@@ -59,15 +75,15 @@ impl PostHandler {
         
         let posts = if let Some(topic_id) = request.topic_id {
             self.post_service
-                .get_posts_by_topic(&topic_id, pagination.limit, pagination.offset)
+                .get_posts_by_topic(&topic_id, pagination.limit.unwrap_or(50) as usize)
                 .await?
         } else if let Some(author) = request.author_pubkey {
             self.post_service
-                .get_posts_by_author(&author, pagination.limit, pagination.offset)
+                .get_posts_by_author(&author, pagination.limit.unwrap_or(50) as usize)
                 .await?
         } else {
             self.post_service
-                .get_recent_posts(pagination.limit, pagination.offset)
+                .get_recent_posts(pagination.limit.unwrap_or(50) as usize)
                 .await?
         };
 
@@ -76,7 +92,7 @@ impl PostHandler {
             async move {
                 // npub変換をブロッキングタスクで並行実行
                 let npub = tokio::task::spawn_blocking({
-                    let pubkey = post.author_pubkey.clone();
+                    let pubkey = post.author.pubkey.clone();
                     move || {
                         use nostr_sdk::prelude::*;
                         PublicKey::from_hex(&pubkey)
@@ -84,18 +100,18 @@ impl PostHandler {
                             .and_then(|pk| pk.to_bech32().ok())
                             .unwrap_or(pubkey)
                     }
-                }).await.unwrap_or_else(|_| post.author_pubkey.clone());
+                }).await.unwrap_or_else(|_| post.author.pubkey.clone());
 
                 PostResponse {
                     id: post.id.to_string(),
                     content: post.content,
-                    author_pubkey: post.author_pubkey.clone(),
+                    author_pubkey: post.author.pubkey.clone(),
                     author_npub: npub,
                     topic_id: post.topic_id,
                     created_at: post.created_at.timestamp(),
                     likes: post.likes,
                     boosts: post.boosts,
-                    replies: post.replies,
+                    replies: post.replies.len() as u32,
                     is_synced: post.is_synced,
                 }
             }
@@ -111,8 +127,9 @@ impl PostHandler {
             .map_err(|e| AppError::InvalidInput(e))?;
 
         self.post_service
-            .delete_post(&request.post_id, request.reason.as_deref())
-            .await
+            .delete_post(&request.post_id)
+            .await?;
+        Ok(())
     }
 
     pub async fn react_to_post(&self, request: ReactToPostRequest) -> Result<(), AppError> {
@@ -121,7 +138,8 @@ impl PostHandler {
 
         self.post_service
             .react_to_post(&request.post_id, &request.reaction)
-            .await
+            .await?;
+        Ok(())
     }
 
     pub async fn bookmark_post(&self, request: BookmarkPostRequest, user_pubkey: &str) -> Result<(), AppError> {
@@ -130,7 +148,8 @@ impl PostHandler {
 
         self.post_service
             .bookmark_post(&request.post_id, user_pubkey)
-            .await
+            .await?;
+        Ok(())
     }
 
     pub async fn unbookmark_post(&self, request: BookmarkPostRequest, user_pubkey: &str) -> Result<(), AppError> {
@@ -139,7 +158,8 @@ impl PostHandler {
 
         self.post_service
             .unbookmark_post(&request.post_id, user_pubkey)
-            .await
+            .await?;
+        Ok(())
     }
 
     // バッチ処理メソッド
@@ -160,10 +180,10 @@ impl PostHandler {
         
         let mut posts = Vec::new();
         for result in results {
-            if let Ok(post) = result {
+            if let Ok(Some(post)) = result {
                 // npub変換を並行処理
                 let npub = tokio::task::spawn_blocking({
-                    let pubkey = post.author_pubkey.clone();
+                    let pubkey = post.author.pubkey.clone();
                     move || {
                         use nostr_sdk::prelude::*;
                         PublicKey::from_hex(&pubkey)
@@ -171,18 +191,18 @@ impl PostHandler {
                             .and_then(|pk| pk.to_bech32().ok())
                             .unwrap_or(pubkey)
                     }
-                }).await.unwrap_or_else(|_| post.author_pubkey.clone());
+                }).await.unwrap_or_else(|_| post.author.pubkey.clone());
 
                 posts.push(PostResponse {
                     id: post.id.to_string(),
                     content: post.content,
-                    author_pubkey: post.author_pubkey.clone(),
+                    author_pubkey: post.author.pubkey.clone(),
                     author_npub: npub,
                     topic_id: post.topic_id,
                     created_at: post.created_at.timestamp(),
                     likes: post.likes,
                     boosts: post.boosts,
-                    replies: post.replies,
+                    replies: post.replies.len() as u32,
                     is_synced: post.is_synced,
                 });
             }

@@ -15,18 +15,19 @@ pub struct TopicStats {
     pub post_count: u32,
 }
 
-#[tauri::command]
-pub async fn create_topic(
-    request: CreateTopicRequest,
-    topic_service: State<'_, Arc<TopicService>>,
-) -> Result<serde_json::Value, String> {
-    let topic = topic_service
-        .create_topic(request.name, request.description)
-        .await
-        .map_err(|e| e.to_string())?;
+// v2コマンドに移行
+// #[tauri::command]
+// pub async fn create_topic(
+//     request: CreateTopicRequest,
+//     topic_service: State<'_, Arc<TopicService>>,
+// ) -> Result<serde_json::Value, String> {
+//     let topic = topic_service
+//         .create_topic(request.name, request.description)
+//         .await
+//         .map_err(|e| e.to_string())?;
 
-    serde_json::to_value(topic).map_err(|e| e.to_string())
-}
+//     serde_json::to_value(topic).map_err(|e| e.to_string())
+// }
 
 #[tauri::command]
 pub async fn get_topic(
@@ -93,16 +94,17 @@ pub async fn leave_topic(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub async fn delete_topic(
-    id: String,
-    topic_service: State<'_, Arc<TopicService>>,
-) -> Result<(), String> {
-    topic_service
-        .delete_topic(&id)
-        .await
-        .map_err(|e| e.to_string())
-}
+// v2コマンドに移行
+// #[tauri::command]
+// pub async fn delete_topic(
+//     id: String,
+//     topic_service: State<'_, Arc<TopicService>>,
+// ) -> Result<(), String> {
+//     topic_service
+//         .delete_topic(&id)
+//         .await
+//         .map_err(|e| e.to_string())
+// }
 
 #[tauri::command]
 pub async fn get_topic_stats(

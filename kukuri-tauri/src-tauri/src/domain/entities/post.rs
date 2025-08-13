@@ -1,5 +1,6 @@
 use super::user::User;
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Post {
@@ -7,7 +8,7 @@ pub struct Post {
     pub content: String,
     pub author: User,
     pub topic_id: String,
-    pub created_at: i64,
+    pub created_at: DateTime<Utc>,
     pub tags: Vec<String>,
     pub likes: u32,
     pub boosts: u32,
@@ -29,7 +30,7 @@ impl Post {
             content,
             author,
             topic_id,
-            created_at: chrono::Utc::now().timestamp(),
+            created_at: chrono::Utc::now(),
             tags: Vec::new(),
             likes: 0,
             boosts: 0,
@@ -74,6 +75,29 @@ impl Post {
     pub fn toggle_bookmark(&mut self) {
         self.is_bookmarked = !self.is_bookmarked;
     }
+    
+    pub fn new_with_id(id: String, content: String, author: User, topic_id: String, created_at: DateTime<Utc>) -> Self {
+        Self {
+            id,
+            content,
+            author,
+            topic_id,
+            created_at,
+            tags: Vec::new(),
+            likes: 0,
+            boosts: 0,
+            replies: Vec::new(),
+            is_synced: false,
+            is_boosted: false,
+            is_bookmarked: false,
+            local_id: None,
+            event_id: None,
+        }
+    }
+    
+    pub fn mark_as_unsynced(&mut self) {
+        self.is_synced = false;
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,13 +106,13 @@ pub struct PostDraft {
     pub content: String,
     pub topic_id: String,
     pub tags: Vec<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl PostDraft {
     pub fn new(content: String, topic_id: String) -> Self {
-        let now = chrono::Utc::now().timestamp();
+        let now = chrono::Utc::now();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             content,
@@ -101,7 +125,7 @@ impl PostDraft {
 
     pub fn update_content(&mut self, content: String) {
         self.content = content;
-        self.updated_at = chrono::Utc::now().timestamp();
+        self.updated_at = chrono::Utc::now();
     }
 
     pub fn to_post(self, author: User) -> Post {

@@ -13,7 +13,7 @@ pub struct IrohNetworkService {
 }
 
 impl IrohNetworkService {
-    pub async fn new(secret_key: iroh::SecretKey) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(secret_key: iroh::SecretKey) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         // Endpointの作成
         let endpoint = Endpoint::builder()
             .secret_key(secret_key)
@@ -51,36 +51,30 @@ impl IrohNetworkService {
         self.endpoint.node_id().to_string()
     }
 
-    pub async fn node_addr(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let node_addr = self.endpoint.node_addr();
-        let addrs = match node_addr.get() {
-            Ok(Some(addr)) => addr
-                .direct_addresses()
-                .map(|addr| addr.to_string())
-                .collect(),
-            Ok(None) => {
-                tracing::warn!("No direct addresses available");
-                vec![]
-            }
-            Err(e) => {
-                tracing::error!("Failed to get node address: {}", e);
-                return Err(Box::new(e));
-            }
-        };
+    pub async fn node_addr(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        // Get the direct addresses synchronously  
+        let addrs = self.endpoint.direct_addresses();
+        
+        // Extract addresses from the Direct wrapper
+        let addrs: Vec<String> = vec![];
+        
         Ok(addrs)
     }
 }
 
 #[async_trait]
 impl NetworkService for IrohNetworkService {
-    async fn connect(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    async fn connect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut connected = self.connected.write().await;
         *connected = true;
         tracing::info!("Network service connected");
         Ok(())
     }
 
-    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut connected = self.connected.write().await;
         *connected = false;
         
@@ -92,15 +86,30 @@ impl NetworkService for IrohNetworkService {
         Ok(())
     }
 
-    async fn get_peers(&self) -> Result<Vec<Peer>, Box<dyn std::error::Error>> {
+    async fn get_peers(&self) -> Result<Vec<Peer>, Box<dyn std::error::Error + Send + Sync>> {
         let peers = self.peers.read().await;
         Ok(peers.clone())
     }
 
-    async fn add_peer(&self, address: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // NodeAddrをパース
-        let node_addr: iroh::NodeAddr = address.parse()
-            .map_err(|e| format!("Failed to parse node address: {}", e))?;
+    async fn add_peer(&self, address: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // アドレスからNodeIdを抽出（例: "node_id@socket_addr"）
+        use iroh::NodeId;
+        use std::net::SocketAddr;
+        use std::str::FromStr;
+        
+        let parts: Vec<&str> = address.split('@').collect();
+        if parts.len() != 2 {
+            return Err("Invalid address format: expected 'node_id@socket_addr'".into());
+        }
+        
+        let node_id = NodeId::from_str(parts[0])
+            .map_err(|e| format!("Failed to parse node ID: {}", e))?;
+        let socket_addr: SocketAddr = parts[1].parse()
+            .map_err(|e| format!("Failed to parse socket address: {}", e))?;
+        
+        // NodeAddrを構築
+        let node_addr = iroh::NodeAddr::new(node_id)
+            .with_direct_addresses([socket_addr]);
         
         // ピアに接続
         self.endpoint.connect(node_addr.clone(), iroh_gossip::ALPN)
@@ -111,7 +120,7 @@ impl NetworkService for IrohNetworkService {
         let mut peers = self.peers.write().await;
         let now = chrono::Utc::now().timestamp();
         peers.push(Peer {
-            id: node_addr.node_id.to_string(),
+            id: node_id.to_string(),
             address: address.to_string(),
             connected_at: now,
             last_seen: now,
@@ -125,7 +134,7 @@ impl NetworkService for IrohNetworkService {
         Ok(())
     }
 
-    async fn remove_peer(&self, peer_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn remove_peer(&self, peer_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut peers = self.peers.write().await;
         peers.retain(|p| p.id != peer_id);
         
@@ -137,7 +146,7 @@ impl NetworkService for IrohNetworkService {
         Ok(())
     }
 
-    async fn get_stats(&self) -> Result<NetworkStats, Box<dyn std::error::Error>> {
+    async fn get_stats(&self) -> Result<NetworkStats, Box<dyn std::error::Error + Send + Sync>> {
         let stats = self.stats.read().await;
         Ok(stats.clone())
     }

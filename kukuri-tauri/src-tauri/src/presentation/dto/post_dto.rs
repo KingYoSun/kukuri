@@ -61,7 +61,7 @@ impl Validate for DeletePostRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReactToPostRequest {
     pub post_id: String,
     pub reaction: String,
@@ -138,7 +138,7 @@ pub struct BatchBookmarkRequest {
     pub action: BookmarkAction,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BookmarkAction {
     Add,
     Remove,
