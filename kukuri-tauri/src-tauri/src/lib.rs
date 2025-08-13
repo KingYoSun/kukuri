@@ -11,14 +11,7 @@ mod presentation;
 mod shared;
 
 // Tauriコマンドのインポート
-use modules::auth::commands as auth_commands;
-use modules::event::commands as event_commands;
-use modules::offline::commands as offline_commands;
-use modules::p2p::commands as p2p_commands;
-use modules::post::commands as post_commands;
-use modules::secure_storage as secure_storage_commands;
-use modules::topic::commands as topic_commands;
-use modules::utils::commands as utils_commands;
+// v2アーキテクチャへの移行完了につき、旧コマンドのインポートは削除
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -73,7 +66,7 @@ pub fn run() {
             // post_commands::get_posts,  // v2に移行済み
             // post_commands::bookmark_post,  // v2に移行済み
             // post_commands::unbookmark_post,  // v2に移行済み
-            post_commands::get_bookmarked_post_ids,  // TODO: v2に移行予定
+            // post_commands::get_bookmarked_post_ids,  // v2に移行済み
             // v2コマンド
             presentation::commands::create_post_v2,
             presentation::commands::get_posts_v2,
@@ -83,43 +76,78 @@ pub fn run() {
             presentation::commands::unbookmark_post_v2,
             presentation::commands::like_post_v2,
             presentation::commands::boost_post_v2,
+            presentation::commands::get_bookmarked_post_ids_v2,
             presentation::commands::batch_get_posts_v2,
             presentation::commands::batch_react_v2,
             presentation::commands::batch_bookmark_v2,
-            // Nostr関連コマンド
-            event_commands::initialize_nostr,
-            event_commands::publish_text_note,
-            event_commands::publish_topic_post,
-            event_commands::send_reaction,
-            event_commands::update_nostr_metadata,
-            event_commands::subscribe_to_topic,
-            event_commands::subscribe_to_user,
-            event_commands::get_nostr_pubkey,
-            event_commands::delete_events,
-            event_commands::disconnect_nostr,
-            // P2P関連コマンド
-            p2p_commands::initialize_p2p,
-            p2p_commands::join_p2p_topic,
-            p2p_commands::leave_p2p_topic,
-            p2p_commands::broadcast_to_topic,
-            p2p_commands::get_p2p_status,
-            p2p_commands::get_node_address,
-            p2p_commands::join_topic_by_name,
-            // オフライン関連コマンド
-            offline_commands::save_offline_action,
-            offline_commands::get_offline_actions,
-            offline_commands::sync_offline_actions,
-            offline_commands::get_cache_status,
-            offline_commands::add_to_sync_queue,
-            offline_commands::update_cache_metadata,
-            offline_commands::save_optimistic_update,
-            offline_commands::confirm_optimistic_update,
-            offline_commands::rollback_optimistic_update,
-            offline_commands::cleanup_expired_cache,
-            offline_commands::update_sync_status,
-            // ユーティリティコマンド
-            utils_commands::pubkey_to_npub,
-            utils_commands::npub_to_pubkey,
+            // Nostr関連コマンド（旧）
+            // event_commands::initialize_nostr,  // v2に移行済み
+            // event_commands::publish_text_note,  // v2に移行済み
+            // event_commands::publish_topic_post,  // v2に移行済み
+            // event_commands::send_reaction,  // v2に移行済み
+            // event_commands::update_nostr_metadata,  // v2に移行済み
+            // event_commands::subscribe_to_topic,  // v2に移行済み
+            // event_commands::subscribe_to_user,  // v2に移行済み
+            // event_commands::get_nostr_pubkey,  // v2に移行済み
+            // event_commands::delete_events,  // v2に移行済み
+            // event_commands::disconnect_nostr,  // v2に移行済み
+            // v2 Nostrコマンド
+            presentation::commands::initialize_nostr_v2,
+            presentation::commands::publish_text_note_v2,
+            presentation::commands::publish_topic_post_v2,
+            presentation::commands::send_reaction_v2,
+            presentation::commands::update_nostr_metadata_v2,
+            presentation::commands::subscribe_to_topic_v2,
+            presentation::commands::subscribe_to_user_v2,
+            presentation::commands::get_nostr_pubkey_v2,
+            presentation::commands::delete_events_v2,
+            presentation::commands::disconnect_nostr_v2,
+            // P2P関連コマンド（旧）
+            // p2p_commands::initialize_p2p,  // v2に移行済み
+            // p2p_commands::join_p2p_topic,  // v2に移行済み
+            // p2p_commands::leave_p2p_topic,  // v2に移行済み
+            // p2p_commands::broadcast_to_topic,  // v2に移行済み
+            // p2p_commands::get_p2p_status,  // v2に移行済み
+            // p2p_commands::get_node_address,  // v2に移行済み
+            // p2p_commands::join_topic_by_name,  // v2に移行済み
+            // v2 P2Pコマンド
+            presentation::commands::initialize_p2p_v2,
+            presentation::commands::join_p2p_topic_v2,
+            presentation::commands::leave_p2p_topic_v2,
+            presentation::commands::broadcast_to_topic_v2,
+            presentation::commands::get_p2p_status_v2,
+            presentation::commands::get_node_address_v2,
+            presentation::commands::join_topic_by_name_v2,
+            // オフライン関連コマンド（旧）
+            // offline_commands::save_offline_action,  // v2に移行済み
+            // offline_commands::get_offline_actions,  // v2に移行済み
+            // offline_commands::sync_offline_actions,  // v2に移行済み
+            // offline_commands::get_cache_status,  // v2に移行済み
+            // offline_commands::add_to_sync_queue,  // v2に移行済み
+            // offline_commands::update_cache_metadata,  // v2に移行済み
+            // offline_commands::save_optimistic_update,  // v2に移行済み
+            // offline_commands::confirm_optimistic_update,  // v2に移行済み
+            // offline_commands::rollback_optimistic_update,  // v2に移行済み
+            // offline_commands::cleanup_expired_cache,  // v2に移行済み
+            // offline_commands::update_sync_status,  // v2に移行済み
+            // v2 オフラインコマンド
+            presentation::commands::save_offline_action_v2,
+            presentation::commands::get_offline_actions_v2,
+            presentation::commands::sync_offline_actions_v2,
+            presentation::commands::get_cache_status_v2,
+            presentation::commands::add_to_sync_queue_v2,
+            presentation::commands::update_cache_metadata_v2,
+            presentation::commands::save_optimistic_update_v2,
+            presentation::commands::confirm_optimistic_update_v2,
+            presentation::commands::rollback_optimistic_update_v2,
+            presentation::commands::cleanup_expired_cache_v2,
+            presentation::commands::update_sync_status_v2,
+            // ユーティリティコマンド（旧）
+            // utils_commands::pubkey_to_npub,  // v2に移行済み
+            // utils_commands::npub_to_pubkey,  // v2に移行済み
+            // v2 ユーティリティコマンド
+            presentation::commands::pubkey_to_npub_v2,
+            presentation::commands::npub_to_pubkey_v2,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

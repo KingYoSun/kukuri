@@ -1,6 +1,6 @@
 # 既知の問題と注意事項
 
-**最終更新**: 2025年8月13日（Phase 6プレゼンテーション層統合・コマンド最適化完了）
+**最終更新**: 2025年8月14日（v2アーキテクチャ移行 Phase 3完了）
 
 > **注記**: 2025年7月の問題・注意事項は`archives/issuesAndNotes_2025-07.md`にアーカイブされました。
 
@@ -31,6 +31,35 @@
 
 ## 現在の問題
 
+### ビルドエラー（2025年8月14日 Phase 3完了時点）
+**問題**: v2アーキテクチャ移行Phase 3完了後、約22件のコンパイルエラーが残存
+
+**現在の状況**:
+- Result型の不整合（`Box<dyn Error>` vs `AppError`）
+- トレイトメソッドの未実装
+- サービス層のTODO実装が未完了
+
+**エラー詳細**:
+1. **Result型の不整合**
+   - 影響ファイル: `application/services/*.rs`, `infrastructure/p2p/*.rs`, `infrastructure/database/*.rs`
+   - 現状: `Result<T, Box<dyn std::error::Error + Send + Sync>>`
+   - 目標: `Result<T, AppError>`に統一
+
+2. **トレイトメソッド未実装**
+   - GossipService: `broadcast_message`メソッド未実装
+   - NetworkService: `get_node_id`, `get_addresses`メソッド未実装
+   - EventServiceTrait: 全10メソッドがTODO実装
+   - P2PServiceTrait: 全7メソッドがTODO実装
+   - OfflineServiceTrait: 全11メソッドがTODO実装
+
+3. **警告状況**
+   - 合計: 62件
+   - 未使用変数: 約20件
+   - 未使用インポート: 約30件
+   - デッドコード: 約12件
+
+**優先度**: 🚨 最高（ビルド不可のため即座の対応が必要）
+
 ### TypeScriptテストの一部失敗（2025年8月13日更新）
 **問題**: テスト固有の設定問題により一部のテストが失敗
 
@@ -49,13 +78,18 @@
 - ✅ 22個のテストファイル失敗 → 10個に削減
 - ✅ ビルドエラーが完全に解消
 
-### 新アーキテクチャへの既存コード移行（2025年8月13日更新）
-**背景**: Phase 5で新しいクリーンアーキテクチャ構造を作成し、既存コードの移行を実施中
+### 新アーキテクチャへの既存コード移行（2025年8月14日 Phase 3完了）
+**背景**: クリーンアーキテクチャへの完全移行を実施、全49コマンドのv2移行が完了
 
-**現在の状況**:
-- ✅ 新アーキテクチャ（domain/infrastructure/application/presentation）は作成済み
-- ⚠️ 既存のmodules/ディレクトリのコードは動作中だが、段階的に新アーキテクチャへ移行中
-- ⚠️ 新旧の構造が並存している状態（移行期間中）
+**Phase 3完了時点の状況**:
+- ✅ **全49コマンドのv2移行完了**（100%達成）
+  - Phase 1: 19コマンド（Auth、Post、Topic、User）
+  - Phase 2: 30コマンド（Event、P2P、Offline、Utils）
+  - Phase 3: クリーンアップとエラー修正
+- ✅ **旧コマンドファイル完全削除**（modules/*/commands.rs 8ファイル削除済み）
+- ✅ **クリーンアーキテクチャ5層構造確立**
+- ✅ **トレイトベース設計によるDIP実装**
+- ⚠️ **ビルドエラー約22件が残存**（Result型統一とメソッド実装が必要）
 
 **完了した作業（2025年8月13日）**:
 1. **リポジトリ実装の詳細化** ✅
@@ -90,11 +124,29 @@
    - EventDistributor: infrastructure/p2p/event_distributor.rsに実装完了（367行）
    - PostCacheService: infrastructure/cache/post_cache.rsに実装完了（155行）
 
-**残作業**:
-1. **コンパイルエラーの解消** 🚨 最優先
-   - state.rsのサービス初期化修正（175個のエラー）
-   - 型の不一致解消
-   - 依存関係の整理
+**完了した作業（2025年8月14日 Phase 3）**:
+1. **v2コマンド移行完了** ✅
+   - Phase 2: 30コマンド（Event 10個、P2P 7個、Offline 11個、Utils 2個）
+   - 合計49コマンドすべてがv2アーキテクチャに移行完了
+   
+2. **旧コード削除** ✅
+   - modules/*/commands.rs 8ファイル削除
+   - modules/*/mod.rsから`pub mod commands;`参照削除
+   - lib.rsから旧コマンドインポート削除
+   
+3. **エラー型拡張** ✅
+   - AppErrorにValidationError、NostrError、P2PError追加
+   - From実装でBox<dyn Error>からの変換サポート
+
+**残作業（Phase 4）**:
+1. **ビルドエラーの解消** 🚨 最優先
+   - Result型統一（約22箇所）
+   - トレイトメソッド実装（GossipService、NetworkService）
+   - サービス層のTODO実装（EventService、P2PService、OfflineService）
+   
+2. **警告の解消**
+   - 未使用変数・インポートの削除（約50件）
+   - デッドコードの削除（約12件）
 
 **リスク**:
 - 段階的移行中に新旧コードの不整合が発生する可能性

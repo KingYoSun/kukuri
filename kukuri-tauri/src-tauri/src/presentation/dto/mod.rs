@@ -3,9 +3,9 @@ pub mod auth_dto;
 pub mod post_dto;
 pub mod topic_dto;
 pub mod user_dto;
-pub mod event_dto;
-pub mod offline_dto;
-pub mod p2p_dto;
+pub mod event;
+pub mod offline;
+pub mod p2p;
 
 // 共通のレスポンス型
 use serde::{Deserialize, Serialize};

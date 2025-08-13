@@ -10,7 +10,7 @@ use iroh_gossip::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
 
 pub struct IrohGossipService {
     gossip: Arc<Gossip>,

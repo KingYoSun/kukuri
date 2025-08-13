@@ -7,6 +7,10 @@ pub mod topic_commands_v2;
 pub mod user_commands;
 pub mod sync_commands;
 pub mod secure_storage_commands_v2;
+pub mod event_commands_v2;
+pub mod p2p_commands_v2;
+pub mod offline_commands_v2;
+pub mod utils_commands_v2;
 
 pub use auth_commands::*;
 pub use auth_commands_v2::*;
@@ -17,3 +21,7 @@ pub use topic_commands_v2::*;
 pub use user_commands::*;
 pub use sync_commands::*;
 pub use secure_storage_commands_v2::*;
+pub use event_commands_v2::*;
+pub use p2p_commands_v2::*;
+pub use offline_commands_v2::*;
+pub use utils_commands_v2::*;

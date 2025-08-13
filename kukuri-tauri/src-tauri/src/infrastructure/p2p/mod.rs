@@ -16,5 +16,3 @@ pub enum DistributionStrategy {
 pub use network_service::{NetworkService, NetworkStats, Peer};
 pub use gossip_service::GossipService;
 pub use event_distributor::EventDistributor;
-pub use iroh_network_service::IrohNetworkService;
-pub use iroh_gossip_service::IrohGossipService;

@@ -1,7 +1,3 @@
-mod commands;
-
-pub use commands::*;
-
 use anyhow::{Context, Result};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};

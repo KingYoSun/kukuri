@@ -162,6 +162,14 @@ impl PostHandler {
         Ok(())
     }
 
+    /// ユーザーのブックマーク済み投稿IDを取得
+    pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, AppError> {
+        let post_ids = self.post_service
+            .get_bookmarked_post_ids(user_pubkey)
+            .await?;
+        Ok(post_ids)
+    }
+
     // バッチ処理メソッド
     pub async fn batch_get_posts(&self, request: BatchGetPostsRequest) -> Result<Vec<PostResponse>, AppError> {
         request.validate()

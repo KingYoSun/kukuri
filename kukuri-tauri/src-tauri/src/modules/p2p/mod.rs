@@ -1,4 +1,3 @@
-pub mod commands;
 pub mod error;
 pub mod event_sync;
 pub mod gossip_manager;
@@ -8,8 +7,6 @@ pub mod topic_mesh;
 #[cfg(test)]
 mod tests;
 
-#[allow(unused_imports)]
-pub use commands::*;
 #[allow(unused_imports)]
 pub use error::{P2PError, Result};
 pub use event_sync::EventSync;

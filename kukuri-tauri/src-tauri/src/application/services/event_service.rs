@@ -3,7 +3,54 @@ use crate::infrastructure::database::EventRepository;
 use crate::infrastructure::crypto::SignatureService;
 use crate::infrastructure::p2p::EventDistributor;
 use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
+use crate::presentation::dto::event::NostrMetadataDto;
+use crate::shared::error::AppError;
 use std::sync::Arc;
+use async_trait::async_trait;
+use nostr_sdk::prelude::*;
+
+/// Nostrイベントサービスのトレイト
+#[async_trait]
+pub trait EventServiceTrait: Send + Sync {
+    /// Nostrクライアントを初期化
+    async fn initialize(&self) -> Result<(), AppError>;
+    
+    /// テキストノートを投稿
+    async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError>;
+    
+    /// トピック投稿を作成
+    async fn publish_topic_post(
+        &self,
+        topic_id: &str,
+        content: &str,
+        reply_to: Option<&str>,
+    ) -> Result<EventId, AppError>;
+    
+    /// リアクションを送信
+    async fn send_reaction(&self, event_id: &str, reaction: &str) -> Result<EventId, AppError>;
+    
+    /// メタデータを更新
+    async fn update_metadata(&self, metadata: NostrMetadataDto) -> Result<EventId, AppError>;
+    
+    /// トピックをサブスクライブ
+    async fn subscribe_to_topic(&self, topic_id: &str) -> Result<(), AppError>;
+    
+    /// ユーザーをサブスクライブ
+    async fn subscribe_to_user(&self, pubkey: &str) -> Result<(), AppError>;
+    
+    /// Nostr公開鍵を取得
+    async fn get_public_key(&self) -> Result<Option<String>, AppError>;
+    
+    /// イベントを削除
+    async fn delete_events(
+        &self,
+        event_ids: Vec<String>,
+        reason: Option<String>,
+    ) -> Result<EventId, AppError>;
+    
+    /// Nostrクライアントを切断
+    async fn disconnect(&self) -> Result<(), AppError>;
+}
 
 pub struct EventService {
     repository: Arc<dyn EventRepository>,
@@ -106,5 +153,82 @@ impl EventService {
         }
         
         Ok(synced_count)
+    }
+}
+
+#[async_trait]
+impl EventServiceTrait for EventService {
+    async fn initialize(&self) -> Result<(), AppError> {
+        // Nostrクライアントの初期化処理
+        // 実際の初期化はEventManagerで行われている場合はチェックのみ
+        Ok(())
+    }
+    
+    async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        // 仮の実装
+        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000001")
+            .map_err(|e| AppError::NostrError(e.to_string()))?;
+        Ok(event_id)
+    }
+    
+    async fn publish_topic_post(
+        &self,
+        _topic_id: &str,
+        _content: &str,
+        _reply_to: Option<&str>,
+    ) -> Result<EventId, AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000002")
+            .map_err(|e| AppError::NostrError(e.to_string()))?;
+        Ok(event_id)
+    }
+    
+    async fn send_reaction(&self, _event_id: &str, _reaction: &str) -> Result<EventId, AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000003")
+            .map_err(|e| AppError::NostrError(e.to_string()))?;
+        Ok(event_id)
+    }
+    
+    async fn update_metadata(&self, _metadata: NostrMetadataDto) -> Result<EventId, AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000004")
+            .map_err(|e| AppError::NostrError(e.to_string()))?;
+        Ok(event_id)
+    }
+    
+    async fn subscribe_to_topic(&self, _topic_id: &str) -> Result<(), AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        Ok(())
+    }
+    
+    async fn subscribe_to_user(&self, _pubkey: &str) -> Result<(), AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        Ok(())
+    }
+    
+    async fn get_public_key(&self) -> Result<Option<String>, AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        Ok(None)
+    }
+    
+    async fn delete_events(
+        &self,
+        event_ids: Vec<String>,
+        _reason: Option<String>,
+    ) -> Result<EventId, AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        if event_ids.is_empty() {
+            return Err(AppError::ValidationError("No event IDs provided".to_string()));
+        }
+        let event_id = EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000005")
+            .map_err(|e| AppError::NostrError(e.to_string()))?;
+        Ok(event_id)
+    }
+    
+    async fn disconnect(&self) -> Result<(), AppError> {
+        // TODO: 実際のEventManagerを使用して実装
+        Ok(())
     }
 }

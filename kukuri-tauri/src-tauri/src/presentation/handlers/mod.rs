@@ -3,12 +3,18 @@ pub mod topic_handler;
 pub mod auth_handler;
 pub mod user_handler;
 pub mod secure_storage_handler;
+pub mod event_handler;
+pub mod p2p_handler;
+pub mod offline_handler;
 
 pub use auth_handler::AuthHandler;
 pub use post_handler::PostHandler;
 pub use topic_handler::TopicHandler;
 pub use user_handler::UserHandler;
 pub use secure_storage_handler::SecureStorageHandler;
+pub use event_handler::EventHandler;
+pub use p2p_handler::P2PHandler;
+pub use offline_handler::OfflineHandler;
 
 use crate::shared::error::AppError;
 

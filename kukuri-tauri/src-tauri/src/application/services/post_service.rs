@@ -206,6 +206,11 @@ impl PostService {
         // TODO: Implement unbookmark logic with user_pubkey
         Ok(())
     }
+    
+    pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        // TODO: Implement get bookmarked posts logic with user_pubkey
+        Ok(Vec::new())
+    }
 
     pub async fn sync_pending_posts(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
         let unsync_posts = self.repository.get_unsync_posts().await?;

@@ -9,11 +9,15 @@ use crate::modules::p2p::{EventSync, GossipManager, P2PEvent};
 // アプリケーションサービスのインポート
 use crate::application::services::{
     AuthService, EventService, PostService, SyncService, TopicService, UserService,
+    P2PService, OfflineService,
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::presentation::handlers::{
     post_handler::PostHandler, topic_handler::TopicHandler, 
     auth_handler::AuthHandler, user_handler::UserHandler,
+    secure_storage_handler::SecureStorageHandler,
+    event_handler::EventHandler, p2p_handler::P2PHandler,
+    offline_handler::OfflineHandler,
 };
 use crate::infrastructure::{
     database::{sqlite_repository::SqliteRepository, connection_pool::ConnectionPool},
@@ -70,12 +74,18 @@ pub struct AppState {
     pub user_service: Arc<UserService>,
     pub event_service: Arc<EventService>,
     pub sync_service: Arc<SyncService>,
+    pub p2p_service: Arc<P2PService>,
+    pub offline_service: Arc<OfflineService>,
     
     // プレゼンテーション層のハンドラー（最適化用）
     pub post_handler: Arc<PostHandler>,
     pub topic_handler: Arc<TopicHandler>,
     pub auth_handler: Arc<AuthHandler>,
     pub user_handler: Arc<UserHandler>,
+    pub secure_storage_handler: Arc<SecureStorageHandler>,
+    pub event_handler: Arc<EventHandler>,
+    pub p2p_handler: Arc<P2PHandler>,
+    pub offline_handler: Arc<OfflineHandler>,
 }
 
 impl AppState {
@@ -192,6 +202,17 @@ impl AppState {
             Arc::clone(&event_service),
         ));
         
+        // P2PServiceの初期化
+        let p2p_service = Arc::new(P2PService::new(
+            Arc::clone(&network_service),
+            Arc::clone(&gossip_service),
+        ));
+        
+        // OfflineServiceの初期化
+        let offline_service = Arc::new(OfflineService::new(
+            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::Repository>,
+        ));
+        
         // プレゼンテーション層のハンドラーを初期化
         let post_handler = Arc::new(PostHandler::with_auth(
             Arc::clone(&post_service),
@@ -200,6 +221,10 @@ impl AppState {
         let topic_handler = Arc::new(TopicHandler::new(Arc::clone(&topic_service)));
         let auth_handler = Arc::new(AuthHandler::new(Arc::clone(&auth_service)));
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
+        let secure_storage_handler = Arc::new(SecureStorageHandler::new(Arc::clone(&secure_storage) as Arc<dyn SecureStorage>));
+        let event_handler = Arc::new(EventHandler::new(Arc::clone(&event_service) as Arc<dyn crate::application::services::event_service::EventServiceTrait>));
+        let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service) as Arc<dyn crate::application::services::p2p_service::P2PServiceTrait>));
+        let offline_handler = Arc::new(OfflineHandler::new(Arc::clone(&offline_service) as Arc<dyn crate::application::services::offline_service::OfflineServiceTrait>));
 
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {
@@ -222,10 +247,16 @@ impl AppState {
             user_service,
             event_service,
             sync_service,
+            p2p_service,
+            offline_service,
             post_handler,
             topic_handler,
             auth_handler,
             user_handler,
+            secure_storage_handler,
+            event_handler,
+            p2p_handler,
+            offline_handler,
         })
     }
 

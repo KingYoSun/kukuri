@@ -146,6 +146,26 @@ pub async fn like_post_v2(
     react_to_post_v2(state, request).await
 }
 
+/// ブックマーク済み投稿IDを取得する
+#[tauri::command]
+pub async fn get_bookmarked_post_ids_v2(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<String>>, String> {
+    // 認証チェック
+    let user_pubkey = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .public_key()
+        .to_hex();
+    
+    match state.post_handler.get_bookmarked_post_ids(&user_pubkey).await {
+        Ok(post_ids) => Ok(ApiResponse::success(post_ids)),
+        Err(e) => Ok(ApiResponse::error(e.to_string())),
+    }
+}
+
 // バッチ処理コマンド
 
 /// 複数の投稿を一括取得する
