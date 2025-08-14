@@ -92,3 +92,5 @@ secrets/
 /docker/data/
 
 .claude/
+
+msedgedriver.exe

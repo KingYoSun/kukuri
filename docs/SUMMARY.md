@@ -1,6 +1,6 @@
 # kukuri ドキュメント概要
 
-**最終更新**: 2025年8月14日（Result型統一完了）
+**最終更新**: 2025年8月14日（E2Eテスト基盤構築完了）
 
 ## プロジェクト概要
 kukuriは、Nostrプロトコルをベースとした分散型トピック中心ソーシャルアプリケーションです。検閲耐性を持つP2Pネットワークを通じて、ユーザーがトピックベースで情報を共有・発見できるプラットフォームを提供します。
@@ -43,6 +43,8 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
   - Phase 3: 正式リリース
 - **storage_implementation_guide.md**: ストレージ実装ガイド
 - **testing_guide.md**: テスト戦略と実装ガイド
+- **e2e_test_setup.md**: E2Eテスト環境セットアップガイド（WebdriverIO + tauri-driver）
+- **e2e_test_implementation_plan.md**: E2Eテスト導入プラン（初期設計文書）
 - **iroh_gossip_integration_design.md**: iroh-gossip統合設計
 - **iroh_gossip_implementation_plan.md**: iroh-gossip実装計画
 - **iroh_gossip_test_implementation.md**: P2P機能テスト実装詳細
@@ -71,6 +73,13 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
 ## 現在の開発状況 (2025年8月14日時点)
 
 ### 最新の完了項目
+- ✅ **E2Eテスト基盤構築（2025年8月14日）**
+  - WebdriverIO環境セットアップ完了
+  - tauri-driver + Microsoft Edge Driver導入
+  - 基本テストファイル作成（basic.spec.ts, nostr.spec.ts）
+  - デバッグビルド作成・テスト実行成功
+  - 実装時間: 約4時間
+
 - ✅ **Result型統一完了（2025年8月14日）**
   - 全サービス層のResult型をAppErrorに統一
   - インフラ層（Repository, P2P, 暗号化）の統一
@@ -85,11 +94,15 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
   - トレイトベース設計実装
 
 ### 現在の状況
-- ✅ **ビルド**: 成功（警告169件、主に未使用インポート）
-- 🔄 **次フェーズ**: Phase 5（基本機能実装）開始予定
-  - EventServiceTrait実装
-  - P2PServiceTrait実装
-  - OfflineServiceTrait実装
+- ✅ **ビルド**: 成功（警告175件、主に未使用インポート）
+- ✅ **E2Eテスト基盤**: 構築完了（2025年8月14日）
+  - WebdriverIO + tauri-driver環境構築
+  - 6/8テスト成功（基盤動作確認済み）
+  - 実行時間: 約34秒
+- 🔄 **次フェーズ**: E2Eテスト安定化とPhase 7
+  - E2Eテストの待機処理改善
+  - data-testid属性追加
+  - OfflineService詳細実装
   - → 詳細: activeContext/current_tasks.md
 
 ### 完了済み機能
