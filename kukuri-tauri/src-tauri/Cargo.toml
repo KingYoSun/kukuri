@@ -63,6 +63,7 @@ dirs = "5.0"
 [dev-dependencies]
 tempfile = "3.17"
 criterion = { version = "0.5", features = ["async_tokio"] }
+mockall = "0.13"
 
 # [[bench]]
 # name = "command_optimization"

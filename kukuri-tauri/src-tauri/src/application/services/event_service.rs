@@ -297,3 +297,340 @@ impl EventServiceTrait for EventService {
             .map_err(|e| AppError::NostrError(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::database::EventRepository;
+    use crate::infrastructure::crypto::SignatureService;
+    use crate::infrastructure::p2p::{EventDistributor, event_distributor::DistributionStrategy};
+    use async_trait::async_trait;
+    use mockall::{mock, predicate::*};
+
+    // EventRepositoryのモック
+    mock! {
+        pub EventRepo {}
+        
+        #[async_trait]
+        impl EventRepository for EventRepo {
+            async fn create_event(&self, event: &Event) -> Result<(), AppError>;
+            async fn get_event(&self, id: &str) -> Result<Option<Event>, AppError>;
+            async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, AppError>;
+            async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, AppError>;
+            async fn delete_event(&self, id: &str) -> Result<(), AppError>;
+            async fn get_unsync_events(&self) -> Result<Vec<Event>, AppError>;
+            async fn mark_event_synced(&self, id: &str) -> Result<(), AppError>;
+        }
+    }
+
+    // SignatureServiceのモック
+    mock! {
+        pub SignatureServ {}
+        
+        #[async_trait]
+        impl SignatureService for SignatureServ {
+            async fn sign_event(&self, event: &mut Event, private_key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+            async fn verify_event(&self, event: &Event) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
+            async fn sign_message(&self, message: &str, private_key: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
+            async fn verify_message(&self, message: &str, signature: &str, public_key: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
+        }
+    }
+
+    // EventDistributorのモック
+    mock! {
+        pub EventDist {}
+        
+        #[async_trait]
+        impl EventDistributor for EventDist {
+            async fn distribute(&self, event: &Event, strategy: DistributionStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+            async fn receive(&self) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>>;
+            async fn set_strategy(&self, strategy: DistributionStrategy);
+            async fn get_pending_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>>;
+            async fn retry_failed(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>>;
+        }
+    }
+
+    fn create_test_event() -> Event {
+        Event::new(1, "Test content".to_string(), "test_pubkey".to_string())
+    }
+
+    #[tokio::test]
+    async fn test_create_event_success() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        mock_repo
+            .expect_create_event()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let mut mock_signature = MockSignatureServ::new();
+        mock_signature
+            .expect_sign_event()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let mut mock_distributor = MockEventDist::new();
+        mock_distributor
+            .expect_distribute()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        // EventServiceを作成
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テスト実行
+        let result = service.create_event(
+            1,
+            "Test content".to_string(),
+            "test_pubkey".to_string(),
+            "test_private_key",
+        ).await;
+
+        // 検証
+        assert!(result.is_ok());
+        let event = result.unwrap();
+        assert_eq!(event.content, "Test content");
+        assert_eq!(event.pubkey, "test_pubkey");
+    }
+
+    #[tokio::test]
+    async fn test_process_received_event_valid_signature() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        mock_repo
+            .expect_create_event()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let mut mock_signature = MockSignatureServ::new();
+        mock_signature
+            .expect_verify_event()
+            .times(1)
+            .returning(|_| Ok(true));
+
+        let mock_distributor = MockEventDist::new();
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テストイベント作成
+        let event = create_test_event();
+
+        // テスト実行
+        let result = service.process_received_event(event).await;
+
+        // 検証
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_process_received_event_invalid_signature() {
+        // モックの準備
+        let mock_repo = MockEventRepo::new();
+
+        let mut mock_signature = MockSignatureServ::new();
+        mock_signature
+            .expect_verify_event()
+            .times(1)
+            .returning(|_| Ok(false));
+
+        let mock_distributor = MockEventDist::new();
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テストイベント作成
+        let event = create_test_event();
+
+        // テスト実行
+        let result = service.process_received_event(event).await;
+
+        // 検証
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid event signature"));
+    }
+
+    #[tokio::test]
+    async fn test_get_event() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        let test_event = create_test_event();
+        let test_event_clone = test_event.clone();
+        
+        mock_repo
+            .expect_get_event()
+            .with(eq("test_id"))
+            .times(1)
+            .returning(move |_| Ok(Some(test_event_clone.clone())));
+
+        let mock_signature = MockSignatureServ::new();
+        let mock_distributor = MockEventDist::new();
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テスト実行
+        let result = service.get_event("test_id").await;
+
+        // 検証
+        assert!(result.is_ok());
+        let event_opt = result.unwrap();
+        assert!(event_opt.is_some());
+        let event = event_opt.unwrap();
+        assert_eq!(event.content, "Test content");
+    }
+
+    #[tokio::test]
+    async fn test_get_events_by_kind() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        let test_events = vec![create_test_event(), create_test_event()];
+        let test_events_clone = test_events.clone();
+        
+        mock_repo
+            .expect_get_events_by_kind()
+            .with(eq(1u32), eq(10usize))
+            .times(1)
+            .returning(move |_, _| Ok(test_events_clone.clone()));
+
+        let mock_signature = MockSignatureServ::new();
+        let mock_distributor = MockEventDist::new();
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テスト実行
+        let result = service.get_events_by_kind(1, 10).await;
+
+        // 検証
+        assert!(result.is_ok());
+        let events = result.unwrap();
+        assert_eq!(events.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_events_by_author() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        let test_events = vec![create_test_event()];
+        let test_events_clone = test_events.clone();
+        
+        mock_repo
+            .expect_get_events_by_author()
+            .with(eq("test_pubkey"), eq(5usize))
+            .times(1)
+            .returning(move |_, _| Ok(test_events_clone.clone()));
+
+        let mock_signature = MockSignatureServ::new();
+        let mock_distributor = MockEventDist::new();
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テスト実行
+        let result = service.get_events_by_author("test_pubkey", 5).await;
+
+        // 検証
+        assert!(result.is_ok());
+        let events = result.unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].pubkey, "test_pubkey");
+    }
+
+    #[tokio::test]
+    async fn test_delete_event() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        mock_repo
+            .expect_create_event()
+            .times(1)
+            .returning(|_| Ok(()));
+        mock_repo
+            .expect_delete_event()
+            .with(eq("event_to_delete"))
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let mut mock_signature = MockSignatureServ::new();
+        mock_signature
+            .expect_sign_event()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let mut mock_distributor = MockEventDist::new();
+        mock_distributor
+            .expect_distribute()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テスト実行
+        let result = service.delete_event("event_to_delete", "test_pubkey".to_string(), "test_private_key").await;
+
+        // 検証
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sync_pending_events() {
+        // モックの準備
+        let mut mock_repo = MockEventRepo::new();
+        let test_events = vec![create_test_event(), create_test_event()];
+        let test_events_clone = test_events.clone();
+        
+        mock_repo
+            .expect_get_unsync_events()
+            .times(1)
+            .returning(move || Ok(test_events_clone.clone()));
+        
+        mock_repo
+            .expect_mark_event_synced()
+            .times(2)
+            .returning(|_| Ok(()));
+
+        let mock_signature = MockSignatureServ::new();
+        
+        let mut mock_distributor = MockEventDist::new();
+        mock_distributor
+            .expect_distribute()
+            .times(2)
+            .returning(|_, _| Ok(()));
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+        );
+
+        // テスト実行
+        let result = service.sync_pending_events().await;
+
+        // 検証
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2); // 2つのイベントが同期された
+    }
+}

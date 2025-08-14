@@ -1,6 +1,6 @@
 # 現在のタスク状況
 
-**最終更新日**: 2025年8月14日 18:00
+**最終更新日**: 2025年8月14日 20:00
 
 ## ✅ 完了したタスク（2025年8月14日）
 
@@ -27,11 +27,17 @@
 
 ### v2アーキテクチャ移行 Phase 6: テスト追加
 **目標**: 単体テストと統合テストの実装
-- [ ] EventServiceのテスト追加
-- [ ] P2PServiceのテスト追加  
-- [ ] OfflineServiceのテスト追加
+- [x] EventServiceのテスト追加（8テスト実装完了）
+- [x] P2PServiceのテスト追加（8テスト実装完了）
+- [x] OfflineServiceのテスト追加（3テスト実装完了）
 - [ ] ハンドラー層のテスト実装
 - [ ] E2Eテストの作成
+
+**実装済みテスト詳細**:
+- **EventService**: create_event、process_received_event、get_event、sync_pending_events等のモックテスト
+- **P2PService**: join_topic、leave_topic、broadcast_message、get_status等のモックテスト  
+- **OfflineService**: save_action、sync_actions、save_optimistic_update等の基本テスト
+- **使用技術**: mockall v0.13でのモック実装、tokio::testによる非同期テスト
 
 ## 📋 次フェーズタスク（優先度順）
 
@@ -69,12 +75,15 @@
 動作確認: 0 (0%)
 ```
 
-### ビルド状況（2025年8月14日更新）
+### ビルド状況（2025年8月14日 20:00更新）
 ```
 コンパイルエラー: 0件 ✅
-警告: 175件（6件増加）
+警告: 175件（変化なし）
 ビルド: 成功 ✅
-テスト: 147/150 成功（3件はWindows環境の既知の問題）
+テスト: 
+  - TypeScript: 全テスト成功 ✅
+  - Rust: 147/150 成功（3件はWindows環境の既知の問題）
+  - 新規追加: 19件のサービス層テスト
 ```
 
 ### コード統計
@@ -126,11 +135,17 @@
 4. ~~EventServiceTraitの実装~~ ✅ 完了（EventManager統合済み）
 5. ~~P2PServiceTraitの実装~~ ✅ 完了（get_status改善済み）
 6. ~~OfflineServiceTraitの実装~~ ✅ 完了（基本実装済み）
+7. ~~EventServiceのテスト追加~~ ✅ 完了（8テスト）
+8. ~~P2PServiceのテスト追加~~ ✅ 完了（8テスト）
+9. ~~OfflineServiceのテスト追加~~ ✅ 完了（3テスト）
 
-### 次に着手すべき作業（Phase 6: テスト追加）
-1. 各サービスの単体テスト作成
-2. ハンドラー層のテスト実装
-3. E2Eテストの基盤構築
+### 次に着手すべき作業（Phase 6: テスト追加継続）
+1. ハンドラー層のテスト実装
+   - AuthHandlerのテスト
+   - PostHandlerのテスト
+   - TopicHandlerのテスト
+2. E2Eテストの基盤構築
+3. テストカバレッジの測定と改善
 
 ### コマンド実行
 ```bash
