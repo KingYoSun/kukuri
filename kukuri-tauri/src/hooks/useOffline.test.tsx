@@ -3,7 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useOffline, useOptimisticUpdate } from './useOffline';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
-import { OfflineActionType } from '@/types/offline';
+import { OfflineActionType, EntityType } from '@/types/offline';
 
 // モックの設定
 vi.mock('sonner', () => ({
@@ -39,7 +39,7 @@ describe('useOffline', () => {
   };
 
   const defaultAuthState = {
-    currentAccount: {
+    currentUser: {
       npub: 'test_npub',
       displayName: 'Test User',
     },
@@ -64,7 +64,7 @@ describe('useOffline', () => {
 
     it('ユーザーが未ログインの場合はアクションを読み込まない', () => {
       vi.mocked(useAuthStore).mockReturnValue({
-        currentAccount: null,
+        currentUser: null,
       } as any);
 
       renderHook(() => useOffline());
@@ -124,8 +124,9 @@ describe('useOffline', () => {
       expect(mockSaveOfflineAction).toHaveBeenCalledWith({
         userPubkey: 'test_npub',
         actionType: OfflineActionType.CREATE_POST,
-        targetId: 'post_123',
-        actionData: { content: 'Test post' },
+        entityType: EntityType.POST,
+        entityId: 'post_123',
+        data: JSON.stringify({ content: 'Test post' }),
       });
     });
 
@@ -149,7 +150,7 @@ describe('useOffline', () => {
 
     it('未ログイン時はエラーをスローする', async () => {
       vi.mocked(useAuthStore).mockReturnValue({
-        currentAccount: null,
+        currentUser: null,
       } as any);
 
       const { result } = renderHook(() => useOffline());

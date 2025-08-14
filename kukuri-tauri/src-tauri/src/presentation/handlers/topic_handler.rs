@@ -98,3 +98,97 @@ impl TopicHandler {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_topic_request_validation() {
+        // 空の名前はエラー
+        let invalid_request = CreateTopicRequest {
+            name: "".to_string(),
+            description: "Test description".to_string(),
+        };
+        assert!(invalid_request.validate().is_err());
+
+        // 有効なリクエスト
+        let valid_request = CreateTopicRequest {
+            name: "test-topic".to_string(),
+            description: "Test description".to_string(),
+        };
+        assert!(valid_request.validate().is_ok());
+
+        // 長すぎる名前はエラー（100文字以上）
+        let long_name = "a".repeat(101);
+        let invalid_long_request = CreateTopicRequest {
+            name: long_name,
+            description: "Test description".to_string(),
+        };
+        assert!(invalid_long_request.validate().is_err());
+    }
+
+    #[test]
+    fn test_join_topic_request_validation() {
+        // 空のトピックIDはエラー
+        let invalid_request = JoinTopicRequest {
+            topic_id: "".to_string(),
+        };
+        assert!(invalid_request.validate().is_err());
+
+        // 有効なリクエスト
+        let valid_request = JoinTopicRequest {
+            topic_id: "topic123".to_string(),
+        };
+        assert!(valid_request.validate().is_ok());
+    }
+
+    #[test]
+    fn test_get_topic_stats_request_validation() {
+        // 空のトピックIDはエラー
+        let invalid_request = GetTopicStatsRequest {
+            topic_id: "".to_string(),
+        };
+        assert!(invalid_request.validate().is_err());
+
+        // 有効なリクエスト
+        let valid_request = GetTopicStatsRequest {
+            topic_id: "topic123".to_string(),
+        };
+        assert!(valid_request.validate().is_ok());
+    }
+
+    #[test]
+    fn test_topic_response_creation() {
+        use crate::domain::entities::Topic;
+        use chrono::Utc;
+
+        let topic = Topic {
+            id: "topic123".to_string(),
+            name: "Test Topic".to_string(),
+            description: Some("A test topic".to_string()),
+            image_url: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let response = TopicResponse {
+            id: topic.id.clone(),
+            name: topic.name.clone(),
+            description: topic.description.clone().unwrap_or_default(),
+            image_url: topic.image_url.clone(),
+            member_count: 10,
+            post_count: 50,
+            is_joined: true,
+            created_at: topic.created_at.timestamp_millis(),
+            updated_at: topic.updated_at.timestamp_millis(),
+        };
+
+        assert_eq!(response.id, "topic123");
+        assert_eq!(response.name, "Test Topic");
+        assert_eq!(response.description, "A test topic");
+        assert_eq!(response.member_count, 10);
+        assert_eq!(response.post_count, 50);
+        assert!(response.is_joined);
+    }
+}

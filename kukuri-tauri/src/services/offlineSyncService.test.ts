@@ -33,7 +33,7 @@ describe('OfflineSyncService', () => {
     });
     
     mockAuthStore.getState = vi.fn().mockReturnValue({
-      currentAccount: { pubkey: 'test-pubkey' },
+      currentUser: { pubkey: 'test-pubkey' },
     });
   });
 

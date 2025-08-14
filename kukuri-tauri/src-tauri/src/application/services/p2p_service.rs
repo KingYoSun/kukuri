@@ -142,19 +142,99 @@ mod tests {
     use crate::infrastructure::p2p::{NetworkService, GossipService};
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
-    use std::collections::HashMap;
+    use std::sync::Mutex;
 
-    // NetworkServiceのモック
-    mock! {
-        pub NetworkServ {}
-        
-        #[async_trait]
-        impl NetworkService for NetworkServ {
-            async fn connect(&self, address: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-            async fn disconnect(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-            async fn get_node_id(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
-            async fn get_addresses(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>;
-            async fn is_connected(&self) -> bool;
+    // NetworkServiceのモック - 手動実装
+    pub struct MockNetworkServ {
+        node_id: Mutex<Option<String>>,
+        addresses: Mutex<Option<Vec<String>>>,
+    }
+
+    impl MockNetworkServ {
+        pub fn new() -> Self {
+            Self {
+                node_id: Mutex::new(None),
+                addresses: Mutex::new(None),
+            }
+        }
+
+        pub fn expect_get_node_id(&mut self) -> &mut Self {
+            self
+        }
+
+        pub fn returning<F>(&mut self, f: F) -> &mut Self 
+        where
+            F: FnOnce() -> Result<String, AppError> + 'static
+        {
+            if let Ok(value) = f() {
+                *self.node_id.lock().unwrap() = Some(value);
+            }
+            self
+        }
+
+        pub fn expect_get_addresses(&mut self) -> &mut Self {
+            self
+        }
+
+        pub fn returning_addresses<F>(&mut self, f: F) -> &mut Self
+        where
+            F: FnOnce() -> Result<Vec<String>, AppError> + 'static  
+        {
+            if let Ok(value) = f() {
+                *self.addresses.lock().unwrap() = Some(value);
+            }
+            self
+        }
+    }
+
+    #[async_trait]
+    impl NetworkService for MockNetworkServ {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        async fn connect(&self) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn disconnect(&self) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn get_peers(&self) -> Result<Vec<crate::infrastructure::p2p::network_service::Peer>, AppError> {
+            Ok(vec![])
+        }
+
+        async fn add_peer(&self, _address: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn remove_peer(&self, _peer_id: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn get_stats(&self) -> Result<crate::infrastructure::p2p::network_service::NetworkStats, AppError> {
+            Ok(crate::infrastructure::p2p::network_service::NetworkStats {
+                connected_peers: 0,
+                total_messages_sent: 0,
+                total_messages_received: 0,
+                bandwidth_up: 0,
+                bandwidth_down: 0,
+            })
+        }
+
+        async fn is_connected(&self) -> bool {
+            true
+        }
+
+        async fn get_node_id(&self) -> Result<String, AppError> {
+            let node_id = self.node_id.lock().unwrap();
+            Ok(node_id.clone().unwrap_or_else(|| "default_node_id".to_string()))
+        }
+
+        async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
+            let addresses = self.addresses.lock().unwrap();
+            Ok(addresses.clone().unwrap_or_else(|| vec![]))
         }
     }
 
@@ -164,12 +244,13 @@ mod tests {
         
         #[async_trait]
         impl GossipService for GossipServ {
-            async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-            async fn leave_topic(&self, topic_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-            async fn broadcast_message(&self, topic_id: &str, message: &[u8]) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-            async fn get_joined_topics(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>;
-            async fn get_topic_peers(&self, topic_id: &str) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>;
-            async fn get_all_topics_stats(&self) -> Result<HashMap<String, usize>, Box<dyn std::error::Error + Send + Sync>>;
+            async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
+            async fn leave_topic(&self, topic: &str) -> Result<(), AppError>;
+            async fn broadcast(&self, topic: &str, event: &crate::domain::entities::Event) -> Result<(), AppError>;
+            async fn subscribe(&self, topic: &str) -> Result<tokio::sync::mpsc::Receiver<crate::domain::entities::Event>, AppError>;
+            async fn get_joined_topics(&self) -> Result<Vec<String>, AppError>;
+            async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError>;
+            async fn broadcast_message(&self, topic: &str, message: &[u8]) -> Result<(), AppError>;
         }
     }
 
@@ -216,7 +297,7 @@ mod tests {
             .expect_join_topic()
             .with(eq("test_topic"), eq(vec![]))
             .times(1)
-            .returning(|_, _| Err("Failed to join topic".into()));
+            .returning(|_, _| Err(AppError::P2PError("Failed to join topic".to_string())));
 
         let service = P2PService::new(
             Arc::new(mock_network),
@@ -274,7 +355,6 @@ mod tests {
         let mut mock_network = MockNetworkServ::new();
         mock_network
             .expect_get_node_id()
-            .times(1)
             .returning(|| Ok("node123".to_string()));
 
         let mut mock_gossip = MockGossipServ::new();
@@ -283,14 +363,28 @@ mod tests {
             .times(1)
             .returning(|| Ok(vec!["topic1".to_string(), "topic2".to_string()]));
         
-        let mut stats = HashMap::new();
-        stats.insert("topic1".to_string(), 5);
-        stats.insert("topic2".to_string(), 3);
+        // get_topic_peersをモックして各トピックのピアを返す
+        mock_gossip
+            .expect_get_topic_peers()
+            .with(eq("topic1"))
+            .times(1)
+            .returning(|_| Ok(vec![
+                "peer1".to_string(),
+                "peer2".to_string(),
+                "peer3".to_string(),
+                "peer4".to_string(),
+                "peer5".to_string(),
+            ]));
         
         mock_gossip
-            .expect_get_all_topics_stats()
+            .expect_get_topic_peers()
+            .with(eq("topic2"))
             .times(1)
-            .returning(move || Ok(stats.clone()));
+            .returning(|_| Ok(vec![
+                "peer6".to_string(),
+                "peer7".to_string(),
+                "peer8".to_string(),
+            ]));
 
         let service = P2PService::new(
             Arc::new(mock_network),
@@ -312,8 +406,7 @@ mod tests {
         let mut mock_network = MockNetworkServ::new();
         mock_network
             .expect_get_addresses()
-            .times(1)
-            .returning(|| Ok(vec![
+            .returning_addresses(|| Ok(vec![
                 "/ip4/127.0.0.1/tcp/4001".to_string(),
                 "/ip4/192.168.1.10/tcp/4001".to_string(),
             ]));

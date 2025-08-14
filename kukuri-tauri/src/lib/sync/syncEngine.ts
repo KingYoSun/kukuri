@@ -211,9 +211,9 @@ export class SyncEngine {
    * Last-Write-Wins (LWW) 競合解決
    */
   private resolveLWW(conflict: SyncConflict): SyncConflict {
-    const localTime = conflict.localAction.createdAt;
+    const localTime = new Date(conflict.localAction.createdAt).getTime();
     const remoteTime = conflict.remoteAction 
-      ? conflict.remoteAction.createdAt 
+      ? new Date(conflict.remoteAction.createdAt).getTime() 
       : 0;
     
     if (localTime >= remoteTime) {
