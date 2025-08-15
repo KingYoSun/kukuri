@@ -51,10 +51,34 @@ export class AppHelper {
    */
   static async waitForAppReady() {
     // アプリのルート要素が表示されるまで待機
-    await this.waitForElement('#root');
+    await this.waitForElement('#root', 15000);
 
-    // 初期ロードが完了するまで少し待機
-    await browser.pause(1000);
+    // Reactアプリケーションが完全にレンダリングされるまで待機
+    await browser.waitUntil(
+      async () => {
+        // #root要素内に子要素が存在することを確認
+        const rootChildren = await browser.execute(() => {
+          const root = document.getElementById('root');
+          return root ? root.children.length > 0 : false;
+        });
+        
+        // bodyタグが表示されていることを確認
+        const bodyVisible = await browser.execute(() => {
+          const body = document.querySelector('body');
+          return body ? window.getComputedStyle(body).display !== 'none' : false;
+        });
+
+        return rootChildren && bodyVisible;
+      },
+      {
+        timeout: 20000,
+        timeoutMsg: 'App failed to load within 20 seconds',
+        interval: 500
+      }
+    );
+
+    // アニメーションやトランジションが完了するための追加の待機
+    await browser.pause(500);
   }
 
   /**

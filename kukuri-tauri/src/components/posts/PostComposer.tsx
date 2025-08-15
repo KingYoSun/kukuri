@@ -284,6 +284,7 @@ export function PostComposer({
                 rows={6}
                 className="resize-none"
                 maxLength={1000}
+                data-testid="post-input"
               />
               <div className="text-right text-xs text-muted-foreground mt-1">
                 {content.length} / 1000
@@ -343,6 +344,7 @@ export function PostComposer({
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !content.trim() || !selectedTopicId}
+            data-testid="submit-post-button"
           >
             {isSubmitting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

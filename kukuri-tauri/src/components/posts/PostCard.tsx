@@ -20,9 +20,10 @@ import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface PostCardProps {
   post: Post;
+  'data-testid'?: string;
 }
 
-export function PostCard({ post }: PostCardProps) {
+export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const queryClient = useQueryClient();
@@ -125,7 +126,7 @@ export function PostCard({ post }: PostCardProps) {
   };
 
   return (
-    <Card>
+    <Card data-testid={dataTestId}>
       <CardHeader>
         <div className="flex items-start gap-3">
           <Avatar>

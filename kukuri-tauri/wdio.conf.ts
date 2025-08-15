@@ -1,72 +1,175 @@
-import { join } from 'path';
-import { spawn, ChildProcess } from 'child_process';
 import type { Options } from '@wdio/types';
+import { spawn, ChildProcess } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
 
-let tauriDriverProcess: ChildProcess | null = null;
+// ESモジュールで__dirnameを取得
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// tauri-driverのパス
+const tauriDriver = process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver';
+let driverProcess: ChildProcess | null = null;
+
+// msedgedriverのパスを探す
+const msedgedriverPath = process.platform === 'win32'
+  ? path.resolve(__dirname, '../msedgedriver.exe')
+  : 'msedgedriver';
+
+// Windows環境では.exe拡張子が必要
+const appBinary = process.platform === 'win32'
+  ? 'kukuri-tauri.exe'
+  : 'kukuri-tauri';
+
+// デバッグビルドかリリースビルドを使用
+const buildType = process.env.E2E_BUILD_TYPE || 'release';
+const appPath = path.resolve(__dirname, './src-tauri/target', buildType, appBinary);
+
+// Tauriアプリケーションのパスを確認
+if (!fs.existsSync(appPath)) {
+  console.error(`ERROR: Application not found at ${appPath}`);
+  console.error('Please run: pnpm tauri build --debug');
+  process.exit(1);
+}
+
+// console.log(`Using application: ${appPath}`);
 
 export const config: Options.Testrunner = {
-  // tauri-driverのホストとポート設定
-  host: '127.0.0.1',
-  port: 4445,
-  
-  runner: 'local',
-  autoCompileOpts: {
-    autoCompile: true,
-    tsNodeOpts: {
-      project: './tsconfig.json',
-      transpileOnly: true
-    }
-  },
-  
-  specs: ['./tests/e2e/**/*.spec.ts'],
+  // テストファイル
+  specs: ['./tests/e2e/**/*.spec.ts', './tests/e2e/specs/**/*.e2e.ts'],
   exclude: [],
+
+  // 実行設定
   maxInstances: 1,
-  
-  // Tauri専用のcapabilities設定
+
+  // Capabilities - Tauriアプリケーション用
   capabilities: [{
     maxInstances: 1,
+    // browserNameは指定しない（tauri-driverが自動設定）
     'tauri:options': {
-      application: join(process.cwd(), 'src-tauri/target/debug/kukuri-tauri.exe')
-    }
-  }],
-  
-  logLevel: 'info',
+      application: appPath,
+    },
+  }] as any,
+
+  // WebDriver接続設定
+  port: 4445,
+  hostname: 'localhost',
+  path: '/',
+
+  // ログレベル
+  logLevel: 'error', // エラーのみ表示
+
+  // その他の設定
   bail: 0,
   waitforTimeout: 30000,
   connectionRetryTimeout: 120000,
   connectionRetryCount: 3,
-  
+
+  // テストフレームワーク
   framework: 'mocha',
   reporters: ['spec'],
   mochaOpts: {
     ui: 'bdd',
-    timeout: 60000
+    timeout: 60000,
   },
-  
-  // tauri-driverを起動する前にアプリケーションが存在することを確認
+
+  // tauri-driverを起動
   onPrepare: async function () {
-    const appPath = join(process.cwd(), 'src-tauri/target/debug/kukuri-tauri.exe');
-    const { existsSync } = await import('fs');
-    
-    if (!existsSync(appPath)) {
-      console.error(`Application not found at: ${appPath}`);
-      console.log('Please run: pnpm tauri build --debug');
-      process.exit(1);
+    // console.log('Starting tauri-driver...');  // ログ抑制
+
+    // 既存のドライバープロセスをクリーンアップ
+    if (driverProcess) {
+      driverProcess.kill();
+      driverProcess = null;
     }
-    
-    console.log('Application found, ready for E2E testing');
+
+    return new Promise<void>((resolve, reject) => {
+      // tauri-driverを起動（ポート4445で起動、msedgedriverはポート9515で起動）
+      // console.log('Starting tauri-driver on port 4445...');
+      // console.log('Using msedgedriver at:', msedgedriverPath);
+
+      const args = [
+        '--port', '4445',           // tauri-driverのポート
+        '--native-port', '9515'      // msedgedriverのポート
+      ];
+      
+      if (fs.existsSync(msedgedriverPath)) {
+        args.push('--native-driver', msedgedriverPath);
+      }
+
+      driverProcess = spawn(tauriDriver, args, {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      // エラーハンドリング
+      driverProcess.on('error', (error) => {
+        console.error('Failed to start tauri-driver:', error);
+        reject(error);
+      });
+
+      // 標準出力を監視
+      let driverStarted = false;
+      const timeout = setTimeout(() => {
+        if (!driverStarted) {
+          reject(new Error('tauri-driver failed to start within timeout'));
+        }
+      }, 15000);
+
+      driverProcess.stdout?.on('data', (data) => {
+        const output = data.toString();
+        // 重要なメッセージのみログ出力
+        if (output.includes('Listening on') || output.includes('error') || output.includes('ERROR')) {
+          console.log('tauri-driver:', output.trim());
+        }
+
+        // tauri-driverが起動したことを確認
+        if (output.includes('Listening on') && !driverStarted) {
+          driverStarted = true;
+          clearTimeout(timeout);
+
+          // ポート番号を抽出
+          const portMatch = output.match(/Listening on .*:(\d+)/);
+          if (portMatch) {
+            const port = parseInt(portMatch[1], 10);
+            // console.log(`tauri-driver is listening on port ${port}`);
+
+            // ポートが4445でない場合は警告（重要なので残す）
+            if (port !== 4445) {
+              console.warn(`tauri-driver is listening on port ${port}, expected 4445`);
+            }
+          }
+
+          // ドライバーが完全に準備されるまで少し待つ
+          setTimeout(resolve, 2000);
+        }
+      });
+
+      driverProcess.stderr?.on('data', (data) => {
+        const error = data.toString().trim();
+        // 空行やデバッグ情報は無視
+        if (error && !error.includes('[DEBUG]') && !error.includes('[TRACE]')) {
+          console.error('tauri-driver error:', error);
+        }
+      });
+    });
   },
-  
-  // tauri-driverをbeforeSessionで起動（現在は手動起動のためコメントアウト）
+
+  // クリーンアップ
+  onComplete: function () {
+    // console.log('Cleaning up tauri-driver...');
+    if (driverProcess) {
+      driverProcess.kill();
+      driverProcess = null;
+    }
+  },
+
+  // セッション開始前
   beforeSession: function () {
-    console.log('Using manually started tauri-driver on port 4445...');
-    // 手動起動したtauri-driverを使用するため、ここでは何もしない
-    return Promise.resolve();
-  },
-  
-  // テスト終了後にtauri-driverを停止
-  afterSession: function () {
-    // 手動起動の場合は何もしない
-    console.log('Test session completed');
+    // 最小限のログのみ
+    if (process.env.VERBOSE) {
+      console.log('Starting new test session...');
+      console.log('Application path:', appPath);
+    }
   }
 };

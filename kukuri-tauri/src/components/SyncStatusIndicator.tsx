@@ -107,6 +107,7 @@ export function SyncStatusIndicator() {
             variant="ghost"
             size="sm"
             className="gap-2"
+            data-testid="sync-indicator"
           >
             {getSyncStatusIcon()}
             <span className="text-sm">{getSyncStatusText()}</span>

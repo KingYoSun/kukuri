@@ -90,6 +90,7 @@ export function Sidebar() {
                 key={category.name}
                 variant="ghost"
                 className="w-full justify-start"
+                data-testid={`category-${category.name.toLowerCase().replace(/\s+/g, '-')}`}
                 onClick={() => category.path && navigate({ to: category.path })}
               >
                 <category.icon className="mr-2 h-4 w-4" />
@@ -102,7 +103,7 @@ export function Sidebar() {
         <Separator />
 
         <ScrollArea className="flex-1">
-          <div className="p-4">
+          <div className="p-4" data-testid="topics-list">
             <h3 className="mb-2 text-sm font-semibold text-muted-foreground">参加中のトピック</h3>
             <div className="space-y-1">
               {joinedTopicsList.length === 0 ? (
@@ -121,6 +122,7 @@ export function Sidebar() {
                       key={topic.id}
                       variant={currentTopic?.id === topic.id ? 'secondary' : 'ghost'}
                       className="w-full justify-start p-2 h-auto"
+                      data-testid={`topic-${topic.id}`}
                       onClick={() => handleTopicClick(topic.id)}
                     >
                       <Hash className="mr-2 h-4 w-4 flex-shrink-0" />

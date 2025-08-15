@@ -45,11 +45,11 @@ function Home() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto" data-testid="home-page">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">{currentTopic ? currentTopic.name : 'タイムライン'}</h2>
         {joinedTopics.length > 0 && !showComposer && (
-          <Button onClick={() => setShowComposer(true)} size="sm">
+          <Button onClick={() => setShowComposer(true)} size="sm" data-testid="create-post-button">
             <PlusCircle className="h-4 w-4 mr-2" />
             投稿する
           </Button>
@@ -62,9 +62,9 @@ function Home() {
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="posts-list">
         {posts && posts.length > 0 ? (
-          posts.map((post) => <PostCard key={post.id} post={post} />)
+          posts.map((post) => <PostCard key={post.id} post={post} data-testid={`post-${post.id}`} />)
         ) : (
           <Alert>
             <AlertDescription>
