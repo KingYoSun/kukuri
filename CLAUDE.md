@@ -1,7 +1,10 @@
 # CLAUDE.md
 
 ## 作業開始時の確認事項
-1. `docs/01_project/activeContext/current_tasks.md` で最新タスクを把握
+1. `docs/01_project/activeContext/tasks/` で最新タスクを把握
+   - `tasks/priority/critical.md` - 最重要タスク（最大3個）
+   - `tasks/status/in_progress.md` - 現在進行中のタスク
+   - `tasks/README.md` - タスク全体のダッシュボード
 2. ドキュメントの最終更新日を確認（古い情報に注意）
 
 ## 基本ルール
@@ -30,8 +33,29 @@
 - **互換性チェック**: 実装がNIP仕様に準拠しているか検証
 - **拡張時の注意**: 独自拡張を行う場合は、NIPs標準との違いを明確に文書化
 
+### タスク管理ルール
+**タスク開始時**:
+1. `tasks/priority/critical.md`から最重要タスクを選択
+2. 選択したタスクを`tasks/status/in_progress.md`に移動
+3. TodoWriteツールと同期
+
+**作業中**:
+- `tasks/status/in_progress.md`のみを更新（進捗記録）
+- 他のファイルは触らない
+
+**タスク完了時**:
+1. `tasks/completed/YYYY-MM-DD.md`に完了内容を追記（新規作成も可）
+2. `tasks/status/in_progress.md`から削除
+3. TodoWriteツールでタスクリストを更新
+4. 重要な変更は進捗レポート作成
+
+**ブロッカー発生時**:
+- `tasks/context/blockers.md`に追記
+- 解決したら削除
+
 ### 作業完了時のチェック
-- [ ] current_tasks.mdの更新（完了タスクを反映）
+- [ ] `tasks/completed/YYYY-MM-DD.md`に完了タスク追記
+- [ ] `tasks/status/in_progress.md`から完了タスク削除
 - [ ] TodoWriteツールでタスクリストを更新
 - [ ] 重要な変更は進捗レポート作成
 
