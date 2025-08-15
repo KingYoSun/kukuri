@@ -67,6 +67,7 @@ export function Sidebar() {
   return (
     <aside
       role="complementary"
+      data-testid="sidebar"
       className={cn(
         'border-r bg-background transition-all duration-300 overflow-hidden',
         sidebarOpen ? 'w-64' : 'w-0',

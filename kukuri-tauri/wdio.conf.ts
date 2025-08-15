@@ -99,7 +99,7 @@ export const config: Options.Testrunner = {
       }
 
       driverProcess = spawn(tauriDriver, args, {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe']  // pipeに戻すが、出力を確実に読み取る
       });
 
       // エラーハンドリング
@@ -108,49 +108,44 @@ export const config: Options.Testrunner = {
         reject(error);
       });
 
-      // 標準出力を監視
-      let driverStarted = false;
+      // プロセスが起動したら成功とみなす
+      console.log('Starting tauri-driver process...');
+      
+      // エラー時のタイムアウト（念のため）
       const timeout = setTimeout(() => {
-        if (!driverStarted) {
-          reject(new Error('tauri-driver failed to start within timeout'));
+        if (driverProcess) {
+          driverProcess.kill();
+          driverProcess = null;
         }
-      }, 15000);
+        reject(new Error('tauri-driver process did not spawn within timeout'));
+      }, 10000);
 
+      // 出力を確実に読み取ってブロッキングを回避
       driverProcess.stdout?.on('data', (data) => {
         const output = data.toString();
-        // 重要なメッセージのみログ出力
-        if (output.includes('Listening on') || output.includes('error') || output.includes('ERROR')) {
+        // 重要なメッセージのみ表示
+        if (output.includes('Listening on') || output.includes('error')) {
           console.log('tauri-driver:', output.trim());
-        }
-
-        // tauri-driverが起動したことを確認
-        if (output.includes('Listening on') && !driverStarted) {
-          driverStarted = true;
-          clearTimeout(timeout);
-
-          // ポート番号を抽出
-          const portMatch = output.match(/Listening on .*:(\d+)/);
-          if (portMatch) {
-            const port = parseInt(portMatch[1], 10);
-            // console.log(`tauri-driver is listening on port ${port}`);
-
-            // ポートが4445でない場合は警告（重要なので残す）
-            if (port !== 4445) {
-              console.warn(`tauri-driver is listening on port ${port}, expected 4445`);
-            }
-          }
-
-          // ドライバーが完全に準備されるまで少し待つ
-          setTimeout(resolve, 2000);
         }
       });
 
       driverProcess.stderr?.on('data', (data) => {
-        const error = data.toString().trim();
-        // 空行やデバッグ情報は無視
-        if (error && !error.includes('[DEBUG]') && !error.includes('[TRACE]')) {
-          console.error('tauri-driver error:', error);
+        const output = data.toString();
+        // エラーは常に表示
+        if (output.trim()) {
+          console.error('tauri-driver stderr:', output.trim());
         }
+      });
+
+      // プロセス起動イベントを待つ
+      driverProcess.on('spawn', () => {
+        console.log('tauri-driver process spawned, waiting for initialization...');
+        clearTimeout(timeout); // タイムアウトをクリア
+        // tauri-driverが完全に起動するまで少し待つ
+        setTimeout(() => {
+          console.log('tauri-driver assumed ready');
+          resolve();
+        }, 3000);
       });
     });
   },
