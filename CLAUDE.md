@@ -5,7 +5,8 @@
 2. ドキュメントの最終更新日を確認（古い情報に注意）
 
 ## 基本ルール
-- **serena mcpを使用**: ユーザーから明示的に指示されない限り、typescriptの開発ではserena mcpを活用する
+- **serena mcpを使用**: typescriptの開発ではserena mcpを活用する
+- **ghコマンドを使用**: GitHubに関連した操作はGitHub Cli（ghコマンド）を用いる
 - **言語**: 必ず日本語で回答
 - **コミット**: ユーザーから明示的に要求されない限り、絶対にコミットしない
 - **日付**: ドキュメント作成/更新の前に必ず`date "+%Y年%m月%d日"`コマンドで今日の日付を確認し、出力された日付を使用する
@@ -18,8 +19,10 @@
 ### 実装のリファレンス
 - **zustand**: storeのモックを実装/変更する前にzustand公式のドキュメント( https://zustand.docs.pmnd.rs/guides/testing )を必ず参照する
 - **zustandテスト**: Zustandストアのテスト実装時は必ず `docs/03_implementation/zustand_testing_best_practices.md` を参照する
-- **iroh-gossip**: iroh-gossipを用いる機能を実装/変更する前にiroh-gossipの公式ドキュメント ( https://docs.rs/iroh-gossip/latest/iroh_gossip/ )を必ず参照する
-- **iroh**: irohを用いる機能を実装/変更する前にirohの公式ドキュメント ( https://docs.rs/iroh/latest/iroh/)を必ず参照する
+- **iroh-gossip**: iroh-gossipを用いる機能を実装/変更する前にiroh-gossipの公式API情報の入ったJSON ( https://docs.rs/crate/iroh-gossip/latest/json )を必ず参照する
+- **iroh-docs**: iroh-docsを用いる機能を実装/変更する前にiroh-docsの公式API情報の入ったJSON（ https://docs.rs/crate/iroh-docs/latest/json ）を必ず参照する
+- **iroh-blobs**: iroh-blobsを用いる機能を実装/変更する前にiroh-blobsの公式API情報の入ったJSON（ https://docs.rs/crate/iroh-blobs/latest/json ）を必ず参照する
+- **iroh**: irohを用いる機能を実装/変更する前にirohの公式API情報の入ったJSON ( https://docs.rs/crate/iroh/latest/json )を必ず参照する
 
 ### Nostr互換性の確認
 - **NIP準拠**: Nostr関連の実装を行う際は、`docs/nips/`内の該当するNIPを必ず参照
@@ -194,6 +197,8 @@ kukuri/
 - 開発進捗: `docs/01_project/progressReports/`
 
 ## 外部ドキュメント
-- **iroh**: https://docs.rs/iroh/latest/iroh/
-- **iroh-gossip**: https://docs.rs/iroh-gossip/latest/iroh_gossip/
+- **iroh**: https://docs.rs/crate/iroh/latest/json
+- **iroh-gossip**: https://docs.rs/crate/iroh-gossip/latest/json
+- **iroh-docs**: https://docs.rs/crate/iroh-blobs/latest/json
+- **iroh-blobs**: https://docs.rs/crate/iroh-blobs/latest/json
 - **Nostr NIPs**: https://github.com/nostr-protocol/nips
