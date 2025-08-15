@@ -94,9 +94,27 @@ export class AppHelper {
    */
   static async checkAuthStatus(): Promise<boolean> {
     try {
+      // URL ベースでの確認
+      const url = await browser.getUrl();
+      
+      // 認証ページにいる場合は未認証
+      if (url.includes('/welcome') || url.includes('/login')) {
+        return false;
+      }
+      
+      // data-testid="auth-status" 要素があれば確認
       const authStatus = await $('[data-testid="auth-status"]');
-      const text = await authStatus.getText();
-      return text.includes('Authenticated');
+      if (await authStatus.isExisting()) {
+        const text = await authStatus.getText();
+        return text.includes('Authenticated');
+      }
+      
+      // プロテクトされたページにアクセスできる場合は認証済み
+      if (url.includes('/topics') || url.includes('/settings') || url === '/' || url.endsWith('/')) {
+        return true;
+      }
+      
+      return false;
     } catch {
       return false;
     }
@@ -111,14 +129,33 @@ export class AppHelper {
       return;
     }
 
-    // 鍵ペアを生成
-    await this.clickButton('Generate Keypair');
+    // Welcomeページにいることを確認
+    const url = await browser.getUrl();
+    if (!url.includes('/welcome')) {
+      const baseUrl = url.split('#')[0].split('?')[0];
+      await browser.url(baseUrl + '#/welcome');
+      await this.waitForElement('body');
+    }
 
-    // 認証完了を待つ
-    await browser.waitUntil(async () => await this.checkAuthStatus(), {
-      timeout: 5000,
-      timeoutMsg: 'Login failed',
-    });
+    // 新規アカウント作成ボタンをクリック
+    try {
+      await this.clickButton('新規アカウント作成');
+    } catch {
+      // フォールバック: 英語版のボタンテキスト
+      await this.clickButton('Generate Keypair');
+    }
+
+    // プロファイル設定ページへのリダイレクトを待つ
+    await browser.waitUntil(
+      async () => {
+        const currentUrl = await browser.getUrl();
+        return currentUrl.includes('/profile-setup') || !currentUrl.includes('/welcome');
+      },
+      {
+        timeout: 10000,
+        timeoutMsg: 'Login failed',
+      }
+    );
   }
 
   /**
@@ -181,5 +218,70 @@ export class AppHelper {
     }
 
     return status;
+  }
+
+  /**
+   * 認証を実行して認証済み状態にする
+   */
+  static async ensureAuthenticated() {
+    // 既に認証済みならスキップ
+    if (await this.checkAuthStatus()) {
+      return;
+    }
+
+    // ログイン処理を実行
+    await this.login();
+
+    // プロファイル設定ページにいる場合はスキップ
+    const url = await browser.getUrl();
+    if (url.includes('/profile-setup')) {
+      try {
+        const skipBtn = await this.findByText('スキップ', 'button');
+        if (await skipBtn.isExisting()) {
+          await skipBtn.click();
+          await browser.pause(1000);
+        }
+      } catch {
+        // スキップボタンがない場合は保存ボタンを試す
+        try {
+          const saveBtn = await this.findByText('保存', 'button');
+          if (await saveBtn.isExisting()) {
+            await saveBtn.click();
+            await browser.pause(1000);
+          }
+        } catch {
+          // ボタンがない場合は直接ホームページへ
+          const currentUrl = await browser.getUrl();
+          const baseUrl = currentUrl.split('#')[0].split('?')[0];
+          await browser.url(baseUrl + '#/');
+        }
+      }
+    }
+  }
+
+  /**
+   * ナビゲーションメニューからページに移動
+   */
+  static async navigateToPage(pageName: 'home' | 'topics' | 'settings' | 'profile') {
+    const navLinks: Record<string, string> = {
+      home: '/',
+      topics: '/topics',
+      settings: '/settings',
+      profile: '/profile',
+    };
+
+    const currentUrl = await browser.getUrl();
+    const baseUrl = currentUrl.split('#')[0].split('?')[0];
+    await browser.url(baseUrl + '#' + navLinks[pageName]);
+    await browser.waitUntil(
+      async () => {
+        const url = await browser.getUrl();
+        return url.includes(navLinks[pageName]);
+      },
+      {
+        timeout: 5000,
+        timeoutMsg: `Failed to navigate to ${pageName} page`,
+      }
+    );
   }
 }
