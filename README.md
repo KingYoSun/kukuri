@@ -101,7 +101,46 @@ kukuri/
 │   └── Cargo.toml
 ├── docs/                   # ドキュメント
 ├── scripts/                # ユーティリティスクリプト
-└── workers/                # Cloudflare Workers
+├── workers/                # Cloudflare Workers
+└── pkarr/                  # Pkarr submodule (DHTリレーサーバー)
+```
+
+## Pkarrリレーサーバー (ローカル開発用)
+
+kukuriは、irohのビルトインDHTディスカバリー機能を通じてPkarrリレーサーバーと連携します。ローカル開発環境では、Docker Composeを使用してPkarrリレーサーバーを起動できます。
+
+### Pkarrリレーサーバーの起動
+
+```bash
+# 初回のみ: submoduleの初期化
+git submodule update --init --recursive
+
+# Pkarrリレーサーバーの起動
+docker-compose up -d
+
+# ログの確認
+docker-compose logs -f pkarr
+
+# サーバーの停止
+docker-compose down
+```
+
+### 設定
+
+Pkarrリレーサーバーの設定は`config.toml`で管理されています：
+
+- **HTTPポート**: 8080 (API)
+- **Mainline DHTポート**: 6881 (DHT通信)
+- **キャッシュ**: `.pkarr_cache/`ディレクトリに保存
+
+### 動作確認
+
+```bash
+# Pkarrリレーサーバーのヘルスチェック
+curl http://localhost:8080/health
+
+# ステータス確認
+curl http://localhost:8080/stats
 ```
 
 ## ドキュメント

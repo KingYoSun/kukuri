@@ -1,0 +1,16 @@
+services:
+  pkarr:
+    container_name: pkarr
+    build:
+      context: ./pkarr
+      dockerfile: Dockerfile
+    volumes:
+      - ./config.toml:/config.toml
+      - .pkarr_cache:/cache
+    ports:
+      - "8080:8080"  # HTTP API port
+      - "6881:6881"  # Mainline DHT port
+    command: pkarr-relay --config=/config.toml
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info

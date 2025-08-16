@@ -24,7 +24,7 @@ Endpoint::builder()
 - **DNS**: デフォルトで有効（Number 0の公開DNSサーバー）
 - **DHT**: `discovery-pkarr-dht`フィーチャーフラグで有効化
 - **ローカル**: 将来実装予定
-- **Pkarr**: HTTPベースのリレー（将来実装予定）
+- **Pkarr**: HTTPベースのリレー（ローカル環境構築済み、Docker Composeで利用可能）
 
 ### 2. DHT統合アーキテクチャ
 

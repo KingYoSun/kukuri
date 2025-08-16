@@ -97,3 +97,6 @@ msedgedriver.exe
 
 # API Documents
 docs/apis/
+
+# Pkarr cache
+.pkarr_cache/
