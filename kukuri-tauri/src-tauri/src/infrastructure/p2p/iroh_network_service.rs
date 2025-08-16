@@ -1,9 +1,10 @@
-use super::{NetworkService, NetworkStats, Peer};
+use super::{NetworkService, NetworkStats, Peer, dht_bootstrap::{DhtGossip, secret}};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use iroh::{protocol::Router, Endpoint};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing;
 
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
@@ -11,6 +12,7 @@ pub struct IrohNetworkService {
     connected: Arc<RwLock<bool>>,
     peers: Arc<RwLock<Vec<Peer>>>,
     stats: Arc<RwLock<NetworkStats>>,
+    dht_gossip: Option<Arc<DhtGossip>>,
 }
 
 impl IrohNetworkService {
@@ -26,6 +28,15 @@ impl IrohNetworkService {
         // Routerの作成（Gossipプロトコルは別で設定）
         let router = Router::builder(endpoint.clone()).spawn();
 
+        // DhtGossipの初期化
+        let dht_gossip = match DhtGossip::new(Arc::new(endpoint.clone())).await {
+            Ok(service) => Some(Arc::new(service)),
+            Err(e) => {
+                tracing::warn!("Failed to initialize DhtGossip: {:?}", e);
+                None
+            }
+        };
+
         Ok(Self {
             endpoint: Arc::new(endpoint),
             router: Arc::new(router),
@@ -38,6 +49,7 @@ impl IrohNetworkService {
                 bandwidth_up: 0,
                 bandwidth_down: 0,
             })),
+            dht_gossip,
         })
     }
 
@@ -61,6 +73,71 @@ impl IrohNetworkService {
         let addrs: Vec<String> = vec![];
         
         Ok(addrs)
+    }
+
+    /// DHTを使用してトピックに参加
+    pub async fn join_dht_topic(&self, topic_name: &str) -> Result<(), AppError> {
+        if let Some(ref dht_gossip) = self.dht_gossip {
+            dht_gossip.join_topic(topic_name.as_bytes(), vec![]).await?;
+            tracing::info!("Joined DHT topic: {}", topic_name);
+        } else {
+            tracing::warn!("DHT service not available, using fallback");
+            // フォールバックモードを使用
+            self.connect_fallback().await?;
+        }
+        Ok(())
+    }
+
+    /// DHTを使用してトピックから離脱
+    pub async fn leave_dht_topic(&self, topic_name: &str) -> Result<(), AppError> {
+        if let Some(ref dht_gossip) = self.dht_gossip {
+            dht_gossip.leave_topic(topic_name.as_bytes()).await?;
+            tracing::info!("Left DHT topic: {}", topic_name);
+        }
+        Ok(())
+    }
+
+    /// DHTを使用してメッセージをブロードキャスト
+    pub async fn broadcast_dht(&self, topic_name: &str, message: Vec<u8>) -> Result<(), AppError> {
+        if let Some(ref dht_gossip) = self.dht_gossip {
+            dht_gossip.broadcast(topic_name.as_bytes(), message).await?;
+        } else {
+            return Err(AppError::P2PError("DHT service not available".to_string()));
+        }
+        Ok(())
+    }
+
+    /// フォールバックモードでピアに接続
+    async fn connect_fallback(&self) -> Result<(), AppError> {
+        let fallback_peers = super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?;
+        
+        // フォールバックピアをピアリストに追加
+        let mut peers = self.peers.write().await;
+        let now = chrono::Utc::now().timestamp();
+        
+        for node_addr in fallback_peers {
+            peers.push(Peer {
+                id: node_addr.node_id.to_string(),
+                address: format!("{}@fallback", node_addr.node_id),
+                connected_at: now,
+                last_seen: now,
+            });
+        }
+
+        // 統計を更新
+        let mut stats = self.stats.write().await;
+        stats.connected_peers = peers.len();
+
+        Ok(())
+    }
+
+    /// 共有シークレットをローテーション
+    pub async fn rotate_dht_secret(&self) -> Result<(), AppError> {
+        secret::rotate_secret()
+            .await
+            .map_err(|e| AppError::P2PError(format!("Failed to rotate secret: {:?}", e)))?;
+        tracing::info!("DHT shared secret rotated");
+        Ok(())
     }
 }
 

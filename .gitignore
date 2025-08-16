@@ -94,3 +94,6 @@ secrets/
 .claude/
 
 msedgedriver.exe
+
+# API Documents
+docs/apis/

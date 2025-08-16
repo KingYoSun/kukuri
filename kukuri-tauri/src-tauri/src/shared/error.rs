@@ -14,6 +14,9 @@ pub enum AppError {
     NostrError(String),
     P2PError(String),
     ConfigurationError(String),
+    SerializationError(String),
+    DeserializationError(String),
+    NotImplemented(String),
     Internal(String),
 }
 
@@ -32,6 +35,9 @@ impl fmt::Display for AppError {
             AppError::NostrError(msg) => write!(f, "Nostr error: {}", msg),
             AppError::P2PError(msg) => write!(f, "P2P error: {}", msg),
             AppError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
+            AppError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
+            AppError::DeserializationError(msg) => write!(f, "Deserialization error: {}", msg),
+            AppError::NotImplemented(msg) => write!(f, "Not implemented: {}", msg),
             AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
         }
     }

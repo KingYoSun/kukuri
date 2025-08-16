@@ -3,6 +3,8 @@ pub mod gossip_service;
 pub mod event_distributor;
 pub mod iroh_network_service;
 pub mod iroh_gossip_service;
+pub mod dht_bootstrap;
+pub mod dht_integration;
 
 use serde::{Deserialize, Serialize};
 
