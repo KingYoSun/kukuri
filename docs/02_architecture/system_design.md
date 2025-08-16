@@ -23,7 +23,9 @@
               ▼                    ▼
 ┌─────────────────────┐  ┌──────────────────┐
 │  Discovery Layer    │  │   P2P Network    │
-│ (Workers/Container) │  │     (iroh)       │
+│  (BitTorrent DHT)   │  │  (iroh-gossip)   │
+│  distributed-topic  │  │                  │
+│      -tracker       │  │                  │
 └─────────────────────┘  └──────────────────┘
               │                    │
               ▼                    ▼
@@ -40,10 +42,11 @@
 - **ビジネスロジック**: Rustによるコア機能実装（暗号化、署名、P2P通信）
 - **データ管理**: Zustandによる状態管理、Tanstack Queryによるキャッシュ
 
-#### 発見層
-- **ピア発見**: トピック別のピアリスト管理
-- **登録/検索API**: RESTful/WebSocket API
-- **分散運用**: 複数インスタンスによる冗長性
+#### 発見層（DHT基盤）
+- **ピア発見**: BitTorrent Mainline DHTによる完全分散型発見
+- **distributed-topic-tracker統合**: iroh-gossipの自動ブートストラップ
+- **共有シークレット**: Ed25519署名と回転機構でセキュア化
+- **フォールバック**: DHT失敗時の既知ピアリスト使用
 
 #### P2Pネットワーク層 ✅ 実装完了
 - **ゴシッププロトコル**: iroh-gossip v0.90.0によるトピックベース配信 ✅

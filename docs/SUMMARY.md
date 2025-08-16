@@ -1,29 +1,38 @@
 # kukuri ドキュメント概要
 
-**最終更新**: 2025年8月14日（E2Eテスト基盤構築完了）
+**最終更新**: 2025年8月16日（DHT基盤Discovery Layer移行決定）
 
 ## プロジェクト概要
-kukuriは、Nostrプロトコルをベースとした分散型トピック中心ソーシャルアプリケーションです。検閲耐性を持つP2Pネットワークを通じて、ユーザーがトピックベースで情報を共有・発見できるプラットフォームを提供します。
+kukuriは、Nostrプロトコルをベースとした完全分散型トピック中心ソーシャルアプリケーションです。BitTorrent Mainline DHTを基盤とした分散型ピア発見により、中央サーバー依存を完全に排除し、検閲耐性とユーザー主権を実現します。
 
 ## ドキュメント構成
 
 ### 01_project/ - プロジェクト管理
 - **design_doc.md**: プロジェクトの全体設計書
 - **requirements.md**: 機能要件・非機能要件定義
+- **roadmap.md**: プロジェクトロードマップ ✨新規
 - **activeContext/**: 現在の作業状況
   - current_tasks.md: 進行中のタスク
   - current_environment.md: 開発環境情報
   - issuesAndNotes.md: 既知の問題と注意事項
+  - distributed-topic-tracker-plan.md: DHT基盤実装計画 ✨最重要
   - tauri_app_experience_design.md: Tauriアプリ体験設計
   - tauri_app_implementation_plan.md: Tauriアプリ実装計画
+  - **tasks/**: タスク管理システム
+    - priority/critical.md: 最重要タスク
+    - status/in_progress.md: 進行中タスク
 - **progressReports/**: 進捗レポート
 
 ### 02_architecture/ - アーキテクチャ設計
-- **system_design.md**: システム設計詳細
-  - レイヤー構成
+- **system_design.md**: システム設計詳細（DHT更新済み）
+  - レイヤー構成（BitTorrent DHT統合）
   - データモデル
   - API設計
   - セキュリティ設計
+- **dht_discovery_architecture.md**: DHT基盤Discovery Layerアーキテクチャ ✨新規
+  - distributed-topic-tracker統合
+  - セキュリティモデル
+  - パフォーマンス要件
 - **project_structure.md**: プロジェクト構造
   - ディレクトリ構成
   - ファイル構造詳細
@@ -37,8 +46,13 @@ kukuriは、Nostrプロトコルをベースとした分散型トピック中心
 - Nostrイベント仕様（作成予定）
 
 ### 03_implementation/ - 実装ガイド
+- **dht_integration_guide.md**: Distributed Topic Tracker統合実装ガイド ✨最重要
+  - 依存関係とセットアップ
+  - P2Pモジュール実装
+  - イベントハンドリング
+  - テスト戦略
 - **implementation_plan.md**: 段階的実装計画
-  - Phase 1: MVP (3ヶ月)
+  - Phase 1: DHT統合 (2週間) ✨更新
   - Phase 2: ベータ版 (3ヶ月)
   - Phase 3: 正式リリース
 - **storage_implementation_guide.md**: ストレージ実装ガイド
