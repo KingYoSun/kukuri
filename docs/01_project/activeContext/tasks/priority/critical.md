@@ -3,15 +3,15 @@
 **最終更新**: 2025年08月16日
 **最大3個まで**
 
-## 1. Distributed Topic Tracker実装（DHT基盤のP2P Discovery）
+## 1. irohネイティブDHT実装（DHT基盤のP2P Discovery）
 
-**目標**: BitTorrent Mainline DHTを用いた完全分散型ピア発見システムの実装
+**目標**: irohビルトインDHTを用いた完全分散型ピア発見システムの実装
 **優先度**: 最高（アーキテクチャの根幹変更）
 **期限**: 2025年08月30日目標
 
 ### 次のアクション（完了）
-- [x] distributed-topic-tracker依存追加とCargo.toml更新
-- [x] P2Pモジュールにbootstrap.rs作成（AutoDiscovery統合）  
+- [x] irohにdiscovery-pkarr-dhtフィーチャー追加とCargo.toml更新
+- [x] P2Pモジュールにbootstrap.rs作成（DHT統合）  
 - [x] 共有シークレット管理とキーローテーション実装
 - [x] iroh-gossipとのイベントハンドリング統合
 - [x] DHT失敗時のフォールバック機構実装
@@ -20,12 +20,12 @@
 - [ ] 実際のDHTブートストラップノードアドレスの設定（fallback::FALLBACK_NODES）
 - [ ] iroh-gossipのquitメソッドが使用可能になったら離脱機能を実装（dht_bootstrap.rs::leave_topic）
 - [ ] iroh-gossipのbroadcastメソッドが使用可能になったらブロードキャスト実装（dht_bootstrap.rs::broadcast）
-- [ ] NodeAddrのパース方法を確認してフォールバック接続を実装（fallback::connect_to_fallback）
+- [x] NodeAddrのパース方法を確認してフォールバック接続を実装（fallback::connect_to_fallback）- 完了
 - [ ] Nostr/Kukuriイベント変換の実装（bridge::kukuri_to_nostr, bridge::nostr_to_kukuri）
 - [ ] DHT統合のユニットテスト作成
 
 ### 背景
-Cloudflare Workers依存を排除し、真の分散性を実現。検閲耐性とスケーラビリティを大幅に向上させる戦略的変更。詳細設計: `docs/01_project/activeContext/distributed-topic-tracker-plan.md`
+irohのビルトインDHTディスカバリー機能を活用し、外部依存を削減。検閲耐性とスケーラビリティを大幅に向上させる戦略的変更。詳細設計: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 ---
 ## 2. v2アーキテクチャPhase 7: DHT統合後の最適化
@@ -35,7 +35,7 @@ Cloudflare Workers依存を排除し、真の分散性を実現。検閲耐性�
 **期限**: 2025年09月10日
 
 ### 次のアクション
-- [ ] P2PService DHT統合（AutoDiscoveryGossip連携）
+- [ ] P2PService DHT統合（irohネイティブDHT連携）
 - [ ] OfflineService Repository層統合（11メソッドが基本実装のみ）
 - [ ] DHT統計情報の追加（ピア数、レイテンシ）
 - [ ] EventService DHT最適化

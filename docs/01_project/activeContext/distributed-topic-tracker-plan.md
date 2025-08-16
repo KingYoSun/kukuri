@@ -1,6 +1,17 @@
-# Kukuri: Distributed-Topic-Tracker を用いたブートストラップ機能の設計ドキュメント
+# [DEPRECATED] Kukuri: Distributed-Topic-Tracker を用いたブートストラップ機能の設計ドキュメント
 
-## 1. 導入
+> **⚠️ 注意: このドキュメントは廃止されました**
+> 
+> **更新日: 2025年08月16日**
+> 
+> irohがビルトインでBitTorrent Mainline DHTをサポートしていることが判明したため、
+> distributed-topic-trackerの使用は不要となりました。
+> 
+> **新しい計画書を参照してください: [iroh-native-dht-plan.md](./iroh-native-dht-plan.md)**
+
+---
+
+## 1. 導入（旧内容）
 
 ### 1.1 背景
 kukuri は、Nostr プロトコルに基づく分散型 P2P ソーシャルアプリケーションで、iroh と iroh-gossip を活用したイベント配信とエンドツーエンド暗号化を特徴としています。現在の開発では、Cloudflare Workers を用いた中央集権型ブートストラップを想定していましたが、まだ未実装のため、分散型アプローチへの移行が容易です。

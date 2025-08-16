@@ -15,7 +15,8 @@ kukuriは、Nostrプロトコルをベースとした完全分散型トピック
   - current_tasks.md: 進行中のタスク
   - current_environment.md: 開発環境情報
   - issuesAndNotes.md: 既知の問題と注意事項
-  - distributed-topic-tracker-plan.md: DHT基盤実装計画 ✨最重要
+  - iroh-native-dht-plan.md: irohネイティブDHT実装計画 ✨最重要
+  - distributed-topic-tracker-plan.md: [DEPRECATED] 旧DHT実装計画
   - tauri_app_experience_design.md: Tauriアプリ体験設計
   - tauri_app_implementation_plan.md: Tauriアプリ実装計画
   - **tasks/**: タスク管理システム
@@ -30,7 +31,7 @@ kukuriは、Nostrプロトコルをベースとした完全分散型トピック
   - API設計
   - セキュリティ設計
 - **dht_discovery_architecture.md**: DHT基盤Discovery Layerアーキテクチャ ✨新規
-  - distributed-topic-tracker統合
+  - irohビルトインDHT統合
   - セキュリティモデル
   - パフォーマンス要件
 - **project_structure.md**: プロジェクト構造
@@ -46,7 +47,7 @@ kukuriは、Nostrプロトコルをベースとした完全分散型トピック
 - Nostrイベント仕様（作成予定）
 
 ### 03_implementation/ - 実装ガイド
-- **dht_integration_guide.md**: Distributed Topic Tracker統合実装ガイド ✨最重要
+- **dht_integration_guide.md**: DHT統合実装ガイド ✨最重要
   - 依存関係とセットアップ
   - P2Pモジュール実装
   - イベントハンドリング

@@ -12,7 +12,7 @@ kukuriは、Nostrプロトコルを基盤とした完全分散型ソーシャル
 - 🔐 **暗号化通信**: エンドツーエンドの暗号化によるプライバシー保護
 - 📝 **トピックベース**: 興味のあるトピックに基づいた情報共有
 - ⚡ **高速同期**: iroh-gossipによる効率的なイベント配信
-- 🔍 **DHT基盤**: distributed-topic-trackerによる自動ブートストラップ
+- 🔍 **DHT基盤**: irohビルトインDHTによる自動ブートストラップ
 - 🖥️ **デスクトップアプリ**: Tauri v2による軽量で高速なネイティブアプリ
 - 👥 **複数アカウント管理**: セキュアストレージによる安全なアカウント切り替え
 - 🔑 **自動ログイン**: プラットフォーム固有のキーチェーンによる安全な認証
@@ -24,7 +24,7 @@ kukuriは、Nostrプロトコルを基盤とした完全分散型ソーシャル
 - **UI**: shadcn/ui (Radix UI + Tailwind CSS)
 - **状態管理**: Zustand
 - **P2P通信**: iroh + iroh-gossip
-- **ピア発見**: distributed-topic-tracker (BitTorrent Mainline DHT)
+- **ピア発見**: irohビルトインDHT (BitTorrent Mainline DHT)
 - **プロトコル**: Nostr (NIP準拠)
 - **データベース**: SQLite
 - **セキュアストレージ**: keyring (Keychain/Credential Manager/Secret Service)

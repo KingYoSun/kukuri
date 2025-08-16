@@ -44,7 +44,7 @@
 
 #### 発見層（DHT基盤）
 - **ピア発見**: BitTorrent Mainline DHTによる完全分散型発見
-- **distributed-topic-tracker統合**: iroh-gossipの自動ブートストラップ
+- **irohビルトインDHT**: irohのdiscovery_dht()による自動ブートストラップ
 - **共有シークレット**: Ed25519署名と回転機構でセキュア化
 - **フォールバック**: DHT失敗時の既知ピアリスト使用
 

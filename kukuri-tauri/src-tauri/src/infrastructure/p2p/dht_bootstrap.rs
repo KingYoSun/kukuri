@@ -1,8 +1,7 @@
-/// DHT基盤のブートストラップ実装（simplified版）
-/// distributed-topic-trackerを使用した分散型ピア発見
+/// DHT基盤のブートストラップ実装
+/// irohのビルトインDHTディスカバリーを使用した分散型ピア発見
 
 use crate::shared::error::AppError;
-// use distributed_topic_tracker::{AutoDiscoveryBuilder, DefaultSecretRotation, SecretRotation};
 use iroh::Endpoint;
 use iroh_gossip::net::Gossip;
 use std::sync::Arc;
@@ -129,20 +128,60 @@ pub mod secret {
 pub mod fallback {
     use super::*;
     use iroh::NodeAddr;
+    use std::str::FromStr;
 
-    /// ハードコードされたブートストラップノード
+    /// ハードコードされたブートストラップノード（将来的に設定ファイルから読み込み）
+    /// 形式: "NodeId@Address" (例: "abc123...@192.168.1.1:11204")
     const FALLBACK_NODES: &[&str] = &[
-        // TODO: 実際のノードアドレスを追加
+        // 本番環境用のブートストラップノードをここに追加
+        // 例: "NodeId@IP:Port"
     ];
 
     /// フォールバックノードに接続
-    pub async fn connect_to_fallback(_endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
-        // TODO: フォールバックノードの実装
-        // NodeAddrのパース方法が変更されているため、APIドキュメントを確認して実装
-        if FALLBACK_NODES.is_empty() {
-            return Err(AppError::P2PError("No fallback nodes configured".to_string()));
+    pub async fn connect_to_fallback(endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
+        let mut connected_nodes = Vec::new();
+        
+        for node_str in FALLBACK_NODES {
+            match parse_node_addr(node_str) {
+                Ok(node_addr) => {
+                    // ノードに接続を試みる
+                    match endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
+                        Ok(_) => {
+                            info!("Connected to fallback node: {}", node_str);
+                            connected_nodes.push(node_addr);
+                        }
+                        Err(e) => {
+                            debug!("Failed to connect to fallback node {}: {:?}", node_str, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to parse node address {}: {:?}", node_str, e);
+                }
+            }
         }
         
-        Err(AppError::P2PError("Fallback connection not implemented".to_string()))
+        if connected_nodes.is_empty() {
+            return Err(AppError::P2PError("Failed to connect to any fallback nodes".to_string()));
+        }
+        
+        Ok(connected_nodes)
+    }
+    
+    /// ノードアドレス文字列をパース
+    fn parse_node_addr(node_str: &str) -> Result<NodeAddr, AppError> {
+        // 形式: "NodeId@Address"
+        let parts: Vec<&str> = node_str.split('@').collect();
+        if parts.len() != 2 {
+            return Err(AppError::P2PError(format!("Invalid node address format: {}", node_str)));
+        }
+        
+        let node_id = iroh::NodeId::from_str(parts[0])
+            .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {}", e)))?;
+        
+        let socket_addr = parts[1].parse()
+            .map_err(|e| AppError::P2PError(format!("Failed to parse socket address: {}", e)))?;
+        
+        Ok(NodeAddr::new(node_id).with_direct_addresses([socket_addr]))
     }
 }

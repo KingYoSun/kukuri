@@ -12,11 +12,11 @@ kukuriは、Nostrプロトコルベースの完全分散型トピック中心ソ
 ### Phase 1: DHT統合基盤構築（8月16日-8月30日）✨ 最優先
 
 #### 主要タスク
-- [ ] distributed-topic-tracker依存追加
-- [ ] P2Pモジュールbootstrap.rs実装
+- [x] irohネイティブDHT機能有効化（完了）
+- [x] P2Pモジュールbootstrap.rs実装（完了）
 - [ ] 共有シークレット管理システム構築
-- [ ] iroh-gossipイベントハンドリング統合
-- [ ] DHT失敗時フォールバック機構
+- [x] iroh-gossipイベントハンドリング統合（完了）
+- [x] DHT失敗時フォールバック機構（完了）
 
 #### 成果物
 - DHT基盤のピア発見システム
@@ -187,7 +187,7 @@ kukuriは、Nostrプロトコルベースの完全分散型トピック中心ソ
 
 ## 関連ドキュメント
 
-- [DHT実装計画](./activeContext/distributed-topic-tracker-plan.md)
+- [DHT実装計画](./activeContext/iroh-native-dht-plan.md)
 - [アーキテクチャ設計](../02_architecture/dht_discovery_architecture.md)
 - [実装ガイド](../03_implementation/dht_integration_guide.md)
 - [タスク管理](./activeContext/tasks/README.md)
