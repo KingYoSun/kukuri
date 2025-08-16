@@ -4,17 +4,22 @@
 
 ## 🚨 クリティカル
 
-### Rust側とフロントエンドのアーキテクチャ不整合
-- **影響**: アプリケーションの基本機能（認証）が動作しない
+### E2EテストでのTauri API統合問題
+- **影響**: E2Eテストが正常に実行できない
 - **発見日**: 2025年08月16日
 - **詳細**: 
-  - E2Eテストで認証機能が完全に動作しないことが判明
-  - generateNewKeypairとSecureStorageApiの連携不具合
-  - APIインターフェースの定義不一致
-- **対応**: 
-  - API定義の確認と修正（優先度：最高）
-  - インターフェース統一作業
-- **関連**: [E2Eテスト拡充報告](../../progressReports/2025-08-16_e2e_test_enhancement_and_architecture_issue.md)
+  - データベース接続問題は解決済み（マイグレーション再構築で対応）
+  - `Tauri API not available when running "execute/sync"`エラーが頻発
+  - WebDriverとTauri APIの統合に問題がある
+- **解決済み**: 
+  - ✅ データベーススキーマ不整合（npubカラム、reactionsテーブル）
+  - ✅ マイグレーション履歴の不整合
+- **対応必要**: 
+  - WebDriverIO設定の見直し
+  - Tauri APIのE2E環境での初期化方法の調査
+- **関連**: 
+  - [E2Eテスト拡充報告](../../progressReports/2025-08-16_e2e_test_enhancement_and_architecture_issue.md)
+  - [データベースマイグレーション再構築](../../progressReports/2025-08-16_database_migration_rebuild.md)
 
 ## ⚠️ 中程度
 

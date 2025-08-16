@@ -21,11 +21,40 @@ export async function setupE2ETest() {
  */
 export async function beforeEachTest() {
   // アプリケーションの状態をリセット
-  // 注: 実際のアプリでは、テスト用のリセットコマンドを実装する必要があります
   await browser.execute(() => {
     // localStorageをクリア
     window.localStorage.clear();
+    // sessionStorageもクリア
+    window.sessionStorage.clear();
   });
+
+  // セキュアストレージのアカウントデータをクリア（別のexecuteで実行）
+  try {
+    // Tauri APIを使ってセキュアストレージをクリア
+    const result = await browser.execute(() => {
+      return new Promise((resolve) => {
+        // @ts-ignore - Tauri APIは実行時に利用可能
+        if (window.__TAURI__ && window.__TAURI__.core) {
+          const { invoke } = window.__TAURI__.core;
+          invoke('clear_all_accounts_for_test')
+            .then(() => {
+              console.log('Secure storage cleared for E2E test');
+              resolve({ success: true });
+            })
+            .catch((error: any) => {
+              console.warn('Failed to clear secure storage:', error);
+              resolve({ success: false, error: error.toString() });
+            });
+        } else {
+          console.log('Tauri API not available, skipping secure storage clear');
+          resolve({ success: false, error: 'Tauri API not available' });
+        }
+      });
+    });
+    console.log('Clear secure storage result:', result);
+  } catch (error) {
+    console.warn('Failed to execute secure storage clear:', error);
+  }
 
   // ページをリロード
   await browser.refresh();

@@ -40,6 +40,8 @@ pub fn run() {
             presentation::commands::remove_account,
             presentation::commands::get_current_account,
             presentation::commands::secure_login,
+            // テスト用コマンド
+            presentation::commands::clear_all_accounts_for_test,
             // トピック関連コマンド
             presentation::commands::create_topic,
             presentation::commands::get_topic,

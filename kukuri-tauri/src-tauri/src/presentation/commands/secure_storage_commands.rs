@@ -92,3 +92,20 @@ pub async fn secure_login(
         .await
         .map_err(|e| e.to_string())
 }
+
+/// 全てのアカウントデータをクリア（テスト用）
+#[tauri::command]
+pub async fn clear_all_accounts_for_test(
+    _state: State<'_, AppState>,
+) -> Result<(), String> {
+    use crate::modules::secure_storage::SecureStorage;
+    
+    // プロダクションビルドでは実行を拒否
+    #[cfg(not(debug_assertions))]
+    {
+        return Err("This command is only available in debug builds".to_string());
+    }
+    
+    SecureStorage::clear_all_accounts()
+        .map_err(|e| e.to_string())
+}

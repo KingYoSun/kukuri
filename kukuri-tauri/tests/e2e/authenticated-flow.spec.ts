@@ -75,9 +75,9 @@ describe('Authenticated User Flow E2E Tests', () => {
       await expect(rootElement).toBeDisplayed();
 
       // 認証後のページであることを確認（welcomeページでないこと）
-      const currentUrl = await browser.getUrl();
-      expect(currentUrl).not.toContain('/welcome');
-      expect(currentUrl).not.toContain('/login');
+      const finalUrl = await browser.getUrl();
+      expect(finalUrl).not.toContain('/welcome');
+      expect(finalUrl).not.toContain('/login');
     });
 
     it('should navigate between authenticated pages', async () => {

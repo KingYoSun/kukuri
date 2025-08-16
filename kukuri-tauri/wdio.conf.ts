@@ -22,8 +22,8 @@ const appBinary = process.platform === 'win32'
   ? 'kukuri-tauri.exe'
   : 'kukuri-tauri';
 
-// デバッグビルドかリリースビルドを使用
-const buildType = process.env.E2E_BUILD_TYPE || 'release';
+// デバッグビルドかリリースビルドを使用（デフォルトはdebug）
+const buildType = process.env.E2E_BUILD_TYPE || 'debug';
 const appPath = path.resolve(__dirname, './src-tauri/target', buildType, appBinary);
 
 // Tauriアプリケーションのパスを確認

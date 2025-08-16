@@ -19,7 +19,7 @@ use crate::presentation::handlers::{
     offline_handler::OfflineHandler,
 };
 use crate::infrastructure::{
-    database::{sqlite_repository::SqliteRepository, connection_pool::ConnectionPool},
+    database::{sqlite_repository::SqliteRepository, connection_pool::ConnectionPool, Repository},
     p2p::{
         iroh_gossip_service::IrohGossipService, 
         iroh_network_service::IrohNetworkService,
@@ -139,6 +139,9 @@ impl AppState {
         // 新アーキテクチャのリポジトリとサービスを初期化
         let pool = ConnectionPool::new(&db_url).await?;
         let repository = Arc::new(SqliteRepository::new(pool));
+        
+        // リポジトリのマイグレーションを実行
+        repository.initialize().await?;
         
         // インフラストラクチャサービスの初期化
         let key_manager_service: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());

@@ -99,6 +99,25 @@ impl SecureStorage {
         }
     }
 
+    /// 全てのアカウントデータをクリア（テスト用）
+    pub fn clear_all_accounts() -> Result<()> {
+        debug!("SecureStorage: Clearing all accounts data");
+        
+        // メタデータを取得して全アカウントを削除
+        let metadata = Self::get_accounts_metadata()?;
+        for npub in metadata.accounts.keys() {
+            Self::delete_private_key(npub)?;
+        }
+        
+        // メタデータ自体も削除
+        let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()), // 既に削除されている場合もOK
+            Err(e) => Err(anyhow::anyhow!("Failed to delete accounts metadata: {e}")),
+        }
+    }
+
     /// アカウントメタデータを取得
     pub fn get_accounts_metadata() -> Result<AccountsMetadata> {
         debug!("SecureStorage: Getting accounts metadata from keyring...");

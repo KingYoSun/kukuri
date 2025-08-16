@@ -84,4 +84,11 @@ export const SecureStorageApi = {
   async secureLogin(npub: string): Promise<LoginResponse> {
     return await invoke<LoginResponse>('secure_login', { npub });
   },
+
+  /**
+   * 全てのアカウントデータをクリア（テスト用、デバッグビルドのみ）
+   */
+  async clearAllAccountsForTest(): Promise<void> {
+    return await invoke<void>('clear_all_accounts_for_test');
+  },
 };
