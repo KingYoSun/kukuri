@@ -29,19 +29,20 @@
   - 検索性の向上
 - **構造**: priority/status/completed/metrics/contextに分類
 
-### 2025年08月15日 - E2Eテストの実装方針
-- **決定**: WebdriverIO + tauri-driver採用
+### 2025年08月16日 - E2Eテストの削除
+- **決定**: E2Eテスト機能を削除し、ユニットテスト・統合テストに集中
 - **理由**: 
-  - Tauri公式推奨
-  - 実績のあるテストフレームワーク
-- **課題**: 認証機能の不整合により完全動作せず
+  - Tauri v2がE2Eテストに正式対応していない
+  - WebDriver経由でTauri APIが利用できない根本的制約
+- **代替**: ユニットテストと統合テストでカバレッジ70%以上を目指す
 
 ## 技術選定
 
 ### テストツール
-- **単体テスト**: Jest (TypeScript), tokio::test (Rust)
-- **E2Eテスト**: WebdriverIO + tauri-driver
-- **モック**: mockall v0.13 (Rust)
+- **単体テスト**: Vitest (TypeScript), tokio::test (Rust)
+- **統合テスト**: Vitest + Tauri API モック (予定)
+- **モック**: mockall v0.13 (Rust), Zustand モック (TypeScript)
+- **カバレッジ目標**: 最低70%
 
 ### 開発環境
 - **Windows環境**: Docker経由でのテスト実行推奨

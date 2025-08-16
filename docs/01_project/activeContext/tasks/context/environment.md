@@ -70,10 +70,10 @@ pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc  # クロ�
 
 ### テスト
 ```bash
-pnpm test           # フロントエンド
+pnpm test           # フロントエンド（ユニットテスト）
+pnpm test:coverage  # カバレッジ測定
 cargo test          # バックエンド（Windowsではtest-docker.ps1推奨）
-pnpm test:e2e       # E2E
-.\scripts\test-docker.ps1  # Windows環境推奨
+.\scripts\test-docker.ps1  # Windows環境推奨（Docker経由）
 ```
 
 ### 品質管理
