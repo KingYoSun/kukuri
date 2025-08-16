@@ -91,20 +91,15 @@ impl GossipManager {
 
     /// 自身のアドレス情報を取得
     pub async fn node_addr(&self) -> P2PResult<Vec<String>> {
-        let node_addr = self.endpoint.node_addr();
+        let mut node_addr = self.endpoint.node_addr();
         let addrs = match node_addr.get() {
-            Ok(Some(addr)) => addr
+            Some(addr) => addr
                 .direct_addresses()
                 .map(|addr| addr.to_string())
                 .collect(),
-            Ok(None) => {
+            None => {
                 // ローカルアドレスが利用可能でない場合は空のベクターを返す
                 Vec::new()
-            }
-            Err(e) => {
-                return Err(P2PError::Internal(format!(
-                    "Failed to get node address: {e}"
-                )))
             }
         };
 
