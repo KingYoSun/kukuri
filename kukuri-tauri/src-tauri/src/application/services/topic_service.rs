@@ -27,17 +27,21 @@ impl TopicService {
         Ok(topic)
     }
 
+
     pub async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError> {
         self.repository.get_topic(id).await
     }
+
 
     pub async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError> {
         self.repository.get_all_topics().await
     }
 
+
     pub async fn get_joined_topics(&self) -> Result<Vec<Topic>, AppError> {
         self.repository.get_joined_topics().await
     }
+
 
     pub async fn join_topic(&self, id: &str) -> Result<(), AppError> {
         self.repository.join_topic(id).await?;
@@ -45,11 +49,13 @@ impl TopicService {
         Ok(())
     }
 
+
     pub async fn leave_topic(&self, id: &str) -> Result<(), AppError> {
         self.repository.leave_topic(id).await?;
         self.gossip.leave_topic(id).await?;
         Ok(())
     }
+
 
     pub async fn update_topic(&self, topic: &Topic) -> Result<(), AppError> {
         self.repository.update_topic(topic).await
@@ -72,6 +78,7 @@ impl TopicService {
             Ok((0, 0))
         }
     }
+
 
     pub async fn ensure_public_topic(&self) -> Result<(), AppError> {
         if self.repository.get_topic("public").await?.is_none() {

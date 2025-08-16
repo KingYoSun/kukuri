@@ -23,7 +23,7 @@ impl PostService {
             keys: None,
         }
     }
-    
+
     pub fn with_keys(mut self, keys: Keys) -> Self {
         self.keys = Some(keys);
         self
@@ -31,19 +31,19 @@ impl PostService {
 
     pub async fn create_post(&self, content: String, author: User, topic_id: String) -> Result<Post, AppError> {
         let mut post = Post::new(content.clone(), author.clone(), topic_id.clone());
-        
+
         // Save to database
         self.repository.create_post(&post).await?;
-        
+
         // Convert to Nostr event and distribute
         if let Some(ref keys) = self.keys {
             // Create Nostr event with topic tag
             let tag = Tag::hashtag(topic_id.clone());
-            
+
             let mut event_builder = EventBuilder::text_note(&content);
             event_builder = event_builder.tag(tag);
             let nostr_event = event_builder.sign_with_keys(keys)?;
-            
+
             // Convert to domain Event
             let mut event = Event::new(
                 1, // Kind 1 for text notes
@@ -51,18 +51,18 @@ impl PostService {
                 author.pubkey.clone(),
             );
             event.tags = vec![vec!["t".to_string(), topic_id]];
-            
+
             // Distribute via P2P
             self.distributor.distribute(&event, DistributionStrategy::Hybrid).await?;
-            
+
             // Mark post as synced
             post.mark_as_synced(nostr_event.id.to_hex());
             self.repository.update_post(&post).await?;
         }
-        
+
         // 新規作成した投稿をキャッシュに保存
         self.cache.add(post.clone()).await;
-        
+
         Ok(post)
     }
 
@@ -71,15 +71,15 @@ impl PostService {
         if let Some(post) = self.cache.get(id).await {
             return Ok(Some(post));
         }
-        
+
         // キャッシュにない場合はDBから取得
         let post = self.repository.get_post(id).await?;
-        
+
         // キャッシュに保存
         if let Some(ref p) = post {
             self.cache.add(p.clone()).await;
         }
-        
+
         Ok(post)
     }
 
@@ -87,12 +87,12 @@ impl PostService {
         // TODO: トピック別の投稿キャッシュを実装
         // 現在は直接DBから取得（キャッシュの無効化が複雑なため）
         let posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
-        
+
         // 個別の投稿をキャッシュに保存
         for post in &posts {
             self.cache.add(post.clone()).await;
         }
-        
+
         Ok(posts)
     }
 
@@ -100,10 +100,10 @@ impl PostService {
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_likes();
             self.repository.update_post(&post).await?;
-            
+
             // キャッシュを無効化
             self.cache.remove(post_id).await;
-            
+
             // Send like event (Nostr reaction)
             if let Some(ref keys) = self.keys {
                 let event_id = nostr_sdk::EventId::from_hex(post_id)?;
@@ -111,7 +111,7 @@ impl PostService {
                 let reaction_event = EventBuilder::text_note("+")
                     .tag(Tag::event(event_id))
                     .sign_with_keys(keys)?;
-                
+
                 // Convert to domain Event and distribute
                 let mut event = Event::new(
                     7, // Kind 7 for reactions
@@ -119,7 +119,7 @@ impl PostService {
                     keys.public_key().to_hex(),
                 );
                 event.tags = vec![vec!["e".to_string(), post_id.to_string()]];
-                
+
                 self.distributor.distribute(&event, DistributionStrategy::Nostr).await?;
             }
         }
@@ -130,10 +130,10 @@ impl PostService {
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_boosts();
             self.repository.update_post(&post).await?;
-            
+
             // キャッシュを無効化
             self.cache.remove(post_id).await;
-            
+
             // Send boost event (Nostr repost)
             if let Some(ref keys) = self.keys {
                 let event_id = nostr_sdk::EventId::from_hex(post_id)?;
@@ -141,7 +141,7 @@ impl PostService {
                 let repost_event = EventBuilder::text_note("")
                     .tag(Tag::event(event_id))
                     .sign_with_keys(keys)?;
-                
+
                 // Convert to domain Event and distribute
                 let mut event = Event::new(
                     6, // Kind 6 for reposts
@@ -149,7 +149,7 @@ impl PostService {
                     keys.public_key().to_hex(),
                 );
                 event.tags = vec![vec!["e".to_string(), post_id.to_string()]];
-                
+
                 self.distributor.distribute(&event, DistributionStrategy::Nostr).await?;
             }
         }
@@ -164,7 +164,7 @@ impl PostService {
             let deletion_event = EventBuilder::text_note("Post deleted")
                 .tag(Tag::event(event_id))
                 .sign_with_keys(keys)?;
-            
+
             // Convert to domain Event and distribute
             let mut event = Event::new(
                 5, // Kind 5 for deletions
@@ -172,10 +172,10 @@ impl PostService {
                 keys.public_key().to_hex(),
             );
             event.tags = vec![vec!["e".to_string(), id.to_string()]];
-            
+
             self.distributor.distribute(&event, DistributionStrategy::Nostr).await?;
         }
-        
+
         // Mark as deleted in database
         self.repository.delete_post(id).await
     }
@@ -207,7 +207,7 @@ impl PostService {
         // TODO: Implement unbookmark logic with user_pubkey
         Ok(())
     }
-    
+
     pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, AppError> {
         // TODO: Implement get bookmarked posts logic with user_pubkey
         Ok(Vec::new())
@@ -216,7 +216,7 @@ impl PostService {
     pub async fn sync_pending_posts(&self) -> Result<u32, AppError> {
         let unsync_posts = self.repository.get_unsync_posts().await?;
         let mut synced_count = 0;
-        
+
         for post in unsync_posts {
             // Convert to Event and distribute
             let mut event = Event::new(
@@ -225,7 +225,7 @@ impl PostService {
                 post.author.pubkey.clone(), // Use pubkey from author
             );
             event.tags = vec![vec!["t".to_string(), post.topic_id.clone()]];
-            
+
             // Try to distribute
             if self.distributor.distribute(&event, DistributionStrategy::Hybrid).await.is_ok() {
                 // Mark as synced
@@ -233,7 +233,7 @@ impl PostService {
                 synced_count += 1;
             }
         }
-        
+
         Ok(synced_count)
     }
 }

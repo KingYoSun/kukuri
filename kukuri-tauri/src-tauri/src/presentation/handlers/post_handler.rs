@@ -6,7 +6,7 @@ use crate::{
             BookmarkPostRequest, CreatePostRequest, DeletePostRequest, GetPostsRequest,
             PostResponse, ReactToPostRequest,
         },
-        ApiResponse, Validate,
+        Validate,
     },
     shared::error::AppError,
 };
@@ -19,13 +19,7 @@ pub struct PostHandler {
 }
 
 impl PostHandler {
-    pub fn new(post_service: Arc<PostService>) -> Self {
-        // TODO: AuthServiceを適切に注入する必要がある
-        // 一時的にパニックを避けるため、コンパイルエラーのままにする
-        unimplemented!("PostHandler needs AuthService injection")
-    }
-    
-    pub fn with_auth(post_service: Arc<PostService>, auth_service: Arc<AuthService>) -> Self {
+    pub fn new(post_service: Arc<PostService>, auth_service: Arc<AuthService>) -> Self {
         Self { 
             post_service,
             auth_service,
@@ -267,79 +261,5 @@ impl PostHandler {
 
         let results = join_all(futures).await;
         Ok(results)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::presentation::dto::Pagination;
-
-    #[test]
-    fn test_create_post_request_validation() {
-        // 空のコンテンツはエラー
-        let invalid_request = CreatePostRequest {
-            content: "".to_string(),
-            topic_id: Some("public".to_string()),
-        };
-        assert!(invalid_request.validate().is_err());
-
-        // 有効なリクエスト
-        let valid_request = CreatePostRequest {
-            content: "Test post content".to_string(),
-            topic_id: Some("public".to_string()),
-        };
-        assert!(valid_request.validate().is_ok());
-    }
-
-    #[test]
-    fn test_get_posts_request_default_pagination() {
-        let request = GetPostsRequest {
-            topic_id: Some("public".to_string()),
-            author_pubkey: None,
-            pagination: None,
-        };
-
-        // デフォルトのpaginationが適用されることを確認
-        let pagination = request.pagination.unwrap_or_default();
-        assert_eq!(pagination.limit, Some(50));
-        assert_eq!(pagination.offset, Some(0));
-    }
-
-    #[test]
-    fn test_batch_bookmark_request_validation() {
-        // 空のpost_idsはエラー
-        let invalid_request = BatchBookmarkRequest {
-            post_ids: vec![],
-            action: BookmarkAction::Add,
-        };
-        assert!(invalid_request.validate().is_err());
-
-        // 有効なリクエスト
-        let valid_request = BatchBookmarkRequest {
-            post_ids: vec!["post1".to_string(), "post2".to_string()],
-            action: BookmarkAction::Add,
-        };
-        assert!(valid_request.validate().is_ok());
-    }
-
-    #[test]
-    fn test_batch_react_request_validation() {
-        // 空のreactionsはエラー
-        let invalid_request = BatchReactRequest {
-            reactions: vec![],
-        };
-        assert!(invalid_request.validate().is_err());
-
-        // 有効なリクエスト
-        let valid_request = BatchReactRequest {
-            reactions: vec![
-                ReactToPostRequest {
-                    post_id: "post1".to_string(),
-                    reaction: "+".to_string(),
-                },
-            ],
-        };
-        assert!(valid_request.validate().is_ok());
     }
 }

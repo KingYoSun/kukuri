@@ -8,7 +8,7 @@
 2. ドキュメントの最終更新日を確認（古い情報に注意）
 
 ## 基本ルール
-- **serena mcpを使用**: typescriptの開発ではserena mcpを活用する
+- **serena mcpを使用**: typescriptの開発ではserena mcpを活用する。Rustの開発では利用しない。
 - **ghコマンドを使用**: GitHubに関連した操作はGitHub Cli（ghコマンド）を用いる
 - **言語**: 必ず日本語で回答
 - **コミット**: ユーザーから明示的に要求されない限り、絶対にコミットしない

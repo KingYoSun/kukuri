@@ -13,8 +13,7 @@ use crate::application::services::{
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::presentation::handlers::{
-    post_handler::PostHandler, topic_handler::TopicHandler, 
-    auth_handler::AuthHandler, user_handler::UserHandler,
+    user_handler::UserHandler,
     secure_storage_handler::SecureStorageHandler,
     event_handler::EventHandler, p2p_handler::P2PHandler,
     offline_handler::OfflineHandler,
@@ -78,9 +77,6 @@ pub struct AppState {
     pub offline_service: Arc<OfflineService>,
     
     // プレゼンテーション層のハンドラー（最適化用）
-    pub post_handler: Arc<PostHandler>,
-    pub topic_handler: Arc<TopicHandler>,
-    pub auth_handler: Arc<AuthHandler>,
     pub user_handler: Arc<UserHandler>,
     pub secure_storage_handler: Arc<SecureStorageHandler>,
     pub event_handler: Arc<EventHandler>,
@@ -217,12 +213,6 @@ impl AppState {
         ));
         
         // プレゼンテーション層のハンドラーを初期化
-        let post_handler = Arc::new(PostHandler::with_auth(
-            Arc::clone(&post_service),
-            Arc::clone(&auth_service),
-        ));
-        let topic_handler = Arc::new(TopicHandler::new(Arc::clone(&topic_service)));
-        let auth_handler = Arc::new(AuthHandler::new(Arc::clone(&auth_service)));
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
         let secure_storage_handler = Arc::new(SecureStorageHandler::new(Arc::clone(&auth_service)));
         let event_handler = Arc::new(EventHandler::new(Arc::clone(&event_service) as Arc<dyn crate::application::services::event_service::EventServiceTrait>));
@@ -252,9 +242,6 @@ impl AppState {
             sync_service,
             p2p_service,
             offline_service,
-            post_handler,
-            topic_handler,
-            auth_handler,
             user_handler,
             secure_storage_handler,
             event_handler,
