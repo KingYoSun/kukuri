@@ -5,6 +5,7 @@ pub mod iroh_network_service;
 pub mod iroh_gossip_service;
 pub mod dht_bootstrap;
 pub mod dht_integration;
+pub mod bootstrap_config;
 
 use serde::{Deserialize, Serialize};
 

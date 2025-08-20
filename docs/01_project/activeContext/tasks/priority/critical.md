@@ -1,6 +1,6 @@
 # 最重要タスク
 
-**最終更新**: 2025年08月16日
+**最終更新**: 2025年08月20日
 **最大3個まで**
 
 ## 1. irohネイティブDHT実装（DHT基盤のP2P Discovery）
@@ -17,7 +17,8 @@
 - [x] DHT失敗時のフォールバック機構実装
 
 ### 実装で発生したTODO
-- [ ] 実際のDHTブートストラップノードアドレスの設定（fallback::FALLBACK_NODES）
+- [x] ローカル開発用DHTブートストラップノード実装（kukuri-cli）- 2025年08月20日完了
+- [ ] 本番環境用DHTブートストラップノードアドレスの設定（bootstrap_nodes.json）
 - [ ] iroh-gossipのquitメソッドが使用可能になったら離脱機能を実装（dht_bootstrap.rs::leave_topic）
 - [ ] iroh-gossipのbroadcastメソッドが使用可能になったらブロードキャスト実装（dht_bootstrap.rs::broadcast）
 - [x] NodeAddrのパース方法を確認してフォールバック接続を実装（fallback::connect_to_fallback）- 完了

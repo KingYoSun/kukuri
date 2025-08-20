@@ -1,0 +1,11 @@
+C:\Users\kgm11\kukuri\kukuri-cli\target\debug\deps\ed25519_dalek-b6de9e4bce06faa1.d: C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\lib.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\constants.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\errors.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\signature.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\signing.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\verifying.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\hazmat.rs
+
+C:\Users\kgm11\kukuri\kukuri-cli\target\debug\deps\libed25519_dalek-b6de9e4bce06faa1.rmeta: C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\lib.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\constants.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\errors.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\signature.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\signing.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\verifying.rs C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\hazmat.rs
+
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\lib.rs:
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\constants.rs:
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\errors.rs:
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\signature.rs:
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\signing.rs:
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\verifying.rs:
+C:\Users\kgm11\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ed25519-dalek-2.2.0\src\hazmat.rs:

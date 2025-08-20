@@ -1,0 +1,17 @@
+{
+  "development": {
+    "description": "Local development bootstrap nodes",
+    "nodes": [
+      "localhost:11223",
+      "localhost:11224"
+    ]
+  },
+  "staging": {
+    "description": "Staging environment bootstrap nodes",
+    "nodes": []
+  },
+  "production": {
+    "description": "Production bootstrap nodes",
+    "nodes": []
+  }
+}
