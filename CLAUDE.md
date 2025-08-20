@@ -9,8 +9,9 @@
 
 ## 基本ルール
 - **serena mcpを使用**: typescriptの開発ではserena mcpを活用する。Rustの開発では利用しない。
-- **ghコマンドを使用**: GitHubに関連した操作はpowershellのGitHub Cli（ghコマンド）を用いる
-- **jqコマンドを使用**: jsonファイルの操作にはpowershellのjqコマンドを用いる
+- **ghコマンドを使用**: GitHubに関連した操作はGitHub Cli（ghコマンド）を用いる
+- **jqコマンドを使用**: jsonファイルの調査/操作にはjqコマンドを用いる
+  - iroh系ライブラリのAPI確認は `docs\apis` 以下のjsonファイルから行う
 - **言語**: 必ず日本語で回答
 - **コミット**: ユーザーから明示的に要求されない限り、絶対にコミットしない
 - **日付**: ドキュメント作成/更新の前に必ず`date "+%Y年%m月%d日"`コマンドで今日の日付を確認し、出力された日付を使用する
@@ -217,7 +218,11 @@ kukuri/
 - **アーキテクチャ文書**: `./docs/02_architecture/`に作成
 
 ## 詳細参照先
-- 主要ライブラリのAPIドキュメント: `docs\apis\*.md`
+- APIドキュメント
+  - iroh: `docs\apis\iroh_0.91.1_x86_64-unknown-linux-gnu_latest.json`
+  - iroh-blobs: `docs\apis\iroh-blobs_0.93.0_x86_64-unknown-linux-gnu_latest.json`
+  - iroh-docs: `docs\apis\iroh-docs_0.91.0_x86_64-unknown-linux-gnu_latest.json`
+  - iroh-gossip: `docs\apis\iroh-gossip_0.91.0_x86_64-unknown-linux-gnu_latest.json`
 - 環境情報: `docs/01_project/activeContext/current_environment.md`
 - 既知の問題: `docs/01_project/activeContext/issuesAndNotes.md`
 - 開発進捗: `docs/01_project/progressReports/`

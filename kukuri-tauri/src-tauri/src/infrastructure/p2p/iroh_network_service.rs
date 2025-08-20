@@ -67,12 +67,12 @@ impl IrohNetworkService {
     }
 
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
-        // Get the direct addresses synchronously  
+        // Get the direct addresses synchronously
         let addrs = self.endpoint.direct_addresses();
-        
+
         // Extract addresses from the Direct wrapper
         let addrs: Vec<String> = vec![];
-        
+
         Ok(addrs)
     }
 
@@ -111,11 +111,11 @@ impl IrohNetworkService {
     /// フォールバックモードでピアに接続
     async fn connect_fallback(&self) -> Result<(), AppError> {
         let fallback_peers = super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?;
-        
+
         // フォールバックピアをピアリストに追加
         let mut peers = self.peers.write().await;
         let now = chrono::Utc::now().timestamp();
-        
+
         for node_addr in fallback_peers {
             peers.push(Peer {
                 id: node_addr.node_id.to_string(),
@@ -157,11 +157,11 @@ impl NetworkService for IrohNetworkService {
     async fn disconnect(&self) -> Result<(), AppError> {
         let mut connected = self.connected.write().await;
         *connected = false;
-        
+
         // ピアリストをクリア
         let mut peers = self.peers.write().await;
         peers.clear();
-        
+
         tracing::info!("Network service disconnected");
         Ok(())
     }
@@ -176,26 +176,26 @@ impl NetworkService for IrohNetworkService {
         use iroh::NodeId;
         use std::net::SocketAddr;
         use std::str::FromStr;
-        
+
         let parts: Vec<&str> = address.split('@').collect();
         if parts.len() != 2 {
             return Err("Invalid address format: expected 'node_id@socket_addr'".into());
         }
-        
+
         let node_id = NodeId::from_str(parts[0])
             .map_err(|e| format!("Failed to parse node ID: {}", e))?;
         let socket_addr: SocketAddr = parts[1].parse()
             .map_err(|e| format!("Failed to parse socket address: {}", e))?;
-        
+
         // NodeAddrを構築
         let node_addr = iroh::NodeAddr::new(node_id)
             .with_direct_addresses([socket_addr]);
-        
+
         // ピアに接続
         self.endpoint.connect(node_addr.clone(), iroh_gossip::ALPN)
             .await
             .map_err(|e| format!("Failed to connect to peer: {}", e))?;
-        
+
         // ピアリストに追加
         let mut peers = self.peers.write().await;
         let now = chrono::Utc::now().timestamp();
@@ -205,11 +205,11 @@ impl NetworkService for IrohNetworkService {
             connected_at: now,
             last_seen: now,
         });
-        
+
         // 統計を更新
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
-        
+
         tracing::info!("Added peer: {}", address);
         Ok(())
     }
@@ -217,11 +217,11 @@ impl NetworkService for IrohNetworkService {
     async fn remove_peer(&self, peer_id: &str) -> Result<(), AppError> {
         let mut peers = self.peers.write().await;
         peers.retain(|p| p.id != peer_id);
-        
+
         // 統計を更新
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
-        
+
         tracing::info!("Removed peer: {}", peer_id);
         Ok(())
     }
@@ -235,11 +235,11 @@ impl NetworkService for IrohNetworkService {
         let connected = self.connected.read().await;
         *connected
     }
-    
+
     async fn get_node_id(&self) -> Result<String, AppError> {
         Ok(self.endpoint.node_id().to_string())
     }
-    
+
     async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
         self.node_addr().await
     }
