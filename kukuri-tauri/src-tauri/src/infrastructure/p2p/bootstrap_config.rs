@@ -1,7 +1,6 @@
 /// ブートストラップノード設定モジュール
 use crate::shared::error::AppError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -24,10 +23,10 @@ impl BootstrapConfig {
     /// 設定ファイルから読み込み
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, AppError> {
         let content = fs::read_to_string(path)
-            .map_err(|e| AppError::ConfigError(format!("Failed to read bootstrap config: {}", e)))?;
+            .map_err(|e| AppError::ConfigurationError(format!("Failed to read bootstrap config: {}", e)))?;
         
         let config: BootstrapConfig = serde_json::from_str(&content)
-            .map_err(|e| AppError::ConfigError(format!("Failed to parse bootstrap config: {}", e)))?;
+            .map_err(|e| AppError::ConfigurationError(format!("Failed to parse bootstrap config: {}", e)))?;
         
         Ok(config)
     }
