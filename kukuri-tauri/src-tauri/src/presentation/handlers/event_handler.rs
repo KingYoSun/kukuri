@@ -2,7 +2,7 @@ use crate::application::services::event_service::EventServiceTrait;
 use crate::presentation::dto::event::{
     NostrMetadataDto, PublishTextNoteRequest, PublishTopicPostRequest,
     SendReactionRequest, UpdateMetadataRequest, DeleteEventsRequest,
-    EventResponse, SubscribeRequest
+    EventResponse, SubscribeRequest, SetDefaultP2PTopicRequest
 };
 use crate::presentation::dto::Validate;
 use crate::shared::error::AppError;
@@ -172,6 +172,18 @@ impl EventHandler {
     pub async fn disconnect_nostr(&self) -> Result<serde_json::Value, AppError> {
         self.event_service.disconnect().await?;
         
+        Ok(json!({ "success": true }))
+    }
+
+    /// 既定のP2P配信トピックを設定
+    pub async fn set_default_p2p_topic(
+        &self,
+        request: SetDefaultP2PTopicRequest,
+    ) -> Result<serde_json::Value, AppError> {
+        request.validate()?;
+        self.event_service
+            .set_default_p2p_topic(&request.topic_id)
+            .await?;
         Ok(json!({ "success": true }))
     }
 }

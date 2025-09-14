@@ -8,6 +8,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 use tracing::{error, info};
+use crate::infrastructure::p2p::GossipService;
+use crate::domain::entities as domain;
+use crate::domain::value_objects::EventId as DomainEventId;
 
 /// フロントエンドに送信するイベントペイロード
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -27,6 +30,10 @@ pub struct EventManager {
     pub(crate) event_publisher: Arc<RwLock<EventPublisher>>,
     is_initialized: Arc<RwLock<bool>>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
+    /// P2P配信用のGossipService（任意）
+    gossip_service: Arc<RwLock<Option<Arc<dyn GossipService>>>>,
+    /// 非トピック系イベントの既定配信先トピックID
+    default_topic_id: Arc<RwLock<String>>,
 }
 
 impl EventManager {
@@ -39,6 +46,8 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
+            gossip_service: Arc::new(RwLock::new(None)),
+            default_topic_id: Arc::new(RwLock::new("public".to_string())),
         }
     }
 
@@ -53,6 +62,8 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
+            gossip_service: Arc::new(RwLock::new(None)),
+            default_topic_id: Arc::new(RwLock::new("public".to_string())),
         }
     }
 
@@ -65,6 +76,18 @@ impl EventManager {
     }
 
     // EventSyncは廃止（IrohGossipService経由に移行）
+
+    /// GossipServiceを接続（P2P配信用）。未設定でも動作は継続。
+    pub async fn set_gossip_service(&self, gossip: Arc<dyn GossipService>) {
+        let mut gs = self.gossip_service.write().await;
+        *gs = Some(gossip);
+    }
+
+    /// 既定の配信先トピックIDを設定
+    pub async fn set_default_p2p_topic_id(&self, topic_id: impl Into<String>) {
+        let mut id = self.default_topic_id.write().await;
+        *id = topic_id.into();
+    }
 
     /// KeyManagerからの秘密鍵でマネージャーを初期化
     pub async fn initialize_with_key_manager(&self, key_manager: &KeyManager) -> Result<()> {
@@ -99,11 +122,11 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let event_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークに配信
-        if let Some(ref event_sync) = *self.event_sync.read().await {
-            if let Err(e) = event_sync.propagate_nostr_event(event).await {
-                error!("Failed to propagate event to P2P network: {}", e);
-                // P2P配信の失敗はエラーとしない（Nostrリレーへの送信が成功していれば十分）
+        // P2Pネットワークへブロードキャスト（既定トピック）
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            let topic = self.default_topic_id.read().await.clone();
+            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
+                error!("Failed to broadcast to P2P (global): {}", e);
             }
         }
 
@@ -125,10 +148,10 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let event_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークに配信
-        if let Some(ref event_sync) = *self.event_sync.read().await {
-            if let Err(e) = event_sync.propagate_nostr_event(event).await {
-                error!("Failed to propagate event to P2P network: {}", e);
+        // P2Pネットワークへブロードキャスト（対象トピック）
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            if let Err(e) = self.broadcast_to_topic(&gossip, topic_id, &event).await {
+                error!("Failed to broadcast to P2P (topic {}): {}", topic_id, e);
             }
         }
 
@@ -145,10 +168,11 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let result_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークに配信
-        if let Some(ref event_sync) = *self.event_sync.read().await {
-            if let Err(e) = event_sync.propagate_nostr_event(event).await {
-                error!("Failed to propagate event to P2P network: {}", e);
+        // P2Pネットワークへブロードキャスト（既定トピック）
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            let topic = self.default_topic_id.read().await.clone();
+            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
+                error!("Failed to broadcast reaction to P2P: {}", e);
             }
         }
 
@@ -164,10 +188,11 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let event_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークに配信
-        if let Some(ref event_sync) = *self.event_sync.read().await {
-            if let Err(e) = event_sync.propagate_nostr_event(event).await {
-                error!("Failed to propagate event to P2P network: {}", e);
+        // P2Pネットワークへブロードキャスト（既定トピック）
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            let topic = self.default_topic_id.read().await.clone();
+            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
+                error!("Failed to broadcast event to P2P: {}", e);
             }
         }
 
@@ -184,10 +209,11 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let result_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークに配信
-        if let Some(ref event_sync) = *self.event_sync.read().await {
-            if let Err(e) = event_sync.propagate_nostr_event(event).await {
-                error!("Failed to propagate event to P2P network: {}", e);
+        // P2Pネットワークへブロードキャスト（既定トピック）
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            let topic = self.default_topic_id.read().await.clone();
+            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
+                error!("Failed to broadcast metadata to P2P: {}", e);
             }
         }
 
@@ -271,6 +297,54 @@ impl EventManager {
         client_manager.disconnect().await?;
         *self.is_initialized.write().await = false;
         Ok(())
+    }
+}
+
+impl EventManager {
+    async fn broadcast_to_topic(
+        &self,
+        gossip: &Arc<dyn GossipService>,
+        topic_id: &str,
+        nostr_event: &nostr_sdk::Event,
+    ) -> Result<()> {
+        // 変換：nostr_sdk::Event -> domain::entities::Event
+        let domain_event = Self::to_domain_event(nostr_event)?;
+        // トピックに参加していない場合は参加（冪等）
+        let _ = gossip.join_topic(topic_id, vec![]).await;
+        // ブロードキャスト
+        gossip.broadcast(topic_id, &domain_event)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    fn to_domain_event(nostr: &nostr_sdk::Event) -> Result<domain::Event> {
+        // id
+        let id_hex = nostr.id.to_string();
+        let id = DomainEventId::from_hex(&id_hex)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        // created_at
+        let secs = nostr.created_at.as_u64() as i64;
+        let naive = chrono::NaiveDateTime::from_timestamp_opt(secs, 0)
+            .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?;
+        let created_at = chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc);
+        // kind
+        let kind = nostr.kind.as_u16() as u32;
+        // tags
+        let tags: Vec<Vec<String>> = nostr.tags.iter().map(|t| t.clone().to_vec()).collect();
+        // sig
+        let sig = nostr.sig.to_string();
+        // build
+        let event = domain::Event::new_with_id(
+            id,
+            nostr.pubkey.to_string(),
+            nostr.content.clone(),
+            kind,
+            tags,
+            created_at,
+            sig,
+        );
+        Ok(event)
     }
 }
 

@@ -166,6 +166,8 @@ impl AppState {
             .map_err(|e| anyhow::anyhow!("Failed to create GossipService: {}", e))?;
         gossip_inner.set_event_sender(p2p_event_tx);
         let gossip_service: Arc<dyn GossipService> = Arc::new(gossip_inner);
+        // EventManagerへGossipServiceを接続（P2P配信経路の直結）
+        event_manager.set_gossip_service(Arc::clone(&gossip_service)).await;
         
         // UserServiceを先に初期化（他のサービスの依存）
         let user_service = Arc::new(UserService::new(
@@ -177,6 +179,10 @@ impl AppState {
             Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::TopicRepository>,
             Arc::clone(&gossip_service),
         ));
+        // 既定トピック（public）を保証し、EventManagerの既定配信先に設定
+        topic_service.ensure_public_topic().await
+            .map_err(|e| anyhow::anyhow!("Failed to ensure public topic: {}", e))?;
+        event_manager.set_default_p2p_topic_id("public").await;
         
         // AuthServiceの初期化（UserServiceとTopicServiceが必要）
         let auth_service = Arc::new(AuthService::new(

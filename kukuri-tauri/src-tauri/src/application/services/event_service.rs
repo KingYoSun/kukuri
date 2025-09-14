@@ -51,6 +51,9 @@ pub trait EventServiceTrait: Send + Sync {
     
     /// Nostrクライアントを切断
     async fn disconnect(&self) -> Result<(), AppError>;
+
+    /// 既定のP2P配信トピックを設定
+    async fn set_default_p2p_topic(&self, topic_id: &str) -> Result<(), AppError>;
 }
 
 pub struct EventService {
@@ -295,6 +298,18 @@ impl EventServiceTrait for EventService {
         event_manager.disconnect()
             .await
             .map_err(|e| AppError::NostrError(e.to_string()))
+    }
+
+    async fn set_default_p2p_topic(&self, topic_id: &str) -> Result<(), AppError> {
+        let event_manager = self.event_manager.as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        if topic_id.is_empty() {
+            return Err(AppError::ValidationError("Topic ID is required".to_string()));
+        }
+        event_manager
+            .set_default_p2p_topic_id(topic_id.to_string())
+            .await;
+        Ok(())
     }
 }
 

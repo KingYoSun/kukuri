@@ -144,3 +144,17 @@ pub struct EventResponse {
     pub success: bool,
     pub message: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetDefaultP2PTopicRequest {
+    pub topic_id: String,
+}
+
+impl Validate for SetDefaultP2PTopicRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.topic_id.is_empty() {
+            return Err("Topic ID is required".to_string());
+        }
+        Ok(())
+    }
+}

@@ -76,6 +76,7 @@ pub fn run() {
             presentation::commands::get_nostr_pubkey,
             presentation::commands::delete_events,
             presentation::commands::disconnect_nostr,
+            presentation::commands::set_default_p2p_topic,
             // P2P関連コマンド
             presentation::commands::initialize_p2p,
             presentation::commands::join_p2p_topic,

@@ -18,7 +18,9 @@
 - [x] `state.initialize_p2p`をno-op化（旧経路の実起動を停止）
 - [x] 旧EventSyncおよび対応テストを削除（段階移行完了）
 - [x] 最小ユニットテスト（join/broadcast/leave）追加・通過
-- [ ] EventManagerのP2P配信を`GossipService`直結に変更（`EventSync`完全撤去）
+- [x] EventManagerのP2P配信を`GossipService`直結に変更（`EventSync`完全撤去）
+- [x] 非トピック系イベントの配信先を既定トピックに統一（初期値`public`、起動時に作成/参加保証）
+- [x] 既定トピック切替のTauriコマンド追加（`set_default_p2p_topic`）
 - [ ] UI受信導線の接続（`IrohGossipService::subscribe`→UI/handlers）
 - [ ] 旧`GossipManager`利用箇所の棚卸しと段階的無効化（integration_testsの移行含む）
 

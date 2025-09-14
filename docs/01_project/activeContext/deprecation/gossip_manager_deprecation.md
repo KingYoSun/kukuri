@@ -41,8 +41,10 @@
 - [x] 旧テストの移植（等価テストの第1弾：join/leave/get_joined_topics/broadcast）
 - [x] 未参加トピックの`leave`は冪等に（期待値を修正）
 - [x] 旧EventSyncおよび対応テストの削除
+- [x] 非トピック系イベントの配信先を既定トピックに統一（初期値`public`）
+- [x] 既定トピック切替APIを追加（Tauri: `set_default_p2p_topic`）
 - [ ] UI配信の接続（`IrohGossipService::subscribe` → UI/handlers）
-- [ ] EventManagerのP2P配信を`GossipService`へ直結（`EventSync`完全撤去）
+- [x] EventManagerのP2P配信を`GossipService`へ直結（`EventSync`完全撤去）
 - [ ] integrationテスト群の移行（`GossipManager`依存の除去）
 - [ ] `gossip_manager.rs` の削除（最終）
 
@@ -57,6 +59,7 @@
 ## 互換性/仕様メモ
 - `leave`：未参加トピックに対しても成功扱い（冪等）。
 - 受信イベント：UI向け（domain::Event）と互換用途（P2PEvent）の二経路を暫定維持。
+- 非トピック系の送信イベント（テキストノート/メタデータ/リアクション等）は既定トピックで流通（初期値`public`、アプリ起動時に作成・参加を保証）。
 
 ## テスト
 - Docker実行（前回）：166 passed / 0 failed / 6 ignored。
