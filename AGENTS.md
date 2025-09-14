@@ -34,7 +34,6 @@
 - 変更時は必ずテスト追加/更新とカバレッジ確認
 
 ## コミット/PR
-- ユーザーから明示的に要求されない限り、絶対にコミットしない
 - Conventional Commits推奨: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`
 - PRに含める: 要約、根拠/設計意図、再現/確認手順、関連Issue、UI変更はスクリーンショット
 - 無関係な整形・リファクタは分離。サブモジュールは`git submodule update --init --recursive`
