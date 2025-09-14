@@ -8,7 +8,6 @@
 2. ドキュメントの最終更新日を確認（古い情報に注意）
 
 ## 基本ルール
-- **serena mcpを使用**: typescriptの開発ではserena mcpを活用する。Rustの開発では利用しない。
 - **ghコマンドを使用**: GitHubに関連した操作はGitHub Cli（ghコマンド）を用いる
 - **jqコマンドを使用**: jsonファイルの調査/操作にはjqコマンドを用いる
   - iroh系ライブラリのAPI確認は `docs\apis` 以下のjsonファイルから行う

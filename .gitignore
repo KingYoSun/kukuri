@@ -3,6 +3,8 @@ kukuri-tauri/src-tauri/target/
 kukuri-tauri/src-tauri/WixTools/
 kukuri-tauri/src-tauri/gen/
 
+kukuri-cli/target/
+
 # Node
 node_modules/
 dist/
