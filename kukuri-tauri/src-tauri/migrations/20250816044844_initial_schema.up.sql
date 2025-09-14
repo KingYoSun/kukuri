@@ -76,50 +76,69 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 
--- オフラインアクションテーブル
+-- オフラインアクションテーブル（v2仕様）
 CREATE TABLE IF NOT EXISTS offline_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_pubkey TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    target_id TEXT,
+    action_data TEXT NOT NULL, -- JSON形式
+    local_id TEXT NOT NULL,
+    remote_id TEXT,
+    is_synced INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    synced_at INTEGER
+);
+
+-- キャッシュメタデータ（v2仕様）
+CREATE TABLE IF NOT EXISTS cache_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cache_key TEXT NOT NULL UNIQUE,
+    cache_type TEXT NOT NULL,
+    last_synced_at INTEGER,
+    last_accessed_at INTEGER,
+    data_version INTEGER DEFAULT 1,
+    is_stale INTEGER DEFAULT 0,
+    expiry_time INTEGER,
+    metadata TEXT -- JSON形式
+);
+
+-- 楽観的更新テーブル（v2仕様）
+CREATE TABLE IF NOT EXISTS optimistic_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    update_id TEXT NOT NULL UNIQUE,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    original_data TEXT, -- JSON形式
+    updated_data TEXT NOT NULL, -- JSON形式
+    is_confirmed INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    confirmed_at INTEGER
+);
+
+-- 同期キューテーブル（v2仕様）
+CREATE TABLE IF NOT EXISTS sync_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_type TEXT NOT NULL,
     payload TEXT NOT NULL, -- JSON形式
-    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-    synced INTEGER DEFAULT 0,
+    status TEXT NOT NULL,
+    retry_count INTEGER DEFAULT 0,
+    max_retries INTEGER DEFAULT 3,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
     synced_at INTEGER,
-    error TEXT
+    error_message TEXT
 );
 
--- キャッシュテーブル
-CREATE TABLE IF NOT EXISTS cache_entries (
-    key TEXT PRIMARY KEY NOT NULL,
-    value TEXT NOT NULL, -- JSON形式
-    category TEXT NOT NULL,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-    expires_at INTEGER,
-    access_count INTEGER DEFAULT 0,
-    last_accessed INTEGER
-);
-
--- 楽観的更新テーブル
-CREATE TABLE IF NOT EXISTS optimistic_updates (
-    id TEXT PRIMARY KEY NOT NULL,
+-- 同期状態テーブル（v2仕様）
+CREATE TABLE IF NOT EXISTS sync_status (
     entity_type TEXT NOT NULL,
     entity_id TEXT NOT NULL,
-    update_data TEXT NOT NULL, -- JSON形式
-    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-    confirmed INTEGER DEFAULT 0,
-    confirmed_at INTEGER,
-    rollback_data TEXT -- JSON形式
-);
-
--- 同期キューテーブル
-CREATE TABLE IF NOT EXISTS sync_queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_type TEXT NOT NULL,
-    item_id TEXT NOT NULL,
-    priority INTEGER DEFAULT 0,
-    retry_count INTEGER DEFAULT 0,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-    next_retry_at INTEGER,
-    error_message TEXT
+    local_version INTEGER NOT NULL,
+    last_local_update INTEGER NOT NULL,
+    sync_status TEXT NOT NULL,
+    conflict_data TEXT,
+    PRIMARY KEY (entity_type, entity_id)
 );
 
 -- リレーテーブル（Nostrリレー管理用）
@@ -155,11 +174,10 @@ CREATE INDEX IF NOT EXISTS idx_user_topics_user ON user_topics(user_pubkey);
 CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_pubkey);
 CREATE INDEX IF NOT EXISTS idx_follows_followed ON follows(followed_pubkey);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
-CREATE INDEX IF NOT EXISTS idx_offline_actions_synced ON offline_actions(synced);
-CREATE INDEX IF NOT EXISTS idx_cache_entries_category ON cache_entries(category);
-CREATE INDEX IF NOT EXISTS idx_cache_entries_expires_at ON cache_entries(expires_at);
-CREATE INDEX IF NOT EXISTS idx_sync_queue_item_type ON sync_queue(item_type);
-CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_offline_actions_synced ON offline_actions(is_synced);
+CREATE INDEX IF NOT EXISTS idx_cache_metadata_type ON cache_metadata(cache_type);
+CREATE INDEX IF NOT EXISTS idx_cache_metadata_expiry ON cache_metadata(expiry_time);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
 
 -- デフォルトデータの挿入
 INSERT OR IGNORE INTO topics (topic_id, name, description, created_at, updated_at)

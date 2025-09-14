@@ -1,4 +1,4 @@
-use super::{handler::EventHandler, nostr_client::NostrClientManager, publisher::EventPublisher};
+﻿use super::{handler::EventHandler, nostr_client::NostrClientManager, publisher::EventPublisher};
 use crate::modules::auth::key_manager::KeyManager;
 use crate::modules::database::connection::DbPool;
 use anyhow::Result;
@@ -27,8 +27,6 @@ pub struct EventManager {
     pub(crate) event_publisher: Arc<RwLock<EventPublisher>>,
     is_initialized: Arc<RwLock<bool>>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
-    /// EventSync for P2P integration (set after initialization)
-    event_sync: Arc<RwLock<Option<Arc<crate::modules::p2p::EventSync>>>>,
 }
 
 impl EventManager {
@@ -41,7 +39,6 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
-            event_sync: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -56,7 +53,6 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
-            event_sync: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -68,11 +64,7 @@ impl EventManager {
         *handle = Some(app_handle);
     }
 
-    /// EventSyncを設定（P2P統合用）
-    pub async fn set_event_sync(&self, event_sync: Arc<crate::modules::p2p::EventSync>) {
-        let mut sync = self.event_sync.write().await;
-        *sync = Some(event_sync);
-    }
+    // EventSyncは廃止（IrohGossipService経由に移行）
 
     /// KeyManagerからの秘密鍵でマネージャーを初期化
     pub async fn initialize_with_key_manager(&self, key_manager: &KeyManager) -> Result<()> {
@@ -429,3 +421,4 @@ mod tests {
         assert!(!payload.tags.is_empty());
     }
 }
+

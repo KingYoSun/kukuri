@@ -17,11 +17,10 @@ pub struct IrohNetworkService {
 
 impl IrohNetworkService {
     pub async fn new(secret_key: iroh::SecretKey) -> Result<Self, AppError> {
-        // Endpointの作成（DNSとDHTディスカバリーを有効化）
+        // Endpointの作成（当面はn0ディスカバリーを優先採用）
         let endpoint = Endpoint::builder()
             .secret_key(secret_key)
-            .discovery_n0()      // DNSディスカバリー（プライマリ）
-            .discovery_dht()     // DHTディスカバリー（BitTorrent Mainline）
+            .discovery_n0()      // n0の公開ディスカバリーを利用
             .bind()
             .await
             .map_err(|e| AppError::P2PError(format!("Failed to bind endpoint: {:?}", e)))?;

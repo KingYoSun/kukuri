@@ -10,7 +10,9 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 
 use crate::modules::p2p::error::{P2PError, Result as P2PResult};
 use crate::modules::p2p::message::GossipMessage;
+use crate::modules::p2p::events::P2PEvent;
 
+#[deprecated(since = "0.1.0", note = "IrohGossipService へ統一します（infrastructure/p2p）")]
 pub struct GossipManager {
     endpoint: Endpoint,
     gossip: Gossip,
@@ -32,25 +34,11 @@ pub struct TopicHandle {
     mesh: Arc<crate::modules::p2p::topic_mesh::TopicMesh>,
 }
 
-#[derive(Clone, Debug)]
-pub enum P2PEvent {
-    MessageReceived {
-        topic_id: String,
-        message: GossipMessage,
-        _from_peer: Vec<u8>,
-    },
-    PeerJoined {
-        topic_id: String,
-        peer_id: Vec<u8>,
-    },
-    PeerLeft {
-        topic_id: String,
-        peer_id: Vec<u8>,
-    },
-}
+// P2PEvent は modules::p2p::events に移動
 
 impl GossipManager {
     /// 新しいGossipManagerを作成
+    #[deprecated(since = "0.1.0", note = "IrohGossipService を使用してください")]
     pub async fn new(
         iroh_secret_key: iroh::SecretKey,
         secp_secret_key: secp256k1::SecretKey,
@@ -107,6 +95,7 @@ impl GossipManager {
     }
 
     /// トピックに参加
+    #[deprecated(since = "0.1.0", note = "IrohGossipService を使用してください")]
     pub async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> P2PResult<()> {
         // すでに参加しているか確認
         {
@@ -242,6 +231,7 @@ impl GossipManager {
     }
 
     /// トピックから離脱
+    #[deprecated(since = "0.1.0", note = "IrohGossipService を使用してください")]
     pub async fn leave_topic(&self, topic_id: &str) -> P2PResult<()> {
         let mut topics = self.topics.write().await;
 
@@ -261,6 +251,7 @@ impl GossipManager {
     }
 
     /// メッセージをブロードキャスト
+    #[deprecated(since = "0.1.0", note = "IrohGossipService を使用してください")]
     pub async fn broadcast(&self, topic_id: &str, mut message: GossipMessage) -> P2PResult<()> {
         let topics = self.topics.read().await;
 

@@ -1,4 +1,5 @@
-use crate::modules::p2p::{generate_topic_id, GossipManager, GossipMessage, MessageType, P2PEvent};
+﻿use crate::modules::p2p::gossip_manager::GossipManager;
+use crate::modules::p2p::{generate_topic_id, GossipMessage, MessageType, P2PEvent};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 

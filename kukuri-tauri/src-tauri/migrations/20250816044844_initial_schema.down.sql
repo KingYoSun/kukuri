@@ -1,7 +1,8 @@
 -- ロールバック用：すべてのテーブルを削除
+DROP TABLE IF EXISTS sync_status;
 DROP TABLE IF EXISTS sync_queue;
 DROP TABLE IF EXISTS optimistic_updates;
-DROP TABLE IF EXISTS cache_entries;
+DROP TABLE IF EXISTS cache_metadata;
 DROP TABLE IF EXISTS offline_actions;
 DROP TABLE IF EXISTS bookmarks;
 DROP TABLE IF EXISTS reactions;
