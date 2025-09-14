@@ -23,6 +23,7 @@
 - [x] 既定トピック切替のTauriコマンド追加（`set_default_p2p_topic`）
 - [ ] UI受信導線の接続（`IrohGossipService::subscribe`→UI/handlers）
 - [ ] 旧`GossipManager`利用箇所の棚卸しと段階的無効化（integration_testsの移行含む）
+- [ ] P2Pイベント配信/購読ルーティングの実装（設計は作成済: `docs/03_implementation/p2p_event_routing_design.md`。実装着手はGossipManager廃止完了後）
 
 ### メモ
 - ブートストラップノード（staging/production）は未運用のため、当面はn0のDNSディスカバリーを使用。
