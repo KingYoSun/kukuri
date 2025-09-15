@@ -81,3 +81,5 @@ kukuri-tauri/src-tauri/WixTools/
 # Other project-specific
 workers/
 .claude/
+
+build.err

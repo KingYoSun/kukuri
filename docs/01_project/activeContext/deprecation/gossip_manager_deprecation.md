@@ -1,6 +1,6 @@
 # GossipManager 廃止計画（具体化）
 
-最終更新: 2025年09月14日
+最終更新: 2025年09月15日
 
 ## 背景
 - 旧経路 `modules/p2p/GossipManager + EventSync` は、独自のEndpoint生成やイベント配信経路を持つ。
@@ -24,8 +24,8 @@
 - IrohGossipServiceに subscribe API と互換P2PEvent送出を実装。
 - P2PEventを`modules/p2p/events.rs`に一元化し、`mod.rs`で再エクスポート。
 
-### Phase 3（移行中）
-- UI配信を IrohGossipService へ移行（AppState/lib.rsでイベント導線を整備）。
+### Phase 3（移行中→一部完了）
+- UI配信を IrohGossipService へ移行（AppStateで購読管理・Tauri Emit接続を実装、lib.rsの旧イベント名は`p2p://message/raw`へ退避）。
 - 旧テストの等価カバレッジを IrohGossipService 系へ移植（integrationの置換を含む）。
 
 ### Phase 4（削除）
@@ -43,14 +43,16 @@
 - [x] 旧EventSyncおよび対応テストの削除
 - [x] 非トピック系イベントの配信先を既定トピックに統一（初期値`public`）
 - [x] 既定トピック切替APIを追加（Tauri: `set_default_p2p_topic`）
-- [ ] UI配信の接続（`IrohGossipService::subscribe` → UI/handlers）
+- [x] UI配信の接続（`IrohGossipService::subscribe` → UI/handlers）
 - [x] EventManagerのP2P配信を`GossipService`へ直結（`EventSync`完全撤去）
 - [ ] integrationテスト群の移行（`GossipManager`依存の除去）
 - [ ] `gossip_manager.rs` の削除（最終）
 
-## 進捗概要（2025年09月14日）
+## 進捗概要（2025年09月15日）
 - 等価テストを IrohGossipService へ移植（join/leave/get_joined_topics/broadcast）。
 - IrohGossipService に購読APIを追加。受信を domain::Event として配布しつつ、互換の P2PEvent も送出。
+- AppStateにUI購読管理（`ensure_ui_subscription`/`stop_ui_subscription`）を実装。起動時`public`購読を確立し、`join_p2p_topic`/`join_topic_by_name`で自動購読、`leave_p2p_topic`で停止。
+- UI向けイベントの形状を`useP2PEventListener`の期待に合わせて`p2p://message`にEmit。旧`GossipMessage`経路は`p2p://message/raw`へ移して競合を回避。
 - P2PEvent を modules/p2p/events.rs に集約。重複定義を解消。
 - 露出整理：modules/p2p/mod.rs から GossipManager の再エクスポートを削除。
 - `state.initialize_p2p` は no-op 化（旧経路の実行抑止）。
@@ -62,6 +64,7 @@
 - 非トピック系の送信イベント（テキストノート/メタデータ/リアクション等）は既定トピックで流通（初期値`public`、アプリ起動時に作成・参加を保証）。
 
 ## テスト
+- ローカルRustテスト：147 passed / 0 failed / 6 ignored。
 - Docker実行（前回）：166 passed / 0 failed / 6 ignored。
 
 ## リスクと対策
@@ -72,3 +75,4 @@
 
 ## ロールバック
 - `initialize_p2p` を戻すだけで旧経路を再起動可能（当面はコード残置）
+  - 注意: UIイベント名は`p2p://message`を新UIが使用中。旧`GossipMessage`経路は`p2p://message/raw`へ変更済みのため、戻す際はUI側のリスナを合わせて切替が必要。

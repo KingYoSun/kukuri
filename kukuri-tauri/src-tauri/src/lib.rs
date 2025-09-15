@@ -177,11 +177,9 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
         if let Some(mut rx) = rx {
             while let Some(event) = rx.recv().await {
                 match event {
-                    modules::p2p::P2PEvent::MessageReceived {
-                        topic_id,
-                        message,
-                        _from_peer: _,
-                    } => {
+                    modules::p2p::P2PEvent::MessageReceived { topic_id, message, _from_peer: _ } => {
+                        // 旧GossipMessage経路はUIの期待ペイロードと形状が異なるため、
+                        // 衝突回避のためイベント名を変更（デバッグ用途）
                         let event_data = P2PMessageEvent {
                             topic_id,
                             message_type: format!("{:?}", message.msg_type),
@@ -190,8 +188,8 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
                             timestamp: message.timestamp,
                         };
 
-                        if let Err(e) = app_handle.emit("p2p://message", event_data) {
-                            tracing::error!("Failed to emit P2P message event: {}", e);
+                        if let Err(e) = app_handle.emit("p2p://message/raw", event_data) {
+                            tracing::error!("Failed to emit P2P raw message event: {}", e);
                         }
                     }
                     modules::p2p::P2PEvent::PeerJoined { topic_id, peer_id } => {

@@ -36,7 +36,7 @@ use crate::infrastructure::{
 };
 
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
@@ -47,11 +47,16 @@ pub struct P2PState {
 
     /// Message event channel
     pub event_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<P2PEvent>>>>,
+    /// GossipService 本体（UI購読導線で使用）
+    pub gossip_service: Arc<dyn GossipService>,
+    /// UI購読済みトピック集合（重複購読防止）
+    pub ui_subscribed_topics: Arc<RwLock<std::collections::HashSet<String>>>,
 }
 
 /// アプリケーション全体の状態を管理する構造体
 #[derive(Clone)]
 pub struct AppState {
+    pub app_handle: tauri::AppHandle,
     // 既存のマネージャー（後で移行予定）
     pub key_manager: Arc<OldKeyManager>,
     #[allow(dead_code)]
@@ -237,9 +242,15 @@ impl AppState {
         let p2p_state = Arc::new(RwLock::new(P2PState {
             manager: None,
             event_rx: Arc::new(RwLock::new(Some(p2p_event_rx))),
+            gossip_service: Arc::clone(&gossip_service),
+            ui_subscribed_topics: Arc::new(RwLock::new(Default::default())),
         }));
 
-        Ok(Self {
+        // 既定トピック`public`に対するUI購読を張る（冪等）
+        // TopicService.ensure_public_topic でjoinは保証済
+        let this_handle = app_handle.clone();
+        let this = Self {
+            app_handle: this_handle,
             key_manager,
             db_pool,
             encryption_manager,
@@ -260,7 +271,19 @@ impl AppState {
             event_handler,
             p2p_handler,
             offline_handler,
-        })
+        };
+
+        // 起動時にpublic購読を非同期で確立
+        {
+            let this_clone = this.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = this_clone.ensure_ui_subscription("public").await {
+                    tracing::warn!("Failed to subscribe UI to public: {}", e);
+                }
+            });
+        }
+
+        Ok(this)
     }
 
     /// P2P機能を初期化
@@ -271,4 +294,104 @@ impl AppState {
     }
 
     // Event loop for P2P messages is now handled via UI emitter in lib.rs using event_rx
+
+    /// UI向けに指定トピックの購読を確立（冪等）
+    pub async fn ensure_ui_subscription(&self, topic_id: &str) -> anyhow::Result<()> {
+        // 重複購読チェック
+        {
+            let p2p_state = self.p2p_state.read().await;
+            let subs = p2p_state.ui_subscribed_topics.read().await;
+            if subs.contains(topic_id) {
+                return Ok(());
+            }
+        }
+
+        // 購読開始（joinはTopicService側で行われるが、冪等joinは吸収される）
+        let (gossip, event_manager, p2p_state_arc, app_handle, topic) = {
+            let p2p_state = self.p2p_state.read().await;
+            (
+                Arc::clone(&p2p_state.gossip_service),
+                Arc::clone(&self.event_manager),
+                Arc::clone(&self.p2p_state),
+                self.app_handle.clone(),
+                topic_id.to_string(),
+            )
+        };
+
+        // 先にフラグを立てる（競合回避）
+        {
+            let ui_arc = {
+                let p2p = p2p_state_arc.read().await;
+                Arc::clone(&p2p.ui_subscribed_topics)
+            };
+            let mut subs = ui_arc.write().await;
+            subs.insert(topic.clone());
+        }
+
+        tauri::async_runtime::spawn(async move {
+            match gossip.subscribe(&topic).await {
+                Ok(mut rx) => {
+                    tracing::info!("UI subscribed to topic {}", topic);
+                    while let Some(evt) = rx.recv().await {
+                        // 受信: domain::entities::Event
+                        // UIへemit（p2p://message）
+                        #[derive(serde::Serialize, Clone)]
+                        struct UiMsg { id: String, author: String, content: String, timestamp: i64, signature: String }
+                        #[derive(serde::Serialize, Clone)]
+                        struct UiP2PMessageEvent { topic_id: String, message: UiMsg }
+
+                        let payload = UiP2PMessageEvent {
+                            topic_id: topic.clone(),
+                            message: UiMsg {
+                                id: evt.id.clone(),
+                                author: evt.pubkey.clone(),
+                                content: evt.content.clone(),
+                                timestamp: evt.created_at.timestamp_millis(),
+                                signature: evt.sig.clone(),
+                            },
+                        };
+                        if let Err(e) = app_handle.emit("p2p://message", payload) {
+                            tracing::error!("Failed to emit UI P2P message: {}", e);
+                        }
+
+                        // 既存Nostr系導線へも流す（必要に応じて）
+                        // domain::Event -> NostrEventPayload 相当はEventManager内にあるが、
+                        // ここではDB保存・加工は後段で検討するためスキップ
+                        let _ = event_manager; // 未来の拡張用プレースホルダ
+                    }
+                    // チャネルクローズ時、購読フラグを解除
+                    let ui_arc = {
+                        let p2p = p2p_state_arc.read().await;
+                        Arc::clone(&p2p.ui_subscribed_topics)
+                    };
+                    let mut subs = ui_arc.write().await;
+                    subs.remove(&topic);
+                    tracing::info!("UI subscription ended for topic {}", topic);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to subscribe to topic {}: {}", topic, e);
+                    let ui_arc = {
+                        let p2p = p2p_state_arc.read().await;
+                        Arc::clone(&p2p.ui_subscribed_topics)
+                    };
+                    let mut subs = ui_arc.write().await;
+                    subs.remove(&topic);
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// UI向け購読を停止（存在しなければ何もしない）
+    pub async fn stop_ui_subscription(&self, topic_id: &str) -> anyhow::Result<()> {
+        // フラグのみ除去（購読タスクはチャネルクローズにより自然終了）
+        let ui_subs_arc = {
+            let p2p_state = self.p2p_state.read().await;
+            Arc::clone(&p2p_state.ui_subscribed_topics)
+        };
+        let mut subs = ui_subs_arc.write().await;
+        subs.remove(topic_id);
+        Ok(())
+    }
 }

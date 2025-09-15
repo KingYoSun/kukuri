@@ -24,7 +24,7 @@ pub async fn join_p2p_topic(
     #[allow(non_snake_case)] initialPeers: Vec<String>,
 ) -> Result<String, String> {
     let request = JoinTopicRequest {
-        topic_id: topicId,
+        topic_id: topicId.clone(),
         initial_peers: initialPeers,
     };
     
@@ -32,8 +32,14 @@ pub async fn join_p2p_topic(
         .p2p_handler
         .join_topic(request)
         .await
-        .map(|response| serde_json::to_string(&response).unwrap())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // UI購読導線を確立（冪等）
+    if let Err(e) = state.ensure_ui_subscription(&topicId).await {
+        tracing::warn!("Failed to ensure UI subscription for {}: {}", &topicId, e);
+    }
+
+    Ok(serde_json::to_string(&serde_json::json!({ "success": true })).unwrap())
 }
 
 /// P2Pトピックから離脱
@@ -43,15 +49,21 @@ pub async fn leave_p2p_topic(
     #[allow(non_snake_case)] topicId: String,
 ) -> Result<String, String> {
     let request = LeaveTopicRequest {
-        topic_id: topicId,
+        topic_id: topicId.clone(),
     };
     
     state
         .p2p_handler
         .leave_topic(request)
         .await
-        .map(|response| serde_json::to_string(&response).unwrap())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // UI購読導線を停止（冪等）
+    if let Err(e) = state.stop_ui_subscription(&topicId).await {
+        tracing::warn!("Failed to stop UI subscription for {}: {}", &topicId, e);
+    }
+
+    Ok(serde_json::to_string(&serde_json::json!({ "success": true })).unwrap())
 }
 
 /// トピックにメッセージをブロードキャスト
@@ -101,10 +113,17 @@ pub async fn join_topic_by_name(
     #[allow(non_snake_case)] topicName: String,
     #[allow(non_snake_case)] initialPeers: Vec<String>,
 ) -> Result<String, String> {
-    state
+    let res = state
         .p2p_handler
         .join_topic_by_name(topicName, initialPeers)
         .await
-        .map(|response| serde_json::to_string(&response).unwrap())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // レスポンスからtopic_idを取り出してUI購読を確立
+    if let Some(topic_id) = res.get("topic_id").and_then(|t| t.as_str()) {
+        if let Err(e) = state.ensure_ui_subscription(topic_id).await {
+            tracing::warn!("Failed to ensure UI subscription for {}: {}", topic_id, e);
+        }
+    }
+    Ok(serde_json::to_string(&res).unwrap())
 }
