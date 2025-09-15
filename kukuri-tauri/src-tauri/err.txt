@@ -1,0 +1,605 @@
+   Compiling kukuri-tauri v0.1.0 (/mnt/c/Users/kgm11/kukuri/kukuri-tauri/src-tauri)
+warning: unused import: `info`
+  --> src/infrastructure/p2p/dht_integration.rs:10:29
+   |
+10 | use tracing::{debug, error, info};
+   |                             ^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `Deserialize` and `Serialize`
+ --> src/infrastructure/cache/memory_cache.rs:5:13
+  |
+5 | use serde::{Serialize, Deserialize};
+  |             ^^^^^^^^^  ^^^^^^^^^^^
+
+warning: unused import: `memory_cache::MemoryCacheService`
+ --> src/infrastructure/cache/mod.rs:4:9
+  |
+4 | pub use memory_cache::MemoryCacheService;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `UserMetadata`
+ --> src/domain/repositories/mod.rs:2:57
+  |
+2 | use crate::domain::entities::{Post, Topic, User, Event, UserMetadata};
+  |                                                         ^^^^^^^^^^^^
+
+warning: unused imports: `Event`, `Post`, `Topic`, and `User`
+ --> src/domain/mod.rs:5:20
+  |
+5 | pub use entities::{Event, Post, Topic, User};
+  |                    ^^^^^  ^^^^  ^^^^^  ^^^^
+
+warning: unused imports: `EventId`, `Npub`, and `TopicId`
+ --> src/domain/mod.rs:6:25
+  |
+6 | pub use value_objects::{EventId, Npub, TopicId};
+  |                         ^^^^^^^  ^^^^  ^^^^^^^
+
+warning: unused import: `CreateAccountResponse`
+ --> src/presentation/commands/auth_commands.rs:4:24
+  |
+4 |             auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
+  |                        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `user_commands::*`
+  --> src/presentation/commands/mod.rs:15:9
+   |
+15 | pub use user_commands::*;
+   |         ^^^^^^^^^^^^^^^^
+
+warning: unused import: `sync_commands::*`
+  --> src/presentation/commands/mod.rs:16:9
+   |
+16 | pub use sync_commands::*;
+   |         ^^^^^^^^^^^^^^^^
+
+warning: unused import: `ApiResponse`
+ --> src/presentation/handlers/user_handler.rs:5:9
+  |
+5 |         ApiResponse,
+  |         ^^^^^^^^^^^
+
+warning: unused import: `user_handler::UserHandler`
+  --> src/presentation/handlers/mod.rs:13:9
+   |
+13 | pub use user_handler::UserHandler;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `secure_storage_handler::SecureStorageHandler`
+  --> src/presentation/handlers/mod.rs:14:9
+   |
+14 | pub use secure_storage_handler::SecureStorageHandler;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `event_handler::EventHandler`
+  --> src/presentation/handlers/mod.rs:15:9
+   |
+15 | pub use event_handler::EventHandler;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `p2p_handler::P2PHandler`
+  --> src/presentation/handlers/mod.rs:16:9
+   |
+16 | pub use p2p_handler::P2PHandler;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `offline_handler::OfflineHandler`
+  --> src/presentation/handlers/mod.rs:17:9
+   |
+17 | pub use offline_handler::OfflineHandler;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `auth_commands`, `post_commands`, `sync_commands`, `topic_commands`, and `user_commands`
+  --> src/presentation/mod.rs:6:5
+   |
+6  |     auth_commands,
+   |     ^^^^^^^^^^^^^
+7  |     post_commands,
+   |     ^^^^^^^^^^^^^
+8  |     topic_commands,
+   |     ^^^^^^^^^^^^^^
+9  |     user_commands,
+   |     ^^^^^^^^^^^^^
+10 |     sync_commands,
+   |     ^^^^^^^^^^^^^
+
+warning: unused imports: `AppError` and `Result`
+ --> src/shared/mod.rs:4:17
+  |
+4 | pub use error::{AppError, Result};
+  |                 ^^^^^^^^  ^^^^^^
+
+warning: unused import: `config::AppConfig`
+ --> src/shared/mod.rs:5:9
+  |
+5 | pub use config::AppConfig;
+  |         ^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `modules::p2p::gossip_manager::GossipManager`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:39:6
+   |
+39 | impl GossipManager {
+   |      ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated struct `modules::p2p::gossip_manager::GossipManager`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/state.rs:46:66
+   |
+46 |     pub manager: Option<Arc<crate::modules::p2p::gossip_manager::GossipManager>>,
+   |                                                                  ^^^^^^^^^^^^^
+
+warning: use of deprecated struct `modules::p2p::gossip_manager::GossipManager`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:357:23
+    |
+357 |         let manager = GossipManager::new(iroh_secret_key, secp_secret_key, event_tx).await;
+    |                       ^^^^^^^^^^^^^
+
+warning: use of deprecated struct `modules::p2p::gossip_manager::GossipManager`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:366:23
+    |
+366 |         let manager = GossipManager::new(iroh_secret_key, secp_secret_key, event_tx)
+    |                       ^^^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::endpoint`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:64:13
+   |
+64 |             endpoint,
+   |             ^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::gossip`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:65:13
+   |
+65 |             gossip,
+   |             ^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::router`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:66:13
+   |
+66 |             router,
+   |             ^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:67:13
+   |
+67 |             topics: Arc::new(RwLock::new(HashMap::new())),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::secret_key`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:68:13
+   |
+68 |             secret_key: secp_secret_key,
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::event_tx`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:69:13
+   |
+69 |             event_tx,
+   |             ^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::endpoint`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:82:29
+   |
+82 |         let mut node_addr = self.endpoint.node_addr();
+   |                             ^^^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:102:26
+    |
+102 |             let topics = self.topics.read().await;
+    |                          ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::gossip`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:136:41
+    |
+136 |           let gossip_topic: GossipTopic = self
+    |  _________________________________________^
+137 | |             .gossip
+    | |___________________^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::event_tx`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:151:24
+    |
+151 |         let event_tx = self.event_tx.clone();
+    |                        ^^^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:227:9
+    |
+227 |         self.topics.write().await.insert(topic_id.to_string(), handle);
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:236:26
+    |
+236 |         let mut topics = self.topics.write().await;
+    |                          ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:256:22
+    |
+256 |         let topics = self.topics.read().await;
+    |                      ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::secret_key`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:260:27
+    |
+260 |             message.sign(&self.secret_key).map_err(|e| {
+    |                           ^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> src/modules/p2p/gossip_manager.rs:271:17
+    |
+271 |             let mut sender_guard = sender.lock().await;
+    |                 ----^^^^^^^^^^^^
+    |                 |
+    |                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:286:22
+    |
+286 |         let topics = self.topics.read().await;
+    |                      ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:296:22
+    |
+296 |         let topics = self.topics.read().await;
+    |                      ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:309:22
+    |
+309 |         let topics = self.topics.read().await;
+    |                      ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::topics`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:331:26
+    |
+331 |             let topics = self.topics.read().await;
+    |                          ^^^^^^^^^^^
+
+warning: use of deprecated method `modules::p2p::gossip_manager::GossipManager::leave_topic`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:336:26
+    |
+336 |             let _ = self.leave_topic(&topic_id).await;
+    |                          ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::router`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:340:17
+    |
+340 |         let _ = self.router.shutdown().await;
+    |                 ^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::endpoint`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:341:17
+    |
+341 |         let _ = self.endpoint.close().await;
+    |                 ^^^^^^^^^^^^^
+
+warning: unused variable: `reaction_event`
+   --> src/application/services/post_service.rs:111:21
+    |
+111 |                 let reaction_event = EventBuilder::text_note("+")
+    |                     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_reaction_event`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `repost_event`
+   --> src/application/services/post_service.rs:141:21
+    |
+141 |                 let repost_event = EventBuilder::text_note("")
+    |                     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_repost_event`
+
+warning: unused variable: `deletion_event`
+   --> src/application/services/post_service.rs:164:17
+    |
+164 |             let deletion_event = EventBuilder::text_note("Post deleted")
+    |                 ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_deletion_event`
+
+warning: unused variable: `post_id`
+   --> src/application/services/post_service.rs:201:39
+    |
+201 |     pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+    |                                       ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_post_id`
+
+warning: unused variable: `user_pubkey`
+   --> src/application/services/post_service.rs:201:54
+    |
+201 |     pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+    |                                                      ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_pubkey`
+
+warning: unused variable: `post_id`
+   --> src/application/services/post_service.rs:206:41
+    |
+206 |     pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+    |                                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_post_id`
+
+warning: unused variable: `user_pubkey`
+   --> src/application/services/post_service.rs:206:56
+    |
+206 |     pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+    |                                                        ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_pubkey`
+
+warning: unused variable: `user_pubkey`
+   --> src/application/services/post_service.rs:211:49
+    |
+211 |     pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, AppError> {
+    |                                                 ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_pubkey`
+
+warning: unused variable: `follower_npub`
+  --> src/application/services/user_service.rs:41:37
+   |
+41 |     pub async fn follow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), AppError> {
+   |                                     ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_follower_npub`
+
+warning: unused variable: `target_npub`
+  --> src/application/services/user_service.rs:41:58
+   |
+41 |     pub async fn follow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), AppError> {
+   |                                                          ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_target_npub`
+
+warning: unused variable: `follower_npub`
+  --> src/application/services/user_service.rs:46:39
+   |
+46 |     pub async fn unfollow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), AppError> {
+   |                                       ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_follower_npub`
+
+warning: unused variable: `target_npub`
+  --> src/application/services/user_service.rs:46:60
+   |
+46 |     pub async fn unfollow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), AppError> {
+   |                                                            ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_target_npub`
+
+error[E0599]: no method named `initialized` found for opaque type `impl Watcher<Value = std::option::Option<NodeAddr>>` in the current scope
+   --> src/infrastructure/p2p/iroh_network_service.rs:70:51
+    |
+70  |         let node_addr = self.endpoint.node_addr().initialized().await;
+    |                                                   ^^^^^^^^^^^ method not found in `impl Watcher<Value = Option<NodeAddr>>`
+    |
+   ::: /home/kingyosun/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/n0-watcher-0.3.0/src/lib.rs:279:8
+    |
+279 |     fn initialized<T, W>(&mut self) -> InitializedFut<'_, T, W, Self>
+    |        ----------- the method is available for `impl Watcher<Value = std::option::Option<NodeAddr>>` here
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: trait `Watcher` which provides `initialized` is implemented but not in scope; perhaps you want to import it
+    |
+1   + use iroh::Watcher;
+    |
+
+warning: unused variable: `key`
+   --> src/infrastructure/cache/memory_cache.rs:142:13
+    |
+142 |         let key = format!("topic_posts:{}", topic_id);
+    |             ^^^ help: if this is intentional, prefix it with an underscore: `_key`
+
+warning: unused variable: `user_pubkey`
+  --> src/presentation/commands/post_commands.rs:24:9
+   |
+24 |     let user_pubkey = state
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_pubkey`
+
+warning: unused variable: `request`
+  --> src/presentation/commands/topic_commands.rs:88:5
+   |
+88 |     request: UpdateTopicRequest,
+   |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> src/presentation/commands/topic_commands.rs:107:5
+    |
+107 |     request: DeleteTopicRequest,
+    |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: use of deprecated associated function `chrono::NaiveDateTime::from_timestamp_opt`: use `DateTime::from_timestamp` instead
+   --> src/modules/event/manager.rs:328:44
+    |
+328 |         let naive = chrono::NaiveDateTime::from_timestamp_opt(secs, 0)
+    |                                            ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `chrono::DateTime::<Tz>::from_utc`: Use TimeZone::from_utc_datetime() or DateTime::from_naive_utc_and_offset instead
+   --> src/modules/event/manager.rs:330:59
+    |
+330 |         let created_at = chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc);
+    |                                                           ^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::endpoint`: IrohGossipService へ統一します（infrastructure/p2p）
+  --> src/modules/p2p/gossip_manager.rs:77:9
+   |
+77 |         self.endpoint.node_id().to_string()
+   |         ^^^^^^^^^^^^^
+
+warning: use of deprecated field `modules::p2p::gossip_manager::GossipManager::secret_key`: IrohGossipService へ統一します（infrastructure/p2p）
+   --> src/modules/p2p/gossip_manager.rs:322:20
+    |
+322 |             .sign(&self.secret_key)
+    |                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `modules::p2p::gossip_manager::GossipManager::new`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:357:38
+    |
+357 |         let manager = GossipManager::new(iroh_secret_key, secp_secret_key, event_tx).await;
+    |                                      ^^^
+
+warning: use of deprecated associated function `modules::p2p::gossip_manager::GossipManager::new`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:366:38
+    |
+366 |         let manager = GossipManager::new(iroh_secret_key, secp_secret_key, event_tx)
+    |                                      ^^^
+
+warning: use of deprecated method `modules::p2p::gossip_manager::GossipManager::join_topic`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:373:30
+    |
+373 |         let result = manager.join_topic(topic_id, vec![]).await;
+    |                              ^^^^^^^^^^
+
+warning: use of deprecated method `modules::p2p::gossip_manager::GossipManager::join_topic`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:377:30
+    |
+377 |         let result = manager.join_topic(topic_id, vec![]).await;
+    |                              ^^^^^^^^^^
+
+warning: use of deprecated method `modules::p2p::gossip_manager::GossipManager::leave_topic`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:381:30
+    |
+381 |         let result = manager.leave_topic(topic_id).await;
+    |                              ^^^^^^^^^^^
+
+warning: use of deprecated method `modules::p2p::gossip_manager::GossipManager::leave_topic`: IrohGossipService を使用してください
+   --> src/modules/p2p/gossip_manager.rs:385:30
+    |
+385 |         let result = manager.leave_topic(topic_id).await;
+    |                              ^^^^^^^^^^^
+
+error[E0599]: no method named `initialized` found for opaque type `impl Watcher<Value = std::option::Option<NodeAddr>>` in the current scope
+   --> src/modules/p2p/tests/iroh_integration_tests.rs:25:44
+    |
+25  |         let node_addr_b = ep_b.node_addr().initialized().await;
+    |                                            ^^^^^^^^^^^ method not found in `impl Watcher<Value = Option<NodeAddr>>`
+    |
+   ::: /home/kingyosun/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/n0-watcher-0.3.0/src/lib.rs:279:8
+    |
+279 |     fn initialized<T, W>(&mut self) -> InitializedFut<'_, T, W, Self>
+    |        ----------- the method is available for `impl Watcher<Value = std::option::Option<NodeAddr>>` here
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: trait `Watcher` which provides `initialized` is implemented but not in scope; perhaps you want to import it
+    |
+3   +     use iroh::Watcher;
+    |
+
+warning: unused variable: `entity_type`
+   --> src/application/services/offline_service.rs:126:9
+    |
+126 |         entity_type: String,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entity_type`
+
+warning: unused variable: `entity_id`
+   --> src/application/services/offline_service.rs:127:9
+    |
+127 |         entity_id: String,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entity_id`
+
+warning: unused variable: `action_type`
+   --> src/application/services/offline_service.rs:128:9
+    |
+128 |         action_type: String,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_action_type`
+
+warning: unused variable: `payload`
+   --> src/application/services/offline_service.rs:129:9
+    |
+129 |         payload: String,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_payload`
+
+warning: variable does not need to be mutable
+   --> src/application/services/offline_service.rs:150:13
+    |
+150 |         let mut actions = Vec::new();
+    |             ----^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `entity_type`
+   --> src/application/services/offline_service.rs:189:9
+    |
+189 |         entity_type: String,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entity_type`
+
+warning: unused variable: `entity_id`
+   --> src/application/services/offline_service.rs:190:9
+    |
+190 |         entity_id: String,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entity_id`
+
+warning: unused variable: `operation`
+   --> src/application/services/offline_service.rs:191:9
+    |
+191 |         operation: String,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_operation`
+
+warning: unused variable: `data`
+   --> src/application/services/offline_service.rs:192:9
+    |
+192 |         data: String,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_data`
+
+warning: unused variable: `entity_type`
+   --> src/application/services/offline_service.rs:214:9
+    |
+214 |         entity_type: String,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entity_type`
+
+warning: unused variable: `entity_id`
+   --> src/application/services/offline_service.rs:215:9
+    |
+215 |         entity_id: String,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entity_id`
+
+warning: unused variable: `original_data`
+   --> src/application/services/offline_service.rs:216:9
+    |
+216 |         original_data: Option<String>,
+    |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_original_data`
+
+warning: unused variable: `updated_data`
+   --> src/application/services/offline_service.rs:217:9
+    |
+217 |         updated_data: String,
+    |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_updated_data`
+
+warning: variable does not need to be mutable
+   --> src/infrastructure/p2p/iroh_gossip_service.rs:190:17
+    |
+190 |             let mut guard = sender.lock().await;
+    |                 ----^^^^^
+    |                 |
+    |                 help: remove this `mut`
+
+warning: unused variable: `handle`
+   --> src/infrastructure/p2p/iroh_gossip_service.rs:230:21
+    |
+230 |         if let Some(handle) = topics.get(topic) {
+    |                     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_handle`
+
+warning: unused variable: `peer_id`
+   --> src/infrastructure/p2p/iroh_gossip_service.rs:238:23
+    |
+238 |                 .map(|peer_id: ()| String::new())
+    |                       ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_peer_id`
+
+warning: unused variable: `public_key`
+  --> src/infrastructure/crypto/default_signature_service.rs:56:13
+   |
+56 |         let public_key = PublicKey::from_hex(&event.pubkey)?;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_public_key`
+
+warning: unused variable: `message`
+  --> src/infrastructure/crypto/default_signature_service.rs:77:36
+   |
+77 |     async fn verify_message(&self, message: &str, signature: &str, public_key: &str) -> Result<bool, Box<dyn std::error::Error + Send + S...
+   |                                    ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_message`
+
+warning: unused variable: `signature`
+  --> src/infrastructure/crypto/default_signature_service.rs:77:51
+   |
+77 |     async fn verify_message(&self, message: &str, signature: &str, public_key: &str) -> Result<bool, Box<dyn std::error::Error + Send + S...
+   |                                                   ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_signature`
+
+warning: unused variable: `public_key`
+  --> src/infrastructure/crypto/default_signature_service.rs:77:68
+   |
+77 | ...: &str, signature: &str, public_key: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+   |                             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_public_key`
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `kukuri-tauri` (lib) generated 82 warnings (4 duplicates)
+error: could not compile `kukuri-tauri` (lib) due to 1 previous error; 82 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `kukuri-tauri` (lib test) generated 90 warnings (78 duplicates)
+error: could not compile `kukuri-tauri` (lib test) due to 2 previous errors; 90 warnings emitted

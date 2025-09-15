@@ -1,7 +1,7 @@
 use super::{NetworkService, NetworkStats, Peer, dht_bootstrap::{DhtGossip, secret}};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{protocol::Router, Endpoint};
+use iroh::{protocol::Router, Endpoint, Watcher as _};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing;
@@ -66,13 +66,17 @@ impl IrohNetworkService {
     }
 
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
-        // Get the direct addresses synchronously
-        let addrs = self.endpoint.direct_addresses();
-
-        // Extract addresses from the Direct wrapper
-        let addrs: Vec<String> = vec![];
-
-        Ok(addrs)
+        // 直接アドレスを解決し、`node_id@ip:port` 形式で返却
+        let node_id = self.endpoint.node_id().to_string();
+        let addrs = self.endpoint.direct_addresses().initialized().await;
+        let mut out = Vec::new();
+        for a in addrs {
+            out.push(format!("{}@{}", node_id, a.addr));
+        }
+        if out.is_empty() {
+            out.push(node_id);
+        }
+        Ok(out)
     }
 
     /// DHTを使用してトピックに参加
