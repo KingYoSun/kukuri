@@ -35,9 +35,17 @@ jobs:
         run: |
           docker-compose -f docker-compose.test.yml build test-runner
 
+      - name: Build rust-test image (multi-node P2P)
+        run: |
+          docker-compose -f docker-compose.test.yml build rust-test
+
       - name: Run all tests
         run: |
           docker-compose -f docker-compose.test.yml run --rm test-runner
+
+      - name: Run Rust tests in Docker (multi-node P2P)
+        run: |
+          docker-compose -f docker-compose.test.yml run --rm rust-test
 
       - name: Upload test results
         if: always()
