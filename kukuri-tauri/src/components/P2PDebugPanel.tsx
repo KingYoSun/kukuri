@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { p2pApi } from '@/lib/api/p2p';
 import { useP2P } from '@/hooks/useP2P';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ export function P2PDebugPanel() {
   const [messageContent, setMessageContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [metrics, setMetrics] = useState<{ joins: number; leaves: number; broadcasts_sent: number; messages_received: number } | null>(null);
 
   // ログを追加
   const addLog = useCallback((message: string) => {
@@ -94,6 +96,36 @@ export function P2PDebugPanel() {
     }
   }, [selectedTopic, messageContent, broadcast, addLog]);
 
+  const handleRefreshMetrics = useCallback(async () => {
+    try {
+      const m = await p2pApi.getMetrics();
+      setMetrics(m);
+      addLog(`Metrics updated: J=${m.joins} L=${m.leaves} S=${m.broadcasts_sent} R=${m.messages_received}`);
+    } catch (e) {
+      addLog(`Failed to fetch metrics: ${e}`);
+    }
+  }, [addLog]);
+
+  // 開発時は定期的にメトリクスを自動更新
+  useEffect(() => {
+    if (import.meta.env.PROD) return;
+    let disposed = false;
+    (async () => {
+      try {
+        await handleRefreshMetrics();
+      } catch {}
+    })();
+    const t = setInterval(() => {
+      if (!disposed) {
+        handleRefreshMetrics();
+      }
+    }, 10000);
+    return () => {
+      disposed = true;
+      clearInterval(t);
+    };
+  }, [handleRefreshMetrics]);
+
   // 開発環境チェック
   if (import.meta.env.PROD) {
     return null;
@@ -156,6 +188,19 @@ export function P2PDebugPanel() {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">参加トピック数</span>
                 <Badge variant="outline">{activeTopics.length}</Badge>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Gossipメトリクス</span>
+                  <Button variant="secondary" size="sm" onClick={handleRefreshMetrics}>メトリクス更新</Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center justify-between text-sm"><span>Joins</span><Badge variant="outline">{metrics?.joins ?? 0}</Badge></div>
+                  <div className="flex items-center justify-between text-sm"><span>Leaves</span><Badge variant="outline">{metrics?.leaves ?? 0}</Badge></div>
+                  <div className="flex items-center justify-between text-sm"><span>Broadcasts</span><Badge variant="outline">{metrics?.broadcasts_sent ?? 0}</Badge></div>
+                  <div className="flex items-center justify-between text-sm"><span>Received</span><Badge variant="outline">{metrics?.messages_received ?? 0}</Badge></div>
+                </div>
               </div>
 
               {error && (

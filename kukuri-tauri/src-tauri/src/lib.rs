@@ -85,6 +85,7 @@ pub fn run() {
             presentation::commands::get_p2p_status,
             presentation::commands::get_node_address,
             presentation::commands::join_topic_by_name,
+            presentation::commands::get_p2p_metrics,
             // オフライン関連コマンド
             presentation::commands::save_offline_action,
             presentation::commands::get_offline_actions,

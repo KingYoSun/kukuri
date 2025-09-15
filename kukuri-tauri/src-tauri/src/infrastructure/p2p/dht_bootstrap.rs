@@ -60,7 +60,10 @@ impl DhtGossip {
         let mut senders = self.senders.write().await;
         senders.insert(topic_key, sender);
 
-        info!("Joined DHT topic: {:?}", Self::fmt_topic_id(&topic_id));
+        super::metrics::inc_join();
+        let snap = super::metrics::snapshot();
+        info!("Joined DHT topic: {:?} [joins={}, leaves={}, sent={}, recv={}]",
+            Self::fmt_topic_id(&topic_id), snap.joins, snap.leaves, snap.broadcasts_sent, snap.messages_received);
         Ok(())
     }
 
@@ -70,7 +73,10 @@ impl DhtGossip {
         let topic_key = Self::topic_key(&topic_id);
         let mut senders = self.senders.write().await;
         if senders.remove(&topic_key).is_some() {
-            info!("Left DHT topic: {:?}", Self::fmt_topic_id(&topic_id));
+            super::metrics::inc_leave();
+            let snap = super::metrics::snapshot();
+            info!("Left DHT topic: {:?} [joins={}, leaves={}, sent={}, recv={}]",
+                Self::fmt_topic_id(&topic_id), snap.joins, snap.leaves, snap.broadcasts_sent, snap.messages_received);
             Ok(())
         } else {
             debug!("Leave requested for non-joined topic: {:?}", Self::fmt_topic_id(&topic_id));
@@ -108,13 +114,21 @@ impl DhtGossip {
 
         // ブロードキャスト
         let mut guard = sender.lock().await;
-        guard
+        super::metrics::inc_broadcast();
+        let res = guard
             .broadcast(message.into())
             .await
-            .map_err(|e| AppError::P2PError(format!("Failed to broadcast: {:?}", e)))?;
+            .map_err(|e| AppError::P2PError(format!("Failed to broadcast: {:?}", e)));
 
-        debug!("Broadcasted message on topic {:?}", Self::fmt_topic_id(&topic_id));
-        Ok(())
+        match res {
+            Ok(()) => {
+                let snap = super::metrics::snapshot();
+                debug!("Broadcasted message on topic {:?} [joins={}, leaves={}, sent={}, recv={}]",
+                    Self::fmt_topic_id(&topic_id), snap.joins, snap.leaves, snap.broadcasts_sent, snap.messages_received);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Gossipインスタンスを取得

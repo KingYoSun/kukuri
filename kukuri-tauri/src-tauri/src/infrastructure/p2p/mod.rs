@@ -6,6 +6,7 @@ pub mod iroh_gossip_service;
 pub mod dht_bootstrap;
 pub mod dht_integration;
 pub mod bootstrap_config;
+pub mod metrics;
 
 use serde::{Deserialize, Serialize};
 

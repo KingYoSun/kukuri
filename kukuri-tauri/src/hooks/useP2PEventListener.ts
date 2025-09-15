@@ -91,6 +91,15 @@ export function useP2PEventListener() {
     unlisteners.push(
       listen<P2PMessageEvent>('p2p://message', (event) => {
         const { topic_id, message } = event.payload;
+        // 最小NIP-01形状の検証（不正は破棄）
+        const v = validateNip01LiteMessage(message);
+        if (!v.ok) {
+          errorHandler.log('Drop invalid P2P message (NIP-01 lite)', v.reason, {
+            context: 'useP2PEventListener.p2p://message',
+            showToast: false,
+          });
+          return;
+        }
 
         const p2pMessage: P2PMessage = {
           ...message,
@@ -165,6 +174,7 @@ export function useP2PEventListener() {
       }),
     );
 
+import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
     // クリーンアップ
     return () => {
       unlisteners.forEach(async (unlisten) => {

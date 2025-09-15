@@ -1,5 +1,6 @@
 use super::{NetworkService, NetworkStats, Peer, dht_bootstrap::{DhtGossip, secret}};
 use crate::shared::error::AppError;
+use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use async_trait::async_trait;
 use iroh::{protocol::Router, Endpoint, Watcher as _};
 use std::sync::Arc;
@@ -16,12 +17,17 @@ pub struct IrohNetworkService {
 }
 
 impl IrohNetworkService {
-    pub async fn new(secret_key: iroh::SecretKey) -> Result<Self, AppError> {
-        // Endpointの作成（n0 + DHT ディスカバリーを併用）
-        let endpoint = Endpoint::builder()
-            .secret_key(secret_key)
-            .discovery_n0()      // n0の公開ディスカバリーを利用
-            .discovery_dht()     // BitTorrent Mainline DHT を利用（Cargo feature 必須）
+    pub async fn new(secret_key: iroh::SecretKey, net_cfg: &AppNetworkConfig) -> Result<Self, AppError> {
+        // Endpointの作成（設定に応じてディスカバリーを有効化）
+        let mut builder = Endpoint::builder().secret_key(secret_key);
+        if net_cfg.enable_dns {
+            builder = builder.discovery_n0(); // n0の公開ディスカバリー
+        }
+        if net_cfg.enable_dht {
+            builder = builder.discovery_dht(); // BitTorrent Mainline DHT（feature必要）
+        }
+        // 将来: net_cfg.enable_local に応じたローカルディスカバリー
+        let endpoint = builder
             .bind()
             .await
             .map_err(|e| AppError::P2PError(format!("Failed to bind endpoint: {:?}", e)))?;

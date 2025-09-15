@@ -97,6 +97,7 @@ impl GossipService for IrohGossipService {
             while let Some(event) = receiver.next().await {
                 match event {
                     Ok(GossipApiEvent::Received(msg)) => {
+                        super::metrics::inc_received();
                         // 1) P2PEvent (GossipMessage) 経路（互換用途）
                         if let Some(tx) = &event_tx_clone {
                             if let Ok(message) = GossipMessage::from_bytes(&msg.content) {
@@ -110,9 +111,14 @@ impl GossipService for IrohGossipService {
 
                         // 2) UI向けサブスクライバ（domain::entities::Event）
                         if let Ok(domain_event) = serde_json::from_slice::<Event>(&msg.content) {
-                            let subs = subscribers_for_task.read().await;
-                            for s in subs.iter() {
-                                let _ = s.send(domain_event.clone()).await;
+                            // NIP-01/10/19 に準拠しているか検証（不正は破棄）
+                            if let Err(e) = domain_event.validate_nip01().and_then(|_| domain_event.validate_nip10_19()) {
+                                tracing::warn!("Drop invalid Nostr event (NIP-01): {}", e);
+                            } else {
+                                let subs = subscribers_for_task.read().await;
+                                for s in subs.iter() {
+                                    let _ = s.send(domain_event.clone()).await;
+                                }
                             }
                         }
                     }

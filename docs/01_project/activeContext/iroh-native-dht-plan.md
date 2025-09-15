@@ -188,12 +188,14 @@ pub async fn bootstrap_with_fallback(
 - [x] dht_bootstrap.rs - quit/broadcast 実装（`GossipSender` 管理で実装済み）
 - [x] bootstrap_nodes.json - 形式定義（NodeId@Addr 推奨）と検証導線（実装済み：Tauri/CLI）
 - [x] ブートストラップUI - ユーザー指定を保存/読込（Tauriコマンド + Settings画面）
-- [ ] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
+- [x] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
 
 ### 4.3 新規追加（短期）
 - [ ] ブートストラップピアの初期リスト（`bootstrap_nodes.json`）
-- [ ] DHTメトリクス/ログ（tracing, counters, レベル設定）
+- [x] DHTメトリクス/ログ（tracing, counters, レベル設定）
 - [ ] ディスカバリーメソッドの切り替え（設定/起動オプション）
+  - 環境変数: `KUKURI_ENABLE_DHT`, `KUKURI_ENABLE_DNS`, `KUKURI_ENABLE_LOCAL`（bool）
+  - ブートストラップピア: `KUKURI_BOOTSTRAP_PEERS`（カンマ区切り `nodeid@host:port`）
 
 ## 5. テスト計画
 
@@ -218,6 +220,13 @@ mod tests {
 ### 5.2 統合テスト
 - Docker/ローカルで複数ノード起動（`scripts/start-bootstrap-nodes.ps1`）
 - DHT経由でのピア発見確認（`discovery_dht()` 有効時）
+
+### 5.3 スモークテスト（Docker）
+- 目的: Tauri起動なしでP2Pの最低限動作（join/broadcast/receive）を検証
+- 実行: `docker compose -f docker-compose.test.yml up --build rust-test`（重め）
+- 簡易: `docker compose -f docker-compose.test.yml up --build test-runner`（Rust/TSまとめ・最小）
+- 設定: `ENABLE_P2P_INTEGRATION=1`（`docker-compose.test.yml` の `test-runner`/`rust-test` に設定済み）
+- 補足: 受信側で NIP-01/10/19 バリデーションを行い、不正イベントは破棄
 - Gossip経由のメッセージ交換の検証（`IrohGossipService`）
 
 ## 6. リスクと対策
@@ -260,3 +269,5 @@ mod tests {
 
 ## 10. 結論
 irohのビルトインDHTディスカバリーを中核に、DNS/ブートストラップ/ローカル発見をハイブリッドで併用する方針は維持します。Cargo設定は完了済みのため、次はコード側で `discovery_dht()` を有効化し、quit/broadcastの意味整理とメトリクス整備を優先して仕上げます。
+- NIP検証方針（受信）: NIP-01（ID/hex）に加え、NIP-10（e/pタグ markerとrelay_url）、NIP-19（note/nevent/npub/nprofile 形式）を最低限検証。`nprofile`はbech32形式の厳格性で代替（TLVの完全検証は今後）。
+  - 追記: `nprofile`/`nevent` は bech32 decode + TLV(0x00=32byte)を必須化（最小）。

@@ -74,6 +74,14 @@ pub struct NodeAddressResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GossipMetricsResponse {
+    pub joins: u64,
+    pub leaves: u64,
+    pub broadcasts_sent: u64,
+    pub messages_received: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinTopicByNameRequest {
     pub topic_name: String,
     pub initial_peers: Vec<String>,

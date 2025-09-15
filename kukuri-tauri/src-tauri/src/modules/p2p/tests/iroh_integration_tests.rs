@@ -7,11 +7,28 @@ mod tests {
     use iroh::{Endpoint, Watcher as _};
     use std::sync::Arc;
     use tokio::time::{timeout, sleep, Duration};
+    use nostr_sdk::prelude::*;
 
     async fn create_service_with_endpoint() -> (IrohGossipService, Arc<Endpoint>) {
         let endpoint = Arc::new(Endpoint::builder().bind().await.unwrap());
         let svc = IrohGossipService::new(endpoint.clone()).unwrap();
         (svc, endpoint)
+    }
+
+    fn nostr_to_domain(ev: &nostr_sdk::Event) -> Event {
+        let created_at = chrono::DateTime::<chrono::Utc>::from_utc(
+            chrono::NaiveDateTime::from_timestamp_opt(ev.created_at.as_u64() as i64, 0).unwrap(),
+            chrono::Utc,
+        );
+        Event {
+            id: ev.id.to_string(),
+            pubkey: ev.pubkey.to_string(),
+            created_at,
+            kind: ev.kind.as_u16() as u32,
+            tags: ev.tags.iter().map(|t| t.clone().to_vec()).collect(),
+            content: ev.content.clone(),
+            sig: ev.sig.to_string(),
+        }
     }
 
     async fn connect_peers(src: &Endpoint, dst: &Endpoint) {
@@ -87,8 +104,10 @@ mod tests {
         // 少し安定化
         sleep(Duration::from_millis(300)).await;
 
-        // Aから送信→Bが受信
-        let ev = Event::new(1, "hello-int".to_string(), "pk".to_string());
+        // Aから送信→Bが受信（NIP-01準拠のイベントを送信）
+        let keys = Keys::generate();
+        let ne = EventBuilder::text_note("hello-int").sign_with_keys(&keys).unwrap();
+        let ev = nostr_to_domain(&ne);
         svc_a.broadcast(&topic, &ev).await.unwrap();
         let r = timeout(Duration::from_secs(8), async { rx_b.recv().await })
             .await
@@ -118,8 +137,10 @@ mod tests {
         svc_a.join_topic(&topic, vec![]).await.unwrap();
 
         sleep(Duration::from_millis(200)).await;
-        // Aから送信
-        let ev = Event::new(1, "hello-multi".to_string(), "pk".to_string());
+        // Aから送信（NIP-01準拠）
+        let keys = Keys::generate();
+        let ne = EventBuilder::text_note("hello-multi").sign_with_keys(&keys).unwrap();
+        let ev = nostr_to_domain(&ne);
         svc_a.broadcast(&topic, &ev).await.unwrap();
 
         let r1 = timeout(Duration::from_secs(5), async { rx1.recv().await })
@@ -160,8 +181,10 @@ mod tests {
         // 安定化待ち
         sleep(Duration::from_millis(200)).await;
 
-        // Aから送信
-        let ev = Event::new(1, "hello-3nodes".to_string(), "pk".to_string());
+        // Aから送信（NIP-01準拠）
+        let keys = Keys::generate();
+        let ne = EventBuilder::text_note("hello-3nodes").sign_with_keys(&keys).unwrap();
+        let ev = nostr_to_domain(&ne);
         svc_a.broadcast(&topic, &ev).await.unwrap();
 
         // BとCで受信
@@ -201,7 +224,9 @@ mod tests {
 
         // A→B, B→A 交互に送信
         for i in 0..5u32 {
-            let ev = Event::new(i, format!("ping-{i}"), "pk".to_string());
+            let keys = Keys::generate();
+            let ne = EventBuilder::text_note(format!("ping-{i}")).sign_with_keys(&keys).unwrap();
+            let ev = nostr_to_domain(&ne);
             if i % 2 == 0 { svc_a.broadcast(&topic, &ev).await.unwrap(); }
             else { svc_b.broadcast(&topic, &ev).await.unwrap(); }
         }

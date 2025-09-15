@@ -1,4 +1,6 @@
 import { useP2P } from '@/hooks/useP2P';
+import { useEffect, useState, useCallback } from 'react';
+import { p2pApi } from '@/lib/api/p2p';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +27,22 @@ export function P2PStatus() {
     error,
     clearError,
   } = useP2P();
+
+  const [metrics, setMetrics] = useState<{ joins: number; leaves: number; broadcasts_sent: number; messages_received: number } | null>(null);
+  const refreshMetrics = useCallback(async () => {
+    try {
+      const m = await p2pApi.getMetrics();
+      setMetrics(m);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (initialized && connectionStatus === 'connected') {
+      refreshMetrics();
+      const t = setInterval(refreshMetrics, 30000);
+      return () => clearInterval(t);
+    }
+  }, [initialized, connectionStatus, refreshMetrics]);
 
   // 接続状態のアイコンとカラーを取得
   const getConnectionIcon = () => {
@@ -113,6 +131,22 @@ export function P2PStatus() {
                 <span className="text-muted-foreground">接続ピア</span>
               </div>
               <span className="text-sm font-medium">{connectedPeerCount}</span>
+            </div>
+
+            {/* メトリクスサマリ */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Gossipメトリクス</span>
+                <Button variant="secondary" size="sm" className="h-6 text-xs" onClick={refreshMetrics}>
+                  更新
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center justify-between"><span>Join</span><Badge variant="outline">{metrics?.joins ?? 0}</Badge></div>
+                <div className="flex items-center justify-between"><span>Leave</span><Badge variant="outline">{metrics?.leaves ?? 0}</Badge></div>
+                <div className="flex items-center justify-between"><span>Broadcast</span><Badge variant="outline">{metrics?.broadcasts_sent ?? 0}</Badge></div>
+                <div className="flex items-center justify-between"><span>Received</span><Badge variant="outline">{metrics?.messages_received ?? 0}</Badge></div>
+              </div>
             </div>
 
             {/* アクティブトピック */}

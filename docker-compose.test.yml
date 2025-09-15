@@ -24,6 +24,7 @@ services:
       RUST_BACKTRACE: 1
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
+      ENABLE_P2P_INTEGRATION: "1"
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）

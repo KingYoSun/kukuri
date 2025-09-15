@@ -155,6 +155,18 @@ describe('p2pApi', () => {
     });
   });
 
+  describe('getMetrics', () => {
+    it('should get gossip metrics', async () => {
+      const mockMetrics = { joins: 3, leaves: 1, broadcasts_sent: 7, messages_received: 12 };
+      vi.mocked(invoke).mockResolvedValueOnce(mockMetrics);
+
+      const metrics = await p2pApi.getMetrics();
+
+      expect(invoke).toHaveBeenCalledWith('get_p2p_metrics');
+      expect(metrics).toEqual(mockMetrics);
+    });
+  });
+
   describe('connectToPeer', () => {
     it('should connect to a peer with valid address', async () => {
       vi.mocked(invoke).mockResolvedValueOnce(undefined);

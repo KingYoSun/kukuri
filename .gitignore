@@ -104,3 +104,6 @@ docs/apis/
 .pkarr_cache/
 
 build.err
+
+# Optional local bootstrap config (override via UI)
+kukuri-tauri/src-tauri/bootstrap_nodes.json

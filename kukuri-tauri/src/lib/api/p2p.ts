@@ -62,4 +62,9 @@ export const p2pApi = {
   getBootstrapConfig: () => invoke<string>('get_bootstrap_config'),
   setBootstrapNodes: (nodes: string[]) => invoke<string>('set_bootstrap_nodes', { nodes }),
   clearBootstrapNodes: () => invoke<string>('clear_bootstrap_nodes'),
+
+  /**
+   * Gossipメトリクスを取得
+   */
+  getMetrics: () => invoke<{ joins: number; leaves: number; broadcasts_sent: number; messages_received: number }>('get_p2p_metrics'),
 };

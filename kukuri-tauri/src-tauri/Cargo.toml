@@ -60,6 +60,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 keyring = { version = "3.6.3", features = ["windows-native"] }
 dirs = "5.0"
+bech32 = "0.9"
 
 [dev-dependencies]
 tempfile = "3.17"
@@ -69,4 +70,3 @@ mockall = "0.13"
 # [[bench]]
 # name = "command_optimization"
 # harness = false
-

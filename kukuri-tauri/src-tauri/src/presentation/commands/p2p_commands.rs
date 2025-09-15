@@ -1,6 +1,6 @@
 use crate::presentation::dto::p2p::{
     JoinTopicRequest, LeaveTopicRequest, BroadcastRequest,
-    P2PStatusResponse, NodeAddressResponse
+    P2PStatusResponse, NodeAddressResponse, GossipMetricsResponse
 };
 use crate::state::AppState;
 use tauri::State;
@@ -156,4 +156,17 @@ pub async fn clear_bootstrap_nodes() -> Result<String, String> {
     bootstrap_config::clear_user_bootstrap_nodes()
         .map_err(|e| e.to_string())?;
     Ok(serde_json::to_string(&serde_json::json!({"success": true})).unwrap())
+}
+
+/// Gossipメトリクスを取得
+#[tauri::command]
+pub async fn get_p2p_metrics() -> Result<GossipMetricsResponse, String> {
+    use crate::infrastructure::p2p::metrics;
+    let snap = metrics::snapshot();
+    Ok(GossipMetricsResponse {
+        joins: snap.joins,
+        leaves: snap.leaves,
+        broadcasts_sent: snap.broadcasts_sent,
+        messages_received: snap.messages_received,
+    })
 }

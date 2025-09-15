@@ -21,6 +21,10 @@ pub struct NetworkConfig {
     pub max_peers: u32,
     pub connection_timeout: u64,
     pub retry_interval: u64,
+    // DHT/Discovery 関連フラグ
+    pub enable_dht: bool,
+    pub enable_dns: bool,
+    pub enable_local: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +55,9 @@ impl Default for AppConfig {
                 max_peers: 50,
                 connection_timeout: 30,
                 retry_interval: 60,
+                enable_dht: true,
+                enable_dns: true,
+                enable_local: false,
             },
             sync: SyncConfig {
                 auto_sync: true,
@@ -69,9 +76,24 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
-        // Load from environment variables or config file
-        // For now, use defaults
-        Self::default()
+        // 既定値
+        let mut cfg = Self::default();
+
+        // ネットワーク設定の環境変数反映
+        if let Ok(v) = std::env::var("KUKURI_ENABLE_DHT") { cfg.network.enable_dht = parse_bool(&v, cfg.network.enable_dht); }
+        if let Ok(v) = std::env::var("KUKURI_ENABLE_DNS") { cfg.network.enable_dns = parse_bool(&v, cfg.network.enable_dns); }
+        if let Ok(v) = std::env::var("KUKURI_ENABLE_LOCAL") { cfg.network.enable_local = parse_bool(&v, cfg.network.enable_local); }
+
+        if let Ok(v) = std::env::var("KUKURI_BOOTSTRAP_PEERS") {
+            let peers: Vec<String> = v
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !peers.is_empty() { cfg.network.bootstrap_peers = peers; }
+        }
+
+        cfg
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -82,5 +104,13 @@ impl AppConfig {
             return Err("Network max_peers must be greater than 0".to_string());
         }
         Ok(())
+    }
+}
+
+fn parse_bool(s: &str, default: bool) -> bool {
+    match s.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => true,
+        "0" | "false" | "no" | "off" => false,
+        _ => default,
     }
 }

@@ -1,0 +1,24 @@
+name: Smoke Tests (Docker)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Compose Smoke (test-runner)
+        run: |
+          docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner test-runner
+

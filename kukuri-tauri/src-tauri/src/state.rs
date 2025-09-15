@@ -157,8 +157,11 @@ impl AppState {
         
         // P2Pサービスの初期化（後で実際に初期化）
         let iroh_secret_key = iroh::SecretKey::generate(rand::thread_rng());
+        // ネットワーク設定（環境変数等から）
+        let app_cfg = crate::shared::AppConfig::from_env();
+        let net_cfg = app_cfg.network.clone();
         let network_service: Arc<dyn NetworkService> = Arc::new(
-            IrohNetworkService::new(iroh_secret_key).await
+            IrohNetworkService::new(iroh_secret_key, &net_cfg).await
                 .map_err(|e| anyhow::anyhow!("Failed to create NetworkService: {}", e))?
         );
         // GossipServiceの初期化（イベントチャネルを接続）
