@@ -1,6 +1,6 @@
 # Kukuri: irohビルトインDHTディスカバリー活用計画
 
-## 更新日: 2025年08月16日
+## 最終更新日: 2025年09月15日
 
 ## 1. 背景と変更理由
 
@@ -9,9 +9,9 @@
 - 外部ライブラリ依存によるDHT実装
 
 ### 1.2 新しいアプローチ
-- **irohのビルトインDHTディスカバリー機能を活用**
+- irohのビルトインDHTディスカバリー機能を活用
 - 公式ドキュメント: https://www.iroh.computer/docs/concepts/discovery
-- distributed-topic-trackerは不要（削除予定）
+- distributed-topic-trackerは不要（削除済み/非推奨化済み）
 
 ### 1.3 メリット
 - 依存関係の削減
@@ -38,36 +38,45 @@
    - NodeIdの解決に使用
 
 4. **DHTディスカバリー** (`discovery_dht()`)
-   - BitTorrent Mainline DHT使用
-   - デフォルトでは無効
-   - "discovery-pkarr-dht"フィーチャーフラグが必要
+   - BitTorrent Mainline DHTを利用
+   - デフォルトでは無効（コードで明示的に有効化が必要）
+   - "discovery-pkarr-dht" フィーチャーフラグが必要（Cargoで設定済み）
 
-### 2.2 現在の実装状況
-```rust
-// 現在のkukuri実装 (iroh_network_service.rs)
-let endpoint = Endpoint::builder()
-    .secret_key(secret_key)
-    .discovery_n0()  // DNSディスカバリーのみ
-    .bind()
-    .await?;
-```
+### 2.2 現在の実装状況（2025年09月15日時点）
+- Cargo.toml:
+  - iroh = { version = "0.91.1", features = ["discovery-pkarr-dht"] }（設定済み）
+  - iroh-gossip = "0.91.0"
+  - distributed-topic-tracker はコメントアウト済み（非推奨化）
+- エンドポイント初期化: `discovery_n0()` のみ有効。`discovery_dht()` は未付与。
+  ```rust
+  // kukuri-tauri/src-tauri/src/infrastructure/p2p/iroh_network_service.rs
+  let endpoint = Endpoint::builder()
+      .secret_key(secret_key)
+      .discovery_n0()  // n0の公開ディスカバリー
+      .bind()
+      .await?;
+  ```
+- DHT統合（最小）: `dht_bootstrap.rs` の `DhtGossip` で `subscribe` ベースの join は実装済み。
+  - `leave_topic` / `broadcast` は TODO（API連動の意味整理待ち）。
+- ブートストラップ設定: `bootstrap_config.rs` 実装済み（`bootstrap_nodes.json` 読み込み、ソケットアドレスリスト）。
+- Gossip移行: 旧 `GossipManager` は廃止、`IrohGossipService` へ移行完了（進捗レポート参照）。
+
+関連:
+- `docs/01_project/activeContext/tasks/status/in_progress.md`（残タスクの最新ソース）
+- 進捗: `docs/01_project/progressReports/2025-09-15_gossip_manager_deprecation_completion.md`
 
 ## 3. 実装計画
 
-### 3.1 Phase 1: DHTディスカバリーの有効化
+### 3.1 Phase 1: DHTディスカバリーの有効化（未対応 → 次対応）
 
-#### Cargo.tomlの更新
+#### Cargo.tomlの更新（実施済み）
 ```toml
-[dependencies]
-# distributed-topic-trackerを削除
-# distributed-topic-tracker = "0.1.1"  # 削除
-
-# irohにDHTフィーチャーを追加
 iroh = { version = "0.91.1", features = ["discovery-pkarr-dht"] }
 iroh-gossip = "0.91.0"
+# distributed-topic-tracker = "0.1.1"  # Deprecated
 ```
 
-#### エンドポイント初期化の更新
+#### エンドポイント初期化の更新（対応予定）
 ```rust
 // src-tauri/src/infrastructure/p2p/iroh_network_service.rs
 let endpoint = Endpoint::builder()
@@ -78,9 +87,9 @@ let endpoint = Endpoint::builder()
     .await?;
 ```
 
-### 3.2 Phase 2: ブートストラップノード設定
+### 3.2 Phase 2: ブートストラップノード設定（実装済み/要整備）
 
-#### 設定ファイルの活用
+#### 設定ファイルの活用（設計例）
 ```rust
 // src-tauri/src/shared/config.rs
 pub struct NetworkConfig {
@@ -92,7 +101,7 @@ pub struct NetworkConfig {
 }
 ```
 
-#### 動的エンドポイント構築
+#### 動的エンドポイント構築（設計例）
 ```rust
 pub async fn create_endpoint(
     secret_key: iroh::SecretKey,
@@ -118,7 +127,7 @@ pub async fn create_endpoint(
 }
 ```
 
-### 3.3 Phase 3: フォールバック機構の改善
+### 3.3 Phase 3: フォールバック機構の改善（継続）
 
 #### ハイブリッドアプローチ
 1. **プライマリ**: DHT + DNSディスカバリー
@@ -150,23 +159,23 @@ pub async fn bootstrap_with_fallback(
 }
 ```
 
-## 4. 移行手順
+## 4. 移行手順（現状と残タスク）
 
-### 4.1 削除対象
-- [ ] distributed-topic-trackerの依存関係
-- [ ] `use distributed_topic_tracker::*`のインポート
-- [ ] AutoDiscoveryBuilderベースのコード
+### 4.1 完了済みの削除/非推奨化
+- [x] distributed-topic-tracker の依存関係・利用箇所（非推奨化/除去）
+- [x] 旧 `GossipManager` の削除（`IrohGossipService` へ移行）
 
-### 4.2 更新対象
-- [ ] Cargo.toml - irohフィーチャーフラグ追加
-- [ ] iroh_network_service.rs - DHTディスカバリー有効化
-- [ ] dht_bootstrap.rs - フォールバック機構の実装
-- [ ] config.rs - DHT関連設定の追加
+### 4.2 更新対象（未完了/継続）
+- [x] Cargo.toml - irohフィーチャーフラグ追加（実施済み）
+- [ ] iroh_network_service.rs - `discovery_dht()` 有効化
+- [ ] dht_bootstrap.rs - quit/broadcast のAPI連動実装（意味整理含む）
+- [ ] bootstrap_nodes.json - 形式定義（NodeId@Addr か SocketAddr）と検証導線
+- [ ] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
 
-### 4.3 新規追加
-- [ ] ブートストラップピアの初期リスト（設定ファイル）
-- [ ] DHT状態監視メトリクス
-- [ ] ディスカバリーメソッドの切り替えUI（オプション）
+### 4.3 新規追加（短期）
+- [ ] ブートストラップピアの初期リスト（`bootstrap_nodes.json`）
+- [ ] DHTメトリクス/ログ（tracing, counters, レベル設定）
+- [ ] ディスカバリーメソッドの切り替え（設定/起動オプション）
 
 ## 5. テスト計画
 
@@ -189,9 +198,9 @@ mod tests {
 ```
 
 ### 5.2 統合テスト
-- Docker環境での複数ノード起動
-- DHT経由でのピア発見確認
-- メッセージ交換の検証
+- Docker/ローカルで複数ノード起動（`scripts/start-bootstrap-nodes.ps1`）
+- DHT経由でのピア発見確認（`discovery_dht()` 有効時）
+- Gossip経由のメッセージ交換の検証（`IrohGossipService`）
 
 ## 6. リスクと対策
 
@@ -221,5 +230,13 @@ mod tests {
 - [BitTorrent DHT BEP-5](https://www.bittorrent.org/beps/bep_0005.html)
 - [Pkarr Project](https://github.com/number0/pkarr)
 
-## 9. 結論
-irohのビルトインDHTディスカバリー機能を活用することで、外部依存を減らしながら、より堅牢な分散型ピア発見を実現できます。段階的な移行により、リスクを最小化しつつ、完全分散型のアーキテクチャへ移行します。
+## 9. 残タスク（集約）
+`docs/01_project/activeContext/tasks/status/in_progress.md` を最新版としつつ、本計画に直結する残りを抜粋:
+- [ ] `bootstrap_nodes.json` の形式定義・検証・読み込み導線の確定（CLI/アプリ双方）
+- [ ] iroh-gossip: quit の意味整理と API 連動実装（例: `dht_bootstrap.rs::leave_topic`）
+- [ ] iroh-gossip: broadcast の意味整理と API 連動実装（例: `dht_bootstrap.rs::broadcast`）
+- [ ] Kukuri ↔ Nostr ブリッジの設計/実装（`bridge::kukuri_to_nostr`, `bridge::nostr_to_kukuri`）
+- [ ] DHT メトリクス/ログの整備（tracing, counters, レベル設定）
+
+## 10. 結論
+irohのビルトインDHTディスカバリーを中核に、DNS/ブートストラップ/ローカル発見をハイブリッドで併用する方針は維持します。Cargo設定は完了済みのため、次はコード側で `discovery_dht()` を有効化し、quit/broadcastの意味整理とメトリクス整備を優先して仕上げます。
