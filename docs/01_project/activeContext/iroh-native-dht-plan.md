@@ -19,6 +19,11 @@
 - 公式サポートとドキュメント
 - メンテナンスの簡素化
 
+### 1.4 本フェーズの方針（2025年09月15日 更新）
+- 当面は Nostr リレーとは接続しない（外部インデックスサーバー等の導入時に検討）。
+- P2P（iroh + iroh-gossip + DHT）で一通りの体験が完結することを最優先。
+- kukuri 内部のイベントは全て NIPs 準拠（内部フォーマットは Nostr Event スキーマ準拠）。
+
 ## 2. irohディスカバリー機能の概要
 
 ### 2.1 利用可能なディスカバリーメカニズム
@@ -61,6 +66,7 @@
   - `leave_topic` / `broadcast` は TODO（API連動の意味整理待ち）。
 - ブートストラップ設定: `bootstrap_config.rs` 実装済み（`bootstrap_nodes.json` 読み込み、ソケットアドレスリスト）。
 - Gossip移行: 旧 `GossipManager` は廃止、`IrohGossipService` へ移行完了（進捗レポート参照）。
+ - Nostrリレー接続: 現時点では未接続（本フェーズの方針に基づく）。
 
 追加（本日反映）:
 - DHTディスカバリー: `discovery_n0()` と `discovery_dht()` を併用するよう有効化済み。
@@ -246,8 +252,11 @@ mod tests {
 `docs/01_project/activeContext/tasks/status/in_progress.md` を最新版としつつ、本計画に直結する残りを抜粋:
 - [ ] iroh-gossip: quit の意味整理と API 連動実装（例: `dht_bootstrap.rs::leave_topic`）
 - [ ] iroh-gossip: broadcast の意味整理と API 連動実装（例: `dht_bootstrap.rs::broadcast`）
-- [ ] Kukuri ↔ Nostr ブリッジの設計/実装（`bridge::kukuri_to_nostr`, `bridge::nostr_to_kukuri`）
+- [ ] NIPs 準拠イベントスキーマの確定・検証（NIP-01/10/19/30078 など）
 - [ ] DHT メトリクス/ログの整備（tracing, counters, レベル設定）
+
+備考:
+- Nostr リレー連携（Kukuri ↔ Nostr ブリッジのリレー接続機能）はバックログ。外部インデックスサーバー等の導入時に検討する。
 
 ## 10. 結論
 irohのビルトインDHTディスカバリーを中核に、DNS/ブートストラップ/ローカル発見をハイブリッドで併用する方針は維持します。Cargo設定は完了済みのため、次はコード側で `discovery_dht()` を有効化し、quit/broadcastの意味整理とメトリクス整備を優先して仕上げます。

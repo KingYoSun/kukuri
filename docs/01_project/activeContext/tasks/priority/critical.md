@@ -7,6 +7,10 @@
 移動済みメモ
 - Iroh DHT/Discovery 残タスクは `tasks/status/in_progress.md` に移動（2025年09月15日）
 
+方針更新（2025年09月15日）
+- 当面は Nostr リレーとは接続しない。まず P2P（iroh + iroh-gossip + DHT）で完結した体験の実現を優先。
+- kukuri 内部のイベントは全て NIPs 準拠（Nostr Event スキーマ準拠）。
+
 ## 2. v2 アプリ Phase 7（DHT統合の仕上げ）
 - [ ] P2PService: Iroh Mainline DHT の統合（Builder/DI の明確化）
 - [ ] OfflineService: Repository 再索引ジョブと整合性の担保（再起動/再接続時）
