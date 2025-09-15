@@ -1,63 +1,26 @@
-# 最重要タスク
+# 最重要タスク（Critical）
 
-**最終更新**: 2025年08月20日
-**最大3個まで**
+最終更新日: 2025年09月15日
 
-## 1. irohネイティブDHT実装（DHT基盤のP2P Discovery）
+目的: 今後直近で着手すべき最重要タスクの一覧。着手時は本ファイルから `tasks/status/in_progress.md` へ移動して進捗を管理します。
 
-**目標**: irohビルトインDHTを用いた完全分散型ピア発見システムの実装
-**優先度**: 最高（アーキテクチャの根幹変更）
-**期限**: 2025年08月30日目標
+移動済みメモ
+- Iroh DHT/Discovery 残タスクは `tasks/status/in_progress.md` に移動（2025年09月15日）
 
-### 次のアクション（完了）
-- [x] irohにdiscovery-pkarr-dhtフィーチャー追加とCargo.toml更新
-- [x] P2Pモジュールにbootstrap.rs作成（DHT統合）  
-- [x] 共有シークレット管理とキーローテーション実装
-- [x] iroh-gossipとのイベントハンドリング統合
-- [x] DHT失敗時のフォールバック機構実装
+## 2. v2 アプリ Phase 7（DHT統合の仕上げ）
+- [ ] P2PService: Iroh Mainline DHT の統合（Builder/DI の明確化）
+- [ ] OfflineService: Repository 再索引ジョブと整合性の担保（再起動/再接続時）
+- [ ] EventService: DHT 経由イベント購読・再接続時の復元
+- [ ] エラーハンドリング統一（フロントは `errorHandler`、Rust 側は `thiserror`）
 
-### 実装で発生したTODO
-- [x] ローカル開発用DHTブートストラップノード実装（kukuri-cli）- 2025年08月20日完了
-- [ ] 本番環境用DHTブートストラップノードアドレスの設定（bootstrap_nodes.json）
-- [ ] iroh-gossipのquitメソッドが使用可能になったら離脱機能を実装（dht_bootstrap.rs::leave_topic）
-- [ ] iroh-gossipのbroadcastメソッドが使用可能になったらブロードキャスト実装（dht_bootstrap.rs::broadcast）
-- [x] NodeAddrのパース方法を確認してフォールバック接続を実装（fallback::connect_to_fallback）- 完了
-- [ ] Nostr/Kukuriイベント変換の実装（bridge::kukuri_to_nostr, bridge::nostr_to_kukuri）
-- [ ] DHT統合のユニットテスト作成
+## 3. 運用/品質・観測
+- [ ] メトリクス運用: `tasks/metrics/{build_status,code_quality,test_results}.md` の更新フロー整備
+- [ ] Windows 安定化: `./scripts/test-docker.ps1` を用いた Docker 経由のテスト実行を既定化
+- [ ] ドキュメントの最終更新日表記の統一（`YYYY年MM月DD日`）
 
-### 背景
-irohのビルトインDHTディスカバリー機能を活用し、外部依存を削減。検閲耐性とスケーラビリティを大幅に向上させる戦略的変更。詳細設計: `docs/01_project/activeContext/iroh-native-dht-plan.md`
+運用ルール（再掲）
+- 新規着手: 本ファイルから対象を選び、`tasks/status/in_progress.md` へ移動
+- 完了時: `tasks/completed/YYYY-MM-DD.md` に追記 → `in_progress.md` から削除 → 重要変更は `docs/01_project/progressReports/` にレポート作成
 
----
-## 2. v2アーキテクチャPhase 7: DHT統合後の最適化
-
-**目標**: DHT統合を踏まえた新アーキテクチャの完全稼働
-**優先度**: 中
-**期限**: 2025年09月10日
-
-### 次のアクション
-- [ ] P2PService DHT統合（irohネイティブDHT連携）
-- [ ] OfflineService Repository層統合（11メソッドが基本実装のみ）
-- [ ] DHT統計情報の追加（ピア数、レイテンシ）
-- [ ] EventService DHT最適化
-
-### 背景
-DHT実装により、P2Pモジュール全体の再設計が必要。v2移行と統合して一貫性のあるアーキテクチャを構築。
-
----
-
-## 3. ユニットテスト・統合テストの強化
-
-**目標**: DHT実装を含むテストカバレッジの確保
-**優先度**: 高（品質保証の基盤）
-**期限**: 2025年09月05日目標（DHT実装後）
-
-### 次のアクション
-- [ ] DHT統合のモックテスト作成
-- [ ] 認証機能のユニットテスト作成
-- [ ] Service層の統合テスト実装
-- [ ] Storeのモックを使用したフロントエンドテスト強化
-- [ ] カバレッジ目標の設定（最低70%）
-
-### 背景
-DHT実装と並行してテスト体制を強化。分散システムの信頼性確保が重要。
+補足
+- 既に完了済みの内容は本ファイルから除去済み（詳細は `tasks/completed/2025-09-15.md` を参照）。
