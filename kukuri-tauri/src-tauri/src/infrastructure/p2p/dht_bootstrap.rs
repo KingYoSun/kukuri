@@ -3,14 +3,21 @@
 
 use crate::shared::error::AppError;
 use iroh::Endpoint;
-use iroh_gossip::net::Gossip;
+use iroh_gossip::{
+    api::{GossipSender, GossipTopic},
+    net::Gossip,
+    proto::TopicId,
+};
 use std::sync::Arc;
 use tracing::{debug, info};
+use tokio::sync::{Mutex as TokioMutex, RwLock};
+use std::collections::HashMap;
 
 /// DHT統合付きGossipサービス
 pub struct DhtGossip {
     gossip: Gossip,
     endpoint: Arc<Endpoint>,
+    senders: Arc<RwLock<HashMap<String, Arc<TokioMutex<GossipSender>>>>>,
 }
 
 impl DhtGossip {
@@ -26,6 +33,7 @@ impl DhtGossip {
         Ok(Self {
             gossip,
             endpoint,
+            senders: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -35,38 +43,102 @@ impl DhtGossip {
         topic: &[u8],
         neighbors: Vec<iroh::NodeAddr>,
     ) -> Result<(), AppError> {
-        let topic_id = blake3::hash(topic);
-        let topic_bytes = *topic_id.as_bytes();
+        let topic_id = Self::make_topic_id(topic);
+        let topic_key = Self::topic_key(&topic_id);
 
         // subscribe には NodeAddrのリストではなく、NodeIdのリストが必要
         let peer_ids: Vec<_> = neighbors.iter().map(|addr| addr.node_id).collect();
-        
-        self.gossip
-            .subscribe(topic_bytes.into(), peer_ids)
+        let topic: GossipTopic = self
+            .gossip
+            .subscribe(topic_id, peer_ids)
             .await
             .map_err(|e| AppError::P2PError(format!("Failed to join topic: {:?}", e)))?;
 
-        info!("Joined DHT topic: {:?}", topic_id);
+        // Sender を保存（Receiver は破棄しても参加状態は維持される）
+        let (sender, _receiver) = topic.split();
+        let sender = Arc::new(TokioMutex::new(sender));
+        let mut senders = self.senders.write().await;
+        senders.insert(topic_key, sender);
+
+        info!("Joined DHT topic: {:?}", Self::fmt_topic_id(&topic_id));
         Ok(())
     }
 
     /// トピックから離脱
-    pub async fn leave_topic(&self, _topic: &[u8]) -> Result<(), AppError> {
-        // TODO: iroh-gossipのquitメソッドが使用可能になったら実装
-        info!("Leave topic not yet implemented");
-        Ok(())
+    pub async fn leave_topic(&self, topic: &[u8]) -> Result<(), AppError> {
+        let topic_id = Self::make_topic_id(topic);
+        let topic_key = Self::topic_key(&topic_id);
+        let mut senders = self.senders.write().await;
+        if senders.remove(&topic_key).is_some() {
+            info!("Left DHT topic: {:?}", Self::fmt_topic_id(&topic_id));
+            Ok(())
+        } else {
+            debug!("Leave requested for non-joined topic: {:?}", Self::fmt_topic_id(&topic_id));
+            Ok(())
+        }
     }
 
     /// メッセージをブロードキャスト
-    pub async fn broadcast(&self, _topic: &[u8], _message: Vec<u8>) -> Result<(), AppError> {
-        // TODO: iroh-gossipのbroadcastメソッドが使用可能になったら実装
-        debug!("Broadcast not yet implemented");
+    pub async fn broadcast(&self, topic: &[u8], message: Vec<u8>) -> Result<(), AppError> {
+        let topic_id = Self::make_topic_id(topic);
+        let topic_key = Self::topic_key(&topic_id);
+
+        // 既存 Sender を探す。なければ参加して作成。
+        let sender_opt = {
+            let senders = self.senders.read().await;
+            senders.get(&topic_key).cloned()
+        };
+
+        let sender = match sender_opt {
+            Some(s) => s,
+            None => {
+                // 近傍指定なしで join（Receiver は破棄）
+                let topic: GossipTopic = self
+                    .gossip
+                    .subscribe(topic_id, vec![])
+                    .await
+                    .map_err(|e| AppError::P2PError(format!("Failed to subscribe before broadcast: {:?}", e)))?;
+                let (sender, _receiver) = topic.split();
+                let sender = Arc::new(TokioMutex::new(sender));
+                let mut senders = self.senders.write().await;
+                senders.insert(topic_key.clone(), sender.clone());
+                sender
+            }
+        };
+
+        // ブロードキャスト
+        let mut guard = sender.lock().await;
+        guard
+            .broadcast(message.into())
+            .await
+            .map_err(|e| AppError::P2PError(format!("Failed to broadcast: {:?}", e)))?;
+
+        debug!("Broadcasted message on topic {:?}", Self::fmt_topic_id(&topic_id));
         Ok(())
     }
 
     /// Gossipインスタンスを取得
     pub fn gossip(&self) -> &Gossip {
         &self.gossip
+    }
+
+    fn make_topic_id(topic: &[u8]) -> TopicId {
+        let hash = blake3::hash(topic);
+        TopicId::from_bytes(*hash.as_bytes())
+    }
+
+    fn topic_key(topic_id: &TopicId) -> String {
+        use std::fmt::Write as _;
+        let bytes = topic_id.as_bytes();
+        let mut s = String::with_capacity(64);
+        for b in bytes {
+            let _ = write!(&mut s, "{:02x}", b);
+        }
+        s
+    }
+
+    fn fmt_topic_id(topic_id: &TopicId) -> String {
+        Self::topic_key(topic_id)
     }
 }
 
