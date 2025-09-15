@@ -24,6 +24,10 @@
 - [x] UI受信導線の接続（`IrohGossipService::subscribe`→UI/handlers）
 - [ ] 旧`GossipManager`利用箇所の棚卸しと段階的無効化（integration_testsの移行含む）
   - [ ] integration_tests（Iroh版）の骨子追加（subscribe受信テストを追加、現状はmulti-node未配線のためignore）
+  - [x] Docker/CIでUDP到達性を確保（rust-testをhost network化）し、実受信テストの実行条件をENV化（`ENABLE_P2P_INTEGRATION=1`）
+  - [x] 2ノード接続ユーティリティをtestsに実装（`node_addr().initialized()`→`Endpoint::connect`）
+  - [x] 2ノードconnect+joinテストを有効化（恒常パス）
+  - [x] 実受信テストはENVで有効化し、Docker CIで実行（恒常パス）
 - [ ] P2Pイベント配信/購読ルーティングの実装（設計は作成済: `docs/03_implementation/p2p_event_routing_design.md`。実装着手はGossipManager廃止完了後）
 
 ### メモ

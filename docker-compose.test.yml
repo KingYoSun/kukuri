@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile.test
     container_name: kukuri-test-runner
+    network_mode: host
     volumes:
       # ソースコードをマウント（開発時の変更を即座に反映）
       - ./kukuri-tauri/src:/app/kukuri-tauri/src:ro
@@ -27,8 +28,7 @@ services:
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
       CI: true
-    networks:
-      - test-network
+    # host network used for UDP reachability between endpoints
 
   # 個別のRustテスト実行
   rust-test:
@@ -37,7 +37,8 @@ services:
       dockerfile: Dockerfile.test
     container_name: kukuri-rust-test
     working_dir: /app/kukuri-tauri/src-tauri
-    command: cargo test --workspace --all-features -- --nocapture
+    network_mode: host
+    command: bash -lc "cargo test --workspace --all-features -- --nocapture"
     volumes:
       - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
       - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
@@ -54,8 +55,7 @@ services:
       RUST_BACKTRACE: full
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
-    networks:
-      - test-network
+      ENABLE_P2P_INTEGRATION: "1"
 
   # 個別のTypeScriptテスト実行
   ts-test:
