@@ -39,6 +39,9 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use std::collections::{HashSet as StdHashSet, VecDeque as StdVecDeque};
+
+const P2P_DEDUP_MAX: usize = 8192;
 
 /// P2P関連の状態
 pub struct P2PState {
@@ -48,6 +51,10 @@ pub struct P2PState {
     pub gossip_service: Arc<dyn GossipService>,
     /// UI購読済みトピック集合（重複購読防止）
     pub ui_subscribed_topics: Arc<RwLock<std::collections::HashSet<String>>>,
+    /// 受信イベントIDの重複排除用セット
+    pub seen_event_ids: Arc<RwLock<StdHashSet<String>>>,
+    /// 受信イベントIDの順序（容量制御用）
+    pub seen_event_order: Arc<RwLock<StdVecDeque<String>>>,
 }
 
 /// アプリケーション全体の状態を管理する構造体
@@ -244,6 +251,8 @@ impl AppState {
             event_rx: Arc::new(RwLock::new(Some(p2p_event_rx))),
             gossip_service: Arc::clone(&gossip_service),
             ui_subscribed_topics: Arc::new(RwLock::new(Default::default())),
+            seen_event_ids: Arc::new(RwLock::new(Default::default())),
+            seen_event_order: Arc::new(RwLock::new(Default::default())),
         }));
 
         // 既定トピック`public`に対するUI購読を張る（冪等）
@@ -273,12 +282,12 @@ impl AppState {
             offline_handler,
         };
 
-        // 起動時にpublic購読を非同期で確立
+        // 起動時に既定＋ユーザー固有トピックの購読を確立
         {
             let this_clone = this.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = this_clone.ensure_ui_subscription("public").await {
-                    tracing::warn!("Failed to subscribe UI to public: {}", e);
+                if let Err(e) = this_clone.ensure_default_and_user_subscriptions().await {
+                    tracing::warn!("Failed to ensure default/user subscriptions: {}", e);
                 }
             });
         }
@@ -333,6 +342,32 @@ impl AppState {
                 Ok(mut rx) => {
                     tracing::info!("UI subscribed to topic {}", topic);
                     while let Some(evt) = rx.recv().await {
+                        // 重複排除（イベントID）
+                        let evt_id = evt.id.clone();
+                        let (set_arc, order_arc) = {
+                            let p2p = p2p_state_arc.read().await;
+                            (
+                                Arc::clone(&p2p.seen_event_ids),
+                                Arc::clone(&p2p.seen_event_order),
+                            )
+                        };
+                        {
+                            let mut set = set_arc.write().await;
+                            if set.contains(&evt_id) {
+                                continue;
+                            }
+                            set.insert(evt_id.clone());
+                        }
+                        {
+                            let mut order = order_arc.write().await;
+                            order.push_back(evt_id.clone());
+                            if order.len() > P2P_DEDUP_MAX {
+                                if let Some(old_id) = order.pop_front() {
+                                    let mut set = set_arc.write().await;
+                                    set.remove(&old_id);
+                                }
+                            }
+                        }
                         // 受信: domain::entities::Event
                         // UIへemit（p2p://message）
                         #[derive(serde::Serialize, Clone)]
@@ -380,6 +415,21 @@ impl AppState {
             }
         });
 
+        Ok(())
+    }
+
+    /// 既定トピックとユーザー固有トピックの購読を確立（冪等）
+    pub async fn ensure_default_and_user_subscriptions(&self) -> anyhow::Result<()> {
+        let mut topics = self.event_manager.list_default_p2p_topics().await;
+        if let Some(pk) = self.event_manager.get_public_key().await {
+            let user_topic = crate::modules::p2p::user_topic_id(&pk.to_string());
+            topics.push(user_topic);
+        }
+        for t in topics {
+            if let Err(e) = self.ensure_ui_subscription(&t).await {
+                tracing::warn!("Failed to ensure subscription for {}: {}", t, e);
+            }
+        }
         Ok(())
     }
 

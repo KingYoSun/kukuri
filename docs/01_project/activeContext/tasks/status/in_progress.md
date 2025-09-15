@@ -30,19 +30,23 @@
   - [x] 実受信テストはENVで有効化し、Docker CIで実行（恒常パス）
   - [x] 旧`integration_tests.rs`を削除
   - [x] `gossip_manager.rs`を削除し、`mod.rs`/`state.rs`の参照を整理
-- [ ] P2Pイベント配信/購読ルーティングの実装（設計は作成済: `docs/03_implementation/p2p_event_routing_design.md`。実装着手はGossipManager廃止完了後）
+- [x] P2Pイベント配信/購読ルーティングの実装（設計は作成済: `docs/03_implementation/p2p_event_routing_design.md`。実装着手はGossipManager廃止完了後）
   - [x] Phase A: 送信ルーティング（EventManagerのみ）実装着手・単体テスト通過
     - 既定トピック集合の導入とAPI: `set_default_p2p_topics`/`add_*/remove_*`/`list_*`
     - 非トピック系は「既定+ユーザー固有」に配信、参照系は解決不可時フォールバック
     - 実装ファイル: `kukuri-tauri/src-tauri/src/modules/event/manager.rs`
     - テスト: 同ファイル内の新規テストが通過（cargo test: 150 passed）
-  - [ ] Phase B: 参照トピックのDB解決（EventRepository拡張）
+  - [x] Phase B: 参照トピックのDB解決（EventRepository拡張）
     - [x] `event_topics`テーブル追加（マイグレーション）
     - [x] Repository拡張: `add_event_topic` / `get_event_topics`
     - [x] 保存時マッピング登録（`SqliteRepository::create_event` と `modules/event/handler.rs`）
     - [x] `EventManager.resolve_topics_for_referenced_event` をRepo参照実装に変更
     - [x] `AppState`で`EventManager`に`EventRepository`を接続
-  - [ ] Phase C: 受信側の重複排除とUI集約導線
+  - [x] Phase C: 受信側の重複排除とUI集約導線
+    - 受信イベントIDの重複排除を実装（見聞集合＋LRU風キュー、上限8192）
+    - UI送出は`p2p://message`へ一度だけ emit するよう集約
+    - 起動時に「既定＋ユーザー固有」トピックの購読を自動確立（冪等）
+    - 実装: `kukuri-tauri/src-tauri/src/state.rs`
 
 ### メモ
 - ブートストラップノード（staging/production）は未運用のため、当面はn0のDNSディスカバリーを使用。
