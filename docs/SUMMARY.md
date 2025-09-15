@@ -1,4 +1,5 @@
 # kukuri ドキュメント概要
+補足: ActiveContext の最新索引は `docs/01_project/activeContext/summary.md` を参照（最終更新: 2025年09月15日）。
 
 **最終更新**: 2025年8月16日（DHT基盤Discovery Layer移行決定）
 
