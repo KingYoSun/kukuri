@@ -42,9 +42,6 @@ use tokio::sync::RwLock;
 
 /// P2P関連の状態
 pub struct P2PState {
-    /// GossipManager instance
-    pub manager: Option<Arc<crate::modules::p2p::gossip_manager::GossipManager>>,
-
     /// Message event channel
     pub event_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<P2PEvent>>>>,
     /// GossipService 本体（UI購読導線で使用）
@@ -240,7 +237,6 @@ impl AppState {
 
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {
-            manager: None,
             event_rx: Arc::new(RwLock::new(Some(p2p_event_rx))),
             gossip_service: Arc::clone(&gossip_service),
             ui_subscribed_topics: Arc::new(RwLock::new(Default::default())),

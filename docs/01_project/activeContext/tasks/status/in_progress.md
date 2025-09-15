@@ -1,6 +1,6 @@
 # 進行中タスク
 
-**最終更新**: 2025年09月14日
+**最終更新**: 2025年09月15日
 
 ## n0ディスカバリー利用＋IrohGossipService統一（着手）
 - 目的: 当面はn0提供ノードを利用し、安定したブートストラップを確保。並行してGossip実装をIrohGossipServiceへ早期統一。
@@ -22,12 +22,14 @@
 - [x] 非トピック系イベントの配信先を既定トピックに統一（初期値`public`、起動時に作成/参加保証）
 - [x] 既定トピック切替のTauriコマンド追加（`set_default_p2p_topic`）
 - [x] UI受信導線の接続（`IrohGossipService::subscribe`→UI/handlers）
-- [ ] 旧`GossipManager`利用箇所の棚卸しと段階的無効化（integration_testsの移行含む）
-  - [ ] integration_tests（Iroh版）の骨子追加（subscribe受信テストを追加、現状はmulti-node未配線のためignore）
+- [x] 旧`GossipManager`利用箇所の棚卸しと段階的無効化（integration_testsの移行含む）
+  - [x] integration_tests（旧）をIroh版へ完全移行（2ノード/3ノード受信・双方向安定性を追加、ENV駆動）
   - [x] Docker/CIでUDP到達性を確保（rust-testをhost network化）し、実受信テストの実行条件をENV化（`ENABLE_P2P_INTEGRATION=1`）
   - [x] 2ノード接続ユーティリティをtestsに実装（`node_addr().initialized()`→`Endpoint::connect`）
   - [x] 2ノードconnect+joinテストを有効化（恒常パス）
   - [x] 実受信テストはENVで有効化し、Docker CIで実行（恒常パス）
+  - [x] 旧`integration_tests.rs`を削除
+  - [x] `gossip_manager.rs`を削除し、`mod.rs`/`state.rs`の参照を整理
 - [ ] P2Pイベント配信/購読ルーティングの実装（設計は作成済: `docs/03_implementation/p2p_event_routing_design.md`。実装着手はGossipManager廃止完了後）
 
 ### メモ

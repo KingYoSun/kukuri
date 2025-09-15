@@ -45,8 +45,8 @@
 - [x] 既定トピック切替APIを追加（Tauri: `set_default_p2p_topic`）
 - [x] UI配信の接続（`IrohGossipService::subscribe` → UI/handlers）
 - [x] EventManagerのP2P配信を`GossipService`へ直結（`EventSync`完全撤去）
-- [ ] integrationテスト群の移行（`GossipManager`依存の除去）
-- [ ] `gossip_manager.rs` の削除（最終）
+- [x] integrationテスト群の移行（`GossipManager`依存の除去）
+- [x] `gossip_manager.rs` の削除（最終）
 
 ## 進捗概要（2025年09月15日）
 - 等価テストを IrohGossipService へ移植（join/leave/get_joined_topics/broadcast）。

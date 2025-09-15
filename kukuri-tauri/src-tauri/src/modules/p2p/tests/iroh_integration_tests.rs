@@ -133,4 +133,87 @@ mod tests {
         assert_eq!(r1.unwrap().content, "hello-multi");
         assert_eq!(r2.unwrap().content, "hello-multi");
     }
+
+    /// 3ノード構成でA->(B,C)へブロードキャストが届くことを検証
+    #[tokio::test]
+    async fn test_multi_node_broadcast_three_nodes() {
+        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
+            eprintln!("skipping multi_node_broadcast_three_nodes (ENABLE_P2P_INTEGRATION!=1)");
+            return;
+        }
+
+        let (svc_a, ep_a) = create_service_with_endpoint().await;
+        let (svc_b, ep_b) = create_service_with_endpoint().await;
+        let (svc_c, ep_c) = create_service_with_endpoint().await;
+
+        // AからB,Cへ接続（単方向で十分）
+        connect_peers(&ep_a, &ep_b).await;
+        connect_peers(&ep_a, &ep_c).await;
+
+        let topic = generate_topic_id("iroh-int-multi-node");
+        // 受信側B,Cは購読（内部でjoin）
+        let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
+        let mut rx_c = svc_c.subscribe(&topic).await.unwrap();
+        // 送信側Aはjoinのみ
+        svc_a.join_topic(&topic, vec![]).await.unwrap();
+
+        // 安定化待ち
+        sleep(Duration::from_millis(200)).await;
+
+        // Aから送信
+        let ev = Event::new(1, "hello-3nodes".to_string(), "pk".to_string());
+        svc_a.broadcast(&topic, &ev).await.unwrap();
+
+        // BとCで受信
+        let r_b = timeout(Duration::from_secs(8), async { rx_b.recv().await })
+            .await
+            .expect("B receive timeout");
+        let r_c = timeout(Duration::from_secs(8), async { rx_c.recv().await })
+            .await
+            .expect("C receive timeout");
+
+        assert!(r_b.is_some() && r_c.is_some());
+        assert_eq!(r_b.unwrap().content, "hello-3nodes");
+        assert_eq!(r_c.unwrap().content, "hello-3nodes");
+    }
+
+    /// 双方向にメッセージをやり取りし、近接で安定して届くことを簡易確認
+    #[tokio::test]
+    async fn test_peer_connection_stability_bidirectional() {
+        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
+            eprintln!("skipping peer_connection_stability_bidirectional (ENABLE_P2P_INTEGRATION!=1)");
+            return;
+        }
+
+        let (svc_a, ep_a) = create_service_with_endpoint().await;
+        let (svc_b, ep_b) = create_service_with_endpoint().await;
+
+        // 接続
+        connect_peers(&ep_a, &ep_b).await;
+        connect_peers(&ep_b, &ep_a).await;
+
+        let topic = generate_topic_id("iroh-int-stability");
+        let mut rx_a = svc_a.subscribe(&topic).await.unwrap();
+        let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
+
+        // 安定化待ち
+        sleep(Duration::from_millis(200)).await;
+
+        // A→B, B→A 交互に送信
+        for i in 0..5u32 {
+            let ev = Event::new(i, format!("ping-{i}"), "pk".to_string());
+            if i % 2 == 0 { svc_a.broadcast(&topic, &ev).await.unwrap(); }
+            else { svc_b.broadcast(&topic, &ev).await.unwrap(); }
+        }
+
+        // 少なくとも片側で3件以上受信できること（緩い安定性チェック）
+        let mut count_a = 0;
+        let mut count_b = 0;
+        let start = tokio::time::Instant::now();
+        while start.elapsed() < Duration::from_secs(8) && (count_a < 3 || count_b < 3) {
+            if let Ok(Some(_)) = timeout(Duration::from_millis(100), async { rx_a.recv().await }).await { count_a += 1; }
+            if let Ok(Some(_)) = timeout(Duration::from_millis(100), async { rx_b.recv().await }).await { count_b += 1; }
+        }
+        assert!(count_a >= 3 || count_b >= 3, "insufficient messages received: a={}, b={}", count_a, count_b);
+    }
 }

@@ -1,5 +1,4 @@
 ﻿pub mod error;
-pub mod gossip_manager;
 pub mod message;
 pub mod topic_mesh;
 pub mod events;
