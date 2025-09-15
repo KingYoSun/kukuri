@@ -747,6 +747,16 @@ impl EventRepository for SqliteRepository {
         .bind(&event.sig)
         .execute(self.pool.get_pool())
         .await?;
+        // タグからトピックIDを抽出してマッピング登録（冪等）
+        // ルール: ["topic", <id>] または ["t", <id>] の2要素タグを優先採用
+        for tag in &event.tags {
+            if tag.len() >= 2 {
+                let key = tag[0].to_lowercase();
+                if (key == "topic" || key == "t") && !tag[1].is_empty() {
+                    let _ = self.add_event_topic(&event.id, &tag[1]).await;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -937,5 +947,38 @@ impl EventRepository for SqliteRepository {
         .await?;
 
         Ok(())
+    }
+
+    async fn add_event_topic(&self, event_id: &str, topic_id: &str) -> Result<(), AppError> {
+        sqlx::query(
+            r#"
+            INSERT OR IGNORE INTO event_topics (event_id, topic_id, created_at)
+            VALUES (?1, ?2, ?3)
+            "#
+        )
+        .bind(event_id)
+        .bind(topic_id)
+        .bind(chrono::Utc::now().timestamp_millis())
+        .execute(self.pool.get_pool())
+        .await?;
+        Ok(())
+    }
+
+    async fn get_event_topics(&self, event_id: &str) -> Result<Vec<String>, AppError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT topic_id FROM event_topics WHERE event_id = ?1
+            "#
+        )
+        .bind(event_id)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        let mut topics = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            topics.push(row.try_get::<String, _>("topic_id")?);
+        }
+        Ok(topics)
     }
 }

@@ -335,6 +335,8 @@ mod tests {
             async fn delete_event(&self, id: &str) -> Result<(), AppError>;
             async fn get_unsync_events(&self) -> Result<Vec<Event>, AppError>;
             async fn mark_event_synced(&self, id: &str) -> Result<(), AppError>;
+            async fn add_event_topic(&self, event_id: &str, topic_id: &str) -> Result<(), AppError>;
+            async fn get_event_topics(&self, event_id: &str) -> Result<Vec<String>, AppError>;
         }
     }
 

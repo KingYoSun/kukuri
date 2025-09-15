@@ -18,14 +18,14 @@ use crate::presentation::handlers::{
     event_handler::EventHandler, p2p_handler::P2PHandler,
     offline_handler::OfflineHandler,
 };
-use crate::infrastructure::{
-    database::{sqlite_repository::SqliteRepository, connection_pool::ConnectionPool, Repository},
-    p2p::{
-        iroh_gossip_service::IrohGossipService, 
-        iroh_network_service::IrohNetworkService,
-        event_distributor::{DefaultEventDistributor, EventDistributor},
-        GossipService, NetworkService,
-    },
+    use crate::infrastructure::{
+        database::{sqlite_repository::SqliteRepository, connection_pool::ConnectionPool, Repository},
+        p2p::{
+            iroh_gossip_service::IrohGossipService, 
+            iroh_network_service::IrohNetworkService,
+            event_distributor::{DefaultEventDistributor, EventDistributor},
+            GossipService, NetworkService,
+        },
     crypto::{
         key_manager::DefaultKeyManager, 
         SignatureService, 
@@ -170,6 +170,10 @@ impl AppState {
         let gossip_service: Arc<dyn GossipService> = Arc::new(gossip_inner);
         // EventManagerへGossipServiceを接続（P2P配信経路の直結）
         event_manager.set_gossip_service(Arc::clone(&gossip_service)).await;
+        // EventManagerへEventRepositoryを接続（参照トピック解決用）
+        event_manager
+            .set_event_repository(Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::EventRepository>)
+            .await;
         
         // UserServiceを先に初期化（他のサービスの依存）
         let user_service = Arc::new(UserService::new(

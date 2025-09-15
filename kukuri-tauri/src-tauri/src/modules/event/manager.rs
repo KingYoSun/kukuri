@@ -11,6 +11,9 @@ use tracing::{error, info};
 use crate::infrastructure::p2p::GossipService;
 use crate::domain::entities as domain;
 use crate::domain::value_objects::EventId as DomainEventId;
+use std::collections::HashSet;
+use crate::modules::p2p::user_topic_id;
+use crate::infrastructure::database::EventRepository as InfraEventRepository;
 
 /// フロントエンドに送信するイベントペイロード
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -32,8 +35,10 @@ pub struct EventManager {
     app_handle: Arc<RwLock<Option<AppHandle>>>,
     /// P2P配信用のGossipService（任意）
     gossip_service: Arc<RwLock<Option<Arc<dyn GossipService>>>>,
-    /// 非トピック系イベントの既定配信先トピックID
-    default_topic_id: Arc<RwLock<String>>,
+    /// 非トピック系イベントの既定配信先トピック集合（複数）
+    selected_default_topic_ids: Arc<RwLock<HashSet<String>>>,
+    /// 参照トピック解決用のEventRepository（任意）
+    event_repository: Arc<RwLock<Option<Arc<dyn InfraEventRepository>>>>,
 }
 
 impl EventManager {
@@ -47,7 +52,8 @@ impl EventManager {
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
             gossip_service: Arc::new(RwLock::new(None)),
-            default_topic_id: Arc::new(RwLock::new("public".to_string())),
+            selected_default_topic_ids: Arc::new(RwLock::new(HashSet::from(["public".to_string()]))),
+            event_repository: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -63,7 +69,8 @@ impl EventManager {
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
             gossip_service: Arc::new(RwLock::new(None)),
-            default_topic_id: Arc::new(RwLock::new("public".to_string())),
+            selected_default_topic_ids: Arc::new(RwLock::new(HashSet::from(["public".to_string()]))),
+            event_repository: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -83,10 +90,50 @@ impl EventManager {
         *gs = Some(gossip);
     }
 
+    /// EventRepositoryを接続（参照トピック解決用）。未設定でも動作は継続。
+    pub async fn set_event_repository(&self, repo: Arc<dyn InfraEventRepository>) {
+        let mut r = self.event_repository.write().await;
+        *r = Some(repo);
+    }
+
     /// 既定の配信先トピックIDを設定
     pub async fn set_default_p2p_topic_id(&self, topic_id: impl Into<String>) {
-        let mut id = self.default_topic_id.write().await;
-        *id = topic_id.into();
+        // 後方互換API: 単一の既定トピックに置き換える
+        let mut set = self.selected_default_topic_ids.write().await;
+        set.clear();
+        set.insert(topic_id.into());
+    }
+
+    /// 既定配信先トピックを一括設定（複数）
+    pub async fn set_default_p2p_topics(&self, topics: Vec<String>) {
+        let mut set = self.selected_default_topic_ids.write().await;
+        set.clear();
+        for t in topics {
+            if !t.is_empty() {
+                set.insert(t);
+            }
+        }
+    }
+
+    /// 既定配信先トピックを追加
+    pub async fn add_default_p2p_topic(&self, topic_id: impl Into<String>) {
+        let mut set = self.selected_default_topic_ids.write().await;
+        let t = topic_id.into();
+        if !t.is_empty() {
+            set.insert(t);
+        }
+    }
+
+    /// 既定配信先トピックを削除
+    pub async fn remove_default_p2p_topic(&self, topic_id: &str) {
+        let mut set = self.selected_default_topic_ids.write().await;
+        set.remove(topic_id);
+    }
+
+    /// 既定配信先トピック一覧を取得
+    pub async fn list_default_p2p_topics(&self) -> Vec<String> {
+        let set = self.selected_default_topic_ids.read().await;
+        set.iter().cloned().collect()
     }
 
     /// KeyManagerからの秘密鍵でマネージャーを初期化
@@ -122,11 +169,15 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let event_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークへブロードキャスト（既定トピック）
+        // P2Pネットワークへブロードキャスト（既定トピック + ユーザー固有トピック）
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
-            let topic = self.default_topic_id.read().await.clone();
-            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
-                error!("Failed to broadcast to P2P (global): {}", e);
+            let mut topics: HashSet<String> = self.selected_default_topic_ids.read().await.clone();
+            if let Some(pk) = self.get_public_key().await {
+                topics.insert(user_topic_id(&pk.to_string()));
+            }
+            let topic_list: Vec<String> = topics.into_iter().collect();
+            if let Err(e) = self.broadcast_to_topics(&gossip, &topic_list, &event).await {
+                error!("Failed to broadcast to P2P (text_note): {}", e);
             }
         }
 
@@ -155,6 +206,11 @@ impl EventManager {
             }
         }
 
+        // 参照マッピングをDBへ保存（可能な場合、冪等）
+        if let Some(repo) = self.event_repository.read().await.as_ref().cloned() {
+            let _ = repo.add_event_topic(&event.id.to_string(), topic_id).await;
+        }
+
         Ok(event_id)
     }
 
@@ -168,10 +224,22 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let result_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークへブロードキャスト（既定トピック）
+        // P2Pネットワークへブロードキャスト（参照イベントの属するトピックがあればそこへ。未解決なら既定+ユーザー）
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
-            let topic = self.default_topic_id.read().await.clone();
-            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
+            let referenced = event_id.to_hex();
+            let resolved_topics = self.resolve_topics_for_referenced_event(&referenced).await;
+            let topics: HashSet<String> = if let Some(mut ts) = resolved_topics {
+                ts.drain(..).collect()
+            } else {
+                // フォールバック: 既定 + ユーザー
+                let mut set = self.selected_default_topic_ids.read().await.clone();
+                if let Some(pk) = self.get_public_key().await {
+                    set.insert(user_topic_id(&pk.to_string()));
+                }
+                set
+            };
+            let topic_list: Vec<String> = topics.into_iter().collect();
+            if let Err(e) = self.broadcast_to_topics(&gossip, &topic_list, &event).await {
                 error!("Failed to broadcast reaction to P2P: {}", e);
             }
         }
@@ -188,11 +256,15 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let event_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークへブロードキャスト（既定トピック）
+        // P2Pネットワークへブロードキャスト（既定トピック + ユーザー固有トピック）
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
-            let topic = self.default_topic_id.read().await.clone();
-            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
-                error!("Failed to broadcast event to P2P: {}", e);
+            let mut topics: HashSet<String> = self.selected_default_topic_ids.read().await.clone();
+            if let Some(pk) = self.get_public_key().await {
+                topics.insert(user_topic_id(&pk.to_string()));
+            }
+            let topic_list: Vec<String> = topics.into_iter().collect();
+            if let Err(e) = self.broadcast_to_topics(&gossip, &topic_list, &event).await {
+                error!("Failed to broadcast generic event to P2P: {}", e);
             }
         }
 
@@ -209,10 +281,14 @@ impl EventManager {
         let client_manager = self.client_manager.read().await;
         let result_id = client_manager.publish_event(event.clone()).await?;
 
-        // P2Pネットワークへブロードキャスト（既定トピック）
+        // P2Pネットワークへブロードキャスト（既定トピック + ユーザー固有トピック）
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
-            let topic = self.default_topic_id.read().await.clone();
-            if let Err(e) = self.broadcast_to_topic(&gossip, &topic, &event).await {
+            let mut topics: HashSet<String> = self.selected_default_topic_ids.read().await.clone();
+            if let Some(pk) = self.get_public_key().await {
+                topics.insert(user_topic_id(&pk.to_string()));
+            }
+            let topic_list: Vec<String> = topics.into_iter().collect();
+            if let Err(e) = self.broadcast_to_topics(&gossip, &topic_list, &event).await {
                 error!("Failed to broadcast metadata to P2P: {}", e);
             }
         }
@@ -318,6 +394,46 @@ impl EventManager {
         Ok(())
     }
 
+    /// 複数トピックへ冪等Join + 重複排除つきでブロードキャスト
+    async fn broadcast_to_topics(
+        &self,
+        gossip: &Arc<dyn GossipService>,
+        topics: &[String],
+        nostr_event: &nostr_sdk::Event,
+    ) -> Result<()> {
+        // 重複排除
+        let mut uniq: HashSet<String> = HashSet::new();
+        for t in topics {
+            if !t.is_empty() {
+                uniq.insert(t.clone());
+            }
+        }
+        if uniq.is_empty() {
+            return Ok(());
+        }
+        // 変換
+        let domain_event = Self::to_domain_event(nostr_event)?;
+        // 冪等Join + 送信
+        for topic in uniq.into_iter() {
+            let _ = gossip.join_topic(&topic, vec![]).await; // 冪等
+            if let Err(e) = gossip.broadcast(&topic, &domain_event).await {
+                error!("Failed to broadcast to topic {}: {}", topic, e);
+            }
+        }
+        Ok(())
+    }
+
+    /// 参照イベント（eタグ等）から配信先トピックを解決（Phase A: 仮実装）
+    async fn resolve_topics_for_referenced_event(&self, event_id: &str) -> Option<Vec<String>> {
+        if let Some(repo) = self.event_repository.read().await.as_ref().cloned() {
+            match repo.get_event_topics(event_id).await {
+                Ok(v) if !v.is_empty() => return Some(v),
+                _ => {}
+            }
+        }
+        None
+    }
+
     fn to_domain_event(nostr: &nostr_sdk::Event) -> Result<domain::Event> {
         // id
         let id_hex = nostr.id.to_string();
@@ -351,6 +467,58 @@ impl EventManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::error::AppError;
+    use async_trait::async_trait;
+    use std::sync::Mutex;
+
+    struct TestGossipService {
+        joined: Arc<RwLock<HashSet<String>>>,
+        broadcasts: Arc<RwLock<Vec<(String, domain::Event)>>>,
+    }
+
+    impl TestGossipService {
+        fn new() -> Self {
+            Self {
+                joined: Arc::new(RwLock::new(HashSet::new())),
+                broadcasts: Arc::new(RwLock::new(Vec::new())),
+            }
+        }
+
+        async fn joined_topics(&self) -> HashSet<String> {
+            self.joined.read().await.clone()
+        }
+
+        async fn broadcasted_topics(&self) -> Vec<String> {
+            self.broadcasts
+                .read()
+                .await
+                .iter()
+                .map(|(t, _)| t.clone())
+                .collect()
+        }
+    }
+
+    #[async_trait]
+    impl GossipService for TestGossipService {
+        async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {
+            let mut j = self.joined.write().await;
+            j.insert(topic.to_string());
+            Ok(())
+        }
+        async fn leave_topic(&self, _topic: &str) -> Result<(), AppError> { Ok(()) }
+        async fn broadcast(&self, topic: &str, event: &domain::Event) -> Result<(), AppError> {
+            let mut b = self.broadcasts.write().await;
+            b.push((topic.to_string(), event.clone()));
+            Ok(())
+        }
+        async fn subscribe(&self, _topic: &str) -> Result<tokio::sync::mpsc::Receiver<domain::Event>, AppError> {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+        async fn get_joined_topics(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
+        async fn get_topic_peers(&self, _topic: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
+        async fn broadcast_message(&self, _topic: &str, _message: &[u8]) -> Result<(), AppError> { Ok(()) }
+    }
 
     #[tokio::test]
     async fn test_event_manager_initialization() {
@@ -493,6 +661,74 @@ mod tests {
         assert_eq!(payload.content, "Test content");
         assert_eq!(payload.kind, 1); // TextNote
         assert!(!payload.tags.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_default_topics_api() {
+        let manager = EventManager::new();
+
+        // 初期はpublicのみ
+        let mut topics = manager.list_default_p2p_topics().await;
+        topics.sort();
+        assert_eq!(topics, vec!["public".to_string()]);
+
+        // 一括設定
+        manager.set_default_p2p_topics(vec!["a".into(), "b".into()]).await;
+        let mut topics = manager.list_default_p2p_topics().await;
+        topics.sort();
+        assert_eq!(topics, vec!["a".to_string(), "b".to_string()]);
+
+        // 追加と削除
+        manager.add_default_p2p_topic("c").await;
+        manager.remove_default_p2p_topic("b").await;
+        let mut topics = manager.list_default_p2p_topics().await;
+        topics.sort();
+        assert_eq!(topics, vec!["a".to_string(), "c".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_routing_non_topic_includes_user_and_defaults() {
+        let manager = EventManager::new();
+        let key_manager = KeyManager::new();
+        // 鍵生成と初期化
+        key_manager.generate_keypair().await.unwrap();
+        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+
+        // 既定トピックを2つ設定
+        manager.set_default_p2p_topics(vec!["t1".into(), "t2".into()]).await;
+
+        // テスト用GossipServiceを設定
+        let gossip = Arc::new(TestGossipService::new());
+        manager.set_gossip_service(gossip.clone()).await;
+
+        // イベント作成（Nostrへのpublishは避け、直接P2Pブロードキャスト経路を検証）
+        let publisher = manager.event_publisher.read().await;
+        let nostr_event = publisher.create_text_note("hello", vec![]).unwrap();
+        let mut topics = manager.list_default_p2p_topics().await;
+        if let Some(pk) = manager.get_public_key().await {
+            topics.push(user_topic_id(&pk.to_string()));
+        }
+        manager
+            .broadcast_to_topics(&(gossip.clone() as Arc<dyn GossipService>), &topics, &nostr_event)
+            .await
+            .unwrap();
+
+        // 参加済トピックにt1, t2, userトピックが含まれる
+        let joined = gossip.joined_topics().await;
+        let pubkey = manager.get_public_key().await.unwrap();
+        let user_topic = user_topic_id(&pubkey.to_string());
+        assert!(joined.contains("t1"));
+        assert!(joined.contains("t2"));
+        assert!(joined.contains(&user_topic));
+
+        // ブロードキャスト先も同様に3件（重複なし）
+        let mut b = gossip.broadcasted_topics().await;
+        b.sort();
+        assert_eq!(b, {
+            let mut v = vec!["t1".to_string(), "t2".to_string(), user_topic];
+            v.sort();
+            v
+        });
     }
 }
 

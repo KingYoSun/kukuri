@@ -54,4 +54,16 @@ pub trait EventRepository: Send + Sync {
     async fn delete_event(&self, id: &str) -> Result<(), AppError>;
     async fn get_unsync_events(&self) -> Result<Vec<Event>, AppError>;
     async fn mark_event_synced(&self, id: &str) -> Result<(), AppError>;
+
+    /// イベントとトピックのマッピングを登録（冪等）
+    async fn add_event_topic(&self, _event_id: &str, _topic_id: &str) -> Result<(), AppError> {
+        // 既定実装: 実装なし
+        Ok(())
+    }
+
+    /// イベントが属するトピックID一覧を取得
+    async fn get_event_topics(&self, _event_id: &str) -> Result<Vec<String>, AppError> {
+        // 既定実装: 空
+        Ok(vec![])
+    }
 }
