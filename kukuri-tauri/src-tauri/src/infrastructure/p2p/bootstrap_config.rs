@@ -3,10 +3,11 @@ use crate::shared::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 use iroh::{NodeAddr, NodeId};
 use std::str::FromStr;
+use dirs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootstrapConfig {
@@ -212,4 +213,78 @@ pub fn validate_bootstrap_config() -> Result<(), AppError> {
     );
 
     Ok(())
+}
+
+// =============== ユーザーUIによるブートストラップ指定 ===============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserBootstrapConfig {
+    nodes: Vec<String>,
+}
+
+fn user_config_path() -> PathBuf {
+    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    let dir = base.join("kukuri");
+    let _ = fs::create_dir_all(&dir);
+    dir.join("user_bootstrap_nodes.json")
+}
+
+/// ユーザー定義のブートストラップノード（NodeId@host:port）を保存
+pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
+    let path = user_config_path();
+    let cfg = UserBootstrapConfig { nodes: nodes.to_vec() };
+    let json = serde_json::to_string_pretty(&cfg)
+        .map_err(|e| AppError::ConfigurationError(format!("Failed to serialize user bootstrap: {}", e)))?;
+    fs::write(&path, json)
+        .map_err(|e| AppError::ConfigurationError(format!("Failed to write user bootstrap file: {}", e)))?;
+    info!("Saved user bootstrap nodes to {:?} ({} entries)", path, nodes.len());
+    Ok(())
+}
+
+/// ユーザー定義のブートストラップノードを削除
+pub fn clear_user_bootstrap_nodes() -> Result<(), AppError> {
+    let path = user_config_path();
+    if path.exists() {
+        fs::remove_file(&path)
+            .map_err(|e| AppError::ConfigurationError(format!("Failed to remove user bootstrap file: {}", e)))?;
+        info!("Removed user bootstrap config at {:?}", path);
+    }
+    Ok(())
+}
+
+/// ユーザー定義のブートストラップノード（文字列）を読み込み
+pub fn load_user_bootstrap_nodes() -> Vec<String> {
+    let path = user_config_path();
+    if !path.exists() {
+        return vec![];
+    }
+    match fs::read_to_string(&path) {
+        Ok(content) => match serde_json::from_str::<UserBootstrapConfig>(&content) {
+            Ok(cfg) => cfg.nodes,
+            Err(e) => {
+                warn!("Invalid user bootstrap json: {}", e);
+                vec![]
+            }
+        },
+        Err(e) => {
+            debug!("Failed to read user bootstrap file: {}", e);
+            vec![]
+        }
+    }
+}
+
+/// ユーザー定義のブートストラップノード（NodeAddr）
+pub fn load_user_bootstrap_node_addrs() -> Vec<NodeAddr> {
+    let mut out = Vec::new();
+    for node in load_user_bootstrap_nodes() {
+        if let Some((id_part, addr_part)) = node.split_once('@') {
+            match (NodeId::from_str(id_part), addr_part.parse::<SocketAddr>()) {
+                (Ok(node_id), Ok(sock)) => out.push(NodeAddr::new(node_id).with_direct_addresses([sock])),
+                _ => debug!("Invalid user bootstrap entry: {}", node),
+            }
+        } else {
+            debug!("Skipping SocketAddr-only user bootstrap entry: {}", node);
+        }
+    }
+    out
 }

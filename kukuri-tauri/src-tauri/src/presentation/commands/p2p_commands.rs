@@ -127,3 +127,33 @@ pub async fn join_topic_by_name(
     }
     Ok(serde_json::to_string(&res).unwrap())
 }
+
+// ================= Bootstrap UI コマンド =================
+
+#[tauri::command]
+pub async fn get_bootstrap_config() -> Result<String, String> {
+    use crate::infrastructure::p2p::bootstrap_config;
+    let user_nodes = bootstrap_config::load_user_bootstrap_nodes();
+    let mode = if user_nodes.is_empty() { "default" } else { "custom" };
+    let json = serde_json::json!({
+        "mode": mode,
+        "nodes": user_nodes,
+    });
+    Ok(serde_json::to_string(&json).unwrap())
+}
+
+#[tauri::command]
+pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<String, String> {
+    use crate::infrastructure::p2p::bootstrap_config;
+    bootstrap_config::save_user_bootstrap_nodes(&nodes)
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::to_string(&serde_json::json!({"success": true})).unwrap())
+}
+
+#[tauri::command]
+pub async fn clear_bootstrap_nodes() -> Result<String, String> {
+    use crate::infrastructure::p2p::bootstrap_config;
+    bootstrap_config::clear_user_bootstrap_nodes()
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::to_string(&serde_json::json!({"success": true})).unwrap())
+}

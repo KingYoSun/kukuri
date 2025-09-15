@@ -241,9 +241,14 @@ pub mod fallback {
         Ok(connected_nodes)
     }
 
-    /// 設定ファイル（bootstrap_nodes.json）から NodeId@Addr を読み込み接続
+    /// ユーザーUI設定 または 設定ファイル（bootstrap_nodes.json）から NodeId@Addr を読み込み接続
     pub async fn connect_from_config(endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
-        let node_addrs = bootstrap_config::load_bootstrap_node_addrs()?;
+        // 1) ユーザー設定を優先
+        let mut node_addrs = bootstrap_config::load_user_bootstrap_node_addrs();
+        // 2) ユーザー設定が空なら、プロジェクト同梱のJSONを利用
+        if node_addrs.is_empty() {
+            node_addrs = bootstrap_config::load_bootstrap_node_addrs()?;
+        }
         let mut connected = Vec::new();
 
         for node_addr in node_addrs {

@@ -57,4 +57,9 @@ export const p2pApi = {
    * 指定されたピアアドレスに手動で接続
    */
   connectToPeer: (peerAddress: string) => invoke<void>('connect_to_peer', { peerAddress }),
+
+  // Bootstrap UI
+  getBootstrapConfig: () => invoke<string>('get_bootstrap_config'),
+  setBootstrapNodes: (nodes: string[]) => invoke<string>('set_bootstrap_nodes', { nodes }),
+  clearBootstrapNodes: () => invoke<string>('clear_bootstrap_nodes'),
 };

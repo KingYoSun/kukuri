@@ -1,4 +1,4 @@
-use tauri::{Emitter, Manager};
+﻿use tauri::{Emitter, Manager};
 use tracing::info;
 
 // モジュール定義
@@ -100,6 +100,10 @@ pub fn run() {
             // ユーティリティコマンド
             presentation::commands::pubkey_to_npub,
             presentation::commands::npub_to_pubkey,
+            // Bootstrap UI commands
+            presentation::commands::get_bootstrap_config,
+            presentation::commands::set_bootstrap_nodes,
+            presentation::commands::clear_bootstrap_nodes,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

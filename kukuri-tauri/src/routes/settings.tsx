@@ -7,6 +7,7 @@ import { useUIStore } from '@/stores';
 import { NostrTestPanel } from '@/components/NostrTestPanel';
 import { P2PDebugPanel } from '@/components/P2PDebugPanel';
 import { PeerConnectionPanel } from '@/components/p2p/PeerConnectionPanel';
+import { BootstrapConfigPanel } from '@/components/p2p/BootstrapConfigPanel';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -77,6 +78,7 @@ function SettingsPage() {
       </Card>
 
       <PeerConnectionPanel />
+      <BootstrapConfigPanel />
 
       {/* 開発環境でのみ表示 */}
       {import.meta.env.DEV && (

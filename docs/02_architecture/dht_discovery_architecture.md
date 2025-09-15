@@ -1,7 +1,7 @@
 # DHT基盤Discovery Layerアーキテクチャ
 
 **作成日**: 2025年08月16日
-**最終更新**: 2025年08月16日
+**最終更新**: 2025年09月15日
 
 ## 概要
 
@@ -150,7 +150,7 @@ impl DhtDiscovery {
 }
 ```
 
-### 2. フォールバック機構
+### 2. フォールバック機構とJSON仕様
 ```rust
 pub async fn bootstrap_with_fallback(
     endpoint: &Endpoint,
@@ -175,6 +175,13 @@ pub async fn bootstrap_with_fallback(
     
     Ok(discovered_peers)
 }
+
+補足（JSON仕様）:
+- ブートストラップは `bootstrap_nodes.json` に環境別で宣言する。
+- 推奨（採用される）: `"<node_id>@<host:port>"`
+- 参考（採用しない）: `"<host:port>"`（NodeIdがないため接続対象外。検証時に警告）
+- Tauri: `bootstrap_config.rs` が with_id/socket_only/invalid を検証・ログ出力し、`NodeId@Addr` のみ接続に利用。
+- CLI: `--peers` 未指定時に `KUKURI_BOOTSTRAP_CONFIG` と `KUKURI_ENV|ENVIRONMENT` を参照して `NodeId@host:port` を読み込む。
 ```
 
 ## 監視とメトリクス

@@ -1,7 +1,7 @@
 # irohネイティブDHT統合実装ガイド
 
 **作成日**: 2025年08月16日
-**最終更新**: 2025年08月16日
+**最終更新**: 2025年09月15日
 
 > **注意**: distributed-topic-trackerを使った実装から、irohのビルトインDHTディスカバリーへ移行しました。
 
@@ -151,15 +151,77 @@ pub async fn create_endpoint_with_config(
 }
 ```
 
+### 3.3 bootstrap_nodes.json の仕様（NodeId@host:port 推奨）
+
+- 目的: DHTディスカバリーがつながらない場合のフォールバック接続先を、環境別に宣言する。
+- 置き場所: `kukuri-tauri/src-tauri/bootstrap_nodes.json`
+- 環境変数（CLI向け）: `KUKURI_BOOTSTRAP_CONFIG`（パス指定）/ `KUKURI_ENV` または `ENVIRONMENT`（環境名）
+- スキーマ:
+  - ルートに `development`/`staging`/`production` 等の環境キーを持ち、それぞれ `description` と `nodes` を持つ。
+  - nodes のエントリ形式は2種のうち、NodeIdを含む形式を推奨・採用。
+    - 推奨（採用される）: `"<node_id>@<host:port>"`
+    - 参考（採用しない）: `"<host:port>"`（NodeId 不在のため接続対象外。検証時に警告を出力）
+
+例:
+```json
+{
+  "development": {
+    "description": "Local development bootstrap nodes",
+    "nodes": [
+      "npub1xy...@127.0.0.1:11223",
+      "npub1ab...@127.0.0.1:11224"
+    ]
+  },
+  "staging": { "description": "staging", "nodes": [] },
+  "production": { "description": "prod", "nodes": [] }
+}
+```
+
+実装ポイント:
+- Tauri: `bootstrap_config.rs`
+  - `load_bootstrap_node_addrs()` で `NodeId@host:port` のみ `NodeAddr` に変換
+  - `validate_bootstrap_config()` で `with_id/socket_only/invalid` をカウントしログ出力
+  - `iroh_network_service.rs` で検証を起動時ログに出力、接続は `fallback::connect_from_config()` を優先
+- CLI: `kukuri-cli/src/main.rs`
+  - 引数 `--peers` が空の場合、JSONから `NodeId@host:port` をロードして接続
+  - `KUKURI_BOOTSTRAP_CONFIG` と `KUKURI_ENV|ENVIRONMENT` で切替
+
+### 3.4 UIからのブートストラップ指定（推奨ルート）
+
+- 目的: ユーザーが JSON を直接編集せず、UIからカスタムのブートストラップノードを指定できるようにする。
+- 既定: デフォルトは n0 提供のディスカバリーに委ね、ユーザー指定がない限りフォールバックは無効（空）。
+
+実装:
+- UI: `routes/settings.tsx` に `BootstrapConfigPanel` を追加。
+  - モード選択: `デフォルト (n0)` / `カスタム指定`
+  - カスタム時: `node_id@host:port` のリストを追加・削除し保存可能
+- Tauriコマンド:
+  - `get_bootstrap_config` / `set_bootstrap_nodes` / `clear_bootstrap_nodes`
+  - 保存先: ユーザーデータディレクトリ配下 `user_bootstrap_nodes.json`（内部形式: `{ "nodes": [ ... ] }`）
+- 優先順: `ユーザー設定` → `プロジェクト同梱 JSON` → `なし`（= n0 による発見に依存）
+
 ## 4. Gossipとの統合
 
-### 4.1 Gossipサービス
+### 4.1 役割分担（IrohGossipService と DhtGossip）
+
+方針:
+- `IrohGossipService`: UI/ドメイン層向けの高レベルAPI。購読（subscribe）・配信（broadcast）・UI通知（emit）・重複排除を担当。
+- `DhtGossip`: ネットワーク層の補助。ブートストラップ、DHT参加維持、低レベルの即時ブロードキャストを提供。
+
+利用ルール:
+- アプリ機能は `IrohGossipService` を優先使用。UI購読・投稿配信はこちら。
+- `DhtGossip` はフォールバック接続や、UIを介さない低レベル送信（CLI/ブリッジ用途）で使用。
+- 同一トピックの二重参加を避けるため、`DhtGossip` は必要時のみ参加（現実装では broadcast 時に未参加なら自動参加）。
+
+### 4.2 DhtGossip の実装（抜粋）
 ```rust
 use iroh_gossip::net::Gossip;
 
 pub struct DhtGossip {
     gossip: Gossip,
     endpoint: Arc<Endpoint>,
+    // トピックごとの送信用ハンドル
+    senders: Arc<RwLock<HashMap<String, Arc<TokioMutex<GossipSender>>>>>,
 }
 
 impl DhtGossip {
@@ -172,24 +234,13 @@ impl DhtGossip {
         Ok(Self { gossip, endpoint })
     }
     
-    pub async fn join_topic(
-        &self,
-        topic: &[u8],
-        neighbors: Vec<iroh::NodeAddr>,
-    ) -> Result<(), AppError> {
-        let topic_id = blake3::hash(topic);
-        let topic_bytes = *topic_id.as_bytes();
-        
-        let peer_ids: Vec<_> = neighbors
-            .iter()
-            .map(|addr| addr.node_id)
-            .collect();
-        
-        self.gossip
-            .subscribe(topic_bytes.into(), peer_ids)
-            .await?;
-        
-        info!("Joined DHT topic: {:?}", topic_id);
+    pub async fn join_topic(&self, topic: &[u8], neighbors: Vec<iroh::NodeAddr>) -> Result<(), AppError> {
+        let topic_id = TopicId::from_bytes(*blake3::hash(topic).as_bytes());
+        let peer_ids: Vec<_> = neighbors.iter().map(|a| a.node_id).collect();
+        let topic: GossipTopic = self.gossip.subscribe(topic_id, peer_ids).await?;
+        let (sender, _rx) = topic.split();
+        let key = hex::encode(topic_id.as_bytes());
+        self.senders.write().await.insert(key, Arc::new(TokioMutex::new(sender)));
         Ok(())
     }
 }
@@ -411,3 +462,22 @@ pub struct DhtMetrics {
 - [ ] フォールバック機構の実装
 - [ ] テストの更新と実行
 - [ ] ドキュメントの更新
+    pub async fn leave_topic(&self, topic: &[u8]) -> Result<(), AppError> {
+        let key = hex::encode(blake3::hash(topic).as_bytes());
+        self.senders.write().await.remove(&key);
+        Ok(())
+    }
+
+    pub async fn broadcast(&self, topic: &[u8], msg: Vec<u8>) -> Result<(), AppError> {
+        let key = hex::encode(blake3::hash(topic).as_bytes());
+        let sender = if let Some(s) = self.senders.read().await.get(&key).cloned() { s } else {
+            let topic_id = TopicId::from_bytes(*blake3::hash(topic).as_bytes());
+            let t = self.gossip.subscribe(topic_id, vec![]).await?;
+            let (sender, _rx) = t.split();
+            let s = Arc::new(TokioMutex::new(sender));
+            self.senders.write().await.insert(key.clone(), s.clone());
+            s
+        };
+        sender.lock().await.broadcast(msg.into()).await?;
+        Ok(())
+    }
