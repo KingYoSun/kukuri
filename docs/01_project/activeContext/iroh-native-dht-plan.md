@@ -62,6 +62,15 @@
 - ブートストラップ設定: `bootstrap_config.rs` 実装済み（`bootstrap_nodes.json` 読み込み、ソケットアドレスリスト）。
 - Gossip移行: 旧 `GossipManager` は廃止、`IrohGossipService` へ移行完了（進捗レポート参照）。
 
+追加（本日反映）:
+- DHTディスカバリー: `discovery_n0()` と `discovery_dht()` を併用するよう有効化済み。
+- DHT Gossip API: `DhtGossip` に `leave_topic`（Senderドロップ）/`broadcast`（Sender利用、未参加時は自動参加）を実装。
+- ブートストラップUI: 設定画面に `BootstrapConfigPanel` を追加し、UIから `node_id@host:port` を保存可能。
+  - Tauriコマンド: `get_bootstrap_config` / `set_bootstrap_nodes` / `clear_bootstrap_nodes`
+  - 保存先: ユーザーデータ配下 `user_bootstrap_nodes.json`
+  - フォールバック優先順: ユーザー設定 → 同梱 `bootstrap_nodes.json` → なし（= n0 に依存）
+  - development の同梱JSONは `nodes: []`（n0優先運用）
+
 関連:
 - `docs/01_project/activeContext/tasks/status/in_progress.md`（残タスクの最新ソース）
 - 進捗: `docs/01_project/progressReports/2025-09-15_gossip_manager_deprecation_completion.md`
@@ -170,7 +179,9 @@ pub async fn bootstrap_with_fallback(
 - [x] Cargo.toml - irohフィーチャーフラグ追加（実施済み）
 - [x] iroh_network_service.rs - `discovery_dht()` 有効化（実施済み）
 - [ ] dht_bootstrap.rs - quit/broadcast のAPI連動実装（意味整理含む）
+- [x] dht_bootstrap.rs - quit/broadcast 実装（`GossipSender` 管理で実装済み）
 - [x] bootstrap_nodes.json - 形式定義（NodeId@Addr 推奨）と検証導線（実装済み：Tauri/CLI）
+- [x] ブートストラップUI - ユーザー指定を保存/読込（Tauriコマンド + Settings画面）
 - [ ] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
 
 ### 4.3 新規追加（短期）
