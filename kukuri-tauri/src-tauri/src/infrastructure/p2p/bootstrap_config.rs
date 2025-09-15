@@ -5,6 +5,8 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::Path;
 use tracing::{debug, info, warn};
+use iroh::{NodeAddr, NodeId};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootstrapConfig {
@@ -81,6 +83,43 @@ impl BootstrapConfig {
         
         addrs
     }
+
+    /// 形式: "<node_id>@<host:port>" のみ NodeAddr に変換する
+    /// SocketAddr のみの指定は警告を出してスキップ
+    pub fn get_node_addrs_with_id(&self, environment: &str) -> Vec<NodeAddr> {
+        let nodes = self.get_nodes(environment);
+        let mut out = Vec::new();
+
+        for node in nodes {
+            if let Some((id_part, addr_part)) = node.split_once('@') {
+                match (NodeId::from_str(id_part), addr_part.parse::<SocketAddr>()) {
+                    (Ok(node_id), Ok(sock)) => {
+                        out.push(NodeAddr::new(node_id).with_direct_addresses([sock]));
+                    }
+                    (id_res, addr_res) => {
+                        debug!(
+                            "Invalid node entry '{}': id_ok={}, addr_ok={}",
+                            node,
+                            id_res.is_ok(),
+                            addr_res.is_ok()
+                        );
+                    }
+                }
+            } else {
+                // SocketAddr 形式のみ → 警告しつつスキップ（仕様は node_id@addr 推奨）
+                if node.parse::<SocketAddr>().is_ok() {
+                    warn!(
+                        "Bootstrap node '{}' lacks NodeId; expected '<node_id>@<host:port>'. Skipping.",
+                        node
+                    );
+                } else {
+                    debug!("Unrecognized bootstrap node entry: {}", node);
+                }
+            }
+        }
+
+        out
+    }
 }
 
 /// 現在の環境を取得
@@ -113,4 +152,64 @@ pub fn load_bootstrap_nodes() -> Result<Vec<SocketAddr>, AppError> {
     }
     
     Ok(addrs)
+}
+
+/// NodeId を含むブートストラップノードを取得（NodeAddr）。
+/// NodeId がないエントリは警告してスキップする。
+pub fn load_bootstrap_node_addrs() -> Result<Vec<NodeAddr>, AppError> {
+    let env = get_current_environment();
+    info!("Loading bootstrap NodeAddrs for environment: {}", env);
+
+    let config_path = "bootstrap_nodes.json";
+    let config = if Path::new(config_path).exists() {
+        BootstrapConfig::load_from_file(config_path)?
+    } else {
+        info!("Bootstrap config file not found, using defaults");
+        BootstrapConfig::default_config()
+    };
+
+    let addrs = config.get_node_addrs_with_id(&env);
+    if addrs.is_empty() {
+        warn!("No valid NodeId@Addr bootstrap entries for environment: {}", env);
+    } else {
+        info!("Loaded {} NodeId@Addr bootstrap entries", addrs.len());
+    }
+    Ok(addrs)
+}
+
+/// 検証: JSONのノード配列のうち、NodeId@Addr と SocketAddr の件数をカウントしてログ出力
+pub fn validate_bootstrap_config() -> Result<(), AppError> {
+    let env = get_current_environment();
+    let config_path = "bootstrap_nodes.json";
+    let config = if Path::new(config_path).exists() {
+        BootstrapConfig::load_from_file(config_path)?
+    } else {
+        BootstrapConfig::default_config()
+    };
+
+    let nodes = config.get_nodes(&env);
+    let mut with_id = 0usize;
+    let mut socket_only = 0usize;
+    let mut invalid = 0usize;
+
+    for node in nodes {
+        if let Some((id_part, addr_part)) = node.split_once('@') {
+            if NodeId::from_str(id_part).is_ok() && addr_part.parse::<SocketAddr>().is_ok() {
+                with_id += 1;
+            } else {
+                invalid += 1;
+            }
+        } else if node.parse::<SocketAddr>().is_ok() {
+            socket_only += 1;
+        } else {
+            invalid += 1;
+        }
+    }
+
+    info!(
+        "bootstrap_nodes.json validation (env={}): with_id={}, socket_only={}, invalid={}",
+        env, with_id, socket_only, invalid
+    );
+
+    Ok(())
 }

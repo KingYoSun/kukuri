@@ -5,7 +5,9 @@ use iroh_gossip::net::Gossip;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::{error, info, debug};
+use tracing::{error, info, debug, warn};
+use std::fs;
+use serde_json::Value;
 
 #[derive(Parser)]
 #[command(name = "kukuri-cli")]
@@ -77,8 +79,20 @@ async fn run_bootstrap_node(bind_addr: &str, bootstrap_peers: Vec<String>) -> Re
     info!("Node ID: {}", node_id);
     debug!("Node address configured");
     
+    // Resolve peers: CLI args first, then JSON config if empty
+    let mut peers = bootstrap_peers;
+    if peers.is_empty() {
+        let from_file = load_bootstrap_peers_from_json();
+        if from_file.is_empty() {
+            warn!("No bootstrap peers provided and none found in bootstrap_nodes.json");
+        } else {
+            info!("Loaded {} peers from bootstrap_nodes.json", from_file.len());
+            peers.extend(from_file);
+        }
+    }
+
     // Parse and connect to bootstrap peers
-    for peer_str in bootstrap_peers {
+    for peer_str in peers {
         if let Ok(node_addr) = parse_node_addr(&peer_str) {
             info!("Connecting to bootstrap peer: {}", node_addr.node_id);
             if let Err(e) = endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
@@ -179,4 +193,57 @@ fn parse_node_addr(s: &str) -> Result<iroh::NodeAddr> {
     let socket_addr = SocketAddr::from_str(parts[1])?;
     
     Ok(iroh::NodeAddr::new(node_id).with_direct_addresses([socket_addr]))
+}
+
+fn load_bootstrap_peers_from_json() -> Vec<String> {
+    // Path via env or default to local file
+    let path = std::env::var("KUKURI_BOOTSTRAP_CONFIG").unwrap_or_else(|_| "bootstrap_nodes.json".to_string());
+    let env = std::env::var("KUKURI_ENV").or_else(|_| std::env::var("ENVIRONMENT")).unwrap_or_else(|_| "development".to_string());
+
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            debug!("No bootstrap config at {}: {}", path, e);
+            return vec![];
+        }
+    };
+
+    let json: Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!("Invalid JSON in {}: {}", path, e);
+            return vec![];
+        }
+    };
+
+    // Expect structure: { "<env>": { "nodes": ["node_id@host:port", ...] } }
+    let env_obj = match json.get(&env).and_then(|v| v.as_object()) {
+        Some(o) => o,
+        None => {
+            warn!("Environment '{}' not found in {}", env, path);
+            return vec![];
+        }
+    };
+
+    let nodes = match env_obj.get("nodes").and_then(|v| v.as_array()) {
+        Some(a) => a,
+        None => {
+            warn!("No 'nodes' array for '{}' in {}", env, path);
+            return vec![];
+        }
+    };
+
+    let mut peers = Vec::new();
+    for n in nodes {
+        if let Some(s) = n.as_str() {
+            if s.contains('@') {
+                peers.push(s.to_string());
+            } else {
+                // SocketAddr only: not usable for CLI (needs NodeId)
+                debug!("Skipping SocketAddr-only bootstrap entry (no NodeId): {}", s);
+            }
+        }
+    }
+
+    peers
 }

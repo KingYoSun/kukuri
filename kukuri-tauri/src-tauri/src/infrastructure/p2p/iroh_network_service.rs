@@ -29,6 +29,11 @@ impl IrohNetworkService {
         // Routerの作成（Gossipプロトコルは別で設定）
         let router = Router::builder(endpoint.clone()).spawn();
 
+        // ブートストラップ設定の検証（警告/件数ログのみ）
+        if let Err(e) = super::bootstrap_config::validate_bootstrap_config() {
+            tracing::warn!("bootstrap_nodes.json validation failed: {:?}", e);
+        }
+
         // DhtGossipの初期化
         let dht_gossip = match DhtGossip::new(Arc::new(endpoint.clone())).await {
             Ok(service) => Some(Arc::new(service)),
@@ -114,7 +119,14 @@ impl IrohNetworkService {
 
     /// フォールバックモードでピアに接続
     async fn connect_fallback(&self) -> Result<(), AppError> {
-        let fallback_peers = super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?;
+        // 1) 設定ファイルからのブートストラップ接続を優先
+        let fallback_peers = match super::dht_bootstrap::fallback::connect_from_config(&self.endpoint).await {
+            Ok(peers) => peers,
+            Err(_) => {
+                // 2) ハードコードされたフォールバックに接続（なければ失敗）
+                super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?
+            }
+        };
 
         // フォールバックピアをピアリストに追加
         let mut peers = self.peers.write().await;

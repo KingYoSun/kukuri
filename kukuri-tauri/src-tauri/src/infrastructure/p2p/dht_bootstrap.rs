@@ -127,6 +127,7 @@ pub mod secret {
 /// フォールバック機構
 pub mod fallback {
     use super::*;
+    use crate::infrastructure::p2p::bootstrap_config;
     use iroh::NodeAddr;
     use std::str::FromStr;
 
@@ -166,6 +167,30 @@ pub mod fallback {
         }
         
         Ok(connected_nodes)
+    }
+
+    /// 設定ファイル（bootstrap_nodes.json）から NodeId@Addr を読み込み接続
+    pub async fn connect_from_config(endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
+        let node_addrs = bootstrap_config::load_bootstrap_node_addrs()?;
+        let mut connected = Vec::new();
+
+        for node_addr in node_addrs {
+            match endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
+                Ok(_) => {
+                    info!("Connected to config bootstrap node: {}", node_addr.node_id);
+                    connected.push(node_addr);
+                }
+                Err(e) => {
+                    debug!("Failed to connect to config bootstrap node: {:?}", e);
+                }
+            }
+        }
+
+        if connected.is_empty() {
+            return Err(AppError::P2PError("Failed to connect to nodes from bootstrap_nodes.json".to_string()));
+        }
+
+        Ok(connected)
     }
     
     /// ノードアドレス文字列をパース

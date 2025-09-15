@@ -1,10 +1,7 @@
 {
   "development": {
     "description": "Local development bootstrap nodes",
-    "nodes": [
-      "localhost:11223",
-      "localhost:11224"
-    ]
+    "nodes": []
   },
   "staging": {
     "description": "Staging environment bootstrap nodes",

@@ -47,12 +47,13 @@
   - iroh = { version = "0.91.1", features = ["discovery-pkarr-dht"] }（設定済み）
   - iroh-gossip = "0.91.0"
   - distributed-topic-tracker はコメントアウト済み（非推奨化）
-- エンドポイント初期化: `discovery_n0()` のみ有効。`discovery_dht()` は未付与。
+- エンドポイント初期化: `discovery_n0()` + `discovery_dht()` を併用（有効化済み）。
   ```rust
   // kukuri-tauri/src-tauri/src/infrastructure/p2p/iroh_network_service.rs
   let endpoint = Endpoint::builder()
       .secret_key(secret_key)
-      .discovery_n0()  // n0の公開ディスカバリー
+      .discovery_n0()      // n0の公開ディスカバリー
+      .discovery_dht()     // BitTorrent Mainline DHT を利用
       .bind()
       .await?;
   ```
@@ -67,7 +68,7 @@
 
 ## 3. 実装計画
 
-### 3.1 Phase 1: DHTディスカバリーの有効化（未対応 → 次対応）
+### 3.1 Phase 1: DHTディスカバリーの有効化（実施済み）
 
 #### Cargo.tomlの更新（実施済み）
 ```toml
@@ -76,7 +77,7 @@ iroh-gossip = "0.91.0"
 # distributed-topic-tracker = "0.1.1"  # Deprecated
 ```
 
-#### エンドポイント初期化の更新（対応予定）
+#### エンドポイント初期化の更新（実施済み）
 ```rust
 // src-tauri/src/infrastructure/p2p/iroh_network_service.rs
 let endpoint = Endpoint::builder()
@@ -167,9 +168,9 @@ pub async fn bootstrap_with_fallback(
 
 ### 4.2 更新対象（未完了/継続）
 - [x] Cargo.toml - irohフィーチャーフラグ追加（実施済み）
-- [ ] iroh_network_service.rs - `discovery_dht()` 有効化
+- [x] iroh_network_service.rs - `discovery_dht()` 有効化（実施済み）
 - [ ] dht_bootstrap.rs - quit/broadcast のAPI連動実装（意味整理含む）
-- [ ] bootstrap_nodes.json - 形式定義（NodeId@Addr か SocketAddr）と検証導線
+- [x] bootstrap_nodes.json - 形式定義（NodeId@Addr 推奨）と検証導線（実装済み：Tauri/CLI）
 - [ ] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
 
 ### 4.3 新規追加（短期）
@@ -232,7 +233,6 @@ mod tests {
 
 ## 9. 残タスク（集約）
 `docs/01_project/activeContext/tasks/status/in_progress.md` を最新版としつつ、本計画に直結する残りを抜粋:
-- [ ] `bootstrap_nodes.json` の形式定義・検証・読み込み導線の確定（CLI/アプリ双方）
 - [ ] iroh-gossip: quit の意味整理と API 連動実装（例: `dht_bootstrap.rs::leave_topic`）
 - [ ] iroh-gossip: broadcast の意味整理と API 連動実装（例: `dht_bootstrap.rs::broadcast`）
 - [ ] Kukuri ↔ Nostr ブリッジの設計/実装（`bridge::kukuri_to_nostr`, `bridge::nostr_to_kukuri`）
