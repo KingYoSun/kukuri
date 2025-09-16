@@ -1,6 +1,5 @@
-/// DHT基盤のブートストラップ実装
-/// irohのビルトインDHTディスカバリーを使用した分散型ピア発見
-
+//! DHT基盤のブートストラップ実装
+//! irohのビルトインDHTディスカバリーを使用した分散型ピア発見
 use crate::shared::error::AppError;
 use iroh::Endpoint;
 use iroh_gossip::{

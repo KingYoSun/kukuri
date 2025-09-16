@@ -40,7 +40,7 @@ interface OfflineStore extends OfflineState {
     updatedData: T
   ) => Promise<string>;
   confirmUpdate: (updateId: string) => Promise<void>;
-  rollbackUpdate: (updateId: string) => Promise<void>;
+  rollbackUpdate: (updateId: string) => Promise<string | null>;
 }
 
 export const useOfflineStore = create<OfflineStore>()(
@@ -240,12 +240,13 @@ export const useOfflineStore = create<OfflineStore>()(
       },
 
       rollbackUpdate: async (updateId) => {
-        await offlineApi.rollbackOptimisticUpdate(updateId);
+        const originalData = await offlineApi.rollbackOptimisticUpdate(updateId);
         set((state) => {
           const updates = new Map(state.optimisticUpdates);
           updates.delete(updateId);
           return { optimisticUpdates: updates };
         });
+        return originalData;
       },
     }),
     {

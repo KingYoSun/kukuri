@@ -32,10 +32,9 @@ export function BootstrapConfigPanel() {
     const v = newNode.trim();
     if (!v) return;
     if (!v.includes('@')) {
-      errorHandler.log('Invalid bootstrap entry', undefined, {
+      errorHandler.log('node_id@host:port の形式で入力してください', undefined, {
         showToast: true,
         toastTitle: '形式エラー',
-        toastDescription: 'node_id@host:port の形式で入力してください',
       });
       return;
     }
@@ -56,11 +55,14 @@ export function BootstrapConfigPanel() {
       } else {
         await p2pApi.clearBootstrapNodes();
       }
-      errorHandler.log('Bootstrap config saved', undefined, {
+      errorHandler.log(
+        mode === 'custom' ? 'カスタムノードを保存しました' : 'デフォルト(n0)に戻しました',
+        undefined,
+        {
         showToast: true,
         toastTitle: '保存しました',
-        toastDescription: mode === 'custom' ? 'カスタムノードを保存しました' : 'デフォルト(n0)に戻しました',
-      });
+      }
+      );
     } catch (e) {
       errorHandler.log('Failed to save bootstrap config', e, {
         showToast: true,
@@ -147,4 +149,3 @@ export function BootstrapConfigPanel() {
     </Card>
   );
 }
-

@@ -1,6 +1,7 @@
 import { useP2P } from '@/hooks/useP2P';
 import { useEffect, useState, useCallback } from 'react';
 import { p2pApi } from '@/lib/api/p2p';
+import { errorHandler } from '@/lib/errorHandler';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +34,9 @@ export function P2PStatus() {
     try {
       const m = await p2pApi.getMetrics();
       setMetrics(m);
-    } catch {}
+    } catch (e) {
+      errorHandler.log('Failed to fetch metrics', e, { context: 'P2PStatus.refreshMetrics' });
+    }
   }, []);
 
   useEffect(() => {

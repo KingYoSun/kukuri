@@ -106,14 +106,14 @@ export function P2PDebugPanel() {
     }
   }, [addLog]);
 
-  // 開発時は定期的にメトリクスを自動更新
+  // 開発時は定期的にメトリクスを自動更新（テスト時は無効化して安定化）
   useEffect(() => {
-    if (import.meta.env.PROD) return;
+    // Vitest 実行時は Vite のモードが "test"
+    const isTestEnv = import.meta.env.MODE === 'test';
+    if (import.meta.env.PROD || isTestEnv) return;
     let disposed = false;
     (async () => {
-      try {
-        await handleRefreshMetrics();
-      } catch {}
+      await handleRefreshMetrics();
     })();
     const t = setInterval(() => {
       if (!disposed) {

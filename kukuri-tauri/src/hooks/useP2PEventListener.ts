@@ -5,6 +5,7 @@ import { useP2PStore, type P2PMessage, type PeerInfo } from '@/stores/p2pStore';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
 import { errorHandler } from '@/lib/errorHandler';
+import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
 import type { Post } from '@/stores/types';
 import { pubkeyToNpub } from '@/lib/utils/nostr';
 
@@ -173,8 +174,6 @@ export function useP2PEventListener() {
         useP2PStore.getState().clearError();
       }),
     );
-
-import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
     // クリーンアップ
     return () => {
       unlisteners.forEach(async (unlisten) => {

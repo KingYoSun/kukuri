@@ -1,13 +1,12 @@
-/// DHT統合モジュール
-/// iroh-gossipとdistributed-topic-trackerの統合
-
+//! DHT統合モジュール
+//! iroh-gossipとdistributed-topic-trackerの統合
 use crate::domain::entities::Event;
 use crate::infrastructure::p2p::dht_bootstrap::DhtGossip;
 use crate::shared::error::AppError;
 // use iroh_gossip::proto::Event as GossipEvent;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 /// DHTイベントハンドラー
 pub struct DhtEventHandler {
