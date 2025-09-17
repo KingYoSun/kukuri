@@ -1,0 +1,24 @@
+services:
+  node_a:
+    build:
+      context: ..
+    env_file:
+      - .env.node_a
+    command: ["bootstrap"]
+    networks:
+      - kukuri-cli-test
+
+  node_b:
+    build:
+      context: ..
+    depends_on:
+      - node_a
+    env_file:
+      - .env.node_b
+    command: ["connect", "--no-dht", "--timeout", "30"]
+    networks:
+      - kukuri-cli-test
+
+networks:
+  kukuri-cli-test:
+    driver: bridge

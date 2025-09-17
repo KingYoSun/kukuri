@@ -54,3 +54,6 @@
 - 2025年09月15日: NIP-19 TLV検証を拡張（tag=1 relay URLがある場合はws(s)://のみ許可）。
 - 2025年09月15日: `kukuri-tauri/src-tauri/bootstrap_nodes.json` を `.gitignore` に追加（UIから入力する方針に統一）。
 - 2025年09月15日: テスト/品質対応（DHT/Discovery関連）。TSユニット/結合テストを実行し、`P2PDebugPanel` の自動メトリクス更新がテストを不安定化していた問題を修正（テストモードでは自動更新無効化）。`offlineStore.rollbackUpdate` の戻り値不整合を修正してテスト通過。型エラーを解消（`BootstrapConfigPanel` の `errorHandler` オプション調整、`useP2PEventListener` の誤った import 位置修正）。Rust側は `cargo check` でビルド確認（`cargo clippy -D warnings` は既存警告が多く別対応）。
+- 2025年09月16日: Rust/TS双方でP2P投稿・返信・引用経路のテストを追加。TSはVitestで通過、Rust統合テストはENABLE_P2P_INTEGRATION=1で実行したがローカル環境でピア接続が成立せず6件がタイムアウト。
+- 2025年09月16日: 接続確認用ヘルパーを  として追加し、各P2P統合テストでトピック参加の成否を明示的に検証。ローカル環境では依然としてメッセージ受信前にタイムアウトするため、更なる接続安定化が今後の課題。
+- 2025年09月17日: Windows で ./scripts/test-docker.ps1 実行時の invalid socket address syntax エラーを調査開始（Codex）

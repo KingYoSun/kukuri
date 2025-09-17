@@ -48,6 +48,7 @@
 - 依存追加: 追加時は最新安定版を確認して採用。
 - フロントのエラー処理: `console.error` は禁止。`docs/03_implementation/error_handling_guidelines.md` の `errorHandler` を使用。
 - Windowsテスト: DLL等の理由で不安定な場合は `./scripts/test-docker.ps1` を用いて Docker 経由で実行。
+- ファイル編集時は既存ファイルのエンコーディング（UTF-8/LF）を必ず維持し、スクリプトでのバイト列操作でも UTF-8 を明示して読み書きすること（Shift_JIS など別エンコーディングでの保存禁止）。
 - 検証必須: テスト・型・リント修正タスクは、実際にコマンドを実行しエラーが出ないことを確認してから完了とする。
 - Rustテスト実行方針: Rust（`kukuri-tauri/src-tauri` と `kukuri-cli`）の `cargo test` は所要時間が長くても必ず実行し、完了まで待つ。必要に応じてタイムアウトを延長してでもテスト結果を確認する。
 - 日付記法: ドキュメント内の日付は `date "+%Y年%m月%d日"` の出力を使用。

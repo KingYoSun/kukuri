@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.83-slim AS builder
+FROM rustlang/rust:nightly-slim AS builder
 
 # Install dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -40,8 +40,12 @@ RUN useradd -m -u 1000 -s /bin/bash kukuri
 # Copy binary from builder
 COPY --from=builder /usr/src/kukuri-cli/target/release/kukuri-cli /usr/local/bin/kukuri-cli
 
+# Copy runtime entrypoint wrapper
+COPY scripts/docker-entrypoint.sh /usr/local/bin/kukuri-entrypoint.sh
+RUN chmod +x /usr/local/bin/kukuri-entrypoint.sh
+
 # Set ownership
-RUN chown kukuri:kukuri /usr/local/bin/kukuri-cli
+RUN chown kukuri:kukuri /usr/local/bin/kukuri-cli /usr/local/bin/kukuri-entrypoint.sh
 
 # Switch to non-root user
 USER kukuri
@@ -53,5 +57,5 @@ WORKDIR /home/kukuri
 EXPOSE 11223
 
 # Default command
-ENTRYPOINT ["kukuri-cli"]
+ENTRYPOINT ["/usr/local/bin/kukuri-entrypoint.sh"]
 CMD ["bootstrap"]

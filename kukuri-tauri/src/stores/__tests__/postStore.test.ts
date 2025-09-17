@@ -1,5 +1,21 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const { mockCreatePost, mockGetPosts } = vi.hoisted(() => ({
+  mockCreatePost: vi.fn(),
+  mockGetPosts: vi.fn(),
+}));
+
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    createPost: mockCreatePost,
+    getPosts: mockGetPosts,
+    deletePost: vi.fn(),
+    likePost: vi.fn(),
+  },
+}));
+
 import { usePostStore } from '../postStore';
+import { useOfflineStore } from '../offlineStore';
 import type { Post } from '../types';
 
 describe('postStore', () => {
@@ -70,9 +86,21 @@ describe('postStore', () => {
   };
 
   beforeEach(() => {
+    mockCreatePost.mockReset();
+    mockGetPosts.mockReset();
+
     usePostStore.setState({
       posts: new Map(),
       postsByTopic: new Map(),
+    });
+
+    useOfflineStore.setState({
+      isOnline: true,
+      pendingActions: [],
+      optimisticUpdates: new Map(),
+      syncErrors: new Map(),
+      syncQueue: [],
+      isSyncing: false,
     });
   });
 
@@ -188,4 +216,112 @@ describe('postStore', () => {
     const emptyPosts = usePostStore.getState().getPostsByTopic('nonexistent');
     expect(emptyPosts).toHaveLength(0);
   });
+
+  it('オンライン時はcreatePostがTauri API経由で投稿すること', async () => {
+    const apiResponse = {
+      id: 'real-post',
+      content: 'こんにちは',
+      author_pubkey: 'pubkey123',
+      topic_id: 'topic1',
+      created_at: 1_725_000_000,
+      likes: 0,
+      boosts: 0,
+      replies: 0,
+      is_synced: true,
+    };
+    mockCreatePost.mockResolvedValueOnce(apiResponse);
+
+    const result = await usePostStore.getState().createPost('こんにちは', 'topic1');
+
+    expect(mockCreatePost).toHaveBeenCalledTimes(1);
+    expect(mockCreatePost).toHaveBeenCalledWith({
+      content: 'こんにちは',
+      topic_id: 'topic1',
+      reply_to: undefined,
+      quoted_post: undefined,
+    });
+
+    const state = usePostStore.getState();
+    expect(state.posts.get('real-post')?.content).toBe('こんにちは');
+    expect(state.postsByTopic.get('topic1')).toEqual(['real-post']);
+    expect(result.id).toBe('real-post');
+  });
+
+  it('replyToを指定するとreply_toパラメータを付与すること', async () => {
+    const apiResponse = {
+      id: 'reply-post',
+      content: '返信本文',
+      author_pubkey: 'pubkey123',
+      topic_id: 'topic1',
+      created_at: 1_725_000_100,
+      likes: 0,
+      boosts: 0,
+      replies: 0,
+      is_synced: true,
+    };
+    mockCreatePost.mockResolvedValueOnce(apiResponse);
+
+    await usePostStore.getState().createPost('返信本文', 'topic1', { replyTo: 'event123' });
+
+    expect(mockCreatePost).toHaveBeenCalledTimes(1);
+    expect(mockCreatePost).toHaveBeenLastCalledWith({
+      content: '返信本文',
+      topic_id: 'topic1',
+      reply_to: 'event123',
+      quoted_post: undefined,
+    });
+  });
+
+  it('quotedPostを指定するとquoted_postパラメータを付与すること', async () => {
+    const apiResponse = {
+      id: 'quote-post',
+      content: '引用本文',
+      author_pubkey: 'pubkey123',
+      topic_id: 'topic1',
+      created_at: 1_725_000_200,
+      likes: 0,
+      boosts: 0,
+      replies: 0,
+      is_synced: true,
+    };
+    mockCreatePost.mockResolvedValueOnce(apiResponse);
+
+    await usePostStore.getState().createPost('引用本文', 'topic1', { quotedPost: 'note1' });
+
+    expect(mockCreatePost).toHaveBeenCalledTimes(1);
+    expect(mockCreatePost).toHaveBeenLastCalledWith({
+      content: '引用本文',
+      topic_id: 'topic1',
+      reply_to: undefined,
+      quoted_post: 'note1',
+    });
+  });
+
+  it('fetchPostsがAPIレスポンスをストアに反映すること', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    mockGetPosts.mockResolvedValueOnce([
+      {
+        id: 'api-post-1',
+        content: 'P2Pからの投稿',
+        author_pubkey: 'pubkey999',
+        topic_id: 'topic1',
+        created_at: now,
+        likes: 2,
+        boosts: 0,
+        replies: 0,
+        is_synced: true,
+      },
+    ]);
+
+    await usePostStore.getState().fetchPosts('topic1');
+
+    expect(mockGetPosts).toHaveBeenCalledTimes(1);
+    expect(mockGetPosts).toHaveBeenCalledWith({ topic_id: 'topic1', limit: undefined, offset: undefined });
+
+    const posts = usePostStore.getState().getPostsByTopic('topic1');
+    expect(posts).toHaveLength(1);
+    expect(posts[0].id).toBe('api-post-1');
+    expect(posts[0].content).toBe('P2Pからの投稿');
+  });
+
 });
