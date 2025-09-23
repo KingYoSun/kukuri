@@ -24,7 +24,9 @@ services:
       RUST_BACKTRACE: 1
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
-      ENABLE_P2P_INTEGRATION: "1"
+      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-1}
+      KUKURI_FORCE_LOCALHOST_ADDRS: ${KUKURI_FORCE_LOCALHOST_ADDRS:-1}
+      KUKURI_BOOTSTRAP_PEERS: ${KUKURI_BOOTSTRAP_PEERS:-}
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
@@ -56,7 +58,9 @@ services:
       RUST_BACKTRACE: full
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
-      ENABLE_P2P_INTEGRATION: "1"
+      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-1}
+      KUKURI_FORCE_LOCALHOST_ADDRS: ${KUKURI_FORCE_LOCALHOST_ADDRS:-1}
+      KUKURI_BOOTSTRAP_PEERS: ${KUKURI_BOOTSTRAP_PEERS:-}
 
   # 個別のTypeScriptテスト実行
   ts-test:

@@ -4,13 +4,22 @@ mod tests {
     use crate::infrastructure::p2p::gossip_service::GossipService;
     use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
     use crate::modules::p2p::generate_topic_id;
-    use iroh::{Endpoint, Watcher as _};
+    use iroh::{Endpoint, NodeAddr, Watcher as _};
+    use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::Arc;
     use tokio::time::{timeout, sleep, Duration};
     use nostr_sdk::prelude::*;
 
     async fn create_service_with_endpoint() -> (IrohGossipService, Arc<Endpoint>) {
-        let endpoint = Arc::new(Endpoint::builder().discovery_local_network().bind().await.unwrap());
+        let bind_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0);
+        let endpoint = Arc::new(
+            Endpoint::builder()
+                .discovery_local_network()
+                .bind_addr_v4(bind_addr)
+                .bind()
+                .await
+                .unwrap(),
+        );
         let svc = IrohGossipService::new(endpoint.clone()).unwrap();
         (svc, endpoint)
     }
@@ -32,11 +41,15 @@ mod tests {
     }
 
     async fn connect_peers(src: &Endpoint, dst: &Endpoint) {
-        // discovery_local_network により NodeId だけで解決できることを確認
-        let node_id = dst.node_id();
-        // 少し待機してディスカバリー情報が反映されるようにする
+        // resolve peer using direct addresses similar to kukuri-cli
         sleep(Duration::from_millis(500)).await;
-        src.connect(node_id, iroh_gossip::ALPN).await.unwrap();
+        let direct_addrs = dst.direct_addresses().initialized().await;
+        if let Some(addr) = direct_addrs.into_iter().map(|a| a.addr).next() {
+            let node_addr = NodeAddr::new(dst.node_id()).with_direct_addresses([addr]);
+            src.connect(node_addr, iroh_gossip::ALPN).await.unwrap();
+        } else {
+            src.connect(dst.node_id(), iroh_gossip::ALPN).await.unwrap();
+        }
     }
 
     async fn wait_for_topic_membership(service: &IrohGossipService, topic: &str, timeout: Duration) -> bool {

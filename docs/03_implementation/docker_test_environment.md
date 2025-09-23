@@ -59,6 +59,15 @@ PowerShellで以下のコマンドを実行：
 # リントとフォーマットチェック
 .\scripts\test-docker.ps1 lint
 
+# Dockerイメージの再ビルドのみ
+.\scripts\test-docker.ps1 build
+
+# コンテナとイメージのクリーンアップ
+.\scripts\test-docker.ps1 clean
+
+# キャッシュ削除を含む完全クリーンアップ
+.\scripts\test-docker.ps1 cache-clean
+
 # ヘルプを表示
 .\scripts\test-docker.ps1 -Help
 ```
@@ -81,9 +90,30 @@ chmod +x scripts/test-docker.sh
 # リントとフォーマットチェック
 ./scripts/test-docker.sh lint
 
+# Dockerイメージの再ビルドのみ
+./scripts/test-docker.sh build
+
+# コンテナとイメージのクリーンアップ
+./scripts/test-docker.sh clean
+
+# キャッシュ削除を含む完全クリーンアップ
+./scripts/test-docker.sh cache-clean
+
+# P2P統合テスト（Docker上で起動）
+./scripts/test-docker.sh p2p --tests iroh_integration_tests --bootstrap node1@127.0.0.1:4400
+
 # ヘルプを表示
 ./scripts/test-docker.sh -h
 ```
+
+
+P2P統合テスト用に追加された `p2p` サブコマンドでは次のオプションを組み合わせて利用できます。
+- `--tests <name>`: `iroh_integration_tests`（既定）を含む Cargo テストターゲットを指定
+- `--bootstrap <node_id@host:port>`: カンマ区切りでブートストラップピアを上書き
+- `--no-build`: 事前ビルドをスキップ（イメージ変更がない反復実行向け）
+- `--keep-env`: 生成された `kukuri-tauri/tests/.env.p2p` を削除せず残す
+- `--rust-log <value>` / `--rust-backtrace <value>`: Rust 側のロギング設定を上書き
+実行時に生成される `.env.p2p` は `kukuri-tauri/tests/` 配下に保存され、`--keep-env` を指定しなければ完了後に自動削除されます。
 
 ### docker-composeコマンドでの直接実行
 
@@ -118,9 +148,12 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 
 ### 環境変数
 - `RUST_BACKTRACE=1`: Rustのスタックトレースを有効化
-- `RUST_LOG=debug`: デバッグログを出力
-- `NODE_ENV=test`: Node.jsテスト環境
-- `CI=true`: CI環境として実行
+- `RUST_LOG=debug`: Rust側のログレベルをデバッグに固定
+- `NODE_ENV=test`: Node.jsのテスト環境を明示
+- `CI=true`: CI環境であることをライブラリに通知
+- `ENABLE_P2P_INTEGRATION` (既定値 `1`): P2P統合テスト向けのパスを有効化
+- `KUKURI_FORCE_LOCALHOST_ADDRS` (既定値 `1`): Docker内部から `127.0.0.1` を優先してノードを解決
+- `KUKURI_BOOTSTRAP_PEERS`: `node_id@host:port` 形式のカンマ区切りでブートストラップノードを上書き
 
 ## CI/CDでの活用
 

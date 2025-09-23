@@ -46,6 +46,9 @@ FROM rust:1.85-bookworm AS test-env
 .\scripts\test-docker.ps1 rust   # Rustテストのみ
 .\scripts\test-docker.ps1 ts     # TypeScriptテストのみ
 .\scripts\test-docker.ps1 lint   # リントチェック
+.\scripts\test-docker.ps1 build  # Dockerイメージを再ビルド
+.\scripts\test-docker.ps1 clean  # コンテナとイメージをクリーンアップ
+.\scripts\test-docker.ps1 cache-clean  # キャッシュも含めてクリーンアップ
 ```
 
 #### Linux/macOS用（test-docker.sh）
@@ -54,7 +57,13 @@ FROM rust:1.85-bookworm AS test-env
 ./scripts/test-docker.sh rust    # Rustテストのみ
 ./scripts/test-docker.sh ts      # TypeScriptテストのみ
 ./scripts/test-docker.sh lint    # リントチェック
+./scripts/test-docker.sh build   # Dockerイメージを再ビルド
+./scripts/test-docker.sh clean   # コンテナとイメージをクリーンアップ
+./scripts/test-docker.sh cache-clean  # キャッシュも含めてクリーンアップ
+./scripts/test-docker.sh p2p --tests iroh_integration_tests  # P2P統合テスト
 ```
+
+P2P統合テストでは `./scripts/test-docker.sh p2p --bootstrap <node@host:port>` を利用してブートストラップノードを差し替え可能。Docker 上でのアドレス強制は `KUKURI_FORCE_LOCALHOST_ADDRS=1` で制御する。
 
 ### 3. CI/CD統合
 

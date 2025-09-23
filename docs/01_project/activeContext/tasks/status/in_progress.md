@@ -57,3 +57,5 @@
 - 2025年09月16日: Rust/TS双方でP2P投稿・返信・引用経路のテストを追加。TSはVitestで通過、Rust統合テストはENABLE_P2P_INTEGRATION=1で実行したがローカル環境でピア接続が成立せず6件がタイムアウト。
 - 2025年09月16日: 接続確認用ヘルパーを  として追加し、各P2P統合テストでトピック参加の成否を明示的に検証。ローカル環境では依然としてメッセージ受信前にタイムアウトするため、更なる接続安定化が今後の課題。
 - 2025年09月17日: Windows で ./scripts/test-docker.ps1 実行時の invalid socket address syntax エラーを調査開始（Codex）
+- 2025年09月18日: iroh_integration_tests の接続設定を kukuri-cli に倣って NodeAddr で直接解決するよう更新。ローカル統合テストのタイムアウト緩和を狙ったが Windows ネイティブ cargo test は STATUS_ENTRYPOINT_NOT_FOUND で停止。
+- 2025年09月18日: Docker Compose の P2P 環境変数をテンプレート化し、scripts/test-docker.sh に P2P コマンドを統合。Windows でも docker 経由で P2P 統合テストとブートストラップ設定の注入が容易に。
