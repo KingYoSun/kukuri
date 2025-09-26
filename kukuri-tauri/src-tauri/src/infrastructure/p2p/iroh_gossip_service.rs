@@ -1,6 +1,7 @@
 ﻿use super::GossipService;
 use crate::shared::error::AppError;
 use crate::domain::entities::Event;
+use crate::infrastructure::p2p::utils::{parse_peer_hint, ParsedPeer};
 use async_trait::async_trait;
 use futures::StreamExt;
 use iroh::protocol::Router;
@@ -20,6 +21,7 @@ use crate::modules::p2p::events::P2PEvent;
 use crate::modules::p2p::message::GossipMessage;
 
 pub struct IrohGossipService {
+    endpoint: Arc<iroh::Endpoint>,
     gossip: Arc<Gossip>,
     router: Arc<Router>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
@@ -45,6 +47,7 @@ impl IrohGossipService {
             .spawn();
 
         Ok(Self {
+            endpoint,
             gossip: Arc::new(gossip),
             router: Arc::new(router),
             topics: Arc::new(RwLock::new(HashMap::new())),
@@ -68,25 +71,58 @@ impl IrohGossipService {
 
 #[async_trait]
 impl GossipService for IrohGossipService {
-    async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {
-        let mut topics = self.topics.write().await;
+    async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
+        let parsed_peers: Vec<ParsedPeer> = initial_peers
+            .into_iter()
+            .filter_map(|entry| match parse_peer_hint(&entry) {
+                Ok(parsed) => Some(parsed),
+                Err(e) => {
+                    tracing::warn!("Failed to parse initial peer '{}': {:?}", entry, e);
+                    None
+                }
+            })
+            .collect();
 
-        // 既に参加済みの場合はスキップ
-        if topics.contains_key(topic) {
-            tracing::debug!("Already joined topic: {}", topic);
-            return Ok(());
+        {
+            let topics = self.topics.read().await;
+            if topics.contains_key(topic) {
+                drop(topics);
+                self.apply_initial_peers(topic, &parsed_peers).await?;
+                return Ok(());
+            }
+            drop(topics);
+        }
+
+        for peer in &parsed_peers {
+            if let Some(addr) = &peer.node_addr {
+                if let Err(e) = self.endpoint.add_node_addr(addr.clone()) {
+                    tracing::warn!("Failed to add node addr for {}: {:?}", topic, e);
+                }
+            }
         }
 
         let topic_id = Self::create_topic_id(topic);
+        let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
 
-        // Gossip APIを使用してトピックに参加し、Sender/Receiverに分離
         let gossip_topic: GossipTopic = self
             .gossip
-            .subscribe(topic_id, vec![])
+            .subscribe(topic_id, peer_ids.clone())
             .await
             .map_err(|e| AppError::P2PError(format!("Failed to subscribe to topic: {:?}", e)))?;
 
-        let (sender, mut receiver) = gossip_topic.split();
+        let (mut sender_handle, mut receiver) = gossip_topic.split();
+
+        if !peer_ids.is_empty() {
+            if let Err(e) = sender_handle.join_peers(peer_ids.clone()).await {
+                tracing::warn!("Failed to join peers for topic {}: {:?}", topic, e);
+            }
+        }
+
+        if let Err(e) = receiver.joined().await {
+            tracing::debug!("Waiting for neighbor on {} returned: {:?}", topic, e);
+        }
+
+        let sender = Arc::new(TokioMutex::new(sender_handle));
 
         // 受信タスクを起動（UI配信用にサブスクライバへ配布 & 任意でP2PEventを送出）
         let topic_clone = topic.to_string();
@@ -98,7 +134,6 @@ impl GossipService for IrohGossipService {
                 match event {
                     Ok(GossipApiEvent::Received(msg)) => {
                         super::metrics::inc_received();
-                        // 1) P2PEvent (GossipMessage) 経路（互換用途）
                         if let Some(tx) = &event_tx_clone {
                             if let Ok(message) = GossipMessage::from_bytes(&msg.content) {
                                 let _ = tx.lock().unwrap().send(P2PEvent::MessageReceived {
@@ -109,9 +144,7 @@ impl GossipService for IrohGossipService {
                             }
                         }
 
-                        // 2) UI向けサブスクライバ（domain::entities::Event）
                         if let Ok(domain_event) = serde_json::from_slice::<Event>(&msg.content) {
-                            // NIP-01/10/19 に準拠しているか検証（不正は破棄）
                             if let Err(e) = domain_event.validate_nip01().and_then(|_| domain_event.validate_nip10_19()) {
                                 tracing::warn!("Drop invalid Nostr event (NIP-01): {}", e);
                             } else {
@@ -155,13 +188,13 @@ impl GossipService for IrohGossipService {
         let handle = TopicHandle {
             topic_id: topic.to_string(),
             iroh_topic_id: topic_id,
-            sender: Arc::new(TokioMutex::new(sender)),
+            sender,
             receiver_task,
             subscribers,
         };
 
+        let mut topics = self.topics.write().await;
         topics.insert(topic.to_string(), handle);
-        tracing::info!("Joined gossip topic: {}", topic);
 
         Ok(())
     }

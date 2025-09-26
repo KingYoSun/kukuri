@@ -1,5 +1,6 @@
 //! DHT基盤のブートストラップ実装
 //! irohのビルトインDHTディスカバリーを使用した分散型ピア発見
+use super::utils::parse_node_addr;
 use crate::shared::error::AppError;
 use iroh::Endpoint;
 use iroh_gossip::{
@@ -283,20 +284,4 @@ pub mod fallback {
         Ok(connected)
     }
     
-    /// ノードアドレス文字列をパース
-    fn parse_node_addr(node_str: &str) -> Result<NodeAddr, AppError> {
-        // 形式: "NodeId@Address"
-        let parts: Vec<&str> = node_str.split('@').collect();
-        if parts.len() != 2 {
-            return Err(AppError::P2PError(format!("Invalid node address format: {}", node_str)));
-        }
-        
-        let node_id = iroh::NodeId::from_str(parts[0])
-            .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {}", e)))?;
-        
-        let socket_addr = parts[1].parse()
-            .map_err(|e| AppError::P2PError(format!("Failed to parse socket address: {}", e)))?;
-        
-        Ok(NodeAddr::new(node_id).with_direct_addresses([socket_addr]))
-    }
 }

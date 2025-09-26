@@ -7,6 +7,7 @@ pub mod dht_bootstrap;
 pub mod dht_integration;
 pub mod bootstrap_config;
 pub mod metrics;
+pub mod utils;
 
 use serde::{Deserialize, Serialize};
 
