@@ -100,7 +100,7 @@ chmod +x scripts/test-docker.sh
 ./scripts/test-docker.sh cache-clean
 
 # P2P統合テスト（Docker上で起動）
-./scripts/test-docker.sh p2p --tests iroh_integration_tests --bootstrap node1@127.0.0.1:4400
+./scripts/test-docker.sh p2p --tests iroh_integration_tests
 
 # ヘルプを表示
 ./scripts/test-docker.sh -h
@@ -109,11 +109,13 @@ chmod +x scripts/test-docker.sh
 
 P2P統合テスト用に追加された `p2p` サブコマンドでは次のオプションを組み合わせて利用できます。
 - `--tests <name>`: `iroh_integration_tests`（既定）を含む Cargo テストターゲットを指定
-- `--bootstrap <node_id@host:port>`: カンマ区切りでブートストラップピアを上書き
+- `--bootstrap <node_id@host:port>`: デフォルトの `p2p-bootstrap` 設定を上書きしたい場合に使用（複数ノードはカンマ区切り）
 - `--no-build`: 事前ビルドをスキップ（イメージ変更がない反復実行向け）
 - `--keep-env`: 生成された `kukuri-tauri/tests/.env.p2p` を削除せず残す
 - `--rust-log <value>` / `--rust-backtrace <value>`: Rust 側のロギング設定を上書き
-実行時に生成される `.env.p2p` は `kukuri-tauri/tests/` 配下に保存され、`--keep-env` を指定しなければ完了後に自動削除されます。
+実行時に生成される `.env.p2p` は `kukuri-tauri/tests/` 配下に保存され、デフォルトで `KUKURI_BOOTSTRAP_PEERS=03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233` を含みます。`--keep-env` を指定しなければ完了後に自動削除されます。
+
+詳細な設計背景と検証手順は `docs/03_implementation/p2p_dht_test_strategy.md` を参照してください。
 
 ### docker-composeコマンドでの直接実行
 
@@ -141,10 +143,13 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 
 ### docker-compose.test.yml
 以下のサービスを定義：
+- `p2p-bootstrap`: iroh DHT ブートストラップノード（`kukuri-cli` を使用）
 - `test-runner`: すべてのテストを実行
 - `rust-test`: Rustテストのみ実行
 - `ts-test`: TypeScriptテストのみ実行
 - `lint-check`: リントとフォーマットチェック
+
+`p2p-bootstrap` は固定シークレットで決定論的な NodeId を生成し、11233/TCP と 6881/UDP を公開してテスト用 DHT ブートストラップとして常駐します。`test-runner` / `rust-test` はヘルスチェックの完了を待って起動し、`.env.p2p` に自動出力される `KUKURI_BOOTSTRAP_PEERS` を通じてこのノードを参照します。
 
 ### 環境変数
 - `RUST_BACKTRACE=1`: Rustのスタックトレースを有効化
@@ -152,8 +157,9 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 - `NODE_ENV=test`: Node.jsのテスト環境を明示
 - `CI=true`: CI環境であることをライブラリに通知
 - `ENABLE_P2P_INTEGRATION` (既定値 `1`): P2P統合テスト向けのパスを有効化
-- `KUKURI_FORCE_LOCALHOST_ADDRS` (既定値 `1`): Docker内部から `127.0.0.1` を優先してノードを解決
-- `KUKURI_BOOTSTRAP_PEERS`: `node_id@host:port` 形式のカンマ区切りでブートストラップノードを上書き
+- `KUKURI_FORCE_LOCALHOST_ADDRS` (推奨値 `0`): DHT 経由で得たピアアドレスをそのまま利用するためのフラグ。p2p-bootstrap を利用するテストではスクリプト側で自動的に 0 に上書きされる
+- `KUKURI_BOOTSTRAP_PEERS`: `node_id@host:port` 形式。p2p-bootstrap 起動時に `03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233` が自動設定される
+- `KUKURI_SECRET_KEY`: p2p-bootstrap コンテナが使用する Base64 エンコード済み 32バイト秘密鍵。既定値は `AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`
 
 ## CI/CDでの活用
 

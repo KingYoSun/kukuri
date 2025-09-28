@@ -31,7 +31,7 @@
 - [ ] Rust/TSの契約テストを追加（NIP-10のmarker/relay_url整合の境界ケース）
 - [ ] Windows: `./scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加
 - [ ] `modules/p2p/tests/iroh_integration_tests.rs` を NodeAddr ヒント対応（`connect_peers` の戻り値で初期ピア再設定）
-- [ ] P2P受信確認テストの安定化（Endpoint生成と接続シーケンスの再検討 or テスト専用Gossipスタブ）
+- [ ] P2P受信確認テストの安定化（DHTブートストラップコンテナ経由で `discovery_dht()` のみを使用。詳細: `docs/03_implementation/p2p_dht_test_strategy.md`）
 - [ ] TypeScript契約テストの追加と Docker スモークテスト構成の縮小タスク化
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
@@ -63,3 +63,5 @@
 - 2025年09月18日: iroh_integration_tests の接続設定を kukuri-cli に倣って NodeAddr で直接解決するよう更新。ローカル統合テストのタイムアウト緩和を狙ったが Windows ネイティブ cargo test は STATUS_ENTRYPOINT_NOT_FOUND で停止。
 - 2025年09月18日: Docker Compose の P2P 環境変数をテンプレート化し、scripts/test-docker.sh に P2P コマンドを統合。Windows でも docker 経由で P2P 統合テストとブートストラップ設定の注入が容易に。
 - 2025年09月26日: DHTブートストラップを NodeAddr ヒント対応に再構成（`p2p::utils::parse_peer_hint` を追加、`IrohGossipService` の初期ピア反映を調整）。受信テスト未改修のため `iroh_integration_tests.rs` や受信確認フローの更新、TS契約テスト整備は別途進行予定。
+- 2025年09月28日: DHTブートストラップサービスを Docker で常駐させ、テストは `discovery_dht()` のみで接続する方針に更新。詳細は `docs/03_implementation/p2p_dht_test_strategy.md`。
+
