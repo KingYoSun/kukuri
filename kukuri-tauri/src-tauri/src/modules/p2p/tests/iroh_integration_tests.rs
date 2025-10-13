@@ -4,7 +4,7 @@ mod tests {
     use crate::infrastructure::p2p::gossip_service::GossipService;
     use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
     use crate::modules::p2p::generate_topic_id;
-    use iroh::{Endpoint, NodeAddr, Watcher as _};
+    use iroh::{Endpoint, NodeAddr};
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::Arc;
     use tokio::time::{timeout, sleep, Duration};
@@ -43,9 +43,12 @@ mod tests {
     async fn connect_peers(src: &Endpoint, dst: &Endpoint) {
         // resolve peer using direct addresses similar to kukuri-cli
         sleep(Duration::from_millis(500)).await;
-        let direct_addrs = dst.direct_addresses().initialized().await;
-        if let Some(addr) = direct_addrs.into_iter().map(|a| a.addr).next() {
-            let node_addr = NodeAddr::new(dst.node_id()).with_direct_addresses([addr]);
+        dst.online().await;
+        let node_addr = dst.node_addr();
+        if let Some(addr) = node_addr.direct_addresses().next().copied() {
+            let direct_only = NodeAddr::new(dst.node_id()).with_direct_addresses([addr]);
+            src.connect(direct_only, iroh_gossip::ALPN).await.unwrap();
+        } else if node_addr.relay_url().is_some() {
             src.connect(node_addr, iroh_gossip::ALPN).await.unwrap();
         } else {
             src.connect(dst.node_id(), iroh_gossip::ALPN).await.unwrap();

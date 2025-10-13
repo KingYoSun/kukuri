@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 # P2P and networking (same versions as kukuri-tauri)
-iroh = { version = "0.91.1", features = ["discovery-pkarr-dht", "discovery-local-network"] }
-iroh-gossip = "0.91.0"
+iroh = { version = "0.93.1", features = ["discovery-pkarr-dht", "discovery-local-network"] }
+iroh-gossip = "0.93.1"
 blake3 = "1.5"
 
 # Async runtime

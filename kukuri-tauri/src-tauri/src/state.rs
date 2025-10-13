@@ -39,6 +39,7 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use rand_core::{OsRng, TryRngCore};
 use std::collections::{HashSet as StdHashSet, VecDeque as StdVecDeque};
 
 const P2P_DEDUP_MAX: usize = 8192;
@@ -156,7 +157,11 @@ impl AppState {
         let event_distributor: Arc<dyn EventDistributor> = Arc::new(DefaultEventDistributor::new());
         
         // P2Pサービスの初期化（後で実際に初期化）
-        let iroh_secret_key = iroh::SecretKey::generate(rand::thread_rng());
+        let mut secret_key_bytes = [0u8; 32];
+        OsRng
+            .try_fill_bytes(&mut secret_key_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to generate iroh secret key: {:?}", e))?;
+        let iroh_secret_key = iroh::SecretKey::from_bytes(&secret_key_bytes);
         // ネットワーク設定（環境変数等から）
         let app_cfg = crate::shared::AppConfig::from_env();
         let net_cfg = app_cfg.network.clone();

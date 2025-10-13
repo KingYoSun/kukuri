@@ -12,8 +12,8 @@
 # kukuri-tauri/src-tauri/Cargo.toml
 [dependencies]
 # P2P Networking（DHTフィーチャー付き）
-iroh = { version = "0.91.1", features = ["discovery-pkarr-dht"] }
-iroh-gossip = "0.91.0"
+iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }
+iroh-gossip = "0.93.1"
 
 # その他の依存関係
 keyring = "3.6.3"  # シークレット管理用

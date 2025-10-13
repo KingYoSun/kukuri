@@ -64,4 +64,4 @@
 - 2025年09月18日: Docker Compose の P2P 環境変数をテンプレート化し、scripts/test-docker.sh に P2P コマンドを統合。Windows でも docker 経由で P2P 統合テストとブートストラップ設定の注入が容易に。
 - 2025年09月26日: DHTブートストラップを NodeAddr ヒント対応に再構成（`p2p::utils::parse_peer_hint` を追加、`IrohGossipService` の初期ピア反映を調整）。受信テスト未改修のため `iroh_integration_tests.rs` や受信確認フローの更新、TS契約テスト整備は別途進行予定。
 - 2025年09月28日: DHTブートストラップサービスを Docker で常駐させ、テストは `discovery_dht()` のみで接続する方針に更新。詳細は `docs/03_implementation/p2p_dht_test_strategy.md`。
-
+- 2025年10月13日: iroh / iroh-gossip バージョンを 0.93.1 へ更新作業開始（Codex）。

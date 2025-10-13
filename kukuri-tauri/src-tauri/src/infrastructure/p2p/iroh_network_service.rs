@@ -2,7 +2,7 @@ use super::{NetworkService, NetworkStats, Peer, dht_bootstrap::{DhtGossip, secre
 use crate::shared::error::AppError;
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use async_trait::async_trait;
-use iroh::{protocol::Router, Endpoint, Watcher as _};
+use iroh::{protocol::Router, Endpoint};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing;
@@ -79,11 +79,12 @@ impl IrohNetworkService {
 
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
         // 直接アドレスを解決し、`node_id@ip:port` 形式で返却
+        self.endpoint.online().await;
         let node_id = self.endpoint.node_id().to_string();
-        let addrs = self.endpoint.direct_addresses().initialized().await;
+        let node_addr = self.endpoint.node_addr();
         let mut out = Vec::new();
-        for a in addrs {
-            out.push(format!("{}@{}", node_id, a.addr));
+        for addr in node_addr.direct_addresses() {
+            out.push(format!("{}@{}", node_id, addr));
         }
         if out.is_empty() {
             out.push(node_id);

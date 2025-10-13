@@ -67,6 +67,41 @@ impl IrohGossipService {
         let hash = hasher.finalize();
         TopicId::from_bytes(*hash.as_bytes())
     }
+
+    async fn apply_initial_peers(&self, topic: &str, parsed_peers: &[ParsedPeer]) -> Result<(), AppError> {
+        if parsed_peers.is_empty() {
+            return Ok(());
+        }
+
+        for peer in parsed_peers {
+            if let Some(addr) = &peer.node_addr {
+                if let Err(e) = self
+                    .endpoint
+                    .add_node_addr_with_source(addr.clone(), "gossip-bootstrap")
+                {
+                    tracing::warn!("Failed to add node addr for {}: {:?}", topic, e);
+                }
+            }
+        }
+
+        let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
+        if peer_ids.is_empty() {
+            return Ok(());
+        }
+
+        let topics = self.topics.read().await;
+        if let Some(handle) = topics.get(topic) {
+            let sender = handle.sender.clone();
+            drop(topics);
+            if let Err(e) = sender.lock().await.join_peers(peer_ids).await {
+                tracing::warn!("Failed to join peers for topic {}: {:?}", topic, e);
+            }
+        } else {
+            tracing::debug!("Topic {} not found when applying initial peers", topic);
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -95,7 +130,10 @@ impl GossipService for IrohGossipService {
 
         for peer in &parsed_peers {
             if let Some(addr) = &peer.node_addr {
-                if let Err(e) = self.endpoint.add_node_addr(addr.clone()) {
+                if let Err(e) = self
+                    .endpoint
+                    .add_node_addr_with_source(addr.clone(), "gossip-bootstrap")
+                {
                     tracing::warn!("Failed to add node addr for {}: {:?}", topic, e);
                 }
             }
