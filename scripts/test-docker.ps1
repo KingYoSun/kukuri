@@ -78,12 +78,12 @@ function Invoke-DockerCompose {
         [switch]$IgnoreFailure
     )
 
-    & docker-compose -f docker-compose.test.yml @Arguments
+    & docker compose -f docker-compose.test.yml @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
     $code = $LASTEXITCODE
     if (-not $IgnoreFailure -and $code -ne 0) {
         Write-ErrorMessage "Docker Compose command failed"
     }
-    return $code
+    return [int]$code
 }
 
 # Dockerイメージの存在確認

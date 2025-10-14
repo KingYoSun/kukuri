@@ -166,6 +166,21 @@ mod tests {
         false
     }
 
+    fn build_peer_hints(base: &[String], local_hints: &[Option<String>], self_idx: usize) -> Vec<String> {
+        let mut result = base.to_vec();
+        for (idx, hint) in local_hints.iter().enumerate() {
+            if idx == self_idx {
+                continue;
+            }
+            if let Some(h) = hint {
+                if !result.contains(h) {
+                    result.push(h.clone());
+                }
+            }
+        }
+        result
+    }
+
     /// subscribe → broadcast → 受信までを単一ノードで検証（実配信導線）
     /// 二つのノードを接続して相互にメッセージを受信できることを検証
     #[tokio::test]
@@ -180,9 +195,12 @@ mod tests {
         // 同一トピックで購読/参加のみ検証（実ネットワーク経由の配送は別途環境依存のため）
         let topic = generate_topic_id("iroh-int-two-nodes");
         log_step!("joining topic {} on both services", topic);
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined topic {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined topic {}", topic);
         let _rx_b = svc_b.subscribe(&topic).await.unwrap();
         assert!(
@@ -223,9 +241,12 @@ mod tests {
 
         // 同一トピックで先に購読を確立
         let topic = generate_topic_id("iroh-int-recv");
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined {}", topic);
         let _rx_a = svc_a.subscribe(&topic).await.unwrap();
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
@@ -280,9 +301,12 @@ mod tests {
 
         let topic = generate_topic_id("iroh-int-reply-flow");
 
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined {}", topic);
 
         let mut rx_a = svc_a.subscribe(&topic).await.unwrap();
@@ -377,9 +401,12 @@ mod tests {
 
         let topic = generate_topic_id("iroh-int-quote-flow");
 
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined {}", topic);
 
         let mut rx_a = svc_a.subscribe(&topic).await.unwrap();
@@ -469,9 +496,12 @@ mod tests {
         let mut svc_b = create_service(&ctx).await;
 
         let topic = generate_topic_id("iroh-int-multi-subs");
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined {}", topic);
 
         // B側に2購読者
@@ -522,11 +552,19 @@ mod tests {
         let mut svc_c = create_service(&ctx).await;
 
         let topic = generate_topic_id("iroh-int-multi-node");
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![
+            svc_a.local_peer_hint(),
+            svc_b.local_peer_hint(),
+            svc_c.local_peer_hint(),
+        ];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        let hints_c = build_peer_hints(&ctx.hints, &local_hints, 2);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined {}", topic);
-        svc_c.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_c.join_topic(&topic, hints_c).await.unwrap();
         log_step!("svc_c joined {}", topic);
         // 受信側B,Cは購読（内部でjoin）
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
@@ -585,9 +623,12 @@ mod tests {
         let mut svc_b = create_service(&ctx).await;
 
         let topic = generate_topic_id("iroh-int-stability");
-        svc_a.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
+        let hints_a = build_peer_hints(&ctx.hints, &local_hints, 0);
+        let hints_b = build_peer_hints(&ctx.hints, &local_hints, 1);
+        svc_a.join_topic(&topic, hints_a).await.unwrap();
         log_step!("svc_a joined {}", topic);
-        svc_b.join_topic(&topic, ctx.hints.clone()).await.unwrap();
+        svc_b.join_topic(&topic, hints_b).await.unwrap();
         log_step!("svc_b joined {}", topic);
         let mut rx_a = svc_a.subscribe(&topic).await.unwrap();
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();

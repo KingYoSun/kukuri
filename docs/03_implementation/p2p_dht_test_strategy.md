@@ -31,6 +31,8 @@
   - `create_service_with_endpoint` / `connect_peers` を廃止し、`Endpoint::builder().discovery_dht()` + `endpoint.connect(bootstrap)` で初期化する `create_service()` を導入。
   - `wait_for_peer_join_event` ヘルパーで `PeerJoined` イベントを待機し、テストごとにブートストラップヒントを `join_topic` へ配布して DHT への参加完了を確認。
   - タイムアウトを 15 秒前後へ延長し、受信失敗時にはウォーンログを出力することでデバッグ容易性を向上。
+  - `build_peer_hints` で各ノードのローカル `node_id@host:port` ヒントを共有し、ブートストラップ前でも接続を確立できるようにする。
+  - `IrohGossipService::local_peer_hint()` と `join_topic` のタイムアウト制御を組み合わせ、`receiver.joined()` が未完了でもテストが完走するよう調整。
 - ドキュメント
   - 本ドキュメントおよび `docker_test_environment.md` を更新し、`.ps1` / `.sh` の自動化内容と既定値の扱いを明文化。
 
@@ -44,4 +46,5 @@
 - テスト用トピック一覧を集約管理する仕組み（例: `tests/p2p_topics.rs`）を整備する。
 - `p2p-bootstrap` のトピック購読数が増えた場合に備え、将来的な設定ファイル化や `--topics-file` オプション追加を検討する。
 - DHT メトリクスをテスト中に取得し、受信遅延の傾向を観測できるようにする。
-- `test_multi_node_broadcast_three_nodes` など複数ノードテストでは `IrohGossipService::join_topic` 内の `receiver.joined()` が返らずハングする事象を確認済み。`join_topic` でタイムアウトを設ける・`PeerJoined` を待つヘルパーで失敗時に明示すべきこと、加えてブートストラップノードを複数化する/待機時間を設計見直しする対応を検討する。
+- TypeScript 契約テストを追加し、P2P 経路の返信・引用ケースを E2E 以外でも担保する。
+- Windows 向け `scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加し、Docker 経由でメトリクス取得と契約テストを実行できるようにする。

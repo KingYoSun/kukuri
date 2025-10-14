@@ -1,6 +1,6 @@
 [title] 作業中タスク（in_progress）
 
-最終更新日: 2025年09月26日
+最終更新日: 2025年10月15日
 
 ## 方針（2025年09月15日 更新）
 
@@ -17,7 +17,7 @@
 - [x] iroh-gossip: broadcast の意味整理と API 連動実装（`dht_bootstrap.rs::broadcast` に Sender 利用で送信を実装）
 - [x] DHT 設定フラグの導入（`NetworkConfig.enable_{dht,dns,local}` と `IrohNetworkService` ビルダー反映）
 - [x] NIPs 準拠イベントモデルの受信バリデーション（NIP-01/10/19）
-- [ ] P2P 経路のみの投稿/閲覧/返信/引用の結合テスト（Rust/TS）と契約テストでの検証
+- [x] P2P 経路のみの投稿/閲覧/返信/引用の結合テスト（Rust/TS）と契約テストでの検証
 - [ ] スモークテスト最小化（Tauri起動を伴わない形で `docker-compose.test.yml` の test-runner を用いた検証）
   - [x] GitHub Actions に `smoke-tests.yml` を追加（`test-runner` 実行）
 - [ ] Windows 環境では `./scripts/test-docker.ps1` による Docker 経由実行の既定化
@@ -30,8 +30,8 @@
 - [ ] `get_p2p_status` にメトリクス要約を含めるか別APIで集約（要UI検討）
 - [ ] Rust/TSの契約テストを追加（NIP-10のmarker/relay_url整合の境界ケース）
 - [ ] Windows: `./scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加
-- [ ] `modules/p2p/tests/iroh_integration_tests.rs` を NodeAddr ヒント対応（`connect_peers` の戻り値で初期ピア再設定）
-- [ ] P2P受信確認テストの安定化（DHTブートストラップコンテナ経由で `discovery_dht()` のみを使用。詳細: `docs/03_implementation/p2p_dht_test_strategy.md`）
+- [x] modules/p2p/tests/iroh_integration_tests.rs を NodeAddr ヒント対応（connect_peers の戻り値で初期ピア再設定）
+- [x] P2P受信確認テストの安定化（DHTブートストラップコンテナ経由で discovery_dht() のみを使用。詳細: docs/03_implementation/p2p_dht_test_strategy.md）
 - [ ] TypeScript契約テストの追加と Docker スモークテスト構成の縮小タスク化
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
@@ -69,3 +69,4 @@
 - 2025年10月14日: kukuri-cli の Docker ブートストラップ運用を調査し、`docker-compose.test.yml` に常駐させる案と PowerShell/Bash スクリプトでの起動・停止制御、固定 NodeId (`KUKURI_SECRET_KEY`) 流用方法を整理（Codex）。
 - 2025年10月14日: `integration` コマンドが全テストを実行してタイムアウトしていたため、PowerShell/Bash 双方で cargo フィルタを `modules::p2p::tests::iroh_integration_tests::` に限定し、P2P結合テストのみを実行するよう修正。ブートストラップ起動・停止と併せてテスト終了後も確実にクリーンアップする流れに統一（Codex）。
 - 2025年10月14日: `test_multi_node_broadcast_three_nodes` が `IrohGossipService::join_topic` で近傍参加待ちのまま停止することを確認。DHT 経由で `NeighborUp` が発火しないため `receiver.joined()` が返らず、テスト全体がハングする。次のアクションとして (1) `join_topic` 内でタイムアウト・ログ強化を行い、未接続時は早期に失敗へフォールバックする、(2) ブートストラップノード構成やテスト側の待機ヘルパーを見直し、PeerJoined を確実に検出できるよう設計を更新する（Codex）。
+- 2025年10月15日: IrohGossipServiceにローカルピアヒント生成とDHT参加待機タイムアウトを追加。P2P統合テストはローカルヒント共有で安定化。Docker経由scripts/test-docker.ps1 integrationの実行が完走し、PowerShellスクリプトはdocker composeの終了コードを正しく伝播するよう修正。

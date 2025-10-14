@@ -15,7 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock, Mutex as TokioMutex};
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::time::timeout;
 use std::sync::Mutex as StdMutex;
+use std::time::Duration;
 
 use crate::modules::p2p::events::P2PEvent;
 use crate::modules::p2p::message::GossipMessage;
@@ -57,6 +59,15 @@ impl IrohGossipService {
 
     pub fn set_event_sender(&mut self, tx: UnboundedSender<P2PEvent>) {
         self.event_tx = Some(Arc::new(StdMutex::new(tx)));
+    }
+
+    pub fn local_peer_hint(&self) -> Option<String> {
+        let node_addr = self.endpoint.node_addr();
+        let node_id = node_addr.node_id.to_string();
+        node_addr
+            .direct_addresses()
+            .next()
+            .map(|addr| format!("{}@{}", node_id, addr))
     }
 
     fn create_topic_id(topic: &str) -> TopicId {
@@ -189,13 +200,25 @@ impl GossipService for IrohGossipService {
             }
         }
 
-        if let Err(e) = receiver.joined().await {
-            tracing::debug!("Waiting for neighbor on {} returned: {:?}", topic, e);
-        } else {
-            eprintln!(
-                "[iroh_gossip_service] first neighbor joined for topic {}",
-                topic
-            );
+        let wait_duration = Duration::from_secs(12);
+        match timeout(wait_duration, receiver.joined()).await {
+            Ok(Ok(peer)) => {
+                eprintln!(
+                    "[iroh_gossip_service] first neighbor joined for topic {} ({:?})",
+                    topic,
+                    peer
+                );
+            }
+            Ok(Err(e)) => {
+                tracing::debug!("Waiting for neighbor on {} returned error: {:?}", topic, e);
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Timed out ({:?}) waiting for neighbor on {}",
+                    wait_duration,
+                    topic
+                );
+            }
         }
 
         let sender = Arc::new(TokioMutex::new(sender_handle));
