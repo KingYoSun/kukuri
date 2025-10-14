@@ -1,4 +1,23 @@
 services:
+  # P2P統合テスト用 ブートストラップノード
+  p2p-bootstrap:
+    build:
+      context: ./kukuri-cli
+      dockerfile: Dockerfile
+    container_name: kukuri-p2p-bootstrap
+    network_mode: host
+    environment:
+      LOG_LEVEL: info
+      BIND_ADDRESS: 0.0.0.0:11233
+      KUKURI_SECRET_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+    healthcheck:
+      test: ["CMD", "pidof", "kukuri-cli"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    command: ["bootstrap"]
+
   # テスト実行サービス
   test-runner:
     build:

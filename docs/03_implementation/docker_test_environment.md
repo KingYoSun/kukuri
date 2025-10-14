@@ -53,6 +53,9 @@ PowerShellで以下のコマンドを実行：
 # Rustテストのみ実行
 .\scripts\test-docker.ps1 rust
 
+# P2P統合テスト（ブートストラップを自動起動）
+.\scripts\test-docker.ps1 integration
+
 # TypeScriptテストのみ実行
 .\scripts\test-docker.ps1 ts
 
@@ -71,6 +74,7 @@ PowerShellで以下のコマンドを実行：
 # ヘルプを表示
 .\scripts\test-docker.ps1 -Help
 ```
+`integration` コマンドは `ENABLE_P2P_INTEGRATION=1` を付与した上で `p2p-bootstrap` コンテナを自動起動し、テスト完了後にクリーンアップします。追加の環境変数設定は不要です。
 
 ### Linux/macOS環境での実行
 
@@ -114,6 +118,7 @@ P2P統合テスト用に追加された `p2p` サブコマンドでは次のオ�
 - `--keep-env`: 生成された `kukuri-tauri/tests/.env.p2p` を削除せず残す
 - `--rust-log <value>` / `--rust-backtrace <value>`: Rust 側のロギング設定を上書き
 実行時に生成される `.env.p2p` は `kukuri-tauri/tests/` 配下に保存され、デフォルトで `KUKURI_BOOTSTRAP_PEERS=03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233` を含みます。`--keep-env` を指定しなければ完了後に自動削除されます。
+`p2p` サブコマンドは PowerShell 版 `integration` と同様に `p2p-bootstrap` を自動で起動し、ヘルスチェックが `healthy` になるまで待機してからテストを実行します。既定では `cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1` を実行し、P2P 結合テストのみに絞って検証します。
 
 詳細な設計背景と検証手順は `docs/03_implementation/p2p_dht_test_strategy.md` を参照してください。
 
@@ -149,7 +154,7 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 - `ts-test`: TypeScriptテストのみ実行
 - `lint-check`: リントとフォーマットチェック
 
-`p2p-bootstrap` は固定シークレットで決定論的な NodeId を生成し、11233/TCP と 6881/UDP を公開してテスト用 DHT ブートストラップとして常駐します。`test-runner` / `rust-test` はヘルスチェックの完了を待って起動し、`.env.p2p` に自動出力される `KUKURI_BOOTSTRAP_PEERS` を通じてこのノードを参照します。
+`p2p-bootstrap` は固定シークレットで決定論的な NodeId を生成し、11233/TCP と 6881/UDP を公開してテスト用 DHT ブートストラップとして常駐します。テストスクリプト側がヘルスチェックの完了を待ってから `rust-test` / `test-runner` のコンテナを起動し、`.env.p2p` や PowerShell の一時環境変数を通じて `KUKURI_BOOTSTRAP_PEERS` を参照します。
 
 ### 環境変数
 - `RUST_BACKTRACE=1`: Rustのスタックトレースを有効化

@@ -9,6 +9,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.test.yml"
 ENV_FILE="${REPO_ROOT}/kukuri-tauri/tests/.env.p2p"
 RESULTS_DIR="${REPO_ROOT}/test-results"
+BOOTSTRAP_DEFAULT_PEER="03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
+BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
 
 usage() {
   cat <<'EOF'
@@ -25,7 +27,7 @@ Commands:
   p2p          Run P2P integration tests inside Docker
 
 Options for p2p:
-  --tests <name>          Cargo test target (default: iroh_integration_tests)
+  --tests <name>          Cargo test filter (default: modules::p2p::tests::iroh_integration_tests::)
   --bootstrap <peers>     KUKURI_BOOTSTRAP_PEERS (comma separated node@host:port)
   --no-build              Skip docker compose build
   --keep-env              Keep generated .env.p2p after execution
@@ -123,15 +125,55 @@ show_cache_status() {
 
 write_p2p_env() {
   mkdir -p "$(dirname "$ENV_FILE")"
+  local bootstrap="${BOOTSTRAP_PEERS:-}"
+  if [[ -z "$bootstrap" ]]; then
+    bootstrap="$BOOTSTRAP_DEFAULT_PEER"
+  fi
   {
     echo 'ENABLE_P2P_INTEGRATION=1'
-    echo 'KUKURI_FORCE_LOCALHOST_ADDRS=1'
+    echo 'KUKURI_FORCE_LOCALHOST_ADDRS=0'
     echo "RUST_LOG=${RUST_LOG}"
     echo "RUST_BACKTRACE=${RUST_BACKTRACE}"
-    if [[ -n "$BOOTSTRAP_PEERS" ]]; then
-      echo "KUKURI_BOOTSTRAP_PEERS=${BOOTSTRAP_PEERS}"
-    fi
+    echo "KUKURI_BOOTSTRAP_PEERS=${bootstrap}"
   } >"$ENV_FILE"
+}
+
+wait_bootstrap_healthy() {
+  local timeout="${1:-60}"
+  local i
+  for ((i = 0; i < timeout; i++)); do
+    local status
+    status=$(docker inspect --format '{{.State.Health.Status}}' "$BOOTSTRAP_CONTAINER" 2>/dev/null || true)
+    if [[ "$status" == "healthy" ]]; then
+      return 0
+    fi
+    sleep 1
+  }
+  return 1
+}
+
+start_bootstrap() {
+  echo 'Starting p2p-bootstrap container...'
+  set +e
+  compose_run '' up -d p2p-bootstrap
+  local code=$?
+  set -e
+  if [[ $code -ne 0 ]]; then
+    echo 'Failed to start p2p-bootstrap container.' >&2
+    return $code
+  fi
+  if ! wait_bootstrap_healthy 60; then
+    echo 'p2p-bootstrap health check failed.' >&2
+    return 1
+  fi
+  echo '[OK] p2p-bootstrap is healthy.'
+  return 0
+}
+
+stop_bootstrap() {
+  set +e
+  compose_run '' down --remove-orphans >/dev/null 2>&1
+  set -e
 }
 
 run_p2p_tests() {
@@ -144,27 +186,36 @@ run_p2p_tests() {
   fi
 
   local cargo_cmd
+  local cargo_args
   case "$TESTS" in
     all)
-      cargo_cmd='cargo test --workspace --all-features -- --nocapture'
+      cargo_args=(test --workspace --all-features -- --nocapture)
       ;;
     workspace)
-      cargo_cmd='cargo test --all-features -- --nocapture'
+      cargo_args=(test --all-features -- --nocapture)
       ;;
     *)
-      cargo_cmd="cargo test --test ${TESTS} -- --nocapture"
+      cargo_args=(test --package kukuri-tauri --lib "${TESTS}" -- --nocapture --test-threads=1)
       ;;
   esac
 
-  echo "Running tests (${cargo_cmd}) inside Docker..."
+  echo "Running tests (cargo ${cargo_args[*]}) inside Docker..."
+  if ! start_bootstrap; then
+    if [[ $KEEP_ENV -eq 0 ]]; then
+      rm -f "$ENV_FILE"
+    fi
+    exit 1
+  fi
+
   set +e
-  compose_run "$ENV_FILE" run --rm rust-test bash -lc "$cargo_cmd"
+  compose_run "$ENV_FILE" run --rm rust-test cargo "${cargo_args[@]}"
   local code=$?
-  compose_run "$ENV_FILE" down --remove-orphans >/dev/null 2>&1 || true
+  set -e
+
+  stop_bootstrap
   if [[ $KEEP_ENV -eq 0 ]]; then
     rm -f "$ENV_FILE"
   fi
-  set -e
 
   if [[ $code -ne 0 ]]; then
     echo "Error: docker compose exited with code $code" >&2
@@ -186,7 +237,7 @@ mkdir -p "$RESULTS_DIR"
 COMMAND="${1:-all}"
 shift || true
 
-TESTS="iroh_integration_tests"
+TESTS="modules::p2p::tests::iroh_integration_tests::"
 BOOTSTRAP_PEERS=""
 NO_BUILD=0
 KEEP_ENV=0

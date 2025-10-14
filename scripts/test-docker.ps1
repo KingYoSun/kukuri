@@ -68,16 +68,22 @@ Performance Tips:
 $env:DOCKER_BUILDKIT = "1"
 $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 
+$BootstrapDefaultPeer = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
+$BootstrapContainerName = "kukuri-p2p-bootstrap"
+
 # Docker Composeコマンドの実行
 function Invoke-DockerCompose {
     param(
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [switch]$IgnoreFailure
     )
 
     & docker-compose -f docker-compose.test.yml @Arguments
-    if ($LASTEXITCODE -ne 0) {
+    $code = $LASTEXITCODE
+    if (-not $IgnoreFailure -and $code -ne 0) {
         Write-ErrorMessage "Docker Compose command failed"
     }
+    return $code
 }
 
 # Dockerイメージの存在確認
@@ -121,21 +127,63 @@ function Invoke-RustTests {
 }
 
 function Invoke-IntegrationTests {
-    $previousValue = $env:ENABLE_P2P_INTEGRATION
+    $previousEnable = $env:ENABLE_P2P_INTEGRATION
+    $previousBootstrap = $env:KUKURI_BOOTSTRAP_PEERS
+    $previousForceLocal = $env:KUKURI_FORCE_LOCALHOST_ADDRS
+    $bootstrapWasSet = $false
+    $bootstrapStarted = $false
+    $exitCode = 0
+    $fatalMessage = $null
     try {
         $env:ENABLE_P2P_INTEGRATION = "1"
+        if ([string]::IsNullOrWhiteSpace($env:KUKURI_BOOTSTRAP_PEERS)) {
+            $env:KUKURI_BOOTSTRAP_PEERS = $BootstrapDefaultPeer
+            $bootstrapWasSet = $true
+        }
+        $env:KUKURI_FORCE_LOCALHOST_ADDRS = "0"
         if (-not $NoBuild) {
             Build-TestImage
         }
+        Start-P2PBootstrap
+        $bootstrapStarted = $true
         Write-Host "Running Rust P2P integration tests in Docker..."
-        Invoke-DockerCompose @("run", "--rm", "rust-test")
-        Write-Success "Rust P2P integration tests passed!"
+        $exitCode = Invoke-DockerCompose @(
+            "run", "--rm", "rust-test",
+            "cargo", "test",
+            "--package", "kukuri-tauri",
+            "--lib", "modules::p2p::tests::iroh_integration_tests::",
+            "--", "--nocapture", "--test-threads=1"
+        ) -IgnoreFailure
+        if ($exitCode -eq 0) {
+            Write-Success "Rust P2P integration tests passed!"
+        } else {
+            $fatalMessage = "Rust P2P integration tests exited with code $exitCode"
+        }
+    }
+    catch {
+        $fatalMessage = $_.Exception.Message
     }
     finally {
-        if ($null -eq $previousValue) {
+        if ($bootstrapStarted) {
+            Stop-P2PBootstrap
+        }
+        if ($null -eq $previousEnable) {
             Remove-Item Env:ENABLE_P2P_INTEGRATION -ErrorAction SilentlyContinue
         } else {
-            $env:ENABLE_P2P_INTEGRATION = $previousValue
+            $env:ENABLE_P2P_INTEGRATION = $previousEnable
+        }
+        if ($bootstrapWasSet) {
+            Remove-Item Env:KUKURI_BOOTSTRAP_PEERS -ErrorAction SilentlyContinue
+        } else {
+            $env:KUKURI_BOOTSTRAP_PEERS = $previousBootstrap
+        }
+        if ($null -eq $previousForceLocal) {
+            Remove-Item Env:KUKURI_FORCE_LOCALHOST_ADDRS -ErrorAction SilentlyContinue
+        } else {
+            $env:KUKURI_FORCE_LOCALHOST_ADDRS = $previousForceLocal
+        }
+        if ($fatalMessage) {
+            Write-ErrorMessage $fatalMessage
         }
     }
 }
@@ -198,6 +246,43 @@ function Show-CacheStatus {
         }
     }
     Write-Host ""
+}
+
+function Wait-BootstrapHealthy {
+    param(
+        [int]$TimeoutSeconds = 60
+    )
+
+    for ($i = 0; $i -lt $TimeoutSeconds; $i++) {
+        $status = ""
+        try {
+            $status = docker inspect --format '{{.State.Health.Status}}' $BootstrapContainerName 2>$null
+        } catch {
+            $status = ""
+        }
+
+        if ($status -eq "healthy") {
+            return $true
+        }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
+function Start-P2PBootstrap {
+    Write-Info "Starting p2p-bootstrap container..."
+    $code = Invoke-DockerCompose @("up", "-d", "p2p-bootstrap") -IgnoreFailure
+    if ($code -ne 0) {
+        throw "Failed to start p2p-bootstrap (exit code $code)"
+    }
+    if (-not (Wait-BootstrapHealthy)) {
+        throw "p2p-bootstrap health check failed"
+    }
+    Write-Success "p2p-bootstrap is healthy"
+}
+
+function Stop-P2PBootstrap {
+    Invoke-DockerCompose @("down", "--remove-orphans") -IgnoreFailure | Out-Null
 }
 
 # メイン処理

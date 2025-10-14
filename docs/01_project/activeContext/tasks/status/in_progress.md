@@ -65,3 +65,7 @@
 - 2025年09月26日: DHTブートストラップを NodeAddr ヒント対応に再構成（`p2p::utils::parse_peer_hint` を追加、`IrohGossipService` の初期ピア反映を調整）。受信テスト未改修のため `iroh_integration_tests.rs` や受信確認フローの更新、TS契約テスト整備は別途進行予定。
 - 2025年09月28日: DHTブートストラップサービスを Docker で常駐させ、テストは `discovery_dht()` のみで接続する方針に更新。詳細は `docs/03_implementation/p2p_dht_test_strategy.md`。
 - 2025年10月13日: iroh / iroh-gossip バージョンを 0.93.1 へ更新作業開始（Codex）。
+- 2025年10月14日: Windows環境で `.\scripts\test-docker.ps1 integration` が停止する問題調査を開始（Codex）。まずスクリプトの実行手順と前提条件を確認。
+- 2025年10月14日: kukuri-cli の Docker ブートストラップ運用を調査し、`docker-compose.test.yml` に常駐させる案と PowerShell/Bash スクリプトでの起動・停止制御、固定 NodeId (`KUKURI_SECRET_KEY`) 流用方法を整理（Codex）。
+- 2025年10月14日: `integration` コマンドが全テストを実行してタイムアウトしていたため、PowerShell/Bash 双方で cargo フィルタを `modules::p2p::tests::iroh_integration_tests::` に限定し、P2P結合テストのみを実行するよう修正。ブートストラップ起動・停止と併せてテスト終了後も確実にクリーンアップする流れに統一（Codex）。
+- 2025年10月14日: `test_multi_node_broadcast_three_nodes` が `IrohGossipService::join_topic` で近傍参加待ちのまま停止することを確認。DHT 経由で `NeighborUp` が発火しないため `receiver.joined()` が返らず、テスト全体がハングする。次のアクションとして (1) `join_topic` 内でタイムアウト・ログ強化を行い、未接続時は早期に失敗へフォールバックする、(2) ブートストラップノード構成やテスト側の待機ヘルパーを見直し、PeerJoined を確実に検出できるよう設計を更新する（Codex）。

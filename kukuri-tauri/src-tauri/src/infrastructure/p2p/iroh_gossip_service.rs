@@ -73,8 +73,19 @@ impl IrohGossipService {
             return Ok(());
         }
 
+        eprintln!(
+            "[iroh_gossip_service] applying {} initial peers to existing topic {}",
+            parsed_peers.len(),
+            topic
+        );
+
         for peer in parsed_peers {
             if let Some(addr) = &peer.node_addr {
+                eprintln!(
+                    "[iroh_gossip_service] re-applying node addr {} for topic {}",
+                    addr.node_id,
+                    topic
+                );
                 if let Err(e) = self
                     .endpoint
                     .add_node_addr_with_source(addr.clone(), "gossip-bootstrap")
@@ -107,6 +118,11 @@ impl IrohGossipService {
 #[async_trait]
 impl GossipService for IrohGossipService {
     async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
+        eprintln!(
+            "[iroh_gossip_service] join_topic start: {} (initial peers: {:?})",
+            topic,
+            initial_peers
+        );
         let parsed_peers: Vec<ParsedPeer> = initial_peers
             .into_iter()
             .filter_map(|entry| match parse_peer_hint(&entry) {
@@ -117,6 +133,12 @@ impl GossipService for IrohGossipService {
                 }
             })
             .collect();
+
+        eprintln!(
+            "[iroh_gossip_service] parsed {} peers for topic {}",
+            parsed_peers.len(),
+            topic
+        );
 
         {
             let topics = self.topics.read().await;
@@ -141,6 +163,11 @@ impl GossipService for IrohGossipService {
 
         let topic_id = Self::create_topic_id(topic);
         let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
+        eprintln!(
+            "[iroh_gossip_service] subscribing topic {} with {} peer hints",
+            topic,
+            peer_ids.len()
+        );
 
         let gossip_topic: GossipTopic = self
             .gossip
@@ -153,11 +180,22 @@ impl GossipService for IrohGossipService {
         if !peer_ids.is_empty() {
             if let Err(e) = sender_handle.join_peers(peer_ids.clone()).await {
                 tracing::warn!("Failed to join peers for topic {}: {:?}", topic, e);
+            } else {
+                eprintln!(
+                    "[iroh_gossip_service] join_peers issued for topic {} ({} peers)",
+                    topic,
+                    peer_ids.len()
+                );
             }
         }
 
         if let Err(e) = receiver.joined().await {
             tracing::debug!("Waiting for neighbor on {} returned: {:?}", topic, e);
+        } else {
+            eprintln!(
+                "[iroh_gossip_service] first neighbor joined for topic {}",
+                topic
+            );
         }
 
         let sender = Arc::new(TokioMutex::new(sender_handle));
