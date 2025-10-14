@@ -40,6 +40,18 @@ mod tests {
         }
     }
 
+    fn should_run_p2p_integration(test_name: &str) -> bool {
+        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
+            eprintln!(
+                "skipping {} (ENABLE_P2P_INTEGRATION!=1)",
+                test_name
+            );
+            false
+        } else {
+            true
+        }
+    }
+
     async fn connect_peers(src: &Endpoint, dst: &Endpoint) {
         // resolve peer using direct addresses similar to kukuri-cli
         sleep(Duration::from_millis(500)).await;
@@ -73,6 +85,9 @@ mod tests {
     /// 二つのノードを接続して相互にメッセージを受信できることを検証
     #[tokio::test]
     async fn test_two_nodes_connect_and_join() {
+        if !should_run_p2p_integration("test_two_nodes_connect_and_join") {
+            return;
+        }
         let (mut svc_a, ep_a) = create_service_with_endpoint().await;
         let (mut svc_b, ep_b) = create_service_with_endpoint().await;
 
@@ -103,8 +118,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_two_nodes_broadcast_and_receive() {
-        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping two_nodes_broadcast_and_receive (ENABLE_P2P_INTEGRATION!=1)");
+        if !should_run_p2p_integration("test_two_nodes_broadcast_and_receive") {
             return;
         }
         use tokio::sync::mpsc::unbounded_channel;
@@ -174,8 +188,7 @@ mod tests {
     /// P2P経路のみで返信イベントを伝搬できることを検証
     #[tokio::test]
     async fn test_p2p_reply_flow() {
-        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping p2p_reply_flow (ENABLE_P2P_INTEGRATION!=1)");
+        if !should_run_p2p_integration("test_p2p_reply_flow") {
             return;
         }
         use crate::modules::p2p::P2PEvent;
@@ -282,8 +295,7 @@ mod tests {
     /// P2P経路のみで引用イベント（mention）が伝搬されることを検証
     #[tokio::test]
     async fn test_p2p_quote_flow() {
-        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping p2p_quote_flow (ENABLE_P2P_INTEGRATION!=1)");
+        if !should_run_p2p_integration("test_p2p_quote_flow") {
             return;
         }
         use crate::modules::p2p::P2PEvent;
@@ -388,8 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_subscribers_receive() {
-        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping multiple_subscribers_receive (ENABLE_P2P_INTEGRATION!=1)");
+        if !should_run_p2p_integration("test_multiple_subscribers_receive") {
             return;
         }
         let (svc_a, ep_a) = create_service_with_endpoint().await;
@@ -437,8 +448,7 @@ mod tests {
     /// 3ノード構成でA->(B,C)へブロードキャストが届くことを検証
     #[tokio::test]
     async fn test_multi_node_broadcast_three_nodes() {
-        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping multi_node_broadcast_three_nodes (ENABLE_P2P_INTEGRATION!=1)");
+        if !should_run_p2p_integration("test_multi_node_broadcast_three_nodes") {
             return;
         }
 
@@ -497,8 +507,7 @@ mod tests {
     /// 双方向にメッセージをやり取りし、近接で安定して届くことを簡易確認
     #[tokio::test]
     async fn test_peer_connection_stability_bidirectional() {
-        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping peer_connection_stability_bidirectional (ENABLE_P2P_INTEGRATION!=1)");
+        if !should_run_p2p_integration("test_peer_connection_stability_bidirectional") {
             return;
         }
 

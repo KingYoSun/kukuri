@@ -339,8 +339,23 @@ mod tests {
     use crate::domain::entities::Event;
     use iroh::Endpoint;
 
+    fn should_run_p2p_tests(test_name: &str) -> bool {
+        if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
+            eprintln!(
+                "skipping {} (ENABLE_P2P_INTEGRATION!=1)",
+                test_name
+            );
+            false
+        } else {
+            true
+        }
+    }
+
     #[tokio::test]
     async fn test_join_and_broadcast_without_peers() {
+        if !should_run_p2p_tests("test_join_and_broadcast_without_peers") {
+            return;
+        }
         // エンドポイント作成（ローカル、ディスカバリ無し）
         let endpoint = Arc::new(Endpoint::builder().bind().await.unwrap());
         let service = IrohGossipService::new(endpoint).unwrap();
@@ -357,6 +372,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_join_and_leave_topic() {
+        if !should_run_p2p_tests("test_join_and_leave_topic") {
+            return;
+        }
         let endpoint = Arc::new(Endpoint::builder().bind().await.unwrap());
         let service = IrohGossipService::new(endpoint).unwrap();
 

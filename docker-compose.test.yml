@@ -24,13 +24,13 @@ services:
       RUST_BACKTRACE: 1
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
-      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-1}
+      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-0}
       KUKURI_FORCE_LOCALHOST_ADDRS: ${KUKURI_FORCE_LOCALHOST_ADDRS:-1}
       KUKURI_BOOTSTRAP_PEERS: ${KUKURI_BOOTSTRAP_PEERS:-}
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
-      CI: true
+      CI: "true"
     # host network used for UDP reachability between endpoints
 
   # 個別のRustテスト実行
@@ -41,7 +41,7 @@ services:
     container_name: kukuri-rust-test
     working_dir: /app/kukuri-tauri/src-tauri
     network_mode: host
-    command: bash -lc "cargo test --workspace --all-features -- --nocapture"
+    command: /bin/sh -c "cargo test --workspace --all-features -- --nocapture"
     volumes:
       - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
       - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
@@ -58,7 +58,7 @@ services:
       RUST_BACKTRACE: full
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
-      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-1}
+      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-0}
       KUKURI_FORCE_LOCALHOST_ADDRS: ${KUKURI_FORCE_LOCALHOST_ADDRS:-1}
       KUKURI_BOOTSTRAP_PEERS: ${KUKURI_BOOTSTRAP_PEERS:-}
 
@@ -77,7 +77,7 @@ services:
       - pnpm-store:/root/.local/share/pnpm/store
     environment:
       NODE_ENV: test
-      CI: true
+      CI: "true"
     networks:
       - test-network
 

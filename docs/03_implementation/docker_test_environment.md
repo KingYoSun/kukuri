@@ -156,7 +156,7 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 - `RUST_LOG=debug`: Rust側のログレベルをデバッグに固定
 - `NODE_ENV=test`: Node.jsのテスト環境を明示
 - `CI=true`: CI環境であることをライブラリに通知
-- `ENABLE_P2P_INTEGRATION` (既定値 `1`): P2P統合テスト向けのパスを有効化
+- `ENABLE_P2P_INTEGRATION` (既定値 `0`): P2P統合テスト向けのパスを有効化。通常の `./scripts/test-docker.ps1 rust` / `all` では無効化され、`./scripts/test-docker.ps1 integration` を実行した場合のみ `1` に上書きされる
 - `KUKURI_FORCE_LOCALHOST_ADDRS` (推奨値 `0`): DHT 経由で得たピアアドレスをそのまま利用するためのフラグ。p2p-bootstrap を利用するテストではスクリプト側で自動的に 0 に上書きされる
 - `KUKURI_BOOTSTRAP_PEERS`: `node_id@host:port` 形式。p2p-bootstrap 起動時に `03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233` が自動設定される
 - `KUKURI_SECRET_KEY`: p2p-bootstrap コンテナが使用する Base64 エンコード済み 32バイト秘密鍵。既定値は `AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`

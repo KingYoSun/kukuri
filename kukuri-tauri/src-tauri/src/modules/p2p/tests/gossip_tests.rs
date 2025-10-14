@@ -7,6 +7,15 @@ mod tests {
     use iroh::Endpoint;
     use std::sync::Arc;
 
+    macro_rules! skip_unless_p2p_enabled {
+        ($name:literal) => {
+            if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
+                eprintln!("skipping {} (ENABLE_P2P_INTEGRATION!=1)", $name);
+                return;
+            }
+        };
+    }
+
     async fn create_test_service() -> IrohGossipService {
         let endpoint = Endpoint::builder().bind().await.unwrap();
         IrohGossipService::new(Arc::new(endpoint)).unwrap()
@@ -14,6 +23,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_topic_join_leave() {
+        skip_unless_p2p_enabled!("test_topic_join_leave");
         let service = create_test_service().await;
         let topic_id = generate_topic_id("test-topic");
 
@@ -36,6 +46,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_topics() {
+        skip_unless_p2p_enabled!("test_multiple_topics");
         let service = create_test_service().await;
         let topics = vec!["topic1", "topic2", "topic3"]; 
 
@@ -59,6 +70,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_leave_nonexistent_topic() {
+        skip_unless_p2p_enabled!("test_leave_nonexistent_topic");
         let service = create_test_service().await;
         let topic = generate_topic_id("nonexistent");
         let result = service.leave_topic(&topic).await;
@@ -68,6 +80,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_broadcast_to_topic() {
+        skip_unless_p2p_enabled!("test_broadcast_to_topic");
         let service = create_test_service().await;
         let topic_id = generate_topic_id("broadcast-test");
 
@@ -82,6 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_broadcast_to_nonexistent_topic() {
+        skip_unless_p2p_enabled!("test_broadcast_to_nonexistent_topic");
         let service = create_test_service().await;
 
         let event = Event::new(1, "hello".to_string(), "pubkey_test".to_string());
@@ -92,6 +106,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_topic_status() {
+        skip_unless_p2p_enabled!("test_get_topic_status");
         // IrohGossipServiceではステータスAPIは最小提供のためスキップ
         // 代わりにjoin後にget_joined_topicsで存在確認
         let service = create_test_service().await;
@@ -103,6 +118,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_all_topic_stats() {
+        skip_unless_p2p_enabled!("test_get_all_topic_stats");
         let service = create_test_service().await;
         let topics = vec!["stats-topic1", "stats-topic2", "stats-topic3"];
         for topic in &topics {
@@ -114,6 +130,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shutdown() {
+        skip_unless_p2p_enabled!("test_shutdown");
         let service = create_test_service().await;
         let topics = vec!["shutdown-topic1", "shutdown-topic2"];
         for topic in &topics {
@@ -131,6 +148,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_id() {
+        skip_unless_p2p_enabled!("test_node_id");
         // IrohGossipServiceでは直接のNodeID APIは提供しないため簡易確認のみ
         let _service = create_test_service().await;
         assert!(true);
@@ -138,6 +156,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_addr() {
+        skip_unless_p2p_enabled!("test_node_addr");
         // IrohGossipServiceでは直接のアドレスAPIは提供しないためスキップ
         let _service = create_test_service().await;
         assert!(true);
@@ -145,6 +164,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_topic_operations() {
+        skip_unless_p2p_enabled!("test_concurrent_topic_operations");
         use std::sync::Arc;
         use tokio::task;
 

@@ -1,6 +1,6 @@
 # P2P DHTテスト戦略
 
-最終更新日: 2025年09月28日
+最終更新日: 2025年10月14日
 
 ## 目的
 - kukuri-tauri の P2P 受信確認テストを、iroh の DHT ディスカバリーのみで安定実行する。
@@ -26,6 +26,7 @@
 - `scripts/test-docker.sh` / `.ps1`
   - テスト前に `docker compose up -d p2p-bootstrap`、終了後に `down p2p-bootstrap` を実行。
   - `.env.p2p` に `KUKURI_BOOTSTRAP_PEERS=<node_id>@127.0.0.1:11233` を書き込むロジックを追加。
+  - 通常の `rust` / `all` コマンド時は `ENABLE_P2P_INTEGRATION=0` を既定とし、新設した `integration` コマンド実行時のみ `ENABLE_P2P_INTEGRATION=1` を付与して P2P 疎通テストを有効化。
 - `iroh_integration_tests.rs`
   - `create_service_with_endpoint` を DHT 専用ビルダーへ変更。
   - `connect_peers` ヘルパーを削除し、DHT の近接検知を待つ `wait_for_dht_peer` を実装。
@@ -36,8 +37,8 @@
 
 ## 検証ステップ
 1. `./scripts/test-docker.sh build` で新イメージを作成。
-2. `./scripts/test-docker.sh p2p --tests iroh_integration_tests` を実行し、DHT 経由で受信確認テストが完走することを確認。
-3. Windows 環境で `./scripts/test-docker.ps1 rust` を実行し、Docker 経由でも同様に成功することを確認。
+2. Windows/Linux 共通で `./scripts/test-docker.ps1 integration` または `./scripts/test-docker.sh integration` を用い、P2P 統合テストのみを実行（内部で `ENABLE_P2P_INTEGRATION=1` を設定）。
+3. 通常の Rust テストは `./scripts/test-docker.ps1 rust`（または `./scripts/test-docker.sh rust`）で実行し、P2P 疎通テストをスキップした形で完走することを確認。
 4. 失敗した場合は `docker logs kukuri-p2p-bootstrap` を確認し、NodeId や Discovery の初期化に問題がないかを調査。
 
 ## 今後のフォロー

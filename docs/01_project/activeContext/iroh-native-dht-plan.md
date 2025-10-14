@@ -225,7 +225,7 @@ mod tests {
 - 目的: Tauri起動なしでP2Pの最低限動作（join/broadcast/receive）を検証
 - 実行: `docker compose -f docker-compose.test.yml up --build rust-test`（重め）
 - 簡易: `docker compose -f docker-compose.test.yml up --build test-runner`（Rust/TSまとめ・最小）
-- 設定: `ENABLE_P2P_INTEGRATION=1`（`docker-compose.test.yml` の `test-runner`/`rust-test` に設定済み）
+- 設定: `ENABLE_P2P_INTEGRATION=1`（`./scripts/test-docker.ps1 integration` 実行時に `docker-compose.test.yml` の `test-runner`/`rust-test` へ上書き）
 - 補足: 受信側で NIP-01/10/19 バリデーションを行い、不正イベントは破棄
 - Gossip経由のメッセージ交換の検証（`IrohGossipService`）
 

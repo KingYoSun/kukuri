@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "ts", "lint", "build", "clean", "cache-clean")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "build", "clean", "cache-clean")]
     [string]$Command = "all",
 
     [switch]$NoBuild,  # ビルドをスキップするオプション
@@ -120,6 +120,26 @@ function Invoke-RustTests {
     Write-Success "Rust tests passed!"
 }
 
+function Invoke-IntegrationTests {
+    $previousValue = $env:ENABLE_P2P_INTEGRATION
+    try {
+        $env:ENABLE_P2P_INTEGRATION = "1"
+        if (-not $NoBuild) {
+            Build-TestImage
+        }
+        Write-Host "Running Rust P2P integration tests in Docker..."
+        Invoke-DockerCompose @("run", "--rm", "rust-test")
+        Write-Success "Rust P2P integration tests passed!"
+    }
+    finally {
+        if ($null -eq $previousValue) {
+            Remove-Item Env:ENABLE_P2P_INTEGRATION -ErrorAction SilentlyContinue
+        } else {
+            $env:ENABLE_P2P_INTEGRATION = $previousValue
+        }
+    }
+}
+
 # TypeScriptテストのみ実行
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
@@ -198,6 +218,10 @@ switch ($Command) {
     }
     "rust" {
         Invoke-RustTests
+        Show-CacheStatus
+    }
+    "integration" {
+        Invoke-IntegrationTests
         Show-CacheStatus
     }
     "ts" {
