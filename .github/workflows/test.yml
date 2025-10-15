@@ -41,7 +41,7 @@ jobs:
 
       - name: Run all tests
         run: |
-          docker-compose -f docker-compose.test.yml run --rm test-runner
+          docker-compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh
 
       - name: Run Rust tests in Docker (multi-node P2P)
         run: |

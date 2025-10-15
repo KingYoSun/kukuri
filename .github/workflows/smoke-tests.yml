@@ -20,5 +20,5 @@ jobs:
 
       - name: Docker Compose Smoke (test-runner)
         run: |
-          docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner test-runner
+          docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner p2p-bootstrap test-runner
 

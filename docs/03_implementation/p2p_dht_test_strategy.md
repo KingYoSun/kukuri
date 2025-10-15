@@ -1,6 +1,6 @@
 # P2P DHTテスト戦略
 
-最終更新日: 2025年10月14日
+最終更新日: 2025年10月15日
 
 ## 目的
 - kukuri-tauri の P2P 受信確認テストを、iroh の DHT ディスカバリーのみで安定実行する。
@@ -11,21 +11,24 @@
 - 当面は Nostr リレーに依存せず、iroh DHT + Gossip のみで体験を完結させる方針（`docs/01_project/activeContext/tasks/status/in_progress.md` 参照）。
 
 ## 対応方針
-1. Docker テスト環境に `kukuri-cli` の `bootstrap` サービスを常駐させ、全テストノードのディスカバリーフックとする。
-2. Rust 統合テストでは `Endpoint::builder().discovery_dht()` のみを利用し、`connect_peers` を廃止する。
-3. `scripts/test-docker.{ps1,sh}` がブートストラップノードを起動し、`KUKURI_BOOTSTRAP_PEERS` を未指定の場合は既定値（`03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233`）へ上書きする。
-4. トピック参加後は DHT 経由でピアが可視化されるまで待機するヘルパーを用意し、`PeerJoined` イベントや `get_joined_topics()` を監視してタイムアウトする仕組みを整える。
-
+1. `docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner p2p-bootstrap test-runner` を実行し、Rust P2P 統合テストと TypeScript 統合テストによる最小スモークを確認。
+2. 必要に応じて `./scripts/test-docker.sh build` でテスト用イメージを再構築し、キャッシュ汚染がない状態を作る。
+3. Windows/Linux 共通で `./scripts/test-docker.ps1 integration` または `./scripts/test-docker.sh integration` を用い、P2P 統合テストのみを実行（ブートストラップが自動起動し、`ENABLE_P2P_INTEGRATION=1` が付与される）。
+4. 通常の Rust テストは `./scripts/test-docker.ps1 rust` または `./scripts/test-docker.sh rust` で実行し、`ENABLE_P2P_INTEGRATION=0` のまま高速に完了することを確認。
+5. 失敗した場合は `docker logs kukuri-p2p-bootstrap` や `docker inspect kukuri-p2p-bootstrap --format '{{.State.Health}}'` を確認し、NodeId や Discovery 初期化に問題がないか調査する。
 ## 変更案概要
 - `docker-compose.test.yml`
-  - `p2p-bootstrap` サービスを追加し、`kukuri-cli` イメージを再利用した DHT ブートストラップノードを常時起動。
-  - `network_mode: host` で 11233/TCP をリッスン、`KUKURI_SECRET_KEY` を固定化（NodeId は `03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8`）。
-  - `netcat-openbsd` を導入した上で `healthcheck`（`nc -z 127.0.0.1 11233`）を設定し、テスト実行前にヘルス確認が行えるようにした。
+  - `p2p-bootstrap` サービスを追加し、`kukuri-cli` イメージを利用した DHT ブートストラップノードを常時起動。
+  - `network_mode: host` で 11233/TCP を露出し、`KUKURI_SECRET_KEY` を固定化して決定論的な NodeId (`03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8`) を生成。
+  - `test-runner` サービスの既定コマンドを `run-smoke-tests.sh` に変更し、Rust P2P 統合テスト (`cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1`) と TypeScript 統合テスト (`pnpm test:integration`) のみを実行してスモークを最小化。
+  - `p2p-bootstrap` の `healthcheck` 成功を待ってから開始するよう `depends_on` を追加し、`docker compose up` 実行時にブートストラップ起動待ちが保証されるようにした。
+  - `ENABLE_P2P_INTEGRATION=1` / `KUKURI_FORCE_LOCALHOST_ADDRS=0` / `KUKURI_BOOTSTRAP_HOST` / `KUKURI_BOOTSTRAP_PORT` を既定で埋め込み、`BOOTSTRAP_WAIT_SECONDS` で待機秒数を調整できるようにした。
 - `scripts/test-docker.sh` / `.ps1`
-  - `integration` 実行時に `p2p-bootstrap` を起動し、ヘルスチェック完了まで待機。終了後は必ず `down --remove-orphans` でクリーンアップ。
-  - PowerShell 版はホスト環境変数を一時的に設定し、Unix 版は `kukuri-tauri/tests/.env.p2p` を生成することで `ENABLE_P2P_INTEGRATION=1` / `KUKURI_FORCE_LOCALHOST_ADDRS=0` / `KUKURI_BOOTSTRAP_PEERS=...` をコンテナへ注入。
-  - テスト実行は `cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1` に絞り込み、既存のユニットテストを巻き込まずに P2P 経路の結合テストのみを実行する。
-  - 失敗時にもブートストラップを停止できるようコマンド失敗を捕捉し、後続のクリーンアップとエラーハンドリングを分離。
+  - `integration` 実行時に `p2p-bootstrap` を起動し、ヘルスチェック完了まで待機。終了後は `down --remove-orphans` でクリーンアップ。
+  - PowerShell 版はホスト側環境変数を一時的に設定し、Unix 版は `kukuri-tauri/tests/.env.p2p` を生成して `ENABLE_P2P_INTEGRATION=1` / `KUKURI_FORCE_LOCALHOST_ADDRS=0` / `KUKURI_BOOTSTRAP_PEERS=...` を注入。
+  - `all` / `rust` / `ts` / `lint` コマンドは `docker-compose.test.yml` の `test-runner` に対して `/app/run-tests.sh` を明示的に実行し、従来のフルスイートを維持する。
+  - スモーク用途ではコンテナ既定の `run-smoke-tests.sh` をそのまま利用し、`docker compose up --build p2p-bootstrap test-runner` で Tauri 非依存の検証が完結する。
+  - 失敗時にもブートストラップを停止できるよう例外処理を維持し、クリーンアップとエラーハンドリングを分離。
 - `iroh_integration_tests.rs`
   - DHT ブートストラップ必須の `bootstrap_context()` を追加し、`ENABLE_P2P_INTEGRATION!=1` や `KUKURI_BOOTSTRAP_PEERS` 未設定時はテストをスキップ。
   - `create_service_with_endpoint` / `connect_peers` を廃止し、`Endpoint::builder().discovery_dht()` + `endpoint.connect(bootstrap)` で初期化する `create_service()` を導入。

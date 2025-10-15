@@ -43,6 +43,7 @@ kukuri/
 Windows環境でDLLエラーによりネイティブでのテストが実行できない場合は、**必ずDockerを使用してテストを実行してください**。
 
 ### Windows環境での実行
+**Windows では DLL 依存の問題を避けるため、`scripts/test-docker.ps1` を既定のテスト実行経路としてください。**
 
 PowerShellで以下のコマンドを実行：
 
@@ -79,35 +80,19 @@ PowerShellで以下のコマンドを実行：
 ### Linux/macOS環境での実行
 
 ```bash
-# 実行権限を付与（初回のみ）
-chmod +x scripts/test-docker.sh
+# スモークテスト（Rust P2P + TypeScript 統合のみ、Tauri 起動なし）
+docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner p2p-bootstrap test-runner
 
-# すべてのテストを実行
-./scripts/test-docker.sh
+# フルスイート（従来どおりの全テスト）
+docker compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh
 
-# Rustテストのみ実行
-./scripts/test-docker.sh rust
+# 個別のサービスを実行
+docker compose -f docker-compose.test.yml run --rm rust-test
+docker compose -f docker-compose.test.yml run --rm ts-test
+docker compose -f docker-compose.test.yml run --rm lint-check
 
-# TypeScriptテストのみ実行
-./scripts/test-docker.sh ts
-
-# リントとフォーマットチェック
-./scripts/test-docker.sh lint
-
-# Dockerイメージの再ビルドのみ
-./scripts/test-docker.sh build
-
-# コンテナとイメージのクリーンアップ
-./scripts/test-docker.sh clean
-
-# キャッシュ削除を含む完全クリーンアップ
-./scripts/test-docker.sh cache-clean
-
-# P2P統合テスト（Docker上で起動）
-./scripts/test-docker.sh p2p --tests iroh_integration_tests
-
-# ヘルプを表示
-./scripts/test-docker.sh -h
+# クリーンアップ
+docker compose -f docker-compose.test.yml down --rmi local --volumes
 ```
 
 
@@ -125,16 +110,19 @@ P2P統合テスト用に追加された `p2p` サブコマンドでは次のオ�
 ### docker-composeコマンドでの直接実行
 
 ```bash
-# すべてのテストを実行
-docker-compose -f docker-compose.test.yml run --rm test-runner
+# スモークテスト（Rust P2P + TypeScript 統合のみ、Tauri 起動なし）
+docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner p2p-bootstrap test-runner
+
+# フルスイート（従来どおりの全テスト）
+docker compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh
 
 # 個別のサービスを実行
-docker-compose -f docker-compose.test.yml run --rm rust-test
-docker-compose -f docker-compose.test.yml run --rm ts-test
-docker-compose -f docker-compose.test.yml run --rm lint-check
+docker compose -f docker-compose.test.yml run --rm rust-test
+docker compose -f docker-compose.test.yml run --rm ts-test
+docker compose -f docker-compose.test.yml run --rm lint-check
 
 # クリーンアップ
-docker-compose -f docker-compose.test.yml down --rmi local --volumes
+docker compose -f docker-compose.test.yml down --rmi local --volumes
 ```
 
 ## Docker環境の詳細
@@ -149,7 +137,7 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 ### docker-compose.test.yml
 以下のサービスを定義：
 - `p2p-bootstrap`: iroh DHT ブートストラップノード（`kukuri-cli` を使用）
-- `test-runner`: すべてのテストを実行
+- `test-runner`: 既定では `run-smoke-tests.sh` で Rust P2P + TypeScript 統合スモークを実行。フルスイートは `/app/run-tests.sh` を明示的に指定して実行する。
 - `rust-test`: Rustテストのみ実行
 - `ts-test`: TypeScriptテストのみ実行
 - `lint-check`: リントとフォーマットチェック
@@ -164,6 +152,9 @@ docker-compose -f docker-compose.test.yml down --rmi local --volumes
 - `ENABLE_P2P_INTEGRATION` (既定値 `0`): P2P統合テスト向けのパスを有効化。通常の `./scripts/test-docker.ps1 rust` / `all` では無効化され、`./scripts/test-docker.ps1 integration` を実行した場合のみ `1` に上書きされる
 - `KUKURI_FORCE_LOCALHOST_ADDRS` (推奨値 `0`): DHT 経由で得たピアアドレスをそのまま利用するためのフラグ。p2p-bootstrap を利用するテストではスクリプト側で自動的に 0 に上書きされる
 - `KUKURI_BOOTSTRAP_PEERS`: `node_id@host:port` 形式。p2p-bootstrap 起動時に `03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233` が自動設定される
+- `KUKURI_BOOTSTRAP_HOST`: ブートストラップに接続するホスト名（既定値 `127.0.0.1`）。
+- `KUKURI_BOOTSTRAP_PORT`: ブートストラップの待ち受けポート（既定値 `11233`）。
+- `BOOTSTRAP_WAIT_SECONDS`: スモークテスト開始前に待機する秒数（既定値 `10`）。
 - `KUKURI_SECRET_KEY`: p2p-bootstrap コンテナが使用する Base64 エンコード済み 32バイト秘密鍵。既定値は `AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`
 
 ## CI/CDでの活用

@@ -73,6 +73,8 @@ secrets/
 
 # Scripts (we'll copy only what we need)
 scripts/
+!scripts/docker/
+!scripts/docker/**
 
 # Tauri generated files
 kukuri-tauri/src-tauri/gen/

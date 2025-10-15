@@ -112,7 +112,7 @@ function Invoke-AllTests {
         Build-TestImage
     }
     Write-Host "Running all tests in Docker..."
-    Invoke-DockerCompose @("run", "--rm", "test-runner")
+    Invoke-DockerCompose @("run", "--rm", "test-runner", "/app/run-tests.sh")
     Write-Success "All tests passed!"
 }
 

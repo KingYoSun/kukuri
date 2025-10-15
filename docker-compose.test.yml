@@ -24,6 +24,9 @@ services:
       context: .
       dockerfile: Dockerfile.test
     container_name: kukuri-test-runner
+    depends_on:
+      p2p-bootstrap:
+        condition: service_healthy
     network_mode: host
     volumes:
       # ソースコードをマウント（開発時の変更を即座に反映）
@@ -43,9 +46,11 @@ services:
       RUST_BACKTRACE: 1
       RUST_LOG: debug
       CARGO_HOME: /usr/local/cargo
-      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-0}
-      KUKURI_FORCE_LOCALHOST_ADDRS: ${KUKURI_FORCE_LOCALHOST_ADDRS:-1}
-      KUKURI_BOOTSTRAP_PEERS: ${KUKURI_BOOTSTRAP_PEERS:-}
+      ENABLE_P2P_INTEGRATION: "${ENABLE_P2P_INTEGRATION:-1}"
+      KUKURI_FORCE_LOCALHOST_ADDRS: "${KUKURI_FORCE_LOCALHOST_ADDRS:-0}"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_BOOTSTRAP_HOST: "${KUKURI_BOOTSTRAP_HOST:-127.0.0.1}"
+      KUKURI_BOOTSTRAP_PORT: "${KUKURI_BOOTSTRAP_PORT:-11233}"
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）

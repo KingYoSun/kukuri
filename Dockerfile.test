@@ -57,22 +57,8 @@ RUN mkdir -p /tmp && chmod 777 /tmp
 ENV DOCKER_ENV=1
 
 # テスト実行用のスクリプトを作成
-RUN echo '#!/bin/bash\n\
-set -e\n\
-echo "=== Running Rust tests ==="\n\
-cd /app/kukuri-tauri/src-tauri\n\
-cargo test --workspace --all-features\n\
-echo "=== Running Rust clippy ==="\n\
-cargo clippy --workspace --all-features -- -D warnings\n\
-echo "=== Running TypeScript tests ==="\n\
-cd /app/kukuri-tauri\n\
-pnpm test\n\
-echo "=== Running TypeScript type check ==="\n\
-pnpm type-check\n\
-echo "=== Running ESLint ==="\n\
-pnpm lint\n\
-echo "=== All tests passed! ===" \
-' > /app/run-tests.sh && chmod +x /app/run-tests.sh
+RUN install -Dm755 scripts/docker/run-tests.sh /app/run-tests.sh
+RUN install -Dm755 scripts/docker/run-smoke-tests.sh /app/run-smoke-tests.sh
 
 # デフォルトコマンド
-CMD ["/app/run-tests.sh"]
+CMD ["/app/run-smoke-tests.sh"]

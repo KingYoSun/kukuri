@@ -1,4 +1,4 @@
-[title] 作業中タスク（in_progress）
+﻿[title] 作業中タスク（in_progress）
 
 最終更新日: 2025年10月15日
 
@@ -17,11 +17,7 @@
 - [x] iroh-gossip: broadcast の意味整理と API 連動実装（`dht_bootstrap.rs::broadcast` に Sender 利用で送信を実装）
 - [x] DHT 設定フラグの導入（`NetworkConfig.enable_{dht,dns,local}` と `IrohNetworkService` ビルダー反映）
 - [x] NIPs 準拠イベントモデルの受信バリデーション（NIP-01/10/19）
-- [x] P2P 経路のみの投稿/閲覧/返信/引用の結合テスト（Rust/TS）と契約テストでの検証
-- [ ] スモークテスト最小化（Tauri起動を伴わない形で `docker-compose.test.yml` の test-runner を用いた検証）
-  - [x] GitHub Actions に `smoke-tests.yml` を追加（`test-runner` 実行）
-- [ ] Windows 環境では `./scripts/test-docker.ps1` による Docker 経由実行の既定化
-- [ ] DHT メトリクス/ログの整備（tracing, counters, レベル設定）
+- [x] P2P 経路のみの投稿/閲覧/返信/引用の結合テスト（Rust/TS）と契約テストでの検証\n  - [x] GitHub Actions に `smoke-tests.yml` を追加（`test-runner` 実行）\n- [ ] DHT メトリクス/ログの整備（tracing, counters, レベル設定）
   - [x] GossipメトリクスAPI（`get_p2p_metrics`）とフロントAPIラッパを追加
   - [x] P2PDebugPanelにメトリクス自動更新（10秒）と手動更新を追加
 
@@ -70,3 +66,5 @@
 - 2025年10月14日: `integration` コマンドが全テストを実行してタイムアウトしていたため、PowerShell/Bash 双方で cargo フィルタを `modules::p2p::tests::iroh_integration_tests::` に限定し、P2P結合テストのみを実行するよう修正。ブートストラップ起動・停止と併せてテスト終了後も確実にクリーンアップする流れに統一（Codex）。
 - 2025年10月14日: `test_multi_node_broadcast_three_nodes` が `IrohGossipService::join_topic` で近傍参加待ちのまま停止することを確認。DHT 経由で `NeighborUp` が発火しないため `receiver.joined()` が返らず、テスト全体がハングする。次のアクションとして (1) `join_topic` 内でタイムアウト・ログ強化を行い、未接続時は早期に失敗へフォールバックする、(2) ブートストラップノード構成やテスト側の待機ヘルパーを見直し、PeerJoined を確実に検出できるよう設計を更新する（Codex）。
 - 2025年10月15日: IrohGossipServiceにローカルピアヒント生成とDHT参加待機タイムアウトを追加。P2P統合テストはローカルヒント共有で安定化。Docker経由scripts/test-docker.ps1 integrationの実行が完走し、PowerShellスクリプトはdocker composeの終了コードを正しく伝播するよう修正。
+- 2025年10月15日: test-runner の既定コマンドを run-smoke-tests.sh へ切り替え、Windows は `scripts/test-docker.ps1` を既定経路として明示 (Codex)。
+

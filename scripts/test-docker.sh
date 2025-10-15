@@ -66,7 +66,7 @@ build_image() {
 run_all_tests() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   echo 'Running all tests in Docker...'
-  compose_run '' run --rm test-runner
+  compose_run '' run --rm test-runner /app/run-tests.sh
   echo '[OK] All tests passed'
 }
 
