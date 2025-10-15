@@ -42,10 +42,19 @@ RUN pnpm install --frozen-lockfile --ignore-workspace
 
 # Cargo.toml と Cargo.lock を先にコピー（Rust依存関係のキャッシュ）
 WORKDIR /app
-COPY kukuri-tauri/src-tauri/Cargo.toml kukuri-tauri/src-tauri/Cargo.lock ./kukuri-tauri/src-tauri/
+COPY kukuri-tauri/src-tauri/Cargo.toml ./kukuri-tauri/src-tauri/
 COPY kukuri-tauri/src-tauri/build.rs ./kukuri-tauri/src-tauri/
 COPY kukuri-tauri/src-tauri/tauri.conf.json ./kukuri-tauri/src-tauri/
 COPY kukuri-tauri/src-tauri/migrations ./kukuri-tauri/src-tauri/migrations
+# Rust依存関係の解決とロックファイル生成を事前に行い、ビルドキャッシュを有効活用する
+WORKDIR /app/kukuri-tauri/src-tauri
+RUN mkdir src \
+    && echo "fn main() {}" > src/main.rs \
+    && cargo generate-lockfile \
+    && cargo fetch \
+    && rm -rf src
+
+WORKDIR /app
 COPY kukuri-tauri/src-tauri/.sqlx ./kukuri-tauri/src-tauri/.sqlx
 
 # 残りのプロジェクトファイルをコピー（.dockerignoreで除外されたものを除く）

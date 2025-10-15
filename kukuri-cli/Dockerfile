@@ -10,13 +10,14 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /usr/src/kukuri-cli
 
-# Copy Cargo files
-COPY Cargo.toml Cargo.lock ./
-
-# Build dependencies (cache layer)
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-RUN rm -rf src
+# Copy Cargo manifest and prime dependency cache
+COPY Cargo.toml ./
+# Generate lockfile and vendor dependencies without requiring the full source tree
+RUN mkdir src \
+    && echo "fn main() {}" > src/main.rs \
+    && cargo generate-lockfile \
+    && cargo build --release \
+    && rm -rf src
 
 # Copy source code
 COPY src ./src
