@@ -9,9 +9,12 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use tokio::sync::{Mutex as TokioMutex, RwLock};
 use std::collections::HashMap;
+
+const LOG_TARGET: &str = "kukuri::p2p::dht";
+const METRICS_TARGET: &str = "kukuri::p2p::metrics";
 
 /// DHT統合付きGossipサービス
 pub struct DhtGossip {
@@ -23,12 +26,12 @@ pub struct DhtGossip {
 impl DhtGossip {
     /// DHT統合付きGossipを作成
     pub async fn new(endpoint: Arc<Endpoint>) -> Result<Self, AppError> {
-        info!("Initializing DHT-integrated Gossip service");
+        info!(target: LOG_TARGET, "Initializing DHT-integrated Gossip service");
 
         // iroh-gossipを作成
         let gossip = Gossip::builder().spawn(endpoint.as_ref().clone());
 
-        info!("DHT-integrated Gossip initialized successfully");
+        info!(target: LOG_TARGET, "DHT-integrated Gossip initialized successfully");
 
         Ok(Self {
             gossip,
@@ -52,7 +55,16 @@ impl DhtGossip {
             .gossip
             .subscribe(topic_id, peer_ids)
             .await
-            .map_err(|e| AppError::P2PError(format!("Failed to join topic: {:?}", e)))?;
+            .map_err(|e| {
+                super::metrics::record_join_failure();
+                warn!(
+                    target: LOG_TARGET,
+                    topic = %Self::fmt_topic_id(&topic_id),
+                    error = ?e,
+                    "Failed to join DHT topic"
+                );
+                AppError::P2PError(format!("Failed to join topic: {:?}", e))
+            })?;
 
         // Sender を保存（Receiver は破棄しても参加状態は維持される）
         let (sender, _receiver) = topic.split();
@@ -60,10 +72,19 @@ impl DhtGossip {
         let mut senders = self.senders.write().await;
         senders.insert(topic_key, sender);
 
-        super::metrics::inc_join();
+        super::metrics::record_join_success();
         let snap = super::metrics::snapshot();
-        info!("Joined DHT topic: {:?} [joins={}, leaves={}, sent={}, recv={}]",
-            Self::fmt_topic_id(&topic_id), snap.joins, snap.leaves, snap.broadcasts_sent, snap.messages_received);
+        info!(
+            target: METRICS_TARGET,
+            action = "join",
+            topic = %Self::fmt_topic_id(&topic_id),
+            joins = snap.joins,
+            join_failures = snap.join_details.failures,
+            leaves = snap.leaves,
+            broadcasts = snap.broadcasts_sent,
+            received = snap.messages_received,
+            "Joined DHT topic"
+        );
         Ok(())
     }
 
@@ -73,13 +94,27 @@ impl DhtGossip {
         let topic_key = Self::topic_key(&topic_id);
         let mut senders = self.senders.write().await;
         if senders.remove(&topic_key).is_some() {
-            super::metrics::inc_leave();
+            super::metrics::record_leave_success();
             let snap = super::metrics::snapshot();
-            info!("Left DHT topic: {:?} [joins={}, leaves={}, sent={}, recv={}]",
-                Self::fmt_topic_id(&topic_id), snap.joins, snap.leaves, snap.broadcasts_sent, snap.messages_received);
+            info!(
+                target: METRICS_TARGET,
+                action = "leave",
+                topic = %Self::fmt_topic_id(&topic_id),
+                leaves = snap.leaves,
+                leave_failures = snap.leave_details.failures,
+                joins = snap.joins,
+                broadcasts = snap.broadcasts_sent,
+                received = snap.messages_received,
+                "Left DHT topic"
+            );
             Ok(())
         } else {
-            debug!("Leave requested for non-joined topic: {:?}", Self::fmt_topic_id(&topic_id));
+            super::metrics::record_leave_failure();
+            debug!(
+                target: LOG_TARGET,
+                topic = %Self::fmt_topic_id(&topic_id),
+                "Leave requested for non-joined topic"
+            );
             Ok(())
         }
     }
@@ -103,7 +138,16 @@ impl DhtGossip {
                     .gossip
                     .subscribe(topic_id, vec![])
                     .await
-                    .map_err(|e| AppError::P2PError(format!("Failed to subscribe before broadcast: {:?}", e)))?;
+                    .map_err(|e| {
+                        super::metrics::record_broadcast_failure();
+                        warn!(
+                            target: LOG_TARGET,
+                            topic = %Self::fmt_topic_id(&topic_id),
+                            error = ?e,
+                            "Failed to lazily subscribe before broadcast"
+                        );
+                        AppError::P2PError(format!("Failed to subscribe before broadcast: {:?}", e))
+                    })?;
                 let (sender, _receiver) = topic.split();
                 let sender = Arc::new(TokioMutex::new(sender));
                 let mut senders = self.senders.write().await;
@@ -114,20 +158,35 @@ impl DhtGossip {
 
         // ブロードキャスト
         let mut guard = sender.lock().await;
-        super::metrics::inc_broadcast();
-        let res = guard
-            .broadcast(message.into())
-            .await
-            .map_err(|e| AppError::P2PError(format!("Failed to broadcast: {:?}", e)));
+        let res = guard.broadcast(message.into()).await;
 
         match res {
             Ok(()) => {
+                super::metrics::record_broadcast_success();
                 let snap = super::metrics::snapshot();
-                debug!("Broadcasted message on topic {:?} [joins={}, leaves={}, sent={}, recv={}]",
-                    Self::fmt_topic_id(&topic_id), snap.joins, snap.leaves, snap.broadcasts_sent, snap.messages_received);
+                debug!(
+                    target: METRICS_TARGET,
+                    action = "broadcast",
+                    topic = %Self::fmt_topic_id(&topic_id),
+                    broadcasts = snap.broadcasts_sent,
+                    broadcast_failures = snap.broadcast_details.failures,
+                    joins = snap.joins,
+                    leaves = snap.leaves,
+                    received = snap.messages_received,
+                    "Broadcasted message on topic"
+                );
                 Ok(())
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                super::metrics::record_broadcast_failure();
+                warn!(
+                    target: LOG_TARGET,
+                    topic = %Self::fmt_topic_id(&topic_id),
+                    error = ?e,
+                    "Failed to broadcast gossip message"
+                );
+                Err(AppError::P2PError(format!("Failed to broadcast: {:?}", e)))
+            }
         }
     }
 

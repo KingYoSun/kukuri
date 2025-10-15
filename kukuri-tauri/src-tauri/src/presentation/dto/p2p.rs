@@ -79,6 +79,18 @@ pub struct GossipMetricsResponse {
     pub leaves: u64,
     pub broadcasts_sent: u64,
     pub messages_received: u64,
+    pub join_details: GossipMetricDetailsResponse,
+    pub leave_details: GossipMetricDetailsResponse,
+    pub broadcast_details: GossipMetricDetailsResponse,
+    pub receive_details: GossipMetricDetailsResponse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GossipMetricDetailsResponse {
+    pub total: u64,
+    pub failures: u64,
+    pub last_success_ms: Option<u64>,
+    pub last_failure_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

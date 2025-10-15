@@ -1,7 +1,8 @@
 use crate::presentation::dto::p2p::{
-    JoinTopicRequest, LeaveTopicRequest, BroadcastRequest,
-    P2PStatusResponse, NodeAddressResponse, GossipMetricsResponse
+    BroadcastRequest, GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicRequest,
+    LeaveTopicRequest, NodeAddressResponse, P2PStatusResponse,
 };
+use crate::infrastructure::p2p::metrics::GossipMetricDetails;
 use crate::state::AppState;
 use tauri::State;
 
@@ -168,5 +169,18 @@ pub async fn get_p2p_metrics() -> Result<GossipMetricsResponse, String> {
         leaves: snap.leaves,
         broadcasts_sent: snap.broadcasts_sent,
         messages_received: snap.messages_received,
+        join_details: to_response_details(&snap.join_details),
+        leave_details: to_response_details(&snap.leave_details),
+        broadcast_details: to_response_details(&snap.broadcast_details),
+        receive_details: to_response_details(&snap.receive_details),
     })
+}
+
+fn to_response_details(details: &GossipMetricDetails) -> GossipMetricDetailsResponse {
+    GossipMetricDetailsResponse {
+        total: details.total,
+        failures: details.failures,
+        last_success_ms: details.last_success_ms,
+        last_failure_ms: details.last_failure_ms,
+    }
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { p2pApi } from '@/lib/api/p2p';
+import type { GossipMetrics } from '@/lib/api/p2p';
 import { useP2P } from '@/hooks/useP2P';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +31,29 @@ export function P2PDebugPanel() {
   const [messageContent, setMessageContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
-  const [metrics, setMetrics] = useState<{ joins: number; leaves: number; broadcasts_sent: number; messages_received: number } | null>(null);
+  const [metrics, setMetrics] = useState<GossipMetrics | null>(null);
+
+  const formatTimestamp = (value: number | null | undefined) => {
+    if (!value) {
+      return '—';
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString();
+  };
+
+  const renderMetricCard = (label: string, total: number, detail?: GossipMetrics['join_details']) => (
+    <div className="rounded-md border p-2 space-y-1">
+      <div className="flex items-center justify-between">
+        <span>{label}</span>
+        <Badge variant="outline">{total}</Badge>
+      </div>
+      <div className="grid gap-0.5 text-[10px] text-muted-foreground">
+        <span>失敗: {detail?.failures ?? 0}</span>
+        <span>最終成功: {formatTimestamp(detail?.last_success_ms)}</span>
+        <span>最終失敗: {formatTimestamp(detail?.last_failure_ms)}</span>
+      </div>
+    </div>
+  );
 
   // ログを追加
   const addLog = useCallback((message: string) => {
@@ -100,7 +123,9 @@ export function P2PDebugPanel() {
     try {
       const m = await p2pApi.getMetrics();
       setMetrics(m);
-      addLog(`Metrics updated: J=${m.joins} L=${m.leaves} S=${m.broadcasts_sent} R=${m.messages_received}`);
+      addLog(
+        `Metrics updated: join=${m.joins}/${m.join_details.failures} fail, leave=${m.leaves}/${m.leave_details.failures} fail, broadcast=${m.broadcasts_sent}/${m.broadcast_details.failures} fail, recv=${m.messages_received}/${m.receive_details.failures} fail`,
+      );
     } catch (e) {
       addLog(`Failed to fetch metrics: ${e}`);
     }
@@ -195,12 +220,16 @@ export function P2PDebugPanel() {
                   <span className="text-sm font-medium">Gossipメトリクス</span>
                   <Button variant="secondary" size="sm" onClick={handleRefreshMetrics}>メトリクス更新</Button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex items-center justify-between text-sm"><span>Joins</span><Badge variant="outline">{metrics?.joins ?? 0}</Badge></div>
-                  <div className="flex items-center justify-between text-sm"><span>Leaves</span><Badge variant="outline">{metrics?.leaves ?? 0}</Badge></div>
-                  <div className="flex items-center justify-between text-sm"><span>Broadcasts</span><Badge variant="outline">{metrics?.broadcasts_sent ?? 0}</Badge></div>
-                  <div className="flex items-center justify-between text-sm"><span>Received</span><Badge variant="outline">{metrics?.messages_received ?? 0}</Badge></div>
-                </div>
+                {metrics ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {renderMetricCard('Joins', metrics.joins, metrics.join_details)}
+                    {renderMetricCard('Leaves', metrics.leaves, metrics.leave_details)}
+                    {renderMetricCard('Broadcasts', metrics.broadcasts_sent, metrics.broadcast_details)}
+                    {renderMetricCard('Received', metrics.messages_received, metrics.receive_details)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">メトリクスはまだ取得されていません</p>
+                )}
               </div>
 
               {error && (

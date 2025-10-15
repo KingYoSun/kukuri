@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+﻿import { invoke } from '@tauri-apps/api/core';
 
 export interface P2PStatus {
   connected: boolean;
@@ -14,48 +14,62 @@ export interface TopicStatus {
   last_activity: number;
 }
 
+export interface GossipMetricDetails {
+  total: number;
+  failures: number;
+  last_success_ms: number | null;
+  last_failure_ms: number | null;
+}
+
+export interface GossipMetrics {
+  joins: number;
+  leaves: number;
+  broadcasts_sent: number;
+  messages_received: number;
+  join_details: GossipMetricDetails;
+  leave_details: GossipMetricDetails;
+  broadcast_details: GossipMetricDetails;
+  receive_details: GossipMetricDetails;
+}
+
 export const p2pApi = {
   /**
-   * P2P機能を初期化
+   * P2P讖溯・繧貞・譛溷喧
    */
   initialize: () => invoke<void>('initialize_p2p'),
 
   /**
-   * トピックに参加
+   * 繝医ヴ繝・け縺ｫ蜿ょ刈
    */
   joinTopic: (topicId: string, initialPeers: string[] = []) =>
     invoke<void>('join_p2p_topic', { topicId, initialPeers }),
 
   /**
-   * トピック名で参加
+   * 繝医ヴ繝・け蜷阪〒蜿ょ刈
    */
   joinTopicByName: (topicName: string, initialPeers: string[] = []) =>
     invoke<void>('join_topic_by_name', { topicName, initialPeers }),
 
   /**
-   * トピックから離脱
+   * 繝医ヴ繝・け縺九ｉ髮｢閼ｱ
    */
   leaveTopic: (topicId: string) => invoke<void>('leave_p2p_topic', { topicId }),
 
   /**
-   * トピックにメッセージをブロードキャスト
-   */
+   * 繝医ヴ繝・け縺ｫ繝｡繝・そ繝ｼ繧ｸ繧偵ヶ繝ｭ繝ｼ繝峨く繝｣繧ｹ繝・   */
   broadcast: (topicId: string, content: string) =>
     invoke<void>('broadcast_to_topic', { topicId, content }),
 
   /**
-   * P2P接続状態を取得
-   */
+   * P2P謗･邯夂憾諷九ｒ蜿門ｾ・   */
   getStatus: () => invoke<P2PStatus>('get_p2p_status'),
 
   /**
-   * ノードアドレスを取得
-   */
+   * 繝弱・繝峨い繝峨Ξ繧ｹ繧貞叙蠕・   */
   getNodeAddress: () => invoke<string[]>('get_node_address'),
 
   /**
-   * 指定されたピアアドレスに手動で接続
-   */
+   * 謖・ｮ壹＆繧後◆繝斐い繧｢繝峨Ξ繧ｹ縺ｫ謇句虚縺ｧ謗･邯・   */
   connectToPeer: (peerAddress: string) => invoke<void>('connect_to_peer', { peerAddress }),
 
   // Bootstrap UI
@@ -64,7 +78,7 @@ export const p2pApi = {
   clearBootstrapNodes: () => invoke<string>('clear_bootstrap_nodes'),
 
   /**
-   * Gossipメトリクスを取得
-   */
-  getMetrics: () => invoke<{ joins: number; leaves: number; broadcasts_sent: number; messages_received: number }>('get_p2p_metrics'),
+   * Gossip繝｡繝医Μ繧ｯ繧ｹ繧貞叙蠕・   */
+  getMetrics: () => invoke<GossipMetrics>('get_p2p_metrics'),
 };
+

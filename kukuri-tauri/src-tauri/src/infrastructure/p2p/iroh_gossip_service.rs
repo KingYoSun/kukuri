@@ -22,6 +22,9 @@ use std::time::Duration;
 use crate::modules::p2p::events::P2PEvent;
 use crate::modules::p2p::message::GossipMessage;
 
+const LOG_TARGET: &str = "kukuri::p2p::gossip";
+const METRICS_TARGET: &str = "kukuri::p2p::metrics";
+
 pub struct IrohGossipService {
     endpoint: Arc<iroh::Endpoint>,
     gossip: Arc<Gossip>,
@@ -232,25 +235,74 @@ impl GossipService for IrohGossipService {
             while let Some(event) = receiver.next().await {
                 match event {
                     Ok(GossipApiEvent::Received(msg)) => {
-                        super::metrics::inc_received();
                         if let Some(tx) = &event_tx_clone {
-                            if let Ok(message) = GossipMessage::from_bytes(&msg.content) {
-                                let _ = tx.lock().unwrap().send(P2PEvent::MessageReceived {
-                                    topic_id: topic_clone.clone(),
-                                    message,
-                                    _from_peer: msg.delivered_from.as_bytes().to_vec(),
-                                });
+                            match GossipMessage::from_bytes(&msg.content) {
+                                Ok(message) => {
+                                    let _ = tx.lock().unwrap().send(P2PEvent::MessageReceived {
+                                        topic_id: topic_clone.clone(),
+                                        message,
+                                        _from_peer: msg.delivered_from.as_bytes().to_vec(),
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::debug!(
+                                        target: LOG_TARGET,
+                                        topic = %topic_clone,
+                                        error = ?e,
+                                        "Failed to decode gossip payload into GossipMessage"
+                                    );
+                                }
                             }
                         }
 
-                        if let Ok(domain_event) = serde_json::from_slice::<Event>(&msg.content) {
-                            if let Err(e) = domain_event.validate_nip01().and_then(|_| domain_event.validate_nip10_19()) {
-                                tracing::warn!("Drop invalid Nostr event (NIP-01): {}", e);
-                            } else {
-                                let subs = subscribers_for_task.read().await;
-                                for s in subs.iter() {
-                                    let _ = s.send(domain_event.clone()).await;
+                        match serde_json::from_slice::<Event>(&msg.content) {
+                            Ok(domain_event) => {
+                                match domain_event
+                                    .validate_nip01()
+                                    .and_then(|_| domain_event.validate_nip10_19())
+                                {
+                                    Ok(_) => {
+                                        super::metrics::record_receive_success();
+                                        let snap = super::metrics::snapshot();
+                                        tracing::trace!(
+                                            target: METRICS_TARGET,
+                                            action = "receive",
+                                            topic = %topic_clone,
+                                            received = snap.messages_received,
+                                            receive_failures = snap.receive_details.failures,
+                                            "Validated gossip payload"
+                                        );
+
+                                        let subs = subscribers_for_task.read().await;
+                                        for s in subs.iter() {
+                                            let _ = s.send(domain_event.clone()).await;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        super::metrics::record_receive_failure();
+                                        let snap = super::metrics::snapshot();
+                                        tracing::warn!(
+                                            target: METRICS_TARGET,
+                                            action = "receive_failure",
+                                            topic = %topic_clone,
+                                            failures = snap.receive_details.failures,
+                                            error = %e,
+                                            "Dropped invalid Nostr event after validation"
+                                        );
+                                    }
                                 }
+                            }
+                            Err(e) => {
+                                super::metrics::record_receive_failure();
+                                let snap = super::metrics::snapshot();
+                                tracing::warn!(
+                                    target: METRICS_TARGET,
+                                    action = "receive_failure",
+                                    topic = %topic_clone,
+                                    failures = snap.receive_details.failures,
+                                    error = ?e,
+                                    "Failed to decode gossip payload as Nostr event"
+                                );
                             }
                         }
                     }

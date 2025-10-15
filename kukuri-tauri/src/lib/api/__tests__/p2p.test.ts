@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { p2pApi } from '../p2p';
-import type { P2PStatus, TopicStatus } from '../p2p';
+import type { GossipMetrics, P2PStatus, TopicStatus } from '../p2p';
 
-// Tauri APIのモック
+// Tauri API縺ｮ繝｢繝・け
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
@@ -157,7 +157,16 @@ describe('p2pApi', () => {
 
   describe('getMetrics', () => {
     it('should get gossip metrics', async () => {
-      const mockMetrics = { joins: 3, leaves: 1, broadcasts_sent: 7, messages_received: 12 };
+      const mockMetrics: GossipMetrics = {
+        joins: 3,
+        leaves: 1,
+        broadcasts_sent: 7,
+        messages_received: 12,
+        join_details: { total: 3, failures: 1, last_success_ms: 1000, last_failure_ms: 2000 },
+        leave_details: { total: 1, failures: 0, last_success_ms: 3000, last_failure_ms: null },
+        broadcast_details: { total: 7, failures: 2, last_success_ms: 4000, last_failure_ms: 4500 },
+        receive_details: { total: 12, failures: 4, last_success_ms: 5000, last_failure_ms: 5500 },
+      };
       vi.mocked(invoke).mockResolvedValueOnce(mockMetrics);
 
       const metrics = await p2pApi.getMetrics();
@@ -236,3 +245,4 @@ describe('p2pApi', () => {
     });
   });
 });
+
