@@ -12,7 +12,7 @@
 # kukuri-tauri/src-tauri/Cargo.toml
 [dependencies]
 # P2P Networking（DHTフィーチャー付き）
-iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }
+iroh = { version = "0.93.1", features = ["discovery-dht"] }
 iroh-gossip = "0.93.1"
 
 # その他の依存関係
@@ -316,83 +316,8 @@ docker-compose up -d
 cargo test --test integration
 ```
 
-## 7. Pkarrリレーサーバーのローカル環境構築
-
-### 7.1 概要
-irohのビルトインDHTディスカバリー機能をローカル環境でテストするため、Pkarrリレーサーバーをセットアップします。
-
-### 7.2 セットアップ手順
-```bash
-# サブモジュールの初期化（初回のみ）
-git submodule update --init --recursive
-
-# Pkarrリレーサーバーの起動
-docker-compose up -d
-
-# ログの確認
-docker-compose logs -f pkarr
-
-# 動作確認
-curl http://localhost:8080/health
-curl http://localhost:8080/stats
-
-# サーバーの停止
-docker-compose down
-```
-
-### 7.3 設定ファイル
-
-#### docker-compose.yml
-```yaml
-services:
-  pkarr:
-    container_name: pkarr
-    build:
-      context: ./pkarr
-      dockerfile: Dockerfile
-    volumes:
-      - ./config.toml:/config.toml
-      - .pkarr_cache:/cache
-    ports:
-      - "8080:8080"  # HTTP API port
-      - "6881:6881"  # Mainline DHT port
-    command: pkarr-relay --config=/config.toml
-    restart: unless-stopped
-    environment:
-      - RUST_LOG=info
-```
-
-#### config.toml
-```toml
-[http]
-port = 8080
-
-[mainline]
-port = 6881
-
-[cache]
-path = "/cache"
-size = 100_000
-minimum_ttl = 300
-maximum_ttl = 86400
-
-[rate_limiter]
-behind_proxy = false
-burst_size = 10
-per_second = 2
-```
-
-### 7.4 irohアプリケーション側の設定
-```rust
-// Pkarrリレーサーバーへの接続（将来実装）
-pub async fn connect_to_pkarr(endpoint: &Endpoint) -> Result<()> {
-    // Pkarrリレーサーバーは自動的にDHTディスカバリーで発見される
-    // 明示的な接続設定は不要
-    Ok(())
-}
-```
-
-## 8. デバッグとトラブルシューティング
+## 8. テストとトラブルシューティング
+グ
 
 ### 8.1 ログ設定
 ```bash
@@ -403,16 +328,14 @@ RUST_LOG=kukuri=debug,iroh=info,iroh_gossip=info cargo run
 ### 8.2 よくある問題
 
 #### DHTディスカバリーが機能しない
-- フィーチャーフラグ `discovery-pkarr-dht` が有効か確認
+- フィーチャーフラグ `discovery-dht` が有効か確認
 - ファイアウォール設定を確認
 - NAT traversalの問題を確認
-- Pkarrリレーサーバーが起動しているか確認（ローカル環境）
 
 #### ピアが見つからない
 - ブートストラップノードが正しく設定されているか確認
 - DNSディスカバリーも併用する
 - ローカルネットワークでテスト
-- Pkarrリレーサーバーのログを確認
 
 ## 9. パフォーマンス最適化
 
@@ -450,8 +373,6 @@ pub struct DhtMetrics {
 - [iroh Discovery Documentation](https://www.iroh.computer/docs/concepts/discovery)
 - [BitTorrent DHT BEP-5](https://www.bittorrent.org/beps/bep_0005.html)
 - [iroh API Documentation](https://docs.rs/iroh/latest/iroh/)
-- [Pkarr GitHub Repository](https://github.com/Pubky/pkarr)
-- [Pkarr Relay Configuration](https://github.com/Pubky/pkarr/blob/main/relay/src/config.example.toml)
 - [iroh-gossip Documentation](https://docs.rs/iroh-gossip/latest/iroh_gossip/)
 
 ## 11. 移行チェックリスト

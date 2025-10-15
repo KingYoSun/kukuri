@@ -5,7 +5,6 @@
   - `src/` UI・hooks・stores・`__tests__/`
   - `src-tauri/` Rust・`migrations/`・`tauri.conf.json`・`.sqlx/`
 - `kukuri-cli/`: DHTブートストラップ/リレー用Rust CLI
-- `pkarr/`: Pkarrリレー（サブモジュール）。設定は`config.toml`
 - `docs/`: 設計・実装ガイド、API JSONは`docs/apis/`
 - `scripts/`: セットアップ・テスト・起動用スクリプト
 
@@ -17,7 +16,6 @@
 - Rust(kukuri-cli): `cd kukuri-cli && cargo test && cargo build --release`
 - Dockerテスト: `docker compose -f docker-compose.test.yml up --build test-runner`
 - Windows推奨: `./scripts/test-docker.ps1 all|rust|ts|lint`
-- Pkarrローカル: `docker compose up -d`（`8080`/`6881`）
 
 ## コーディング規約
 - EditorConfig: LF、TS/JS 2スペース、Rust/TOML 4スペース

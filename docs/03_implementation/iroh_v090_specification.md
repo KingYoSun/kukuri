@@ -56,7 +56,6 @@ irohは、Rustで実装されたピアツーピアQUIC接続を確立するた�
 **検出メカニズム**:
 1. **StaticProvider**: 手動でノードアドレスを管理
 2. **DnsDiscovery**: 標準的なDNSルックアップ
-3. **PkarrResolver**: 指定されたリレーサーバーからの検索
 4. **MdnsDiscovery**: ローカルネットワーク内のノード検出
 5. **DhtDiscovery**: Mainline DHTを介した記録の公開/検索
 
@@ -68,7 +67,6 @@ irohは、Rustで実装されたピアツーピアQUIC接続を確立するた�
 **使用例**:
 ```rust
 let ep = Endpoint::builder()
-    .add_discovery(PkarrPublisher::n0_dns())
     .add_discovery(DnsDiscovery::n0_dns())
     .bind()
     .await?;
@@ -152,7 +150,6 @@ let (send, recv) = connection.open_bi().await?;
 ```rust
 let endpoint = Endpoint::builder()
     .add_discovery(DnsDiscovery::n0_dns())
-    .add_discovery(PkarrPublisher::n0_dns())
     .add_discovery(MdnsDiscovery::new()?)
     .bind()
     .await?;

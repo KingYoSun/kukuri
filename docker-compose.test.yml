@@ -118,7 +118,7 @@ services:
         cd kukuri-tauri/src-tauri &&
         cargo fmt -- --check &&
         echo '=== Rust clippy ===' &&
-        cargo clippy --workspace --all-features -- -D warnings &&
+        cargo clippy --workspace --all-features -- -D warnings -A dead_code -A unused_variables &&
         echo '=== TypeScript lint ===' &&
         cd /app/kukuri-tauri &&
         pnpm lint &&

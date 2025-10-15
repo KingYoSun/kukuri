@@ -167,7 +167,7 @@ pnpm test:watch        # ウォッチモード
 pnpm test:coverage     # カバレッジレポート生成
 
 # 型チェック
-pnpm typecheck         # TypeScript型チェック
+pnpm type-check        # TypeScript型チェック
 
 # リント
 pnpm lint              # ESLintチェック

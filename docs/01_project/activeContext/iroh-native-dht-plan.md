@@ -38,18 +38,16 @@
    - ローカルネットワーク内のみ
    - 明示的な有効化が必要
 
-3. **Pkarrディスカバリー**
-   - HTTPベースのPkarrリレーサーバー
    - NodeIdの解決に使用
 
 4. **DHTディスカバリー** (`discovery_dht()`)
    - BitTorrent Mainline DHTを利用
    - デフォルトでは無効（コードで明示的に有効化が必要）
-   - "discovery-pkarr-dht" フィーチャーフラグが必要（Cargoで設定済み）
+   - "discovery-dht" フィーチャーフラグが必要（Cargoで設定済み）
 
 ### 2.2 現在の実装状況（2025年09月15日時点）
 - Cargo.toml:
-  - iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }（設定済み）
+  - iroh = { version = "0.93.1", features = ["discovery-dht"] }（設定済み）
   - iroh-gossip = "0.93.1"
   - distributed-topic-tracker はコメントアウト済み（非推奨化）
 - エンドポイント初期化: `discovery_n0()` + `discovery_dht()` を併用（有効化済み）。
@@ -87,7 +85,7 @@
 
 #### Cargo.tomlの更新（実施済み）
 ```toml
-iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }
+iroh = { version = "0.93.1", features = ["discovery-dht"] }
 iroh-gossip = "0.93.1"
 # distributed-topic-tracker = "0.1.1"  # Deprecated
 ```
@@ -247,7 +245,6 @@ mod tests {
 ## 7. 今後の拡張
 
 ### 7.1 短期
-- Pkarrリレーサーバーの自前ホスティング
 - ブートストラップピアの動的更新
 
 ### 7.2 中長期
@@ -258,7 +255,6 @@ mod tests {
 ## 8. 参考資料
 - [iroh Discovery Documentation](https://www.iroh.computer/docs/concepts/discovery)
 - [BitTorrent DHT BEP-5](https://www.bittorrent.org/beps/bep_0005.html)
-- [Pkarr Project](https://github.com/number0/pkarr)
 
 ## 9. 残タスク（集約）
 `docs/01_project/activeContext/tasks/status/in_progress.md` を最新版としつつ、本計画に直結する残りを抜粋:

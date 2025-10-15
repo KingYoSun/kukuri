@@ -17,14 +17,12 @@ Endpoint::builder()
     .discovery_n0()      // DNSディスカバリー（Number 0）
     .discovery_dht()     // DHTディスカバリー（BitTorrent Mainline）
     .discovery_local()   // ローカルディスカバリー（mDNS風）
-    .discovery_pkarr()   // Pkarrリレーサーバー
 ```
 
 #### 現在の実装
 - **DNS**: デフォルトで有効（Number 0の公開DNSサーバー）
-- **DHT**: `discovery-pkarr-dht`フィーチャーフラグで有効化
+- **DHT**: `discovery-dht`フィーチャーフラグで有効化
 - **ローカル**: 将来実装予定
-- **Pkarr**: HTTPベースのリレー（ローカル環境構築済み、Docker Composeで利用可能）
 
 ### 2. DHT統合アーキテクチャ
 
@@ -104,7 +102,6 @@ sequenceDiagram
 #### プライバシー保護
 - 最小限のメタデータ公開
 - IPアドレスのローテーション
-- リレーサーバー経由の通信オプション
 
 ## パフォーマンス要件
 
@@ -218,7 +215,6 @@ pub struct DiscoveryMetrics {
 - [ ] パフォーマンスチューニング
 
 ### Phase 3: 拡張（計画中）
-- [ ] Pkarrリレー統合
 - [ ] ローカルディスカバリー
 - [ ] カスタムディスカバリーサービス
 
@@ -235,7 +231,6 @@ pub struct DiscoveryMetrics {
 #### 接続が不安定
 1. NAT設定を確認
 2. タイムアウト値を調整
-3. リレーサーバーを活用
 
 ## 参考資料
 

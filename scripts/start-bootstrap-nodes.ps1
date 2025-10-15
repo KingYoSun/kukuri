@@ -73,7 +73,7 @@ function Start-BootstrapNodes {
     $services = @()
     switch ($Mode) {
         "all" {
-            $services = @()  # docker-composeに任せる
+            $services = @()  # docker composeに任せる
             Write-ColorOutput "モード: すべてのノードを起動" -Color Green
         }
         "bootstrap" {
@@ -90,7 +90,7 @@ function Start-BootstrapNodes {
     }
 
     # Docker Composeコマンドを構築
-    $composeCmd = "docker-compose"
+    $composeCmd = "docker compose"
     if ($Profile -eq "full") {
         $composeCmd += " --profile full"
         Write-ColorOutput "プロファイル: フル（すべてのオプショナルサービスを含む）" -Color Yellow
@@ -129,7 +129,7 @@ function Start-BootstrapNodes {
     Write-ColorOutput "起動状態を確認中..." -Color Yellow
     Start-Sleep -Seconds 2
     
-    Invoke-Expression "docker-compose ps"
+    Invoke-Expression "$composeCmd ps"
     
     Write-ColorOutput ""
     Write-ColorOutput "========================================" -Color Green
@@ -144,8 +144,8 @@ function Start-BootstrapNodes {
         Write-ColorOutput "  Relay Node 2:     localhost:11226" -Color White
     }
     Write-ColorOutput ""
-    Write-ColorOutput "ログを確認: docker-compose logs -f" -Color Gray
-    Write-ColorOutput "停止:       docker-compose down" -Color Gray
+    Write-ColorOutput "ログを確認: docker compose logs -f" -Color Gray
+    Write-ColorOutput "停止:       docker compose down" -Color Gray
     Write-ColorOutput ""
 }
 

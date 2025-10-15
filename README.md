@@ -73,7 +73,7 @@ cargo test
 ```
 
 ### プロジェクト構造
-```
+`
 kukuri/
 ├── src/                    # React フロントエンド
 │   ├── components/         # UI コンポーネント
@@ -89,37 +89,8 @@ kukuri/
 │   └── Cargo.toml
 ├── docs/                   # ドキュメント
 ├── scripts/                # ユーティリティスクリプト
-├── workers/                # Cloudflare Workers
-└── pkarr/                  # Pkarr サブモジュール (DHT リレー)
-```
-
-## Pkarr リレーサーバー (ローカル開発)
-ローカル開発では Docker Compose を使って Pkarr リレーサーバーを起動できます。
-
-```bash
-# submodule の初期化（初回のみ）
-git submodule update --init --recursive
-
-# リレーサーバー起動
-docker-compose up -d
-
-# ログ確認
-docker-compose logs -f pkarr
-
-# 停止
-docker-compose down
-```
-
-設定は `config.toml` で管理されています。
-- HTTP ポート: 8080
-- DHT ポート: 6881
-- キャッシュ: `.pkarr_cache/`
-
-動作確認例:
-```bash
-curl http://localhost:8080/health
-curl http://localhost:8080/stats
-```
+└── workers/                # Cloudflare Workers
+`
 
 ## ドキュメント
 - [プロジェクト設計書](docs/01_project/design_doc.md)
