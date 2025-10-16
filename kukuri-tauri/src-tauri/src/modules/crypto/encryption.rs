@@ -57,7 +57,8 @@ fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
     }
 
     let (nonce_bytes, ciphertext) = combined.split_at(12);
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let mut nonce = Nonce::default();
+    nonce.copy_from_slice(nonce_bytes);
 
     // Derive key from password
     let key = derive_key_from_password(password);
@@ -65,7 +66,7 @@ fn decrypt(encrypted_data: &str, password: &str) -> Result<Vec<u8>> {
 
     // Decrypt
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|e| anyhow!("Decryption failed: {}", e))
 }
 
