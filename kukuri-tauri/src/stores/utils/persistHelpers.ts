@@ -16,10 +16,8 @@ export const createPersistConfig = <T>(
 /**
  * localStorageを使用する標準的なpersist設定を生成
  */
-export const createLocalStoragePersist = <T>(
-  name: string,
-  partialize?: (state: T) => Partial<T>,
-) => createPersistConfig(name, partialize);
+export const createLocalStoragePersist = <T>(name: string, partialize?: (state: T) => Partial<T>) =>
+  createPersistConfig(name, partialize);
 
 /**
  * 特定のフィールドのみを永続化するpartialize関数を生成
@@ -58,13 +56,18 @@ export const createMapAwareStorage = (): StateStorage => {
     getItem: (name) => {
       const str = localStorage.getItem(name);
       if (!str) return null;
-      
+
       try {
         const { state, version } = JSON.parse(str);
         // Mapフィールドを復元
         if (state) {
           Object.keys(state).forEach((key) => {
-            if (state[key] && Array.isArray(state[key]) && state[key][0] && Array.isArray(state[key][0])) {
+            if (
+              state[key] &&
+              Array.isArray(state[key]) &&
+              state[key][0] &&
+              Array.isArray(state[key][0])
+            ) {
               // [[key, value], ...] の形式ならMapとして復元
               state[key] = deserializeMap(state[key]);
             }

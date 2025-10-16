@@ -1,6 +1,5 @@
 use crate::{
-    application::services::UserService,
-    presentation::dto::{user_dto::UserProfile},
+    application::services::UserService, presentation::dto::user_dto::UserProfile,
     shared::error::AppError,
 };
 use std::sync::Arc;

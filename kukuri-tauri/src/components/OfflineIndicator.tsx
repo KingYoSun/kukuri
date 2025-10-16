@@ -4,13 +4,7 @@ import { useOfflineStore } from '@/stores/offlineStore';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function OfflineIndicator() {
   const { isOnline, lastSyncedAt, pendingActions, isSyncing } = useOfflineStore();
@@ -34,9 +28,9 @@ export function OfflineIndicator() {
 
   const getLastSyncText = () => {
     if (!lastSyncedAt) return '未同期';
-    return formatDistanceToNow(lastSyncedAt, { 
-      addSuffix: true, 
-      locale: ja 
+    return formatDistanceToNow(lastSyncedAt, {
+      addSuffix: true,
+      locale: ja,
     });
   };
 
@@ -49,30 +43,20 @@ export function OfflineIndicator() {
         <div
           className={cn(
             'fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center transition-all duration-300',
-            isOnline
-              ? 'bg-green-500 text-white'
-              : 'bg-orange-500 text-white'
+            isOnline ? 'bg-green-500 text-white' : 'bg-orange-500 text-white',
           )}
         >
           <div className="flex items-center justify-center gap-2">
             {isOnline ? (
               <>
                 <Wifi className="h-4 w-4" />
-                <span className="text-sm font-medium">
-                  オンラインに復帰しました
-                </span>
-                {isSyncing && (
-                  <span className="text-xs opacity-90">
-                    （同期中...）
-                  </span>
-                )}
+                <span className="text-sm font-medium">オンラインに復帰しました</span>
+                {isSyncing && <span className="text-xs opacity-90">（同期中...）</span>}
               </>
             ) : (
               <>
                 <WifiOff className="h-4 w-4" />
-                <span className="text-sm font-medium">
-                  オフラインモード
-                </span>
+                <span className="text-sm font-medium">オフラインモード</span>
                 <span className="text-xs opacity-90">
                   （変更は保存され、オンライン時に同期されます）
                 </span>
@@ -90,10 +74,10 @@ export function OfflineIndicator() {
               <TooltipTrigger asChild>
                 <button
                   className={cn(
-                    "relative flex items-center justify-center h-12 w-12 rounded-full shadow-lg transition-all",
-                    isOnline 
-                      ? "bg-white border-2 border-gray-200"
-                      : "bg-orange-100 border-2 border-orange-300"
+                    'relative flex items-center justify-center h-12 w-12 rounded-full shadow-lg transition-all',
+                    isOnline
+                      ? 'bg-white border-2 border-gray-200'
+                      : 'bg-orange-100 border-2 border-orange-300',
                   )}
                 >
                   {isOnline ? (
@@ -116,19 +100,11 @@ export function OfflineIndicator() {
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">
-                    {isOnline ? 'オンライン' : 'オフライン'}
-                  </p>
-                  {isSyncing && (
-                    <p className="text-xs text-gray-500">（同期中...）</p>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    最終同期: {getLastSyncText()}
-                  </p>
+                  <p className="text-sm font-medium">{isOnline ? 'オンライン' : 'オフライン'}</p>
+                  {isSyncing && <p className="text-xs text-gray-500">（同期中...）</p>}
+                  <p className="text-xs text-gray-500">最終同期: {getLastSyncText()}</p>
                   {pendingCount > 0 && (
-                    <p className="text-xs text-gray-500">
-                      未同期: {pendingCount}件
-                    </p>
+                    <p className="text-xs text-gray-500">未同期: {pendingCount}件</p>
                   )}
                 </div>
               </TooltipContent>

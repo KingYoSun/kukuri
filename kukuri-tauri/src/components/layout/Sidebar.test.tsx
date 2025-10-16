@@ -71,9 +71,9 @@ describe('Sidebar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-    
+
     vi.mocked(useUIStore).mockReturnValue({
       sidebarOpen: true,
     } as Partial<ReturnType<typeof useUIStore>>);

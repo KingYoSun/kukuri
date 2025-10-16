@@ -29,7 +29,7 @@ describe('offlineStore', () => {
       isSyncing: false,
       syncErrors: new Map(),
     });
-    
+
     // モックをリセット
     vi.clearAllMocks();
   });
@@ -42,9 +42,9 @@ describe('offlineStore', () => {
     it('オンライン状態を設定できる', () => {
       const store = useOfflineStore.getState();
       store.setOnlineStatus(false);
-      
+
       expect(useOfflineStore.getState().isOnline).toBe(false);
-      
+
       store.setOnlineStatus(true);
       expect(useOfflineStore.getState().isOnline).toBe(true);
     });
@@ -135,7 +135,7 @@ describe('offlineStore', () => {
       } as OfflineAction);
 
       expect(useOfflineStore.getState().pendingActions).toHaveLength(1);
-      
+
       store.clearPendingActions();
       expect(useOfflineStore.getState().pendingActions).toHaveLength(0);
     });
@@ -274,7 +274,7 @@ describe('offlineStore', () => {
 
       const store = useOfflineStore.getState();
       store.setOnlineStatus(true);
-      
+
       await store.saveOfflineAction({
         userPubkey: 'test_user',
         actionType: 'create_post',
@@ -301,15 +301,17 @@ describe('offlineStore', () => {
       useOfflineStore.setState({
         isOnline: true,
         isSyncing: false,
-        pendingActions: [{
-          id: 1,
-          userPubkey: 'test_user',
-          actionType: 'create_post',
-          actionData: '{}',
-          localId: 'local_123',
-          isSynced: false,
-          createdAt: Date.now(),
-        } as OfflineAction],
+        pendingActions: [
+          {
+            id: 1,
+            userPubkey: 'test_user',
+            actionType: 'create_post',
+            actionData: '{}',
+            localId: 'local_123',
+            isSynced: false,
+            createdAt: Date.now(),
+          } as OfflineAction,
+        ],
       });
 
       await store.syncPendingActions('test_user');
@@ -351,7 +353,7 @@ describe('offlineStore', () => {
         'post' as any,
         'post_123',
         originalData,
-        updatedData
+        updatedData,
       );
 
       expect(updateId).toBe('update_123');
@@ -359,7 +361,7 @@ describe('offlineStore', () => {
         'post',
         'post_123',
         JSON.stringify(originalData),
-        JSON.stringify(updatedData)
+        JSON.stringify(updatedData),
       );
       expect(useOfflineStore.getState().optimisticUpdates.size).toBe(1);
     });

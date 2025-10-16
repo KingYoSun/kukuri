@@ -85,7 +85,9 @@ export class TauriApi {
     return await invoke('get_topics');
   }
 
-  static async getTopicStats(topicId: string): Promise<{ member_count: number; post_count: number }> {
+  static async getTopicStats(
+    topicId: string,
+  ): Promise<{ member_count: number; post_count: number }> {
     return await invoke('get_topic_stats', { topicId });
   }
 

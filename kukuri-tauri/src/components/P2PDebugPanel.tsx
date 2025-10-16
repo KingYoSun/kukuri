@@ -41,7 +41,11 @@ export function P2PDebugPanel() {
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString();
   };
 
-  const renderMetricCard = (label: string, total: number, detail?: GossipMetrics['join_details']) => (
+  const renderMetricCard = (
+    label: string,
+    total: number,
+    detail?: GossipMetrics['join_details'],
+  ) => (
     <div className="rounded-md border p-2 space-y-1">
       <div className="flex items-center justify-between">
         <span>{label}</span>
@@ -218,17 +222,29 @@ export function P2PDebugPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Gossipメトリクス</span>
-                  <Button variant="secondary" size="sm" onClick={handleRefreshMetrics}>メトリクス更新</Button>
+                  <Button variant="secondary" size="sm" onClick={handleRefreshMetrics}>
+                    メトリクス更新
+                  </Button>
                 </div>
                 {metrics ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {renderMetricCard('Joins', metrics.joins, metrics.join_details)}
                     {renderMetricCard('Leaves', metrics.leaves, metrics.leave_details)}
-                    {renderMetricCard('Broadcasts', metrics.broadcasts_sent, metrics.broadcast_details)}
-                    {renderMetricCard('Received', metrics.messages_received, metrics.receive_details)}
+                    {renderMetricCard(
+                      'Broadcasts',
+                      metrics.broadcasts_sent,
+                      metrics.broadcast_details,
+                    )}
+                    {renderMetricCard(
+                      'Received',
+                      metrics.messages_received,
+                      metrics.receive_details,
+                    )}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">メトリクスはまだ取得されていません</p>
+                  <p className="text-xs text-muted-foreground">
+                    メトリクスはまだ取得されていません
+                  </p>
                 )}
               </div>
 

@@ -15,7 +15,10 @@ export function validateNip01Json(ev: any): ValidationResult {
   }
   if (typeof ev.kind !== 'number') return { ok: false, reason: 'invalid kind' };
   if (typeof ev.created_at !== 'number') return { ok: false, reason: 'invalid created_at' };
-  if (!Array.isArray(ev.tags) || !ev.tags.every((t: any) => Array.isArray(t) && t.every((s: any) => typeof s === 'string'))) {
+  if (
+    !Array.isArray(ev.tags) ||
+    !ev.tags.every((t: any) => Array.isArray(t) && t.every((s: any) => typeof s === 'string'))
+  ) {
     return { ok: false, reason: 'invalid tags (string[][])' };
   }
   if (typeof ev.content !== 'string') return { ok: false, reason: 'invalid content' };
@@ -35,7 +38,11 @@ export function validateNip01LiteMessage(msg: any): ValidationResult {
   if (typeof msg.author !== 'string' || msg.author.length !== 64 || !HEX.test(msg.author)) {
     return { ok: false, reason: 'invalid author (64 hex pubkey)' };
   }
-  if (typeof msg.signature !== 'string' || msg.signature.length !== 128 || !HEX.test(msg.signature)) {
+  if (
+    typeof msg.signature !== 'string' ||
+    msg.signature.length !== 128 ||
+    !HEX.test(msg.signature)
+  ) {
     return { ok: false, reason: 'invalid signature (128 hex)' };
   }
   if (typeof msg.content !== 'string') return { ok: false, reason: 'invalid content' };
@@ -45,7 +52,8 @@ export function validateNip01LiteMessage(msg: any): ValidationResult {
 
 export function validateNip10Basic(ev: any): ValidationResult {
   if (!Array.isArray(ev?.tags)) return { ok: false, reason: 'no tags' };
-  let root = 0, reply = 0;
+  let root = 0,
+    reply = 0;
   for (const tag of ev.tags as string[][]) {
     if (!Array.isArray(tag) || tag.length < 2) continue;
     const [t, id, relay, marker] = tag;
@@ -65,7 +73,8 @@ export function validateNip10Basic(ev: any): ValidationResult {
     }
     if (t === 'p') {
       const isHex = typeof id === 'string' && id.length === 64 && HEX.test(id);
-      const isBech = typeof id === 'string' && (id.startsWith('npub1') || id.startsWith('nprofile1'));
+      const isBech =
+        typeof id === 'string' && (id.startsWith('npub1') || id.startsWith('nprofile1'));
       if (!isHex && !isBech) return { ok: false, reason: 'invalid p tag pubkey' };
       if (relay && typeof relay === 'string' && relay.length > 0 && !/^wss?:\/\//i.test(relay)) {
         return { ok: false, reason: 'invalid p tag relay_url' };

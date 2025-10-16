@@ -15,7 +15,10 @@ export function MainLayout({ children }: MainLayoutProps) {
     <div className="h-screen flex flex-col bg-background">
       <Header />
       <div className="flex flex-1 overflow-hidden">
-        <div className={cn('transition-all duration-300', sidebarOpen ? 'w-64' : 'w-0')} data-testid="sidebar">
+        <div
+          className={cn('transition-all duration-300', sidebarOpen ? 'w-64' : 'w-0')}
+          data-testid="sidebar"
+        >
           <Sidebar />
         </div>
         <main className="flex-1 overflow-auto">

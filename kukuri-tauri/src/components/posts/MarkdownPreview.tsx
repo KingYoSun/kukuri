@@ -30,13 +30,12 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
             /x\.com\/\w+\/status\/\d+/,
           ];
 
-          const isMediaUrl = mediaPatterns.some(pattern => pattern.test(href));
-          
+          const isMediaUrl = mediaPatterns.some((pattern) => pattern.test(href));
+
           // If the link text is the same as href, it's likely meant to be embedded
-          const shouldEmbed = isMediaUrl && (
-            children?.toString() === href ||
-            children?.toString().startsWith('http')
-          );
+          const shouldEmbed =
+            isMediaUrl &&
+            (children?.toString() === href || children?.toString().startsWith('http'));
 
           if (shouldEmbed) {
             return <MediaEmbed url={href} className="my-4" />;
@@ -59,13 +58,13 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
               return child;
             }
           }
-          
+
           return <p {...props}>{children}</p>;
         },
         // Custom image renderer
         img: ({ node: _node, src, alt, ...props }) => {
           if (!src) return null;
-          
+
           return (
             <img
               src={src}
@@ -80,7 +79,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         code: ({ node: _node, inline, className, children, ...props }: any) => {
           const match = /language-(\w+)/.exec(className || '');
-          
+
           if (!inline && match) {
             return (
               <pre className="bg-muted rounded-lg p-4 overflow-x-auto">
@@ -90,7 +89,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
               </pre>
             );
           }
-          
+
           return (
             <code className="bg-muted px-1 py-0.5 rounded text-sm" {...props}>
               {children}
@@ -100,10 +99,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
         // Custom blockquote renderer
         blockquote: ({ node: _node, children, ...props }) => {
           return (
-            <blockquote
-              className="border-l-4 border-primary pl-4 my-4 italic"
-              {...props}
-            >
+            <blockquote className="border-l-4 border-primary pl-4 my-4 italic" {...props}>
               {children}
             </blockquote>
           );

@@ -29,7 +29,7 @@ export interface DiffPatch {
 
 export class SyncEngine {
   private isSyncing = false;
-  
+
   constructor() {
     // TauriApiは静的メソッドを使用
   }
@@ -38,8 +38,8 @@ export class SyncEngine {
    * 差分同期アルゴリズムの実装
    */
   async performDifferentialSync(
-    localActions: OfflineAction[], 
-    _remoteCheckpoint?: string
+    localActions: OfflineAction[],
+    _remoteCheckpoint?: string,
   ): Promise<SyncResult> {
     const result: SyncResult = {
       syncedActions: [],
@@ -57,14 +57,14 @@ export class SyncEngine {
     try {
       // トピック別にアクションをグループ化
       const groupedActions = this.groupActionsByTopic(localActions);
-      
+
       // 並列同期処理
-      const syncPromises = Array.from(groupedActions.entries()).map(
-        ([topicId, actions]) => this.syncTopicActions(topicId, actions)
+      const syncPromises = Array.from(groupedActions.entries()).map(([topicId, actions]) =>
+        this.syncTopicActions(topicId, actions),
       );
-      
+
       const topicResults = await Promise.allSettled(syncPromises);
-      
+
       // 結果を集約
       for (const topicResult of topicResults) {
         if (topicResult.status === 'fulfilled') {
@@ -74,11 +74,11 @@ export class SyncEngine {
           result.totalProcessed += topicResult.value.totalProcessed;
         } else {
           errorHandler.log('トピック同期エラー', topicResult.reason, {
-            context: 'SyncEngine.performDifferentialSync'
+            context: 'SyncEngine.performDifferentialSync',
           });
         }
       }
-      
+
       return result;
     } finally {
       this.isSyncing = false;
@@ -90,32 +90,32 @@ export class SyncEngine {
    */
   private groupActionsByTopic(actions: OfflineAction[]): Map<string, OfflineAction[]> {
     const grouped = new Map<string, OfflineAction[]>();
-    
+
     for (const action of actions) {
       const topicId = (() => {
-      try {
-        const data = typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
-        return data?.topicId || 'default';
-      } catch {
-        return 'default';
-      }
-    })();
+        try {
+          const data =
+            typeof action.actionData === 'string'
+              ? JSON.parse(action.actionData)
+              : action.actionData;
+          return data?.topicId || 'default';
+        } catch {
+          return 'default';
+        }
+      })();
       if (!grouped.has(topicId)) {
         grouped.set(topicId, []);
       }
       grouped.get(topicId)!.push(action);
     }
-    
+
     return grouped;
   }
 
   /**
    * トピック単位でアクションを同期
    */
-  private async syncTopicActions(
-    _topicId: string, 
-    actions: OfflineAction[]
-  ): Promise<SyncResult> {
+  private async syncTopicActions(_topicId: string, actions: OfflineAction[]): Promise<SyncResult> {
     const result: SyncResult = {
       syncedActions: [],
       conflicts: [],
@@ -126,10 +126,10 @@ export class SyncEngine {
     for (const action of actions) {
       try {
         result.totalProcessed++;
-        
+
         // タイムスタンプベースの競合検出
         const conflict = await this.detectConflict(action);
-        
+
         if (conflict) {
           // 競合解決
           const resolved = await this.resolveConflict(conflict);
@@ -145,12 +145,12 @@ export class SyncEngine {
         }
       } catch (error) {
         errorHandler.log(`アクション同期エラー (${action.localId})`, error, {
-          context: 'SyncEngine.syncTopicActions'
+          context: 'SyncEngine.syncTopicActions',
         });
         result.failedActions.push(action);
       }
     }
-    
+
     return result;
   }
 
@@ -159,20 +159,21 @@ export class SyncEngine {
    */
   async detectConflict(action: OfflineAction): Promise<SyncConflict | null> {
     // エンティティの最終更新時刻を取得
-    const actionData = typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
+    const actionData =
+      typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
     const lastModified = await this.getEntityLastModified(
-      actionData?.entityType, 
-      actionData?.entityId
+      actionData?.entityType,
+      actionData?.entityId,
     );
-    
+
     if (!lastModified) {
       return null;
     }
-    
+
     // アクションの作成時刻と比較
     const actionTimestamp = new Date(action.createdAt).getTime();
     const entityTimestamp = new Date(lastModified).getTime();
-    
+
     if (entityTimestamp > actionTimestamp) {
       // 競合検出
       return {
@@ -180,7 +181,7 @@ export class SyncEngine {
         conflictType: 'timestamp',
       };
     }
-    
+
     return null;
   }
 
@@ -192,15 +193,15 @@ export class SyncEngine {
       case 'timestamp':
         // Last-Write-Wins (LWW) ベースライン実装
         return this.resolveLWW(conflict);
-        
+
       case 'version':
         // バージョンベースの解決
         return this.resolveVersionConflict(conflict);
-        
+
       case 'merge':
         // カスタムマージルール
         return this.applyCustomMergeRules(conflict);
-        
+
       default:
         // デフォルトはLWW
         return this.resolveLWW(conflict);
@@ -212,16 +213,16 @@ export class SyncEngine {
    */
   private resolveLWW(conflict: SyncConflict): SyncConflict {
     const localTime = new Date(conflict.localAction.createdAt).getTime();
-    const remoteTime = conflict.remoteAction 
-      ? new Date(conflict.remoteAction.createdAt).getTime() 
+    const remoteTime = conflict.remoteAction
+      ? new Date(conflict.remoteAction.createdAt).getTime()
       : 0;
-    
+
     if (localTime >= remoteTime) {
       conflict.resolution = 'local';
     } else {
       conflict.resolution = 'remote';
     }
-    
+
     return conflict;
   }
 
@@ -230,17 +231,24 @@ export class SyncEngine {
    */
   private resolveVersionConflict(conflict: SyncConflict): SyncConflict {
     // バージョン番号の比較ロジック
-    const localData = typeof conflict.localAction.actionData === 'string' ? JSON.parse(conflict.localAction.actionData) : conflict.localAction.actionData;
-    const remoteData = conflict.remoteAction ? (typeof conflict.remoteAction.actionData === 'string' ? JSON.parse(conflict.remoteAction.actionData) : conflict.remoteAction.actionData) : null;
+    const localData =
+      typeof conflict.localAction.actionData === 'string'
+        ? JSON.parse(conflict.localAction.actionData)
+        : conflict.localAction.actionData;
+    const remoteData = conflict.remoteAction
+      ? typeof conflict.remoteAction.actionData === 'string'
+        ? JSON.parse(conflict.remoteAction.actionData)
+        : conflict.remoteAction.actionData
+      : null;
     const localVersion = localData?.version || 0;
     const remoteVersion = remoteData?.version || 0;
-    
+
     if (localVersion >= remoteVersion) {
       conflict.resolution = 'local';
     } else {
       conflict.resolution = 'remote';
     }
-    
+
     return conflict;
   }
 
@@ -249,28 +257,28 @@ export class SyncEngine {
    */
   private applyCustomMergeRules(conflict: SyncConflict): SyncConflict {
     const actionType = conflict.localAction.actionType;
-    
+
     switch (actionType) {
       case OfflineActionType.JOIN_TOPIC:
       case OfflineActionType.LEAVE_TOPIC:
         // トピック参加状態は最新の状態を優先
         return this.resolveLWW(conflict);
-        
+
       case OfflineActionType.CREATE_POST:
         // 投稿は両方を保持（重複の可能性あり）
         conflict.resolution = 'local';
         break;
-        
+
       case OfflineActionType.LIKE_POST:
         // いいねは重複しても問題ない
         conflict.resolution = 'local';
         break;
-        
+
       default:
         // デフォルトはLWW
         return this.resolveLWW(conflict);
     }
-    
+
     return conflict;
   }
 
@@ -278,31 +286,32 @@ export class SyncEngine {
    * アクションを適用
    */
   private async applyAction(action: OfflineAction): Promise<void> {
-    const actionData = typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
-    
+    const actionData =
+      typeof action.actionData === 'string' ? JSON.parse(action.actionData) : action.actionData;
+
     switch (action.actionType) {
       case OfflineActionType.CREATE_POST:
         await TauriApi.createPost({
           content: actionData.content,
           topic_id: actionData.topicId,
           reply_to: actionData.replyTo,
-          quoted_post: actionData.quotedPost
+          quoted_post: actionData.quotedPost,
         });
         break;
-        
+
       case OfflineActionType.LIKE_POST:
         await TauriApi.likePost(actionData.postId);
         break;
-        
+
       case OfflineActionType.JOIN_TOPIC:
         await p2pApi.joinTopic(actionData.topicId);
         await nostrSubscribe(actionData.topicId);
         break;
-        
+
       case OfflineActionType.LEAVE_TOPIC:
         await p2pApi.leaveTopic(actionData.topicId);
         break;
-        
+
       default:
         throw new Error(`未対応のアクションタイプ: ${action.actionType}`);
     }
@@ -312,13 +321,13 @@ export class SyncEngine {
    * エンティティの最終更新時刻を取得
    */
   private async getEntityLastModified(
-    entityType?: string, 
-    entityId?: string
+    entityType?: string,
+    entityId?: string,
   ): Promise<string | null> {
     if (!entityType || !entityId) {
       return null;
     }
-    
+
     try {
       // エンティティタイプに応じてメタデータを取得
       switch (entityType) {
@@ -326,46 +335,49 @@ export class SyncEngine {
           // 投稿のメタデータを取得
           const { invoke } = await import('@tauri-apps/api/core');
           const result = await invoke<{ updated_at: string }>('get_post_metadata', {
-            postId: entityId
+            postId: entityId,
           }).catch(() => null);
           return result?.updated_at || null;
         }
-        
+
         case 'topic': {
           // トピックのメタデータを取得
           const { invoke } = await import('@tauri-apps/api/core');
           const result = await invoke<{ updated_at: string }>('get_topic_metadata', {
-            topicId: entityId
+            topicId: entityId,
           }).catch(() => null);
           return result?.updated_at || null;
         }
-        
+
         case 'user': {
           // ユーザーのメタデータを取得
           const { invoke } = await import('@tauri-apps/api/core');
           const result = await invoke<{ updated_at: string }>('get_user_metadata', {
-            userId: entityId
+            userId: entityId,
           }).catch(() => null);
           return result?.updated_at || null;
         }
-        
+
         case 'reaction': {
           // リアクションのメタデータを取得
           const { invoke } = await import('@tauri-apps/api/core');
           const result = await invoke<{ created_at: string }>('get_reaction_metadata', {
-            reactionId: entityId
+            reactionId: entityId,
           }).catch(() => null);
           return result?.created_at || null;
         }
-        
+
         default:
           // その他のエンティティタイプ
-          errorHandler.warn(`未対応のエンティティタイプ: ${entityType}`, 'SyncEngine.getEntityLastModified');
+          errorHandler.warn(
+            `未対応のエンティティタイプ: ${entityType}`,
+            'SyncEngine.getEntityLastModified',
+          );
           return null;
       }
     } catch (error) {
       errorHandler.log('エンティティメタデータ取得エラー', error, {
-        context: 'SyncEngine.getEntityLastModified'
+        context: 'SyncEngine.getEntityLastModified',
       });
       return null;
     }
@@ -376,13 +388,13 @@ export class SyncEngine {
    */
   generateDiffPatches(oldData: any, newData: any): DiffPatch[] {
     const patches: DiffPatch[] = [];
-    
+
     // 簡単な差分検出実装
     const processObject = (old: any, current: any, path = '') => {
       // 新規追加
       for (const key in current) {
         const currentPath = path ? `${path}.${key}` : key;
-        
+
         if (!(key in old)) {
           patches.push({
             type: 'add',
@@ -399,11 +411,11 @@ export class SyncEngine {
           });
         }
       }
-      
+
       // 削除
       for (const key in old) {
         const currentPath = path ? `${path}.${key}` : key;
-        
+
         if (!(key in current)) {
           patches.push({
             type: 'delete',
@@ -413,9 +425,9 @@ export class SyncEngine {
         }
       }
     };
-    
+
     processObject(oldData || {}, newData || {});
-    
+
     return patches;
   }
 
@@ -424,11 +436,11 @@ export class SyncEngine {
    */
   applyDiffPatches(data: any, patches: DiffPatch[]): any {
     const result = { ...data };
-    
+
     for (const patch of patches) {
       const keys = patch.path.split('.');
       let target = result;
-      
+
       // パスを辿る
       for (let i = 0; i < keys.length - 1; i++) {
         if (!target[keys[i]]) {
@@ -436,21 +448,21 @@ export class SyncEngine {
         }
         target = target[keys[i]];
       }
-      
+
       const lastKey = keys[keys.length - 1];
-      
+
       switch (patch.type) {
         case 'add':
         case 'modify':
           target[lastKey] = patch.value;
           break;
-          
+
         case 'delete':
           delete target[lastKey];
           break;
       }
     }
-    
+
     return result;
   }
 }

@@ -23,12 +23,12 @@ interface PostComposerProps {
   quotedPost?: string;
 }
 
-export function PostComposer({ 
-  topicId, 
-  onSuccess, 
+export function PostComposer({
+  topicId,
+  onSuccess,
   onCancel,
   replyTo,
-  quotedPost 
+  quotedPost,
 }: PostComposerProps) {
   const [content, setContent] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState(topicId || '');
@@ -39,11 +39,7 @@ export function PostComposer({
 
   const { createPost } = usePostStore();
   const { topics } = useTopicStore();
-  const { 
-    createDraft, 
-    deleteDraft, 
-    autosaveDraft 
-  } = useDraftStore();
+  const { createDraft, deleteDraft, autosaveDraft } = useDraftStore();
   const { toast } = useToast();
 
   // Get topic name for draft
@@ -81,13 +77,19 @@ export function PostComposer({
       });
       setCurrentDraftId(draft.id);
     }
-  }, [content, selectedTopicId, currentDraftId, replyTo, quotedPost, createDraft, autosaveDraft, getTopicName]);
+  }, [
+    content,
+    selectedTopicId,
+    currentDraftId,
+    replyTo,
+    quotedPost,
+    createDraft,
+    autosaveDraft,
+    getTopicName,
+  ]);
 
   // Debounced autosave
-  const debouncedAutosave = useMemo(
-    () => debounce(autosave, 2000),
-    [autosave]
-  );
+  const debouncedAutosave = useMemo(() => debounce(autosave, 2000), [autosave]);
 
   // Trigger autosave on content change
   useEffect(() => {
@@ -124,17 +126,17 @@ export function PostComposer({
         replyTo,
         quotedPost,
       });
-      
+
       toast({
         title: '成功',
         description: '投稿を作成しました',
       });
-      
+
       // Clean up
       if (currentDraftId) {
         deleteDraft(currentDraftId);
       }
-      
+
       resetForm();
       onSuccess?.();
     } catch (error) {
@@ -194,19 +196,19 @@ export function PostComposer({
   const handleImageUpload = async (file: File): Promise<string> => {
     // 画像サイズの制限（5MB）
     const MAX_SIZE = 5 * 1024 * 1024;
-    
+
     if (file.size > MAX_SIZE) {
       throw new Error('画像サイズは5MB以下にしてください');
     }
-    
+
     // 画像形式の確認
     if (!file.type.startsWith('image/')) {
       throw new Error('画像ファイルを選択してください');
     }
-    
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
+
       reader.onload = (e) => {
         const result = e.target?.result;
         if (typeof result === 'string') {
@@ -216,11 +218,11 @@ export function PostComposer({
           reject(new Error('画像の読み込みに失敗しました'));
         }
       };
-      
+
       reader.onerror = () => {
         reject(new Error('画像の読み込みに失敗しました'));
       };
-      
+
       // Base64エンコードされたデータURLとして読み込む
       reader.readAsDataURL(file);
     });
@@ -235,17 +237,13 @@ export function PostComposer({
               <TabsTrigger value="simple">シンプル</TabsTrigger>
               <TabsTrigger value="markdown">Markdown</TabsTrigger>
             </TabsList>
-            
+
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowDrafts(!showDrafts)}
-              >
+              <Button size="sm" variant="ghost" onClick={() => setShowDrafts(!showDrafts)}>
                 <FileText className="w-4 h-4 mr-1" />
                 下書き
               </Button>
-              
+
               {currentDraftId && (
                 <Button
                   size="sm"
@@ -317,21 +315,15 @@ export function PostComposer({
       <CardFooter className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {currentDraftId && (
-            <span className="text-xs text-muted-foreground">
-              下書きを自動保存中...
-            </span>
+            <span className="text-xs text-muted-foreground">下書きを自動保存中...</span>
           )}
         </div>
 
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleCancel} 
-            disabled={isSubmitting}
-          >
+          <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
             キャンセル
           </Button>
-          
+
           <Button
             variant="outline"
             onClick={handleSaveDraft}
@@ -340,7 +332,7 @@ export function PostComposer({
             <Save className="w-4 h-4 mr-1" />
             下書き保存
           </Button>
-          
+
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !content.trim() || !selectedTopicId}

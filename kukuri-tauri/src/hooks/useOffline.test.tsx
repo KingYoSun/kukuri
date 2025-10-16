@@ -27,7 +27,7 @@ describe('useOffline', () => {
   const mockSaveOfflineAction = vi.fn();
   const mockSyncPendingActions = vi.fn();
   const mockLoadPendingActions = vi.fn();
-  
+
   const defaultOfflineState = {
     isOnline: true,
     pendingActions: [],
@@ -58,7 +58,7 @@ describe('useOffline', () => {
   describe('初期化', () => {
     it('マウント時に保留中のアクションを読み込む', () => {
       renderHook(() => useOffline());
-      
+
       expect(mockLoadPendingActions).toHaveBeenCalledWith('test_npub');
     });
 
@@ -68,7 +68,7 @@ describe('useOffline', () => {
       } as any);
 
       renderHook(() => useOffline());
-      
+
       expect(mockLoadPendingActions).not.toHaveBeenCalled();
     });
   });
@@ -83,9 +83,7 @@ describe('useOffline', () => {
 
       renderHook(() => useOffline());
 
-      expect(toast.info).toHaveBeenCalledWith(
-        'オフラインモードです。変更は後で同期されます。'
-      );
+      expect(toast.info).toHaveBeenCalledWith('オフラインモードです。変更は後で同期されます。');
     });
 
     it('オンラインになった時に同期を開始する', async () => {
@@ -102,7 +100,7 @@ describe('useOffline', () => {
 
       await waitFor(() => {
         expect(toast.success).toHaveBeenCalledWith(
-          'オンラインになりました。データを同期しています...'
+          'オンラインになりました。データを同期しています...',
         );
         expect(mockSyncPendingActions).toHaveBeenCalledWith('test_npub');
       });
@@ -114,11 +112,9 @@ describe('useOffline', () => {
       const { result } = renderHook(() => useOffline());
 
       await act(async () => {
-        await result.current.saveAction(
-          OfflineActionType.CREATE_POST,
-          'post_123',
-          { content: 'Test post' }
-        );
+        await result.current.saveAction(OfflineActionType.CREATE_POST, 'post_123', {
+          content: 'Test post',
+        });
       });
 
       expect(mockSaveOfflineAction).toHaveBeenCalledWith({
@@ -144,7 +140,7 @@ describe('useOffline', () => {
       });
 
       expect(toast.info).toHaveBeenCalledWith(
-        'アクションが保存されました。オンライン時に同期されます。'
+        'アクションが保存されました。オンライン時に同期されます。',
       );
     });
 
@@ -155,9 +151,9 @@ describe('useOffline', () => {
 
       const { result } = renderHook(() => useOffline());
 
-      await expect(
-        result.current.saveAction(OfflineActionType.LIKE, 'post_123')
-      ).rejects.toThrow('User not authenticated');
+      await expect(result.current.saveAction(OfflineActionType.LIKE, 'post_123')).rejects.toThrow(
+        'User not authenticated',
+      );
     });
   });
 
@@ -217,7 +213,7 @@ describe('useOffline', () => {
 
     it('保留中のアクションがない場合は通知する', async () => {
       const { toast } = await import('sonner');
-      
+
       const { result } = renderHook(() => useOffline());
 
       await act(async () => {
@@ -284,7 +280,7 @@ describe('useOptimisticUpdate', () => {
 
   it('楽観的更新を適用できる', async () => {
     mockApplyOptimisticUpdate.mockResolvedValue('update_123');
-    
+
     const { result } = renderHook(() => useOptimisticUpdate());
 
     const originalData = { likes: 10 };
@@ -297,7 +293,7 @@ describe('useOptimisticUpdate', () => {
         'post_123',
         originalData,
         updatedData,
-        onSuccess
+        onSuccess,
       );
       expect(updateId).toBe('update_123');
     });
@@ -306,7 +302,7 @@ describe('useOptimisticUpdate', () => {
       'post',
       'post_123',
       originalData,
-      updatedData
+      updatedData,
     );
     expect(onSuccess).toHaveBeenCalled();
     expect(mockConfirmUpdate).toHaveBeenCalledWith('update_123');
@@ -314,7 +310,7 @@ describe('useOptimisticUpdate', () => {
 
   it('エラー時にロールバックする', async () => {
     mockApplyOptimisticUpdate.mockResolvedValue('update_123');
-    
+
     const { result } = renderHook(() => useOptimisticUpdate());
 
     const originalData = { likes: 10 };
@@ -330,7 +326,7 @@ describe('useOptimisticUpdate', () => {
           originalData,
           updatedData,
           onSuccess,
-          onError
+          onError,
         );
       } catch {
         // エラーが期待される
@@ -345,19 +341,14 @@ describe('useOptimisticUpdate', () => {
 
   it('onSuccessがない場合でも動作する', async () => {
     mockApplyOptimisticUpdate.mockResolvedValue('update_123');
-    
+
     const { result } = renderHook(() => useOptimisticUpdate());
 
     const originalData = { likes: 10 };
     const updatedData = { likes: 11 };
 
     await act(async () => {
-      const updateId = await result.current.apply(
-        'post',
-        'post_123',
-        originalData,
-        updatedData
-      );
+      const updateId = await result.current.apply('post', 'post_123', originalData, updatedData);
       expect(updateId).toBe('update_123');
     });
 

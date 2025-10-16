@@ -316,12 +316,15 @@ describe('postStore', () => {
     await usePostStore.getState().fetchPosts('topic1');
 
     expect(mockGetPosts).toHaveBeenCalledTimes(1);
-    expect(mockGetPosts).toHaveBeenCalledWith({ topic_id: 'topic1', limit: undefined, offset: undefined });
+    expect(mockGetPosts).toHaveBeenCalledWith({
+      topic_id: 'topic1',
+      limit: undefined,
+      offset: undefined,
+    });
 
     const posts = usePostStore.getState().getPostsByTopic('topic1');
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe('api-post-1');
     expect(posts[0].content).toBe('P2Pからの投稿');
   });
-
 });

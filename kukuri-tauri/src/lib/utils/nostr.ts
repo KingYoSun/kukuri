@@ -11,7 +11,7 @@ export async function pubkeyToNpub(pubkey: string): Promise<string> {
     return await invoke('pubkey_to_npub', { pubkey });
   } catch (error) {
     errorHandler.log('Failed to convert pubkey to npub', error, {
-      context: 'nostr.pubkeyToNpub'
+      context: 'nostr.pubkeyToNpub',
     });
     // エラー時はそのまま返す（fallback）
     return pubkey;
@@ -28,7 +28,7 @@ export async function npubToPubkey(npub: string): Promise<string> {
     return await invoke('npub_to_pubkey', { npub });
   } catch (error) {
     errorHandler.log('Failed to convert npub to pubkey', error, {
-      context: 'nostr.npubToPubkey'
+      context: 'nostr.npubToPubkey',
     });
     // エラー時はそのまま返す（fallback）
     return npub;

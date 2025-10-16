@@ -18,18 +18,14 @@ export const offlineApi = {
   /**
    * オフラインアクションを保存
    */
-  async saveOfflineAction(
-    request: SaveOfflineActionRequest
-  ): Promise<SaveOfflineActionResponse> {
+  async saveOfflineAction(request: SaveOfflineActionRequest): Promise<SaveOfflineActionResponse> {
     return invoke('save_offline_action', { request });
   },
 
   /**
    * オフラインアクションを取得
    */
-  async getOfflineActions(
-    request: GetOfflineActionsRequest = {}
-  ): Promise<OfflineAction[]> {
+  async getOfflineActions(request: GetOfflineActionsRequest = {}): Promise<OfflineAction[]> {
     return invoke('get_offline_actions', { request });
   },
 
@@ -37,7 +33,7 @@ export const offlineApi = {
    * オフラインアクションを同期
    */
   async syncOfflineActions(
-    request: SyncOfflineActionsRequest
+    request: SyncOfflineActionsRequest,
   ): Promise<SyncOfflineActionsResponse> {
     return invoke('sync_offline_actions', { request });
   },
@@ -59,9 +55,7 @@ export const offlineApi = {
   /**
    * キャッシュメタデータを更新
    */
-  async updateCacheMetadata(
-    request: UpdateCacheMetadataRequest
-  ): Promise<void> {
+  async updateCacheMetadata(request: UpdateCacheMetadataRequest): Promise<void> {
     return invoke('update_cache_metadata', { request });
   },
 
@@ -72,7 +66,7 @@ export const offlineApi = {
     entityType: string,
     entityId: string,
     originalData: string | null,
-    updatedData: string
+    updatedData: string,
   ): Promise<string> {
     return invoke('save_optimistic_update', {
       entityType,
@@ -110,7 +104,7 @@ export const offlineApi = {
     entityType: string,
     entityId: string,
     syncStatus: string,
-    conflictData: string | null = null
+    conflictData: string | null = null,
   ): Promise<void> {
     return invoke('update_sync_status', {
       entityType,

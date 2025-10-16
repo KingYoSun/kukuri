@@ -45,10 +45,12 @@ describe('useNostrEvents', () => {
     const { listen } = await import('@tauri-apps/api/event');
     mockListen = listen as MockedFunction<typeof import('@tauri-apps/api/event').listen>;
 
-    mockListen.mockImplementation((event: string, handler: (event: { payload: NostrEventPayload }) => void) => {
-      listeners.set(event, handler);
-      return Promise.resolve(mockUnlisten);
-    });
+    mockListen.mockImplementation(
+      (event: string, handler: (event: { payload: NostrEventPayload }) => void) => {
+        listeners.set(event, handler);
+        return Promise.resolve(mockUnlisten);
+      },
+    );
 
     // ストアのモックを設定
     const mockIncrementLikes = vi.fn();

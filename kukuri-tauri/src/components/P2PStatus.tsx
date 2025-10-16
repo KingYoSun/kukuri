@@ -29,7 +29,12 @@ export function P2PStatus() {
     clearError,
   } = useP2P();
 
-  const [metrics, setMetrics] = useState<{ joins: number; leaves: number; broadcasts_sent: number; messages_received: number } | null>(null);
+  const [metrics, setMetrics] = useState<{
+    joins: number;
+    leaves: number;
+    broadcasts_sent: number;
+    messages_received: number;
+  } | null>(null);
   const refreshMetrics = useCallback(async () => {
     try {
       const m = await p2pApi.getMetrics();
@@ -140,15 +145,32 @@ export function P2PStatus() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Gossipメトリクス</span>
-                <Button variant="secondary" size="sm" className="h-6 text-xs" onClick={refreshMetrics}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={refreshMetrics}
+                >
                   更新
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center justify-between"><span>Join</span><Badge variant="outline">{metrics?.joins ?? 0}</Badge></div>
-                <div className="flex items-center justify-between"><span>Leave</span><Badge variant="outline">{metrics?.leaves ?? 0}</Badge></div>
-                <div className="flex items-center justify-between"><span>Broadcast</span><Badge variant="outline">{metrics?.broadcasts_sent ?? 0}</Badge></div>
-                <div className="flex items-center justify-between"><span>Received</span><Badge variant="outline">{metrics?.messages_received ?? 0}</Badge></div>
+                <div className="flex items-center justify-between">
+                  <span>Join</span>
+                  <Badge variant="outline">{metrics?.joins ?? 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Leave</span>
+                  <Badge variant="outline">{metrics?.leaves ?? 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Broadcast</span>
+                  <Badge variant="outline">{metrics?.broadcasts_sent ?? 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Received</span>
+                  <Badge variant="outline">{metrics?.messages_received ?? 0}</Badge>
+                </div>
               </div>
             </div>
 

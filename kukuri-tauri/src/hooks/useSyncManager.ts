@@ -16,17 +16,17 @@ export interface SyncStatus {
 }
 
 export function useSyncManager() {
-  const { 
-    pendingActions, 
-    isOnline, 
+  const {
+    pendingActions,
+    isOnline,
     lastSyncedAt,
     syncPendingActions,
     setSyncError,
     clearSyncError,
   } = useOfflineStore();
-  
+
   const { currentUser } = useAuthStore();
-  
+
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     isSyncing: false,
     progress: 0,
@@ -57,7 +57,7 @@ export function useSyncManager() {
       return;
     }
 
-    setSyncStatus(prev => ({
+    setSyncStatus((prev) => ({
       ...prev,
       isSyncing: true,
       progress: 0,
@@ -70,18 +70,18 @@ export function useSyncManager() {
     try {
       // 差分同期を実行
       const result = await syncEngine.performDifferentialSync(pendingActions);
-      
+
       // 同期結果を処理
       await processSyncResult(result);
-      
+
       // 成功したアクションをクリア
       if (result.syncedActions.length > 0) {
         for (const action of result.syncedActions) {
           clearSyncError(action.localId);
         }
       }
-      
-      setSyncStatus(prev => ({
+
+      setSyncStatus((prev) => ({
         ...prev,
         isSyncing: false,
         progress: 100,
@@ -89,19 +89,18 @@ export function useSyncManager() {
         conflicts: result.conflicts,
         lastSyncTime: new Date(),
       }));
-      
+
       // 競合がある場合は通知
       if (result.conflicts.length > 0) {
         toast.warning(`${result.conflicts.length}件の競合が検出されました`);
       } else {
         toast.success(`${result.syncedActions.length}件のアクションを同期しました`);
       }
-      
     } catch (error) {
       errorHandler.log('同期エラー', error, {
-        context: 'useSyncManager.triggerManualSync'
+        context: 'useSyncManager.triggerManualSync',
       });
-      setSyncStatus(prev => ({
+      setSyncStatus((prev) => ({
         ...prev,
         isSyncing: false,
         error: error instanceof Error ? error.message : '同期に失敗しました',
@@ -118,18 +117,18 @@ export function useSyncManager() {
     for (const failedAction of result.failedActions) {
       setSyncError(failedAction.localId, '同期に失敗しました');
     }
-    
+
     // 競合の手動解決が必要な場合
-    const manualConflicts = result.conflicts.filter(c => c.resolution === 'manual');
+    const manualConflicts = result.conflicts.filter((c) => c.resolution === 'manual');
     if (manualConflicts.length > 0) {
       // 競合解決UIのためにステートを更新
-      setSyncStatus(prev => ({
+      setSyncStatus((prev) => ({
         ...prev,
         conflicts: manualConflicts,
       }));
       setShowConflictDialog(true);
     }
-    
+
     // Zustandストアの同期処理を呼び出し
     if (currentUser?.npub) {
       await syncPendingActions(currentUser.npub);
@@ -139,52 +138,52 @@ export function useSyncManager() {
   /**
    * 競合を手動で解決
    */
-  const resolveConflict = useCallback(async (
-    conflict: SyncConflict, 
-    resolution: 'local' | 'remote' | 'merge'
-  ) => {
-    conflict.resolution = resolution;
-    
-    try {
-      if (resolution === 'local') {
-        // ローカルのアクションを適用
-        await syncEngine['applyAction'](conflict.localAction);
-        toast.success('ローカルの変更を適用しました');
-      } else if (resolution === 'remote' && conflict.remoteAction) {
-        // リモートのアクションを適用
-        await syncEngine['applyAction'](conflict.remoteAction);
-        toast.success('リモートの変更を適用しました');
-      } else if (resolution === 'merge' && conflict.mergedData) {
-        // マージしたデータを適用
-        const mergedAction = {
-          ...conflict.localAction,
-          data: conflict.mergedData,
-          timestamp: Date.now(),
-        };
-        await syncEngine['applyAction'](mergedAction);
-        toast.success('変更をマージしました');
+  const resolveConflict = useCallback(
+    async (conflict: SyncConflict, resolution: 'local' | 'remote' | 'merge') => {
+      conflict.resolution = resolution;
+
+      try {
+        if (resolution === 'local') {
+          // ローカルのアクションを適用
+          await syncEngine['applyAction'](conflict.localAction);
+          toast.success('ローカルの変更を適用しました');
+        } else if (resolution === 'remote' && conflict.remoteAction) {
+          // リモートのアクションを適用
+          await syncEngine['applyAction'](conflict.remoteAction);
+          toast.success('リモートの変更を適用しました');
+        } else if (resolution === 'merge' && conflict.mergedData) {
+          // マージしたデータを適用
+          const mergedAction = {
+            ...conflict.localAction,
+            data: conflict.mergedData,
+            timestamp: Date.now(),
+          };
+          await syncEngine['applyAction'](mergedAction);
+          toast.success('変更をマージしました');
+        }
+
+        // 競合リストから削除
+        setSyncStatus((prev) => ({
+          ...prev,
+          conflicts: prev.conflicts.filter((c) => c !== conflict),
+        }));
+      } catch (error) {
+        errorHandler.log('競合解決エラー', error, {
+          context: 'useSyncManager.resolveConflict',
+        });
+        toast.error('競合の解決に失敗しました');
       }
-      
-      // 競合リストから削除
-      setSyncStatus(prev => ({
-        ...prev,
-        conflicts: prev.conflicts.filter(c => c !== conflict),
-      }));
-    } catch (error) {
-      errorHandler.log('競合解決エラー', error, {
-        context: 'useSyncManager.resolveConflict'
-      });
-      toast.error('競合の解決に失敗しました');
-    }
-  }, []);
+    },
+    [],
+  );
 
   /**
    * 同期進捗の更新
    */
   const updateProgress = useCallback((syncedItems: number, totalItems: number) => {
     const progress = totalItems > 0 ? (syncedItems / totalItems) * 100 : 0;
-    
-    setSyncStatus(prev => ({
+
+    setSyncStatus((prev) => ({
       ...prev,
       progress,
       syncedItems,
@@ -217,11 +216,14 @@ export function useSyncManager() {
     }
 
     // 5分ごとに自動同期
-    const interval = setInterval(() => {
-      if (pendingActions.length > 0 && !syncStatus.isSyncing) {
-        triggerManualSync();
-      }
-    }, 5 * 60 * 1000);
+    const interval = setInterval(
+      () => {
+        if (pendingActions.length > 0 && !syncStatus.isSyncing) {
+          triggerManualSync();
+        }
+      },
+      5 * 60 * 1000,
+    );
 
     return () => clearInterval(interval);
   }, [isOnline, pendingActions.length]); // triggerManualSyncとsyncStatus.isSyncingは依存配列に含めない

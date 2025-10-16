@@ -45,14 +45,18 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       // Validate file type
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
       if (!validTypes.includes(file.type)) {
-        errorHandler.log('Invalid file type. Please upload an image.', undefined, { showToast: true });
+        errorHandler.log('Invalid file type. Please upload an image.', undefined, {
+          showToast: true,
+        });
         return;
       }
 
       // Validate file size (max 10MB)
       const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
-        errorHandler.log('File size too large. Maximum size is 10MB.', undefined, { showToast: true });
+        errorHandler.log('File size too large. Maximum size is 10MB.', undefined, {
+          showToast: true,
+        });
         return;
       }
 
@@ -60,7 +64,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       try {
         const imageUrl = await onImageUpload(file);
         const imageMarkdown = `![${file.name}](${imageUrl})`;
-        
+
         // Insert image at cursor position or at the end
         const textarea = document.querySelector('.w-md-editor-text-input') as HTMLTextAreaElement;
         if (textarea) {
@@ -68,7 +72,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           const end = textarea.selectionEnd;
           const newValue = value.substring(0, start) + imageMarkdown + value.substring(end);
           onChange(newValue);
-          
+
           // Reset cursor position after image
           setTimeout(() => {
             textarea.setSelectionRange(start + imageMarkdown.length, start + imageMarkdown.length);
@@ -78,9 +82,9 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           onChange(value + '\n' + imageMarkdown);
         }
       } catch (error) {
-        errorHandler.log('Failed to upload image', error, { 
+        errorHandler.log('Failed to upload image', error, {
           context: 'Image upload failed',
-          showToast: true 
+          showToast: true,
         });
       } finally {
         setUploadingImage(false);
@@ -90,7 +94,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         }
       }
     },
-    [value, onChange, onImageUpload]
+    [value, onChange, onImageUpload],
   );
 
   const handleChange = useCallback(
@@ -101,7 +105,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }
       onChange(val);
     },
-    [onChange, maxLength]
+    [onChange, maxLength],
   );
 
   const customCommands = React.useMemo(() => {
@@ -121,7 +125,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       commands.orderedListCommand,
       commands.checkedListCommand,
     ].filter(Boolean);
-    
+
     if (onImageUpload) {
       // Add custom image upload command
       const imageCommand = {
@@ -130,27 +134,25 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         buttonProps: { 'aria-label': 'Upload image', title: 'Upload image' },
         icon: (
           <span style={{ display: 'flex', alignItems: 'center' }}>
-            {uploadingImage ? (
-              <span className="animate-spin">↻</span>
-            ) : (
-              <Upload size={12} />
-            )}
+            {uploadingImage ? <span className="animate-spin">↻</span> : <Upload size={12} />}
           </span>
         ),
         execute: () => {
           handleImageClick();
         },
       };
-      
+
       // Insert after the image command
-      const imageIndex = defaultCommands.findIndex((cmd) => cmd && 'name' in cmd && cmd.name === 'image');
+      const imageIndex = defaultCommands.findIndex(
+        (cmd) => cmd && 'name' in cmd && cmd.name === 'image',
+      );
       if (imageIndex >= 0) {
         const newCommands = [...defaultCommands];
         newCommands.splice(imageIndex + 1, 0, imageCommand);
         return newCommands;
       }
     }
-    
+
     return defaultCommands;
   }, [onImageUpload, uploadingImage, handleImageClick]);
 
@@ -172,12 +174,12 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         }}
         components={{
           preview: (source: { value?: string } | string) => {
-            const text = typeof source === 'string' ? source : (source?.value || '');
+            const text = typeof source === 'string' ? source : source?.value || '';
             return <MarkdownPreview content={text} />;
           },
         }}
       />
-      
+
       {/* Hidden file input for image uploads */}
       {onImageUpload && (
         <input
@@ -189,7 +191,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           aria-label="Upload image file"
         />
       )}
-      
+
       {/* Character count */}
       {maxLength && (
         <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">

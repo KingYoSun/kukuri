@@ -9,18 +9,20 @@ import { useTopicStore } from '@/stores/topicStore';
 
 function Home() {
   const { joinedTopics, currentTopic } = useTopicStore();
-  
+
   // currentTopicがある場合はそのトピックの投稿を、ない場合は全体のタイムラインを取得
   const timelineQuery = useTimelinePosts();
   const topicQuery = usePostsByTopic(currentTopic?.id || '');
-  
+
   const { data: posts, isLoading, error, refetch } = currentTopic ? topicQuery : timelineQuery;
   const [showComposer, setShowComposer] = useState(false);
 
   if (isLoading) {
     return (
       <div className="max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">{currentTopic ? currentTopic.name : 'タイムライン'}</h2>
+        <h2 className="text-2xl font-bold mb-6">
+          {currentTopic ? currentTopic.name : 'タイムライン'}
+        </h2>
         <div className="flex justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin" data-testid="loader" />
         </div>
@@ -31,7 +33,9 @@ function Home() {
   if (error) {
     return (
       <div className="max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">{currentTopic ? currentTopic.name : 'タイムライン'}</h2>
+        <h2 className="text-2xl font-bold mb-6">
+          {currentTopic ? currentTopic.name : 'タイムライン'}
+        </h2>
         <Alert variant="destructive">
           <AlertDescription>投稿の取得に失敗しました。リロードしてください。</AlertDescription>
         </Alert>
@@ -64,15 +68,17 @@ function Home() {
 
       <div className="space-y-4" data-testid="posts-list">
         {posts && posts.length > 0 ? (
-          posts.map((post) => <PostCard key={post.id} post={post} data-testid={`post-${post.id}`} />)
+          posts.map((post) => (
+            <PostCard key={post.id} post={post} data-testid={`post-${post.id}`} />
+          ))
         ) : (
           <Alert>
             <AlertDescription>
               {joinedTopics.length === 0
                 ? 'トピックに参加すると、投稿が表示されます。'
                 : currentTopic
-                ? `${currentTopic.name}にはまだ投稿がありません。最初の投稿をしてみましょう！`
-                : 'まだ投稿がありません。最初の投稿をしてみましょう！'}
+                  ? `${currentTopic.name}にはまだ投稿がありません。最初の投稿をしてみましょう！`
+                  : 'まだ投稿がありません。最初の投稿をしてみましょう！'}
             </AlertDescription>
           </Alert>
         )}

@@ -51,7 +51,7 @@ describe('bookmarkStore', () => {
           context: 'BookmarkStore.fetchBookmarks',
           showToast: true,
           toastTitle: 'ブックマークの取得に失敗しました',
-        })
+        }),
       );
       expect(useBookmarkStore.getState().isLoading).toBe(false);
     });
@@ -96,7 +96,7 @@ describe('bookmarkStore', () => {
           context: 'BookmarkStore.toggleBookmark',
           showToast: true,
           toastTitle: 'ブックマークの追加に失敗しました',
-        })
+        }),
       );
     });
 
@@ -118,7 +118,7 @@ describe('bookmarkStore', () => {
           context: 'BookmarkStore.toggleBookmark',
           showToast: true,
           toastTitle: 'ブックマークの解除に失敗しました',
-        })
+        }),
       );
     });
   });

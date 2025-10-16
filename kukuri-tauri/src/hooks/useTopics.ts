@@ -12,7 +12,7 @@ export const useTopics = () => {
     queryKey: ['topics'],
     queryFn: async () => {
       const apiTopics = await TauriApi.getTopics();
-      
+
       // 各トピックの統計情報を並列で取得
       const topicsWithStats = await Promise.all(
         apiTopics.map(async (topic) => {
@@ -32,7 +32,7 @@ export const useTopics = () => {
           } catch (error) {
             // 統計情報の取得に失敗した場合はデフォルト値を使用
             errorHandler.log(`Failed to get stats for topic ${topic.id}`, error, {
-              context: 'useTopics.getTopicStats'
+              context: 'useTopics.getTopicStats',
             });
             return {
               id: topic.id,
@@ -46,9 +46,9 @@ export const useTopics = () => {
               createdAt: new Date(topic.created_at * 1000),
             } as Topic;
           }
-        })
+        }),
       );
-      
+
       setTopics(topicsWithStats);
       return topicsWithStats;
     },

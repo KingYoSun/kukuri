@@ -78,13 +78,13 @@ describe('PostCard', () => {
     return render(
       <QueryClientProvider client={queryClient}>
         <PostCard post={post} />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
   };
 
   it('should render post content and author info', () => {
     renderPostCard();
-    
+
     expect(screen.getByText('Test post content')).toBeInTheDocument();
     expect(screen.getByText('Test Display Name')).toBeInTheDocument();
     expect(screen.getByText('npub1234...')).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe('PostCard', () => {
 
   it('should show unsync badge when post is not synced', () => {
     renderPostCard({ ...mockPost, isSynced: false });
-    
+
     expect(screen.getByText('同期待ち')).toBeInTheDocument();
   });
 
@@ -102,7 +102,7 @@ describe('PostCard', () => {
 
     renderPostCard();
     const likeButton = screen.getByRole('button', { name: /5/ });
-    
+
     fireEvent.click(likeButton);
 
     await waitFor(() => {
@@ -116,7 +116,7 @@ describe('PostCard', () => {
 
     renderPostCard();
     const boostButton = screen.getByRole('button', { name: /3/ });
-    
+
     fireEvent.click(boostButton);
 
     await waitFor(() => {
@@ -131,7 +131,7 @@ describe('PostCard', () => {
 
     renderPostCard();
     const boostButton = screen.getByRole('button', { name: /3/ });
-    
+
     fireEvent.click(boostButton);
 
     await waitFor(() => {
@@ -143,10 +143,10 @@ describe('PostCard', () => {
   it('should toggle reply form', () => {
     renderPostCard();
     const replyButton = screen.getAllByRole('button')[0];
-    
+
     fireEvent.click(replyButton);
     expect(screen.getByText('Reply Form')).toBeInTheDocument();
-    
+
     fireEvent.click(replyButton);
     expect(screen.queryByText('Reply Form')).not.toBeInTheDocument();
   });
@@ -154,10 +154,10 @@ describe('PostCard', () => {
   it('should toggle quote form', () => {
     renderPostCard();
     const quoteButton = screen.getAllByRole('button')[2];
-    
+
     fireEvent.click(quoteButton);
     expect(screen.getByText('Quote Form')).toBeInTheDocument();
-    
+
     fireEvent.click(quoteButton);
     expect(screen.queryByText('Quote Form')).not.toBeInTheDocument();
   });
@@ -168,7 +168,7 @@ describe('PostCard', () => {
 
     renderPostCard();
     const bookmarkButton = screen.getAllByRole('button')[4];
-    
+
     fireEvent.click(bookmarkButton);
 
     await waitFor(() => {
@@ -179,65 +179,66 @@ describe('PostCard', () => {
 
   it('should show bookmark as active when bookmarked', () => {
     mockBookmarkStore.isBookmarked.mockReturnValue(true);
-    
+
     renderPostCard();
     const bookmarkButton = screen.getAllByRole('button')[4];
-    
+
     expect(bookmarkButton).toHaveClass('text-yellow-500');
   });
 
   it('should fetch bookmarks on mount', () => {
     renderPostCard();
-    
+
     expect(mockBookmarkStore.fetchBookmarks).toHaveBeenCalled();
   });
 
   it('should render reaction picker', () => {
     renderPostCard();
-    
+
     expect(screen.getByLabelText('reaction-picker')).toBeInTheDocument();
     expect(screen.getByText('Reactions for post1')).toBeInTheDocument();
   });
 
   it('should display boost count', () => {
     renderPostCard();
-    
+
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('should show boosted state when post is boosted', () => {
     renderPostCard({ ...mockPost, isBoosted: true });
     const boostButton = screen.getByRole('button', { name: /3/ });
-    
+
     expect(boostButton).toHaveClass('text-primary');
   });
 
   it('should disable buttons during mutations', async () => {
     let resolvePromise: () => void;
     mockTauriApi.likePost = vi.fn().mockImplementation(
-      () => new Promise((resolve) => {
-        resolvePromise = resolve;
-      })
+      () =>
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        }),
     );
 
     renderPostCard();
     const likeButton = screen.getByRole('button', { name: /5/ });
-    
+
     // Click the button to start the mutation
     fireEvent.click(likeButton);
-    
+
     // Wait for React Query to process the mutation start
     await waitFor(() => {
       expect(mockTauriApi.likePost).toHaveBeenCalled();
     });
-    
+
     // The button should be disabled during pending state
     // Note: This might not work as expected due to React Query's async behavior
     // We'll skip the disabled check and just verify the mutation completes
-    
+
     // Resolve the promise to complete the mutation
     resolvePromise!();
-    
+
     // Wait for the mutation to complete
     await waitFor(() => {
       expect(likeButton).not.toBeDisabled();
@@ -248,11 +249,11 @@ describe('PostCard', () => {
     renderPostCard();
     const replyButton = screen.getAllByRole('button')[0];
     const quoteButton = screen.getAllByRole('button')[2];
-    
+
     // 先にQuoteフォームを開く
     fireEvent.click(quoteButton);
     expect(screen.getByText('Quote Form')).toBeInTheDocument();
-    
+
     // Replyフォームを開く
     fireEvent.click(replyButton);
     expect(screen.getByText('Reply Form')).toBeInTheDocument();

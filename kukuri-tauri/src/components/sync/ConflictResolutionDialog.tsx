@@ -30,7 +30,9 @@ export function ConflictResolutionDialog({
   onResolve,
 }: ConflictResolutionDialogProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedResolution, setSelectedResolution] = useState<'local' | 'remote' | 'merge'>('local');
+  const [selectedResolution, setSelectedResolution] = useState<'local' | 'remote' | 'merge'>(
+    'local',
+  );
   const [isResolving, setIsResolving] = useState(false);
 
   const currentConflict = conflicts[currentIndex];
@@ -41,7 +43,7 @@ export function ConflictResolutionDialog({
     setIsResolving(true);
     try {
       await onResolve(currentConflict, selectedResolution);
-      
+
       // 次の競合に移動、または終了
       if (currentIndex < conflicts.length - 1) {
         setCurrentIndex(currentIndex + 1);
@@ -53,7 +55,7 @@ export function ConflictResolutionDialog({
       errorHandler.log('競合解決エラー', error, {
         context: 'ConflictResolutionDialog.handleResolve',
         showToast: true,
-        toastTitle: '競合の解決に失敗しました'
+        toastTitle: '競合の解決に失敗しました',
       });
     } finally {
       setIsResolving(false);
@@ -94,9 +96,7 @@ export function ConflictResolutionDialog({
                     <Monitor className="h-4 w-4" />
                     ローカルの変更
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    あなたのデバイスでの変更
-                  </CardDescription>
+                  <CardDescription className="text-xs">あなたのデバイスでの変更</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
@@ -152,7 +152,9 @@ export function ConflictResolutionDialog({
               <CardContent>
                 <RadioGroup
                   value={selectedResolution}
-                  onValueChange={(value: string) => setSelectedResolution(value as 'local' | 'remote' | 'merge')}
+                  onValueChange={(value: string) =>
+                    setSelectedResolution(value as 'local' | 'remote' | 'merge')
+                  }
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="local" id="local" />
@@ -181,17 +183,10 @@ export function ConflictResolutionDialog({
         </ScrollArea>
 
         <DialogFooter>
-          <Button 
-            variant="outline" 
-            onClick={handleSkip}
-            disabled={isResolving}
-          >
+          <Button variant="outline" onClick={handleSkip} disabled={isResolving}>
             スキップ
           </Button>
-          <Button 
-            onClick={handleResolve}
-            disabled={isResolving}
-          >
+          <Button onClick={handleResolve} disabled={isResolving}>
             {isResolving ? '適用中...' : '適用'}
           </Button>
         </DialogFooter>

@@ -24,9 +24,7 @@ vi.mock('sonner', () => ({
 // Mock Collapsible components
 vi.mock('@/components/ui/collapsible', () => ({
   Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
-    <div data-state={open ? 'open' : 'closed'}>
-      {open ? children : null}
-    </div>
+    <div data-state={open ? 'open' : 'closed'}>{open ? children : null}</div>
   ),
   CollapsibleContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -94,7 +92,7 @@ describe('PostCard', () => {
     const postContent = container.querySelector('.mb-4.whitespace-pre-wrap');
     expect(postContent).toBeTruthy();
     expect(postContent?.textContent).toBe('テスト投稿です');
-    
+
     // 投稿者名はh4タグ内のものを取得
     const authorName = container.querySelector('h4.font-semibold');
     expect(authorName?.textContent).toBe('Test User');
@@ -243,7 +241,7 @@ describe('PostCard', () => {
     it('返信を送信できる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
       const { toast } = await import('sonner');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+      vi.mocked(TauriApi.createPost).mockResolvedValue({
         id: 'reply-id',
         content: '',
         author_pubkey: '',
@@ -252,7 +250,7 @@ describe('PostCard', () => {
         likes: 0,
         boosts: 0,
         replies: 0,
-        is_synced: false
+        is_synced: false,
       });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
@@ -288,7 +286,7 @@ describe('PostCard', () => {
 
     it('返信成功後にフォームが閉じる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+      vi.mocked(TauriApi.createPost).mockResolvedValue({
         id: 'reply-id',
         content: '',
         author_pubkey: '',
@@ -297,7 +295,7 @@ describe('PostCard', () => {
         likes: 0,
         boosts: 0,
         replies: 0,
-        is_synced: false
+        is_synced: false,
       });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
@@ -322,9 +320,12 @@ describe('PostCard', () => {
         expect(TauriApi.createPost).toHaveBeenCalled();
       });
 
-      await waitFor(() => {
-        expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
+        },
+        { timeout: 3000 },
+      );
     });
   });
 
@@ -382,7 +383,7 @@ describe('PostCard', () => {
     it('引用投稿を送信できる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
       const { toast } = await import('sonner');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+      vi.mocked(TauriApi.createPost).mockResolvedValue({
         id: 'quote-id',
         content: '',
         author_pubkey: '',
@@ -391,7 +392,7 @@ describe('PostCard', () => {
         likes: 0,
         boosts: 0,
         replies: 0,
-        is_synced: false
+        is_synced: false,
       });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
@@ -428,7 +429,7 @@ describe('PostCard', () => {
 
     it('引用成功後にフォームが閉じる', async () => {
       const { TauriApi } = await import('@/lib/api/tauri');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({ 
+      vi.mocked(TauriApi.createPost).mockResolvedValue({
         id: 'quote-id',
         content: '',
         author_pubkey: '',
@@ -437,7 +438,7 @@ describe('PostCard', () => {
         likes: 0,
         boosts: 0,
         replies: 0,
-        is_synced: false
+        is_synced: false,
       });
 
       renderWithQueryClient(<PostCard post={mockPost} />);
@@ -462,9 +463,12 @@ describe('PostCard', () => {
         expect(TauriApi.createPost).toHaveBeenCalled();
       });
 
-      await waitFor(() => {
-        expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
+        },
+        { timeout: 3000 },
+      );
     });
 
     it('返信フォームと引用フォームは同時に開かない', async () => {

@@ -11,10 +11,14 @@ interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
   fetchPosts: (topicId?: string, limit?: number, offset?: number) => Promise<void>;
   addPost: (post: Post) => void;
-  createPost: (content: string, topicId: string, options?: {
-    replyTo?: string;
-    quotedPost?: string;
-  }) => Promise<Post>;
+  createPost: (
+    content: string,
+    topicId: string,
+    options?: {
+      replyTo?: string;
+      quotedPost?: string;
+    },
+  ) => Promise<Post>;
   updatePost: (id: string, update: Partial<Post>) => void;
   removePost: (id: string) => void;
   deletePostRemote: (id: string) => Promise<void>;
@@ -47,27 +51,29 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   fetchPosts: async (topicId?: string, limit?: number, offset?: number) => {
     try {
       const apiPosts = await TauriApi.getPosts({ topic_id: topicId, limit, offset });
-      const posts: Post[] = await Promise.all(apiPosts.map(async (p) => ({
-        id: p.id,
-        content: p.content,
-        author: {
-          id: p.author_pubkey,
-          pubkey: p.author_pubkey,
-          npub: await pubkeyToNpub(p.author_pubkey),
-          name: '匿名ユーザー',
-          displayName: '匿名ユーザー',
-          about: '',
-          picture: '',
-          nip05: '',
-        },
-        topicId: p.topic_id,
-        created_at: p.created_at,
-        tags: [],
-        likes: p.likes,
-        boosts: p.boosts || 0,
-        replies: [],
-        isSynced: p.is_synced ?? true, // DBのis_syncedフィールドを使用（未定義の場合はtrue）
-      })));
+      const posts: Post[] = await Promise.all(
+        apiPosts.map(async (p) => ({
+          id: p.id,
+          content: p.content,
+          author: {
+            id: p.author_pubkey,
+            pubkey: p.author_pubkey,
+            npub: await pubkeyToNpub(p.author_pubkey),
+            name: '匿名ユーザー',
+            displayName: '匿名ユーザー',
+            about: '',
+            picture: '',
+            nip05: '',
+          },
+          topicId: p.topic_id,
+          created_at: p.created_at,
+          tags: [],
+          likes: p.likes,
+          boosts: p.boosts || 0,
+          replies: [],
+          isSynced: p.is_synced ?? true, // DBのis_syncedフィールドを使用（未定義の場合はtrue）
+        })),
+      );
 
       const postsMap = new Map(posts.map((p) => [p.id, p]));
       const postsByTopicMap = new Map<string, string[]>();
@@ -106,13 +112,17 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       };
     }),
 
-  createPost: async (content: string, topicId: string, options?: {
-    replyTo?: string;
-    quotedPost?: string;
-  }) => {
+  createPost: async (
+    content: string,
+    topicId: string,
+    options?: {
+      replyTo?: string;
+      quotedPost?: string;
+    },
+  ) => {
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
-    
+
     // 楽観的投稿データを作成
     const tempId = `temp-${uuidv4()}`;
     const optimisticPost: Post = {
@@ -168,19 +178,19 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           quotedPost: options?.quotedPost,
         }),
       });
-      
+
       return optimisticPost;
     }
 
     // オンラインの場合、バックグラウンドでサーバーに送信
     try {
-      const apiPost = await TauriApi.createPost({ 
-        content, 
+      const apiPost = await TauriApi.createPost({
+        content,
         topic_id: topicId,
         reply_to: options?.replyTo,
         quoted_post: options?.quotedPost,
       });
-      
+
       const realPost: Post = {
         id: apiPost.id,
         content: apiPost.content,
@@ -211,7 +221,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
         const newPostsByTopic = new Map(state.postsByTopic);
         const topicPosts = newPostsByTopic.get(topicId) || [];
-        const updatedTopicPosts = topicPosts.map(id => id === tempId ? realPost.id : id);
+        const updatedTopicPosts = topicPosts.map((id) => (id === tempId ? realPost.id : id));
         newPostsByTopic.set(topicId, updatedTopicPosts);
 
         return {
@@ -229,7 +239,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
         const newPostsByTopic = new Map(state.postsByTopic);
         const topicPosts = newPostsByTopic.get(topicId) || [];
-        const updatedTopicPosts = topicPosts.filter(id => id !== tempId);
+        const updatedTopicPosts = topicPosts.filter((id) => id !== tempId);
         newPostsByTopic.set(topicId, updatedTopicPosts);
 
         return {
@@ -313,7 +323,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   likePost: async (postId: string) => {
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
-    
+
     // 楽観的更新: 即座にUIに反映
     const previousLikes = get().posts.get(postId)?.likes || 0;
     set((state) => {

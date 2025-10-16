@@ -201,7 +201,7 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // P2P接続を先に実行
           await p2pApi.joinTopic(topicId);
-          
+
           // P2P接続が安定した後にNostrサブスクリプションを開始
           // リレー接続が無効化されている場合でも、将来的な互換性のために呼び出しは維持
           setTimeout(() => {

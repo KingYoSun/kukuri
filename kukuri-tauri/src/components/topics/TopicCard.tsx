@@ -18,10 +18,7 @@ export function TopicCard({ topic }: TopicCardProps) {
   const { joinedTopics, joinTopic, leaveTopic, setCurrentTopic } = useTopicStore();
   const navigate = useNavigate();
   // joinedTopicsが変更されたときのみ再計算
-  const isJoined = useMemo(
-    () => joinedTopics.includes(topic.id),
-    [joinedTopics, topic.id]
-  );
+  const isJoined = useMemo(() => joinedTopics.includes(topic.id), [joinedTopics, topic.id]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -74,7 +71,7 @@ export function TopicCard({ topic }: TopicCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <h3 
+            <h3
               className="text-lg font-semibold flex items-center gap-2 hover:underline cursor-pointer"
               onClick={handleTopicClick}
             >

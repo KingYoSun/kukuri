@@ -29,7 +29,17 @@ vi.mock('lodash', () => ({
 
 // Mock components
 vi.mock('../topics/TopicSelector', () => ({
-  TopicSelector: ({ value, onValueChange, disabled, placeholder }: { value?: string; onValueChange: (value: string) => void; disabled?: boolean; placeholder?: string }) => (
+  TopicSelector: ({
+    value,
+    onValueChange,
+    disabled,
+    placeholder,
+  }: {
+    value?: string;
+    onValueChange: (value: string) => void;
+    disabled?: boolean;
+    placeholder?: string;
+  }) => (
     <select
       data-testid="topic-selector"
       value={value}
@@ -45,7 +55,17 @@ vi.mock('../topics/TopicSelector', () => ({
 
 vi.mock('./MarkdownEditor', () => ({
   __esModule: true,
-  default: ({ value, onChange, placeholder, onImageUpload }: { value: string; onChange: (value: string) => void; placeholder?: string; onImageUpload?: (file: File) => Promise<string> }) => (
+  default: ({
+    value,
+    onChange,
+    placeholder,
+    onImageUpload,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    onImageUpload?: (file: File) => Promise<string>;
+  }) => (
     <div>
       <textarea
         data-testid="markdown-editor"
@@ -54,7 +74,10 @@ vi.mock('./MarkdownEditor', () => ({
         placeholder={placeholder}
       />
       {onImageUpload && (
-        <button data-testid="upload-image" onClick={() => onImageUpload(new File(['test'], 'test.jpg'))}>
+        <button
+          data-testid="upload-image"
+          onClick={() => onImageUpload(new File(['test'], 'test.jpg'))}
+        >
           Upload Image
         </button>
       )}
@@ -62,21 +85,26 @@ vi.mock('./MarkdownEditor', () => ({
   ),
 }));
 
-
 vi.mock('./DraftManager', () => ({
   __esModule: true,
-  default: ({ onSelectDraft }: { onSelectDraft: (draft: import('@/types/draft').PostDraft) => void }) => (
+  default: ({
+    onSelectDraft,
+  }: {
+    onSelectDraft: (draft: import('@/types/draft').PostDraft) => void;
+  }) => (
     <div data-testid="draft-manager">
       <button
         data-testid="select-draft"
-        onClick={() => onSelectDraft({
-          id: 'draft1',
-          content: 'Draft content',
-          topicId: 'topic1',
-          topicName: 'Technology',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })}
+        onClick={() =>
+          onSelectDraft({
+            id: 'draft1',
+            content: 'Draft content',
+            topicId: 'topic1',
+            topicName: 'Technology',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+        }
       >
         Select Draft
       </button>
@@ -85,8 +113,30 @@ vi.mock('./DraftManager', () => ({
 }));
 
 const mockTopics = new Map<string, Topic>([
-  ['topic1', { id: 'topic1', name: 'Technology', description: 'Tech topics', postCount: 10, isActive: true, createdAt: Date.now(), updatedAt: Date.now() }],
-  ['topic2', { id: 'topic2', name: 'Life', description: 'Life topics', postCount: 5, isActive: true, createdAt: Date.now(), updatedAt: Date.now() }],
+  [
+    'topic1',
+    {
+      id: 'topic1',
+      name: 'Technology',
+      description: 'Tech topics',
+      postCount: 10,
+      isActive: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+  ],
+  [
+    'topic2',
+    {
+      id: 'topic2',
+      name: 'Life',
+      description: 'Life topics',
+      postCount: 5,
+      isActive: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+  ],
 ]);
 
 describe('PostComposer', () => {
@@ -101,7 +151,7 @@ describe('PostComposer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     vi.mocked(usePostStore).mockReturnValue(
       createStoreWithMapMock({
         posts: [],
@@ -118,7 +168,7 @@ describe('PostComposer', () => {
         getPostsByTopic: vi.fn(),
         incrementLikes: vi.fn(),
         updatePostLikes: vi.fn(),
-      })
+      }),
     );
 
     vi.mocked(useTopicStore).mockReturnValue(
@@ -134,7 +184,7 @@ describe('PostComposer', () => {
         leaveTopic: vi.fn(),
         isJoinedTopic: vi.fn(),
         getTopicById: vi.fn(),
-      })
+      }),
     );
 
     vi.mocked(useDraftStore).mockReturnValue(
@@ -150,7 +200,7 @@ describe('PostComposer', () => {
         getCurrentDraft: vi.fn(),
         listDrafts: vi.fn(),
         clearAllDrafts: vi.fn(),
-      })
+      }),
     );
 
     vi.mocked(useToast).mockReturnValue({ toast: mockToast });
@@ -158,7 +208,7 @@ describe('PostComposer', () => {
 
   it('renders with all components', () => {
     render(<PostComposer onSuccess={mockOnSuccess} onCancel={mockOnCancel} />);
-    
+
     expect(screen.getByText('シンプル')).toBeInTheDocument();
     expect(screen.getByText('Markdown')).toBeInTheDocument();
     expect(screen.getByTestId('topic-selector')).toBeInTheDocument();
@@ -169,11 +219,11 @@ describe('PostComposer', () => {
   it('switches between simple and markdown editor', async () => {
     const user = userEvent.setup();
     render(<PostComposer />);
-    
+
     // Initially in simple mode
     expect(screen.getByPlaceholderText('今何を考えていますか？')).toBeInTheDocument();
     expect(screen.queryByTestId('markdown-editor')).not.toBeInTheDocument();
-    
+
     // Switch to markdown mode
     await user.click(screen.getByText('Markdown'));
     expect(screen.getByTestId('markdown-editor')).toBeInTheDocument();
@@ -183,29 +233,29 @@ describe('PostComposer', () => {
   it('shows character count in simple mode', async () => {
     const user = userEvent.setup();
     render(<PostComposer />);
-    
+
     const textarea = screen.getByPlaceholderText('今何を考えていますか？');
     await user.type(textarea, 'Hello world');
-    
+
     expect(screen.getByText('11 / 1000')).toBeInTheDocument();
   });
 
   it('creates post successfully', async () => {
     const user = userEvent.setup();
     mockCreatePost.mockResolvedValue({ id: 'new-post-id' });
-    
+
     render(<PostComposer onSuccess={mockOnSuccess} />);
-    
+
     // Fill in form
     const textarea = screen.getByPlaceholderText('今何を考えていますか？');
     await user.type(textarea, 'Test post content');
-    
+
     const topicSelector = screen.getByTestId('topic-selector');
     await user.selectOptions(topicSelector, 'topic1');
-    
+
     // Submit
     await user.click(screen.getByText('投稿する'));
-    
+
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith('Test post content', 'topic1', {
         replyTo: undefined,
@@ -219,30 +269,29 @@ describe('PostComposer', () => {
     });
   });
 
-
   it('shows draft manager when draft button clicked', async () => {
     const user = userEvent.setup();
     render(<PostComposer />);
-    
+
     await user.click(screen.getByText('下書き'));
-    
+
     expect(screen.getByTestId('draft-manager')).toBeInTheDocument();
   });
 
   it('loads draft when selected', async () => {
     const user = userEvent.setup();
     render(<PostComposer />);
-    
+
     // Open draft manager
     await user.click(screen.getByText('下書き'));
-    
+
     // Select draft
     await user.click(screen.getByTestId('select-draft'));
-    
+
     await waitFor(() => {
       const textarea = screen.getByPlaceholderText('今何を考えていますか？');
       expect(textarea).toHaveValue('Draft content');
-      
+
       const topicSelector = screen.getByTestId('topic-selector');
       expect(topicSelector).toHaveValue('topic1');
     });
@@ -250,29 +299,29 @@ describe('PostComposer', () => {
 
   it('saves draft on cancel with content', async () => {
     const user = userEvent.setup();
-    
+
     // Mock createDraft to return a draft with an ID
     mockCreateDraft.mockReturnValue({ id: 'draft-123' });
-    
+
     render(<PostComposer onCancel={mockOnCancel} />);
-    
+
     const textarea = screen.getByPlaceholderText('今何を考えていますか？');
     await user.type(textarea, 'Unsaved content');
-    
+
     await user.click(screen.getByText('キャンセル'));
-    
+
     // Since debounce is synchronous, the draft is created on first character
     // Then subsequent characters trigger autosaveDraft
     expect(mockCreateDraft).toHaveBeenCalled();
     expect(mockAutosaveDraft).toHaveBeenCalled();
-    
+
     // Check the last autosave had the full content
     const lastAutosaveCall = mockAutosaveDraft.mock.calls[mockAutosaveDraft.mock.calls.length - 1];
     expect(lastAutosaveCall[0]).toMatchObject({
       id: 'draft-123',
       content: 'Unsaved content',
     });
-    
+
     // The toast is not shown because a draft already exists (currentDraftId is set)
     // This is the expected behavior based on the component logic
     expect(mockOnCancel).toHaveBeenCalled();
@@ -280,28 +329,28 @@ describe('PostComposer', () => {
 
   it('manually saves draft', async () => {
     const user = userEvent.setup();
-    
+
     // Mock createDraft to return a draft with an ID
     mockCreateDraft.mockReturnValue({ id: 'draft-456' });
-    
+
     render(<PostComposer />);
-    
+
     const textarea = screen.getByPlaceholderText('今何を考えていますか？');
     await user.type(textarea, 'Manual save content');
-    
+
     await user.click(screen.getByText('下書き保存'));
-    
+
     // The manual save button triggers autosave, which will use autosaveDraft if a draft exists
     expect(mockCreateDraft).toHaveBeenCalled();
     expect(mockAutosaveDraft).toHaveBeenCalled();
-    
+
     // Check the last autosave had the full content
     const lastAutosaveCall = mockAutosaveDraft.mock.calls[mockAutosaveDraft.mock.calls.length - 1];
     expect(lastAutosaveCall[0]).toMatchObject({
       id: 'draft-456',
       content: 'Manual save content',
     });
-    
+
     expect(mockToast).toHaveBeenCalledWith({
       title: '下書きを保存しました',
       description: '下書き一覧から編集を再開できます',
@@ -310,19 +359,19 @@ describe('PostComposer', () => {
 
   it('shows reply indicator', () => {
     render(<PostComposer replyTo="post123" />);
-    
+
     expect(screen.getByText('返信先: post123')).toBeInTheDocument();
   });
 
   it('shows quote indicator', () => {
     render(<PostComposer quotedPost="post456" />);
-    
+
     expect(screen.getByText('引用: post456')).toBeInTheDocument();
   });
 
   it('disables submit with empty content', () => {
     render(<PostComposer />);
-    
+
     const submitButton = screen.getByText('投稿する');
     expect(submitButton).toBeDisabled();
   });
@@ -330,10 +379,10 @@ describe('PostComposer', () => {
   it('disables submit without topic', async () => {
     const user = userEvent.setup();
     render(<PostComposer />);
-    
+
     const textarea = screen.getByPlaceholderText('今何を考えていますか？');
     await user.type(textarea, 'Content without topic');
-    
+
     const submitButton = screen.getByText('投稿する');
     expect(submitButton).toBeDisabled();
   });
@@ -341,17 +390,17 @@ describe('PostComposer', () => {
   it('shows error toast when submit fails', async () => {
     const user = userEvent.setup();
     mockCreatePost.mockRejectedValue(new Error('Network error'));
-    
+
     render(<PostComposer />);
-    
+
     const textarea = screen.getByPlaceholderText('今何を考えていますか？');
     await user.type(textarea, 'Test content');
-    
+
     const topicSelector = screen.getByTestId('topic-selector');
     await user.selectOptions(topicSelector, 'topic1');
-    
+
     await user.click(screen.getByText('投稿する'));
-    
+
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalled();
     });
@@ -359,15 +408,15 @@ describe('PostComposer', () => {
 
   it('uploads image in markdown mode', async () => {
     const user = userEvent.setup();
-    
+
     render(<PostComposer />);
-    
+
     // Switch to markdown mode
     await user.click(screen.getByText('Markdown'));
-    
+
     // Verify markdown editor is rendered
     expect(screen.getByTestId('markdown-editor')).toBeInTheDocument();
-    
+
     // Since the mock doesn't actually implement the upload functionality,
     // we'll just verify the editor is in markdown mode
     const editor = screen.getByTestId('markdown-editor');
@@ -376,7 +425,7 @@ describe('PostComposer', () => {
 
   it('respects topicId prop', () => {
     render(<PostComposer topicId="topic2" />);
-    
+
     const topicSelector = screen.getByTestId('topic-selector');
     expect(topicSelector).toHaveValue('topic2');
     expect(topicSelector).toBeDisabled();

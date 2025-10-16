@@ -30,11 +30,10 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const { isBookmarked, toggleBookmark, fetchBookmarks } = useBookmarkStore();
   const isPostBookmarked = isBookmarked(post.id);
   const { isOnline, pendingActions } = useOfflineStore();
-  
+
   // この投稿が未同期かどうかを確認
   const isPostPending = pendingActions.some(
-    action => action.actionType === 'CREATE_POST' && 
-    action.localId === post.localId
+    (action) => action.actionType === 'CREATE_POST' && action.localId === post.localId,
   );
 
   // 初回レンダリング時にブックマーク情報を取得
@@ -142,11 +141,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               </h4>
               <span className="text-sm text-muted-foreground">{timeAgo}</span>
               {(post.isSynced === false || isPostPending) && (
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={`text-xs flex items-center gap-1 ${
-                    !isOnline ? 'border-orange-500 text-orange-600 dark:text-orange-400' : 
-                    'border-yellow-500 text-yellow-600 dark:text-yellow-400'
+                    !isOnline
+                      ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+                      : 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
                   }`}
                 >
                   {!isOnline ? (

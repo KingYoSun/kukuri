@@ -81,4 +81,3 @@ export const p2pApi = {
    * Gossip繝｡繝医Μ繧ｯ繧ｹ繧貞叙蠕・   */
   getMetrics: () => invoke<GossipMetrics>('get_p2p_metrics'),
 };
-

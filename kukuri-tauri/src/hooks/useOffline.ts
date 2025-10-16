@@ -61,11 +61,14 @@ export function useOffline() {
   useEffect(() => {
     if (!isOnline || !currentUser?.npub) return;
 
-    const interval = setInterval(() => {
-      if (pendingActions.length > 0 && !isSyncing) {
-        syncPendingActions(currentUser.npub);
-      }
-    }, 5 * 60 * 1000); // 5分
+    const interval = setInterval(
+      () => {
+        if (pendingActions.length > 0 && !isSyncing) {
+          syncPendingActions(currentUser.npub);
+        }
+      },
+      5 * 60 * 1000,
+    ); // 5分
 
     return () => clearInterval(interval);
   }, [isOnline, currentUser?.npub, pendingActions.length, isSyncing, syncPendingActions]);
@@ -92,7 +95,7 @@ export function useOffline() {
         toast.info('アクションが保存されました。オンライン時に同期されます。');
       }
     },
-    [currentUser?.npub, saveOfflineAction, isOnline]
+    [currentUser?.npub, saveOfflineAction, isOnline],
   );
 
   // 手動同期トリガー
@@ -123,7 +126,7 @@ export function useOffline() {
     } catch (error) {
       toast.error('同期に失敗しました');
       errorHandler.log('Sync failed', error, {
-        context: 'useOffline.triggerSync'
+        context: 'useOffline.triggerSync',
       });
     }
   }, [currentUser?.npub, isOnline, isSyncing, pendingActions.length, syncPendingActions]);
@@ -142,11 +145,7 @@ export function useOffline() {
  * オフライン対応の楽観的更新を行うフック
  */
 export function useOptimisticUpdate<T = any>() {
-  const {
-    applyOptimisticUpdate,
-    confirmUpdate,
-    rollbackUpdate,
-  } = useOfflineStore();
+  const { applyOptimisticUpdate, confirmUpdate, rollbackUpdate } = useOfflineStore();
 
   const apply = useCallback(
     async (
@@ -155,7 +154,7 @@ export function useOptimisticUpdate<T = any>() {
       originalData: T,
       updatedData: T,
       onSuccess?: () => void,
-      onError?: (error: Error) => void
+      onError?: (error: Error) => void,
     ) => {
       try {
         // 楽観的更新を適用
@@ -163,7 +162,7 @@ export function useOptimisticUpdate<T = any>() {
           entityType as any,
           entityId,
           originalData,
-          updatedData
+          updatedData,
         );
 
         // 実際のAPI呼び出しなどを行う
@@ -185,12 +184,12 @@ export function useOptimisticUpdate<T = any>() {
         return updateId;
       } catch (error) {
         errorHandler.log('Optimistic update failed', error, {
-          context: 'useOptimisticUpdate.apply'
+          context: 'useOptimisticUpdate.apply',
         });
         throw error;
       }
     },
-    [applyOptimisticUpdate, confirmUpdate, rollbackUpdate]
+    [applyOptimisticUpdate, confirmUpdate, rollbackUpdate],
   );
 
   return { apply };

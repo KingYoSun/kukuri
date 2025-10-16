@@ -41,7 +41,7 @@ describe('ReactionPicker', () => {
     return render(
       <QueryClientProvider client={queryClient}>
         <ReactionPicker postId={postId} topicId={topicId} />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
   };
 
@@ -54,9 +54,9 @@ describe('ReactionPicker', () => {
   it('should open popover when clicked', () => {
     renderReactionPicker();
     const button = screen.getByRole('button');
-    
+
     fireEvent.click(button);
-    
+
     // ポピュラーなリアクションが表示されることを確認
     expect(screen.getByText('👍')).toBeInTheDocument();
     expect(screen.getByText('❤️')).toBeInTheDocument();
@@ -119,9 +119,10 @@ describe('ReactionPicker', () => {
   it('should disable button while sending reaction', async () => {
     let resolvePromise: (value: string) => void;
     vi.mocked(NostrAPI.sendReaction).mockImplementation(
-      () => new Promise((resolve) => {
-        resolvePromise = resolve;
-      })
+      () =>
+        new Promise((resolve) => {
+          resolvePromise = resolve;
+        }),
     );
 
     renderReactionPicker();
@@ -139,10 +140,10 @@ describe('ReactionPicker', () => {
     // The button should be disabled during pending state
     // Note: This might not work as expected due to React Query's async behavior
     // We'll skip the disabled check and just verify the mutation completes
-    
+
     // Resolve the promise to complete the mutation
     resolvePromise!('event123');
-    
+
     // Wait for the mutation to complete
     await waitFor(() => {
       expect(mockToast.success).toHaveBeenCalledWith('リアクションを送信しました');
@@ -155,8 +156,22 @@ describe('ReactionPicker', () => {
     fireEvent.click(button);
 
     const expectedReactions = [
-      '👍', '❤️', '😄', '😂', '😮', '😢', '😡', '🔥',
-      '💯', '🎉', '🚀', '👀', '🤔', '👏', '💪', '🙏',
+      '👍',
+      '❤️',
+      '😄',
+      '😂',
+      '😮',
+      '😢',
+      '😡',
+      '🔥',
+      '💯',
+      '🎉',
+      '🚀',
+      '👀',
+      '🤔',
+      '👏',
+      '💪',
+      '🙏',
     ];
 
     expectedReactions.forEach((reaction) => {

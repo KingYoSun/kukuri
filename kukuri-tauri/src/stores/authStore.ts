@@ -85,14 +85,16 @@ export const useAuthStore = create<AuthStore>()(
           await useAuthStore.getState().updateRelayStatus();
           // アカウントリストを更新
           await useAuthStore.getState().loadAccounts();
-          
+
           // 初回ログイン時（アカウント追加時）は#publicトピックに参加
           if (saveToSecureStorage) {
             const topicStore = useTopicStore.getState();
             // トピック一覧を取得
             await topicStore.fetchTopics();
             // #publicトピックを探す
-            const publicTopic = Array.from(topicStore.topics.values()).find(t => t.id === 'public');
+            const publicTopic = Array.from(topicStore.topics.values()).find(
+              (t) => t.id === 'public',
+            );
             if (publicTopic) {
               // #publicトピックに参加
               await topicStore.joinTopic('public');
@@ -148,14 +150,16 @@ export const useAuthStore = create<AuthStore>()(
           await useAuthStore.getState().updateRelayStatus();
           // アカウントリストを更新
           await useAuthStore.getState().loadAccounts();
-          
+
           // 新規アカウント作成時は#publicトピックに参加
           if (saveToSecureStorage) {
             const topicStore = useTopicStore.getState();
             // トピック一覧を取得
             await topicStore.fetchTopics();
             // #publicトピックを探す
-            const publicTopic = Array.from(topicStore.topics.values()).find(t => t.id === 'public');
+            const publicTopic = Array.from(topicStore.topics.values()).find(
+              (t) => t.id === 'public',
+            );
             if (publicTopic) {
               // #publicトピックに参加
               await topicStore.joinTopic('public');

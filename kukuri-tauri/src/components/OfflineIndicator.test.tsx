@@ -49,7 +49,7 @@ describe('OfflineIndicator', () => {
 
   it('オンライン復帰時に成功メッセージが表示される', async () => {
     const { rerender } = render(<OfflineIndicator />);
-    
+
     mockUseOfflineStore.mockReturnValue({
       isOnline: false,
       lastSyncedAt: Date.now(),
@@ -119,7 +119,7 @@ describe('OfflineIndicator', () => {
       expect.objectContaining({
         addSuffix: true,
         locale: ja,
-      })
+      }),
     );
   });
 
@@ -134,12 +134,12 @@ describe('OfflineIndicator', () => {
     await act(async () => {
       render(<OfflineIndicator />);
     });
-    
+
     const tooltipTrigger = screen.getByRole('button');
     await act(async () => {
       tooltipTrigger.focus();
     });
-    
+
     await waitFor(() => {
       expect(mockFormatDistanceToNow).not.toHaveBeenCalled();
     });
@@ -162,7 +162,7 @@ describe('OfflineIndicator', () => {
 
   it.skip('オンライン復帰後5秒でバナーが自動的に非表示になる', async () => {
     vi.useFakeTimers();
-    
+
     // 最初はオフライン状態でマウント
     mockUseOfflineStore.mockReturnValue({
       isOnline: false,
@@ -187,17 +187,17 @@ describe('OfflineIndicator', () => {
     await waitFor(() => {
       expect(screen.getByText('オンラインに復帰しました')).toBeInTheDocument();
     });
-    
+
     // 5秒経過
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-    
+
     // バナーが非表示になっている
     await waitFor(() => {
       expect(screen.queryByText('オンラインに復帰しました')).not.toBeInTheDocument();
     });
-    
+
     vi.useRealTimers();
   }, 10000);
 });

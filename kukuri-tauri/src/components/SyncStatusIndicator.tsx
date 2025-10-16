@@ -13,15 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { 
-  RefreshCw, 
-  AlertCircle, 
-  CheckCircle, 
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
   Clock,
   Wifi,
   WifiOff,
@@ -32,13 +28,8 @@ import { ja } from 'date-fns/locale';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 
 export function SyncStatusIndicator() {
-  const {
-    syncStatus,
-    triggerManualSync,
-    resolveConflict,
-    pendingActionsCount,
-    isOnline,
-  } = useSyncManager();
+  const { syncStatus, triggerManualSync, resolveConflict, pendingActionsCount, isOnline } =
+    useSyncManager();
 
   const [selectedConflict, setSelectedConflict] = React.useState<SyncConflict | null>(null);
   const [showConflictDialog, setShowConflictDialog] = React.useState(false);
@@ -55,23 +46,23 @@ export function SyncStatusIndicator() {
     if (!isOnline) {
       return <WifiOff className="h-4 w-4 text-muted-foreground" />;
     }
-    
+
     if (syncStatus.isSyncing) {
       return <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />;
     }
-    
+
     if (syncStatus.conflicts.length > 0) {
       return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
     }
-    
+
     if (syncStatus.error) {
       return <AlertCircle className="h-4 w-4 text-red-500" />;
     }
-    
+
     if (pendingActionsCount === 0) {
       return <CheckCircle className="h-4 w-4 text-green-500" />;
     }
-    
+
     return <Clock className="h-4 w-4 text-muted-foreground" />;
   };
 
@@ -79,23 +70,23 @@ export function SyncStatusIndicator() {
     if (!isOnline) {
       return 'オフライン';
     }
-    
+
     if (syncStatus.isSyncing) {
       return `同期中... (${syncStatus.syncedItems}/${syncStatus.totalItems})`;
     }
-    
+
     if (syncStatus.conflicts.length > 0) {
       return `競合: ${syncStatus.conflicts.length}件`;
     }
-    
+
     if (syncStatus.error) {
       return '同期エラー';
     }
-    
+
     if (pendingActionsCount === 0) {
       return '同期済み';
     }
-    
+
     return `未同期: ${pendingActionsCount}件`;
   };
 
@@ -103,12 +94,7 @@ export function SyncStatusIndicator() {
     <>
       <Popover>
         <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2"
-            data-testid="sync-indicator"
-          >
+          <Button variant="ghost" size="sm" className="gap-2" data-testid="sync-indicator">
             {getSyncStatusIcon()}
             <span className="text-sm">{getSyncStatusText()}</span>
             {pendingActionsCount > 0 && (
@@ -173,12 +159,8 @@ export function SyncStatusIndicator() {
                         setShowConflictDialog(true);
                       }}
                     >
-                      <p className="font-medium">
-                        {conflict.localAction.actionType}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        クリックして解決
-                      </p>
+                      <p className="font-medium">{conflict.localAction.actionType}</p>
+                      <p className="text-xs text-muted-foreground">クリックして解決</p>
                     </div>
                   ))}
                   {syncStatus.conflicts.length > 3 && (
@@ -197,9 +179,7 @@ export function SyncStatusIndicator() {
                   <AlertCircle className="h-4 w-4 text-red-500" />
                   同期エラー
                 </h4>
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {syncStatus.error}
-                </p>
+                <p className="text-sm text-red-600 dark:text-red-400">{syncStatus.error}</p>
               </div>
             )}
 
@@ -244,30 +224,26 @@ export function SyncStatusIndicator() {
               <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
                 <h5 className="font-medium mb-1">ローカルの変更</h5>
                 <p className="text-sm text-muted-foreground">
-                  作成日時: {new Date(selectedConflict.localAction.createdAt).toLocaleString('ja-JP')}
+                  作成日時:{' '}
+                  {new Date(selectedConflict.localAction.createdAt).toLocaleString('ja-JP')}
                 </p>
-                <p className="text-sm mt-1">
-                  タイプ: {selectedConflict.localAction.actionType}
-                </p>
+                <p className="text-sm mt-1">タイプ: {selectedConflict.localAction.actionType}</p>
               </div>
               {selectedConflict.remoteAction && (
                 <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded">
                   <h5 className="font-medium mb-1">リモートの変更</h5>
                   <p className="text-sm text-muted-foreground">
-                    作成日時: {new Date(selectedConflict.remoteAction.createdAt).toLocaleString('ja-JP')}
+                    作成日時:{' '}
+                    {new Date(selectedConflict.remoteAction.createdAt).toLocaleString('ja-JP')}
                   </p>
-                  <p className="text-sm mt-1">
-                    タイプ: {selectedConflict.remoteAction.actionType}
-                  </p>
+                  <p className="text-sm mt-1">タイプ: {selectedConflict.remoteAction.actionType}</p>
                 </div>
               )}
             </div>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel>キャンセル</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => handleConflictResolution('local')}
-            >
+            <AlertDialogAction onClick={() => handleConflictResolution('local')}>
               ローカルを適用
             </AlertDialogAction>
             {selectedConflict?.remoteAction && (

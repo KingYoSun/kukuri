@@ -13,10 +13,10 @@ export class OfflineSyncService {
   initialize() {
     // ネットワーク状態の監視
     this.setupNetworkListener();
-    
+
     // 定期同期の開始
     this.startPeriodicSync();
-    
+
     // アプリ起動時の初期同期
     this.performInitialSync();
   }
@@ -28,7 +28,7 @@ export class OfflineSyncService {
     const handleOnline = () => {
       const offlineStore = useOfflineStore.getState();
       offlineStore.setOnlineStatus(true);
-      
+
       // オンライン復帰時に即座に同期を試行
       this.triggerSync();
     };
@@ -36,7 +36,7 @@ export class OfflineSyncService {
     const handleOffline = () => {
       const offlineStore = useOfflineStore.getState();
       offlineStore.setOnlineStatus(false);
-      
+
       // 同期インターバルを停止
       this.stopPeriodicSync();
     };
@@ -56,7 +56,7 @@ export class OfflineSyncService {
   private startPeriodicSync() {
     // 既存のインターバルをクリア
     this.stopPeriodicSync();
-    
+
     // 30秒ごとに同期を試行
     this.syncInterval = setInterval(() => {
       const { isOnline } = useOfflineStore.getState();
@@ -82,19 +82,19 @@ export class OfflineSyncService {
   private async performInitialSync() {
     const authStore = useAuthStore.getState();
     const offlineStore = useOfflineStore.getState();
-    
+
     if (!authStore.currentUser?.pubkey) {
       return;
     }
-    
+
     // 保存済みの未同期アクションを読み込み
     await offlineStore.loadPendingActions(authStore.currentUser.pubkey);
-    
+
     // オンラインの場合は同期を実行
     if (offlineStore.isOnline) {
       await this.triggerSync();
     }
-    
+
     // 期限切れキャッシュのクリーンアップ
     await offlineStore.cleanupExpiredCache();
   }
@@ -105,22 +105,22 @@ export class OfflineSyncService {
   async triggerSync() {
     const authStore = useAuthStore.getState();
     const offlineStore = useOfflineStore.getState();
-    
+
     if (!authStore.currentUser?.pubkey || !offlineStore.isOnline || offlineStore.isSyncing) {
       return;
     }
-    
+
     const pendingCount = offlineStore.pendingActions.length;
     if (pendingCount === 0) {
       return;
     }
-    
+
     console.log(`Starting sync for ${pendingCount} pending actions`);
-    
+
     try {
       await offlineStore.syncPendingActions(authStore.currentUser.pubkey);
       console.log('Sync completed successfully');
-      
+
       // 成功時はリトライタイマーをクリア
       if (this.retryTimeout) {
         clearTimeout(this.retryTimeout);
@@ -128,9 +128,9 @@ export class OfflineSyncService {
       }
     } catch (error) {
       errorHandler.log('Sync failed', error, {
-        context: 'OfflineSyncService.sync'
+        context: 'OfflineSyncService.sync',
       });
-      
+
       // エラー時は指数バックオフでリトライ
       this.scheduleRetry();
     }
@@ -143,10 +143,10 @@ export class OfflineSyncService {
     if (this.retryTimeout) {
       return;
     }
-    
+
     // 最初は5秒後、その後は倍々で増やす（最大5分）
     const retryDelay = Math.min(5000 * Math.pow(2, this.getRetryCount()), 300000);
-    
+
     this.retryTimeout = setTimeout(() => {
       this.retryTimeout = null;
       this.triggerSync();
@@ -166,12 +166,12 @@ export class OfflineSyncService {
    */
   cleanup() {
     this.stopPeriodicSync();
-    
+
     if (this.retryTimeout) {
       clearTimeout(this.retryTimeout);
       this.retryTimeout = null;
     }
-    
+
     if (this.networkListener) {
       this.networkListener();
       this.networkListener = null;

@@ -36,7 +36,9 @@ describe('useDataSync', () => {
 
     vi.mocked(usePostStore).subscribe = mockPostStoreSubscribe;
     vi.mocked(useTopicStore).subscribe = mockTopicStoreSubscribe;
-    vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: true } as ReturnType<typeof useAuthStore>);
+    vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: true } as ReturnType<
+      typeof useAuthStore
+    >);
   });
 
   afterEach(() => {
@@ -45,7 +47,9 @@ describe('useDataSync', () => {
   });
 
   it('should not setup subscriptions when not authenticated', () => {
-    vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: false } as ReturnType<typeof useAuthStore>);
+    vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: false } as ReturnType<
+      typeof useAuthStore
+    >);
 
     renderHook(() => useDataSync(), { wrapper });
 

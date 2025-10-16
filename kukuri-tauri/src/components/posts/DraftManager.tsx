@@ -45,9 +45,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
 
   const getPreview = (content: string, maxLength = 100) => {
     const preview = content.replace(/\n/g, ' ').trim();
-    return preview.length > maxLength
-      ? preview.substring(0, maxLength) + '...'
-      : preview;
+    return preview.length > maxLength ? preview.substring(0, maxLength) + '...' : preview;
   };
 
   if (drafts.length === 0) {
@@ -92,7 +90,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
                       <p className="text-sm line-clamp-2">
                         {getPreview(draft.content) || '（内容なし）'}
                       </p>
-                      
+
                       {/* Metadata */}
                       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                         {draft.topicName && (
@@ -101,8 +99,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
                             <span>{draft.topicName}</span>
                           </div>
                         )}
-                        
-                        
+
                         <div className="flex items-center gap-1 ml-auto">
                           <Clock className="w-3 h-3" />
                           <span>更新: {formatDate(draft.updatedAt)}</span>

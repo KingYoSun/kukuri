@@ -125,7 +125,7 @@ describe('TopicCard', () => {
 
   it('ローディング中はボタンが無効化される', async () => {
     // joinTopicを遅延させる
-    mockJoinTopic.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
+    mockJoinTopic.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 100)));
 
     render(<TopicCard topic={mockTopic} />);
 
@@ -180,7 +180,7 @@ describe('TopicCard', () => {
       ...mockTopic,
       lastActive: fiveMinutesAgo,
     };
-    
+
     render(<TopicCard topic={topicWithPastActivity} />);
 
     // 相対時間表示を確認（「前」または「ago」が含まれる）
@@ -208,7 +208,7 @@ describe('TopicCard', () => {
   it('トピック名をクリックするとナビゲートされる', async () => {
     const mockNavigate = vi.fn();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-    
+
     render(<TopicCard topic={mockTopic} />);
 
     const topicTitle = screen.getByText(mockTopic.name);

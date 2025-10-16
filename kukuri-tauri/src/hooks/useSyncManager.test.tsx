@@ -358,9 +358,12 @@ describe('useSyncManager', () => {
         vi.advanceTimersByTime(2000);
       });
 
-      await waitFor(() => {
-        expect(syncEngine.performDifferentialSync).toHaveBeenCalledWith(mockPendingActions);
-      }, { timeout: 5000 });
+      await waitFor(
+        () => {
+          expect(syncEngine.performDifferentialSync).toHaveBeenCalledWith(mockPendingActions);
+        },
+        { timeout: 5000 },
+      );
     }, 15000);
   });
 });

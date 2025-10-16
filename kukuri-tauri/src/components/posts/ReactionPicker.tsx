@@ -13,8 +13,22 @@ interface ReactionPickerProps {
 
 // よく使われるリアクション絵文字
 const POPULAR_REACTIONS = [
-  '👍', '❤️', '😄', '😂', '😮', '😢', '😡', '🔥',
-  '💯', '🎉', '🚀', '👀', '🤔', '👏', '💪', '🙏',
+  '👍',
+  '❤️',
+  '😄',
+  '😂',
+  '😮',
+  '😢',
+  '😡',
+  '🔥',
+  '💯',
+  '🎉',
+  '🚀',
+  '👀',
+  '🤔',
+  '👏',
+  '💪',
+  '🙏',
 ];
 
 export function ReactionPicker({ postId, topicId }: ReactionPickerProps) {

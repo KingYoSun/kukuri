@@ -5,7 +5,7 @@ import { errorHandler } from '@/lib/errorHandler';
 interface BookmarkState {
   bookmarkedPostIds: Set<string>;
   isLoading: boolean;
-  
+
   // Actions
   fetchBookmarks: () => Promise<void>;
   toggleBookmark: (postId: string) => Promise<void>;
@@ -34,7 +34,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
 
   toggleBookmark: async (postId: string) => {
     const isCurrentlyBookmarked = get().isBookmarked(postId);
-    
+
     try {
       if (isCurrentlyBookmarked) {
         await TauriApi.unbookmarkPost(postId);
@@ -55,7 +55,9 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       errorHandler.log('Failed to toggle bookmark', error, {
         context: 'BookmarkStore.toggleBookmark',
         showToast: true,
-        toastTitle: isCurrentlyBookmarked ? 'ブックマークの解除に失敗しました' : 'ブックマークの追加に失敗しました',
+        toastTitle: isCurrentlyBookmarked
+          ? 'ブックマークの解除に失敗しました'
+          : 'ブックマークの追加に失敗しました',
       });
       throw error;
     }

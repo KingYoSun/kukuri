@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, black_box, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use tokio::runtime::Runtime;
 
 fn benchmark_single_vs_batch_posts(c: &mut Criterion) {

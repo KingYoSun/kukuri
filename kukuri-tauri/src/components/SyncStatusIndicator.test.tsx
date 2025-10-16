@@ -46,13 +46,13 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       expect(screen.getByText('オフライン')).toBeInTheDocument();
     });
 
     it('同期済み状態を表示', () => {
       render(<SyncStatusIndicator />);
-      
+
       expect(screen.getByText('同期済み')).toBeInTheDocument();
     });
 
@@ -63,7 +63,7 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       expect(screen.getByText('未同期: 5件')).toBeInTheDocument();
       expect(screen.getByText('5')).toHaveClass('ml-1'); // バッジ
     });
@@ -80,7 +80,7 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       expect(screen.getByText('同期中... (3/10)')).toBeInTheDocument();
     });
 
@@ -107,7 +107,7 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       expect(screen.getByText('競合: 1件')).toBeInTheDocument();
     });
 
@@ -121,7 +121,7 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       expect(screen.getByText('同期エラー')).toBeInTheDocument();
     });
   });
@@ -129,10 +129,10 @@ describe('SyncStatusIndicator', () => {
   describe('ポップオーバー', () => {
     it('クリックでポップオーバーを開く', async () => {
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         expect(screen.getByText('接続状態')).toBeInTheDocument();
       });
@@ -151,10 +151,10 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         expect(screen.getByText('同期進捗')).toBeInTheDocument();
         expect(screen.getByText('5 / 10 件を同期中')).toBeInTheDocument();
@@ -168,10 +168,10 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         expect(screen.getByText('未同期アクション')).toBeInTheDocument();
         expect(screen.getByText('3件のアクションが同期待ちです')).toBeInTheDocument();
@@ -215,10 +215,10 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         expect(screen.getByText('競合検出')).toBeInTheDocument();
         expect(screen.getByText('create_post')).toBeInTheDocument();
@@ -228,7 +228,7 @@ describe('SyncStatusIndicator', () => {
 
     it('最終同期時刻を表示', async () => {
       const lastSyncTime = new Date('2024-01-01T12:00:00Z');
-      
+
       vi.mocked(useSyncManager).mockReturnValue({
         ...defaultManagerState,
         syncStatus: {
@@ -238,10 +238,10 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         expect(screen.getByText('最終同期')).toBeInTheDocument();
       });
@@ -256,15 +256,15 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         const syncButton = screen.getByText('今すぐ同期');
         fireEvent.click(syncButton);
       });
-      
+
       expect(mockTriggerManualSync).toHaveBeenCalled();
     });
 
@@ -276,10 +276,10 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         const syncButton = screen.getByText('今すぐ同期');
         expect(syncButton).toBeDisabled();
@@ -297,10 +297,10 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         const syncButton = screen.getByText('今すぐ同期');
         expect(syncButton).toBeDisabled();
@@ -309,10 +309,10 @@ describe('SyncStatusIndicator', () => {
 
     it('未同期アクションがない場合は同期ボタンを無効化', async () => {
       render(<SyncStatusIndicator />);
-      
+
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       await waitFor(() => {
         const syncButton = screen.getByText('今すぐ同期');
         expect(syncButton).toBeDisabled();
@@ -344,17 +344,17 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       // ポップオーバーを開く
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       // 競合をクリック
       await waitFor(() => {
         const conflictItem = screen.getByText('create_post');
         fireEvent.click(conflictItem);
       });
-      
+
       // ダイアログが表示される
       await waitFor(() => {
         expect(screen.getByText('競合の解決')).toBeInTheDocument();
@@ -385,23 +385,23 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       // ポップオーバーを開く
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       // 競合をクリック
       await waitFor(() => {
         const conflictItem = screen.getByText('create_post');
         fireEvent.click(conflictItem);
       });
-      
+
       // ローカルを適用ボタンをクリック
       await waitFor(() => {
         const applyLocalButton = screen.getByText('ローカルを適用');
         fireEvent.click(applyLocalButton);
       });
-      
+
       expect(mockResolveConflict).toHaveBeenCalledWith(mockConflict, 'local');
     });
 
@@ -437,23 +437,23 @@ describe('SyncStatusIndicator', () => {
       });
 
       render(<SyncStatusIndicator />);
-      
+
       // ポップオーバーを開く
       const button = screen.getByRole('button');
       fireEvent.click(button);
-      
+
       // 競合をクリック
       await waitFor(() => {
         const conflictItem = screen.getByText('create_post');
         fireEvent.click(conflictItem);
       });
-      
+
       // リモートを適用ボタンをクリック
       await waitFor(() => {
         const applyRemoteButton = screen.getByText('リモートを適用');
         fireEvent.click(applyRemoteButton);
       });
-      
+
       expect(mockResolveConflict).toHaveBeenCalledWith(mockConflict, 'remote');
     });
   });

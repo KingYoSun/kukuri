@@ -11,7 +11,7 @@ export const queryClient = new QueryClient({
         // オフラインの場合はリトライしない
         const isOnline = useOfflineStore.getState().isOnline;
         if (!isOnline) return false;
-        
+
         // オンラインの場合は3回までリトライ
         return failureCount < 3;
       },
@@ -25,7 +25,7 @@ export const queryClient = new QueryClient({
         // オフラインの場合はリトライしない
         const isOnline = useOfflineStore.getState().isOnline;
         if (!isOnline) return false;
-        
+
         // オンラインの場合は1回までリトライ
         return failureCount < 1;
       },
@@ -40,21 +40,21 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     const offlineStore = useOfflineStore.getState();
     offlineStore.setOnlineStatus(true);
-    
+
     // オンラインになったら保留中のクエリを再実行
     queryClient.resumePausedMutations();
     queryClient.invalidateQueries();
-    
+
     toast.success('オンラインに復帰しました');
   });
 
   window.addEventListener('offline', () => {
     const offlineStore = useOfflineStore.getState();
     offlineStore.setOnlineStatus(false);
-    
+
     // オフラインになったらクエリを一時停止
     queryClient.cancelQueries();
-    
+
     toast.info('オフラインモードで動作中です');
   });
 }
@@ -98,11 +98,11 @@ export const cacheUtils = {
   isCacheValid: (queryKey: string[]): boolean => {
     const state = queryClient.getQueryState(queryKey);
     if (!state) return false;
-    
+
     const now = Date.now();
     const dataUpdatedAt = state.dataUpdatedAt;
     const staleTime = 1000 * 60 * 5; // 5分
-    
+
     return now - dataUpdatedAt < staleTime;
   },
 
@@ -111,14 +111,9 @@ export const cacheUtils = {
    */
   optimizeForOffline: () => {
     // 重要なデータのキャッシュ時間を延長
-    const importantQueries = [
-      ['topics'],
-      ['posts'],
-      ['timeline'],
-      ['bookmarks'],
-    ];
-    
-    importantQueries.forEach(queryKey => {
+    const importantQueries = [['topics'], ['posts'], ['timeline'], ['bookmarks']];
+
+    importantQueries.forEach((queryKey) => {
       const data = queryClient.getQueryData(queryKey);
       if (data) {
         queryClient.setQueryData(queryKey, data, {

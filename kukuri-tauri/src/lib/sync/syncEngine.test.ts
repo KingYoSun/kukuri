@@ -3,7 +3,6 @@ import { syncEngine } from './syncEngine';
 import type { OfflineAction, SyncConflict } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 
-
 // モックの設定
 vi.mock('@/lib/api/tauri');
 vi.mock('@/lib/api/p2p');
@@ -21,7 +20,7 @@ describe('SyncEngine', () => {
   describe('performDifferentialSync', () => {
     it('空のアクションリストで同期を実行できる', async () => {
       const result = await syncEngine.performDifferentialSync([]);
-      
+
       expect(result).toEqual({
         syncedActions: [],
         conflicts: [],
@@ -48,7 +47,7 @@ describe('SyncEngine', () => {
       vi.spyOn(syncEngine as any, 'applyAction').mockResolvedValue(undefined);
 
       const result = await syncEngine.performDifferentialSync([mockAction]);
-      
+
       expect(result.syncedActions).toHaveLength(1);
       expect(result.syncedActions[0]).toEqual(mockAction);
       expect(result.conflicts).toHaveLength(0);
@@ -82,7 +81,7 @@ describe('SyncEngine', () => {
       vi.spyOn(syncEngine as any, 'applyAction').mockResolvedValue(undefined);
 
       const result = await syncEngine.performDifferentialSync([mockAction]);
-      
+
       expect(result.syncedActions).toHaveLength(1);
       expect(result.conflicts).toHaveLength(1);
       expect(result.conflicts[0].resolution).toBe('local');
@@ -115,7 +114,7 @@ describe('SyncEngine', () => {
       vi.spyOn(syncEngine as any, 'applyAction').mockResolvedValue(undefined);
 
       const result = await syncEngine.performDifferentialSync(actions);
-      
+
       expect(result.syncedActions).toHaveLength(2);
       expect(result.totalProcessed).toBe(2);
     });
@@ -133,15 +132,16 @@ describe('SyncEngine', () => {
 
       // 長時間かかる同期をシミュレート
       vi.spyOn(syncEngine as any, 'applyAction').mockImplementation(
-        () => new Promise(resolve => setTimeout(resolve, 100))
+        () => new Promise((resolve) => setTimeout(resolve, 100)),
       );
 
       // 最初の同期を開始
       const firstSync = syncEngine.performDifferentialSync([mockAction]);
 
       // 2回目の同期を試みる
-      await expect(syncEngine.performDifferentialSync([mockAction]))
-        .rejects.toThrow('同期処理が既に実行中です');
+      await expect(syncEngine.performDifferentialSync([mockAction])).rejects.toThrow(
+        '同期処理が既に実行中です',
+      );
 
       // 最初の同期が完了するのを待つ
       await firstSync;
@@ -182,8 +182,7 @@ describe('SyncEngine', () => {
       };
 
       const oldDate = new Date(now.getTime() - 1000);
-      vi.spyOn(syncEngine as any, 'getEntityLastModified')
-        .mockResolvedValue(oldDate.toISOString());
+      vi.spyOn(syncEngine as any, 'getEntityLastModified').mockResolvedValue(oldDate.toISOString());
 
       const conflict = await syncEngine['detectConflict'](action);
       expect(conflict).toBeNull();
@@ -205,8 +204,7 @@ describe('SyncEngine', () => {
       };
 
       const newDate = new Date('2024-01-02');
-      vi.spyOn(syncEngine as any, 'getEntityLastModified')
-        .mockResolvedValue(newDate.toISOString());
+      vi.spyOn(syncEngine as any, 'getEntityLastModified').mockResolvedValue(newDate.toISOString());
 
       const conflict = await syncEngine['detectConflict'](action);
       expect(conflict).not.toBeNull();
@@ -293,7 +291,7 @@ describe('SyncEngine', () => {
       const newData = { a: 1, b: 2 };
 
       const patches = syncEngine.generateDiffPatches(oldData, newData);
-      
+
       expect(patches).toHaveLength(1);
       expect(patches[0]).toEqual({
         type: 'add',
@@ -307,7 +305,7 @@ describe('SyncEngine', () => {
       const newData = { a: 1, b: 3 };
 
       const patches = syncEngine.generateDiffPatches(oldData, newData);
-      
+
       expect(patches).toHaveLength(1);
       expect(patches[0]).toEqual({
         type: 'modify',
@@ -322,7 +320,7 @@ describe('SyncEngine', () => {
       const newData = { a: 1 };
 
       const patches = syncEngine.generateDiffPatches(oldData, newData);
-      
+
       expect(patches).toHaveLength(1);
       expect(patches[0]).toEqual({
         type: 'delete',
@@ -336,7 +334,7 @@ describe('SyncEngine', () => {
       const newData = { a: { b: 2 } };
 
       const patches = syncEngine.generateDiffPatches(oldData, newData);
-      
+
       expect(patches).toHaveLength(1);
       expect(patches[0].path).toBe('a');
     });
@@ -345,34 +343,28 @@ describe('SyncEngine', () => {
   describe('applyDiffPatches', () => {
     it('追加パッチを適用', () => {
       const data = { a: 1 };
-      const patches = [
-        { type: 'add' as const, path: 'b', value: 2 },
-      ];
+      const patches = [{ type: 'add' as const, path: 'b', value: 2 }];
 
       const result = syncEngine.applyDiffPatches(data, patches);
-      
+
       expect(result).toEqual({ a: 1, b: 2 });
     });
 
     it('変更パッチを適用', () => {
       const data = { a: 1, b: 2 };
-      const patches = [
-        { type: 'modify' as const, path: 'b', value: 3 },
-      ];
+      const patches = [{ type: 'modify' as const, path: 'b', value: 3 }];
 
       const result = syncEngine.applyDiffPatches(data, patches);
-      
+
       expect(result).toEqual({ a: 1, b: 3 });
     });
 
     it('削除パッチを適用', () => {
       const data = { a: 1, b: 2 };
-      const patches = [
-        { type: 'delete' as const, path: 'b', oldValue: 2 },
-      ];
+      const patches = [{ type: 'delete' as const, path: 'b', oldValue: 2 }];
 
       const result = syncEngine.applyDiffPatches(data, patches);
-      
+
       expect(result).toEqual({ a: 1 });
     });
 
@@ -385,7 +377,7 @@ describe('SyncEngine', () => {
       ];
 
       const result = syncEngine.applyDiffPatches(data, patches);
-      
+
       expect(result).toEqual({ a: 10, b: 2, c: 3 });
     });
   });

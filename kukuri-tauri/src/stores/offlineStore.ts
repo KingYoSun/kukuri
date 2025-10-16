@@ -25,19 +25,19 @@ interface OfflineStore extends OfflineState {
   startSync: () => void;
   endSync: () => void;
   updateLastSyncedAt: () => void;
-  
+
   // 非同期アクション
   saveOfflineAction: (request: SaveOfflineActionRequest) => Promise<void>;
   syncPendingActions: (userPubkey: string) => Promise<void>;
   loadPendingActions: (userPubkey?: string) => Promise<void>;
   cleanupExpiredCache: () => Promise<void>;
-  
+
   // 楽観的更新ヘルパー
   applyOptimisticUpdate: <T>(
     entityType: EntityType,
     entityId: string,
     originalData: T,
-    updatedData: T
+    updatedData: T,
   ) => Promise<string>;
   confirmUpdate: (updateId: string) => Promise<void>;
   rollbackUpdate: (updateId: string) => Promise<string | null>;
@@ -65,9 +65,7 @@ export const useOfflineStore = create<OfflineStore>()(
 
       removePendingAction: (localId) =>
         set((state) => ({
-          pendingActions: state.pendingActions.filter(
-            (a) => a.localId !== localId
-          ),
+          pendingActions: state.pendingActions.filter((a) => a.localId !== localId),
         })),
 
       clearPendingActions: () => set({ pendingActions: [] }),
@@ -121,14 +119,14 @@ export const useOfflineStore = create<OfflineStore>()(
         try {
           const response = await offlineApi.saveOfflineAction(request);
           get().addPendingAction(response.action);
-          
+
           // オンラインの場合は即座に同期を試みる
           if (get().isOnline && !get().isSyncing) {
             await get().syncPendingActions(request.userPubkey);
           }
         } catch (error) {
           errorHandler.log('Failed to save offline action', error, {
-            context: 'offlineStore.saveOfflineAction'
+            context: 'offlineStore.saveOfflineAction',
           });
           throw error;
         }
@@ -139,26 +137,24 @@ export const useOfflineStore = create<OfflineStore>()(
 
         try {
           set({ isSyncing: true });
-          
+
           const response = await offlineApi.syncOfflineActions({ userPubkey });
-          
+
           if (response.syncedCount > 0) {
             // 同期済みのアクションを削除
             const syncedActions = await offlineApi.getOfflineActions({
               userPubkey,
               isSynced: true,
             });
-            
+
             const syncedIds = new Set(syncedActions.map((a) => a.localId));
             set((state) => ({
-              pendingActions: state.pendingActions.filter(
-                (a) => !syncedIds.has(a.localId)
-              ),
+              pendingActions: state.pendingActions.filter((a) => !syncedIds.has(a.localId)),
             }));
           }
-          
+
           set({ lastSyncedAt: Date.now() });
-          
+
           // エラーがあった場合は再試行をスケジュール
           if (response.failedCount > 0) {
             setTimeout(() => {
@@ -167,7 +163,7 @@ export const useOfflineStore = create<OfflineStore>()(
           }
         } catch (error) {
           errorHandler.log('Sync failed', error, {
-            context: 'offlineStore.syncPendingActions'
+            context: 'offlineStore.syncPendingActions',
           });
         } finally {
           set({ isSyncing: false });
@@ -183,7 +179,7 @@ export const useOfflineStore = create<OfflineStore>()(
           set({ pendingActions: actions });
         } catch (error) {
           errorHandler.log('Failed to load pending actions', error, {
-            context: 'offlineStore.loadPendingActions'
+            context: 'offlineStore.loadPendingActions',
           });
         }
       },
@@ -191,10 +187,13 @@ export const useOfflineStore = create<OfflineStore>()(
       cleanupExpiredCache: async () => {
         try {
           const cleanedCount = await offlineApi.cleanupExpiredCache();
-          errorHandler.info(`Cleaned up ${cleanedCount} expired cache entries`, 'offlineStore.cleanupExpiredCache');
+          errorHandler.info(
+            `Cleaned up ${cleanedCount} expired cache entries`,
+            'offlineStore.cleanupExpiredCache',
+          );
         } catch (error) {
           errorHandler.log('Failed to cleanup cache', error, {
-            context: 'offlineStore.cleanupExpiredCache'
+            context: 'offlineStore.cleanupExpiredCache',
           });
         }
       },
@@ -203,14 +202,14 @@ export const useOfflineStore = create<OfflineStore>()(
       applyOptimisticUpdate: async (entityType, entityId, originalData, updatedData) => {
         const originalDataStr = JSON.stringify(originalData);
         const updatedDataStr = JSON.stringify(updatedData);
-        
+
         const updateId = await offlineApi.saveOptimisticUpdate(
           entityType,
           entityId,
           originalDataStr,
-          updatedDataStr
+          updatedDataStr,
         );
-        
+
         get().addOptimisticUpdate({
           id: 0, // サーバーから返される
           updateId,
@@ -221,7 +220,7 @@ export const useOfflineStore = create<OfflineStore>()(
           isConfirmed: false,
           createdAt: Date.now(),
         });
-        
+
         return updateId;
       },
 
@@ -256,8 +255,8 @@ export const useOfflineStore = create<OfflineStore>()(
         pendingActions: state.pendingActions,
         syncQueue: state.syncQueue,
       }),
-    }
-  )
+    },
+  ),
 );
 
 // オンライン/オフライン状態の監視を設定
@@ -265,7 +264,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     const store = useOfflineStore.getState();
     store.setOnlineStatus(true);
-    
+
     // オンラインになったら自動的に同期を開始
     const userPubkey = localStorage.getItem('currentUserPubkey');
     if (userPubkey && store.pendingActions.length > 0) {
@@ -278,7 +277,10 @@ if (typeof window !== 'undefined') {
   });
 
   // 定期的なキャッシュクリーンアップ（1時間ごと）
-  setInterval(() => {
-    useOfflineStore.getState().cleanupExpiredCache();
-  }, 60 * 60 * 1000);
+  setInterval(
+    () => {
+      useOfflineStore.getState().cleanupExpiredCache();
+    },
+    60 * 60 * 1000,
+  );
 }

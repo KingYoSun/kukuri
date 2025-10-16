@@ -54,11 +54,9 @@ mod tests {
     }
 
     fn nostr_to_domain(ev: &nostr_sdk::Event) -> Event {
-        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(
-            ev.created_at.as_u64() as i64,
-            0,
-        )
-        .unwrap();
+        let created_at =
+            chrono::DateTime::<chrono::Utc>::from_timestamp(ev.created_at.as_u64() as i64, 0)
+                .unwrap();
         Event {
             id: ev.id.to_string(),
             pubkey: ev.pubkey.to_string(),
@@ -103,9 +101,7 @@ mod tests {
             }
         }
         if addrs.is_empty() {
-            eprintln!(
-                "skipping {test_name} (no usable bootstrap node addresses)"
-            );
+            eprintln!("skipping {test_name} (no usable bootstrap node addresses)");
             return None;
         }
         log_step!(

@@ -53,10 +53,10 @@ describe('topicStore', () => {
 
       // Nostrサブスクリプションが遅延して呼ばれることを確認
       expect(nostrApi.subscribeToTopic).not.toHaveBeenCalled();
-      
+
       // 500ms待つ
       await vi.advanceTimersByTimeAsync(500);
-      
+
       expect(nostrApi.subscribeToTopic).toHaveBeenCalledWith(topicId);
     });
 
@@ -99,7 +99,7 @@ describe('topicStore', () => {
           context: 'TopicStore.joinTopic',
           showToast: true,
           toastTitle: 'トピックへの参加に失敗しました',
-        })
+        }),
       );
     });
 
@@ -109,7 +109,9 @@ describe('topicStore', () => {
 
       // P2P APIは成功、Nostr APIはエラーを返すようにモック
       vi.mocked(p2pApi.joinTopic).mockResolvedValue(undefined);
-      vi.mocked(nostrApi.subscribeToTopic).mockRejectedValue(new Error('Nostr subscription failed'));
+      vi.mocked(nostrApi.subscribeToTopic).mockRejectedValue(
+        new Error('Nostr subscription failed'),
+      );
 
       // トピックに参加
       await joinTopic(topicId);
@@ -128,7 +130,7 @@ describe('topicStore', () => {
         expect.objectContaining({
           context: 'TopicStore.joinTopic.nostrSubscribe',
           showToast: false,
-        })
+        }),
       );
     });
   });
@@ -195,7 +197,7 @@ describe('topicStore', () => {
           context: 'TopicStore.leaveTopic',
           showToast: true,
           toastTitle: 'トピックからの離脱に失敗しました',
-        })
+        }),
       );
     });
 

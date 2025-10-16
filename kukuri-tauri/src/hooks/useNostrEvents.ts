@@ -59,18 +59,29 @@ export function useNostrEvents() {
             incrementLikes(postId);
 
             // React Queryのキャッシュも更新
-            queryClient.setQueryData(['posts'], (oldData: { pages?: Array<{ posts?: Array<{ id: string; likes: number; [key: string]: unknown }> }> } | undefined) => {
-              if (!oldData) return oldData;
-              return {
-                ...oldData,
-                pages: oldData.pages?.map((page) => ({
-                  ...page,
-                  posts: page.posts?.map((post) =>
-                    post.id === postId ? { ...post, likes: post.likes + 1 } : post,
-                  ),
-                })),
-              };
-            });
+            queryClient.setQueryData(
+              ['posts'],
+              (
+                oldData:
+                  | {
+                      pages?: Array<{
+                        posts?: Array<{ id: string; likes: number; [key: string]: unknown }>;
+                      }>;
+                    }
+                  | undefined,
+              ) => {
+                if (!oldData) return oldData;
+                return {
+                  ...oldData,
+                  pages: oldData.pages?.map((page) => ({
+                    ...page,
+                    posts: page.posts?.map((post) =>
+                      post.id === postId ? { ...post, likes: post.likes + 1 } : post,
+                    ),
+                  })),
+                };
+              },
+            );
           }
         }
       } catch (error) {

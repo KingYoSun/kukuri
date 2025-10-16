@@ -26,20 +26,21 @@ export function Sidebar() {
   const navigate = useNavigate();
 
   const { getTopicMessages } = useP2P();
-  
+
   // 参加中トピックを最終活動時刻でソート
   const joinedTopicsList = useMemo(() => {
     const topicsList = joinedTopics
       .map((id) => {
         const topic = topics.get(id);
         if (!topic) return null;
-        
+
         // P2Pメッセージから最終活動時刻を取得
         const messages = getTopicMessages(id);
-        const lastMessageTime = messages.length > 0
-          ? Math.max(...messages.map((m) => m.timestamp))
-          : topic.lastActive || 0;
-        
+        const lastMessageTime =
+          messages.length > 0
+            ? Math.max(...messages.map((m) => m.timestamp))
+            : topic.lastActive || 0;
+
         return {
           ...topic,
           lastActive: lastMessageTime,
@@ -47,7 +48,7 @@ export function Sidebar() {
         };
       })
       .filter(Boolean) as NonNullable<ReturnType<typeof topics.get> & { unreadCount: number }>[];
-    
+
     // 最終活動時刻の新しい順にソート
     return topicsList.sort((a, b) => {
       const aTime = a.lastActive || 0;
@@ -117,7 +118,7 @@ export function Sidebar() {
                         locale: ja,
                       })
                     : '未投稿';
-                  
+
                   return (
                     <Button
                       key={topic.id}

@@ -59,9 +59,9 @@ export function BootstrapConfigPanel() {
         mode === 'custom' ? 'カスタムノードを保存しました' : 'デフォルト(n0)に戻しました',
         undefined,
         {
-        showToast: true,
-        toastTitle: '保存しました',
-      }
+          showToast: true,
+          toastTitle: '保存しました',
+        },
       );
     } catch (e) {
       errorHandler.log('Failed to save bootstrap config', e, {
@@ -78,7 +78,8 @@ export function BootstrapConfigPanel() {
       <CardHeader>
         <CardTitle>ブートストラップ設定</CardTitle>
         <CardDescription>
-          既定は n0 提供ノードを利用します。必要に応じてカスタムのブートストラップノード（node_id@host:port）を指定できます。
+          既定は n0
+          提供ノードを利用します。必要に応じてカスタムのブートストラップノード（node_id@host:port）を指定できます。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -127,7 +128,10 @@ export function BootstrapConfigPanel() {
                   <p className="text-sm text-muted-foreground">ノードは未指定です</p>
                 ) : (
                   nodes.map((n) => (
-                    <div key={n} className="flex items-center justify-between rounded-md border px-3 py-2">
+                    <div
+                      key={n}
+                      className="flex items-center justify-between rounded-md border px-3 py-2"
+                    >
                       <span className="font-mono text-sm truncate">{n}</span>
                       <Button size="sm" variant="ghost" onClick={() => removeNode(n)}>
                         削除

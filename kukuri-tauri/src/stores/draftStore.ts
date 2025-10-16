@@ -7,7 +7,7 @@ import { errorHandler } from '@/lib/errorHandler';
 interface DraftStore {
   drafts: PostDraft[];
   currentDraftId: string | null;
-  
+
   // Actions
   createDraft: (params: CreateDraftParams) => PostDraft;
   updateDraft: (params: UpdateDraftParams) => void;
@@ -17,7 +17,7 @@ interface DraftStore {
   getCurrentDraft: () => PostDraft | undefined;
   listDrafts: () => PostDraft[];
   clearAllDrafts: () => void;
-  
+
   // Autosave
   autosaveDraft: (params: UpdateDraftParams) => void;
 }
@@ -60,7 +60,7 @@ export const useDraftStore = create<DraftStore>()(
                   ...params,
                   updatedAt: new Date(),
                 }
-              : draft
+              : draft,
           ),
         }));
       },
@@ -87,8 +87,8 @@ export const useDraftStore = create<DraftStore>()(
       },
 
       listDrafts: () => {
-        return get().drafts.sort((a, b) => 
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        return get().drafts.sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
         );
       },
 
@@ -101,12 +101,12 @@ export const useDraftStore = create<DraftStore>()(
           const state = get();
           // Direct access to drafts array
           const existingDraft = state.drafts.find((draft) => draft.id === params.id);
-          
+
           if (existingDraft) {
             // Only update if content has changed
-            const shouldUpdate = existingDraft.content !== params.content ||
-                existingDraft.topicId !== params.topicId;
-            
+            const shouldUpdate =
+              existingDraft.content !== params.content || existingDraft.topicId !== params.topicId;
+
             if (shouldUpdate) {
               // Update draft directly by manipulating state
               set((currentState) => ({
@@ -117,7 +117,7 @@ export const useDraftStore = create<DraftStore>()(
                         ...params,
                         updatedAt: new Date(),
                       }
-                    : draft
+                    : draft,
                 ),
               }));
             }
@@ -135,6 +135,6 @@ export const useDraftStore = create<DraftStore>()(
         drafts: state.drafts,
         // Don't persist currentDraftId to avoid confusion on reload
       }),
-    }
-  )
+    },
+  ),
 );
