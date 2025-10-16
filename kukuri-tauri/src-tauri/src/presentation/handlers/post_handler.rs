@@ -28,7 +28,7 @@ impl PostHandler {
 
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<PostResponse, AppError> {
         // 入力検証
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // 現在のユーザーを取得
         let current_user =
@@ -118,14 +118,14 @@ impl PostHandler {
     }
 
     pub async fn delete_post(&self, request: DeletePostRequest) -> Result<(), AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         self.post_service.delete_post(&request.post_id).await?;
         Ok(())
     }
 
     pub async fn react_to_post(&self, request: ReactToPostRequest) -> Result<(), AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         self.post_service
             .react_to_post(&request.post_id, &request.reaction)
@@ -138,7 +138,7 @@ impl PostHandler {
         request: BookmarkPostRequest,
         user_pubkey: &str,
     ) -> Result<(), AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         self.post_service
             .bookmark_post(&request.post_id, user_pubkey)
@@ -151,7 +151,7 @@ impl PostHandler {
         request: BookmarkPostRequest,
         user_pubkey: &str,
     ) -> Result<(), AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         self.post_service
             .unbookmark_post(&request.post_id, user_pubkey)
@@ -176,7 +176,7 @@ impl PostHandler {
         &self,
         request: BatchGetPostsRequest,
     ) -> Result<Vec<PostResponse>, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // 並行して複数の投稿を取得
         let futures = request.post_ids.iter().map(|post_id| {
@@ -188,35 +188,37 @@ impl PostHandler {
         let results = join_all(futures).await;
 
         let mut posts = Vec::new();
-        for result in results {
-            if let Ok(Some(post)) = result {
-                // npub変換を並行処理
-                let npub = tokio::task::spawn_blocking({
-                    let pubkey = post.author.pubkey.clone();
-                    move || {
-                        use nostr_sdk::prelude::*;
-                        PublicKey::from_hex(&pubkey)
-                            .ok()
-                            .and_then(|pk| pk.to_bech32().ok())
-                            .unwrap_or(pubkey)
-                    }
-                })
-                .await
-                .unwrap_or_else(|_| post.author.pubkey.clone());
+        for post in results
+            .into_iter()
+            .filter_map(|result| result.ok().flatten())
+        {
+            // npub変換を並行実行
+            let author_pubkey = post.author.pubkey.clone();
+            let npub = tokio::task::spawn_blocking({
+                let pubkey = author_pubkey.clone();
+                move || {
+                    use nostr_sdk::prelude::*;
+                    PublicKey::from_hex(&pubkey)
+                        .ok()
+                        .and_then(|pk| pk.to_bech32().ok())
+                        .unwrap_or(pubkey)
+                }
+            })
+            .await
+            .unwrap_or(author_pubkey.clone());
 
-                posts.push(PostResponse {
-                    id: post.id.to_string(),
-                    content: post.content,
-                    author_pubkey: post.author.pubkey.clone(),
-                    author_npub: npub,
-                    topic_id: post.topic_id,
-                    created_at: post.created_at.timestamp(),
-                    likes: post.likes,
-                    boosts: post.boosts,
-                    replies: post.replies.len() as u32,
-                    is_synced: post.is_synced,
-                });
-            }
+            posts.push(PostResponse {
+                id: post.id.to_string(),
+                content: post.content,
+                author_pubkey: post.author.pubkey.clone(),
+                author_npub: npub,
+                topic_id: post.topic_id,
+                created_at: post.created_at.timestamp(),
+                likes: post.likes,
+                boosts: post.boosts,
+                replies: post.replies.len() as u32,
+                is_synced: post.is_synced,
+            });
         }
 
         Ok(posts)
@@ -226,7 +228,7 @@ impl PostHandler {
         &self,
         request: BatchReactRequest,
     ) -> Result<Vec<Result<(), String>>, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // 並行して複数のリアクションを処理
         let futures = request.reactions.iter().map(|reaction| {
@@ -249,7 +251,7 @@ impl PostHandler {
         request: BatchBookmarkRequest,
         user_pubkey: &str,
     ) -> Result<Vec<Result<(), String>>, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // 並行して複数のブックマークを処理
         let futures = request.post_ids.iter().map(|post_id| {

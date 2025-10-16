@@ -54,10 +54,11 @@ mod tests {
     }
 
     fn nostr_to_domain(ev: &nostr_sdk::Event) -> Event {
-        let created_at = chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(ev.created_at.as_u64() as i64, 0).unwrap(),
-            chrono::Utc,
-        );
+        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(
+            ev.created_at.as_u64() as i64,
+            0,
+        )
+        .unwrap();
         Event {
             id: ev.id.to_string(),
             pubkey: ev.pubkey.to_string(),
@@ -71,12 +72,12 @@ mod tests {
 
     fn bootstrap_context(test_name: &str) -> Option<BootstrapContext> {
         if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping {} (ENABLE_P2P_INTEGRATION!=1)", test_name);
+            eprintln!("skipping {test_name} (ENABLE_P2P_INTEGRATION!=1)");
             return None;
         }
         let raw = std::env::var("KUKURI_BOOTSTRAP_PEERS").unwrap_or_default();
         if raw.trim().is_empty() {
-            eprintln!("skipping {} (KUKURI_BOOTSTRAP_PEERS not set)", test_name);
+            eprintln!("skipping {test_name} (KUKURI_BOOTSTRAP_PEERS not set)");
             return None;
         }
         let mut hints = Vec::new();
@@ -92,19 +93,18 @@ mod tests {
                     if let Some(addr) = parsed.node_addr {
                         addrs.push(addr);
                     } else {
-                        eprintln!("bootstrap peer '{}' missing address; skipping", trimmed);
+                        eprintln!("bootstrap peer '{trimmed}' missing address; skipping");
                     }
                 }
                 Err(err) => {
-                    eprintln!("failed to parse bootstrap peer '{}': {:?}", trimmed, err);
+                    eprintln!("failed to parse bootstrap peer '{trimmed}': {err:?}");
                     return None;
                 }
             }
         }
         if addrs.is_empty() {
             eprintln!(
-                "skipping {} (no usable bootstrap node addresses)",
-                test_name
+                "skipping {test_name} (no usable bootstrap node addresses)"
             );
             return None;
         }
@@ -200,8 +200,8 @@ mod tests {
             return;
         };
         log_step!("--- test_two_nodes_connect_and_join start ---");
-        let mut svc_a = create_service(&ctx).await;
-        let mut svc_b = create_service(&ctx).await;
+        let svc_a = create_service(&ctx).await;
+        let svc_b = create_service(&ctx).await;
 
         // 同一トピックで購読/参加のみ検証（実ネットワーク経由の配送は別途環境依存のため）
         let topic = generate_topic_id("iroh-int-two-nodes");
@@ -216,13 +216,11 @@ mod tests {
         let _rx_b = svc_b.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
         log_step!("both services joined topic {}", topic);
         // 参加済みトピックに含まれることを確認
@@ -263,13 +261,11 @@ mod tests {
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
         log_step!("services joined topic {}, waiting for peer events", topic);
 
@@ -326,13 +322,11 @@ mod tests {
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
 
         let (tx_a_evt, mut rx_a_evt) = unbounded_channel();
@@ -388,7 +382,7 @@ mod tests {
         let e_tag = received_reply
             .tags
             .iter()
-            .find(|tag| tag.get(0).map(|s| s.as_str()) == Some("e"))
+            .find(|tag| tag.first().map(|s| s.as_str()) == Some("e"))
             .expect("reply event missing e tag");
         assert_eq!(e_tag.get(1).map(|s| s.as_str()), Some(root_id.as_str()));
         assert_eq!(e_tag.get(3).map(|s| s.as_str()), Some("reply"));
@@ -396,7 +390,7 @@ mod tests {
         let p_tag = received_reply
             .tags
             .iter()
-            .find(|tag| tag.get(0).map(|s| s.as_str()) == Some("p"))
+            .find(|tag| tag.first().map(|s| s.as_str()) == Some("p"))
             .expect("reply event missing p tag");
         assert_eq!(p_tag.get(1).map(|s| s.as_str()), Some(root_pubkey.as_str()));
         log_step!("--- test_p2p_reply_flow end ---");
@@ -428,13 +422,11 @@ mod tests {
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
 
         let (tx_a_evt, mut rx_a_evt) = unbounded_channel();
@@ -489,7 +481,7 @@ mod tests {
         let e_tag = received_quote
             .tags
             .iter()
-            .find(|tag| tag.get(0).map(|s| s.as_str()) == Some("e"))
+            .find(|tag| tag.first().map(|s| s.as_str()) == Some("e"))
             .expect("quote event missing e tag");
         assert_eq!(e_tag.get(1).map(|s| s.as_str()), Some(base_id.as_str()));
         assert_eq!(e_tag.get(3).map(|s| s.as_str()), Some("mention"));
@@ -497,7 +489,7 @@ mod tests {
         let p_tag = received_quote
             .tags
             .iter()
-            .find(|tag| tag.get(0).map(|s| s.as_str()) == Some("p"))
+            .find(|tag| tag.first().map(|s| s.as_str()) == Some("p"))
             .expect("quote event missing p tag");
         assert_eq!(p_tag.get(1).map(|s| s.as_str()), Some(base_pubkey.as_str()));
         log_step!("--- test_p2p_quote_flow end ---");
@@ -509,8 +501,8 @@ mod tests {
             return;
         };
         log_step!("--- test_multiple_subscribers_receive start ---");
-        let mut svc_a = create_service(&ctx).await;
-        let mut svc_b = create_service(&ctx).await;
+        let svc_a = create_service(&ctx).await;
+        let svc_b = create_service(&ctx).await;
 
         let topic = generate_topic_id("iroh-int-multi-subs");
         let local_hints = vec![svc_a.local_peer_hint(), svc_b.local_peer_hint()];
@@ -526,13 +518,11 @@ mod tests {
         let mut rx2 = svc_b.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
 
         sleep(Duration::from_secs(1)).await;
@@ -566,9 +556,9 @@ mod tests {
         };
         log_step!("--- test_multi_node_broadcast_three_nodes start ---");
 
-        let mut svc_a = create_service(&ctx).await;
-        let mut svc_b = create_service(&ctx).await;
-        let mut svc_c = create_service(&ctx).await;
+        let svc_a = create_service(&ctx).await;
+        let svc_b = create_service(&ctx).await;
+        let svc_c = create_service(&ctx).await;
 
         let topic = generate_topic_id("iroh-int-multi-node");
         let local_hints = vec![
@@ -590,19 +580,16 @@ mod tests {
         let mut rx_c = svc_c.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_c, &topic, Duration::from_secs(15)).await,
-            "svc_c failed to join topic {}",
-            topic
+            "svc_c failed to join topic {topic}"
         );
         // 送信側Aはjoinのみ
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
         log_step!("all nodes joined topic {}", topic);
 
@@ -655,13 +642,11 @@ mod tests {
         let mut rx_b = svc_b.subscribe(&topic).await.unwrap();
         assert!(
             wait_for_topic_membership(&svc_a, &topic, Duration::from_secs(15)).await,
-            "svc_a failed to join topic {}",
-            topic
+            "svc_a failed to join topic {topic}"
         );
         assert!(
             wait_for_topic_membership(&svc_b, &topic, Duration::from_secs(15)).await,
-            "svc_b failed to join topic {}",
-            topic
+            "svc_b failed to join topic {topic}"
         );
 
         let (tx_a_evt, mut rx_a_evt) = unbounded_channel();
@@ -710,9 +695,7 @@ mod tests {
         }
         assert!(
             count_a >= 3 || count_b >= 3,
-            "insufficient messages received: a={}, b={}",
-            count_a,
-            count_b
+            "insufficient messages received: a={count_a}, b={count_b}"
         );
         log_step!(
             "--- test_peer_connection_stability_bidirectional end (counts a={}, b={}) ---",

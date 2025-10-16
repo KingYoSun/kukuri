@@ -26,11 +26,11 @@ impl BootstrapConfig {
     /// 設定ファイルから読み込み
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, AppError> {
         let content = fs::read_to_string(path).map_err(|e| {
-            AppError::ConfigurationError(format!("Failed to read bootstrap config: {}", e))
+            AppError::ConfigurationError(format!("Failed to read bootstrap config: {e}"))
         })?;
 
         let config: BootstrapConfig = serde_json::from_str(&content).map_err(|e| {
-            AppError::ConfigurationError(format!("Failed to parse bootstrap config: {}", e))
+            AppError::ConfigurationError(format!("Failed to parse bootstrap config: {e}"))
         })?;
 
         Ok(config)
@@ -238,10 +238,10 @@ pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
         nodes: nodes.to_vec(),
     };
     let json = serde_json::to_string_pretty(&cfg).map_err(|e| {
-        AppError::ConfigurationError(format!("Failed to serialize user bootstrap: {}", e))
+        AppError::ConfigurationError(format!("Failed to serialize user bootstrap: {e}"))
     })?;
     fs::write(&path, json).map_err(|e| {
-        AppError::ConfigurationError(format!("Failed to write user bootstrap file: {}", e))
+        AppError::ConfigurationError(format!("Failed to write user bootstrap file: {e}"))
     })?;
     info!(
         "Saved user bootstrap nodes to {:?} ({} entries)",
@@ -256,7 +256,7 @@ pub fn clear_user_bootstrap_nodes() -> Result<(), AppError> {
     let path = user_config_path();
     if path.exists() {
         fs::remove_file(&path).map_err(|e| {
-            AppError::ConfigurationError(format!("Failed to remove user bootstrap file: {}", e))
+            AppError::ConfigurationError(format!("Failed to remove user bootstrap file: {e}"))
         })?;
         info!("Removed user bootstrap config at {:?}", path);
     }

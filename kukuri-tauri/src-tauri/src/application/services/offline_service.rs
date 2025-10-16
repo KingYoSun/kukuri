@@ -150,7 +150,7 @@ impl OfflineServiceTrait for OfflineService {
         // TODO: Repositoryを通じてオフラインアクションを取得
         // フィルタリング条件を適用
         let _limit = limit.unwrap_or(100);
-        let mut actions = Vec::new();
+        let actions = Vec::new();
 
         // デモデータを返す
         if entity_type.is_some() || entity_id.is_some() || status.is_some() {

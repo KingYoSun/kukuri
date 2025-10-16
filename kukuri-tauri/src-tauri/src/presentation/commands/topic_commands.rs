@@ -24,7 +24,7 @@ pub async fn create_topic(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -70,7 +70,7 @@ pub async fn get_joined_topics(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -92,7 +92,7 @@ pub async fn update_topic(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -111,7 +111,7 @@ pub async fn delete_topic(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -130,7 +130,7 @@ pub async fn join_topic(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -152,7 +152,7 @@ pub async fn leave_topic(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 

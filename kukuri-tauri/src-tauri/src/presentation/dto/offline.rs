@@ -125,7 +125,7 @@ impl Validate for AddToSyncQueueRequest {
             return Err("Data is required".to_string());
         }
         if let Some(priority) = self.priority {
-            if priority < 0 || priority > 10 {
+            if !(0..=10).contains(&priority) {
                 return Err("Priority must be between 0 and 10".to_string());
             }
         }
@@ -203,8 +203,7 @@ impl Validate for UpdateSyncStatusRequest {
         let valid_statuses = ["pending", "syncing", "synced", "failed", "conflict"];
         if !valid_statuses.contains(&self.sync_status.as_str()) {
             return Err(format!(
-                "Invalid sync status. Must be one of: {:?}",
-                valid_statuses
+                "Invalid sync status. Must be one of: {valid_statuses:?}"
             ));
         }
         Ok(())

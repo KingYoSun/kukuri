@@ -1,4 +1,4 @@
-use crate::domain::entities::{Event, Post, Topic, User, UserMetadata};
+use crate::domain::entities::{Event, Post, Topic, User};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 

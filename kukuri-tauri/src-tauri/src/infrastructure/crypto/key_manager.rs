@@ -105,11 +105,11 @@ impl KeyManager for DefaultKeyManager {
         let npub = keys
             .public_key()
             .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?;
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
         let nsec = keys
             .secret_key()
             .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?;
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
 
         let keypair = KeyPair {
             public_key,
@@ -128,7 +128,7 @@ impl KeyManager for DefaultKeyManager {
 
     async fn import_private_key(&self, nsec: &str) -> Result<KeyPair, AppError> {
         let secret_key = SecretKey::from_bech32(nsec)
-            .map_err(|e| AppError::Crypto(format!("Invalid nsec: {:?}", e)))?;
+            .map_err(|e| AppError::Crypto(format!("Invalid nsec: {e:?}")))?;
         let keys = Keys::new(secret_key);
 
         let public_key = keys.public_key().to_hex();
@@ -136,7 +136,7 @@ impl KeyManager for DefaultKeyManager {
         let npub = keys
             .public_key()
             .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?;
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
 
         let keypair = KeyPair {
             public_key,
@@ -159,7 +159,7 @@ impl KeyManager for DefaultKeyManager {
             .stored_keys
             .get(npub)
             .map(|kp| kp.nsec.clone())
-            .ok_or_else(|| AppError::NotFound(format!("Key not found: {}", npub)))
+            .ok_or_else(|| AppError::NotFound(format!("Key not found: {npub}")))
     }
 
     async fn get_public_key(&self, npub: &str) -> Result<String, AppError> {
@@ -168,7 +168,7 @@ impl KeyManager for DefaultKeyManager {
             .stored_keys
             .get(npub)
             .map(|kp| kp.public_key.clone())
-            .ok_or_else(|| AppError::NotFound(format!("Key not found: {}", npub)))
+            .ok_or_else(|| AppError::NotFound(format!("Key not found: {npub}")))
     }
 
     async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), AppError> {
@@ -187,7 +187,7 @@ impl KeyManager for DefaultKeyManager {
             if keys
                 .public_key()
                 .to_bech32()
-                .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {:?}", e)))?
+                .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?
                 == npub
             {
                 inner.keys = None;

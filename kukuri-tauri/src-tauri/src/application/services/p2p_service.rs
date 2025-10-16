@@ -257,7 +257,7 @@ mod tests {
 
         async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
             let addresses = self.addresses.lock().unwrap();
-            Ok(addresses.clone().unwrap_or_else(|| vec![]))
+            Ok(addresses.clone().unwrap_or_else(std::vec::Vec::new))
         }
     }
 

@@ -25,7 +25,7 @@ pub async fn create_post(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -61,7 +61,7 @@ pub async fn delete_post(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -83,7 +83,7 @@ pub async fn react_to_post(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -105,7 +105,7 @@ pub async fn bookmark_post(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -127,7 +127,7 @@ pub async fn unbookmark_post(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -162,7 +162,7 @@ pub async fn get_bookmarked_post_ids(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -199,7 +199,7 @@ pub async fn batch_react(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 
@@ -221,7 +221,7 @@ pub async fn batch_bookmark(
         .key_manager
         .get_keys()
         .await
-        .map_err(|e| format!("ログインが必要です: {}", e))?
+        .map_err(|e| format!("ログインが必要です: {e}"))?
         .public_key()
         .to_hex();
 

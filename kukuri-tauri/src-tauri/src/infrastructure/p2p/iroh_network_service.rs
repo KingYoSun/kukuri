@@ -36,7 +36,7 @@ impl IrohNetworkService {
         let endpoint = builder
             .bind()
             .await
-            .map_err(|e| AppError::P2PError(format!("Failed to bind endpoint: {:?}", e)))?;
+            .map_err(|e| AppError::P2PError(format!("Failed to bind endpoint: {e:?}")))?;
 
         // Routerの作成（Gossipプロトコルは別で設定）
         let router = Router::builder(endpoint.clone()).spawn();
@@ -90,7 +90,7 @@ impl IrohNetworkService {
         let node_addr = self.endpoint.node_addr();
         let mut out = Vec::new();
         for addr in node_addr.direct_addresses() {
-            out.push(format!("{}@{}", node_id, addr));
+            out.push(format!("{node_id}@{addr}"));
         }
         if out.is_empty() {
             out.push(node_id);
@@ -166,7 +166,7 @@ impl IrohNetworkService {
     pub async fn rotate_dht_secret(&self) -> Result<(), AppError> {
         secret::rotate_secret()
             .await
-            .map_err(|e| AppError::P2PError(format!("Failed to rotate secret: {:?}", e)))?;
+            .map_err(|e| AppError::P2PError(format!("Failed to rotate secret: {e:?}")))?;
         tracing::info!("DHT shared secret rotated");
         Ok(())
     }
@@ -213,10 +213,10 @@ impl NetworkService for IrohNetworkService {
         }
 
         let node_id =
-            NodeId::from_str(parts[0]).map_err(|e| format!("Failed to parse node ID: {}", e))?;
+            NodeId::from_str(parts[0]).map_err(|e| format!("Failed to parse node ID: {e}"))?;
         let socket_addr: SocketAddr = parts[1]
             .parse()
-            .map_err(|e| format!("Failed to parse socket address: {}", e))?;
+            .map_err(|e| format!("Failed to parse socket address: {e}"))?;
 
         // NodeAddrを構築
         let node_addr = iroh::NodeAddr::new(node_id).with_direct_addresses([socket_addr]);
@@ -225,7 +225,7 @@ impl NetworkService for IrohNetworkService {
         self.endpoint
             .connect(node_addr.clone(), iroh_gossip::ALPN)
             .await
-            .map_err(|e| format!("Failed to connect to peer: {}", e))?;
+            .map_err(|e| format!("Failed to connect to peer: {e}"))?;
 
         // ピアリストに追加
         let mut peers = self.peers.write().await;

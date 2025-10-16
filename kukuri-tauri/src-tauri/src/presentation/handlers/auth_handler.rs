@@ -34,7 +34,7 @@ impl AuthHandler {
         &self,
         request: LoginWithNsecRequest,
     ) -> Result<LoginResponse, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         let user = self.auth_service.login_with_nsec(&request.nsec).await?;
 

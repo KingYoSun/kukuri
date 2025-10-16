@@ -41,7 +41,7 @@ impl DhtEventHandler {
     async fn deserialize_message(&self, data: &[u8]) -> Result<Event, AppError> {
         bincode::serde::decode_from_slice::<Event, _>(data, bincode::config::standard())
             .map(|(event, _)| event)
-            .map_err(|e| AppError::DeserializationError(format!("Failed to deserialize: {:?}", e)))
+            .map_err(|e| AppError::DeserializationError(format!("Failed to deserialize: {e:?}")))
     }
 }
 
@@ -81,7 +81,7 @@ impl DhtIntegration {
     pub async fn broadcast_event(&self, topic: &str, event: &Event) -> Result<(), AppError> {
         // イベントをシリアライズ
         let message = bincode::serde::encode_to_vec(event, bincode::config::standard())
-            .map_err(|e| AppError::SerializationError(format!("Failed to serialize: {:?}", e)))?;
+            .map_err(|e| AppError::SerializationError(format!("Failed to serialize: {e:?}")))?;
 
         // DHTにブロードキャスト
         self.dht_gossip.broadcast(topic.as_bytes(), message).await?;

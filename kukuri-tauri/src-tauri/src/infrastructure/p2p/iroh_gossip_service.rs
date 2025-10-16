@@ -70,7 +70,7 @@ impl IrohGossipService {
         node_addr
             .direct_addresses()
             .next()
-            .map(|addr| format!("{}@{}", node_id, addr))
+            .map(|addr| format!("{node_id}@{addr}"))
     }
 
     fn create_topic_id(topic: &str) -> TopicId {
@@ -189,9 +189,9 @@ impl GossipService for IrohGossipService {
             .gossip
             .subscribe(topic_id, peer_ids.clone())
             .await
-            .map_err(|e| AppError::P2PError(format!("Failed to subscribe to topic: {:?}", e)))?;
+            .map_err(|e| AppError::P2PError(format!("Failed to subscribe to topic: {e:?}")))?;
 
-        let (mut sender_handle, mut receiver) = gossip_topic.split();
+        let (sender_handle, mut receiver) = gossip_topic.split();
 
         if !peer_ids.is_empty() {
             if let Err(e) = sender_handle.join_peers(peer_ids.clone()).await {
@@ -209,8 +209,7 @@ impl GossipService for IrohGossipService {
         match timeout(wait_duration, receiver.joined()).await {
             Ok(Ok(peer)) => {
                 eprintln!(
-                    "[iroh_gossip_service] first neighbor joined for topic {} ({:?})",
-                    topic, peer
+                    "[iroh_gossip_service] first neighbor joined for topic {topic} ({peer:?})"
                 );
             }
             Ok(Err(e)) => {
@@ -378,16 +377,16 @@ impl GossipService for IrohGossipService {
             let sender = handle.sender.clone();
             drop(topics);
 
-            let mut guard = sender.lock().await;
+            let guard = sender.lock().await;
             guard
                 .broadcast(message_bytes.into())
                 .await
-                .map_err(|e| AppError::P2PError(format!("Failed to broadcast: {:?}", e)))?;
+                .map_err(|e| AppError::P2PError(format!("Failed to broadcast: {e:?}")))?;
 
             tracing::debug!("Broadcasted event to topic {}", topic);
             Ok(())
         } else {
-            Err(format!("Not joined to topic: {}", topic).into())
+            Err(format!("Not joined to topic: {topic}").into())
         }
     }
 
@@ -406,7 +405,7 @@ impl GossipService for IrohGossipService {
             }
             Ok(rx)
         } else {
-            Err(format!("Not joined to topic: {}", topic).into())
+            Err(format!("Not joined to topic: {topic}").into())
         }
     }
 
@@ -429,7 +428,7 @@ impl GossipService for IrohGossipService {
                 .map(|peer_id: ()| String::new())
                 .collect())
         } else {
-            Err(format!("Not joined to topic: {}", topic).into())
+            Err(format!("Not joined to topic: {topic}").into())
         }
     }
 
@@ -446,7 +445,7 @@ impl GossipService for IrohGossipService {
             );
             Ok(())
         } else {
-            Err(format!("Not joined to topic: {}", topic).into())
+            Err(format!("Not joined to topic: {topic}").into())
         }
     }
 }
@@ -459,7 +458,7 @@ mod tests {
 
     fn should_run_p2p_tests(test_name: &str) -> bool {
         if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!("skipping {} (ENABLE_P2P_INTEGRATION!=1)", test_name);
+            eprintln!("skipping {test_name} (ENABLE_P2P_INTEGRATION!=1)");
             false
         } else {
             true

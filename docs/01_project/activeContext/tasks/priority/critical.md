@@ -1,10 +1,11 @@
 # 最重要タスク（Critical）
 
-最終更新日: 2025年09月15日
+最終更新日: 2025年10月16日
 
 目的: 今後直近で着手すべき最重要タスクの一覧。着手時は本ファイルから `tasks/status/in_progress.md` へ移動して進捗を管理します。
 
 移動済みメモ
+- GitHub Actions ワークフロー失敗調査を `tasks/status/in_progress.md` に移動（2025年10月16日着手）
 - Iroh DHT/Discovery 残タスクは `tasks/status/in_progress.md` に移動（2025年09月15日）
 
 方針更新（2025年09月15日）

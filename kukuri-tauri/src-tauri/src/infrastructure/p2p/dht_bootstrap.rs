@@ -63,7 +63,7 @@ impl DhtGossip {
                     error = ?e,
                     "Failed to join DHT topic"
                 );
-                AppError::P2PError(format!("Failed to join topic: {:?}", e))
+                AppError::P2PError(format!("Failed to join topic: {e:?}"))
             })?;
 
         // Sender を保存（Receiver は破棄しても参加状態は維持される）
@@ -143,7 +143,7 @@ impl DhtGossip {
                             error = ?e,
                             "Failed to lazily subscribe before broadcast"
                         );
-                        AppError::P2PError(format!("Failed to subscribe before broadcast: {:?}", e))
+                        AppError::P2PError(format!("Failed to subscribe before broadcast: {e:?}"))
                     })?;
                 let (sender, _receiver) = topic.split();
                 let sender = Arc::new(TokioMutex::new(sender));
@@ -154,7 +154,7 @@ impl DhtGossip {
         };
 
         // ブロードキャスト
-        let mut guard = sender.lock().await;
+        let guard = sender.lock().await;
         let res = guard.broadcast(message.into()).await;
 
         match res {
@@ -182,7 +182,7 @@ impl DhtGossip {
                     error = ?e,
                     "Failed to broadcast gossip message"
                 );
-                Err(AppError::P2PError(format!("Failed to broadcast: {:?}", e)))
+                Err(AppError::P2PError(format!("Failed to broadcast: {e:?}")))
             }
         }
     }
@@ -202,7 +202,7 @@ impl DhtGossip {
         let bytes = topic_id.as_bytes();
         let mut s = String::with_capacity(64);
         for b in bytes {
-            let _ = write!(&mut s, "{:02x}", b);
+            let _ = write!(&mut s, "{b:02x}");
         }
         s
     }
@@ -271,7 +271,6 @@ pub mod fallback {
     use super::*;
     use crate::infrastructure::p2p::bootstrap_config;
     use iroh::NodeAddr;
-    use std::str::FromStr;
 
     /// ハードコードされたブートストラップノード（将来的に設定ファイルから読み込み）
     /// 形式: "NodeId@Address" (例: "abc123...@192.168.1.1:11204")

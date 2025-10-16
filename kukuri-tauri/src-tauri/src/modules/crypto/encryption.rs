@@ -73,7 +73,9 @@ fn derive_key_from_password(password: &str) -> Key<Aes256Gcm> {
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());
     let result = hasher.finalize();
-    *Key::<Aes256Gcm>::from_slice(&result)
+    let mut key = Key::<Aes256Gcm>::default();
+    key.copy_from_slice(&result);
+    key
 }
 
 #[cfg(test)]

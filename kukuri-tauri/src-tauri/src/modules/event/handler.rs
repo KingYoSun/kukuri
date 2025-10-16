@@ -105,18 +105,15 @@ impl EventHandler {
             // 対象: Hashtag("t") と Custom("topic")
             for tag in event.tags.iter() {
                 if let Some(std) = tag.as_standardized() {
-                    match std {
-                        nostr_sdk::TagStandard::Hashtag(topic) => {
-                            let _ = sqlx::query(
-                                r#"INSERT OR IGNORE INTO event_topics (event_id, topic_id, created_at) VALUES (?1, ?2, ?3)"#,
-                            )
-                            .bind(event.id.to_string())
-                            .bind(topic)
-                            .bind(chrono::Utc::now().timestamp_millis())
-                            .execute(pool.as_ref())
-                            .await;
-                        }
-                        _ => {}
+                    if let nostr_sdk::TagStandard::Hashtag(topic) = std {
+                        let _ = sqlx::query(
+                            r#"INSERT OR IGNORE INTO event_topics (event_id, topic_id, created_at) VALUES (?1, ?2, ?3)"#,
+                        )
+                        .bind(event.id.to_string())
+                        .bind(topic)
+                        .bind(chrono::Utc::now().timestamp_millis())
+                        .execute(pool.as_ref())
+                        .await;
                     }
                 }
                 // カスタムタグ 'topic'

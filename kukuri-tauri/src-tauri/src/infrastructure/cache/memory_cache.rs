@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -134,7 +133,7 @@ impl PostCacheService {
     }
 
     pub async fn get_post(&self, post_id: &str) -> Option<crate::domain::entities::post::Post> {
-        let key = format!("post:{}", post_id);
+        let key = format!("post:{post_id}");
         self.cache.get(&key).await
     }
 
@@ -143,7 +142,7 @@ impl PostCacheService {
         topic_id: &str,
         posts: Vec<crate::domain::entities::post::Post>,
     ) {
-        let key = format!("topic_posts:{}", topic_id);
+        let key = format!("topic_posts:{topic_id}");
         // トピック別の投稿は短めのTTL（1分）
         for post in posts {
             self.cache_post(post).await;
@@ -151,12 +150,12 @@ impl PostCacheService {
     }
 
     pub async fn invalidate_topic_posts(&self, topic_id: &str) {
-        let pattern = format!("topic_posts:{}", topic_id);
+        let pattern = format!("topic_posts:{topic_id}");
         self.cache.delete_pattern(&pattern).await;
     }
 
     pub async fn invalidate_post(&self, post_id: &str) {
-        let key = format!("post:{}", post_id);
+        let key = format!("post:{post_id}");
         self.cache.delete(&key).await;
     }
 }
@@ -180,12 +179,12 @@ impl UserCacheService {
     }
 
     pub async fn get_user(&self, pubkey: &str) -> Option<crate::domain::entities::user::User> {
-        let key = format!("user:{}", pubkey);
+        let key = format!("user:{pubkey}");
         self.cache.get(&key).await
     }
 
     pub async fn invalidate_user(&self, pubkey: &str) {
-        let key = format!("user:{}", pubkey);
+        let key = format!("user:{pubkey}");
         self.cache.delete(&key).await;
     }
 }
@@ -209,7 +208,7 @@ impl TopicCacheService {
     }
 
     pub async fn get_topic(&self, topic_id: &str) -> Option<crate::domain::entities::topic::Topic> {
-        let key = format!("topic:{}", topic_id);
+        let key = format!("topic:{topic_id}");
         self.cache.get(&key).await
     }
 
@@ -220,7 +219,7 @@ impl TopicCacheService {
     }
 
     pub async fn invalidate_topic(&self, topic_id: &str) {
-        let key = format!("topic:{}", topic_id);
+        let key = format!("topic:{topic_id}");
         self.cache.delete(&key).await;
     }
 }

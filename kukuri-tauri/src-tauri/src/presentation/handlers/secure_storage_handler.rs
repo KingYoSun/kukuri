@@ -63,7 +63,7 @@ impl SecureStorageHandler {
         &self,
         request: AddAccountRequest,
     ) -> Result<AddAccountResponse, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // nsecから公開鍵とnpubを生成
         let user = self.auth_service.login_with_nsec(&request.nsec).await?;

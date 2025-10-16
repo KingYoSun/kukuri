@@ -190,9 +190,9 @@ impl Event {
             self.content,
         ]);
         let serialized =
-            serde_json::to_vec(&arr).map_err(|e| format!("serialization error: {}", e))?;
+            serde_json::to_vec(&arr).map_err(|e| format!("serialization error: {e}"))?;
         let hash = Sha256::digest(&serialized);
-        let calc_id = format!("{:x}", hash);
+        let calc_id = format!("{hash:x}");
         if calc_id != self.id {
             return Err("id mismatch (not NIP-01 compliant)".into());
         }
@@ -233,7 +233,7 @@ impl Event {
                             "root" => root_seen += 1,
                             "reply" => reply_seen += 1,
                             "mention" => {}
-                            _ => return Err(format!("invalid e tag marker: {}", marker)),
+                            _ => return Err(format!("invalid e tag marker: {marker}")),
                         }
                     }
                 }
@@ -414,11 +414,11 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
 
-        let created_at = chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(nostr_ev.created_at.as_u64() as i64, 0)
-                .unwrap(),
-            chrono::Utc,
-        );
+        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(
+            nostr_ev.created_at.as_u64() as i64,
+            0,
+        )
+        .unwrap();
 
         let dom = super::Event {
             id: nostr_ev.id.to_string(),
@@ -440,11 +440,11 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
 
-        let created_at = chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(nostr_ev.created_at.as_u64() as i64, 0)
-                .unwrap(),
-            chrono::Utc,
-        );
+        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(
+            nostr_ev.created_at.as_u64() as i64,
+            0,
+        )
+        .unwrap();
 
         let mut dom = super::Event {
             id: nostr_ev.id.to_string(),

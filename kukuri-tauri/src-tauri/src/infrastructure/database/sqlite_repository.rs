@@ -44,7 +44,7 @@ impl PostRepository for SqliteRepository {
             "#,
         )
         .bind(&post.id)
-        .bind(&post.author.pubkey())
+        .bind(post.author.pubkey())
         .bind(&post.content)
         .bind(1) // Kind 1 for text notes
         .bind(&tags_json)
@@ -108,7 +108,7 @@ impl PostRepository for SqliteRepository {
         topic_id: &str,
         limit: usize,
     ) -> Result<Vec<Post>, AppError> {
-        let topic_tag = format!(r#"["t","{}"]"#, topic_id);
+        let topic_tag = format!(r#"["t","{topic_id}"]"#);
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, created_at, tags
@@ -753,7 +753,7 @@ impl EventRepository for SqliteRepository {
             VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&event.id.to_string())
+        .bind(event.id.to_string())
         .bind(&event.pubkey)
         .bind(&event.content)
         .bind(event.kind as i64)

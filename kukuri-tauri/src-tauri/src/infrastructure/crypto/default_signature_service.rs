@@ -36,7 +36,7 @@ impl SignatureService for DefaultSignatureService {
             .into_iter()
             .map(|t| {
                 // Convert Vec<String> to Tag
-                if t.len() > 0 {
+                if !t.is_empty() {
                     nostr_sdk::Tag::custom(nostr_sdk::TagKind::from(t[0].as_str()), t[1..].to_vec())
                 } else {
                     nostr_sdk::Tag::custom(nostr_sdk::TagKind::from(""), Vec::<String>::new())

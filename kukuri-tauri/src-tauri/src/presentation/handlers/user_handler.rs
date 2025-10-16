@@ -1,6 +1,6 @@
 use crate::{
     application::services::UserService,
-    presentation::dto::{ApiResponse, user_dto::UserProfile},
+    presentation::dto::{user_dto::UserProfile},
     shared::error::AppError,
 };
 use std::sync::Arc;
@@ -19,7 +19,7 @@ impl UserHandler {
             .user_service
             .get_user(&npub)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("User not found: {}", npub)))?;
+            .ok_or_else(|| AppError::NotFound(format!("User not found: {npub}")))?;
 
         Ok(UserProfile {
             npub: user.npub.clone(),

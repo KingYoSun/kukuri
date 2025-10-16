@@ -23,22 +23,22 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::Database(msg) => write!(f, "Database error: {}", msg),
-            AppError::Network(msg) => write!(f, "Network error: {}", msg),
-            AppError::Crypto(msg) => write!(f, "Crypto error: {}", msg),
-            AppError::Storage(msg) => write!(f, "Storage error: {}", msg),
-            AppError::Auth(msg) => write!(f, "Auth error: {}", msg),
-            AppError::Unauthorized(msg) => write!(f, "Unauthorized: {}", msg),
-            AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            AppError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
-            AppError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
-            AppError::NostrError(msg) => write!(f, "Nostr error: {}", msg),
-            AppError::P2PError(msg) => write!(f, "P2P error: {}", msg),
-            AppError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
-            AppError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
-            AppError::DeserializationError(msg) => write!(f, "Deserialization error: {}", msg),
-            AppError::NotImplemented(msg) => write!(f, "Not implemented: {}", msg),
-            AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
+            AppError::Database(msg) => write!(f, "Database error: {msg}"),
+            AppError::Network(msg) => write!(f, "Network error: {msg}"),
+            AppError::Crypto(msg) => write!(f, "Crypto error: {msg}"),
+            AppError::Storage(msg) => write!(f, "Storage error: {msg}"),
+            AppError::Auth(msg) => write!(f, "Auth error: {msg}"),
+            AppError::Unauthorized(msg) => write!(f, "Unauthorized: {msg}"),
+            AppError::NotFound(msg) => write!(f, "Not found: {msg}"),
+            AppError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
+            AppError::ValidationError(msg) => write!(f, "Validation error: {msg}"),
+            AppError::NostrError(msg) => write!(f, "Nostr error: {msg}"),
+            AppError::P2PError(msg) => write!(f, "P2P error: {msg}"),
+            AppError::ConfigurationError(msg) => write!(f, "Configuration error: {msg}"),
+            AppError::SerializationError(msg) => write!(f, "Serialization error: {msg}"),
+            AppError::DeserializationError(msg) => write!(f, "Deserialization error: {msg}"),
+            AppError::NotImplemented(msg) => write!(f, "Not implemented: {msg}"),
+            AppError::Internal(msg) => write!(f, "Internal error: {msg}"),
         }
     }
 }
@@ -125,7 +125,7 @@ impl From<sqlx::migrate::MigrateError> for AppError {
 
 impl From<iroh::endpoint::Builder> for AppError {
     fn from(err: iroh::endpoint::Builder) -> Self {
-        AppError::P2PError(format!("Endpoint builder error: {:?}", err))
+        AppError::P2PError(format!("Endpoint builder error: {err:?}"))
     }
 }
 

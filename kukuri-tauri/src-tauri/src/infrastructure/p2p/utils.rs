@@ -12,14 +12,14 @@ pub struct ParsedPeer {
 pub fn parse_node_addr(value: &str) -> Result<NodeAddr, AppError> {
     let (node_part, addr_part) = value
         .split_once('@')
-        .ok_or_else(|| AppError::P2PError(format!("Invalid node address format: {}", value)))?;
+        .ok_or_else(|| AppError::P2PError(format!("Invalid node address format: {value}")))?;
 
     let node_id = NodeId::from_str(node_part)
-        .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {}", e)))?;
+        .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {e}")))?;
 
     let socket_addr: SocketAddr = addr_part
         .parse()
-        .map_err(|e| AppError::P2PError(format!("Failed to parse socket address: {}", e)))?;
+        .map_err(|e| AppError::P2PError(format!("Failed to parse socket address: {e}")))?;
 
     Ok(NodeAddr::new(node_id).with_direct_addresses([socket_addr]))
 }
@@ -33,7 +33,7 @@ pub fn parse_peer_hint(value: &str) -> Result<ParsedPeer, AppError> {
         })
     } else {
         let node_id = NodeId::from_str(value)
-            .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {}", e)))?;
+            .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {e}")))?;
         Ok(ParsedPeer {
             node_id,
             node_addr: None,

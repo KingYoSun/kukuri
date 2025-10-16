@@ -20,7 +20,7 @@ impl EventId {
         use sha2::{Digest, Sha256};
         let random_bytes = uuid::Uuid::new_v4().as_bytes().to_vec();
         let hash = Sha256::digest(&random_bytes);
-        Self(format!("{:x}", hash))
+        Self(format!("{hash:x}"))
     }
 
     pub fn as_str(&self) -> &str {

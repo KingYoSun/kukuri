@@ -1,6 +1,6 @@
 use crate::{
     presentation::{
-        dto::auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
+        dto::auth_dto::{LoginResponse, LoginWithNsecRequest},
         handlers::AuthHandler,
     },
     state::AppState,

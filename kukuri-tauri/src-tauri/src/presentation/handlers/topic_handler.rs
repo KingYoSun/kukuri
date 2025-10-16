@@ -24,7 +24,7 @@ impl TopicHandler {
         &self,
         request: CreateTopicRequest,
     ) -> Result<TopicResponse, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         let topic = self
             .topic_service
@@ -103,7 +103,7 @@ impl TopicHandler {
         request: JoinTopicRequest,
         user_pubkey: &str,
     ) -> Result<(), AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // user_pubkeyはログ用に保持（将来の実装用）
         let _ = user_pubkey;
@@ -117,7 +117,7 @@ impl TopicHandler {
         request: JoinTopicRequest,
         user_pubkey: &str,
     ) -> Result<(), AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // user_pubkeyはログ用に保持（将来の実装用）
         let _ = user_pubkey;
@@ -130,7 +130,7 @@ impl TopicHandler {
         &self,
         request: GetTopicStatsRequest,
     ) -> Result<TopicStatsResponse, AppError> {
-        request.validate().map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(AppError::InvalidInput)?;
 
         // 統計情報の仮実装
         Ok(TopicStatsResponse {

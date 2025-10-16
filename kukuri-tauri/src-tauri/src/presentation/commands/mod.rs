@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 pub mod auth_commands;
 pub mod event_commands;
 pub mod offline_commands;

@@ -433,9 +433,8 @@ impl EventManager {
         let id = DomainEventId::from_hex(&id_hex).map_err(|e| anyhow::anyhow!(e))?;
         // created_at
         let secs = nostr.created_at.as_u64() as i64;
-        let naive = chrono::NaiveDateTime::from_timestamp_opt(secs, 0)
+        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(secs, 0)
             .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?;
-        let created_at = chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc);
         // kind
         let kind = nostr.kind.as_u16() as u32;
         // tags
@@ -461,7 +460,6 @@ mod tests {
     use super::*;
     use crate::shared::error::AppError;
     use async_trait::async_trait;
-    use std::sync::Mutex;
 
     struct TestGossipService {
         joined: Arc<RwLock<HashSet<String>>>,
