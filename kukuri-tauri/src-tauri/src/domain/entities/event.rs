@@ -304,15 +304,30 @@ fn is_valid_nprofile_tlv(s: &str) -> bool {
             return false;
         }
         if let Ok(bytes) = Vec::<u8>::from_base32(&data) {
-            // 必須: tag=0 (pubkey 32bytes)
-            if !tlv_has_tag_len(&bytes, 0, 32) {
+            let mut has_pubkey = false;
+            let mut relay_count = 0usize;
+            if parse_tlv(&bytes, |tag, value| match tag {
+                0 => {
+                    if has_pubkey || value.len() != 32 {
+                        return Err(());
+                    }
+                    has_pubkey = true;
+                    Ok(())
+                }
+                1 => {
+                    relay_count += 1;
+                    if relay_count > MAX_TLV_RELAY_URLS || !validate_tlv_relay(value) {
+                        return Err(());
+                    }
+                    Ok(())
+                }
+                _ => Ok(()),
+            })
+            .is_err()
+            {
                 return false;
             }
-            // 任意: tag=1 (relay URL), 複数可。存在する場合はws[s]://であること
-            if !tlv_validate_relays(&bytes) {
-                return false;
-            }
-            return true;
+            return has_pubkey;
         }
     }
     false
@@ -324,31 +339,47 @@ fn is_valid_nevent_tlv(s: &str) -> bool {
             return false;
         }
         if let Ok(bytes) = Vec::<u8>::from_base32(&data) {
-            if !tlv_has_tag_len(&bytes, 0, 32) {
+            let mut has_event_id = false;
+            let mut has_author = false;
+            let mut has_kind = false;
+            let mut relay_count = 0usize;
+            if parse_tlv(&bytes, |tag, value| match tag {
+                0 => {
+                    if has_event_id || value.len() != 32 {
+                        return Err(());
+                    }
+                    has_event_id = true;
+                    Ok(())
+                }
+                1 => {
+                    relay_count += 1;
+                    if relay_count > MAX_TLV_RELAY_URLS || !validate_tlv_relay(value) {
+                        return Err(());
+                    }
+                    Ok(())
+                }
+                2 => {
+                    if has_author || value.len() != 32 {
+                        return Err(());
+                    }
+                    has_author = true;
+                    Ok(())
+                }
+                3 => {
+                    if has_kind || value.len() != 4 {
+                        return Err(());
+                    }
+                    has_kind = true;
+                    Ok(())
+                }
+                _ => Ok(()),
+            })
+            .is_err()
+            {
                 return false;
             }
-            if !tlv_validate_relays(&bytes) {
-                return false;
-            }
-            return true;
+            return has_event_id;
         }
-    }
-    false
-}
-
-fn tlv_has_tag_len(bytes: &[u8], want_tag: u8, want_len: usize) -> bool {
-    let mut i = 0usize;
-    while i + 2 <= bytes.len() {
-        let t = bytes[i];
-        let l = bytes[i + 1] as usize;
-        i += 2;
-        if i + l > bytes.len() {
-            return false;
-        }
-        if t == want_tag && l == want_len {
-            return true;
-        }
-        i += l;
     }
     false
 }
@@ -379,28 +410,36 @@ impl EventKind {
     }
 }
 
-fn tlv_validate_relays(bytes: &[u8]) -> bool {
+const MAX_TLV_RELAY_URLS: usize = 16;
+const MAX_TLV_RELAY_URL_LEN: usize = 255;
+
+fn parse_tlv(bytes: &[u8], mut handler: impl FnMut(u8, &[u8]) -> Result<(), ()>) -> Result<(), ()> {
     let mut i = 0usize;
     while i + 2 <= bytes.len() {
-        let t = bytes[i];
-        let l = bytes[i + 1] as usize;
+        let tag = bytes[i];
+        let len = bytes[i + 1] as usize;
         i += 2;
-        if i + l > bytes.len() {
-            return false;
+        if i + len > bytes.len() {
+            return Err(());
         }
-        if t == 1 {
-            let slice = &bytes[i..i + l];
-            if let Ok(s) = std::str::from_utf8(slice) {
-                if !s.is_empty() && !is_ws_url(s) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-        i += l;
+        let value = &bytes[i..i + len];
+        handler(tag, value)?;
+        i += len;
     }
-    true
+    if i == bytes.len() { Ok(()) } else { Err(()) }
+}
+
+fn validate_tlv_relay(value: &[u8]) -> bool {
+    if value.len() > MAX_TLV_RELAY_URL_LEN {
+        return false;
+    }
+    if value.is_empty() {
+        return true;
+    }
+    match std::str::from_utf8(value) {
+        Ok(url) => url.is_ascii() && is_ws_url(url),
+        Err(_) => false,
+    }
 }
 
 #[cfg(test)]
@@ -459,6 +498,7 @@ mod tests {
 
 #[cfg(test)]
 mod nip10_19_tests {
+    use bech32::{ToBase32 as _, Variant};
     use nostr_sdk::prelude::*;
 
     fn dummy_event_with_tags(tags: Vec<Vec<String>>) -> super::Event {
@@ -494,5 +534,77 @@ mod nip10_19_tests {
         let p_tag = vec!["p".into(), "zzz".into()];
         let ev = dummy_event_with_tags(vec![e_tag, p_tag]);
         assert!(ev.validate_nip10_19().is_err());
+    }
+
+    #[test]
+    fn test_nprofile_tlv_multiple_relays_ok() {
+        let keys = Keys::generate();
+        let mut bytes = Vec::new();
+        bytes.push(0);
+        bytes.push(32);
+        bytes.extend_from_slice(&keys.public_key().to_bytes());
+        for relay in ["wss://relay.one", "wss://relay.two"] {
+            let relay_bytes = relay.as_bytes();
+            bytes.push(1);
+            bytes.push(relay_bytes.len() as u8);
+            bytes.extend_from_slice(relay_bytes);
+        }
+        let encoded =
+            bech32::encode("nprofile", bytes.to_base32(), Variant::Bech32).expect("encode");
+        assert!(super::is_valid_nprofile_tlv(&encoded));
+    }
+
+    #[test]
+    fn test_nprofile_tlv_rejects_invalid_relay_scheme() {
+        let keys = Keys::generate();
+        let mut bytes = Vec::new();
+        bytes.push(0);
+        bytes.push(32);
+        bytes.extend_from_slice(&keys.public_key().to_bytes());
+        let relay_bytes = b"https://relay.invalid";
+        bytes.push(1);
+        bytes.push(relay_bytes.len() as u8);
+        bytes.extend_from_slice(relay_bytes);
+        let encoded =
+            bech32::encode("nprofile", bytes.to_base32(), Variant::Bech32).expect("encode");
+        assert!(!super::is_valid_nprofile_tlv(&encoded));
+    }
+
+    #[test]
+    fn test_nevent_tlv_with_optional_author_and_kind() {
+        let keys = Keys::generate();
+        let nostr_ev = EventBuilder::text_note("tlv")
+            .sign_with_keys(&keys)
+            .expect("sign");
+        let mut bytes = Vec::new();
+        bytes.push(0);
+        bytes.push(32);
+        bytes.extend_from_slice(&nostr_ev.id.to_bytes());
+        let relay_bytes = b"wss://relay.example";
+        bytes.push(1);
+        bytes.push(relay_bytes.len() as u8);
+        bytes.extend_from_slice(relay_bytes);
+        bytes.push(2);
+        bytes.push(32);
+        bytes.extend_from_slice(&nostr_ev.pubkey.to_bytes());
+        let kind_bytes = (nostr_ev.kind.as_u16() as u32).to_be_bytes();
+        bytes.push(3);
+        bytes.push(kind_bytes.len() as u8);
+        bytes.extend_from_slice(&kind_bytes);
+        let encoded = bech32::encode("nevent", bytes.to_base32(), Variant::Bech32).unwrap();
+        assert!(super::is_valid_nevent_tlv(&encoded));
+    }
+
+    #[test]
+    fn test_nevent_tlv_rejects_invalid_author_length() {
+        let mut bytes = Vec::new();
+        bytes.push(0);
+        bytes.push(32);
+        bytes.extend_from_slice(&[0u8; 32]);
+        bytes.push(2);
+        bytes.push(31);
+        bytes.extend_from_slice(&[0u8; 31]);
+        let encoded = bech32::encode("nevent", bytes.to_base32(), Variant::Bech32).unwrap();
+        assert!(!super::is_valid_nevent_tlv(&encoded));
     }
 }

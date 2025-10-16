@@ -1,7 +1,13 @@
 // 最小限のNIPフォーマット検証（フロント側・型/形式のみ）
 // 厳密なID再計算や署名検証はバックエンドに委譲
 
+import { bech32 } from '@scure/base';
+
 const HEX = /^[0-9a-f]+$/i;
+const WS_URL_REGEX = /^wss?:\/\/.+/i;
+const MAX_TLV_RELAY_URLS = 16;
+const MAX_TLV_RELAY_URL_LEN = 255;
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };
 
@@ -60,9 +66,9 @@ export function validateNip10Basic(ev: any): ValidationResult {
     if (t === 'e') {
       // 参照IDは64hex or bech32(note|nevent)
       const isHex = typeof id === 'string' && id.length === 64 && HEX.test(id);
-      const isBech = typeof id === 'string' && (id.startsWith('note1') || id.startsWith('nevent1'));
+      const isBech = typeof id === 'string' && isValidEventReference(id);
       if (!isHex && !isBech) return { ok: false, reason: 'invalid e tag id' };
-      if (relay && typeof relay === 'string' && relay.length > 0 && !/^wss?:\/\//i.test(relay)) {
+      if (relay && typeof relay === 'string' && relay.length > 0 && !isWsUrl(relay)) {
         return { ok: false, reason: 'invalid e tag relay_url' };
       }
       if (marker === 'root') root++;
@@ -73,10 +79,9 @@ export function validateNip10Basic(ev: any): ValidationResult {
     }
     if (t === 'p') {
       const isHex = typeof id === 'string' && id.length === 64 && HEX.test(id);
-      const isBech =
-        typeof id === 'string' && (id.startsWith('npub1') || id.startsWith('nprofile1'));
+      const isBech = typeof id === 'string' && isValidPubkeyReference(id);
       if (!isHex && !isBech) return { ok: false, reason: 'invalid p tag pubkey' };
-      if (relay && typeof relay === 'string' && relay.length > 0 && !/^wss?:\/\//i.test(relay)) {
+      if (relay && typeof relay === 'string' && relay.length > 0 && !isWsUrl(relay)) {
         return { ok: false, reason: 'invalid p tag relay_url' };
       }
     }
@@ -84,4 +89,124 @@ export function validateNip10Basic(ev: any): ValidationResult {
   if (root > 1) return { ok: false, reason: 'multiple root markers' };
   if (reply > 1) return { ok: false, reason: 'multiple reply markers' };
   return { ok: true };
+}
+
+function isWsUrl(url: string): boolean {
+  return WS_URL_REGEX.test(url);
+}
+
+function isValidEventReference(value: string): boolean {
+  if (value.startsWith('note1')) {
+    return isBech32Payload(value, 'note', 32);
+  }
+  if (value.startsWith('nevent1')) {
+    return isValidNeventTlv(value);
+  }
+  return false;
+}
+
+function isValidPubkeyReference(value: string): boolean {
+  if (value.startsWith('npub1')) {
+    return isBech32Payload(value, 'npub', 32);
+  }
+  if (value.startsWith('nprofile1')) {
+    return isValidNprofileTlv(value);
+  }
+  return false;
+}
+
+function isBech32Payload(bech: string, expectedHrp: string, expectedLen: number): boolean {
+  const bytes = decodeBech32(bech, expectedHrp);
+  return !!bytes && bytes.length === expectedLen;
+}
+
+function isValidNprofileTlv(bech: string): boolean {
+  const bytes = decodeBech32(bech, 'nprofile');
+  if (!bytes) return false;
+  let hasPubkey = false;
+  let relayCount = 0;
+  const ok = parseTlv(bytes, (tag, value) => {
+    if (tag === 0) {
+      if (hasPubkey || value.length !== 32) return false;
+      hasPubkey = true;
+    } else if (tag === 1) {
+      relayCount += 1;
+      if (relayCount > MAX_TLV_RELAY_URLS || !validateRelayTlv(value)) return false;
+    }
+    return true;
+  });
+  return ok && hasPubkey;
+}
+
+function isValidNeventTlv(bech: string): boolean {
+  const bytes = decodeBech32(bech, 'nevent');
+  if (!bytes) return false;
+  let hasEventId = false;
+  let hasAuthor = false;
+  let hasKind = false;
+  let relayCount = 0;
+  const ok = parseTlv(bytes, (tag, value) => {
+    if (tag === 0) {
+      if (hasEventId || value.length !== 32) return false;
+      hasEventId = true;
+    } else if (tag === 1) {
+      relayCount += 1;
+      if (relayCount > MAX_TLV_RELAY_URLS || !validateRelayTlv(value)) return false;
+    } else if (tag === 2) {
+      if (hasAuthor || value.length !== 32) return false;
+      hasAuthor = true;
+    } else if (tag === 3) {
+      if (hasKind || value.length !== 4) return false;
+      hasKind = true;
+    }
+    return true;
+  });
+  return ok && hasEventId;
+}
+
+function decodeBech32(value: string, expectedHrp: string): Uint8Array | null {
+  try {
+    const { prefix, words } = bech32.decode(value, 1023);
+    if (prefix !== expectedHrp) return null;
+    return Uint8Array.from(bech32.fromWords(words));
+  } catch {
+    return null;
+  }
+}
+
+function parseTlv(
+  bytes: Uint8Array,
+  handler: (tag: number, value: Uint8Array) => boolean
+): boolean {
+  let i = 0;
+  while (i + 2 <= bytes.length) {
+    const tag = bytes[i];
+    const len = bytes[i + 1];
+    i += 2;
+    if (i + len > bytes.length) return false;
+    const value = bytes.subarray(i, i + len);
+    if (!handler(tag, value)) return false;
+    i += len;
+  }
+  return i === bytes.length;
+}
+
+function validateRelayTlv(value: Uint8Array): boolean {
+  if (value.length > MAX_TLV_RELAY_URL_LEN) return false;
+  if (value.length === 0) return true;
+  let decoded: string;
+  try {
+    decoded = utf8Decoder.decode(value);
+  } catch {
+    return false;
+  }
+  if (!isAscii(decoded)) return false;
+  return isWsUrl(decoded);
+}
+
+function isAscii(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 0x7f) return false;
+  }
+  return true;
 }
