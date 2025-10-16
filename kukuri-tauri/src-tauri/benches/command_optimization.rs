@@ -1,9 +1,4 @@
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use kukuri_tauri::application::services::PostService;
-use kukuri_tauri::infrastructure::cache::PostCacheService;
-use kukuri_tauri::presentation::dto::post_dto::{BatchGetPostsRequest, GetPostsRequest};
-use kukuri_tauri::presentation::handlers::post_handler::PostHandler;
-use std::sync::Arc;
+use criterion::{criterion_group, criterion_main, black_box, BenchmarkId, Criterion};
 use tokio::runtime::Runtime;
 
 fn benchmark_single_vs_batch_posts(c: &mut Criterion) {

@@ -134,7 +134,7 @@ impl PostDraft {
         self.updated_at = chrono::Utc::now();
     }
 
-    pub fn to_post(self, author: User) -> Post {
+    pub fn into_post(self, author: User) -> Post {
         Post::new(self.content, author, self.topic_id).with_tags(self.tags)
     }
 }
