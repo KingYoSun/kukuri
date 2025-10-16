@@ -1,11 +1,11 @@
 use crate::application::services::offline_service::OfflineServiceTrait;
-use crate::presentation::dto::offline::{
-    SaveOfflineActionRequest, SaveOfflineActionResponse,
-    GetOfflineActionsRequest, SyncOfflineActionsRequest, SyncOfflineActionsResponse,
-    CacheStatusResponse, AddToSyncQueueRequest, UpdateCacheMetadataRequest,
-    OptimisticUpdateRequest, OfflineAction, UpdateSyncStatusRequest
-};
 use crate::presentation::dto::Validate;
+use crate::presentation::dto::offline::{
+    AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest, OfflineAction,
+    OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
+    SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
+    UpdateSyncStatusRequest,
+};
 use crate::shared::error::AppError;
 use serde_json::json;
 use std::sync::Arc;
@@ -25,8 +25,9 @@ impl OfflineHandler {
         request: SaveOfflineActionRequest,
     ) -> Result<SaveOfflineActionResponse, AppError> {
         request.validate()?;
-        
-        let action_id = self.offline_service
+
+        let action_id = self
+            .offline_service
             .save_action(
                 request.entity_type,
                 request.entity_id,
@@ -34,7 +35,7 @@ impl OfflineHandler {
                 request.payload,
             )
             .await?;
-        
+
         Ok(SaveOfflineActionResponse {
             success: true,
             action_id,
@@ -48,8 +49,9 @@ impl OfflineHandler {
         request: GetOfflineActionsRequest,
     ) -> Result<Vec<OfflineAction>, AppError> {
         request.validate()?;
-        
-        let actions = self.offline_service
+
+        let actions = self
+            .offline_service
             .get_actions(
                 request.entity_type,
                 request.entity_id,
@@ -57,18 +59,21 @@ impl OfflineHandler {
                 request.limit,
             )
             .await?;
-        
-        Ok(actions.into_iter().map(|a| OfflineAction {
-            id: a.id,
-            entity_type: a.entity_type,
-            entity_id: a.entity_id,
-            action_type: a.action_type,
-            payload: a.payload,
-            status: a.status,
-            created_at: a.created_at,
-            synced_at: a.synced_at,
-            error_message: a.error_message,
-        }).collect())
+
+        Ok(actions
+            .into_iter()
+            .map(|a| OfflineAction {
+                id: a.id,
+                entity_type: a.entity_type,
+                entity_id: a.entity_id,
+                action_type: a.action_type,
+                payload: a.payload,
+                status: a.status,
+                created_at: a.created_at,
+                synced_at: a.synced_at,
+                error_message: a.error_message,
+            })
+            .collect())
     }
 
     /// オフラインアクションを同期
@@ -77,11 +82,12 @@ impl OfflineHandler {
         request: SyncOfflineActionsRequest,
     ) -> Result<SyncOfflineActionsResponse, AppError> {
         request.validate()?;
-        
-        let result = self.offline_service
+
+        let result = self
+            .offline_service
             .sync_actions(request.action_ids)
             .await?;
-        
+
         Ok(SyncOfflineActionsResponse {
             success: true,
             synced_count: result.synced_count,
@@ -93,7 +99,7 @@ impl OfflineHandler {
     /// キャッシュステータスを取得
     pub async fn get_cache_status(&self) -> Result<CacheStatusResponse, AppError> {
         let status = self.offline_service.get_cache_status().await?;
-        
+
         Ok(CacheStatusResponse {
             total_size: status.total_size,
             item_count: status.item_count,
@@ -103,13 +109,11 @@ impl OfflineHandler {
     }
 
     /// 同期キューに追加
-    pub async fn add_to_sync_queue(
-        &self,
-        request: AddToSyncQueueRequest,
-    ) -> Result<i64, AppError> {
+    pub async fn add_to_sync_queue(&self, request: AddToSyncQueueRequest) -> Result<i64, AppError> {
         request.validate()?;
-        
-        let queue_id = self.offline_service
+
+        let queue_id = self
+            .offline_service
             .add_to_sync_queue(
                 request.entity_type,
                 request.entity_id,
@@ -118,7 +122,7 @@ impl OfflineHandler {
                 request.priority,
             )
             .await?;
-        
+
         Ok(queue_id)
     }
 
@@ -128,15 +132,11 @@ impl OfflineHandler {
         request: UpdateCacheMetadataRequest,
     ) -> Result<serde_json::Value, AppError> {
         request.validate()?;
-        
+
         self.offline_service
-            .update_cache_metadata(
-                request.key,
-                request.metadata,
-                request.ttl,
-            )
+            .update_cache_metadata(request.key, request.metadata, request.ttl)
             .await?;
-        
+
         Ok(json!({ "success": true }))
     }
 
@@ -146,8 +146,9 @@ impl OfflineHandler {
         request: OptimisticUpdateRequest,
     ) -> Result<String, AppError> {
         request.validate()?;
-        
-        let update_id = self.offline_service
+
+        let update_id = self
+            .offline_service
             .save_optimistic_update(
                 request.entity_type,
                 request.entity_id,
@@ -155,7 +156,7 @@ impl OfflineHandler {
                 request.updated_data,
             )
             .await?;
-        
+
         Ok(update_id)
     }
 
@@ -165,13 +166,15 @@ impl OfflineHandler {
         update_id: String,
     ) -> Result<serde_json::Value, AppError> {
         if update_id.is_empty() {
-            return Err(AppError::ValidationError("Update ID is required".to_string()));
+            return Err(AppError::ValidationError(
+                "Update ID is required".to_string(),
+            ));
         }
-        
+
         self.offline_service
             .confirm_optimistic_update(update_id)
             .await?;
-        
+
         Ok(json!({ "success": true }))
     }
 
@@ -181,22 +184,23 @@ impl OfflineHandler {
         update_id: String,
     ) -> Result<Option<String>, AppError> {
         if update_id.is_empty() {
-            return Err(AppError::ValidationError("Update ID is required".to_string()));
+            return Err(AppError::ValidationError(
+                "Update ID is required".to_string(),
+            ));
         }
-        
-        let original_data = self.offline_service
+
+        let original_data = self
+            .offline_service
             .rollback_optimistic_update(update_id)
             .await?;
-        
+
         Ok(original_data)
     }
 
     /// 期限切れキャッシュをクリーンアップ
     pub async fn cleanup_expired_cache(&self) -> Result<i32, AppError> {
-        let cleaned_count = self.offline_service
-            .cleanup_expired_cache()
-            .await?;
-        
+        let cleaned_count = self.offline_service.cleanup_expired_cache().await?;
+
         Ok(cleaned_count)
     }
 
@@ -206,7 +210,7 @@ impl OfflineHandler {
         request: UpdateSyncStatusRequest,
     ) -> Result<serde_json::Value, AppError> {
         request.validate()?;
-        
+
         self.offline_service
             .update_sync_status(
                 request.entity_type,
@@ -215,7 +219,7 @@ impl OfflineHandler {
                 request.conflict_data,
             )
             .await?;
-        
+
         Ok(json!({ "success": true }))
     }
 }

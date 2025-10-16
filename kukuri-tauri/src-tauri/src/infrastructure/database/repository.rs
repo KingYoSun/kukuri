@@ -12,12 +12,17 @@ pub trait Repository: PostRepository + TopicRepository + UserRepository + EventR
 pub trait PostRepository: Send + Sync {
     async fn create_post(&self, post: &Post) -> Result<(), AppError>;
     async fn get_post(&self, id: &str) -> Result<Option<Post>, AppError>;
-    async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, AppError>;
+    async fn get_posts_by_topic(&self, topic_id: &str, limit: usize)
+    -> Result<Vec<Post>, AppError>;
     async fn update_post(&self, post: &Post) -> Result<(), AppError>;
     async fn delete_post(&self, id: &str) -> Result<(), AppError>;
     async fn get_unsync_posts(&self) -> Result<Vec<Post>, AppError>;
     async fn mark_post_synced(&self, id: &str, event_id: &str) -> Result<(), AppError>;
-    async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, AppError>;
+    async fn get_posts_by_author(
+        &self,
+        author_pubkey: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError>;
     async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, AppError>;
 }
 
@@ -31,7 +36,12 @@ pub trait TopicRepository: Send + Sync {
     async fn delete_topic(&self, id: &str) -> Result<(), AppError>;
     async fn join_topic(&self, id: &str) -> Result<(), AppError>;
     async fn leave_topic(&self, id: &str) -> Result<(), AppError>;
-    async fn update_topic_stats(&self, id: &str, member_count: u32, post_count: u32) -> Result<(), AppError>;
+    async fn update_topic_stats(
+        &self,
+        id: &str,
+        member_count: u32,
+        post_count: u32,
+    ) -> Result<(), AppError>;
 }
 
 #[async_trait]
@@ -50,7 +60,11 @@ pub trait EventRepository: Send + Sync {
     async fn create_event(&self, event: &Event) -> Result<(), AppError>;
     async fn get_event(&self, id: &str) -> Result<Option<Event>, AppError>;
     async fn get_events_by_kind(&self, kind: u32, limit: usize) -> Result<Vec<Event>, AppError>;
-    async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, AppError>;
+    async fn get_events_by_author(
+        &self,
+        pubkey: &str,
+        limit: usize,
+    ) -> Result<Vec<Event>, AppError>;
     async fn delete_event(&self, id: &str) -> Result<(), AppError>;
     async fn get_unsync_events(&self) -> Result<Vec<Event>, AppError>;
     async fn mark_event_synced(&self, id: &str) -> Result<(), AppError>;

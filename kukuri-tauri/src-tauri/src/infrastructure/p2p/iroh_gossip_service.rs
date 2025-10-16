@@ -1,23 +1,23 @@
-﻿use super::GossipService;
-use crate::shared::error::AppError;
+use super::GossipService;
 use crate::domain::entities::Event;
-use crate::infrastructure::p2p::utils::{parse_peer_hint, ParsedPeer};
+use crate::infrastructure::p2p::utils::{ParsedPeer, parse_peer_hint};
+use crate::shared::error::AppError;
 use async_trait::async_trait;
 use futures::StreamExt;
 use iroh::protocol::Router;
 use iroh_gossip::{
+    ALPN as GOSSIP_ALPN,
     api::{Event as GossipApiEvent, GossipSender, GossipTopic},
     net::Gossip,
     proto::TopicId,
-    ALPN as GOSSIP_ALPN,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock, Mutex as TokioMutex};
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::time::timeout;
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{Mutex as TokioMutex, RwLock, mpsc};
+use tokio::time::timeout;
 
 use crate::modules::p2p::events::P2PEvent;
 use crate::modules::p2p::message::GossipMessage;
@@ -82,7 +82,11 @@ impl IrohGossipService {
         TopicId::from_bytes(*hash.as_bytes())
     }
 
-    async fn apply_initial_peers(&self, topic: &str, parsed_peers: &[ParsedPeer]) -> Result<(), AppError> {
+    async fn apply_initial_peers(
+        &self,
+        topic: &str,
+        parsed_peers: &[ParsedPeer],
+    ) -> Result<(), AppError> {
         if parsed_peers.is_empty() {
             return Ok(());
         }
@@ -97,8 +101,7 @@ impl IrohGossipService {
             if let Some(addr) = &peer.node_addr {
                 eprintln!(
                     "[iroh_gossip_service] re-applying node addr {} for topic {}",
-                    addr.node_id,
-                    topic
+                    addr.node_id, topic
                 );
                 if let Err(e) = self
                     .endpoint
@@ -134,8 +137,7 @@ impl GossipService for IrohGossipService {
     async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
         eprintln!(
             "[iroh_gossip_service] join_topic start: {} (initial peers: {:?})",
-            topic,
-            initial_peers
+            topic, initial_peers
         );
         let parsed_peers: Vec<ParsedPeer> = initial_peers
             .into_iter()
@@ -208,8 +210,7 @@ impl GossipService for IrohGossipService {
             Ok(Ok(peer)) => {
                 eprintln!(
                     "[iroh_gossip_service] first neighbor joined for topic {} ({:?})",
-                    topic,
-                    peer
+                    topic, peer
                 );
             }
             Ok(Err(e)) => {
@@ -393,9 +394,9 @@ impl GossipService for IrohGossipService {
     async fn subscribe(&self, topic: &str) -> Result<mpsc::Receiver<Event>, AppError> {
         // トピックに参加していることを確認
         self.join_topic(topic, vec![]).await?;
-        
+
         let topics = self.topics.read().await;
-        
+
         if let Some(handle) = topics.get(topic) {
             // 新しいレシーバーを作成し、サブスクライバに登録
             let (tx, rx) = mpsc::channel(100);
@@ -416,13 +417,13 @@ impl GossipService for IrohGossipService {
 
     async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError> {
         let topics = self.topics.read().await;
-        
+
         if let Some(handle) = topics.get(topic) {
             // iroh-gossipのAPIでピアリストを取得
             // Note: iroh-gossip doesn't expose a direct way to get topic peers
             // Return empty list for now
             let neighbors = vec![];
-            
+
             Ok(neighbors
                 .into_iter()
                 .map(|peer_id: ()| String::new())
@@ -431,14 +432,18 @@ impl GossipService for IrohGossipService {
             Err(format!("Not joined to topic: {}", topic).into())
         }
     }
-    
+
     async fn broadcast_message(&self, topic: &str, message: &[u8]) -> Result<(), AppError> {
         let topics = self.topics.read().await;
-        
+
         if let Some(_handle) = topics.get(topic) {
             // メッセージをブロードキャスト
             // Simplified - actual implementation needs proper API
-            tracing::debug!("Broadcasting raw message to topic {}: {} bytes", topic, message.len());
+            tracing::debug!(
+                "Broadcasting raw message to topic {}: {} bytes",
+                topic,
+                message.len()
+            );
             Ok(())
         } else {
             Err(format!("Not joined to topic: {}", topic).into())
@@ -454,10 +459,7 @@ mod tests {
 
     fn should_run_p2p_tests(test_name: &str) -> bool {
         if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
-            eprintln!(
-                "skipping {} (ENABLE_P2P_INTEGRATION!=1)",
-                test_name
-            );
+            eprintln!("skipping {} (ENABLE_P2P_INTEGRATION!=1)", test_name);
             false
         } else {
             true

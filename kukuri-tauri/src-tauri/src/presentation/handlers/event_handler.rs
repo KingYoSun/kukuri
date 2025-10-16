@@ -1,10 +1,10 @@
 use crate::application::services::event_service::EventServiceTrait;
-use crate::presentation::dto::event::{
-    NostrMetadataDto, PublishTextNoteRequest, PublishTopicPostRequest,
-    SendReactionRequest, UpdateMetadataRequest, DeleteEventsRequest,
-    EventResponse, SubscribeRequest, SetDefaultP2PTopicRequest
-};
 use crate::presentation::dto::Validate;
+use crate::presentation::dto::event::{
+    DeleteEventsRequest, EventResponse, NostrMetadataDto, PublishTextNoteRequest,
+    PublishTopicPostRequest, SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest,
+    UpdateMetadataRequest,
+};
 use crate::shared::error::AppError;
 use serde_json::json;
 use std::sync::Arc;
@@ -30,11 +30,12 @@ impl EventHandler {
         request: PublishTextNoteRequest,
     ) -> Result<EventResponse, AppError> {
         request.validate()?;
-        
-        let event_id = self.event_service
+
+        let event_id = self
+            .event_service
             .publish_text_note(&request.content)
             .await?;
-        
+
         Ok(EventResponse {
             event_id: event_id.to_string(),
             success: true,
@@ -48,15 +49,16 @@ impl EventHandler {
         request: PublishTopicPostRequest,
     ) -> Result<EventResponse, AppError> {
         request.validate()?;
-        
-        let event_id = self.event_service
+
+        let event_id = self
+            .event_service
             .publish_topic_post(
                 &request.topic_id,
                 &request.content,
                 request.reply_to.as_deref(),
             )
             .await?;
-        
+
         Ok(EventResponse {
             event_id: event_id.to_string(),
             success: true,
@@ -70,11 +72,12 @@ impl EventHandler {
         request: SendReactionRequest,
     ) -> Result<EventResponse, AppError> {
         request.validate()?;
-        
-        let event_id = self.event_service
+
+        let event_id = self
+            .event_service
             .send_reaction(&request.event_id, &request.reaction)
             .await?;
-        
+
         Ok(EventResponse {
             event_id: event_id.to_string(),
             success: true,
@@ -88,7 +91,7 @@ impl EventHandler {
         request: UpdateMetadataRequest,
     ) -> Result<EventResponse, AppError> {
         request.validate()?;
-        
+
         let metadata = NostrMetadataDto {
             name: request.metadata.name,
             display_name: request.metadata.display_name,
@@ -99,11 +102,9 @@ impl EventHandler {
             lud16: request.metadata.lud16,
             website: request.metadata.website,
         };
-        
-        let event_id = self.event_service
-            .update_metadata(metadata)
-            .await?;
-        
+
+        let event_id = self.event_service.update_metadata(metadata).await?;
+
         Ok(EventResponse {
             event_id: event_id.to_string(),
             success: true,
@@ -117,35 +118,32 @@ impl EventHandler {
         request: SubscribeRequest,
     ) -> Result<serde_json::Value, AppError> {
         request.validate()?;
-        
+
         self.event_service
             .subscribe_to_topic(&request.topic_id)
             .await?;
-        
+
         Ok(json!({ "success": true }))
     }
 
     /// ユーザーをサブスクライブ
-    pub async fn subscribe_to_user(
-        &self,
-        pubkey: String,
-    ) -> Result<serde_json::Value, AppError> {
+    pub async fn subscribe_to_user(&self, pubkey: String) -> Result<serde_json::Value, AppError> {
         if pubkey.is_empty() {
-            return Err(AppError::ValidationError("Public key is required".to_string()));
+            return Err(AppError::ValidationError(
+                "Public key is required".to_string(),
+            ));
         }
-        
-        self.event_service
-            .subscribe_to_user(&pubkey)
-            .await?;
-        
+
+        self.event_service.subscribe_to_user(&pubkey).await?;
+
         Ok(json!({ "success": true }))
     }
 
     /// Nostr公開鍵を取得
     pub async fn get_nostr_pubkey(&self) -> Result<serde_json::Value, AppError> {
         let pubkey = self.event_service.get_public_key().await?;
-        
-        Ok(json!({ 
+
+        Ok(json!({
             "pubkey": pubkey
         }))
     }
@@ -156,11 +154,12 @@ impl EventHandler {
         request: DeleteEventsRequest,
     ) -> Result<EventResponse, AppError> {
         request.validate()?;
-        
-        let event_id = self.event_service
+
+        let event_id = self
+            .event_service
             .delete_events(request.event_ids, request.reason)
             .await?;
-        
+
         Ok(EventResponse {
             event_id: event_id.to_string(),
             success: true,
@@ -171,7 +170,7 @@ impl EventHandler {
     /// Nostrクライアントを切断
     pub async fn disconnect_nostr(&self) -> Result<serde_json::Value, AppError> {
         self.event_service.disconnect().await?;
-        
+
         Ok(json!({ "success": true }))
     }
 

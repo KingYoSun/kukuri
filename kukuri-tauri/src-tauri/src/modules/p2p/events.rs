@@ -16,4 +16,3 @@ pub enum P2PEvent {
         peer_id: Vec<u8>,
     },
 }
-

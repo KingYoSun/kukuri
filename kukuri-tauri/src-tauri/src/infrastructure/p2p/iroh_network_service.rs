@@ -1,8 +1,11 @@
-use super::{NetworkService, NetworkStats, Peer, dht_bootstrap::{DhtGossip, secret}};
-use crate::shared::error::AppError;
+use super::{
+    NetworkService, NetworkStats, Peer,
+    dht_bootstrap::{DhtGossip, secret},
+};
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
+use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{protocol::Router, Endpoint};
+use iroh::{Endpoint, protocol::Router};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing;
@@ -17,7 +20,10 @@ pub struct IrohNetworkService {
 }
 
 impl IrohNetworkService {
-    pub async fn new(secret_key: iroh::SecretKey, net_cfg: &AppNetworkConfig) -> Result<Self, AppError> {
+    pub async fn new(
+        secret_key: iroh::SecretKey,
+        net_cfg: &AppNetworkConfig,
+    ) -> Result<Self, AppError> {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
         let mut builder = Endpoint::builder().secret_key(secret_key);
         if net_cfg.enable_dns {
@@ -127,13 +133,14 @@ impl IrohNetworkService {
     /// フォールバックモードでピアに接続
     async fn connect_fallback(&self) -> Result<(), AppError> {
         // 1) 設定ファイルからのブートストラップ接続を優先
-        let fallback_peers = match super::dht_bootstrap::fallback::connect_from_config(&self.endpoint).await {
-            Ok(peers) => peers,
-            Err(_) => {
-                // 2) ハードコードされたフォールバックに接続（なければ失敗）
-                super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?
-            }
-        };
+        let fallback_peers =
+            match super::dht_bootstrap::fallback::connect_from_config(&self.endpoint).await {
+                Ok(peers) => peers,
+                Err(_) => {
+                    // 2) ハードコードされたフォールバックに接続（なければ失敗）
+                    super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?
+                }
+            };
 
         // フォールバックピアをピアリストに追加
         let mut peers = self.peers.write().await;
@@ -205,17 +212,18 @@ impl NetworkService for IrohNetworkService {
             return Err("Invalid address format: expected 'node_id@socket_addr'".into());
         }
 
-        let node_id = NodeId::from_str(parts[0])
-            .map_err(|e| format!("Failed to parse node ID: {}", e))?;
-        let socket_addr: SocketAddr = parts[1].parse()
+        let node_id =
+            NodeId::from_str(parts[0]).map_err(|e| format!("Failed to parse node ID: {}", e))?;
+        let socket_addr: SocketAddr = parts[1]
+            .parse()
             .map_err(|e| format!("Failed to parse socket address: {}", e))?;
 
         // NodeAddrを構築
-        let node_addr = iroh::NodeAddr::new(node_id)
-            .with_direct_addresses([socket_addr]);
+        let node_addr = iroh::NodeAddr::new(node_id).with_direct_addresses([socket_addr]);
 
         // ピアに接続
-        self.endpoint.connect(node_addr.clone(), iroh_gossip::ALPN)
+        self.endpoint
+            .connect(node_addr.clone(), iroh_gossip::ALPN)
             .await
             .map_err(|e| format!("Failed to connect to peer: {}", e))?;
 

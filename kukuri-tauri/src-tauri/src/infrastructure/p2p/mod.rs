@@ -1,12 +1,12 @@
-pub mod network_service;
-pub mod gossip_service;
-pub mod event_distributor;
-pub mod iroh_network_service;
-pub mod iroh_gossip_service;
+pub mod bootstrap_config;
 pub mod dht_bootstrap;
 pub mod dht_integration;
-pub mod bootstrap_config;
+pub mod event_distributor;
+pub mod gossip_service;
+pub mod iroh_gossip_service;
+pub mod iroh_network_service;
 pub mod metrics;
+pub mod network_service;
 pub mod utils;
 
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,6 @@ pub enum DistributionStrategy {
     P2P,
 }
 
-pub use network_service::{NetworkService, NetworkStats, Peer};
-pub use gossip_service::GossipService;
 pub use event_distributor::EventDistributor;
+pub use gossip_service::GossipService;
+pub use network_service::{NetworkService, NetworkStats, Peer};

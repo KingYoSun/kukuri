@@ -15,10 +15,7 @@ mod tests {
             .unwrap();
 
         // マイグレーションを実行
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         pool
     }
@@ -106,7 +103,10 @@ mod tests {
             expiry_seconds: Some(3600),
         };
 
-        manager.update_cache_metadata(request.clone()).await.unwrap();
+        manager
+            .update_cache_metadata(request.clone())
+            .await
+            .unwrap();
 
         // キャッシュステータスを確認
         let status = manager.get_cache_status().await.unwrap();
@@ -137,7 +137,10 @@ mod tests {
         assert!(!update_id.is_empty());
 
         // 更新を確認
-        manager.confirm_optimistic_update(update_id.clone()).await.unwrap();
+        manager
+            .confirm_optimistic_update(update_id.clone())
+            .await
+            .unwrap();
 
         // ロールバックテスト（別の更新で）
         let update_id2 = manager
@@ -204,7 +207,7 @@ mod tests {
             INSERT INTO cache_metadata (
                 cache_key, cache_type, expiry_time, data_version, is_stale
             ) VALUES (?1, ?2, ?3, 1, 0)
-            "#
+            "#,
         )
         .bind("expired_cache")
         .bind("test")
@@ -220,7 +223,7 @@ mod tests {
             INSERT INTO cache_metadata (
                 cache_key, cache_type, expiry_time, data_version, is_stale
             ) VALUES (?1, ?2, ?3, 1, 0)
-            "#
+            "#,
         )
         .bind("valid_cache")
         .bind("test")

@@ -76,8 +76,6 @@ impl NostrClientManager {
     pub fn get_public_key(&self) -> Option<PublicKey> {
         self.keys.as_ref().map(|k| k.public_key())
     }
-
-
 }
 
 #[cfg(test)]
@@ -133,6 +131,4 @@ mod tests {
         assert_ne!(public_key1, public_key2);
         assert_eq!(public_key2, Keys::new(secret_key2).public_key());
     }
-
-
 }

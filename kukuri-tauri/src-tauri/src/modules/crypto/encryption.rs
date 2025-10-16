@@ -1,9 +1,9 @@
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
+    aead::{Aead, AeadCore, KeyInit, OsRng},
 };
-use anyhow::{anyhow, Result};
-use base64::{engine::general_purpose, Engine as _};
+use anyhow::{Result, anyhow};
+use base64::{Engine as _, engine::general_purpose};
 use sha2::{Digest, Sha256};
 
 #[allow(dead_code)]
@@ -125,10 +125,12 @@ mod tests {
         // Try to decrypt with wrong password
         let result = decrypt(&encrypted, wrong_password);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Decryption failed"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Decryption failed")
+        );
     }
 
     #[test]
@@ -138,10 +140,12 @@ mod tests {
 
         let result = decrypt(invalid_base64, password);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Base64 decode failed"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Base64 decode failed")
+        );
     }
 
     #[test]

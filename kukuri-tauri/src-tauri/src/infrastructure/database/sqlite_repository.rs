@@ -1,6 +1,8 @@
-use super::{ConnectionPool, EventRepository, PostRepository, Repository, TopicRepository, UserRepository};
-use crate::shared::error::AppError;
+use super::{
+    ConnectionPool, EventRepository, PostRepository, Repository, TopicRepository, UserRepository,
+};
 use crate::domain::entities::{Event, Post, Topic, User};
+use crate::shared::error::AppError;
 use async_trait::async_trait;
 
 pub struct SqliteRepository {
@@ -39,7 +41,7 @@ impl PostRepository for SqliteRepository {
             r#"
             INSERT INTO events (event_id, public_key, content, kind, tags, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            "#
+            "#,
         )
         .bind(&post.id)
         .bind(&post.author.pubkey())
@@ -59,7 +61,7 @@ impl PostRepository for SqliteRepository {
             SELECT event_id, public_key, content, created_at, tags
             FROM events
             WHERE event_id = ? AND kind = 1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(self.pool.get_pool())
@@ -73,7 +75,7 @@ impl PostRepository for SqliteRepository {
                 let content: String = row.try_get("content")?;
                 let created_at: i64 = row.try_get("created_at")?;
                 let tags_json: String = row.try_get("tags").unwrap_or_default();
-                
+
                 // タグからトピックIDを抽出
                 let mut topic_id = String::new();
                 if let Ok(tags) = serde_json::from_str::<Vec<Vec<String>>>(&tags_json) {
@@ -92,16 +94,20 @@ impl PostRepository for SqliteRepository {
                     user,
                     topic_id,
                     chrono::DateTime::from_timestamp_millis(created_at)
-                        .unwrap_or_else(chrono::Utc::now)
+                        .unwrap_or_else(chrono::Utc::now),
                 );
-                
+
                 Ok(Some(post))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
-    async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, AppError> {
+    async fn get_posts_by_topic(
+        &self,
+        topic_id: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError> {
         let topic_tag = format!(r#"["t","{}"]"#, topic_id);
         let rows = sqlx::query(
             r#"
@@ -111,7 +117,7 @@ impl PostRepository for SqliteRepository {
             AND tags LIKE '%' || ? || '%'
             ORDER BY created_at DESC
             LIMIT ?
-            "#
+            "#,
         )
         .bind(&topic_tag)
         .bind(limit as i64)
@@ -125,7 +131,7 @@ impl PostRepository for SqliteRepository {
             let public_key: String = row.try_get("public_key")?;
             let content: String = row.try_get("content")?;
             let created_at: i64 = row.try_get("created_at")?;
-            
+
             let user = User::from_pubkey(&public_key);
             let post = Post::new_with_id(
                 event_id,
@@ -133,7 +139,7 @@ impl PostRepository for SqliteRepository {
                 user,
                 topic_id.to_string(),
                 chrono::DateTime::from_timestamp_millis(created_at)
-                    .unwrap_or_else(chrono::Utc::now)
+                    .unwrap_or_else(chrono::Utc::now),
             );
             posts.push(post);
         }
@@ -148,7 +154,7 @@ impl PostRepository for SqliteRepository {
             UPDATE events 
             SET content = ?, updated_at = ?
             WHERE event_id = ?
-            "#
+            "#,
         )
         .bind(&post.content)
         .bind(chrono::Utc::now().timestamp_millis())
@@ -167,7 +173,7 @@ impl PostRepository for SqliteRepository {
             UPDATE events 
             SET deleted = 1, updated_at = ?
             WHERE event_id = ?
-            "#
+            "#,
         )
         .bind(chrono::Utc::now().timestamp_millis())
         .bind(id)
@@ -186,7 +192,7 @@ impl PostRepository for SqliteRepository {
             WHERE kind = 1
             AND (sync_status IS NULL OR sync_status = 0)
             ORDER BY created_at DESC
-            "#
+            "#,
         )
         .fetch_all(self.pool.get_pool())
         .await?;
@@ -199,7 +205,7 @@ impl PostRepository for SqliteRepository {
             let content: String = row.try_get("content")?;
             let created_at: i64 = row.try_get("created_at")?;
             let tags_json: String = row.try_get("tags").unwrap_or_default();
-            
+
             // タグからトピックIDを抽出
             let mut topic_id = String::new();
             if let Ok(tags) = serde_json::from_str::<Vec<Vec<String>>>(&tags_json) {
@@ -210,7 +216,7 @@ impl PostRepository for SqliteRepository {
                     }
                 }
             }
-            
+
             let user = User::from_pubkey(&public_key);
             let mut post = Post::new_with_id(
                 event_id,
@@ -218,7 +224,7 @@ impl PostRepository for SqliteRepository {
                 user,
                 topic_id,
                 chrono::DateTime::from_timestamp_millis(created_at)
-                    .unwrap_or_else(chrono::Utc::now)
+                    .unwrap_or_else(chrono::Utc::now),
             );
             post.mark_as_unsynced();
             posts.push(post);
@@ -233,7 +239,7 @@ impl PostRepository for SqliteRepository {
             UPDATE events 
             SET sync_status = 1, sync_event_id = ?, synced_at = ?
             WHERE event_id = ?
-            "#
+            "#,
         )
         .bind(event_id)
         .bind(chrono::Utc::now().timestamp_millis())
@@ -244,7 +250,11 @@ impl PostRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, AppError> {
+    async fn get_posts_by_author(
+        &self,
+        author_pubkey: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, created_at, tags
@@ -252,7 +262,7 @@ impl PostRepository for SqliteRepository {
             WHERE kind = 1 AND public_key = ?
             ORDER BY created_at DESC
             LIMIT ?
-            "#
+            "#,
         )
         .bind(author_pubkey)
         .bind(limit as i64)
@@ -267,7 +277,7 @@ impl PostRepository for SqliteRepository {
             let content: String = row.try_get("content")?;
             let created_at: i64 = row.try_get("created_at")?;
             let tags_json: String = row.try_get("tags").unwrap_or_default();
-            
+
             // タグからトピックIDを抽出
             let mut topic_id = String::new();
             if let Ok(tags) = serde_json::from_str::<Vec<Vec<String>>>(&tags_json) {
@@ -278,7 +288,7 @@ impl PostRepository for SqliteRepository {
                     }
                 }
             }
-            
+
             let user = User::from_pubkey(&public_key);
             let post = Post::new_with_id(
                 event_id,
@@ -286,7 +296,7 @@ impl PostRepository for SqliteRepository {
                 user,
                 topic_id,
                 chrono::DateTime::from_timestamp_millis(created_at)
-                    .unwrap_or_else(chrono::Utc::now)
+                    .unwrap_or_else(chrono::Utc::now),
             );
             posts.push(post);
         }
@@ -302,7 +312,7 @@ impl PostRepository for SqliteRepository {
             WHERE kind = 1
             ORDER BY created_at DESC
             LIMIT ?
-            "#
+            "#,
         )
         .bind(limit as i64)
         .fetch_all(self.pool.get_pool())
@@ -316,7 +326,7 @@ impl PostRepository for SqliteRepository {
             let content: String = row.try_get("content")?;
             let created_at: i64 = row.try_get("created_at")?;
             let tags_json: String = row.try_get("tags").unwrap_or_default();
-            
+
             // タグからトピックIDを抽出
             let mut topic_id = String::new();
             if let Ok(tags) = serde_json::from_str::<Vec<Vec<String>>>(&tags_json) {
@@ -327,7 +337,7 @@ impl PostRepository for SqliteRepository {
                     }
                 }
             }
-            
+
             let user = User::from_pubkey(&public_key);
             let post = Post::new_with_id(
                 event_id,
@@ -335,7 +345,7 @@ impl PostRepository for SqliteRepository {
                 user,
                 topic_id,
                 chrono::DateTime::from_timestamp_millis(created_at)
-                    .unwrap_or_else(chrono::Utc::now)
+                    .unwrap_or_else(chrono::Utc::now),
             );
             posts.push(post);
         }
@@ -352,7 +362,7 @@ impl TopicRepository for SqliteRepository {
             r#"
             INSERT INTO topics (topic_id, name, description, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?)
-            "#
+            "#,
         )
         .bind(&topic.id)
         .bind(&topic.name)
@@ -371,7 +381,7 @@ impl TopicRepository for SqliteRepository {
             SELECT topic_id, name, description, created_at, updated_at
             FROM topics
             WHERE topic_id = ?
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(self.pool.get_pool())
@@ -389,7 +399,7 @@ impl TopicRepository for SqliteRepository {
                 );
                 Ok(Some(topic))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -399,7 +409,7 @@ impl TopicRepository for SqliteRepository {
             SELECT topic_id, name, description, created_at, updated_at
             FROM topics
             ORDER BY created_at ASC
-            "#
+            "#,
         )
         .fetch_all(self.pool.get_pool())
         .await?;
@@ -429,7 +439,7 @@ impl TopicRepository for SqliteRepository {
             INNER JOIN user_topics ut ON t.topic_id = ut.topic_id
             WHERE ut.is_joined = 1
             ORDER BY t.created_at ASC
-            "#
+            "#,
         )
         .fetch_all(self.pool.get_pool())
         .await?;
@@ -456,7 +466,7 @@ impl TopicRepository for SqliteRepository {
             UPDATE topics 
             SET name = ?, description = ?, updated_at = ?
             WHERE topic_id = ?
-            "#
+            "#,
         )
         .bind(&topic.name)
         .bind(&topic.description)
@@ -478,7 +488,7 @@ impl TopicRepository for SqliteRepository {
             r#"
             DELETE FROM topics 
             WHERE topic_id = ?
-            "#
+            "#,
         )
         .bind(id)
         .execute(self.pool.get_pool())
@@ -493,7 +503,7 @@ impl TopicRepository for SqliteRepository {
             r#"
             INSERT OR REPLACE INTO user_topics (topic_id, is_joined, joined_at)
             VALUES (?, 1, ?)
-            "#
+            "#,
         )
         .bind(id)
         .bind(chrono::Utc::now().timestamp_millis())
@@ -514,7 +524,7 @@ impl TopicRepository for SqliteRepository {
             UPDATE user_topics 
             SET is_joined = 0, left_at = ?
             WHERE topic_id = ?
-            "#
+            "#,
         )
         .bind(chrono::Utc::now().timestamp_millis())
         .bind(id)
@@ -524,13 +534,18 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn update_topic_stats(&self, id: &str, member_count: u32, post_count: u32) -> Result<(), AppError> {
+    async fn update_topic_stats(
+        &self,
+        id: &str,
+        member_count: u32,
+        post_count: u32,
+    ) -> Result<(), AppError> {
         sqlx::query(
             r#"
             UPDATE topics 
             SET member_count = ?, post_count = ?, updated_at = ?
             WHERE topic_id = ?
-            "#
+            "#,
         )
         .bind(member_count as i64)
         .bind(post_count as i64)
@@ -550,7 +565,7 @@ impl UserRepository for SqliteRepository {
             r#"
             INSERT INTO users (npub, pubkey, display_name, bio, avatar_url, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#
+            "#,
         )
         .bind(user.npub())
         .bind(user.pubkey())
@@ -571,7 +586,7 @@ impl UserRepository for SqliteRepository {
             SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
             FROM users
             WHERE npub = ?
-            "#
+            "#,
         )
         .bind(npub)
         .fetch_optional(self.pool.get_pool())
@@ -579,20 +594,20 @@ impl UserRepository for SqliteRepository {
 
         match row {
             Some(row) => {
-                use sqlx::Row;
                 use crate::domain::entities::UserProfile;
-                
+                use sqlx::Row;
+
                 let user = User::new_with_profile(
                     row.try_get("npub")?,
                     UserProfile {
                         display_name: row.try_get("display_name").unwrap_or_default(),
                         bio: row.try_get("bio").unwrap_or_default(),
                         avatar_url: row.try_get("avatar_url").ok(),
-                    }
+                    },
                 );
                 Ok(Some(user))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -602,7 +617,7 @@ impl UserRepository for SqliteRepository {
             SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
             FROM users
             WHERE pubkey = ?
-            "#
+            "#,
         )
         .bind(pubkey)
         .fetch_optional(self.pool.get_pool())
@@ -610,20 +625,20 @@ impl UserRepository for SqliteRepository {
 
         match row {
             Some(row) => {
-                use sqlx::Row;
                 use crate::domain::entities::UserProfile;
-                
+                use sqlx::Row;
+
                 let user = User::new_with_profile(
                     row.try_get("npub")?,
                     UserProfile {
                         display_name: row.try_get("display_name").unwrap_or_default(),
                         bio: row.try_get("bio").unwrap_or_default(),
                         avatar_url: row.try_get("avatar_url").ok(),
-                    }
+                    },
                 );
                 Ok(Some(user))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -633,7 +648,7 @@ impl UserRepository for SqliteRepository {
             UPDATE users 
             SET display_name = ?, bio = ?, avatar_url = ?, updated_at = ?
             WHERE npub = ?
-            "#
+            "#,
         )
         .bind(&user.profile.display_name)
         .bind(&user.profile.bio)
@@ -651,7 +666,7 @@ impl UserRepository for SqliteRepository {
             r#"
             DELETE FROM users 
             WHERE npub = ?
-            "#
+            "#,
         )
         .bind(npub)
         .execute(self.pool.get_pool())
@@ -668,7 +683,7 @@ impl UserRepository for SqliteRepository {
             FROM users u
             INNER JOIN follows f ON u.pubkey = f.follower_pubkey
             WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
-            "#
+            "#,
         )
         .bind(npub)
         .fetch_all(self.pool.get_pool())
@@ -676,16 +691,16 @@ impl UserRepository for SqliteRepository {
 
         let mut users = Vec::new();
         for row in rows {
-            use sqlx::Row;
             use crate::domain::entities::UserProfile;
-            
+            use sqlx::Row;
+
             let user = User::new_with_profile(
                 row.try_get("npub")?,
                 UserProfile {
                     display_name: row.try_get("display_name").unwrap_or_default(),
                     bio: row.try_get("bio").unwrap_or_default(),
                     avatar_url: row.try_get("avatar_url").ok(),
-                }
+                },
             );
             users.push(user);
         }
@@ -701,7 +716,7 @@ impl UserRepository for SqliteRepository {
             FROM users u
             INNER JOIN follows f ON u.pubkey = f.followed_pubkey
             WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
-            "#
+            "#,
         )
         .bind(npub)
         .fetch_all(self.pool.get_pool())
@@ -709,16 +724,16 @@ impl UserRepository for SqliteRepository {
 
         let mut users = Vec::new();
         for row in rows {
-            use sqlx::Row;
             use crate::domain::entities::UserProfile;
-            
+            use sqlx::Row;
+
             let user = User::new_with_profile(
                 row.try_get("npub")?,
                 UserProfile {
                     display_name: row.try_get("display_name").unwrap_or_default(),
                     bio: row.try_get("bio").unwrap_or_default(),
                     avatar_url: row.try_get("avatar_url").ok(),
-                }
+                },
             );
             users.push(user);
         }
@@ -731,12 +746,12 @@ impl UserRepository for SqliteRepository {
 impl EventRepository for SqliteRepository {
     async fn create_event(&self, event: &Event) -> Result<(), AppError> {
         let tags_json = serde_json::to_string(&event.tags).unwrap_or_else(|_| "[]".to_string());
-        
+
         sqlx::query(
             r#"
             INSERT INTO events (event_id, public_key, content, kind, tags, created_at, sig)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#
+            "#,
         )
         .bind(&event.id.to_string())
         .bind(&event.pubkey)
@@ -767,7 +782,7 @@ impl EventRepository for SqliteRepository {
             SELECT event_id, public_key, content, kind, tags, created_at, sig
             FROM events
             WHERE event_id = ?
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(self.pool.get_pool())
@@ -775,13 +790,13 @@ impl EventRepository for SqliteRepository {
 
         match row {
             Some(row) => {
-                use sqlx::Row;
                 use crate::domain::value_objects::EventId;
-                
+                use sqlx::Row;
+
                 let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
                 let tags_json: String = row.try_get("tags").unwrap_or_default();
                 let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
-                
+
                 let event = Event::new_with_id(
                     event_id,
                     row.try_get("public_key")?,
@@ -792,10 +807,10 @@ impl EventRepository for SqliteRepository {
                         .unwrap_or_else(chrono::Utc::now),
                     row.try_get("sig")?,
                 );
-                
+
                 Ok(Some(event))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -807,7 +822,7 @@ impl EventRepository for SqliteRepository {
             WHERE kind = ?
             ORDER BY created_at DESC
             LIMIT ?
-            "#
+            "#,
         )
         .bind(kind as i64)
         .bind(limit as i64)
@@ -816,13 +831,13 @@ impl EventRepository for SqliteRepository {
 
         let mut events = Vec::new();
         for row in rows {
-            use sqlx::Row;
             use crate::domain::value_objects::EventId;
-            
+            use sqlx::Row;
+
             let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
             let tags_json: String = row.try_get("tags").unwrap_or_default();
             let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
-            
+
             let event = Event::new_with_id(
                 event_id,
                 row.try_get("public_key")?,
@@ -839,7 +854,11 @@ impl EventRepository for SqliteRepository {
         Ok(events)
     }
 
-    async fn get_events_by_author(&self, pubkey: &str, limit: usize) -> Result<Vec<Event>, AppError> {
+    async fn get_events_by_author(
+        &self,
+        pubkey: &str,
+        limit: usize,
+    ) -> Result<Vec<Event>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT event_id, public_key, content, kind, tags, created_at, sig
@@ -847,7 +866,7 @@ impl EventRepository for SqliteRepository {
             WHERE public_key = ?
             ORDER BY created_at DESC
             LIMIT ?
-            "#
+            "#,
         )
         .bind(pubkey)
         .bind(limit as i64)
@@ -856,13 +875,13 @@ impl EventRepository for SqliteRepository {
 
         let mut events = Vec::new();
         for row in rows {
-            use sqlx::Row;
             use crate::domain::value_objects::EventId;
-            
+            use sqlx::Row;
+
             let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
             let tags_json: String = row.try_get("tags").unwrap_or_default();
             let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
-            
+
             let event = Event::new_with_id(
                 event_id,
                 row.try_get("public_key")?,
@@ -886,7 +905,7 @@ impl EventRepository for SqliteRepository {
             UPDATE events 
             SET deleted = 1, updated_at = ?
             WHERE event_id = ?
-            "#
+            "#,
         )
         .bind(chrono::Utc::now().timestamp_millis())
         .bind(id)
@@ -903,20 +922,20 @@ impl EventRepository for SqliteRepository {
             FROM events
             WHERE sync_status IS NULL OR sync_status = 0
             ORDER BY created_at DESC
-            "#
+            "#,
         )
         .fetch_all(self.pool.get_pool())
         .await?;
 
         let mut events = Vec::new();
         for row in rows {
-            use sqlx::Row;
             use crate::domain::value_objects::EventId;
-            
+            use sqlx::Row;
+
             let event_id = EventId::from_hex(row.try_get::<String, _>("event_id")?.as_str())?;
             let tags_json: String = row.try_get("tags").unwrap_or_default();
             let tags: Vec<Vec<String>> = serde_json::from_str(&tags_json).unwrap_or_default();
-            
+
             let event = Event::new_with_id(
                 event_id,
                 row.try_get("public_key")?,
@@ -939,7 +958,7 @@ impl EventRepository for SqliteRepository {
             UPDATE events 
             SET sync_status = 1, synced_at = ?
             WHERE event_id = ?
-            "#
+            "#,
         )
         .bind(chrono::Utc::now().timestamp_millis())
         .bind(id)
@@ -954,7 +973,7 @@ impl EventRepository for SqliteRepository {
             r#"
             INSERT OR IGNORE INTO event_topics (event_id, topic_id, created_at)
             VALUES (?1, ?2, ?3)
-            "#
+            "#,
         )
         .bind(event_id)
         .bind(topic_id)
@@ -968,7 +987,7 @@ impl EventRepository for SqliteRepository {
         let rows = sqlx::query(
             r#"
             SELECT topic_id FROM event_topics WHERE event_id = ?1
-            "#
+            "#,
         )
         .bind(event_id)
         .fetch_all(self.pool.get_pool())

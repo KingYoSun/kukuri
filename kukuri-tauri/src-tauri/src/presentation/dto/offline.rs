@@ -202,7 +202,10 @@ impl Validate for UpdateSyncStatusRequest {
         // 同期ステータスの有効な値をチェック
         let valid_statuses = ["pending", "syncing", "synced", "failed", "conflict"];
         if !valid_statuses.contains(&self.sync_status.as_str()) {
-            return Err(format!("Invalid sync status. Must be one of: {:?}", valid_statuses));
+            return Err(format!(
+                "Invalid sync status. Must be one of: {:?}",
+                valid_statuses
+            ));
         }
         Ok(())
     }

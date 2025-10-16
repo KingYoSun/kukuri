@@ -1,10 +1,7 @@
 use crate::{
-    infrastructure::storage::secure_storage::{DefaultSecureStorage, AccountMetadata},
     application::services::AuthService,
-    presentation::dto::{
-        auth_dto::LoginResponse,
-        Validate,
-    },
+    infrastructure::storage::secure_storage::{AccountMetadata, DefaultSecureStorage},
+    presentation::dto::{Validate, auth_dto::LoginResponse},
     shared::error::AppError,
 };
 use serde::{Deserialize, Serialize};
@@ -62,9 +59,11 @@ impl SecureStorageHandler {
         Self { auth_service }
     }
 
-    pub async fn add_account(&self, request: AddAccountRequest) -> Result<AddAccountResponse, AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn add_account(
+        &self,
+        request: AddAccountRequest,
+    ) -> Result<AddAccountResponse, AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         // nsecから公開鍵とnpubを生成
         let user = self.auth_service.login_with_nsec(&request.nsec).await?;
@@ -77,7 +76,8 @@ impl SecureStorageHandler {
             &request.name,
             &request.display_name,
             request.picture,
-        ).map_err(|e| AppError::Database(e.to_string()))?;
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
         Ok(AddAccountResponse {
             npub: user.npub,
@@ -86,8 +86,7 @@ impl SecureStorageHandler {
     }
 
     pub async fn list_accounts(&self) -> Result<Vec<AccountMetadata>, AppError> {
-        DefaultSecureStorage::list_accounts()
-            .map_err(|e| AppError::Database(e.to_string()))
+        DefaultSecureStorage::list_accounts().map_err(|e| AppError::Database(e.to_string()))
     }
 
     pub async fn switch_account(&self, npub: String) -> Result<SwitchAccountResponse, AppError> {
@@ -109,14 +108,14 @@ impl SecureStorageHandler {
     }
 
     pub async fn remove_account(&self, npub: String) -> Result<(), AppError> {
-        DefaultSecureStorage::remove_account(&npub)
-            .map_err(|e| AppError::Database(e.to_string()))
+        DefaultSecureStorage::remove_account(&npub).map_err(|e| AppError::Database(e.to_string()))
     }
 
     pub async fn get_current_account(&self) -> Result<Option<GetCurrentAccountResponse>, AppError> {
         // 現在のアカウント情報を取得
         if let Some((npub, nsec)) = DefaultSecureStorage::get_current_private_key()
-            .map_err(|e| AppError::Database(e.to_string()))? {
+            .map_err(|e| AppError::Database(e.to_string()))?
+        {
             // メタデータを取得
             let metadata = DefaultSecureStorage::get_accounts_metadata()
                 .map_err(|e| AppError::Database(e.to_string()))?;

@@ -1,8 +1,8 @@
 use crate::{
     application::services::AuthService,
     presentation::dto::{
-        auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
         Validate,
+        auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
     },
     shared::error::AppError,
 };
@@ -19,7 +19,7 @@ impl AuthHandler {
 
     pub async fn create_account(&self) -> Result<CreateAccountResponse, AppError> {
         let user = self.auth_service.create_account().await?;
-        
+
         // nsecの生成（実際の実装では秘密鍵から生成）
         let nsec = format!("nsec1{}", &user.pubkey[..32]); // 仮実装
 
@@ -30,9 +30,11 @@ impl AuthHandler {
         })
     }
 
-    pub async fn login_with_nsec(&self, request: LoginWithNsecRequest) -> Result<LoginResponse, AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn login_with_nsec(
+        &self,
+        request: LoginWithNsecRequest,
+    ) -> Result<LoginResponse, AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         let user = self.auth_service.login_with_nsec(&request.nsec).await?;
 

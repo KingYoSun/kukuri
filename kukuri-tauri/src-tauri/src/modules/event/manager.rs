@@ -1,19 +1,19 @@
-﻿use super::{handler::EventHandler, nostr_client::NostrClientManager, publisher::EventPublisher};
+use super::{handler::EventHandler, nostr_client::NostrClientManager, publisher::EventPublisher};
+use crate::domain::entities as domain;
+use crate::domain::value_objects::EventId as DomainEventId;
+use crate::infrastructure::database::EventRepository as InfraEventRepository;
+use crate::infrastructure::p2p::GossipService;
 use crate::modules::auth::key_manager::KeyManager;
 use crate::modules::database::connection::DbPool;
+use crate::modules::p2p::user_topic_id;
 use anyhow::Result;
 use nostr_sdk::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 use tracing::{error, info};
-use crate::infrastructure::p2p::GossipService;
-use crate::domain::entities as domain;
-use crate::domain::value_objects::EventId as DomainEventId;
-use std::collections::HashSet;
-use crate::modules::p2p::user_topic_id;
-use crate::infrastructure::database::EventRepository as InfraEventRepository;
 
 /// フロントエンドに送信するイベントペイロード
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -52,7 +52,9 @@ impl EventManager {
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
             gossip_service: Arc::new(RwLock::new(None)),
-            selected_default_topic_ids: Arc::new(RwLock::new(HashSet::from(["public".to_string()]))),
+            selected_default_topic_ids: Arc::new(RwLock::new(HashSet::from(
+                ["public".to_string()],
+            ))),
             event_repository: Arc::new(RwLock::new(None)),
         }
     }
@@ -61,7 +63,7 @@ impl EventManager {
     pub fn new_with_db(db_pool: Arc<DbPool>) -> Self {
         let mut event_handler = EventHandler::new();
         event_handler.set_db_pool(db_pool);
-        
+
         Self {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
             event_handler: Arc::new(event_handler),
@@ -69,12 +71,12 @@ impl EventManager {
             is_initialized: Arc::new(RwLock::new(false)),
             app_handle: Arc::new(RwLock::new(None)),
             gossip_service: Arc::new(RwLock::new(None)),
-            selected_default_topic_ids: Arc::new(RwLock::new(HashSet::from(["public".to_string()]))),
+            selected_default_topic_ids: Arc::new(RwLock::new(HashSet::from(
+                ["public".to_string()],
+            ))),
             event_repository: Arc::new(RwLock::new(None)),
         }
     }
-
-
 
     /// AppHandleを設定
     pub async fn set_app_handle(&self, app_handle: AppHandle) {
@@ -154,10 +156,6 @@ impl EventManager {
         info!("EventManager initialized successfully");
         Ok(())
     }
-
-
-
-
 
     /// テキストノートを投稿
     pub async fn publish_text_note(&self, content: &str) -> Result<EventId> {
@@ -322,10 +320,6 @@ impl EventManager {
         Ok(())
     }
 
-
-
-
-
     /// 初期化状態を確認
     async fn ensure_initialized(&self) -> Result<()> {
         if !*self.is_initialized.read().await {
@@ -362,8 +356,6 @@ impl EventManager {
             let _ = handle.emit("nostr://event/p2p", payload);
         }
 
-
-
         Ok(())
     }
 
@@ -388,7 +380,8 @@ impl EventManager {
         // トピックに参加していない場合は参加（冪等）
         let _ = gossip.join_topic(topic_id, vec![]).await;
         // ブロードキャスト
-        gossip.broadcast(topic_id, &domain_event)
+        gossip
+            .broadcast(topic_id, &domain_event)
             .await
             .map_err(|e| anyhow::anyhow!("{}", e))?;
         Ok(())
@@ -437,8 +430,7 @@ impl EventManager {
     fn to_domain_event(nostr: &nostr_sdk::Event) -> Result<domain::Event> {
         // id
         let id_hex = nostr.id.to_string();
-        let id = DomainEventId::from_hex(&id_hex)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let id = DomainEventId::from_hex(&id_hex).map_err(|e| anyhow::anyhow!(e))?;
         // created_at
         let secs = nostr.created_at.as_u64() as i64;
         let naive = chrono::NaiveDateTime::from_timestamp_opt(secs, 0)
@@ -500,24 +492,39 @@ mod tests {
 
     #[async_trait]
     impl GossipService for TestGossipService {
-        async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {
+        async fn join_topic(
+            &self,
+            topic: &str,
+            _initial_peers: Vec<String>,
+        ) -> Result<(), AppError> {
             let mut j = self.joined.write().await;
             j.insert(topic.to_string());
             Ok(())
         }
-        async fn leave_topic(&self, _topic: &str) -> Result<(), AppError> { Ok(()) }
+        async fn leave_topic(&self, _topic: &str) -> Result<(), AppError> {
+            Ok(())
+        }
         async fn broadcast(&self, topic: &str, event: &domain::Event) -> Result<(), AppError> {
             let mut b = self.broadcasts.write().await;
             b.push((topic.to_string(), event.clone()));
             Ok(())
         }
-        async fn subscribe(&self, _topic: &str) -> Result<tokio::sync::mpsc::Receiver<domain::Event>, AppError> {
+        async fn subscribe(
+            &self,
+            _topic: &str,
+        ) -> Result<tokio::sync::mpsc::Receiver<domain::Event>, AppError> {
             let (_tx, rx) = tokio::sync::mpsc::channel(1);
             Ok(rx)
         }
-        async fn get_joined_topics(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
-        async fn get_topic_peers(&self, _topic: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
-        async fn broadcast_message(&self, _topic: &str, _message: &[u8]) -> Result<(), AppError> { Ok(()) }
+        async fn get_joined_topics(&self) -> Result<Vec<String>, AppError> {
+            Ok(vec![])
+        }
+        async fn get_topic_peers(&self, _topic: &str) -> Result<Vec<String>, AppError> {
+            Ok(vec![])
+        }
+        async fn broadcast_message(&self, _topic: &str, _message: &[u8]) -> Result<(), AppError> {
+            Ok(())
+        }
     }
 
     #[tokio::test]
@@ -528,10 +535,12 @@ mod tests {
         // 新しい鍵ペアを生成
         let _ = key_manager.generate_keypair().await.unwrap();
 
-        assert!(manager
-            .initialize_with_key_manager(&key_manager)
-            .await
-            .is_ok());
+        assert!(
+            manager
+                .initialize_with_key_manager(&key_manager)
+                .await
+                .is_ok()
+        );
         assert!(manager.get_public_key().await.is_some());
     }
 
@@ -541,10 +550,12 @@ mod tests {
 
         // 初期化前はエラーになることを確認
         assert!(manager.publish_text_note("test").await.is_err());
-        assert!(manager
-            .publish_topic_post("topic", "content", None)
-            .await
-            .is_err());
+        assert!(
+            manager
+                .publish_topic_post("topic", "content", None)
+                .await
+                .is_err()
+        );
         assert!(manager.subscribe_to_topic("topic").await.is_err());
     }
 
@@ -589,8 +600,6 @@ mod tests {
             key_manager.get_keys().await.unwrap().public_key()
         );
     }
-
-
 
     #[tokio::test]
     async fn test_create_events() {
@@ -673,7 +682,9 @@ mod tests {
         assert_eq!(topics, vec!["public".to_string()]);
 
         // 一括設定
-        manager.set_default_p2p_topics(vec!["a".into(), "b".into()]).await;
+        manager
+            .set_default_p2p_topics(vec!["a".into(), "b".into()])
+            .await;
         let mut topics = manager.list_default_p2p_topics().await;
         topics.sort();
         assert_eq!(topics, vec!["a".to_string(), "b".to_string()]);
@@ -692,10 +703,15 @@ mod tests {
         let key_manager = KeyManager::new();
         // 鍵生成と初期化
         key_manager.generate_keypair().await.unwrap();
-        manager.initialize_with_key_manager(&key_manager).await.unwrap();
+        manager
+            .initialize_with_key_manager(&key_manager)
+            .await
+            .unwrap();
 
         // 既定トピックを2つ設定
-        manager.set_default_p2p_topics(vec!["t1".into(), "t2".into()]).await;
+        manager
+            .set_default_p2p_topics(vec!["t1".into(), "t2".into()])
+            .await;
 
         // テスト用GossipServiceを設定
         let gossip = Arc::new(TestGossipService::new());
@@ -709,7 +725,11 @@ mod tests {
             topics.push(user_topic_id(&pk.to_string()));
         }
         manager
-            .broadcast_to_topics(&(gossip.clone() as Arc<dyn GossipService>), &topics, &nostr_event)
+            .broadcast_to_topics(
+                &(gossip.clone() as Arc<dyn GossipService>),
+                &topics,
+                &nostr_event,
+            )
             .await
             .unwrap();
 
@@ -731,4 +751,3 @@ mod tests {
         });
     }
 }
-

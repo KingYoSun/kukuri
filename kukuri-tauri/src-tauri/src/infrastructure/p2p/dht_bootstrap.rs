@@ -8,10 +8,10 @@ use iroh_gossip::{
     net::Gossip,
     proto::TopicId,
 };
-use std::sync::Arc;
-use tracing::{debug, info, warn};
-use tokio::sync::{Mutex as TokioMutex, RwLock};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{Mutex as TokioMutex, RwLock};
+use tracing::{debug, info, warn};
 
 const LOG_TARGET: &str = "kukuri::p2p::dht";
 const METRICS_TARGET: &str = "kukuri::p2p::metrics";
@@ -134,11 +134,8 @@ impl DhtGossip {
             Some(s) => s,
             None => {
                 // 近傍指定なしで join（Receiver は破棄）
-                let topic: GossipTopic = self
-                    .gossip
-                    .subscribe(topic_id, vec![])
-                    .await
-                    .map_err(|e| {
+                let topic: GossipTopic =
+                    self.gossip.subscribe(topic_id, vec![]).await.map_err(|e| {
                         super::metrics::record_broadcast_failure();
                         warn!(
                             target: LOG_TARGET,
@@ -286,7 +283,7 @@ pub mod fallback {
     /// フォールバックノードに接続
     pub async fn connect_to_fallback(endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
         let mut connected_nodes = Vec::new();
-        
+
         for node_str in FALLBACK_NODES {
             match parse_node_addr(node_str) {
                 Ok(node_addr) => {
@@ -306,11 +303,13 @@ pub mod fallback {
                 }
             }
         }
-        
+
         if connected_nodes.is_empty() {
-            return Err(AppError::P2PError("Failed to connect to any fallback nodes".to_string()));
+            return Err(AppError::P2PError(
+                "Failed to connect to any fallback nodes".to_string(),
+            ));
         }
-        
+
         Ok(connected_nodes)
     }
 
@@ -337,10 +336,11 @@ pub mod fallback {
         }
 
         if connected.is_empty() {
-            return Err(AppError::P2PError("Failed to connect to nodes from bootstrap_nodes.json".to_string()));
+            return Err(AppError::P2PError(
+                "Failed to connect to nodes from bootstrap_nodes.json".to_string(),
+            ));
         }
 
         Ok(connected)
     }
-    
 }

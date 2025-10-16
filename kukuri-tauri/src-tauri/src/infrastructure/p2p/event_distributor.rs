@@ -7,7 +7,7 @@ use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub enum DistributionStrategy {
-    Broadcast,       // 全ピアに配信
+    Broadcast,      // 全ピアに配信
     Gossip,         // Gossipプロトコルで配信
     Direct(String), // 特定のピアに直接配信
     Hybrid,         // NostrとP2Pの両方で配信
@@ -17,10 +17,16 @@ pub enum DistributionStrategy {
 
 #[async_trait]
 pub trait EventDistributor: Send + Sync {
-    async fn distribute(&self, event: &Event, strategy: DistributionStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn distribute(
+        &self,
+        event: &Event,
+        strategy: DistributionStrategy,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn receive(&self) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_strategy(&self, strategy: DistributionStrategy);
-    async fn get_pending_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_pending_events(
+        &self,
+    ) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>>;
     async fn retry_failed(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -125,8 +131,11 @@ impl EventDistributor for DefaultEventDistributor {
         event: &Event,
         strategy: DistributionStrategy,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        debug!("Distributing event {} with strategy {:?}", event.id, strategy);
-        
+        debug!(
+            "Distributing event {} with strategy {:?}",
+            event.id, strategy
+        );
+
         // 配信を試行
         match self.distribute_internal(event, &strategy).await {
             Ok(()) => {
@@ -135,11 +144,11 @@ impl EventDistributor for DefaultEventDistributor {
             }
             Err(e) => {
                 error!("Failed to distribute event {}: {}", event.id, e);
-                
+
                 // 失敗したイベントを記録
                 let mut inner = self.inner.write().await;
                 inner.failed_events.push((event.clone(), strategy));
-                
+
                 Err(e)
             }
         }
@@ -156,7 +165,9 @@ impl EventDistributor for DefaultEventDistributor {
         inner.strategy = strategy;
     }
 
-    async fn get_pending_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_pending_events(
+        &self,
+    ) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
         let inner = self.inner.read().await;
         Ok(inner.pending_events.iter().cloned().collect())
     }
@@ -214,7 +225,9 @@ impl EventDistributor for P2PEventDistributor {
         event: &Event,
         _strategy: DistributionStrategy, // P2Pのみ使用
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.distributor.distribute(event, DistributionStrategy::P2P).await
+        self.distributor
+            .distribute(event, DistributionStrategy::P2P)
+            .await
     }
 
     async fn receive(&self) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
@@ -225,7 +238,9 @@ impl EventDistributor for P2PEventDistributor {
         // P2P専用なので変更しない
     }
 
-    async fn get_pending_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_pending_events(
+        &self,
+    ) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
         self.distributor.get_pending_events().await
     }
 
@@ -260,7 +275,9 @@ impl EventDistributor for NostrEventDistributor {
         event: &Event,
         _strategy: DistributionStrategy, // Nostrのみ使用
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.distributor.distribute(event, DistributionStrategy::Nostr).await
+        self.distributor
+            .distribute(event, DistributionStrategy::Nostr)
+            .await
     }
 
     async fn receive(&self) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
@@ -271,7 +288,9 @@ impl EventDistributor for NostrEventDistributor {
         // Nostr専用なので変更しない
     }
 
-    async fn get_pending_events(&self) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_pending_events(
+        &self,
+    ) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
         self.distributor.get_pending_events().await
     }
 
@@ -308,7 +327,7 @@ mod tests {
     async fn test_set_strategy() {
         let distributor = DefaultEventDistributor::new();
         distributor.set_strategy(DistributionStrategy::P2P).await;
-        
+
         let inner = distributor.inner.read().await;
         assert!(matches!(inner.strategy, DistributionStrategy::P2P));
     }
@@ -317,8 +336,10 @@ mod tests {
     async fn test_distribute_event() {
         let distributor = DefaultEventDistributor::new();
         let event = create_test_event();
-        
-        let result = distributor.distribute(&event, DistributionStrategy::Broadcast).await;
+
+        let result = distributor
+            .distribute(&event, DistributionStrategy::Broadcast)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -326,8 +347,10 @@ mod tests {
     async fn test_hybrid_distribution() {
         let distributor = DefaultEventDistributor::new();
         let event = create_test_event();
-        
-        let result = distributor.distribute(&event, DistributionStrategy::Hybrid).await;
+
+        let result = distributor
+            .distribute(&event, DistributionStrategy::Hybrid)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -342,9 +365,11 @@ mod tests {
     async fn test_p2p_distributor() {
         let distributor = P2PEventDistributor::new();
         let event = create_test_event();
-        
+
         // P2P distributorは常にP2P戦略を使用
-        let result = distributor.distribute(&event, DistributionStrategy::Broadcast).await;
+        let result = distributor
+            .distribute(&event, DistributionStrategy::Broadcast)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -352,9 +377,11 @@ mod tests {
     async fn test_nostr_distributor() {
         let distributor = NostrEventDistributor::new();
         let event = create_test_event();
-        
+
         // Nostr distributorは常にNostr戦略を使用
-        let result = distributor.distribute(&event, DistributionStrategy::P2P).await;
+        let result = distributor
+            .distribute(&event, DistributionStrategy::P2P)
+            .await;
         assert!(result.is_ok());
     }
 

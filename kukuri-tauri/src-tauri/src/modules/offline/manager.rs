@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{Pool, Sqlite, Row};
+use sqlx::{Pool, Row, Sqlite};
 use uuid::Uuid;
 
 use super::models::*;
@@ -56,7 +56,7 @@ impl OfflineManager {
     ) -> Result<Vec<OfflineAction>> {
         // シンプルな実装に変更
         let actions = sqlx::query_as::<_, OfflineAction>(
-            "SELECT * FROM offline_actions WHERE is_synced = 0 ORDER BY created_at DESC"
+            "SELECT * FROM offline_actions WHERE is_synced = 0 ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -75,7 +75,7 @@ impl OfflineManager {
             SELECT * FROM offline_actions
             WHERE user_pubkey = ?1 AND is_synced = 0
             ORDER BY created_at ASC
-            "#
+            "#,
         )
         .bind(&request.user_pubkey)
         .fetch_all(&self.pool)
@@ -101,7 +101,7 @@ impl OfflineManager {
                     UPDATE offline_actions 
                     SET is_synced = 1, synced_at = ?1
                     WHERE id = ?2
-                    "#
+                    "#,
                 )
                 .bind(synced_at)
                 .bind(action.id)
@@ -116,7 +116,7 @@ impl OfflineManager {
             SELECT COUNT(*) as count
             FROM offline_actions
             WHERE user_pubkey = ?1 AND is_synced = 0
-            "#
+            "#,
         )
         .bind(&request.user_pubkey)
         .fetch_one(&self.pool)
@@ -133,18 +133,15 @@ impl OfflineManager {
 
     // キャッシュステータスの取得
     pub async fn get_cache_status(&self) -> Result<CacheStatusResponse> {
-        let total_result = sqlx::query(
-            r#"SELECT COUNT(*) as count FROM cache_metadata"#
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let total_result = sqlx::query(r#"SELECT COUNT(*) as count FROM cache_metadata"#)
+            .fetch_one(&self.pool)
+            .await?;
         let total_items: i64 = total_result.try_get("count").unwrap_or(0);
 
-        let stale_result = sqlx::query(
-            r#"SELECT COUNT(*) as count FROM cache_metadata WHERE is_stale = 1"#
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let stale_result =
+            sqlx::query(r#"SELECT COUNT(*) as count FROM cache_metadata WHERE is_stale = 1"#)
+                .fetch_one(&self.pool)
+                .await?;
         let stale_items: i64 = stale_result.try_get("count").unwrap_or(0);
 
         let cache_types_result = sqlx::query(
@@ -156,7 +153,7 @@ impl OfflineManager {
                 MAX(is_stale) as is_stale
             FROM cache_metadata
             GROUP BY cache_type
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -187,7 +184,7 @@ impl OfflineManager {
             r#"
             INSERT INTO sync_queue (action_type, payload, status, created_at, updated_at)
             VALUES (?1, ?2, 'pending', ?3, ?3)
-            "#
+            "#,
         )
         .bind(&request.action_type)
         .bind(&payload)
@@ -199,18 +196,13 @@ impl OfflineManager {
     }
 
     // キャッシュメタデータの更新
-    pub async fn update_cache_metadata(
-        &self,
-        request: UpdateCacheMetadataRequest,
-    ) -> Result<()> {
+    pub async fn update_cache_metadata(&self, request: UpdateCacheMetadataRequest) -> Result<()> {
         let now = Utc::now().timestamp();
         let metadata = request
             .metadata
             .map(|m| serde_json::to_string(&m))
             .transpose()?;
-        let expiry_time = request
-            .expiry_seconds
-            .map(|seconds| now + seconds);
+        let expiry_time = request.expiry_seconds.map(|seconds| now + seconds);
 
         sqlx::query(
             r#"
@@ -225,7 +217,7 @@ impl OfflineManager {
                 data_version = data_version + 1,
                 expiry_time = excluded.expiry_time,
                 metadata = excluded.metadata
-            "#
+            "#,
         )
         .bind(&request.cache_key)
         .bind(&request.cache_type)
@@ -255,7 +247,7 @@ impl OfflineManager {
                 update_id, entity_type, entity_id, original_data,
                 updated_data, is_confirmed, created_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
-            "#
+            "#,
         )
         .bind(&update_id)
         .bind(&entity_type)
@@ -278,7 +270,7 @@ impl OfflineManager {
             UPDATE optimistic_updates
             SET is_confirmed = 1, confirmed_at = ?1
             WHERE update_id = ?2
-            "#
+            "#,
         )
         .bind(confirmed_at)
         .bind(&update_id)
@@ -294,7 +286,7 @@ impl OfflineManager {
             r#"
             SELECT * FROM optimistic_updates
             WHERE update_id = ?1
-            "#
+            "#,
         )
         .bind(&update_id)
         .fetch_optional(&self.pool)
@@ -302,12 +294,10 @@ impl OfflineManager {
 
         if let Some(update) = update {
             // 削除
-            sqlx::query(
-                r#"DELETE FROM optimistic_updates WHERE update_id = ?1"#
-            )
-            .bind(&update_id)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query(r#"DELETE FROM optimistic_updates WHERE update_id = ?1"#)
+                .bind(&update_id)
+                .execute(&self.pool)
+                .await?;
 
             Ok(update.original_data)
         } else {
@@ -321,7 +311,7 @@ impl OfflineManager {
             r#"
             SELECT * FROM offline_actions
             WHERE id = ?1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_one(&self.pool)
@@ -338,7 +328,7 @@ impl OfflineManager {
             r#"
             DELETE FROM cache_metadata
             WHERE expiry_time IS NOT NULL AND expiry_time < ?1
-            "#
+            "#,
         )
         .bind(now)
         .execute(&self.pool)
@@ -368,7 +358,7 @@ impl OfflineManager {
                 last_local_update = excluded.last_local_update,
                 sync_status = excluded.sync_status,
                 conflict_data = excluded.conflict_data
-            "#
+            "#,
         )
         .bind(&entity_type)
         .bind(&entity_id)

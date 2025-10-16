@@ -1,9 +1,6 @@
 use crate::{
     application::services::UserService,
-    presentation::dto::{
-        user_dto::UserProfile,
-        ApiResponse,
-    },
+    presentation::dto::{ApiResponse, user_dto::UserProfile},
     shared::error::AppError,
 };
 use std::sync::Arc;
@@ -18,7 +15,10 @@ impl UserHandler {
     }
 
     pub async fn get_user_profile(&self, npub: String) -> Result<UserProfile, AppError> {
-        let user = self.user_service.get_user(&npub).await?
+        let user = self
+            .user_service
+            .get_user(&npub)
+            .await?
             .ok_or_else(|| AppError::NotFound(format!("User not found: {}", npub)))?;
 
         Ok(UserProfile {

@@ -4,13 +4,13 @@ mod tests {
     use crate::infrastructure::p2p::gossip_service::GossipService;
     use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
     use crate::infrastructure::p2p::utils::parse_peer_hint;
-    use crate::modules::p2p::generate_topic_id;
     use crate::modules::p2p::P2PEvent;
+    use crate::modules::p2p::generate_topic_id;
     use iroh::{Endpoint, NodeAddr};
+    use nostr_sdk::prelude::*;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::Arc;
-    use tokio::time::{timeout, sleep, Duration};
-    use nostr_sdk::prelude::*;
+    use tokio::time::{Duration, sleep, timeout};
 
     macro_rules! log_step {
         ($($arg:tt)*) => {{
@@ -43,10 +43,7 @@ mod tests {
             log_step!("adding bootstrap node addr {}", addr.node_id);
             let _ = endpoint.add_node_addr_with_source(addr.clone(), "integration-bootstrap");
             if let Err(err) = endpoint.connect(addr.clone(), iroh_gossip::ALPN).await {
-                eprintln!(
-                    "failed to connect to bootstrap {}: {:?}",
-                    addr.node_id, err
-                );
+                eprintln!("failed to connect to bootstrap {}: {:?}", addr.node_id, err);
             } else {
                 log_step!("connected to bootstrap {}", addr.node_id);
             }
@@ -95,10 +92,7 @@ mod tests {
                     if let Some(addr) = parsed.node_addr {
                         addrs.push(addr);
                     } else {
-                        eprintln!(
-                            "bootstrap peer '{}' missing address; skipping",
-                            trimmed
-                        );
+                        eprintln!("bootstrap peer '{}' missing address; skipping", trimmed);
                     }
                 }
                 Err(err) => {
@@ -108,7 +102,10 @@ mod tests {
             }
         }
         if addrs.is_empty() {
-            eprintln!("skipping {} (no usable bootstrap node addresses)", test_name);
+            eprintln!(
+                "skipping {} (no usable bootstrap node addresses)",
+                test_name
+            );
             return None;
         }
         log_step!(
@@ -116,10 +113,17 @@ mod tests {
             test_name,
             hints.join(", ")
         );
-        Some(BootstrapContext { hints, node_addrs: addrs })
+        Some(BootstrapContext {
+            hints,
+            node_addrs: addrs,
+        })
     }
 
-    async fn wait_for_topic_membership(service: &IrohGossipService, topic: &str, timeout: Duration) -> bool {
+    async fn wait_for_topic_membership(
+        service: &IrohGossipService,
+        topic: &str,
+        timeout: Duration,
+    ) -> bool {
         let target = topic.to_string();
         let start = tokio::time::Instant::now();
         while start.elapsed() < timeout {
@@ -162,11 +166,18 @@ mod tests {
                 }
             }
         }
-        log_step!("timed out waiting for peer join events after {:?}", max_wait);
+        log_step!(
+            "timed out waiting for peer join events after {:?}",
+            max_wait
+        );
         false
     }
 
-    fn build_peer_hints(base: &[String], local_hints: &[Option<String>], self_idx: usize) -> Vec<String> {
+    fn build_peer_hints(
+        base: &[String],
+        local_hints: &[Option<String>],
+        self_idx: usize,
+    ) -> Vec<String> {
         let mut result = base.to_vec();
         for (idx, hint) in local_hints.iter().enumerate() {
             if idx == self_idx {
@@ -274,7 +285,9 @@ mod tests {
 
         // Aから送信→Bが受信（NIP-01準拠のイベントを送信）
         let keys = Keys::generate();
-        let ne = EventBuilder::text_note("hello-int").sign_with_keys(&keys).unwrap();
+        let ne = EventBuilder::text_note("hello-int")
+            .sign_with_keys(&keys)
+            .unwrap();
         let ev = nostr_to_domain(&ne);
         svc_a.broadcast(&topic, &ev).await.unwrap();
         let r = timeout(Duration::from_secs(15), async { rx_b.recv().await })
@@ -335,7 +348,9 @@ mod tests {
         log_step!("broadcasting root event on topic {}", topic);
 
         let root_keys = Keys::generate();
-        let root_note = EventBuilder::text_note("root-post").sign_with_keys(&root_keys).unwrap();
+        let root_note = EventBuilder::text_note("root-post")
+            .sign_with_keys(&root_keys)
+            .unwrap();
         let root_event = nostr_to_domain(&root_note);
         let root_id = root_event.id.clone();
         let root_pubkey = root_event.pubkey.clone();
@@ -435,7 +450,9 @@ mod tests {
         log_step!("broadcasting base event on topic {}", topic);
 
         let base_keys = Keys::generate();
-        let base_note = EventBuilder::text_note("quote-root").sign_with_keys(&base_keys).unwrap();
+        let base_note = EventBuilder::text_note("quote-root")
+            .sign_with_keys(&base_keys)
+            .unwrap();
         let base_event = nostr_to_domain(&base_note);
         let base_id = base_event.id.clone();
         let base_pubkey = base_event.pubkey.clone();
@@ -522,7 +539,9 @@ mod tests {
         log_step!("broadcasting multi-subscriber event on {}", topic);
         // Aから送信（NIP-01準拠）
         let keys = Keys::generate();
-        let ne = EventBuilder::text_note("hello-multi").sign_with_keys(&keys).unwrap();
+        let ne = EventBuilder::text_note("hello-multi")
+            .sign_with_keys(&keys)
+            .unwrap();
         let ev = nostr_to_domain(&ne);
         svc_a.broadcast(&topic, &ev).await.unwrap();
 
@@ -592,7 +611,9 @@ mod tests {
 
         // Aから送信（NIP-01準拠）
         let keys = Keys::generate();
-        let ne = EventBuilder::text_note("hello-3nodes").sign_with_keys(&keys).unwrap();
+        let ne = EventBuilder::text_note("hello-3nodes")
+            .sign_with_keys(&keys)
+            .unwrap();
         let ev = nostr_to_domain(&ne);
         svc_a.broadcast(&topic, &ev).await.unwrap();
 
@@ -660,7 +681,9 @@ mod tests {
         // A→B, B→A 交互に送信
         for i in 0..5u32 {
             let keys = Keys::generate();
-            let ne = EventBuilder::text_note(format!("ping-{i}")).sign_with_keys(&keys).unwrap();
+            let ne = EventBuilder::text_note(format!("ping-{i}"))
+                .sign_with_keys(&keys)
+                .unwrap();
             let ev = nostr_to_domain(&ne);
             if i % 2 == 0 {
                 svc_a.broadcast(&topic, &ev).await.unwrap();

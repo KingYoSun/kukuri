@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use chrono::Utc;
-use secp256k1::ecdsa::Signature;
 use secp256k1::SECP256K1;
+use secp256k1::ecdsa::Signature;
 use secp256k1::{Message as Secp256k1Message, PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

@@ -1,13 +1,13 @@
 /// ブートストラップノード設定モジュール
 use crate::shared::error::AppError;
+use dirs;
+use iroh::{NodeAddr, NodeId};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use tracing::{debug, info, warn};
-use iroh::{NodeAddr, NodeId};
 use std::str::FromStr;
-use dirs;
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootstrapConfig {
@@ -25,24 +25,23 @@ pub struct EnvironmentConfig {
 impl BootstrapConfig {
     /// 設定ファイルから読み込み
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, AppError> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| AppError::ConfigurationError(format!("Failed to read bootstrap config: {}", e)))?;
-        
-        let config: BootstrapConfig = serde_json::from_str(&content)
-            .map_err(|e| AppError::ConfigurationError(format!("Failed to parse bootstrap config: {}", e)))?;
-        
+        let content = fs::read_to_string(path).map_err(|e| {
+            AppError::ConfigurationError(format!("Failed to read bootstrap config: {}", e))
+        })?;
+
+        let config: BootstrapConfig = serde_json::from_str(&content).map_err(|e| {
+            AppError::ConfigurationError(format!("Failed to parse bootstrap config: {}", e))
+        })?;
+
         Ok(config)
     }
-    
+
     /// デフォルト設定を取得
     pub fn default_config() -> Self {
         Self {
             development: EnvironmentConfig {
                 description: "Local development bootstrap nodes".to_string(),
-                nodes: vec![
-                    "localhost:11223".to_string(),
-                    "localhost:11224".to_string(),
-                ],
+                nodes: vec!["localhost:11223".to_string(), "localhost:11224".to_string()],
             },
             staging: EnvironmentConfig {
                 description: "Staging environment bootstrap nodes".to_string(),
@@ -54,7 +53,7 @@ impl BootstrapConfig {
             },
         }
     }
-    
+
     /// 環境に応じたノードリストを取得
     pub fn get_nodes(&self, environment: &str) -> Vec<String> {
         match environment {
@@ -67,12 +66,12 @@ impl BootstrapConfig {
             }
         }
     }
-    
+
     /// ソケットアドレスのリストを取得
     pub fn get_socket_addrs(&self, environment: &str) -> Vec<SocketAddr> {
         let nodes = self.get_nodes(environment);
         let mut addrs = Vec::new();
-        
+
         for node in nodes {
             match node.parse::<SocketAddr>() {
                 Ok(addr) => addrs.push(addr),
@@ -81,7 +80,7 @@ impl BootstrapConfig {
                 }
             }
         }
-        
+
         addrs
     }
 
@@ -134,7 +133,7 @@ pub fn get_current_environment() -> String {
 pub fn load_bootstrap_nodes() -> Result<Vec<SocketAddr>, AppError> {
     let env = get_current_environment();
     info!("Loading bootstrap nodes for environment: {}", env);
-    
+
     // まず設定ファイルを探す
     let config_path = "bootstrap_nodes.json";
     let config = if Path::new(config_path).exists() {
@@ -143,15 +142,15 @@ pub fn load_bootstrap_nodes() -> Result<Vec<SocketAddr>, AppError> {
         info!("Bootstrap config file not found, using defaults");
         BootstrapConfig::default_config()
     };
-    
+
     let addrs = config.get_socket_addrs(&env);
-    
+
     if addrs.is_empty() {
         warn!("No bootstrap nodes configured for environment: {}", env);
     } else {
         info!("Loaded {} bootstrap nodes", addrs.len());
     }
-    
+
     Ok(addrs)
 }
 
@@ -171,7 +170,10 @@ pub fn load_bootstrap_node_addrs() -> Result<Vec<NodeAddr>, AppError> {
 
     let addrs = config.get_node_addrs_with_id(&env);
     if addrs.is_empty() {
-        warn!("No valid NodeId@Addr bootstrap entries for environment: {}", env);
+        warn!(
+            "No valid NodeId@Addr bootstrap entries for environment: {}",
+            env
+        );
     } else {
         info!("Loaded {} NodeId@Addr bootstrap entries", addrs.len());
     }
@@ -232,12 +234,20 @@ fn user_config_path() -> PathBuf {
 /// ユーザー定義のブートストラップノード（NodeId@host:port）を保存
 pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
     let path = user_config_path();
-    let cfg = UserBootstrapConfig { nodes: nodes.to_vec() };
-    let json = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| AppError::ConfigurationError(format!("Failed to serialize user bootstrap: {}", e)))?;
-    fs::write(&path, json)
-        .map_err(|e| AppError::ConfigurationError(format!("Failed to write user bootstrap file: {}", e)))?;
-    info!("Saved user bootstrap nodes to {:?} ({} entries)", path, nodes.len());
+    let cfg = UserBootstrapConfig {
+        nodes: nodes.to_vec(),
+    };
+    let json = serde_json::to_string_pretty(&cfg).map_err(|e| {
+        AppError::ConfigurationError(format!("Failed to serialize user bootstrap: {}", e))
+    })?;
+    fs::write(&path, json).map_err(|e| {
+        AppError::ConfigurationError(format!("Failed to write user bootstrap file: {}", e))
+    })?;
+    info!(
+        "Saved user bootstrap nodes to {:?} ({} entries)",
+        path,
+        nodes.len()
+    );
     Ok(())
 }
 
@@ -245,8 +255,9 @@ pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
 pub fn clear_user_bootstrap_nodes() -> Result<(), AppError> {
     let path = user_config_path();
     if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|e| AppError::ConfigurationError(format!("Failed to remove user bootstrap file: {}", e)))?;
+        fs::remove_file(&path).map_err(|e| {
+            AppError::ConfigurationError(format!("Failed to remove user bootstrap file: {}", e))
+        })?;
         info!("Removed user bootstrap config at {:?}", path);
     }
     Ok(())
@@ -279,7 +290,9 @@ pub fn load_user_bootstrap_node_addrs() -> Vec<NodeAddr> {
     for node in load_user_bootstrap_nodes() {
         if let Some((id_part, addr_part)) = node.split_once('@') {
             match (NodeId::from_str(id_part), addr_part.parse::<SocketAddr>()) {
-                (Ok(node_id), Ok(sock)) => out.push(NodeAddr::new(node_id).with_direct_addresses([sock])),
+                (Ok(node_id), Ok(sock)) => {
+                    out.push(NodeAddr::new(node_id).with_direct_addresses([sock]))
+                }
                 _ => debug!("Invalid user bootstrap entry: {}", node),
             }
         } else {

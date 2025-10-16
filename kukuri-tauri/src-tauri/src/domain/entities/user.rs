@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 // UserProfile for compatibility with SqliteRepository
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -40,7 +40,12 @@ impl User {
         }
     }
 
-    pub fn with_profile(mut self, name: Option<String>, display_name: Option<String>, about: Option<String>) -> Self {
+    pub fn with_profile(
+        mut self,
+        name: Option<String>,
+        display_name: Option<String>,
+        about: Option<String>,
+    ) -> Self {
         self.name = name;
         self.profile.display_name = display_name.unwrap_or_default();
         self.profile.bio = about.unwrap_or_default();
@@ -69,26 +74,26 @@ impl User {
         }
         self.updated_at = chrono::Utc::now();
     }
-    
+
     pub fn pubkey(&self) -> &str {
         &self.pubkey
     }
-    
+
     pub fn npub(&self) -> &str {
         &self.npub
     }
-    
+
     pub fn from_pubkey(pubkey: &str) -> Self {
         use nostr_sdk::prelude::*;
-        
+
         let npub = PublicKey::from_hex(pubkey)
             .ok()
             .and_then(|pk| pk.to_bech32().ok())
             .unwrap_or_else(|| pubkey.to_string());
-        
+
         Self::new(npub, pubkey.to_string())
     }
-    
+
     pub fn new_with_profile(npub: String, profile: UserProfile) -> Self {
         let mut user = Self::new(npub.clone(), String::new());
         user.profile = profile;

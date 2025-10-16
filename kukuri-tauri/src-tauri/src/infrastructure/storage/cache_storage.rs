@@ -11,8 +11,16 @@ pub struct CacheEntry<T> {
 
 #[async_trait]
 pub trait CacheStorage: Send + Sync {
-    async fn set<T: Serialize + Send + Sync>(&self, key: &str, value: T, ttl: Option<Duration>) -> Result<(), Box<dyn std::error::Error>>;
-    async fn get<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Result<Option<T>, Box<dyn std::error::Error>>;
+    async fn set<T: Serialize + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+        ttl: Option<Duration>,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get<T: for<'de> Deserialize<'de>>(
+        &self,
+        key: &str,
+    ) -> Result<Option<T>, Box<dyn std::error::Error>>;
     async fn delete(&self, key: &str) -> Result<(), Box<dyn std::error::Error>>;
     async fn clear(&self) -> Result<(), Box<dyn std::error::Error>>;
     async fn exists(&self, key: &str) -> Result<bool, Box<dyn std::error::Error>>;

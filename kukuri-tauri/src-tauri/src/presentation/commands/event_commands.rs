@@ -1,7 +1,7 @@
 use crate::presentation::dto::event::{
-    NostrMetadataDto, PublishTextNoteRequest, PublishTopicPostRequest,
-    SendReactionRequest, UpdateMetadataRequest, DeleteEventsRequest,
-    EventResponse, SubscribeRequest, SetDefaultP2PTopicRequest
+    DeleteEventsRequest, EventResponse, NostrMetadataDto, PublishTextNoteRequest,
+    PublishTopicPostRequest, SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest,
+    UpdateMetadataRequest,
 };
 use crate::state::AppState;
 use tauri::State;
@@ -24,7 +24,7 @@ pub async fn publish_text_note(
     state: State<'_, AppState>,
 ) -> Result<EventResponse, String> {
     let request = PublishTextNoteRequest { content };
-    
+
     state
         .event_handler
         .publish_text_note(request)
@@ -45,7 +45,7 @@ pub async fn publish_topic_post(
         content,
         reply_to,
     };
-    
+
     state
         .event_handler
         .publish_topic_post(request)
@@ -60,11 +60,8 @@ pub async fn send_reaction(
     reaction: String,
     state: State<'_, AppState>,
 ) -> Result<EventResponse, String> {
-    let request = SendReactionRequest {
-        event_id,
-        reaction,
-    };
-    
+    let request = SendReactionRequest { event_id, reaction };
+
     state
         .event_handler
         .send_reaction(request)
@@ -79,7 +76,7 @@ pub async fn update_nostr_metadata(
     state: State<'_, AppState>,
 ) -> Result<EventResponse, String> {
     let request = UpdateMetadataRequest { metadata };
-    
+
     state
         .event_handler
         .update_metadata(request)
@@ -94,7 +91,7 @@ pub async fn subscribe_to_topic(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let request = SubscribeRequest { topic_id };
-    
+
     state
         .event_handler
         .subscribe_to_topic(request)
@@ -135,11 +132,8 @@ pub async fn delete_events(
     reason: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<EventResponse, String> {
-    let request = DeleteEventsRequest {
-        event_ids,
-        reason,
-    };
-    
+    let request = DeleteEventsRequest { event_ids, reason };
+
     state
         .event_handler
         .delete_events(request)

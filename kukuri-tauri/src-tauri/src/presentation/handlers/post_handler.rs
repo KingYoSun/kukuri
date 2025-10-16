@@ -1,12 +1,12 @@
 use crate::{
-    application::services::{PostService, AuthService},
+    application::services::{AuthService, PostService},
     presentation::dto::{
+        Validate,
         post_dto::{
             BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest, BookmarkAction,
             BookmarkPostRequest, CreatePostRequest, DeletePostRequest, GetPostsRequest,
             PostResponse, ReactToPostRequest,
         },
-        Validate,
     },
     shared::error::AppError,
 };
@@ -20,7 +20,7 @@ pub struct PostHandler {
 
 impl PostHandler {
     pub fn new(post_service: Arc<PostService>, auth_service: Arc<AuthService>) -> Self {
-        Self { 
+        Self {
             post_service,
             auth_service,
         }
@@ -28,14 +28,13 @@ impl PostHandler {
 
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<PostResponse, AppError> {
         // 入力検証
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         // 現在のユーザーを取得
-        let current_user = self.auth_service
-            .get_current_user()
-            .await?
-            .ok_or_else(|| AppError::Unauthorized("ユーザーが認証されていません".to_string()))?;
+        let current_user =
+            self.auth_service.get_current_user().await?.ok_or_else(|| {
+                AppError::Unauthorized("ユーザーが認証されていません".to_string())
+            })?;
 
         // サービス層を呼び出し
         let post = self
@@ -66,7 +65,7 @@ impl PostHandler {
 
     pub async fn get_posts(&self, request: GetPostsRequest) -> Result<Vec<PostResponse>, AppError> {
         let pagination = request.pagination.unwrap_or_default();
-        
+
         let posts = if let Some(topic_id) = request.topic_id {
             self.post_service
                 .get_posts_by_topic(&topic_id, pagination.limit.unwrap_or(50) as usize)
@@ -94,7 +93,9 @@ impl PostHandler {
                             .and_then(|pk| pk.to_bech32().ok())
                             .unwrap_or(pubkey)
                     }
-                }).await.unwrap_or_else(|_| post.author.pubkey.clone());
+                })
+                .await
+                .unwrap_or_else(|_| post.author.pubkey.clone());
 
                 PostResponse {
                     id: post.id.to_string(),
@@ -117,18 +118,14 @@ impl PostHandler {
     }
 
     pub async fn delete_post(&self, request: DeletePostRequest) -> Result<(), AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
-        self.post_service
-            .delete_post(&request.post_id)
-            .await?;
+        self.post_service.delete_post(&request.post_id).await?;
         Ok(())
     }
 
     pub async fn react_to_post(&self, request: ReactToPostRequest) -> Result<(), AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         self.post_service
             .react_to_post(&request.post_id, &request.reaction)
@@ -136,9 +133,12 @@ impl PostHandler {
         Ok(())
     }
 
-    pub async fn bookmark_post(&self, request: BookmarkPostRequest, user_pubkey: &str) -> Result<(), AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn bookmark_post(
+        &self,
+        request: BookmarkPostRequest,
+        user_pubkey: &str,
+    ) -> Result<(), AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         self.post_service
             .bookmark_post(&request.post_id, user_pubkey)
@@ -146,9 +146,12 @@ impl PostHandler {
         Ok(())
     }
 
-    pub async fn unbookmark_post(&self, request: BookmarkPostRequest, user_pubkey: &str) -> Result<(), AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn unbookmark_post(
+        &self,
+        request: BookmarkPostRequest,
+        user_pubkey: &str,
+    ) -> Result<(), AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         self.post_service
             .unbookmark_post(&request.post_id, user_pubkey)
@@ -157,29 +160,33 @@ impl PostHandler {
     }
 
     /// ユーザーのブックマーク済み投稿IDを取得
-    pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, AppError> {
-        let post_ids = self.post_service
+    pub async fn get_bookmarked_post_ids(
+        &self,
+        user_pubkey: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let post_ids = self
+            .post_service
             .get_bookmarked_post_ids(user_pubkey)
             .await?;
         Ok(post_ids)
     }
 
     // バッチ処理メソッド
-    pub async fn batch_get_posts(&self, request: BatchGetPostsRequest) -> Result<Vec<PostResponse>, AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn batch_get_posts(
+        &self,
+        request: BatchGetPostsRequest,
+    ) -> Result<Vec<PostResponse>, AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         // 並行して複数の投稿を取得
         let futures = request.post_ids.iter().map(|post_id| {
             let service = self.post_service.clone();
             let id = post_id.clone();
-            async move {
-                service.get_post(&id).await
-            }
+            async move { service.get_post(&id).await }
         });
 
         let results = join_all(futures).await;
-        
+
         let mut posts = Vec::new();
         for result in results {
             if let Ok(Some(post)) = result {
@@ -193,7 +200,9 @@ impl PostHandler {
                             .and_then(|pk| pk.to_bech32().ok())
                             .unwrap_or(pubkey)
                     }
-                }).await.unwrap_or_else(|_| post.author.pubkey.clone());
+                })
+                .await
+                .unwrap_or_else(|_| post.author.pubkey.clone());
 
                 posts.push(PostResponse {
                     id: post.id.to_string(),
@@ -213,16 +222,19 @@ impl PostHandler {
         Ok(posts)
     }
 
-    pub async fn batch_react(&self, request: BatchReactRequest) -> Result<Vec<Result<(), String>>, AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn batch_react(
+        &self,
+        request: BatchReactRequest,
+    ) -> Result<Vec<Result<(), String>>, AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         // 並行して複数のリアクションを処理
         let futures = request.reactions.iter().map(|reaction| {
             let service = self.post_service.clone();
             let req = reaction.clone();
             async move {
-                service.react_to_post(&req.post_id, &req.reaction)
+                service
+                    .react_to_post(&req.post_id, &req.reaction)
                     .await
                     .map_err(|e| e.to_string())
             }
@@ -232,9 +244,12 @@ impl PostHandler {
         Ok(results)
     }
 
-    pub async fn batch_bookmark(&self, request: BatchBookmarkRequest, user_pubkey: &str) -> Result<Vec<Result<(), String>>, AppError> {
-        request.validate()
-            .map_err(|e| AppError::InvalidInput(e))?;
+    pub async fn batch_bookmark(
+        &self,
+        request: BatchBookmarkRequest,
+        user_pubkey: &str,
+    ) -> Result<Vec<Result<(), String>>, AppError> {
+        request.validate().map_err(|e| AppError::InvalidInput(e))?;
 
         // 並行して複数のブックマークを処理
         let futures = request.post_ids.iter().map(|post_id| {
@@ -242,19 +257,17 @@ impl PostHandler {
             let id = post_id.clone();
             let pubkey = user_pubkey.to_string();
             let action = request.action.clone();
-            
+
             async move {
                 match action {
-                    BookmarkAction::Add => {
-                        service.bookmark_post(&id, &pubkey)
-                            .await
-                            .map_err(|e| e.to_string())
-                    },
-                    BookmarkAction::Remove => {
-                        service.unbookmark_post(&id, &pubkey)
-                            .await
-                            .map_err(|e| e.to_string())
-                    }
+                    BookmarkAction::Add => service
+                        .bookmark_post(&id, &pubkey)
+                        .await
+                        .map_err(|e| e.to_string()),
+                    BookmarkAction::Remove => service
+                        .unbookmark_post(&id, &pubkey)
+                        .await
+                        .map_err(|e| e.to_string()),
                 }
             }
         });

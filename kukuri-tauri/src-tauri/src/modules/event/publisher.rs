@@ -64,8 +64,6 @@ impl EventPublisher {
         Ok(event)
     }
 
-
-
     /// 削除イベントを作成
     pub fn create_deletion(&self, event_ids: Vec<EventId>, reason: Option<&str>) -> Result<Event> {
         let keys = self
@@ -208,7 +206,6 @@ mod tests {
         assert!(tags.iter().any(|t| matches!(t.as_standardized(), Some(nostr_sdk::TagStandard::Event { event_id: id, .. }) if id == &event_id)));
     }
 
-
     #[test]
     fn test_create_deletion() {
         let mut publisher = EventPublisher::new();
@@ -247,9 +244,10 @@ mod tests {
         // タグを確認
         let tags: Vec<_> = event.tags.into_iter().collect();
         assert!(tags.iter().any(|t| matches!(t.as_standardized(), Some(nostr_sdk::TagStandard::Hashtag(h)) if h == "bitcoin")));
-        assert!(tags
-            .iter()
-            .any(|t| t.kind().to_string() == "topic" && t.content().is_some()));
+        assert!(
+            tags.iter()
+                .any(|t| t.kind().to_string() == "topic" && t.content().is_some())
+        );
     }
 
     #[test]
@@ -266,9 +264,10 @@ mod tests {
         // タグにリプライ情報が含まれていることを確認
         let tags: Vec<_> = event.tags.into_iter().collect();
         assert!(tags.iter().any(|t| matches!(t.as_standardized(), Some(nostr_sdk::TagStandard::Event { event_id, .. }) if event_id == &reply_to)));
-        assert!(tags
-            .iter()
-            .any(|t| t.kind().to_string() == "reply" && t.content().is_some()));
+        assert!(
+            tags.iter()
+                .any(|t| t.kind().to_string() == "reply" && t.content().is_some())
+        );
     }
 
     #[test]
@@ -278,13 +277,17 @@ mod tests {
         // 鍵が設定されていない状態で各メソッドを呼び出すとエラーになることを確認
         assert!(publisher.create_text_note("test", vec![]).is_err());
         assert!(publisher.create_metadata(Metadata::new()).is_err());
-        assert!(publisher
-            .create_reaction(&EventId::from_slice(&[1; 32]).unwrap(), "+")
-            .is_err());
+        assert!(
+            publisher
+                .create_reaction(&EventId::from_slice(&[1; 32]).unwrap(), "+")
+                .is_err()
+        );
         assert!(publisher.create_deletion(vec![], None).is_err());
-        assert!(publisher
-            .create_topic_post("topic", "content", None)
-            .is_err());
+        assert!(
+            publisher
+                .create_topic_post("topic", "content", None)
+                .is_err()
+        );
     }
 
     #[test]

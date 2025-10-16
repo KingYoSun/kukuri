@@ -68,7 +68,7 @@ impl Default for AppConfig {
             storage: StorageConfig {
                 data_dir: "./data".to_string(),
                 cache_size: 100 * 1024 * 1024, // 100MB
-                cache_ttl: 3600, // 1 hour
+                cache_ttl: 3600,               // 1 hour
             },
         }
     }
@@ -80,9 +80,15 @@ impl AppConfig {
         let mut cfg = Self::default();
 
         // ネットワーク設定の環境変数反映
-        if let Ok(v) = std::env::var("KUKURI_ENABLE_DHT") { cfg.network.enable_dht = parse_bool(&v, cfg.network.enable_dht); }
-        if let Ok(v) = std::env::var("KUKURI_ENABLE_DNS") { cfg.network.enable_dns = parse_bool(&v, cfg.network.enable_dns); }
-        if let Ok(v) = std::env::var("KUKURI_ENABLE_LOCAL") { cfg.network.enable_local = parse_bool(&v, cfg.network.enable_local); }
+        if let Ok(v) = std::env::var("KUKURI_ENABLE_DHT") {
+            cfg.network.enable_dht = parse_bool(&v, cfg.network.enable_dht);
+        }
+        if let Ok(v) = std::env::var("KUKURI_ENABLE_DNS") {
+            cfg.network.enable_dns = parse_bool(&v, cfg.network.enable_dns);
+        }
+        if let Ok(v) = std::env::var("KUKURI_ENABLE_LOCAL") {
+            cfg.network.enable_local = parse_bool(&v, cfg.network.enable_local);
+        }
 
         if let Ok(v) = std::env::var("KUKURI_BOOTSTRAP_PEERS") {
             let peers: Vec<String> = v
@@ -90,7 +96,9 @@ impl AppConfig {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if !peers.is_empty() { cfg.network.bootstrap_peers = peers; }
+            if !peers.is_empty() {
+                cfg.network.bootstrap_peers = peers;
+            }
         }
 
         cfg

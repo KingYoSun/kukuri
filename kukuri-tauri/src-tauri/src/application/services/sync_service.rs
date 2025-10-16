@@ -40,32 +40,32 @@ impl SyncService {
 
     pub async fn start_sync(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut status = self.status.write().await;
-        
+
         if status.is_syncing {
             return Ok(());
         }
-        
+
         status.is_syncing = true;
         drop(status);
-        
+
         // Ensure network is connected
         if !self.network.is_connected().await {
             self.network.connect().await?;
         }
-        
+
         // Sync pending posts
         let synced_posts = self.post_service.sync_pending_posts().await?;
-        
+
         // Sync pending events
         let synced_events = self.event_service.sync_pending_events().await?;
-        
+
         // Update status
         let mut status = self.status.write().await;
         status.is_syncing = false;
         status.last_sync = Some(chrono::Utc::now().timestamp());
         status.pending_posts = status.pending_posts.saturating_sub(synced_posts);
         status.pending_events = status.pending_events.saturating_sub(synced_events);
-        
+
         Ok(())
     }
 
@@ -90,11 +90,12 @@ impl SyncService {
     pub async fn schedule_sync(&self, interval_secs: u64) {
         let service = Arc::new(self.clone());
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
-            
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = service.start_sync().await {
                     tracing::error!("Sync error: {}", e);
                     let mut status = service.status.write().await;

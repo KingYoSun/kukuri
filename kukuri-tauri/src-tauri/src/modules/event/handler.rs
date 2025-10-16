@@ -1,10 +1,10 @@
+use crate::modules::database::connection::DbPool;
+use crate::modules::database::models;
 use anyhow::Result;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use crate::modules::database::connection::DbPool;
-use crate::modules::database::models;
 
 /// イベントコールバックの型エイリアス
 type EventCallback = Box<dyn Fn(Event) + Send + Sync>;
@@ -28,8 +28,6 @@ impl EventHandler {
     pub fn set_db_pool(&mut self, db_pool: Arc<DbPool>) {
         self.db_pool = Some(db_pool);
     }
-
-
 
     /// イベントを処理
     pub async fn handle_event(&self, event: Event) -> Result<()> {
@@ -68,7 +66,7 @@ impl EventHandler {
             "Received text note from {}: {}",
             event.pubkey, event.content
         );
-        
+
         // データベースに保存
         if let Some(pool) = &self.db_pool {
             let event_model = models::Event {
@@ -82,7 +80,7 @@ impl EventHandler {
                 sig: event.sig.to_string(),
                 saved_at: chrono::Utc::now().timestamp(),
             };
-            
+
             sqlx::query!(
                 r#"
                 INSERT INTO events (event_id, public_key, created_at, kind, content, tags, sig, saved_at)
@@ -100,7 +98,7 @@ impl EventHandler {
             )
             .execute(pool.as_ref())
             .await?;
-            
+
             debug!("Text note saved to database: {}", event.id);
 
             // イベントのタグからトピックIDを抽出し、マッピングを保存（冪等）
@@ -136,30 +134,45 @@ impl EventHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// メタデータイベントを処理
     async fn handle_metadata(&self, event: &Event) -> Result<()> {
         info!("Received metadata update from {}", event.pubkey);
-        
+
         // メタデータをパースしてデータベースに保存
         if let Some(pool) = &self.db_pool {
             let metadata: serde_json::Value = serde_json::from_str(&event.content)?;
-            
+
             let profile = models::Profile {
                 id: 0, // Auto-increment
                 public_key: event.pubkey.to_string(),
-                display_name: metadata.get("name").and_then(|v| v.as_str()).map(String::from),
-                about: metadata.get("about").and_then(|v| v.as_str()).map(String::from),
-                picture_url: metadata.get("picture").and_then(|v| v.as_str()).map(String::from),
-                banner_url: metadata.get("banner").and_then(|v| v.as_str()).map(String::from),
-                nip05: metadata.get("nip05").and_then(|v| v.as_str()).map(String::from),
+                display_name: metadata
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                about: metadata
+                    .get("about")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                picture_url: metadata
+                    .get("picture")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                banner_url: metadata
+                    .get("banner")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                nip05: metadata
+                    .get("nip05")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 created_at: event.created_at.as_u64() as i64,
                 updated_at: chrono::Utc::now().timestamp(),
             };
-            
+
             sqlx::query!(
                 r#"
                 INSERT INTO profiles (public_key, display_name, about, picture_url, banner_url, nip05, created_at, updated_at)
@@ -183,17 +196,17 @@ impl EventHandler {
             )
             .execute(pool.as_ref())
             .await?;
-            
+
             debug!("Profile metadata saved to database for: {}", event.pubkey);
         }
-        
+
         Ok(())
     }
 
     /// コンタクトリストイベントを処理
     async fn handle_contact_list(&self, event: &Event) -> Result<()> {
         info!("Received contact list from {}", event.pubkey);
-        
+
         // フォロー関係をデータベースに保存
         if let Some(pool) = &self.db_pool {
             // 既存のフォロー関係を削除
@@ -204,14 +217,17 @@ impl EventHandler {
             )
             .execute(pool.as_ref())
             .await?;
-            
+
             // 新しいフォロー関係を保存
             let follower_pubkey_str = event.pubkey.to_string();
             for tag in event.tags.iter() {
-                if let Some(nostr_sdk::TagStandard::PublicKey { public_key: pubkey, .. }) = tag.as_standardized() {
+                if let Some(nostr_sdk::TagStandard::PublicKey {
+                    public_key: pubkey, ..
+                }) = tag.as_standardized()
+                {
                     let followed_pubkey = pubkey.to_hex();
                     let created_at = chrono::Utc::now().timestamp();
-                    
+
                     sqlx::query!(
                         r#"
                         INSERT INTO follows (follower_pubkey, followed_pubkey, created_at)
@@ -225,33 +241,34 @@ impl EventHandler {
                     .await?;
                 }
             }
-            
+
             debug!("Contact list saved to database for: {}", event.pubkey);
         }
-        
+
         Ok(())
     }
 
     /// リアクションイベントを処理
     async fn handle_reaction(&self, event: &Event) -> Result<()> {
         info!("Received reaction from {}: {}", event.pubkey, event.content);
-        
+
         // リアクションをデータベースに保存
         if let Some(pool) = &self.db_pool {
             // リアクション対象のイベントIDを取得
             let mut target_event_id: Option<String> = None;
             for tag in event.tags.iter() {
-                if let Some(nostr_sdk::TagStandard::Event { event_id, .. }) = tag.as_standardized() {
+                if let Some(nostr_sdk::TagStandard::Event { event_id, .. }) = tag.as_standardized()
+                {
                     target_event_id = Some(event_id.to_hex());
                     break;
                 }
             }
-            
+
             if let Some(target_id) = target_event_id {
                 let reactor_pubkey = event.pubkey.to_string();
                 let reaction_content = event.content.clone();
                 let created_at = event.created_at.as_u64() as i64;
-                
+
                 sqlx::query!(
                     r#"
                     INSERT INTO reactions (reactor_pubkey, target_event_id, reaction_content, created_at)
@@ -267,15 +284,16 @@ impl EventHandler {
                 )
                 .execute(pool.as_ref())
                 .await?;
-                
-                debug!("Reaction saved to database: {} -> {}", event.pubkey, target_id);
+
+                debug!(
+                    "Reaction saved to database: {} -> {}",
+                    event.pubkey, target_id
+                );
             }
         }
-        
+
         Ok(())
     }
-
-
 }
 
 #[cfg(test)]
@@ -287,10 +305,6 @@ mod tests {
         let handler = EventHandler::new();
         assert!(handler.event_callbacks.read().await.is_empty());
     }
-
-
-
-
 
     #[tokio::test]
     async fn test_handle_text_note() {
@@ -337,6 +351,4 @@ mod tests {
         // リアクションイベントの処理が正常に完了することを確認
         assert!(handler.handle_event(event).await.is_ok());
     }
-
-
 }

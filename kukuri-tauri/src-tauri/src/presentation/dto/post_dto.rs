@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::{PaginationRequest, Validate};
+use serde::{Deserialize, Serialize};
 
 // レスポンスDTO
 #[derive(Debug, Serialize, Deserialize, Clone)]

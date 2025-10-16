@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::domain::entities::Event;
-    use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
     use crate::infrastructure::p2p::gossip_service::GossipService;
+    use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
     use crate::modules::p2p::generate_topic_id;
     use iroh::Endpoint;
     use std::sync::Arc;
@@ -48,7 +48,7 @@ mod tests {
     async fn test_multiple_topics() {
         skip_unless_p2p_enabled!("test_multiple_topics");
         let service = create_test_service().await;
-        let topics = vec!["topic1", "topic2", "topic3"]; 
+        let topics = vec!["topic1", "topic2", "topic3"];
 
         // Join multiple topics
         for topic in &topics {
@@ -122,7 +122,10 @@ mod tests {
         let service = create_test_service().await;
         let topics = vec!["stats-topic1", "stats-topic2", "stats-topic3"];
         for topic in &topics {
-            service.join_topic(&generate_topic_id(topic), vec![]).await.unwrap();
+            service
+                .join_topic(&generate_topic_id(topic), vec![])
+                .await
+                .unwrap();
         }
         let joined = service.get_joined_topics().await.unwrap();
         assert_eq!(joined.len(), 3);
@@ -134,13 +137,19 @@ mod tests {
         let service = create_test_service().await;
         let topics = vec!["shutdown-topic1", "shutdown-topic2"];
         for topic in &topics {
-            service.join_topic(&generate_topic_id(topic), vec![]).await.unwrap();
+            service
+                .join_topic(&generate_topic_id(topic), vec![])
+                .await
+                .unwrap();
         }
         let active_topics = service.get_joined_topics().await.unwrap();
         assert_eq!(active_topics.len(), 2);
         // leave all
         for topic in &topics {
-            service.leave_topic(&generate_topic_id(topic)).await.unwrap();
+            service
+                .leave_topic(&generate_topic_id(topic))
+                .await
+                .unwrap();
         }
         let active_topics = service.get_joined_topics().await.unwrap();
         assert_eq!(active_topics.len(), 0);

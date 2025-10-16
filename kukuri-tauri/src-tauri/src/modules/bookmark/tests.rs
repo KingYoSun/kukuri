@@ -2,13 +2,13 @@
 #[allow(clippy::module_inception)]
 mod tests {
     use super::super::BookmarkManager;
-    use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+    use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
     use uuid::Uuid;
 
     async fn setup_test_db() -> (SqlitePool, Option<()>) {
         // メモリ内SQLiteデータベースを使用（Docker環境での権限問題を回避）
         let db_url = "sqlite::memory:";
-        
+
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
             .connect(db_url)
@@ -41,7 +41,7 @@ mod tests {
 
         let result = manager.add_bookmark("user1", "post1").await;
         assert!(result.is_ok());
-        
+
         let bookmark = result.unwrap();
         assert_eq!(bookmark.user_pubkey, "user1");
         assert_eq!(bookmark.post_id, "post1");
@@ -87,15 +87,13 @@ mod tests {
         assert!(result.is_ok());
     }
 
-
-
     #[tokio::test]
     async fn test_get_bookmarked_post_ids() {
         let (pool, _) = setup_test_db().await;
-        
+
         // 手動でcreated_atを制御するためにSQLを直接実行
         let base_time = chrono::Utc::now().timestamp_millis();
-        
+
         // 最初のブックマーク（一番古い）
         sqlx::query(
             r#"
@@ -110,7 +108,7 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        
+
         // 2番目のブックマーク
         sqlx::query(
             r#"
@@ -125,7 +123,7 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        
+
         // 3番目のブックマーク（一番新しい）
         sqlx::query(
             r#"
@@ -140,13 +138,13 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        
+
         let manager = BookmarkManager::new(pool);
-        
+
         // 投稿IDのリストを取得
         let post_ids = manager.get_bookmarked_post_ids("user1").await.unwrap();
         assert_eq!(post_ids.len(), 3);
-        
+
         // 新しい順にソートされているか確認
         assert_eq!(post_ids[0], "post2");
         assert_eq!(post_ids[1], "post1");

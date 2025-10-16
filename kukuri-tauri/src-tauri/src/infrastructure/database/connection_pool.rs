@@ -1,4 +1,4 @@
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -27,9 +27,7 @@ impl ConnectionPool {
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
-        sqlx::migrate!("./migrations")
-            .run(self.pool.as_ref())
-            .await
+        sqlx::migrate!("./migrations").run(self.pool.as_ref()).await
     }
 
     pub async fn close(&self) {

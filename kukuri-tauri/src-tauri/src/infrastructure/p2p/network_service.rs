@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::shared::error::AppError;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ pub struct NetworkStats {
 pub trait NetworkService: Send + Sync {
     // Type conversion helper for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
-    
+
     async fn connect(&self) -> Result<(), AppError>;
     async fn disconnect(&self) -> Result<(), AppError>;
     async fn get_peers(&self) -> Result<Vec<Peer>, AppError>;

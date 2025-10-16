@@ -1,8 +1,8 @@
+use crate::infrastructure::p2p::metrics::GossipMetricDetails;
 use crate::presentation::dto::p2p::{
     BroadcastRequest, GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicRequest,
     LeaveTopicRequest, NodeAddressResponse, P2PStatusResponse,
 };
-use crate::infrastructure::p2p::metrics::GossipMetricDetails;
 use crate::state::AppState;
 use tauri::State;
 
@@ -28,7 +28,7 @@ pub async fn join_p2p_topic(
         topic_id: topicId.clone(),
         initial_peers: initialPeers,
     };
-    
+
     state
         .p2p_handler
         .join_topic(request)
@@ -52,7 +52,7 @@ pub async fn leave_p2p_topic(
     let request = LeaveTopicRequest {
         topic_id: topicId.clone(),
     };
-    
+
     state
         .p2p_handler
         .leave_topic(request)
@@ -78,7 +78,7 @@ pub async fn broadcast_to_topic(
         topic_id: topicId,
         content,
     };
-    
+
     state
         .p2p_handler
         .broadcast_to_topic(request)
@@ -135,7 +135,11 @@ pub async fn join_topic_by_name(
 pub async fn get_bootstrap_config() -> Result<String, String> {
     use crate::infrastructure::p2p::bootstrap_config;
     let user_nodes = bootstrap_config::load_user_bootstrap_nodes();
-    let mode = if user_nodes.is_empty() { "default" } else { "custom" };
+    let mode = if user_nodes.is_empty() {
+        "default"
+    } else {
+        "custom"
+    };
     let json = serde_json::json!({
         "mode": mode,
         "nodes": user_nodes,
@@ -146,16 +150,14 @@ pub async fn get_bootstrap_config() -> Result<String, String> {
 #[tauri::command]
 pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<String, String> {
     use crate::infrastructure::p2p::bootstrap_config;
-    bootstrap_config::save_user_bootstrap_nodes(&nodes)
-        .map_err(|e| e.to_string())?;
+    bootstrap_config::save_user_bootstrap_nodes(&nodes).map_err(|e| e.to_string())?;
     Ok(serde_json::to_string(&serde_json::json!({"success": true})).unwrap())
 }
 
 #[tauri::command]
 pub async fn clear_bootstrap_nodes() -> Result<String, String> {
     use crate::infrastructure::p2p::bootstrap_config;
-    bootstrap_config::clear_user_bootstrap_nodes()
-        .map_err(|e| e.to_string())?;
+    bootstrap_config::clear_user_bootstrap_nodes().map_err(|e| e.to_string())?;
     Ok(serde_json::to_string(&serde_json::json!({"success": true})).unwrap())
 }
 

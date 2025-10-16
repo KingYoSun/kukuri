@@ -1,8 +1,6 @@
 use crate::{
     presentation::{
-        dto::{
-            auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
-        },
+        dto::auth_dto::{CreateAccountResponse, LoginResponse, LoginWithNsecRequest},
         handlers::AuthHandler,
     },
     state::AppState,
@@ -28,11 +26,8 @@ pub async fn generate_keypair(
     state: State<'_, AppState>,
 ) -> Result<GenerateKeypairResponse, String> {
     let handler = AuthHandler::new(state.auth_service.clone());
-    let response = handler
-        .create_account()
-        .await
-        .map_err(|e| e.to_string())?;
-    
+    let response = handler.create_account().await.map_err(|e| e.to_string())?;
+
     Ok(GenerateKeypairResponse {
         public_key: response.pubkey,
         nsec: response.nsec,
@@ -47,10 +42,8 @@ pub async fn login(
     request: LoginRequest,
 ) -> Result<LoginResponse, String> {
     let handler = AuthHandler::new(state.auth_service.clone());
-    let login_request = LoginWithNsecRequest {
-        nsec: request.nsec,
-    };
-    
+    let login_request = LoginWithNsecRequest { nsec: request.nsec };
+
     handler
         .login_with_nsec(login_request)
         .await
@@ -66,23 +59,19 @@ pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
         .get_current_user()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     if let Some(user) = current_user {
-        handler
-            .logout(user.npub)
-            .await
-            .map_err(|e| e.to_string())?;
+        handler.logout(user.npub).await.map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
 /// アカウント作成（旧APIとの互換性のため）
 #[tauri::command]
-pub async fn create_account(
-    state: State<'_, AppState>,
-) -> Result<LoginResponse, String> {
-    let user = state.auth_service
+pub async fn create_account(state: State<'_, AppState>) -> Result<LoginResponse, String> {
+    let user = state
+        .auth_service
         .create_account()
         .await
         .map_err(|e| e.to_string())?;
@@ -100,7 +89,8 @@ pub async fn login_with_nsec(
     nsec: String,
     state: State<'_, AppState>,
 ) -> Result<LoginResponse, String> {
-    let user = state.auth_service
+    let user = state
+        .auth_service
         .login_with_nsec(&nsec)
         .await
         .map_err(|e| e.to_string())?;
@@ -118,7 +108,8 @@ pub async fn login_with_npub(
     npub: String,
     state: State<'_, AppState>,
 ) -> Result<LoginResponse, String> {
-    let user = state.auth_service
+    let user = state
+        .auth_service
         .login_with_npub(&npub)
         .await
         .map_err(|e| e.to_string())?;
@@ -135,7 +126,8 @@ pub async fn login_with_npub(
 pub async fn get_current_user(
     state: State<'_, AppState>,
 ) -> Result<Option<serde_json::Value>, String> {
-    let user = state.auth_service
+    let user = state
+        .auth_service
         .get_current_user()
         .await
         .map_err(|e| e.to_string())?;
@@ -155,7 +147,8 @@ pub async fn export_private_key(
     npub: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    state.auth_service
+    state
+        .auth_service
         .export_private_key(&npub)
         .await
         .map_err(|e| e.to_string())

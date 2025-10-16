@@ -1,6 +1,6 @@
 use super::user::User;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Post {
@@ -24,7 +24,7 @@ impl Post {
     pub fn new(content: String, author: User, topic_id: String) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
         let local_id = id.clone();
-        
+
         Self {
             id,
             content,
@@ -75,8 +75,14 @@ impl Post {
     pub fn toggle_bookmark(&mut self) {
         self.is_bookmarked = !self.is_bookmarked;
     }
-    
-    pub fn new_with_id(id: String, content: String, author: User, topic_id: String, created_at: DateTime<Utc>) -> Self {
+
+    pub fn new_with_id(
+        id: String,
+        content: String,
+        author: User,
+        topic_id: String,
+        created_at: DateTime<Utc>,
+    ) -> Self {
         Self {
             id,
             content,
@@ -94,7 +100,7 @@ impl Post {
             event_id: None,
         }
     }
-    
+
     pub fn mark_as_unsynced(&mut self) {
         self.is_synced = false;
     }

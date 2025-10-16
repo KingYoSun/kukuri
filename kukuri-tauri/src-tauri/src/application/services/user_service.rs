@@ -1,6 +1,6 @@
 use crate::domain::entities::{User, UserMetadata};
-use crate::shared::error::AppError;
 use crate::infrastructure::database::UserRepository;
+use crate::shared::error::AppError;
 use std::sync::Arc;
 
 pub struct UserService {
@@ -33,17 +33,25 @@ impl UserService {
         }
         Ok(())
     }
-    
+
     pub async fn update_user(&self, user: User) -> Result<(), AppError> {
         self.repository.update_user(&user).await
     }
 
-    pub async fn follow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), AppError> {
+    pub async fn follow_user(
+        &self,
+        follower_npub: &str,
+        target_npub: &str,
+    ) -> Result<(), AppError> {
         // TODO: Implement follow relationship
         Ok(())
     }
 
-    pub async fn unfollow_user(&self, follower_npub: &str, target_npub: &str) -> Result<(), AppError> {
+    pub async fn unfollow_user(
+        &self,
+        follower_npub: &str,
+        target_npub: &str,
+    ) -> Result<(), AppError> {
         // TODO: Implement unfollow
         Ok(())
     }

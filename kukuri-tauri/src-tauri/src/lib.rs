@@ -1,14 +1,14 @@
-﻿use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager};
 use tracing::info;
 
 // モジュール定義
-mod modules;
-mod state;
 mod application;
-mod infrastructure;
 mod domain;
+mod infrastructure;
+mod modules;
 mod presentation;
 mod shared;
+mod state;
 
 // Tauriコマンドのインポート
 // v2アーキテクチャへの移行完了につき、旧コマンドのインポートは削除
@@ -182,7 +182,11 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
         if let Some(mut rx) = rx {
             while let Some(event) = rx.recv().await {
                 match event {
-                    modules::p2p::P2PEvent::MessageReceived { topic_id, message, _from_peer: _ } => {
+                    modules::p2p::P2PEvent::MessageReceived {
+                        topic_id,
+                        message,
+                        _from_peer: _,
+                    } => {
                         // 旧GossipMessage経路はUIの期待ペイロードと形状が異なるため、
                         // 衝突回避のためイベント名を変更（デバッグ用途）
                         let event_data = P2PMessageEvent {

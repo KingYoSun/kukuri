@@ -2,7 +2,7 @@
 mod performance_tests {
     // パフォーマンステストは一時的に無効化
     // TODO: 新アーキテクチャに対応後に再実装
-    
+
     #[tokio::test]
     #[ignore]
     async fn test_cache_performance() {

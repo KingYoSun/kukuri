@@ -1,8 +1,8 @@
+use crate::infrastructure::p2p::{GossipService, NetworkService};
 use crate::shared::error::AppError;
-use crate::infrastructure::p2p::{NetworkService, GossipService};
-use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// P2Pネットワークのステータス情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,22 +27,22 @@ pub struct TopicInfo {
 pub trait P2PServiceTrait: Send + Sync {
     /// P2Pネットワークを初期化
     async fn initialize(&self) -> Result<(), AppError>;
-    
+
     /// トピックに参加
     async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
-    
+
     /// トピックから離脱
     async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError>;
-    
+
     /// メッセージをブロードキャスト
     async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError>;
-    
+
     /// P2Pステータスを取得
     async fn get_status(&self) -> Result<P2PStatus, AppError>;
-    
+
     /// ノードアドレスを取得
     async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
-    
+
     /// トピックIDを生成
     fn generate_topic_id(&self, topic_name: &str) -> String;
 }
@@ -72,40 +72,55 @@ impl P2PServiceTrait for P2PService {
         // 既にstate.rsのinitialize_p2pで初期化されている場合はチェックのみ
         Ok(())
     }
-    
+
     async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
-        self.gossip_service.join_topic(topic_id, initial_peers).await
+        self.gossip_service
+            .join_topic(topic_id, initial_peers)
+            .await
             .map_err(|e| AppError::P2PError(e.to_string()))
     }
-    
+
     async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError> {
-        self.gossip_service.leave_topic(topic_id).await
+        self.gossip_service
+            .leave_topic(topic_id)
+            .await
             .map_err(|e| AppError::P2PError(e.to_string()))
     }
-    
+
     async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError> {
-        self.gossip_service.broadcast_message(topic_id, content.as_bytes()).await
+        self.gossip_service
+            .broadcast_message(topic_id, content.as_bytes())
+            .await
             .map_err(|e| AppError::P2PError(e.to_string()))
     }
-    
+
     async fn get_status(&self) -> Result<P2PStatus, AppError> {
         // ステータス情報を収集
-        let endpoint_id = self.network_service.get_node_id().await
+        let endpoint_id = self
+            .network_service
+            .get_node_id()
+            .await
             .map_err(|e| AppError::P2PError(e.to_string()))?;
-            
+
         // 実際のトピック情報を取得
-        let joined_topics = self.gossip_service.get_joined_topics().await
+        let joined_topics = self
+            .gossip_service
+            .get_joined_topics()
+            .await
             .map_err(|e| AppError::P2PError(e.to_string()))?;
-        
+
         let mut active_topics = Vec::new();
         let mut total_peer_count = 0;
-        
+
         for topic_id in joined_topics {
-            let peers = self.gossip_service.get_topic_peers(&topic_id).await
+            let peers = self
+                .gossip_service
+                .get_topic_peers(&topic_id)
+                .await
                 .map_err(|e| AppError::P2PError(e.to_string()))?;
             let peer_count = peers.len();
             total_peer_count += peer_count;
-            
+
             active_topics.push(TopicInfo {
                 id: topic_id,
                 peer_count,
@@ -113,7 +128,7 @@ impl P2PServiceTrait for P2PService {
                 last_activity: chrono::Utc::now().timestamp(),
             });
         }
-        
+
         Ok(P2PStatus {
             connected: true,
             endpoint_id,
@@ -121,12 +136,14 @@ impl P2PServiceTrait for P2PService {
             peer_count: total_peer_count,
         })
     }
-    
+
     async fn get_node_addresses(&self) -> Result<Vec<String>, AppError> {
-        self.network_service.get_addresses().await
+        self.network_service
+            .get_addresses()
+            .await
             .map_err(|e| AppError::P2PError(e.to_string()))
     }
-    
+
     fn generate_topic_id(&self, topic_name: &str) -> String {
         // トピック名からIDを生成（例：ハッシュを使用）
         use sha2::{Digest, Sha256};
@@ -139,7 +156,7 @@ impl P2PServiceTrait for P2PService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::p2p::{NetworkService, GossipService};
+    use crate::infrastructure::p2p::{GossipService, NetworkService};
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
     use std::sync::Mutex;
@@ -162,9 +179,9 @@ mod tests {
             self
         }
 
-        pub fn returning<F>(&mut self, f: F) -> &mut Self 
+        pub fn returning<F>(&mut self, f: F) -> &mut Self
         where
-            F: FnOnce() -> Result<String, AppError> + 'static
+            F: FnOnce() -> Result<String, AppError> + 'static,
         {
             if let Ok(value) = f() {
                 *self.node_id.lock().unwrap() = Some(value);
@@ -178,7 +195,7 @@ mod tests {
 
         pub fn returning_addresses<F>(&mut self, f: F) -> &mut Self
         where
-            F: FnOnce() -> Result<Vec<String>, AppError> + 'static  
+            F: FnOnce() -> Result<Vec<String>, AppError> + 'static,
         {
             if let Ok(value) = f() {
                 *self.addresses.lock().unwrap() = Some(value);
@@ -201,7 +218,9 @@ mod tests {
             Ok(())
         }
 
-        async fn get_peers(&self) -> Result<Vec<crate::infrastructure::p2p::network_service::Peer>, AppError> {
+        async fn get_peers(
+            &self,
+        ) -> Result<Vec<crate::infrastructure::p2p::network_service::Peer>, AppError> {
             Ok(vec![])
         }
 
@@ -213,7 +232,9 @@ mod tests {
             Ok(())
         }
 
-        async fn get_stats(&self) -> Result<crate::infrastructure::p2p::network_service::NetworkStats, AppError> {
+        async fn get_stats(
+            &self,
+        ) -> Result<crate::infrastructure::p2p::network_service::NetworkStats, AppError> {
             Ok(crate::infrastructure::p2p::network_service::NetworkStats {
                 connected_peers: 0,
                 total_messages_sent: 0,
@@ -229,7 +250,9 @@ mod tests {
 
         async fn get_node_id(&self) -> Result<String, AppError> {
             let node_id = self.node_id.lock().unwrap();
-            Ok(node_id.clone().unwrap_or_else(|| "default_node_id".to_string()))
+            Ok(node_id
+                .clone()
+                .unwrap_or_else(|| "default_node_id".to_string()))
         }
 
         async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
@@ -241,7 +264,7 @@ mod tests {
     // GossipServiceのモック
     mock! {
         pub GossipServ {}
-        
+
         #[async_trait]
         impl GossipService for GossipServ {
             async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
@@ -259,10 +282,7 @@ mod tests {
         let mock_network = MockNetworkServ::new();
         let mock_gossip = MockGossipServ::new();
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let result = service.initialize().await;
         assert!(result.is_ok());
@@ -272,19 +292,21 @@ mod tests {
     async fn test_join_topic_success() {
         let mock_network = MockNetworkServ::new();
         let mut mock_gossip = MockGossipServ::new();
-        
+
         mock_gossip
             .expect_join_topic()
-            .with(eq("test_topic"), eq(vec!["peer1".to_string(), "peer2".to_string()]))
+            .with(
+                eq("test_topic"),
+                eq(vec!["peer1".to_string(), "peer2".to_string()]),
+            )
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
-        let result = service.join_topic("test_topic", vec!["peer1".to_string(), "peer2".to_string()]).await;
+        let result = service
+            .join_topic("test_topic", vec!["peer1".to_string(), "peer2".to_string()])
+            .await;
         assert!(result.is_ok());
     }
 
@@ -292,38 +314,37 @@ mod tests {
     async fn test_join_topic_failure() {
         let mock_network = MockNetworkServ::new();
         let mut mock_gossip = MockGossipServ::new();
-        
+
         mock_gossip
             .expect_join_topic()
             .with(eq("test_topic"), eq(vec![]))
             .times(1)
             .returning(|_, _| Err(AppError::P2PError("Failed to join topic".to_string())));
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let result = service.join_topic("test_topic", vec![]).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to join topic"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to join topic")
+        );
     }
 
     #[tokio::test]
     async fn test_leave_topic() {
         let mock_network = MockNetworkServ::new();
         let mut mock_gossip = MockGossipServ::new();
-        
+
         mock_gossip
             .expect_leave_topic()
             .with(eq("test_topic"))
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let result = service.leave_topic("test_topic").await;
         assert!(result.is_ok());
@@ -333,7 +354,7 @@ mod tests {
     async fn test_broadcast_message() {
         let mock_network = MockNetworkServ::new();
         let mut mock_gossip = MockGossipServ::new();
-        
+
         let test_content = "Test message";
         mock_gossip
             .expect_broadcast_message()
@@ -341,10 +362,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let result = service.broadcast_message("test_topic", test_content).await;
         assert!(result.is_ok());
@@ -362,38 +380,39 @@ mod tests {
             .expect_get_joined_topics()
             .times(1)
             .returning(|| Ok(vec!["topic1".to_string(), "topic2".to_string()]));
-        
+
         // get_topic_peersをモックして各トピックのピアを返す
         mock_gossip
             .expect_get_topic_peers()
             .with(eq("topic1"))
             .times(1)
-            .returning(|_| Ok(vec![
-                "peer1".to_string(),
-                "peer2".to_string(),
-                "peer3".to_string(),
-                "peer4".to_string(),
-                "peer5".to_string(),
-            ]));
-        
+            .returning(|_| {
+                Ok(vec![
+                    "peer1".to_string(),
+                    "peer2".to_string(),
+                    "peer3".to_string(),
+                    "peer4".to_string(),
+                    "peer5".to_string(),
+                ])
+            });
+
         mock_gossip
             .expect_get_topic_peers()
             .with(eq("topic2"))
             .times(1)
-            .returning(|_| Ok(vec![
-                "peer6".to_string(),
-                "peer7".to_string(),
-                "peer8".to_string(),
-            ]));
+            .returning(|_| {
+                Ok(vec![
+                    "peer6".to_string(),
+                    "peer7".to_string(),
+                    "peer8".to_string(),
+                ])
+            });
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let result = service.get_status().await;
         assert!(result.is_ok());
-        
+
         let status = result.unwrap();
         assert_eq!(status.endpoint_id, "node123");
         assert!(status.connected);
@@ -404,23 +423,20 @@ mod tests {
     #[tokio::test]
     async fn test_get_node_addresses() {
         let mut mock_network = MockNetworkServ::new();
-        mock_network
-            .expect_get_addresses()
-            .returning_addresses(|| Ok(vec![
+        mock_network.expect_get_addresses().returning_addresses(|| {
+            Ok(vec![
                 "/ip4/127.0.0.1/tcp/4001".to_string(),
                 "/ip4/192.168.1.10/tcp/4001".to_string(),
-            ]));
+            ])
+        });
 
         let mock_gossip = MockGossipServ::new();
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let result = service.get_node_addresses().await;
         assert!(result.is_ok());
-        
+
         let addresses = result.unwrap();
         assert_eq!(addresses.len(), 2);
         assert!(addresses.contains(&"/ip4/127.0.0.1/tcp/4001".to_string()));
@@ -431,15 +447,12 @@ mod tests {
         let mock_network = MockNetworkServ::new();
         let mock_gossip = MockGossipServ::new();
 
-        let service = P2PService::new(
-            Arc::new(mock_network),
-            Arc::new(mock_gossip),
-        );
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
 
         let topic_id1 = service.generate_topic_id("test_topic");
         let topic_id2 = service.generate_topic_id("test_topic");
         let topic_id3 = service.generate_topic_id("different_topic");
-        
+
         // 同じトピック名から同じIDが生成される
         assert_eq!(topic_id1, topic_id2);
         // 異なるトピック名からは異なるIDが生成される

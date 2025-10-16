@@ -1,9 +1,9 @@
 use crate::application::services::p2p_service::P2PServiceTrait;
-use crate::presentation::dto::p2p::{
-    P2PStatusResponse, TopicStatus, JoinTopicRequest, LeaveTopicRequest,
-    BroadcastRequest, NodeAddressResponse
-};
 use crate::presentation::dto::Validate;
+use crate::presentation::dto::p2p::{
+    BroadcastRequest, JoinTopicRequest, LeaveTopicRequest, NodeAddressResponse, P2PStatusResponse,
+    TopicStatus,
+};
 use crate::shared::error::AppError;
 use serde_json::json;
 use std::sync::Arc;
@@ -29,11 +29,11 @@ impl P2PHandler {
         request: JoinTopicRequest,
     ) -> Result<serde_json::Value, AppError> {
         request.validate()?;
-        
+
         self.p2p_service
             .join_topic(&request.topic_id, request.initial_peers)
             .await?;
-        
+
         Ok(json!({ "success": true }))
     }
 
@@ -43,11 +43,9 @@ impl P2PHandler {
         request: LeaveTopicRequest,
     ) -> Result<serde_json::Value, AppError> {
         request.validate()?;
-        
-        self.p2p_service
-            .leave_topic(&request.topic_id)
-            .await?;
-        
+
+        self.p2p_service.leave_topic(&request.topic_id).await?;
+
         Ok(json!({ "success": true }))
     }
 
@@ -57,20 +55,21 @@ impl P2PHandler {
         request: BroadcastRequest,
     ) -> Result<serde_json::Value, AppError> {
         request.validate()?;
-        
+
         self.p2p_service
             .broadcast_message(&request.topic_id, &request.content)
             .await?;
-        
+
         Ok(json!({ "success": true }))
     }
 
     /// P2Pステータスを取得
     pub async fn get_p2p_status(&self) -> Result<P2PStatusResponse, AppError> {
         let status = self.p2p_service.get_status().await?;
-        
+
         // サービスから取得したステータスをDTOに変換
-        let topic_statuses: Vec<TopicStatus> = status.active_topics
+        let topic_statuses: Vec<TopicStatus> = status
+            .active_topics
             .into_iter()
             .map(|topic| TopicStatus {
                 topic_id: topic.id,
@@ -79,7 +78,7 @@ impl P2PHandler {
                 last_activity: topic.last_activity,
             })
             .collect();
-        
+
         Ok(P2PStatusResponse {
             connected: status.connected,
             endpoint_id: status.endpoint_id,
@@ -91,10 +90,8 @@ impl P2PHandler {
     /// ノードアドレスを取得
     pub async fn get_node_address(&self) -> Result<NodeAddressResponse, AppError> {
         let addresses = self.p2p_service.get_node_addresses().await?;
-        
-        Ok(NodeAddressResponse {
-            addresses,
-        })
+
+        Ok(NodeAddressResponse { addresses })
     }
 
     /// トピック名で参加
@@ -104,17 +101,19 @@ impl P2PHandler {
         initial_peers: Vec<String>,
     ) -> Result<serde_json::Value, AppError> {
         if topic_name.is_empty() {
-            return Err(AppError::ValidationError("Topic name is required".to_string()));
+            return Err(AppError::ValidationError(
+                "Topic name is required".to_string(),
+            ));
         }
-        
+
         // トピック名からIDを生成してjoin_topicを呼び出す
         let topic_id = self.p2p_service.generate_topic_id(&topic_name);
-        
+
         self.p2p_service
             .join_topic(&topic_id, initial_peers)
             .await?;
-        
-        Ok(json!({ 
+
+        Ok(json!({
             "success": true,
             "topic_id": topic_id
         }))

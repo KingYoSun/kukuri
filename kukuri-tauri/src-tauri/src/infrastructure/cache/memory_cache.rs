@@ -1,8 +1,8 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 
 #[derive(Clone)]
 struct CacheEntry<T> {
@@ -16,7 +16,7 @@ pub struct MemoryCacheService<T: Clone> {
     default_ttl: Duration,
 }
 
-impl<T> MemoryCacheService<T> 
+impl<T> MemoryCacheService<T>
 where
     T: Clone + Send + Sync + 'static,
 {
@@ -39,7 +39,7 @@ where
             data: value,
             expires_at: Instant::now() + ttl,
         };
-        
+
         let mut cache = self.cache.write().await;
         cache.insert(key, entry);
     }
@@ -47,13 +47,13 @@ where
     /// キャッシュからデータを取得
     pub async fn get(&self, key: &str) -> Option<T> {
         let cache = self.cache.read().await;
-        
+
         if let Some(entry) = cache.get(key) {
             if entry.expires_at > Instant::now() {
                 return Some(entry.data.clone());
             }
         }
-        
+
         None
     }
 
@@ -61,7 +61,7 @@ where
     pub async fn get_many(&self, keys: &[String]) -> HashMap<String, T> {
         let cache = self.cache.read().await;
         let now = Instant::now();
-        
+
         let mut results = HashMap::new();
         for key in keys {
             if let Some(entry) = cache.get(key) {
@@ -70,7 +70,7 @@ where
                 }
             }
         }
-        
+
         results
     }
 
@@ -88,7 +88,7 @@ where
             .filter(|k| k.contains(pattern))
             .cloned()
             .collect();
-        
+
         for key in keys_to_remove {
             cache.remove(&key);
         }
@@ -104,7 +104,7 @@ where
     pub async fn cleanup_expired(&self) {
         let mut cache = self.cache.write().await;
         let now = Instant::now();
-        
+
         cache.retain(|_, entry| entry.expires_at > now);
     }
 
@@ -138,7 +138,11 @@ impl PostCacheService {
         self.cache.get(&key).await
     }
 
-    pub async fn cache_posts_by_topic(&self, topic_id: &str, posts: Vec<crate::domain::entities::post::Post>) {
+    pub async fn cache_posts_by_topic(
+        &self,
+        topic_id: &str,
+        posts: Vec<crate::domain::entities::post::Post>,
+    ) {
         let key = format!("topic_posts:{}", topic_id);
         // トピック別の投稿は短めのTTL（1分）
         for post in posts {

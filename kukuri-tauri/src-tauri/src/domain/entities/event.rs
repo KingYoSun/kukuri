@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use crate::domain::value_objects::EventId;
-use sha2::{Digest, Sha256};
 use bech32::FromBase32 as _;
-use nostr_sdk::prelude::{FromBech32 as _, EventId as NostrEventId, PublicKey as NostrPublicKey};
+use chrono::{DateTime, Utc};
+use nostr_sdk::prelude::{EventId as NostrEventId, FromBech32 as _, PublicKey as NostrPublicKey};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 // NIP-19 厳密なTLVデコードはSDKの公開API差異があるため、
 // ここではEventId/PublicKeyのbech32復号と形式検証で代替する。
 
@@ -139,7 +139,7 @@ impl Event {
             .map(|tag| tag[1].clone())
             .collect()
     }
-    
+
     pub fn new_with_id(
         id: EventId,
         pubkey: String,
@@ -189,7 +189,8 @@ impl Event {
             self.tags,
             self.content,
         ]);
-        let serialized = serde_json::to_vec(&arr).map_err(|e| format!("serialization error: {}", e))?;
+        let serialized =
+            serde_json::to_vec(&arr).map_err(|e| format!("serialization error: {}", e))?;
         let hash = Sha256::digest(&serialized);
         let calc_id = format!("{:x}", hash);
         if calc_id != self.id {
@@ -206,10 +207,14 @@ impl Event {
         let mut reply_seen = 0usize;
 
         for tag in &self.tags {
-            if tag.is_empty() { continue; }
+            if tag.is_empty() {
+                continue;
+            }
             match tag[0].as_str() {
                 "e" => {
-                    if tag.len() < 2 { return Err("invalid e tag (len < 2)".into()); }
+                    if tag.len() < 2 {
+                        return Err("invalid e tag (len < 2)".into());
+                    }
                     let evref = &tag[1];
                     if !(is_hex_n(evref, 64) || is_valid_event_ref(evref)) {
                         return Err("invalid e tag id (not hex or bech32)".into());
@@ -227,13 +232,15 @@ impl Event {
                         match marker {
                             "root" => root_seen += 1,
                             "reply" => reply_seen += 1,
-                            "mention" => {},
+                            "mention" => {}
                             _ => return Err(format!("invalid e tag marker: {}", marker)),
                         }
                     }
                 }
                 "p" => {
-                    if tag.len() < 2 { return Err("invalid p tag (len < 2)".into()); }
+                    if tag.len() < 2 {
+                        return Err("invalid p tag (len < 2)".into());
+                    }
                     let pkref = &tag[1];
                     if !(is_hex_n(pkref, 64) || is_valid_pubkey_ref(pkref)) {
                         return Err("invalid p tag pubkey (not hex or bech32)".into());
@@ -250,8 +257,12 @@ impl Event {
             }
         }
 
-        if root_seen > 1 { return Err("multiple root markers in e tags".into()); }
-        if reply_seen > 1 { return Err("multiple reply markers in e tags".into()); }
+        if root_seen > 1 {
+            return Err("multiple root markers in e tags".into());
+        }
+        if reply_seen > 1 {
+            return Err("multiple reply markers in e tags".into());
+        }
         Ok(())
     }
 }
@@ -273,8 +284,12 @@ fn is_valid_event_ref(s: &str) -> bool {
 
 fn is_valid_pubkey_ref(s: &str) -> bool {
     // 支持: npub1... / nprofile1...
-    if s.starts_with("npub1") { return NostrPublicKey::from_bech32(s).is_ok(); }
-    if s.starts_with("nprofile1") { return is_valid_nprofile_tlv(s); }
+    if s.starts_with("npub1") {
+        return NostrPublicKey::from_bech32(s).is_ok();
+    }
+    if s.starts_with("nprofile1") {
+        return is_valid_nprofile_tlv(s);
+    }
     false
 }
 
@@ -285,12 +300,18 @@ fn is_ws_url(url: &str) -> bool {
 
 fn is_valid_nprofile_tlv(s: &str) -> bool {
     if let Ok((hrp, data, _)) = bech32::decode(s) {
-        if hrp != "nprofile" { return false; }
+        if hrp != "nprofile" {
+            return false;
+        }
         if let Ok(bytes) = Vec::<u8>::from_base32(&data) {
             // 必須: tag=0 (pubkey 32bytes)
-            if !tlv_has_tag_len(&bytes, 0, 32) { return false; }
+            if !tlv_has_tag_len(&bytes, 0, 32) {
+                return false;
+            }
             // 任意: tag=1 (relay URL), 複数可。存在する場合はws[s]://であること
-            if !tlv_validate_relays(&bytes) { return false; }
+            if !tlv_validate_relays(&bytes) {
+                return false;
+            }
             return true;
         }
     }
@@ -299,10 +320,16 @@ fn is_valid_nprofile_tlv(s: &str) -> bool {
 
 fn is_valid_nevent_tlv(s: &str) -> bool {
     if let Ok((hrp, data, _)) = bech32::decode(s) {
-        if hrp != "nevent" { return false; }
+        if hrp != "nevent" {
+            return false;
+        }
         if let Ok(bytes) = Vec::<u8>::from_base32(&data) {
-            if !tlv_has_tag_len(&bytes, 0, 32) { return false; }
-            if !tlv_validate_relays(&bytes) { return false; }
+            if !tlv_has_tag_len(&bytes, 0, 32) {
+                return false;
+            }
+            if !tlv_validate_relays(&bytes) {
+                return false;
+            }
             return true;
         }
     }
@@ -315,13 +342,16 @@ fn tlv_has_tag_len(bytes: &[u8], want_tag: u8, want_len: usize) -> bool {
         let t = bytes[i];
         let l = bytes[i + 1] as usize;
         i += 2;
-        if i + l > bytes.len() { return false; }
-        if t == want_tag && l == want_len { return true; }
+        if i + l > bytes.len() {
+            return false;
+        }
+        if t == want_tag && l == want_len {
+            return true;
+        }
         i += l;
     }
     false
 }
-
 
 impl EventKind {
     pub fn as_u32(&self) -> u32 {
@@ -355,11 +385,15 @@ fn tlv_validate_relays(bytes: &[u8]) -> bool {
         let t = bytes[i];
         let l = bytes[i + 1] as usize;
         i += 2;
-        if i + l > bytes.len() { return false; }
+        if i + l > bytes.len() {
+            return false;
+        }
         if t == 1 {
             let slice = &bytes[i..i + l];
             if let Ok(s) = std::str::from_utf8(slice) {
-                if !s.is_empty() && !is_ws_url(s) { return false; }
+                if !s.is_empty() && !is_ws_url(s) {
+                    return false;
+                }
             } else {
                 return false;
             }
@@ -381,7 +415,8 @@ mod tests {
             .unwrap();
 
         let created_at = chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(nostr_ev.created_at.as_u64() as i64, 0).unwrap(),
+            chrono::NaiveDateTime::from_timestamp_opt(nostr_ev.created_at.as_u64() as i64, 0)
+                .unwrap(),
             chrono::Utc,
         );
 
@@ -406,7 +441,8 @@ mod tests {
             .unwrap();
 
         let created_at = chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(nostr_ev.created_at.as_u64() as i64, 0).unwrap(),
+            chrono::NaiveDateTime::from_timestamp_opt(nostr_ev.created_at.as_u64() as i64, 0)
+                .unwrap(),
             chrono::Utc,
         );
 

@@ -60,7 +60,6 @@ impl BookmarkManager {
         Ok(())
     }
 
-
     /// ユーザーがブックマークした投稿IDのリストを取得
     pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>> {
         let post_ids: Vec<String> = sqlx::query_scalar(

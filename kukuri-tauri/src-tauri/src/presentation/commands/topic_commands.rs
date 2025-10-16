@@ -1,11 +1,11 @@
 use crate::{
     presentation::{
         dto::{
+            ApiResponse,
             topic_dto::{
                 CreateTopicRequest, DeleteTopicRequest, GetTopicStatsRequest, JoinTopicRequest,
                 TopicResponse, TopicStatsResponse, UpdateTopicRequest,
             },
-            ApiResponse,
         },
         handlers::TopicHandler,
     },

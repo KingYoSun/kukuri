@@ -1,7 +1,7 @@
 use crate::domain::entities::User;
-use crate::shared::error::AppError;
 use crate::infrastructure::crypto::KeyManager;
 use crate::infrastructure::storage::SecureStorage;
+use crate::shared::error::AppError;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -36,52 +36,66 @@ impl AuthService {
     pub async fn create_account(&self) -> Result<User, AppError> {
         // Generate new keypair
         let keypair = self.key_manager.generate_keypair().await?;
-        
+
         // Store securely
         self.key_manager.store_keypair(&keypair).await?;
-        self.secure_storage.store("current_npub", &keypair.npub).await?;
-        
+        self.secure_storage
+            .store("current_npub", &keypair.npub)
+            .await?;
+
         // Create user
-        let user = self.user_service.create_user(keypair.npub.clone(), keypair.public_key).await?;
-        
+        let user = self
+            .user_service
+            .create_user(keypair.npub.clone(), keypair.public_key)
+            .await?;
+
         // Join public topic by default
         self.topic_service.ensure_public_topic().await?;
         self.topic_service.join_topic("public").await?;
-        
+
         Ok(user)
     }
 
     pub async fn login_with_nsec(&self, nsec: &str) -> Result<User, AppError> {
         // Import private key
         let keypair = self.key_manager.import_private_key(nsec).await?;
-        
+
         // Store securely
         self.key_manager.store_keypair(&keypair).await?;
-        self.secure_storage.store("current_npub", &keypair.npub).await?;
-        
+        self.secure_storage
+            .store("current_npub", &keypair.npub)
+            .await?;
+
         // Get or create user
         let user = match self.user_service.get_user(&keypair.npub).await? {
             Some(user) => user,
-            None => self.user_service.create_user(keypair.npub.clone(), keypair.public_key).await?,
+            None => {
+                self.user_service
+                    .create_user(keypair.npub.clone(), keypair.public_key)
+                    .await?
+            }
         };
-        
+
         // Join public topic by default
         self.topic_service.ensure_public_topic().await?;
         self.topic_service.join_topic("public").await?;
-        
+
         Ok(user)
     }
 
     pub async fn login_with_npub(&self, npub: &str) -> Result<User, AppError> {
         // Check if we have the private key stored
         let _private_key = self.key_manager.export_private_key(npub).await?;
-        
+
         // Get user
-        let user = self.user_service.get_user(npub).await?
+        let user = self
+            .user_service
+            .get_user(npub)
+            .await?
             .ok_or("User not found")?;
-        
+
         self.secure_storage.store("current_npub", npub).await?;
-        
+
         Ok(user)
     }
 
@@ -99,13 +113,17 @@ impl AuthService {
     }
 
     pub async fn is_authenticated(&self) -> bool {
-        self.secure_storage.retrieve("current_npub").await.unwrap_or(None).is_some()
+        self.secure_storage
+            .retrieve("current_npub")
+            .await
+            .unwrap_or(None)
+            .is_some()
     }
 
     pub async fn get_auth_status(&self) -> Result<AuthStatus, AppError> {
         let current_user = self.get_current_user().await?;
         let npub = self.secure_storage.retrieve("current_npub").await?;
-        
+
         Ok(AuthStatus {
             is_authenticated: current_user.is_some(),
             current_user,

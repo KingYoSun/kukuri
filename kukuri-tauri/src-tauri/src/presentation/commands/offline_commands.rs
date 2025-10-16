@@ -1,8 +1,8 @@
 use crate::presentation::dto::offline::{
-    SaveOfflineActionRequest, SaveOfflineActionResponse,
-    GetOfflineActionsRequest, SyncOfflineActionsRequest, SyncOfflineActionsResponse,
-    CacheStatusResponse, AddToSyncQueueRequest, UpdateCacheMetadataRequest,
-    OptimisticUpdateRequest, OfflineAction, UpdateSyncStatusRequest
+    AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest, OfflineAction,
+    OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
+    SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
+    UpdateSyncStatusRequest,
 };
 use crate::state::AppState;
 use tauri::State;
@@ -48,9 +48,7 @@ pub async fn sync_offline_actions(
 
 /// キャッシュステータスを取得
 #[tauri::command]
-pub async fn get_cache_status(
-    state: State<'_, AppState>,
-) -> Result<CacheStatusResponse, String> {
+pub async fn get_cache_status(state: State<'_, AppState>) -> Result<CacheStatusResponse, String> {
     state
         .offline_handler
         .get_cache_status()
@@ -100,7 +98,7 @@ pub async fn save_optimistic_update(
         original_data,
         updated_data,
     };
-    
+
     state
         .offline_handler
         .save_optimistic_update(request)
@@ -137,9 +135,7 @@ pub async fn rollback_optimistic_update(
 
 /// 期限切れキャッシュをクリーンアップ
 #[tauri::command]
-pub async fn cleanup_expired_cache(
-    state: State<'_, AppState>,
-) -> Result<i32, String> {
+pub async fn cleanup_expired_cache(state: State<'_, AppState>) -> Result<i32, String> {
     state
         .offline_handler
         .cleanup_expired_cache()
@@ -162,7 +158,7 @@ pub async fn update_sync_status(
         sync_status,
         conflict_data,
     };
-    
+
     state
         .offline_handler
         .update_sync_status(request)

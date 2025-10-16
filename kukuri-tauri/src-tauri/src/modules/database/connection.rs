@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
 use std::path::Path;
 use tracing::info;
 
@@ -23,10 +23,10 @@ impl Database {
         } else {
             database_url
         };
-        
+
         // Remove query parameters if present
         let file_path = file_path.split('?').next().unwrap_or(file_path);
-        
+
         // Create database directory
         if let Some(parent) = Path::new(file_path).parent() {
             std::fs::create_dir_all(parent)?;

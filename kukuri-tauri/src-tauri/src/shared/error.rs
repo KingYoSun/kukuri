@@ -123,8 +123,6 @@ impl From<sqlx::migrate::MigrateError> for AppError {
     }
 }
 
-
-
 impl From<iroh::endpoint::Builder> for AppError {
     fn from(err: iroh::endpoint::Builder) -> Self {
         AppError::P2PError(format!("Endpoint builder error: {:?}", err))

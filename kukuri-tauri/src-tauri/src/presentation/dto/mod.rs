@@ -1,11 +1,11 @@
 // DTOモジュール
 pub mod auth_dto;
-pub mod post_dto;
-pub mod topic_dto;
-pub mod user_dto;
 pub mod event;
 pub mod offline;
 pub mod p2p;
+pub mod post_dto;
+pub mod topic_dto;
+pub mod user_dto;
 
 // 共通のレスポンス型
 use serde::{Deserialize, Serialize};

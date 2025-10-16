@@ -1,7 +1,7 @@
+use crate::domain::entities::Post;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
-use crate::domain::entities::Post;
 
 /// 投稿キャッシュサービス
 #[derive(Clone)]
@@ -39,9 +39,7 @@ impl PostCacheService {
     /// 複数のIDで投稿を取得
     pub async fn get_many(&self, ids: &[String]) -> Vec<Post> {
         let cache = self.cache.read().await;
-        ids.iter()
-            .filter_map(|id| cache.get(id).cloned())
-            .collect()
+        ids.iter().filter_map(|id| cache.get(id).cloned()).collect()
     }
 
     /// トピックIDで投稿を取得
@@ -85,7 +83,7 @@ mod tests {
 
     fn create_test_post(id: &str, topic_id: &str) -> Post {
         use crate::domain::entities::user::User;
-        
+
         let author = User {
             npub: "npub1test".to_string(),
             pubkey: "test_pubkey".to_string(),
@@ -100,7 +98,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
-        
+
         Post {
             id: id.to_string(),
             content: "Test content".to_string(),
@@ -123,10 +121,10 @@ mod tests {
     async fn test_add_and_get() {
         let cache = PostCacheService::new();
         let post = create_test_post("1", "topic1");
-        
+
         cache.add(post.clone()).await;
         let retrieved = cache.get("1").await;
-        
+
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().id, "1");
     }
@@ -139,7 +137,7 @@ mod tests {
             create_test_post("2", "topic1"),
             create_test_post("3", "topic2"),
         ];
-        
+
         cache.add_many(posts).await;
         assert_eq!(cache.size().await, 3);
     }
@@ -152,10 +150,10 @@ mod tests {
             create_test_post("2", "topic1"),
             create_test_post("3", "topic2"),
         ];
-        
+
         cache.add_many(posts).await;
         let topic1_posts = cache.get_by_topic("topic1").await;
-        
+
         assert_eq!(topic1_posts.len(), 2);
         assert!(topic1_posts.iter().all(|p| p.topic_id == "topic1"));
     }
@@ -164,10 +162,10 @@ mod tests {
     async fn test_remove() {
         let cache = PostCacheService::new();
         let post = create_test_post("1", "topic1");
-        
+
         cache.add(post.clone()).await;
         let removed = cache.remove("1").await;
-        
+
         assert!(removed.is_some());
         assert_eq!(removed.unwrap().id, "1");
         assert!(cache.get("1").await.is_none());
@@ -181,10 +179,10 @@ mod tests {
             create_test_post("2", "topic1"),
             create_test_post("3", "topic2"),
         ];
-        
+
         cache.add_many(posts).await;
         assert_eq!(cache.size().await, 3);
-        
+
         cache.clear().await;
         assert_eq!(cache.size().await, 0);
     }

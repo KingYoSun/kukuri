@@ -1,9 +1,9 @@
 use crate::domain::entities::{Event, Post, User};
-use crate::shared::error::AppError;
+use crate::infrastructure::cache::PostCacheService;
 use crate::infrastructure::database::PostRepository;
 use crate::infrastructure::p2p::EventDistributor;
 use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
-use crate::infrastructure::cache::PostCacheService;
+use crate::shared::error::AppError;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 
@@ -15,7 +15,10 @@ pub struct PostService {
 }
 
 impl PostService {
-    pub fn new(repository: Arc<dyn PostRepository>, distributor: Arc<dyn EventDistributor>) -> Self {
+    pub fn new(
+        repository: Arc<dyn PostRepository>,
+        distributor: Arc<dyn EventDistributor>,
+    ) -> Self {
         Self {
             repository,
             distributor,
@@ -29,7 +32,12 @@ impl PostService {
         self
     }
 
-    pub async fn create_post(&self, content: String, author: User, topic_id: String) -> Result<Post, AppError> {
+    pub async fn create_post(
+        &self,
+        content: String,
+        author: User,
+        topic_id: String,
+    ) -> Result<Post, AppError> {
         let mut post = Post::new(content.clone(), author.clone(), topic_id.clone());
 
         // Save to database
@@ -53,7 +61,9 @@ impl PostService {
             event.tags = vec![vec!["t".to_string(), topic_id]];
 
             // Distribute via P2P
-            self.distributor.distribute(&event, DistributionStrategy::Hybrid).await?;
+            self.distributor
+                .distribute(&event, DistributionStrategy::Hybrid)
+                .await?;
 
             // Mark post as synced
             post.mark_as_synced(nostr_event.id.to_hex());
@@ -83,7 +93,11 @@ impl PostService {
         Ok(post)
     }
 
-    pub async fn get_posts_by_topic(&self, topic_id: &str, limit: usize) -> Result<Vec<Post>, AppError> {
+    pub async fn get_posts_by_topic(
+        &self,
+        topic_id: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError> {
         // TODO: トピック別の投稿キャッシュを実装
         // 現在は直接DBから取得（キャッシュの無効化が複雑なため）
         let posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
@@ -120,7 +134,9 @@ impl PostService {
                 );
                 event.tags = vec![vec!["e".to_string(), post_id.to_string()]];
 
-                self.distributor.distribute(&event, DistributionStrategy::Nostr).await?;
+                self.distributor
+                    .distribute(&event, DistributionStrategy::Nostr)
+                    .await?;
             }
         }
         Ok(())
@@ -150,7 +166,9 @@ impl PostService {
                 );
                 event.tags = vec![vec!["e".to_string(), post_id.to_string()]];
 
-                self.distributor.distribute(&event, DistributionStrategy::Nostr).await?;
+                self.distributor
+                    .distribute(&event, DistributionStrategy::Nostr)
+                    .await?;
             }
         }
         Ok(())
@@ -173,15 +191,23 @@ impl PostService {
             );
             event.tags = vec![vec!["e".to_string(), id.to_string()]];
 
-            self.distributor.distribute(&event, DistributionStrategy::Nostr).await?;
+            self.distributor
+                .distribute(&event, DistributionStrategy::Nostr)
+                .await?;
         }
 
         // Mark as deleted in database
         self.repository.delete_post(id).await
     }
 
-    pub async fn get_posts_by_author(&self, author_pubkey: &str, limit: usize) -> Result<Vec<Post>, AppError> {
-        self.repository.get_posts_by_author(author_pubkey, limit).await
+    pub async fn get_posts_by_author(
+        &self,
+        author_pubkey: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError> {
+        self.repository
+            .get_posts_by_author(author_pubkey, limit)
+            .await
     }
 
     pub async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, AppError> {
@@ -208,7 +234,10 @@ impl PostService {
         Ok(())
     }
 
-    pub async fn get_bookmarked_post_ids(&self, user_pubkey: &str) -> Result<Vec<String>, AppError> {
+    pub async fn get_bookmarked_post_ids(
+        &self,
+        user_pubkey: &str,
+    ) -> Result<Vec<String>, AppError> {
         // TODO: Implement get bookmarked posts logic with user_pubkey
         Ok(Vec::new())
     }
@@ -227,9 +256,16 @@ impl PostService {
             event.tags = vec![vec!["t".to_string(), post.topic_id.clone()]];
 
             // Try to distribute
-            if self.distributor.distribute(&event, DistributionStrategy::Hybrid).await.is_ok() {
+            if self
+                .distributor
+                .distribute(&event, DistributionStrategy::Hybrid)
+                .await
+                .is_ok()
+            {
                 // Mark as synced
-                self.repository.mark_post_synced(&post.id, &event.id).await?;
+                self.repository
+                    .mark_post_synced(&post.id, &event.id)
+                    .await?;
                 synced_count += 1;
             }
         }

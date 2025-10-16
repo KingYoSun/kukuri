@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Topic {
@@ -86,8 +86,13 @@ impl Topic {
         self.owner = Some(owner);
         self.updated_at = chrono::Utc::now();
     }
-    
-    pub fn new_with_id(id: String, name: String, description: String, created_at: DateTime<Utc>) -> Self {
+
+    pub fn new_with_id(
+        id: String,
+        name: String,
+        description: String,
+        created_at: DateTime<Utc>,
+    ) -> Self {
         Self {
             id,
             name,
