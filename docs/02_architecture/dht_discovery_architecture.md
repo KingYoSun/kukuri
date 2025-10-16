@@ -21,7 +21,7 @@ Endpoint::builder()
 
 #### 現在の実装
 - **DNS**: デフォルトで有効（Number 0の公開DNSサーバー）
-- **DHT**: `discovery-dht`フィーチャーフラグで有効化
+- **DHT**: Cargoで提供されるDHTディスカバリーフィーチャーを有効化（現在は `discovery-pkarr-dht` として公開）
 - **ローカル**: 将来実装予定
 
 ### 2. DHT統合アーキテクチャ

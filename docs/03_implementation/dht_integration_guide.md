@@ -12,7 +12,7 @@
 # kukuri-tauri/src-tauri/Cargo.toml
 [dependencies]
 # P2P Networking（DHTフィーチャー付き）
-iroh = { version = "0.93.1", features = ["discovery-dht"] }
+iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }
 iroh-gossip = "0.93.1"
 
 # その他の依存関係
@@ -328,7 +328,7 @@ RUST_LOG=kukuri=debug,iroh=info,iroh_gossip=info cargo run
 ### 8.2 よくある問題
 
 #### DHTディスカバリーが機能しない
-- フィーチャーフラグ `discovery-dht` が有効か確認
+- Cargo 側で DHT ディスカバリーフィーチャー ( `discovery-pkarr-dht` ) が有効か確認
 - ファイアウォール設定を確認
 - NAT traversalの問題を確認
 

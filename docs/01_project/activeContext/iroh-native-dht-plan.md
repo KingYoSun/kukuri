@@ -43,11 +43,11 @@
 4. **DHTディスカバリー** (`discovery_dht()`)
    - BitTorrent Mainline DHTを利用
    - デフォルトでは無効（コードで明示的に有効化が必要）
-   - "discovery-dht" フィーチャーフラグが必要（Cargoで設定済み）
+   - DHTディスカバリーフィーチャー（現行i roh crateでは `discovery-pkarr-dht` として提供）をCargoで有効化する
 
 ### 2.2 現在の実装状況（2025年09月15日時点）
 - Cargo.toml:
-  - iroh = { version = "0.93.1", features = ["discovery-dht"] }（設定済み）
+  - iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }（設定済み）
   - iroh-gossip = "0.93.1"
   - distributed-topic-tracker はコメントアウト済み（非推奨化）
 - エンドポイント初期化: `discovery_n0()` + `discovery_dht()` を併用（有効化済み）。
@@ -85,7 +85,7 @@
 
 #### Cargo.tomlの更新（実施済み）
 ```toml
-iroh = { version = "0.93.1", features = ["discovery-dht"] }
+iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }
 iroh-gossip = "0.93.1"
 # distributed-topic-tracker = "0.1.1"  # Deprecated
 ```
