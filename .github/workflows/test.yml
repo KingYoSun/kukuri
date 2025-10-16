@@ -64,6 +64,10 @@ jobs:
   native-test-linux:
     name: Native Test (Linux)
     runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -186,6 +190,10 @@ jobs:
   build-test-windows:
     name: Build Test (Windows)
     runs-on: windows-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
