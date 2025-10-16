@@ -73,7 +73,6 @@ services:
     volumes:
       - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
       - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
-      - ./kukuri-tauri/src-tauri/Cargo.lock:/app/kukuri-tauri/src-tauri/Cargo.lock:ro
       - ./kukuri-tauri/src-tauri/build.rs:/app/kukuri-tauri/src-tauri/build.rs:ro
       - ./kukuri-tauri/src-tauri/tauri.conf.json:/app/kukuri-tauri/src-tauri/tauri.conf.json:ro
       - ./kukuri-tauri/src-tauri/migrations:/app/kukuri-tauri/src-tauri/migrations:ro

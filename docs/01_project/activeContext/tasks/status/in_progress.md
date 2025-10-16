@@ -36,7 +36,7 @@
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 メモ/進捗ログ:
-- 2025年10月16日: GitHub Actions が失敗しているため調査を開始。`gh run view` で Docker テストが `No space left on device` で落ちていることを確認し、`CARGO_PROFILE_*_DEBUG=0` / `CARGO_INCREMENTAL=0` を導入。`docker compose run test-runner` / `rust-test` および `gh act -j native-test-linux` で再実行。
+- 2025年10月16日: GitHub Actions が失敗しているため調査を開始。`gh run view` で Docker テストが `No space left on device` で落ちていることを確認し、`CARGO_PROFILE_*_DEBUG=0` / `CARGO_INCREMENTAL=0` を導入。`docker compose run test-runner` / `rust-test` および `gh act -j native-test-linux` で再実行。さらに `docker compose run rust-test` が `Cargo.lock` マウント欠如で失敗したため、`docker-compose.test.yml` から `Cargo.lock` バインドを削除。
 - 2025年09月15日: テスト戦略を更新（Tauri v2 の E2E は困難のため、ユニット/結合/契約テスト中心＋最小スモークへ移行）。
 - 2025年09月15日: 方針更新（Nostr リレー非接続・P2P 優先、内部イベントは NIPs 準拠）。
 - 2025年09月15日: critical.md から本タスク群を移動し、着手を明示しました。
