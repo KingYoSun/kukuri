@@ -49,7 +49,8 @@ COPY kukuri-tauri/src-tauri/migrations ./kukuri-tauri/src-tauri/migrations
 # Rust依存関係の解決とロックファイル生成を事前に行い、ビルドキャッシュを有効活用する
 WORKDIR /app/kukuri-tauri/src-tauri
 RUN mkdir src \
-    && echo "fn main() {}" > src/main.rs \
+    && printf 'fn main() {}\n' > src/main.rs \
+    && printf 'pub fn dummy() {}\n' > src/lib.rs \
     && cargo generate-lockfile \
     && cargo fetch \
     && rm -rf src
