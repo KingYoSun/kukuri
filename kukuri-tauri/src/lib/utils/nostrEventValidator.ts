@@ -165,8 +165,10 @@ function isValidNeventTlv(bech: string): boolean {
 }
 
 function decodeBech32(value: string, expectedHrp: string): Uint8Array | null {
+  if (!value.includes('1')) return null;
+  const bechValue = value as `${string}1${string}`;
   try {
-    const { prefix, words } = bech32.decode(value, 1023);
+    const { prefix, words } = bech32.decode(bechValue, 1023);
     if (prefix !== expectedHrp) return null;
     return Uint8Array.from(bech32.fromWords(words));
   } catch {
@@ -176,7 +178,7 @@ function decodeBech32(value: string, expectedHrp: string): Uint8Array | null {
 
 function parseTlv(
   bytes: Uint8Array,
-  handler: (tag: number, value: Uint8Array) => boolean
+  handler: (tag: number, value: Uint8Array) => boolean,
 ): boolean {
   let i = 0;
   while (i + 2 <= bytes.length) {

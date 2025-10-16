@@ -1,4 +1,4 @@
-use crate::infrastructure::p2p::{metrics, GossipService, NetworkService};
+use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -175,7 +175,7 @@ impl P2PServiceTrait for P2PService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::p2p::{metrics, GossipService, NetworkService};
+    use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
     use std::sync::Mutex;

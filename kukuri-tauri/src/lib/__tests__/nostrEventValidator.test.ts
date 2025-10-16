@@ -19,10 +19,6 @@ function makeBech32(prefix: string, payload: Uint8Array): string {
   return bech32.encode(prefix, bech32.toWords(payload), 1023);
 }
 
-function makeNote(hexId: string): string {
-  return makeBech32('note', hexToBytes(hexId));
-}
-
 function makeNpub(hexPubkey: string): string {
   return makeBech32('npub', hexToBytes(hexPubkey));
 }
@@ -51,11 +47,9 @@ function makeNprofile(hexPubkey: string, relays: string[] = []): string {
 
 function makeNevent(
   hexId: string,
-  options: { relays?: string[]; author?: string; kind?: number } = {}
+  options: { relays?: string[]; author?: string; kind?: number } = {},
 ): string {
-  const entries: Array<{ tag: number; value: Uint8Array }> = [
-    { tag: 0, value: hexToBytes(hexId) },
-  ];
+  const entries: Array<{ tag: number; value: Uint8Array }> = [{ tag: 0, value: hexToBytes(hexId) }];
   for (const relay of options.relays ?? []) {
     entries.push({ tag: 1, value: new TextEncoder().encode(relay) });
   }
@@ -125,7 +119,7 @@ describe('nostrEventValidator', () => {
   it('rejects invalid nevent tlv', () => {
     const badNevent = makeBech32(
       'nevent',
-      makeTlv([{ tag: 1, value: new TextEncoder().encode('wss://relay.example') }])
+      makeTlv([{ tag: 1, value: new TextEncoder().encode('wss://relay.example') }]),
     );
     const ev = { tags: [['e', badNevent]] };
     expect(validateNip10Basic(ev).ok).toBe(false);
@@ -144,7 +138,7 @@ describe('nostrEventValidator', () => {
       makeTlv([
         { tag: 0, value: hexToBytes(hex(64)) },
         { tag: 1, value: invalidBytes },
-      ])
+      ]),
     );
     const ev = { tags: [['p', badProfile]] };
     expect(validateNip10Basic(ev).ok).toBe(false);

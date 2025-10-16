@@ -58,12 +58,36 @@ describe('P2PStatus', () => {
         nodeId: 'QmExampleNodeId1234567890',
         nodeAddr: '/ip4/127.0.0.1/tcp/4001/p2p/QmExampleNodeId1234567890',
         peers: [
-          { node_id: 'peer-1', node_addr: 'addr1', topics: [], last_seen: Date.now(), connection_status: 'connected' },
-          { node_id: 'peer-2', node_addr: 'addr2', topics: [], last_seen: Date.now(), connection_status: 'connected' },
+          {
+            node_id: 'peer-1',
+            node_addr: 'addr1',
+            topics: [],
+            last_seen: Date.now(),
+            connection_status: 'connected',
+          },
+          {
+            node_id: 'peer-2',
+            node_addr: 'addr2',
+            topics: [],
+            last_seen: Date.now(),
+            connection_status: 'connected',
+          },
         ],
         activeTopics: [
-          { topic_id: 'topic-1', peer_count: 3, message_count: 12, recent_messages: [], connected_peers: [] },
-          { topic_id: 'topic-2', peer_count: 2, message_count: 5, recent_messages: [], connected_peers: [] },
+          {
+            topic_id: 'topic-1',
+            peer_count: 3,
+            message_count: 12,
+            recent_messages: [],
+            connected_peers: [],
+          },
+          {
+            topic_id: 'topic-2',
+            peer_count: 2,
+            message_count: 5,
+            recent_messages: [],
+            connected_peers: [],
+          },
         ],
         getConnectedPeerCount: vi.fn().mockReturnValue(2),
         metricsSummary: {
@@ -85,7 +109,9 @@ describe('P2PStatus', () => {
     expect(screen.getByText('Received').parentElement).toHaveTextContent('Received2');
     expect(screen.getByText('topic-1...')).toBeInTheDocument();
     expect(screen.getByText('12 msgs')).toBeInTheDocument();
-    expect(screen.getByText('/ip4/127.0.0.1/tcp/4001/p2p/QmExampleNodeId1234567890')).toBeInTheDocument();
+    expect(
+      screen.getByText('/ip4/127.0.0.1/tcp/4001/p2p/QmExampleNodeId1234567890'),
+    ).toBeInTheDocument();
   });
 
   it('calls refreshStatus when the 更新 button is pressed', () => {

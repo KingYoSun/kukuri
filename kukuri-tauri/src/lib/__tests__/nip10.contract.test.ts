@@ -35,4 +35,3 @@ describe('NIP-10 contract cases', () => {
     });
   }
 });
-

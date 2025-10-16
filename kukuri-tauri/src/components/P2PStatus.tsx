@@ -142,7 +142,12 @@ export function P2PStatus() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Gossipメトリクス</span>
-                <Button variant="secondary" size="sm" className="h-6 text-xs" onClick={handleRefresh}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={handleRefresh}
+                >
                   更新
                 </Button>
               </div>
