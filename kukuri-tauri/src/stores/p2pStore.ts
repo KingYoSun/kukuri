@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { p2pApi } from '@/lib/api/p2p';
+import type { GossipMetricsSummary } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 
 // P2Pメッセージ
@@ -43,6 +44,7 @@ interface P2PStore {
   messages: Map<string, P2PMessage[]>; // topic_id -> messages
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   error: string | null;
+  metricsSummary: GossipMetricsSummary | null;
 
   // アクション
   initialize: () => Promise<void>;
@@ -69,6 +71,7 @@ export const useP2PStore = create<P2PStore>()(
       messages: new Map(),
       connectionStatus: 'disconnected',
       error: null,
+      metricsSummary: null,
 
       // P2P初期化
       initialize: async () => {
@@ -89,6 +92,7 @@ export const useP2PStore = create<P2PStore>()(
             nodeAddr: nodeAddr ? nodeAddr.join(', ') : '',
             nodeId: status?.endpoint_id || '',
             connectionStatus: 'connected',
+            metricsSummary: status?.metrics_summary ?? null,
           });
         } catch (error) {
           errorHandler.log('Failed to initialize P2P', error, {
@@ -200,7 +204,10 @@ export const useP2PStore = create<P2PStore>()(
             });
           }
 
-          set({ activeTopics });
+          set({
+            activeTopics,
+            metricsSummary: status.metrics_summary ?? null,
+          });
         } catch (error) {
           errorHandler.log('Failed to refresh P2P status', error, {
             context: 'P2PStore.refreshStatus',
@@ -264,6 +271,7 @@ export const useP2PStore = create<P2PStore>()(
           messages: new Map(),
           connectionStatus: 'disconnected',
           error: null,
+          metricsSummary: null,
         });
       },
     }),

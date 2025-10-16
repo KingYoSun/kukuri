@@ -107,6 +107,12 @@ describe('p2pApi', () => {
           },
         ],
         peer_count: 10,
+        metrics_summary: {
+          joins: 3,
+          leaves: 1,
+          broadcasts_sent: 4,
+          messages_received: 6,
+        },
       };
 
       vi.mocked(invoke).mockResolvedValueOnce(mockStatus);
@@ -123,6 +129,12 @@ describe('p2pApi', () => {
         endpoint_id: '',
         active_topics: [],
         peer_count: 0,
+        metrics_summary: {
+          joins: 0,
+          leaves: 0,
+          broadcasts_sent: 0,
+          messages_received: 0,
+        },
       };
 
       vi.mocked(invoke).mockResolvedValueOnce(mockStatus);
@@ -236,6 +248,12 @@ describe('p2pApi', () => {
         endpoint_id: 'node123',
         active_topics: [],
         peer_count: 0,
+        metrics_summary: {
+          joins: 0,
+          leaves: 0,
+          broadcasts_sent: 0,
+          messages_received: 0,
+        },
       };
 
       expect(p2pStatus.connected).toBe(true);

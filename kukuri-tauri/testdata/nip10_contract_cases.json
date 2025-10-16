@@ -1,0 +1,53 @@
+[
+  {
+    "name": "valid_root_marker",
+    "description": "Single e-tag with root marker and ws relay, plus hex p-tag",
+    "tags": [
+      ["e", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "wss://relay.example", "root"],
+      ["p", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+    ],
+    "expected": true
+  },
+  {
+    "name": "invalid_e_relay_scheme",
+    "description": "e-tag relay URL must be ws(s) scheme",
+    "tags": [
+      ["e", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "https://relay.example", "root"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "invalid_marker_value",
+    "description": "Marker must be root/reply/mention",
+    "tags": [
+      ["e", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "wss://relay.example", "reply-all"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "invalid_multiple_reply_markers",
+    "description": "Only one reply marker is permitted across e-tags",
+    "tags": [
+      ["e", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "wss://relay.one", "reply"],
+      ["e", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "wss://relay.two", "reply"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "invalid_p_relay_scheme",
+    "description": "p-tag relay must also use ws(s) scheme",
+    "tags": [
+      ["p", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "http://bad.example"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "valid_mention_and_empty_relay",
+    "description": "mention marker is allowed and empty relay implies default",
+    "tags": [
+      ["e", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "", "mention"],
+      ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "ws://relay.local:7777"]
+    ],
+    "expected": true
+  }
+]

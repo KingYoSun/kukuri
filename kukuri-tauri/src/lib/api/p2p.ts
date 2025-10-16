@@ -5,6 +5,7 @@ export interface P2PStatus {
   endpoint_id: string;
   active_topics: TopicStatus[];
   peer_count: number;
+  metrics_summary: GossipMetricsSummary;
 }
 
 export interface TopicStatus {
@@ -19,6 +20,13 @@ export interface GossipMetricDetails {
   failures: number;
   last_success_ms: number | null;
   last_failure_ms: number | null;
+}
+
+export interface GossipMetricsSummary {
+  joins: number;
+  leaves: number;
+  broadcasts_sent: number;
+  messages_received: number;
 }
 
 export interface GossipMetrics {

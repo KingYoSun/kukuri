@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月16日
+最終更新日: 2025年10月17日
 
 ## 方針（2025年09月15日 更新）
 
@@ -26,9 +26,9 @@
 ### 今後の作業予定（短期）
 
 - [x] NIP-19 TLVの詳細検証拡張（複数relay_urlsの扱い、文字列長上限、UTF-8検証など）
-- [ ] `get_p2p_status` にメトリクス要約を含めるか別APIで集約（要UI検討）
-- [ ] Rust/TSの契約テストを追加（NIP-10のmarker/relay_url整合の境界ケース）
-- [ ] Windows: `./scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加
+- [x] `get_p2p_status` にメトリクス要約を含めるか別APIで集約（要UI検討）
+- [x] Rust/TSの契約テストを追加（NIP-10のmarker/relay_url整合の境界ケース）
+- [x] Windows: `./scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加
 - [x] modules/p2p/tests/iroh_integration_tests.rs を NodeAddr ヒント対応（connect_peers の戻り値で初期ピア再設定）
 - [x] P2P受信確認テストの安定化（DHTブートストラップコンテナ経由で discovery_dht() のみを使用。詳細: docs/03_implementation/p2p_dht_test_strategy.md）
 - [ ] TypeScript契約テストの追加と Docker スモークテスト構成の縮小タスク化
@@ -36,6 +36,8 @@
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 メモ/進捗ログ:
+- 2025年10月17日: `get_p2p_status` にメトリクス要約を含め、Rust/DTO/ハンドラ/フロントを更新。`p2pStore`・`useP2P` が `metricsSummary` を保持するよう拡張。
+- 2025年10月17日: NIP-10 の境界ケースを JSON で共通管理し、Rust（`nip10_contract_tests`）と TypeScript（`nip10.contract.test.ts`）の契約テストを追加。`scripts/test-docker.ps1` に `metrics` / `contracts` コマンドを実装し個別テストを実行可能にした。
 - 2025年10月16日: NIP-19 TLV検証拡張の設計を開始。`nprofile`/`nevent` のTLV構造とリレーURL検証要件を整理中。
 - 2025年10月16日: `nprofile`/`nevent` のTLV解析を厳格化（必須/任意タグ長、ASCII/UTF-8チェック、リレー数制限）し、`cargo test`（kukuri-tauri/src-tauri・kukuri-cli）を完走。
 - 2025年10月16日: フロントエンドも `@scure/base` 利用で bech32/TLV検証を整備。`pnpm test` を実行し、NIP-19参照の正常系/異常系テストを追加。

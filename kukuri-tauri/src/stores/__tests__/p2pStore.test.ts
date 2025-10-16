@@ -30,6 +30,7 @@ describe('p2pStore', () => {
         messages: new Map(),
         connectionStatus: 'disconnected',
         error: null,
+        metricsSummary: null,
       });
     });
   });
@@ -42,6 +43,12 @@ describe('p2pStore', () => {
         endpoint_id: 'QmNodeId123',
         active_topics: [],
         peer_count: 0,
+        metrics_summary: {
+          joins: 0,
+          leaves: 0,
+          broadcasts_sent: 0,
+          messages_received: 0,
+        },
       };
 
       vi.mocked(p2pApi.initialize).mockResolvedValueOnce(undefined);
@@ -59,6 +66,12 @@ describe('p2pStore', () => {
       expect(useP2PStore.getState().nodeId).toBe('QmNodeId123');
       expect(useP2PStore.getState().nodeAddr).toBe(mockNodeAddr.join(', '));
       expect(useP2PStore.getState().connectionStatus).toBe('connected');
+      expect(useP2PStore.getState().metricsSummary).toEqual({
+        joins: 0,
+        leaves: 0,
+        broadcasts_sent: 0,
+        messages_received: 0,
+      });
     });
 
     it('初期化エラーを適切に処理する', async () => {
@@ -90,6 +103,12 @@ describe('p2pStore', () => {
           },
         ],
         peer_count: 3,
+        metrics_summary: {
+          joins: 1,
+          leaves: 0,
+          broadcasts_sent: 2,
+          messages_received: 3,
+        },
       });
 
       await act(async () => {
@@ -102,6 +121,12 @@ describe('p2pStore', () => {
       expect(topicStats).toBeDefined();
       expect(topicStats?.topic_id).toBe('test-topic');
       expect(topicStats?.peer_count).toBe(3);
+      expect(useP2PStore.getState().metricsSummary).toEqual({
+        joins: 1,
+        leaves: 0,
+        broadcasts_sent: 2,
+        messages_received: 3,
+      });
     });
 
     it('トピック参加エラーを適切に処理する', async () => {
@@ -132,6 +157,12 @@ describe('p2pStore', () => {
           },
         ],
         peer_count: 0,
+        metrics_summary: {
+          joins: 0,
+          leaves: 1,
+          broadcasts_sent: 0,
+          messages_received: 0,
+        },
       });
 
       // 事前にトピックに参加
@@ -145,6 +176,12 @@ describe('p2pStore', () => {
 
       expect(vi.mocked(p2pApi.leaveTopic)).toHaveBeenCalledWith('test-topic');
       expect(useP2PStore.getState().activeTopics.has('test-topic')).toBe(false);
+      expect(useP2PStore.getState().metricsSummary).toEqual({
+        joins: 0,
+        leaves: 1,
+        broadcasts_sent: 0,
+        messages_received: 0,
+      });
       expect(useP2PStore.getState().messages.has('test-topic')).toBe(false);
     });
   });
@@ -299,6 +336,7 @@ describe('p2pStore', () => {
       expect(useP2PStore.getState().nodeAddr).toBe(null);
       expect(useP2PStore.getState().connectionStatus).toBe('disconnected');
       expect(useP2PStore.getState().activeTopics.size).toBe(0);
+      expect(useP2PStore.getState().metricsSummary).toBeNull();
     });
   });
 });

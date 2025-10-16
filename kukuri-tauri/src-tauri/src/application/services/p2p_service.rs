@@ -1,4 +1,4 @@
-use crate::infrastructure::p2p::{GossipService, NetworkService};
+use crate::infrastructure::p2p::{metrics, GossipService, NetworkService};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,16 @@ pub struct P2PStatus {
     pub endpoint_id: String,
     pub active_topics: Vec<TopicInfo>,
     pub peer_count: usize,
+    pub metrics_summary: GossipMetricsSummary,
+}
+
+/// Gossipメトリクスのサマリー
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GossipMetricsSummary {
+    pub joins: u64,
+    pub leaves: u64,
+    pub broadcasts_sent: u64,
+    pub messages_received: u64,
 }
 
 /// トピック情報
@@ -129,11 +139,20 @@ impl P2PServiceTrait for P2PService {
             });
         }
 
+        let metrics_snapshot = metrics::snapshot();
+        let metrics_summary = GossipMetricsSummary {
+            joins: metrics_snapshot.joins,
+            leaves: metrics_snapshot.leaves,
+            broadcasts_sent: metrics_snapshot.broadcasts_sent,
+            messages_received: metrics_snapshot.messages_received,
+        };
+
         Ok(P2PStatus {
             connected: true,
             endpoint_id,
             active_topics,
             peer_count: total_peer_count,
+            metrics_summary,
         })
     }
 
@@ -156,7 +175,7 @@ impl P2PServiceTrait for P2PService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::p2p::{GossipService, NetworkService};
+    use crate::infrastructure::p2p::{metrics, GossipService, NetworkService};
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
     use std::sync::Mutex;
@@ -370,6 +389,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_status() {
+        metrics::reset_all();
         let mut mock_network = MockNetworkServ::new();
         mock_network
             .expect_get_node_id()
@@ -418,6 +438,10 @@ mod tests {
         assert!(status.connected);
         assert_eq!(status.active_topics.len(), 2);
         assert_eq!(status.peer_count, 8); // 5 + 3
+        assert_eq!(status.metrics_summary.joins, 0);
+        assert_eq!(status.metrics_summary.leaves, 0);
+        assert_eq!(status.metrics_summary.broadcasts_sent, 0);
+        assert_eq!(status.metrics_summary.messages_received, 0);
     }
 
     #[tokio::test]

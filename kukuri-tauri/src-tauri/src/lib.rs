@@ -10,6 +10,9 @@ mod presentation;
 mod shared;
 mod state;
 
+#[doc(hidden)]
+pub mod contract_testing;
+
 // Tauriコマンドのインポート
 // v2アーキテクチャへの移行完了につき、旧コマンドのインポートは削除
 use state::AppState;

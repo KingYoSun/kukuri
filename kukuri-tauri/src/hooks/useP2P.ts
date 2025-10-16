@@ -1,5 +1,6 @@
-import { useCallback, useEffect } from 'react';
+﻿import { useCallback, useEffect } from 'react';
 import { useP2PStore, TopicStats, PeerInfo, P2PMessage } from '@/stores/p2pStore';
+import type { GossipMetricsSummary } from '@/lib/api/p2p';
 import { useP2PEventListener } from './useP2PEventListener';
 
 // useP2Pフックの戻り値の型定義
@@ -12,12 +13,14 @@ export interface UseP2PReturn {
   peers: PeerInfo[];
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   error: string | null;
+  metricsSummary: GossipMetricsSummary | null;
 
   // アクション
   joinTopic: (topicId: string, initialPeers?: string[]) => Promise<void>;
   leaveTopic: (topicId: string) => Promise<void>;
   broadcast: (topicId: string, content: string) => Promise<void>;
   clearError: () => void;
+  refreshStatus: () => Promise<void>;
 
   // ヘルパー関数
   getTopicMessages: (topicId: string) => P2PMessage[];
@@ -44,6 +47,7 @@ export function useP2P(): UseP2PReturn {
     broadcast,
     refreshStatus,
     clearError,
+    metricsSummary,
   } = useP2PStore();
 
   // P2Pイベントリスナーを設定
@@ -114,12 +118,14 @@ export function useP2P(): UseP2PReturn {
     peers: Array.from(peers.values()),
     connectionStatus,
     error,
+    metricsSummary,
 
     // アクション
     joinTopic,
     leaveTopic,
     broadcast,
     clearError,
+    refreshStatus,
 
     // ヘルパー関数
     getTopicMessages,

@@ -70,6 +70,7 @@ describe('useP2P', () => {
         messages: new Map(),
         error: null,
         peers: new Map(),
+        metricsSummary: null,
       });
     });
   });
@@ -92,6 +93,12 @@ describe('useP2P', () => {
         endpoint_id: 'node123',
         active_topics: [],
         peer_count: 0,
+        metrics_summary: {
+          joins: 0,
+          leaves: 0,
+          broadcasts_sent: 0,
+          messages_received: 0,
+        },
       });
 
       // 初期状態を確認
@@ -106,6 +113,12 @@ describe('useP2P', () => {
       // 初期化が完了したことを確認
       expect(useP2PStore.getState().initialized).toBe(true);
       expect(useP2PStore.getState().connectionStatus).toBe('connected');
+      expect(useP2PStore.getState().metricsSummary).toEqual({
+        joins: 0,
+        leaves: 0,
+        broadcasts_sent: 0,
+        messages_received: 0,
+      });
       expect(useP2PStore.getState().nodeId).toBe('node123');
       expect(useP2PStore.getState().nodeAddr).toBe('/ip4/127.0.0.1/tcp/4001');
     });
@@ -282,6 +295,12 @@ describe('useP2P', () => {
           },
         ],
         peer_count: 1,
+        metrics_summary: {
+          joins: 1,
+          leaves: 0,
+          broadcasts_sent: 1,
+          messages_received: 1,
+        },
       });
 
       await act(async () => {

@@ -1,8 +1,8 @@
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::p2p::{
-    BroadcastRequest, JoinTopicRequest, LeaveTopicRequest, NodeAddressResponse, P2PStatusResponse,
-    TopicStatus,
+    BroadcastRequest, GossipMetricsSummaryResponse, JoinTopicRequest, LeaveTopicRequest,
+    NodeAddressResponse, P2PStatusResponse, TopicStatus,
 };
 use crate::shared::error::AppError;
 use serde_json::json;
@@ -66,10 +66,16 @@ impl P2PHandler {
     /// P2Pステータスを取得
     pub async fn get_p2p_status(&self) -> Result<P2PStatusResponse, AppError> {
         let status = self.p2p_service.get_status().await?;
+        let crate::application::services::p2p_service::P2PStatus {
+            connected,
+            endpoint_id,
+            active_topics,
+            peer_count,
+            metrics_summary,
+        } = status;
 
         // サービスから取得したステータスをDTOに変換
-        let topic_statuses: Vec<TopicStatus> = status
-            .active_topics
+        let topic_statuses: Vec<TopicStatus> = active_topics
             .into_iter()
             .map(|topic| TopicStatus {
                 topic_id: topic.id,
@@ -80,10 +86,16 @@ impl P2PHandler {
             .collect();
 
         Ok(P2PStatusResponse {
-            connected: status.connected,
-            endpoint_id: status.endpoint_id,
+            connected,
+            endpoint_id,
             active_topics: topic_statuses,
-            peer_count: status.peer_count,
+            peer_count,
+            metrics_summary: GossipMetricsSummaryResponse {
+                joins: metrics_summary.joins,
+                leaves: metrics_summary.leaves,
+                broadcasts_sent: metrics_summary.broadcasts_sent,
+                messages_received: metrics_summary.messages_received,
+            },
         })
     }
 

@@ -7,6 +7,7 @@ pub struct P2PStatusResponse {
     pub endpoint_id: String,
     pub active_topics: Vec<TopicStatus>,
     pub peer_count: usize,
+    pub metrics_summary: GossipMetricsSummaryResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +92,14 @@ pub struct GossipMetricDetailsResponse {
     pub failures: u64,
     pub last_success_ms: Option<u64>,
     pub last_failure_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GossipMetricsSummaryResponse {
+    pub joins: u64,
+    pub leaves: u64,
+    pub broadcasts_sent: u64,
+    pub messages_received: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

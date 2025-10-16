@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "build", "clean", "cache-clean")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "build", "clean", "cache-clean", "metrics", "contracts")]
     [string]$Command = "all",
 
     [switch]$NoBuild,  # ビルドをスキップするオプション
@@ -41,6 +41,8 @@ Commands:
   rust         - Rustのテストのみ実行
   ts           - TypeScriptのテストのみ実行
   lint         - リントとフォーマットチェックのみ実行
+  metrics      - メトリクス関連のショートテスト（Rust test_get_status / TS P2P UI）
+  contracts    - 契約テスト（NIP-10境界ケース）を実行
   build        - Dockerイメージのビルドのみ実行
   clean        - Dockerコンテナとイメージをクリーンアップ
   cache-clean  - キャッシュボリュームも含めて完全クリーンアップ
@@ -208,6 +210,46 @@ function Invoke-LintCheck {
     Write-Success "Lint and format checks passed!"
 }
 
+function Invoke-MetricsTests {
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+    Write-Host "Running metrics-focused Rust test (test_get_status)..."
+    Invoke-DockerCompose @("run", "--rm", "rust-test", "cargo", "test", "test_get_status")
+    Write-Host "Running metrics-focused TypeScript tests (P2PStatus/store/useP2P)..."
+    Invoke-DockerCompose @(
+        "run",
+        "--rm",
+        "ts-test",
+        "pnpm",
+        "vitest",
+        "run",
+        "src/components/__tests__/P2PStatus.test.tsx",
+        "src/stores/__tests__/p2pStore.test.ts",
+        "src/hooks/__tests__/useP2P.test.tsx"
+    )
+    Write-Success "Metrics-focused tests passed!"
+}
+
+function Invoke-ContractTests {
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+    Write-Host "Running Rust contract tests (nip10_contract_tests)..."
+    Invoke-DockerCompose @("run", "--rm", "rust-test", "cargo", "test", "--test", "nip10_contract_tests")
+    Write-Host "Running TypeScript contract tests (nip10.contract)..."
+    Invoke-DockerCompose @(
+        "run",
+        "--rm",
+        "ts-test",
+        "pnpm",
+        "vitest",
+        "run",
+        "src/lib/__tests__/nip10.contract.test.ts"
+    )
+    Write-Success "Contract tests passed!"
+}
+
 # クリーンアップ
 function Invoke-Cleanup {
     Write-Host "Cleaning up Docker containers and images..."
@@ -315,6 +357,14 @@ switch ($Command) {
     }
     "lint" {
         Invoke-LintCheck
+        Show-CacheStatus
+    }
+    "metrics" {
+        Invoke-MetricsTests
+        Show-CacheStatus
+    }
+    "contracts" {
+        Invoke-ContractTests
         Show-CacheStatus
     }
     "build" {

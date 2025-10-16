@@ -1,7 +1,5 @@
 import { useP2P } from '@/hooks/useP2P';
-import { useEffect, useState, useCallback } from 'react';
-import { p2pApi } from '@/lib/api/p2p';
-import { errorHandler } from '@/lib/errorHandler';
+import { useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,30 +25,29 @@ export function P2PStatus() {
     connectionStatus,
     error,
     clearError,
+    refreshStatus,
+    metricsSummary,
   } = useP2P();
-
-  const [metrics, setMetrics] = useState<{
-    joins: number;
-    leaves: number;
-    broadcasts_sent: number;
-    messages_received: number;
-  } | null>(null);
-  const refreshMetrics = useCallback(async () => {
-    try {
-      const m = await p2pApi.getMetrics();
-      setMetrics(m);
-    } catch (e) {
-      errorHandler.log('Failed to fetch metrics', e, { context: 'P2PStatus.refreshMetrics' });
-    }
-  }, []);
 
   useEffect(() => {
     if (initialized && connectionStatus === 'connected') {
-      refreshMetrics();
-      const t = setInterval(refreshMetrics, 30000);
+      refreshStatus();
+      const t = setInterval(() => {
+        refreshStatus();
+      }, 30000);
       return () => clearInterval(t);
     }
-  }, [initialized, connectionStatus, refreshMetrics]);
+  }, [initialized, connectionStatus, refreshStatus]);
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      await refreshStatus();
+    } catch {
+      // 既に refreshStatus 内でロギング済み
+    }
+  }, [refreshStatus]);
+
+  const metrics = metricsSummary;
 
   // 接続状態のアイコンとカラーを取得
   const getConnectionIcon = () => {
@@ -145,12 +142,7 @@ export function P2PStatus() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Gossipメトリクス</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={refreshMetrics}
-                >
+                <Button variant="secondary" size="sm" className="h-6 text-xs" onClick={handleRefresh}>
                   更新
                 </Button>
               </div>
