@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@testing-library/jest-dom';
 import { vi, afterEach } from 'vitest';
 import { act } from '@testing-library/react';

@@ -85,7 +85,7 @@ pub async fn get_joined_topics(
 #[tauri::command]
 pub async fn update_topic(
     state: State<'_, AppState>,
-    request: UpdateTopicRequest,
+    _request: UpdateTopicRequest,
 ) -> Result<ApiResponse<TopicResponse>, String> {
     // 認証チェック
     let _user_pubkey = state
@@ -104,7 +104,7 @@ pub async fn update_topic(
 #[tauri::command]
 pub async fn delete_topic(
     state: State<'_, AppState>,
-    request: DeleteTopicRequest,
+    _request: DeleteTopicRequest,
 ) -> Result<ApiResponse<()>, String> {
     // 認証チェック
     let _user_pubkey = state

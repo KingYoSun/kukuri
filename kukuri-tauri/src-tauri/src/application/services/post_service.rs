@@ -122,7 +122,7 @@ impl PostService {
             if let Some(ref keys) = self.keys {
                 let event_id = nostr_sdk::EventId::from_hex(post_id)?;
                 // Create a simple reaction event
-                let reaction_event = EventBuilder::text_note("+")
+                let _reaction_event = EventBuilder::text_note("+")
                     .tag(Tag::event(event_id))
                     .sign_with_keys(keys)?;
 
@@ -154,7 +154,7 @@ impl PostService {
             if let Some(ref keys) = self.keys {
                 let event_id = nostr_sdk::EventId::from_hex(post_id)?;
                 // Create a repost event
-                let repost_event = EventBuilder::text_note("")
+                let _repost_event = EventBuilder::text_note("")
                     .tag(Tag::event(event_id))
                     .sign_with_keys(keys)?;
 
@@ -179,7 +179,7 @@ impl PostService {
         if let Some(ref keys) = self.keys {
             let event_id = nostr_sdk::EventId::from_hex(id)?;
             // Create a deletion event
-            let deletion_event = EventBuilder::text_note("Post deleted")
+            let _deletion_event = EventBuilder::text_note("Post deleted")
                 .tag(Tag::event(event_id))
                 .sign_with_keys(keys)?;
 
@@ -224,19 +224,23 @@ impl PostService {
         }
     }
 
-    pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+    pub async fn bookmark_post(&self, _post_id: &str, _user_pubkey: &str) -> Result<(), AppError> {
         // TODO: Implement bookmark logic with user_pubkey
         Ok(())
     }
 
-    pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+    pub async fn unbookmark_post(
+        &self,
+        _post_id: &str,
+        _user_pubkey: &str,
+    ) -> Result<(), AppError> {
         // TODO: Implement unbookmark logic with user_pubkey
         Ok(())
     }
 
     pub async fn get_bookmarked_post_ids(
         &self,
-        user_pubkey: &str,
+        _user_pubkey: &str,
     ) -> Result<Vec<String>, AppError> {
         // TODO: Implement get bookmarked posts logic with user_pubkey
         Ok(Vec::new())

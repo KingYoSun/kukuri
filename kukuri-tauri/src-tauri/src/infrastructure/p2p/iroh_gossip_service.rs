@@ -417,16 +417,11 @@ impl GossipService for IrohGossipService {
     async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError> {
         let topics = self.topics.read().await;
 
-        if let Some(handle) = topics.get(topic) {
+        if let Some(_handle) = topics.get(topic) {
             // iroh-gossipのAPIでピアリストを取得
             // Note: iroh-gossip doesn't expose a direct way to get topic peers
             // Return empty list for now
-            let neighbors = vec![];
-
-            Ok(neighbors
-                .into_iter()
-                .map(|peer_id: ()| String::new())
-                .collect())
+            Ok(Vec::new())
         } else {
             Err(format!("Not joined to topic: {topic}").into())
         }

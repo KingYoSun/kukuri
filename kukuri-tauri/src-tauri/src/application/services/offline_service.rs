@@ -126,10 +126,10 @@ impl OfflineService {
 impl OfflineServiceTrait for OfflineService {
     async fn save_action(
         &self,
-        entity_type: String,
-        entity_id: String,
-        action_type: String,
-        payload: String,
+        _entity_type: String,
+        _entity_id: String,
+        _action_type: String,
+        _payload: String,
     ) -> Result<i64, AppError> {
         // TODO: Repositoryを通じてオフラインアクションを保存
         // 実装の参考: modules/offline/manager.rsのsave_offline_actionメソッド
@@ -189,10 +189,10 @@ impl OfflineServiceTrait for OfflineService {
 
     async fn add_to_sync_queue(
         &self,
-        entity_type: String,
-        entity_id: String,
-        operation: String,
-        data: String,
+        _entity_type: String,
+        _entity_id: String,
+        _operation: String,
+        _data: String,
         priority: Option<i32>,
     ) -> Result<i64, AppError> {
         // TODO: Repositoryを通じて同期キューに追加
@@ -214,10 +214,10 @@ impl OfflineServiceTrait for OfflineService {
 
     async fn save_optimistic_update(
         &self,
-        entity_type: String,
-        entity_id: String,
-        original_data: Option<String>,
-        updated_data: String,
+        _entity_type: String,
+        _entity_id: String,
+        _original_data: Option<String>,
+        _updated_data: String,
     ) -> Result<String, AppError> {
         // TODO: Repositoryを通じて楽観的更新を保存
         // 1. UUIDでupdate_idを生成

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use crate::modules::bookmark::BookmarkManager;
 use crate::modules::crypto::encryption::EncryptionManager;

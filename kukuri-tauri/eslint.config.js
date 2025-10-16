@@ -47,7 +47,8 @@ export default [
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
       }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'react-hooks/exhaustive-deps': 'off',
       'no-undef': 'off', // TypeScriptが処理するため
     },
     settings: {

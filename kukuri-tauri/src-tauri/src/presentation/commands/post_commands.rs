@@ -21,7 +21,7 @@ pub async fn create_post(
     request: CreatePostRequest,
 ) -> Result<ApiResponse<PostResponse>, String> {
     // 認証チェック
-    let user_pubkey = state
+    let _user_pubkey = state
         .key_manager
         .get_keys()
         .await

@@ -40,8 +40,8 @@ impl UserService {
 
     pub async fn follow_user(
         &self,
-        follower_npub: &str,
-        target_npub: &str,
+        _follower_npub: &str,
+        _target_npub: &str,
     ) -> Result<(), AppError> {
         // TODO: Implement follow relationship
         Ok(())
@@ -49,8 +49,8 @@ impl UserService {
 
     pub async fn unfollow_user(
         &self,
-        follower_npub: &str,
-        target_npub: &str,
+        _follower_npub: &str,
+        _target_npub: &str,
     ) -> Result<(), AppError> {
         // TODO: Implement unfollow
         Ok(())

@@ -139,11 +139,10 @@ impl PostCacheService {
 
     pub async fn cache_posts_by_topic(
         &self,
-        topic_id: &str,
+        _topic_id: &str,
         posts: Vec<crate::domain::entities::post::Post>,
     ) {
-        let key = format!("topic_posts:{topic_id}");
-        // トピック別の投稿は短めのTTL（1分）
+        // トピック別の投稿は短めのTTLを想定して個別キャッシュのみ更新
         for post in posts {
             self.cache_post(post).await;
         }

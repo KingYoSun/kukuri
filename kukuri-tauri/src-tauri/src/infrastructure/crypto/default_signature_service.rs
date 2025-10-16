@@ -63,7 +63,7 @@ impl SignatureService for DefaultSignatureService {
         event: &Event,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         // イベントの署名を検証
-        let public_key = PublicKey::from_hex(&event.pubkey)?;
+        let _public_key = PublicKey::from_hex(&event.pubkey)?;
 
         // Nostrイベントを再構築
         let nostr_event = nostr_sdk::Event::from_json(serde_json::to_string(event)?)?;
@@ -89,9 +89,9 @@ impl SignatureService for DefaultSignatureService {
 
     async fn verify_message(
         &self,
-        message: &str,
-        signature: &str,
-        public_key: &str,
+        _message: &str,
+        _signature: &str,
+        _public_key: &str,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         // For now, we'll use the Nostr event verification approach
         // In a real implementation, you'd need to reconstruct the event with the signature
