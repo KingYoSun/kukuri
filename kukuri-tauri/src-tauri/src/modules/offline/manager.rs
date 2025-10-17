@@ -370,4 +370,98 @@ impl OfflineManager {
 
         Ok(())
     }
+
+    /// 指定されたオフラインアクションが同期キューに存在しない場合のみ追加する
+    pub async fn ensure_offline_action_in_queue(&self, action: &OfflineAction) -> Result<bool> {
+        let payload_value: serde_json::Value = serde_json::from_str(&action.action_data)?;
+        let payload = serde_json::to_string(&payload_value)?;
+
+        let existing = sqlx::query(
+            r#"
+            SELECT id FROM sync_queue
+            WHERE action_type = ?1 AND payload = ?2
+              AND status IN ('pending', 'failed')
+            LIMIT 1
+            "#,
+        )
+        .bind(&action.action_type)
+        .bind(&payload)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if existing.is_some() {
+            return Ok(false);
+        }
+
+        self.add_to_sync_queue(AddToSyncQueueRequest {
+            action_type: action.action_type.clone(),
+            payload: payload_value,
+        })
+        .await?;
+
+        Ok(true)
+    }
+
+    /// キュー内の未処理/失敗アクションを取得する
+    pub async fn get_pending_sync_queue(&self) -> Result<Vec<SyncQueueItem>> {
+        let items = sqlx::query_as::<_, SyncQueueItem>(
+            r#"
+            SELECT * FROM sync_queue
+            WHERE status IN ('pending', 'failed')
+            ORDER BY updated_at ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(items)
+    }
+
+    /// 期限切れ・ステール判定済みのキャッシュメタデータを取得する
+    pub async fn get_stale_cache_entries(&self) -> Result<Vec<CacheMetadata>> {
+        let now = Utc::now().timestamp();
+        let items = sqlx::query_as::<_, CacheMetadata>(
+            r#"
+            SELECT * FROM cache_metadata
+            WHERE is_stale = 1
+               OR (expiry_time IS NOT NULL AND expiry_time < ?1)
+            ORDER BY COALESCE(last_synced_at, 0) ASC
+            "#,
+        )
+        .bind(now)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(items)
+    }
+
+    /// 未確定の楽観的更新を取得する
+    pub async fn get_unconfirmed_updates(&self) -> Result<Vec<OptimisticUpdate>> {
+        let items = sqlx::query_as::<_, OptimisticUpdate>(
+            r#"
+            SELECT * FROM optimistic_updates
+            WHERE is_confirmed = 0
+            ORDER BY created_at ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(items)
+    }
+
+    /// コンフリクトや失敗状態の同期記録を取得する
+    pub async fn get_sync_conflicts(&self) -> Result<Vec<SyncStatusRecord>> {
+        let items = sqlx::query_as::<_, SyncStatusRecord>(
+            r#"
+            SELECT * FROM sync_status
+            WHERE sync_status IN ('conflict', 'failed', 'pending')
+            ORDER BY last_local_update DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(items)
+    }
 }

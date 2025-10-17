@@ -1,6 +1,6 @@
 # Kukuri: irohビルトインDHTディスカバリー活用計画
 
-## 最終更新日: 2025年09月15日
+## 最終更新日: 2025年10月18日
 
 ## 1. 背景と変更理由
 
@@ -188,15 +188,96 @@ pub async fn bootstrap_with_fallback(
 - [x] ブートストラップUI - ユーザー指定を保存/読込（Tauriコマンド + Settings画面）
 - [x] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
 
-### 4.3 ????????
-- [ ] ?????????????????`bootstrap_nodes.json`?
-- [x] DHT?????/???tracing, counters, ??????
-  - ??/????????????????????? `AtomicMetric` ?????`dht_bootstrap.rs`?`iroh_gossip_service.rs` ????????????
-  - Tauri ???? `get_p2p_metrics` ? DTO ?????????????`p2p.ts`?`P2PDebugPanel`???????????????
-  - `pnpm test` ? `cargo test` ??????????????????????
-- [ ] ?????????????????/????????
-  - ????: `KUKURI_ENABLE_DHT`, `KUKURI_ENABLE_DNS`, `KUKURI_ENABLE_LOCAL`?bool?
-  - ??????????: `KUKURI_BOOTSTRAP_PEERS`??????? `nodeid@host:port`?
+### 4.3 運用/観測タスクの整理（引き継ぎメモ）
+- [ ] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI更新）方針を確定する。
+- [x] DHTメトリクス／tracing整備
+  - `AtomicMetric` を `dht_bootstrap.rs` / `iroh_gossip_service.rs` に組み込み、Tauriコマンド `get_p2p_metrics` → `p2p.ts` → `P2PDebugPanel` の経路で可視化。
+  - `pnpm test` / `cargo test` のメトリクス項目を更新済み（Docker スモークテストで検証）。
+- [ ] 環境変数ベースの機能トグル整理
+  - 候補: `KUKURI_ENABLE_DHT`, `KUKURI_ENABLE_DNS`, `KUKURI_ENABLE_LOCAL`（bool）
+  - ブートストラップ: `KUKURI_BOOTSTRAP_PEERS` に `nodeid@host:port` を列挙し、UIでの上書きルールを文書化。
+
+### 4.4 Offline再索引対象の棚卸し（2025年10月18日 更新）
+
+| データ領域 | 主な格納先 | 現状の用途 | 再索引で復元すべき状態 | 関連コード/備考 |
+| --- | --- | --- | --- | --- |
+| Offline Actions | SQLite `offline_actions` テーブル | オフライン時にキューイングした投稿/フォロー等のローカルキュー | アプリ再起動時に未同期アクションを復元し、`sync_queue` へ再投入する | `kukuri-tauri/src-tauri/src/modules/offline/manager.rs` 内 `save_offline_action` / `get_offline_actions` |
+| Sync Queue | SQLite `sync_queue` テーブル | ネットワーク送出待ちのアクションを保持 | 再接続後に`pending`項目を再送し、失敗履歴・リトライ回数を反映する | `modules/offline/manager.rs` `add_to_sync_queue` / `sync_offline_actions` |
+| Cache Metadata | SQLite `cache_metadata` テーブル | 投稿・プロフィールなどのローカルキャッシュ鮮度を管理 | TTL切れや`is_stale`=1を再走査し、再取得対象を判定する | `modules/offline/manager.rs` `get_cache_status` / `update_cache_metadata` / `cleanup_expired_cache` |
+| Optimistic Updates | SQLite `optimistic_updates` テーブル | UI側の楽観的更新内容を保持し、サーバー応答後に確定/ロールバックする | 未確定 (`is_confirmed=0`) の更新を UI ストアへ再適用し、Conflict時の差分復旧に備える | `modules/offline/manager.rs` `save_optimistic_update` 他 |
+| Sync Status | SQLite `sync_status` テーブル | エンティティごとの同期バージョン/コンフリクト情報を追跡 | 再接続時に `pending` / `conflict` を一覧化し、優先再送順を決定する | `modules/offline/manager.rs` `update_sync_status` |
+| UI Persisted Store | `offline-store`（Zustand Persist, LocalStorage） | ペンディングアクションと同期状態をブラウザ側に保持 | バックエンド再索引完了後に`offlineApi.getOfflineActions`/`getCacheStatus`で最新状態を再注入する | `kukuri-tauri/src/stores/offlineStore.ts` |
+
+- `Repository` トレイト自体はオフライン領域を未カバーのため、再索引ジョブでは `OfflineManager` の SQL 実装を直接利用する。
+- 再索引タイミング（案）: アプリ起動直後・P2P再接続検知時・`sync_queue` のリトライ上限超過時。
+- 再索引結果は Tauri -> フロントエンドへイベント送信（`tauri::Emitter`）し、`offlineStore.loadPendingActions` を呼び出す導線を用意する。
+
+### 4.5 Offline再索引ジョブ設計（ドラフト）
+
+**ジョブ目的**
+- オフライン期間中に蓄積されたローカルキューとキャッシュ状態を、オンライン復帰後に一貫性のある状態へ復旧する。
+- 再接続直後に UI とバックエンドの差分を埋め、重複送信や取りこぼしを防ぐ。
+
+**ジョブライフサイクル**
+1. **初期起動**: `AppState::new` 完了後に `tauri::async_runtime::spawn` で `OfflineReindexJob::run()` を起動。`Arc<OfflineManager>` / `Arc<P2PService>` / `AppHandle` を依存として受け取る。
+2. **トリガー**:
+   - アプリ起動直後に必ず1回実行。
+   - `P2PService` の接続イベント（`ConnectionState::Connected` へ遷移）を watch する。
+   - `sync_queue` 内の `status='failed'` かつ `retry_count < max_retries` の行が発生した際にスケジュール。
+3. **スケジューラ**: `tokio::time::interval` による30秒 tick をベースに、上記トリガーで即時実行フラグを立てる。実行中の場合は次 tick までコールバックを抑制（`AtomicBool` でガード）。
+
+**処理フロー（擬似コード）**
+```rust
+pub async fn reindex(&self) -> Result<(), AppError> {
+    let unsynced = self.offline_manager.get_offline_actions(GetOfflineActionsRequest {
+        user_pubkey: None,
+        is_synced: Some(false),
+        limit: None,
+    }).await?;
+
+    for action in unsynced {
+        // sync_queue に存在しない場合のみ再投入
+        self.offline_manager.enqueue_if_missing(&action).await?;
+    }
+
+    let pending_queue = self.offline_manager.get_pending_sync_items().await?;
+    self.sync_scheduler.schedule(pending_queue).await?;
+
+    let stale_cache = self.offline_manager.collect_stale_cache().await?;
+    self.cache_refresher.request_refresh(stale_cache).await?;
+
+    let optimistic = self.offline_manager.get_unconfirmed_updates().await?;
+    self.emit_replay_event(optimistic).await?;
+
+    let conflicts = self.offline_manager.get_sync_conflicts().await?;
+    self.emit_conflict_digest(conflicts).await?;
+
+    Ok(())
+}
+```
+
+**バックオフ戦略**
+- 失敗時は指数バックオフ（`5s, 15s, 45s, …` 最大5分）で再試行。`retry_count` が閾値を超えた場合は `sync_status` に `conflict` として書き込み、UIへ通知。
+- `sync_queue` の `retry_count` も同時に更新し、再索引ジョブ側のバックオフと整合を取る。
+
+**エラーハンドリングと監視**
+- `tracing` に `offline::reindex` スパンを設け、成功/失敗/処理件数をメトリクスに送出（`OfflineReindexMetrics` を `AtomicU64` で実装）。
+- 致命的エラー時は `errorHandler` に送るための Tauri イベント `offline://reindex_failed` を emit し、UIでリトライボタンを提示。
+
+**UI連携**
+- 再索引完了後に `offline://reindex_complete` を emit。フロント側は `offlineStore.loadPendingActions` / `cleanupExpiredCache` を呼び直し、`optimisticUpdates` を再適用。
+- コンフリクト検出時は `offline://sync_conflict` イベントでエンティティID一覧を通知し、UI側の解消ワークフローへ引き渡す。
+
+**未決事項（次ステップで確定）**
+- `OfflineManager` に `enqueue_if_missing` / `get_pending_sync_items` 等の補助メソッドを追加する実装詳細。
+- P2P接続状態の購読API（`P2PServiceTrait` にイベントストリームを追加するか、`P2PState` を watch するか）の選定。
+- フロントエンドイベントハンドラの実装責務（store直更新 vs TanStack Query invalidate）。
+
+**実装ステータス（2025年10月18日 更新）**
+- `IrohNetworkService` が `ConnectionEvent` ブロードキャストを公開し、再接続時に `OfflineReindexJob::trigger` を呼び出すウォッチャーを `AppState` で常駐化。
+- `OfflineReindexJob` は多重実行を `Mutex` で防ぎ、Tauriイベント `offline://reindex_complete` / `offline://reindex_failed` を発火。
+- フロントエンドの `offlineStore` が上記イベントを購読し、未同期アクションの再読込とステータス更新を行う。
+- `modules/offline/tests.rs::test_reindex_triggered_on_connection_event` で再接続イベントから同期キューが再構築されることを結合テストで検証。
 
 ## 5. テスト計画
 

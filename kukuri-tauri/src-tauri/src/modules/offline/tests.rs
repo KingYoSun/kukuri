@@ -1,8 +1,16 @@
 #[cfg(test)]
 #[allow(clippy::module_inception)]
 mod tests {
-    use super::super::{OfflineManager, models};
+    use super::super::{OfflineManager, models, reindex::OfflineReindexJob};
+    use crate::infrastructure::p2p::{
+        ConnectionEvent, DiscoveryOptions, iroh_network_service::IrohNetworkService,
+        network_service::NetworkService,
+    };
+    use crate::shared::config::AppConfig;
+    use iroh::SecretKey;
     use sqlx::sqlite::SqlitePoolOptions;
+    use std::sync::Arc;
+    use tokio::time::{Duration, sleep, timeout};
 
     async fn setup_test_db() -> sqlx::Pool<sqlx::Sqlite> {
         // メモリ内SQLiteデータベースを使用（Docker環境での権限問題を回避）
@@ -267,5 +275,154 @@ mod tests {
         assert_eq!(result.synced_count, 5);
         assert_eq!(result.failed_count, 0);
         assert_eq!(result.pending_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_ensure_offline_action_in_queue_deduplicates() {
+        let pool = setup_test_db().await;
+        let manager = OfflineManager::new(pool);
+
+        let request = models::SaveOfflineActionRequest {
+            user_pubkey: "queue_user".to_string(),
+            action_type: "create_post".to_string(),
+            target_id: Some("post_001".to_string()),
+            action_data: serde_json::json!({"content": "queued post"}),
+        };
+
+        let saved = manager.save_offline_action(request).await.unwrap();
+        let action = saved.action.clone();
+
+        let inserted = manager
+            .ensure_offline_action_in_queue(&action)
+            .await
+            .unwrap();
+        assert!(inserted);
+
+        let inserted_again = manager
+            .ensure_offline_action_in_queue(&action)
+            .await
+            .unwrap();
+        assert!(!inserted_again);
+
+        let pending = manager.get_pending_sync_queue().await.unwrap();
+        assert_eq!(pending.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_stale_cache_entries() {
+        let pool = setup_test_db().await;
+        let manager = OfflineManager::new(pool.clone());
+
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            r#"
+            INSERT INTO cache_metadata (
+                cache_key, cache_type, last_synced_at, is_stale, expiry_time, data_version
+            ) VALUES (?1, ?2, ?3, 1, ?4, 1)
+            "#,
+        )
+        .bind("stale_cache")
+        .bind("posts")
+        .bind(now - 10)
+        .bind(now - 5)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let stale = manager.get_stale_cache_entries().await.unwrap();
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].cache_key, "stale_cache");
+    }
+
+    #[tokio::test]
+    async fn test_offline_reindex_job_requeues_actions() {
+        let pool = setup_test_db().await;
+        let manager = Arc::new(OfflineManager::new(pool));
+
+        let request = models::SaveOfflineActionRequest {
+            user_pubkey: "reindex_user".to_string(),
+            action_type: "follow".to_string(),
+            target_id: Some("user_123".to_string()),
+            action_data: serde_json::json!({"follow": "user_123"}),
+        };
+
+        manager
+            .save_offline_action(request)
+            .await
+            .expect("failed to save offline action");
+
+        let job = OfflineReindexJob::create(None, Arc::clone(&manager));
+        let report = job.reindex_once().await.unwrap();
+
+        assert_eq!(report.offline_action_count, 1);
+        assert_eq!(report.queued_action_count, 1);
+
+        let pending = manager.get_pending_sync_queue().await.unwrap();
+        assert_eq!(pending.len(), 1);
+
+        let report_second = job.reindex_once().await.unwrap();
+        assert_eq!(report_second.queued_action_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_reindex_triggered_on_connection_event() {
+        let pool = setup_test_db().await;
+        let manager = Arc::new(OfflineManager::new(pool));
+
+        let request = models::SaveOfflineActionRequest {
+            user_pubkey: "connection_user".to_string(),
+            action_type: "follow".to_string(),
+            target_id: Some("user_999".to_string()),
+            action_data: serde_json::json!({"target": "user_999"}),
+        };
+        manager
+            .save_offline_action(request)
+            .await
+            .expect("failed to save offline action");
+
+        let job = OfflineReindexJob::create(None, Arc::clone(&manager));
+
+        let network_cfg = AppConfig::default().network;
+        let secret = SecretKey::from_bytes(&[7u8; 32]);
+        let service = IrohNetworkService::new(secret, network_cfg, DiscoveryOptions::default())
+            .await
+            .expect("failed to create network service");
+
+        let mut connection_rx = service.subscribe_connection_events();
+        let job_watcher = Arc::clone(&job);
+        let watcher = tokio::spawn(async move {
+            while let Ok(event) = connection_rx.recv().await {
+                if matches!(event, ConnectionEvent::Connected) {
+                    job_watcher.trigger();
+                    break;
+                }
+            }
+        });
+
+        service.connect().await.expect("connect should succeed");
+
+        let manager_for_check = Arc::clone(&manager);
+        let pending = timeout(Duration::from_secs(5), async move {
+            loop {
+                let queue = manager_for_check
+                    .get_pending_sync_queue()
+                    .await
+                    .expect("failed to query queue");
+                if !queue.is_empty() {
+                    return queue;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("offline reindex did not enqueue actions in time");
+
+        watcher.abort();
+        service
+            .disconnect()
+            .await
+            .expect("disconnect should succeed");
+
+        assert_eq!(pending.len(), 1);
     }
 }

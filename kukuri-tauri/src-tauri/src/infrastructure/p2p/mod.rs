@@ -12,6 +12,8 @@ pub mod utils;
 
 use serde::{Deserialize, Serialize};
 
+pub use iroh_network_service::ConnectionEvent;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DistributionStrategy {
     Hybrid,

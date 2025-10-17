@@ -8,8 +8,15 @@ import type {
   OfflineAction,
   SaveOfflineActionRequest,
   OptimisticUpdate,
+  OfflineReindexReport,
 } from '@/types/offline';
 import { EntityType } from '@/types/offline';
+
+declare global {
+  interface Window {
+    __TAURI__?: unknown;
+  }
+}
 
 interface OfflineStore extends OfflineState {
   // アクション
@@ -283,4 +290,56 @@ if (typeof window !== 'undefined') {
     },
     60 * 60 * 1000,
   );
+
+  if (window.__TAURI__) {
+    void import('@tauri-apps/api/event')
+      .then(({ listen }) => {
+        void listen<OfflineReindexReport>('offline://reindex_complete', async ({ payload }) => {
+          const store = useOfflineStore.getState();
+          const userPubkey = localStorage.getItem('currentUserPubkey') ?? undefined;
+          try {
+            await store.loadPendingActions(userPubkey || undefined);
+            store.updateLastSyncedAt();
+          } catch (error) {
+            errorHandler.log('Failed to refresh pending actions after reindex', error, {
+              context: 'offlineStore.reindex',
+            });
+          }
+
+          if (payload.queued_action_count > 0) {
+            errorHandler.info(
+              `再索引で ${payload.queued_action_count} 件のアクションを同期キューに再投入しました`,
+              'offlineStore.reindex',
+            );
+          }
+
+          if (payload.sync_conflicts.length > 0) {
+            errorHandler.warn(
+              `未解決の同期コンフリクトが ${payload.sync_conflicts.length} 件あります`,
+              'offlineStore.reindex',
+            );
+          }
+        }).catch((error) => {
+          errorHandler.log('Failed to subscribe offline reindex completion event', error, {
+            context: 'offlineStore.reindex',
+          });
+        });
+
+        void listen<string>('offline://reindex_failed', ({ payload }) => {
+          errorHandler.warn(
+            `オフライン再索引に失敗しました: ${payload}`,
+            'offlineStore.reindex',
+          );
+        }).catch((error) => {
+          errorHandler.log('Failed to subscribe offline reindex failure event', error, {
+            context: 'offlineStore.reindex',
+          });
+        });
+      })
+      .catch((error) => {
+        errorHandler.log('Failed to setup Tauri event listeners for offline reindex', error, {
+          context: 'offlineStore.reindex',
+        });
+      });
+  }
 }

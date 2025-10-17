@@ -7,8 +7,14 @@ use crate::shared::error::AppError;
 use async_trait::async_trait;
 use iroh::{Endpoint, protocol::Router};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 use tracing;
+
+#[derive(Debug, Clone)]
+pub enum ConnectionEvent {
+    Connected,
+    Disconnected,
+}
 
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
@@ -19,6 +25,7 @@ pub struct IrohNetworkService {
     dht_gossip: Option<Arc<DhtGossip>>,
     discovery_options: Arc<RwLock<DiscoveryOptions>>,
     network_config: AppNetworkConfig,
+    connection_events: broadcast::Sender<ConnectionEvent>,
 }
 
 impl IrohNetworkService {
@@ -52,6 +59,8 @@ impl IrohNetworkService {
             }
         };
 
+        let (connection_events, _) = broadcast::channel(16);
+
         let service = Self {
             endpoint: Arc::new(endpoint),
             router: Arc::new(router),
@@ -67,6 +76,7 @@ impl IrohNetworkService {
             dht_gossip,
             discovery_options: Arc::new(RwLock::new(discovery_options)),
             network_config: net_cfg,
+            connection_events,
         };
 
         service.apply_bootstrap_peers_from_config().await;
@@ -104,6 +114,10 @@ impl IrohNetworkService {
 
     pub async fn discovery_options(&self) -> DiscoveryOptions {
         *self.discovery_options.read().await
+    }
+
+    pub fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent> {
+        self.connection_events.subscribe()
     }
 
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
@@ -212,14 +226,21 @@ impl NetworkService for IrohNetworkService {
     }
     async fn connect(&self) -> Result<(), AppError> {
         let mut connected = self.connected.write().await;
+        let was_connected = *connected;
         *connected = true;
+        drop(connected);
+        if !was_connected {
+            let _ = self.connection_events.send(ConnectionEvent::Connected);
+        }
         tracing::info!("Network service connected");
         Ok(())
     }
 
     async fn disconnect(&self) -> Result<(), AppError> {
         let mut connected = self.connected.write().await;
+        let was_connected = *connected;
         *connected = false;
+        drop(connected);
 
         // ピアリストをクリア
         let mut peers = self.peers.write().await;
@@ -227,6 +248,9 @@ impl NetworkService for IrohNetworkService {
         super::metrics::set_mainline_connected_peers(0);
 
         tracing::info!("Network service disconnected");
+        if was_connected {
+            let _ = self.connection_events.send(ConnectionEvent::Disconnected);
+        }
         Ok(())
     }
 

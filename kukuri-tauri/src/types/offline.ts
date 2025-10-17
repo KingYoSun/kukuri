@@ -114,6 +114,23 @@ export interface OfflineState {
   syncErrors: Map<string, string>;
 }
 
+export interface SyncConflictDigest {
+  entity_type: string;
+  entity_id: string;
+  sync_status: string;
+}
+
+export interface OfflineReindexReport {
+  offline_action_count: number;
+  queued_action_count: number;
+  pending_queue_count: number;
+  stale_cache_keys: string[];
+  optimistic_update_ids: string[];
+  sync_conflicts: SyncConflictDigest[];
+  queued_offline_action_ids: string[];
+  emitted_at: number;
+}
+
 // アクションタイプの列挙
 export enum OfflineActionType {
   CREATE_POST = 'create_post',

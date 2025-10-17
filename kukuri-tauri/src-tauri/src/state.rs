@@ -2,12 +2,13 @@
 
 mod application_container;
 
+use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use crate::modules::bookmark::BookmarkManager;
 use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
-use crate::modules::offline::OfflineManager;
+use crate::modules::offline::{OfflineManager, OfflineReindexJob};
 use crate::modules::p2p::P2PEvent;
 use application_container::ApplicationContainer;
 
@@ -69,6 +70,7 @@ pub struct AppState {
     pub p2p_state: Arc<RwLock<P2PState>>,
     pub bookmark_manager: Arc<BookmarkManager>,
     pub offline_manager: Arc<OfflineManager>,
+    pub offline_reindex_job: Arc<OfflineReindexJob>,
 
     // 新アーキテクチャのサービス層
     pub auth_service: Arc<AuthService>,
@@ -123,6 +125,9 @@ impl AppState {
         let event_manager = Arc::new(EventManager::new_with_db(db_pool.clone()));
         let bookmark_manager = Arc::new(BookmarkManager::new((*db_pool).clone()));
         let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
+        let offline_reindex_job =
+            OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_manager));
+        offline_reindex_job.trigger();
 
         // 新アーキテクチャのリポジトリとサービスを初期化
         let pool = ConnectionPool::new(&db_url).await?;
@@ -218,6 +223,19 @@ impl AppState {
         let offline_handler = Arc::new(OfflineHandler::new(Arc::clone(&offline_service)
             as Arc<dyn crate::application::services::offline_service::OfflineServiceTrait>));
 
+        // P2P接続イベントを監視し、再接続時に再索引ジョブをトリガー
+        {
+            let mut connection_rx = p2p_stack.network_service.subscribe_connection_events();
+            let job = Arc::clone(&offline_reindex_job);
+            tauri::async_runtime::spawn(async move {
+                while let Ok(event) = connection_rx.recv().await {
+                    if matches!(event, ConnectionEvent::Connected) {
+                        job.trigger();
+                    }
+                }
+            });
+        }
+
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {
             event_rx: Arc::new(RwLock::new(Some(p2p_event_rx))),
@@ -239,6 +257,7 @@ impl AppState {
             p2p_state,
             bookmark_manager,
             offline_manager,
+            offline_reindex_job,
             auth_service,
             post_service,
             topic_service,
