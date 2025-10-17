@@ -10,9 +10,26 @@ WAIT_SECONDS="${BOOTSTRAP_WAIT_SECONDS:-10}"
 echo "=== Waiting ${WAIT_SECONDS}s for bootstrap startup ==="
 sleep "${WAIT_SECONDS}"
 
-echo "=== Running Rust P2P smoke tests ==="
+echo "=== Running Rust P2P smoke tests (parallel mainline & gossip) ==="
 cd /app/kukuri-tauri/src-tauri
-cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1
+set +e
+cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1 &
+P2P_GOSSIP_PID=$!
+cargo test --package kukuri-tauri --lib modules::p2p::tests::mainline_dht_tests:: -- --nocapture --test-threads=1 &
+P2P_MAINLINE_PID=$!
+
+wait ${P2P_GOSSIP_PID}
+GOSSIP_STATUS=$?
+wait ${P2P_MAINLINE_PID}
+MAINLINE_STATUS=$?
+set -e
+
+if [ ${GOSSIP_STATUS} -ne 0 ] || [ ${MAINLINE_STATUS} -ne 0 ]; then
+  echo "Rust P2P smoke tests failed (gossip=${GOSSIP_STATUS}, mainline=${MAINLINE_STATUS})" >&2
+  exit 1
+fi
+
+echo "=== Rust P2P smoke tests completed ==="
 
 echo "=== Running TypeScript integration smoke tests ==="
 cd /app/kukuri-tauri

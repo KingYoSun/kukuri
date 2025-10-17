@@ -7,6 +7,8 @@ mod gossip_tests;
 #[cfg(test)]
 mod iroh_integration_tests;
 #[cfg(test)]
+mod mainline_dht_tests;
+#[cfg(test)]
 mod message_tests;
 #[cfg(test)]
 mod topic_mesh_tests;
