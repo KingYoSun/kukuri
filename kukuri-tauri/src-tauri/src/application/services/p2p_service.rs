@@ -1,8 +1,15 @@
-use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
+use crate::infrastructure::p2p::{
+    DiscoveryOptions, GossipService, NetworkService, iroh_gossip_service::IrohGossipService,
+    iroh_network_service::IrohNetworkService, metrics,
+};
+use crate::modules::p2p::events::P2PEvent;
+use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
+use iroh::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::{RwLock, mpsc::UnboundedSender};
 
 /// P2Pネットワークのステータス情報
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +68,7 @@ pub trait P2PServiceTrait: Send + Sync {
 pub struct P2PService {
     network_service: Arc<dyn NetworkService>,
     gossip_service: Arc<dyn GossipService>,
+    discovery_options: Arc<RwLock<DiscoveryOptions>>,
 }
 
 impl P2PService {
@@ -68,10 +76,113 @@ impl P2PService {
         network_service: Arc<dyn NetworkService>,
         gossip_service: Arc<dyn GossipService>,
     ) -> Self {
+        Self::with_discovery(network_service, gossip_service, DiscoveryOptions::default())
+    }
+
+    pub fn with_discovery(
+        network_service: Arc<dyn NetworkService>,
+        gossip_service: Arc<dyn GossipService>,
+        discovery: DiscoveryOptions,
+    ) -> Self {
         Self {
             network_service,
             gossip_service,
+            discovery_options: Arc::new(RwLock::new(discovery)),
         }
+    }
+
+    pub async fn discovery_options(&self) -> DiscoveryOptions {
+        *self.discovery_options.read().await
+    }
+
+    pub async fn set_mainline_enabled(&self, enabled: bool) {
+        let mut options = self.discovery_options.write().await;
+        *options = options.with_mainline(enabled);
+    }
+
+    pub fn builder(secret_key: SecretKey, network_config: AppNetworkConfig) -> P2PServiceBuilder {
+        let discovery_options = DiscoveryOptions::from(&network_config);
+        P2PServiceBuilder::new(secret_key, network_config, discovery_options)
+    }
+}
+
+/// P2Pレイヤーの構築結果
+pub struct P2PStack {
+    pub network_service: Arc<IrohNetworkService>,
+    pub gossip_service: Arc<IrohGossipService>,
+    pub p2p_service: Arc<P2PService>,
+}
+
+pub struct P2PServiceBuilder {
+    secret_key: SecretKey,
+    network_config: AppNetworkConfig,
+    discovery_options: DiscoveryOptions,
+    event_sender: Option<UnboundedSender<P2PEvent>>,
+}
+
+impl P2PServiceBuilder {
+    fn new(
+        secret_key: SecretKey,
+        network_config: AppNetworkConfig,
+        discovery_options: DiscoveryOptions,
+    ) -> Self {
+        Self {
+            secret_key,
+            network_config,
+            discovery_options,
+            event_sender: None,
+        }
+    }
+
+    pub fn with_discovery_options(mut self, options: DiscoveryOptions) -> Self {
+        self.discovery_options = options;
+        self
+    }
+
+    pub fn enable_mainline(mut self, enabled: bool) -> Self {
+        self.discovery_options = self.discovery_options.with_mainline(enabled);
+        self
+    }
+
+    pub fn with_event_sender(mut self, sender: UnboundedSender<P2PEvent>) -> Self {
+        self.event_sender = Some(sender);
+        self
+    }
+
+    pub fn discovery_options(&self) -> DiscoveryOptions {
+        self.discovery_options
+    }
+
+    pub async fn build(self) -> Result<P2PStack, AppError> {
+        let P2PServiceBuilder {
+            secret_key,
+            network_config,
+            discovery_options,
+            event_sender,
+        } = self;
+
+        let network_service =
+            Arc::new(IrohNetworkService::new(secret_key, network_config, discovery_options).await?);
+        let endpoint_arc = network_service.endpoint().clone();
+        let mut gossip_inner = IrohGossipService::new(endpoint_arc)?;
+        if let Some(tx) = event_sender {
+            gossip_inner.set_event_sender(tx);
+        }
+        let gossip_service = Arc::new(gossip_inner);
+
+        let network_service_dyn: Arc<dyn NetworkService> = network_service.clone();
+        let gossip_service_dyn: Arc<dyn GossipService> = gossip_service.clone();
+        let p2p_service = Arc::new(P2PService::with_discovery(
+            network_service_dyn,
+            gossip_service_dyn,
+            discovery_options,
+        ));
+
+        Ok(P2PStack {
+            network_service,
+            gossip_service,
+            p2p_service,
+        })
     }
 }
 

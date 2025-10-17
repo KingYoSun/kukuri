@@ -1,5 +1,5 @@
 use super::{
-    NetworkService, NetworkStats, Peer,
+    DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
 };
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
@@ -17,22 +17,19 @@ pub struct IrohNetworkService {
     peers: Arc<RwLock<Vec<Peer>>>,
     stats: Arc<RwLock<NetworkStats>>,
     dht_gossip: Option<Arc<DhtGossip>>,
+    discovery_options: Arc<RwLock<DiscoveryOptions>>,
+    network_config: AppNetworkConfig,
 }
 
 impl IrohNetworkService {
     pub async fn new(
         secret_key: iroh::SecretKey,
-        net_cfg: &AppNetworkConfig,
+        net_cfg: AppNetworkConfig,
+        discovery_options: DiscoveryOptions,
     ) -> Result<Self, AppError> {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
-        let mut builder = Endpoint::builder().secret_key(secret_key);
-        if net_cfg.enable_dns {
-            builder = builder.discovery_n0(); // n0の公開ディスカバリー
-        }
-        if net_cfg.enable_dht {
-            builder = builder.discovery_dht(); // BitTorrent Mainline DHT（feature必要）
-        }
-        // 将来: net_cfg.enable_local に応じたローカルディスカバリー
+        let builder = Endpoint::builder().secret_key(secret_key);
+        let builder = discovery_options.apply_to_builder(builder);
         let endpoint = builder
             .bind()
             .await
@@ -68,6 +65,8 @@ impl IrohNetworkService {
                 bandwidth_down: 0,
             })),
             dht_gossip,
+            discovery_options: Arc::new(RwLock::new(discovery_options)),
+            network_config: net_cfg,
         })
     }
 
@@ -81,6 +80,10 @@ impl IrohNetworkService {
 
     pub fn node_id(&self) -> String {
         self.endpoint.node_id().to_string()
+    }
+
+    pub async fn discovery_options(&self) -> DiscoveryOptions {
+        *self.discovery_options.read().await
     }
 
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {

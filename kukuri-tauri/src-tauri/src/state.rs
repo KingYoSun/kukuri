@@ -22,8 +22,6 @@ use crate::infrastructure::{
     p2p::{
         GossipService, NetworkService,
         event_distributor::{DefaultEventDistributor, EventDistributor},
-        iroh_gossip_service::IrohGossipService,
-        iroh_network_service::IrohNetworkService,
     },
     storage::{SecureStorage, secure_storage::DefaultSecureStorage},
 };
@@ -162,25 +160,18 @@ impl AppState {
         // ネットワーク設定（環境変数等から）
         let app_cfg = crate::shared::AppConfig::from_env();
         let net_cfg = app_cfg.network.clone();
-        let network_service: Arc<dyn NetworkService> = Arc::new(
-            IrohNetworkService::new(iroh_secret_key, &net_cfg)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to create NetworkService: {}", e))?,
-        );
-        // GossipServiceの初期化（イベントチャネルを接続）
-        let endpoint_arc = network_service
-            .as_any()
-            .downcast_ref::<IrohNetworkService>()
-            .ok_or_else(|| anyhow::anyhow!("Failed to downcast NetworkService"))?
-            .endpoint()
-            .clone();
-
         let (p2p_event_tx, p2p_event_rx) = mpsc::unbounded_channel();
+        let p2p_builder =
+            P2PService::builder(iroh_secret_key, net_cfg.clone()).with_event_sender(p2p_event_tx);
+        let p2p_stack = p2p_builder
+            .build()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to build P2P stack: {}", e))?;
 
-        let mut gossip_inner = IrohGossipService::new(endpoint_arc)
-            .map_err(|e| anyhow::anyhow!("Failed to create GossipService: {}", e))?;
-        gossip_inner.set_event_sender(p2p_event_tx);
-        let gossip_service: Arc<dyn GossipService> = Arc::new(gossip_inner);
+        let network_service: Arc<dyn NetworkService> = p2p_stack.network_service.clone();
+        let gossip_service_concrete = p2p_stack.gossip_service.clone();
+        let gossip_service: Arc<dyn GossipService> = gossip_service_concrete.clone();
+        let p2p_service = Arc::clone(&p2p_stack.p2p_service);
         // EventManagerへGossipServiceを接続（P2P配信経路の直結）
         event_manager
             .set_gossip_service(Arc::clone(&gossip_service))
@@ -237,12 +228,6 @@ impl AppState {
             Arc::clone(&network_service),
             Arc::clone(&post_service),
             Arc::clone(&event_service),
-        ));
-
-        // P2PServiceの初期化
-        let p2p_service = Arc::new(P2PService::new(
-            Arc::clone(&network_service),
-            Arc::clone(&gossip_service),
         ));
 
         // OfflineServiceの初期化
