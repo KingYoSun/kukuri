@@ -52,7 +52,7 @@ impl IrohNetworkService {
             }
         };
 
-        Ok(Self {
+        let service = Self {
             endpoint: Arc::new(endpoint),
             router: Arc::new(router),
             connected: Arc::new(RwLock::new(false)),
@@ -67,7 +67,11 @@ impl IrohNetworkService {
             dht_gossip,
             discovery_options: Arc::new(RwLock::new(discovery_options)),
             network_config: net_cfg,
-        })
+        };
+
+        service.apply_bootstrap_peers_from_config().await;
+
+        Ok(service)
     }
 
     pub fn endpoint(&self) -> &Arc<Endpoint> {
@@ -76,6 +80,22 @@ impl IrohNetworkService {
 
     pub fn router(&self) -> &Arc<Router> {
         &self.router
+    }
+
+    async fn apply_bootstrap_peers_from_config(&self) {
+        for peer in &self.network_config.bootstrap_peers {
+            let trimmed = peer.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            match self.add_peer(trimmed).await {
+                Ok(_) => tracing::info!("Connected to bootstrap peer from config: {}", trimmed),
+                Err(err) => {
+                    tracing::warn!("Failed to connect to bootstrap peer '{}': {}", trimmed, err)
+                }
+            }
+        }
     }
 
     pub fn node_id(&self) -> String {

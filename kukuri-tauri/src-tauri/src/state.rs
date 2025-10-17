@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+mod application_container;
+
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use crate::modules::bookmark::BookmarkManager;
 use crate::modules::crypto::encryption::EncryptionManager;
@@ -7,6 +9,7 @@ use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
 use crate::modules::offline::OfflineManager;
 use crate::modules::p2p::P2PEvent;
+use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
 use crate::application::services::{
@@ -30,10 +33,9 @@ use crate::presentation::handlers::{
     secure_storage_handler::SecureStorageHandler, user_handler::UserHandler,
 };
 
-use rand_core::{OsRng, TryRngCore};
 use std::collections::{HashSet as StdHashSet, VecDeque as StdVecDeque};
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 
@@ -88,24 +90,8 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
-        // Get app data directory
-        let app_data_dir = app_handle
-            .path()
-            .app_data_dir()
-            .map_err(|e| anyhow::anyhow!("Failed to get app data dir: {}", e))?;
-
-        // Debug logging
-        tracing::info!("App data directory: {:?}", app_data_dir);
-
-        // Create data directory if it doesn't exist
-        if !app_data_dir.exists() {
-            tracing::info!("Creating app data directory...");
-            std::fs::create_dir_all(&app_data_dir)
-                .map_err(|e| anyhow::anyhow!("Failed to create app data dir: {}", e))?;
-            tracing::info!("App data directory created successfully");
-        } else {
-            tracing::info!("App data directory already exists");
-        }
+        let container = ApplicationContainer::new(app_handle).await?;
+        let app_data_dir = container.app_data_dir().to_path_buf();
 
         let key_manager = Arc::new(OldKeyManager::new());
 
@@ -151,22 +137,9 @@ impl AppState {
         let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());
         let event_distributor: Arc<dyn EventDistributor> = Arc::new(DefaultEventDistributor::new());
 
-        // P2Pサービスの初期化（後で実際に初期化）
-        let mut secret_key_bytes = [0u8; 32];
-        OsRng
-            .try_fill_bytes(&mut secret_key_bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to generate iroh secret key: {:?}", e))?;
-        let iroh_secret_key = iroh::SecretKey::from_bytes(&secret_key_bytes);
-        // ネットワーク設定（環境変数等から）
-        let app_cfg = crate::shared::AppConfig::from_env();
-        let net_cfg = app_cfg.network.clone();
+        // P2Pサービスの初期化
         let (p2p_event_tx, p2p_event_rx) = mpsc::unbounded_channel();
-        let p2p_builder =
-            P2PService::builder(iroh_secret_key, net_cfg.clone()).with_event_sender(p2p_event_tx);
-        let p2p_stack = p2p_builder
-            .build()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to build P2P stack: {}", e))?;
+        let p2p_stack = container.build_p2p_stack(p2p_event_tx).await?;
 
         let network_service: Arc<dyn NetworkService> = p2p_stack.network_service.clone();
         let gossip_service_concrete = p2p_stack.gossip_service.clone();
