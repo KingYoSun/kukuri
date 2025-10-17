@@ -55,6 +55,10 @@ static JOIN_METRIC: AtomicMetric = AtomicMetric::new();
 static LEAVE_METRIC: AtomicMetric = AtomicMetric::new();
 static BROADCAST_METRIC: AtomicMetric = AtomicMetric::new();
 static RECEIVE_METRIC: AtomicMetric = AtomicMetric::new();
+static MAINLINE_CONNECTION_METRIC: AtomicMetric = AtomicMetric::new();
+static MAINLINE_ROUTING_METRIC: AtomicMetric = AtomicMetric::new();
+static MAINLINE_RECONNECT_METRIC: AtomicMetric = AtomicMetric::new();
+static MAINLINE_CONNECTED_PEERS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GossipMetricDetails {
@@ -74,6 +78,33 @@ pub struct GossipMetricsSnapshot {
     pub leave_details: GossipMetricDetails,
     pub broadcast_details: GossipMetricDetails,
     pub receive_details: GossipMetricDetails,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MainlineMetricsSnapshot {
+    pub connected_peers: u64,
+    pub connection_attempts: u64,
+    pub connection_successes: u64,
+    pub connection_failures: u64,
+    pub connection_last_success_ms: Option<u64>,
+    pub connection_last_failure_ms: Option<u64>,
+    pub routing_attempts: u64,
+    pub routing_successes: u64,
+    pub routing_failures: u64,
+    pub routing_success_rate: f64,
+    pub routing_last_success_ms: Option<u64>,
+    pub routing_last_failure_ms: Option<u64>,
+    pub reconnect_attempts: u64,
+    pub reconnect_successes: u64,
+    pub reconnect_failures: u64,
+    pub last_reconnect_success_ms: Option<u64>,
+    pub last_reconnect_failure_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct P2PMetricsSnapshot {
+    pub gossip: GossipMetricsSnapshot,
+    pub mainline: MainlineMetricsSnapshot,
 }
 
 #[inline]
@@ -121,12 +152,44 @@ pub fn record_receive_failure() {
     RECEIVE_METRIC.record_failure();
 }
 
+pub fn record_mainline_connection_success() {
+    MAINLINE_CONNECTION_METRIC.record_success();
+}
+
+pub fn record_mainline_connection_failure() {
+    MAINLINE_CONNECTION_METRIC.record_failure();
+}
+
+pub fn set_mainline_connected_peers(count: u64) {
+    MAINLINE_CONNECTED_PEERS.store(count, Ordering::Relaxed);
+}
+
+pub fn record_mainline_route_success() {
+    MAINLINE_ROUTING_METRIC.record_success();
+}
+
+pub fn record_mainline_route_failure() {
+    MAINLINE_ROUTING_METRIC.record_failure();
+}
+
+pub fn record_mainline_reconnect_success() {
+    MAINLINE_RECONNECT_METRIC.record_success();
+}
+
+pub fn record_mainline_reconnect_failure() {
+    MAINLINE_RECONNECT_METRIC.record_failure();
+}
+
 #[allow(dead_code)]
 pub fn reset_all() {
     JOIN_METRIC.reset();
     LEAVE_METRIC.reset();
     BROADCAST_METRIC.reset();
     RECEIVE_METRIC.reset();
+    MAINLINE_CONNECTION_METRIC.reset();
+    MAINLINE_ROUTING_METRIC.reset();
+    MAINLINE_RECONNECT_METRIC.reset();
+    MAINLINE_CONNECTED_PEERS.store(0, Ordering::Relaxed);
 }
 
 pub fn snapshot() -> GossipMetricsSnapshot {
@@ -144,5 +207,48 @@ pub fn snapshot() -> GossipMetricsSnapshot {
         leave_details,
         broadcast_details,
         receive_details,
+    }
+}
+
+pub fn mainline_snapshot() -> MainlineMetricsSnapshot {
+    let connection_details = MAINLINE_CONNECTION_METRIC.snapshot();
+    let routing_details = MAINLINE_ROUTING_METRIC.snapshot();
+    let reconnect_details = MAINLINE_RECONNECT_METRIC.snapshot();
+    let connected_peers = MAINLINE_CONNECTED_PEERS.load(Ordering::Relaxed);
+
+    let connection_attempts = connection_details.total + connection_details.failures;
+    let routing_attempts = routing_details.total + routing_details.failures;
+    let routing_success_rate = if routing_attempts == 0 {
+        0.0
+    } else {
+        routing_details.total as f64 / routing_attempts as f64
+    };
+    let reconnect_attempts = reconnect_details.total + reconnect_details.failures;
+
+    MainlineMetricsSnapshot {
+        connected_peers,
+        connection_attempts,
+        connection_successes: connection_details.total,
+        connection_failures: connection_details.failures,
+        connection_last_success_ms: connection_details.last_success_ms,
+        connection_last_failure_ms: connection_details.last_failure_ms,
+        routing_attempts,
+        routing_successes: routing_details.total,
+        routing_failures: routing_details.failures,
+        routing_success_rate,
+        routing_last_success_ms: routing_details.last_success_ms,
+        routing_last_failure_ms: routing_details.last_failure_ms,
+        reconnect_attempts,
+        reconnect_successes: reconnect_details.total,
+        reconnect_failures: reconnect_details.failures,
+        last_reconnect_success_ms: reconnect_details.last_success_ms,
+        last_reconnect_failure_ms: reconnect_details.last_failure_ms,
+    }
+}
+
+pub fn snapshot_full() -> P2PMetricsSnapshot {
+    P2PMetricsSnapshot {
+        gossip: snapshot(),
+        mainline: mainline_snapshot(),
     }
 }

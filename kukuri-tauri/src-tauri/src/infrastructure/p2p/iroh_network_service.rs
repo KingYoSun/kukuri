@@ -161,9 +161,18 @@ impl IrohNetworkService {
                 Ok(peers) => peers,
                 Err(_) => {
                     // 2) ハードコードされたフォールバックに接続（なければ失敗）
-                    super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await?
+                    match super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await
+                    {
+                        Ok(peers) => peers,
+                        Err(err) => {
+                            super::metrics::record_mainline_reconnect_failure();
+                            return Err(err);
+                        }
+                    }
                 }
             };
+
+        super::metrics::record_mainline_reconnect_success();
 
         // フォールバックピアをピアリストに追加
         let mut peers = self.peers.write().await;
@@ -181,6 +190,7 @@ impl IrohNetworkService {
         // 統計を更新
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
+        super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
 
         Ok(())
     }
@@ -214,6 +224,7 @@ impl NetworkService for IrohNetworkService {
         // ピアリストをクリア
         let mut peers = self.peers.write().await;
         peers.clear();
+        super::metrics::set_mainline_connected_peers(0);
 
         tracing::info!("Network service disconnected");
         Ok(())
@@ -232,14 +243,18 @@ impl NetworkService for IrohNetworkService {
 
         let parts: Vec<&str> = address.split('@').collect();
         if parts.len() != 2 {
+            super::metrics::record_mainline_connection_failure();
             return Err("Invalid address format: expected 'node_id@socket_addr'".into());
         }
 
-        let node_id =
-            NodeId::from_str(parts[0]).map_err(|e| format!("Failed to parse node ID: {e}"))?;
-        let socket_addr: SocketAddr = parts[1]
-            .parse()
-            .map_err(|e| format!("Failed to parse socket address: {e}"))?;
+        let node_id = NodeId::from_str(parts[0]).map_err(|e| {
+            super::metrics::record_mainline_connection_failure();
+            AppError::from(format!("Failed to parse node ID: {e}"))
+        })?;
+        let socket_addr: SocketAddr = parts[1].parse().map_err(|e| {
+            super::metrics::record_mainline_connection_failure();
+            AppError::from(format!("Failed to parse socket address: {e}"))
+        })?;
 
         // NodeAddrを構築
         let node_addr = iroh::NodeAddr::new(node_id).with_direct_addresses([socket_addr]);
@@ -248,7 +263,10 @@ impl NetworkService for IrohNetworkService {
         self.endpoint
             .connect(node_addr.clone(), iroh_gossip::ALPN)
             .await
-            .map_err(|e| format!("Failed to connect to peer: {e}"))?;
+            .map_err(|e| {
+                super::metrics::record_mainline_connection_failure();
+                AppError::from(format!("Failed to connect to peer: {e}"))
+            })?;
 
         // ピアリストに追加
         let mut peers = self.peers.write().await;
@@ -263,6 +281,8 @@ impl NetworkService for IrohNetworkService {
         // 統計を更新
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
+        super::metrics::record_mainline_connection_success();
+        super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
 
         tracing::info!("Added peer: {}", address);
         Ok(())
@@ -275,6 +295,7 @@ impl NetworkService for IrohNetworkService {
         // 統計を更新
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
+        super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
 
         tracing::info!("Removed peer: {}", peer_id);
         Ok(())

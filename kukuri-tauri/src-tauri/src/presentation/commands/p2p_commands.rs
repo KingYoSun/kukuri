@@ -1,7 +1,8 @@
 use crate::infrastructure::p2p::metrics::GossipMetricDetails;
 use crate::presentation::dto::p2p::{
     BroadcastRequest, GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicRequest,
-    LeaveTopicRequest, NodeAddressResponse, P2PStatusResponse,
+    LeaveTopicRequest, MainlineMetricsResponse, NodeAddressResponse, P2PMetricsResponse,
+    P2PStatusResponse,
 };
 use crate::state::AppState;
 use tauri::State;
@@ -163,18 +164,39 @@ pub async fn clear_bootstrap_nodes() -> Result<String, String> {
 
 /// Gossipメトリクスを取得
 #[tauri::command]
-pub async fn get_p2p_metrics() -> Result<GossipMetricsResponse, String> {
+pub async fn get_p2p_metrics() -> Result<P2PMetricsResponse, String> {
     use crate::infrastructure::p2p::metrics;
-    let snap = metrics::snapshot();
-    Ok(GossipMetricsResponse {
-        joins: snap.joins,
-        leaves: snap.leaves,
-        broadcasts_sent: snap.broadcasts_sent,
-        messages_received: snap.messages_received,
-        join_details: to_response_details(&snap.join_details),
-        leave_details: to_response_details(&snap.leave_details),
-        broadcast_details: to_response_details(&snap.broadcast_details),
-        receive_details: to_response_details(&snap.receive_details),
+    let snap = metrics::snapshot_full();
+    Ok(P2PMetricsResponse {
+        gossip: GossipMetricsResponse {
+            joins: snap.gossip.joins,
+            leaves: snap.gossip.leaves,
+            broadcasts_sent: snap.gossip.broadcasts_sent,
+            messages_received: snap.gossip.messages_received,
+            join_details: to_response_details(&snap.gossip.join_details),
+            leave_details: to_response_details(&snap.gossip.leave_details),
+            broadcast_details: to_response_details(&snap.gossip.broadcast_details),
+            receive_details: to_response_details(&snap.gossip.receive_details),
+        },
+        mainline: MainlineMetricsResponse {
+            connected_peers: snap.mainline.connected_peers,
+            connection_attempts: snap.mainline.connection_attempts,
+            connection_successes: snap.mainline.connection_successes,
+            connection_failures: snap.mainline.connection_failures,
+            connection_last_success_ms: snap.mainline.connection_last_success_ms,
+            connection_last_failure_ms: snap.mainline.connection_last_failure_ms,
+            routing_attempts: snap.mainline.routing_attempts,
+            routing_successes: snap.mainline.routing_successes,
+            routing_failures: snap.mainline.routing_failures,
+            routing_success_rate: snap.mainline.routing_success_rate,
+            routing_last_success_ms: snap.mainline.routing_last_success_ms,
+            routing_last_failure_ms: snap.mainline.routing_last_failure_ms,
+            reconnect_attempts: snap.mainline.reconnect_attempts,
+            reconnect_successes: snap.mainline.reconnect_successes,
+            reconnect_failures: snap.mainline.reconnect_failures,
+            last_reconnect_success_ms: snap.mainline.last_reconnect_success_ms,
+            last_reconnect_failure_ms: snap.mainline.last_reconnect_failure_ms,
+        },
     })
 }
 

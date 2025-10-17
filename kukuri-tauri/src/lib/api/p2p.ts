@@ -29,7 +29,7 @@ export interface GossipMetricsSummary {
   messages_received: number;
 }
 
-export interface GossipMetrics {
+export interface GossipMetricsSection {
   joins: number;
   leaves: number;
   broadcasts_sent: number;
@@ -38,6 +38,31 @@ export interface GossipMetrics {
   leave_details: GossipMetricDetails;
   broadcast_details: GossipMetricDetails;
   receive_details: GossipMetricDetails;
+}
+
+export interface MainlineMetrics {
+  connected_peers: number;
+  connection_attempts: number;
+  connection_successes: number;
+  connection_failures: number;
+  connection_last_success_ms: number | null;
+  connection_last_failure_ms: number | null;
+  routing_attempts: number;
+  routing_successes: number;
+  routing_failures: number;
+  routing_success_rate: number;
+  routing_last_success_ms: number | null;
+  routing_last_failure_ms: number | null;
+  reconnect_attempts: number;
+  reconnect_successes: number;
+  reconnect_failures: number;
+  last_reconnect_success_ms: number | null;
+  last_reconnect_failure_ms: number | null;
+}
+
+export interface P2PMetrics {
+  gossip: GossipMetricsSection;
+  mainline: MainlineMetrics;
 }
 
 export const p2pApi = {
@@ -87,5 +112,5 @@ export const p2pApi = {
 
   /**
    * Gossip繝｡繝医Μ繧ｯ繧ｹ繧貞叙蠕・   */
-  getMetrics: () => invoke<GossipMetrics>('get_p2p_metrics'),
+  getMetrics: () => invoke<P2PMetrics>('get_p2p_metrics'),
 };

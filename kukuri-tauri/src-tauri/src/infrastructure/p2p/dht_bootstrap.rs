@@ -137,6 +137,7 @@ impl DhtGossip {
                 let topic: GossipTopic =
                     self.gossip.subscribe(topic_id, vec![]).await.map_err(|e| {
                         super::metrics::record_broadcast_failure();
+                        super::metrics::record_mainline_route_failure();
                         warn!(
                             target: LOG_TARGET,
                             topic = %Self::fmt_topic_id(&topic_id),
@@ -160,6 +161,7 @@ impl DhtGossip {
         match res {
             Ok(()) => {
                 super::metrics::record_broadcast_success();
+                super::metrics::record_mainline_route_success();
                 let snap = super::metrics::snapshot();
                 debug!(
                     target: METRICS_TARGET,
@@ -176,6 +178,7 @@ impl DhtGossip {
             }
             Err(e) => {
                 super::metrics::record_broadcast_failure();
+                super::metrics::record_mainline_route_failure();
                 warn!(
                     target: LOG_TARGET,
                     topic = %Self::fmt_topic_id(&topic_id),
@@ -270,6 +273,7 @@ pub mod secret {
 pub mod fallback {
     use super::*;
     use crate::infrastructure::p2p::bootstrap_config;
+    use crate::infrastructure::p2p::metrics;
     use iroh::NodeAddr;
 
     /// ハードコードされたブートストラップノード（将来的に設定ファイルから読み込み）
@@ -290,14 +294,17 @@ pub mod fallback {
                     match endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
                         Ok(_) => {
                             info!("Connected to fallback node: {}", node_str);
+                            metrics::record_mainline_connection_success();
                             connected_nodes.push(node_addr);
                         }
                         Err(e) => {
+                            metrics::record_mainline_connection_failure();
                             debug!("Failed to connect to fallback node {}: {:?}", node_str, e);
                         }
                     }
                 }
                 Err(e) => {
+                    metrics::record_mainline_connection_failure();
                     debug!("Failed to parse node address {}: {:?}", node_str, e);
                 }
             }
@@ -326,9 +333,11 @@ pub mod fallback {
             match endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
                 Ok(_) => {
                     info!("Connected to config bootstrap node: {}", node_addr.node_id);
+                    metrics::record_mainline_connection_success();
                     connected.push(node_addr);
                 }
                 Err(e) => {
+                    metrics::record_mainline_connection_failure();
                     debug!("Failed to connect to config bootstrap node: {:?}", e);
                 }
             }

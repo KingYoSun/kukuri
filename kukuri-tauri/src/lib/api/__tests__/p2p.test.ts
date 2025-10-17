@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { p2pApi } from '../p2p';
-import type { GossipMetrics, P2PStatus, TopicStatus } from '../p2p';
+import type { P2PMetrics, P2PStatus, TopicStatus } from '../p2p';
 
 // Tauri API縺ｮ繝｢繝・け
 vi.mock('@tauri-apps/api/core', () => ({
@@ -168,16 +168,47 @@ describe('p2pApi', () => {
   });
 
   describe('getMetrics', () => {
-    it('should get gossip metrics', async () => {
-      const mockMetrics: GossipMetrics = {
-        joins: 3,
-        leaves: 1,
-        broadcasts_sent: 7,
-        messages_received: 12,
-        join_details: { total: 3, failures: 1, last_success_ms: 1000, last_failure_ms: 2000 },
-        leave_details: { total: 1, failures: 0, last_success_ms: 3000, last_failure_ms: null },
-        broadcast_details: { total: 7, failures: 2, last_success_ms: 4000, last_failure_ms: 4500 },
-        receive_details: { total: 12, failures: 4, last_success_ms: 5000, last_failure_ms: 5500 },
+    it('should get P2P metrics', async () => {
+      const mockMetrics: P2PMetrics = {
+        gossip: {
+          joins: 3,
+          leaves: 1,
+          broadcasts_sent: 7,
+          messages_received: 12,
+          join_details: { total: 3, failures: 1, last_success_ms: 1000, last_failure_ms: 2000 },
+          leave_details: { total: 1, failures: 0, last_success_ms: 3000, last_failure_ms: null },
+          broadcast_details: {
+            total: 7,
+            failures: 2,
+            last_success_ms: 4000,
+            last_failure_ms: 4500,
+          },
+          receive_details: {
+            total: 12,
+            failures: 4,
+            last_success_ms: 5000,
+            last_failure_ms: 5500,
+          },
+        },
+        mainline: {
+          connected_peers: 4,
+          connection_attempts: 5,
+          connection_successes: 4,
+          connection_failures: 1,
+          connection_last_success_ms: 6000,
+          connection_last_failure_ms: 6100,
+          routing_attempts: 9,
+          routing_successes: 8,
+          routing_failures: 1,
+          routing_success_rate: 0.888,
+          routing_last_success_ms: 6200,
+          routing_last_failure_ms: 6300,
+          reconnect_attempts: 3,
+          reconnect_successes: 2,
+          reconnect_failures: 1,
+          last_reconnect_success_ms: 6400,
+          last_reconnect_failure_ms: 6500,
+        },
       };
       vi.mocked(invoke).mockResolvedValueOnce(mockMetrics);
 

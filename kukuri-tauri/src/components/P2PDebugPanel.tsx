@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { p2pApi } from '@/lib/api/p2p';
-import type { GossipMetrics } from '@/lib/api/p2p';
+import type { GossipMetricsSection, P2PMetrics } from '@/lib/api/p2p';
 import { useP2P } from '@/hooks/useP2P';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { SendIcon, NetworkIcon, TrashIcon, WifiIcon, WifiOffIcon } from 'lucide-react';
+
+const formatPercent = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return '0%';
+  }
+  return `${(value * 100).toFixed(1)}%`;
+};
 
 export function P2PDebugPanel() {
   const {
@@ -31,7 +38,7 @@ export function P2PDebugPanel() {
   const [messageContent, setMessageContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
-  const [metrics, setMetrics] = useState<GossipMetrics | null>(null);
+  const [metrics, setMetrics] = useState<P2PMetrics | null>(null);
 
   const formatTimestamp = (value: number | null | undefined) => {
     if (!value) {
@@ -44,7 +51,7 @@ export function P2PDebugPanel() {
   const renderMetricCard = (
     label: string,
     total: number,
-    detail?: GossipMetrics['join_details'],
+    detail?: GossipMetricsSection['join_details'],
   ) => (
     <div className="rounded-md border p-2 space-y-1">
       <div className="flex items-center justify-between">
@@ -128,7 +135,7 @@ export function P2PDebugPanel() {
       const m = await p2pApi.getMetrics();
       setMetrics(m);
       addLog(
-        `Metrics updated: join=${m.joins}/${m.join_details.failures} fail, leave=${m.leaves}/${m.leave_details.failures} fail, broadcast=${m.broadcasts_sent}/${m.broadcast_details.failures} fail, recv=${m.messages_received}/${m.receive_details.failures} fail`,
+        `Metrics updated: gossip join=${m.gossip.joins}/${m.gossip.join_details.failures} fail, routing=${formatPercent(m.mainline.routing_success_rate)} (${m.mainline.routing_successes}/${m.mainline.routing_failures}), reconnect=${m.mainline.reconnect_successes}/${m.mainline.reconnect_failures}`,
       );
     } catch (e) {
       addLog(`Failed to fetch metrics: ${e}`);
@@ -227,19 +234,76 @@ export function P2PDebugPanel() {
                   </Button>
                 </div>
                 {metrics ? (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {renderMetricCard('Joins', metrics.joins, metrics.join_details)}
-                    {renderMetricCard('Leaves', metrics.leaves, metrics.leave_details)}
-                    {renderMetricCard(
-                      'Broadcasts',
-                      metrics.broadcasts_sent,
-                      metrics.broadcast_details,
-                    )}
-                    {renderMetricCard(
-                      'Received',
-                      metrics.messages_received,
-                      metrics.receive_details,
-                    )}
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {renderMetricCard('Joins', metrics.gossip.joins, metrics.gossip.join_details)}
+                      {renderMetricCard(
+                        'Leaves',
+                        metrics.gossip.leaves,
+                        metrics.gossip.leave_details,
+                      )}
+                      {renderMetricCard(
+                        'Broadcasts',
+                        metrics.gossip.broadcasts_sent,
+                        metrics.gossip.broadcast_details,
+                      )}
+                      {renderMetricCard(
+                        'Received',
+                        metrics.gossip.messages_received,
+                        metrics.gossip.receive_details,
+                      )}
+                    </div>
+                    <div className="rounded-md border p-3 space-y-2 text-xs sm:text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Mainline DHT</span>
+                        <Badge variant="outline">
+                          ピア {metrics.mainline.connected_peers}
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-0.5">
+                          <span className="text-muted-foreground">接続試行</span>
+                          <span>
+                            {metrics.mainline.connection_attempts}（成功
+                            {metrics.mainline.connection_successes} / 失敗
+                            {metrics.mainline.connection_failures}）
+                          </span>
+                          <span className="text-muted-foreground">
+                            最終成功: {formatTimestamp(metrics.mainline.connection_last_success_ms)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            最終失敗: {formatTimestamp(metrics.mainline.connection_last_failure_ms)}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-muted-foreground">ルーティング成功率</span>
+                          <span>
+                            {formatPercent(metrics.mainline.routing_success_rate)}（成功
+                            {metrics.mainline.routing_successes} / 失敗
+                            {metrics.mainline.routing_failures}）
+                          </span>
+                          <span className="text-muted-foreground">
+                            最終成功: {formatTimestamp(metrics.mainline.routing_last_success_ms)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            最終失敗: {formatTimestamp(metrics.mainline.routing_last_failure_ms)}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-muted-foreground">再接続</span>
+                          <span>
+                            {metrics.mainline.reconnect_attempts}（成功
+                            {metrics.mainline.reconnect_successes} / 失敗
+                            {metrics.mainline.reconnect_failures}）
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-muted-foreground">最終再接続</span>
+                          <span>成功: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}</span>
+                          <span>失敗: {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">

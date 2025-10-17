@@ -95,6 +95,33 @@ pub struct GossipMetricDetailsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MainlineMetricsResponse {
+    pub connected_peers: u64,
+    pub connection_attempts: u64,
+    pub connection_successes: u64,
+    pub connection_failures: u64,
+    pub connection_last_success_ms: Option<u64>,
+    pub connection_last_failure_ms: Option<u64>,
+    pub routing_attempts: u64,
+    pub routing_successes: u64,
+    pub routing_failures: u64,
+    pub routing_success_rate: f64,
+    pub routing_last_success_ms: Option<u64>,
+    pub routing_last_failure_ms: Option<u64>,
+    pub reconnect_attempts: u64,
+    pub reconnect_successes: u64,
+    pub reconnect_failures: u64,
+    pub last_reconnect_success_ms: Option<u64>,
+    pub last_reconnect_failure_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct P2PMetricsResponse {
+    pub gossip: GossipMetricsResponse,
+    pub mainline: MainlineMetricsResponse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GossipMetricsSummaryResponse {
     pub joins: u64,
     pub leaves: u64,
