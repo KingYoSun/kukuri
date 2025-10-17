@@ -49,5 +49,86 @@
       ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "ws://relay.local:7777"]
     ],
     "expected": true
+  },
+  {
+    "name": "valid_note_reference_root",
+    "description": "bech32 note reference with root marker and bech32 profile recipient",
+    "tags": [
+      ["e", "note1llllllllllllllllllllllllllllllllllllllllllllllllllls35u7tx", "wss://relay.example", "root"],
+      ["p", "nprofile1qqswamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamspzdmhxue69uhhyetvv9ujuetcv9khqmr9qyghwue69uhhyetvv9ujucnpvd4h2uq76dqwr"]
+    ],
+    "expected": true
+  },
+  {
+    "name": "invalid_note_short_payload",
+    "description": "note reference with insufficient payload bytes must be rejected",
+    "tags": [
+      ["e", "note1lllllllllllllllllllllllllu0v7s7j", "wss://relay.example", "reply"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "valid_nevent_full_reference",
+    "description": "nevent TLV with relays, author and kind should be accepted",
+    "tags": [
+      ["e", "nevent1qqs0llllllllllllllllllllllllllllllllllllllllllllllllllcpzdmhxue69uhhyetvv9ujuetcv9khqmr9qyghwue69uhhyetvv9ujucnpvd4h2uqzyz424242424242424242424242424242424242424242424242425qcyqqqqqqgjn9m5u", "ws://relay.backup", "reply"]
+    ],
+    "expected": true
+  },
+  {
+    "name": "invalid_nevent_missing_event",
+    "description": "nevent missing tag0 (event id) is invalid",
+    "tags": [
+      ["e", "nevent1qyfhwumn8ghj7un9d3shjtn90psk6urvv5t8r44c", "wss://relay.example", "reply"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "invalid_nevent_too_many_relays",
+    "description": "nevent TLV exceeding relay limit should fail validation",
+    "tags": [
+      ["e", "nevent1qqs0llllllllllllllllllllllllllllllllllllllllllllllllllcpz3mhxue69uhhyetvv9unqtn90psk6urvv5q3gamnwvaz7tmjv4kxz7f39ejhsctdwpkx2qg5waehxw309aex2mrp0yezuetcv9khqmr9qy28wumn8ghj7un9d3shjvewv4uxzmtsd3jsz9rhwden5te0wfjkcctexshx27rpd4cxcegpz3mhxue69uhhyetvv9un2tn90psk6urvv5q3gamnwvaz7tmjv4kxz7fk9ejhsctdwpkx2qg5waehxw309aex2mrp0ymjuetcv9khqmr9qy2hwumn8ghj7un9d3shjvfj9ejhsctdwpkx2qg4waehxw309aex2mrp0ycnxtn90psk6urvv5q32amnwvaz7tmjv4kxz7f3xshx27rpd4cxcegpz4mhxue69uhhyetvv9unzvpwv4uxzmtsd3jsz9thwden5te0wfjkcctexycjuetcv9khqmr9qy2hwumn8ghj7un9d3shjvfj9ejhsctdwpkx2qg4waehxw309aex2mrp0ycnxtn90psk6urvv5q32amnwvaz7tmjv4kxz7f3xshx27rpd4cxcegpz4mhxue69uhhyetvv9unzdfwv4uxzmtsd3jsz9thwden5te0wfjkcctexymzuetcv9khqmr9cl044q", "wss://relay.example"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "valid_nprofile_reference",
+    "description": "nprofile with pubkey and relay TLVs is accepted",
+    "tags": [
+      ["p", "nprofile1qqswamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamspzdmhxue69uhhyetvv9ujuetcv9khqmr9qyghwue69uhhyetvv9ujucnpvd4h2uq76dqwr"]
+    ],
+    "expected": true
+  },
+  {
+    "name": "invalid_nprofile_missing_pubkey",
+    "description": "nprofile missing mandatory pubkey record must be rejected",
+    "tags": [
+      ["p", "nprofile1qyfhwumn8ghj7un9d3shjtn90psk6urvv5cf02vf", "wss://relay.example"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "invalid_nprofile_utf8_violation",
+    "description": "nprofile relay TLV must contain UTF-8/ASCII relay strings",
+    "tags": [
+      ["p", "nprofile1qqswamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamspqtllu0zxm2r"]
+    ],
+    "expected": false
+  },
+  {
+    "name": "valid_npub_reference",
+    "description": "npub bech32 reference with optional relay should be accepted",
+    "tags": [
+      ["p", "npub1amhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhqmtnwcq", "ws://relay.backup"]
+    ],
+    "expected": true
+  },
+  {
+    "name": "invalid_npub_truncated",
+    "description": "npub reference with truncated payload should fail",
+    "tags": [
+      ["p", "npub1amhwamhwamhwamhwamhwamhwac5vmrvf"]
+    ],
+    "expected": false
   }
 ]

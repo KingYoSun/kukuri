@@ -31,11 +31,15 @@
 - [x] Windows: `./scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加
 - [x] modules/p2p/tests/iroh_integration_tests.rs を NodeAddr ヒント対応（connect_peers の戻り値で初期ピア再設定）
 - [x] P2P受信確認テストの安定化（DHTブートストラップコンテナ経由で discovery_dht() のみを使用。詳細: docs/03_implementation/p2p_dht_test_strategy.md）
-- [ ] TypeScript契約テストの追加と Docker スモークテスト構成の縮小タスク化
+- [x] TypeScript契約テストの追加と Docker スモークテスト構成の縮小タスク化
+  - [x] `testdata/nip10_contract_cases.json` に NIP-10 bech32/TLV 境界ケースを追加し、Rust/TS 双方の契約テストを整合
+  - [x] Docker スモークテスト縮小のフォロータスクを整理（`docs/01_project/activeContext/tasks/context/docker_smoke_tests.md`）
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 メモ/進捗ログ:
+- 2025年10月17日: `testdata/nip10_contract_cases.json` を bech32（note/nevent/npub/nprofile）ケース含め12件へ拡張し、`docker run --rm -w /app/kukuri-tauri/src-tauri kukuri-rust-test cargo test --test nip10_contract_tests` および `docker run --rm -w /app/kukuri-tauri kukuri-ts-test pnpm vitest run src/lib/__tests__/nip10.contract.test.ts` で契約テストを完了。
+- 2025年10月17日: Docker スモークテスト構成の縮小タスクを `docs/01_project/activeContext/tasks/context/docker_smoke_tests.md` に整理し、軽量 Compose/イメージ最適化/スクリプト連携のTODOを明文化。
 - 2025年10月17日: GitHub Actions の `format-check` と `native-test-linux` が Rustfmt／tsc／Prettier／ESLint で落ちていたため、`nostrEventValidator` の bech32 デコードを型安全化し、未使用テストヘルパーを削除。該当 TS ファイルを Prettier で整形し、`cargo fmt`・`pnpm type-check`・`pnpm lint` を実行。`gh act -j format-check` と `gh act -j native-test-linux` で再現確認し、ローカル CI を通過。
 - 2025年10月17日: `get_p2p_status` にメトリクス要約を含め、Rust/DTO/ハンドラ/フロントを更新。`p2pStore`・`useP2P` が `metricsSummary` を保持するよう拡張。
 - 2025年10月17日: NIP-10 の境界ケースを JSON で共通管理し、Rust（`nip10_contract_tests`）と TypeScript（`nip10.contract.test.ts`）の契約テストを追加。`scripts/test-docker.ps1` に `metrics` / `contracts` コマンドを実装し個別テストを実行可能にした。
