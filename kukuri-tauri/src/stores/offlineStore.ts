@@ -326,10 +326,7 @@ if (typeof window !== 'undefined') {
         });
 
         void listen<string>('offline://reindex_failed', ({ payload }) => {
-          errorHandler.warn(
-            `オフライン再索引に失敗しました: ${payload}`,
-            'offlineStore.reindex',
-          );
+          errorHandler.warn(`オフライン再索引に失敗しました: ${payload}`, 'offlineStore.reindex');
         }).catch((error) => {
           errorHandler.log('Failed to subscribe offline reindex failure event', error, {
             context: 'offlineStore.reindex',

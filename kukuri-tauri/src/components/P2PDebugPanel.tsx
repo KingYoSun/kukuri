@@ -256,9 +256,7 @@ export function P2PDebugPanel() {
                     <div className="rounded-md border p-3 space-y-2 text-xs sm:text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Mainline DHT</span>
-                        <Badge variant="outline">
-                          ピア {metrics.mainline.connected_peers}
-                        </Badge>
+                        <Badge variant="outline">ピア {metrics.mainline.connected_peers}</Badge>
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div className="space-y-0.5">
@@ -299,8 +297,12 @@ export function P2PDebugPanel() {
                         </div>
                         <div className="space-y-0.5">
                           <span className="text-muted-foreground">最終再接続</span>
-                          <span>成功: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}</span>
-                          <span>失敗: {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}</span>
+                          <span>
+                            成功: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
+                          </span>
+                          <span>
+                            失敗: {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}
+                          </span>
                         </div>
                       </div>
                     </div>
