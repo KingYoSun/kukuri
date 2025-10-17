@@ -1,27 +1,27 @@
 # 最重要タスク（Critical）
 
-最終更新日: 2025年10月16日
+最終更新日: 2025年10月17日
 
 目的: 今後直近で着手すべき最重要タスクの一覧。着手時は本ファイルから `tasks/status/in_progress.md` へ移動して進捗を管理します。
 
 移動済みメモ
 - GitHub Actions ワークフロー失敗調査を `tasks/status/in_progress.md` に移動（2025年10月16日着手）
 - Iroh DHT/Discovery 残タスクは `tasks/status/in_progress.md` に移動（2025年09月15日）
+- v2 アプリ Phase 7 - Mainline DHT 統合タスク群を `tasks/status/in_progress.md` に移動（2025年10月17日）
 
 方針更新（2025年09月15日）
 - 当面は Nostr リレーとは接続しない。まず P2P（iroh + iroh-gossip + DHT）で完結した体験の実現を優先。
 - kukuri 内部のイベントは全て NIPs 準拠（Nostr Event スキーマ準拠）。
 
-## 2. v2 アプリ Phase 7（DHT統合の仕上げ）
-- [ ] P2PService: Iroh Mainline DHT の統合（Builder/DI の明確化）
-- [ ] OfflineService: Repository 再索引ジョブと整合性の担保（再起動/再接続時）
-- [ ] EventService: DHT 経由イベント購読・再接続時の復元
-- [ ] エラーハンドリング統一（フロントは `errorHandler`、Rust 側は `thiserror`）
+## 2. Phase 7 Exit / Release 準備
+- [ ] Mainline DHT 運用 Runbook を作成し、障害対応・監視手順を `docs/03_implementation/p2p_mainline_runbook.md` に整理。
+- [ ] 再接続・再索引シナリオの受け入れ基準を定義し、フェーズ完了条件（テストマトリクス・復旧時間目標）をドキュメント化。
+- [ ] Phase 7 の成果をまとめたリリースノート／ユーザー告知計画を策定し、配布チャネルと検証手順を決定。
 
-## 3. 運用/品質・観測
-- [ ] メトリクス運用: `tasks/metrics/{build_status,code_quality,test_results}.md` の更新フロー整備
-- [ ] Windows 安定化: `./scripts/test-docker.ps1` を用いた Docker 経由のテスト実行を既定化
-- [ ] ドキュメントの最終更新日表記の統一（`YYYY年MM月DD日`）
+## 3. ブートストラップ/観測基盤の高度化
+- [ ] ブートストラップピアの動的更新機構を PoC し、バックエンドと UI の同期方針を設計。
+- [ ] DHT メトリクスの長期蓄積パイプラインを検討し、Prometheus/Grafana 等への連携要件を整理。
+- [ ] Gossip/P2P の負荷ベンチマーク計画を立案し、ターゲット指標（レイテンシ/スループット）と測定環境を定義。
 
 運用ルール（再掲）
 - 新規着手: 本ファイルから対象を選び、`tasks/status/in_progress.md` へ移動

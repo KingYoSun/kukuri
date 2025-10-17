@@ -1,4 +1,4 @@
-﻿[title] 作業中タスク（in_progress）
+[title] 作業中タスク（in_progress）
 
 最終更新日: 2025年10月17日
 
@@ -9,54 +9,48 @@
 - kukuri 内部のイベントは全て NIPs 準拠（内部フォーマットは Nostr Event スキーマを準拠・整合）。
 - テスト戦略: Tauri v2 では E2E が困難なため、層別テスト（ユニット/結合/契約）＋スモーク最小限に切替。
 
-## Iroh DHT/Discovery 残タスク（着手）
+## v2 アプリ Phase 7 - Mainline DHT 統合（着手）
 
-- [x] `bootstrap_nodes.json` の形式定義・検証・読み込み導線の確定（CLI/アプリ双方 実装）
-- [x] ブートストラップUIの実装（n0デフォルト、任意ノードをUIから `node_id@host:port` 指定）
-- [x] iroh-gossip: quit の意味整理と API 連動実装（`dht_bootstrap.rs::leave_topic` に Sender ドロップで退出を実装）
-- [x] iroh-gossip: broadcast の意味整理と API 連動実装（`dht_bootstrap.rs::broadcast` に Sender 利用で送信を実装）
-- [x] DHT 設定フラグの導入（`NetworkConfig.enable_{dht,dns,local}` と `IrohNetworkService` ビルダー反映）
-- [x] NIPs 準拠イベントモデルの受信バリデーション（NIP-01/10/19）
-- [x] P2P 経路のみの投稿/閲覧/返信/引用の結合テスト（Rust/TS）と契約テストでの検証
-  - [x] GitHub Actions に `smoke-tests.yml` を追加（`test-runner` 実行）
-- [x] DHT メトリクス/ログの整備（tracing, counters, レベル設定）
-  - [x] GossipメトリクスAPI（`get_p2p_metrics`）とフロントAPIラッパを追加
-  - [x] P2PDebugPanelにメトリクス自動更新（10秒）と手動更新を追加
+- [ ] Iroh Mainline DHT を有効化する Builder 抽象を整理し、`P2PService` から `discovery_mainline` を切り替え可能にする。
+- [ ] `ApplicationContainer` / `IrohNetworkService` の DI を見直し、ノード ID・ブートストラップ設定を mainline 向けに注入できる初期化シーケンスを実装。
+- [ ] Mainline DHT ハンドシェイクとルーティングの統合テストを追加し、既存 DHT/Gossip テストと並行実行できるよう CI 設定を更新。
+- [ ] Mainline DHT のメトリクス項目（接続数、ルーティング成功率、再接続統計）を収集し、`get_p2p_metrics` に反映。
 
-### 今後の作業予定（短期）
+## OfflineService 再索引ジョブ整備（準備中）
 
-- [x] NIP-19 TLVの詳細検証拡張（複数relay_urlsの扱い、文字列長上限、UTF-8検証など）
-- [x] `get_p2p_status` にメトリクス要約を含めるか別APIで集約（要UI検討）
-- [x] Rust/TSの契約テストを追加（NIP-10のmarker/relay_url整合の境界ケース）
-- [x] Windows: `./scripts/test-docker.ps1` に `metrics` / `contracts` オプションを追加
-- [x] modules/p2p/tests/iroh_integration_tests.rs を NodeAddr ヒント対応（connect_peers の戻り値で初期ピア再設定）
-- [x] P2P受信確認テストの安定化（DHTブートストラップコンテナ経由で discovery_dht() のみを使用。詳細: docs/03_implementation/p2p_dht_test_strategy.md）
-- [x] TypeScript契約テストの追加と Docker スモークテスト構成の縮小タスク化
-  - [x] `testdata/nip10_contract_cases.json` に NIP-10 bech32/TLV 境界ケースを追加し、Rust/TS 双方の契約テストを整合
-  - [x] Docker スモークテスト縮小のフォロータスクを整理（`docs/01_project/activeContext/tasks/context/docker_smoke_tests.md`）
+- [ ] 現状の Repository キャッシュ構造を棚卸しし、再接続時に必要な再索引対象をリストアップ。
+- [ ] オフライン再索引ジョブの設計（スケジューラ、バックオフ、失敗時リカバリ）を `docs/01_project/activeContext/iroh-native-dht-plan.md` に追記。
+- [ ] 再起動／再接続シナリオの結合テストを作成し、P2P 経路でのイベント整合性を確認。
+
+## EventService DHT購読・復元の強化
+
+- [ ] DHT購読状態を永続化するステートマシンを設計し、`EventService` に実装。
+- [ ] 再接続時の購読復元シーケンスをテストで検証（離脱→再接続→履歴同期）。
+- [ ] UI 側で購読状態と同期状況を可視化するフックを追加（P2PDebugPanel 連携）。
+
+## エラーハンドリング統一タスク
+
+- [ ] フロントエンドの主要フローを `errorHandler` ベースに移行し、`console.error` を廃止。
+- [ ] Rust/Tauri 側のドメインエラーを `thiserror` でラップし、コマンド境界の共通レスポンスを整理。
+- [ ] `docs/03_implementation/error_handling_guidelines.md` を更新し、統一フローと実装例を追記。
+
+## 運用/品質・観測
+
+- [ ] `tasks/metrics/{build_status,code_quality,test_results}.md` の更新フローを確立し、定期レビュー体制を文書化。
+- [ ] Windows での `./scripts/test-docker.ps1` 実行を基本ラインとする運用ガイドを策定し、CI とローカルの手順差異を吸収。
+- [ ] ドキュメントの日付表記を `YYYY年MM月DD日` に統一するルールを整理し、主要ドキュメントの棚卸しを行う。
+
+## リファクタリング計画フォローアップ
+
+- [ ] Phase 2 TODO 解消: `event_service` の未実装処理（Post変換・メタデータ更新・Reaction/Repost処理）を完了し、`EventManager` との連携を整備する（`kukuri-tauri/src-tauri/src/application/services/event_service.rs:122`）。
+- [ ] Phase 2 TODO 解消: `offline_service` の Repository 統合タスクを実装し、同期/キャッシュ関連の TODO を解消する（`kukuri-tauri/src-tauri/src/application/services/offline_service.rs:134`）。
+- [ ] Phase 2 TODO 解消: トピック更新・削除コマンドの未実装部分を実装し、フロントからの操作を完了させる（`kukuri-tauri/src-tauri/src/presentation/commands/topic_commands.rs:99`）。
+- [ ] Phase 3/4 ギャップ対応: 700行超のファイル（`kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository.rs:1003`, `kukuri-tauri/src-tauri/src/application/services/event_service.rs:341`, `kukuri-tauri/src-tauri/src/modules/event/manager.rs:240`）の分割計画を策定し、リファクタリングタスクへ落とし込む。
+- [ ] Phase 4 DRY 適用: Zustand ストアで `persistHelpers.ts`（`kukuri-tauri/src/stores/utils/persistHelpers.ts:6`）を採用し、永続化設定の重複を解消する。
+- [ ] Phase 5 成果測定: dead code 数やテストカバレッジといった指標を `tasks/metrics/` 配下で定期記録する運用を整備する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 メモ/進捗ログ:
-- 2025年10月17日: `testdata/nip10_contract_cases.json` を bech32（note/nevent/npub/nprofile）ケース含め12件へ拡張し、`docker run --rm -w /app/kukuri-tauri/src-tauri kukuri-rust-test cargo test --test nip10_contract_tests` および `docker run --rm -w /app/kukuri-tauri kukuri-ts-test pnpm vitest run src/lib/__tests__/nip10.contract.test.ts` で契約テストを完了。
-- 2025年10月17日: Docker スモークテスト構成の縮小タスクを `docs/01_project/activeContext/tasks/context/docker_smoke_tests.md` に整理し、軽量 Compose/イメージ最適化/スクリプト連携のTODOを明文化。
-- 2025年10月17日: GitHub Actions の `format-check` と `native-test-linux` が Rustfmt／tsc／Prettier／ESLint で落ちていたため、`nostrEventValidator` の bech32 デコードを型安全化し、未使用テストヘルパーを削除。該当 TS ファイルを Prettier で整形し、`cargo fmt`・`pnpm type-check`・`pnpm lint` を実行。`gh act -j format-check` と `gh act -j native-test-linux` で再現確認し、ローカル CI を通過。
-- 2025年10月17日: `get_p2p_status` にメトリクス要約を含め、Rust/DTO/ハンドラ/フロントを更新。`p2pStore`・`useP2P` が `metricsSummary` を保持するよう拡張。
-- 2025年10月17日: NIP-10 の境界ケースを JSON で共通管理し、Rust（`nip10_contract_tests`）と TypeScript（`nip10.contract.test.ts`）の契約テストを追加。`scripts/test-docker.ps1` に `metrics` / `contracts` コマンドを実装し個別テストを実行可能にした。
-- 2025年10月16日: NIP-19 TLV検証拡張の設計を開始。`nprofile`/`nevent` のTLV構造とリレーURL検証要件を整理中。
-- 2025年10月16日: `nprofile`/`nevent` のTLV解析を厳格化（必須/任意タグ長、ASCII/UTF-8チェック、リレー数制限）し、`cargo test`（kukuri-tauri/src-tauri・kukuri-cli）を完走。
-- 2025年10月16日: フロントエンドも `@scure/base` 利用で bech32/TLV検証を整備。`pnpm test` を実行し、NIP-19参照の正常系/異常系テストを追加。
-- 2025年10月16日: GitHub Actions が失敗しているため調査を開始。`gh run view` で Docker テストが `No space left on device` で落ちていることを確認し、`CARGO_PROFILE_*_DEBUG=0` / `CARGO_INCREMENTAL=0` を導入。`docker compose run test-runner` / `rust-test` および `gh act -j native-test-linux` で再実行。さらに `docker compose run rust-test` が `Cargo.lock` マウント欠如で失敗したため、`docker-compose.test.yml` から `Cargo.lock` バインドを削除。
-- 2025年09月15日: テスト戦略を更新（Tauri v2 の E2E は困難のため、ユニット/結合/契約テスト中心＋最小スモークへ移行）。
-- 2025年09月15日: 方針更新（Nostr リレー非接続・P2P 優先、内部イベントは NIPs 準拠）。
-- 2025年09月15日: critical.md から本タスク群を移動し、着手を明示しました。
-- 2025年09月15日: DhtGossip にトピック別 Sender 管理を追加。`join_topic` で Sender を保持、`leave_topic` で削除、`broadcast` で送信（未参加時は自動参加）。
-- 2025年09月15日: `discovery_dht()` を有効化（Tauri）。`bootstrap_nodes.json` の仕様（NodeId@host:port 推奨）・検証/読み込み導線を Tauri/CLI 双方に実装。development の localhost ノード設定を削除（n0 優先運用）。
-- 2025年09月15日: ブートストラップUIを追加。Tauriコマンド `get_bootstrap_config` / `set_bootstrap_nodes` / `clear_bootstrap_nodes` 実装、ユーザーデータ配下 `user_bootstrap_nodes.json` に保存。設定画面に `BootstrapConfigPanel` を追加。フォールバック優先順は「ユーザー設定 → 同梱JSON → なし（n0依存）」に統一。
-- 2025年09月15日: DHT 設定フラグを `shared/config.rs::NetworkConfig` に追加（`enable_dht`, `enable_dns`, `enable_local`）。`IrohNetworkService::new` に反映（ビルダーに `discovery_n0` / `discovery_dht` を条件付け）。
-- 2025年09月15日: P2P受信経路に NIP-01 準拠バリデーションを追加。`domain::entities::Event::validate_nip01` を実装し、`IrohGossipService` の受信処理で検証・不正ドロップ。
-- 2025年09月15日: DHT/Gossip メトリクスの軽量カウンタを追加（`infrastructure/p2p/metrics.rs`）。`join/leave/broadcast/received` を計測し `tracing` に集約ログ出力。
-- 2025年09月15日: NIP-10/19 検証を受信経路に追加（e/pタグの基本整合性）。統合テストをNIP-01準拠イベントで送信するよう修正。Dockerスモークで `ENABLE_P2P_INTEGRATION=1` を有効化。
-- 2025年09月15日: GitHub Actions に Docker スモークテストを追加（`.github/workflows/smoke-tests.yml`）。
-- 2025年09月15日: NIP-19（nprofile/npubなど）のエンコード検証が必要なケースを洗い出し中。
-- 2025年10月15日: DHT メトリクスを成功/失敗件数と最終時刻を保持できる構造に刷新。`dht_bootstrap.rs` と `iroh_gossip_service.rs` へ成功・失敗ログを追加し、Tauri コマンドとフロントエンド（P2PDebugPanel）を拡張。`pnpm test` と `cargo test` を実行し、いずれも成功。
+- 2025年10月17日: Iroh DHT/Discovery 残タスクを完了し、Mainline DHT 統合フェーズへ移行。Phase 7 の残項目（Mainline DHT/OfflineService/EventService/エラーハンドリング）を次スプリントの主テーマに設定。
+- 2025年10月17日: 運用・品質セクションの TODO を見直し、メトリクス更新フローと Windows テスト運用の標準化タスクを切り出した。
