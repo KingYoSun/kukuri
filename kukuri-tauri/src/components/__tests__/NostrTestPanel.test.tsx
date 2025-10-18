@@ -35,7 +35,7 @@ const mockInvoke = invoke as MockedFunction<typeof invoke>;
 const mockListen = listen as MockedFunction<typeof listen>;
 const mockUseAuthStore = useAuthStore as unknown as MockedFunction<typeof useAuthStore>;
 
-const successResponse = <T>(data: T): CommandResponse<T> => ({
+const successResponse = <T,>(data: T): CommandResponse<T> => ({
   success: true,
   data,
   error: null,

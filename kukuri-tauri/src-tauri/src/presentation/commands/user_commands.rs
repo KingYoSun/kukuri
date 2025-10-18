@@ -11,13 +11,10 @@ pub async fn get_user(
     npub: String,
     user_service: State<'_, Arc<UserService>>,
 ) -> Result<ApiResponse<Option<Value>>, AppError> {
-    let result = user_service
-        .get_user(&npub)
-        .await
-        .and_then(|user| {
-            user.map(|u| serde_json::to_value(u).map_err(AppError::from))
-                .transpose()
-        });
+    let result = user_service.get_user(&npub).await.and_then(|user| {
+        user.map(|u| serde_json::to_value(u).map_err(AppError::from))
+            .transpose()
+    });
     Ok(ApiResponse::from_result(result))
 }
 
@@ -42,9 +39,7 @@ pub async fn update_profile(
     metadata: UserMetadata,
     user_service: State<'_, Arc<UserService>>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = user_service
-        .update_profile(&npub, metadata)
-        .await;
+    let result = user_service.update_profile(&npub, metadata).await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -54,9 +49,7 @@ pub async fn follow_user(
     target_npub: String,
     user_service: State<'_, Arc<UserService>>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = user_service
-        .follow_user(&follower_npub, &target_npub)
-        .await;
+    let result = user_service.follow_user(&follower_npub, &target_npub).await;
     Ok(ApiResponse::from_result(result))
 }
 

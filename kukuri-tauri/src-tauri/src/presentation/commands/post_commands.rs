@@ -204,8 +204,5 @@ pub async fn get_posts_by_topic(
 /// 保留中の投稿を同期する
 #[tauri::command]
 pub async fn sync_posts(state: State<'_, AppState>) -> Result<u32, AppError> {
-    state
-        .post_service
-        .sync_pending_posts()
-        .await
+    state.post_service.sync_pending_posts().await
 }

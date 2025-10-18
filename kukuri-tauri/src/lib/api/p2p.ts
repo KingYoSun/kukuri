@@ -111,8 +111,7 @@ export const p2pApi = {
 
   /**
    * 謖・ｮ壹＆繧後◆繝斐い繧｢繝峨Ξ繧ｹ縺ｫ謇句虚縺ｧ謗･邯・   */
-  connectToPeer: (peerAddress: string) =>
-    invokeCommandVoid('connect_to_peer', { peerAddress }),
+  connectToPeer: (peerAddress: string) => invokeCommandVoid('connect_to_peer', { peerAddress }),
 
   // Bootstrap UI
   getBootstrapConfig: () => invokeCommand<BootstrapConfig>('get_bootstrap_config'),

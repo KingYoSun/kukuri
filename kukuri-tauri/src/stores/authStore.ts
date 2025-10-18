@@ -128,7 +128,10 @@ export const useAuthStore = create<AuthStore>()(
 
           // セキュアストレージに保存
           if (saveToSecureStorage) {
-            errorHandler.info('Saving new account to secure storage...', 'AuthStore.generateNewKeypair');
+            errorHandler.info(
+              'Saving new account to secure storage...',
+              'AuthStore.generateNewKeypair',
+            );
             await SecureStorageApi.addAccount({
               nsec: response.nsec,
               name: user.name,

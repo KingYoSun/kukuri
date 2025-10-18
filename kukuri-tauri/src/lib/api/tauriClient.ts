@@ -19,29 +19,54 @@ export class TauriCommandError extends Error {
   }
 }
 
+function isCommandResponse<T>(value: unknown): value is CommandResponse<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'success' in value &&
+    typeof (value as CommandResponse<unknown>).success === 'boolean'
+  );
+}
+
+async function tauriInvoke<T>(command: string, payload?: Record<string, unknown>): Promise<T> {
+  if (payload === undefined) {
+    return invoke<T>(command);
+  }
+  return invoke<T>(command, payload);
+}
+
 export async function invokeCommand<T>(
   command: string,
   payload?: Record<string, unknown>,
 ): Promise<T> {
-  const response = await invoke<CommandResponse<T>>(command, payload);
-  if (!response.success) {
-    throw new TauriCommandError(
-      response.error ?? `Command ${command} failed`,
-      response.error_code,
-    );
+  const response = await tauriInvoke<CommandResponse<T>>(command, payload);
+  if (isCommandResponse<T>(response)) {
+    if (!response.success) {
+      throw new TauriCommandError(
+        response.error ?? `Command ${command} failed`,
+        response.error_code,
+      );
+    }
+    return response.data as T;
   }
-  return response.data as T;
+  if (response !== undefined) {
+    return response as T;
+  }
+  throw new TauriCommandError(`Command ${command} returned no response`);
 }
 
 export async function invokeCommandVoid(
   command: string,
   payload?: Record<string, unknown>,
 ): Promise<void> {
-  const response = await invoke<CommandResponse<unknown>>(command, payload);
+  const response = await tauriInvoke<CommandResponse<unknown>>(command, payload);
+  if (response === undefined || response === null) {
+    return;
+  }
+  if (!isCommandResponse<unknown>(response)) {
+    return;
+  }
   if (!response.success) {
-    throw new TauriCommandError(
-      response.error ?? `Command ${command} failed`,
-      response.error_code,
-    );
+    throw new TauriCommandError(response.error ?? `Command ${command} failed`, response.error_code);
   }
 }

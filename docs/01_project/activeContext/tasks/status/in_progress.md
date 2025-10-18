@@ -59,6 +59,7 @@
 - 2025年10月18日: `SubscriptionStateMachine` を `kukuri-tauri/src-tauri/src/application/services/subscription_state.rs` に導入し、`nostr_subscriptions` テーブルで購読対象・状態・再同期時刻を管理。接続断検知で `needs_resync` へ遷移し、再接続時に `EventService::handle_network_connected` から自動復元する流れを実装。
 - 2025年10月18日: `list_nostr_subscriptions` コマンドと `useNostrSubscriptions` フックを追加し、`P2PDebugPanel` に購読対象・最終同期時刻・失敗回数を可視化するセクションを組み込み。
 - 2025年10月18日: GitHub Actions の Format Check 失敗を確認し、`src/components/P2PDebugPanel.tsx` と `src/stores/offlineStore.ts` を Prettier で整形。`pnpm format:check` が成功することをローカルで確認。
+- 2025年10月18日: `gh act` で `format-check`・`native-test-linux` ジョブが成功することを確認。Docker Test Suite は `docker compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh` で完走（`gh act` 実行環境ではボリューム制限により確認不可）。
 - 2025年10月18日: P2P接続イベントから再索引ジョブをトリガーするウォッチャーと、`offline://reindex_*` イベントに応答してUIストアを更新する処理を実装。
 - 2025年10月18日: `IrohNetworkService` の接続イベントを用いた再索引結合テストを追加し、再接続時に同期キューへ再投入されることを検証。
 - 2025年10月18日: OfflineService の再索引ジョブ整備タスクに着手。現状の Repository キャッシュ構造と再接続時の課題を洗い出すための調査を開始。

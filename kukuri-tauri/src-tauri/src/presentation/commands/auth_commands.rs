@@ -140,9 +140,6 @@ pub async fn export_private_key(
     npub: String,
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<String>, AppError> {
-    let result = state
-        .auth_service
-        .export_private_key(&npub)
-        .await;
+    let result = state.auth_service.export_private_key(&npub).await;
     Ok(ApiResponse::from_result(result))
 }
