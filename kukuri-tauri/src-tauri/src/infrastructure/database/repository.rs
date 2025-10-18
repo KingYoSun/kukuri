@@ -31,14 +31,14 @@ pub trait TopicRepository: Send + Sync {
     async fn create_topic(&self, topic: &Topic) -> Result<(), AppError>;
     async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError>;
     async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError>;
-    async fn get_joined_topics(&self) -> Result<Vec<Topic>, AppError>;
+    async fn get_joined_topics(&self, user_pubkey: &str) -> Result<Vec<Topic>, AppError>;
     async fn update_topic(&self, topic: &Topic) -> Result<(), AppError>;
     async fn delete_topic(&self, id: &str) -> Result<(), AppError>;
-    async fn join_topic(&self, id: &str) -> Result<(), AppError>;
-    async fn leave_topic(&self, id: &str) -> Result<(), AppError>;
+    async fn join_topic(&self, topic_id: &str, user_pubkey: &str) -> Result<(), AppError>;
+    async fn leave_topic(&self, topic_id: &str, user_pubkey: &str) -> Result<(), AppError>;
     async fn update_topic_stats(
         &self,
-        id: &str,
+        topic_id: &str,
         member_count: u32,
         post_count: u32,
     ) -> Result<(), AppError>;

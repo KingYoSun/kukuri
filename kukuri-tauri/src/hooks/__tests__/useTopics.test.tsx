@@ -25,8 +25,11 @@ vi.mock('@/lib/api/tauri', () => ({
       },
     ]),
     getTopicStats: vi.fn().mockResolvedValue({
+      topic_id: 'tech',
       member_count: 100,
       post_count: 500,
+      active_users_24h: 80,
+      trending_score: 420.0,
     }),
     createTopic: vi.fn().mockResolvedValue({
       id: 'new-topic',

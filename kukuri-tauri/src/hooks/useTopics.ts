@@ -79,8 +79,11 @@ export const useTopic = (topicId: string) => {
 
       // 統計情報を取得
       const stats = await TauriApi.getTopicStats(apiTopic.id).catch(() => ({
+        topic_id: apiTopic.id,
         member_count: 0,
         post_count: 0,
+        active_users_24h: 0,
+        trending_score: 0,
       }));
 
       return {

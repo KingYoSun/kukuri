@@ -533,18 +533,37 @@ impl EventServiceTrait for EventService {
     async fn delete_events(
         &self,
         event_ids: Vec<String>,
-        _reason: Option<String>,
+        reason: Option<String>,
     ) -> Result<EventId, AppError> {
-        // TODO: 実際のEventManagerを使用して実装
         if event_ids.is_empty() {
             return Err(AppError::ValidationError(
                 "No event IDs provided".to_string(),
             ));
         }
-        let event_id =
-            EventId::from_hex("0000000000000000000000000000000000000000000000000000000000000005")
-                .map_err(|e| AppError::NostrError(e.to_string()))?;
-        Ok(event_id)
+
+        let event_manager = self
+            .event_manager
+            .as_ref()
+            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+
+        let parsed_ids = event_ids
+            .iter()
+            .map(|id| {
+                EventId::from_hex(id)
+                    .map_err(|e| AppError::ValidationError(format!("Invalid event ID: {e}")))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let deletion_event_id = event_manager
+            .delete_events(parsed_ids, reason)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))?;
+
+        for event_id in event_ids {
+            self.repository.delete_event(&event_id).await?;
+        }
+
+        Ok(deletion_event_id)
     }
 
     async fn disconnect(&self) -> Result<(), AppError> {
@@ -777,6 +796,72 @@ mod tests {
                 .to_string()
                 .contains("Invalid event signature")
         );
+    }
+
+    #[tokio::test]
+    async fn test_delete_events_without_manager_fails() {
+        let mock_repo = MockEventRepo::new();
+        let mock_signature = MockSignatureServ::new();
+        let mock_distributor = MockEventDist::new();
+
+        let service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
+        );
+
+        let result = service.delete_events(vec!["abc".to_string()], None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AppError::ConfigurationError(_)));
+    }
+
+    #[tokio::test]
+    async fn test_delete_events_with_invalid_id() {
+        let mock_repo = MockEventRepo::new();
+        let mock_signature = MockSignatureServ::new();
+        let mock_distributor = MockEventDist::new();
+
+        let mut service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
+        );
+
+        service.set_event_manager(Arc::new(EventManager::new()));
+
+        let result = service
+            .delete_events(vec!["invalid".to_string()], None)
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AppError::ValidationError(_)));
+    }
+
+    #[tokio::test]
+    async fn test_delete_events_event_manager_failure_maps_to_nostr_error() {
+        let mock_repo = MockEventRepo::new();
+        let mock_signature = MockSignatureServ::new();
+        let mock_distributor = MockEventDist::new();
+
+        let mut service = EventService::new(
+            Arc::new(mock_repo),
+            Arc::new(mock_signature),
+            Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
+        );
+
+        service.set_event_manager(Arc::new(EventManager::new()));
+
+        let valid_id = format!("{:064x}", 1);
+        let result = service
+            .delete_events(vec![valid_id], Some("cleanup".to_string()))
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AppError::NostrError(_)));
     }
 
     #[tokio::test]

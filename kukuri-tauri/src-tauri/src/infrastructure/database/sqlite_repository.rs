@@ -4,6 +4,7 @@ use super::{
 use crate::domain::entities::{Event, Post, Topic, User};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
+use sqlx::Row;
 
 pub struct SqliteRepository {
     pool: ConnectionPool,
@@ -378,7 +379,7 @@ impl TopicRepository for SqliteRepository {
     async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError> {
         let row = sqlx::query(
             r#"
-            SELECT topic_id, name, description, created_at, updated_at
+            SELECT topic_id, name, description, created_at, updated_at, member_count, post_count
             FROM topics
             WHERE topic_id = ?
             "#,
@@ -390,13 +391,21 @@ impl TopicRepository for SqliteRepository {
         match row {
             Some(row) => {
                 use sqlx::Row;
-                let topic = Topic::new_with_id(
-                    row.try_get("topic_id")?,
-                    row.try_get("name")?,
-                    row.try_get("description")?,
+                let created_at =
                     chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
-                        .unwrap_or_else(chrono::Utc::now),
+                        .unwrap_or_else(chrono::Utc::now);
+                let mut topic = Topic::new_with_id(
+                    row.try_get("topic_id")?,
+                    row.try_get::<String, _>("name")?,
+                    row.try_get::<Option<String>, _>("description")?
+                        .unwrap_or_default(),
+                    created_at,
                 );
+                topic.updated_at =
+                    chrono::DateTime::from_timestamp_millis(row.try_get("updated_at")?)
+                        .unwrap_or(created_at);
+                topic.member_count = row.try_get::<i64, _>("member_count")? as u32;
+                topic.post_count = row.try_get::<i64, _>("post_count")? as u32;
                 Ok(Some(topic))
             }
             None => Ok(None),
@@ -406,7 +415,7 @@ impl TopicRepository for SqliteRepository {
     async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError> {
         let rows = sqlx::query(
             r#"
-            SELECT topic_id, name, description, created_at, updated_at
+            SELECT topic_id, name, description, created_at, updated_at, member_count, post_count
             FROM topics
             ORDER BY created_at ASC
             "#,
@@ -417,43 +426,57 @@ impl TopicRepository for SqliteRepository {
         let mut topics = Vec::new();
         for row in rows {
             use sqlx::Row;
-            let topic = Topic::new_with_id(
+            let created_at = chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                .unwrap_or_else(chrono::Utc::now);
+            let mut topic = Topic::new_with_id(
                 row.try_get("topic_id")?,
-                row.try_get("name")?,
-                row.try_get("description")?,
-                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
-                    .unwrap_or_else(chrono::Utc::now),
+                row.try_get::<String, _>("name")?,
+                row.try_get::<Option<String>, _>("description")?
+                    .unwrap_or_default(),
+                created_at,
             );
+            topic.updated_at = chrono::DateTime::from_timestamp_millis(row.try_get("updated_at")?)
+                .unwrap_or(created_at);
+            topic.member_count = row.try_get::<i64, _>("member_count")? as u32;
+            topic.post_count = row.try_get::<i64, _>("post_count")? as u32;
             topics.push(topic);
         }
 
         Ok(topics)
     }
 
-    async fn get_joined_topics(&self) -> Result<Vec<Topic>, AppError> {
+    async fn get_joined_topics(&self, user_pubkey: &str) -> Result<Vec<Topic>, AppError> {
         // ユーザーが参加しているトピックを取得
         let rows = sqlx::query(
             r#"
-            SELECT t.topic_id, t.name, t.description, t.created_at, t.updated_at
+            SELECT t.topic_id, t.name, t.description, t.created_at, t.updated_at, t.member_count, t.post_count
             FROM topics t
             INNER JOIN user_topics ut ON t.topic_id = ut.topic_id
-            WHERE ut.is_joined = 1
+            WHERE ut.is_joined = 1 AND ut.user_pubkey = ?
             ORDER BY t.created_at ASC
             "#,
         )
+        .bind(user_pubkey)
         .fetch_all(self.pool.get_pool())
         .await?;
 
         let mut topics = Vec::new();
         for row in rows {
             use sqlx::Row;
-            let topic = Topic::new_with_id(
+            let created_at = chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
+                .unwrap_or_else(chrono::Utc::now);
+            let mut topic = Topic::new_with_id(
                 row.try_get("topic_id")?,
-                row.try_get("name")?,
-                row.try_get("description")?,
-                chrono::DateTime::from_timestamp_millis(row.try_get("created_at")?)
-                    .unwrap_or_else(chrono::Utc::now),
+                row.try_get::<String, _>("name")?,
+                row.try_get::<Option<String>, _>("description")?
+                    .unwrap_or_default(),
+                created_at,
             );
+            topic.updated_at = chrono::DateTime::from_timestamp_millis(row.try_get("updated_at")?)
+                .unwrap_or(created_at);
+            topic.member_count = row.try_get::<i64, _>("member_count")? as u32;
+            topic.post_count = row.try_get::<i64, _>("post_count")? as u32;
+            topic.is_joined = true;
             topics.push(topic);
         }
 
@@ -486,6 +509,16 @@ impl TopicRepository for SqliteRepository {
 
         sqlx::query(
             r#"
+            DELETE FROM user_topics
+            WHERE topic_id = ?
+            "#,
+        )
+        .bind(id)
+        .execute(self.pool.get_pool())
+        .await?;
+
+        sqlx::query(
+            r#"
             DELETE FROM topics 
             WHERE topic_id = ?
             "#,
@@ -497,40 +530,103 @@ impl TopicRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn join_topic(&self, id: &str) -> Result<(), AppError> {
-        // ユーザーのトピック参加を記録
+    async fn join_topic(&self, topic_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let mut tx = self.pool.get_pool().begin().await?;
+
         sqlx::query(
             r#"
-            INSERT OR REPLACE INTO user_topics (topic_id, is_joined, joined_at)
-            VALUES (?, 1, ?)
+            INSERT INTO user_topics (topic_id, user_pubkey, is_joined, joined_at, left_at)
+            VALUES (?1, ?2, 1, ?3, NULL)
+            ON CONFLICT(topic_id, user_pubkey) DO UPDATE SET
+                is_joined = 1,
+                joined_at = excluded.joined_at,
+                left_at = NULL
             "#,
         )
-        .bind(id)
-        .bind(chrono::Utc::now().timestamp_millis())
-        .execute(self.pool.get_pool())
+        .bind(topic_id)
+        .bind(user_pubkey)
+        .bind(now)
+        .execute(&mut *tx)
         .await?;
 
+        let member_count: i64 = sqlx::query(
+            r#"
+            SELECT COUNT(*) as count
+            FROM user_topics
+            WHERE topic_id = ?1 AND is_joined = 1
+            "#,
+        )
+        .bind(topic_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .try_get("count")?;
+
+        sqlx::query(
+            r#"
+            UPDATE topics
+            SET member_count = ?1, updated_at = ?2
+            WHERE topic_id = ?3
+            "#,
+        )
+        .bind(member_count)
+        .bind(now)
+        .bind(topic_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 
-    async fn leave_topic(&self, id: &str) -> Result<(), AppError> {
+    async fn leave_topic(&self, topic_id: &str, user_pubkey: &str) -> Result<(), AppError> {
         // #publicトピックからは離脱できない
-        if id == "public" {
+        if topic_id == "public" {
             return Err("デフォルトトピックから離脱することはできません".into());
         }
+
+        let now = chrono::Utc::now().timestamp_millis();
+        let mut tx = self.pool.get_pool().begin().await?;
 
         sqlx::query(
             r#"
             UPDATE user_topics 
-            SET is_joined = 0, left_at = ?
-            WHERE topic_id = ?
+            SET is_joined = 0, left_at = ?1
+            WHERE topic_id = ?2 AND user_pubkey = ?3
             "#,
         )
-        .bind(chrono::Utc::now().timestamp_millis())
-        .bind(id)
-        .execute(self.pool.get_pool())
+        .bind(now)
+        .bind(topic_id)
+        .bind(user_pubkey)
+        .execute(&mut *tx)
         .await?;
 
+        let member_count: i64 = sqlx::query(
+            r#"
+            SELECT COUNT(*) as count
+            FROM user_topics
+            WHERE topic_id = ?1 AND is_joined = 1
+            "#,
+        )
+        .bind(topic_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .try_get("count")?;
+
+        sqlx::query(
+            r#"
+            UPDATE topics
+            SET member_count = ?1, updated_at = ?2
+            WHERE topic_id = ?3
+            "#,
+        )
+        .bind(member_count)
+        .bind(now)
+        .bind(topic_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 

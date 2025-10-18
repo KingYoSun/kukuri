@@ -192,6 +192,7 @@ pub async fn bootstrap_with_fallback(
 - [ ] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI更新）方針を確定する。
 - [x] DHTメトリクス／tracing整備
   - `AtomicMetric` を `dht_bootstrap.rs` / `iroh_gossip_service.rs` に組み込み、Tauriコマンド `get_p2p_metrics` → `p2p.ts` → `P2PDebugPanel` の経路で可視化。
+  - 2025年10月20日: GossipService で `TopicMesh` ベースのトピック統計を公開し、`P2PService::get_status` からメッセージ数と最終アクティビティを返却できるようにした。
   - `pnpm test` / `cargo test` のメトリクス項目を更新済み（Docker スモークテストで検証）。
 - [ ] 環境変数ベースの機能トグル整理
   - 候補: `KUKURI_ENABLE_DHT`, `KUKURI_ENABLE_DNS`, `KUKURI_ENABLE_LOCAL`（bool）

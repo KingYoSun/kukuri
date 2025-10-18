@@ -44,14 +44,15 @@ impl AuthService {
             .await?;
 
         // Create user
+        let public_key = keypair.public_key.clone();
         let user = self
             .user_service
-            .create_user(keypair.npub.clone(), keypair.public_key)
+            .create_user(keypair.npub.clone(), public_key.clone())
             .await?;
 
         // Join public topic by default
         self.topic_service.ensure_public_topic().await?;
-        self.topic_service.join_topic("public").await?;
+        self.topic_service.join_topic("public", &public_key).await?;
 
         Ok(user)
     }
@@ -66,19 +67,20 @@ impl AuthService {
             .store("current_npub", &keypair.npub)
             .await?;
 
+        let public_key = keypair.public_key.clone();
         // Get or create user
         let user = match self.user_service.get_user(&keypair.npub).await? {
             Some(user) => user,
             None => {
                 self.user_service
-                    .create_user(keypair.npub.clone(), keypair.public_key)
+                    .create_user(keypair.npub.clone(), public_key.clone())
                     .await?
             }
         };
 
         // Join public topic by default
         self.topic_service.ensure_public_topic().await?;
-        self.topic_service.join_topic("public").await?;
+        self.topic_service.join_topic("public", &public_key).await?;
 
         Ok(user)
     }

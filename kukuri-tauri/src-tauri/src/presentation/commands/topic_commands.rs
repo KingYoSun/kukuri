@@ -61,9 +61,9 @@ pub async fn get_topics(
 pub async fn get_joined_topics(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<TopicResponse>>, AppError> {
-    ensure_authenticated(&state).await?;
+    let user_pubkey = ensure_authenticated(&state).await?;
     let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.get_joined_topics().await;
+    let result = handler.get_joined_topics(&user_pubkey).await;
     Ok(ApiResponse::from_result(result))
 }
 

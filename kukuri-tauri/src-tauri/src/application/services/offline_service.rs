@@ -385,3 +385,289 @@ impl OfflineServiceTrait for OfflineService {
             .map_err(|e| AppError::Internal(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
+
+    async fn setup_service() -> (OfflineService, Pool<Sqlite>) {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:?cache=shared")
+            .await
+            .unwrap();
+
+        initialize_schema(&pool).await;
+
+        let manager = Arc::new(OfflineManager::new(pool.clone()));
+        (OfflineService::new(manager), pool)
+    }
+
+    async fn initialize_schema(pool: &Pool<Sqlite>) {
+        pool.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS offline_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_pubkey TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                target_id TEXT,
+                action_data TEXT NOT NULL,
+                local_id TEXT NOT NULL,
+                remote_id TEXT,
+                is_synced INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                synced_at INTEGER
+            )
+            "#,
+        )
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS sync_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL,
+                retry_count INTEGER DEFAULT 0,
+                max_retries INTEGER DEFAULT 3,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                synced_at INTEGER,
+                error_message TEXT
+            )
+            "#,
+        )
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS cache_metadata (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cache_key TEXT NOT NULL UNIQUE,
+                cache_type TEXT NOT NULL,
+                last_synced_at INTEGER,
+                last_accessed_at INTEGER,
+                data_version INTEGER DEFAULT 1,
+                is_stale INTEGER DEFAULT 0,
+                expiry_time INTEGER,
+                metadata TEXT
+            )
+            "#,
+        )
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS optimistic_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                update_id TEXT NOT NULL UNIQUE,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                original_data TEXT,
+                updated_data TEXT NOT NULL,
+                is_confirmed INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                confirmed_at INTEGER
+            )
+            "#,
+        )
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS sync_status (
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                local_version INTEGER NOT NULL,
+                last_local_update INTEGER NOT NULL,
+                sync_status TEXT NOT NULL,
+                conflict_data TEXT,
+                PRIMARY KEY (entity_type, entity_id)
+            )
+            "#,
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_save_action_persists_record() {
+        let (service, pool) = setup_service().await;
+
+        let saved = service
+            .save_action(
+                "npub1".into(),
+                "create_post".into(),
+                "post".into(),
+                "post123".into(),
+                r#"{"content":"Hello"}"#.into(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(saved.action.user_pubkey, "npub1");
+        assert_eq!(saved.action.target_id.as_deref(), Some("post123"));
+
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM offline_actions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let (action_data,): (String,) =
+            sqlx::query_as("SELECT action_data FROM offline_actions LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(action_data.contains("\"entityType\":\"post\""));
+        assert!(action_data.contains("\"entityId\":\"post123\""));
+    }
+
+    #[tokio::test]
+    async fn test_get_actions_filters_by_user_and_sync_state() {
+        let (service, pool) = setup_service().await;
+
+        let first = service
+            .save_action(
+                "npub1".into(),
+                "create".into(),
+                "post".into(),
+                "p1".into(),
+                r#"{"content":"A"}"#.into(),
+            )
+            .await
+            .unwrap();
+
+        let _second = service
+            .save_action(
+                "npub2".into(),
+                "create".into(),
+                "post".into(),
+                "p2".into(),
+                r#"{"content":"B"}"#.into(),
+            )
+            .await
+            .unwrap();
+
+        // Mark first as synced
+        sqlx::query("UPDATE offline_actions SET is_synced = 1 WHERE id = ?1")
+            .bind(first.action.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let synced_actions = service
+            .get_actions(Some("npub1".into()), Some(true), None)
+            .await
+            .unwrap();
+        assert_eq!(synced_actions.len(), 1);
+        assert_eq!(synced_actions[0].local_id, first.action.local_id);
+
+        let unsynced = service
+            .get_actions(Some("npub2".into()), Some(false), None)
+            .await
+            .unwrap();
+        assert_eq!(unsynced.len(), 1);
+        assert_eq!(unsynced[0].user_pubkey, "npub2");
+    }
+
+    #[tokio::test]
+    async fn test_sync_actions_marks_entries_and_enqueues() {
+        let (service, pool) = setup_service().await;
+
+        service
+            .save_action(
+                "npub1".into(),
+                "create".into(),
+                "post".into(),
+                "p1".into(),
+                r#"{"content":"sync"}"#.into(),
+            )
+            .await
+            .unwrap();
+
+        let result = service.sync_actions("npub1".into()).await.unwrap();
+        assert_eq!(result.synced_count, 1);
+        assert_eq!(result.failed_count, 0);
+
+        let (is_synced,): (i64,) = sqlx::query_as("SELECT is_synced FROM offline_actions LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(is_synced, 1);
+
+        let (queue_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sync_queue")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(queue_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_update_cache_metadata_and_cleanup() {
+        let (service, pool) = setup_service().await;
+
+        service
+            .update_cache_metadata(
+                "cache:topics".into(),
+                "topics".into(),
+                Some(serde_json::json!({"version":1})),
+                Some(1),
+            )
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let removed = service.cleanup_expired_cache().await.unwrap();
+        assert_eq!(removed, 1);
+
+        let (remaining,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM cache_metadata")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[tokio::test]
+    async fn test_update_sync_status_upserts_record() {
+        let (service, pool) = setup_service().await;
+
+        service
+            .update_sync_status(
+                "post".into(),
+                "p1".into(),
+                "pending".into(),
+                Some("conflict".into()),
+            )
+            .await
+            .unwrap();
+
+        service
+            .update_sync_status("post".into(), "p1".into(), "resolved".into(), None)
+            .await
+            .unwrap();
+
+        let (local_version, sync_status, conflict_data): (i64, String, Option<String>) =
+            sqlx::query_as(
+                r#"
+                SELECT local_version, sync_status, conflict_data
+                FROM sync_status
+                WHERE entity_type = 'post' AND entity_id = 'p1'
+                "#,
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(local_version, 2);
+        assert_eq!(sync_status, "resolved");
+        assert!(conflict_data.is_none());
+    }
+}

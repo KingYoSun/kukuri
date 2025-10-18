@@ -129,8 +129,11 @@ impl TopicHandler {
             .collect())
     }
 
-    pub async fn get_joined_topics(&self) -> Result<Vec<TopicResponse>, AppError> {
-        let topics = self.topic_service.get_joined_topics().await?;
+    pub async fn get_joined_topics(
+        &self,
+        user_pubkey: &str,
+    ) -> Result<Vec<TopicResponse>, AppError> {
+        let topics = self.topic_service.get_joined_topics(user_pubkey).await?;
 
         Ok(topics
             .into_iter()
@@ -155,10 +158,9 @@ impl TopicHandler {
     ) -> Result<(), AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
 
-        // user_pubkeyはログ用に保持（将来の実装用）
-        let _ = user_pubkey;
-
-        self.topic_service.join_topic(&request.topic_id).await?;
+        self.topic_service
+            .join_topic(&request.topic_id, user_pubkey)
+            .await?;
         Ok(())
     }
 
@@ -169,10 +171,9 @@ impl TopicHandler {
     ) -> Result<(), AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
 
-        // user_pubkeyはログ用に保持（将来の実装用）
-        let _ = user_pubkey;
-
-        self.topic_service.leave_topic(&request.topic_id).await?;
+        self.topic_service
+            .leave_topic(&request.topic_id, user_pubkey)
+            .await?;
         Ok(())
     }
 
@@ -182,13 +183,24 @@ impl TopicHandler {
     ) -> Result<TopicStatsResponse, AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
 
-        // 統計情報の仮実装
+        let (member_count, post_count) = self
+            .topic_service
+            .get_topic_stats(&request.topic_id)
+            .await?;
+
+        let active_users_24h = member_count.min(post_count);
+        let trending_score = if member_count == 0 && post_count == 0 {
+            0.0
+        } else {
+            (post_count as f64 * 0.6) + (member_count as f64 * 0.4)
+        };
+
         Ok(TopicStatsResponse {
             topic_id: request.topic_id,
-            member_count: 0,
-            post_count: 0,
-            active_users_24h: 0,
-            trending_score: 0.0,
+            member_count,
+            post_count,
+            active_users_24h,
+            trending_score,
         })
     }
 }

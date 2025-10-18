@@ -32,6 +32,14 @@ export interface CreateTopicRequest {
   description: string;
 }
 
+export interface TopicStats {
+  topic_id: string;
+  member_count: number;
+  post_count: number;
+  active_users_24h: number;
+  trending_score: number;
+}
+
 export interface UpdateTopicRequest {
   id: string;
   name: string;
@@ -87,9 +95,9 @@ export class TauriApi {
 
   static async getTopicStats(
     topicId: string,
-  ): Promise<{ member_count: number; post_count: number }> {
-    return await invokeCommand<{ member_count: number; post_count: number }>('get_topic_stats', {
-      topicId,
+  ): Promise<TopicStats> {
+    return await invokeCommand<TopicStats>('get_topic_stats', {
+      request: { topic_id: topicId },
     });
   }
 
@@ -102,7 +110,7 @@ export class TauriApi {
   }
 
   static async deleteTopic(id: string): Promise<void> {
-    await invokeCommandVoid('delete_topic', { id });
+    await invokeCommandVoid('delete_topic', { request: { id } });
   }
 
   // ポスト関連

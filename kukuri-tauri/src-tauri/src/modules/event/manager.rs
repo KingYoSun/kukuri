@@ -245,6 +245,53 @@ impl EventManager {
         Ok(result_id)
     }
 
+    /// 指定したイベントを削除するための削除イベントを発行
+    pub async fn delete_events(
+        &self,
+        target_ids: Vec<EventId>,
+        reason: Option<String>,
+    ) -> Result<EventId> {
+        self.ensure_initialized().await?;
+        if target_ids.is_empty() {
+            return Err(anyhow::anyhow!("No event IDs provided"));
+        }
+
+        let publisher = self.event_publisher.read().await;
+        let deletion_event = publisher.create_deletion(target_ids.clone(), reason.as_deref())?;
+
+        let client_manager = self.client_manager.read().await;
+        let deletion_event_id = client_manager.publish_event(deletion_event.clone()).await?;
+
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            let mut topics: HashSet<String> = HashSet::new();
+            for event_id in &target_ids {
+                if let Some(resolved_topics) = self
+                    .resolve_topics_for_referenced_event(&event_id.to_hex())
+                    .await
+                {
+                    topics.extend(resolved_topics);
+                }
+            }
+
+            if topics.is_empty() {
+                topics.extend(self.selected_default_topic_ids.read().await.clone());
+                if let Some(pk) = self.get_public_key().await {
+                    topics.insert(user_topic_id(&pk.to_string()));
+                }
+            }
+
+            let topic_list: Vec<String> = topics.into_iter().collect();
+            if let Err(e) = self
+                .broadcast_to_topics(&gossip, &topic_list, &deletion_event)
+                .await
+            {
+                error!("Failed to broadcast deletion to P2P: {}", e);
+            }
+        }
+
+        Ok(deletion_event_id)
+    }
+
     /// リポスト（ブースト）を送信
     /// 任意のイベントを発行
     #[allow(dead_code)]
