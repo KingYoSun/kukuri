@@ -62,3 +62,5 @@
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。
+- 2025�N10��18��: EventService DHT�w�ǁE���������^�X�N�ɒ���BEventService�^EventManager�\���ƍw�Ǌ֘A��DB�X�L�[�}�𒲍����B
+- 2025�N10��18��: EventService�̍w�ǃX�e�[�g�}�V��������Nostr�w�ǊĎ�UI��ǉ����A�Đڑ����̍w�Ǖ����e�X�g�𐮔��B

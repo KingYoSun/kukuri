@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { p2pApi } from '@/lib/api/p2p';
 import type { GossipMetricsSection, P2PMetrics } from '@/lib/api/p2p';
 import { useP2P } from '@/hooks/useP2P';
+import { useNostrSubscriptions } from '@/hooks/useNostrSubscriptions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,13 @@ export function P2PDebugPanel() {
     broadcast,
     clearError,
   } = useP2P();
+
+  const {
+    subscriptions,
+    isLoading: isSubscriptionLoading,
+    error: subscriptionError,
+    refresh: refreshSubscriptions,
+  } = useNostrSubscriptions();
 
   const [newTopicId, setNewTopicId] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
@@ -312,6 +320,56 @@ export function P2PDebugPanel() {
                     メトリクスはまだ取得されていません
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Nostr購読状態</span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={refreshSubscriptions}
+                    disabled={isSubscriptionLoading}
+                  >
+                    {isSubscriptionLoading ? '更新中…' : '再取得'}
+                  </Button>
+                </div>
+                {subscriptionError && (
+                  <p className="text-xs text-destructive">{subscriptionError}</p>
+                )}
+                <div className="grid gap-2">
+                  {subscriptions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">購読情報はまだありません。</p>
+                  ) : (
+                    subscriptions.map((subscription) => (
+                      <div
+                        key={`${subscription.targetType}:${subscription.target}`}
+                        className="rounded-md border p-2 space-y-1 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>
+                            {subscription.targetType === 'topic'
+                              ? `#${subscription.target}`
+                              : subscription.target}
+                          </span>
+                          <Badge variant="outline">{subscription.status}</Badge>
+                        </div>
+                        <div className="grid gap-0.5 text-[10px] text-muted-foreground">
+                          <span>最終同期: {formatTimestamp(subscription.lastSyncedAt)}</span>
+                          <span>最終試行: {formatTimestamp(subscription.lastAttemptAt)}</span>
+                          {subscription.failureCount > 0 && (
+                            <span>失敗回数: {subscription.failureCount}</span>
+                          )}
+                          {subscription.errorMessage && (
+                            <span className="text-destructive">
+                              エラー: {subscription.errorMessage}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               {error && (

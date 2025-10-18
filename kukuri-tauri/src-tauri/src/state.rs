@@ -13,9 +13,10 @@ use crate::modules::p2p::P2PEvent;
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
+use crate::application::services::event_service::EventManagerSubscriptionInvoker;
 use crate::application::services::{
-    AuthService, EventService, OfflineService, P2PService, PostService, SyncService, TopicService,
-    UserService,
+    AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
+    SyncService, TopicService, UserService,
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::infrastructure::{
@@ -131,7 +132,7 @@ impl AppState {
 
         // 新アーキテクチャのリポジトリとサービスを初期化
         let pool = ConnectionPool::new(&db_url).await?;
-        let repository = Arc::new(SqliteRepository::new(pool));
+        let repository = Arc::new(SqliteRepository::new(pool.clone()));
 
         // リポジトリのマイグレーションを実行
         repository.initialize().await?;
@@ -191,14 +192,21 @@ impl AppState {
             Arc::clone(&event_distributor),
         ));
 
+        let subscription_state = Arc::new(SubscriptionStateMachine::new(pool.clone()));
+
         // EventServiceの初期化
         let mut event_service_inner = EventService::new(
             Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::EventRepository>,
             Arc::clone(&signature_service),
             Arc::clone(&event_distributor),
+            Arc::clone(&subscription_state)
+                as Arc<dyn crate::application::services::SubscriptionStateStore>,
         );
         // EventManagerを設定
         event_service_inner.set_event_manager(Arc::clone(&event_manager));
+        event_service_inner.set_subscription_invoker(Arc::new(
+            EventManagerSubscriptionInvoker::new(Arc::clone(&event_manager)),
+        ));
         let event_service = Arc::new(event_service_inner);
 
         // SyncServiceの初期化（PostServiceとEventServiceが必要）
@@ -231,6 +239,31 @@ impl AppState {
                 while let Ok(event) = connection_rx.recv().await {
                     if matches!(event, ConnectionEvent::Connected) {
                         job.trigger();
+                    }
+                }
+            });
+        }
+
+        {
+            let mut connection_rx = p2p_stack.network_service.subscribe_connection_events();
+            let event_service_clone = Arc::clone(&event_service);
+            tauri::async_runtime::spawn(async move {
+                while let Ok(event) = connection_rx.recv().await {
+                    match event {
+                        ConnectionEvent::Disconnected => {
+                            if let Err(e) = event_service_clone.handle_network_disconnected().await
+                            {
+                                tracing::warn!("Failed to mark subscriptions for resync: {}", e);
+                            }
+                        }
+                        ConnectionEvent::Connected => {
+                            if let Err(e) = event_service_clone.handle_network_connected().await {
+                                tracing::warn!(
+                                    "Failed to restore subscriptions after reconnect: {}",
+                                    e
+                                );
+                            }
+                        }
                     }
                 }
             });

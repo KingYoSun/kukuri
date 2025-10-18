@@ -1,3 +1,4 @@
+use crate::application::services::{SubscriptionRecord, SubscriptionTarget};
 use crate::presentation::dto::Validate;
 use serde::{Deserialize, Serialize};
 
@@ -156,5 +157,34 @@ impl Validate for SetDefaultP2PTopicRequest {
             return Err("Topic ID is required".to_string());
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NostrSubscriptionStateDto {
+    pub target: String,
+    pub target_type: String,
+    pub status: String,
+    pub last_synced_at: Option<i64>,
+    pub last_attempt_at: Option<i64>,
+    pub failure_count: i64,
+    pub error_message: Option<String>,
+}
+
+impl From<SubscriptionRecord> for NostrSubscriptionStateDto {
+    fn from(record: SubscriptionRecord) -> Self {
+        let (target_type, target_value) = match record.target {
+            SubscriptionTarget::Topic(id) => ("topic".to_string(), id),
+            SubscriptionTarget::User(id) => ("user".to_string(), id),
+        };
+        Self {
+            target: target_value,
+            target_type,
+            status: record.status.as_str().to_string(),
+            last_synced_at: record.last_synced_at,
+            last_attempt_at: record.last_attempt_at,
+            failure_count: record.failure_count,
+            error_message: record.error_message,
+        }
     }
 }

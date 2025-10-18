@@ -295,10 +295,13 @@ impl EventManager {
     }
 
     /// 特定のトピックをサブスクライブ
-    pub async fn subscribe_to_topic(&self, topic_id: &str) -> Result<()> {
+    pub async fn subscribe_to_topic(&self, topic_id: &str, since: Option<Timestamp>) -> Result<()> {
         self.ensure_initialized().await?;
 
-        let filter = Filter::new().hashtag(topic_id).kind(Kind::TextNote);
+        let mut filter = Filter::new().hashtag(topic_id).kind(Kind::TextNote);
+        if let Some(since_ts) = since {
+            filter = filter.since(since_ts);
+        }
 
         let client_manager = self.client_manager.read().await;
         client_manager.subscribe(vec![filter]).await?;
@@ -308,10 +311,17 @@ impl EventManager {
     }
 
     /// ユーザーの投稿をサブスクライブ
-    pub async fn subscribe_to_user(&self, pubkey: PublicKey) -> Result<()> {
+    pub async fn subscribe_to_user(
+        &self,
+        pubkey: PublicKey,
+        since: Option<Timestamp>,
+    ) -> Result<()> {
         self.ensure_initialized().await?;
 
-        let filter = Filter::new().author(pubkey).kind(Kind::TextNote);
+        let mut filter = Filter::new().author(pubkey).kind(Kind::TextNote);
+        if let Some(since_ts) = since {
+            filter = filter.since(since_ts);
+        }
 
         let client_manager = self.client_manager.read().await;
         client_manager.subscribe(vec![filter]).await?;
@@ -554,7 +564,7 @@ mod tests {
                 .await
                 .is_err()
         );
-        assert!(manager.subscribe_to_topic("topic").await.is_err());
+        assert!(manager.subscribe_to_topic("topic", None).await.is_err());
     }
 
     #[tokio::test]

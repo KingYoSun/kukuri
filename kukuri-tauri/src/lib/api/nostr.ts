@@ -26,6 +26,16 @@ export interface NostrEvent {
   tags: string[][];
 }
 
+export interface NostrSubscriptionState {
+  target: string;
+  targetType: 'topic' | 'user';
+  status: string;
+  lastSyncedAt: number | null;
+  lastAttemptAt: number | null;
+  failureCount: number;
+  errorMessage: string | null;
+}
+
 // Nostr Commands
 export async function initializeNostr(): Promise<void> {
   return invoke('initialize_nostr');
@@ -65,6 +75,30 @@ export async function subscribeToTopic(topicId: string): Promise<void> {
 
 export async function subscribeToUser(pubkey: string): Promise<void> {
   return invoke('subscribe_to_user', { pubkey });
+}
+
+export async function listNostrSubscriptions(): Promise<NostrSubscriptionState[]> {
+  const response = await invoke<{
+    subscriptions: {
+      target: string;
+      target_type: 'topic' | 'user';
+      status: string;
+      last_synced_at: number | null;
+      last_attempt_at: number | null;
+      failure_count: number;
+      error_message: string | null;
+    }[];
+  }>('list_nostr_subscriptions');
+  const raw = response.subscriptions ?? [];
+  return raw.map((item) => ({
+    target: item.target,
+    targetType: item.target_type,
+    status: item.status,
+    lastSyncedAt: item.last_synced_at,
+    lastAttemptAt: item.last_attempt_at,
+    failureCount: item.failure_count,
+    errorMessage: item.error_message,
+  }));
 }
 
 export async function getNostrPubkey(): Promise<string | null> {

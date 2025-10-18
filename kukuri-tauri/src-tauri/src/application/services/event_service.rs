@@ -1,3 +1,6 @@
+use crate::application::services::{
+    SubscriptionRecord, SubscriptionStateStore, SubscriptionTarget,
+};
 use crate::domain::entities::{Event, EventKind};
 use crate::infrastructure::crypto::SignatureService;
 use crate::infrastructure::database::EventRepository;
@@ -7,8 +10,10 @@ use crate::modules::event::manager::EventManager;
 use crate::presentation::dto::event::NostrMetadataDto;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
+use chrono::Utc;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 /// Nostrイベントサービスのトレイト
 #[async_trait]
@@ -54,6 +59,53 @@ pub trait EventServiceTrait: Send + Sync {
 
     /// 既定のP2P配信トピックを設定
     async fn set_default_p2p_topic(&self, topic_id: &str) -> Result<(), AppError>;
+
+    /// 現在の購読状態を一覧取得
+    async fn list_subscriptions(&self) -> Result<Vec<SubscriptionRecord>, AppError>;
+}
+
+#[async_trait]
+pub trait SubscriptionInvoker: Send + Sync {
+    async fn subscribe_topic(
+        &self,
+        topic_id: &str,
+        since: Option<Timestamp>,
+    ) -> Result<(), AppError>;
+
+    async fn subscribe_user(&self, pubkey: &str, since: Option<Timestamp>) -> Result<(), AppError>;
+}
+
+pub struct EventManagerSubscriptionInvoker {
+    event_manager: Arc<EventManager>,
+}
+
+impl EventManagerSubscriptionInvoker {
+    pub fn new(event_manager: Arc<EventManager>) -> Self {
+        Self { event_manager }
+    }
+}
+
+#[async_trait]
+impl SubscriptionInvoker for EventManagerSubscriptionInvoker {
+    async fn subscribe_topic(
+        &self,
+        topic_id: &str,
+        since: Option<Timestamp>,
+    ) -> Result<(), AppError> {
+        self.event_manager
+            .subscribe_to_topic(topic_id, since)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
+    }
+
+    async fn subscribe_user(&self, pubkey: &str, since: Option<Timestamp>) -> Result<(), AppError> {
+        let public_key =
+            PublicKey::from_hex(pubkey).map_err(|e| AppError::NostrError(e.to_string()))?;
+        self.event_manager
+            .subscribe_to_user(public_key, since)
+            .await
+            .map_err(|e| AppError::NostrError(e.to_string()))
+    }
 }
 
 pub struct EventService {
@@ -61,6 +113,8 @@ pub struct EventService {
     signature_service: Arc<dyn SignatureService>,
     distributor: Arc<dyn EventDistributor>,
     event_manager: Option<Arc<EventManager>>,
+    subscription_state: Arc<dyn SubscriptionStateStore>,
+    subscription_invoker: Option<Arc<dyn SubscriptionInvoker>>,
 }
 
 impl EventService {
@@ -68,20 +122,92 @@ impl EventService {
         repository: Arc<dyn EventRepository>,
         signature_service: Arc<dyn SignatureService>,
         distributor: Arc<dyn EventDistributor>,
+        subscription_state: Arc<dyn SubscriptionStateStore>,
     ) -> Self {
         Self {
             repository,
             signature_service,
             distributor,
             event_manager: None,
+            subscription_state,
+            subscription_invoker: None,
         }
     }
 
-    /// EventManagerを設定する
+    /// Attach the EventManager used by this service.
     pub fn set_event_manager(&mut self, event_manager: Arc<EventManager>) {
         self.event_manager = Some(event_manager);
     }
 
+    /// Attach the subscription invoker used to execute subscriptions.
+    pub fn set_subscription_invoker(&mut self, invoker: Arc<dyn SubscriptionInvoker>) {
+        self.subscription_invoker = Some(invoker);
+    }
+
+    pub async fn handle_network_disconnected(&self) -> Result<(), AppError> {
+        self.subscription_state.mark_all_need_resync().await
+    }
+
+    pub async fn handle_network_connected(&self) -> Result<(), AppError> {
+        self.restore_subscriptions().await
+    }
+
+    async fn restore_subscriptions(&self) -> Result<(), AppError> {
+        let invoker = self.subscription_invoker.as_ref().ok_or_else(|| {
+            AppError::ConfigurationError("Subscription invoker not set".to_string())
+        })?;
+
+        let records = self.subscription_state.list_for_restore().await?;
+        let mut failure_message: Option<String> = None;
+
+        for record in records {
+            let target = record.target.clone();
+            let since = record.since_timestamp();
+            let target_label = match &target {
+                SubscriptionTarget::Topic(t) => format!("topic:{t}"),
+                SubscriptionTarget::User(u) => format!("user:{u}"),
+            };
+
+            let result = match &target {
+                SubscriptionTarget::Topic(topic_id) => {
+                    invoker.subscribe_topic(topic_id, since).await
+                }
+                SubscriptionTarget::User(pubkey) => invoker.subscribe_user(pubkey, since).await,
+            };
+
+            match result {
+                Ok(_) => {
+                    self.subscription_state
+                        .mark_subscribed(&target, Utc::now().timestamp())
+                        .await?;
+                }
+                Err(err) => {
+                    let err_message = err.to_string();
+                    if let Err(store_err) = self
+                        .subscription_state
+                        .mark_failure(&target, &err_message)
+                        .await
+                    {
+                        warn!(
+                            "Failed to record subscription failure for {}: {}",
+                            target_label, store_err
+                        );
+                    }
+                    warn!(
+                        "Failed to restore subscription for {}: {}",
+                        target_label, err_message
+                    );
+                    failure_message = Some(err_message);
+                }
+            }
+        }
+
+        if let Some(message) = failure_message {
+            Err(AppError::NostrError(message))
+        } else {
+            Ok(())
+        }
+    }
     pub async fn create_event(
         &self,
         kind: u32,
@@ -297,30 +423,87 @@ impl EventServiceTrait for EventService {
     }
 
     async fn subscribe_to_topic(&self, topic_id: &str) -> Result<(), AppError> {
-        let event_manager = self
-            .event_manager
-            .as_ref()
-            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        if topic_id.is_empty() {
+            return Err(AppError::ValidationError(
+                "Topic ID is required".to_string(),
+            ));
+        }
 
-        event_manager
-            .subscribe_to_topic(topic_id)
-            .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
+        let invoker = self.subscription_invoker.as_ref().ok_or_else(|| {
+            AppError::ConfigurationError("Subscription invoker not set".to_string())
+        })?;
+
+        let target = SubscriptionTarget::Topic(topic_id.to_string());
+        let record = self
+            .subscription_state
+            .record_request(target.clone())
+            .await?;
+        let since = record.since_timestamp();
+
+        match invoker.subscribe_topic(topic_id, since).await {
+            Ok(_) => {
+                self.subscription_state
+                    .mark_subscribed(&target, Utc::now().timestamp())
+                    .await?;
+                Ok(())
+            }
+            Err(err) => {
+                let err_message = err.to_string();
+                if let Err(store_err) = self
+                    .subscription_state
+                    .mark_failure(&target, &err_message)
+                    .await
+                {
+                    warn!(
+                        "Failed to record subscription failure for topic {}: {}",
+                        topic_id, store_err
+                    );
+                }
+                Err(err)
+            }
+        }
     }
 
     async fn subscribe_to_user(&self, pubkey: &str) -> Result<(), AppError> {
-        let event_manager = self
-            .event_manager
-            .as_ref()
-            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))?;
+        if pubkey.is_empty() {
+            return Err(AppError::ValidationError(
+                "Public key is required".to_string(),
+            ));
+        }
 
-        let public_key =
-            PublicKey::from_hex(pubkey).map_err(|e| AppError::NostrError(e.to_string()))?;
+        let invoker = self.subscription_invoker.as_ref().ok_or_else(|| {
+            AppError::ConfigurationError("Subscription invoker not set".to_string())
+        })?;
 
-        event_manager
-            .subscribe_to_user(public_key)
-            .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
+        let target = SubscriptionTarget::User(pubkey.to_string());
+        let record = self
+            .subscription_state
+            .record_request(target.clone())
+            .await?;
+        let since = record.since_timestamp();
+
+        match invoker.subscribe_user(pubkey, since).await {
+            Ok(_) => {
+                self.subscription_state
+                    .mark_subscribed(&target, Utc::now().timestamp())
+                    .await?;
+                Ok(())
+            }
+            Err(err) => {
+                let err_message = err.to_string();
+                if let Err(store_err) = self
+                    .subscription_state
+                    .mark_failure(&target, &err_message)
+                    .await
+                {
+                    warn!(
+                        "Failed to record subscription failure for user {}: {}",
+                        pubkey, store_err
+                    );
+                }
+                Err(err)
+            }
+        }
     }
 
     async fn get_public_key(&self) -> Result<Option<String>, AppError> {
@@ -377,11 +560,16 @@ impl EventServiceTrait for EventService {
             .await;
         Ok(())
     }
+
+    async fn list_subscriptions(&self) -> Result<Vec<SubscriptionRecord>, AppError> {
+        self.subscription_state.list_all().await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::services::subscription_state::SubscriptionStatus;
     use crate::infrastructure::crypto::SignatureService;
     use crate::infrastructure::database::EventRepository;
     use crate::infrastructure::p2p::{EventDistributor, event_distributor::DistributionStrategy};
@@ -433,6 +621,30 @@ mod tests {
         }
     }
 
+    mock! {
+        pub SubscriptionStateMock {}
+
+        #[async_trait]
+        impl SubscriptionStateStore for SubscriptionStateMock {
+            async fn record_request(&self, target: SubscriptionTarget) -> Result<SubscriptionRecord, AppError>;
+            async fn mark_subscribed(&self, target: &SubscriptionTarget, synced_at: i64) -> Result<(), AppError>;
+            async fn mark_failure(&self, target: &SubscriptionTarget, error: &str) -> Result<(), AppError>;
+            async fn mark_all_need_resync(&self) -> Result<(), AppError>;
+            async fn list_for_restore(&self) -> Result<Vec<SubscriptionRecord>, AppError>;
+            async fn list_all(&self) -> Result<Vec<SubscriptionRecord>, AppError>;
+        }
+    }
+
+    mock! {
+        pub SubscriptionInvokerMock {}
+
+        #[async_trait]
+        impl SubscriptionInvoker for SubscriptionInvokerMock {
+            async fn subscribe_topic(&self, topic_id: &str, since: Option<Timestamp>) -> Result<(), AppError>;
+            async fn subscribe_user(&self, pubkey: &str, since: Option<Timestamp>) -> Result<(), AppError>;
+        }
+    }
+
     fn create_test_event() -> Event {
         Event::new(1, "Test content".to_string(), "test_pubkey".to_string())
     }
@@ -463,6 +675,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テスト実行
@@ -503,6 +716,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テストイベント作成
@@ -532,6 +746,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テストイベント作成
@@ -570,6 +785,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テスト実行
@@ -603,6 +819,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テスト実行
@@ -634,6 +851,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テスト実行
@@ -676,6 +894,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テスト実行
@@ -720,6 +939,7 @@ mod tests {
             Arc::new(mock_repo),
             Arc::new(mock_signature),
             Arc::new(mock_distributor),
+            Arc::new(MockSubscriptionStateMock::new()) as Arc<dyn SubscriptionStateStore>,
         );
 
         // テスト実行
@@ -728,5 +948,170 @@ mod tests {
         // 検証
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 2); // 2つのイベントが同期された
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_topic_uses_state_machine_and_invoker() {
+        let record = SubscriptionRecord {
+            target: SubscriptionTarget::Topic("topic".into()),
+            status: SubscriptionStatus::Pending,
+            last_synced_at: None,
+            last_attempt_at: None,
+            failure_count: 0,
+            error_message: None,
+        };
+
+        let mut mock_state = MockSubscriptionStateMock::new();
+        mock_state
+            .expect_record_request()
+            .times(1)
+            .withf(|target| matches!(target, SubscriptionTarget::Topic(t) if t == "topic"))
+            .return_once(move |_| Ok(record.clone()));
+        mock_state
+            .expect_mark_subscribed()
+            .times(1)
+            .withf(|target, _| matches!(target, SubscriptionTarget::Topic(t) if t == "topic"))
+            .return_once(|_, _| Ok(()));
+
+        let mut mock_invoker = MockSubscriptionInvokerMock::new();
+        mock_invoker
+            .expect_subscribe_topic()
+            .times(1)
+            .with(eq("topic"), eq(None))
+            .return_once(|_, _| Ok(()));
+
+        let service = {
+            let mock_repo = MockEventRepo::new();
+            let mock_signature = MockSignatureServ::new();
+            let mock_distributor = MockEventDist::new();
+            let mut service = EventService::new(
+                Arc::new(mock_repo),
+                Arc::new(mock_signature),
+                Arc::new(mock_distributor),
+                Arc::new(mock_state) as Arc<dyn SubscriptionStateStore>,
+            );
+            service.set_subscription_invoker(Arc::new(mock_invoker));
+            service
+        };
+
+        let result = service.subscribe_to_topic("topic").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_topic_failure_marks_state() {
+        let record = SubscriptionRecord {
+            target: SubscriptionTarget::Topic("topic".into()),
+            status: SubscriptionStatus::Pending,
+            last_synced_at: None,
+            last_attempt_at: None,
+            failure_count: 0,
+            error_message: None,
+        };
+
+        let mut mock_state = MockSubscriptionStateMock::new();
+        mock_state
+            .expect_record_request()
+            .times(1)
+            .return_once(move |_| Ok(record.clone()));
+        mock_state
+            .expect_mark_failure()
+            .times(1)
+            .withf(|target, message| {
+                matches!(target, SubscriptionTarget::Topic(t) if t == "topic")
+                    && message.contains("failed")
+            })
+            .return_once(|_, _| Ok(()));
+
+        let mut mock_invoker = MockSubscriptionInvokerMock::new();
+        mock_invoker
+            .expect_subscribe_topic()
+            .times(1)
+            .return_once(|_, _| Err(AppError::NostrError("failed".into())));
+
+        let service = {
+            let mock_repo = MockEventRepo::new();
+            let mock_signature = MockSignatureServ::new();
+            let mock_distributor = MockEventDist::new();
+            let mut service = EventService::new(
+                Arc::new(mock_repo),
+                Arc::new(mock_signature),
+                Arc::new(mock_distributor),
+                Arc::new(mock_state) as Arc<dyn SubscriptionStateStore>,
+            );
+            service.set_subscription_invoker(Arc::new(mock_invoker));
+            service
+        };
+
+        let result = service.subscribe_to_topic("topic").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_network_connected_restores_subscriptions() {
+        let topic_record = SubscriptionRecord {
+            target: SubscriptionTarget::Topic("topic".into()),
+            status: SubscriptionStatus::NeedsResync,
+            last_synced_at: None,
+            last_attempt_at: None,
+            failure_count: 0,
+            error_message: None,
+        };
+        let user_record = SubscriptionRecord {
+            target: SubscriptionTarget::User("user".into()),
+            status: SubscriptionStatus::Pending,
+            last_synced_at: Some(3600),
+            last_attempt_at: None,
+            failure_count: 1,
+            error_message: Some("previous failure".into()),
+        };
+        let topic_record_for_list = topic_record.clone();
+        let user_record_for_list = user_record.clone();
+        let user_record_for_predicate = user_record.clone();
+
+        let mut mock_state = MockSubscriptionStateMock::new();
+        mock_state
+            .expect_list_for_restore()
+            .times(1)
+            .return_once(move || Ok(vec![topic_record_for_list, user_record_for_list]));
+        mock_state
+            .expect_mark_subscribed()
+            .times(2)
+            .returning(|_, _| Ok(()));
+
+        let mut mock_invoker = MockSubscriptionInvokerMock::new();
+        mock_invoker
+            .expect_subscribe_topic()
+            .times(1)
+            .with(eq("topic"), eq(None))
+            .return_once(|_, _| Ok(()));
+        mock_invoker
+            .expect_subscribe_user()
+            .times(1)
+            .withf(move |pubkey, since| {
+                pubkey == "user"
+                    && since.map(|ts| ts.as_u64())
+                        == user_record_for_predicate
+                            .last_synced_at
+                            .map(|value| (value - 300) as u64)
+            })
+            .return_once(|_, _| Ok(()));
+
+        let service = {
+            let mock_repo = MockEventRepo::new();
+            let mock_signature = MockSignatureServ::new();
+            let mock_distributor = MockEventDist::new();
+            let mut service = EventService::new(
+                Arc::new(mock_repo),
+                Arc::new(mock_signature),
+                Arc::new(mock_distributor),
+                Arc::new(mock_state) as Arc<dyn SubscriptionStateStore>,
+            );
+            service.set_subscription_invoker(Arc::new(mock_invoker));
+            service
+        };
+
+        let result = service.handle_network_connected().await;
+        assert!(result.is_ok());
     }
 }

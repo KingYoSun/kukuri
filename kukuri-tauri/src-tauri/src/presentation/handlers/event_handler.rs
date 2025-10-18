@@ -1,9 +1,9 @@
 use crate::application::services::event_service::EventServiceTrait;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::event::{
-    DeleteEventsRequest, EventResponse, NostrMetadataDto, PublishTextNoteRequest,
-    PublishTopicPostRequest, SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest,
-    UpdateMetadataRequest,
+    DeleteEventsRequest, EventResponse, NostrMetadataDto, NostrSubscriptionStateDto,
+    PublishTextNoteRequest, PublishTopicPostRequest, SendReactionRequest,
+    SetDefaultP2PTopicRequest, SubscribeRequest, UpdateMetadataRequest,
 };
 use crate::shared::error::AppError;
 use serde_json::json;
@@ -184,5 +184,13 @@ impl EventHandler {
             .set_default_p2p_topic(&request.topic_id)
             .await?;
         Ok(json!({ "success": true }))
+    }
+
+    /// 現在のNostr購読状態一覧を取得
+    pub async fn list_subscriptions(&self) -> Result<serde_json::Value, AppError> {
+        let records = self.event_service.list_subscriptions().await?;
+        let subscriptions: Vec<NostrSubscriptionStateDto> =
+            records.into_iter().map(Into::into).collect();
+        Ok(json!({ "subscriptions": subscriptions }))
     }
 }

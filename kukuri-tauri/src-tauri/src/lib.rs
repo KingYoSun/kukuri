@@ -80,6 +80,7 @@ pub fn run() {
             presentation::commands::delete_events,
             presentation::commands::disconnect_nostr,
             presentation::commands::set_default_p2p_topic,
+            presentation::commands::list_nostr_subscriptions,
             // P2P関連コマンド
             presentation::commands::initialize_p2p,
             presentation::commands::join_p2p_topic,

@@ -114,6 +114,17 @@ pub async fn subscribe_to_user(
         .map_err(|e| e.to_string())
 }
 
+/// 現在のNostr購読状態を取得
+#[tauri::command]
+pub async fn list_nostr_subscriptions(state: State<'_, AppState>) -> Result<String, String> {
+    state
+        .event_handler
+        .list_subscriptions()
+        .await
+        .map(|response| serde_json::to_string(&response).unwrap())
+        .map_err(|e| e.to_string())
+}
+
 /// Nostr公開鍵を取得
 #[tauri::command]
 pub async fn get_nostr_pubkey(state: State<'_, AppState>) -> Result<String, String> {
