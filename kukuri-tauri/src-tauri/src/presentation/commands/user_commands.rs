@@ -14,7 +14,6 @@ pub async fn get_user(
     let result = user_service
         .get_user(&npub)
         .await
-        .map_err(AppError::from)
         .and_then(|user| {
             user.map(|u| serde_json::to_value(u).map_err(AppError::from))
                 .transpose()
@@ -30,7 +29,6 @@ pub async fn get_user_by_pubkey(
     let result = user_service
         .get_user_by_pubkey(&pubkey)
         .await
-        .map_err(AppError::from)
         .and_then(|user| {
             user.map(|u| serde_json::to_value(u).map_err(AppError::from))
                 .transpose()
@@ -46,8 +44,7 @@ pub async fn update_profile(
 ) -> Result<ApiResponse<()>, AppError> {
     let result = user_service
         .update_profile(&npub, metadata)
-        .await
-        .map_err(AppError::from);
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -59,8 +56,7 @@ pub async fn follow_user(
 ) -> Result<ApiResponse<()>, AppError> {
     let result = user_service
         .follow_user(&follower_npub, &target_npub)
-        .await
-        .map_err(AppError::from);
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -72,8 +68,7 @@ pub async fn unfollow_user(
 ) -> Result<ApiResponse<()>, AppError> {
     let result = user_service
         .unfollow_user(&follower_npub, &target_npub)
-        .await
-        .map_err(AppError::from);
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -85,7 +80,6 @@ pub async fn get_followers(
     let result = user_service
         .get_followers(&npub)
         .await
-        .map_err(AppError::from)
         .and_then(|followers| {
             followers
                 .into_iter()
@@ -103,7 +97,6 @@ pub async fn get_following(
     let result = user_service
         .get_following(&npub)
         .await
-        .map_err(AppError::from)
         .and_then(|following| {
             following
                 .into_iter()

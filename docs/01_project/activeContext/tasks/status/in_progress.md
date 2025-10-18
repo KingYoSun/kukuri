@@ -51,7 +51,9 @@
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
-メモ/進捗ログ:
+-メモ/進捗ログ:
+- 2025年10月18日: GitHub Actions ワークフロー失敗（最新 `main` 向け CI）について Codex CLI で調査を開始。`gh` コマンドで失敗ログを確認予定。
+- 2025年10月18日: `clippy::useless_conversion` による CI 失敗を特定し、該当コマンド群から冗長な `map_err(AppError::from)` を削除。`cargo clippy -D warnings` と `cargo test` を Docker 経由で再実行し、Rust テストが通ることを確認。
 - 2025年10月18日: フロント主要UIとユーティリティの `errorHandler` への統一・ESLint `no-console` 追加、および Rust 側 `AppError`/`ApiResponse` の共通化を実施。`post_commands.rs` と `topic_commands.rs` など主要コマンドを `ApiResponse::from_result` で揃え、ドキュメントを更新。
 - 2025年10月19日: 残っていた `p2p`/`event`/`offline`/`secure_storage`/`auth` など全ての Tauri コマンドを `AppError` + `ApiResponse` へ統一。TypeScript 側は共通 `invokeCommand` ヘルパーを追加し、API ラッパー・テストを新シグネチャに追随。
 - 2025年10月18日: `SubscriptionStateMachine` を `kukuri-tauri/src-tauri/src/application/services/subscription_state.rs` に導入し、`nostr_subscriptions` テーブルで購読対象・状態・再同期時刻を管理。接続断検知で `needs_resync` へ遷移し、再接続時に `EventService::handle_network_connected` から自動復元する流れを実装。

@@ -208,5 +208,4 @@ pub async fn sync_posts(state: State<'_, AppState>) -> Result<u32, AppError> {
         .post_service
         .sync_pending_posts()
         .await
-        .map_err(AppError::from)
 }

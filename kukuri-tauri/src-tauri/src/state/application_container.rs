@@ -31,7 +31,7 @@ impl ApplicationContainer {
             tracing::info!("Creating app data directory...");
             fs::create_dir_all(&app_data_dir)
                 .await
-                .with_context(|| format!("Failed to create app data dir at {:?}", app_data_dir))?;
+                .with_context(|| format!("Failed to create app data dir at {app_data_dir:?}"))?;
             tracing::info!("App data directory created successfully");
         } else {
             tracing::info!("App data directory already exists");
@@ -129,7 +129,7 @@ impl ApplicationContainer {
 
         fs::write(path, encoded)
             .await
-            .with_context(|| format!("Failed to write iroh secret key to {:?}", path))?;
+            .with_context(|| format!("Failed to write iroh secret key to {path:?}"))?;
 
         tracing::info!("Generated new iroh secret key at {:?}", path);
         Ok(iroh::SecretKey::from_bytes(&secret_bytes))

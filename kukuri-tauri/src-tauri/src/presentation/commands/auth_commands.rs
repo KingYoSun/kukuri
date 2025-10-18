@@ -119,7 +119,6 @@ pub async fn get_current_user(
         .auth_service
         .get_current_user()
         .await
-        .map_err(AppError::from)
         .and_then(|user| {
             user.map(|u| serde_json::to_value(u).map_err(AppError::from))
                 .transpose()
@@ -144,7 +143,6 @@ pub async fn export_private_key(
     let result = state
         .auth_service
         .export_private_key(&npub)
-        .await
-        .map_err(AppError::from);
+        .await;
     Ok(ApiResponse::from_result(result))
 }
