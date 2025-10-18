@@ -1,8 +1,8 @@
 use crate::application::services::offline_service::OfflineServiceTrait;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::offline::{
-    AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest, OfflineAction,
-    OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
+    AddToSyncQueueRequest, CacheStatusResponse, CacheTypeStatus, GetOfflineActionsRequest,
+    OfflineAction, OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
     SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
     UpdateSyncStatusRequest,
 };
@@ -26,20 +26,32 @@ impl OfflineHandler {
     ) -> Result<SaveOfflineActionResponse, AppError> {
         request.validate()?;
 
-        let action_id = self
+        let saved = self
             .offline_service
             .save_action(
+                request.user_pubkey,
+                request.action_type,
                 request.entity_type,
                 request.entity_id,
-                request.action_type,
-                request.payload,
+                request.data,
             )
             .await?;
 
         Ok(SaveOfflineActionResponse {
-            success: true,
-            action_id,
-            message: Some("Offline action saved successfully".to_string()),
+            local_id: saved.local_id,
+            action: OfflineAction {
+                id: saved.action.id,
+                user_pubkey: saved.action.user_pubkey,
+                action_type: saved.action.action_type,
+                target_id: saved.action.target_id,
+                action_data: saved.action.action_data,
+                local_id: saved.action.local_id,
+                remote_id: saved.action.remote_id,
+                is_synced: saved.action.is_synced,
+                created_at: saved.action.created_at,
+                synced_at: saved.action.synced_at,
+                error_message: saved.action.error_message,
+            },
         })
     }
 
@@ -52,23 +64,20 @@ impl OfflineHandler {
 
         let actions = self
             .offline_service
-            .get_actions(
-                request.entity_type,
-                request.entity_id,
-                request.status,
-                request.limit,
-            )
+            .get_actions(request.user_pubkey, request.is_synced, request.limit)
             .await?;
 
         Ok(actions
             .into_iter()
             .map(|a| OfflineAction {
                 id: a.id,
-                entity_type: a.entity_type,
-                entity_id: a.entity_id,
+                user_pubkey: a.user_pubkey,
                 action_type: a.action_type,
-                payload: a.payload,
-                status: a.status,
+                target_id: a.target_id,
+                action_data: a.action_data,
+                local_id: a.local_id,
+                remote_id: a.remote_id,
+                is_synced: a.is_synced,
                 created_at: a.created_at,
                 synced_at: a.synced_at,
                 error_message: a.error_message,
@@ -85,14 +94,13 @@ impl OfflineHandler {
 
         let result = self
             .offline_service
-            .sync_actions(request.action_ids)
+            .sync_actions(request.user_pubkey)
             .await?;
 
         Ok(SyncOfflineActionsResponse {
-            success: true,
             synced_count: result.synced_count,
             failed_count: result.failed_count,
-            failed_actions: result.failed_actions,
+            pending_count: result.pending_count,
         })
     }
 
@@ -101,10 +109,18 @@ impl OfflineHandler {
         let status = self.offline_service.get_cache_status().await?;
 
         Ok(CacheStatusResponse {
-            total_size: status.total_size,
-            item_count: status.item_count,
-            oldest_item: status.oldest_item,
-            newest_item: status.newest_item,
+            total_items: status.total_items,
+            stale_items: status.stale_items,
+            cache_types: status
+                .cache_types
+                .into_iter()
+                .map(|t| CacheTypeStatus {
+                    cache_type: t.cache_type,
+                    item_count: t.item_count,
+                    last_synced_at: t.last_synced_at,
+                    is_stale: t.is_stale,
+                })
+                .collect(),
         })
     }
 
@@ -114,13 +130,7 @@ impl OfflineHandler {
 
         let queue_id = self
             .offline_service
-            .add_to_sync_queue(
-                request.entity_type,
-                request.entity_id,
-                request.operation,
-                request.data,
-                request.priority,
-            )
+            .add_to_sync_queue(request.action_type, request.payload, request.priority)
             .await?;
 
         Ok(queue_id)
@@ -134,7 +144,12 @@ impl OfflineHandler {
         request.validate()?;
 
         self.offline_service
-            .update_cache_metadata(request.key, request.metadata, request.ttl)
+            .update_cache_metadata(
+                request.cache_key,
+                request.cache_type,
+                request.metadata,
+                request.expiry_seconds,
+            )
             .await?;
 
         Ok(json!({ "success": true }))

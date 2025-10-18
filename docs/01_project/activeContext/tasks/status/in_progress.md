@@ -56,6 +56,8 @@
 - 2025年10月18日: `clippy::useless_conversion` による CI 失敗を特定し、該当コマンド群から冗長な `map_err(AppError::from)` を削除。`cargo clippy -D warnings` と `cargo test` を Docker 経由で再実行し、Rust テストが通ることを確認。
 - 2025年10月18日: フロント主要UIとユーティリティの `errorHandler` への統一・ESLint `no-console` 追加、および Rust 側 `AppError`/`ApiResponse` の共通化を実施。`post_commands.rs` と `topic_commands.rs` など主要コマンドを `ApiResponse::from_result` で揃え、ドキュメントを更新。
 - 2025年10月19日: 残っていた `p2p`/`event`/`offline`/`secure_storage`/`auth` など全ての Tauri コマンドを `AppError` + `ApiResponse` へ統一。TypeScript 側は共通 `invokeCommand` ヘルパーを追加し、API ラッパー・テストを新シグネチャに追随。
+- 2025年10月19日: `EventService::process_received_event` の Phase 2 TODO を EventManager 連携で解消し、`topic_commands.rs` の更新/削除コマンドを TopicService に接続。OfflineService の API 仕様と実装の乖離を調査し、次の対応方針を整理中。
+- 2025年10月19日: OfflineService/Handler を OfflineManager ベースの実装に刷新し、Tauri 側 DTO を camelCase スキーマへ統一。`save_offline_action` で entityType/entityId を含む JSON を永続化できるよう調整し、取得・同期・メタデータ更新系のコマンドも更新済み。`cargo fmt` / `cargo test` がWindows環境でも通過することを確認済み。
 - 2025年10月18日: `SubscriptionStateMachine` を `kukuri-tauri/src-tauri/src/application/services/subscription_state.rs` に導入し、`nostr_subscriptions` テーブルで購読対象・状態・再同期時刻を管理。接続断検知で `needs_resync` へ遷移し、再接続時に `EventService::handle_network_connected` から自動復元する流れを実装。
 - 2025年10月18日: `list_nostr_subscriptions` コマンドと `useNostrSubscriptions` フックを追加し、`P2PDebugPanel` に購読対象・最終同期時刻・失敗回数を可視化するセクションを組み込み。
 - 2025年10月18日: GitHub Actions の Format Check 失敗を確認し、`src/components/P2PDebugPanel.tsx` と `src/stores/offlineStore.ts` を Prettier で整形。`pnpm format:check` が成功することをローカルで確認。

@@ -112,7 +112,7 @@
 - **動作確認**: 0/49 (0%)
 - **EventService**: 100%
 - **P2PService**: 95%（message_countのみ未実装）
-- **OfflineService**: 40%（基本実装のみ）
+- **OfflineService**: 75%（Tauriコマンド／DTO刷新完了、残りは再索引ジョブ周り）
 
 ### テストカバレッジ
 - **フロントエンド**: 537件実装

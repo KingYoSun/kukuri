@@ -217,9 +217,7 @@ impl AppState {
         ));
 
         // OfflineServiceの初期化
-        let offline_service = Arc::new(OfflineService::new(
-            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::Repository>
-        ));
+        let offline_service = Arc::new(OfflineService::new(Arc::clone(&offline_manager)));
 
         // プレゼンテーション層のハンドラーを初期化
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));

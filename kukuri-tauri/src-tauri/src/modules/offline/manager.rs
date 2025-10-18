@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, QueryBuilder, Row, Sqlite};
 use uuid::Uuid;
 
 use super::models::*;
@@ -52,14 +52,29 @@ impl OfflineManager {
     // オフラインアクションの取得
     pub async fn get_offline_actions(
         &self,
-        _request: GetOfflineActionsRequest,
+        request: GetOfflineActionsRequest,
     ) -> Result<Vec<OfflineAction>> {
-        // シンプルな実装に変更
-        let actions = sqlx::query_as::<_, OfflineAction>(
-            "SELECT * FROM offline_actions WHERE is_synced = 0 ORDER BY created_at DESC",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let mut builder = QueryBuilder::new("SELECT * FROM offline_actions WHERE 1=1");
+
+        if let Some(user_pubkey) = request.user_pubkey.as_ref() {
+            builder.push(" AND user_pubkey = ");
+            builder.push_bind(user_pubkey);
+        }
+
+        if let Some(is_synced) = request.is_synced {
+            builder.push(" AND is_synced = ");
+            builder.push_bind(if is_synced { 1 } else { 0 });
+        }
+
+        builder.push(" ORDER BY created_at DESC");
+
+        if let Some(limit) = request.limit {
+            builder.push(" LIMIT ");
+            builder.push_bind(limit);
+        }
+
+        let query = builder.build_query_as::<OfflineAction>();
+        let actions = query.fetch_all(&self.pool).await?;
 
         Ok(actions)
     }

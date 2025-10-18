@@ -1,86 +1,102 @@
-use crate::infrastructure::database::Repository;
+use crate::modules::offline::{
+    OfflineManager,
+    models::{
+        AddToSyncQueueRequest as ManagerAddToSyncQueueRequest,
+        CacheStatusResponse as ManagerCacheStatusResponse,
+        CacheTypeStatus as ManagerCacheTypeStatus,
+        GetOfflineActionsRequest as ManagerGetOfflineActionsRequest,
+        OfflineAction as ManagerOfflineAction,
+        SaveOfflineActionRequest as ManagerSaveOfflineActionRequest,
+        SaveOfflineActionResponse as ManagerSaveOfflineActionResponse,
+        SyncOfflineActionsRequest as ManagerSyncOfflineActionsRequest,
+        UpdateCacheMetadataRequest as ManagerUpdateCacheMetadataRequest,
+    },
+};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::sync::Arc;
 
-/// オフラインアクション情報
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OfflineActionInfo {
+#[derive(Debug, Clone)]
+pub struct OfflineActionRecord {
     pub id: i64,
-    pub entity_type: String,
-    pub entity_id: String,
+    pub user_pubkey: String,
     pub action_type: String,
-    pub payload: String,
-    pub status: String,
+    pub target_id: Option<String>,
+    pub action_data: String,
+    pub local_id: String,
+    pub remote_id: Option<String>,
+    pub is_synced: bool,
     pub created_at: i64,
     pub synced_at: Option<i64>,
     pub error_message: Option<String>,
 }
 
-/// 同期結果情報
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+pub struct SavedOfflineAction {
+    pub local_id: String,
+    pub action: OfflineActionRecord,
+}
+
+#[derive(Debug, Clone)]
 pub struct SyncResult {
-    pub synced_count: usize,
-    pub failed_count: usize,
-    pub failed_actions: Vec<i64>,
+    pub synced_count: i32,
+    pub failed_count: i32,
+    pub pending_count: i32,
 }
 
-/// キャッシュステータス情報
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheStatus {
-    pub total_size: i64,
-    pub item_count: i32,
-    pub oldest_item: Option<i64>,
-    pub newest_item: Option<i64>,
+#[derive(Debug, Clone)]
+pub struct CacheTypeStatusData {
+    pub cache_type: String,
+    pub item_count: i64,
+    pub last_synced_at: Option<i64>,
+    pub is_stale: bool,
 }
 
-/// オフラインサービスのトレイト
+#[derive(Debug, Clone)]
+pub struct CacheStatusData {
+    pub total_items: i64,
+    pub stale_items: i64,
+    pub cache_types: Vec<CacheTypeStatusData>,
+}
+
 #[async_trait]
 pub trait OfflineServiceTrait: Send + Sync {
-    /// オフラインアクションを保存
     async fn save_action(
         &self,
+        user_pubkey: String,
+        action_type: String,
         entity_type: String,
         entity_id: String,
-        action_type: String,
-        payload: String,
-    ) -> Result<i64, AppError>;
+        data: String,
+    ) -> Result<SavedOfflineAction, AppError>;
 
-    /// オフラインアクションを取得
     async fn get_actions(
         &self,
-        entity_type: Option<String>,
-        entity_id: Option<String>,
-        status: Option<String>,
+        user_pubkey: Option<String>,
+        is_synced: Option<bool>,
         limit: Option<i32>,
-    ) -> Result<Vec<OfflineActionInfo>, AppError>;
+    ) -> Result<Vec<OfflineActionRecord>, AppError>;
 
-    /// アクションを同期
-    async fn sync_actions(&self, action_ids: Option<Vec<i64>>) -> Result<SyncResult, AppError>;
+    async fn sync_actions(&self, user_pubkey: String) -> Result<SyncResult, AppError>;
 
-    /// キャッシュステータスを取得
-    async fn get_cache_status(&self) -> Result<CacheStatus, AppError>;
+    async fn get_cache_status(&self) -> Result<CacheStatusData, AppError>;
 
-    /// 同期キューに追加
     async fn add_to_sync_queue(
         &self,
-        entity_type: String,
-        entity_id: String,
-        operation: String,
-        data: String,
+        action_type: String,
+        payload: Value,
         priority: Option<i32>,
     ) -> Result<i64, AppError>;
 
-    /// キャッシュメタデータを更新
     async fn update_cache_metadata(
         &self,
-        key: String,
-        metadata: String,
-        ttl: Option<i64>,
+        cache_key: String,
+        cache_type: String,
+        metadata: Option<Value>,
+        expiry_seconds: Option<i64>,
     ) -> Result<(), AppError>;
 
-    /// 楽観的更新を保存
     async fn save_optimistic_update(
         &self,
         entity_type: String,
@@ -89,19 +105,15 @@ pub trait OfflineServiceTrait: Send + Sync {
         updated_data: String,
     ) -> Result<String, AppError>;
 
-    /// 楽観的更新を確定
     async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError>;
 
-    /// 楽観的更新をロールバック
     async fn rollback_optimistic_update(
         &self,
         update_id: String,
     ) -> Result<Option<String>, AppError>;
 
-    /// 期限切れキャッシュをクリーンアップ
     async fn cleanup_expired_cache(&self) -> Result<i32, AppError>;
 
-    /// 同期ステータスを更新
     async fn update_sync_status(
         &self,
         entity_type: String,
@@ -111,14 +123,109 @@ pub trait OfflineServiceTrait: Send + Sync {
     ) -> Result<(), AppError>;
 }
 
-/// オフラインサービスの実装
 pub struct OfflineService {
-    repository: Arc<dyn Repository>,
+    manager: Arc<OfflineManager>,
 }
 
 impl OfflineService {
-    pub fn new(repository: Arc<dyn Repository>) -> Self {
-        Self { repository }
+    pub fn new(manager: Arc<OfflineManager>) -> Self {
+        Self { manager }
+    }
+
+    fn map_offline_action(action: ManagerOfflineAction) -> OfflineActionRecord {
+        OfflineActionRecord {
+            id: action.id,
+            user_pubkey: action.user_pubkey,
+            action_type: action.action_type,
+            target_id: action.target_id,
+            action_data: action.action_data,
+            local_id: action.local_id,
+            remote_id: action.remote_id,
+            is_synced: action.is_synced,
+            created_at: action.created_at,
+            synced_at: action.synced_at,
+            error_message: None,
+        }
+    }
+
+    fn map_cache_status(status: ManagerCacheStatusResponse) -> CacheStatusData {
+        CacheStatusData {
+            total_items: status.total_items,
+            stale_items: status.stale_items,
+            cache_types: status
+                .cache_types
+                .into_iter()
+                .map(|t: ManagerCacheTypeStatus| CacheTypeStatusData {
+                    cache_type: t.cache_type,
+                    item_count: t.item_count,
+                    last_synced_at: t.last_synced_at,
+                    is_stale: t.is_stale,
+                })
+                .collect(),
+        }
+    }
+
+    fn build_action_payload(
+        data: String,
+        entity_type: &str,
+        entity_id: &str,
+    ) -> Result<Value, AppError> {
+        let value = serde_json::from_str::<Value>(&data).map_err(|e| {
+            AppError::ValidationError(format!("Invalid data payload. Expected JSON: {e}"))
+        })?;
+
+        let mut map = value.as_object().cloned().ok_or_else(|| {
+            AppError::ValidationError("Data payload must be a JSON object".to_string())
+        })?;
+
+        map.insert(
+            "entityType".to_string(),
+            Value::String(entity_type.to_string()),
+        );
+        map.insert("entityId".to_string(), Value::String(entity_id.to_string()));
+
+        Ok(Value::Object(map))
+    }
+
+    fn to_saved_action(response: ManagerSaveOfflineActionResponse) -> SavedOfflineAction {
+        SavedOfflineAction {
+            local_id: response.local_id,
+            action: Self::map_offline_action(response.action),
+        }
+    }
+
+    fn filter_and_limit(
+        actions: Vec<ManagerOfflineAction>,
+        user_pubkey: Option<String>,
+        is_synced: Option<bool>,
+        limit: Option<i32>,
+    ) -> Vec<OfflineActionRecord> {
+        let mut filtered = actions
+            .into_iter()
+            .filter(|action| {
+                if let Some(ref user) = user_pubkey {
+                    if action.user_pubkey != *user {
+                        return false;
+                    }
+                }
+                if let Some(flag) = is_synced {
+                    if action.is_synced != flag {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(Self::map_offline_action)
+            .collect::<Vec<_>>();
+
+        if let Some(limit) = limit {
+            let limit = limit.max(0) as usize;
+            if filtered.len() > limit {
+                filtered.truncate(limit);
+            }
+        }
+
+        filtered
     }
 }
 
@@ -126,290 +233,155 @@ impl OfflineService {
 impl OfflineServiceTrait for OfflineService {
     async fn save_action(
         &self,
-        _entity_type: String,
-        _entity_id: String,
-        _action_type: String,
-        _payload: String,
-    ) -> Result<i64, AppError> {
-        // TODO: Repositoryを通じてオフラインアクションを保存
-        // 実装の参考: modules/offline/manager.rsのsave_offline_actionメソッド
-        // 1. UUIDでlocal_idを生成
-        // 2. 現在のタイムスタンプを設定
-        // 3. offline_actionsテーブルに挿入
-        let id = chrono::Utc::now().timestamp();
-        Ok(id)
+        user_pubkey: String,
+        action_type: String,
+        entity_type: String,
+        entity_id: String,
+        data: String,
+    ) -> Result<SavedOfflineAction, AppError> {
+        let payload = Self::build_action_payload(data, &entity_type, &entity_id)?;
+
+        let response = self
+            .manager
+            .save_offline_action(ManagerSaveOfflineActionRequest {
+                user_pubkey,
+                action_type,
+                target_id: Some(entity_id),
+                action_data: payload,
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(Self::to_saved_action(response))
     }
 
     async fn get_actions(
         &self,
-        entity_type: Option<String>,
-        entity_id: Option<String>,
-        status: Option<String>,
+        user_pubkey: Option<String>,
+        is_synced: Option<bool>,
         limit: Option<i32>,
-    ) -> Result<Vec<OfflineActionInfo>, AppError> {
-        // TODO: Repositoryを通じてオフラインアクションを取得
-        // フィルタリング条件を適用
-        let _limit = limit.unwrap_or(100);
-        let actions = Vec::new();
+    ) -> Result<Vec<OfflineActionRecord>, AppError> {
+        let manager_response = self
+            .manager
+            .get_offline_actions(ManagerGetOfflineActionsRequest {
+                user_pubkey: user_pubkey.clone(),
+                is_synced,
+                limit,
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // デモデータを返す
-        if entity_type.is_some() || entity_id.is_some() || status.is_some() {
-            // フィルタリングされた結果を返す
-        }
-
-        Ok(actions)
+        Ok(Self::filter_and_limit(
+            manager_response,
+            user_pubkey,
+            is_synced,
+            limit,
+        ))
     }
 
-    async fn sync_actions(&self, action_ids: Option<Vec<i64>>) -> Result<SyncResult, AppError> {
-        // TODO: オフラインアクションを同期
-        // 1. 指定されたアクションまたはすべての未同期アクションを取得
-        // 2. 各アクションをサーバーに送信
-        // 3. 成功したアクションをis_synced=trueに更新
-        let synced_count = action_ids.as_ref().map_or(0, |ids| ids.len());
+    async fn sync_actions(&self, user_pubkey: String) -> Result<SyncResult, AppError> {
+        let response = self
+            .manager
+            .sync_offline_actions(ManagerSyncOfflineActionsRequest { user_pubkey })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
 
         Ok(SyncResult {
-            synced_count,
-            failed_count: 0,
-            failed_actions: vec![],
+            synced_count: response.synced_count,
+            failed_count: response.failed_count,
+            pending_count: response.pending_count,
         })
     }
 
-    async fn get_cache_status(&self) -> Result<CacheStatus, AppError> {
-        // TODO: Repositoryを通じてキャッシュステータスを取得
-        // 1. cache_metadataテーブルから総アイテム数をカウント
-        // 2. 総サイズを計算
-        // 3. 最古と最新のアイテムのタイムスタンプを取得
-        Ok(CacheStatus {
-            total_size: 0,
-            item_count: 0,
-            oldest_item: None,
-            newest_item: None,
-        })
+    async fn get_cache_status(&self) -> Result<CacheStatusData, AppError> {
+        let status = self
+            .manager
+            .get_cache_status()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        Ok(Self::map_cache_status(status))
     }
 
     async fn add_to_sync_queue(
         &self,
-        _entity_type: String,
-        _entity_id: String,
-        _operation: String,
-        _data: String,
-        priority: Option<i32>,
+        action_type: String,
+        payload: Value,
+        _priority: Option<i32>,
     ) -> Result<i64, AppError> {
-        // TODO: Repositoryを通じて同期キューに追加
-        // sync_queueテーブルに挿入
-        let _priority = priority.unwrap_or(5);
-        let queue_id = chrono::Utc::now().timestamp();
-        Ok(queue_id)
+        self.manager
+            .add_to_sync_queue(ManagerAddToSyncQueueRequest {
+                action_type,
+                payload,
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn update_cache_metadata(
         &self,
-        _key: String,
-        _metadata: String,
-        _ttl: Option<i64>,
+        cache_key: String,
+        cache_type: String,
+        metadata: Option<Value>,
+        expiry_seconds: Option<i64>,
     ) -> Result<(), AppError> {
-        // TODO: キャッシュメタデータを更新
-        Ok(())
+        self.manager
+            .update_cache_metadata(ManagerUpdateCacheMetadataRequest {
+                cache_key,
+                cache_type,
+                metadata,
+                expiry_seconds,
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn save_optimistic_update(
         &self,
-        _entity_type: String,
-        _entity_id: String,
-        _original_data: Option<String>,
-        _updated_data: String,
+        entity_type: String,
+        entity_id: String,
+        original_data: Option<String>,
+        updated_data: String,
     ) -> Result<String, AppError> {
-        // TODO: Repositoryを通じて楽観的更新を保存
-        // 1. UUIDでupdate_idを生成
-        // 2. optimistic_updatesテーブルに保存
-        // 3. 元データと更新データを記録
-        use uuid::Uuid;
-        let update_id = Uuid::new_v4().to_string();
-        Ok(update_id)
+        self.manager
+            .save_optimistic_update(entity_type, entity_id, original_data, updated_data)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
-    async fn confirm_optimistic_update(&self, _update_id: String) -> Result<(), AppError> {
-        // TODO: 楽観的更新を確定
-        Ok(())
+    async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError> {
+        self.manager
+            .confirm_optimistic_update(update_id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn rollback_optimistic_update(
         &self,
-        _update_id: String,
+        update_id: String,
     ) -> Result<Option<String>, AppError> {
-        // TODO: 楽観的更新をロールバック
-        Ok(None)
+        self.manager
+            .rollback_optimistic_update(update_id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn cleanup_expired_cache(&self) -> Result<i32, AppError> {
-        // TODO: Repositoryを通じて期限切れキャッシュをクリーンアップ
-        // 1. 現在のタイムスタンプより古いTTLのアイテムを削除
-        // 2. 削除されたアイテム数を返す
-        let cleaned_count = 0;
-        Ok(cleaned_count)
+        self.manager
+            .cleanup_expired_cache()
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn update_sync_status(
         &self,
-        _entity_type: String,
-        _entity_id: String,
-        _sync_status: String,
-        _conflict_data: Option<String>,
+        entity_type: String,
+        entity_id: String,
+        sync_status: String,
+        conflict_data: Option<String>,
     ) -> Result<(), AppError> {
-        // TODO: 同期ステータスを更新
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // 注: OfflineServiceの現在の実装は多くのメソッドがTODOであり、
-    // 実際にはRepositoryを使用していないため、簡略化されたテストのみ実装
-
-    #[tokio::test]
-    async fn test_save_action_returns_timestamp() {
-        // save_actionは現在タイムスタンプを返すだけの実装
-        let result = OfflineServiceTrait::save_action(
-            &DummyOfflineService {},
-            "post".to_string(),
-            "post123".to_string(),
-            "create".to_string(),
-            r#"{"content": "test"}"#.to_string(),
-        )
-        .await;
-
-        assert!(result.is_ok());
-        let action_id = result.unwrap();
-        assert!(action_id > 0);
-    }
-
-    #[tokio::test]
-    async fn test_sync_actions_returns_correct_count() {
-        let action_ids = vec![1, 2, 3];
-        let result =
-            OfflineServiceTrait::sync_actions(&DummyOfflineService {}, Some(action_ids)).await;
-
-        assert!(result.is_ok());
-        let sync_result = result.unwrap();
-        assert_eq!(sync_result.synced_count, 3);
-        assert_eq!(sync_result.failed_count, 0);
-    }
-
-    #[tokio::test]
-    async fn test_save_optimistic_update_returns_uuid() {
-        let result = OfflineServiceTrait::save_optimistic_update(
-            &DummyOfflineService {},
-            "user".to_string(),
-            "user123".to_string(),
-            Some(r#"{"name": "old"}"#.to_string()),
-            r#"{"name": "new"}"#.to_string(),
-        )
-        .await;
-
-        assert!(result.is_ok());
-        let update_id = result.unwrap();
-        assert!(!update_id.is_empty());
-        assert!(update_id.contains('-')); // UUID形式をチェック
-    }
-
-    // テスト用のダミー実装
-    struct DummyOfflineService {}
-
-    #[async_trait]
-    impl OfflineServiceTrait for DummyOfflineService {
-        async fn save_action(
-            &self,
-            _entity_type: String,
-            _entity_id: String,
-            _action_type: String,
-            _payload: String,
-        ) -> Result<i64, AppError> {
-            Ok(chrono::Utc::now().timestamp())
-        }
-
-        async fn get_actions(
-            &self,
-            _entity_type: Option<String>,
-            _entity_id: Option<String>,
-            _status: Option<String>,
-            _limit: Option<i32>,
-        ) -> Result<Vec<OfflineActionInfo>, AppError> {
-            Ok(Vec::new())
-        }
-
-        async fn sync_actions(&self, action_ids: Option<Vec<i64>>) -> Result<SyncResult, AppError> {
-            let synced_count = action_ids.as_ref().map(|ids| ids.len()).unwrap_or(0);
-            Ok(SyncResult {
-                synced_count,
-                failed_count: 0,
-                failed_actions: Vec::new(),
-            })
-        }
-
-        async fn get_cache_status(&self) -> Result<CacheStatus, AppError> {
-            Ok(CacheStatus {
-                total_size: 0,
-                item_count: 0,
-                oldest_item: None,
-                newest_item: None,
-            })
-        }
-
-        async fn add_to_sync_queue(
-            &self,
-            _entity_type: String,
-            _entity_id: String,
-            _operation: String,
-            _data: String,
-            _priority: Option<i32>,
-        ) -> Result<i64, AppError> {
-            Ok(chrono::Utc::now().timestamp())
-        }
-
-        async fn update_cache_metadata(
-            &self,
-            _key: String,
-            _metadata: String,
-            _ttl: Option<i64>,
-        ) -> Result<(), AppError> {
-            Ok(())
-        }
-
-        async fn save_optimistic_update(
-            &self,
-            _entity_type: String,
-            _entity_id: String,
-            _original_data: Option<String>,
-            _updated_data: String,
-        ) -> Result<String, AppError> {
-            Ok(uuid::Uuid::new_v4().to_string())
-        }
-
-        async fn confirm_optimistic_update(&self, _update_id: String) -> Result<(), AppError> {
-            Ok(())
-        }
-
-        async fn rollback_optimistic_update(
-            &self,
-            _update_id: String,
-        ) -> Result<Option<String>, AppError> {
-            Ok(None)
-        }
-
-        async fn cleanup_expired_cache(&self) -> Result<i32, AppError> {
-            Ok(0)
-        }
-
-        async fn update_sync_status(
-            &self,
-            _entity_type: String,
-            _entity_id: String,
-            _sync_status: String,
-            _conflict_data: Option<String>,
-        ) -> Result<(), AppError> {
-            Ok(())
-        }
+        self.manager
+            .update_sync_status(entity_type, entity_id, sync_status, conflict_data)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 }

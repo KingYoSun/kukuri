@@ -3,12 +3,13 @@ use crate::{
     presentation::dto::{
         Validate,
         topic_dto::{
-            CreateTopicRequest, GetTopicStatsRequest, JoinTopicRequest, TopicResponse,
-            TopicStatsResponse,
+            CreateTopicRequest, DeleteTopicRequest, GetTopicStatsRequest, JoinTopicRequest,
+            TopicResponse, TopicStatsResponse, UpdateTopicRequest,
         },
     },
     shared::error::AppError,
 };
+use chrono::Utc;
 use std::sync::Arc;
 
 pub struct TopicHandler {
@@ -58,6 +59,55 @@ impl TopicHandler {
             created_at: t.created_at.timestamp(),
             updated_at: t.updated_at.timestamp(),
         }))
+    }
+
+    pub async fn update_topic(
+        &self,
+        request: UpdateTopicRequest,
+    ) -> Result<TopicResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let mut topic = self
+            .topic_service
+            .get_topic(&request.id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Topic not found".to_string()))?;
+
+        if let Some(name) = request.name {
+            topic.name = name;
+        }
+        if let Some(description) = request.description {
+            topic.description = Some(description);
+        }
+        if let Some(image_url) = request.image_url {
+            topic.image_url = if image_url.is_empty() {
+                None
+            } else {
+                Some(image_url)
+            };
+        }
+        topic.updated_at = Utc::now();
+
+        self.topic_service.update_topic(&topic).await?;
+
+        Ok(TopicResponse {
+            id: topic.id.clone(),
+            name: topic.name.clone(),
+            description: topic.description.clone().unwrap_or_default(),
+            image_url: topic.image_url.clone(),
+            member_count: topic.member_count,
+            post_count: topic.post_count,
+            is_joined: topic.is_joined,
+            created_at: topic.created_at.timestamp(),
+            updated_at: topic.updated_at.timestamp(),
+        })
+    }
+
+    pub async fn delete_topic(&self, request: DeleteTopicRequest) -> Result<(), AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        self.topic_service.delete_topic(&request.id).await?;
+        Ok(())
     }
 
     pub async fn get_all_topics(&self) -> Result<Vec<TopicResponse>, AppError> {

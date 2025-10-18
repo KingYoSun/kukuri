@@ -12,6 +12,7 @@ use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;
 use nostr_sdk::prelude::*;
+use serde_json::json;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -242,26 +243,39 @@ impl EventService {
         // Save to database
         self.repository.create_event(&event).await?;
 
-        // Process based on event kind
-        match EventKind::from_u32(event.kind) {
-            Some(EventKind::TextNote) => {
-                // TODO: Convert to Post and save
-            }
-            Some(EventKind::Metadata) => {
-                // TODO: Update user metadata
-            }
-            Some(EventKind::Reaction) => {
-                // TODO: Process reaction
-            }
-            Some(EventKind::Repost) => {
-                // TODO: Process repost
-            }
-            _ => {
-                // Unknown or unhandled event kind
+        // Delegate detailed processing to EventManager when available
+        if let Some(event_manager) = &self.event_manager {
+            if matches!(
+                EventKind::from_u32(event.kind),
+                Some(EventKind::TextNote)
+                    | Some(EventKind::Metadata)
+                    | Some(EventKind::Reaction)
+                    | Some(EventKind::Repost)
+            ) {
+                let nostr_event = Self::to_nostr_event(&event)?;
+                event_manager
+                    .handle_p2p_event(nostr_event)
+                    .await
+                    .map_err(|e| AppError::NostrError(e.to_string()))?;
             }
         }
 
         Ok(())
+    }
+
+    fn to_nostr_event(event: &Event) -> Result<nostr_sdk::Event, AppError> {
+        let event_json = json!({
+            "id": event.id,
+            "pubkey": event.pubkey,
+            "created_at": event.created_at.timestamp(),
+            "kind": event.kind,
+            "tags": event.tags,
+            "content": event.content,
+            "sig": event.sig,
+        });
+
+        nostr_sdk::Event::from_json(event_json.to_string())
+            .map_err(|e| AppError::NostrError(format!("Failed to convert event: {e}")))
     }
 
     pub async fn get_event(&self, id: &str) -> Result<Option<Event>, AppError> {

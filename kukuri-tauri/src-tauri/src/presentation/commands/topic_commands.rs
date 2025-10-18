@@ -71,24 +71,24 @@ pub async fn get_joined_topics(
 #[tauri::command]
 pub async fn update_topic(
     state: State<'_, AppState>,
-    _request: UpdateTopicRequest,
+    request: UpdateTopicRequest,
 ) -> Result<ApiResponse<TopicResponse>, AppError> {
     ensure_authenticated(&state).await?;
-    Ok(ApiResponse::from_app_error(AppError::NotImplemented(
-        "Topic update is not implemented yet".to_string(),
-    )))
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let result = handler.update_topic(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// トピックを削除する
 #[tauri::command]
 pub async fn delete_topic(
     state: State<'_, AppState>,
-    _request: DeleteTopicRequest,
+    request: DeleteTopicRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     ensure_authenticated(&state).await?;
-    Ok(ApiResponse::from_app_error(AppError::NotImplemented(
-        "Topic delete is not implemented yet".to_string(),
-    )))
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let result = handler.delete_topic(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// トピックに参加する
