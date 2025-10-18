@@ -18,10 +18,9 @@ export function BootstrapConfigPanel() {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await p2pApi.getBootstrapConfig();
-        const data = JSON.parse(raw) as { mode: Mode; nodes: string[] };
-        setMode(data.mode);
-        setNodes(data.nodes || []);
+        const data = await p2pApi.getBootstrapConfig();
+        setMode(data.mode as Mode);
+        setNodes(data.nodes ?? []);
       } catch (e) {
         errorHandler.log('Failed to load bootstrap config', e);
       }

@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { Route } from '../__root';
 import { useAuthStore } from '@/stores/authStore';
 import { useTopics, useP2P, useAuth } from '@/hooks';
+import { errorHandler } from '@/lib/errorHandler';
 
 // モック
 const mockNavigate = vi.fn();
@@ -34,6 +35,13 @@ vi.mock('@/hooks/useP2PEventListener', () => ({
 }));
 vi.mock('@/hooks/useDataSync', () => ({
   useDataSync: vi.fn(() => {}),
+}));
+vi.mock('@/lib/errorHandler', () => ({
+  errorHandler: {
+    log: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
 }));
 Object.defineProperty(window, 'location', {
   value: {
@@ -218,8 +226,7 @@ describe('__root (Authentication Guard)', () => {
     }
   });
 
-  it('トピックデータが読み込まれた時にコンソールログが出力される', async () => {
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('トピックデータが読み込まれた時にerrorHandlerへ情報ログを送る', async () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
 
@@ -238,14 +245,11 @@ describe('__root (Authentication Guard)', () => {
     render(<RootComponent />);
 
     await waitFor(() => {
-      expect(consoleLogSpy).toHaveBeenCalledWith('Topics loaded:', mockTopics);
+      expect(errorHandler.info).toHaveBeenCalledWith('Topics loaded', 'RootRoute.topicsEffect');
     });
-
-    consoleLogSpy.mockRestore();
   });
 
-  it('P2P初期化状態がコンソールログに出力される', async () => {
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('P2P初期化状態をerrorHandlerへ情報ログとして送る', async () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
 
@@ -261,9 +265,10 @@ describe('__root (Authentication Guard)', () => {
     render(<RootComponent />);
 
     await waitFor(() => {
-      expect(consoleLogSpy).toHaveBeenCalledWith('P2P initialized:', true);
+      expect(errorHandler.info).toHaveBeenCalledWith(
+        'P2P initialized: true',
+        'RootRoute.p2pEffect',
+      );
     });
-
-    consoleLogSpy.mockRestore();
   });
 });

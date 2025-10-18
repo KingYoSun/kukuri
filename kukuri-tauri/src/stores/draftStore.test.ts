@@ -225,7 +225,7 @@ describe('draftStore', () => {
       const store = useDraftStore.getState();
 
       const draft = store.createDraft({ content: 'Original', topicId: null });
-      console.log('1. Draft after creation:', {
+      console.info('1. Draft after creation:', {
         id: draft.id,
         content: draft.content,
         topicId: draft.topicId,
@@ -240,12 +240,12 @@ describe('draftStore', () => {
         content: 'Updated',
         topicId: null,
       };
-      console.log('2. Params being passed to autosaveDraft:', autosaveParams);
+      console.info('2. Params being passed to autosaveDraft:', autosaveParams);
 
       store.autosaveDraft(autosaveParams);
 
       const updatedDraft = store.getDraft(draft.id);
-      console.log('3. Draft after autosaveDraft:', {
+      console.info('3. Draft after autosaveDraft:', {
         id: updatedDraft?.id,
         content: updatedDraft?.content,
         topicId: updatedDraft?.topicId,

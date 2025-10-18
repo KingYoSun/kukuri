@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { listen } from '@tauri-apps/api/event';
+import { errorHandler } from '@/lib/errorHandler';
 
 interface NostrEventPayload {
   id: string;
@@ -58,6 +59,9 @@ export function NostrTestPanel() {
       setTestContent('');
     } catch (error) {
       const message = error instanceof Error ? error.message : '不明なエラー';
+      errorHandler.log('テキストノート送信に失敗しました', error, {
+        context: 'NostrTestPanel.handleTestTextNote',
+      });
       addResult(`❌ テキストノート送信失敗: ${message}`);
       toast.error('送信に失敗しました');
     } finally {
@@ -79,6 +83,9 @@ export function NostrTestPanel() {
       setTestContent('');
     } catch (error) {
       const message = error instanceof Error ? error.message : '不明なエラー';
+      errorHandler.log('トピック投稿送信に失敗しました', error, {
+        context: 'NostrTestPanel.handleTestTopicPost',
+      });
       addResult(`❌ トピック投稿送信失敗: ${message}`);
       toast.error('送信に失敗しました');
     } finally {
@@ -94,6 +101,9 @@ export function NostrTestPanel() {
       toast.success('トピックを購読しました');
     } catch (error) {
       const message = error instanceof Error ? error.message : '不明なエラー';
+      errorHandler.log('トピック購読に失敗しました', error, {
+        context: 'NostrTestPanel.handleSubscribeTopic',
+      });
       addResult(`❌ トピック購読失敗: ${message}`);
       toast.error('購読に失敗しました');
     } finally {
@@ -112,6 +122,9 @@ export function NostrTestPanel() {
       toast.success('リアクションを送信しました');
     } catch (error) {
       const message = error instanceof Error ? error.message : '不明なエラー';
+      errorHandler.log('リアクション送信に失敗しました', error, {
+        context: 'NostrTestPanel.handleTestReaction',
+      });
       addResult(`❌ リアクション送信失敗: ${message}`);
       toast.error('送信に失敗しました');
     } finally {

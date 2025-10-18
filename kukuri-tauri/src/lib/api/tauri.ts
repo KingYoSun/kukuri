@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand, invokeCommandVoid } from './tauriClient';
 
 // 認証関連の型定義
 export interface GenerateKeypairResponse {
@@ -69,71 +69,73 @@ export interface GetPostsRequest {
 export class TauriApi {
   // 認証関連
   static async generateKeypair(): Promise<GenerateKeypairResponse> {
-    return await invoke('generate_keypair');
+    return await invokeCommand<GenerateKeypairResponse>('generate_keypair');
   }
 
   static async login(request: LoginRequest): Promise<LoginResponse> {
-    return await invoke('login', { request });
+    return await invokeCommand<LoginResponse>('login', { request });
   }
 
   static async logout(): Promise<void> {
-    return await invoke('logout');
+    await invokeCommandVoid('logout');
   }
 
   // トピック関連
   static async getTopics(): Promise<Topic[]> {
-    return await invoke('get_topics');
+    return await invokeCommand<Topic[]>('get_topics');
   }
 
   static async getTopicStats(
     topicId: string,
   ): Promise<{ member_count: number; post_count: number }> {
-    return await invoke('get_topic_stats', { topicId });
+    return await invokeCommand<{ member_count: number; post_count: number }>('get_topic_stats', {
+      topicId,
+    });
   }
 
   static async createTopic(request: CreateTopicRequest): Promise<Topic> {
-    return await invoke('create_topic', { request });
+    return await invokeCommand<Topic>('create_topic', { request });
   }
 
   static async updateTopic(request: UpdateTopicRequest): Promise<Topic> {
-    return await invoke('update_topic', { request });
+    return await invokeCommand<Topic>('update_topic', { request });
   }
 
   static async deleteTopic(id: string): Promise<void> {
-    return await invoke('delete_topic', { id });
+    await invokeCommandVoid('delete_topic', { id });
   }
 
   // ポスト関連
   static async getPosts(request: GetPostsRequest = {}): Promise<Post[]> {
-    return await invoke('get_posts', { request });
+    return await invokeCommand<Post[]>('get_posts', { request });
   }
 
   static async createPost(request: CreatePostRequest): Promise<Post> {
-    return await invoke('create_post', { request });
+    return await invokeCommand<Post>('create_post', { request });
   }
 
   static async deletePost(id: string): Promise<void> {
-    return await invoke('delete_post', { id });
+    await invokeCommandVoid('delete_post', { id });
   }
 
   static async likePost(postId: string): Promise<void> {
-    return await invoke('like_post', { postId });
+    await invokeCommandVoid('like_post', { postId });
   }
 
   static async boostPost(postId: string): Promise<void> {
-    return await invoke('boost_post', { postId });
+    await invokeCommandVoid('boost_post', { postId });
   }
 
   static async bookmarkPost(postId: string): Promise<void> {
-    return await invoke('bookmark_post', { postId });
+    await invokeCommandVoid('bookmark_post', { postId });
   }
 
   static async unbookmarkPost(postId: string): Promise<void> {
-    return await invoke('unbookmark_post', { postId });
+    await invokeCommandVoid('unbookmark_post', { postId });
   }
 
   static async getBookmarkedPostIds(): Promise<string[]> {
-    return await invoke('get_bookmarked_post_ids');
+    return await invokeCommand<string[]>('get_bookmarked_post_ids');
   }
 }
 
@@ -163,18 +165,25 @@ export interface NostrEvent {
   tags: string[][];
 }
 
+interface EventCommandResponse {
+  event_id: string;
+  success: boolean;
+  message?: string | null;
+}
+
 // Nostr API
 export class NostrAPI {
   static async initialize(): Promise<void> {
-    return await invoke('initialize_nostr');
+    await invokeCommandVoid('initialize_nostr');
   }
 
   static async addRelay(url: string): Promise<void> {
-    return await invoke('add_relay', { url });
+    await invokeCommandVoid('add_relay', { url });
   }
 
   static async publishTextNote(content: string): Promise<string> {
-    return await invoke('publish_text_note', { content });
+    const response = await invokeCommand<EventCommandResponse>('publish_text_note', { content });
+    return response.event_id;
   }
 
   static async publishTopicPost(
@@ -182,38 +191,69 @@ export class NostrAPI {
     content: string,
     replyTo?: string,
   ): Promise<string> {
-    return await invoke('publish_topic_post', { topicId, content, replyTo });
+    const response = await invokeCommand<EventCommandResponse>('publish_topic_post', {
+      topicId,
+      content,
+      replyTo,
+    });
+    return response.event_id;
   }
 
   static async sendReaction(eventId: string, reaction: string): Promise<string> {
-    return await invoke('send_reaction', { eventId, reaction });
+    const response = await invokeCommand<EventCommandResponse>('send_reaction', {
+      eventId,
+      reaction,
+    });
+    return response.event_id;
   }
 
   static async updateMetadata(metadata: NostrMetadata): Promise<string> {
-    return await invoke('update_nostr_metadata', { metadata });
+    const response = await invokeCommand<EventCommandResponse>('update_nostr_metadata', {
+      metadata,
+    });
+    return response.event_id;
   }
 
   static async subscribeToTopic(topicId: string): Promise<void> {
-    return await invoke('subscribe_to_topic', { topicId });
+    await invokeCommandVoid('subscribe_to_topic', { topicId });
   }
 
   static async subscribeToUser(pubkey: string): Promise<void> {
-    return await invoke('subscribe_to_user', { pubkey });
+    await invokeCommandVoid('subscribe_to_user', { pubkey });
   }
 
   static async getNostrPubkey(): Promise<string | null> {
-    return await invoke('get_nostr_pubkey');
+    const response = await invokeCommand<{ pubkey: string | null }>('get_nostr_pubkey');
+    return response.pubkey ?? null;
+  }
+
+  static async listSubscriptions(): Promise<{
+    subscriptions: Array<{
+      target: string;
+      target_type: 'topic' | 'user';
+      status: string;
+      last_synced_at: number | null;
+      last_attempt_at: number | null;
+      failure_count: number;
+      error_message: string | null;
+    }>;
+  }> {
+    return await invokeCommand('list_nostr_subscriptions');
   }
 
   static async deleteEvents(eventIds: string[], reason?: string): Promise<string> {
-    return await invoke('delete_events', { eventIds, reason });
+    const response = await invokeCommand<EventCommandResponse>('delete_events', {
+      eventIds,
+      reason,
+    });
+    return response.event_id;
   }
 
   static async disconnect(): Promise<void> {
-    return await invoke('disconnect_nostr');
+    await invokeCommandVoid('disconnect_nostr');
   }
 
   static async getRelayStatus(): Promise<RelayInfo[]> {
-    return await invoke('get_relay_status');
+    return await invokeCommand<RelayInfo[]>('get_relay_status');
   }
 }

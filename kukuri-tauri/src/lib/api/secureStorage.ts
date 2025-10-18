@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand, invokeCommandVoid } from '@/lib/api/tauriClient';
 
 export interface AccountMetadata {
   npub: string;
@@ -47,48 +47,48 @@ export const SecureStorageApi = {
    * 新しいアカウントを追加
    */
   async addAccount(request: AddAccountRequest): Promise<AddAccountResponse> {
-    return await invoke<AddAccountResponse>('add_account', { request });
+    return await invokeCommand<AddAccountResponse>('add_account', { request });
   },
 
   /**
    * 保存されているアカウント一覧を取得
    */
   async listAccounts(): Promise<AccountMetadata[]> {
-    return await invoke<AccountMetadata[]>('list_accounts');
+    return await invokeCommand<AccountMetadata[]>('list_accounts');
   },
 
   /**
    * アカウントを切り替え
    */
   async switchAccount(npub: string): Promise<SwitchAccountResponse> {
-    return await invoke<SwitchAccountResponse>('switch_account', { npub });
+    return await invokeCommand<SwitchAccountResponse>('switch_account', { npub });
   },
 
   /**
    * アカウントを削除
    */
   async removeAccount(npub: string): Promise<void> {
-    return await invoke<void>('remove_account', { npub });
+    await invokeCommandVoid('remove_account', { npub });
   },
 
   /**
    * 現在のアカウント情報を取得（自動ログイン用）
    */
   async getCurrentAccount(): Promise<GetCurrentAccountResponse | null> {
-    return await invoke<GetCurrentAccountResponse | null>('get_current_account');
+    return await invokeCommand<GetCurrentAccountResponse | null>('get_current_account');
   },
 
   /**
    * セキュアストレージからログイン
    */
   async secureLogin(npub: string): Promise<LoginResponse> {
-    return await invoke<LoginResponse>('secure_login', { npub });
+    return await invokeCommand<LoginResponse>('secure_login', { npub });
   },
 
   /**
    * 全てのアカウントデータをクリア（テスト用、デバッグビルドのみ）
    */
   async clearAllAccountsForTest(): Promise<void> {
-    return await invoke<void>('clear_all_accounts_for_test');
+    await invokeCommandVoid('clear_all_accounts_for_test');
   },
 };

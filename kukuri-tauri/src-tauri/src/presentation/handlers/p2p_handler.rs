@@ -1,11 +1,11 @@
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::p2p::{
-    BroadcastRequest, GossipMetricsSummaryResponse, JoinTopicRequest, LeaveTopicRequest,
-    NodeAddressResponse, P2PStatusResponse, TopicStatus,
+    BroadcastRequest, GossipMetricsSummaryResponse, JoinTopicByNameRequest,
+    JoinTopicByNameResponse, JoinTopicRequest, LeaveTopicRequest, NodeAddressResponse,
+    P2PStatusResponse, TopicStatus,
 };
 use crate::shared::error::AppError;
-use serde_json::json;
 use std::sync::Arc;
 
 pub struct P2PHandler {
@@ -18,49 +18,33 @@ impl P2PHandler {
     }
 
     /// P2Pネットワークを初期化
-    pub async fn initialize_p2p(&self) -> Result<serde_json::Value, AppError> {
-        self.p2p_service.initialize().await?;
-        Ok(json!({ "success": true }))
+    pub async fn initialize_p2p(&self) -> Result<(), AppError> {
+        self.p2p_service.initialize().await
     }
 
     /// P2Pトピックに参加
-    pub async fn join_topic(
-        &self,
-        request: JoinTopicRequest,
-    ) -> Result<serde_json::Value, AppError> {
+    pub async fn join_topic(&self, request: JoinTopicRequest) -> Result<(), AppError> {
         request.validate()?;
 
         self.p2p_service
             .join_topic(&request.topic_id, request.initial_peers)
-            .await?;
-
-        Ok(json!({ "success": true }))
+            .await
     }
 
     /// P2Pトピックから離脱
-    pub async fn leave_topic(
-        &self,
-        request: LeaveTopicRequest,
-    ) -> Result<serde_json::Value, AppError> {
+    pub async fn leave_topic(&self, request: LeaveTopicRequest) -> Result<(), AppError> {
         request.validate()?;
 
-        self.p2p_service.leave_topic(&request.topic_id).await?;
-
-        Ok(json!({ "success": true }))
+        self.p2p_service.leave_topic(&request.topic_id).await
     }
 
     /// トピックにメッセージをブロードキャスト
-    pub async fn broadcast_to_topic(
-        &self,
-        request: BroadcastRequest,
-    ) -> Result<serde_json::Value, AppError> {
+    pub async fn broadcast_to_topic(&self, request: BroadcastRequest) -> Result<(), AppError> {
         request.validate()?;
 
         self.p2p_service
             .broadcast_message(&request.topic_id, &request.content)
-            .await?;
-
-        Ok(json!({ "success": true }))
+            .await
     }
 
     /// P2Pステータスを取得
@@ -109,25 +93,16 @@ impl P2PHandler {
     /// トピック名で参加
     pub async fn join_topic_by_name(
         &self,
-        topic_name: String,
-        initial_peers: Vec<String>,
-    ) -> Result<serde_json::Value, AppError> {
-        if topic_name.is_empty() {
-            return Err(AppError::ValidationError(
-                "Topic name is required".to_string(),
-            ));
-        }
+        request: JoinTopicByNameRequest,
+    ) -> Result<JoinTopicByNameResponse, AppError> {
+        request.validate()?;
 
-        // トピック名からIDを生成してjoin_topicを呼び出す
-        let topic_id = self.p2p_service.generate_topic_id(&topic_name);
+        let topic_id = self.p2p_service.generate_topic_id(&request.topic_name);
 
         self.p2p_service
-            .join_topic(&topic_id, initial_peers)
+            .join_topic(&topic_id, request.initial_peers)
             .await?;
 
-        Ok(json!({
-            "success": true,
-            "topic_id": topic_id
-        }))
+        Ok(JoinTopicByNameResponse { topic_id })
     }
 }

@@ -75,6 +75,12 @@ pub struct NodeAddressResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BootstrapConfigResponse {
+    pub mode: String,
+    pub nodes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GossipMetricsResponse {
     pub joins: u64,
     pub leaves: u64,
@@ -145,4 +151,9 @@ impl Validate for JoinTopicByNameRequest {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JoinTopicByNameResponse {
+    pub topic_id: String,
 }

@@ -1,12 +1,20 @@
 # エラーハンドリングガイドライン
 
-最終更新: 2025年7月28日
+最終更新: 2025年10月18日
 
 ## 概要
 
 kukuriプロジェクトでは、統一されたエラーハンドリングを実現するため、`errorHandler`ユーティリティを使用します。
 
 ## 基本ルール
+
+### ESLintによる強制
+`eslint.config.js` では `no-console` ルールを有効化し、`console.warn` / `console.info` のみ使用可能としました。開発・テストでのログは必要に応じて `errorHandler.info` / `errorHandler.warn` を利用してください。
+
+```javascript
+// eslint.config.js（抜粋）
+'no-console': ['error', { allow: ['warn', 'info'] }],
+```
 
 ### ❌ 使用禁止
 ```typescript
@@ -178,6 +186,49 @@ try {
 ```
 
 ## 今後の拡張予定
+
+## バックエンド（Tauri/Rust）との連携
+
+### AppError の共通化
+Rust 側では `thiserror` を用いた `AppError` 列挙体でドメインエラーを一元管理します。各バリアントには `code()`（機械判定用）と `user_message()`（UI表示用）を実装しています。
+
+```rust
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("Database error: {0}")]
+    Database(String),
+    // ...
+}
+
+impl AppError {
+    pub fn code(&self) -> &'static str { /* DATABASE_ERROR など */ }
+    pub fn user_message(&self) -> String { /* ユーザー向け日本語メッセージ */ }
+}
+```
+
+### ApiResponse の拡張
+すべての Tauri コマンドは `ApiResponse<T>` を返し、成功/失敗を統一形式で扱います。失敗時は `error` にユーザー向けメッセージ、`error_code` に `AppError::code()` を格納します。
+
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+    pub error_code: Option<String>,
+}
+
+impl<T> ApiResponse<T> {
+    pub fn from_result(result: crate::shared::Result<T>) -> Self {
+        match result {
+            Ok(data) => Self::success(data),
+            Err(err) => Self::from_app_error(err),
+        }
+    }
+}
+```
+
+フロントエンドで `invoke` を用いる際は、`success` / `error_code` を参照し、`errorHandler` でログと通知を行ってください。
 
 1. **エラーレポーティング**: Sentry等の外部サービスとの連携
 2. **エラー分析**: エラーパターンの自動検出と通知

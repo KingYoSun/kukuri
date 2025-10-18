@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { SendIcon, NetworkIcon, TrashIcon, WifiIcon, WifiOffIcon } from 'lucide-react';
+import { errorHandler } from '@/lib/errorHandler';
 
 const formatPercent = (value: number) => {
   if (!Number.isFinite(value)) {
@@ -93,6 +94,9 @@ export function P2PDebugPanel() {
       setNewTopicId('');
       setSelectedTopic(newTopicId.trim());
     } catch (error) {
+      errorHandler.log('トピック参加に失敗しました', error, {
+        context: 'P2PDebugPanel.handleJoinTopic',
+      });
       addLog(`Failed to join topic: ${error}`);
     } finally {
       setIsLoading(false);
@@ -112,6 +116,9 @@ export function P2PDebugPanel() {
           setSelectedTopic('');
         }
       } catch (error) {
+        errorHandler.log('トピック離脱に失敗しました', error, {
+          context: 'P2PDebugPanel.handleLeaveTopic',
+        });
         addLog(`Failed to leave topic: ${error}`);
       } finally {
         setIsLoading(false);
@@ -132,6 +139,9 @@ export function P2PDebugPanel() {
       addLog(`Message broadcast successfully`);
       setMessageContent('');
     } catch (error) {
+      errorHandler.log('メッセージ送信に失敗しました', error, {
+        context: 'P2PDebugPanel.handleBroadcast',
+      });
       addLog(`Failed to broadcast: ${error}`);
     } finally {
       setIsLoading(false);
@@ -146,6 +156,9 @@ export function P2PDebugPanel() {
         `Metrics updated: gossip join=${m.gossip.joins}/${m.gossip.join_details.failures} fail, routing=${formatPercent(m.mainline.routing_success_rate)} (${m.mainline.routing_successes}/${m.mainline.routing_failures}), reconnect=${m.mainline.reconnect_successes}/${m.mainline.reconnect_failures}`,
       );
     } catch (e) {
+      errorHandler.log('P2Pメトリクスの取得に失敗しました', e, {
+        context: 'P2PDebugPanel.handleRefreshMetrics',
+      });
       addLog(`Failed to fetch metrics: ${e}`);
     }
   }, [addLog]);

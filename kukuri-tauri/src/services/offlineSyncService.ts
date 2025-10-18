@@ -115,11 +115,11 @@ export class OfflineSyncService {
       return;
     }
 
-    console.log(`Starting sync for ${pendingCount} pending actions`);
+    errorHandler.info(`Starting sync for ${pendingCount} pending actions`, 'OfflineSyncService');
 
     try {
       await offlineStore.syncPendingActions(authStore.currentUser.pubkey);
-      console.log('Sync completed successfully');
+      errorHandler.info('Sync completed successfully', 'OfflineSyncService');
 
       // 成功時はリトライタイマーをクリア
       if (this.retryTimeout) {

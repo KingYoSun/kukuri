@@ -1,5 +1,8 @@
 use crate::application::services::UserService;
 use crate::domain::entities::UserMetadata;
+use crate::presentation::dto::ApiResponse;
+use crate::shared::AppError;
+use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
 
@@ -7,26 +10,32 @@ use tauri::State;
 pub async fn get_user(
     npub: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<Option<serde_json::Value>, String> {
-    let user = user_service
+) -> Result<ApiResponse<Option<Value>>, AppError> {
+    let result = user_service
         .get_user(&npub)
         .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(user.map(|u| serde_json::to_value(u).unwrap()))
+        .map_err(AppError::from)
+        .and_then(|user| {
+            user.map(|u| serde_json::to_value(u).map_err(AppError::from))
+                .transpose()
+        });
+    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
 pub async fn get_user_by_pubkey(
     pubkey: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<Option<serde_json::Value>, String> {
-    let user = user_service
+) -> Result<ApiResponse<Option<Value>>, AppError> {
+    let result = user_service
         .get_user_by_pubkey(&pubkey)
         .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(user.map(|u| serde_json::to_value(u).unwrap()))
+        .map_err(AppError::from)
+        .and_then(|user| {
+            user.map(|u| serde_json::to_value(u).map_err(AppError::from))
+                .transpose()
+        });
+    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
@@ -34,11 +43,12 @@ pub async fn update_profile(
     npub: String,
     metadata: UserMetadata,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<(), String> {
-    user_service
+) -> Result<ApiResponse<()>, AppError> {
+    let result = user_service
         .update_profile(&npub, metadata)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(AppError::from);
+    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
@@ -46,11 +56,12 @@ pub async fn follow_user(
     follower_npub: String,
     target_npub: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<(), String> {
-    user_service
+) -> Result<ApiResponse<()>, AppError> {
+    let result = user_service
         .follow_user(&follower_npub, &target_npub)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(AppError::from);
+    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
@@ -58,41 +69,46 @@ pub async fn unfollow_user(
     follower_npub: String,
     target_npub: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<(), String> {
-    user_service
+) -> Result<ApiResponse<()>, AppError> {
+    let result = user_service
         .unfollow_user(&follower_npub, &target_npub)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(AppError::from);
+    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
 pub async fn get_followers(
     npub: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<Vec<serde_json::Value>, String> {
-    let followers = user_service
+) -> Result<ApiResponse<Vec<Value>>, AppError> {
+    let result = user_service
         .get_followers(&npub)
         .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(followers
-        .into_iter()
-        .map(|u| serde_json::to_value(u).unwrap())
-        .collect())
+        .map_err(AppError::from)
+        .and_then(|followers| {
+            followers
+                .into_iter()
+                .map(|u| serde_json::to_value(u).map_err(AppError::from))
+                .collect::<Result<Vec<_>, _>>()
+        });
+    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
 pub async fn get_following(
     npub: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<Vec<serde_json::Value>, String> {
-    let following = user_service
+) -> Result<ApiResponse<Vec<Value>>, AppError> {
+    let result = user_service
         .get_following(&npub)
         .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(following
-        .into_iter()
-        .map(|u| serde_json::to_value(u).unwrap())
-        .collect())
+        .map_err(AppError::from)
+        .and_then(|following| {
+            following
+                .into_iter()
+                .map(|u| serde_json::to_value(u).map_err(AppError::from))
+                .collect::<Result<Vec<_>, _>>()
+        });
+    Ok(ApiResponse::from_result(result))
 }

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach, MockedFunction } from 'vitest';
 import { NostrTestPanel } from '../NostrTestPanel';
+import type { CommandResponse } from '@/lib/api/tauriClient';
 
 // Tauri APIをモック
 vi.mock('@tauri-apps/api/core', () => ({
@@ -34,6 +35,13 @@ const mockInvoke = invoke as MockedFunction<typeof invoke>;
 const mockListen = listen as MockedFunction<typeof listen>;
 const mockUseAuthStore = useAuthStore as unknown as MockedFunction<typeof useAuthStore>;
 
+const successResponse = <T>(data: T): CommandResponse<T> => ({
+  success: true,
+  data,
+  error: null,
+  error_code: null,
+});
+
 describe('NostrTestPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -60,7 +68,9 @@ describe('NostrTestPanel', () => {
 
   it('sends text note when button is clicked', async () => {
     const mockEventId = 'test-event-id-123';
-    mockInvoke.mockResolvedValueOnce(mockEventId);
+    mockInvoke.mockResolvedValueOnce(
+      successResponse({ event_id: mockEventId, success: true, message: null }),
+    );
 
     render(<NostrTestPanel />);
 
@@ -85,7 +95,9 @@ describe('NostrTestPanel', () => {
 
   it('sends topic post with form data', async () => {
     const mockEventId = 'topic-event-id-456';
-    mockInvoke.mockResolvedValueOnce(mockEventId);
+    mockInvoke.mockResolvedValueOnce(
+      successResponse({ event_id: mockEventId, success: true, message: null }),
+    );
 
     render(<NostrTestPanel />);
 
@@ -116,7 +128,9 @@ describe('NostrTestPanel', () => {
 
   it('sends reaction with form data', async () => {
     const mockReactionId = 'reaction-id-789';
-    mockInvoke.mockResolvedValueOnce(mockReactionId);
+    mockInvoke.mockResolvedValueOnce(
+      successResponse({ event_id: mockReactionId, success: true, message: null }),
+    );
 
     render(<NostrTestPanel />);
 
@@ -141,7 +155,7 @@ describe('NostrTestPanel', () => {
   });
 
   it('subscribes to topic', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
+    mockInvoke.mockResolvedValueOnce(successResponse(null));
 
     render(<NostrTestPanel />);
 

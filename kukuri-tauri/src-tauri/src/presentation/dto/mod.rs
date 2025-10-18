@@ -8,6 +8,7 @@ pub mod topic_dto;
 pub mod user_dto;
 
 // 共通のレスポンス型
+use crate::shared::AppError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -15,6 +16,7 @@ pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
     pub error: Option<String>,
+    pub error_code: Option<String>,
 }
 
 impl<T> ApiResponse<T> {
@@ -23,6 +25,7 @@ impl<T> ApiResponse<T> {
             success: true,
             data: Some(data),
             error: None,
+            error_code: None,
         }
     }
 
@@ -31,6 +34,23 @@ impl<T> ApiResponse<T> {
             success: false,
             data: None,
             error: Some(error),
+            error_code: None,
+        }
+    }
+
+    pub fn from_app_error(error: AppError) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(error.user_message()),
+            error_code: Some(error.code().to_string()),
+        }
+    }
+
+    pub fn from_result(result: crate::shared::Result<T>) -> Self {
+        match result {
+            Ok(data) => Self::success(data),
+            Err(err) => Self::from_app_error(err),
         }
     }
 }

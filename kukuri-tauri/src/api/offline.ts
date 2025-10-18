@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand, invokeCommandVoid } from '@/lib/api/tauriClient';
 import type {
   SaveOfflineActionRequest,
   SaveOfflineActionResponse,
@@ -19,14 +19,14 @@ export const offlineApi = {
    * オフラインアクションを保存
    */
   async saveOfflineAction(request: SaveOfflineActionRequest): Promise<SaveOfflineActionResponse> {
-    return invoke('save_offline_action', { request });
+    return invokeCommand('save_offline_action', { request });
   },
 
   /**
    * オフラインアクションを取得
    */
   async getOfflineActions(request: GetOfflineActionsRequest = {}): Promise<OfflineAction[]> {
-    return invoke('get_offline_actions', { request });
+    return invokeCommand('get_offline_actions', { request });
   },
 
   /**
@@ -35,28 +35,28 @@ export const offlineApi = {
   async syncOfflineActions(
     request: SyncOfflineActionsRequest,
   ): Promise<SyncOfflineActionsResponse> {
-    return invoke('sync_offline_actions', { request });
+    return invokeCommand('sync_offline_actions', { request });
   },
 
   /**
    * キャッシュステータスを取得
    */
   async getCacheStatus(): Promise<CacheStatusResponse> {
-    return invoke('get_cache_status');
+    return invokeCommand('get_cache_status');
   },
 
   /**
    * 同期キューに追加
    */
   async addToSyncQueue(request: AddToSyncQueueRequest): Promise<number> {
-    return invoke('add_to_sync_queue', { request });
+    return invokeCommand('add_to_sync_queue', { request });
   },
 
   /**
    * キャッシュメタデータを更新
    */
   async updateCacheMetadata(request: UpdateCacheMetadataRequest): Promise<void> {
-    return invoke('update_cache_metadata', { request });
+    await invokeCommandVoid('update_cache_metadata', { request });
   },
 
   /**
@@ -68,7 +68,7 @@ export const offlineApi = {
     originalData: string | null,
     updatedData: string,
   ): Promise<string> {
-    return invoke('save_optimistic_update', {
+    return invokeCommand('save_optimistic_update', {
       entityType,
       entityId,
       originalData,
@@ -80,21 +80,21 @@ export const offlineApi = {
    * 楽観的更新を確認
    */
   async confirmOptimisticUpdate(updateId: string): Promise<void> {
-    return invoke('confirm_optimistic_update', { updateId });
+    await invokeCommandVoid('confirm_optimistic_update', { updateId });
   },
 
   /**
    * 楽観的更新をロールバック
    */
   async rollbackOptimisticUpdate(updateId: string): Promise<string | null> {
-    return invoke('rollback_optimistic_update', { updateId });
+    return invokeCommand('rollback_optimistic_update', { updateId });
   },
 
   /**
    * 期限切れキャッシュをクリーンアップ
    */
   async cleanupExpiredCache(): Promise<number> {
-    return invoke('cleanup_expired_cache');
+    return invokeCommand('cleanup_expired_cache');
   },
 
   /**
@@ -106,7 +106,7 @@ export const offlineApi = {
     syncStatus: string,
     conflictData: string | null = null,
   ): Promise<void> {
-    return invoke('update_sync_status', {
+    await invokeCommandVoid('update_sync_status', {
       entityType,
       entityId,
       syncStatus,

@@ -50,6 +50,7 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off',
       'react-hooks/exhaustive-deps': 'off',
       'no-undef': 'off', // TypeScriptが処理するため
+      'no-console': ['error', { allow: ['warn', 'info'] }],
     },
     settings: {
       react: {

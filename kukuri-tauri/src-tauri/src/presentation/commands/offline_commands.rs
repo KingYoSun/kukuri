@@ -1,10 +1,13 @@
+use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::offline::{
     AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest, OfflineAction,
     OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
     SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
     UpdateSyncStatusRequest,
 };
+use crate::shared::AppError;
 use crate::state::AppState;
+use serde_json::Value;
 use tauri::State;
 
 /// オフラインアクションを保存
@@ -12,12 +15,9 @@ use tauri::State;
 pub async fn save_offline_action(
     state: State<'_, AppState>,
     request: SaveOfflineActionRequest,
-) -> Result<SaveOfflineActionResponse, String> {
-    state
-        .offline_handler
-        .save_offline_action(request)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<ApiResponse<SaveOfflineActionResponse>, AppError> {
+    let result = state.offline_handler.save_offline_action(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// オフラインアクションを取得
@@ -25,12 +25,9 @@ pub async fn save_offline_action(
 pub async fn get_offline_actions(
     state: State<'_, AppState>,
     request: GetOfflineActionsRequest,
-) -> Result<Vec<OfflineAction>, String> {
-    state
-        .offline_handler
-        .get_offline_actions(request)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<ApiResponse<Vec<OfflineAction>>, AppError> {
+    let result = state.offline_handler.get_offline_actions(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// オフラインアクションを同期
@@ -38,22 +35,18 @@ pub async fn get_offline_actions(
 pub async fn sync_offline_actions(
     state: State<'_, AppState>,
     request: SyncOfflineActionsRequest,
-) -> Result<SyncOfflineActionsResponse, String> {
-    state
-        .offline_handler
-        .sync_offline_actions(request)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<ApiResponse<SyncOfflineActionsResponse>, AppError> {
+    let result = state.offline_handler.sync_offline_actions(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// キャッシュステータスを取得
 #[tauri::command]
-pub async fn get_cache_status(state: State<'_, AppState>) -> Result<CacheStatusResponse, String> {
-    state
-        .offline_handler
-        .get_cache_status()
-        .await
-        .map_err(|e| e.to_string())
+pub async fn get_cache_status(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<CacheStatusResponse>, AppError> {
+    let result = state.offline_handler.get_cache_status().await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 同期キューに追加
@@ -61,12 +54,9 @@ pub async fn get_cache_status(state: State<'_, AppState>) -> Result<CacheStatusR
 pub async fn add_to_sync_queue(
     state: State<'_, AppState>,
     request: AddToSyncQueueRequest,
-) -> Result<i64, String> {
-    state
-        .offline_handler
-        .add_to_sync_queue(request)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<ApiResponse<i64>, AppError> {
+    let result = state.offline_handler.add_to_sync_queue(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// キャッシュメタデータを更新
@@ -74,13 +64,9 @@ pub async fn add_to_sync_queue(
 pub async fn update_cache_metadata(
     state: State<'_, AppState>,
     request: UpdateCacheMetadataRequest,
-) -> Result<String, String> {
-    state
-        .offline_handler
-        .update_cache_metadata(request)
-        .await
-        .map(|response| serde_json::to_string(&response).unwrap())
-        .map_err(|e| e.to_string())
+) -> Result<ApiResponse<Value>, AppError> {
+    let result = state.offline_handler.update_cache_metadata(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 楽観的更新を保存
@@ -91,7 +77,7 @@ pub async fn save_optimistic_update(
     entity_id: String,
     original_data: Option<String>,
     updated_data: String,
-) -> Result<String, String> {
+) -> Result<ApiResponse<String>, AppError> {
     let request = OptimisticUpdateRequest {
         entity_type,
         entity_id,
@@ -99,11 +85,8 @@ pub async fn save_optimistic_update(
         updated_data,
     };
 
-    state
-        .offline_handler
-        .save_optimistic_update(request)
-        .await
-        .map_err(|e| e.to_string())
+    let result = state.offline_handler.save_optimistic_update(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 楽観的更新を確定
@@ -111,13 +94,12 @@ pub async fn save_optimistic_update(
 pub async fn confirm_optimistic_update(
     state: State<'_, AppState>,
     update_id: String,
-) -> Result<String, String> {
-    state
+) -> Result<ApiResponse<Value>, AppError> {
+    let result = state
         .offline_handler
         .confirm_optimistic_update(update_id)
-        .await
-        .map(|response| serde_json::to_string(&response).unwrap())
-        .map_err(|e| e.to_string())
+        .await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 楽観的更新をロールバック
@@ -125,22 +107,21 @@ pub async fn confirm_optimistic_update(
 pub async fn rollback_optimistic_update(
     state: State<'_, AppState>,
     update_id: String,
-) -> Result<Option<String>, String> {
-    state
+) -> Result<ApiResponse<Option<String>>, AppError> {
+    let result = state
         .offline_handler
         .rollback_optimistic_update(update_id)
-        .await
-        .map_err(|e| e.to_string())
+        .await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 期限切れキャッシュをクリーンアップ
 #[tauri::command]
-pub async fn cleanup_expired_cache(state: State<'_, AppState>) -> Result<i32, String> {
-    state
-        .offline_handler
-        .cleanup_expired_cache()
-        .await
-        .map_err(|e| e.to_string())
+pub async fn cleanup_expired_cache(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<i32>, AppError> {
+    let result = state.offline_handler.cleanup_expired_cache().await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 同期ステータスを更新
@@ -151,7 +132,7 @@ pub async fn update_sync_status(
     entity_id: String,
     sync_status: String,
     conflict_data: Option<String>,
-) -> Result<String, String> {
+) -> Result<ApiResponse<Value>, AppError> {
     let request = UpdateSyncStatusRequest {
         entity_type,
         entity_id,
@@ -159,10 +140,6 @@ pub async fn update_sync_status(
         conflict_data,
     };
 
-    state
-        .offline_handler
-        .update_sync_status(request)
-        .await
-        .map(|response| serde_json::to_string(&response).unwrap())
-        .map_err(|e| e.to_string())
+    let result = state.offline_handler.update_sync_status(request).await;
+    Ok(ApiResponse::from_result(result))
 }

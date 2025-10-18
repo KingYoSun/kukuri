@@ -128,14 +128,14 @@ export const useAuthStore = create<AuthStore>()(
 
           // セキュアストレージに保存
           if (saveToSecureStorage) {
-            console.log('Saving new account to secure storage...');
+            errorHandler.info('Saving new account to secure storage...', 'AuthStore.generateNewKeypair');
             await SecureStorageApi.addAccount({
               nsec: response.nsec,
               name: user.name,
               display_name: user.displayName,
               picture: user.picture,
             });
-            console.log('Account saved successfully');
+            errorHandler.info('Account saved successfully', 'AuthStore.generateNewKeypair');
           }
 
           set({
@@ -228,14 +228,20 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       initialize: async () => {
-        console.log('Auth store initialization started...');
+        errorHandler.info('Auth store initialization started...', 'AuthStore.initialize');
         try {
           // セキュアストレージから現在のアカウントを取得
           const currentAccount = await SecureStorageApi.getCurrentAccount();
-          console.log('Current account from secure storage:', currentAccount);
+          errorHandler.info(
+            `Current account from secure storage: ${currentAccount?.npub ?? 'unknown'}`,
+            'AuthStore.initialize',
+          );
 
           if (currentAccount) {
-            console.log('Auto-login with account:', currentAccount.npub);
+            errorHandler.info(
+              `Auto-login with account: ${currentAccount.npub}`,
+              'AuthStore.initialize',
+            );
             // 自動ログイン
             const user: User = {
               id: currentAccount.pubkey,
@@ -258,9 +264,9 @@ export const useAuthStore = create<AuthStore>()(
             await initializeNostr();
             // リレー状態を更新
             await useAuthStore.getState().updateRelayStatus();
-            console.log('Auto-login completed successfully');
+            errorHandler.info('Auto-login completed successfully', 'AuthStore.initialize');
           } else {
-            console.log('No current account found in secure storage');
+            errorHandler.info('No current account found in secure storage', 'AuthStore.initialize');
             // アカウントが見つからない場合は初期状態
             set({
               isAuthenticated: false,
@@ -272,7 +278,7 @@ export const useAuthStore = create<AuthStore>()(
 
           // アカウントリストを読み込み
           await useAuthStore.getState().loadAccounts();
-          console.log('Auth store initialization completed');
+          errorHandler.info('Auth store initialization completed', 'AuthStore.initialize');
         } catch (error) {
           errorHandler.log('Failed to initialize auth store', error, {
             context: 'AuthStore.initialize',

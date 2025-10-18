@@ -10,31 +10,29 @@ use crate::{
         },
         handlers::PostHandler,
     },
+    shared::AppError,
     state::AppState,
 };
 use tauri::State;
+
+async fn ensure_authenticated(state: &State<'_, AppState>) -> Result<String, AppError> {
+    let keys = state
+        .key_manager
+        .get_keys()
+        .await
+        .map_err(|e| AppError::Unauthorized(format!("ログインが必要です: {e}")))?;
+    Ok(keys.public_key().to_hex())
+}
 
 /// 投稿を作成する
 #[tauri::command]
 pub async fn create_post(
     state: State<'_, AppState>,
     request: CreatePostRequest,
-) -> Result<ApiResponse<PostResponse>, String> {
-    // 認証チェック
-    let _user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
-    // PostHandlerを使用
+) -> Result<ApiResponse<PostResponse>, AppError> {
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.create_post(request).await {
-        Ok(post) => Ok(ApiResponse::success(post)),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.create_post(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 投稿を取得する
@@ -42,12 +40,10 @@ pub async fn create_post(
 pub async fn get_posts(
     state: State<'_, AppState>,
     request: GetPostsRequest,
-) -> Result<ApiResponse<Vec<PostResponse>>, String> {
+) -> Result<ApiResponse<Vec<PostResponse>>, AppError> {
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.get_posts(request).await {
-        Ok(posts) => Ok(ApiResponse::success(posts)),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.get_posts(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 投稿を削除する
@@ -55,21 +51,10 @@ pub async fn get_posts(
 pub async fn delete_post(
     state: State<'_, AppState>,
     request: DeletePostRequest,
-) -> Result<ApiResponse<()>, String> {
-    // 認証チェック
-    let _user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<()>, AppError> {
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.delete_post(request).await {
-        Ok(_) => Ok(ApiResponse::success(())),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.delete_post(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 投稿にリアクションする
@@ -77,21 +62,11 @@ pub async fn delete_post(
 pub async fn react_to_post(
     state: State<'_, AppState>,
     request: ReactToPostRequest,
-) -> Result<ApiResponse<()>, String> {
-    // 認証チェック
-    let _user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<()>, AppError> {
+    ensure_authenticated(&state).await?;
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.react_to_post(request).await {
-        Ok(_) => Ok(ApiResponse::success(())),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.react_to_post(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 投稿をブックマークする
@@ -99,21 +74,11 @@ pub async fn react_to_post(
 pub async fn bookmark_post(
     state: State<'_, AppState>,
     request: BookmarkPostRequest,
-) -> Result<ApiResponse<()>, String> {
-    // 認証チェック
-    let user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<()>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.bookmark_post(request, &user_pubkey).await {
-        Ok(_) => Ok(ApiResponse::success(())),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.bookmark_post(request, &user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// ブックマークを解除する
@@ -121,21 +86,11 @@ pub async fn bookmark_post(
 pub async fn unbookmark_post(
     state: State<'_, AppState>,
     request: BookmarkPostRequest,
-) -> Result<ApiResponse<()>, String> {
-    // 認証チェック
-    let user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<()>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.unbookmark_post(request, &user_pubkey).await {
-        Ok(_) => Ok(ApiResponse::success(())),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.unbookmark_post(request, &user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 投稿にいいねする（旧APIとの互換性のため）
@@ -143,7 +98,7 @@ pub async fn unbookmark_post(
 pub async fn like_post(
     state: State<'_, AppState>,
     post_id: String,
-) -> Result<ApiResponse<()>, String> {
+) -> Result<ApiResponse<()>, AppError> {
     let request = ReactToPostRequest {
         post_id,
         reaction: "+".to_string(),
@@ -156,21 +111,11 @@ pub async fn like_post(
 #[tauri::command]
 pub async fn get_bookmarked_post_ids(
     state: State<'_, AppState>,
-) -> Result<ApiResponse<Vec<String>>, String> {
-    // 認証チェック
-    let user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<Vec<String>>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.get_bookmarked_post_ids(&user_pubkey).await {
-        Ok(post_ids) => Ok(ApiResponse::success(post_ids)),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.get_bookmarked_post_ids(&user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 // バッチ処理コマンド
@@ -180,12 +125,10 @@ pub async fn get_bookmarked_post_ids(
 pub async fn batch_get_posts(
     state: State<'_, AppState>,
     request: BatchGetPostsRequest,
-) -> Result<ApiResponse<Vec<PostResponse>>, String> {
+) -> Result<ApiResponse<Vec<PostResponse>>, AppError> {
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.batch_get_posts(request).await {
-        Ok(posts) => Ok(ApiResponse::success(posts)),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.batch_get_posts(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 複数のリアクションを一括処理する
@@ -193,21 +136,11 @@ pub async fn batch_get_posts(
 pub async fn batch_react(
     state: State<'_, AppState>,
     request: BatchReactRequest,
-) -> Result<ApiResponse<Vec<Result<(), String>>>, String> {
-    // 認証チェック
-    let _user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<Vec<Result<(), String>>>, AppError> {
+    ensure_authenticated(&state).await?;
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.batch_react(request).await {
-        Ok(results) => Ok(ApiResponse::success(results)),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.batch_react(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 複数のブックマークを一括処理する
@@ -215,21 +148,11 @@ pub async fn batch_react(
 pub async fn batch_bookmark(
     state: State<'_, AppState>,
     request: BatchBookmarkRequest,
-) -> Result<ApiResponse<Vec<Result<(), String>>>, String> {
-    // 認証チェック
-    let user_pubkey = state
-        .key_manager
-        .get_keys()
-        .await
-        .map_err(|e| format!("ログインが必要です: {e}"))?
-        .public_key()
-        .to_hex();
-
+) -> Result<ApiResponse<Vec<Result<(), String>>>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
     let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
-    match handler.batch_bookmark(request, &user_pubkey).await {
-        Ok(results) => Ok(ApiResponse::success(results)),
-        Err(e) => Ok(ApiResponse::error(e.to_string())),
-    }
+    let result = handler.batch_bookmark(request, &user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 投稿をブーストする（旧APIとの互換性のため）
@@ -237,7 +160,7 @@ pub async fn batch_bookmark(
 pub async fn boost_post(
     state: State<'_, AppState>,
     post_id: String,
-) -> Result<ApiResponse<()>, String> {
+) -> Result<ApiResponse<()>, AppError> {
     let request = ReactToPostRequest {
         post_id,
         reaction: "boost".to_string(),
@@ -251,11 +174,13 @@ pub async fn boost_post(
 pub async fn get_post(
     state: State<'_, AppState>,
     id: String,
-) -> Result<Option<serde_json::Value>, String> {
-    match state.post_service.get_post(&id).await {
-        Ok(post) => Ok(post.map(|p| serde_json::to_value(p).unwrap())),
-        Err(e) => Err(e.to_string()),
-    }
+) -> Result<Option<serde_json::Value>, AppError> {
+    state
+        .post_service
+        .get_post(&id)
+        .await?
+        .map(|p| serde_json::to_value(p).map_err(AppError::from))
+        .transpose()
 }
 
 /// トピック別の投稿を取得する（旧APIとの互換性のため）
@@ -264,26 +189,24 @@ pub async fn get_posts_by_topic(
     state: State<'_, AppState>,
     topic_id: String,
     limit: Option<usize>,
-) -> Result<Vec<serde_json::Value>, String> {
-    match state
+) -> Result<Vec<serde_json::Value>, AppError> {
+    let posts = state
         .post_service
         .get_posts_by_topic(&topic_id, limit.unwrap_or(50))
-        .await
-    {
-        Ok(posts) => Ok(posts
-            .into_iter()
-            .map(|p| serde_json::to_value(p).unwrap())
-            .collect()),
-        Err(e) => Err(e.to_string()),
-    }
+        .await?;
+
+    posts
+        .into_iter()
+        .map(|p| serde_json::to_value(p).map_err(AppError::from))
+        .collect()
 }
 
 /// 保留中の投稿を同期する
 #[tauri::command]
-pub async fn sync_posts(state: State<'_, AppState>) -> Result<u32, String> {
+pub async fn sync_posts(state: State<'_, AppState>) -> Result<u32, AppError> {
     state
         .post_service
         .sync_pending_posts()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(AppError::from)
 }

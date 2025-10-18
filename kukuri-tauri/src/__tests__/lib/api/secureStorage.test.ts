@@ -4,6 +4,7 @@ import {
   type AccountMetadata,
   type AddAccountRequest,
 } from '@/lib/api/secureStorage';
+import type { CommandResponse } from '@/lib/api/tauriClient';
 
 // @tauri-apps/api/coreのモック
 vi.mock('@tauri-apps/api/core', () => ({
@@ -12,6 +13,13 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 import { invoke } from '@tauri-apps/api/core';
 const mockInvoke = invoke as unknown as ReturnType<typeof vi.fn>;
+
+const successResponse = <T>(data: T): CommandResponse<T> => ({
+  success: true,
+  data,
+  error: null,
+  error_code: null,
+});
 
 describe('SecureStorageApi', () => {
   beforeEach(() => {
@@ -32,7 +40,7 @@ describe('SecureStorageApi', () => {
         pubkey: 'pubkey123',
       };
 
-      mockInvoke.mockResolvedValueOnce(mockResponse);
+      mockInvoke.mockResolvedValueOnce(successResponse(mockResponse));
 
       const result = await SecureStorageApi.addAccount(request);
 
@@ -73,7 +81,7 @@ describe('SecureStorageApi', () => {
         },
       ];
 
-      mockInvoke.mockResolvedValueOnce(mockAccounts);
+      mockInvoke.mockResolvedValueOnce(successResponse(mockAccounts));
 
       const result = await SecureStorageApi.listAccounts();
 
@@ -83,7 +91,7 @@ describe('SecureStorageApi', () => {
     });
 
     it('should return empty array when no accounts', async () => {
-      mockInvoke.mockResolvedValueOnce([]);
+      mockInvoke.mockResolvedValueOnce(successResponse([]));
 
       const result = await SecureStorageApi.listAccounts();
 
@@ -99,7 +107,7 @@ describe('SecureStorageApi', () => {
         pubkey: 'pubkey123',
       };
 
-      mockInvoke.mockResolvedValueOnce(mockResponse);
+      mockInvoke.mockResolvedValueOnce(successResponse(mockResponse));
 
       const result = await SecureStorageApi.switchAccount(npub);
 
@@ -120,7 +128,7 @@ describe('SecureStorageApi', () => {
     it('should remove account successfully', async () => {
       const npub = 'npub1test123';
 
-      mockInvoke.mockResolvedValueOnce(undefined);
+      mockInvoke.mockResolvedValueOnce(successResponse(null));
 
       await SecureStorageApi.removeAccount(npub);
 
@@ -154,7 +162,7 @@ describe('SecureStorageApi', () => {
         },
       };
 
-      mockInvoke.mockResolvedValueOnce(mockAccount);
+      mockInvoke.mockResolvedValueOnce(successResponse(mockAccount));
 
       const result = await SecureStorageApi.getCurrentAccount();
 
@@ -163,7 +171,7 @@ describe('SecureStorageApi', () => {
     });
 
     it('should return null when no current account', async () => {
-      mockInvoke.mockResolvedValueOnce(null);
+      mockInvoke.mockResolvedValueOnce(successResponse(null));
 
       const result = await SecureStorageApi.getCurrentAccount();
 
@@ -179,7 +187,7 @@ describe('SecureStorageApi', () => {
         npub: 'npub1test123',
       };
 
-      mockInvoke.mockResolvedValueOnce(mockResponse);
+      mockInvoke.mockResolvedValueOnce(successResponse(mockResponse));
 
       const result = await SecureStorageApi.secureLogin(npub);
 

@@ -6,6 +6,7 @@ import { useP2PEventListener } from '@/hooks/useP2PEventListener';
 import { useDataSync } from '@/hooks/useDataSync';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { errorHandler } from '@/lib/errorHandler';
 
 function RootComponent() {
   const navigate = useNavigate();
@@ -58,13 +59,13 @@ function RootComponent() {
   useEffect(() => {
     // 初期トピックデータの読み込み
     if (topics) {
-      console.log('Topics loaded:', topics);
+      errorHandler.info('Topics loaded', 'RootRoute.topicsEffect');
     }
   }, [topics]);
 
   useEffect(() => {
     // P2P初期化の確認
-    console.log('P2P initialized:', p2pInitialized);
+    errorHandler.info(`P2P initialized: ${p2pInitialized}`, 'RootRoute.p2pEffect');
   }, [p2pInitialized]);
 
   if (isInitializing) {

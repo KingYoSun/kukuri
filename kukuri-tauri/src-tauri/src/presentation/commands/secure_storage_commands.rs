@@ -1,12 +1,13 @@
 use crate::{
     infrastructure::storage::secure_storage::AccountMetadata,
     presentation::{
-        dto::auth_dto::LoginResponse,
+        dto::{ApiResponse, auth_dto::LoginResponse},
         handlers::secure_storage_handler::{
             AddAccountRequest, AddAccountResponse, GetCurrentAccountResponse, SecureStorageHandler,
             SwitchAccountResponse,
         },
     },
+    shared::AppError,
     state::AppState,
 };
 use tauri::State;
@@ -16,21 +17,20 @@ use tauri::State;
 pub async fn add_account(
     state: State<'_, AppState>,
     request: AddAccountRequest,
-) -> Result<AddAccountResponse, String> {
+) -> Result<ApiResponse<AddAccountResponse>, AppError> {
     let handler = SecureStorageHandler::new(state.auth_service.clone());
-
-    handler
-        .add_account(request)
-        .await
-        .map_err(|e| e.to_string())
+    let result = handler.add_account(request).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// アカウント一覧を取得
 #[tauri::command]
-pub async fn list_accounts(state: State<'_, AppState>) -> Result<Vec<AccountMetadata>, String> {
+pub async fn list_accounts(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<AccountMetadata>>, AppError> {
     let handler = SecureStorageHandler::new(state.auth_service.clone());
-
-    handler.list_accounts().await.map_err(|e| e.to_string())
+    let result = handler.list_accounts().await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// アカウントを切り替え
@@ -38,37 +38,31 @@ pub async fn list_accounts(state: State<'_, AppState>) -> Result<Vec<AccountMeta
 pub async fn switch_account(
     state: State<'_, AppState>,
     npub: String,
-) -> Result<SwitchAccountResponse, String> {
+) -> Result<ApiResponse<SwitchAccountResponse>, AppError> {
     let handler = SecureStorageHandler::new(state.auth_service.clone());
-
-    handler
-        .switch_account(npub)
-        .await
-        .map_err(|e| e.to_string())
+    let result = handler.switch_account(npub).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// アカウントを削除
 #[tauri::command]
-pub async fn remove_account(state: State<'_, AppState>, npub: String) -> Result<(), String> {
+pub async fn remove_account(
+    state: State<'_, AppState>,
+    npub: String,
+) -> Result<ApiResponse<()>, AppError> {
     let handler = SecureStorageHandler::new(state.auth_service.clone());
-
-    handler
-        .remove_account(npub)
-        .await
-        .map_err(|e| e.to_string())
+    let result = handler.remove_account(npub).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 現在のアカウントを取得
 #[tauri::command]
 pub async fn get_current_account(
     state: State<'_, AppState>,
-) -> Result<Option<GetCurrentAccountResponse>, String> {
+) -> Result<ApiResponse<Option<GetCurrentAccountResponse>>, AppError> {
     let handler = SecureStorageHandler::new(state.auth_service.clone());
-
-    handler
-        .get_current_account()
-        .await
-        .map_err(|e| e.to_string())
+    let result = handler.get_current_account().await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// セキュアログイン
@@ -76,22 +70,30 @@ pub async fn get_current_account(
 pub async fn secure_login(
     state: State<'_, AppState>,
     npub: String,
-) -> Result<LoginResponse, String> {
+) -> Result<ApiResponse<LoginResponse>, AppError> {
     let handler = SecureStorageHandler::new(state.auth_service.clone());
 
-    handler.secure_login(npub).await.map_err(|e| e.to_string())
+    let result = handler.secure_login(npub).await;
+    Ok(ApiResponse::from_result(result))
 }
 
 /// 全てのアカウントデータをクリア（テスト用）
 #[tauri::command]
-pub async fn clear_all_accounts_for_test(_state: State<'_, AppState>) -> Result<(), String> {
-    use crate::modules::secure_storage::SecureStorage;
-
-    // プロダクションビルドでは実行を拒否
+pub async fn clear_all_accounts_for_test(
+    _state: State<'_, AppState>,
+) -> Result<ApiResponse<()>, AppError> {
     #[cfg(not(debug_assertions))]
     {
-        return Err("This command is only available in debug builds".to_string());
+        return Err(AppError::ConfigurationError(
+            "This command is only available in debug builds".to_string(),
+        ));
     }
 
-    SecureStorage::clear_all_accounts().map_err(|e| e.to_string())
+    #[cfg(debug_assertions)]
+    {
+        use crate::modules::secure_storage::SecureStorage;
+
+        SecureStorage::clear_all_accounts().map_err(|e| AppError::Storage(e.to_string()))?;
+        Ok(ApiResponse::success(()))
+    }
 }

@@ -1,49 +1,86 @@
-use std::fmt;
+use serde::Serialize;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error, Serialize)]
 pub enum AppError {
+    #[error("Database error: {0}")]
     Database(String),
+    #[error("Network error: {0}")]
     Network(String),
+    #[error("Crypto error: {0}")]
     Crypto(String),
+    #[error("Storage error: {0}")]
     Storage(String),
+    #[error("Auth error: {0}")]
     Auth(String),
+    #[error("Unauthorized: {0}")]
     Unauthorized(String),
+    #[error("Not found: {0}")]
     NotFound(String),
+    #[error("Invalid input: {0}")]
     InvalidInput(String),
+    #[error("Validation error: {0}")]
     ValidationError(String),
+    #[error("Nostr error: {0}")]
     NostrError(String),
+    #[error("P2P error: {0}")]
     P2PError(String),
+    #[error("Configuration error: {0}")]
     ConfigurationError(String),
+    #[error("Serialization error: {0}")]
     SerializationError(String),
+    #[error("Deserialization error: {0}")]
     DeserializationError(String),
+    #[error("Not implemented: {0}")]
     NotImplemented(String),
+    #[error("Internal error: {0}")]
     Internal(String),
 }
 
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl AppError {
+    pub fn code(&self) -> &'static str {
         match self {
-            AppError::Database(msg) => write!(f, "Database error: {msg}"),
-            AppError::Network(msg) => write!(f, "Network error: {msg}"),
-            AppError::Crypto(msg) => write!(f, "Crypto error: {msg}"),
-            AppError::Storage(msg) => write!(f, "Storage error: {msg}"),
-            AppError::Auth(msg) => write!(f, "Auth error: {msg}"),
-            AppError::Unauthorized(msg) => write!(f, "Unauthorized: {msg}"),
-            AppError::NotFound(msg) => write!(f, "Not found: {msg}"),
-            AppError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
-            AppError::ValidationError(msg) => write!(f, "Validation error: {msg}"),
-            AppError::NostrError(msg) => write!(f, "Nostr error: {msg}"),
-            AppError::P2PError(msg) => write!(f, "P2P error: {msg}"),
-            AppError::ConfigurationError(msg) => write!(f, "Configuration error: {msg}"),
-            AppError::SerializationError(msg) => write!(f, "Serialization error: {msg}"),
-            AppError::DeserializationError(msg) => write!(f, "Deserialization error: {msg}"),
-            AppError::NotImplemented(msg) => write!(f, "Not implemented: {msg}"),
-            AppError::Internal(msg) => write!(f, "Internal error: {msg}"),
+            AppError::Database(_) => "DATABASE_ERROR",
+            AppError::Network(_) => "NETWORK_ERROR",
+            AppError::Crypto(_) => "CRYPTO_ERROR",
+            AppError::Storage(_) => "STORAGE_ERROR",
+            AppError::Auth(_) => "AUTH_ERROR",
+            AppError::Unauthorized(_) => "UNAUTHORIZED",
+            AppError::NotFound(_) => "NOT_FOUND",
+            AppError::InvalidInput(_) => "INVALID_INPUT",
+            AppError::ValidationError(_) => "VALIDATION_ERROR",
+            AppError::NostrError(_) => "NOSTR_ERROR",
+            AppError::P2PError(_) => "P2P_ERROR",
+            AppError::ConfigurationError(_) => "CONFIGURATION_ERROR",
+            AppError::SerializationError(_) => "SERIALIZATION_ERROR",
+            AppError::DeserializationError(_) => "DESERIALIZATION_ERROR",
+            AppError::NotImplemented(_) => "NOT_IMPLEMENTED",
+            AppError::Internal(_) => "INTERNAL_ERROR",
         }
     }
-}
 
-impl std::error::Error for AppError {}
+    pub fn user_message(&self) -> String {
+        match self {
+            AppError::Database(_) => "データベース処理中にエラーが発生しました。",
+            AppError::Network(_) => "ネットワーク通信でエラーが発生しました。",
+            AppError::Crypto(_) => "暗号処理でエラーが発生しました。",
+            AppError::Storage(_) => "ストレージ操作でエラーが発生しました。",
+            AppError::Auth(_) => "認証処理に失敗しました。",
+            AppError::Unauthorized(_) => "この操作を行うにはログインが必要です。",
+            AppError::NotFound(_) => "対象のデータが見つかりませんでした。",
+            AppError::InvalidInput(_) => "入力値に誤りがあります。",
+            AppError::ValidationError(_) => "入力の検証でエラーが発生しました。",
+            AppError::NostrError(_) => "Nostr処理でエラーが発生しました。",
+            AppError::P2PError(_) => "P2P処理でエラーが発生しました。",
+            AppError::ConfigurationError(_) => "アプリ設定に問題があります。",
+            AppError::SerializationError(_) => "データ変換でエラーが発生しました。",
+            AppError::DeserializationError(_) => "データ読み込みでエラーが発生しました。",
+            AppError::NotImplemented(_) => "この機能はまだ実装されていません。",
+            AppError::Internal(_) => "内部エラーが発生しました。",
+        }
+        .to_string()
+    }
+}
 
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {

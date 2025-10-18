@@ -1,6 +1,7 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { p2pApi } from '../p2p';
 import type { P2PMetrics, P2PStatus, TopicStatus } from '../p2p';
+import type { CommandResponse } from '../tauriClient';
 
 // Tauri API縺ｮ繝｢繝・け
 vi.mock('@tauri-apps/api/core', () => ({
@@ -9,6 +10,13 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 import { invoke } from '@tauri-apps/api/core';
 
+const successResponse = <T>(data: T): CommandResponse<T> => ({
+  success: true,
+  data,
+  error: null,
+  error_code: null,
+});
+
 describe('p2pApi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -16,7 +24,7 @@ describe('p2pApi', () => {
 
   describe('initialize', () => {
     it('should initialize P2P', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.initialize();
 
@@ -33,7 +41,7 @@ describe('p2pApi', () => {
 
   describe('joinTopic', () => {
     it('should join topic with initial peers', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.joinTopic('test-topic', ['peer1', 'peer2']);
 
@@ -44,7 +52,7 @@ describe('p2pApi', () => {
     });
 
     it('should join topic without initial peers', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.joinTopic('test-topic');
 
@@ -57,7 +65,7 @@ describe('p2pApi', () => {
 
   describe('joinTopicByName', () => {
     it('should join topic by name', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.joinTopicByName('Bitcoin', ['peer1']);
 
@@ -70,7 +78,7 @@ describe('p2pApi', () => {
 
   describe('leaveTopic', () => {
     it('should leave topic', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.leaveTopic('test-topic');
 
@@ -82,7 +90,7 @@ describe('p2pApi', () => {
 
   describe('broadcast', () => {
     it('should broadcast message to topic', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.broadcast('test-topic', 'Hello, P2P!');
 
@@ -115,7 +123,7 @@ describe('p2pApi', () => {
         },
       };
 
-      vi.mocked(invoke).mockResolvedValueOnce(mockStatus);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(mockStatus));
 
       const status = await p2pApi.getStatus();
 
@@ -137,7 +145,7 @@ describe('p2pApi', () => {
         },
       };
 
-      vi.mocked(invoke).mockResolvedValueOnce(mockStatus);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(mockStatus));
 
       const status = await p2pApi.getStatus();
 
@@ -150,7 +158,7 @@ describe('p2pApi', () => {
     it('should get node addresses', async () => {
       const mockAddresses = ['/ip4/192.168.1.1/udp/4001', '/ip6/::1/udp/4001'];
 
-      vi.mocked(invoke).mockResolvedValueOnce(mockAddresses);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse({ addresses: mockAddresses }));
 
       const addresses = await p2pApi.getNodeAddress();
 
@@ -159,7 +167,7 @@ describe('p2pApi', () => {
     });
 
     it('should handle empty addresses', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce([]);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse({ addresses: [] }));
 
       const addresses = await p2pApi.getNodeAddress();
 
@@ -210,7 +218,7 @@ describe('p2pApi', () => {
           last_reconnect_failure_ms: 6500,
         },
       };
-      vi.mocked(invoke).mockResolvedValueOnce(mockMetrics);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(mockMetrics));
 
       const metrics = await p2pApi.getMetrics();
 
@@ -221,7 +229,7 @@ describe('p2pApi', () => {
 
   describe('connectToPeer', () => {
     it('should connect to a peer with valid address', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.connectToPeer('/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample');
 
@@ -239,7 +247,7 @@ describe('p2pApi', () => {
     });
 
     it('should connect to IPv6 peer', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(undefined);
+      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
       await p2pApi.connectToPeer('/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWExample');
 
