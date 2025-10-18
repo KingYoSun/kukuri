@@ -73,5 +73,7 @@
 - 2025年10月19日: OfflineService/Handler を OfflineManager ベースの実装に刷新し、Tauri 側 DTO を camelCase スキーマへ統一。`save_offline_action` で entityType/entityId を含む JSON を永続化できるよう調整し、取得・同期・メタデータ更新系のコマンドも更新済み。`cargo fmt` / `cargo test` がWindows環境でも通過することを確認済み。
 - 2025年10月19日: EventServiceの削除イベントをEventManager経由の発行に切り替え、OfflineService向けにインメモリSQLiteを用いた単体テスト群を追加。`cargo test` をローカルで完走し、Phase 2 TODO の完了を確認。
 - 2025年10月19日: TopicService/TopicHandler 経由でユーザー単位の参加状態を扱えるようにし、`join_topic`/`leave_topic`/`get_topic_stats` コマンドを Phase 2 仕様へ更新。Tauri/TypeScript 双方を揃え、`cargo test` で後方互換を確認。
+- 2025年10月19日: GitHub Actions ワークフロー失敗の原因特定に着手。`gh run list` で最新失敗ジョブを洗い出し、`gh act` によるローカル再現準備を開始。
+- 2025年10月19日: `src/lib/api/tauri.ts` を Prettier で整形し、`pnpm format:check` と `gh act -j format-check` が成功することを確認。CI フォーマットジョブの失敗を解消。
 - 2025年10月20日: P2PServiceのmessage_count統計をTopicMeshベースで提供するよう更新し、Mockテストでカバレッジを追加。OfflineReindexJobにイベントエミッタの抽象化を導入し、完了イベントの監視パスをユニットテストで検証。
 - 2025年10月20日: Windows 環境で `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` により異常終了。Docker 経由（`./scripts/test-docker.ps1 rust`）で Rust テストを再確認予定。

@@ -93,9 +93,7 @@ export class TauriApi {
     return await invokeCommand<Topic[]>('get_topics');
   }
 
-  static async getTopicStats(
-    topicId: string,
-  ): Promise<TopicStats> {
+  static async getTopicStats(topicId: string): Promise<TopicStats> {
     return await invokeCommand<TopicStats>('get_topic_stats', {
       request: { topic_id: topicId },
     });
