@@ -1,4 +1,4 @@
-[title] 作業中タスク（in_progress）
+﻿[title] 作業中タスク（in_progress）
 
 最終更新日: 2025年10月17日
 
@@ -24,9 +24,9 @@
 
 ## EventService DHT購読・復元の強化
 
-- [ ] DHT購読状態を永続化するステートマシンを設計し、`EventService` に実装。
-- [ ] 再接続時の購読復元シーケンスをテストで検証（離脱→再接続→履歴同期）。
-- [ ] UI 側で購読状態と同期状況を可視化するフックを追加（P2PDebugPanel 連携）。
+- [x] DHT購読状態を永続化するステートマシンを設計し、`EventService` に実装（8d97b15で `SubscriptionStateMachine` を追加）。
+- [x] 再接続時の購読復元シーケンスをテストで検証（離脱→再接続→履歴同期）し、ConnectionEvent監視から呼び出す復元経路を整備。
+- [x] UI 側で購読状態と同期状況を可視化するフックを追加し、P2PDebugPanel に購読一覧を表示。
 
 ## エラーハンドリング統一タスク
 
@@ -52,6 +52,8 @@
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 メモ/進捗ログ:
+- 2025年10月18日: `SubscriptionStateMachine` を `kukuri-tauri/src-tauri/src/application/services/subscription_state.rs` に導入し、`nostr_subscriptions` テーブルで購読対象・状態・再同期時刻を管理。接続断検知で `needs_resync` へ遷移し、再接続時に `EventService::handle_network_connected` から自動復元する流れを実装。
+- 2025年10月18日: `list_nostr_subscriptions` コマンドと `useNostrSubscriptions` フックを追加し、`P2PDebugPanel` に購読対象・最終同期時刻・失敗回数を可視化するセクションを組み込み。
 - 2025年10月18日: GitHub Actions の Format Check 失敗を確認し、`src/components/P2PDebugPanel.tsx` と `src/stores/offlineStore.ts` を Prettier で整形。`pnpm format:check` が成功することをローカルで確認。
 - 2025年10月18日: P2P接続イベントから再索引ジョブをトリガーするウォッチャーと、`offline://reindex_*` イベントに応答してUIストアを更新する処理を実装。
 - 2025年10月18日: `IrohNetworkService` の接続イベントを用いた再索引結合テストを追加し、再接続時に同期キューへ再投入されることを検証。
@@ -62,5 +64,3 @@
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。
-- 2025�N10��18��: EventService DHT�w�ǁE���������^�X�N�ɒ���BEventService�^EventManager�\���ƍw�Ǌ֘A��DB�X�L�[�}�𒲍����B
-- 2025�N10��18��: EventService�̍w�ǃX�e�[�g�}�V��������Nostr�w�ǊĎ�UI��ǉ����A�Đڑ����̍w�Ǖ����e�X�g�𐮔��B
