@@ -1,7 +1,10 @@
 #[cfg(test)]
 #[allow(clippy::module_inception)]
 mod tests {
-    use super::super::{OfflineManager, models, reindex::OfflineReindexJob};
+    use super::super::{
+        OfflineManager, models,
+        reindex::{OfflineReindexJob, OfflineReindexReport, ReindexEventEmitter},
+    };
     use crate::infrastructure::p2p::{
         ConnectionEvent, DiscoveryOptions, iroh_network_service::IrohNetworkService,
         network_service::NetworkService,
@@ -9,7 +12,7 @@ mod tests {
     use crate::shared::config::AppConfig;
     use iroh::SecretKey;
     use sqlx::sqlite::SqlitePoolOptions;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use tokio::time::{Duration, sleep, timeout};
 
     async fn setup_test_db() -> sqlx::Pool<sqlx::Sqlite> {
@@ -424,5 +427,59 @@ mod tests {
             .expect("disconnect should succeed");
 
         assert_eq!(pending.len(), 1);
+    }
+    #[tokio::test]
+    async fn test_offline_reindex_job_emits_completion_event() {
+        let pool = setup_test_db().await;
+        let manager = Arc::new(OfflineManager::new(pool));
+
+        let request = models::SaveOfflineActionRequest {
+            user_pubkey: "event_user".to_string(),
+            action_type: "create_post".to_string(),
+            target_id: Some("post_321".to_string()),
+            action_data: serde_json::json!({"content": "hello"}),
+        };
+
+        manager
+            .save_offline_action(request)
+            .await
+            .expect("failed to save offline action");
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        struct TestEmitter {
+            sender: Mutex<Option<tokio::sync::oneshot::Sender<OfflineReindexReport>>>,
+        }
+
+        impl ReindexEventEmitter for TestEmitter {
+            fn emit_report(&self, report: &OfflineReindexReport) -> Result<(), String> {
+                if let Some(tx) = self.sender.lock().unwrap().take() {
+                    let _ = tx.send(report.clone());
+                }
+                Ok(())
+            }
+
+            fn emit_failure(&self, _message: &str) -> Result<(), String> {
+                Ok(())
+            }
+        }
+
+        let emitter = Arc::new(TestEmitter {
+            sender: Mutex::new(Some(tx)),
+        });
+
+        let job = OfflineReindexJob::with_emitter(Some(emitter), Arc::clone(&manager));
+        job.trigger();
+
+        let report = timeout(Duration::from_secs(1), rx)
+            .await
+            .expect("offline reindex completion event not received")
+            .expect("completion listener dropped");
+
+        assert_eq!(report.offline_action_count, 1);
+        assert_eq!(report.queued_action_count, 1);
+
+        let pending_queue = manager.get_pending_sync_queue().await.unwrap();
+        assert_eq!(pending_queue.len(), 1);
     }
 }

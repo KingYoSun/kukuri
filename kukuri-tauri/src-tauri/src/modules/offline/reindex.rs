@@ -1,22 +1,44 @@
-use std::sync::Arc;
-
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::Mutex;
+
+pub trait ReindexEventEmitter: Send + Sync {
+    fn emit_report(&self, report: &OfflineReindexReport) -> Result<(), String>;
+    fn emit_failure(&self, message: &str) -> Result<(), String>;
+}
+
+struct TauriEventEmitter {
+    handle: tauri::AppHandle,
+}
+
+impl ReindexEventEmitter for TauriEventEmitter {
+    fn emit_report(&self, report: &OfflineReindexReport) -> Result<(), String> {
+        self.handle
+            .emit("offline://reindex_complete", report)
+            .map_err(|err| err.to_string())
+    }
+
+    fn emit_failure(&self, message: &str) -> Result<(), String> {
+        self.handle
+            .emit("offline://reindex_failed", message.to_string())
+            .map_err(|err| err.to_string())
+    }
+}
 
 use crate::modules::offline::OfflineManager;
 use crate::modules::offline::models::{GetOfflineActionsRequest, SyncStatusRecord};
 use crate::shared::error::AppError;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConflictDigest {
     pub entity_type: String,
     pub entity_id: String,
     pub sync_status: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OfflineReindexReport {
     pub offline_action_count: usize,
     pub queued_action_count: usize,
@@ -29,7 +51,7 @@ pub struct OfflineReindexReport {
 }
 
 pub struct OfflineReindexJob {
-    app_handle: Option<tauri::AppHandle>,
+    event_emitter: Option<Arc<dyn ReindexEventEmitter>>,
     offline_manager: Arc<OfflineManager>,
     gate: Mutex<()>,
 }
@@ -39,8 +61,17 @@ impl OfflineReindexJob {
         app_handle: Option<tauri::AppHandle>,
         offline_manager: Arc<OfflineManager>,
     ) -> Arc<Self> {
+        let emitter = app_handle
+            .map(|handle| Arc::new(TauriEventEmitter { handle }) as Arc<dyn ReindexEventEmitter>);
+        Self::with_emitter(emitter, offline_manager)
+    }
+
+    pub fn with_emitter(
+        event_emitter: Option<Arc<dyn ReindexEventEmitter>>,
+        offline_manager: Arc<OfflineManager>,
+    ) -> Arc<Self> {
         Arc::new(Self {
-            app_handle,
+            event_emitter,
             offline_manager,
             gate: Mutex::new(()),
         })
@@ -138,8 +169,8 @@ impl OfflineReindexJob {
     }
 
     fn emit_success(&self, report: &OfflineReindexReport) {
-        if let Some(handle) = &self.app_handle {
-            if let Err(err) = handle.emit("offline://reindex_complete", report) {
+        if let Some(emitter) = &self.event_emitter {
+            if let Err(err) = emitter.emit_report(report) {
                 tracing::warn!(
                     target: "offline::reindex",
                     error = %err,
@@ -156,8 +187,8 @@ impl OfflineReindexJob {
     }
 
     fn emit_failure(&self, message: &str) {
-        if let Some(handle) = &self.app_handle {
-            if let Err(err) = handle.emit("offline://reindex_failed", message) {
+        if let Some(emitter) = &self.event_emitter {
+            if let Err(err) = emitter.emit_failure(message) {
                 tracing::warn!(
                     target: "offline::reindex",
                     error = %err,

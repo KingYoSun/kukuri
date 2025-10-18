@@ -1,6 +1,6 @@
 # Kukuri: irohビルトインDHTディスカバリー活用計画
 
-## 最終更新日: 2025年10月18日
+## 最終更新日: 2025年10月20日
 
 ## 1. 背景と変更理由
 
@@ -276,6 +276,7 @@ pub async fn reindex(&self) -> Result<(), AppError> {
 **実装ステータス（2025年10月18日 更新）**
 - `IrohNetworkService` が `ConnectionEvent` ブロードキャストを公開し、再接続時に `OfflineReindexJob::trigger` を呼び出すウォッチャーを `AppState` で常駐化。
 - `OfflineReindexJob` は多重実行を `Mutex` で防ぎ、Tauriイベント `offline://reindex_complete` / `offline://reindex_failed` を発火。
+- 2025年10月20日: イベント送信を `ReindexEventEmitter` で抽象化し、Tauri 依存を切り離したユニットテストで完了通知を検証可能にした。
 - フロントエンドの `offlineStore` が上記イベントを購読し、未同期アクションの再読込とステータス更新を行う。
 - `modules/offline/tests.rs::test_reindex_triggered_on_connection_event` で再接続イベントから同期キューが再構築されることを結合テストで検証。
 

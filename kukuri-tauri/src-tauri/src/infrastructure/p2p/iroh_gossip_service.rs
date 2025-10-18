@@ -21,6 +21,7 @@ use tokio::time::timeout;
 
 use crate::modules::p2p::events::P2PEvent;
 use crate::modules::p2p::message::GossipMessage;
+use crate::modules::p2p::{TopicMesh, TopicStats};
 
 const LOG_TARGET: &str = "kukuri::p2p::gossip";
 const METRICS_TARGET: &str = "kukuri::p2p::metrics";
@@ -39,6 +40,7 @@ struct TopicHandle {
     sender: Arc<TokioMutex<GossipSender>>, // GossipSenderでbroadcast可能
     receiver_task: tokio::task::JoinHandle<()>,
     subscribers: Arc<RwLock<Vec<mpsc::Sender<Event>>>>,
+    mesh: Arc<TopicMesh>,
 }
 
 impl IrohGossipService {
@@ -225,34 +227,50 @@ impl GossipService for IrohGossipService {
         }
 
         let sender = Arc::new(TokioMutex::new(sender_handle));
+        let mesh = Arc::new(TopicMesh::new(topic.to_string()));
 
         // 受信タスクを起動（UI配信用にサブスクライバへ配布 & 任意でP2PEventを送出）
         let topic_clone = topic.to_string();
         let event_tx_clone = self.event_tx.clone();
         let subscribers: Arc<RwLock<Vec<mpsc::Sender<Event>>>> = Arc::new(RwLock::new(Vec::new()));
         let subscribers_for_task = subscribers.clone();
+        let mesh_for_task = mesh.clone();
         let receiver_task = tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
                 match event {
                     Ok(GossipApiEvent::Received(msg)) => {
-                        if let Some(tx) = &event_tx_clone {
-                            match GossipMessage::from_bytes(&msg.content) {
-                                Ok(message) => {
-                                    let _ = tx.lock().unwrap().send(P2PEvent::MessageReceived {
-                                        topic_id: topic_clone.clone(),
-                                        message,
-                                        _from_peer: msg.delivered_from.as_bytes().to_vec(),
-                                    });
-                                }
-                                Err(e) => {
-                                    tracing::debug!(
-                                        target: LOG_TARGET,
-                                        topic = %topic_clone,
-                                        error = ?e,
-                                        "Failed to decode gossip payload into GossipMessage"
-                                    );
-                                }
+                        let decoded_message = match GossipMessage::from_bytes(&msg.content) {
+                            Ok(message) => Some(message),
+                            Err(e) => {
+                                tracing::debug!(
+                                    target: LOG_TARGET,
+                                    topic = %topic_clone,
+                                    error = ?e,
+                                    "Failed to decode gossip payload into GossipMessage"
+                                );
+                                None
                             }
+                        };
+
+                        if let Some(message) = decoded_message.as_ref() {
+                            if let Err(e) = mesh_for_task.handle_message(message.clone()).await {
+                                tracing::debug!(
+                                    target: LOG_TARGET,
+                                    topic = %topic_clone,
+                                    error = ?e,
+                                    "Failed to record gossip message in TopicMesh"
+                                );
+                            }
+                        }
+
+                        if let (Some(tx), Some(message)) =
+                            (event_tx_clone.as_ref(), decoded_message.clone())
+                        {
+                            let _ = tx.lock().unwrap().send(P2PEvent::MessageReceived {
+                                topic_id: topic_clone.clone(),
+                                message,
+                                _from_peer: msg.delivered_from.as_bytes().to_vec(),
+                            });
                         }
 
                         match serde_json::from_slice::<Event>(&msg.content) {
@@ -307,24 +325,28 @@ impl GossipService for IrohGossipService {
                         }
                     }
                     Ok(GossipApiEvent::NeighborUp(peer)) => {
+                        let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
                             let _ = tx.lock().unwrap().send(P2PEvent::PeerJoined {
                                 topic_id: topic_clone.clone(),
-                                peer_id: peer.as_bytes().to_vec(),
+                                peer_id: peer_bytes.clone(),
                             });
                         } else {
                             tracing::info!("Neighbor up on {}: {:?}", topic_clone, peer);
                         }
+                        mesh_for_task.update_peer_status(peer_bytes, true).await;
                     }
                     Ok(GossipApiEvent::NeighborDown(peer)) => {
+                        let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
                             let _ = tx.lock().unwrap().send(P2PEvent::PeerLeft {
                                 topic_id: topic_clone.clone(),
-                                peer_id: peer.as_bytes().to_vec(),
+                                peer_id: peer_bytes.clone(),
                             });
                         } else {
                             tracing::info!("Neighbor down on {}: {:?}", topic_clone, peer);
                         }
+                        mesh_for_task.update_peer_status(peer_bytes, false).await;
                     }
                     Ok(GossipApiEvent::Lagged) => {
                         tracing::warn!("Receiver lagged on topic {}", topic_clone);
@@ -342,6 +364,7 @@ impl GossipService for IrohGossipService {
             sender,
             receiver_task,
             subscribers,
+            mesh,
         };
 
         let mut topics = self.topics.write().await;
@@ -424,6 +447,19 @@ impl GossipService for IrohGossipService {
             Ok(Vec::new())
         } else {
             Err(format!("Not joined to topic: {topic}").into())
+        }
+    }
+
+    async fn get_topic_stats(&self, topic: &str) -> Result<Option<TopicStats>, AppError> {
+        let mesh = {
+            let topics = self.topics.read().await;
+            topics.get(topic).map(|handle| handle.mesh.clone())
+        };
+
+        if let Some(mesh) = mesh {
+            Ok(Some(mesh.get_stats().await))
+        } else {
+            Ok(None)
         }
     }
 

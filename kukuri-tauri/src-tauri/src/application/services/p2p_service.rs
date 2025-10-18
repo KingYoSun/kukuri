@@ -234,19 +234,30 @@ impl P2PServiceTrait for P2PService {
         let mut total_peer_count = 0;
 
         for topic_id in joined_topics {
-            let peers = self
+            let stats = self
                 .gossip_service
-                .get_topic_peers(&topic_id)
+                .get_topic_stats(&topic_id)
                 .await
                 .map_err(|e| AppError::P2PError(e.to_string()))?;
-            let peer_count = peers.len();
+
+            let (peer_count, message_count, last_activity) = if let Some(stats) = stats {
+                (stats.peer_count, stats.message_count, stats.last_activity)
+            } else {
+                let peers = self
+                    .gossip_service
+                    .get_topic_peers(&topic_id)
+                    .await
+                    .map_err(|e| AppError::P2PError(e.to_string()))?;
+                (peers.len(), 0, chrono::Utc::now().timestamp())
+            };
+
             total_peer_count += peer_count;
 
             active_topics.push(TopicInfo {
                 id: topic_id,
                 peer_count,
-                message_count: 0, // TODO: メッセージカウントの実装
-                last_activity: chrono::Utc::now().timestamp(),
+                message_count,
+                last_activity,
             });
         }
 
@@ -287,7 +298,9 @@ impl P2PServiceTrait for P2PService {
 mod tests {
     use super::*;
     use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
+    use crate::modules::p2p::TopicStats;
     use async_trait::async_trait;
+    use chrono::Utc;
     use mockall::{mock, predicate::*};
     use std::sync::Mutex;
 
@@ -403,6 +416,7 @@ mod tests {
             async fn subscribe(&self, topic: &str) -> Result<tokio::sync::mpsc::Receiver<crate::domain::entities::Event>, AppError>;
             async fn get_joined_topics(&self) -> Result<Vec<String>, AppError>;
             async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError>;
+            async fn get_topic_stats(&self, topic: &str) -> Result<Option<TopicStats>, AppError>;
             async fn broadcast_message(&self, topic: &str, message: &[u8]) -> Result<(), AppError>;
         }
     }
@@ -512,31 +526,28 @@ mod tests {
             .times(1)
             .returning(|| Ok(vec!["topic1".to_string(), "topic2".to_string()]));
 
-        // get_topic_peersをモックして各トピックのピアを返す
         mock_gossip
-            .expect_get_topic_peers()
+            .expect_get_topic_stats()
             .with(eq("topic1"))
             .times(1)
             .returning(|_| {
-                Ok(vec![
-                    "peer1".to_string(),
-                    "peer2".to_string(),
-                    "peer3".to_string(),
-                    "peer4".to_string(),
-                    "peer5".to_string(),
-                ])
+                Ok(Some(TopicStats {
+                    peer_count: 5,
+                    message_count: 12,
+                    last_activity: 1_700_000_000,
+                }))
             });
 
         mock_gossip
-            .expect_get_topic_peers()
+            .expect_get_topic_stats()
             .with(eq("topic2"))
             .times(1)
             .returning(|_| {
-                Ok(vec![
-                    "peer6".to_string(),
-                    "peer7".to_string(),
-                    "peer8".to_string(),
-                ])
+                Ok(Some(TopicStats {
+                    peer_count: 3,
+                    message_count: 4,
+                    last_activity: 1_700_000_100,
+                }))
             });
 
         let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
@@ -553,6 +564,50 @@ mod tests {
         assert_eq!(status.metrics_summary.leaves, 0);
         assert_eq!(status.metrics_summary.broadcasts_sent, 0);
         assert_eq!(status.metrics_summary.messages_received, 0);
+        assert_eq!(status.active_topics[0].message_count, 12);
+        assert_eq!(status.active_topics[0].last_activity, 1_700_000_000);
+        assert_eq!(status.active_topics[1].message_count, 4);
+        assert_eq!(status.active_topics[1].last_activity, 1_700_000_100);
+    }
+
+    #[tokio::test]
+    async fn test_get_status_fallback_to_peers_when_stats_missing() {
+        metrics::reset_all();
+        let mut mock_network = MockNetworkServ::new();
+        mock_network
+            .expect_get_node_id()
+            .returning(|| Ok("node123".to_string()));
+
+        let mut mock_gossip = MockGossipServ::new();
+        mock_gossip
+            .expect_get_joined_topics()
+            .times(1)
+            .returning(|| Ok(vec!["topic1".to_string()]));
+
+        mock_gossip
+            .expect_get_topic_stats()
+            .with(eq("topic1"))
+            .times(1)
+            .returning(|_| Ok(None));
+
+        mock_gossip
+            .expect_get_topic_peers()
+            .with(eq("topic1"))
+            .times(1)
+            .returning(|_| Ok(vec!["peer1".to_string(), "peer2".to_string()]));
+
+        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+
+        let before = Utc::now().timestamp();
+        let status = service.get_status().await.unwrap();
+        let after = Utc::now().timestamp();
+
+        assert_eq!(status.active_topics.len(), 1);
+        let topic = &status.active_topics[0];
+        assert_eq!(topic.peer_count, 2);
+        assert_eq!(topic.message_count, 0);
+        assert!(topic.last_activity >= before);
+        assert!(topic.last_activity <= after);
     }
 
     #[tokio::test]

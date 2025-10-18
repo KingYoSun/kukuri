@@ -468,6 +468,7 @@ impl EventManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::modules::p2p::TopicStats;
     use crate::shared::error::AppError;
     use async_trait::async_trait;
 
@@ -529,6 +530,10 @@ mod tests {
         }
         async fn get_topic_peers(&self, _topic: &str) -> Result<Vec<String>, AppError> {
             Ok(vec![])
+        }
+
+        async fn get_topic_stats(&self, _topic: &str) -> Result<Option<TopicStats>, AppError> {
+            Ok(None)
         }
         async fn broadcast_message(&self, _topic: &str, _message: &[u8]) -> Result<(), AppError> {
             Ok(())

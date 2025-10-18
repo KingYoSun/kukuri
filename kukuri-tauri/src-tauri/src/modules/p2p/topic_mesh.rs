@@ -15,6 +15,7 @@ pub struct TopicMesh {
     message_cache: Arc<RwLock<LruCache<MessageId, GossipMessage>>>,
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct TopicStats {
     pub peer_count: usize,
     pub message_count: usize,

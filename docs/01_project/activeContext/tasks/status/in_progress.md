@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月17日
+最終更新日: 2025年10月20日
 
 ## 方針（2025年09月15日 更新）
 
@@ -71,3 +71,12 @@
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。
+- 2025年10月20日: P2PServiceのmessage_count統計をTopicMeshベースで提供するよう更新し、Mockテストでカバレッジを追加。OfflineReindexJobにイベントエミッタの抽象化を導入し、完了イベントの監視パスをユニットテストで検証。
+- 2025年10月20日: Windows 環境で `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` により異常終了。Docker 経由（`./scripts/test-docker.ps1 rust`）で Rust テストを再確認予定。
+
+## ネクストアクション（2025年10月20日 更新）
+
+- Docker 経由で `./scripts/test-docker.ps1 rust` を実行し、Windows 環境で再現したテスト失敗を切り分ける。
+- `event_service` と `offline_service` の Phase 2 TODO を順次着手し、テストとドキュメントを更新する。
+- `docs/03_implementation/p2p_mainline_runbook.md` へ Mainline DHT 監視手順を追記し、Phase 7 Exit のドキュメント準備を進める。
+
