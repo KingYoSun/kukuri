@@ -189,3 +189,101 @@
 1. Phase 3A 用のチケットを `tasks/status/in_progress.md` に追加し、担当・予定期間を明記。
 2. `ApplicationContainer` と `Tauri` コマンドの依存一覧を洗い出すリストアップタスクを別途作成（EventService/EventManager 差分検証用）。
 3. CI 設定（GitHub Actions）の統合テストジョブで必要な環境変数 (`ENABLE_P2P_INTEGRATION`, `KUKURI_BOOTSTRAP_PEERS`) の指定を確認し、未設定であればワークフロー定義更新タスクを起票。
+
+## 10. Phase 3B 実行計画 - EventService 再モジュール化
+
+### 10.1 目的とスコープ
+- Phase 3B では `kukuri-tauri/src-tauri/src/application/services/event_service.rs`（1216行）を責務別モジュールへ分割し、API 互換を維持したまま EventService の保守性とテスト容易性を高める。
+- 分割対象はサービス実装、購読復元ロジック、EventManager 協調、P2P 配信連携、Nostr イベント生成処理、テスト資産。
+- Phase 3A で整備した Repository 分割を前提とし、新規モジュールからは既存トレイト（`EventRepository`, `SignatureService`, `EventDistributor`, `SubscriptionStateStore`）の呼び出し契約を変更しない。
+
+### 10.2 現状サマリー
+- `EventService` 構造体が 6 つの依存（Repository/Signature/Distributor/EventManager/SubscriptionState/SubscriptionInvoker）を直接保持し、購読状態・配信・署名・削除・初期化などの責務を内包。
+- `SubscriptionInvoker` トレイトと具象実装 `EventManagerSubscriptionInvoker` が同ファイルに共存し、EventManager との結合が見通しづらい。
+- Nostr イベント生成（`build_text_note_event`, `build_topic_post_event`, `build_delete_event` など）が複数ヘルパーに分散し、タグ構築ロジックが重複している。
+- 非同期テストとモック生成がファイル末尾に集中し、実装コードとの境界が不明瞭。`mockall` モックやテストフラグが再利用されていない。
+
+### 10.3 目標モジュール構成
+
+```text
+src-tauri/src/application/services/event_service/
+├── mod.rs                 // トレイト定義・構造体公開・エイリアス
+├── core.rs                // publish/update/delete 等の主要ビジネスロジック
+├── subscription.rs        // 購読状態管理・復元シーケンス
+├── distribution.rs        // EventDistributor 連携・default topic 扱い
+├── factory.rs             // Nostr イベント生成/署名ヘルパー
+├── invoker.rs             // SubscriptionInvoker と EventManager 実装
+└── tests/
+    ├── mod.rs             // async テスト本体
+    └── support/
+        ├── mocks.rs       // mockall モック定義の共通化
+        └── fixtures.rs    // サンプルイベント/DTO
+```
+
+- `mod.rs` から `pub use core::*` 等で既存 API を再エクスポートし、呼び出し側の import 変更を最小化。
+- 将来の Phase 4 で `factory.rs` を TypeScript 側の EventBuilder と整合させ、DRY 化を推進。
+
+### 10.4 作業ブレークダウン（WBS）
+1. **事前キャプチャ**
+   - `rg "EventService::"` や `rg "SubscriptionInvoker"` で呼び出し側を棚卸しし、破壊的変更の影響点をメモ化。
+   - `docs/03_implementation/error_handling_guidelines.md` を再確認し、エラー型の扱いを共有。
+2. **モジュール骨格の追加**
+   - `event_service/` ディレクトリを新設し、`mod.rs` と空ファイル群（`core.rs` など）を作成。
+   - 既存 `event_service.rs` を段階的に分解できるよう `mod.rs` に `pub use` と `cfg(test)` の再エクスポートを定義。
+3. **構造体/DI の抽出**
+   - `EventService` 構造体定義・`new` コンストラクタ・`initialize` などのエントリポイントを `core.rs` に移動。
+   - `ApplicationContainer`・`State` での import を `event_service::EventService` に切り替え、コンパイルエラーを解消。
+4. **購読系ロジックの分離**
+   - `subscribe_to_topic` / `subscribe_to_user` / `list_subscriptions` / `restore_subscriptions` などを `subscription.rs` に移し、`SubscriptionWorkflow`（仮）として補助メソッド化。
+   - `SubscriptionInvoker` トレイトと `EventManagerSubscriptionInvoker` を `invoker.rs` に切り出し、テストでは `MockSubscriptionInvoker` を再利用。
+5. **イベント生成/配信の整理**
+   - `publish_*` 系メソッド内の Nostr イベント構築ヘルパーを `factory.rs` に統合し、`build_tags` や `build_metadata_event` を純粋関数化。
+   - `set_default_p2p_topic`, `forward_event_to_distributor`, `delete_events` など EventDistributor 連携を `distribution.rs` でラップし、副作用ロジックを集約。
+6. **テスト再編**
+   - 既存 `#[cfg(test)] mod tests` を `tests/mod.rs` に移し、`support/mocks.rs` に `MockEventRepository` 等を再定義。
+   - テストデータ生成（例: `sample_note_event`, `new_metadata_dto`）を `support/fixtures.rs` へ配置し、`use crate::application::services::event_service::tests::support::*;` で読み込む。
+   - フレーク対策として `tokio::time::pause` などのユーティリティを `support` にまとめる。
+7. **仕上げ・リネーム**
+   - 残存する `use crate::application::services::event_service::...` の import を更新し、`cargo fmt` / `cargo clippy` を実行。
+   - `docs/01_project/activeContext/tauri_app_implementation_plan.md` 等の EventService 依存ドキュメント差分を確認し、必要に応じて更新タスクを起票。
+
+### 10.5 テスト・検証計画
+- Rust:
+  - `cd kukuri-tauri/src-tauri && cargo fmt && cargo clippy -D warnings`
+  - `cargo test --package kukuri-tauri --lib application::services::event_service`
+  - `ENABLE_P2P_INTEGRATION=0 cargo test -- --skip modules::p2p::tests::iroh`
+- TypeScript:
+  - `cd kukuri-tauri && pnpm test`
+- 動作確認:
+  - `pnpm tauri dev` で EventService 経由の投稿/サブスク操作を手動確認。
+  - Docker 経由での Rust テストが必要な場合は `./scripts/test-docker.ps1 rust` を利用。
+
+### 10.6 リスクと対応
+- **DI 調整漏れによる起動失敗**  
+  - 対応: `State` / `ApplicationContainer` / `presentation::commands` を差分レビューし、各ステップで `cargo check` を実行。
+- **SubscriptionInvoker の API 変更による EventManager 影響**  
+  - 対応: `modules/event/manager.rs` の依存箇所を洗い出し、Phase 3C への先送りを抑止。
+- **モック再生成に伴うテストフレーク**  
+  - 対応: `mockall` の `expect_*` 設定を共通化し、`tests/support` で順序依存を制御。
+- **イベント生成ロジックの副作用回帰**  
+  - 対応: Text Note / Topic Post / Reaction / Metadata など代表イベントの JSON 出力をスナップショット比較。
+
+### 10.7 スケジュール目安
+| 日数 | 主作業 | チェックポイント |
+| --- | --- | --- |
+| Day 1 | モジュール骨格作成・`core.rs` 抽出 | `cargo check` が通る |
+| Day 2 | 購読ロジック/Invoker 分離 | 購読系テストが緑化 |
+| Day 3 | Factory/Distribution 切り出し | 投稿/削除テストが緑化 |
+| Day 4 | テスト再編・モック整理 | `tests` ディレクトリ再構築完了 |
+| Day 5 | 仕上げ・回帰試験 | `cargo clippy` / `pnpm test` / 手動確認完了 |
+
+### 10.8 連携・ドキュメント
+- `tasks/status/in_progress.md` の「Phase 3/4 ギャップ対応」配下に Phase 3B サブタスクを追記し、進捗を記録。
+- `docs/03_implementation/error_handling_guidelines.md` や `docs/01_project/activeContext/tauri_app_implementation_plan.md` へ影響が出た場合は別チケットで更新。
+- 必要に応じて `docs/01_project/progressReports/` に日次レポートを追加し、レビュー観点を共有。
+
+### 10.9 完了条件
+- 新ディレクトリ構成で `EventServiceTrait` / `EventService::new` / `EventManagerSubscriptionInvoker` の公開 API が互換性を維持。
+- `presentation/commands/event_commands.rs` など呼び出し側がビルドエラーなく連携し、ユニット/結合テストが全て成功。
+- `cargo fmt` / `cargo clippy -D warnings` / `cargo test` / `pnpm test` / `./scripts/test-docker.ps1 rust` が完了し、回帰がない。
+- 700 行超ファイルから `event_service.rs` が除外され、テストモックが `tests/support` に集約されたことを確認。

@@ -79,5 +79,7 @@
 - 2025年10月19日: Phase 3A の実装を完了し、`sqlite_repository` を posts/topics/users/events/mapper/queries モジュールへ分割。SQLx オフラインデータを再生成し、`cargo fmt` / `cargo clippy -- -D warnings` / `./scripts/test-docker.ps1 rust` で検証済み。
 - 2025年10月19日: GitHub Actions ワークフロー失敗の原因特定に着手。`gh run list` で最新失敗ジョブを洗い出し、`gh act` によるローカル再現準備を開始。
 - 2025年10月19日: `src/lib/api/tauri.ts` を Prettier で整形し、`pnpm format:check` と `gh act -j format-check` が成功することを確認。CI フォーマットジョブの失敗を解消。
+- 2025年10月19日: Phase 3B（EventService モジュール化）実行計画を `docs/01_project/activeContext/refactoring_phase34_gap_plan.md` に追記し、WBS/検証/リスク/完了条件を明文化。
+- 2025年10月19日: EventService を `core`/`subscription`/`distribution`/`factory`/`invoker` 構成へ分割し、テストを `tests/` 配下に再配置。`cargo fmt` / `cargo clippy -- -D warnings` / `pnpm test` は完了、Rust テストは Docker 実行で `offline_service::test_update_cache_metadata_and_cleanup` が既存失敗として継続中。
 - 2025年10月20日: P2PServiceのmessage_count統計をTopicMeshベースで提供するよう更新し、Mockテストでカバレッジを追加。OfflineReindexJobにイベントエミッタの抽象化を導入し、完了イベントの監視パスをユニットテストで検証。
 - 2025年10月20日: Windows 環境で `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` により異常終了。Docker 経由（`./scripts/test-docker.ps1 rust`）で Rust テストを再確認予定。
