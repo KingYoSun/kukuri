@@ -287,3 +287,107 @@ src-tauri/src/application/services/event_service/
 - `presentation/commands/event_commands.rs` など呼び出し側がビルドエラーなく連携し、ユニット/結合テストが全て成功。
 - `cargo fmt` / `cargo clippy -D warnings` / `cargo test` / `pnpm test` / `./scripts/test-docker.ps1 rust` が完了し、回帰がない。
 - 700 行超ファイルから `event_service.rs` が除外され、テストモックが `tests/support` に集約されたことを確認。
+
+## 11. Phase 3C 実行計画 - EventManager 分割と DefaultTopicsRegistry 導入
+
+### 11.1 目的とスコープ
+- `kukuri-tauri/src-tauri/src/modules/event/manager.rs`（現在813行）を責務単位で分割し、購読制御・P2P連携・Tauri通知の境界を明確化する。
+- `DefaultTopicsRegistry`（仮称）を導入して既定トピック集合の管理を専用化し、`HashSet` とロック操作の重複を排除する。
+- Phase 3B で確定した EventService API と疎結合に保ちながら、Gossip ブロードキャストと UI 連携のテスト容易性を高める。
+
+### 11.2 現状サマリー
+- EventManager が AppHandle 設定（`set_app_handle`）、鍵初期化（`initialize_with_key_manager`）、Gossip 接続（`set_gossip_service`）、イベント発行（`publish_*` 系）、P2P ブロードキャスト（`broadcast_to_topics`）を一括で実装しており、`Arc<RwLock<...>>` による状態管理が散在。
+- 既定トピック集合 (`selected_default_topic_ids`) の操作が直接 `HashSet` を扱う形で複数メソッドに複製されているほか、ユーザー固有トピックとのマージ処理も各所で重複。
+- `handle_p2p_event` で Tauri への `emit` と EventHandler 連携を担い、テストモジュールは同一ファイル内の `#[cfg(test)] mod tests` に集約されている。
+- 呼び出し側は `state.rs`, `presentation/commands/event_commands.rs`, `presentation/commands/topic_commands.rs`, `application/services/event_service/` など広範囲に及び、API 変更の影響が大きい。
+
+### 11.3 目標モジュール構成
+```text
+src-tauri/src/modules/event/manager/
+├── mod.rs              // 公開API・依存注入のエントリーポイント
+├── core.rs             // 初期化・購読制御・AppHandle連携
+├── publishing.rs       // publish_* / delete / metadata 更新ロジック
+├── p2p.rs              // GossipService 連携と broadcast/resolve ヘルパー
+├── default_topics.rs   // DefaultTopicsRegistry（HashSet 管理）
+├── conversions.rs      // nostr ↔ domain 変換ユーティリティ
+└── tests/
+    ├── mod.rs          // 非同期テスト本体
+    └── support/
+        ├── mocks.rs    // GossipService / EventRepository モック
+        └── fixtures.rs // サンプルイベント・トピックID
+```
+
+- `mod.rs` で `pub use core::EventManager;` を公開し、既存の `use crate::modules::event::manager::EventManager;` 呼び出しを維持する。
+- `DefaultTopicsRegistry` は `RwLock<HashSet<String>>` を内包し、単一/複数設定・追加・削除・スナップショット取得・ユーザートピック合成等の API を提供。
+
+### 11.4 作業ブレークダウン（WBS）
+1. **呼び出し点棚卸し**
+   - `grep -R "EventManager"` で `state.rs`, `application/services/event_service`, `presentation/commands/*`, `tests` の依存リストを作成。
+   - 既存の `#[cfg(test)]` モジュール内で使用するモック構成（`TestGossipService`, `MockEventRepository` 等）を記録。
+2. **モジュール骨格の追加**
+   - `modules/event/manager/` ディレクトリを新設し、`mod.rs`・`core.rs`・`publishing.rs`・`p2p.rs`・`default_topics.rs`・`conversions.rs` を空で配置。
+   - `mod.rs` に re-export (`pub use core::EventManager;`) と `cfg(test)` の `tests` モジュール参照を定義。
+3. **DefaultTopicsRegistry 抽出**
+   - `selected_default_topic_ids` を `DefaultTopicsRegistry` に置き換え、`core.rs` から所有する `Arc<DefaultTopicsRegistry>` を保持。
+   - 単一/複数設定、追加・削除、一覧取得 API を `default_topics.rs` に実装し、既存メソッド (`set_default_p2p_topic_id`, `list_default_p2p_topics` など) は薄い委譲に差し替え。
+4. **コア責務の分離**
+   - `core.rs` に `EventManager` 構造体と `new` / `new_with_db` / `set_app_handle` / `initialize_with_key_manager` / `subscribe_to_*` / `disconnect` / `ensure_initialized` / `get_public_key` を移動。
+   - AppHandle への `emit` を行うヘルパーを `core.rs` にまとめ、`handle_p2p_event` から委譲させる。
+5. **P2P 連携ロジックの抽出**
+   - `set_gossip_service`, `set_event_repository`, `handle_p2p_event`, `broadcast_to_topic`, `broadcast_to_topics`, `resolve_topics_for_referenced_event` を `p2p.rs` に移し、`DefaultTopicsRegistry` とユーザートピック合成処理を共通化。
+   - ブロードキャスト用のトピックリスト構築メソッド（例: `resolve_broadcast_topics`）を追加し、`publish_*` 系からの重複処理を排除。
+6. **イベント発行ロジックの整理**
+   - `publish_text_note`, `publish_topic_post`, `send_reaction`, `delete_events`, `publish_event`, `update_metadata` を `publishing.rs` に移動。
+   - `publishing.rs` 内で `DefaultTopicsRegistry` と `p2p::GossipBroadcaster`（仮）を利用する形にし、戻り値とエラーハンドリングを統一。
+7. **コンバージョン／補助関数の分離**
+   - `to_domain_event` を `conversions.rs` に移し、`p2p.rs` から再利用。
+   - フロント通知用の `NostrEventPayload` 構造体も `core.rs` に移して `Serialize` 周りを整理。
+8. **テスト再編**
+   - 既存の `mod tests` を `tests/mod.rs` に移し、`support/mocks.rs`（MockGossipService, MockEventRepository, MockAppHandle）と `fixtures.rs`（ダミー Event/Topic）を抽出。
+   - `DefaultTopicsRegistry` の単体テストを追加し、境界条件（空配列、重複追加、ユーザートピック併合）をカバー。
+9. **呼び出し側の調整とビルド確認**
+   - `state.rs`, `presentation::commands::*`, `application/services/event_service/*` の `use` 文とメソッド呼び出しが新構成でコンパイル通過するか確認。
+   - `set_default_p2p_topic` コマンドなど、公開 API の返却値／エラーメッセージが変わらないことを手動テスト。
+
+### 11.5 テスト・検証計画
+- Rust:
+  - `cd kukuri-tauri/src-tauri && cargo fmt && cargo clippy -D warnings`
+  - `cargo test --lib modules::event::manager`
+  - `ENABLE_P2P_INTEGRATION=0 cargo test -- --skip modules::p2p::tests::iroh`
+  - `./scripts/test-docker.ps1 rust`（Windows 環境での最終検証）
+- TypeScript:
+  - `cd kukuri-tauri && pnpm test`
+- 動作確認:
+  - `pnpm tauri dev` でテキストノート投稿・リアクション・既定トピック変更をハンドテストし、P2P ブロードキャストが失敗しないことを確認。
+  - `tracing` ログで DefaultTopicsRegistry の出力（設定/削除）を確認し、意図しないトピックが送信されていないかチェック。
+
+### 11.6 リスクと対応
+- **DefaultTopicsRegistry 移行による競合リスク**
+  - 対応: 既存 API シグネチャを維持しつつ内部実装のみ差し替え、ユニットテストで空集合／重複登録／ユーザートピック併合のケースを追加。
+- **GossipService broadcast の回帰**
+  - 対応: `broadcast_to_topic` / `broadcast_to_topics` を共通化した後、TopicService 経由の結合テストを実施し、`AppState::initialize_p2p` フローでの初期 join を確認。
+- **AppHandle emit のコンテキスト喪失**
+  - 対応: `handle_p2p_event` で使用するペイロード生成関数を抽出し、Tauri イベント名・構造体の互換性をクロスチェック。
+- **依存注入ミスによる初期化失敗**
+  - 対応: `ApplicationContainer` / `state.rs` の `Arc<EventManager>` 生成～設定フローを段階的にコンパイルチェックし、`cargo check` を各ステップで実行。
+
+### 11.7 スケジュール目安
+| 日数 | 主作業 | チェックポイント |
+| --- | --- | --- |
+| Day 1 | 呼び出し点棚卸し・モジュール骨格生成 | `mod.rs` の再エクスポートで `cargo check` 合格 |
+| Day 2 | DefaultTopicsRegistry 実装とコア移行 | 既定トピック API テストが緑化 |
+| Day 3 | P2P・イベント発行ロジックの切り出し | `cargo test --lib modules::event::manager` 通過 |
+| Day 4 | テスト再編・モック整理 | `tests/support` 構成で全テスト緑 |
+| Day 5 | 呼び出し側調整・総合検証 | `cargo clippy` / `pnpm test` / `pnpm tauri dev` 確認完了 |
+
+### 11.8 連携・ドキュメント
+- `tasks/status/in_progress.md` の Phase 3/4 ギャップ対応セクションに Phase 3C サブタスクを追加し、進捗を日次で更新。
+- `docs/01_project/activeContext/tauri_app_implementation_plan.md` と `iroh-native-dht-plan.md` に影響する場合は差分反映の是非をレビュアーと確認。
+- Gossip 連携仕様の変更があれば `docs/03_implementation/p2p_mainline_runbook.md` に抜け漏れがないかチェック。
+
+### 11.9 完了条件
+- `modules/event/manager/` 配下に新ディレクトリ構成が整備され、`manager.rs` 単一ファイルが 400 行未満に縮小。
+- `DefaultTopicsRegistry` が導入され、既定トピック操作がすべて専用モジュール経由となっている。
+- `cargo fmt`, `cargo clippy -D warnings`, `cargo test --lib modules::event::manager`, `pnpm test`, `./scripts/test-docker.ps1 rust` が連続成功。
+- 既存の Tauri コマンド (`set_default_p2p_topic`, `broadcast_to_topic` 等) と EventService 依存がビルドエラーなく連携し、手動確認で P2P ブロードキャストが想定通り動作。
+- ドキュメントおよびタスクの更新が完了し、Phase 3C の引継ぎ資料としてレビューアーに共有できる状態。

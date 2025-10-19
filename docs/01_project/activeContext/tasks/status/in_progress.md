@@ -83,3 +83,4 @@
 - 2025年10月19日: EventService を `core`/`subscription`/`distribution`/`factory`/`invoker` 構成へ分割し、テストを `tests/` 配下に再配置。`cargo fmt` / `cargo clippy -- -D warnings` / `pnpm test` は完了、Rust テストは Docker 実行で `offline_service::test_update_cache_metadata_and_cleanup` が既存失敗として継続中。
 - 2025年10月20日: P2PServiceのmessage_count統計をTopicMeshベースで提供するよう更新し、Mockテストでカバレッジを追加。OfflineReindexJobにイベントエミッタの抽象化を導入し、完了イベントの監視パスをユニットテストで検証。
 - 2025年10月20日: Windows 環境で `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` により異常終了。Docker 経由（`./scripts/test-docker.ps1 rust`）で Rust テストを再確認予定。
+- 2025年10月20日: Phase 3C（EventManager 分割）実装を開始。DefaultTopicsRegistry 抽出とモジュール構成の整備に着手し、`refactoring_phase34_gap_plan.md` に沿って進行予定。
