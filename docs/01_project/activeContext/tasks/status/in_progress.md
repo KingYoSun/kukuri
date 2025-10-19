@@ -73,6 +73,10 @@
 - 2025年10月19日: OfflineService/Handler を OfflineManager ベースの実装に刷新し、Tauri 側 DTO を camelCase スキーマへ統一。`save_offline_action` で entityType/entityId を含む JSON を永続化できるよう調整し、取得・同期・メタデータ更新系のコマンドも更新済み。`cargo fmt` / `cargo test` がWindows環境でも通過することを確認済み。
 - 2025年10月19日: EventServiceの削除イベントをEventManager経由の発行に切り替え、OfflineService向けにインメモリSQLiteを用いた単体テスト群を追加。`cargo test` をローカルで完走し、Phase 2 TODO の完了を確認。
 - 2025年10月19日: TopicService/TopicHandler 経由でユーザー単位の参加状態を扱えるようにし、`join_topic`/`leave_topic`/`get_topic_stats` コマンドを Phase 2 仕様へ更新。Tauri/TypeScript 双方を揃え、`cargo test` で後方互換を確認。
+- 2025年10月19日: Phase 3/4 ギャップ対応に着手。`sqlite_repository.rs`/`event_service.rs`/`modules/event/manager.rs` を再調査し、700行超ファイルの分割・DRY 方針を `docs/01_project/activeContext/refactoring_phase34_gap_plan.md` に整理。`modules/p2p/tests/iroh_integration_tests.rs`（702行）を新規対象として追加。
+- 2025年10月19日: 上記計画ドキュメントに背景・スコープ・ロードマップ・リスク・KPI を追記し、フェーズ別の成果物と検証条件を明文化。
+- 2025年10月19日: Phase 3A（SqliteRepository 分割）に着手し、現行実装の棚卸しと移行ステップを `docs/01_project/activeContext/refactoring_phase3a_sqlite_repository_plan.md` にまとめ。Post/Topic/User/Event 各リポジトリの責務・依存・検証手順を洗い出し、`.sqlx/` 更新手順を明示。
+- 2025年10月19日: Phase 3A の実装を完了し、`sqlite_repository` を posts/topics/users/events/mapper/queries モジュールへ分割。SQLx オフラインデータを再生成し、`cargo fmt` / `cargo clippy -- -D warnings` / `./scripts/test-docker.ps1 rust` で検証済み。
 - 2025年10月19日: GitHub Actions ワークフロー失敗の原因特定に着手。`gh run list` で最新失敗ジョブを洗い出し、`gh act` によるローカル再現準備を開始。
 - 2025年10月19日: `src/lib/api/tauri.ts` を Prettier で整形し、`pnpm format:check` と `gh act -j format-check` が成功することを確認。CI フォーマットジョブの失敗を解消。
 - 2025年10月20日: P2PServiceのmessage_count統計をTopicMeshベースで提供するよう更新し、Mockテストでカバレッジを追加。OfflineReindexJobにイベントエミッタの抽象化を導入し、完了イベントの監視パスをユニットテストで検証。
