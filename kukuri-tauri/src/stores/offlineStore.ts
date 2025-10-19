@@ -11,6 +11,7 @@ import type {
   OfflineReindexReport,
 } from '@/types/offline';
 import { EntityType } from '@/types/offline';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 
 declare global {
   interface Window {
@@ -255,14 +256,11 @@ export const useOfflineStore = create<OfflineStore>()(
         return originalData;
       },
     }),
-    {
-      name: 'offline-store',
-      partialize: (state) => ({
-        lastSyncedAt: state.lastSyncedAt,
-        pendingActions: state.pendingActions,
-        syncQueue: state.syncQueue,
-      }),
-    },
+    createLocalStoragePersist<OfflineStore>('offline-store', (state) => ({
+      lastSyncedAt: state.lastSyncedAt,
+      pendingActions: state.pendingActions,
+      syncQueue: state.syncQueue,
+    })),
   ),
 );
 

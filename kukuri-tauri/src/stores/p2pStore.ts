@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import { p2pApi } from '@/lib/api/p2p';
 import type { GossipMetricsSummary } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 
 // P2Pメッセージ
 export interface P2PMessage {
@@ -275,14 +276,11 @@ export const useP2PStore = create<P2PStore>()(
         });
       },
     }),
-    {
-      name: 'p2p-storage',
-      partialize: (state) => ({
-        // 永続化する状態を選択（Mapは除外）
-        initialized: state.initialized,
-        nodeId: state.nodeId,
-        nodeAddr: state.nodeAddr,
-      }),
-    },
+    createLocalStoragePersist<P2PStore>('p2p-storage', (state) => ({
+      // 永続化する状態を選択（Mapは除外）
+      initialized: state.initialized,
+      nodeId: state.nodeId,
+      nodeAddr: state.nodeAddr,
+    })),
   ),
 );

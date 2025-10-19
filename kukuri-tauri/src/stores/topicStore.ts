@@ -8,6 +8,7 @@ import { p2pApi } from '@/lib/api/p2p';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { useOfflineStore } from './offlineStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 
 interface TopicStore extends TopicState {
   setTopics: (topics: Topic[]) => void;
@@ -285,12 +286,9 @@ export const useTopicStore = create<TopicStore>()(
           return { topics: newTopics };
         }),
     }),
-    {
-      name: 'topic-storage',
-      partialize: (state) => ({
-        joinedTopics: state.joinedTopics,
-        currentTopic: state.currentTopic,
-      }),
-    },
+    createLocalStoragePersist<TopicStore>('topic-storage', (state) => ({
+      joinedTopics: state.joinedTopics,
+      currentTopic: state.currentTopic,
+    })),
   ),
 );

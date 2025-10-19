@@ -7,6 +7,7 @@ import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from
 import { SecureStorageApi, type AccountMetadata } from '@/lib/api/secureStorage';
 import { errorHandler } from '@/lib/errorHandler';
 import { useTopicStore } from './topicStore';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
@@ -379,13 +380,10 @@ export const useAuthStore = create<AuthStore>()(
         return get().isAuthenticated;
       },
     }),
-    {
-      name: 'auth-storage',
-      partialize: (state) => ({
-        // privateKeyは保存しない（セキュリティのため）
-        // isAuthenticatedはセキュアストレージからの復元で管理するため保存しない
-        currentUser: state.currentUser,
-      }),
-    },
+    createLocalStoragePersist<AuthStore>('auth-storage', (state) => ({
+      // privateKeyは保存しない（セキュリティのため）
+      // isAuthenticatedはセキュアストレージからの復元で管理するため保存しない
+      currentUser: state.currentUser,
+    })),
   ),
 );

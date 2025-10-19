@@ -509,3 +509,103 @@ src-tauri/src/modules/p2p/tests/iroh/
 - Phase 3D 着手時は `tasks/status/in_progress.md` に「Phase 3D: iroh 統合テスト再編」チケットを追加し、担当・実行期間・環境要件（必要バイナリ/ポート）を明記する。
 - iroh バイナリのバージョン固定やキャッシュ戦略について、プラットフォームチーム／CI 担当と合意し、Runbook へ共有メモを追記する。
 - テスト追加が必要なシナリオ（例: 不正パケット処理、ノード再起動フェイルオーバー）を Phase 4 の DRY 設計と連動させ、バックログへ登録する。
+
+## 13. Phase 4 実行計画 - DRY適用と Zustand 永続化共通化
+
+### 13.1 目的とスコープ
+- Phase 3 で分割した Rust モジュールとテスト資産を土台に、残存しているデータ変換・イベント生成・モック定義の重複を排除する。
+- `sqlite_repository` / `EventService` / `EventManager` 間で共通化すべき補助ロジックを独立モジュールへ集約し、API 拡張時の差分散在を防ぐ。
+- フロントエンドでは Zustand ストアの永続化設定を `persistHelpers.ts` に統一し、Map を含む状態のシリアライズ仕様を標準化する。
+- `.sqlx/` など生成物の再利用戦略を文書化し、DRY 化後のリグレッションを最小化する。
+
+### 13.2 現状の重複と課題
+- **Rust**
+  - `sqlite_repository::{posts, topics, events}` と `EventService` 双方で `SqliteRow` → ドメイン変換ロジックが複製され、テスト用モックも各所で個別定義されている。
+  - `EventService::factory`（予定）と `EventManager` のイベント生成ヘルパーが並列で存在し、タグ構築・署名委譲・デフォルトトピック処理が重複する見込み。
+  - `modules/event/tests` / `modules/p2p/tests` のモック構築・ログユーティリティが似通った実装で散在し、将来のテスト追加時に修正漏れが発生しやすい。
+- **TypeScript**
+  - `authStore` / `draftStore` / `offlineStore` / `p2pStore` / `topicStore` がそれぞれ独自に `persist` 設定・`partialize` 関数・Map シリアライズ処理を実装しており、仕様逸脱やバグ修正の波及が困難。
+  - `draftStore.test.ts` などでローカルストレージの手動モックを設定しており、`persistHelpers` を介さないテスト構造が将来の永続化仕様変更を阻害する。
+  - 既存キー（例: `auth-storage`, `offline-store`）の互換性整理が不十分で、設定を置き換える際にリセットや復元失敗が起こりうる。
+
+### 13.3 目標アーキテクチャ
+- **Rust**
+  - `src-tauri/src/application/shared/`（新設）に共通ユーティリティを配置し、`mapper.rs` / `nostr_factory.rs` / `default_topics.rs` などを再利用可能な形で公開する。
+  - `sqlite_repository` 配下の `mapper.rs` を `application/shared/mappers` に移設し、`pub use` で Repository・Service 双方から参照できるようにする。
+  - `modules/event/tests` / `modules/p2p/tests` のサポートコードを `tests/support/{mocks,logging,fixtures}.rs` にまとめ、共通の `TestClock` / `TestGossip` を再利用する。
+- **TypeScript**
+  - `persistHelpers.ts` を拡張し、Map フィールド向けの `createMapAwareStorage` と `createPartializer` を活用するストア初期化テンプレートを定義。
+  - 各ストアでの `persist` 呼び出しを共通ヘルパーに置き換え、`name`・`partialize`・`storage` をストアごとの構成ファイル（例: `stores/config/persist.ts`）に集約する。
+  - テスト資産側では `setupPersistMock.ts`（仮称）を導入し、`localStorage` のスタブ・リセット処理を 1 箇所にまとめる。
+
+```text
+src-tauri/src/application/shared/
+├── mod.rs
+├── mappers/
+│   ├── mod.rs
+│   ├── posts.rs
+│   ├── topics.rs
+│   └── events.rs
+├── nostr/
+│   ├── mod.rs
+│   └── factory.rs
+└── tests/
+    ├── fixtures.rs
+    └── mocks.rs
+
+kukuri-tauri/src/stores/
+├── utils/persistHelpers.ts
+├── config/
+│   └── persist.ts
+└── *.ts
+```
+
+### 13.4 作業ブレークダウン（WBS）
+1. **共通ユーティリティの棚卸しと計測**
+   - `rg` と `cargo llvm-lines` を用いて変換・イベント生成・モック定義の重複箇所を再確認し、削減対象を表形式で整理。
+   - `.sqlx/` 生成物とローカルストレージキーの現行仕様を `docs/03_implementation/` に追記し、移行時のリスクを洗い出す。
+2. **Rust: データ変換とイベント生成の共通化**
+   - `application/shared/mappers` を新設し、`SqliteTopicRow` などの構造体と変換関数を切り出して `sqlite_repository` / `EventService` で再利用する。
+   - `nostr/factory.rs` に TextNote / TopicPost / Reaction / Metadata の生成ヘルパーを実装し、`EventService` と `EventManager` からの呼び出しを統一する。
+   - `DefaultTopicsRegistry` を再利用できるよう `shared/default_topics.rs` を導入し、`EventManager` から責務を切り離す。
+3. **Rust: テスト支援コードの集約**
+   - `modules/event/tests` と `modules/p2p/tests` のモックやロガーを `application/shared/tests` へ移動し、`pub use` で各テストから参照させる。
+   - Phase 3D で整備した `modules/p2p/tests/iroh/support` と統合性を確認し、重複する `wait_for_*` 系ヘルパーを一本化。
+4. **TypeScript: Zustand 永続化の共通化**
+   - `persistHelpers.ts` にテンプレート関数（例: `withPersist`）を追加し、`authStore` など各ストアでの `persist` 設定を差し替える。
+   - Map を扱うストアでは `createMapAwareStorage` を適用し、従来の手動シリアライズ処理を削除。必要に応じて初回マイグレーションで既存データを復元するコードパスを実装。
+   - `draftStore.test.ts` などのテストを `setupPersistMock` ベースに書き換え、`localStorage` の初期化を共通化する。
+5. **ドキュメント・タスク更新とレビュー準備**
+   - `docs/03_implementation/p2p_mainline_runbook.md` と `docs/01_project/activeContext/tauri_app_implementation_plan.md` に DRY 化後の構成とフロント永続化の扱いを反映。
+   - `tasks/status/in_progress.md` の Phase 4 セクションにサブタスクを追加し、進捗と成果物の棚卸しを行う。
+
+### 13.5 テスト・検証計画
+- **Rust**
+  - `cd kukuri-tauri/src-tauri && cargo fmt && cargo clippy -D warnings`
+  - `cargo test --lib infrastructure::database::sqlite_repository`
+  - `cargo test --lib application::services::event_service`
+  - `ENABLE_P2P_INTEGRATION=1 KUKURI_BOOTSTRAP_PEERS=memory://local cargo test --tests modules::event::manager`
+  - `./scripts/test-docker.ps1 rust`（Windows 安定性確認）
+- **TypeScript**
+  - `cd kukuri-tauri && pnpm lint && pnpm test`
+  - `pnpm test --filter draftStore` などストア別に永続化挙動を重点確認
+- **移行確認**
+  - 既存ローカルストレージキーを保持した状態でアプリを起動し、Phase 4 変更後も自動復元されるかを手動検証。
+  - `.sqlx/` の再生成結果をレビューし、余剰差分が出ていないか確認。
+
+### 13.6 リスクと対応策
+- **ローカルストレージ仕様変更によるデータ消失**  
+  - 対応: 旧フォーマット検出時にマイグレーション関数を実行し、変換失敗時はバックアップ保存と通知を実装。
+- **共通化に伴う `.sqlx/` 差分の再生成漏れ**  
+  - 対応: `cargo sqlx prepare` を WBS 内に明記し、PR テンプレートでもチェックボックス化。
+- **モック統合によるテストフレーク**  
+  - 対応: `tests/support` の API を段階的に置き換え、各ステップで限定的な `cargo test` を実行して問題箇所を即時切り戻せる状態を維持。
+- **TypeScript ストアの循環依存**  
+  - 対応: `config/persist.ts` を純粋関数のみで構成し、副作用のある依存（API 呼び出し等）はストア定義側に残す。
+
+### 13.7 完了条件
+- `application/shared` に共通モジュールが整備され、`EventService`・`EventManager`・`sqlite_repository` からの変換／イベント生成ロジックが再利用されている。
+- `modules/event/tests` および `modules/p2p/tests` のモック・ロギングコードが `tests/support` へ集約され、重複実装が削除されている。
+- `authStore` / `draftStore` / `offlineStore` / `p2pStore` / `topicStore` が `persistHelpers.ts` 由来の設定を利用し、Map フィールドの永続化が共通ストレージで動作する。
+- `cargo fmt`, `cargo clippy -D warnings`, `cargo test`, `pnpm lint`, `pnpm test`, `./scripts/test-docker.ps1 rust` が成功し、ローカルストレージの後方互換チェックを含む手動検証が完了。
+- 関連ドキュメント・タスクが更新され、DRY 適用後の運用手順が共有済みであること。

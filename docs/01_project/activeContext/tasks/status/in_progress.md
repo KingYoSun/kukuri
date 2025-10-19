@@ -45,9 +45,14 @@
 - [x] Phase 2 TODO 解消: `event_service` の未実装処理（Post変換・メタデータ更新・Reaction/Repost処理）を完了し、`EventManager` との連携を整備する（`kukuri-tauri/src-tauri/src/application/services/event_service.rs:122`）。
 - [x] Phase 2 TODO 解消: `offline_service` の Repository 統合タスクを実装し、同期/キャッシュ関連の TODO を解消する（`kukuri-tauri/src-tauri/src/application/services/offline_service.rs:134`）。
 - [x] Phase 2 TODO 解消: トピック更新・削除コマンドの未実装部分を実装し、フロントからの操作を完了させる（`kukuri-tauri/src-tauri/src/presentation/commands/topic_commands.rs:99`）。
-- [ ] Phase 3/4 ギャップ対応: 700行超のファイル（`kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository.rs:1003`, `kukuri-tauri/src-tauri/src/application/services/event_service.rs:341`, `kukuri-tauri/src-tauri/src/modules/event/manager.rs:240`）の分割計画を策定し、リファクタリングタスクへ落とし込む。
-- [ ] Phase 3D: `modules/p2p/tests/iroh/` への統合テスト再編（support抽出・シナリオ別ファイル分割・Runbook/Planの更新）を完了させる。
-- [ ] Phase 4 DRY 適用: Zustand ストアで `persistHelpers.ts`（`kukuri-tauri/src/stores/utils/persistHelpers.ts:6`）を採用し、永続化設定の重複を解消する。
+- [x] Phase 3/4 ギャップ対応: 700行超のファイル（`kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository.rs:1003`, `kukuri-tauri/src-tauri/src/application/services/event_service.rs:341`, `kukuri-tauri/src-tauri/src/modules/event/manager.rs:240`）の分割計画を策定し、リファクタリングタスクへ落とし込む。
+- [x] Phase 3D: `modules/p2p/tests/iroh/` への統合テスト再編（support抽出・シナリオ別ファイル分割・Runbook/Planの更新）を完了させる。
+- [ ] Phase 4 DRY 適用（進行中）
+  - [x] 共有モジュール `application/shared` を追加し、Sqliteマッパーと Nostr ファクトリの基盤を共通化。
+  - [ ] EventService / EventManager のイベント生成ロジックを `shared::nostr` に統合し、DefaultTopicsRegistry を共有ユーティリティ化する。
+  - [ ] `modules/event` / `modules/p2p` テスト支援コードを `application/shared/tests` に集約し、重複モック・ロガーを解消する。
+  - [ ] Zustand 永続化テンプレート（`withPersist` / `config/persist.ts`）を整備し、Map 含むストアで `createMapAwareStorage` を適用。テスト用 `setupPersistMock` を導入する。
+  - [ ] `.sqlx/` 更新手順とローカルストレージキー移行のリスク評価を `docs/03_implementation/` 系ドキュメントへ反映し、後方互換検証結果を記録する。
 - [ ] Phase 5 成果測定: dead code 数やテストカバレッジといった指標を `tasks/metrics/` 配下で定期記録する運用を整備する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
@@ -90,3 +95,5 @@
 - 2025年10月20日: Phase 3C（EventManager 分割）実装を開始。DefaultTopicsRegistry 抽出とモジュール構成の整備に着手し、`refactoring_phase34_gap_plan.md` に沿って進行予定。
 - 2025年10月20日: P2PDebugPanel テストを調整し、`useNostrSubscriptions` モック化と `import.meta.env.MODE` 設定で `act(...)` 警告を解消。`pnpm test` が警告なしで通過することを確認。
 - 2025年10月20日: MarkdownPreview の DOM 構造を見直し、メディア埋め込み時に `<p>` 配下へ `<div>` が入らないよう段落レンダラを調整。`pnpm test` で `validateDOMNesting` 警告が解消されたことを確認。
+- 2025年10月20日: Phase 4（DRY適用・Zustand永続化共通化）の実行計画を `docs/01_project/activeContext/refactoring_phase34_gap_plan.md` に第13章として追加し、対象領域・WBS・検証方針を明文化。
+- 2025年10月20日: Phase 4 の初期実装として `application/shared` モジュールを追加し、Sqliteマッパーと Nostr ファクトリを共通化。Zustand ストアの永続化設定を `persistHelpers` 経由に統一し、`cargo clippy -- -D warnings` / Docker 経由の `cargo test` / `pnpm lint` / `pnpm test` を完走。

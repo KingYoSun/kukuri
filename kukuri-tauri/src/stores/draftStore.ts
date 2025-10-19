@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 import type { PostDraft, CreateDraftParams, UpdateDraftParams } from '@/types/draft';
 import { errorHandler } from '@/lib/errorHandler';
+import { createLocalStoragePersist } from './utils/persistHelpers';
 
 interface DraftStore {
   drafts: PostDraft[];
@@ -129,12 +130,9 @@ export const useDraftStore = create<DraftStore>()(
         }
       },
     }),
-    {
-      name: 'kukuri-drafts',
-      partialize: (state) => ({
-        drafts: state.drafts,
-        // Don't persist currentDraftId to avoid confusion on reload
-      }),
-    },
+    createLocalStoragePersist<DraftStore>('kukuri-drafts', (state) => ({
+      drafts: state.drafts,
+      // Don't persist currentDraftId to avoid confusion on reload
+    })),
   ),
 );
