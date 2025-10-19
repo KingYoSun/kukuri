@@ -6,7 +6,7 @@ import MarkdownPreview from './MarkdownPreview';
 vi.mock('./MediaEmbed', () => ({
   __esModule: true,
   default: ({ url, className }: { url: string; className?: string }) => (
-    <div data-testid="media-embed" data-url={url} className={className}>
+    <div data-testid="media-embed" data-url={url} data-embed="media-embed" className={className}>
       MediaEmbed: {url}
     </div>
   ),

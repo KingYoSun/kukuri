@@ -391,3 +391,12 @@ src-tauri/src/modules/event/manager/
 - `cargo fmt`, `cargo clippy -D warnings`, `cargo test --lib modules::event::manager`, `pnpm test`, `./scripts/test-docker.ps1 rust` が連続成功。
 - 既存の Tauri コマンド (`set_default_p2p_topic`, `broadcast_to_topic` 等) と EventService 依存がビルドエラーなく連携し、手動確認で P2P ブロードキャストが想定通り動作。
 - ドキュメントおよびタスクの更新が完了し、Phase 3C の引継ぎ資料としてレビューアーに共有できる状態。
+
+### 11.10 進捗メモ（2025年10月20日）
+- P2PDebugPanel のテスト環境設定を修正し、`import.meta.env.MODE` を `test` に固定、`useNostrSubscriptions` をモック化することで `act(...)` 警告を解消した。`pnpm test` で React 警告が発生しないことを確認済み。
+- MarkdownPreview の段落レンダラーを調整し、メディア埋め込みリンクを `<p>` ラッパーから切り離すロジックを追加。YouTube 等の埋め込みが DOM ネスティング警告なしで描画されるようになった。
+
+### 11.11 ネクストアクション
+1. MarkdownPreview でのエンベッド対象 URL パターンを追加検証し、必要に応じてサポート対象（Spotify、SoundCloud など）を拡張する。
+2. 実機 UI（`pnpm tauri dev`）で Markdown 埋め込み表示を再確認し、スタイル崩れやパフォーマンス影響がないかをチェック。
+3. Phase 3C の残タスク（EventManager -> DefaultTopicsRegistry 連携テストの拡充 / GossipService モックの再利用性向上）を着手順に沿って具体的なチケットへ切り出す。

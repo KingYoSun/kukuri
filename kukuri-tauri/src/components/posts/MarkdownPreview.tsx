@@ -17,28 +17,10 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeRaw]}
       components={{
-        // Custom link renderer to detect media URLs
+        // Custom link renderer for consistent attributes
         a: ({ node: _node, href, children, ...props }) => {
-          if (!href) return <a {...props}>{children}</a>;
-
-          // Check if this is a media URL that should be embedded
-          const mediaPatterns = [
-            /youtube\.com\/watch\?v=/,
-            /youtu\.be\//,
-            /vimeo\.com\/\d+/,
-            /twitter\.com\/\w+\/status\/\d+/,
-            /x\.com\/\w+\/status\/\d+/,
-          ];
-
-          const isMediaUrl = mediaPatterns.some((pattern) => pattern.test(href));
-
-          // If the link text is the same as href, it's likely meant to be embedded
-          const shouldEmbed =
-            isMediaUrl &&
-            (children?.toString() === href || children?.toString().startsWith('http'));
-
-          if (shouldEmbed) {
-            return <MediaEmbed url={href} className="my-4" />;
+          if (!href) {
+            return <a {...props}>{children}</a>;
           }
 
           return (
@@ -49,13 +31,50 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
         },
         // Override paragraph to handle media embeds properly
         p: ({ node: _node, children, ...props }) => {
-          // Check if the paragraph contains only a media embed
           const childrenArray = React.Children.toArray(children);
-          if (childrenArray.length === 1) {
-            const child = childrenArray[0];
-            if (React.isValidElement(child) && child.type === MediaEmbed) {
-              // Return the media embed without wrapping in a paragraph
-              return child;
+          const meaningfulChildren = childrenArray.filter((child) => {
+            if (typeof child === 'string') {
+              return child.trim().length > 0;
+            }
+            return true;
+          });
+
+          if (meaningfulChildren.length === 1) {
+            const child = meaningfulChildren[0];
+            if (React.isValidElement(child)) {
+              const href: string | undefined = child.props?.href;
+
+              if (href) {
+                const textContent = React.Children.toArray(child.props.children)
+                  .map((c) => (typeof c === 'string' ? c : ''))
+                  .join('');
+
+                const mediaPatterns = [
+                  /youtube\.com\/watch\?v=/,
+                  /youtu\.be\//,
+                  /vimeo\.com\/\d+/,
+                  /twitter\.com\/\w+\/status\/\d+/,
+                  /x\.com\/\w+\/status\/\d+/,
+                ];
+
+                const isMediaUrl = mediaPatterns.some((pattern) => pattern.test(href));
+                const shouldEmbed =
+                  isMediaUrl && (textContent === href || textContent.startsWith('http'));
+
+                if (shouldEmbed) {
+                  return <MediaEmbed url={href} className="my-4" />;
+                }
+              }
+
+              if (
+                child.props?.['data-embed'] === 'media-embed' ||
+                child.type === MediaEmbed ||
+                (typeof child.type === 'function' && child.type.name === MediaEmbed.name)
+              ) {
+                return React.cloneElement(child as React.ReactElement, {
+                  className: cn((child as React.ReactElement).props.className, 'my-4'),
+                });
+              }
             }
           }
 

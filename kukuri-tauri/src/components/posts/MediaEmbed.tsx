@@ -78,6 +78,7 @@ const MediaEmbed: React.FC<MediaEmbedProps> = ({ url, className }) => {
   return (
     <div
       className={cn('relative w-full overflow-hidden rounded-lg', className)}
+      data-embed="media-embed"
       style={{ aspectRatio: embedData.aspectRatio }}
     >
       <iframe

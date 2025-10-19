@@ -1,17 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { P2PDebugPanel } from '../P2PDebugPanel';
 import { useP2P, UseP2PReturn } from '@/hooks/useP2P';
+import { useNostrSubscriptions } from '@/hooks/useNostrSubscriptions';
 
 // useP2Pフックのモック
 vi.mock('@/hooks/useP2P');
+vi.mock('@/hooks/useNostrSubscriptions');
 
 describe('P2PDebugPanel', () => {
+  const originalEnv = { ...import.meta.env };
+
   beforeEach(() => {
     // テスト環境ではimport.meta.env.PRODをfalseに設定
     Object.defineProperty(import.meta, 'env', {
-      value: { PROD: false },
+      value: { ...originalEnv, PROD: false, MODE: 'test' },
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(import.meta, 'env', {
+      value: originalEnv,
       writable: true,
     });
   });
@@ -34,9 +45,17 @@ describe('P2PDebugPanel', () => {
     getTopicPeerCount: vi.fn().mockReturnValue(0),
   });
 
+  const createMockSubscriptions = () => ({
+    subscriptions: [],
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(),
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useP2P).mockReturnValue(createMockUseP2P());
+    vi.mocked(useNostrSubscriptions).mockReturnValue(createMockSubscriptions());
   });
 
   describe('基本的な表示', () => {
