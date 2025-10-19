@@ -400,3 +400,112 @@ src-tauri/src/modules/event/manager/
 1. MarkdownPreview でのエンベッド対象 URL パターンを追加検証し、必要に応じてサポート対象（Spotify、SoundCloud など）を拡張する。
 2. 実機 UI（`pnpm tauri dev`）で Markdown 埋め込み表示を再確認し、スタイル崩れやパフォーマンス影響がないかをチェック。
 3. Phase 3C の残タスク（EventManager -> DefaultTopicsRegistry 連携テストの拡充 / GossipService モックの再利用性向上）を着手順に沿って具体的なチケットへ切り出す。
+
+## 12. Phase 3D 実行計画 - iroh 統合テスト再編
+
+### 12.1 目的とスコープ
+- Phase 3C で安定化した EventManager / P2P API を前提に、`kukuri-tauri/src-tauri/src/modules/p2p/tests/iroh_integration_tests.rs` に集約されている統合テストをシナリオ別モジュールへ再編する。
+- 統合テスト実行に必要な環境変数（`ENABLE_P2P_INTEGRATION`, `KUKURI_BOOTSTRAP_PEERS`, `KUKURI_IROH_BIN` など）と前提手順を文書化し、CI とローカルの実行フローを一致させる。
+- テスト再編の結果を `docs/03_implementation/p2p_mainline_runbook.md` と `docs/01_project/activeContext/iroh-native-dht-plan.md` に反映し、Phase 7 以降の運用チームへ引き継げる状態にする。
+
+### 12.2 現状サマリー
+- `iroh_integration_tests.rs`（702行）に接続確認・ブロードキャスト・多ノードシナリオ・再接続シナリオが混在し、ヘルパー関数や定数が散在して可読性が低下している。
+- ブートストラップ設定（`TestBootstrap::new()` 等）や待機ロジックが各テストで重複し、タイムアウト値・リトライ回数の管理が分散している。
+- ログ出力が独自マクロと `println!` に混在し、トラブルシューティング時に情報量が不足するケースがある。
+- 実行条件の判定がテスト毎にばらばらで、`ENABLE_P2P_INTEGRATION` 未設定時に不明瞭な失敗（タイムアウト）として検出されるパターンが残っている。
+- ドキュメント上はテスト実行手順が旧構成のままで、CI ワークフロー側の環境変数設定とも整合していない。
+
+### 12.3 目標モジュール構成
+
+```text
+src-tauri/src/modules/p2p/tests/iroh/
+├── mod.rs              // テストエントリ・シナリオ公開
+├── support/
+│   ├── config.rs       // 環境変数の取得・スキップ判定・タイムアウト定義
+│   ├── bootstrap.rs    // iroh ノード生成・ピア接続ヘルパー
+│   ├── fixtures.rs     // テスト用イベント／トピック ID 生成
+│   └── logging.rs      // tracing サブスクライバ初期化とステップログ
+├── connectivity.rs     // 1対1 接続・ルーティング検証シナリオ
+├── broadcast.rs        // ブロードキャスト・Topic ルーティング検証
+├── recovery.rs         // 再接続・再索引・フェイルオーバーシナリオ
+└── multi_peer.rs       // 3ノード以上のメッシュ/スター型シナリオ
+```
+
+- 既存の `ENABLE_P2P_INTEGRATION` 判定は `support::config` に集約し、すべてのシナリオで共通の `assume_enabled()`（skipped 出力付き）を利用する。
+- 待機処理は `support::bootstrap::wait_for_route` 等へまとめ、テスト本体は期待シナリオの検証にフォーカスさせる。
+- `logging.rs` で `tracing` を初期化し、CI 上でもステップログが把握できるようにする（必要に応じて `RUST_LOG=iroh_tests=trace` を想定）。
+
+### 12.4 作業ブレークダウン（WBS）
+1. **現状棚卸し**
+   - `rg "modules::p2p::tests::iroh"` や GitHub Actions ワークフローを確認し、参照されているテスト名・環境変数・スキップ実装を洗い出す。
+   - `docs/03_implementation/p2p_mainline_runbook.md` と `iroh-native-dht-plan.md` で統合テストに触れている箇所を抽出し、更新が必要な章をメモ化。
+2. **モジュール骨格の追加**
+   - `modules/p2p/tests/iroh/` ディレクトリと `support` 配下の空ファイル（`config.rs`, `bootstrap.rs`, `fixtures.rs`, `logging.rs`）を作成し、`mod.rs` から再エクスポートする。
+   - 既存テストで利用している構造体/定数のスケルトンを `support` に配置し、コンパイルが通る最小構成を用意。
+3. **サポートユーティリティ抽出**
+   - ブートストラップ生成、キー管理、待機ループ、timeout/interval 定数を `support` へ移設し、テスト本体から重複コードを除去。
+   - `tracing` ベースの `log_step!` マクロを `logging.rs` に再実装し、既存の `println!` を置き換える。
+4. **シナリオ別テスト分割（接続・ブロードキャスト）**
+   - 1対1 接続と Topic ブロードキャスト検証を `connectivity.rs` / `broadcast.rs` に移動し、サポート関数を利用する形へ書き換える。
+   - 旧ファイルからの移動後、`cargo test modules::p2p::tests::iroh::connectivity -- --nocapture` で成功を確認。
+5. **シナリオ別テスト分割（再接続・多ノード）**
+   - 再接続/再索引シナリオと多ノードシナリオを `recovery.rs` / `multi_peer.rs` に移動し、待機処理を共通化。
+   - 再接続テストでは OfflineService/SubscriptionState 依存の確認ポイントを最新仕様へ合わせる。
+6. **実行条件フラグの統一**
+   - `support::config::TestEnv`（仮）を導入し、必須環境変数が不足している場合は `Result::Err` ではなく `assert!(assume_enabled().is_ok())` として `cargo test` 上で `ignored` 表示を出す。
+   - 必要に応じて `Cargo.toml` に `p2p-integration-tests` フィーチャを追加し、CI/ローカルで明示的に切り替えられるようにする。
+7. **ドキュメント／スクリプト連動**
+   - `scripts/test-docker.ps1` `rust` サブコマンドで統合テストを有効化するオプション（例: `-EnableP2PIntegration`）の追加可否を検討し、テスト手順に反映。
+   - `docs/03_implementation/p2p_mainline_runbook.md` に環境変数、期待ログ、失敗時のトラブルシューティングを追記。
+8. **CI 設定更新**
+   - GitHub Actions の Rust テストジョブで `ENABLE_P2P_INTEGRATION=1` と必要なブートストラップ設定を付与し、再編後のテストが実行されるよう修正。
+   - Job のタイムアウトや `-- --test-threads=1` の付与可否を検証し、安定性を記録。
+9. **レガシーファイルの削除と仕上げ**
+   - `iroh_integration_tests.rs` を削除し、新モジュールからの `pub mod` 参照で `cargo fmt` / `cargo clippy -D warnings` / `cargo test` を通す。
+   - Diff を確認し、余剰の `use` 文や未使用モックが残っていないかを確認。
+
+### 12.5 テスト・検証計画
+- Rust:
+  - `cd kukuri-tauri/src-tauri && ENABLE_P2P_INTEGRATION=1 KUKURI_BOOTSTRAP_PEERS=memory://local cargo test --tests modules::p2p::tests::iroh`
+  - `ENABLE_P2P_INTEGRATION=1 cargo test modules::p2p::tests::iroh::connectivity -- --test-threads=1 --nocapture`
+  - `./scripts/test-docker.ps1 rust -Integration`（仮オプション）で Windows 環境の安定性を確認
+- ログ検証:
+  - `RUST_LOG=iroh_tests=debug` を指定し、`support::logging` の出力が CI アーティファクトで確認できるかチェック。
+- 退行確認:
+  - `ENABLE_P2P_INTEGRATION=0 cargo test -- --skip modules::p2p::tests::iroh` が成功することを確認し、フィーチャ未有効時のビルドが壊れていないか検証。
+
+### 12.6 CI・ドキュメント更新
+- GitHub Actions（`ci/rust-tests.yml` 想定）に統合テストの追加ジョブ／ステップを設け、必要なキャッシュ（iroh バイナリ）とタイムアウト延長を設定する。
+- `docs/03_implementation/p2p_mainline_runbook.md` に「統合テスト」の章を設け、事前準備・実行コマンド・期待ログ・失敗時対応フローを追記。
+- `docs/01_project/activeContext/iroh-native-dht-plan.md` の「検証」セクションへ新シナリオ名と実行条件を追記し、Phase 7 以降の検証観点に反映。
+- `tasks/status/in_progress.md` の Phase 3/4 ギャップ対応行に Phase 3D サブタスクを追加し、進捗記録を開始。
+
+### 12.7 スケジュール目安
+| 日数 | 主作業 | チェックポイント |
+| --- | --- | --- |
+| Day 1 | 現状棚卸し・モジュール骨格／support ユーティリティ抽出 | `mod.rs` 追加後に `cargo check` が成功 |
+| Day 2 | シナリオ別ファイルへの移行・実行条件フラグ統一 | `cargo test modules::p2p::tests::iroh::connectivity` が安定 |
+| Day 3 | CI・ドキュメント更新と総合検証 | `cargo test --tests modules::p2p::tests::iroh` + `./scripts/test-docker.ps1 rust` が連続成功 |
+| Buffer | 予備日（CI flake 対応・追加シナリオ検証） | GitHub Actions での統合テスト成功を確認 |
+
+### 12.8 リスクと対応策
+- **ネットワーク依存のフレーク**  
+  - 対応: `support::config` にリトライ戦略とタイムアウト値を集約し、`tokio::time::timeout` を活用した明示的な失敗理由をログへ出力。
+- **Windows 固有挙動（ポート占有・バイナリパス差異）**  
+  - 対応: `KUKURI_IROH_BIN` を環境変数で受け取り、パス解決処理を `bootstrap.rs` にまとめる。Docker 実行手順をドキュメントに明記。
+- **フィーチャフラグ忘れによるテスト未実行**  
+  - 対応: `support::config::assume_enabled()` で `eprintln!` による警告を表示し、CI では `--ensure-integration`（仮）オプションで失敗させる。
+- **ドキュメントとの齟齬**  
+  - 対応: テスト再編の PR で必ず Runbook/Plan の更新を含め、レビューチェックリストに「統合テスト手順の更新」を追加。
+
+### 12.9 完了条件
+- `modules/p2p/tests/iroh/` ディレクトリ構成が整備され、旧 `iroh_integration_tests.rs` は削除されている。
+- すべてのシナリオで共通サポート（config/bootstrap/logging）が利用され、重複コードが解消されている。
+- `ENABLE_P2P_INTEGRATION=1` を設定した `cargo test --tests modules::p2p::tests::iroh` がローカル・CI の双方で安定して成功している。
+- Runbook・DHT プラン・タスクボードが更新済みで、統合テスト実行時の手順と期待結果が明文化されている。
+- `cargo fmt`, `cargo clippy -D warnings`, `cargo test`, `./scripts/test-docker.ps1 rust` が連続成功し、差分に不要な警告が残っていない。
+
+### 12.10 連携・フォローアップ
+- Phase 3D 着手時は `tasks/status/in_progress.md` に「Phase 3D: iroh 統合テスト再編」チケットを追加し、担当・実行期間・環境要件（必要バイナリ/ポート）を明記する。
+- iroh バイナリのバージョン固定やキャッシュ戦略について、プラットフォームチーム／CI 担当と合意し、Runbook へ共有メモを追記する。
+- テスト追加が必要なシナリオ（例: 不正パケット処理、ノード再起動フェイルオーバー）を Phase 4 の DRY 設計と連動させ、バックログへ登録する。

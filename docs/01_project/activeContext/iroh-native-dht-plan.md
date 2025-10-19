@@ -302,8 +302,19 @@ mod tests {
 ```
 
 ### 5.2 統合テスト
-- Docker/ローカルで複数ノード起動（`scripts/start-bootstrap-nodes.ps1`）
-- DHT経由でのピア発見確認（`discovery_dht()` 有効時）
+- 統合テストコードは `kukuri-tauri/src-tauri/src/modules/p2p/tests/iroh/` 配下へ再編済み。
+  - `connectivity.rs`: 2ノード接続／安定性検証
+  - `broadcast.rs`: ブロードキャスト／返信／引用フロー
+  - `multi_peer.rs`: 3ノード以上のメッシュ検証
+  - `support/`: ブートストラップ/ログ共通ユーティリティ
+- 実行方法（ローカル）:
+  ```powershell
+  $env:ENABLE_P2P_INTEGRATION = "1"
+  $env:KUKURI_BOOTSTRAP_PEERS = "node_id@host:port" # カンマ区切り複数可
+  cargo test --tests modules::p2p::tests::iroh -- --test-threads=1 --nocapture
+  ```
+- Docker/ローカルで複数ノード起動（`scripts/start-bootstrap-nodes.ps1`）し、`KUKURI_BOOTSTRAP_PEERS` を自動設定する。
+- DHT経由でのピア発見確認（`discovery_dht()` 有効時）、ログ出力は `RUST_LOG=iroh_tests=debug` で収集。
 
 ### 5.3 スモークテスト（Docker）
 - 目的: Tauri起動なしでP2Pの最低限動作（join/broadcast/receive）を検証

@@ -44,7 +44,7 @@ services:
     environment:
       # Rust環境変数
       RUST_BACKTRACE: 1
-      RUST_LOG: debug
+      RUST_LOG: "${RUST_LOG:-debug}"
       CARGO_HOME: /usr/local/cargo
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -55,6 +55,7 @@ services:
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
       KUKURI_BOOTSTRAP_HOST: "${KUKURI_BOOTSTRAP_HOST:-127.0.0.1}"
       KUKURI_BOOTSTRAP_PORT: "${KUKURI_BOOTSTRAP_PORT:-11233}"
+      KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
@@ -83,15 +84,16 @@ services:
       - cargo-target:/app/kukuri-tauri/src-tauri/target
     environment:
       RUST_BACKTRACE: full
-      RUST_LOG: debug
+      RUST_LOG: "${RUST_LOG:-debug}"
       CARGO_HOME: /usr/local/cargo
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: "-C strip=debuginfo"
-      ENABLE_P2P_INTEGRATION: ${ENABLE_P2P_INTEGRATION:-0}
-      KUKURI_FORCE_LOCALHOST_ADDRS: ${KUKURI_FORCE_LOCALHOST_ADDRS:-1}
-      KUKURI_BOOTSTRAP_PEERS: ${KUKURI_BOOTSTRAP_PEERS:-}
+      ENABLE_P2P_INTEGRATION: "${ENABLE_P2P_INTEGRATION:-0}"
+      KUKURI_FORCE_LOCALHOST_ADDRS: "${KUKURI_FORCE_LOCALHOST_ADDRS:-1}"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-}"
+      KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
 
   # 個別のTypeScriptテスト実行
   ts-test:

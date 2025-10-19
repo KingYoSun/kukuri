@@ -5,7 +5,7 @@ mod error_tests;
 #[cfg(test)]
 mod gossip_tests;
 #[cfg(test)]
-mod iroh_integration_tests;
+mod iroh;
 #[cfg(test)]
 mod mainline_dht_tests;
 #[cfg(test)]

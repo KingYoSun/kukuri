@@ -46,6 +46,7 @@
 - [x] Phase 2 TODO 解消: `offline_service` の Repository 統合タスクを実装し、同期/キャッシュ関連の TODO を解消する（`kukuri-tauri/src-tauri/src/application/services/offline_service.rs:134`）。
 - [x] Phase 2 TODO 解消: トピック更新・削除コマンドの未実装部分を実装し、フロントからの操作を完了させる（`kukuri-tauri/src-tauri/src/presentation/commands/topic_commands.rs:99`）。
 - [ ] Phase 3/4 ギャップ対応: 700行超のファイル（`kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository.rs:1003`, `kukuri-tauri/src-tauri/src/application/services/event_service.rs:341`, `kukuri-tauri/src-tauri/src/modules/event/manager.rs:240`）の分割計画を策定し、リファクタリングタスクへ落とし込む。
+- [ ] Phase 3D: `modules/p2p/tests/iroh/` への統合テスト再編（support抽出・シナリオ別ファイル分割・Runbook/Planの更新）を完了させる。
 - [ ] Phase 4 DRY 適用: Zustand ストアで `persistHelpers.ts`（`kukuri-tauri/src/stores/utils/persistHelpers.ts:6`）を採用し、永続化設定の重複を解消する。
 - [ ] Phase 5 成果測定: dead code 数やテストカバレッジといった指標を `tasks/metrics/` 配下で定期記録する運用を整備する。
 
@@ -54,6 +55,9 @@
 -メモ/進捗ログ:
 - 2025年10月17日: Iroh DHT/Discovery 残タスクを完了し、Mainline DHT 統合フェーズへ移行。Phase 7 の残項目（Mainline DHT/OfflineService/EventService/エラーハンドリング）を次スプリントの主テーマに設定。
 - 2025年10月17日: 運用・品質セクションの TODO を見直し、メトリクス更新フローと Windows テスト運用の標準化タスクを切り出した。
+- 2025年10月20日: Phase 3D チケットとして iroh 統合テスト再編を着手。`modules/p2p/tests/iroh/` にシナリオ別モジュールを作成し、テストユーティリティ/Runbook/計画ドキュメントの更新方針を確定。
+- 2025年10月20日: `scripts/test-docker.ps1` に `-Integration` オプションを実装し、`BootstrapPeers`/`IrohBin`/`IntegrationLog` パラメータで Docker 経由の統合テストを再現できるよう調整。
+- 2025年10月20日: `./scripts/test-docker.ps1 integration -BootstrapPeers "<node_id@127.0.0.1:11233>"` を実行し、Docker 上で P2P 統合テストが成功したことを確認。`KUKURI_IROH_BIN` 未指定でもホスト環境依存の問題なく完走することを検証。
 - 2025年10月17日: `DiscoveryOptions` と `P2PService::builder` を導入し、Mainline DHT 切替対応のためのP2Pスタック組み立てを再構成。
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。

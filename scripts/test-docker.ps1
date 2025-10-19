@@ -5,6 +5,11 @@ param(
     [ValidateSet("all", "rust", "integration", "ts", "lint", "build", "clean", "cache-clean", "metrics", "contracts")]
     [string]$Command = "all",
 
+    [switch]$Integration,            # Rustテスト時にP2P統合テストのみを実行
+    [string]$BootstrapPeers,         # 統合テスト用のブートストラップピア指定
+    [string]$IrohBin,                # iroh バイナリのパス
+    [string]$IntegrationLog = "info,iroh_tests=debug", # 統合テスト用のRUST_LOG
+
     [switch]$NoBuild,  # ビルドをスキップするオプション
     [switch]$Help
 )
@@ -39,6 +44,7 @@ Usage: .\test-docker.ps1 [Command] [Options]
 Commands:
   all          - すべてのテストを実行（デフォルト）
   rust         - Rustのテストのみ実行
+  integration  - P2P統合テスト（Rust）を実行
   ts           - TypeScriptのテストのみ実行
   lint         - リントとフォーマットチェックのみ実行
   metrics      - メトリクス関連のショートテスト（Rust test_get_status / TS P2P UI）
@@ -48,12 +54,17 @@ Commands:
   cache-clean  - キャッシュボリュームも含めて完全クリーンアップ
 
 Options:
+  -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
+  -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
+  -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
+  -IntegrationLog <level> - 統合テスト時の RUST_LOG 設定（既定: info,iroh_tests=debug）
   -NoBuild     - Dockerイメージのビルドをスキップ
   -Help        - このヘルプを表示
 
 Examples:
   .\test-docker.ps1                # すべてのテストを実行
   .\test-docker.ps1 rust           # Rustテストのみ実行
+  .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
   .\test-docker.ps1 rust -NoBuild  # ビルドをスキップしてRustテストを実行
   .\test-docker.ps1 cache-clean    # キャッシュを含めて完全クリーンアップ
   .\test-docker.ps1 -Help          # ヘルプを表示
@@ -129,23 +140,46 @@ function Invoke-RustTests {
 }
 
 function Invoke-IntegrationTests {
+    param(
+        [string]$BootstrapPeersParam,
+        [string]$IrohBinParam,
+        [string]$LogLevel = "info,iroh_tests=debug"
+    )
+
     $previousEnable = $env:ENABLE_P2P_INTEGRATION
     $previousBootstrap = $env:KUKURI_BOOTSTRAP_PEERS
     $previousForceLocal = $env:KUKURI_FORCE_LOCALHOST_ADDRS
-    $bootstrapWasSet = $false
+    $previousIrohBin = $env:KUKURI_IROH_BIN
+    $previousLog = $env:RUST_LOG
     $bootstrapStarted = $false
     $exitCode = 0
     $fatalMessage = $null
     try {
         $env:ENABLE_P2P_INTEGRATION = "1"
-        if ([string]::IsNullOrWhiteSpace($env:KUKURI_BOOTSTRAP_PEERS)) {
-            $env:KUKURI_BOOTSTRAP_PEERS = $BootstrapDefaultPeer
+        if ([string]::IsNullOrWhiteSpace($BootstrapPeersParam)) {
+            if ([string]::IsNullOrWhiteSpace($env:KUKURI_BOOTSTRAP_PEERS)) {
+                $env:KUKURI_BOOTSTRAP_PEERS = $BootstrapDefaultPeer
+                $bootstrapWasSet = $true
+            }
+        } else {
+            $env:KUKURI_BOOTSTRAP_PEERS = $BootstrapPeersParam
             $bootstrapWasSet = $true
         }
         $env:KUKURI_FORCE_LOCALHOST_ADDRS = "0"
+        if ($IrohBinParam) {
+            $env:KUKURI_IROH_BIN = $IrohBinParam
+        }
+        if (-not [string]::IsNullOrWhiteSpace($LogLevel)) {
+            $env:RUST_LOG = $LogLevel
+        }
         if (-not $NoBuild) {
             Build-TestImage
         }
+        Write-Info "Using bootstrap peers: $($env:KUKURI_BOOTSTRAP_PEERS)"
+        if ($IrohBinParam) {
+            Write-Info "Using custom iroh binary: $IrohBinParam"
+        }
+        Write-Info "RUST_LOG for integration: $($env:RUST_LOG)"
         Start-P2PBootstrap
         $bootstrapStarted = $true
         Write-Host "Running Rust P2P integration tests in Docker..."
@@ -153,7 +187,7 @@ function Invoke-IntegrationTests {
             "run", "--rm", "rust-test",
             "cargo", "test",
             "--package", "kukuri-tauri",
-            "--lib", "modules::p2p::tests::iroh_integration_tests::",
+            "--lib", "modules::p2p::tests::iroh",
             "--", "--nocapture", "--test-threads=1"
         ) -IgnoreFailure
         if ($exitCode -eq 0) {
@@ -174,7 +208,7 @@ function Invoke-IntegrationTests {
         } else {
             $env:ENABLE_P2P_INTEGRATION = $previousEnable
         }
-        if ($bootstrapWasSet) {
+        if ($null -eq $previousBootstrap) {
             Remove-Item Env:KUKURI_BOOTSTRAP_PEERS -ErrorAction SilentlyContinue
         } else {
             $env:KUKURI_BOOTSTRAP_PEERS = $previousBootstrap
@@ -183,6 +217,16 @@ function Invoke-IntegrationTests {
             Remove-Item Env:KUKURI_FORCE_LOCALHOST_ADDRS -ErrorAction SilentlyContinue
         } else {
             $env:KUKURI_FORCE_LOCALHOST_ADDRS = $previousForceLocal
+        }
+        if ($null -eq $previousIrohBin) {
+            Remove-Item Env:KUKURI_IROH_BIN -ErrorAction SilentlyContinue
+        } else {
+            $env:KUKURI_IROH_BIN = $previousIrohBin
+        }
+        if ($null -eq $previousLog) {
+            Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
+        } else {
+            $env:RUST_LOG = $previousLog
         }
         if ($fatalMessage) {
             Write-ErrorMessage $fatalMessage
@@ -344,11 +388,15 @@ switch ($Command) {
         Show-CacheStatus
     }
     "rust" {
-        Invoke-RustTests
+        if ($Integration) {
+            Invoke-IntegrationTests -BootstrapPeersParam $BootstrapPeers -IrohBinParam $IrohBin -LogLevel $IntegrationLog
+        } else {
+            Invoke-RustTests
+        }
         Show-CacheStatus
     }
     "integration" {
-        Invoke-IntegrationTests
+        Invoke-IntegrationTests -BootstrapPeersParam $BootstrapPeers -IrohBinParam $IrohBin -LogLevel $IntegrationLog
         Show-CacheStatus
     }
     "ts" {
