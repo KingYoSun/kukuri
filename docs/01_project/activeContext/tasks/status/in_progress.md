@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月20日
+最終更新日: 2025年10月21日
 
 ## 方針（2025年09月15日 更新）
 
@@ -36,16 +36,16 @@
 
 ## 運用/品質・観測（着手）
 
-- [ ] `tasks/metrics/{build_status,code_quality,test_results}.md` の更新フローを確立し、定期レビュー体制を文書化。
-  - 2025年10月20日 着手: 既存メトリクスファイルの内容と更新履歴を調査し、レビュー体制案のドラフトを作成中。
-  - 2025年10月20日: `docs/01_project/activeContext/tasks/metrics/update_flow.md` に現状サマリー・課題・更新フロー案（取得タイミング、実行コマンド、レビュー手順）を整理。
-  - 2025年10月20日: `update_flow.md` に初回収集トライアル結果を追記し、`log_2025-10.md` と `artefacts/metrics/2025-10-20-vitest-results.json` を作成。`pnpm lint` 失敗・`cargo test` Windows エラーなどのギャップを抽出。
 - [ ] Windows での `./scripts/test-docker.ps1` 実行を基本ラインとする運用ガイドを策定し、CI とローカルの手順差異を吸収。
   - 2025年10月20日: `docs/03_implementation/windows_test_docker_runbook.md` を作成し、PowerShell 運用手順と GitHub Actions との主な差分を記録。
   - 2025年10月20日: `windows_test_docker_runbook.md` に Linux/macOS ガイドとの共通化ポイントを整理し、`docker_test_environment.md` との統合方針を検討。
   - 2025年10月20日: `scripts/run-rust-tests.ps1` を追加し、Windows から Docker 経由で Rust テストを呼び出す自動化フローを整備。`docker_test_environment.md` / `windows_test_docker_runbook.md` に運用例を追記。
+  - 2025年10月21日: `windows_test_docker_runbook.md` と `docker_test_environment.md` の重複セクションを精査し、コマンド表・トラブルシュート統合の対応順を整理。
+  - 2025年10月21日: `scripts/metrics/collect-metrics.{ps1,sh}` を追加し、PowerShell 版で TODO / `any` / `#[allow(dead_code)]` 集計を自動化。成果物を `artefacts/metrics/2025-10-21-collect-metrics.json` に保存。
 - [ ] ドキュメントの日付表記を `YYYY年MM月DD日` に統一するルールを整理し、主要ドキュメントの棚卸しを行う。
+  - 2025年10月21日 着手: `rg '202[0-9]-[0-9]{2}-[0-9]{2}' docs` で旧表記の候補を抽出し、`tasks/README.md`・`refactoring_plan_2025-08-08_v3.md` など修正対象リストを作成開始。
 - [ ] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応
+  - 2025年10月21日: `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` を確認し、PowerShell スクリプト→Bash→Compose→Runbook の順で更新する方針を設定。
   - [ ] `scripts/docker/run-smoke-tests.sh` を `tests/` 配下の `p2p_mainline_smoke` 等へ切り替え、P2P ランブックを最新手順に更新。
   - [ ] `scripts/test-docker.sh` の `TESTS` 既定値と `cargo --lib` 呼び出しを新しい `tests::integration::p2p::*` 構成へ移行し、ヘルプ出力と `docs/03_implementation/docker_test_environment.md` を修正。
   - [ ] `scripts/test-docker.ps1` の `cargo test` 呼び出しを `--test` ベースに更新し、ログ文言と PowerShell オプション説明を調整。

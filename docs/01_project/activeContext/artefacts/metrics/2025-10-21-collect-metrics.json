@@ -1,0 +1,11 @@
+﻿{
+    "timestamp":  "2025-10-20T15:42:42.0447702Z",
+    "typescript":  {
+                       "todo":  1,
+                       "any":  94
+                   },
+    "rust":  {
+                 "todo":  21,
+                 "allow_dead_code":  20
+             }
+}
