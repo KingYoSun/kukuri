@@ -26,6 +26,11 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   - `support/`: ブートストラップ生成・待機ロジック・tracing 初期化を集約
 - すべてのテストは `ENABLE_P2P_INTEGRATION!=1` または `KUKURI_BOOTSTRAP_PEERS` 未設定時に早期 return し、明示的にスキップ理由をログへ出力する。
 
+### 3.1 共通ユーティリティの活用
+- Phase 4 でテスト支援コードを `application/shared/tests/p2p` へ集約したため、カスタムヘルパーを追加する際は同ディレクトリに実装し `modules/p2p/tests/iroh/support` から再エクスポートする。  
+- Gossip 経路で利用する DefaultTopicsRegistry や EventPublisher も `application/shared` へ移動済み。ランブック外で個別ユーティリティを作成せず、共有モジュールを参照して重複を避ける。  
+- 新しいシナリオを追加する場合は `tests/iroh/mod.rs` からサブモジュールを登録し、共通ログ初期化（`shared::tests::p2p::logging`）を呼び出すテンプレートを再利用する。
+
 ## 4. 実行手順
 1. ブートストラップノードを起動（例: `./scripts/start-bootstrap-nodes.ps1 -ReplicaCount 3`）。
 2. 上述の環境変数を設定。

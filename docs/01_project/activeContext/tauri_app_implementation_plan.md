@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年7月28日  
-**最終更新**: 2025年8月2日  
+**最終更新**: 2025年10月20日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## Phase 1: 認証フローの修正 ✓ 完了
@@ -415,6 +415,20 @@ export function PeerConnectionPanel() {
    - バックグラウンド同期の実装
    - キャッシュ管理
    - オフラインリソースの事前ロード
+
+### 4.5 Zustand 永続化テンプレート整備 ✓ 完了
+
+#### 実装概要（2025年10月20日更新）
+- `src/stores/utils/persistHelpers.ts` に `withPersist` / `createPersistConfig` / `createMapAwareStorage` を実装し、すべてのストアで同一テンプレートを利用できるようにした。
+- `src/stores/config/persist.ts` でキー名 (`persistKeys`)・partialize 設定・Map 対応ストレージを集中管理。新しいストアを追加する際はここで設定を定義し、ストア側では `withPersist(initializer, createXxxPersistConfig())` を呼び出すだけで済む。
+- Map フィールドを扱うストア（`offlineStore`, `p2pStore`, `topicStore` など）は `createMapAwareStorage` を使用することで、従来の手動シリアライズ処理を排除。
+- テストでは `src/stores/utils/testHelpers.ts` に追加した `setupPersistMock` を利用し、`localStorage`/`sessionStorage` の差し替えとリセットを共通化。
+
+#### 移行手順と注意点
+1. 既存ストアをテンプレートへ移行する際は、旧 `persist` 設定の `name`（ローカルストレージキー）を維持し、過去データが失われないことを確認する。  
+2. キー名を変更する場合はマイグレーションロジック（旧キーからの読み込み → 新フォーマットへの変換）をストア初期化時に追加し、リリースノートへ追記する。  
+3. `setupPersistMock` をテストの `beforeEach` で呼び出し、永続化データの汚染を回避する。ストア単体テストでは新テンプレートが正しく partialize を反映しているかを検証する。
+4. Phase 4 のリファクタリングに伴い、`.sqlx` 再生成や DefaultTopicsRegistry の更新などバックエンド側で大きな変更を行う場合は、本テンプレートのキー互換性チェックを合わせて実施する。
 
 ## MVP完成後の改善
 

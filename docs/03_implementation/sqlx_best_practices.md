@@ -101,7 +101,7 @@ git commit -m "Update SQLx query cache"
    ```bash
    git add .sqlx src/
    git commit -m "Add new query and update SQLx cache"
-   ```
+```
 
 4. **テスト実行**:
    ```bash
@@ -111,6 +111,45 @@ git commit -m "Update SQLx query cache"
    # Docker環境
    .\scripts\test-docker.ps1 rust
    ```
+
+## フェーズ3/4リファクタリング後の `.sqlx` 更新フロー
+
+Phase 3/4 で `sqlite_repository` がモジュール分割され、マッパーが `application/shared/mappers` に集約されました。依存関係が広範囲に及ぶため、`.sqlx` を更新する際は以下のチェックリストに従います。
+
+1. **分割後の構成を確認**  
+   - `kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository/` 配下が `posts.rs` などに分割されていること。  
+   - マッパーが `application/shared/mappers` から再利用されている場合、関連する構造体定義の変更有無を確認。
+
+2. **オフラインキャッシュを再生成**  
+   ```bash
+   cd kukuri-tauri/src-tauri
+   setx DATABASE_URL "sqlite:data/kukuri.db"  # PowerShell の場合は $env:DATABASE_URL を使用
+   $env:DATABASE_URL="sqlite:data/kukuri.db" cargo sqlx prepare
+   ```
+   - Windows では PowerShell で環境変数を設定したうえで実行する。  
+   - `--workspace` は必要なときのみ指定し、想定外のクレートまで再生成しないよう注意。
+
+3. **成果物をバージョン管理する**  
+   - `.sqlx/` 配下のタイムスタンプと差分を確認し、不要なファイル削除が発生していないかチェック。  
+   - SQL を更新していないにも関わらず差分が出た場合はコミット前に原因を調査。
+
+4. **検証と記録**  
+   - `cargo fmt && cargo clippy -D warnings && cargo test` を通過させる。  
+   - `tasks/status/in_progress.md` に再生成の実施日と対象クエリをメモし、レビュー時に参照できる状態を維持する。
+
+### リスク評価と後方互換性チェック
+
+- **生成キャッシュとコードの乖離**  
+  - マッパーや SQL をリファクタリングした場合、`.sqlx` を更新しないままだと CI で `SQLX_OFFLINE=true but there is no cached data` が発生する。  
+  - `cargo sqlx prepare` 後は必ずローカルテストを実行し、生成物とコードが整合しているかを確認する。
+
+- **ローカルストレージとの整合性**  
+  - Phase 4 で Zustand 永続化ロジックが `withPersist` と共通 `createMapAwareStorage` に統一された。`.sqlx` 再生成を含むリリースでは、ローカルストレージキー（`persistKeys.*`）のリネーム有無を併せて確認し、必要に応じて移行手順をリリースノートへ記載する。  
+  - 既存データを破棄する必要がある場合は、UI 初回起動時のクリア処理やバックアップ取得手順を説明する。
+
+- **CI 環境でのオフライン失敗**  
+  - `.sqlx` が最新でない状態で CI を流すと、フェーズ分割後のモジュールが参照するクエリキャッシュが欠落する。  
+  - PR では `cargo sqlx prepare` 実行結果を明示し、レビュー時に `.sqlx` の差分が期待通りか確認するチェックボックスを活用する。
 
 ## ベストプラクティス
 

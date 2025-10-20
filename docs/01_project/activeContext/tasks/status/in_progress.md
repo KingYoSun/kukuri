@@ -47,12 +47,14 @@
 - [x] Phase 2 TODO 解消: トピック更新・削除コマンドの未実装部分を実装し、フロントからの操作を完了させる（`kukuri-tauri/src-tauri/src/presentation/commands/topic_commands.rs:99`）。
 - [x] Phase 3/4 ギャップ対応: 700行超のファイル（`kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository.rs:1003`, `kukuri-tauri/src-tauri/src/application/services/event_service.rs:341`, `kukuri-tauri/src-tauri/src/modules/event/manager.rs:240`）の分割計画を策定し、リファクタリングタスクへ落とし込む。
 - [x] Phase 3D: `modules/p2p/tests/iroh/` への統合テスト再編（support抽出・シナリオ別ファイル分割・Runbook/Planの更新）を完了させる。
-- [ ] Phase 4 DRY 適用（進行中）
+- [x] Phase 4 DRY 適用
   - [x] 共有モジュール `application/shared` を追加し、Sqliteマッパーと Nostr ファクトリの基盤を共通化。
   - [x] EventService / EventManager のイベント生成ロジックを `shared::nostr` に統合し、DefaultTopicsRegistry を共有ユーティリティ化する。
   - [x] `modules/event` / `modules/p2p` テスト支援コードを `application/shared/tests` に集約し、重複モック・ロガーを解消する。
-  - [ ] Zustand 永続化テンプレート（`withPersist` / `config/persist.ts`）を整備し、Map 含むストアで `createMapAwareStorage` を適用。テスト用 `setupPersistMock` を導入する。
-  - [ ] `.sqlx/` 更新手順とローカルストレージキー移行のリスク評価を `docs/03_implementation/` 系ドキュメントへ反映し、後方互換検証結果を記録する。
+  - [x] Zustand 永続化テンプレート（`withPersist` / `config/persist.ts`）を整備し、Map 含むストアで `createMapAwareStorage` を適用。テスト用 `setupPersistMock` を導入する。
+  - [x] `.sqlx/` 更新手順とローカルストレージキー移行のリスク評価を `docs/03_implementation/sqlx_best_practices.md` 等へ反映し、後方互換検証結果を記録する。
+  - [x] `docs/03_implementation/p2p_mainline_runbook.md` に共有モジュール化後の P2P テスト/運用手順を追記する。
+  - [x] `docs/01_project/activeContext/tauri_app_implementation_plan.md` に Zustand 永続化共通化の設計と移行手順をまとめる。
 - [ ] Phase 5 成果測定: dead code 数やテストカバレッジといった指標を `tasks/metrics/` 配下で定期記録する運用を整備する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
@@ -67,6 +69,7 @@
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。
+- 2025年10月20日: Phase 4 ドキュメント整備として `.sqlx` 更新手順（`docs/03_implementation/sqlx_best_practices.md`）、P2P ランブック、Tauri 実装計画の各ガイドを更新し、共有モジュール化後のフローと永続化テンプレートを明文化。
 - 2025年10月18日: `SubscriptionStateMachine` を `kukuri-tauri/src-tauri/src/application/services/subscription_state.rs` に導入し、`nostr_subscriptions` テーブルで購読対象・状態・再同期時刻を管理。接続断検知で `needs_resync` へ遷移し、再接続時に `EventService::handle_network_connected` から自動復元する流れを実装。
 - 2025年10月18日: `list_nostr_subscriptions` コマンドと `useNostrSubscriptions` フックを追加し、`P2PDebugPanel` に購読対象・最終同期時刻・失敗回数を可視化するセクションを組み込み。
 - 2025年10月18日: GitHub Actions の Format Check 失敗を確認し、`src/components/P2PDebugPanel.tsx` と `src/stores/offlineStore.ts` を Prettier で整形。`pnpm format:check` が成功することをローカルで確認。
