@@ -3,7 +3,7 @@ use crate::infrastructure::p2p::utils::parse_peer_hint;
 use super::bootstrap::BootstrapContext;
 use super::logging::log_step;
 
-pub(crate) fn load_bootstrap_context(test_name: &str) -> Option<BootstrapContext> {
+pub fn load_bootstrap_context(test_name: &str) -> Option<BootstrapContext> {
     if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
         log_step!("skipping {} (ENABLE_P2P_INTEGRATION != 1)", test_name);
         return None;

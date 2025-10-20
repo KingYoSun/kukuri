@@ -191,3 +191,23 @@ export const resetStores = (
     store.setState(initialState);
   });
 };
+
+/**
+ * persistを使用するストア向けに localStorage をモック化
+ */
+export const setupPersistMock = () => {
+  const localStorageMock = {
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  };
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    writable: true,
+    value: localStorageMock,
+  });
+
+  return localStorageMock;
+};

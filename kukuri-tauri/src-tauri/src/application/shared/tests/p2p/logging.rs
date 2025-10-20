@@ -3,7 +3,7 @@ use tracing_subscriber::EnvFilter;
 
 static INIT_TRACING: Once = Once::new();
 
-pub(crate) fn init_tracing() {
+pub fn init_tracing() {
     INIT_TRACING.call_once(|| {
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new("info,iroh_tests=info"));

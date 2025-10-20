@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 import type { PostDraft, CreateDraftParams, UpdateDraftParams } from '@/types/draft';
 import { errorHandler } from '@/lib/errorHandler';
-import { createLocalStoragePersist } from './utils/persistHelpers';
+import { withPersist } from './utils/persistHelpers';
+import { createDraftPersistConfig } from './config/persist';
 
 interface DraftStore {
   drafts: PostDraft[];
@@ -28,7 +28,7 @@ const generateId = () => {
 };
 
 export const useDraftStore = create<DraftStore>()(
-  persist(
+  withPersist<DraftStore>(
     (set, get) => ({
       drafts: [],
       currentDraftId: null,
@@ -130,9 +130,6 @@ export const useDraftStore = create<DraftStore>()(
         }
       },
     }),
-    createLocalStoragePersist<DraftStore>('kukuri-drafts', (state) => ({
-      drafts: state.drafts,
-      // Don't persist currentDraftId to avoid confusion on reload
-    })),
+    createDraftPersistConfig<DraftStore>(),
   ),
 );

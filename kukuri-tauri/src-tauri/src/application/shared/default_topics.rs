@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use tokio::sync::RwLock;
 
-/// 既定トピック集合をカプセル化し、ロック操作を一元化するレジストリ。
+/// 既定トピック集合を管理し、非同期アクセスを直列化するレジストリ。
 pub struct DefaultTopicsRegistry {
     topics: RwLock<HashSet<String>>,
 }

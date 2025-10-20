@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDraftStore } from './draftStore';
+import { setupPersistMock } from './utils/testHelpers';
 
 // Mock errorHandler
 vi.mock('@/lib/errorHandler', () => ({
@@ -8,21 +9,11 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
-
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-  writable: true,
-});
-
 describe('draftStore', () => {
+  let localStorageMock: ReturnType<typeof setupPersistMock>;
+
   beforeEach(() => {
+    localStorageMock = setupPersistMock();
     // Setup fake timers
     vi.useFakeTimers();
 

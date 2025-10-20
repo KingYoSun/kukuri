@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 import { offlineApi } from '@/api/offline';
 import { errorHandler } from '@/lib/errorHandler';
@@ -11,7 +10,8 @@ import type {
   OfflineReindexReport,
 } from '@/types/offline';
 import { EntityType } from '@/types/offline';
-import { createLocalStoragePersist } from './utils/persistHelpers';
+import { withPersist } from './utils/persistHelpers';
+import { createOfflinePersistConfig } from './config/persist';
 
 declare global {
   interface Window {
@@ -52,7 +52,7 @@ interface OfflineStore extends OfflineState {
 }
 
 export const useOfflineStore = create<OfflineStore>()(
-  persist(
+  withPersist<OfflineStore>(
     (set, get) => ({
       // 初期状態
       isOnline: navigator.onLine,
@@ -256,11 +256,7 @@ export const useOfflineStore = create<OfflineStore>()(
         return originalData;
       },
     }),
-    createLocalStoragePersist<OfflineStore>('offline-store', (state) => ({
-      lastSyncedAt: state.lastSyncedAt,
-      pendingActions: state.pendingActions,
-      syncQueue: state.syncQueue,
-    })),
+    createOfflinePersistConfig<OfflineStore>(),
   ),
 );
 

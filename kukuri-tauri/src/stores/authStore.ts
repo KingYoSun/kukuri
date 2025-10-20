@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';
@@ -7,7 +6,8 @@ import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from
 import { SecureStorageApi, type AccountMetadata } from '@/lib/api/secureStorage';
 import { errorHandler } from '@/lib/errorHandler';
 import { useTopicStore } from './topicStore';
-import { createLocalStoragePersist } from './utils/persistHelpers';
+import { withPersist } from './utils/persistHelpers';
+import { createAuthPersistConfig } from './config/persist';
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
@@ -27,7 +27,7 @@ interface AuthStore extends AuthState {
 }
 
 export const useAuthStore = create<AuthStore>()(
-  persist(
+  withPersist<AuthStore>(
     (set, get) => ({
       isAuthenticated: false,
       currentUser: null,
@@ -380,10 +380,6 @@ export const useAuthStore = create<AuthStore>()(
         return get().isAuthenticated;
       },
     }),
-    createLocalStoragePersist<AuthStore>('auth-storage', (state) => ({
-      // privateKeyは保存しない（セキュリティのため）
-      // isAuthenticatedはセキュアストレージからの復元で管理するため保存しない
-      currentUser: state.currentUser,
-    })),
+    createAuthPersistConfig<AuthStore>(),
   ),
 );

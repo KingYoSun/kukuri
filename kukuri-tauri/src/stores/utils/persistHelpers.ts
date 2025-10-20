@@ -1,27 +1,35 @@
-import { createJSONStorage, StateStorage } from 'zustand/middleware';
+import type { StateCreator } from 'zustand';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
-/**
- * 共通のpersist設定を生成するヘルパー関数
- */
-export const createPersistConfig = <T>(
-  name: string,
-  partialize?: (state: T) => Partial<T>,
-  storage?: StateStorage,
-) => ({
+export interface PersistOptions<T> {
+  name: string;
+  partialize?: (state: T) => Partial<T>;
+  storage?: StateStorage;
+  version?: number;
+}
+
+export const createPersistConfig = <T>({
+  name,
+  partialize,
+  storage,
+  version,
+}: PersistOptions<T>) => ({
   name,
   storage: storage || createJSONStorage(() => localStorage),
   partialize,
+  version,
 });
 
-/**
- * localStorageを使用する標準的なpersist設定を生成
- */
-export const createLocalStoragePersist = <T>(name: string, partialize?: (state: T) => Partial<T>) =>
-  createPersistConfig(name, partialize);
+export const withPersist = <T>(
+  initializer: StateCreator<T, [], []>,
+  options: PersistOptions<T>,
+) => persist(initializer, createPersistConfig(options));
 
-/**
- * 特定のフィールドのみを永続化するpartialize関数を生成
- */
+export const createLocalStoragePersist = <T>(
+  name: string,
+  partialize?: (state: T) => Partial<T>,
+) => createPersistConfig<T>({ name, partialize });
+
 export const createPartializer = <T, K extends keyof T>(
   fields: K[],
 ): ((state: T) => Pick<T, K>) => {
@@ -34,23 +42,14 @@ export const createPartializer = <T, K extends keyof T>(
   };
 };
 
-/**
- * Mapオブジェクトをシリアライズ可能な形式に変換
- */
 export const serializeMap = <K, V>(map: Map<K, V>): Array<[K, V]> => {
   return Array.from(map.entries());
 };
 
-/**
- * シリアライズされた配列をMapオブジェクトに復元
- */
 export const deserializeMap = <K, V>(entries: Array<[K, V]>): Map<K, V> => {
   return new Map(entries);
 };
 
-/**
- * Map型を含むstateをシリアライズ/デシリアライズするstorage
- */
 export const createMapAwareStorage = (): StateStorage => {
   return {
     getItem: (name) => {
@@ -59,7 +58,6 @@ export const createMapAwareStorage = (): StateStorage => {
 
       try {
         const { state, version } = JSON.parse(str);
-        // Mapフィールドを復元
         if (state) {
           Object.keys(state).forEach((key) => {
             if (
@@ -68,7 +66,6 @@ export const createMapAwareStorage = (): StateStorage => {
               state[key][0] &&
               Array.isArray(state[key][0])
             ) {
-              // [[key, value], ...] の形式ならMapとして復元
               state[key] = deserializeMap(state[key]);
             }
           });
@@ -81,7 +78,6 @@ export const createMapAwareStorage = (): StateStorage => {
     setItem: (name, value) => {
       try {
         const { state, version } = JSON.parse(value);
-        // Mapフィールドをシリアライズ
         if (state) {
           Object.keys(state).forEach((key) => {
             if (state[key] instanceof Map) {

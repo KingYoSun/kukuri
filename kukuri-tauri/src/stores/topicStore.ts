@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 import type { TopicState, Topic } from './types';
 import { TauriApi } from '@/lib/api/tauri';
@@ -8,7 +7,8 @@ import { p2pApi } from '@/lib/api/p2p';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { useOfflineStore } from './offlineStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
-import { createLocalStoragePersist } from './utils/persistHelpers';
+import { withPersist } from './utils/persistHelpers';
+import { createTopicPersistConfig } from './config/persist';
 
 interface TopicStore extends TopicState {
   setTopics: (topics: Topic[]) => void;
@@ -26,7 +26,7 @@ interface TopicStore extends TopicState {
 }
 
 export const useTopicStore = create<TopicStore>()(
-  persist(
+  withPersist<TopicStore>(
     (set) => ({
       topics: new Map(),
       currentTopic: null,
@@ -286,9 +286,6 @@ export const useTopicStore = create<TopicStore>()(
           return { topics: newTopics };
         }),
     }),
-    createLocalStoragePersist<TopicStore>('topic-storage', (state) => ({
-      joinedTopics: state.joinedTopics,
-      currentTopic: state.currentTopic,
-    })),
+    createTopicPersistConfig<TopicStore>(),
   ),
 );

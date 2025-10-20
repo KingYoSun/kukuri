@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { usePostStore } from './postStore';
 import { useTopicStore } from './topicStore';
 import { useOfflineStore } from './offlineStore';
+import { setupPersistMock } from './utils/testHelpers';
 import { TauriApi } from '@/lib/api/tauri';
 import { p2pApi } from '@/lib/api/p2p';
 import { OfflineActionType, EntityType } from '@/types/offline';
@@ -45,17 +46,11 @@ vi.mock('@/api/offline', () => ({
   },
 }));
 
-// localStorageのモック
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
-Object.defineProperty(window, 'localStorage', { value: localStorageMock });
-
 describe('楽観的UI更新', () => {
+  let localStorageMock: ReturnType<typeof setupPersistMock>;
+
   beforeEach(() => {
+    localStorageMock = setupPersistMock();
     vi.clearAllMocks();
     localStorageMock.getItem.mockReturnValue('test-user-pubkey');
 

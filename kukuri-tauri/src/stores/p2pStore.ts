@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 import { p2pApi } from '@/lib/api/p2p';
 import type { GossipMetricsSummary } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
-import { createLocalStoragePersist } from './utils/persistHelpers';
+import { withPersist } from './utils/persistHelpers';
+import { createP2PPersistConfig } from './config/persist';
 
 // P2Pメッセージ
 export interface P2PMessage {
@@ -61,7 +61,7 @@ interface P2PStore {
 }
 
 export const useP2PStore = create<P2PStore>()(
-  persist(
+  withPersist<P2PStore>(
     (set, get) => ({
       // 初期状態
       initialized: false,
@@ -276,11 +276,6 @@ export const useP2PStore = create<P2PStore>()(
         });
       },
     }),
-    createLocalStoragePersist<P2PStore>('p2p-storage', (state) => ({
-      // 永続化する状態を選択（Mapは除外）
-      initialized: state.initialized,
-      nodeId: state.nodeId,
-      nodeAddr: state.nodeAddr,
-    })),
+    createP2PPersistConfig<P2PStore>(),
   ),
 );

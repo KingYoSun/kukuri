@@ -1,6 +1,5 @@
 mod conversions;
 mod core;
-mod default_topics;
 mod p2p;
 mod publishing;
 

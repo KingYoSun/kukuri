@@ -8,16 +8,16 @@ use tokio::time::{Duration, sleep, timeout};
 
 use super::logging::log_step;
 
-pub(crate) const DEFAULT_JOIN_TIMEOUT: Duration = Duration::from_secs(15);
-pub(crate) const DEFAULT_EVENT_TIMEOUT: Duration = Duration::from_secs(15);
+pub const DEFAULT_JOIN_TIMEOUT: Duration = Duration::from_secs(15);
+pub const DEFAULT_EVENT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Clone, Debug)]
-pub(crate) struct BootstrapContext {
-    pub(crate) hints: Vec<String>,
-    pub(crate) node_addrs: Vec<NodeAddr>,
+pub struct BootstrapContext {
+    pub hints: Vec<String>,
+    pub node_addrs: Vec<NodeAddr>,
 }
 
-pub(crate) async fn create_service(ctx: &BootstrapContext) -> IrohGossipService {
+pub async fn create_service(ctx: &BootstrapContext) -> IrohGossipService {
     let bind_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0);
     log_step!(
         "binding endpoint on {} and enabling DHT discovery (bootstrap hints: {})",
@@ -46,7 +46,7 @@ pub(crate) async fn create_service(ctx: &BootstrapContext) -> IrohGossipService 
     IrohGossipService::new(endpoint).expect("failed to create gossip service")
 }
 
-pub(crate) fn build_peer_hints(
+pub fn build_peer_hints(
     base: &[String],
     local_hints: &[Option<String>],
     self_idx: usize,
@@ -65,7 +65,7 @@ pub(crate) fn build_peer_hints(
     result
 }
 
-pub(crate) async fn wait_for_topic_membership(
+pub async fn wait_for_topic_membership(
     service: &IrohGossipService,
     topic: &str,
     timeout_duration: Duration,
@@ -90,7 +90,7 @@ pub(crate) async fn wait_for_topic_membership(
     false
 }
 
-pub(crate) async fn wait_for_peer_join_event(
+pub async fn wait_for_peer_join_event(
     receivers: &mut [&mut tokio::sync::mpsc::UnboundedReceiver<P2PEvent>],
     max_wait: Duration,
 ) -> bool {

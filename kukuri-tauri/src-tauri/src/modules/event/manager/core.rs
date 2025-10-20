@@ -1,18 +1,17 @@
+use crate::application::shared::default_topics::DefaultTopicsRegistry;
+use crate::application::shared::nostr::EventPublisher;
 use crate::infrastructure::database::EventRepository as InfraEventRepository;
 use crate::infrastructure::p2p::GossipService;
 use crate::modules::auth::key_manager::KeyManager;
 use crate::modules::database::connection::DbPool;
 use crate::modules::event::handler::EventHandler;
 use crate::modules::event::nostr_client::NostrClientManager;
-use crate::modules::event::publisher::EventPublisher;
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tracing::info;
-
-use super::default_topics::DefaultTopicsRegistry;
 
 /// Nostrイベントマネージャー - イベント処理の中心的な管理者
 pub struct EventManager {

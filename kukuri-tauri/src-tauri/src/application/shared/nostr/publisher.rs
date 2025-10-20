@@ -2,13 +2,13 @@ use anyhow::Result;
 use nostr_sdk::prelude::*;
 use tracing::{debug, info};
 
-/// Nostrイベント発行者
+/// Nostr イベントの生成を担う共通パブリッシャー。
 pub struct EventPublisher {
     keys: Option<Keys>,
 }
 
 impl EventPublisher {
-    /// 新しいEventPublisherインスタンスを作成
+    /// 新しい EventPublisher インスタンスを作成
     pub fn new() -> Self {
         Self { keys: None }
     }
@@ -84,7 +84,7 @@ impl EventPublisher {
         Ok(event)
     }
 
-    /// トピック投稿イベントを作成（kukuri独自実装）
+    /// トピック投稿イベントを作成（kukuri 独自実装）
     pub fn create_topic_post(
         &self,
         topic_id: &str,
