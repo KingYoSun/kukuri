@@ -77,6 +77,15 @@ PowerShellで以下のコマンドを実行：
 ```
 `integration` コマンドは `ENABLE_P2P_INTEGRATION=1` を付与した上で `p2p-bootstrap` コンテナを自動起動し、テスト完了後にクリーンアップします。追加の環境変数設定は不要です。
 
+#### Rustテスト自動化
+Rust のみを Docker で実行したい場合は、`scripts/run-rust-tests.ps1` を利用するとリポジトリルートの切り替えと戻り値の伝播を自動化できます。
+
+```powershell
+.\scripts\run-rust-tests.ps1            # Rustユニットテスト
+.\scripts\run-rust-tests.ps1 -Integration   # P2P統合テスト（ブートストラップ付き）
+.\scripts\run-rust-tests.ps1 -NoBuild       # 直前にビルド済みの場合の高速化
+```
+
 ### Linux/macOS環境での実行
 
 ```bash

@@ -10,10 +10,10 @@ vi.mock('@/lib/errorHandler', () => ({
 }));
 
 describe('draftStore', () => {
-  let localStorageMock: ReturnType<typeof setupPersistMock>;
+  let _localStorageMock: ReturnType<typeof setupPersistMock>;
 
   beforeEach(() => {
-    localStorageMock = setupPersistMock();
+    _localStorageMock = setupPersistMock();
     // Setup fake timers
     vi.useFakeTimers();
 

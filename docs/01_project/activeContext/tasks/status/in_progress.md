@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月19日
+最終更新日: 2025年10月20日
 
 ## 方針（2025年09月15日 更新）
 
@@ -34,11 +34,23 @@
 - [x] Rust/Tauri 側のドメインエラーを `thiserror` でラップし、コマンド境界の共通レスポンスを整理。
 - [x] `docs/03_implementation/error_handling_guidelines.md` を更新し、統一フローと実装例を追記。
 
-## 運用/品質・観測
+## 運用/品質・観測（着手）
 
 - [ ] `tasks/metrics/{build_status,code_quality,test_results}.md` の更新フローを確立し、定期レビュー体制を文書化。
+  - 2025年10月20日 着手: 既存メトリクスファイルの内容と更新履歴を調査し、レビュー体制案のドラフトを作成中。
+  - 2025年10月20日: `docs/01_project/activeContext/tasks/metrics/update_flow.md` に現状サマリー・課題・更新フロー案（取得タイミング、実行コマンド、レビュー手順）を整理。
+  - 2025年10月20日: `update_flow.md` に初回収集トライアル結果を追記し、`log_2025-10.md` と `artefacts/metrics/2025-10-20-vitest-results.json` を作成。`pnpm lint` 失敗・`cargo test` Windows エラーなどのギャップを抽出。
 - [ ] Windows での `./scripts/test-docker.ps1` 実行を基本ラインとする運用ガイドを策定し、CI とローカルの手順差異を吸収。
+  - 2025年10月20日: `docs/03_implementation/windows_test_docker_runbook.md` を作成し、PowerShell 運用手順と GitHub Actions との主な差分を記録。
+  - 2025年10月20日: `windows_test_docker_runbook.md` に Linux/macOS ガイドとの共通化ポイントを整理し、`docker_test_environment.md` との統合方針を検討。
+  - 2025年10月20日: `scripts/run-rust-tests.ps1` を追加し、Windows から Docker 経由で Rust テストを呼び出す自動化フローを整備。`docker_test_environment.md` / `windows_test_docker_runbook.md` に運用例を追記。
 - [ ] ドキュメントの日付表記を `YYYY年MM月DD日` に統一するルールを整理し、主要ドキュメントの棚卸しを行う。
+- [ ] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応
+  - [ ] `scripts/docker/run-smoke-tests.sh` を `tests/` 配下の `p2p_mainline_smoke` 等へ切り替え、P2P ランブックを最新手順に更新。
+  - [ ] `scripts/test-docker.sh` の `TESTS` 既定値と `cargo --lib` 呼び出しを新しい `tests::integration::p2p::*` 構成へ移行し、ヘルプ出力と `docs/03_implementation/docker_test_environment.md` を修正。
+  - [ ] `scripts/test-docker.ps1` の `cargo test` 呼び出しを `--test` ベースに更新し、ログ文言と PowerShell オプション説明を調整。
+  - [ ] `docker-compose.test.yml` へ `./kukuri-tauri/src-tauri/tests` マウントを追加し、Rust テスト編集を即時反映できるようにする。
+  - [ ] `docs/03_implementation/p2p_mainline_runbook.md` 等 Phase 5 連動ドキュメントから旧 `modules::p2p::tests::*` 参照を除去し、新構成のコマンド例で統一。
 
 ## リファクタリング計画フォローアップ
 
@@ -66,6 +78,10 @@
 -メモ/進捗ログ:
 - 2025年10月17日: Iroh DHT/Discovery 残タスクを完了し、Mainline DHT 統合フェーズへ移行。Phase 7 の残項目（Mainline DHT/OfflineService/EventService/エラーハンドリング）を次スプリントの主テーマに設定。
 - 2025年10月17日: 運用・品質セクションの TODO を見直し、メトリクス更新フローと Windows テスト運用の標準化タスクを切り出した。
+- 2025年10月20日: 運用/品質・観測タスク群の実作業を開始。メトリクス更新フロー整備と Windows テスト運用ガイド策定に向けて現状調査を進行中。
+- 2025年10月20日: `update_flow.md` と `windows_test_docker_runbook.md` を作成し、メトリクス更新手順と PowerShell 運用ガイドのドラフトを共有。
+- 2025年10月20日: メトリクス初回収集で `pnpm test` / `pnpm lint` / `cargo test` 等を実行し、Vitest JSON アーティファクトと `log_2025-10.md` を整備。Windows での Rust テスト失敗と Lint 未解決項目をギャップとして記録。
+- 2025年10月20日: `scripts/run-rust-tests.ps1` 経由で Rust テストの Docker 実行を試行。`docker compose` の Docker Hub 認証失敗（503）を確認し、初回実行時のネットワーク要件をドキュメントへ反映。
 - 2025年10月20日: Phase 3D チケットとして iroh 統合テスト再編を着手。`modules/p2p/tests/iroh/` にシナリオ別モジュールを作成し、テストユーティリティ/Runbook/計画ドキュメントの更新方針を確定。
 - 2025年10月20日: `scripts/test-docker.ps1` に `-Integration` オプションを実装し、`BootstrapPeers`/`IrohBin`/`IntegrationLog` パラメータで Docker 経由の統合テストを再現できるよう調整。
 - 2025年10月20日: `./scripts/test-docker.ps1 integration -BootstrapPeers "<node_id@127.0.0.1:11233>"` を実行し、Docker 上で P2P 統合テストが成功したことを確認。`KUKURI_IROH_BIN` 未指定でもホスト環境依存の問題なく完走することを検証。
