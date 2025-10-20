@@ -316,6 +316,51 @@ tests/
 └── e2e/           // E2Eテスト
 ```
 
+#### 5.3 実装計画
+
+- **目的と前提**  
+  - Phase 1〜4 で整理済みの TODO/DRY 対応が完了している状態を前提とし、`docs/01_project/refactoring_plan_2025-08-08_v3.md` に定義したレイヤ構成への移行を完了させる。  
+  - 既存モジュール間の依存関係を把握するため、着手前に `cargo tree --edges features` と `cargo modules generate graph`（未導入の場合はテンポラリで導入）で依存図を生成し、主要サービス／Repository／コマンドの依存先を一覧化する。
+
+- **準備ステップ**  
+  1. 依存関係棚卸し: 主要クレート構成とモジュール依存を表形式で整理し、レイヤ移行可否（切り離し難易度、循環依存の有無）を評価する。  
+  2. テスト棚卸し: 既存テスト（`modules/*/tests` など）をユニット／統合／共通ユーティリティに分類し、移動対象のファイルと不足領域をリスト化する。  
+  3. CI 影響調査: 現行の GitHub Actions／ローカルスクリプト（`scripts/test-*.sh`, `./scripts/test-docker.ps1`）で参照しているパスを確認し、構成変更時の修正ポイントをまとめる。
+
+- **Workstream A: Rustモジュール再構成（Week4 前半〜中盤）**  
+  1. `domain`,`application`,`infrastructure`,`presentation` 配下に段階移行用の `mod.rs` とプレースホルダーを作成し、既存パスとの互換を確保するための一時的な `pub use` を定義する。  
+  2. ドメインロジック（エンティティ／ユースケース）と外部連携実装（DB・P2P・Tauri）を切り出し、下位レイヤから上位レイヤへの依存のみ許容するルールを `cargo deny` もしくは簡易スクリプトで検証する。  
+  3. DI 初期化（`ApplicationContainer` 等）と Tauri コマンドバインディングを新レイヤに合わせて再配線し、プレゼンテーション層→アプリケーション層→ドメイン層の一方向依存を担保する。  
+  4. 互換フェーズの間は旧モジュールパスに対する `pub use` を残し、段階的に呼び出し元を更新してから削除する。  
+  5. 各移行ステップ後に `cargo fmt` / `cargo clippy -D warnings` / `cargo test` を実行し、リグレッションを即時検知する。
+
+- **Workstream B: テスト構造再編（Week4 後半〜Week5 前半）**  
+  1. `tests/unit`,`tests/integration`,`tests/common/{mocks,fixtures}` を作成し、既存テストを種類に応じて再配置する。  
+  2. 共通モック・フィクスチャを `tests/common` に集約し、重複定義を削減するユーティリティモジュールを整備する。  
+  3. `Cargo.toml` の `[dev-dependencies]` / `[[test]]` 設定を更新して新ディレクトリを参照させ、`cargo test -- --test-threads=1` など既存カスタム呼び出しの動作確認を行う。  
+  4. CI とローカルスクリプトでユニット／統合テストを個別に実行できるようジョブを分割し、`docs/03_implementation/p2p_mainline_runbook.md` に手順を追記する。  
+  5. 統合テストのスモークケースを追加し、`cargo tarpaulin` 等でカバレッジを採取して成功指標の更新方法を確立する。
+
+- **マイルストーン**  
+  - Week4 0.5: 依存棚卸しとテスト棚卸し完了、移行マップ共有。  
+  - Week4 1.0: Workstream A の主要移行（DI 再配線まで）完了、互換パスでビルド成功。  
+  - Week5 0.5: Workstream B 完了、CI とローカルスクリプト更新済み。  
+  - Week5 1.0: `cargo test` / `pnpm test` がグリーンで成功指標のチェックリスト更新、`docs/01_project/progressReports/` へレポート登録。
+
+- **ドキュメント／タスク連携**  
+  - `docs/01_project/activeContext/tauri_app_implementation_plan.md` にレイヤ再構成の進捗を反映し、影響範囲と未完了項目を記録する。  
+  - 運用観点の更新は `docs/03_implementation/p2p_mainline_runbook.md` に記載し、タスクステータスは `tasks/status/in_progress.md` で管理する。
+
+- **リスクと緩和策**  
+  - 循環依存の発生: 依存棚卸し時に循環候補を洗い出し、ドメインサービスの責務分割で対応する。  
+  - テスト移動によるパス破損: 移動後即座に対象テストのみ `cargo test --test <name>` で実行し、失敗時は差分最小化を優先する。  
+  - CI 設定漏れ: 変更前後でワークフローを比較し、レビュー用チェックリスト（CI手順・スクリプト）を活用する。
+
+- **即時アクション（Day0）**  
+  1. 依存関係棚卸し用のテンプレート表（CSV/スプレッドシート想定）の項目定義を決定する。  
+  2. `cargo tree --edges features > docs/01_project/activeContext/artefacts/cargo_tree_phase5.txt` など、基礎データを取得して共有可能な artefact を作成する（`artefacts` ディレクトリが無い場合は作成する）。  
+  3. `tasks/status/in_progress.md` に Phase 5 実装計画タスクを追記し、計画実行フェーズの進捗管理を開始する。
+
 ## 成功指標（改善版）
 
 ### 技術的指標

@@ -55,7 +55,11 @@
   - [x] `.sqlx/` 更新手順とローカルストレージキー移行のリスク評価を `docs/03_implementation/sqlx_best_practices.md` 等へ反映し、後方互換検証結果を記録する。
   - [x] `docs/03_implementation/p2p_mainline_runbook.md` に共有モジュール化後の P2P テスト/運用手順を追記する。
   - [x] `docs/01_project/activeContext/tauri_app_implementation_plan.md` に Zustand 永続化共通化の設計と移行手順をまとめる。
-- [ ] Phase 5 成果測定: dead code 数やテストカバレッジといった指標を `tasks/metrics/` 配下で定期記録する運用を整備する。
+- [x] Phase 5 成果測定: dead code 数やテストカバレッジといった指標を `tasks/metrics/` 配下で定期記録する運用を整備する。
+  - [x] Phase5-01 依存関係棚卸しテンプレートを定義し、artefact 保存ディレクトリ（`docs/01_project/activeContext/artefacts/`）を準備する。
+  - [x] Phase5-02 `cargo tree --edges features` などで基礎データを取得し、artefact を生成して共有する。
+  - [x] Phase5-03 既存テストを種別ごとに分類した表を作成し、移動対象と不足領域を洗い出す。
+  - [x] Phase5-04 CI／ローカルスクリプトのパス依存箇所を調査し、修正候補をリスト化する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
