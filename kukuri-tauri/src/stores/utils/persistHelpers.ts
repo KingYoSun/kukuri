@@ -1,44 +1,53 @@
 import type { StateCreator } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
-export interface PersistOptions<T> {
+export interface PersistOptions<T, PersistedState extends Partial<T> = Partial<T>> {
   name: string;
-  partialize?: (state: T) => Partial<T>;
+  partialize?: (state: T) => PersistedState;
   storage?: StateStorage;
   version?: number;
 }
 
-export const createPersistConfig = <T>({
+export const createPersistConfig = <T, PersistedState extends Partial<T> = Partial<T>>({
   name,
   partialize,
   storage,
   version,
-}: PersistOptions<T>) => ({
-  name,
-  storage: storage || createJSONStorage(() => localStorage),
-  partialize,
-  version,
-});
+}: PersistOptions<T, PersistedState>) => {
+  const resolvedStorage =
+    storage != null
+      ? createJSONStorage<PersistedState>(() => storage)
+      : typeof window !== 'undefined'
+        ? createJSONStorage<PersistedState>(() => localStorage)
+        : undefined;
 
-export const withPersist = <T>(
+  return {
+    name,
+    storage: resolvedStorage,
+    partialize,
+    version,
+  };
+};
+
+export const withPersist = <T, PersistedState extends Partial<T> = Partial<T>>(
   initializer: StateCreator<T, [], []>,
-  options: PersistOptions<T>,
-) => persist(initializer, createPersistConfig(options));
+  options: PersistOptions<T, PersistedState>,
+) => persist(initializer, createPersistConfig<T, PersistedState>(options));
 
-export const createLocalStoragePersist = <T>(
+export const createLocalStoragePersist = <T, PersistedState extends Partial<T> = Partial<T>>(
   name: string,
-  partialize?: (state: T) => Partial<T>,
-) => createPersistConfig<T>({ name, partialize });
+  partialize?: (state: T) => PersistedState,
+) => createPersistConfig<T, PersistedState>({ name, partialize });
 
 export const createPartializer = <T, K extends keyof T>(
   fields: K[],
-): ((state: T) => Pick<T, K>) => {
+): ((state: T) => Partial<T>) => {
   return (state: T) => {
     const partial: Partial<T> = {};
     fields.forEach((field) => {
       partial[field] = state[field];
     });
-    return partial as Pick<T, K>;
+    return partial;
   };
 };
 

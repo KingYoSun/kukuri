@@ -86,6 +86,7 @@
 - 2025年10月20日: `scripts/test-docker.ps1` に `-Integration` オプションを実装し、`BootstrapPeers`/`IrohBin`/`IntegrationLog` パラメータで Docker 経由の統合テストを再現できるよう調整。
 - 2025年10月20日: `./scripts/test-docker.ps1 integration -BootstrapPeers "<node_id@127.0.0.1:11233>"` を実行し、Docker 上で P2P 統合テストが成功したことを確認。`KUKURI_IROH_BIN` 未指定でもホスト環境依存の問題なく完走することを検証。
 - 2025年10月17日: `DiscoveryOptions` と `P2PService::builder` を導入し、Mainline DHT 切替対応のためのP2Pスタック組み立てを再構成。
+- 2025年10月21日: GitHub Actions `Native Test (Linux)` で発生していた TypeScript 型エラーを解消。Zustand 永続化ヘルパー（`persistHelpers.ts`）と `src/stores/config/persist.ts` をジェネリクス対応へ更新し、`pnpm type-check` と `gh act -j native-test-linux -W .github/workflows/test.yml` の成功を確認。
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。
