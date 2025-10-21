@@ -19,9 +19,7 @@ export const createAuthPersistConfig = <
   partialize: createPartializer<T, 'currentUser'>(['currentUser']),
 });
 
-export const createDraftPersistConfig = <
-  T extends { drafts: unknown[] },
->(): PersistOptions<T> => ({
+export const createDraftPersistConfig = <T extends { drafts: unknown[] }>(): PersistOptions<T> => ({
   name: persistKeys.drafts,
   partialize: createPartializer<T, 'drafts'>(['drafts']),
 });
