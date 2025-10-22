@@ -36,12 +36,14 @@
 
 ## 運用/品質・観測（着手）
 
-- [ ] Windows での `./scripts/test-docker.ps1` 実行を基本ラインとする運用ガイドを策定し、CI とローカルの手順差異を吸収。
+- [x] Windows での `./scripts/test-docker.ps1` 実行を基本ラインとする運用ガイドを策定し、CI とローカルの手順差異を吸収。
   - 2025年10月20日: `docs/03_implementation/windows_test_docker_runbook.md` を作成し、PowerShell 運用手順と GitHub Actions との主な差分を記録。
   - 2025年10月20日: `windows_test_docker_runbook.md` に Linux/macOS ガイドとの共通化ポイントを整理し、`docker_test_environment.md` との統合方針を検討。
   - 2025年10月20日: `scripts/run-rust-tests.ps1` を追加し、Windows から Docker 経由で Rust テストを呼び出す自動化フローを整備。`docker_test_environment.md` / `windows_test_docker_runbook.md` に運用例を追記。
   - 2025年10月21日: `windows_test_docker_runbook.md` と `docker_test_environment.md` の重複セクションを精査し、コマンド表・トラブルシュート統合の対応順を整理。
   - 2025年10月21日: `scripts/metrics/collect-metrics.{ps1,sh}` を追加し、PowerShell 版で TODO / `any` / `#[allow(dead_code)]` 集計を自動化。成果物を `artefacts/metrics/2025-10-21-collect-metrics.json` に保存。
+  - 2025年10月22日: `windows_test_docker_runbook.md` に CI 対応表とチェックリストを追加し、`docker_test_environment.md` の Windows 節を runbook 参照に整理。
+  - 2025年10月22日: `.\scripts\test-docker.ps1` を実行し、Runbook の CI 等価性チェックリスト（全テストフロー・成果物確認・ログ確認）を完了したことを検証。
 - [ ] ドキュメントの日付表記を `YYYY年MM月DD日` に統一するルールを整理し、主要ドキュメントの棚卸しを行う。
   - 2025年10月21日 着手: `rg '202[0-9]-[0-9]{2}-[0-9]{2}' docs` で旧表記の候補を抽出し、`tasks/README.md`・`refactoring_plan_2025-08-08_v3.md` など修正対象リストを作成開始。
 - [ ] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応

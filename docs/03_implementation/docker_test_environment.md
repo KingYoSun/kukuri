@@ -1,6 +1,7 @@
 # Docker環境でのテスト実行ガイド
 
 **作成日**: 2025年8月5日
+**最終更新**: 2025年10月22日
 
 ## 概要
 
@@ -43,47 +44,27 @@ kukuri/
 Windows環境でDLLエラーによりネイティブでのテストが実行できない場合は、**必ずDockerを使用してテストを実行してください**。
 
 ### Windows環境での実行
-**Windows では DLL 依存の問題を避けるため、`scripts/test-docker.ps1` を既定のテスト実行経路としてください。**
-
-PowerShellで以下のコマンドを実行：
+Windows では DLL 依存の問題を避けるため `scripts/test-docker.ps1` を既定のテスト経路とする。詳細な運用手順と CI との対応関係は `docs/03_implementation/windows_test_docker_runbook.md` を参照。以下は頻出コマンドの抜粋。
 
 ```powershell
-# すべてのテストを実行
-.\scripts\test-docker.ps1
-
-# Rustテストのみ実行
-.\scripts\test-docker.ps1 rust
-
-# P2P統合テスト（ブートストラップを自動起動）
-.\scripts\test-docker.ps1 integration
-
-# TypeScriptテストのみ実行
-.\scripts\test-docker.ps1 ts
-
-# リントとフォーマットチェック
-.\scripts\test-docker.ps1 lint
-
-# Dockerイメージの再ビルドのみ
-.\scripts\test-docker.ps1 build
-
-# コンテナとイメージのクリーンアップ
-.\scripts\test-docker.ps1 clean
-
-# キャッシュ削除を含む完全クリーンアップ
-.\scripts\test-docker.ps1 cache-clean
-
-# ヘルプを表示
-.\scripts\test-docker.ps1 -Help
+.\scripts\test-docker.ps1             # すべてのテスト
+.\scripts\test-docker.ps1 rust        # Rust テストのみ
+.\scripts\test-docker.ps1 integration # P2P 統合テスト
+.\scripts\test-docker.ps1 ts          # TypeScript テスト
+.\scripts\test-docker.ps1 lint        # Lint / format チェック
+.\scripts\test-docker.ps1 build       # テスト用イメージの再ビルド
+.\scripts\test-docker.ps1 clean       # コンテナとネットワークの削除
+.\scripts\test-docker.ps1 cache-clean # キャッシュ削除を含む完全クリーンアップ
 ```
-`integration` コマンドは `ENABLE_P2P_INTEGRATION=1` を付与した上で `p2p-bootstrap` コンテナを自動起動し、テスト完了後にクリーンアップします。追加の環境変数設定は不要です。
+`integration` は `ENABLE_P2P_INTEGRATION=1` を付与し `p2p-bootstrap` コンテナを自動起動する。P2P 経路の再実行時は `-NoBuild` を組み合わせると高速化できる。
 
 #### Rustテスト自動化
-Rust のみを Docker で実行したい場合は、`scripts/run-rust-tests.ps1` を利用するとリポジトリルートの切り替えと戻り値の伝播を自動化できます。
+Rust のみを Docker で実行したい場合は `scripts/run-rust-tests.ps1` を利用するとリポジトリルートの切り替えと戻り値の伝播を自動化できる。詳細オプションは上記 runbook を参照。
 
 ```powershell
-.\scripts\run-rust-tests.ps1            # Rustユニットテスト
-.\scripts\run-rust-tests.ps1 -Integration   # P2P統合テスト（ブートストラップ付き）
-.\scripts\run-rust-tests.ps1 -NoBuild       # 直前にビルド済みの場合の高速化
+.\scripts\run-rust-tests.ps1             # Rust ユニットテスト
+.\scripts\run-rust-tests.ps1 -Integration   # P2P 統合テスト
+.\scripts\run-rust-tests.ps1 -NoBuild       # ビルド済みキャッシュを利用
 ```
 
 ### Linux/macOS環境での実行
@@ -168,7 +149,7 @@ docker compose -f docker-compose.test.yml down --rmi local --volumes
 
 ## CI/CDでの活用
 
-GitHub Actionsでの自動テスト実行が設定されています：
+GitHub Actionsでの自動テスト実行が設定されています。Windows から同等の実行手順を踏む際は `docs/03_implementation/windows_test_docker_runbook.md` の CI 対応表を参照してください：
 
 1. **docker-test**: Dockerを使用したメインのテストスイート
 2. **native-test-linux**: Linux環境でのネイティブテスト
