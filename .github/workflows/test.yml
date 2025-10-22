@@ -176,6 +176,10 @@ jobs:
           cd kukuri-tauri
           pnpm install --frozen-lockfile
 
+      - name: Check documentation date format
+        run: |
+          python scripts/check_date_format.py
+
       - name: Check Rust formatting
         run: |
           cd kukuri-tauri/src-tauri

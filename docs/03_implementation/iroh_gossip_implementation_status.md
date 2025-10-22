@@ -1,5 +1,5 @@
 # iroh-gossip v0.90.0 実装状況
-## 最終更新: 2025年7月28日
+## 最終更新: 2025年07月28日
 
 ## 完了事項
 
@@ -31,13 +31,13 @@ let (sender, mut receiver) = gossip_topic.split();
 - 全てのコンパイルエラーを解消
 - ユニットテストが正常に動作することを確認
 
-### 4. P2P基盤実装完了 (2025年7月27日)
+### 4. P2P基盤実装完了 (2025年07月27日)
 - **トピック管理機能**: TopicHandle、subscribe/broadcast実装
 - **メッセージ署名・検証**: secp256k1による署名検証機能
 - **重複排除メカニズム**: LRUキャッシュによるメッセージID管理
 - **包括的なテストスイート**: 140個のバックエンドテスト実装
 
-### 5. Nostr/P2P統合完了 (2025年7月27日)
+### 5. Nostr/P2P統合完了 (2025年07月27日)
 - **イベント変換機能** (Day 6):
   - NostrイベントからGossipMessageへの変換 ✅
   - GossipMessageからNostrイベントへの変換 ✅
@@ -51,7 +51,7 @@ let (sender, mut receiver) = gossip_topic.split();
   - 並列配信・フォールバック処理 ✅
   - 配信優先度管理 ✅
 
-### 6. P2P UI統合完了 (2025年7月27日)
+### 6. P2P UI統合完了 (2025年07月27日)
 - **p2pStore**: Zustand状態管理Store
 - **P2PStatus**: サイドバー接続状態表示
 - **TopicMeshVisualization**: トピックメッシュ可視化

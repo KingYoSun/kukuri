@@ -12,6 +12,7 @@
 - iroh-native-dht-plan.md: iroh Mainline DHT 移行計画
 - tauri_app_experience_design.md: Tauri アプリの体験設計
 - tauri_app_implementation_plan.md: 実装計画
+- artefacts/document_date_format_inventory.md: ドキュメント日付表記ルールと棚卸し（2025年10月22日更新）
 - deprecation/
   - gossip_manager_deprecation.md: GossipManager 廃止の経緯
   - distributed-topic-tracker-plan.md: 旧分散トラッカー計画の保管（廃止）

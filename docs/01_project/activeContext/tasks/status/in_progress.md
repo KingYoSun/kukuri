@@ -44,8 +44,12 @@
   - 2025年10月21日: `scripts/metrics/collect-metrics.{ps1,sh}` を追加し、PowerShell 版で TODO / `any` / `#[allow(dead_code)]` 集計を自動化。成果物を `artefacts/metrics/2025-10-21-collect-metrics.json` に保存。
   - 2025年10月22日: `windows_test_docker_runbook.md` に CI 対応表とチェックリストを追加し、`docker_test_environment.md` の Windows 節を runbook 参照に整理。
   - 2025年10月22日: `.\scripts\test-docker.ps1` を実行し、Runbook の CI 等価性チェックリスト（全テストフロー・成果物確認・ログ確認）を完了したことを検証。
-- [ ] ドキュメントの日付表記を `YYYY年MM月DD日` に統一するルールを整理し、主要ドキュメントの棚卸しを行う。
+- [x] ドキュメントの日付表記を `YYYY年MM月DD日` に統一するルールを整理し、主要ドキュメントの棚卸しを行う。
   - 2025年10月21日 着手: `rg '202[0-9]-[0-9]{2}-[0-9]{2}' docs` で旧表記の候補を抽出し、`tasks/README.md`・`refactoring_plan_2025-08-08_v3.md` など修正対象リストを作成開始。
+  - 2025年10月22日: `docs/01_project/activeContext/artefacts/document_date_format_inventory.md` を作成し、ルール整理と主要ドキュメントの棚卸し結果を記録。Python スクリプトによるゼロ埋め未対応箇所の一覧を整理。
+  - 2025年10月22日: 棚卸しで「要修正」となっていた主要ドキュメントのゼロ埋め対応を完了し、同 inventory を対応済みに更新。
+  - 2025年10月22日: ProgressReports や完了タスクアーカイブ等を含む `docs/**/*.md` をスクリプトで一括整形し、非ゼロ埋め表記を完全排除。
+  - 2025年10月22日: `scripts/check_date_format.py` を追加し、`format-check` ワークフローから自動検証するよう CI を更新。
 - [ ] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応
   - 2025年10月21日: `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` を確認し、PowerShell スクリプト→Bash→Compose→Runbook の順で更新する方針を設定。
   - [ ] `scripts/docker/run-smoke-tests.sh` を `tests/` 配下の `p2p_mainline_smoke` 等へ切り替え、P2P ランブックを最新手順に更新。

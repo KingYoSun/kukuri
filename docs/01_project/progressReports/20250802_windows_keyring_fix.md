@@ -45,4 +45,4 @@ let entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create key
 - [keyring crate documentation](https://docs.rs/keyring/latest/keyring/)
 
 ## 作成日
-2025年8月2日
+2025年08月02日

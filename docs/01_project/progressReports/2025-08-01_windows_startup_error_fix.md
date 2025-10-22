@@ -1,6 +1,6 @@
 # 進捗レポート: Windows環境での起動エラー解決
 
-**作成日**: 2025年8月1日  
+**作成日**: 2025年08月01日  
 **作業者**: Claude Code  
 **カテゴリ**: バグ修正
 
@@ -91,5 +91,5 @@ let file_path = if database_url.starts_with("sqlite:///") {
 - [ ] CI/CDパイプラインでのクロスプラットフォームテスト
 
 ## 関連ドキュメント
-- [既知の問題と注意事項](../activeContext/issuesAndNotes.md#windows環境での起動エラー2025年8月1日)
+- [既知の問題と注意事項](../activeContext/issuesAndNotes.md#windows環境での起動エラー2025年08月01日)
 - [現在の開発環境](../activeContext/current_environment.md)

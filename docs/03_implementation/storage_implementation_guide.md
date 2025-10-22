@@ -1,6 +1,6 @@
 # kukuriデータストレージ実装ガイドライン
 
-## 作成日：2025年7月25日
+## 作成日：2025年07月25日
 
 ## 概要
 
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS read_markers (
     FOREIGN KEY (topic_id) REFERENCES topics(id)
 );
 
--- ブックマーク管理（2025年8月3日追加）
+-- ブックマーク管理（2025年08月03日追加）
 CREATE TABLE IF NOT EXISTS bookmarks (
     id TEXT PRIMARY KEY,
     user_pubkey TEXT NOT NULL,
