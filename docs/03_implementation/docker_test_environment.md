@@ -56,6 +56,7 @@ Windows では DLL 依存の問題を避けるため `scripts/test-docker.ps1` �
 .\scripts\test-docker.ps1 clean       # コンテナとネットワークの削除
 .\scripts\test-docker.ps1 cache-clean # キャッシュ削除を含む完全クリーンアップ
 ```
+`integration` コマンドは `p2p_gossip_smoke` と `p2p_mainline_smoke` を順次実行し、両経路のスモークを 1 コマンドで確認できるようになっている。
 `integration` は `ENABLE_P2P_INTEGRATION=1` を付与し `p2p-bootstrap` コンテナを自動起動する。P2P 経路の再実行時は `-NoBuild` を組み合わせると高速化できる。
 
 #### Rustテスト自動化
@@ -87,13 +88,13 @@ docker compose -f docker-compose.test.yml down --rmi local --volumes
 
 
 P2P統合テスト用に追加された `p2p` サブコマンドでは次のオプションを組み合わせて利用できます。
-- `--tests <name>`: `iroh_integration_tests`（既定）を含む Cargo テストターゲットを指定
+- `--tests <name>`: `p2p_gossip_smoke`（既定）など任意の Cargo テストターゲットを指定。`gossip` / `mainline` といったエイリアス指定も可能
 - `--bootstrap <node_id@host:port>`: デフォルトの `p2p-bootstrap` 設定を上書きしたい場合に使用（複数ノードはカンマ区切り）
 - `--no-build`: 事前ビルドをスキップ（イメージ変更がない反復実行向け）
 - `--keep-env`: 生成された `kukuri-tauri/tests/.env.p2p` を削除せず残す
 - `--rust-log <value>` / `--rust-backtrace <value>`: Rust 側のロギング設定を上書き
 実行時に生成される `.env.p2p` は `kukuri-tauri/tests/` 配下に保存され、デフォルトで `KUKURI_BOOTSTRAP_PEERS=03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233` を含みます。`--keep-env` を指定しなければ完了後に自動削除されます。
-`p2p` サブコマンドは PowerShell 版 `integration` と同様に `p2p-bootstrap` を自動で起動し、ヘルスチェックが `healthy` になるまで待機してからテストを実行します。既定では `cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1` を実行し、P2P 結合テストのみに絞って検証します。
+`p2p` サブコマンドは PowerShell 版 `integration` と同様に `p2p-bootstrap` を自動で起動し、ヘルスチェックが `healthy` になるまで待機してからテストを実行します。既定では `cargo test --package kukuri-tauri --test p2p_gossip_smoke -- --nocapture --test-threads=1` を実行し、`--tests mainline` などで他のスモークも選択できます。
 
 詳細な設計背景と検証手順は `docs/03_implementation/p2p_dht_test_strategy.md` を参照してください。
 

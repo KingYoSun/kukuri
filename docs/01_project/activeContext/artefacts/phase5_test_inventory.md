@@ -8,7 +8,7 @@
 | EventService tests | `src/application/services/event_service/tests` | ユニット＼結合混在 | `tests/unit/application/event_service` と `tests/integration/application/event_service` | EventManager 連携ケースは本体内依存のまま。Publish/Distribution のモックを `tests/common` へ切り出す。 |
 | Shared test utilities | `src/application/shared/tests` | 共通モック | `tests/common`（既存）へ統合 | 既に汎用化済。Phase 5 後は Rust 側共通モックの唯一の配置として維持する。 |
 | EventManager tests | `src/modules/event/manager/tests` | 結合 | `tests/integration/event/manager` | Tauri `AppHandle` 依存がないシナリオを追加予定（不足）。 |
-| P2P module tests | `src/modules/p2p/tests` | 結合 | `tests/integration/p2p` | Mainline DHT シナリオを `tests/integration/p2p/mainline_*.rs` として再配置。 |
+| P2P module tests | `src-tauri/tests/p2p_gossip_smoke.rs`, `src-tauri/tests/p2p_mainline_smoke.rs` | 結合 | 同上 | Mainline DHT シナリオは接続統計で検証。Docker / CI 実行時は `ENABLE_P2P_INTEGRATION=1` を設定する。 |
 | Contract tests | `tests/nip10_contract_tests.rs` | 契約 | `tests/contract/nip10.rs` | Phase 5 でカテゴリディレクトリを明確化。 |
 | Performance tests | `tests/performance_tests.rs` | パフォーマンス | `tests/performance/*.rs` | 実行条件と計測方法のドキュメント不足、要整備。 |
 | Integration harness | `tests/integration/*` | 結合 | `tests/integration`（維持） | `test_auth.rs` はモックベースで E2E 未到達。Offline/P2P の統合ケースが未作成（不足）。 |

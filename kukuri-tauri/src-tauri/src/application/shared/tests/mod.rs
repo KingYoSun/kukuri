@@ -1,4 +1,4 @@
-#![cfg(test)]
+#![allow(dead_code)]
 
 //! 共通テストユーティリティ。
 

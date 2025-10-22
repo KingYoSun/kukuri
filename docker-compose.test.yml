@@ -32,6 +32,7 @@ services:
       # ソースコードをマウント（開発時の変更を即座に反映）
       - ./kukuri-tauri/src:/app/kukuri-tauri/src:ro
       - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro
       - ./kukuri-tauri/tests:/app/kukuri-tauri/tests:ro
       # テスト結果の出力用
       - ./test-results:/app/test-results
@@ -73,6 +74,7 @@ services:
     command: /bin/sh -c "cargo test --workspace --all-features -- --nocapture"
     volumes:
       - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro
       - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
       - ./kukuri-tauri/src-tauri/build.rs:/app/kukuri-tauri/src-tauri/build.rs:ro
       - ./kukuri-tauri/src-tauri/tauri.conf.json:/app/kukuri-tauri/src-tauri/tauri.conf.json:ro

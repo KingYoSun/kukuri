@@ -12,6 +12,9 @@ RESULTS_DIR="${REPO_ROOT}/test-results"
 BOOTSTRAP_DEFAULT_PEER="03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
 
+P2P_MAINLINE_TEST="${P2P_MAINLINE_TEST_TARGET:-p2p_mainline_smoke}"
+P2P_GOSSIP_TEST="${P2P_GOSSIP_TEST_TARGET:-p2p_gossip_smoke}"
+
 usage() {
   cat <<'EOF'
 Usage: ./test-docker.sh [command] [options]
@@ -27,13 +30,14 @@ Commands:
   p2p          Run P2P integration tests inside Docker
 
 Options for p2p:
-  --tests <name>          Cargo test filter (default: modules::p2p::tests::iroh_integration_tests::)
+  --tests <name>          Cargo test filter (default: p2p_gossip_smoke)
   --bootstrap <peers>     KUKURI_BOOTSTRAP_PEERS (comma separated node@host:port)
   --no-build              Skip docker compose build
   --keep-env              Keep generated .env.p2p after execution
   --rust-log <value>      RUST_LOG for P2P (default: debug)
   --rust-backtrace <val>  RUST_BACKTRACE for P2P (default: full)
   -h, --help              Show this help
+  ※ `--tests gossip` / `--tests mainline` でそれぞれ `p2p_gossip_smoke` / `p2p_mainline_smoke` を指定可能。任意のテスト名を直接渡すこともできます。
 EOF
 }
 
@@ -148,7 +152,7 @@ wait_bootstrap_healthy() {
       return 0
     fi
     sleep 1
-  }
+  done
   return 1
 }
 
@@ -185,17 +189,30 @@ run_p2p_tests() {
     DOCKER_BUILDKIT=1 compose_run "$ENV_FILE" build rust-test
   fi
 
-  local cargo_cmd
-  local cargo_args
-  case "$TESTS" in
+  local -a cargo_args
+  local selected="$TESTS"
+
+  case "$selected" in
+    mainline)
+      selected="$P2P_MAINLINE_TEST"
+      ;;
+    gossip)
+      selected="$P2P_GOSSIP_TEST"
+      ;;
+  esac
+
+  case "$selected" in
     all)
       cargo_args=(test --workspace --all-features -- --nocapture)
       ;;
     workspace)
       cargo_args=(test --all-features -- --nocapture)
       ;;
+    modules::*|tests::*)
+      cargo_args=(test --package kukuri-tauri --lib "${selected}" -- --nocapture --test-threads=1)
+      ;;
     *)
-      cargo_args=(test --package kukuri-tauri --lib "${TESTS}" -- --nocapture --test-threads=1)
+      cargo_args=(test --package kukuri-tauri --test "${selected}" -- --nocapture --test-threads=1)
       ;;
   esac
 
@@ -237,7 +254,7 @@ mkdir -p "$RESULTS_DIR"
 COMMAND="${1:-all}"
 shift || true
 
-TESTS="modules::p2p::tests::iroh_integration_tests::"
+TESTS="${P2P_GOSSIP_TEST}"
 BOOTSTRAP_PEERS=""
 NO_BUILD=0
 KEEP_ENV=0

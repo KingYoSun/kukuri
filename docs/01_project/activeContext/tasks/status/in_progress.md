@@ -52,11 +52,14 @@
   - 2025年10月22日: `scripts/check_date_format.py` を追加し、`format-check` ワークフローから自動検証するよう CI を更新。
 - [ ] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応
   - 2025年10月21日: `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` を確認し、PowerShell スクリプト→Bash→Compose→Runbook の順で更新する方針を設定。
-  - [ ] `scripts/docker/run-smoke-tests.sh` を `tests/` 配下の `p2p_mainline_smoke` 等へ切り替え、P2P ランブックを最新手順に更新。
-  - [ ] `scripts/test-docker.sh` の `TESTS` 既定値と `cargo --lib` 呼び出しを新しい `tests::integration::p2p::*` 構成へ移行し、ヘルプ出力と `docs/03_implementation/docker_test_environment.md` を修正。
-  - [ ] `scripts/test-docker.ps1` の `cargo test` 呼び出しを `--test` ベースに更新し、ログ文言と PowerShell オプション説明を調整。
-  - [ ] `docker-compose.test.yml` へ `./kukuri-tauri/src-tauri/tests` マウントを追加し、Rust テスト編集を即時反映できるようにする。
-  - [ ] `docs/03_implementation/p2p_mainline_runbook.md` 等 Phase 5 連動ドキュメントから旧 `modules::p2p::tests::*` 参照を除去し、新構成のコマンド例で統一。
+  - [x] `scripts/docker/run-smoke-tests.sh` を `tests/` 配下の `p2p_mainline_smoke` 等へ切り替え、P2P ランブックを最新手順に更新。
+  - [x] `scripts/test-docker.sh` の `TESTS` 既定値と `cargo --lib` 呼び出しを新しい `tests::integration::p2p::*` 構成へ移行し、ヘルプ出力と `docs/03_implementation/docker_test_environment.md` を修正。
+  - [x] `scripts/test-docker.ps1` の `cargo test` 呼び出しを `--test` ベースに更新し、ログ文言と PowerShell オプション説明を調整。
+  - [x] `docker-compose.test.yml` へ `./kukuri-tauri/src-tauri/tests` マウントを追加し、Rust テスト編集を即時反映できるようにする。
+  - [x] `docs/03_implementation/p2p_mainline_runbook.md` 等 Phase 5 連動ドキュメントから旧 `modules::p2p::tests::*` 参照を除去し、新構成のコマンド例で統一。
+  - 2025年10月22日: 新テストバイナリ（`p2p_gossip_smoke` / `p2p_mainline_smoke`）を追加し、旧 `modules::p2p::tests::*` の統合テスト資産を移設。Docker Compose のマウント更新とランブック改訂を完了。
+  - 2025年10月22日: `scripts/docker/run-smoke-tests.sh` / `test-docker.{sh,ps1}` のフォールバックロジックを撤廃し、新バイナリ固定実行に切り替え。
+  - [ ] TypeScript 側の Phase 5 テスト再編（`src/__tests__` → `src/tests/*` への移行、重複整理、DI 周りの統合ケース追加）を実施し、`phase5_test_inventory.md` の不足項目（Hooks/Stores/Integration のギャップ）を解消する。進捗は artefact 更新で追跡。
 
 ## リファクタリング計画フォローアップ
 

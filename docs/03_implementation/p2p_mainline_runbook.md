@@ -1,5 +1,5 @@
 # P2P Mainline Runbook
-最終更新日: 2025年10月20日
+最終更新日: 2025年10月22日
 
 ## 1. 目的
 - Mainline DHT を有効にした P2P ネットワークの運用手順と統合テスト実行フローを共有する。
@@ -19,28 +19,26 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 ```
 
 ## 3. テスト構成概要
-- テストコードは `kukuri-tauri/src-tauri/src/modules/p2p/tests/iroh/` に再編済み。
-  - `connectivity.rs`: 2ノード接続確認・安定性チェック
-  - `broadcast.rs`: ブロードキャスト／返信／引用フロー
-  - `multi_peer.rs`: 3ノード以上での配信シナリオ
-  - `support/`: ブートストラップ生成・待機ロジック・tracing 初期化を集約
-- すべてのテストは `ENABLE_P2P_INTEGRATION!=1` または `KUKURI_BOOTSTRAP_PEERS` 未設定時に早期 return し、明示的にスキップ理由をログへ出力する。
+- Phase 5 で Rust 統合テストを `kukuri-tauri/src-tauri/tests` 配下のテストバイナリへ完全移行済み。
+  - `p2p_gossip_smoke.rs`: Gossip 経路のスモークテスト（旧 `modules::p2p::tests::iroh_integration_tests` の移設版）
+  - `p2p_mainline_smoke.rs`: Mainline DHT 経路のスモークテスト（旧 `modules::p2p::tests::mainline_dht_tests` の移設版）
+- `scripts/docker/run-smoke-tests.sh` / `scripts/test-docker.{sh,ps1}` は両テストを順次実行するよう統一され、`modules::p2p::tests::*` へのフォールバックは廃止済み。
 
 ### 3.1 共通ユーティリティの活用
-- Phase 4 でテスト支援コードを `application/shared/tests/p2p` へ集約したため、カスタムヘルパーを追加する際は同ディレクトリに実装し `modules/p2p/tests/iroh/support` から再エクスポートする。  
-- Gossip 経路で利用する DefaultTopicsRegistry や EventPublisher も `application/shared` へ移動済み。ランブック外で個別ユーティリティを作成せず、共有モジュールを参照して重複を避ける。  
-- 新しいシナリオを追加する場合は `tests/iroh/mod.rs` からサブモジュールを登録し、共通ログ初期化（`shared::tests::p2p::logging`）を呼び出すテンプレートを再利用する。
+- Phase 4 でテスト支援コードを `application/shared/tests/p2p` へ集約済み。新しい `p2p_*_smoke` からも同ユーティリティを利用する。  
+- Gossip 経路で利用する DefaultTopicsRegistry や EventPublisher も `application/shared` へ移動済み。自前で複製せず共有モジュールを参照して重複を避ける。  
+- 新しいシナリオを追加する場合は `src-tauri/tests/common` を再利用し、smoke テストに倣って `ENABLE_P2P_INTEGRATION` とブートストラップ待機処理を組み込む。
 
 ## 4. 実行手順
 1. ブートストラップノードを起動（例: `./scripts/start-bootstrap-nodes.ps1 -ReplicaCount 3`）。
 2. 上述の環境変数を設定。
 3. テスト開始:
    ```powershell
-   cargo test --tests modules::p2p::tests::iroh -- --test-threads=1 --nocapture
+   cargo test --package kukuri-tauri --test p2p_mainline_smoke -- --nocapture --test-threads=1
    ```
 4. 重要シナリオのみを個別確認する場合:
    ```powershell
-   cargo test modules::p2p::tests::iroh::broadcast::test_p2p_reply_flow -- --nocapture
+   cargo test --package kukuri-tauri --test p2p_gossip_smoke -- --nocapture --test-threads=1
    ```
 5. Windows で DLL 解決に問題がある場合は下記の PowerShell コマンドで Docker 経由の統合テストを実行する。
    ```powershell
@@ -50,7 +48,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
    ```
    - `-IntegrationLog` で `RUST_LOG` を上書き可能。
    - `integration` コマンド単体でも同様のオプションを利用できる（例: `./scripts/test-docker.ps1 integration -BootstrapPeers ...`）。
-   - 2025年10月20日時点で `./scripts/test-docker.ps1 integration -BootstrapPeers "<node_id@127.0.0.1:11233>"` を実行し、Docker 環境で統合テストが完了することを確認済み。
+   - PowerShell 版スクリプトは `p2p_gossip_smoke` / `p2p_mainline_smoke` の双方を順次実行する。
 
 ## 5. ログとトレース
 - `support/logging.rs` で `tracing_subscriber` を初期化し、`iroh_tests` ターゲットでログを出力する。

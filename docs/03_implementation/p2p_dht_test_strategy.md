@@ -20,7 +20,7 @@
 - `docker-compose.test.yml`
   - `p2p-bootstrap` サービスを追加し、`kukuri-cli` イメージを利用した DHT ブートストラップノードを常時起動。
   - `network_mode: host` で 11233/TCP を露出し、`KUKURI_SECRET_KEY` を固定化して決定論的な NodeId (`03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8`) を生成。
-  - `test-runner` サービスの既定コマンドを `run-smoke-tests.sh` に変更し、Rust P2P 統合テスト (`cargo test --package kukuri-tauri --lib modules::p2p::tests::iroh_integration_tests:: -- --nocapture --test-threads=1`) と TypeScript 統合テスト (`pnpm test:integration`) のみを実行してスモークを最小化。
+  - `test-runner` サービスの既定コマンドを `run-smoke-tests.sh` に変更し、Rust P2P 統合テスト (`cargo test --package kukuri-tauri --test p2p_gossip_smoke -- --nocapture --test-threads=1` / `cargo test --package kukuri-tauri --test p2p_mainline_smoke -- --nocapture --test-threads=1`) と TypeScript 統合テスト (`pnpm test:integration`) のみを実行してスモークを最小化。
   - `p2p-bootstrap` の `healthcheck` 成功を待ってから開始するよう `depends_on` を追加し、`docker compose up` 実行時にブートストラップ起動待ちが保証されるようにした。
   - `ENABLE_P2P_INTEGRATION=1` / `KUKURI_FORCE_LOCALHOST_ADDRS=0` / `KUKURI_BOOTSTRAP_HOST` / `KUKURI_BOOTSTRAP_PORT` を既定で埋め込み、`BOOTSTRAP_WAIT_SECONDS` で待機秒数を調整できるようにした。
 - `scripts/test-docker.sh` / `.ps1`

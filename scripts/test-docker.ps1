@@ -14,6 +14,11 @@ param(
     [switch]$Help
 )
 
+$scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repositoryRoot = Split-Path $scriptDirectory -Parent
+$NewBinMainlineTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_MAINLINE_TEST_TARGET)) { $env:P2P_MAINLINE_TEST_TARGET } else { "p2p_mainline_smoke" }
+$NewBinGossipTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_GOSSIP_TEST_TARGET)) { $env:P2P_GOSSIP_TEST_TARGET } else { "p2p_gossip_smoke" }
+
 # カラー関数
 function Write-Success {
     param([string]$Message)
@@ -60,6 +65,7 @@ Options:
   -IntegrationLog <level> - 統合テスト時の RUST_LOG 設定（既定: info,iroh_tests=debug）
   -NoBuild     - Dockerイメージのビルドをスキップ
   -Help        - このヘルプを表示
+  ※ P2P統合テストは `p2p_gossip_smoke` / `p2p_mainline_smoke` を順次実行します。`P2P_GOSSIP_TEST_TARGET` や `P2P_MAINLINE_TEST_TARGET` で任意のターゲットに上書き可能です。
 
 Examples:
   .\test-docker.ps1                # すべてのテストを実行
@@ -182,18 +188,42 @@ function Invoke-IntegrationTests {
         Write-Info "RUST_LOG for integration: $($env:RUST_LOG)"
         Start-P2PBootstrap
         $bootstrapStarted = $true
-        Write-Host "Running Rust P2P integration tests in Docker..."
-        $exitCode = Invoke-DockerCompose @(
-            "run", "--rm", "rust-test",
-            "cargo", "test",
-            "--package", "kukuri-tauri",
-            "--lib", "modules::p2p::tests::iroh",
-            "--", "--nocapture", "--test-threads=1"
-        ) -IgnoreFailure
-        if ($exitCode -eq 0) {
+        $targets = @(
+            @{
+                Label = "Rust P2P gossip integration tests"
+                Binary = $NewBinGossipTarget
+            },
+            @{
+                Label = "Rust P2P mainline integration tests"
+                Binary = $NewBinMainlineTarget
+            }
+        )
+
+        foreach ($target in $targets) {
+            $cargoArgs = @(
+                "run",
+                "--rm",
+                "rust-test",
+                "cargo",
+                "test",
+                "--package",
+                "kukuri-tauri",
+                "--test",
+                $target.Binary,
+                "--",
+                "--nocapture",
+                "--test-threads=1"
+            )
+            Write-Host "Running $($target.Label) (cargo test target: $($target.Binary))..."
+            $exitCode = Invoke-DockerCompose $cargoArgs -IgnoreFailure
+            if ($exitCode -ne 0) {
+                $fatalMessage = "$($target.Label) exited with code $exitCode (cargo test target: $($target.Binary))"
+                break
+            }
+        }
+
+        if (-not $fatalMessage) {
             Write-Success "Rust P2P integration tests passed!"
-        } else {
-            $fatalMessage = "Rust P2P integration tests exited with code $exitCode"
         }
     }
     catch {

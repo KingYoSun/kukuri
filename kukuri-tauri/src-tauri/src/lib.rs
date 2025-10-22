@@ -11,6 +11,26 @@ mod shared;
 mod state;
 
 #[doc(hidden)]
+pub mod test_support {
+    pub mod application {
+        pub use crate::application::services;
+        pub use crate::application::shared;
+    }
+    pub mod domain {
+        pub use crate::domain::entities;
+    }
+    pub mod infrastructure {
+        pub use crate::infrastructure::p2p;
+    }
+    pub mod modules {
+        pub use crate::modules::p2p;
+    }
+    pub mod shared {
+        pub use crate::shared::config;
+    }
+}
+
+#[doc(hidden)]
 pub mod contract_testing;
 
 // Tauriコマンドのインポート
