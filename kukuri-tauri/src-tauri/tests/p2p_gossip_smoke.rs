@@ -1,6 +1,6 @@
 use kukuri_lib::test_support::application::shared::tests::p2p::bootstrap::{
-    build_peer_hints, create_service, wait_for_peer_join_event, wait_for_topic_membership,
-    DEFAULT_EVENT_TIMEOUT, DEFAULT_JOIN_TIMEOUT,
+    DEFAULT_EVENT_TIMEOUT, DEFAULT_JOIN_TIMEOUT, build_peer_hints, create_service,
+    wait_for_peer_join_event, wait_for_topic_membership,
 };
 use kukuri_lib::test_support::application::shared::tests::p2p::config::load_bootstrap_context;
 use kukuri_lib::test_support::application::shared::tests::p2p::fixtures::nostr_to_domain;

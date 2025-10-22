@@ -3,6 +3,7 @@ use nostr_sdk::prelude::*;
 use tracing::{debug, info};
 
 /// Nostr イベントの生成を担う共通パブリッシャー。
+#[derive(Default)]
 pub struct EventPublisher {
     keys: Option<Keys>,
 }
@@ -10,7 +11,7 @@ pub struct EventPublisher {
 impl EventPublisher {
     /// 新しい EventPublisher インスタンスを作成
     pub fn new() -> Self {
-        Self { keys: None }
+        Self::default()
     }
 
     /// 鍵を設定

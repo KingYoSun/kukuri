@@ -171,3 +171,9 @@ impl EventManager {
         Ok(())
     }
 }
+
+impl Default for EventManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}

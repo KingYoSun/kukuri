@@ -36,6 +36,12 @@ impl TestGossipService {
     }
 }
 
+impl Default for TestGossipService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl GossipService for TestGossipService {
     async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {

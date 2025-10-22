@@ -2,12 +2,12 @@ use chrono::Utc;
 use iroh::SecretKey;
 use kukuri_lib::test_support::application::services::p2p_service::{P2PService, P2PServiceTrait};
 use kukuri_lib::test_support::infrastructure::p2p::{
-    gossip_service::GossipService, iroh_gossip_service::IrohGossipService,
-    iroh_network_service::IrohNetworkService, DiscoveryOptions, NetworkService,
+    DiscoveryOptions, NetworkService, gossip_service::GossipService,
+    iroh_gossip_service::IrohGossipService, iroh_network_service::IrohNetworkService,
 };
 use kukuri_lib::test_support::shared::config::{AppConfig, NetworkConfig as AppNetworkConfig};
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use tokio::time::{sleep, Duration, Instant};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
+use tokio::time::{Duration, Instant, sleep};
 
 macro_rules! log_step {
     ($($arg:tt)*) => {{
@@ -202,8 +202,8 @@ async fn test_mainline_dht_handshake_and_routing() {
         .expect("fetch stats from A");
     assert!(
         stats_a.connected_peers >= 1,
-            "expected at least one connected peer after handshake"
-        );
+        "expected at least one connected peer after handshake"
+    );
 
     let stats_b = stack_b
         .network_service
