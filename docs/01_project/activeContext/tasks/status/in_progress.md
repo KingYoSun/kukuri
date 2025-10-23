@@ -81,6 +81,9 @@
   - [x] Phase5-02 `cargo tree --edges features` などで基礎データを取得し、artefact を生成して共有する。
   - [x] Phase5-03 既存テストを種別ごとに分類した表を作成し、移動対象と不足領域を洗い出す。
   - [x] Phase5-04 CI／ローカルスクリプトのパス依存箇所を調査し、修正候補をリスト化する。
+- [x] Phase 5 テスト移行: `kukuri-tauri/src-tauri/src/application/services/event_service/tests` を `tests/unit/application/event_service` へ移設し、EventManager 依存を `tests/common` モックへ集約する（`docs/01_project/activeContext/artefacts/phase5_test_inventory.md`）。
+- [x] Phase 5 テスト移行: `kukuri-tauri/src-tauri/tests/integration` 配下に Mainline DHT 向けの P2P シナリオを追加し、Docker/CI 手順を `phase5_test_inventory.md` の更新内容と整合させる。
+- [ ] Phase 5 テスト移行: 契約テスト（`tests/nip10_contract_tests.rs`）を `tests/contract/nip10.rs` へ再配置し、モジュールの参照・CI/Runbook をレイヤ構成に沿って更新する（`docs/01_project/activeContext/artefacts/phase5_test_inventory.md`）。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
@@ -99,6 +102,7 @@
 - 2025年10月21日: Prettier ルールに合わせて `src/stores/config/persist.ts` を整形し、`pnpm format:check` および `gh act -j format-check -W .github/workflows/test.yml` が成功することを確認。
 - 2025年10月23日: GitHub Actions の `clippy::new_without_default` 失敗を解消するため、EventPublisher/TestGossipService/KeyManager/EventManager に `Default` を実装し、`cargo fmt` を実行。`gh act -j native-test-linux` と `gh act -j format-check` が成功することを確認。
 - 2025年10月23日: Format Check ジョブが Prettier 警告（`src/tests/...` 5件）で失敗していたため、対象テストファイルを `pnpm prettier --write` で整形し、`pnpm format:check` と `gh act -j format-check -W .github/workflows/test.yml` が成功することを確認。
+- 2025年10月23日: EventService ユニットテスト群を `tests/unit/application/event_service` へ移設し、`tests/common/mocks` に EventManager スタブとモック群を整理。`test_p2p_mainline.rs` を追加して Mainline DHT 設定の統合シナリオを整備。
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。
