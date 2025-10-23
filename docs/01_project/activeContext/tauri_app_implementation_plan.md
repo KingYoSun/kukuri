@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年10月20日  
+**最終更新**: 2025年10月23日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## Phase 1: 認証フローの修正 ✓ 完了
@@ -430,6 +430,17 @@ export function PeerConnectionPanel() {
 3. `setupPersistMock` をテストの `beforeEach` で呼び出し、永続化データの汚染を回避する。ストア単体テストでは新テンプレートが正しく partialize を反映しているかを検証する。
 4. Phase 4 のリファクタリングに伴い、`.sqlx` 再生成や DefaultTopicsRegistry の更新などバックエンド側で大きな変更を行う場合は、本テンプレートのキー互換性チェックを合わせて実施する。
 
+## Phase 5: アーキテクチャ再構成（準備中）
+
+依存関係棚卸し（2025年10月23日更新, `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）で抽出したハイリスク領域に対応するためのメモ。
+
+### ハイリスク依存対策メモ（2025年10月23日更新）
+- **EventService / EventManager**: プレゼンテーション DTO からの直接参照を `application::shared::mappers::event` に集約し、EventManager 側とは `EventGateway`（async trait）経由で通信する。`tauri::AppHandle` 依存はイベントブロードキャスタ trait へ抽象化する。
+- **OfflineService / OfflineManager**: `modules::offline::models` を `infrastructure::offline::dto`（仮称）に移し、変換アダプタを通じて Application 層へ渡す。再索引ジョブはワーカースレッド化し、キュー処理を `SubscriptionStateStore` と共有する。
+- **AppState（state.rs）**: 旧モジュール依存（`modules::auth::KeyManager`, `modules::database::DbPool` 等）を段階的に排除し、`ApplicationContainer` が生成するサービス集合と UI 向け状態バッファに分離する。P2P イベントバスは `application::shared::p2p_events` に再配置する。
+- **SQLiteRepository**: `ConnectionPool` を唯一の依存にし、Repository trait をエンティティ別ファサード (`EventRepository`, `TopicRepository` など) に再分割する。SQLx の Row マッピングは `mapper` モジュールに統一し、ドメイン層の構造体を丸ごと import しない。
+- **SubscriptionStateMachine**: SQL を直書きしている部分を `SubscriptionStateRepository`（新設）へ移し、再同期バックオフ計算を `domain::value_objects` に切り出す。P2P 再購読処理とジョブスケジューラを同一インターフェースで扱えるようにする。
+
 ## MVP完成後の改善
 
 ### 予約投稿のバックエンド実装
@@ -458,6 +469,7 @@ export function PeerConnectionPanel() {
   - 4.2 楽観的UI更新: 1日
   - 4.3 同期と競合解決: 1日
   - 4.4 オフラインUI/UX: 1日
+- Phase 5: アーキテクチャ再構成 2週間（依存関係棚卸し→モジュール再配線→テスト再編の順に実施）
 - MVP完成後の改善: 2-3日
 
 ### 実績

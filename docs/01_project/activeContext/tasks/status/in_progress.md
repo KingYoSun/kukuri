@@ -50,7 +50,7 @@
   - 2025年10月22日: 棚卸しで「要修正」となっていた主要ドキュメントのゼロ埋め対応を完了し、同 inventory を対応済みに更新。
   - 2025年10月22日: ProgressReports や完了タスクアーカイブ等を含む `docs/**/*.md` をスクリプトで一括整形し、非ゼロ埋め表記を完全排除。
   - 2025年10月22日: `scripts/check_date_format.py` を追加し、`format-check` ワークフローから自動検証するよう CI を更新。
-- [ ] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応
+- [x] Phase 5 CI/ローカルスクリプトのテストモジュール移行対応
   - 2025年10月21日: `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` を確認し、PowerShell スクリプト→Bash→Compose→Runbook の順で更新する方針を設定。
   - [x] `scripts/docker/run-smoke-tests.sh` を `tests/` 配下の `p2p_mainline_smoke` 等へ切り替え、P2P ランブックを最新手順に更新。
   - [x] `scripts/test-docker.sh` の `TESTS` 既定値と `cargo --lib` 呼び出しを新しい `tests::integration::p2p::*` 構成へ移行し、ヘルプ出力と `docs/03_implementation/docker_test_environment.md` を修正。
@@ -88,8 +88,12 @@
   - 2025年10月23日: `scripts/test-docker.ps1` の `contracts` コマンドを Rust 新モジュールと TypeScript 契約テスト（`src/tests/unit/lib/nip10.contract.test.ts`）へ追随させ、`test-runner` サービス経由で実行するよう調整。
   - 2025年10月23日: `./scripts/test-docker.ps1 contracts` を実行し、Rust / TypeScript 契約テストを Docker で完走（Rust 側は既知の `description` 未使用警告のみ発生）。
 - [ ] Phase 5 依存関係棚卸し TODO 対応（`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）
-  - 2025年10月23日: テンプレート末尾の TODO（主要サービス/Repository/コマンドの網羅、High 難易度項目の対策記録、外部クレート棚卸し）が未着手のまま。
-  - 対応方針: Phase 5 で定義したレイヤリングに沿って現行依存関係を洗い出し、`tauri_app_implementation_plan.md` へ対策メモを転記するフローを整備する。
+  - 2025年10月23日: 主要サービス/Repository/コマンド/Legacy 25件を棚卸しし、High 難易度項目の対策メモを `tauri_app_implementation_plan.md` に追記。外部クレートもカテゴリ別に整理した。
+  - 2025年10月23日: EventService/EventManager 向けの `EventGateway` 抽象と mapper 整理案を `docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md` にまとめ、Sprint 1〜3 の粒度を定義した。
+  - 2025年10月23日: Sprint 1 着手タスク（EG-S1-01〜04）を `phase5_event_gateway_design.md` に起票し、`application::ports::event_gateway.rs` / `application/shared/mappers/event/*` の実装前準備を完了。
+  - 2025年10月23日: OfflineService/OfflineManager の adapter 方針と `infrastructure::offline` への段階移行計画を `docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` に記載し、Stage 0〜3 のタスクを整理した。
+  - 2025年10月23日: Offline Stage 0 タスク（OFF-S0-01〜03）を起票し、`.sqlx` 影響調査メモを同 artefact に追記して再生成タイミングを明確化。
+  - 対応方針: 棚卸し結果を基に Workstream A/B の移行順序を定義し、優先度の高い High 項目からリファクタリングに着手する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
