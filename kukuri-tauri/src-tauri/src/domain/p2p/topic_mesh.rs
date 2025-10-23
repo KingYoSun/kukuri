@@ -1,11 +1,12 @@
+use crate::domain::p2p::{
+    error::Result as P2PResult,
+    message::{GossipMessage, MessageId},
+};
 use lru::LruCache;
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
-use crate::modules::p2p::error::Result as P2PResult;
-use crate::modules::p2p::message::{GossipMessage, MessageId};
 
 pub struct TopicMesh {
     #[allow(dead_code)]
@@ -114,75 +115,55 @@ impl TopicMesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modules::p2p::message::MessageType;
+    use crate::domain::p2p::message::MessageType;
 
     #[tokio::test]
     async fn test_duplicate_detection() {
-        let mesh = TopicMesh::new("test-topic".to_string());
-
+        let mesh = TopicMesh::new("test_topic".to_string());
         let message = GossipMessage::new(
-            MessageType::NostrEvent,
+            MessageType::TopicSync,
             vec![1, 2, 3],
-            vec![0; 33], // 公開鍵は33バイト
+            vec![0x02; 33], // 33バイトの公開鍵
         );
+        let id = message.id;
 
-        // 最初のメッセージは重複ではない
-        assert!(!mesh.is_duplicate(&message.id).await);
-
-        // メッセージを処理
         mesh.handle_message(message.clone()).await.unwrap();
+        assert!(mesh.is_duplicate(&id).await);
 
-        // 同じメッセージは重複として検出される
-        assert!(mesh.is_duplicate(&message.id).await);
+        // もう一度同じメッセージを処理
+        let result = mesh.handle_message(message).await;
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_peer_management() {
-        let mesh = TopicMesh::new("test-topic".to_string());
+        let mesh = TopicMesh::new("test_topic".to_string());
+        let peer = vec![0x02; 33];
 
-        let peer1 = vec![1; 33];
-        let peer2 = vec![2; 33];
-
-        // ピアを追加
-        mesh.update_peer_status(peer1.clone(), true).await;
-        mesh.update_peer_status(peer2.clone(), true).await;
-
-        let peers = mesh.get_peers().await;
-        assert_eq!(peers.len(), 2);
-        assert!(peers.contains(&peer1));
-        assert!(peers.contains(&peer2));
-
-        // ピアを削除
-        mesh.update_peer_status(peer1.clone(), false).await;
-
+        mesh.update_peer_status(peer.clone(), true).await;
         let peers = mesh.get_peers().await;
         assert_eq!(peers.len(), 1);
-        assert!(!peers.contains(&peer1));
-        assert!(peers.contains(&peer2));
+        assert_eq!(peers[0], peer);
+
+        mesh.update_peer_status(peer.clone(), false).await;
+        let peers = mesh.get_peers().await;
+        assert_eq!(peers.len(), 0);
     }
 
     #[tokio::test]
-    async fn test_message_cache() {
-        let mesh = TopicMesh::new("test-topic".to_string());
+    async fn test_get_stats() {
+        let mesh = TopicMesh::new("test_topic".to_string());
 
-        // 複数のメッセージを追加
         for i in 0..5 {
-            let message = GossipMessage::new(MessageType::NostrEvent, vec![i], vec![i; 33]);
+            let mut message =
+                GossipMessage::new(MessageType::TopicSync, vec![i as u8], vec![0x02; 33]);
+            message.timestamp = i;
             mesh.handle_message(message).await.unwrap();
         }
 
-        // 統計情報を確認
         let stats = mesh.get_stats().await;
+        assert_eq!(stats.peer_count, 1);
         assert_eq!(stats.message_count, 5);
-        assert_eq!(stats.peer_count, 5); // 各メッセージは異なる送信者から
-
-        // 最新のメッセージを取得
-        let recent = mesh.get_recent_messages(3).await;
-        assert_eq!(recent.len(), 3);
-
-        // キャッシュをクリア
-        mesh.clear_cache().await;
-        let stats = mesh.get_stats().await;
-        assert_eq!(stats.message_count, 0);
+        assert_eq!(stats.last_activity, 4);
     }
 }

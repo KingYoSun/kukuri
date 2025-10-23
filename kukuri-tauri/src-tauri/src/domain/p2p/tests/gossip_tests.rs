@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::domain::entities::Event;
+    use crate::domain::p2p::generate_topic_id;
     use crate::infrastructure::p2p::gossip_service::GossipService;
     use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
-    use crate::modules::p2p::generate_topic_id;
     use iroh::Endpoint;
     use std::sync::Arc;
 

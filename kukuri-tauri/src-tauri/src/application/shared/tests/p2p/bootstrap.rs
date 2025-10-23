@@ -1,6 +1,6 @@
+use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::gossip_service::GossipService;
 use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
-use crate::modules::p2p::P2PEvent;
 use iroh::{Endpoint, NodeAddr};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::Arc;

@@ -35,9 +35,7 @@ impl EventTag {
     }
 
     pub fn into_raw(self) -> Vec<String> {
-        std::iter::once(self.name)
-            .chain(self.values.into_iter())
-            .collect()
+        std::iter::once(self.name).chain(self.values).collect()
     }
 }
 

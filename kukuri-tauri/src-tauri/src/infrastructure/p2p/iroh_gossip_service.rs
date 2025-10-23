@@ -19,9 +19,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{Mutex as TokioMutex, RwLock, mpsc};
 use tokio::time::timeout;
 
-use crate::modules::p2p::events::P2PEvent;
-use crate::modules::p2p::message::GossipMessage;
-use crate::modules::p2p::{TopicMesh, TopicStats};
+use crate::domain::p2p::events::P2PEvent;
+use crate::domain::p2p::message::GossipMessage;
+use crate::domain::p2p::{TopicMesh, TopicStats};
 
 const LOG_TARGET: &str = "kukuri::p2p::gossip";
 const METRICS_TARGET: &str = "kukuri::p2p::metrics";

@@ -1,5 +1,5 @@
 use crate::domain::entities::Event;
-use crate::modules::p2p::TopicStats;
+use crate::domain::p2p::TopicStats;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 

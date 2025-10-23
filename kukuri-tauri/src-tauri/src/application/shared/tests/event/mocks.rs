@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use crate::domain::entities as domain;
+use crate::domain::p2p::TopicStats;
 use crate::infrastructure::p2p::GossipService;
-use crate::modules::p2p::TopicStats;
 use crate::shared::error::AppError;
 
 pub struct TestGossipService {

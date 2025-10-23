@@ -5,8 +5,8 @@ use kukuri_lib::test_support::application::shared::tests::p2p::bootstrap::{
 use kukuri_lib::test_support::application::shared::tests::p2p::config::load_bootstrap_context;
 use kukuri_lib::test_support::application::shared::tests::p2p::fixtures::nostr_to_domain;
 use kukuri_lib::test_support::application::shared::tests::p2p::logging::init_tracing;
+use kukuri_lib::test_support::domain::p2p::generate_topic_id;
 use kukuri_lib::test_support::infrastructure::p2p::gossip_service::GossipService;
-use kukuri_lib::test_support::modules::p2p::generate_topic_id;
 use nostr_sdk::prelude::*;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::{Duration, sleep, timeout};

@@ -2,6 +2,7 @@
 
 mod application_container;
 
+use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use crate::modules::bookmark::BookmarkManager;
@@ -9,7 +10,6 @@ use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
 use crate::modules::offline::{OfflineManager, OfflineReindexJob};
-use crate::modules::p2p::P2PEvent;
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
@@ -454,7 +454,7 @@ impl AppState {
     pub async fn ensure_default_and_user_subscriptions(&self) -> anyhow::Result<()> {
         let mut topics = self.event_manager.list_default_p2p_topics().await;
         if let Some(pk) = self.event_manager.get_public_key().await {
-            let user_topic = crate::modules::p2p::user_topic_id(&pk.to_string());
+            let user_topic = crate::domain::p2p::user_topic_id(&pk.to_string());
             topics.push(user_topic);
         }
         for t in topics {

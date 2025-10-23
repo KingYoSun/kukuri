@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::modules::p2p::message::{GossipMessage, MessageType};
-    use crate::modules::p2p::topic_mesh::*;
+    use crate::domain::p2p::message::{GossipMessage, MessageType};
+    use crate::domain::p2p::topic_mesh::*;
 
     fn create_test_mesh() -> TopicMesh {
         TopicMesh::new("test-topic".to_string())

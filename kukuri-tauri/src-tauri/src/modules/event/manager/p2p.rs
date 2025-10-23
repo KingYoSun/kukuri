@@ -9,9 +9,9 @@ use tracing::error;
 
 use super::EventManager;
 use super::conversions::nostr_to_domain_event;
+use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::database::EventRepository as InfraEventRepository;
 use crate::infrastructure::p2p::GossipService;
-use crate::modules::p2p::user_topic_id;
 
 /// フロントエンドに送信するイベントペイロード
 #[derive(Debug, Serialize, Deserialize, Clone)]

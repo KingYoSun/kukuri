@@ -1,5 +1,5 @@
 use crate::application::services::p2p_service::{P2PService, P2PStack};
-use crate::modules::p2p::P2PEvent;
+use crate::domain::p2p::P2PEvent;
 use crate::shared::config::AppConfig;
 use anyhow::Context;
 use base64::prelude::*;

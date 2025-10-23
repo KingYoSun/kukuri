@@ -1,8 +1,8 @@
+use crate::domain::p2p::events::P2PEvent;
 use crate::infrastructure::p2p::{
     DiscoveryOptions, GossipService, NetworkService, iroh_gossip_service::IrohGossipService,
     iroh_network_service::IrohNetworkService, metrics,
 };
-use crate::modules::p2p::events::P2PEvent;
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -297,8 +297,8 @@ impl P2PServiceTrait for P2PService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::p2p::TopicStats;
     use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
-    use crate::modules::p2p::TopicStats;
     use async_trait::async_trait;
     use chrono::Utc;
     use mockall::{mock, predicate::*};

@@ -125,7 +125,7 @@ mod tests {
             async fn subscribe(&self, topic: &str) -> Result<tokio::sync::mpsc::Receiver<crate::domain::entities::Event>, AppError>;
             async fn get_joined_topics(&self) -> Result<Vec<String>, AppError>;
             async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError>;
-            async fn get_topic_stats(&self, topic: &str) -> Result<Option<crate::modules::p2p::TopicStats>, AppError>;
+            async fn get_topic_stats(&self, topic: &str) -> Result<Option<crate::domain::p2p::TopicStats>, AppError>;
             async fn broadcast_message(&self, topic: &str, message: &[u8]) -> Result<(), AppError>;
         }
     }

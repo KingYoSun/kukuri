@@ -19,6 +19,7 @@ impl ProfileMetadata {
     const ABOUT_LIMIT: usize = 1_000;
     const URL_LIMIT: usize = 1_024;
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: Option<String>,
         display_name: Option<String>,

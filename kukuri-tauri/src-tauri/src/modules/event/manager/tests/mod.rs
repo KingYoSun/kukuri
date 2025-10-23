@@ -1,8 +1,8 @@
 use super::p2p::NostrEventPayload;
 use super::*;
+use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::p2p::GossipService;
 use crate::modules::auth::key_manager::KeyManager;
-use crate::modules::p2p::user_topic_id;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 

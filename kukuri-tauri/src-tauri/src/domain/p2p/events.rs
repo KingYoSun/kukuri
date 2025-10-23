@@ -1,4 +1,4 @@
-use crate::modules::p2p::message::GossipMessage;
+use crate::domain::p2p::message::GossipMessage;
 
 #[derive(Clone, Debug)]
 pub enum P2PEvent {

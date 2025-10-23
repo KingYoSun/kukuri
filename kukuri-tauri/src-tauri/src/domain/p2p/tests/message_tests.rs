@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::modules::p2p::message::*;
+    use crate::domain::p2p::message::*;
 
     #[test]
     fn test_message_type_copy() {

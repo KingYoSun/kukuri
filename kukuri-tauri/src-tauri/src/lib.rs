@@ -18,12 +18,10 @@ pub mod test_support {
     }
     pub mod domain {
         pub use crate::domain::entities;
+        pub use crate::domain::p2p;
     }
     pub mod infrastructure {
         pub use crate::infrastructure::p2p;
-    }
-    pub mod modules {
-        pub use crate::modules::p2p;
     }
     pub mod shared {
         pub use crate::shared::config;
@@ -206,7 +204,7 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
         if let Some(mut rx) = rx {
             while let Some(event) = rx.recv().await {
                 match event {
-                    modules::p2p::P2PEvent::MessageReceived {
+                    crate::domain::p2p::P2PEvent::MessageReceived {
                         topic_id,
                         message,
                         _from_peer: _,
@@ -225,7 +223,7 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
                             tracing::error!("Failed to emit P2P raw message event: {}", e);
                         }
                     }
-                    modules::p2p::P2PEvent::PeerJoined { topic_id, peer_id } => {
+                    crate::domain::p2p::P2PEvent::PeerJoined { topic_id, peer_id } => {
                         let event_data = P2PPeerEvent {
                             topic_id,
                             peer_id,
@@ -236,7 +234,7 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
                             tracing::error!("Failed to emit P2P peer joined event: {}", e);
                         }
                     }
-                    modules::p2p::P2PEvent::PeerLeft { topic_id, peer_id } => {
+                    crate::domain::p2p::P2PEvent::PeerLeft { topic_id, peer_id } => {
                         let event_data = P2PPeerEvent {
                             topic_id,
                             peer_id,

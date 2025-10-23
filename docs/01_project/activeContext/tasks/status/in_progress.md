@@ -101,6 +101,8 @@
   - [ ] `ApplicationContainer` や Tauri コマンドの DI を新レイヤ構成に合わせて再配線し、依存方向をプレゼンテーション→アプリケーション→ドメインに揃える。
   - [ ] 互換用 `pub use` を段階的に削除し、呼び出し元のモジュールパス更新と Legacy モジュール整理を完了する。
   - [ ] 各ステップ後に `cargo fmt` / `cargo clippy -D warnings` / `cargo test` を実行し、リグレッション検知フローを確立する。
+  - 2025年10月24日: `domain/p2p` を新設し、GossipMessage／TopicMesh／P2PEvent を移設。`modules::p2p` はリダイレクト化し、`lib.rs`・`state`・P2P/Gossip サービスなど主要呼び出し元を `domain::p2p` 参照へ切り替えた。`cargo fmt` / `cargo clippy -D warnings` / Docker 経由の `cargo test` を完了（ローカル `cargo test` は Windows 既知の STATUS_ENTRYPOINT_NOT_FOUND のため Docker 実行で代替）。
+  - 2025年10月24日: `modules/p2p` 配下を完全撤去し、ドメイン層テストを `domain/p2p/tests` へ移設。`test_support` と統合テストを `domain::p2p` 参照に更新し、古い `modules::p2p` 参照を排除した。`cargo fmt` / `cargo clippy -D warnings` / Docker Rust テストで回帰確認（Windowsネイティブ `cargo test` は STATUS_ENTRYPOINT_NOT_FOUND の既知事象）。
 - [ ] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
   - [ ] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
   - [ ] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。
