@@ -83,7 +83,13 @@
   - [x] Phase5-04 CI／ローカルスクリプトのパス依存箇所を調査し、修正候補をリスト化する。
 - [x] Phase 5 テスト移行: `kukuri-tauri/src-tauri/src/application/services/event_service/tests` を `tests/unit/application/event_service` へ移設し、EventManager 依存を `tests/common` モックへ集約する（`docs/01_project/activeContext/artefacts/phase5_test_inventory.md`）。
 - [x] Phase 5 テスト移行: `kukuri-tauri/src-tauri/tests/integration` 配下に Mainline DHT 向けの P2P シナリオを追加し、Docker/CI 手順を `phase5_test_inventory.md` の更新内容と整合させる。
-- [ ] Phase 5 テスト移行: 契約テスト（`tests/nip10_contract_tests.rs`）を `tests/contract/nip10.rs` へ再配置し、モジュールの参照・CI/Runbook をレイヤ構成に沿って更新する（`docs/01_project/activeContext/artefacts/phase5_test_inventory.md`）。
+- [x] Phase 5 テスト移行: 契約テスト（`tests/contract/nip10.rs`）を再配置し、モジュール参照と CI / Runbook / Docker スクリプトをレイヤ構成に沿って更新する（`docs/01_project/activeContext/artefacts/phase5_test_inventory.md`）。
+  - 2025年10月23日: 旧 `tests/nip10_contract_tests.rs` を `tests/contract.rs` 経由のモジュール構成へ移し、`env!("CARGO_MANIFEST_DIR")` 連結で `testdata` を参照するよう修正。
+  - 2025年10月23日: `scripts/test-docker.ps1` の `contracts` コマンドを Rust 新モジュールと TypeScript 契約テスト（`src/tests/unit/lib/nip10.contract.test.ts`）へ追随させ、`test-runner` サービス経由で実行するよう調整。
+  - 2025年10月23日: `./scripts/test-docker.ps1 contracts` を実行し、Rust / TypeScript 契約テストを Docker で完走（Rust 側は既知の `description` 未使用警告のみ発生）。
+- [ ] Phase 5 依存関係棚卸し TODO 対応（`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）
+  - 2025年10月23日: テンプレート末尾の TODO（主要サービス/Repository/コマンドの網羅、High 難易度項目の対策記録、外部クレート棚卸し）が未着手のまま。
+  - 対応方針: Phase 5 で定義したレイヤリングに沿って現行依存関係を洗い出し、`tauri_app_implementation_plan.md` へ対策メモを転記するフローを整備する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 

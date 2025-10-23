@@ -1,4 +1,4 @@
-﻿use kukuri_lib::contract_testing::validate_nip10_tags;
+use kukuri_lib::contract_testing::validate_nip10_tags;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -11,7 +11,10 @@ struct Nip10Case {
 
 #[test]
 fn nip10_contract_cases_align_with_rust_validation() {
-    let data = include_str!("../../testdata/nip10_contract_cases.json");
+    let data = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../testdata/nip10_contract_cases.json"
+    ));
     let cases: Vec<Nip10Case> =
         serde_json::from_str(data).expect("nip10 contract cases json should parse");
 

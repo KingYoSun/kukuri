@@ -309,17 +309,16 @@ function Invoke-ContractTests {
     if (-not $NoBuild) {
         Build-TestImage
     }
-    Write-Host "Running Rust contract tests (nip10_contract_tests)..."
-    Invoke-DockerCompose @("run", "--rm", "rust-test", "cargo", "test", "--test", "nip10_contract_tests")
-    Write-Host "Running TypeScript contract tests (nip10.contract)..."
+    Write-Host "Running Rust contract tests (contract/nip10)..."
+    Invoke-DockerCompose @("run", "--rm", "rust-test", "cargo", "test", "--test", "contract")
+    Write-Host "Running TypeScript contract tests (tests/unit/lib/nip10.contract)..."
     Invoke-DockerCompose @(
         "run",
         "--rm",
-        "ts-test",
-        "pnpm",
-        "vitest",
-        "run",
-        "src/lib/__tests__/nip10.contract.test.ts"
+        "test-runner",
+        "bash",
+        "-lc",
+        "cd /app/kukuri-tauri && pnpm vitest run src/tests/unit/lib/nip10.contract.test.ts"
     )
     Write-Success "Contract tests passed!"
 }

@@ -9,7 +9,7 @@
 | Shared test utilities | `src/application/shared/tests` | 共通モック | `tests/common`（既存）へ統合 | 既に汎用化済。Phase 5 後は Rust 側共通モックの唯一の配置として維持する。 |
 | EventManager tests | `src/modules/event/manager/tests` | 結合 | `tests/integration/event/manager` | Tauri `AppHandle` 依存がないシナリオを追加予定（不足）。 |
 | P2P module tests | `src-tauri/tests/p2p_gossip_smoke.rs`, `src-tauri/tests/p2p_mainline_smoke.rs` | 結合 | 同上 | Mainline DHT シナリオは接続統計で検証。Docker / CI 実行時は `ENABLE_P2P_INTEGRATION=1` を設定する。 |
-| Contract tests | `tests/nip10_contract_tests.rs` | 契約 | `tests/contract/nip10.rs` | Phase 5 でカテゴリディレクトリを明確化。 |
+| Contract tests | `tests/contract/nip10.rs` | 契約 | （現行維持） | Phase 5 でカテゴリディレクトリを明確化済み。 |
 | Performance tests | `tests/performance_tests.rs` | パフォーマンス | `tests/performance/*.rs` | 実行条件と計測方法のドキュメント不足、要整備。 |
 | Integration harness | `tests/integration/*` | 結合 | `tests/integration`（維持） | `test_p2p_mainline.rs` で Mainline DHT 設定の統合シナリオを追加。Offline 系統合ケースは引き続き未作成。 |
 | Unit harness | `tests/unit` | （空） | `tests/unit` | Phase 5 で `application/shared` や `state` のユニットテストを移植。 |

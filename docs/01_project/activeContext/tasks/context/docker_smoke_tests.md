@@ -12,7 +12,7 @@
    - `docker-compose.test.yml` とは別に契約テスト専用の Compose ファイル（例: `docker-compose.contracts.yml`）を用意し、Rust/TS いずれも最小限のソースと依存だけをマウントする。
    - CI では `contracts` ワークフローをこの軽量構成に切り替えて、スモーク実行時間の短縮を図る。
 2. **ベースイメージの最適化**  
-   - `Dockerfile.test` を共通ベースとしつつ、契約テスト用にはビルド済みの `cargo` / `pnpm` キャッシュを事前に取り込んだステージを作成する（Rust は `cargo test --test nip10_contract_tests`、TS は `pnpm vitest run ...` のみに絞る）。
+   - `Dockerfile.test` を共通ベースとしつつ、契約テスト用にはビルド済みの `cargo` / `pnpm` キャッシュを事前に取り込んだステージを作成する（Rust は `cargo test --test contract`、TS は `pnpm vitest run ...` のみに絞る）。
    - ボリュームマウントを最小限にし、Docker Desktop 環境での I/O オーバーヘッドを削減。
 3. **スクリプト連携の整理**  
    - `scripts/test-docker.ps1` / `scripts/docker/run-smoke-tests.sh` を更新し、契約テスト実行時は新構成を利用するように分岐。
