@@ -252,7 +252,10 @@ impl OfflineServiceTrait for OfflineService {
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        Ok(Self::to_saved_action(response))
+        let saved = Self::to_saved_action(response);
+        let _domain_saved = converters::saved_action(&saved).ok();
+        // TODO(OFF-S0-02): Stage 1 will swap the return type to domain::OfflineActionRecord.
+        Ok(saved)
     }
 
     async fn get_actions(
@@ -271,12 +274,13 @@ impl OfflineServiceTrait for OfflineService {
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        Ok(Self::filter_and_limit(
-            manager_response,
-            user_pubkey,
-            is_synced,
-            limit,
-        ))
+        let filtered = Self::filter_and_limit(manager_response, user_pubkey, is_synced, limit);
+        let _domain_actions: Vec<_> = filtered
+            .iter()
+            .filter_map(|record| converters::offline_action_record(record).ok())
+            .collect();
+        // TODO(OFF-S0-02): Stage 1 will return domain::OfflineActionRecord values.
+        Ok(filtered)
     }
 
     async fn sync_actions(&self, user_pubkey: String) -> Result<SyncResult, AppError> {
@@ -286,11 +290,14 @@ impl OfflineServiceTrait for OfflineService {
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        Ok(SyncResult {
+        let result = SyncResult {
             synced_count: response.synced_count,
             failed_count: response.failed_count,
             pending_count: response.pending_count,
-        })
+        };
+        let _domain_result = converters::sync_result(&result).ok();
+        // TODO(OFF-S0-02): Stage 1 will return domain::SyncResult directly.
+        Ok(result)
     }
 
     async fn get_cache_status(&self) -> Result<CacheStatusData, AppError> {
@@ -299,7 +306,10 @@ impl OfflineServiceTrait for OfflineService {
             .get_cache_status()
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
-        Ok(Self::map_cache_status(status))
+        let mapped = Self::map_cache_status(status);
+        let _domain_snapshot = converters::cache_status(&mapped).ok();
+        // TODO(OFF-S0-02): Stage 1 will return domain::CacheStatusSnapshot.
+        Ok(mapped)
     }
 
     async fn add_to_sync_queue(
@@ -669,5 +679,141 @@ mod tests {
         assert_eq!(local_version, 2);
         assert_eq!(sync_status, "resolved");
         assert!(conflict_data.is_none());
+    }
+}
+
+mod converters {
+    use super::{
+        CacheStatusData, CacheTypeStatusData, OfflineActionRecord, SavedOfflineAction, SyncResult,
+    };
+    use crate::domain::entities::offline as domain_offline;
+    use crate::domain::value_objects::event_gateway::PublicKey;
+    use crate::domain::value_objects::offline::{
+        CacheType, EntityId, OfflineActionId, OfflineActionType, OfflinePayload, RemoteEventId,
+        SyncStatus,
+    };
+    use crate::shared::error::AppError;
+    use chrono::{DateTime, Utc};
+    use std::convert::TryInto;
+
+    pub(super) fn offline_action_record(
+        record: &OfflineActionRecord,
+    ) -> Result<domain_offline::OfflineActionRecord, AppError> {
+        let action_id = OfflineActionId::from_str(&record.local_id).map_err(|err| {
+            AppError::ValidationError(format!("Invalid offline action id: {err}"))
+        })?;
+        let public_key = PublicKey::from_hex_str(&record.user_pubkey).map_err(|err| {
+            AppError::ValidationError(format!("Invalid offline action pubkey: {err}"))
+        })?;
+        let action_type = OfflineActionType::new(record.action_type.clone()).map_err(|err| {
+            AppError::ValidationError(format!("Invalid offline action type: {err}"))
+        })?;
+        let target_id = match &record.target_id {
+            Some(value) if !value.trim().is_empty() => {
+                Some(EntityId::new(value.clone()).map_err(|err| {
+                    AppError::ValidationError(format!("Invalid offline action target id: {err}"))
+                })?)
+            }
+            _ => None,
+        };
+        let payload = OfflinePayload::from_json_str(&record.action_data).map_err(|err| {
+            AppError::DeserializationError(format!("Invalid offline action payload: {err}"))
+        })?;
+        let sync_status = if record.is_synced {
+            SyncStatus::FullySynced
+        } else {
+            SyncStatus::Pending
+        };
+        let created_at = timestamp_to_datetime(record.created_at);
+        let synced_at = record.synced_at.map(timestamp_to_datetime);
+        let remote_id = record
+            .remote_id
+            .as_ref()
+            .map(|value| {
+                RemoteEventId::new(value.clone()).map_err(|err| {
+                    AppError::ValidationError(format!("Invalid remote event id: {err}"))
+                })
+            })
+            .transpose()?;
+
+        let domain_record = domain_offline::OfflineActionRecord::new(
+            Some(record.id),
+            action_id,
+            public_key,
+            action_type,
+            target_id,
+            payload,
+            sync_status,
+            created_at,
+            synced_at,
+            remote_id,
+        )
+        .with_error_message(record.error_message.clone());
+
+        Ok(domain_record)
+    }
+
+    pub(super) fn saved_action(
+        saved: &SavedOfflineAction,
+    ) -> Result<domain_offline::SavedOfflineAction, AppError> {
+        let action = offline_action_record(&saved.action)?;
+        let local_id = OfflineActionId::from_str(&saved.local_id)
+            .map_err(|err| AppError::ValidationError(format!("Invalid saved action id: {err}")))?;
+        Ok(domain_offline::SavedOfflineAction::new(local_id, action))
+    }
+
+    pub(super) fn sync_result(result: &SyncResult) -> Result<domain_offline::SyncResult, AppError> {
+        Ok(domain_offline::SyncResult::new(
+            try_i32_to_u32(result.synced_count, "synced_count")?,
+            try_i32_to_u32(result.failed_count, "failed_count")?,
+            try_i32_to_u32(result.pending_count, "pending_count")?,
+        ))
+    }
+
+    pub(super) fn cache_status(
+        status: &CacheStatusData,
+    ) -> Result<domain_offline::CacheStatusSnapshot, AppError> {
+        let cache_types = status
+            .cache_types
+            .iter()
+            .map(cache_type_status)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(domain_offline::CacheStatusSnapshot::new(
+            try_i64_to_u64(status.total_items, "total_items")?,
+            try_i64_to_u64(status.stale_items, "stale_items")?,
+            cache_types,
+        ))
+    }
+
+    fn cache_type_status(
+        status: &CacheTypeStatusData,
+    ) -> Result<domain_offline::CacheTypeStatus, AppError> {
+        let cache_type = CacheType::new(status.cache_type.clone()).map_err(|err| {
+            AppError::ValidationError(format!("Invalid cache type identifier: {err}"))
+        })?;
+        Ok(domain_offline::CacheTypeStatus::new(
+            cache_type,
+            try_i64_to_u64(status.item_count, "item_count")?,
+            status.last_synced_at.map(timestamp_to_datetime),
+            status.is_stale,
+        ))
+    }
+
+    fn try_i32_to_u32(value: i32, label: &str) -> Result<u32, AppError> {
+        value
+            .try_into()
+            .map_err(|_| AppError::ValidationError(format!("{label} cannot be negative")))
+    }
+
+    fn try_i64_to_u64(value: i64, label: &str) -> Result<u64, AppError> {
+        value
+            .try_into()
+            .map_err(|_| AppError::ValidationError(format!("{label} cannot be negative")))
+    }
+
+    fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
+        chrono::DateTime::<Utc>::from_timestamp(ts, 0)
+            .or_else(|| chrono::DateTime::<Utc>::from_timestamp_millis(ts))
+            .unwrap_or_else(Utc::now)
     }
 }

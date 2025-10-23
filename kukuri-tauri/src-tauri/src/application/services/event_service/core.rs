@@ -1,23 +1,28 @@
 use super::distribution::distribute_hybrid;
-use super::factory::{build_deletion_event, to_nostr_event};
+use super::factory::build_deletion_event;
 use super::invoker::SubscriptionInvoker;
+use crate::application::ports::event_gateway::EventGateway;
 use crate::application::services::{SubscriptionRecord, SubscriptionStateStore};
+use crate::application::shared::mappers::{
+    domain_event_from_event, dto_to_profile_metadata, parse_event_id, parse_event_ids,
+    parse_optional_event_id,
+};
 use crate::domain::entities::{Event, EventKind};
+use crate::domain::value_objects::event_gateway::{ReactionValue, TopicContent};
+use crate::domain::value_objects::{EventId, TopicId};
 use crate::infrastructure::crypto::SignatureService;
 use crate::infrastructure::database::EventRepository;
 use crate::infrastructure::p2p::EventDistributor;
-use crate::modules::event::manager::EventManager;
 use crate::presentation::dto::event::NostrMetadataDto;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use nostr_sdk::prelude::*;
 use std::sync::Arc;
 
 pub struct EventService {
     pub(crate) repository: Arc<dyn EventRepository>,
     pub(crate) signature_service: Arc<dyn SignatureService>,
     pub(crate) distributor: Arc<dyn EventDistributor>,
-    pub(crate) event_manager: Option<Arc<EventManager>>,
+    pub(crate) event_gateway: Arc<dyn EventGateway>,
     pub(crate) subscription_state: Arc<dyn SubscriptionStateStore>,
     pub(crate) subscription_invoker: Option<Arc<dyn SubscriptionInvoker>>,
 }
@@ -27,32 +32,22 @@ impl EventService {
         repository: Arc<dyn EventRepository>,
         signature_service: Arc<dyn SignatureService>,
         distributor: Arc<dyn EventDistributor>,
+        event_gateway: Arc<dyn EventGateway>,
         subscription_state: Arc<dyn SubscriptionStateStore>,
     ) -> Self {
         Self {
             repository,
             signature_service,
             distributor,
-            event_manager: None,
+            event_gateway,
             subscription_state,
             subscription_invoker: None,
         }
     }
 
-    /// Attach the EventManager used by this service.
-    pub fn set_event_manager(&mut self, event_manager: Arc<EventManager>) {
-        self.event_manager = Some(event_manager);
-    }
-
     /// Attach the subscription invoker used to execute subscriptions.
     pub fn set_subscription_invoker(&mut self, invoker: Arc<dyn SubscriptionInvoker>) {
         self.subscription_invoker = Some(invoker);
-    }
-
-    pub(crate) fn event_manager(&self) -> Result<&Arc<EventManager>, AppError> {
-        self.event_manager
-            .as_ref()
-            .ok_or_else(|| AppError::ConfigurationError("EventManager not set".to_string()))
     }
 
     pub(crate) fn subscription_invoker(&self) -> Result<&Arc<dyn SubscriptionInvoker>, AppError> {
@@ -87,20 +82,17 @@ impl EventService {
 
         self.repository.create_event(&event).await?;
 
-        if let Some(event_manager) = &self.event_manager {
-            if matches!(
-                EventKind::from_u32(event.kind),
-                Some(EventKind::TextNote)
-                    | Some(EventKind::Metadata)
-                    | Some(EventKind::Reaction)
-                    | Some(EventKind::Repost)
-            ) {
-                let nostr_event = to_nostr_event(&event)?;
-                event_manager
-                    .handle_p2p_event(nostr_event)
-                    .await
-                    .map_err(|e| AppError::NostrError(e.to_string()))?;
-            }
+        if matches!(
+            EventKind::from_u32(event.kind),
+            Some(EventKind::TextNote)
+                | Some(EventKind::Metadata)
+                | Some(EventKind::Reaction)
+                | Some(EventKind::Repost)
+        ) {
+            let domain_event = domain_event_from_event(&event)?;
+            self.event_gateway
+                .handle_incoming_event(domain_event)
+                .await?;
         }
 
         Ok(())
@@ -185,22 +177,11 @@ pub trait EventServiceTrait: Send + Sync {
 #[async_trait]
 impl EventServiceTrait for EventService {
     async fn initialize(&self) -> Result<(), AppError> {
-        if self.event_manager.is_none() {
-            Err(AppError::ConfigurationError(
-                "EventManager not set".to_string(),
-            ))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError> {
-        let event_manager = self.event_manager()?;
-
-        event_manager
-            .publish_text_note(content)
-            .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
+        self.event_gateway.publish_text_note(content).await
     }
 
     async fn publish_topic_post(
@@ -209,62 +190,28 @@ impl EventServiceTrait for EventService {
         content: &str,
         reply_to: Option<&str>,
     ) -> Result<EventId, AppError> {
-        let event_manager = self.event_manager()?;
-
-        let reply_to_id = if let Some(reply_id) = reply_to {
-            Some(EventId::from_hex(reply_id).map_err(|e| AppError::NostrError(e.to_string()))?)
-        } else {
-            None
-        };
-
-        event_manager
-            .publish_topic_post(topic_id, content, reply_to_id)
+        let topic = TopicId::new(topic_id.to_string())
+            .map_err(|err| AppError::ValidationError(format!("Invalid topic ID: {err}")))?;
+        let topic_content = TopicContent::from_str(content)
+            .map_err(|err| AppError::ValidationError(format!("Invalid topic content: {err}")))?;
+        let reply_to_id = parse_optional_event_id(reply_to)?;
+        self.event_gateway
+            .publish_topic_post(&topic, &topic_content, reply_to_id.as_ref())
             .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
     }
 
     async fn send_reaction(&self, event_id: &str, reaction: &str) -> Result<EventId, AppError> {
-        let event_manager = self.event_manager()?;
-
-        let event_id =
-            EventId::from_hex(event_id).map_err(|e| AppError::NostrError(e.to_string()))?;
-
-        event_manager
-            .send_reaction(&event_id, reaction)
+        let event_id = parse_event_id(event_id)?;
+        let reaction_value = ReactionValue::from_str(reaction)
+            .map_err(|err| AppError::ValidationError(format!("Invalid reaction value: {err}")))?;
+        self.event_gateway
+            .send_reaction(&event_id, &reaction_value)
             .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
     }
 
     async fn update_metadata(&self, metadata: NostrMetadataDto) -> Result<EventId, AppError> {
-        let event_manager = self.event_manager()?;
-
-        let mut nostr_metadata = Metadata::new();
-        if let Some(name) = metadata.name {
-            nostr_metadata = nostr_metadata.name(name);
-        }
-        if let Some(display_name) = metadata.display_name {
-            nostr_metadata = nostr_metadata.display_name(display_name);
-        }
-        if let Some(about) = metadata.about {
-            nostr_metadata = nostr_metadata.about(about);
-        }
-        if let Some(picture) = metadata.picture {
-            if let Ok(pic_url) = picture.parse() {
-                nostr_metadata = nostr_metadata.picture(pic_url);
-            }
-        }
-        if let Some(website) = metadata.website {
-            nostr_metadata = nostr_metadata.website(
-                website
-                    .parse()
-                    .map_err(|_| AppError::ValidationError("Invalid website URL".to_string()))?,
-            );
-        }
-
-        event_manager
-            .update_metadata(nostr_metadata)
-            .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
+        let profile = dto_to_profile_metadata(metadata)?;
+        self.event_gateway.update_profile_metadata(&profile).await
     }
 
     async fn subscribe_to_topic(&self, topic_id: &str) -> Result<(), AppError> {
@@ -276,10 +223,10 @@ impl EventServiceTrait for EventService {
     }
 
     async fn get_public_key(&self) -> Result<Option<String>, AppError> {
-        let event_manager = self.event_manager()?;
-
-        let public_key = event_manager.get_public_key().await;
-        Ok(public_key.map(|pk| pk.to_hex()))
+        self.event_gateway
+            .get_public_key()
+            .await
+            .map(|key| key.map(|pk| pk.as_hex().to_string()))
     }
 
     async fn delete_events(
@@ -293,20 +240,11 @@ impl EventServiceTrait for EventService {
             ));
         }
 
-        let event_manager = self.event_manager()?;
-
-        let parsed_ids = event_ids
-            .iter()
-            .map(|id| {
-                EventId::from_hex(id)
-                    .map_err(|e| AppError::ValidationError(format!("Invalid event ID: {e}")))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let deletion_event_id = event_manager
-            .delete_events(parsed_ids, reason)
-            .await
-            .map_err(|e| AppError::NostrError(e.to_string()))?;
+        let parsed_ids = parse_event_ids(&event_ids)?;
+        let deletion_event_id = self
+            .event_gateway
+            .delete_events(&parsed_ids, reason.as_deref())
+            .await?;
 
         for event_id in event_ids {
             self.repository.delete_event(&event_id).await?;
@@ -316,24 +254,20 @@ impl EventServiceTrait for EventService {
     }
 
     async fn disconnect(&self) -> Result<(), AppError> {
-        let event_manager = self.event_manager()?;
-
-        event_manager
-            .disconnect()
-            .await
-            .map_err(|e| AppError::NostrError(e.to_string()))
+        self.event_gateway.disconnect().await
     }
 
     async fn set_default_p2p_topic(&self, topic_id: &str) -> Result<(), AppError> {
-        let event_manager = self.event_manager()?;
         if topic_id.is_empty() {
             return Err(AppError::ValidationError(
                 "Topic ID is required".to_string(),
             ));
         }
-        event_manager
-            .set_default_p2p_topic_id(topic_id.to_string())
-            .await;
+        let topic = TopicId::new(topic_id.to_string())
+            .map_err(|err| AppError::ValidationError(format!("Invalid topic ID: {err}")))?;
+        self.event_gateway
+            .set_default_topics(std::slice::from_ref(&topic))
+            .await?;
         Ok(())
     }
 

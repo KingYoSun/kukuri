@@ -1,11 +1,11 @@
-#[path = "../../../common/mod.rs"]
+﻿#[path = "../../../common/mod.rs"]
 mod common;
 
 use std::sync::Arc;
 
 use common::mocks::{
-    event_manager_stub, MockEventDist, MockEventRepo, MockSignatureServ,
-    MockSubscriptionInvokerMock, MockSubscriptionStateMock,
+    MockEventDist, MockEventGateway, MockEventRepo, MockSignatureServ, MockSubscriptionInvokerMock,
+    MockSubscriptionStateMock,
 };
 use kukuri_lib::application::services::event_service::{invoker::SubscriptionInvoker, EventService};
 use kukuri_lib::application::services::subscription_state::{
@@ -27,11 +27,14 @@ fn service_with_state(
     signature: MockSignatureServ,
     distributor: MockEventDist,
     state: MockSubscriptionStateMock,
+    gateway: MockEventGateway,
 ) -> EventService {
     EventService::new(
         Arc::new(repo) as Arc<dyn EventRepository>,
         Arc::new(signature) as Arc<dyn SignatureService>,
         Arc::new(distributor) as Arc<dyn EventDistributor>,
+        Arc::new(gateway)
+            as Arc<dyn kukuri_lib::application::ports::event_gateway::EventGateway>,
         Arc::new(state) as Arc<dyn SubscriptionStateStore>,
     )
 }
@@ -61,6 +64,7 @@ async fn test_create_event_success() {
         mock_signature,
         mock_distributor,
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let event = service
@@ -92,12 +96,18 @@ async fn test_process_received_event_valid_signature() {
         .returning(|_| Ok(true));
 
     let mock_distributor = MockEventDist::new();
+    let mut mock_gateway = MockEventGateway::new();
+    mock_gateway
+        .expect_handle_incoming_event()
+        .times(1)
+        .returning(|_| Ok(()));
 
     let service = service_with_state(
         mock_repo,
         mock_signature,
         mock_distributor,
         MockSubscriptionStateMock::new(),
+        mock_gateway,
     );
 
     let result = service.process_received_event(create_test_event()).await;
@@ -122,6 +132,7 @@ async fn test_process_received_event_invalid_signature() {
         mock_signature,
         mock_distributor,
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let result = service.process_received_event(create_test_event()).await;
@@ -136,32 +147,32 @@ async fn test_process_received_event_invalid_signature() {
 }
 
 #[tokio::test]
-async fn test_delete_events_without_manager_fails() {
+async fn test_delete_events_requires_ids() {
     let service = service_with_state(
         MockEventRepo::new(),
         MockSignatureServ::new(),
         MockEventDist::new(),
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let err = service
-        .delete_events(vec!["abc".to_string()], None)
+        .delete_events(Vec::new(), None)
         .await
-        .expect_err("should fail without manager");
+        .expect_err("empty ids should result in validation error");
 
-    assert!(matches!(err, AppError::ConfigurationError(_)));
+    assert!(matches!(err, AppError::ValidationError(_)));
 }
 
 #[tokio::test]
 async fn test_delete_events_with_invalid_id() {
-    let mut service = service_with_state(
+    let service = service_with_state(
         MockEventRepo::new(),
         MockSignatureServ::new(),
         MockEventDist::new(),
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
-
-    service.set_event_manager(event_manager_stub());
 
     let err = service
         .delete_events(vec!["invalid".to_string()], None)
@@ -172,21 +183,26 @@ async fn test_delete_events_with_invalid_id() {
 }
 
 #[tokio::test]
-async fn test_delete_events_event_manager_failure_maps_to_nostr_error() {
-    let mut service = service_with_state(
+async fn test_delete_events_gateway_failure_maps_to_nostr_error() {
+    let mut mock_gateway = MockEventGateway::new();
+    mock_gateway
+        .expect_delete_events()
+        .times(1)
+        .returning(|_, _| Err(AppError::NostrError("failed".into())));
+
+    let service = service_with_state(
         MockEventRepo::new(),
         MockSignatureServ::new(),
         MockEventDist::new(),
         MockSubscriptionStateMock::new(),
+        mock_gateway,
     );
-
-    service.set_event_manager(event_manager_stub());
 
     let valid_id = format!("{:064x}", 1);
     let err = service
         .delete_events(vec![valid_id], Some("cleanup".to_string()))
         .await
-        .expect_err("manager failure should map to nostr error");
+        .expect_err("gateway failure should map to nostr error");
 
     assert!(matches!(err, AppError::NostrError(_)));
 }
@@ -208,6 +224,7 @@ async fn test_get_event() {
         MockSignatureServ::new(),
         MockEventDist::new(),
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let fetched = service
@@ -236,6 +253,7 @@ async fn test_get_events_by_kind() {
         MockSignatureServ::new(),
         MockEventDist::new(),
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let fetched = service
@@ -263,6 +281,7 @@ async fn test_get_events_by_author() {
         MockSignatureServ::new(),
         MockEventDist::new(),
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let fetched = service
@@ -304,6 +323,7 @@ async fn test_delete_event() {
         mock_signature,
         mock_distributor,
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     service
@@ -343,6 +363,7 @@ async fn test_sync_pending_events() {
         MockSignatureServ::new(),
         mock_distributor,
         MockSubscriptionStateMock::new(),
+        MockEventGateway::new(),
     );
 
     let synced = service
@@ -388,6 +409,7 @@ async fn test_subscribe_to_topic_uses_state_machine_and_invoker() {
         MockSignatureServ::new(),
         MockEventDist::new(),
         mock_state,
+        MockEventGateway::new(),
     );
     service.set_subscription_invoker(Arc::new(mock_invoker) as Arc<dyn SubscriptionInvoker>);
 
@@ -433,6 +455,7 @@ async fn test_subscribe_to_topic_failure_marks_state() {
         MockSignatureServ::new(),
         MockEventDist::new(),
         mock_state,
+        MockEventGateway::new(),
     );
     service.set_subscription_invoker(Arc::new(mock_invoker) as Arc<dyn SubscriptionInvoker>);
 
@@ -499,6 +522,7 @@ async fn test_handle_network_connected_restores_subscriptions() {
         MockSignatureServ::new(),
         MockEventDist::new(),
         mock_state,
+        MockEventGateway::new(),
     );
     service.set_subscription_invoker(Arc::new(mock_invoker) as Arc<dyn SubscriptionInvoker>);
 
@@ -507,3 +531,5 @@ async fn test_handle_network_connected_restores_subscriptions() {
         .await
         .expect("handle_network_connected should succeed");
 }
+
+

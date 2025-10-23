@@ -27,6 +27,7 @@
 - [x] DHT購読状態を永続化するステートマシンを設計し、`EventService` に実装（8d97b15で `SubscriptionStateMachine` を追加）。
 - [x] 再接続時の購読復元シーケンスをテストで検証（離脱→再接続→履歴同期）し、ConnectionEvent監視から呼び出す復元経路を整備。
 - [x] UI 側で購読状態と同期状況を可視化するフックを追加し、P2PDebugPanel に購読一覧を表示。
+- 2025年10月24日: EventService を `EventGateway` 経由に切り替えるため DI・モック・テストを更新。LegacyEventManagerGateway を追加し、Gateway モックベースで `cargo test` / Docker テストを通過確認。
 
 ## エラーハンドリング統一タスク
 
@@ -131,6 +132,7 @@
 - 2025年10月19日: `EventService::process_received_event` の Phase 2 TODO を EventManager 連携で解消し、`topic_commands.rs` の更新/削除コマンドを TopicService に接続。OfflineService の API 仕様と実装の乖離を調査し、次の対応方針を整理中。
 - 2025年10月19日: OfflineService/Handler を OfflineManager ベースの実装に刷新し、Tauri 側 DTO を camelCase スキーマへ統一。`save_offline_action` で entityType/entityId を含む JSON を永続化できるよう調整し、取得・同期・メタデータ更新系のコマンドも更新済み。`cargo fmt` / `cargo test` がWindows環境でも通過することを確認済み。
 - 2025年10月19日: EventServiceの削除イベントをEventManager経由の発行に切り替え、OfflineService向けにインメモリSQLiteを用いた単体テスト群を追加。`cargo test` をローカルで完走し、Phase 2 TODO の完了を確認。
+- 2025年10月24日: OFF-S0-02 の仮実装としてドメイン変換ヘルパを追加し、OfflineService から新 VO へ変換するプレースホルダを設置。段階移行用の TODO を明示しつつ、Docker Rust テストで回帰確認。
 - 2025年10月19日: TopicService/TopicHandler 経由でユーザー単位の参加状態を扱えるようにし、`join_topic`/`leave_topic`/`get_topic_stats` コマンドを Phase 2 仕様へ更新。Tauri/TypeScript 双方を揃え、`cargo test` で後方互換を確認。
 - 2025年10月19日: Phase 3/4 ギャップ対応に着手。`sqlite_repository.rs`/`event_service.rs`/`modules/event/manager.rs` を再調査し、700行超ファイルの分割・DRY 方針を `docs/01_project/activeContext/refactoring_phase34_gap_plan.md` に整理。`modules/p2p/tests/iroh_integration_tests.rs`（702行）を新規対象として追加。
 - 2025年10月19日: 上記計画ドキュメントに背景・スコープ・ロードマップ・リスク・KPI を追記し、フェーズ別の成果物と検証条件を明文化。

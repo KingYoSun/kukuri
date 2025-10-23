@@ -13,7 +13,9 @@ use crate::modules::p2p::P2PEvent;
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
-use crate::application::services::event_service::EventManagerSubscriptionInvoker;
+use crate::application::services::event_service::{
+    EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
+};
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
     SyncService, TopicService, UserService,
@@ -199,11 +201,10 @@ impl AppState {
             Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::EventRepository>,
             Arc::clone(&signature_service),
             Arc::clone(&event_distributor),
+            Arc::new(LegacyEventManagerGateway::new(Arc::clone(&event_manager))),
             Arc::clone(&subscription_state)
                 as Arc<dyn crate::application::services::SubscriptionStateStore>,
         );
-        // EventManagerを設定
-        event_service_inner.set_event_manager(Arc::clone(&event_manager));
         event_service_inner.set_subscription_invoker(Arc::new(
             EventManagerSubscriptionInvoker::new(Arc::clone(&event_manager)),
         ));
