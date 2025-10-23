@@ -59,7 +59,7 @@
   - [x] `docs/03_implementation/p2p_mainline_runbook.md` 等 Phase 5 連動ドキュメントから旧 `modules::p2p::tests::*` 参照を除去し、新構成のコマンド例で統一。
   - 2025年10月22日: 新テストバイナリ（`p2p_gossip_smoke` / `p2p_mainline_smoke`）を追加し、旧 `modules::p2p::tests::*` の統合テスト資産を移設。Docker Compose のマウント更新とランブック改訂を完了。
   - 2025年10月22日: `scripts/docker/run-smoke-tests.sh` / `test-docker.{sh,ps1}` のフォールバックロジックを撤廃し、新バイナリ固定実行に切り替え。
-  - [ ] TypeScript 側の Phase 5 テスト再編（`src/__tests__` → `src/tests/*` への移行、重複整理、DI 周りの統合ケース追加）を実施し、`phase5_test_inventory.md` の不足項目（Hooks/Stores/Integration のギャップ）を解消する。進捗は artefact 更新で追跡。
+  - [x] TypeScript 側の Phase 5 テスト再編（`src/__tests__` → `src/tests/*` への移行、重複整理、DI 周りの統合ケース追加）を実施し、`phase5_test_inventory.md` の不足項目（Hooks/Stores/Integration のギャップ）を解消する。進捗は artefact 更新で追跡。
 
 ## リファクタリング計画フォローアップ
 

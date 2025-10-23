@@ -1,5 +1,5 @@
 # Phase 5 テスト分類インベントリ
-最終更新日: 2025年10月20日
+最終更新日: 2025年10月23日
 
 ## Rust（kukuri-tauri/src-tauri）
 
@@ -16,18 +16,20 @@
 
 ## TypeScript（kukuri-tauri/src）
 
-| グループ | 現行パス | 現行種別 | 移動先候補 | 不足/課題 |
+| グループ | 現行パス | 現行種別 | 移動先候補 | 状態/課題 |
 | --- | --- | --- | --- | --- |
-| Component tests | `src/components/**/*.test.tsx` | コンポーネントユニット | `src/tests/unit/components`（別名維持可） | レイアウト系が二重に存在（直下と `__tests__`）。Phase 5 で `__tests__` を整理。 |
-| Hook tests | `src/hooks/**/*test.tsx` | カスタムフックユニット | `src/tests/unit/hooks` | `useOfflineQueue` など未カバーのフックを追加（不足）。 |
-| Store tests | `src/stores/**/*test.ts` | Zustand ストアユニット | `src/tests/unit/stores` | `p2pStore` 系の永続化検証を `persistHelpers` に合わせ更新。 |
-| Library tests | `src/lib/**/*test.ts` | ユーティリティ／API | `src/tests/unit/lib` | `syncEngine` の競合解決シナリオ未カバー。 |
-| Integration tests | `src/test/integration/*.integration.test.tsx` | 統合（React + Service） | `src/tests/integration/ui` | 新しい DI コンテナ／P2P デバッグパネルの統合ケースが未実装。 |
-| Legacy root tests | `src/__tests__/**` | 混在（古い構成） | `src/tests/legacy` または段階的削除 | Phase 5 で最新構成へ移行し、古いエントリポイントを削除する。 |
+| Component tests | `src/tests/unit/components/**/*.test.tsx` | コンポーネントユニット | （現行維持） | 旧 `__tests__` と直下ファイルを統合済み。Sidebar/PostCard など重複ケースを整理。 |
+| Hook tests | `src/tests/unit/hooks/**/*.test.tsx` | カスタムフックユニット | （現行維持） | 主要フック（`useAuth` / `useP2P` / `useTopics` 等）を集約。欠損シナリオ無し（2025年10月23日確認）。 |
+| Store tests | `src/tests/unit/stores/**/*.test.ts` | Zustand ストアユニット | （現行維持） | `topicStore`／`authStore` テストを統合し、永続化ヘルパー対応を検証。マルチアカウント系は `authStore.accounts.test.ts` に分離。 |
+| Library tests | `src/tests/unit/lib/**/*.test.ts` | ユーティリティ／API | （現行維持） | `syncEngine` の競合解決シナリオは追加要検討（未着手）。 |
+| Integration UI tests | `src/tests/integration/ui/*.integration.test.tsx` | UI＋ストア統合 | （現行維持） | 既存シナリオ（認証／リレー／トピック／マルチアカウント）を新ディレクトリへ移行済み。 |
+| Integration DI tests | `src/tests/integration/di/*.integration.test.ts` | サービス依存統合 | （新設） | `store_di.integration.test.ts` で `useP2PStore` と `offlineSyncService` の依存注入を検証。 |
+| Legacy root tests | （廃止） | - | - | `src/__tests__` ディレクトリを撤去。新構成へ完全移行済み。 |
 
 ## 移動／追加タスク（ドラフト）
 
 - [ ] `tests/unit` へ EventService の純粋ユニットテストを移動し、EventManager 依存をモック化する。
 - [ ] `tests/integration/p2p` に Mainline DHT ルートのシナリオを追加し、Docker 実行手順を更新する。
-- [ ] TypeScript の `__tests__` 直下の UI テストを `src/tests/unit` 配下へ移動し、ダブりを解消する。
-- [ ] Integration テストで `App` の複数アカウントシナリオ（`src/__tests__/integration/multipleAccounts.test.tsx`）を新ディレクトリへ移管し、依存モックを再利用可能にする。
+- [x] TypeScript の `__tests__` 直下の UI テストを `src/tests/unit` 配下へ移動し、ダブりを解消する。
+- [x] Integration テストで `App` の複数アカウントシナリオ（`src/tests/integration/ui/multipleAccounts.test.tsx`）を新ディレクトリへ移管し、依存モックを再利用可能にする。
+- [x] DI 依存の統合テストを `src/tests/integration/di/store_di.integration.test.ts` に追加し、P2P／Offline 系の初期化パスを検証する。
