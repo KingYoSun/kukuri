@@ -81,6 +81,11 @@
 | OFF-S0-02 | 新 VO への変換ヘルパを Application 層に仮実装し、`OfflineService` からの利用箇所を洗い出す。 | `kukuri-tauri/src-tauri/src/application/services/offline_service.rs` | 変換箇所の TODO をコメントで残し、後続 Stage 1 で差し替え可能な状態にする。 |
 | OFF-S0-03 | `.sqlx` ディレクトリの既存ファイルと OfflineManager の SQL を棚卸しし、準備段階での再生成要否を判定。 | `kukuri-tauri/src-tauri/.sqlx/`<br>`kukuri-tauri/src-tauri/src/modules/offline/manager.rs` | 動的 SQL のため即時再生成不要だが、Stage 2 で `query!` 導入時に `cargo sqlx prepare` が必要になる点をメモ。 |
 
+#### OFF-S0-01 実装メモ（2025年10月24日）
+- `domain::value_objects::offline` に `OfflineActionId`・`OfflinePayload`・`SyncStatus`・`SyncQueueStatus`・`CacheKey` などの値オブジェクトを追加し、従来の `String`／`i64` フィールドを型付けした。
+- `domain::entities::offline` では `OfflineActionRecord`・`SyncQueueItem`・`CacheMetadataRecord`・`OptimisticUpdateRecord`・`SyncStatusRecord`・`CacheStatusSnapshot` などを定義。`chrono::DateTime<Utc>` でタイムスタンプを扱い、`serde_json::Value` は `OfflinePayload` 経由で包んだ。
+- 新規スキーマ付きで `cargo check` を実行し、ビルド可能な状態を確認。Stage 1 以降はこれらの型を `OfflineService` から参照するよう変換ヘルパを実装予定。
+
 ### Stage 1（Adapter 導入: 3日）
 1. `application::ports::offline_store` を追加し、`OfflineService` に注入ポイントを用意（既存 `OfflineManager` をラップする暫定 Adapter を実装）。
 2. 暫定 Adapter (`LegacyOfflineManagerAdapter`) を `modules/offline` 上に実装し、テストをモック経由に更新。

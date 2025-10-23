@@ -76,6 +76,11 @@
 | EG-S1-03 | `EventService` に Gateway を注入する DI パスを整備し、`set_event_manager` などの Legacy 依存を暫定的にラップする。 | `kukuri-tauri/src-tauri/src/application/services/event_service/*`<br>`kukuri-tauri/src-tauri/src/state/{application_container.rs,state.rs}` | 既存テストが Gateway モックで通り、Legacy EventManager へのアクセスが `LegacyEventManagerGateway`（仮称）経由になること。 |
 | EG-S1-04 | テスト群を Gateway モックベースに更新し、CI での `cargo test --package kukuri-tauri --test event_service` がグリーンであることを確認。 | `kukuri-tauri/src-tauri/tests/unit/application/event_service/*` | Mock 実装が `EventGateway` trait を実装し、既存のビヘイビア検証を維持する。 |
 
+#### EG-S1-01 実装メモ（2025年10月24日）
+- `application::ports::event_gateway.rs` に `EventGateway` trait を追加し、`handle_incoming_event`／`publish_topic_post`／`send_reaction` など Phase 5 で想定する操作を整理。
+- ドメイン型は `domain::{entities,value_objects}::event_gateway` 配下に新設。`DomainEvent` は `Event` エンティティとの変換ヘルパを備え、タグは `EventTag` で正規化した。
+- `PublicKey`・`ReactionValue`・`TopicContent`・`ProfileMetadata` など値オブジェクト／エンティティを導入し、Nostr 由来の検証（hex長や文字数上限）をドメイン層で担保。
+
 ### Sprint 2（3日想定）
 1. `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲ロジックと mapper 呼び出しを移設。
 2. DI (`state.rs` / `application_container.rs`) を更新し、Gateway を生成・注入。
