@@ -95,6 +95,25 @@
   - 2025年10月23日: OfflineService/OfflineManager の adapter 方針と `infrastructure::offline` への段階移行計画を `docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` に記載し、Stage 0〜3 のタスクを整理した。
   - 2025年10月23日: Offline Stage 0 タスク（OFF-S0-01〜03）を起票し、`.sqlx` 影響調査メモを同 artefact に追記して再生成タイミングを明確化。
   - 対応方針: 棚卸し結果を基に Workstream A/B の移行順序を定義し、優先度の高い High 項目からリファクタリングに着手する。
+- [ ] Phase 5 Workstream A: Rustモジュール再構成（`docs/01_project/refactoring_plan_2025-08-08_v3.md`）
+  - [ ] 互換用の `mod.rs` と `pub use` を整備し、`domain` / `application` / `infrastructure` / `presentation` 配下への段階移行を開始する。
+  - [ ] ドメインロジックと外部連携実装を新レイヤに移動し、`cargo deny` などで一方向依存を検証する。
+  - [ ] `ApplicationContainer` や Tauri コマンドの DI を新レイヤ構成に合わせて再配線し、依存方向をプレゼンテーション→アプリケーション→ドメインに揃える。
+  - [ ] 互換用 `pub use` を段階的に削除し、呼び出し元のモジュールパス更新と Legacy モジュール整理を完了する。
+  - [ ] 各ステップ後に `cargo fmt` / `cargo clippy -D warnings` / `cargo test` を実行し、リグレッション検知フローを確立する。
+- [ ] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
+  - [ ] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
+  - [ ] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。
+  - [ ] Stage1-3: `OfflineService` の公開型を新 VO へ差し替え、変換箇所を整理して Stage 2 で差し替え可能な状態にする。
+- [ ] Phase 5 OfflineService Adapter Stage 2（Stage 1 完了後着手／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 2）
+  - [ ] Stage2-1: `infrastructure/offline/sqlite_store.rs` を実装し、Legacy OfflineManager の CRUD をポート実装へ移植する。
+  - [ ] Stage2-2: DI を新実装へ切り替え、`modules/offline` を read-only ラッパに縮退させる。
+  - [ ] Stage2-3: OfflineService 結合テストを `tests/integration/offline/*` へ移動し、Docker/CI スクリプトを更新する。
+- [ ] Phase 5 EventGateway Sprint 2（`docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md`）
+  - [ ] Sprint2-1: `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲と mapper 呼び出しを整理する。
+  - [ ] Sprint2-2: `state.rs` / `application_container.rs` の DI を Gateway 経由に更新する。
+  - [ ] Sprint2-3: `modules/event/manager` の Presentation 依存を Gateway 側へ閉じ込めるラッパを追加する。
+  - [ ] Sprint2-4: Mainline DHT / EventService 結合テストを Gateway 経由で実行するよう更新する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
