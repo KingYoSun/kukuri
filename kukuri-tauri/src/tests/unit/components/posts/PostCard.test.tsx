@@ -543,11 +543,11 @@ describe('PostCard', () => {
       );
     });
 
-  it('返信フォームと引用フォームは同時に開かない', async () => {
-    renderWithQueryClient(<PostCard post={mockPost} />);
+    it('返信フォームと引用フォームは同時に開かない', async () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
 
-    // まず返信フォームを開く
-    const replyButton = screen.getAllByRole('button')[0];
+      // まず返信フォームを開く
+      const replyButton = screen.getAllByRole('button')[0];
       fireEvent.click(replyButton);
 
       await waitFor(() => {

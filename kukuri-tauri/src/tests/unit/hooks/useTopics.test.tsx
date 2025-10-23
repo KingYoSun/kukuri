@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useTopics, useTopic, useCreateTopic, useUpdateTopic, useDeleteTopic } from '@/hooks/useTopics';
+import {
+  useTopics,
+  useTopic,
+  useCreateTopic,
+  useUpdateTopic,
+  useDeleteTopic,
+} from '@/hooks/useTopics';
 import { useTopicStore } from '@/stores';
 import { ReactNode } from 'react';
 

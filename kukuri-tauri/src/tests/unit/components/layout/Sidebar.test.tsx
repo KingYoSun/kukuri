@@ -231,4 +231,3 @@ describe('Sidebar', () => {
     expect(sidebar).toHaveClass('w-0');
   });
 });
-

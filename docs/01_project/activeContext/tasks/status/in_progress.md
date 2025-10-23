@@ -98,6 +98,7 @@
 - 2025年10月21日: GitHub Actions `Native Test (Linux)` で発生していた TypeScript 型エラーを解消。Zustand 永続化ヘルパー（`persistHelpers.ts`）と `src/stores/config/persist.ts` をジェネリクス対応へ更新し、`pnpm type-check` と `gh act -j native-test-linux -W .github/workflows/test.yml` の成功を確認。
 - 2025年10月21日: Prettier ルールに合わせて `src/stores/config/persist.ts` を整形し、`pnpm format:check` および `gh act -j format-check -W .github/workflows/test.yml` が成功することを確認。
 - 2025年10月23日: GitHub Actions の `clippy::new_without_default` 失敗を解消するため、EventPublisher/TestGossipService/KeyManager/EventManager に `Default` を実装し、`cargo fmt` を実行。`gh act -j native-test-linux` と `gh act -j format-check` が成功することを確認。
+- 2025年10月23日: Format Check ジョブが Prettier 警告（`src/tests/...` 5件）で失敗していたため、対象テストファイルを `pnpm prettier --write` で整形し、`pnpm format:check` と `gh act -j format-check -W .github/workflows/test.yml` が成功することを確認。
 - 2025年10月17日: `ApplicationContainer` を導入し、Base64 永続化した iroh シークレットキーからノード ID を再利用する初期化と、`NetworkConfig.bootstrap_peers` を `IrohNetworkService` 初期化時に適用する仕組みを整備。Docker 経由の `cargo test` と `kukuri-cli` のテストまで確認済み。
 - 2025年10月17日: Mainline DHT ハンドシェイク/ルーティング統合テストを `mainline_dht_tests.rs` に追加し、Docker スモークテストで DHT/Gossip と並行実行するよう `run-smoke-tests.sh` を更新。
 - 2025年10月17日: Mainline DHT の接続・ルーティング・再接続メトリクスを Rust 側で集計し、`get_p2p_metrics`／P2PDebugPanel に反映。Docker 経由で Rust テストと `pnpm test` を通過。

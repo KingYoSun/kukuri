@@ -44,9 +44,9 @@ const createOfflineAction = (overrides: Partial<OfflineAction> = {}): OfflineAct
   ...overrides,
 });
 
-  describe('Dependency integration across stores and services', () => {
-    let cleanup: () => void;
-    let originalSyncPendingActions: OfflineStoreState['syncPendingActions'];
+describe('Dependency integration across stores and services', () => {
+  let cleanup: () => void;
+  let originalSyncPendingActions: OfflineStoreState['syncPendingActions'];
 
   beforeEach(() => {
     cleanup = setupIntegrationTest();
