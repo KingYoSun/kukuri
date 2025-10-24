@@ -1,5 +1,5 @@
 # Phase 5 依存関係棚卸しテンプレート
-最終更新日: 2025年10月24日
+最終更新日: 2025年10月25日
 
 ## 記入ルール
 - `モジュール/コンポーネント`: ファイルまたはモジュールの論理単位（例: `application/services/event_service`）
@@ -14,17 +14,17 @@
 | --- | --- | --- | --- | --- | --- |
 | AuthService | `application/services/auth_service.rs` | `infrastructure::crypto::KeyManager`, `infrastructure::storage::SecureStorage`, `application::services::{UserService,TopicService}`, `shared::error::AppError` | Application | Medium | 認証と初期トピック参加が同期的に結合しており、イベント駆動化とサービス分離が必要。 |
 | EventService | `application/services/event_service/*` | `infrastructure::database::EventRepository`, `infrastructure::crypto::SignatureService`, `infrastructure::p2p::EventDistributor`, `application::services::{SubscriptionStateMachine,SubscriptionStateStore}`, `modules::event::manager::EventManager` | Application | High | Presentation DTO とレガシー EventManager に直接依存。ドメイン用 mapper と `EventGateway` trait を導入して境界を整理する。 |
-| OfflineService | `application/services/offline_service.rs` | `modules::offline::{OfflineManager,models::*}`, `shared::error::AppError`, `serde_json::Value`, `async_trait` | Application | High | 旧 OfflineManager の戻り値をそのまま公開しており、変換アダプタと新インフラ層への移行が必須（`artefacts/phase5_offline_adapter_plan.md` を参照）。 |
+| OfflineService | `application/services/offline_service.rs` | `application::ports::offline_store::OfflinePersistence`, `infrastructure::offline::SqliteOfflinePersistence`, `infrastructure::offline::OfflineReindexJob`, `shared::error::AppError` | Application | Medium | 2025年10月25日 Stage3: Legacy OfflineManager 依存を解消し、ドメイン値オブジェクトでの永続化に移行。テストは新Persistenceベースに更新済み。 |
 | P2PService & Builder | `application/services/p2p_service.rs` | `infrastructure::p2p::{NetworkService,GossipService,DiscoveryOptions,IrohNetworkService,IrohGossipService}`, `modules::p2p::events::P2PEvent`, `shared::config::NetworkConfig`, `tokio::sync`, `iroh::SecretKey` | Application | Medium | Iroh 固有型がサービス層にリーク。Builder 内に閉じ込めつつ、P2PEvent をドメインイベントへ置換する。 |
 | PostService | `application/services/post_service.rs` | `domain::entities::{Post,Event,User}`, `infrastructure::database::PostRepository`, `infrastructure::p2p::EventDistributor`, `infrastructure::cache::PostCacheService`, `nostr_sdk::Keys` | Application | Medium | `nostr_sdk` 依存を共有ファクトリに集約し、イベント生成を EventService 経由に統一する。 |
 | TopicService | `application/services/topic_service.rs` | `domain::entities::Topic`, `infrastructure::database::TopicRepository`, `infrastructure::p2p::GossipService`, `shared::error::AppError` | Application | Medium | Gossip 参加/離脱を直接呼び出すため、P2PService 経由のイベント発行に置き換える。 |
 | SyncService | `application/services/sync_service.rs` | `infrastructure::p2p::NetworkService`, `application::services::{PostService,EventService}`, `tokio::sync::RwLock`, `chrono::Utc` | Application | Medium | サービス間の循環参照防止のため、同期オーケストレータ用 trait を別途定義する。 |
 | SubscriptionStateMachine / Store | `application/services/subscription_state.rs` | `infrastructure::database::connection_pool::ConnectionPool`, `sqlx`, `chrono`, `shared::error::AppError` | Application | High | SQL を直書きしており、`SubscriptionStateRepository` を新設して再同期ロジックをドメイン値オブジェクトへ切り出す。 |
 | UserService | `application/services/user_service.rs` | `domain::entities::{User,UserMetadata}`, `infrastructure::database::UserRepository`, `shared::error::AppError` | Application | Low | Phase 5 ではフォローデータ取得/更新をドメインユースケース化するだけで対応可能。 |
-| AppState（legacy aggregator） | `state.rs` | `modules::{auth,event,offline,p2p}`, `application::services::*`, `presentation::handlers::*`, `infrastructure::{crypto,database,p2p}`, `tauri::AppHandle` | Legacy | High | 旧モジュールと新サービスが同居。状態管理とサービス DI を分割し、UI への公開は読み取り専用 ViewModel に絞る。 |
+| AppState（legacy aggregator） | `state.rs` | `modules::{auth,event,p2p}`, `infrastructure::offline::{SqliteOfflinePersistence,OfflineReindexJob}`, `application::services::*`, `presentation::handlers::*`, `infrastructure::{crypto,database,p2p}`, `tauri::AppHandle` | Legacy | Medium | Offline 領域は新 Persistence/Job に刷新。引き続き Legacy EventManager, Auth まわりの分離が必要。 |
 | ApplicationContainer | `state/application_container.rs` | `application::services::p2p_service::{P2PService,P2PStack}`, `modules::p2p::P2PEvent`, `shared::config::AppConfig`, `tokio::fs`, `anyhow` | Application | Medium | P2P イベント型の差し替えとメトリクス初期化統合が必要。Phase 5 でブートストラップ専用モジュールへ再配置する。 |
 | EventManager | `modules/event/manager` | `application::shared::{default_topics,nostr::EventPublisher}`, `infrastructure::database::EventRepository`, `infrastructure::p2p::GossipService`, `modules::auth::key_manager::KeyManager`, `infrastructure::database::ConnectionPool` | Legacy | High | `tauri::AppHandle` 依存をイベントブロードキャスタ trait に抽象化し、Repository 参照はアプリ層経由に限定する。 |
-| OfflineManager | `modules/offline` | `sqlx`, `chrono`, `serde_json`, `uuid`, `sqlx::Pool<Sqlite>` | Legacy | High | バッチ SQL が多数。`infrastructure::offline` に移行し、DTO 変換を `application::shared::offline` に集約する（`artefacts/phase5_offline_adapter_plan.md` を参照）。 |
+| SqliteOfflinePersistence | `infrastructure/offline/sqlite_store.rs` | `sqlx`, `chrono`, `serde_json`, `uuid`, `application::ports::offline_store::OfflinePersistence` | Infrastructure | Medium | 2025年10月25日 Stage3: Legacy OfflineManager の SQL を移植。OfflineReindexJob とサービス双方から利用。`.sqlx` 再生成タイミングと DRY 化の追跡を継続。 |
 | Legacy KeyManager | `modules/auth/key_manager.rs` | `nostr_sdk::Keys`, `tokio::sync::RwLock`, `anyhow` | Legacy | Medium | AppState からのみ利用。`infrastructure::crypto::KeyManager` に置換し、旧実装はテスト専用へ縮退。 |
 | Legacy Database Connection | `modules/database/connection.rs` | `sqlx`, `std::fs`, `Path`, `tracing` | Retired (2025年10月25日) | - | `ConnectionPool` への移行完了に伴い削除。参照先は `infrastructure::database::connection_pool` に集約済み。 |
 | BookmarkManager | `modules/bookmark` | `sqlx`, `chrono`, `uuid`, `sqlx::Pool<Sqlite>` | Infrastructure | Medium | Application 層の Bookmark API が未実装。`BookmarkRepository` と `PostService` 拡張で置換し、`AppState` の直接依存を解消する。 |
@@ -46,7 +46,7 @@
 - Application 層: 9件（AuthService, EventService, OfflineService, P2PService, PostService, TopicService, SyncService, SubscriptionStateMachine/Store, UserService）
 - Infrastructure 層: 8件（SQLiteRepository, ConnectionPool, EventDistributor, IrohNetworkService, IrohGossipService, Gossip Metrics, KeyManager, SecureStorage）
 - Presentation 層: 2件（Command Modules, Presentation Handlers）
-- Legacy 橋渡し: 5件（AppState, EventManager, OfflineManager, Legacy KeyManager, Legacy Database Connection）
+- Legacy 橋渡し: 4件（AppState, EventManager, Legacy KeyManager, Legacy Database Connection）
 - ブートストラップ: ApplicationContainer（P2P スタック初期化）を別管理とし、Phase 5 Workstream A/B の対象に含める。
 
 ## 外部クレート棚卸し（主要カテゴリ）

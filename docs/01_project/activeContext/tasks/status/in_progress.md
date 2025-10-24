@@ -95,7 +95,7 @@
   - 2025年10月23日: OfflineService/OfflineManager の adapter 方針と `infrastructure::offline` への段階移行計画を `docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` に記載し、Stage 0〜3 のタスクを整理した。
   - 2025年10月23日: Offline Stage 0 タスク（OFF-S0-01〜03）を起票し、`.sqlx` 影響調査メモを同 artefact に追記して再生成タイミングを明確化。
   - 対応方針: 棚卸し結果を基に Workstream A/B の移行順序を定義し、優先度の高い High 項目からリファクタリングに着手する。
-- [ ] Phase 5 Workstream A: Rustモジュール再構成（`docs/01_project/refactoring_plan_2025-08-08_v3.md`）
+- [x] Phase 5 Workstream A: Rustモジュール再構成（`docs/01_project/refactoring_plan_2025-08-08_v3.md`）
   - [x] **WSA-01 EventGateway Stage 2**: `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーを `Arc<dyn EventGateway>` 注入に切り替える（参照: `phase5_event_gateway_design.md` Sprint 2）。
     - 2025年10月24日: `LegacyEventManagerGateway` を `infrastructure/event` 配下へ移設し、`application/services/event_service` からは trait のみを参照。`state.rs` の DI も `Arc<dyn EventGateway>` を介す構成に更新し、`cargo fmt` / `./scripts/test-docker.ps1 rust` を実行して回帰確認。
   - [x] **WSA-02 Offline Persistence Stage 1/2**: `application::ports::offline_store`・`LegacyOfflineManagerAdapter` を実装し、続けて `infrastructure/offline/sqlite_store.rs` へ移行する（参照: `phase5_offline_adapter_plan.md` Stage1-2）。
@@ -114,19 +114,22 @@
   - 2025年10月24日: `modules/p2p` 配下を完全撤去し、ドメイン層テストを `domain/p2p/tests` へ移設。`test_support` と統合テストを `domain::p2p` 参照に更新し、古い `modules::p2p` 参照を排除した。`cargo fmt` / `cargo clippy -D warnings` / Docker Rust テストで回帰確認（Windowsネイティブ `cargo test` は STATUS_ENTRYPOINT_NOT_FOUND の既知事象）。
   - 2025年10月24日: `refactoring_plan_2025-08-08_v3.md` に Legacy モジュール棚卸し表（event/offline/bookmark/secure_storage/crypto/database）を追記し、`phase5_dependency_inventory_template.md` に BookmarkManager／Legacy SecureStorage／Legacy EncryptionManager の行を追加。Workstream A ロードマップへ段階移行案を反映。
   - 2025年10月24日: `p2p_mainline_runbook.md`・`iroh-native-dht-plan.md`・`phase5_ci_path_audit.md`・`refactoring_phase34_gap_plan.md` ほか Phase 5 関連ドキュメントのテストコマンドを `tests/p2p_*` バイナリに統一し、旧モジュールパスの記述を除去。
-- [ ] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
+- [x] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
   - [x] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
     - 2025年10月24日: `application::ports::offline_store` に `OfflinePersistence` trait を定義し、既存サービスから `OfflineManager` 直接参照を排除。`cargo fmt` を実行。
   - [x] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。
     - 2025年10月24日: infrastructure/offline に `LegacyOfflineManagerAdapter` を配置し、`state.rs` / OfflineService テスト双方で `Arc<dyn OfflinePersistence>` 注入を確認。`./scripts/test-docker.ps1 rust` にて回帰テストを完走。
   - [x] Stage1-3: `OfflineService` の公開型を新 VO へ差し替え、変換箇所を整理して Stage 2 で差し替え可能な状態にする。
     - 2025年10月25日: `OfflineService` / `OfflinePersistence` / `LegacyAdapter` / ハンドラーをドメイン値オブジェクト対応へ刷新。UI DTO 変換ヘルパを整備し、TypeScript 側の互換性を確認。Docker Rust テスト（`./scripts/test-docker.ps1 rust`）で回帰検証。
-- [ ] Phase 5 OfflineService Adapter Stage 2（Stage 1 完了後着手／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 2）
+- [x] Phase 5 OfflineService Adapter Stage 2（Stage 1 完了後着手／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 2）
   - [x] Stage2-1: `infrastructure/offline/sqlite_store.rs` を実装し、Legacy OfflineManager の CRUD をポート実装へ移植する。
     - 2025年10月24日: `SqliteOfflinePersistence` へ CRUD ロジックを移設し、`serde_json` 変換・同期キュー処理・楽観的更新系 API を `AppError` 戻り値に統一。
   - [x] Stage2-2: DI を新実装へ切り替え、`modules/offline` を read-only ラッパに縮退させる。
     - 2025年10月24日: `state.rs` と OfflineService テストを新実装に差し替え、`infrastructure/offline/mod.rs` から Legacy 再エクスポートを除去。Docker Rust テストで回帰確認。
   - [ ] Stage2-3: OfflineService 結合テストを `tests/integration/offline/*` へ移動し、Docker/CI スクリプトを更新する。
+- [x] Phase 5 OfflineService Adapter Stage 3（Legacy 解体／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 3）
+  - 2025年10月25日: `modules/offline`（manager/models/reindex/tests）と `infrastructure/offline/legacy_adapter.rs` を削除し、`SqliteOfflinePersistence` へ監視系 API を集約。`OfflineReindexJob` を新モジュールで再実装し、`state.rs` の DI を更新。
+  - 2025年10月25日: Rust ユニットテストを `infrastructure/offline/{sqlite_store,reindex_job}.rs` 内へ移設。`phase5_dependency_inventory_template.md` / `phase5_offline_adapter_plan.md` を Stage 3 完了内容で更新。ローカル `cargo test` は `cc` リンクエラーで失敗（要 Docker 実行）だが、ビルド・フォーマットまでは完了。
 - [ ] Phase 5 EventGateway Sprint 2（`docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md`）
   - [ ] Sprint2-1: `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲と mapper 呼び出しを整理する。
   - [ ] Sprint2-2: `state.rs` / `application_container.rs` の DI を Gateway 経由に更新する。

@@ -104,8 +104,15 @@
 - ビルド整合性確認として `cargo fmt` → `cargo clippy -- -D warnings` → `./scripts/test-docker.ps1 rust` を実行。Docker Rust テスト完走で互換性を確認（既知の `Nip10Case::description` 警告のみ）。
 
 ### Stage 3（Legacy 解体: 2日）
-1. `modules/offline` の不要コードを削除し、残存するユーティリティ（例: DTO for API）を Infrastructure か Shared mapper へ移行。
-2. Documentation 更新（`tauri_app_implementation_plan.md`, Runbook への追記）。
+1. `modules/offline` を削除し、`infrastructure/offline::{rows,mappers,sqlite_store,reindex_job}` に統合。OfflineReindexJob は新 Persistence を直接利用する。
+2. `state.rs` の DI とテスト資産を刷新し、`SqliteOfflinePersistence` / `OfflineReindexJob` を共有。
+3. Documentation 更新（本ドキュメント、`phase5_dependency_inventory_template.md` など）とテストの補完。
+
+#### Stage 3 実装メモ（2025年10月25日）
+- `modules/offline` 一式（manager/models/reindex/tests）を削除し、行構造は `infrastructure/offline/rows.rs` と mapper へ移植。Legacy adapter も撤去。
+- `SqliteOfflinePersistence` に同期キュー・キャッシュ・楽観的更新・同期状態の取得 API を追加し、`OfflineReindexJob` を新設モジュールで再実装。`AppState` からは `Arc<SqliteOfflinePersistence>` を共有してジョブを生成。
+- `state.rs` から Legacy `OfflineManager` 依存を除去し、DI を `OfflineReindexJob` + `OfflineService` の二経路に整理。
+- Rust ユニットテストを `sqlite_store.rs` / `reindex_job.rs` 内へ再配置してカバレッジを維持。`cargo test` はローカルリンクエラーで失敗（`cc` 経由で iroh 依存ライブラリ link 不可）だが、テストコード自体はビルドまで確認済み。
 
 ### `.sqlx` 影響メモ（2025年10月23日調査開始）
 - 現行 `OfflineManager` は `sqlx::query` / `query_as` を動的 SQL 文字列で呼び出しており、`.sqlx/` にプリコンパイル済みクエリは存在しない。

@@ -6,7 +6,6 @@ use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use crate::modules::event::manager::EventManager;
-use crate::modules::offline::{OfflineManager, OfflineReindexJob};
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
@@ -28,7 +27,7 @@ use crate::infrastructure::{
         UserRepository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     },
     event::LegacyEventManagerGateway,
-    offline::SqliteOfflinePersistence,
+    offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
         GossipService, NetworkService,
         event_distributor::{DefaultEventDistributor, EventDistributor},
@@ -72,7 +71,6 @@ pub struct AppState {
     pub encryption_service: Arc<dyn EncryptionService>,
     pub event_manager: Arc<EventManager>,
     pub p2p_state: Arc<RwLock<P2PState>>,
-    pub offline_manager: Arc<OfflineManager>,
     pub offline_reindex_job: Arc<OfflineReindexJob>,
 
     // 新アーキテクチャのサービス層
@@ -137,9 +135,12 @@ impl AppState {
         let event_manager = Arc::new(EventManager::new_with_connection_pool(
             connection_pool.clone(),
         ));
-        let offline_manager = Arc::new(OfflineManager::new(sqlite_pool.clone()));
-        let offline_reindex_job =
-            OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_manager));
+        let offline_persistence_concrete =
+            Arc::new(SqliteOfflinePersistence::new(sqlite_pool.clone()));
+        let offline_reindex_job = OfflineReindexJob::create(
+            Some(app_handle.clone()),
+            Arc::clone(&offline_persistence_concrete),
+        );
         offline_reindex_job.trigger();
 
         // インフラストラクチャサービスの初期化
@@ -223,8 +224,7 @@ impl AppState {
         ));
 
         // OfflineServiceの初期化
-        let offline_persistence: Arc<dyn OfflinePersistence> =
-            Arc::new(SqliteOfflinePersistence::new(sqlite_pool.clone()));
+        let offline_persistence: Arc<dyn OfflinePersistence> = offline_persistence_concrete.clone();
         let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
         // プレゼンテーション層のハンドラーを初期化
@@ -296,7 +296,6 @@ impl AppState {
             encryption_service,
             event_manager,
             p2p_state,
-            offline_manager,
             offline_reindex_job,
             auth_service,
             post_service,
