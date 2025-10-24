@@ -396,8 +396,7 @@ impl OfflineServiceTrait for OfflineService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::offline::LegacyOfflineManagerAdapter;
-    use crate::modules::offline::OfflineManager;
+    use crate::infrastructure::offline::SqliteOfflinePersistence;
     use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
 
     async fn setup_service() -> (OfflineService, Pool<Sqlite>) {
@@ -409,9 +408,8 @@ mod tests {
 
         initialize_schema(&pool).await;
 
-        let manager = Arc::new(OfflineManager::new(pool.clone()));
         let persistence: Arc<dyn OfflinePersistence> =
-            Arc::new(LegacyOfflineManagerAdapter::new(Arc::clone(&manager)));
+            Arc::new(SqliteOfflinePersistence::new(pool.clone()));
         (OfflineService::new(persistence), pool)
     }
 

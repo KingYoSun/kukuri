@@ -26,7 +26,7 @@ use crate::infrastructure::{
     },
     database::{Repository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository},
     event::LegacyEventManagerGateway,
-    offline::LegacyOfflineManagerAdapter,
+    offline::SqliteOfflinePersistence,
     p2p::{
         GossipService, NetworkService,
         event_distributor::{DefaultEventDistributor, EventDistributor},
@@ -219,9 +219,8 @@ impl AppState {
         ));
 
         // OfflineServiceの初期化
-        let offline_persistence: Arc<dyn OfflinePersistence> = Arc::new(
-            LegacyOfflineManagerAdapter::new(Arc::clone(&offline_manager)),
-        );
+        let offline_persistence: Arc<dyn OfflinePersistence> =
+            Arc::new(SqliteOfflinePersistence::new((*db_pool).clone()));
         let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
         // プレゼンテーション層のハンドラーを初期化

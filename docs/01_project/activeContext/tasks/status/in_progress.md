@@ -98,8 +98,9 @@
 - [ ] Phase 5 Workstream A: Rustモジュール再構成（`docs/01_project/refactoring_plan_2025-08-08_v3.md`）
   - [x] **WSA-01 EventGateway Stage 2**: `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーを `Arc<dyn EventGateway>` 注入に切り替える（参照: `phase5_event_gateway_design.md` Sprint 2）。
     - 2025年10月24日: `LegacyEventManagerGateway` を `infrastructure/event` 配下へ移設し、`application/services/event_service` からは trait のみを参照。`state.rs` の DI も `Arc<dyn EventGateway>` を介す構成に更新し、`cargo fmt` / `./scripts/test-docker.ps1 rust` を実行して回帰確認。
-  - [ ] **WSA-02 Offline Persistence Stage 1/2**: `application::ports::offline_store`・`LegacyOfflineManagerAdapter` を実装し、続けて `infrastructure/offline/sqlite_store.rs` へ移行する（参照: `phase5_offline_adapter_plan.md` Stage1-2）。
+  - [x] **WSA-02 Offline Persistence Stage 1/2**: `application::ports::offline_store`・`LegacyOfflineManagerAdapter` を実装し、続けて `infrastructure/offline/sqlite_store.rs` へ移行する（参照: `phase5_offline_adapter_plan.md` Stage1-2）。
     - 2025年10月24日: `OfflineService` を `Arc<dyn OfflinePersistence>` で初期化できるよう刷新し、`LegacyOfflineManagerAdapter` を infrastructure/offline に追加。DI からの注入を更新し、Docker 経由の Rust テストで検証。Stage 2 向けに `sqlite_store.rs` をプレースホルダーとして追加（実実装は後続タスク）。
+    - 2025年10月24日: `SqliteOfflinePersistence` を実装して Legacy 依存を排除。`state.rs` からの DI・OfflineService テストを新実装へ切り替え、`cargo fmt` → `cargo clippy -- -D warnings` → `./scripts/test-docker.ps1 rust` を実行しレグレッションを確認。`infrastructure/offline/mod.rs` の公開 API も新レイヤ構成に合わせて整理。
   - [ ] **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／Tauri コマンドを新 Repository 経由に再配線する。
   - [ ] **WSA-04 SecureStorage / Encryption 再配線**: SecureStorage debug ユーティリティと暗号トレイトを Infrastructure 層へ統合し、`AppState`・`SecureStorageHandler` の依存を刷新する。
   - [ ] **WSA-05 Legacy Database Connection 廃止**: 全呼び出しを `ConnectionPool` + Repository へ揃え、`.sqlx` を再生成した上で `modules::database::connection` を撤去する。
@@ -114,8 +115,10 @@
     - 2025年10月24日: infrastructure/offline に `LegacyOfflineManagerAdapter` を配置し、`state.rs` / OfflineService テスト双方で `Arc<dyn OfflinePersistence>` 注入を確認。`./scripts/test-docker.ps1 rust` にて回帰テストを完走。
   - [ ] Stage1-3: `OfflineService` の公開型を新 VO へ差し替え、変換箇所を整理して Stage 2 で差し替え可能な状態にする。
 - [ ] Phase 5 OfflineService Adapter Stage 2（Stage 1 完了後着手／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 2）
-  - [ ] Stage2-1: `infrastructure/offline/sqlite_store.rs` を実装し、Legacy OfflineManager の CRUD をポート実装へ移植する。
-  - [ ] Stage2-2: DI を新実装へ切り替え、`modules/offline` を read-only ラッパに縮退させる。
+  - [x] Stage2-1: `infrastructure/offline/sqlite_store.rs` を実装し、Legacy OfflineManager の CRUD をポート実装へ移植する。
+    - 2025年10月24日: `SqliteOfflinePersistence` へ CRUD ロジックを移設し、`serde_json` 変換・同期キュー処理・楽観的更新系 API を `AppError` 戻り値に統一。
+  - [x] Stage2-2: DI を新実装へ切り替え、`modules/offline` を read-only ラッパに縮退させる。
+    - 2025年10月24日: `state.rs` と OfflineService テストを新実装に差し替え、`infrastructure/offline/mod.rs` から Legacy 再エクスポートを除去。Docker Rust テストで回帰確認。
   - [ ] Stage2-3: OfflineService 結合テストを `tests/integration/offline/*` へ移動し、Docker/CI スクリプトを更新する。
 - [ ] Phase 5 EventGateway Sprint 2（`docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md`）
   - [ ] Sprint2-1: `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲と mapper 呼び出しを整理する。

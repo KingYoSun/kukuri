@@ -96,6 +96,13 @@
 2. `LegacyOfflineManagerAdapter` から新インフラ実装へ差し替え。`modules/offline` は read-only ラッパに縮退。
 3. SQLx テスト（`offline_service` の結合テスト）を `tests/integration/offline/*` に移し、Docker スクリプトを更新。
 
+#### Stage 2 実装メモ（2025年10月24日）
+- `SqliteOfflinePersistence` を実装し、`modules::offline::manager` から主要 CRUD ロジック（オフラインアクション保存・同期、キャッシュメタデータ更新、同期キュー操作、楽観的更新管理、同期ステータス更新）を移植した。`uuid` / `chrono` / `sqlx::QueryBuilder` を活用しつつ、戻り値を `AppError` ベースに整備。
+- `state.rs` の DI を新実装に切り替え、`Arc<dyn OfflinePersistence>` へ SQLite プールを直接注入。プレゼンテーション層のハンドラーや既存サービスはインターフェイスのみ参照する構成に統一。
+- OfflineService のユニットテストを `LegacyOfflineManagerAdapter` 依存から `SqliteOfflinePersistence` へ差し替え、インメモリ SQLite スキーマ初期化後に同等のシナリオ（保存・同期・キュー・キャッシュ・楽観的更新）を検証。
+- `infrastructure/offline/mod.rs` から Legacy アダプタの再エクスポートを外し、新 API を優先使用できるよう公開面を整理。Stage 3 での Legacy 縮退を容易にするため、旧アダプタはモジュール直下で維持。
+- ビルド整合性確認として `cargo fmt` → `cargo clippy -- -D warnings` → `./scripts/test-docker.ps1 rust` を実行。Docker Rust テスト完走で互換性を確認（既知の `Nip10Case::description` 警告のみ）。
+
 ### Stage 3（Legacy 解体: 2日）
 1. `modules/offline` の不要コードを削除し、残存するユーティリティ（例: DTO for API）を Infrastructure か Shared mapper へ移行。
 2. Documentation 更新（`tauri_app_implementation_plan.md`, Runbook への追記）。
