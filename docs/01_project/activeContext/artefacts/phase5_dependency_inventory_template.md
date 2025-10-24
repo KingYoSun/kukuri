@@ -1,5 +1,5 @@
 # Phase 5 依存関係棚卸しテンプレート
-最終更新日: 2025年10月23日
+最終更新日: 2025年10月24日
 
 ## 記入ルール
 - `モジュール/コンポーネント`: ファイルまたはモジュールの論理単位（例: `application/services/event_service`）
@@ -30,6 +30,7 @@
 | BookmarkManager | `modules/bookmark` | `sqlx`, `chrono`, `uuid`, `modules::database::connection::DbPool` | Infrastructure | Medium | Application 層の Bookmark API が未実装。`BookmarkRepository` と `PostService` 拡張で置換し、`AppState` の直接依存を解消する。 |
 | Legacy SecureStorage Module | `modules/secure_storage` | `keyring`, `serde_json`, `anyhow`, `tokio::sync::RwLock` | Legacy | Medium | Debug 用 `clear_all_accounts` のみ現役。`infrastructure::storage` へユーティリティ移植後に廃止する。 |
 | EncryptionManager (Legacy) | `modules/crypto/encryption.rs` | `aes-gcm`, `sha2`, `base64`, `anyhow` | Legacy | Medium | 暗号化トレイトを Infrastructure 層に再実装し、`AppState` とテストの依存を切り替えた上で退役させる。 |
+| Crypto Hash Stack | `infrastructure/crypto` | `sha2 0.10`, `aes-gcm 0.10`, `argon2 0.5`, `generic-array 0.14` | Infrastructure | Medium | 2025年10月24日: RustCrypto 系は generic-array 1.x をまだ stable 提供しておらず、`aes-gcm`/`sqlx`/`iroh` の依存も 0.14 系を前提。非推奨警告は `GenericArray::as_slice` 呼び出しを `&*key` 参照へ置換して解消済み。RustCrypto の stable リリースで 1.x 対応が揃い次第、依存引き上げを再評価する。 |
 | SQLiteRepository | `infrastructure/database/sqlite_repository/*` | `sqlx`, `infrastructure::database::ConnectionPool`, `domain::entities::*`, `shared::error::AppError`, `async_trait` | Infrastructure | High | ドメイン構造体を丸ごと import しており、mapper 層で DTO 化して domain 依存を薄くする必要がある。 |
 | ConnectionPool | `infrastructure/database/connection_pool.rs` | `sqlx::SqlitePool`, `std::sync::Arc` | Infrastructure | Low | 旧 DbPool 利用箇所をすべて差し替え、環境変数による設定注入をサポートする。 |
 | EventDistributor | `infrastructure/p2p/event_distributor.rs` | `domain::entities::Event`, `tokio::sync::mpsc`, `metrics`, `shared::error::AppError` | Infrastructure | Medium | DistributionStrategy を domain 層で定義し、メトリクス発火を共通トレイトにまとめる。 |

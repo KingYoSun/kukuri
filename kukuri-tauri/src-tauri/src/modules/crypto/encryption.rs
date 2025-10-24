@@ -181,6 +181,6 @@ mod tests {
         let key1 = derive_key_from_password(password);
         let key2 = derive_key_from_password(password);
 
-        assert_eq!(key1.as_slice(), key2.as_slice());
+        assert_eq!(&*key1, &*key2);
     }
 }
