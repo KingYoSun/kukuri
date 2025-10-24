@@ -1,5 +1,4 @@
-use crate::modules::database::connection::DbPool;
-use crate::modules::database::models;
+use crate::infrastructure::database::connection_pool::ConnectionPool;
 use anyhow::Result;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
@@ -12,7 +11,7 @@ type EventCallback = Box<dyn Fn(Event) + Send + Sync>;
 /// Nostrイベントハンドラー
 pub struct EventHandler {
     event_callbacks: Arc<RwLock<Vec<EventCallback>>>,
-    db_pool: Option<Arc<DbPool>>,
+    connection_pool: Option<ConnectionPool>,
 }
 
 impl EventHandler {
@@ -20,13 +19,13 @@ impl EventHandler {
     pub fn new() -> Self {
         Self {
             event_callbacks: Arc::new(RwLock::new(Vec::new())),
-            db_pool: None,
+            connection_pool: None,
         }
     }
 
     /// データベースプールを設定
-    pub fn set_db_pool(&mut self, db_pool: Arc<DbPool>) {
-        self.db_pool = Some(db_pool);
+    pub fn set_connection_pool(&mut self, pool: ConnectionPool) {
+        self.connection_pool = Some(pool);
     }
 
     /// イベントを処理
@@ -68,18 +67,15 @@ impl EventHandler {
         );
 
         // データベースに保存
-        if let Some(pool) = &self.db_pool {
-            let event_model = models::Event {
-                id: 0, // Auto-increment
-                event_id: event.id.to_string(),
-                public_key: event.pubkey.to_string(),
-                created_at: event.created_at.as_u64() as i64,
-                kind: event.kind.as_u16() as i64,
-                content: event.content.clone(),
-                tags: serde_json::to_string(&event.tags)?,
-                sig: event.sig.to_string(),
-                saved_at: chrono::Utc::now().timestamp(),
-            };
+        if let Some(pool) = &self.connection_pool {
+            let event_id = event.id.to_string();
+            let public_key = event.pubkey.to_string();
+            let created_at = event.created_at.as_u64() as i64;
+            let kind = event.kind.as_u16() as i64;
+            let content = event.content.clone();
+            let tags = serde_json::to_string(&event.tags)?;
+            let signature = event.sig.to_string();
+            let saved_at = chrono::Utc::now().timestamp();
 
             sqlx::query!(
                 r#"
@@ -87,16 +83,16 @@ impl EventHandler {
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ON CONFLICT(event_id) DO NOTHING
                 "#,
-                event_model.event_id,
-                event_model.public_key,
-                event_model.created_at,
-                event_model.kind,
-                event_model.content,
-                event_model.tags,
-                event_model.sig,
-                event_model.saved_at
+                event_id,
+                public_key,
+                created_at,
+                kind,
+                content,
+                tags,
+                signature,
+                saved_at
             )
-            .execute(pool.as_ref())
+            .execute(pool.get_pool())
             .await?;
 
             debug!("Text note saved to database: {}", event.id);
@@ -111,7 +107,7 @@ impl EventHandler {
                     .bind(event.id.to_string())
                     .bind(topic)
                     .bind(chrono::Utc::now().timestamp_millis())
-                    .execute(pool.as_ref())
+                    .execute(pool.get_pool())
                     .await;
                 }
                 // カスタムタグ 'topic'
@@ -123,7 +119,7 @@ impl EventHandler {
                         .bind(event.id.to_string())
                         .bind(content)
                         .bind(chrono::Utc::now().timestamp_millis())
-                        .execute(pool.as_ref())
+                        .execute(pool.get_pool())
                         .await;
                     }
                 }
@@ -138,35 +134,31 @@ impl EventHandler {
         info!("Received metadata update from {}", event.pubkey);
 
         // メタデータをパースしてデータベースに保存
-        if let Some(pool) = &self.db_pool {
+        if let Some(pool) = &self.connection_pool {
             let metadata: serde_json::Value = serde_json::from_str(&event.content)?;
-
-            let profile = models::Profile {
-                id: 0, // Auto-increment
-                public_key: event.pubkey.to_string(),
-                display_name: metadata
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-                about: metadata
-                    .get("about")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-                picture_url: metadata
-                    .get("picture")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-                banner_url: metadata
-                    .get("banner")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-                nip05: metadata
-                    .get("nip05")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-                created_at: event.created_at.as_u64() as i64,
-                updated_at: chrono::Utc::now().timestamp(),
-            };
+            let display_name = metadata
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let about = metadata
+                .get("about")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let picture_url = metadata
+                .get("picture")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let banner_url = metadata
+                .get("banner")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let nip05 = metadata
+                .get("nip05")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let created_at = event.created_at.as_u64() as i64;
+            let updated_at = chrono::Utc::now().timestamp();
+            let public_key = event.pubkey.to_string();
 
             sqlx::query!(
                 r#"
@@ -180,16 +172,16 @@ impl EventHandler {
                     nip05 = excluded.nip05,
                     updated_at = excluded.updated_at
                 "#,
-                profile.public_key,
-                profile.display_name,
-                profile.about,
-                profile.picture_url,
-                profile.banner_url,
-                profile.nip05,
-                profile.created_at,
-                profile.updated_at
+                public_key,
+                display_name,
+                about,
+                picture_url,
+                banner_url,
+                nip05,
+                created_at,
+                updated_at
             )
-            .execute(pool.as_ref())
+            .execute(pool.get_pool())
             .await?;
 
             debug!("Profile metadata saved to database for: {}", event.pubkey);
@@ -203,14 +195,14 @@ impl EventHandler {
         info!("Received contact list from {}", event.pubkey);
 
         // フォロー関係をデータベースに保存
-        if let Some(pool) = &self.db_pool {
+        if let Some(pool) = &self.connection_pool {
             // 既存のフォロー関係を削除
             let follower_pubkey = event.pubkey.to_string();
             sqlx::query!(
                 "DELETE FROM follows WHERE follower_pubkey = ?1",
                 follower_pubkey
             )
-            .execute(pool.as_ref())
+            .execute(pool.get_pool())
             .await?;
 
             // 新しいフォロー関係を保存
@@ -232,7 +224,7 @@ impl EventHandler {
                         followed_pubkey,
                         created_at
                     )
-                    .execute(pool.as_ref())
+                    .execute(pool.get_pool())
                     .await?;
                 }
             }
@@ -248,7 +240,7 @@ impl EventHandler {
         info!("Received reaction from {}: {}", event.pubkey, event.content);
 
         // リアクションをデータベースに保存
-        if let Some(pool) = &self.db_pool {
+        if let Some(pool) = &self.connection_pool {
             // リアクション対象のイベントIDを取得
             let mut target_event_id: Option<String> = None;
             for tag in event.tags.iter() {
@@ -277,7 +269,7 @@ impl EventHandler {
                     reaction_content,
                     created_at
                 )
-                .execute(pool.as_ref())
+                .execute(pool.get_pool())
                 .await?;
 
                 debug!(

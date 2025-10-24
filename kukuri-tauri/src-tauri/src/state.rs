@@ -5,7 +5,6 @@ mod application_container;
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
-use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
 use crate::modules::offline::{OfflineManager, OfflineReindexJob};
 use application_container::ApplicationContainer;
@@ -70,8 +69,6 @@ pub struct AppState {
     // 既存のマネージャー（後で移行予定）
     pub key_manager: Arc<OldKeyManager>,
     #[allow(dead_code)]
-    pub db_pool: Arc<DbPool>,
-    #[allow(dead_code)]
     pub encryption_service: Arc<dyn EncryptionService>,
     pub event_manager: Arc<EventManager>,
     pub p2p_state: Arc<RwLock<P2PState>>,
@@ -126,21 +123,24 @@ impl AppState {
 
         tracing::info!("Database URL: {db_url}");
 
-        let db_pool = Arc::new(Database::initialize(&db_url).await?);
-        let encryption_service: Arc<dyn EncryptionService> =
-            Arc::new(DefaultEncryptionService::new());
-        let event_manager = Arc::new(EventManager::new_with_db(db_pool.clone()));
-        let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
-        let offline_reindex_job =
-            OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_manager));
-        offline_reindex_job.trigger();
-
         // 新アーキテクチャのリポジトリとサービスを初期化
-        let pool = ConnectionPool::new(&db_url).await?;
-        let repository = Arc::new(SqliteRepository::new(pool.clone()));
+        let connection_pool = ConnectionPool::new(&db_url).await?;
+        let repository = Arc::new(SqliteRepository::new(connection_pool.clone()));
 
         // リポジトリのマイグレーションを実行
         repository.initialize().await?;
+
+        let sqlite_pool = connection_pool.get_pool().clone();
+
+        let encryption_service: Arc<dyn EncryptionService> =
+            Arc::new(DefaultEncryptionService::new());
+        let event_manager = Arc::new(EventManager::new_with_connection_pool(
+            connection_pool.clone(),
+        ));
+        let offline_manager = Arc::new(OfflineManager::new(sqlite_pool.clone()));
+        let offline_reindex_job =
+            OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_manager));
+        offline_reindex_job.trigger();
 
         // インフラストラクチャサービスの初期化
         let key_manager_service: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());
@@ -199,7 +199,7 @@ impl AppState {
             Arc::clone(&event_distributor),
         ));
 
-        let subscription_state = Arc::new(SubscriptionStateMachine::new(pool.clone()));
+        let subscription_state = Arc::new(SubscriptionStateMachine::new(connection_pool.clone()));
 
         // EventServiceの初期化
         let mut event_service_inner = EventService::new(
@@ -224,7 +224,7 @@ impl AppState {
 
         // OfflineServiceの初期化
         let offline_persistence: Arc<dyn OfflinePersistence> =
-            Arc::new(SqliteOfflinePersistence::new((*db_pool).clone()));
+            Arc::new(SqliteOfflinePersistence::new(sqlite_pool.clone()));
         let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
         // プレゼンテーション層のハンドラーを初期化
@@ -293,7 +293,6 @@ impl AppState {
         let this = Self {
             app_handle: this_handle,
             key_manager,
-            db_pool,
             encryption_service,
             event_manager,
             p2p_state,

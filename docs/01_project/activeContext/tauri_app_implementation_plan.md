@@ -439,7 +439,7 @@ export function PeerConnectionPanel() {
 - **WSA-02 Offline Persistence ポート化**: `application::ports::offline_store` を導入し、Stage1 で `LegacyOfflineManagerAdapter` を挟みつつ Stage2 で `infrastructure/offline/sqlite_store.rs` に移行する。再索引ジョブは新ポート経由でキューを扱い、`SubscriptionStateStore` と同一基盤を共有する。
 - **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／`presentation::handlers::post_handler` を新 Repository に再配線する。`AppState` の `BookmarkManager` フィールドは互換ラッパに縮退させ、最終的に削除する。
 - **WSA-04 SecureStorage / Encryption 再構成**: `infrastructure::storage::secure_storage` に debug/テストユーティリティを移し、`SecureStorageHandler` は新しい `SecureStoragePort`（仮称）を経由。暗号処理は `infrastructure::crypto::encryption_service` トレイトへ集約し、`AppState` の Legacy EncryptionManager / KeyManager 依存を排除する。
-- **WSA-05 Legacy Database Connection 廃止**: `modules::database::connection`／`models` を段階的に退役させ、全サービスが `ConnectionPool` + Repository ファサード (`EventRepository`, `BookmarkRepository` 等) を通過するよう統一する。完了時に `.sqlx` を再生成し、Adapter 系テストを更新する。
+- **WSA-05 Legacy Database Connection 廃止（2025年10月25日完了）**: `state`／`EventManager`／`EventHandler` を `infrastructure::database::ConnectionPool` 経由へ再配線し、Legacy `modules::database::{connection,models}` を撤去済み。`.sqlx` は動的クエリのみのため再生成不要であることを確認。依存棚卸しドキュメントにも完了ステータスを反映した。
 - **SubscriptionStateMachine**: SQL を直書きしている箇所を `SubscriptionStateRepository`（新設）へ切り出し、再同期バックオフ計算を `domain::value_objects` に移す。WSA-02 完了後に着手し、Offline/P2P 双方の再購読ロジックを同一インターフェースに揃える。
 
 ## MVP完成後の改善

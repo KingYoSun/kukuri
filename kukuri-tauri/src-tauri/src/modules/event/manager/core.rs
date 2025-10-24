@@ -1,9 +1,10 @@
 use crate::application::shared::default_topics::DefaultTopicsRegistry;
 use crate::application::shared::nostr::EventPublisher;
-use crate::infrastructure::database::EventRepository as InfraEventRepository;
+use crate::infrastructure::database::{
+    EventRepository as InfraEventRepository, connection_pool::ConnectionPool,
+};
 use crate::infrastructure::p2p::GossipService;
 use crate::modules::auth::key_manager::KeyManager;
-use crate::modules::database::connection::DbPool;
 use crate::modules::event::handler::EventHandler;
 use crate::modules::event::nostr_client::NostrClientManager;
 use anyhow::{Result, anyhow};
@@ -43,10 +44,10 @@ impl EventManager {
         }
     }
 
-    /// 新しいEventManagerインスタンスをDbPoolと共に作成
-    pub fn new_with_db(db_pool: Arc<DbPool>) -> Self {
+    /// 新しいEventManagerインスタンスをConnectionPoolと共に作成
+    pub fn new_with_connection_pool(pool: ConnectionPool) -> Self {
         let mut event_handler = EventHandler::new();
-        event_handler.set_db_pool(db_pool);
+        event_handler.set_connection_pool(pool);
 
         Self {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
