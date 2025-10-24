@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月23日
+最終更新日: 2025年10月24日
 
 ## 方針（2025年09月15日 更新）
 
@@ -96,8 +96,10 @@
   - 2025年10月23日: Offline Stage 0 タスク（OFF-S0-01〜03）を起票し、`.sqlx` 影響調査メモを同 artefact に追記して再生成タイミングを明確化。
   - 対応方針: 棚卸し結果を基に Workstream A/B の移行順序を定義し、優先度の高い High 項目からリファクタリングに着手する。
 - [ ] Phase 5 Workstream A: Rustモジュール再構成（`docs/01_project/refactoring_plan_2025-08-08_v3.md`）
-  - [ ] **WSA-01 EventGateway Stage 2**: `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーを `Arc<dyn EventGateway>` 注入に切り替える（参照: `phase5_event_gateway_design.md` Sprint 2）。
+  - [x] **WSA-01 EventGateway Stage 2**: `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーを `Arc<dyn EventGateway>` 注入に切り替える（参照: `phase5_event_gateway_design.md` Sprint 2）。
+    - 2025年10月24日: `LegacyEventManagerGateway` を `infrastructure/event` 配下へ移設し、`application/services/event_service` からは trait のみを参照。`state.rs` の DI も `Arc<dyn EventGateway>` を介す構成に更新し、`cargo fmt` / `./scripts/test-docker.ps1 rust` を実行して回帰確認。
   - [ ] **WSA-02 Offline Persistence Stage 1/2**: `application::ports::offline_store`・`LegacyOfflineManagerAdapter` を実装し、続けて `infrastructure/offline/sqlite_store.rs` へ移行する（参照: `phase5_offline_adapter_plan.md` Stage1-2）。
+    - 2025年10月24日: `OfflineService` を `Arc<dyn OfflinePersistence>` で初期化できるよう刷新し、`LegacyOfflineManagerAdapter` を infrastructure/offline に追加。DI からの注入を更新し、Docker 経由の Rust テストで検証。Stage 2 向けに `sqlite_store.rs` をプレースホルダーとして追加（実実装は後続タスク）。
   - [ ] **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／Tauri コマンドを新 Repository 経由に再配線する。
   - [ ] **WSA-04 SecureStorage / Encryption 再配線**: SecureStorage debug ユーティリティと暗号トレイトを Infrastructure 層へ統合し、`AppState`・`SecureStorageHandler` の依存を刷新する。
   - [ ] **WSA-05 Legacy Database Connection 廃止**: 全呼び出しを `ConnectionPool` + Repository へ揃え、`.sqlx` を再生成した上で `modules::database::connection` を撤去する。
@@ -106,8 +108,10 @@
   - 2025年10月24日: `refactoring_plan_2025-08-08_v3.md` に Legacy モジュール棚卸し表（event/offline/bookmark/secure_storage/crypto/database）を追記し、`phase5_dependency_inventory_template.md` に BookmarkManager／Legacy SecureStorage／Legacy EncryptionManager の行を追加。Workstream A ロードマップへ段階移行案を反映。
   - 2025年10月24日: `p2p_mainline_runbook.md`・`iroh-native-dht-plan.md`・`phase5_ci_path_audit.md`・`refactoring_phase34_gap_plan.md` ほか Phase 5 関連ドキュメントのテストコマンドを `tests/p2p_*` バイナリに統一し、旧モジュールパスの記述を除去。
 - [ ] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
-  - [ ] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
-  - [ ] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。
+  - [x] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
+    - 2025年10月24日: `application::ports::offline_store` に `OfflinePersistence` trait を定義し、既存サービスから `OfflineManager` 直接参照を排除。`cargo fmt` を実行。
+  - [x] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。
+    - 2025年10月24日: infrastructure/offline に `LegacyOfflineManagerAdapter` を配置し、`state.rs` / OfflineService テスト双方で `Arc<dyn OfflinePersistence>` 注入を確認。`./scripts/test-docker.ps1 rust` にて回帰テストを完走。
   - [ ] Stage1-3: `OfflineService` の公開型を新 VO へ差し替え、変換箇所を整理して Stage 2 で差し替え可能な状態にする。
 - [ ] Phase 5 OfflineService Adapter Stage 2（Stage 1 完了後着手／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 2）
   - [ ] Stage2-1: `infrastructure/offline/sqlite_store.rs` を実装し、Legacy OfflineManager の CRUD をポート実装へ移植する。

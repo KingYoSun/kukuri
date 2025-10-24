@@ -3,5 +3,7 @@
 pub mod cache;
 pub mod crypto;
 pub mod database;
+pub mod event;
+pub mod offline;
 pub mod p2p;
 pub mod storage;

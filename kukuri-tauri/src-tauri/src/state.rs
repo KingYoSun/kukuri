@@ -13,9 +13,8 @@ use crate::modules::offline::{OfflineManager, OfflineReindexJob};
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
-use crate::application::services::event_service::{
-    EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
-};
+use crate::application::ports::offline_store::OfflinePersistence;
+use crate::application::services::event_service::EventManagerSubscriptionInvoker;
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
     SyncService, TopicService, UserService,
@@ -26,6 +25,8 @@ use crate::infrastructure::{
         DefaultSignatureService, KeyManager, SignatureService, key_manager::DefaultKeyManager,
     },
     database::{Repository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository},
+    event::LegacyEventManagerGateway,
+    offline::LegacyOfflineManagerAdapter,
     p2p::{
         GossipService, NetworkService,
         event_distributor::{DefaultEventDistributor, EventDistributor},
@@ -218,7 +219,10 @@ impl AppState {
         ));
 
         // OfflineServiceの初期化
-        let offline_service = Arc::new(OfflineService::new(Arc::clone(&offline_manager)));
+        let offline_persistence: Arc<dyn OfflinePersistence> = Arc::new(
+            LegacyOfflineManagerAdapter::new(Arc::clone(&offline_manager)),
+        );
+        let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
         // プレゼンテーション層のハンドラーを初期化
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));

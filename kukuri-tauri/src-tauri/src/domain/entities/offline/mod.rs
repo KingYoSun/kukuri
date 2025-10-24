@@ -8,7 +8,7 @@ pub mod sync_result;
 pub mod sync_status_record;
 
 pub use cache_metadata::CacheMetadataRecord;
-pub use cache_status::{CacheStatusSnapshot, CacheTypeStatus};
+pub use cache_status::{CacheMetadataUpdate, CacheStatusSnapshot, CacheTypeStatus};
 pub use offline_action::OfflineActionRecord;
 pub use optimistic_update::OptimisticUpdateRecord;
 pub use saved_action::SavedOfflineAction;

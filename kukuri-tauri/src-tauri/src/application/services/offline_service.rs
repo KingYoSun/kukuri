@@ -1,16 +1,13 @@
-use crate::modules::offline::{
-    OfflineManager,
-    models::{
-        AddToSyncQueueRequest as ManagerAddToSyncQueueRequest,
-        CacheStatusResponse as ManagerCacheStatusResponse,
-        CacheTypeStatus as ManagerCacheTypeStatus,
-        GetOfflineActionsRequest as ManagerGetOfflineActionsRequest,
-        OfflineAction as ManagerOfflineAction,
-        SaveOfflineActionRequest as ManagerSaveOfflineActionRequest,
-        SaveOfflineActionResponse as ManagerSaveOfflineActionResponse,
-        SyncOfflineActionsRequest as ManagerSyncOfflineActionsRequest,
-        UpdateCacheMetadataRequest as ManagerUpdateCacheMetadataRequest,
-    },
+use crate::application::ports::offline_store::OfflinePersistence;
+use crate::modules::offline::models::{
+    AddToSyncQueueRequest as ManagerAddToSyncQueueRequest,
+    CacheStatusResponse as ManagerCacheStatusResponse, CacheTypeStatus as ManagerCacheTypeStatus,
+    GetOfflineActionsRequest as ManagerGetOfflineActionsRequest,
+    OfflineAction as ManagerOfflineAction,
+    SaveOfflineActionRequest as ManagerSaveOfflineActionRequest,
+    SaveOfflineActionResponse as ManagerSaveOfflineActionResponse,
+    SyncOfflineActionsRequest as ManagerSyncOfflineActionsRequest,
+    UpdateCacheMetadataRequest as ManagerUpdateCacheMetadataRequest,
 };
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -124,12 +121,12 @@ pub trait OfflineServiceTrait: Send + Sync {
 }
 
 pub struct OfflineService {
-    manager: Arc<OfflineManager>,
+    persistence: Arc<dyn OfflinePersistence>,
 }
 
 impl OfflineService {
-    pub fn new(manager: Arc<OfflineManager>) -> Self {
-        Self { manager }
+    pub fn new(persistence: Arc<dyn OfflinePersistence>) -> Self {
+        Self { persistence }
     }
 
     fn map_offline_action(action: ManagerOfflineAction) -> OfflineActionRecord {
@@ -242,7 +239,7 @@ impl OfflineServiceTrait for OfflineService {
         let payload = Self::build_action_payload(data, &entity_type, &entity_id)?;
 
         let response = self
-            .manager
+            .persistence
             .save_offline_action(ManagerSaveOfflineActionRequest {
                 user_pubkey,
                 action_type,
@@ -265,7 +262,7 @@ impl OfflineServiceTrait for OfflineService {
         limit: Option<i32>,
     ) -> Result<Vec<OfflineActionRecord>, AppError> {
         let manager_response = self
-            .manager
+            .persistence
             .get_offline_actions(ManagerGetOfflineActionsRequest {
                 user_pubkey: user_pubkey.clone(),
                 is_synced,
@@ -285,7 +282,7 @@ impl OfflineServiceTrait for OfflineService {
 
     async fn sync_actions(&self, user_pubkey: String) -> Result<SyncResult, AppError> {
         let response = self
-            .manager
+            .persistence
             .sync_offline_actions(ManagerSyncOfflineActionsRequest { user_pubkey })
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -302,7 +299,7 @@ impl OfflineServiceTrait for OfflineService {
 
     async fn get_cache_status(&self) -> Result<CacheStatusData, AppError> {
         let status = self
-            .manager
+            .persistence
             .get_cache_status()
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -318,7 +315,7 @@ impl OfflineServiceTrait for OfflineService {
         payload: Value,
         _priority: Option<i32>,
     ) -> Result<i64, AppError> {
-        self.manager
+        self.persistence
             .add_to_sync_queue(ManagerAddToSyncQueueRequest {
                 action_type,
                 payload,
@@ -334,7 +331,7 @@ impl OfflineServiceTrait for OfflineService {
         metadata: Option<Value>,
         expiry_seconds: Option<i64>,
     ) -> Result<(), AppError> {
-        self.manager
+        self.persistence
             .update_cache_metadata(ManagerUpdateCacheMetadataRequest {
                 cache_key,
                 cache_type,
@@ -352,14 +349,14 @@ impl OfflineServiceTrait for OfflineService {
         original_data: Option<String>,
         updated_data: String,
     ) -> Result<String, AppError> {
-        self.manager
+        self.persistence
             .save_optimistic_update(entity_type, entity_id, original_data, updated_data)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError> {
-        self.manager
+        self.persistence
             .confirm_optimistic_update(update_id)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))
@@ -369,14 +366,14 @@ impl OfflineServiceTrait for OfflineService {
         &self,
         update_id: String,
     ) -> Result<Option<String>, AppError> {
-        self.manager
+        self.persistence
             .rollback_optimistic_update(update_id)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     async fn cleanup_expired_cache(&self) -> Result<i32, AppError> {
-        self.manager
+        self.persistence
             .cleanup_expired_cache()
             .await
             .map_err(|e| AppError::Internal(e.to_string()))
@@ -389,7 +386,7 @@ impl OfflineServiceTrait for OfflineService {
         sync_status: String,
         conflict_data: Option<String>,
     ) -> Result<(), AppError> {
-        self.manager
+        self.persistence
             .update_sync_status(entity_type, entity_id, sync_status, conflict_data)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))
@@ -399,6 +396,8 @@ impl OfflineServiceTrait for OfflineService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infrastructure::offline::LegacyOfflineManagerAdapter;
+    use crate::modules::offline::OfflineManager;
     use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
 
     async fn setup_service() -> (OfflineService, Pool<Sqlite>) {
@@ -411,7 +410,9 @@ mod tests {
         initialize_schema(&pool).await;
 
         let manager = Arc::new(OfflineManager::new(pool.clone()));
-        (OfflineService::new(manager), pool)
+        let persistence: Arc<dyn OfflinePersistence> =
+            Arc::new(LegacyOfflineManagerAdapter::new(Arc::clone(&manager)));
+        (OfflineService::new(persistence), pool)
     }
 
     async fn initialize_schema(pool: &Pool<Sqlite>) {
