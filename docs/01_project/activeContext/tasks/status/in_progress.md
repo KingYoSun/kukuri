@@ -57,8 +57,8 @@
   - [x] `scripts/test-docker.sh` の `TESTS` 既定値と `cargo --lib` 呼び出しを新しい `tests::integration::p2p::*` 構成へ移行し、ヘルプ出力と `docs/03_implementation/docker_test_environment.md` を修正。
   - [x] `scripts/test-docker.ps1` の `cargo test` 呼び出しを `--test` ベースに更新し、ログ文言と PowerShell オプション説明を調整。
   - [x] `docker-compose.test.yml` へ `./kukuri-tauri/src-tauri/tests` マウントを追加し、Rust テスト編集を即時反映できるようにする。
-  - [x] `docs/03_implementation/p2p_mainline_runbook.md` 等 Phase 5 連動ドキュメントから旧 `modules::p2p::tests::*` 参照を除去し、新構成のコマンド例で統一。
-  - 2025年10月22日: 新テストバイナリ（`p2p_gossip_smoke` / `p2p_mainline_smoke`）を追加し、旧 `modules::p2p::tests::*` の統合テスト資産を移設。Docker Compose のマウント更新とランブック改訂を完了。
+- [x] `docs/03_implementation/p2p_mainline_runbook.md` 等 Phase 5 連動ドキュメントのスモークテスト記述を `tests/p2p_*` バイナリに統一。
+- 2025年10月22日: 新テストバイナリ（`p2p_gossip_smoke` / `p2p_mainline_smoke`）を追加し、旧スモークテスト資産を移設。Docker Compose のマウント更新とランブック改訂を完了。
   - 2025年10月22日: `scripts/docker/run-smoke-tests.sh` / `test-docker.{sh,ps1}` のフォールバックロジックを撤廃し、新バイナリ固定実行に切り替え。
   - [x] TypeScript 側の Phase 5 テスト再編（`src/__tests__` → `src/tests/*` への移行、重複整理、DI 周りの統合ケース追加）を実施し、`phase5_test_inventory.md` の不足項目（Hooks/Stores/Integration のギャップ）を解消する。進捗は artefact 更新で追跡。
 
@@ -96,13 +96,15 @@
   - 2025年10月23日: Offline Stage 0 タスク（OFF-S0-01〜03）を起票し、`.sqlx` 影響調査メモを同 artefact に追記して再生成タイミングを明確化。
   - 対応方針: 棚卸し結果を基に Workstream A/B の移行順序を定義し、優先度の高い High 項目からリファクタリングに着手する。
 - [ ] Phase 5 Workstream A: Rustモジュール再構成（`docs/01_project/refactoring_plan_2025-08-08_v3.md`）
-  - [ ] 互換用の `mod.rs` と `pub use` を整備し、`domain` / `application` / `infrastructure` / `presentation` 配下への段階移行を開始する。
-  - [ ] ドメインロジックと外部連携実装を新レイヤに移動し、`cargo deny` などで一方向依存を検証する。
-  - [ ] `ApplicationContainer` や Tauri コマンドの DI を新レイヤ構成に合わせて再配線し、依存方向をプレゼンテーション→アプリケーション→ドメインに揃える。
-  - [ ] 互換用 `pub use` を段階的に削除し、呼び出し元のモジュールパス更新と Legacy モジュール整理を完了する。
-  - [ ] 各ステップ後に `cargo fmt` / `cargo clippy -D warnings` / `cargo test` を実行し、リグレッション検知フローを確立する。
+  - [ ] **WSA-01 EventGateway Stage 2**: `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーを `Arc<dyn EventGateway>` 注入に切り替える（参照: `phase5_event_gateway_design.md` Sprint 2）。
+  - [ ] **WSA-02 Offline Persistence Stage 1/2**: `application::ports::offline_store`・`LegacyOfflineManagerAdapter` を実装し、続けて `infrastructure/offline/sqlite_store.rs` へ移行する（参照: `phase5_offline_adapter_plan.md` Stage1-2）。
+  - [ ] **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／Tauri コマンドを新 Repository 経由に再配線する。
+  - [ ] **WSA-04 SecureStorage / Encryption 再配線**: SecureStorage debug ユーティリティと暗号トレイトを Infrastructure 層へ統合し、`AppState`・`SecureStorageHandler` の依存を刷新する。
+  - [ ] **WSA-05 Legacy Database Connection 廃止**: 全呼び出しを `ConnectionPool` + Repository へ揃え、`.sqlx` を再生成した上で `modules::database::connection` を撤去する。
   - 2025年10月24日: `domain/p2p` を新設し、GossipMessage／TopicMesh／P2PEvent を移設。`modules::p2p` はリダイレクト化し、`lib.rs`・`state`・P2P/Gossip サービスなど主要呼び出し元を `domain::p2p` 参照へ切り替えた。`cargo fmt` / `cargo clippy -D warnings` / Docker 経由の `cargo test` を完了（ローカル `cargo test` は Windows 既知の STATUS_ENTRYPOINT_NOT_FOUND のため Docker 実行で代替）。
   - 2025年10月24日: `modules/p2p` 配下を完全撤去し、ドメイン層テストを `domain/p2p/tests` へ移設。`test_support` と統合テストを `domain::p2p` 参照に更新し、古い `modules::p2p` 参照を排除した。`cargo fmt` / `cargo clippy -D warnings` / Docker Rust テストで回帰確認（Windowsネイティブ `cargo test` は STATUS_ENTRYPOINT_NOT_FOUND の既知事象）。
+  - 2025年10月24日: `refactoring_plan_2025-08-08_v3.md` に Legacy モジュール棚卸し表（event/offline/bookmark/secure_storage/crypto/database）を追記し、`phase5_dependency_inventory_template.md` に BookmarkManager／Legacy SecureStorage／Legacy EncryptionManager の行を追加。Workstream A ロードマップへ段階移行案を反映。
+  - 2025年10月24日: `p2p_mainline_runbook.md`・`iroh-native-dht-plan.md`・`phase5_ci_path_audit.md`・`refactoring_phase34_gap_plan.md` ほか Phase 5 関連ドキュメントのテストコマンドを `tests/p2p_*` バイナリに統一し、旧モジュールパスの記述を除去。
 - [ ] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
   - [ ] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
   - [ ] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。

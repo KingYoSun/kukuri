@@ -311,7 +311,7 @@ mod tests {
   ```powershell
   $env:ENABLE_P2P_INTEGRATION = "1"
   $env:KUKURI_BOOTSTRAP_PEERS = "node_id@host:port" # カンマ区切り複数可
-  cargo test --tests modules::p2p::tests::iroh -- --test-threads=1 --nocapture
+  cargo test --test p2p_mainline_smoke -- --test-threads=1 --nocapture
   ```
 - Docker/ローカルで複数ノード起動（`scripts/start-bootstrap-nodes.ps1`）し、`KUKURI_BOOTSTRAP_PEERS` を自動設定する。
 - DHT経由でのピア発見確認（`discovery_dht()` 有効時）、ログ出力は `RUST_LOG=iroh_tests=debug` で収集。

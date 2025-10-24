@@ -434,12 +434,13 @@ export function PeerConnectionPanel() {
 
 依存関係棚卸し（2025年10月23日更新, `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）で抽出したハイリスク領域に対応するためのメモ。
 
-### ハイリスク依存対策メモ（2025年10月23日更新）
-- **EventService / EventManager**: プレゼンテーション DTO からの直接参照を `application::shared::mappers::event` に集約し、EventManager 側とは `EventGateway`（async trait）経由で通信する。`tauri::AppHandle` 依存はイベントブロードキャスタ trait へ抽象化する。
-- **OfflineService / OfflineManager**: `modules::offline::models` を `infrastructure::offline::dto`（仮称）に移し、変換アダプタを通じて Application 層へ渡す。再索引ジョブはワーカースレッド化し、キュー処理を `SubscriptionStateStore` と共有する。
-- **AppState（state.rs）**: 旧モジュール依存（`modules::auth::KeyManager`, `modules::database::DbPool` 等）を段階的に排除し、`ApplicationContainer` が生成するサービス集合と UI 向け状態バッファに分離する。P2P イベントバスは `application::shared::p2p_events` に再配置する。
-- **SQLiteRepository**: `ConnectionPool` を唯一の依存にし、Repository trait をエンティティ別ファサード (`EventRepository`, `TopicRepository` など) に再分割する。SQLx の Row マッピングは `mapper` モジュールに統一し、ドメイン層の構造体を丸ごと import しない。
-- **SubscriptionStateMachine**: SQL を直書きしている部分を `SubscriptionStateRepository`（新設）へ移し、再同期バックオフ計算を `domain::value_objects` に切り出す。P2P 再購読処理とジョブスケジューラを同一インターフェースで扱えるようにする。
+### ハイリスク依存対策メモ（2025年10月24日更新）
+- **WSA-01 EventGateway 再配線**: `phase5_event_gateway_design.md` Sprint 2 に沿って `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーは `Arc<dyn EventGateway>` を受け取る。UI との境界は `application::shared::mappers::event` 経由で正規化する。
+- **WSA-02 Offline Persistence ポート化**: `application::ports::offline_store` を導入し、Stage1 で `LegacyOfflineManagerAdapter` を挟みつつ Stage2 で `infrastructure/offline/sqlite_store.rs` に移行する。再索引ジョブは新ポート経由でキューを扱い、`SubscriptionStateStore` と同一基盤を共有する。
+- **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／`presentation::handlers::post_handler` を新 Repository に再配線する。`AppState` の `BookmarkManager` フィールドは互換ラッパに縮退させ、最終的に削除する。
+- **WSA-04 SecureStorage / Encryption 再構成**: `infrastructure::storage::secure_storage` に debug/テストユーティリティを移し、`SecureStorageHandler` は新しい `SecureStoragePort`（仮称）を経由。暗号処理は `infrastructure::crypto::encryption_service` トレイトへ集約し、`AppState` の Legacy EncryptionManager / KeyManager 依存を排除する。
+- **WSA-05 Legacy Database Connection 廃止**: `modules::database::connection`／`models` を段階的に退役させ、全サービスが `ConnectionPool` + Repository ファサード (`EventRepository`, `BookmarkRepository` 等) を通過するよう統一する。完了時に `.sqlx` を再生成し、Adapter 系テストを更新する。
+- **SubscriptionStateMachine**: SQL を直書きしている箇所を `SubscriptionStateRepository`（新設）へ切り出し、再同期バックオフ計算を `domain::value_objects` に移す。WSA-02 完了後に着手し、Offline/P2P 双方の再購読ロジックを同一インターフェースに揃える。
 
 ## MVP完成後の改善
 

@@ -20,9 +20,9 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 
 ## 3. テスト構成概要
 - Phase 5 で Rust 統合テストを `kukuri-tauri/src-tauri/tests` 配下のテストバイナリへ完全移行済み。
-  - `p2p_gossip_smoke.rs`: Gossip 経路のスモークテスト（旧 `modules::p2p::tests::iroh_integration_tests` の移設版）
-  - `p2p_mainline_smoke.rs`: Mainline DHT 経路のスモークテスト（旧 `modules::p2p::tests::mainline_dht_tests` の移設版）
-- `scripts/docker/run-smoke-tests.sh` / `scripts/test-docker.{sh,ps1}` は両テストを順次実行するよう統一され、`modules::p2p::tests::*` へのフォールバックは廃止済み。
+  - `p2p_gossip_smoke.rs`: Gossip 経路のスモークテスト。Phase 5 で `tests/` 配下に再編したテストバイナリ。
+  - `p2p_mainline_smoke.rs`: Mainline DHT 経路のスモークテスト。ブートストラップ接続とルーティングの健全性を検証する。
+  - `scripts/docker/run-smoke-tests.sh` / `scripts/test-docker.{sh,ps1}` は両テストを順次実行する構成に統一済みで、旧バイナリへのフォールバックは存在しない。
 
 ### 3.1 共通ユーティリティの活用
 - Phase 4 でテスト支援コードを `application/shared/tests/p2p` へ集約済み。新しい `p2p_*_smoke` からも同ユーティリティを利用する。  

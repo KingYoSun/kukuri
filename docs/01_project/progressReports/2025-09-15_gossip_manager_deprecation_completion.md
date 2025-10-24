@@ -25,7 +25,7 @@
 - 実行コマンド: `cd kukuri-tauri/src-tauri && cargo test`
 - 結果: 148 passed / 0 failed / 0 ignored
 - 実ネットワークを用いるテストは環境変数で制御:
-  - `ENABLE_P2P_INTEGRATION=1 cargo test --tests modules::p2p::tests::iroh_integration_tests`
+  - `ENABLE_P2P_INTEGRATION=1 cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture`
 
 ## 互換性/仕様メモ
 - `leave` は未参加トピックに対しても成功扱い（冪等）。
@@ -40,4 +40,3 @@
 - P2Pイベント配信/購読ルーティングの実装に着手（設計: `docs/03_implementation/p2p_event_routing_design.md`）。
 - Iroh ネットワーク観測（NeighborUp/Down）を Service 層のメトリクスへ反映し、UI の接続状態に露出。
 - ENV 有効時の統合テストを CI に組み込み（UDP 到達性を担保）。
-

@@ -149,8 +149,8 @@
 - CI（GitHub Actions）でのテスト実行条件（環境変数）について、運用担当と合意を取る。
 
 **検証**
-- `ENABLE_P2P_INTEGRATION=1 KUKURI_BOOTSTRAP_PEERS=... cargo test --tests modules::p2p::tests::iroh` をローカル/CI で実行し成功。
-- `cargo test -- --skip modules::p2p::tests::iroh` のような部分実行でもビルドが通ることを確認。
+- `ENABLE_P2P_INTEGRATION=1 KUKURI_BOOTSTRAP_PEERS=... cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture` をローカル/CI で実行し成功。
+- `cargo test -- --skip test_two_nodes_connect_and_join` のような部分実行でもビルドが通ることを確認。
 
 ## 5. 今後の進め方
 - 上記タスクを Phase 3（ファイル分割）→ Phase 4（DRY適用）の順でチケット化し、優先度は `sqlite_repository` → `event_service` → `event_manager` → `p2p/integration tests` の順で着手。
@@ -251,7 +251,7 @@ src-tauri/src/application/services/event_service/
 - Rust:
   - `cd kukuri-tauri/src-tauri && cargo fmt && cargo clippy -D warnings`
   - `cargo test --package kukuri-tauri --lib application::services::event_service`
-  - `ENABLE_P2P_INTEGRATION=0 cargo test -- --skip modules::p2p::tests::iroh`
+  - `ENABLE_P2P_INTEGRATION=0 cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture`
 - TypeScript:
   - `cd kukuri-tauri && pnpm test`
 - 動作確認:
@@ -353,7 +353,7 @@ src-tauri/src/modules/event/manager/
 - Rust:
   - `cd kukuri-tauri/src-tauri && cargo fmt && cargo clippy -D warnings`
   - `cargo test --lib modules::event::manager`
-  - `ENABLE_P2P_INTEGRATION=0 cargo test -- --skip modules::p2p::tests::iroh`
+  - `ENABLE_P2P_INTEGRATION=0 cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture`
   - `./scripts/test-docker.ps1 rust`（Windows 環境での最終検証）
 - TypeScript:
   - `cd kukuri-tauri && pnpm test`
@@ -437,7 +437,7 @@ src-tauri/src/modules/p2p/tests/iroh/
 
 ### 12.4 作業ブレークダウン（WBS）
 1. **現状棚卸し**
-   - `rg "modules::p2p::tests::iroh"` や GitHub Actions ワークフローを確認し、参照されているテスト名・環境変数・スキップ実装を洗い出す。
+  - `rg "p2p_gossip_smoke"` や GitHub Actions ワークフローを確認し、参照されているテスト名・環境変数・スキップ実装を洗い出す。
    - `docs/03_implementation/p2p_mainline_runbook.md` と `iroh-native-dht-plan.md` で統合テストに触れている箇所を抽出し、更新が必要な章をメモ化。
 2. **モジュール骨格の追加**
    - `modules/p2p/tests/iroh/` ディレクトリと `support` 配下の空ファイル（`config.rs`, `bootstrap.rs`, `fixtures.rs`, `logging.rs`）を作成し、`mod.rs` から再エクスポートする。
@@ -447,7 +447,7 @@ src-tauri/src/modules/p2p/tests/iroh/
    - `tracing` ベースの `log_step!` マクロを `logging.rs` に再実装し、既存の `println!` を置き換える。
 4. **シナリオ別テスト分割（接続・ブロードキャスト）**
    - 1対1 接続と Topic ブロードキャスト検証を `connectivity.rs` / `broadcast.rs` に移動し、サポート関数を利用する形へ書き換える。
-   - 旧ファイルからの移動後、`cargo test modules::p2p::tests::iroh::connectivity -- --nocapture` で成功を確認。
+  - 旧ファイルからの移動後、`cargo test --test p2p_gossip_smoke test_two_nodes_connect_and_join -- --nocapture` で成功を確認。
 5. **シナリオ別テスト分割（再接続・多ノード）**
    - 再接続/再索引シナリオと多ノードシナリオを `recovery.rs` / `multi_peer.rs` に移動し、待機処理を共通化。
    - 再接続テストでは OfflineService/SubscriptionState 依存の確認ポイントを最新仕様へ合わせる。
@@ -466,13 +466,13 @@ src-tauri/src/modules/p2p/tests/iroh/
 
 ### 12.5 テスト・検証計画
 - Rust:
-  - `cd kukuri-tauri/src-tauri && ENABLE_P2P_INTEGRATION=1 KUKURI_BOOTSTRAP_PEERS=memory://local cargo test --tests modules::p2p::tests::iroh`
-  - `ENABLE_P2P_INTEGRATION=1 cargo test modules::p2p::tests::iroh::connectivity -- --test-threads=1 --nocapture`
+  - `cd kukuri-tauri/src-tauri && ENABLE_P2P_INTEGRATION=1 KUKURI_BOOTSTRAP_PEERS=memory://local cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture`
+  - `ENABLE_P2P_INTEGRATION=1 cargo test --test p2p_gossip_smoke test_two_nodes_connect_and_join -- --test-threads=1 --nocapture`
   - `./scripts/test-docker.ps1 rust -Integration`（仮オプション）で Windows 環境の安定性を確認
 - ログ検証:
   - `RUST_LOG=iroh_tests=debug` を指定し、`support::logging` の出力が CI アーティファクトで確認できるかチェック。
 - 退行確認:
-  - `ENABLE_P2P_INTEGRATION=0 cargo test -- --skip modules::p2p::tests::iroh` が成功することを確認し、フィーチャ未有効時のビルドが壊れていないか検証。
+  - `ENABLE_P2P_INTEGRATION=0 cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture` が成功することを確認し、フィーチャ未有効時のビルドが壊れていないか検証。
 
 ### 12.6 CI・ドキュメント更新
 - GitHub Actions（`ci/rust-tests.yml` 想定）に統合テストの追加ジョブ／ステップを設け、必要なキャッシュ（iroh バイナリ）とタイムアウト延長を設定する。
@@ -484,8 +484,8 @@ src-tauri/src/modules/p2p/tests/iroh/
 | 日数 | 主作業 | チェックポイント |
 | --- | --- | --- |
 | Day 1 | 現状棚卸し・モジュール骨格／support ユーティリティ抽出 | `mod.rs` 追加後に `cargo check` が成功 |
-| Day 2 | シナリオ別ファイルへの移行・実行条件フラグ統一 | `cargo test modules::p2p::tests::iroh::connectivity` が安定 |
-| Day 3 | CI・ドキュメント更新と総合検証 | `cargo test --tests modules::p2p::tests::iroh` + `./scripts/test-docker.ps1 rust` が連続成功 |
+| Day 2 | シナリオ別ファイルへの移行・実行条件フラグ統一 | `cargo test --test p2p_gossip_smoke test_two_nodes_connect_and_join` が安定 |
+| Day 3 | CI・ドキュメント更新と総合検証 | `cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture` + `./scripts/test-docker.ps1 rust` が連続成功 |
 | Buffer | 予備日（CI flake 対応・追加シナリオ検証） | GitHub Actions での統合テスト成功を確認 |
 
 ### 12.8 リスクと対応策
@@ -501,7 +501,7 @@ src-tauri/src/modules/p2p/tests/iroh/
 ### 12.9 完了条件
 - `modules/p2p/tests/iroh/` ディレクトリ構成が整備され、旧 `iroh_integration_tests.rs` は削除されている。
 - すべてのシナリオで共通サポート（config/bootstrap/logging）が利用され、重複コードが解消されている。
-- `ENABLE_P2P_INTEGRATION=1` を設定した `cargo test --tests modules::p2p::tests::iroh` がローカル・CI の双方で安定して成功している。
+- `ENABLE_P2P_INTEGRATION=1` を設定した `cargo test --test p2p_gossip_smoke -- --test-threads=1 --nocapture` がローカル・CI の双方で安定して成功している。
 - Runbook・DHT プラン・タスクボードが更新済みで、統合テスト実行時の手順と期待結果が明文化されている。
 - `cargo fmt`, `cargo clippy -D warnings`, `cargo test`, `./scripts/test-docker.ps1 rust` が連続成功し、差分に不要な警告が残っていない。
 

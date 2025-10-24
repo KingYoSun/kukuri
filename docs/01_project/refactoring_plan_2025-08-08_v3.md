@@ -333,6 +333,37 @@ tests/
   3. DI 初期化（`ApplicationContainer` 等）と Tauri コマンドバインディングを新レイヤに合わせて再配線し、プレゼンテーション層→アプリケーション層→ドメイン層の一方向依存を担保する。  
   4. 互換フェーズの間は旧モジュールパスに対する `pub use` を残し、段階的に呼び出し元を更新してから削除する。  
   5. 各移行ステップ後に `cargo fmt` / `cargo clippy -D warnings` / `cargo test` を実行し、リグレッションを即時検知する。
+  - **棚卸し結果（2025年10月24日更新）**  
+    | Legacyモジュール | 現状/主依存 | 移行ターゲット | 段階移行案 | 参照 |
+    | --- | --- | --- | --- | --- |
+    | `modules::event::{manager,handler,nostr_client}` | EventManager が `modules::database::connection::DbPool` や Legacy KeyManager に直接依存し、P2P ブロードキャストと既定トピック管理を内包。 | `application::ports::EventGateway` + `infrastructure::event::EventManagerGateway` | Stage1（完了 2025年10月24日）: Gateway 導入済み。<br>Stage2（Week4 1.0 目標）: LegacyEventManagerGateway を Infrastructure 層へ移設し、DI から `Arc<dyn EventGateway>` を注入。<br>Stage3（Week5 0.5 目標）: `modules::event` 参照を解消し、テスト資産を `tests/` へ移す。 | `phase5_event_gateway_design.md`<br>`phase5_dependency_inventory_template.md` |
+    | `modules::offline::{manager,reindex}` | OfflineManager/OfflineReindexJob が SQLx クエリと JSON 変換を直接保持し、Application 層へ Legacy 型をリーク。 | `application::ports::OfflinePersistence` + `infrastructure::offline::*` | Stage0（完了 2025年10月24日）: ドメイン値オブジェクト追加。<br>Stage1（Week4 0.7 目標）: `LegacyOfflineManagerAdapter` を介してポートに接続。<br>Stage2（Week4 1.0 目標）: `infrastructure/offline` 実装を導入し SQLx ロジックを移植。<br>Stage3（Week5 0.3 目標）: Legacy モジュール縮退と `.sqlx` 更新。 | `phase5_offline_adapter_plan.md` |
+    | `modules::bookmark` | BookmarkManager が `SqlitePool` を直接扱い `AppState` からのみ参照。`PostService` の bookmark 系 API は未実装。 | `domain::entities::bookmark` + `infrastructure::database::BookmarkRepository` + `application::services::PostService` 拡張 | Stage0（Week4 0.3 目標）: Bookmark 値オブジェクトと Repository トレイトを設計。<br>Stage1（Week4 0.6 目標）: `infrastructure::database::bookmark_repository` を追加し、`PostService` へ注入。<br>Stage2（Week4 0.8 目標）: Tauri コマンド／UI を新サービス経由に切替。<br>Stage3（Week5 0.2 目標）: Legacy Manager・テストを削除。 | `phase5_dependency_inventory_template.md` 更新予定<br>`tauri_app_implementation_plan.md` |
+    | `modules::secure_storage` | 旧 SecureStorage 実装とテストユーティリティが残存し、debug 用 `clear_all_accounts` が Presentation 層で参照。 | `infrastructure::storage::SecureStorage` 拡張 | Stage1（Week4 0.5 目標）: Debug/テスト用ユーティリティを `infrastructure::storage` 側へ移植。<br>Stage2（Week4 0.7 目標）: Tauri コマンドの `#[cfg(debug_assertions)]` を新ユーティリティに置換。<br>Stage3（Week4 0.9 目標）: Legacy モジュールを archive/削除。 | `phase5_dependency_inventory_template.md`（新規行） |
+    | `modules::auth::KeyManager` | `AppState` や Legacy EventManager が同期 API を直接呼び出し、`nostr_sdk::Keys` を保持。 | `infrastructure::crypto::{KeyManager,DefaultKeyManager}` | Stage1（Week4 0.4 目標）: `AppState` の公開 API を `Arc<dyn KeyManager>` に置換。<br>Stage2（Week4 0.6 目標）: EventManager/SubscriptionInvoker を新トレイトに接続。<br>Stage3（Week4 0.8 目標）: Legacy 実装削除、テストを `application/shared/tests` へ移行。 | `phase5_dependency_inventory_template.md` |
+    | `modules::crypto::encryption` | AES-256-GCM を直接ラップしたユーティリティで、`AppState` の暗号機能と SecureStorage テストが依存。 | `infrastructure::crypto::encryption_service`（新設予定） + `shared::security` | Stage0（Week4 0.4 目標）: 暗号化トレイト定義とテストダブル作成。<br>Stage1（Week4 0.7 目標）: `AppState`/SecureStorage テストを新トレイトに切替。<br>Stage2（Week4 0.9 目標）: Legacy モジュール削除。 | `phase5_dependency_inventory_template.md`（新規行） |
+    | `modules::database::{connection,models}` | `DbPool` / `Database` 型が EventManager・OfflineManager の初期化に残存し、旧モデルを介して SQLx にアクセス。 | `infrastructure::database::{ConnectionPool,SqliteRepository}` | Stage1（Week4 0.5 目標）: EventManager を `ConnectionPool` / Repository 経由に切替。<br>Stage2（Week4 0.8 目標）: OfflineManager/BookmarkManager の依存を Repository 層に寄せる。<br>Stage3（Week5 0.3 目標）: Legacy 接続モジュールを削除し、マイグレーション/テストを更新。 | `phase5_dependency_inventory_template.md`<br>`phase5_offline_adapter_plan.md` |
+  - **実装順序（2025年10月24日確定）**  
+    1. **WSA-01 EventGateway Stage 2**  
+       - `phase5_event_gateway_design.md` Sprint 2 を実行し、`LegacyEventManagerGateway` を `infrastructure::event` へ移設。  
+       - `state/application_container.rs` と `presentation::handlers` を `Arc<dyn EventGateway>` 経由に再配線。  
+       - 前提: Sprint 1 で trait / mapper が導入済み（完了）。  
+    2. **WSA-02 Offline Persistence Stage 1/2**  
+       - `application::ports::offline_store` を実装し、`LegacyOfflineManagerAdapter` で既存 Manager を包む（Stage1）。  
+       - `infrastructure/offline/sqlite_store.rs` を新設し、Stage2 で Sqlite 実装へ差し替え。  
+       - 参考: `phase5_offline_adapter_plan.md`（Stage1〜2）。WSA-01 完了後に着手。  
+    3. **WSA-03 Bookmark Repository 移行**  
+       - `domain::entities::bookmark` / `infrastructure::database::bookmark_repository` を追加し、`PostService` に新 Repository を注入。  
+       - `presentation::handlers::post_handler` の bookmark 系 API を新サービス経由に揃え、Legacy BookmarkManager を縮退。  
+       - 参考: `phase5_dependency_inventory_template.md` BookmarkManager 行。WSA-02 完了後に着手。  
+    4. **WSA-04 SecureStorage / Encryption 再配線**  
+       - `infrastructure::storage::secure_storage` に debug/テストユーティリティを移し、`SecureStorageHandler` を新アダプタに差し替え。  
+       - `infrastructure::crypto` に暗号化トレイトを追加し、`AppState` が Legacy EncryptionManager に頼らないよう再構成。  
+       - 参考: `phase5_dependency_inventory_template.md` Legacy SecureStorage / EncryptionManager 行。WSA-03 完了後に着手。  
+    5. **WSA-05 Legacy Database Connection 廃止**  
+       - `modules::database::connection` を段階的に削除し、全呼び出しを `ConnectionPool` + Repository 経由に揃える。  
+       - Offline/Bookmark の Repository 移行が完了していることを前提とし、`.sqlx` 再生成とタスク整理を実施。  
+       - 参考: `phase5_dependency_inventory_template.md` Legacy Database Connection 行。WSA-04 完了後に着手。  
 
 - **Workstream B: テスト構造再編（Week4 後半〜Week5 前半）**  
   1. `tests/unit`,`tests/integration`,`tests/common/{mocks,fixtures}` を作成し、既存テストを種類に応じて再配置する。  

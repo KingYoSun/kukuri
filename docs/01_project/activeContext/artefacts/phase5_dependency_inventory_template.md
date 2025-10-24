@@ -27,6 +27,9 @@
 | OfflineManager | `modules/offline` | `sqlx`, `chrono`, `serde_json`, `uuid`, `modules::database::connection::DbPool` | Legacy | High | バッチ SQL が多数。`infrastructure::offline` に移行し、DTO 変換を `application::shared::offline` に集約する（`artefacts/phase5_offline_adapter_plan.md` を参照）。 |
 | Legacy KeyManager | `modules/auth/key_manager.rs` | `nostr_sdk::Keys`, `tokio::sync::RwLock`, `anyhow` | Legacy | Medium | AppState からのみ利用。`infrastructure::crypto::KeyManager` に置換し、旧実装はテスト専用へ縮退。 |
 | Legacy Database Connection | `modules/database/connection.rs` | `sqlx`, `std::fs`, `Path`, `tracing` | Legacy | Medium | `ConnectionPool` への全面移行とマイグレーション呼び出し位置の一本化が必要。 |
+| BookmarkManager | `modules/bookmark` | `sqlx`, `chrono`, `uuid`, `modules::database::connection::DbPool` | Infrastructure | Medium | Application 層の Bookmark API が未実装。`BookmarkRepository` と `PostService` 拡張で置換し、`AppState` の直接依存を解消する。 |
+| Legacy SecureStorage Module | `modules/secure_storage` | `keyring`, `serde_json`, `anyhow`, `tokio::sync::RwLock` | Legacy | Medium | Debug 用 `clear_all_accounts` のみ現役。`infrastructure::storage` へユーティリティ移植後に廃止する。 |
+| EncryptionManager (Legacy) | `modules/crypto/encryption.rs` | `aes-gcm`, `sha2`, `base64`, `anyhow` | Legacy | Medium | 暗号化トレイトを Infrastructure 層に再実装し、`AppState` とテストの依存を切り替えた上で退役させる。 |
 | SQLiteRepository | `infrastructure/database/sqlite_repository/*` | `sqlx`, `infrastructure::database::ConnectionPool`, `domain::entities::*`, `shared::error::AppError`, `async_trait` | Infrastructure | High | ドメイン構造体を丸ごと import しており、mapper 層で DTO 化して domain 依存を薄くする必要がある。 |
 | ConnectionPool | `infrastructure/database/connection_pool.rs` | `sqlx::SqlitePool`, `std::sync::Arc` | Infrastructure | Low | 旧 DbPool 利用箇所をすべて差し替え、環境変数による設定注入をサポートする。 |
 | EventDistributor | `infrastructure/p2p/event_distributor.rs` | `domain::entities::Event`, `tokio::sync::mpsc`, `metrics`, `shared::error::AppError` | Infrastructure | Medium | DistributionStrategy を domain 層で定義し、メトリクス発火を共通トレイトにまとめる。 |
