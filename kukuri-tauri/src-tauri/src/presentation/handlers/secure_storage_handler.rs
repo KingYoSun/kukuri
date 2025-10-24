@@ -1,6 +1,7 @@
 use crate::{
+    application::ports::secure_storage::SecureAccountStore,
     application::services::AuthService,
-    infrastructure::storage::secure_storage::{AccountMetadata, DefaultSecureStorage},
+    domain::entities::{AccountMetadata, AccountRegistration},
     presentation::dto::{Validate, auth_dto::LoginResponse},
     shared::error::AppError,
 };
@@ -52,11 +53,15 @@ pub struct GetCurrentAccountResponse {
 
 pub struct SecureStorageHandler {
     auth_service: Arc<AuthService>,
+    secure_store: Arc<dyn SecureAccountStore>,
 }
 
 impl SecureStorageHandler {
-    pub fn new(auth_service: Arc<AuthService>) -> Self {
-        Self { auth_service }
+    pub fn new(auth_service: Arc<AuthService>, secure_store: Arc<dyn SecureAccountStore>) -> Self {
+        Self {
+            auth_service,
+            secure_store,
+        }
     }
 
     pub async fn add_account(
@@ -64,20 +69,26 @@ impl SecureStorageHandler {
         request: AddAccountRequest,
     ) -> Result<AddAccountResponse, AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
+        let AddAccountRequest {
+            nsec,
+            name,
+            display_name,
+            picture,
+        } = request;
 
         // nsecから公開鍵とnpubを生成
-        let user = self.auth_service.login_with_nsec(&request.nsec).await?;
+        let user = self.auth_service.login_with_nsec(&nsec).await?;
 
-        // セキュアストレージに保存（静的メソッドを使用）
-        DefaultSecureStorage::add_account(
-            &user.npub,
-            &request.nsec,
-            &user.pubkey,
-            &request.name,
-            &request.display_name,
-            request.picture,
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        // セキュアストレージに保存
+        let registration = AccountRegistration {
+            npub: user.npub.clone(),
+            nsec,
+            pubkey: user.pubkey.clone(),
+            name,
+            display_name,
+            picture,
+        };
+        self.secure_store.add_account(registration).await?;
 
         Ok(AddAccountResponse {
             npub: user.npub,
@@ -86,17 +97,18 @@ impl SecureStorageHandler {
     }
 
     pub async fn list_accounts(&self) -> Result<Vec<AccountMetadata>, AppError> {
-        DefaultSecureStorage::list_accounts().map_err(|e| AppError::Database(e.to_string()))
+        self.secure_store.list_accounts().await
     }
 
     pub async fn switch_account(&self, npub: String) -> Result<SwitchAccountResponse, AppError> {
         // アカウントを切り替え
-        DefaultSecureStorage::switch_account(&npub)
-            .map_err(|e| AppError::Database(e.to_string()))?;
+        self.secure_store.switch_account(&npub).await?;
 
         // 秘密鍵を取得してログイン
-        let nsec = DefaultSecureStorage::get_private_key(&npub)
-            .map_err(|e| AppError::Database(e.to_string()))?
+        let nsec = self
+            .secure_store
+            .get_private_key(&npub)
+            .await?
             .ok_or_else(|| AppError::NotFound("Private key not found".into()))?;
 
         let user = self.auth_service.login_with_nsec(&nsec).await?;
@@ -108,31 +120,19 @@ impl SecureStorageHandler {
     }
 
     pub async fn remove_account(&self, npub: String) -> Result<(), AppError> {
-        DefaultSecureStorage::remove_account(&npub).map_err(|e| AppError::Database(e.to_string()))
+        self.secure_store.remove_account(&npub).await
     }
 
     pub async fn get_current_account(&self) -> Result<Option<GetCurrentAccountResponse>, AppError> {
-        // 現在のアカウント情報を取得
-        if let Some((npub, nsec)) = DefaultSecureStorage::get_current_private_key()
-            .map_err(|e| AppError::Database(e.to_string()))?
-        {
-            // メタデータを取得
-            let metadata = DefaultSecureStorage::get_accounts_metadata()
-                .map_err(|e| AppError::Database(e.to_string()))?;
+        if let Some(current) = self.secure_store.current_account().await? {
+            let user = self.auth_service.login_with_nsec(&current.nsec).await?;
 
-            if let Some(account_metadata) = metadata.accounts.get(&npub) {
-                // ログイン処理
-                let user = self.auth_service.login_with_nsec(&nsec).await?;
-
-                Ok(Some(GetCurrentAccountResponse {
-                    npub: user.npub,
-                    nsec,
-                    pubkey: user.pubkey,
-                    metadata: account_metadata.clone(),
-                }))
-            } else {
-                Ok(None)
-            }
+            Ok(Some(GetCurrentAccountResponse {
+                npub: user.npub,
+                nsec: current.nsec,
+                pubkey: user.pubkey,
+                metadata: current.metadata,
+            }))
         } else {
             Ok(None)
         }
@@ -140,13 +140,14 @@ impl SecureStorageHandler {
 
     pub async fn secure_login(&self, npub: String) -> Result<LoginResponse, AppError> {
         // セキュアストレージから秘密鍵を取得
-        let nsec = DefaultSecureStorage::get_private_key(&npub)
-            .map_err(|e| AppError::Database(e.to_string()))?
+        let nsec = self
+            .secure_store
+            .get_private_key(&npub)
+            .await?
             .ok_or_else(|| AppError::NotFound("Private key not found".into()))?;
 
         // アカウントを切り替え
-        DefaultSecureStorage::switch_account(&npub)
-            .map_err(|e| AppError::Database(e.to_string()))?;
+        self.secure_store.switch_account(&npub).await?;
 
         // ログイン処理
         let user = self.auth_service.login_with_nsec(&nsec).await?;

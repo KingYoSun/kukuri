@@ -5,7 +5,6 @@ mod application_container;
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
-use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
 use crate::modules::offline::{OfflineManager, OfflineReindexJob};
@@ -13,6 +12,7 @@ use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
 use crate::application::ports::offline_store::OfflinePersistence;
+use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::services::event_service::EventManagerSubscriptionInvoker;
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
@@ -21,7 +21,8 @@ use crate::application::services::{
 // プレゼンテーション層のハンドラーのインポート
 use crate::infrastructure::{
     crypto::{
-        DefaultSignatureService, KeyManager, SignatureService, key_manager::DefaultKeyManager,
+        DefaultEncryptionService, DefaultSignatureService, EncryptionService, KeyManager,
+        SignatureService, key_manager::DefaultKeyManager,
     },
     database::{
         BookmarkRepository, EventRepository, PostRepository, Repository, TopicRepository,
@@ -71,7 +72,7 @@ pub struct AppState {
     #[allow(dead_code)]
     pub db_pool: Arc<DbPool>,
     #[allow(dead_code)]
-    pub encryption_manager: Arc<EncryptionManager>,
+    pub encryption_service: Arc<dyn EncryptionService>,
     pub event_manager: Arc<EventManager>,
     pub p2p_state: Arc<RwLock<P2PState>>,
     pub offline_manager: Arc<OfflineManager>,
@@ -126,7 +127,8 @@ impl AppState {
         tracing::info!("Database URL: {db_url}");
 
         let db_pool = Arc::new(Database::initialize(&db_url).await?);
-        let encryption_manager = Arc::new(EncryptionManager::new());
+        let encryption_service: Arc<dyn EncryptionService> =
+            Arc::new(DefaultEncryptionService::new());
         let event_manager = Arc::new(EventManager::new_with_db(db_pool.clone()));
         let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
         let offline_reindex_job =
@@ -142,7 +144,9 @@ impl AppState {
 
         // インフラストラクチャサービスの初期化
         let key_manager_service: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());
-        let secure_storage: Arc<dyn SecureStorage> = Arc::new(DefaultSecureStorage::new());
+        let secure_storage_impl = Arc::new(DefaultSecureStorage::new());
+        let secure_storage: Arc<dyn SecureStorage> = secure_storage_impl.clone();
+        let secure_account_store: Arc<dyn SecureAccountStore> = secure_storage_impl.clone();
         let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());
         let event_distributor: Arc<dyn EventDistributor> = Arc::new(DefaultEventDistributor::new());
 
@@ -225,7 +229,10 @@ impl AppState {
 
         // プレゼンテーション層のハンドラーを初期化
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
-        let secure_storage_handler = Arc::new(SecureStorageHandler::new(Arc::clone(&auth_service)));
+        let secure_storage_handler = Arc::new(SecureStorageHandler::new(
+            Arc::clone(&auth_service),
+            Arc::clone(&secure_account_store),
+        ));
         let event_handler = Arc::new(EventHandler::new(Arc::clone(&event_service)
             as Arc<dyn crate::application::services::event_service::EventServiceTrait>));
         let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service)
@@ -287,7 +294,7 @@ impl AppState {
             app_handle: this_handle,
             key_manager,
             db_pool,
-            encryption_manager,
+            encryption_service,
             event_manager,
             p2p_state,
             offline_manager,

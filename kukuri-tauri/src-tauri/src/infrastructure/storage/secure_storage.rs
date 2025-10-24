@@ -1,28 +1,16 @@
+use crate::application::ports::secure_storage::SecureAccountStore;
+use crate::domain::entities::{
+    AccountMetadata, AccountRegistration, AccountsMetadata, CurrentAccountSecret,
+};
+use crate::shared::error::AppError;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chrono::Utc;
 use keyring::Entry;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{debug, error};
 
 const SERVICE_NAME: &str = "kukuri";
 const ACCOUNTS_KEY: &str = "accounts_metadata";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountMetadata {
-    pub npub: String,
-    pub pubkey: String,
-    pub name: String,
-    pub display_name: String,
-    pub picture: Option<String>,
-    pub last_used: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct AccountsMetadata {
-    pub accounts: HashMap<String, AccountMetadata>,
-    pub current_npub: Option<String>,
-}
 
 /// セキュアストレージのトレイト
 #[async_trait]
@@ -158,105 +146,6 @@ impl DefaultSecureStorage {
             }
         }
     }
-
-    /// アカウントを追加
-    pub fn add_account(
-        npub: &str,
-        nsec: &str,
-        pubkey: &str,
-        name: &str,
-        display_name: &str,
-        picture: Option<String>,
-    ) -> Result<()> {
-        debug!("SecureStorage: Adding account npub={npub}");
-
-        // 秘密鍵を保存
-        Self::save_private_key(npub, nsec)?;
-        debug!("SecureStorage: Private key saved");
-
-        // メタデータを更新
-        let mut metadata = Self::get_accounts_metadata()?;
-        metadata.accounts.insert(
-            npub.to_string(),
-            AccountMetadata {
-                npub: npub.to_string(),
-                pubkey: pubkey.to_string(),
-                name: name.to_string(),
-                display_name: display_name.to_string(),
-                picture,
-                last_used: chrono::Utc::now(),
-            },
-        );
-        metadata.current_npub = Some(npub.to_string());
-        Self::save_accounts_metadata(&metadata)?;
-        debug!("SecureStorage: Metadata saved with current_npub={npub}");
-
-        Ok(())
-    }
-
-    /// アカウントを削除
-    pub fn remove_account(npub: &str) -> Result<()> {
-        // 秘密鍵を削除
-        Self::delete_private_key(npub)?;
-
-        // メタデータから削除
-        let mut metadata = Self::get_accounts_metadata()?;
-        metadata.accounts.remove(npub);
-        if metadata.current_npub.as_ref() == Some(&npub.to_string()) {
-            metadata.current_npub = metadata.accounts.keys().next().cloned();
-        }
-        Self::save_accounts_metadata(&metadata)?;
-
-        Ok(())
-    }
-
-    /// 現在のアカウントを切り替え
-    pub fn switch_account(npub: &str) -> Result<()> {
-        let mut metadata = Self::get_accounts_metadata()?;
-        if metadata.accounts.contains_key(npub) {
-            metadata.current_npub = Some(npub.to_string());
-            // 最終使用日時を更新
-            if let Some(account) = metadata.accounts.get_mut(npub) {
-                account.last_used = chrono::Utc::now();
-            }
-            Self::save_accounts_metadata(&metadata)?;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Account not found: {npub}"))
-        }
-    }
-
-    /// 全アカウントを取得（秘密鍵なし）
-    pub fn list_accounts() -> Result<Vec<AccountMetadata>> {
-        let metadata = Self::get_accounts_metadata()?;
-        let mut accounts: Vec<AccountMetadata> = metadata.accounts.values().cloned().collect();
-        // 最終使用日時で降順ソート
-        accounts.sort_by(|a, b| b.last_used.cmp(&a.last_used));
-        Ok(accounts)
-    }
-
-    /// 現在のアカウントの秘密鍵を取得
-    pub fn get_current_private_key() -> Result<Option<(String, String)>> {
-        let metadata = Self::get_accounts_metadata()?;
-        debug!("SecureStorage: current_npub = {:?}", metadata.current_npub);
-        debug!(
-            "SecureStorage: accounts = {:?}",
-            metadata.accounts.keys().collect::<Vec<_>>()
-        );
-
-        if let Some(npub) = metadata.current_npub {
-            if let Some(nsec) = Self::get_private_key(&npub)? {
-                debug!("SecureStorage: Found private key for npub={npub}");
-                Ok(Some((npub, nsec)))
-            } else {
-                debug!("SecureStorage: No private key found for npub={npub}");
-                Ok(None)
-            }
-        } else {
-            debug!("SecureStorage: No current_npub set");
-            Ok(None)
-        }
-    }
 }
 
 impl Default for DefaultSecureStorage {
@@ -326,9 +215,91 @@ impl SecureStorage for DefaultSecureStorage {
     }
 }
 
+fn to_storage_error(err: anyhow::Error) -> AppError {
+    AppError::Storage(err.to_string())
+}
+
+#[async_trait]
+impl SecureAccountStore for DefaultSecureStorage {
+    async fn add_account(
+        &self,
+        registration: AccountRegistration,
+    ) -> Result<AccountMetadata, AppError> {
+        let (mut metadata, nsec) = registration.into_metadata();
+        debug!("SecureStorage: Adding account npub={}", metadata.npub);
+
+        Self::save_private_key(&metadata.npub, &nsec).map_err(to_storage_error)?;
+
+        let mut accounts = Self::get_accounts_metadata().map_err(to_storage_error)?;
+        metadata.mark_used(Utc::now());
+        accounts
+            .accounts
+            .insert(metadata.npub.clone(), metadata.clone());
+        accounts.current_npub = Some(metadata.npub.clone());
+        Self::save_accounts_metadata(&accounts).map_err(to_storage_error)?;
+
+        Ok(metadata)
+    }
+
+    async fn list_accounts(&self) -> Result<Vec<AccountMetadata>, AppError> {
+        let metadata = Self::get_accounts_metadata().map_err(to_storage_error)?;
+        let mut accounts: Vec<AccountMetadata> = metadata.accounts.values().cloned().collect();
+        accounts.sort_by(|a, b| b.last_used.cmp(&a.last_used));
+        Ok(accounts)
+    }
+
+    async fn remove_account(&self, npub: &str) -> Result<(), AppError> {
+        Self::delete_private_key(npub).map_err(to_storage_error)?;
+
+        let mut metadata = Self::get_accounts_metadata().map_err(to_storage_error)?;
+        metadata.accounts.remove(npub);
+        if metadata.current_npub.as_deref() == Some(npub) {
+            metadata.current_npub = metadata.accounts.keys().next().cloned();
+        }
+        Self::save_accounts_metadata(&metadata).map_err(to_storage_error)?;
+
+        Ok(())
+    }
+
+    async fn switch_account(&self, npub: &str) -> Result<AccountMetadata, AppError> {
+        let mut metadata = Self::get_accounts_metadata().map_err(to_storage_error)?;
+        let account = metadata
+            .accounts
+            .get_mut(npub)
+            .ok_or_else(|| AppError::NotFound(format!("Account not found: {npub}")))?;
+        account.mark_used(Utc::now());
+        let updated = account.clone();
+        metadata.current_npub = Some(npub.to_string());
+        Self::save_accounts_metadata(&metadata).map_err(to_storage_error)?;
+
+        Ok(updated)
+    }
+
+    async fn get_private_key(&self, npub: &str) -> Result<Option<String>, AppError> {
+        Self::get_private_key(npub).map_err(to_storage_error)
+    }
+
+    async fn current_account(&self) -> Result<Option<CurrentAccountSecret>, AppError> {
+        let metadata = Self::get_accounts_metadata().map_err(to_storage_error)?;
+        if let Some(current) = metadata.current_npub.as_ref() {
+            if let Some(account) = metadata.accounts.get(current) {
+                if let Some(nsec) = Self::get_private_key(current).map_err(to_storage_error)? {
+                    return Ok(Some(CurrentAccountSecret {
+                        metadata: account.clone(),
+                        nsec,
+                    }));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
+    use crate::application::ports::secure_storage::SecureAccountStore;
+    use crate::domain::entities::AccountRegistration;
 
     #[tokio::test]
     async fn test_secure_storage_store_retrieve() {
@@ -385,39 +356,45 @@ mod tests {
         let _ = storage.delete("test_exists_key").await;
     }
 
-    #[test]
-    fn test_add_account() {
-        let result = DefaultSecureStorage::add_account(
-            "npub1test",
-            "nsec1test",
-            "pubkey_test",
-            "test_user",
-            "Test User",
-            None,
-        );
+    #[tokio::test]
+    async fn test_add_account() {
+        let storage = DefaultSecureStorage::new();
+        let registration = AccountRegistration {
+            npub: "npub1test".to_string(),
+            nsec: "nsec1test".to_string(),
+            pubkey: "pubkey_test".to_string(),
+            name: "test_user".to_string(),
+            display_name: "Test User".to_string(),
+            picture: None,
+        };
+        let npub = registration.npub.clone();
+        let result = SecureAccountStore::add_account(&storage, registration).await;
 
         // Clean up
-        let _ = DefaultSecureStorage::remove_account("npub1test");
+        let _ = SecureAccountStore::remove_account(&storage, &npub).await;
 
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_list_accounts() {
+    #[tokio::test]
+    async fn test_list_accounts() {
+        let storage = DefaultSecureStorage::new();
         // Add an account
-        let _ = DefaultSecureStorage::add_account(
-            "npub1list",
-            "nsec1list",
-            "pubkey_list",
-            "list_user",
-            "List User",
-            None,
-        );
+        let registration = AccountRegistration {
+            npub: "npub1list".to_string(),
+            nsec: "nsec1list".to_string(),
+            pubkey: "pubkey_list".to_string(),
+            name: "list_user".to_string(),
+            display_name: "List User".to_string(),
+            picture: None,
+        };
+        let npub = registration.npub.clone();
+        let _ = SecureAccountStore::add_account(&storage, registration).await;
 
-        let result = DefaultSecureStorage::list_accounts();
+        let result = SecureAccountStore::list_accounts(&storage).await;
 
         // Clean up
-        let _ = DefaultSecureStorage::remove_account("npub1list");
+        let _ = SecureAccountStore::remove_account(&storage, &npub).await;
 
         assert!(result.is_ok());
         let accounts = result.unwrap();

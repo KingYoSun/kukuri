@@ -1,3 +1,4 @@
+pub mod account;
 pub mod bookmark;
 pub mod event;
 pub mod event_gateway;
@@ -6,6 +7,7 @@ pub mod post;
 pub mod topic;
 pub mod user;
 
+pub use account::{AccountMetadata, AccountRegistration, AccountsMetadata, CurrentAccountSecret};
 pub use bookmark::Bookmark;
 pub use event::{Event, EventKind};
 pub use event_gateway::{DomainEvent, EventTag, ProfileMetadata};

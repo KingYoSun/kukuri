@@ -113,8 +113,8 @@ pub fn domain_saved_action_from_module(
     response: SaveOfflineActionResponse,
 ) -> Result<SavedOfflineAction, AppError> {
     let action = domain_offline_action_from_module(response.action)?;
-    let local_id = OfflineActionId::from_str(&response.local_id)
-        .map_err(|err| AppError::ValidationError(err))?;
+    let local_id =
+        OfflineActionId::from_str(&response.local_id).map_err(AppError::ValidationError)?;
     Ok(SavedOfflineAction::new(local_id, action))
 }
 
@@ -122,19 +122,18 @@ pub fn domain_offline_action_from_module(
     model: OfflineAction,
 ) -> Result<OfflineActionRecord, AppError> {
     let action_id =
-        OfflineActionId::from_str(&model.local_id).map_err(|err| AppError::ValidationError(err))?;
-    let public_key = PublicKey::from_hex_str(&model.user_pubkey)
-        .map_err(|err| AppError::ValidationError(err))?;
-    let action_type = OfflineActionType::new(model.action_type.clone())
-        .map_err(|err| AppError::ValidationError(err))?;
+        OfflineActionId::from_str(&model.local_id).map_err(AppError::ValidationError)?;
+    let public_key =
+        PublicKey::from_hex_str(&model.user_pubkey).map_err(AppError::ValidationError)?;
+    let action_type =
+        OfflineActionType::new(model.action_type.clone()).map_err(AppError::ValidationError)?;
     let target_id = model
         .target_id
         .map(|id| EntityId::new(id).map_err(AppError::ValidationError))
         .transpose()?;
     let payload_value: serde_json::Value = serde_json::from_str(&model.action_data)
         .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-    let payload =
-        OfflinePayload::new(payload_value).map_err(|err| AppError::ValidationError(err))?;
+    let payload = OfflinePayload::new(payload_value).map_err(AppError::ValidationError)?;
     let sync_status = if model.is_synced {
         SyncStatus::FullySynced
     } else {
