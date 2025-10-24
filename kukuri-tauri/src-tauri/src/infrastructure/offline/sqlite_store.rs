@@ -1,4 +1,4 @@
-﻿use crate::application::ports::offline_store::OfflinePersistence;
+use crate::application::ports::offline_store::OfflinePersistence;
 use crate::domain::entities::offline::{
     CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionRecord, OptimisticUpdateDraft,
     SyncQueueItemDraft, SyncResult, SyncStatusUpdate,
@@ -32,10 +32,7 @@ impl SqliteOfflinePersistence {
         &self.pool
     }
 
-    async fn get_offline_action_by_id(
-        &self,
-        id: i64,
-    ) -> Result<OfflineActionRecord, AppError> {
+    async fn get_offline_action_by_id(&self, id: i64) -> Result<OfflineActionRecord, AppError> {
         let action = sqlx::query_as::<_, OfflineAction>(
             r#"
             SELECT * FROM offline_actions
@@ -426,4 +423,3 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         Ok(())
     }
 }
-

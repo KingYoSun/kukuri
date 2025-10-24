@@ -1,4 +1,28 @@
-﻿pub(super) const INSERT_POST_EVENT: &str = r#"
+﻿pub(super) const INSERT_BOOKMARK: &str = r#"
+    INSERT INTO bookmarks (id, user_pubkey, post_id, created_at)
+    VALUES (?1, ?2, ?3, ?4)
+    ON CONFLICT(user_pubkey, post_id) DO NOTHING
+"#;
+
+pub(super) const DELETE_BOOKMARK: &str = r#"
+    DELETE FROM bookmarks
+    WHERE user_pubkey = ?1 AND post_id = ?2
+"#;
+
+pub(super) const SELECT_BOOKMARK_BY_USER_AND_POST: &str = r#"
+    SELECT id, user_pubkey, post_id, created_at
+    FROM bookmarks
+    WHERE user_pubkey = ?1 AND post_id = ?2
+"#;
+
+pub(super) const SELECT_BOOKMARKS_BY_USER: &str = r#"
+    SELECT id, user_pubkey, post_id, created_at
+    FROM bookmarks
+    WHERE user_pubkey = ?
+    ORDER BY created_at DESC
+"#;
+
+pub(super) const INSERT_POST_EVENT: &str = r#"
     INSERT INTO events (event_id, public_key, content, kind, tags, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
 "#;

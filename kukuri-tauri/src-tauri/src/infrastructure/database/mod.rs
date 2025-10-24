@@ -4,5 +4,6 @@ pub mod sqlite_repository;
 
 pub use connection_pool::ConnectionPool;
 pub use repository::{
-    EventRepository, PostRepository, Repository, TopicRepository, UserRepository,
+    BookmarkRepository, EventRepository, PostRepository, Repository, TopicRepository,
+    UserRepository,
 };

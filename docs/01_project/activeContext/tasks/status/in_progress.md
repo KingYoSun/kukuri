@@ -102,7 +102,8 @@
     - 2025年10月24日: `OfflineService` を `Arc<dyn OfflinePersistence>` で初期化できるよう刷新し、`LegacyOfflineManagerAdapter` を infrastructure/offline に追加。DI からの注入を更新し、Docker 経由の Rust テストで検証。Stage 2 向けに `sqlite_store.rs` をプレースホルダーとして追加（実実装は後続タスク）。
     - 2025年10月24日: `SqliteOfflinePersistence` を実装して Legacy 依存を排除。`state.rs` からの DI・OfflineService テストを新実装へ切り替え、`cargo fmt` → `cargo clippy -- -D warnings` → `./scripts/test-docker.ps1 rust` を実行しレグレッションを確認。`infrastructure/offline/mod.rs` の公開 API も新レイヤ構成に合わせて整理。
     - 2025年10月25日: ドメイン型ポートと `infrastructure/offline/mappers.rs` を追加し、OfflineService/Handler を新インターフェイスで再配線。Docker Rust テスト（`./scripts/test-docker.ps1 rust`）で回帰確認し、Windows 既知の `STATUS_ENTRYPOINT_NOT_FOUND` は Docker 実行で回避。
-  - [ ] **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／Tauri コマンドを新 Repository 経由に再配線する。
+- [x] **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／Tauri コマンドを新 Repository 経由に再配線する。
+  - 2025年10月24日: Bookmark ドメイン値オブジェクト・エンティティを追加し、`BookmarkRepository` を通じて `SqliteRepository` にブックマーク CRUD を実装。`20251024093000_update_bookmarks_table` マイグレーションを追加し、`PostService`／`AppState` の DI を新リポジトリ経由へ移行、ユニットテストを整備。
   - [ ] **WSA-04 SecureStorage / Encryption 再配線**: SecureStorage debug ユーティリティと暗号トレイトを Infrastructure 層へ統合し、`AppState`・`SecureStorageHandler` の依存を刷新する。
   - [ ] **WSA-05 Legacy Database Connection 廃止**: 全呼び出しを `ConnectionPool` + Repository へ揃え、`.sqlx` を再生成した上で `modules::database::connection` を撤去する。
   - 2025年10月24日: `domain/p2p` を新設し、GossipMessage／TopicMesh／P2PEvent を移設。`modules::p2p` はリダイレクト化し、`lib.rs`・`state`・P2P/Gossip サービスなど主要呼び出し元を `domain::p2p` 参照へ切り替えた。`cargo fmt` / `cargo clippy -D warnings` / Docker 経由の `cargo test` を完了（ローカル `cargo test` は Windows 既知の STATUS_ENTRYPOINT_NOT_FOUND のため Docker 実行で代替）。

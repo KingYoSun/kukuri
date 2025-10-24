@@ -5,7 +5,6 @@ mod application_container;
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
-use crate::modules::bookmark::BookmarkManager;
 use crate::modules::crypto::encryption::EncryptionManager;
 use crate::modules::database::connection::{Database, DbPool};
 use crate::modules::event::manager::EventManager;
@@ -24,7 +23,10 @@ use crate::infrastructure::{
     crypto::{
         DefaultSignatureService, KeyManager, SignatureService, key_manager::DefaultKeyManager,
     },
-    database::{Repository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository},
+    database::{
+        BookmarkRepository, EventRepository, PostRepository, Repository, TopicRepository,
+        UserRepository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
+    },
     event::LegacyEventManagerGateway,
     offline::SqliteOfflinePersistence,
     p2p::{
@@ -72,7 +74,6 @@ pub struct AppState {
     pub encryption_manager: Arc<EncryptionManager>,
     pub event_manager: Arc<EventManager>,
     pub p2p_state: Arc<RwLock<P2PState>>,
-    pub bookmark_manager: Arc<BookmarkManager>,
     pub offline_manager: Arc<OfflineManager>,
     pub offline_reindex_job: Arc<OfflineReindexJob>,
 
@@ -127,7 +128,6 @@ impl AppState {
         let db_pool = Arc::new(Database::initialize(&db_url).await?);
         let encryption_manager = Arc::new(EncryptionManager::new());
         let event_manager = Arc::new(EventManager::new_with_db(db_pool.clone()));
-        let bookmark_manager = Arc::new(BookmarkManager::new((*db_pool).clone()));
         let offline_manager = Arc::new(OfflineManager::new((*db_pool).clone()));
         let offline_reindex_job =
             OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_manager));
@@ -160,18 +160,17 @@ impl AppState {
             .await;
         // EventManagerへEventRepositoryを接続（参照トピック解決用）
         event_manager
-            .set_event_repository(Arc::clone(&repository)
-                as Arc<dyn crate::infrastructure::database::EventRepository>)
+            .set_event_repository(Arc::clone(&repository) as Arc<dyn EventRepository>)
             .await;
 
         // UserServiceを先に初期化（他のサービスの依存）
         let user_service = Arc::new(UserService::new(
-            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::UserRepository>
+            Arc::clone(&repository) as Arc<dyn UserRepository>
         ));
 
         // TopicServiceを初期化（AuthServiceの依存）
         let topic_service = Arc::new(TopicService::new(
-            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::TopicRepository>,
+            Arc::clone(&repository) as Arc<dyn TopicRepository>,
             Arc::clone(&gossip_service),
         ));
         // 既定トピック（public）を保証し、EventManagerの既定配信先に設定
@@ -191,7 +190,8 @@ impl AppState {
 
         // PostServiceの初期化
         let post_service = Arc::new(PostService::new(
-            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::PostRepository>,
+            Arc::clone(&repository) as Arc<dyn PostRepository>,
+            Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
             Arc::clone(&event_distributor),
         ));
 
@@ -199,7 +199,7 @@ impl AppState {
 
         // EventServiceの初期化
         let mut event_service_inner = EventService::new(
-            Arc::clone(&repository) as Arc<dyn crate::infrastructure::database::EventRepository>,
+            Arc::clone(&repository) as Arc<dyn EventRepository>,
             Arc::clone(&signature_service),
             Arc::clone(&event_distributor),
             Arc::new(LegacyEventManagerGateway::new(Arc::clone(&event_manager))),
@@ -290,7 +290,6 @@ impl AppState {
             encryption_manager,
             event_manager,
             p2p_state,
-            bookmark_manager,
             offline_manager,
             offline_reindex_job,
             auth_service,

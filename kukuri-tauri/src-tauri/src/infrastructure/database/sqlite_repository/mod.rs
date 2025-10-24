@@ -3,6 +3,7 @@ use super::Repository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 
+mod bookmarks;
 mod events;
 mod mapper;
 mod posts;

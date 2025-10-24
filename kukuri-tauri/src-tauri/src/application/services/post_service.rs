@@ -1,6 +1,7 @@
 use crate::domain::entities::{Event, Post, User};
+use crate::domain::value_objects::{EventId, PublicKey};
 use crate::infrastructure::cache::PostCacheService;
-use crate::infrastructure::database::PostRepository;
+use crate::infrastructure::database::{BookmarkRepository, PostRepository};
 use crate::infrastructure::p2p::EventDistributor;
 use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
 use crate::shared::error::AppError;
@@ -9,6 +10,7 @@ use std::sync::Arc;
 
 pub struct PostService {
     repository: Arc<dyn PostRepository>,
+    bookmark_repository: Arc<dyn BookmarkRepository>,
     distributor: Arc<dyn EventDistributor>,
     cache: Arc<PostCacheService>,
     keys: Option<Keys>,
@@ -17,10 +19,12 @@ pub struct PostService {
 impl PostService {
     pub fn new(
         repository: Arc<dyn PostRepository>,
+        bookmark_repository: Arc<dyn BookmarkRepository>,
         distributor: Arc<dyn EventDistributor>,
     ) -> Self {
         Self {
             repository,
+            bookmark_repository,
             distributor,
             cache: Arc::new(PostCacheService::new()),
             keys: None,
@@ -224,26 +228,42 @@ impl PostService {
         }
     }
 
-    pub async fn bookmark_post(&self, _post_id: &str, _user_pubkey: &str) -> Result<(), AppError> {
-        // TODO: Implement bookmark logic with user_pubkey
+    pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+        let event_id = EventId::from_hex(post_id).map_err(AppError::ValidationError)?;
+        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(AppError::ValidationError)?;
+
+        self.bookmark_repository
+            .create_bookmark(&public_key, &event_id)
+            .await?;
+        // キャッシュを無効化して次回取得時に最新状態を反映
+        self.cache.remove(post_id).await;
         Ok(())
     }
 
-    pub async fn unbookmark_post(
-        &self,
-        _post_id: &str,
-        _user_pubkey: &str,
-    ) -> Result<(), AppError> {
-        // TODO: Implement unbookmark logic with user_pubkey
+    pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
+        let event_id = EventId::from_hex(post_id).map_err(AppError::ValidationError)?;
+        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(AppError::ValidationError)?;
+
+        self.bookmark_repository
+            .delete_bookmark(&public_key, &event_id)
+            .await?;
+        // キャッシュを無効化して次回取得時に最新状態を反映
+        self.cache.remove(post_id).await;
         Ok(())
     }
 
     pub async fn get_bookmarked_post_ids(
         &self,
-        _user_pubkey: &str,
+        user_pubkey: &str,
     ) -> Result<Vec<String>, AppError> {
-        // TODO: Implement get bookmarked posts logic with user_pubkey
-        Ok(Vec::new())
+        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(AppError::ValidationError)?;
+
+        let bookmarks = self.bookmark_repository.list_bookmarks(&public_key).await?;
+
+        Ok(bookmarks
+            .into_iter()
+            .map(|bookmark| bookmark.post_id().as_str().to_string())
+            .collect())
     }
 
     pub async fn sync_pending_posts(&self) -> Result<u32, AppError> {
@@ -275,5 +295,106 @@ impl PostService {
         }
 
         Ok(synced_count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::database::{
+        BookmarkRepository, PostRepository, connection_pool::ConnectionPool,
+        sqlite_repository::SqliteRepository,
+    };
+    use async_trait::async_trait;
+    use std::sync::Arc;
+
+    struct NoopDistributor;
+
+    #[async_trait]
+    impl EventDistributor for NoopDistributor {
+        async fn distribute(
+            &self,
+            _event: &Event,
+            _strategy: DistributionStrategy,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+
+        async fn receive(&self) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(None)
+        }
+
+        async fn set_strategy(&self, _strategy: DistributionStrategy) {}
+
+        async fn get_pending_events(
+            &self,
+        ) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(vec![])
+        }
+
+        async fn retry_failed(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(0)
+        }
+    }
+
+    async fn setup_post_service() -> PostService {
+        let pool = ConnectionPool::new("sqlite::memory:?cache=shared")
+            .await
+            .expect("failed to create pool");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id TEXT PRIMARY KEY,
+                user_pubkey TEXT NOT NULL,
+                post_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                UNIQUE(user_pubkey, post_id)
+            )
+            "#,
+        )
+        .execute(pool.get_pool())
+        .await
+        .expect("failed to create bookmarks table");
+
+        let repository = Arc::new(SqliteRepository::new(pool));
+        let distributor: Arc<dyn EventDistributor> = Arc::new(NoopDistributor);
+
+        PostService::new(
+            Arc::clone(&repository) as Arc<dyn PostRepository>,
+            Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
+            distributor,
+        )
+    }
+
+    const SAMPLE_PUBKEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    #[tokio::test]
+    async fn bookmark_flow_roundtrip() {
+        let service = setup_post_service().await;
+        let event_id = EventId::generate();
+        let event_hex = event_id.to_hex();
+
+        service
+            .bookmark_post(&event_hex, SAMPLE_PUBKEY)
+            .await
+            .expect("bookmark should succeed");
+
+        let bookmarked = service
+            .get_bookmarked_post_ids(SAMPLE_PUBKEY)
+            .await
+            .expect("list bookmarks");
+        assert_eq!(bookmarked, vec![event_hex.clone()]);
+
+        service
+            .unbookmark_post(&event_hex, SAMPLE_PUBKEY)
+            .await
+            .expect("unbookmark should succeed");
+
+        let bookmarked = service
+            .get_bookmarked_post_ids(SAMPLE_PUBKEY)
+            .await
+            .expect("list bookmarks after removal");
+        assert!(bookmarked.is_empty());
     }
 }

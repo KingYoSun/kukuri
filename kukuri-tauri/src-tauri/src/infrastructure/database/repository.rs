@@ -1,9 +1,12 @@
-use crate::domain::entities::{Event, Post, Topic, User};
+use crate::domain::entities::{Bookmark, Event, Post, Topic, User};
+use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait Repository: PostRepository + TopicRepository + UserRepository + EventRepository {
+pub trait Repository:
+    PostRepository + TopicRepository + UserRepository + EventRepository + BookmarkRepository
+{
     async fn initialize(&self) -> Result<(), AppError>;
     async fn health_check(&self) -> Result<bool, AppError>;
 }
@@ -80,4 +83,21 @@ pub trait EventRepository: Send + Sync {
         // 既定実装: 空
         Ok(vec![])
     }
+}
+
+#[async_trait]
+pub trait BookmarkRepository: Send + Sync {
+    async fn create_bookmark(
+        &self,
+        user_pubkey: &PublicKey,
+        post_id: &EventId,
+    ) -> Result<Bookmark, AppError>;
+
+    async fn delete_bookmark(
+        &self,
+        user_pubkey: &PublicKey,
+        post_id: &EventId,
+    ) -> Result<(), AppError>;
+
+    async fn list_bookmarks(&self, user_pubkey: &PublicKey) -> Result<Vec<Bookmark>, AppError>;
 }
