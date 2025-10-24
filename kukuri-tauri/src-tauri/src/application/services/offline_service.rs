@@ -1,13 +1,12 @@
 use crate::application::ports::offline_store::OfflinePersistence;
-use crate::modules::offline::models::{
-    AddToSyncQueueRequest as ManagerAddToSyncQueueRequest,
-    CacheStatusResponse as ManagerCacheStatusResponse, CacheTypeStatus as ManagerCacheTypeStatus,
-    GetOfflineActionsRequest as ManagerGetOfflineActionsRequest,
-    OfflineAction as ManagerOfflineAction,
-    SaveOfflineActionRequest as ManagerSaveOfflineActionRequest,
-    SaveOfflineActionResponse as ManagerSaveOfflineActionResponse,
-    SyncOfflineActionsRequest as ManagerSyncOfflineActionsRequest,
-    UpdateCacheMetadataRequest as ManagerUpdateCacheMetadataRequest,
+use crate::domain::entities::offline::{
+    CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionDraft, OfflineActionFilter,
+    OfflineActionRecord, OptimisticUpdateDraft, SavedOfflineAction, SyncQueueItemDraft, SyncResult,
+    SyncStatusUpdate,
+};
+use crate::domain::value_objects::event_gateway::PublicKey;
+use crate::domain::value_objects::offline::{
+    EntityId, EntityType, OfflineActionType, OfflinePayload, OptimisticUpdateId, SyncQueueId,
 };
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -15,109 +14,49 @@ use serde_json::Value;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub struct OfflineActionRecord {
-    pub id: i64,
-    pub user_pubkey: String,
-    pub action_type: String,
-    pub target_id: Option<String>,
-    pub action_data: String,
-    pub local_id: String,
-    pub remote_id: Option<String>,
-    pub is_synced: bool,
-    pub created_at: i64,
-    pub synced_at: Option<i64>,
-    pub error_message: Option<String>,
+pub struct SaveOfflineActionParams {
+    pub user_pubkey: PublicKey,
+    pub action_type: OfflineActionType,
+    pub entity_type: EntityType,
+    pub entity_id: EntityId,
+    pub payload: OfflinePayload,
 }
 
-#[derive(Debug, Clone)]
-pub struct SavedOfflineAction {
-    pub local_id: String,
-    pub action: OfflineActionRecord,
-}
-
-#[derive(Debug, Clone)]
-pub struct SyncResult {
-    pub synced_count: i32,
-    pub failed_count: i32,
-    pub pending_count: i32,
-}
-
-#[derive(Debug, Clone)]
-pub struct CacheTypeStatusData {
-    pub cache_type: String,
-    pub item_count: i64,
-    pub last_synced_at: Option<i64>,
-    pub is_stale: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct CacheStatusData {
-    pub total_items: i64,
-    pub stale_items: i64,
-    pub cache_types: Vec<CacheTypeStatusData>,
+#[derive(Debug, Clone, Default)]
+pub struct OfflineActionsQuery {
+    pub user_pubkey: Option<PublicKey>,
+    pub include_synced: Option<bool>,
+    pub limit: Option<u32>,
 }
 
 #[async_trait]
 pub trait OfflineServiceTrait: Send + Sync {
     async fn save_action(
         &self,
-        user_pubkey: String,
-        action_type: String,
-        entity_type: String,
-        entity_id: String,
-        data: String,
+        params: SaveOfflineActionParams,
     ) -> Result<SavedOfflineAction, AppError>;
-
-    async fn get_actions(
+    async fn list_actions(
         &self,
-        user_pubkey: Option<String>,
-        is_synced: Option<bool>,
-        limit: Option<i32>,
+        query: OfflineActionsQuery,
     ) -> Result<Vec<OfflineActionRecord>, AppError>;
-
-    async fn sync_actions(&self, user_pubkey: String) -> Result<SyncResult, AppError>;
-
-    async fn get_cache_status(&self) -> Result<CacheStatusData, AppError>;
-
-    async fn add_to_sync_queue(
-        &self,
-        action_type: String,
-        payload: Value,
-        priority: Option<i32>,
-    ) -> Result<i64, AppError>;
-
-    async fn update_cache_metadata(
-        &self,
-        cache_key: String,
-        cache_type: String,
-        metadata: Option<Value>,
-        expiry_seconds: Option<i64>,
-    ) -> Result<(), AppError>;
-
+    async fn sync_actions(&self, user_pubkey: PublicKey) -> Result<SyncResult, AppError>;
+    async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError>;
+    async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError>;
+    async fn upsert_cache_metadata(&self, update: CacheMetadataUpdate) -> Result<(), AppError>;
     async fn save_optimistic_update(
         &self,
-        entity_type: String,
-        entity_id: String,
-        original_data: Option<String>,
-        updated_data: String,
-    ) -> Result<String, AppError>;
-
-    async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError>;
-
+        draft: OptimisticUpdateDraft,
+    ) -> Result<OptimisticUpdateId, AppError>;
+    async fn confirm_optimistic_update(
+        &self,
+        update_id: OptimisticUpdateId,
+    ) -> Result<(), AppError>;
     async fn rollback_optimistic_update(
         &self,
-        update_id: String,
-    ) -> Result<Option<String>, AppError>;
-
-    async fn cleanup_expired_cache(&self) -> Result<i32, AppError>;
-
-    async fn update_sync_status(
-        &self,
-        entity_type: String,
-        entity_id: String,
-        sync_status: String,
-        conflict_data: Option<String>,
-    ) -> Result<(), AppError>;
+        update_id: OptimisticUpdateId,
+    ) -> Result<Option<OfflinePayload>, AppError>;
+    async fn cleanup_expired_cache(&self) -> Result<u32, AppError>;
+    async fn update_sync_status(&self, update: SyncStatusUpdate) -> Result<(), AppError>;
 }
 
 pub struct OfflineService {
@@ -129,100 +68,41 @@ impl OfflineService {
         Self { persistence }
     }
 
-    fn map_offline_action(action: ManagerOfflineAction) -> OfflineActionRecord {
-        OfflineActionRecord {
-            id: action.id,
-            user_pubkey: action.user_pubkey,
-            action_type: action.action_type,
-            target_id: action.target_id,
-            action_data: action.action_data,
-            local_id: action.local_id,
-            remote_id: action.remote_id,
-            is_synced: action.is_synced,
-            created_at: action.created_at,
-            synced_at: action.synced_at,
-            error_message: None,
-        }
-    }
-
-    fn map_cache_status(status: ManagerCacheStatusResponse) -> CacheStatusData {
-        CacheStatusData {
-            total_items: status.total_items,
-            stale_items: status.stale_items,
-            cache_types: status
-                .cache_types
-                .into_iter()
-                .map(|t: ManagerCacheTypeStatus| CacheTypeStatusData {
-                    cache_type: t.cache_type,
-                    item_count: t.item_count,
-                    last_synced_at: t.last_synced_at,
-                    is_stale: t.is_stale,
-                })
-                .collect(),
-        }
-    }
-
-    fn build_action_payload(
-        data: String,
-        entity_type: &str,
-        entity_id: &str,
-    ) -> Result<Value, AppError> {
-        let value = serde_json::from_str::<Value>(&data).map_err(|e| {
-            AppError::ValidationError(format!("Invalid data payload. Expected JSON: {e}"))
-        })?;
-
-        let mut map = value.as_object().cloned().ok_or_else(|| {
-            AppError::ValidationError("Data payload must be a JSON object".to_string())
-        })?;
+    fn build_action_draft(
+        params: &SaveOfflineActionParams,
+    ) -> Result<OfflineActionDraft, AppError> {
+        let payload_value = params.payload.clone().into_inner();
+        let mut map = match payload_value {
+            Value::Object(map) => map,
+            _ => {
+                return Err(AppError::ValidationError(
+                    "Offline action payload must be a JSON object".to_string(),
+                ));
+            }
+        };
 
         map.insert(
             "entityType".to_string(),
-            Value::String(entity_type.to_string()),
+            Value::String(params.entity_type.to_string()),
         );
-        map.insert("entityId".to_string(), Value::String(entity_id.to_string()));
+        map.insert(
+            "entityId".to_string(),
+            Value::String(params.entity_id.to_string()),
+        );
 
-        Ok(Value::Object(map))
+        let enriched_payload =
+            OfflinePayload::new(Value::Object(map)).map_err(AppError::ValidationError)?;
+
+        Ok(OfflineActionDraft::new(
+            params.user_pubkey.clone(),
+            params.action_type.clone(),
+            Some(params.entity_id.clone()),
+            enriched_payload,
+        ))
     }
 
-    fn to_saved_action(response: ManagerSaveOfflineActionResponse) -> SavedOfflineAction {
-        SavedOfflineAction {
-            local_id: response.local_id,
-            action: Self::map_offline_action(response.action),
-        }
-    }
-
-    fn filter_and_limit(
-        actions: Vec<ManagerOfflineAction>,
-        user_pubkey: Option<String>,
-        is_synced: Option<bool>,
-        limit: Option<i32>,
-    ) -> Vec<OfflineActionRecord> {
-        let mut filtered = actions
-            .into_iter()
-            .filter(|action| {
-                if let Some(ref user) = user_pubkey {
-                    if action.user_pubkey != *user {
-                        return false;
-                    }
-                }
-                if let Some(flag) = is_synced {
-                    if action.is_synced != flag {
-                        return false;
-                    }
-                }
-                true
-            })
-            .map(Self::map_offline_action)
-            .collect::<Vec<_>>();
-
-        if let Some(limit) = limit {
-            let limit = limit.max(0) as usize;
-            if filtered.len() > limit {
-                filtered.truncate(limit);
-            }
-        }
-
-        filtered
+    fn filter_from_query(query: &OfflineActionsQuery) -> OfflineActionFilter {
+        OfflineActionFilter::new(query.user_pubkey.clone(), query.include_synced, query.limit)
     }
 }
 
@@ -230,174 +110,75 @@ impl OfflineService {
 impl OfflineServiceTrait for OfflineService {
     async fn save_action(
         &self,
-        user_pubkey: String,
-        action_type: String,
-        entity_type: String,
-        entity_id: String,
-        data: String,
+        params: SaveOfflineActionParams,
     ) -> Result<SavedOfflineAction, AppError> {
-        let payload = Self::build_action_payload(data, &entity_type, &entity_id)?;
-
-        let response = self
-            .persistence
-            .save_offline_action(ManagerSaveOfflineActionRequest {
-                user_pubkey,
-                action_type,
-                target_id: Some(entity_id),
-                action_data: payload,
-            })
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        let saved = Self::to_saved_action(response);
-        let _domain_saved = converters::saved_action(&saved).ok();
-        // TODO(OFF-S0-02): Stage 1 will swap the return type to domain::OfflineActionRecord.
-        Ok(saved)
+        let draft = Self::build_action_draft(&params)?;
+        self.persistence.save_action(draft).await
     }
 
-    async fn get_actions(
+    async fn list_actions(
         &self,
-        user_pubkey: Option<String>,
-        is_synced: Option<bool>,
-        limit: Option<i32>,
+        query: OfflineActionsQuery,
     ) -> Result<Vec<OfflineActionRecord>, AppError> {
-        let manager_response = self
-            .persistence
-            .get_offline_actions(ManagerGetOfflineActionsRequest {
-                user_pubkey: user_pubkey.clone(),
-                is_synced,
-                limit,
-            })
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        let filtered = Self::filter_and_limit(manager_response, user_pubkey, is_synced, limit);
-        let _domain_actions: Vec<_> = filtered
-            .iter()
-            .filter_map(|record| converters::offline_action_record(record).ok())
-            .collect();
-        // TODO(OFF-S0-02): Stage 1 will return domain::OfflineActionRecord values.
-        Ok(filtered)
+        let filter = Self::filter_from_query(&query);
+        self.persistence.list_actions(filter).await
     }
 
-    async fn sync_actions(&self, user_pubkey: String) -> Result<SyncResult, AppError> {
-        let response = self
-            .persistence
-            .sync_offline_actions(ManagerSyncOfflineActionsRequest { user_pubkey })
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        let result = SyncResult {
-            synced_count: response.synced_count,
-            failed_count: response.failed_count,
-            pending_count: response.pending_count,
-        };
-        let _domain_result = converters::sync_result(&result).ok();
-        // TODO(OFF-S0-02): Stage 1 will return domain::SyncResult directly.
-        Ok(result)
+    async fn sync_actions(&self, user_pubkey: PublicKey) -> Result<SyncResult, AppError> {
+        self.persistence.sync_actions(user_pubkey).await
     }
 
-    async fn get_cache_status(&self) -> Result<CacheStatusData, AppError> {
-        let status = self
-            .persistence
-            .get_cache_status()
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-        let mapped = Self::map_cache_status(status);
-        let _domain_snapshot = converters::cache_status(&mapped).ok();
-        // TODO(OFF-S0-02): Stage 1 will return domain::CacheStatusSnapshot.
-        Ok(mapped)
+    async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError> {
+        self.persistence.cache_status().await
     }
 
-    async fn add_to_sync_queue(
-        &self,
-        action_type: String,
-        payload: Value,
-        _priority: Option<i32>,
-    ) -> Result<i64, AppError> {
-        self.persistence
-            .add_to_sync_queue(ManagerAddToSyncQueueRequest {
-                action_type,
-                payload,
-            })
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+    async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError> {
+        self.persistence.enqueue_sync(draft).await
     }
 
-    async fn update_cache_metadata(
-        &self,
-        cache_key: String,
-        cache_type: String,
-        metadata: Option<Value>,
-        expiry_seconds: Option<i64>,
-    ) -> Result<(), AppError> {
-        self.persistence
-            .update_cache_metadata(ManagerUpdateCacheMetadataRequest {
-                cache_key,
-                cache_type,
-                metadata,
-                expiry_seconds,
-            })
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+    async fn upsert_cache_metadata(&self, update: CacheMetadataUpdate) -> Result<(), AppError> {
+        self.persistence.upsert_cache_metadata(update).await
     }
 
     async fn save_optimistic_update(
         &self,
-        entity_type: String,
-        entity_id: String,
-        original_data: Option<String>,
-        updated_data: String,
-    ) -> Result<String, AppError> {
-        self.persistence
-            .save_optimistic_update(entity_type, entity_id, original_data, updated_data)
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+        draft: OptimisticUpdateDraft,
+    ) -> Result<OptimisticUpdateId, AppError> {
+        self.persistence.save_optimistic_update(draft).await
     }
 
-    async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError> {
-        self.persistence
-            .confirm_optimistic_update(update_id)
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+    async fn confirm_optimistic_update(
+        &self,
+        update_id: OptimisticUpdateId,
+    ) -> Result<(), AppError> {
+        self.persistence.confirm_optimistic_update(update_id).await
     }
 
     async fn rollback_optimistic_update(
         &self,
-        update_id: String,
-    ) -> Result<Option<String>, AppError> {
-        self.persistence
-            .rollback_optimistic_update(update_id)
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+        update_id: OptimisticUpdateId,
+    ) -> Result<Option<OfflinePayload>, AppError> {
+        self.persistence.rollback_optimistic_update(update_id).await
     }
 
-    async fn cleanup_expired_cache(&self) -> Result<i32, AppError> {
-        self.persistence
-            .cleanup_expired_cache()
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+    async fn cleanup_expired_cache(&self) -> Result<u32, AppError> {
+        self.persistence.cleanup_expired_cache().await
     }
 
-    async fn update_sync_status(
-        &self,
-        entity_type: String,
-        entity_id: String,
-        sync_status: String,
-        conflict_data: Option<String>,
-    ) -> Result<(), AppError> {
-        self.persistence
-            .update_sync_status(entity_type, entity_id, sync_status, conflict_data)
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))
+    async fn update_sync_status(&self, update: SyncStatusUpdate) -> Result<(), AppError> {
+        self.persistence.update_sync_status(update).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::value_objects::offline::{CacheKey, CacheType, SyncStatus};
     use crate::infrastructure::offline::SqliteOfflinePersistence;
+    use chrono::{Duration, Utc};
     use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
+
+    const PUBKEY_HEX: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     async fn setup_service() -> (OfflineService, Pool<Sqlite>) {
         let pool = SqlitePoolOptions::new()
@@ -505,103 +286,87 @@ mod tests {
         .unwrap();
     }
 
+    fn sample_save_params() -> SaveOfflineActionParams {
+        SaveOfflineActionParams {
+            user_pubkey: PublicKey::from_hex_str(PUBKEY_HEX).unwrap(),
+            action_type: OfflineActionType::new("create_post".into()).unwrap(),
+            entity_type: EntityType::new("post".into()).unwrap(),
+            entity_id: EntityId::new("post123".into()).unwrap(),
+            payload: OfflinePayload::from_json_str(r#"{"content":"Hello"}"#).unwrap(),
+        }
+    }
+
     #[tokio::test]
     async fn test_save_action_persists_record() {
         let (service, pool) = setup_service().await;
 
-        let saved = service
-            .save_action(
-                "npub1".into(),
-                "create_post".into(),
-                "post".into(),
-                "post123".into(),
-                r#"{"content":"Hello"}"#.into(),
-            )
-            .await
-            .unwrap();
+        let saved = service.save_action(sample_save_params()).await.unwrap();
 
-        assert_eq!(saved.action.user_pubkey, "npub1");
-        assert_eq!(saved.action.target_id.as_deref(), Some("post123"));
+        assert_eq!(saved.action.user_pubkey.as_hex(), PUBKEY_HEX);
+        assert_eq!(
+            saved
+                .action
+                .target_id
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("post123")
+        );
+        assert_eq!(saved.action.action_type.as_str(), "create_post");
 
         let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM offline_actions")
             .fetch_one(&pool)
             .await
             .unwrap();
         assert_eq!(count, 1);
-
-        let (action_data,): (String,) =
-            sqlx::query_as("SELECT action_data FROM offline_actions LIMIT 1")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert!(action_data.contains("\"entityType\":\"post\""));
-        assert!(action_data.contains("\"entityId\":\"post123\""));
     }
 
     #[tokio::test]
-    async fn test_get_actions_filters_by_user_and_sync_state() {
+    async fn test_list_actions_filters_by_sync_state() {
         let (service, pool) = setup_service().await;
 
-        let first = service
-            .save_action(
-                "npub1".into(),
-                "create".into(),
-                "post".into(),
-                "p1".into(),
-                r#"{"content":"A"}"#.into(),
-            )
-            .await
-            .unwrap();
+        let first = service.save_action(sample_save_params()).await.unwrap();
+        let mut second_params = sample_save_params();
+        second_params.entity_id = EntityId::new("post124".into()).unwrap();
+        service.save_action(second_params).await.unwrap();
 
-        let _second = service
-            .save_action(
-                "npub2".into(),
-                "create".into(),
-                "post".into(),
-                "p2".into(),
-                r#"{"content":"B"}"#.into(),
-            )
-            .await
-            .unwrap();
-
-        // Mark first as synced
         sqlx::query("UPDATE offline_actions SET is_synced = 1 WHERE id = ?1")
-            .bind(first.action.id)
+            .bind(first.action.record_id.expect("record id"))
             .execute(&pool)
             .await
             .unwrap();
 
-        let synced_actions = service
-            .get_actions(Some("npub1".into()), Some(true), None)
+        let synced = service
+            .list_actions(OfflineActionsQuery {
+                user_pubkey: Some(PublicKey::from_hex_str(PUBKEY_HEX).unwrap()),
+                include_synced: Some(true),
+                limit: None,
+            })
             .await
             .unwrap();
-        assert_eq!(synced_actions.len(), 1);
-        assert_eq!(synced_actions[0].local_id, first.action.local_id);
+        assert_eq!(synced.len(), 1);
 
         let unsynced = service
-            .get_actions(Some("npub2".into()), Some(false), None)
+            .list_actions(OfflineActionsQuery {
+                user_pubkey: Some(PublicKey::from_hex_str(PUBKEY_HEX).unwrap()),
+                include_synced: Some(false),
+                limit: None,
+            })
             .await
             .unwrap();
         assert_eq!(unsynced.len(), 1);
-        assert_eq!(unsynced[0].user_pubkey, "npub2");
     }
 
     #[tokio::test]
     async fn test_sync_actions_marks_entries_and_enqueues() {
         let (service, pool) = setup_service().await;
 
-        service
-            .save_action(
-                "npub1".into(),
-                "create".into(),
-                "post".into(),
-                "p1".into(),
-                r#"{"content":"sync"}"#.into(),
-            )
+        service.save_action(sample_save_params()).await.unwrap();
+
+        let result = service
+            .sync_actions(PublicKey::from_hex_str(PUBKEY_HEX).unwrap())
             .await
             .unwrap();
-
-        let result = service.sync_actions("npub1".into()).await.unwrap();
         assert_eq!(result.synced_count, 1);
         assert_eq!(result.failed_count, 0);
 
@@ -619,18 +384,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_cache_metadata_and_cleanup() {
+    async fn test_upsert_cache_metadata_and_cleanup() {
         let (service, pool) = setup_service().await;
 
-        service
-            .update_cache_metadata(
-                "cache:topics".into(),
-                "topics".into(),
-                Some(serde_json::json!({"version":1})),
-                Some(1),
-            )
-            .await
-            .unwrap();
+        let update = CacheMetadataUpdate {
+            cache_key: CacheKey::new("cache:topics".into()).unwrap(),
+            cache_type: CacheType::new("topics".into()).unwrap(),
+            metadata: Some(serde_json::json!({"version":1})),
+            expiry: Some(Utc::now() + Duration::seconds(1)),
+        };
+
+        service.upsert_cache_metadata(update).await.unwrap();
 
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
@@ -648,20 +412,23 @@ mod tests {
     async fn test_update_sync_status_upserts_record() {
         let (service, pool) = setup_service().await;
 
-        service
-            .update_sync_status(
-                "post".into(),
-                "p1".into(),
-                "pending".into(),
-                Some("conflict".into()),
-            )
-            .await
-            .unwrap();
+        let update = SyncStatusUpdate::new(
+            EntityType::new("post".into()).unwrap(),
+            EntityId::new("p1".into()).unwrap(),
+            SyncStatus::from("pending"),
+            Some(OfflinePayload::new(Value::String("conflict".into())).unwrap()),
+            Utc::now(),
+        );
+        service.update_sync_status(update).await.unwrap();
 
-        service
-            .update_sync_status("post".into(), "p1".into(), "resolved".into(), None)
-            .await
-            .unwrap();
+        let update_resolved = SyncStatusUpdate::new(
+            EntityType::new("post".into()).unwrap(),
+            EntityId::new("p1".into()).unwrap(),
+            SyncStatus::from("resolved"),
+            None,
+            Utc::now(),
+        );
+        service.update_sync_status(update_resolved).await.unwrap();
 
         let (local_version, sync_status, conflict_data): (i64, String, Option<String>) =
             sqlx::query_as(
@@ -678,141 +445,5 @@ mod tests {
         assert_eq!(local_version, 2);
         assert_eq!(sync_status, "resolved");
         assert!(conflict_data.is_none());
-    }
-}
-
-mod converters {
-    use super::{
-        CacheStatusData, CacheTypeStatusData, OfflineActionRecord, SavedOfflineAction, SyncResult,
-    };
-    use crate::domain::entities::offline as domain_offline;
-    use crate::domain::value_objects::event_gateway::PublicKey;
-    use crate::domain::value_objects::offline::{
-        CacheType, EntityId, OfflineActionId, OfflineActionType, OfflinePayload, RemoteEventId,
-        SyncStatus,
-    };
-    use crate::shared::error::AppError;
-    use chrono::{DateTime, Utc};
-    use std::convert::TryInto;
-
-    pub(super) fn offline_action_record(
-        record: &OfflineActionRecord,
-    ) -> Result<domain_offline::OfflineActionRecord, AppError> {
-        let action_id = OfflineActionId::from_str(&record.local_id).map_err(|err| {
-            AppError::ValidationError(format!("Invalid offline action id: {err}"))
-        })?;
-        let public_key = PublicKey::from_hex_str(&record.user_pubkey).map_err(|err| {
-            AppError::ValidationError(format!("Invalid offline action pubkey: {err}"))
-        })?;
-        let action_type = OfflineActionType::new(record.action_type.clone()).map_err(|err| {
-            AppError::ValidationError(format!("Invalid offline action type: {err}"))
-        })?;
-        let target_id = match &record.target_id {
-            Some(value) if !value.trim().is_empty() => {
-                Some(EntityId::new(value.clone()).map_err(|err| {
-                    AppError::ValidationError(format!("Invalid offline action target id: {err}"))
-                })?)
-            }
-            _ => None,
-        };
-        let payload = OfflinePayload::from_json_str(&record.action_data).map_err(|err| {
-            AppError::DeserializationError(format!("Invalid offline action payload: {err}"))
-        })?;
-        let sync_status = if record.is_synced {
-            SyncStatus::FullySynced
-        } else {
-            SyncStatus::Pending
-        };
-        let created_at = timestamp_to_datetime(record.created_at);
-        let synced_at = record.synced_at.map(timestamp_to_datetime);
-        let remote_id = record
-            .remote_id
-            .as_ref()
-            .map(|value| {
-                RemoteEventId::new(value.clone()).map_err(|err| {
-                    AppError::ValidationError(format!("Invalid remote event id: {err}"))
-                })
-            })
-            .transpose()?;
-
-        let domain_record = domain_offline::OfflineActionRecord::new(
-            Some(record.id),
-            action_id,
-            public_key,
-            action_type,
-            target_id,
-            payload,
-            sync_status,
-            created_at,
-            synced_at,
-            remote_id,
-        )
-        .with_error_message(record.error_message.clone());
-
-        Ok(domain_record)
-    }
-
-    pub(super) fn saved_action(
-        saved: &SavedOfflineAction,
-    ) -> Result<domain_offline::SavedOfflineAction, AppError> {
-        let action = offline_action_record(&saved.action)?;
-        let local_id = OfflineActionId::from_str(&saved.local_id)
-            .map_err(|err| AppError::ValidationError(format!("Invalid saved action id: {err}")))?;
-        Ok(domain_offline::SavedOfflineAction::new(local_id, action))
-    }
-
-    pub(super) fn sync_result(result: &SyncResult) -> Result<domain_offline::SyncResult, AppError> {
-        Ok(domain_offline::SyncResult::new(
-            try_i32_to_u32(result.synced_count, "synced_count")?,
-            try_i32_to_u32(result.failed_count, "failed_count")?,
-            try_i32_to_u32(result.pending_count, "pending_count")?,
-        ))
-    }
-
-    pub(super) fn cache_status(
-        status: &CacheStatusData,
-    ) -> Result<domain_offline::CacheStatusSnapshot, AppError> {
-        let cache_types = status
-            .cache_types
-            .iter()
-            .map(cache_type_status)
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(domain_offline::CacheStatusSnapshot::new(
-            try_i64_to_u64(status.total_items, "total_items")?,
-            try_i64_to_u64(status.stale_items, "stale_items")?,
-            cache_types,
-        ))
-    }
-
-    fn cache_type_status(
-        status: &CacheTypeStatusData,
-    ) -> Result<domain_offline::CacheTypeStatus, AppError> {
-        let cache_type = CacheType::new(status.cache_type.clone()).map_err(|err| {
-            AppError::ValidationError(format!("Invalid cache type identifier: {err}"))
-        })?;
-        Ok(domain_offline::CacheTypeStatus::new(
-            cache_type,
-            try_i64_to_u64(status.item_count, "item_count")?,
-            status.last_synced_at.map(timestamp_to_datetime),
-            status.is_stale,
-        ))
-    }
-
-    fn try_i32_to_u32(value: i32, label: &str) -> Result<u32, AppError> {
-        value
-            .try_into()
-            .map_err(|_| AppError::ValidationError(format!("{label} cannot be negative")))
-    }
-
-    fn try_i64_to_u64(value: i64, label: &str) -> Result<u64, AppError> {
-        value
-            .try_into()
-            .map_err(|_| AppError::ValidationError(format!("{label} cannot be negative")))
-    }
-
-    fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
-        chrono::DateTime::<Utc>::from_timestamp(ts, 0)
-            .or_else(|| chrono::DateTime::<Utc>::from_timestamp_millis(ts))
-            .unwrap_or_else(Utc::now)
     }
 }

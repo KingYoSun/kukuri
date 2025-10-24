@@ -1,13 +1,22 @@
-use crate::application::ports::offline_store::OfflinePersistence;
-use crate::modules::offline::models::{
-    AddToSyncQueueRequest, CacheStatusResponse, CacheTypeStatus, GetOfflineActionsRequest,
-    OfflineAction, SaveOfflineActionRequest, SaveOfflineActionResponse, SyncOfflineActionsRequest,
-    SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
+﻿use crate::application::ports::offline_store::OfflinePersistence;
+use crate::domain::entities::offline::{
+    CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionRecord, OptimisticUpdateDraft,
+    SyncQueueItemDraft, SyncResult, SyncStatusUpdate,
 };
+use crate::domain::value_objects::event_gateway::PublicKey;
+use crate::domain::value_objects::offline::{
+    OfflineActionType, OfflinePayload, OptimisticUpdateId, SyncQueueId,
+};
+use crate::infrastructure::offline::mappers::{
+    domain_cache_status_from_module, domain_offline_action_from_module,
+    optimistic_update_id_from_string, sync_queue_id_from_i64,
+};
+use crate::modules::offline::models::{CacheStatusResponse, CacheTypeStatus, OfflineAction};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::{Pool, QueryBuilder, Row, Sqlite};
+use std::convert::TryInto;
 use uuid::Uuid;
 
 pub struct SqliteOfflinePersistence {
@@ -23,7 +32,10 @@ impl SqliteOfflinePersistence {
         &self.pool
     }
 
-    async fn get_offline_action_by_id(&self, id: i64) -> Result<OfflineAction, AppError> {
+    async fn get_offline_action_by_id(
+        &self,
+        id: i64,
+    ) -> Result<OfflineActionRecord, AppError> {
         let action = sqlx::query_as::<_, OfflineAction>(
             r#"
             SELECT * FROM offline_actions
@@ -34,18 +46,29 @@ impl SqliteOfflinePersistence {
         .fetch_one(self.pool())
         .await?;
 
-        Ok(action)
+        domain_offline_action_from_module(action)
     }
 }
 
 #[async_trait]
 impl OfflinePersistence for SqliteOfflinePersistence {
-    async fn save_offline_action(
+    async fn save_action(
         &self,
-        request: SaveOfflineActionRequest,
-    ) -> Result<SaveOfflineActionResponse, AppError> {
+        draft: crate::domain::entities::offline::OfflineActionDraft,
+    ) -> Result<crate::domain::entities::offline::SavedOfflineAction, AppError> {
+        use crate::domain::entities::offline::{OfflineActionDraft, SavedOfflineAction};
+
+        let OfflineActionDraft {
+            user_pubkey,
+            action_type,
+            target_id,
+            payload,
+        } = draft;
+
         let local_id = Uuid::new_v4().to_string();
-        let action_data = serde_json::to_string(&request.action_data)?;
+        let payload_value = payload.into_inner();
+        let action_data = serde_json::to_string(&payload_value)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
         let created_at = Utc::now().timestamp();
 
         let result = sqlx::query(
@@ -56,9 +79,9 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             ) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
             "#,
         )
-        .bind(&request.user_pubkey)
-        .bind(&request.action_type)
-        .bind(&request.target_id)
+        .bind(user_pubkey.as_hex())
+        .bind(action_type.as_str())
+        .bind(target_id.as_ref().map(|value| value.to_string()))
         .bind(&action_data)
         .bind(&local_id)
         .bind(created_at)
@@ -68,46 +91,43 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         let id = result.last_insert_rowid();
         let action = self.get_offline_action_by_id(id).await?;
 
-        Ok(SaveOfflineActionResponse {
-            local_id: action.local_id.clone(),
-            action,
-        })
+        Ok(SavedOfflineAction::new(action.action_id.clone(), action))
     }
 
-    async fn get_offline_actions(
+    async fn list_actions(
         &self,
-        request: GetOfflineActionsRequest,
-    ) -> Result<Vec<OfflineAction>, AppError> {
+        filter: crate::domain::entities::offline::OfflineActionFilter,
+    ) -> Result<Vec<crate::domain::entities::offline::OfflineActionRecord>, AppError> {
         let mut builder: QueryBuilder<Sqlite> =
             QueryBuilder::new("SELECT * FROM offline_actions WHERE 1=1");
 
-        if let Some(user_pubkey) = request.user_pubkey.as_ref() {
+        if let Some(user_pubkey) = filter.user_pubkey.as_ref() {
             builder.push(" AND user_pubkey = ");
-            builder.push_bind(user_pubkey);
+            builder.push_bind(user_pubkey.as_hex());
         }
 
-        if let Some(is_synced) = request.is_synced {
+        if let Some(is_synced) = filter.include_synced {
             builder.push(" AND is_synced = ");
             builder.push_bind(if is_synced { 1 } else { 0 });
         }
 
         builder.push(" ORDER BY created_at DESC");
 
-        if let Some(limit) = request.limit {
+        if let Some(limit) = filter.limit {
             builder.push(" LIMIT ");
-            builder.push_bind(limit);
+            builder.push_bind(limit as i64);
         }
 
         let query = builder.build_query_as::<OfflineAction>();
         let actions = query.fetch_all(self.pool()).await?;
 
-        Ok(actions)
+        actions
+            .into_iter()
+            .map(domain_offline_action_from_module)
+            .collect()
     }
 
-    async fn sync_offline_actions(
-        &self,
-        request: SyncOfflineActionsRequest,
-    ) -> Result<SyncOfflineActionsResponse, AppError> {
+    async fn sync_actions(&self, user_pubkey: PublicKey) -> Result<SyncResult, AppError> {
         let unsynced_actions = sqlx::query_as::<_, OfflineAction>(
             r#"
             SELECT * FROM offline_actions
@@ -115,23 +135,24 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             ORDER BY created_at ASC
             "#,
         )
-        .bind(&request.user_pubkey)
+        .bind(user_pubkey.as_hex())
         .fetch_all(self.pool())
         .await?;
 
-        let mut synced_count = 0;
-        let failed_count = 0;
+        let mut synced_count: u32 = 0;
 
         for action in unsynced_actions.iter() {
-            let payload: serde_json::Value = serde_json::from_str(&action.action_data)?;
-            let result = self
-                .add_to_sync_queue(AddToSyncQueueRequest {
-                    action_type: action.action_type.clone(),
-                    payload,
-                })
+            let payload_value: serde_json::Value = serde_json::from_str(&action.action_data)
+                .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+            let action_type = OfflineActionType::new(action.action_type.clone())
+                .map_err(AppError::ValidationError)?;
+            let payload_vo =
+                OfflinePayload::new(payload_value).map_err(AppError::ValidationError)?;
+            let enqueue_result = self
+                .enqueue_sync(SyncQueueItemDraft::new(action_type, payload_vo, None))
                 .await;
 
-            if result.is_ok() {
+            if enqueue_result.is_ok() {
                 let synced_at = Utc::now().timestamp();
                 sqlx::query(
                     r#"
@@ -144,7 +165,7 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                 .bind(action.id)
                 .execute(self.pool())
                 .await?;
-                synced_count += 1;
+                synced_count = synced_count.saturating_add(1);
             }
         }
 
@@ -155,20 +176,20 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             WHERE user_pubkey = ?1 AND is_synced = 0
             "#,
         )
-        .bind(&request.user_pubkey)
+        .bind(user_pubkey.as_hex())
         .fetch_one(self.pool())
         .await?;
 
-        let pending_count: i32 = pending_result.try_get("count").unwrap_or(0);
+        let pending_count: u32 = pending_result
+            .try_get::<i32, _>("count")
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(0);
 
-        Ok(SyncOfflineActionsResponse {
-            synced_count,
-            failed_count,
-            pending_count,
-        })
+        Ok(SyncResult::new(synced_count, 0, pending_count))
     }
 
-    async fn get_cache_status(&self) -> Result<CacheStatusResponse, AppError> {
+    async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError> {
         let total_result = sqlx::query(r#"SELECT COUNT(*) as count FROM cache_metadata"#)
             .fetch_one(self.pool())
             .await?;
@@ -204,15 +225,18 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             })
             .collect();
 
-        Ok(CacheStatusResponse {
+        let response = CacheStatusResponse {
             total_items,
             stale_items,
             cache_types,
-        })
+        };
+
+        domain_cache_status_from_module(response)
     }
 
-    async fn add_to_sync_queue(&self, request: AddToSyncQueueRequest) -> Result<i64, AppError> {
-        let payload = serde_json::to_string(&request.payload)?;
+    async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError> {
+        let payload_json = serde_json::to_string(&draft.payload.into_inner())
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
         let created_at = Utc::now().timestamp();
 
         let result = sqlx::query(
@@ -221,25 +245,26 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             VALUES (?1, ?2, 'pending', ?3, ?3)
             "#,
         )
-        .bind(&request.action_type)
-        .bind(&payload)
+        .bind(draft.action_type.as_str())
+        .bind(&payload_json)
         .bind(created_at)
         .execute(self.pool())
         .await?;
 
-        Ok(result.last_insert_rowid())
+        sync_queue_id_from_i64(result.last_insert_rowid())
     }
 
-    async fn update_cache_metadata(
-        &self,
-        request: UpdateCacheMetadataRequest,
-    ) -> Result<(), AppError> {
+    async fn upsert_cache_metadata(&self, update: CacheMetadataUpdate) -> Result<(), AppError> {
         let now = Utc::now().timestamp();
-        let metadata = request
+        let metadata = update
             .metadata
             .map(|value| serde_json::to_string(&value))
-            .transpose()?;
-        let expiry_time = request.expiry_seconds.map(|seconds| now + seconds);
+            .transpose()
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        let expiry_time = update.expiry.map(|expiry| {
+            let seconds = expiry.signed_duration_since(Utc::now()).num_seconds();
+            now + seconds.max(0)
+        });
 
         sqlx::query(
             r#"
@@ -256,8 +281,8 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                 metadata = excluded.metadata
             "#,
         )
-        .bind(&request.cache_key)
-        .bind(&request.cache_type)
+        .bind(update.cache_key.as_str())
+        .bind(update.cache_type.as_str())
         .bind(now)
         .bind(expiry_time)
         .bind(metadata)
@@ -269,13 +294,17 @@ impl OfflinePersistence for SqliteOfflinePersistence {
 
     async fn save_optimistic_update(
         &self,
-        entity_type: String,
-        entity_id: String,
-        original_data: Option<String>,
-        updated_data: String,
-    ) -> Result<String, AppError> {
+        draft: OptimisticUpdateDraft,
+    ) -> Result<OptimisticUpdateId, AppError> {
         let update_id = Uuid::new_v4().to_string();
         let created_at = Utc::now().timestamp();
+        let original = draft
+            .original_data
+            .map(|payload| serde_json::to_string(&payload.into_inner()))
+            .transpose()
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        let updated = serde_json::to_string(&draft.updated_data.into_inner())
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
 
         sqlx::query(
             r#"
@@ -286,18 +315,21 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             "#,
         )
         .bind(&update_id)
-        .bind(&entity_type)
-        .bind(&entity_id)
-        .bind(&original_data)
-        .bind(&updated_data)
+        .bind(draft.entity_type.as_str())
+        .bind(draft.entity_id.as_str())
+        .bind(&original)
+        .bind(&updated)
         .bind(created_at)
         .execute(self.pool())
         .await?;
 
-        Ok(update_id)
+        optimistic_update_id_from_string(update_id)
     }
 
-    async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError> {
+    async fn confirm_optimistic_update(
+        &self,
+        update_id: OptimisticUpdateId,
+    ) -> Result<(), AppError> {
         let confirmed_at = Utc::now().timestamp();
 
         sqlx::query(
@@ -308,7 +340,7 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             "#,
         )
         .bind(confirmed_at)
-        .bind(&update_id)
+        .bind(update_id.as_str())
         .execute(self.pool())
         .await?;
 
@@ -317,31 +349,33 @@ impl OfflinePersistence for SqliteOfflinePersistence {
 
     async fn rollback_optimistic_update(
         &self,
-        update_id: String,
-    ) -> Result<Option<String>, AppError> {
+        update_id: OptimisticUpdateId,
+    ) -> Result<Option<OfflinePayload>, AppError> {
         let update = sqlx::query_as::<_, (Option<String>,)>(
             r#"
                 SELECT original_data FROM optimistic_updates
                 WHERE update_id = ?1
                 "#,
         )
-        .bind(&update_id)
+        .bind(update_id.as_str())
         .fetch_optional(self.pool())
         .await?;
 
         if let Some((original_data,)) = update {
             sqlx::query(r#"DELETE FROM optimistic_updates WHERE update_id = ?1"#)
-                .bind(&update_id)
+                .bind(update_id.as_str())
                 .execute(self.pool())
                 .await?;
 
-            return Ok(original_data);
+            return crate::infrastructure::offline::mappers::payload_from_optional_json(
+                original_data,
+            );
         }
 
         Ok(None)
     }
 
-    async fn cleanup_expired_cache(&self) -> Result<i32, AppError> {
+    async fn cleanup_expired_cache(&self) -> Result<u32, AppError> {
         let now = Utc::now().timestamp();
 
         let result = sqlx::query(
@@ -354,17 +388,19 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         .execute(self.pool())
         .await?;
 
-        Ok(result.rows_affected() as i32)
+        result
+            .rows_affected()
+            .try_into()
+            .map_err(|_| AppError::Internal("Cleanup count overflowed u32".to_string()))
     }
 
-    async fn update_sync_status(
-        &self,
-        entity_type: String,
-        entity_id: String,
-        sync_status: String,
-        conflict_data: Option<String>,
-    ) -> Result<(), AppError> {
-        let now = Utc::now().timestamp();
+    async fn update_sync_status(&self, update: SyncStatusUpdate) -> Result<(), AppError> {
+        let conflict_data = update
+            .conflict_data
+            .map(|payload| serde_json::to_string(&payload.into_inner()))
+            .transpose()
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        let updated_at = update.updated_at.timestamp();
 
         sqlx::query(
             r#"
@@ -379,10 +415,10 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                 conflict_data = excluded.conflict_data
             "#,
         )
-        .bind(&entity_type)
-        .bind(&entity_id)
-        .bind(now)
-        .bind(&sync_status)
+        .bind(update.entity_type.as_str())
+        .bind(update.entity_id.as_str())
+        .bind(updated_at)
+        .bind(update.sync_status.as_str())
         .bind(&conflict_data)
         .execute(self.pool())
         .await?;
@@ -390,3 +426,4 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         Ok(())
     }
 }
+

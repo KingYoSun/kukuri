@@ -8,8 +8,10 @@ pub mod user;
 pub use event::{Event, EventKind};
 pub use event_gateway::{DomainEvent, EventTag, ProfileMetadata};
 pub use offline::{
-    CacheMetadataRecord, CacheStatusSnapshot, CacheTypeStatus, OfflineActionRecord,
-    OptimisticUpdateRecord, SavedOfflineAction, SyncQueueItem, SyncResult, SyncStatusRecord,
+    CacheMetadataRecord, CacheStatusSnapshot, CacheTypeStatus, OfflineActionDraft,
+    OfflineActionFilter, OfflineActionRecord, OptimisticUpdateDraft, OptimisticUpdateRecord,
+    SavedOfflineAction, SyncQueueItem, SyncQueueItemDraft, SyncResult, SyncStatusRecord,
+    SyncStatusUpdate,
 };
 pub use post::Post;
 pub use topic::Topic;

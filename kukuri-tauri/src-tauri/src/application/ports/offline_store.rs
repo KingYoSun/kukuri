@@ -1,49 +1,46 @@
-use crate::modules::offline::models::{
-    AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest, OfflineAction,
-    SaveOfflineActionRequest, SaveOfflineActionResponse, SyncOfflineActionsRequest,
-    SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
+use crate::domain::entities::offline::{
+    CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionDraft, OfflineActionFilter,
+    OfflineActionRecord, OptimisticUpdateDraft, SavedOfflineAction, SyncQueueItemDraft, SyncResult,
+    SyncStatusUpdate,
 };
+use crate::domain::value_objects::event_gateway::PublicKey;
+use crate::domain::value_objects::offline::{OfflinePayload, OptimisticUpdateId, SyncQueueId};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait OfflinePersistence: Send + Sync {
-    async fn save_offline_action(
+    async fn save_action(&self, draft: OfflineActionDraft) -> Result<SavedOfflineAction, AppError>;
+
+    async fn list_actions(
         &self,
-        request: SaveOfflineActionRequest,
-    ) -> Result<SaveOfflineActionResponse, AppError>;
-    async fn get_offline_actions(
-        &self,
-        request: GetOfflineActionsRequest,
-    ) -> Result<Vec<OfflineAction>, AppError>;
-    async fn sync_offline_actions(
-        &self,
-        request: SyncOfflineActionsRequest,
-    ) -> Result<SyncOfflineActionsResponse, AppError>;
-    async fn get_cache_status(&self) -> Result<CacheStatusResponse, AppError>;
-    async fn add_to_sync_queue(&self, request: AddToSyncQueueRequest) -> Result<i64, AppError>;
-    async fn update_cache_metadata(
-        &self,
-        request: UpdateCacheMetadataRequest,
-    ) -> Result<(), AppError>;
+        filter: OfflineActionFilter,
+    ) -> Result<Vec<OfflineActionRecord>, AppError>;
+
+    async fn sync_actions(&self, user_pubkey: PublicKey) -> Result<SyncResult, AppError>;
+
+    async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError>;
+
+    async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError>;
+
+    async fn upsert_cache_metadata(&self, update: CacheMetadataUpdate) -> Result<(), AppError>;
+
     async fn save_optimistic_update(
         &self,
-        entity_type: String,
-        entity_id: String,
-        original_data: Option<String>,
-        updated_data: String,
-    ) -> Result<String, AppError>;
-    async fn confirm_optimistic_update(&self, update_id: String) -> Result<(), AppError>;
+        draft: OptimisticUpdateDraft,
+    ) -> Result<OptimisticUpdateId, AppError>;
+
+    async fn confirm_optimistic_update(
+        &self,
+        update_id: OptimisticUpdateId,
+    ) -> Result<(), AppError>;
+
     async fn rollback_optimistic_update(
         &self,
-        update_id: String,
-    ) -> Result<Option<String>, AppError>;
-    async fn cleanup_expired_cache(&self) -> Result<i32, AppError>;
-    async fn update_sync_status(
-        &self,
-        entity_type: String,
-        entity_id: String,
-        sync_status: String,
-        conflict_data: Option<String>,
-    ) -> Result<(), AppError>;
+        update_id: OptimisticUpdateId,
+    ) -> Result<Option<OfflinePayload>, AppError>;
+
+    async fn cleanup_expired_cache(&self) -> Result<u32, AppError>;
+
+    async fn update_sync_status(&self, update: SyncStatusUpdate) -> Result<(), AppError>;
 }

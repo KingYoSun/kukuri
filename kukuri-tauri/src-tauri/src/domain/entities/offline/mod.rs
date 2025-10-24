@@ -1,5 +1,6 @@
 pub mod cache_metadata;
 pub mod cache_status;
+pub mod commands;
 pub mod offline_action;
 pub mod optimistic_update;
 pub mod saved_action;
@@ -9,6 +10,10 @@ pub mod sync_status_record;
 
 pub use cache_metadata::CacheMetadataRecord;
 pub use cache_status::{CacheMetadataUpdate, CacheStatusSnapshot, CacheTypeStatus};
+pub use commands::{
+    OfflineActionDraft, OfflineActionFilter, OptimisticUpdateDraft, SyncQueueItemDraft,
+    SyncStatusUpdate,
+};
 pub use offline_action::OfflineActionRecord;
 pub use optimistic_update::OptimisticUpdateRecord;
 pub use saved_action::SavedOfflineAction;

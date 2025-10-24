@@ -101,6 +101,7 @@
   - [x] **WSA-02 Offline Persistence Stage 1/2**: `application::ports::offline_store`・`LegacyOfflineManagerAdapter` を実装し、続けて `infrastructure/offline/sqlite_store.rs` へ移行する（参照: `phase5_offline_adapter_plan.md` Stage1-2）。
     - 2025年10月24日: `OfflineService` を `Arc<dyn OfflinePersistence>` で初期化できるよう刷新し、`LegacyOfflineManagerAdapter` を infrastructure/offline に追加。DI からの注入を更新し、Docker 経由の Rust テストで検証。Stage 2 向けに `sqlite_store.rs` をプレースホルダーとして追加（実実装は後続タスク）。
     - 2025年10月24日: `SqliteOfflinePersistence` を実装して Legacy 依存を排除。`state.rs` からの DI・OfflineService テストを新実装へ切り替え、`cargo fmt` → `cargo clippy -- -D warnings` → `./scripts/test-docker.ps1 rust` を実行しレグレッションを確認。`infrastructure/offline/mod.rs` の公開 API も新レイヤ構成に合わせて整理。
+    - 2025年10月25日: ドメイン型ポートと `infrastructure/offline/mappers.rs` を追加し、OfflineService/Handler を新インターフェイスで再配線。Docker Rust テスト（`./scripts/test-docker.ps1 rust`）で回帰確認し、Windows 既知の `STATUS_ENTRYPOINT_NOT_FOUND` は Docker 実行で回避。
   - [ ] **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／Tauri コマンドを新 Repository 経由に再配線する。
   - [ ] **WSA-04 SecureStorage / Encryption 再配線**: SecureStorage debug ユーティリティと暗号トレイトを Infrastructure 層へ統合し、`AppState`・`SecureStorageHandler` の依存を刷新する。
   - [ ] **WSA-05 Legacy Database Connection 廃止**: 全呼び出しを `ConnectionPool` + Repository へ揃え、`.sqlx` を再生成した上で `modules::database::connection` を撤去する。
@@ -113,7 +114,8 @@
     - 2025年10月24日: `application::ports::offline_store` に `OfflinePersistence` trait を定義し、既存サービスから `OfflineManager` 直接参照を排除。`cargo fmt` を実行。
   - [x] Stage1-2: `LegacyOfflineManagerAdapter` を実装し、既存 OfflineManager を暫定的にラップしてモックテストを更新する。
     - 2025年10月24日: infrastructure/offline に `LegacyOfflineManagerAdapter` を配置し、`state.rs` / OfflineService テスト双方で `Arc<dyn OfflinePersistence>` 注入を確認。`./scripts/test-docker.ps1 rust` にて回帰テストを完走。
-  - [ ] Stage1-3: `OfflineService` の公開型を新 VO へ差し替え、変換箇所を整理して Stage 2 で差し替え可能な状態にする。
+  - [x] Stage1-3: `OfflineService` の公開型を新 VO へ差し替え、変換箇所を整理して Stage 2 で差し替え可能な状態にする。
+    - 2025年10月25日: `OfflineService` / `OfflinePersistence` / `LegacyAdapter` / ハンドラーをドメイン値オブジェクト対応へ刷新。UI DTO 変換ヘルパを整備し、TypeScript 側の互換性を確認。Docker Rust テスト（`./scripts/test-docker.ps1 rust`）で回帰検証。
 - [ ] Phase 5 OfflineService Adapter Stage 2（Stage 1 完了後着手／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 2）
   - [x] Stage2-1: `infrastructure/offline/sqlite_store.rs` を実装し、Legacy OfflineManager の CRUD をポート実装へ移植する。
     - 2025年10月24日: `SqliteOfflinePersistence` へ CRUD ロジックを移設し、`serde_json` 変換・同期キュー処理・楽観的更新系 API を `AppError` 戻り値に統一。
