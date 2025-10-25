@@ -28,6 +28,7 @@
 - [x] 再接続時の購読復元シーケンスをテストで検証（離脱→再接続→履歴同期）し、ConnectionEvent監視から呼び出す復元経路を整備。
 - [x] UI 側で購読状態と同期状況を可視化するフックを追加し、P2PDebugPanel に購読一覧を表示。
 - 2025年10月24日: EventService を `EventGateway` 経由に切り替えるため DI・モック・テストを更新。LegacyEventManagerGateway を追加し、Gateway モックベースで `cargo test` / Docker テストを通過確認。
+- 2025年10月25日: Stage3（EventManagerHandle 導入 + Gateway 送信パス結合テスト + Mainline DHT builder 検証）を実施し、`LegacyEventManagerGateway`/`AppState`/`SubscriptionInvoker` から `modules::event` への直接依存を除去。
 
 ## エラーハンドリング統一タスク
 

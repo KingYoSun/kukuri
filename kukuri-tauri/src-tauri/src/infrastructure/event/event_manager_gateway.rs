@@ -3,7 +3,7 @@ use crate::application::shared::mappers::{domain_event_to_nostr_event, profile_m
 use crate::domain::entities::event_gateway::{DomainEvent, ProfileMetadata};
 use crate::domain::value_objects::event_gateway::{PublicKey, ReactionValue, TopicContent};
 use crate::domain::value_objects::{EventId, TopicId};
-use crate::modules::event::manager::EventManager;
+use crate::infrastructure::event::manager_handle::EventManagerHandle;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use nostr_sdk::prelude::{Event as NostrEvent, EventId as NostrEventId};
@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tracing::error;
 
 pub struct LegacyEventManagerGateway {
-    manager: Arc<EventManager>,
+    manager: Arc<dyn EventManagerHandle>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
 }
 
@@ -47,6 +47,7 @@ mod tests {
     use crate::domain::entities::EventKind;
     use crate::domain::entities::event_gateway::EventTag;
     use crate::domain::value_objects::EventId;
+    use crate::infrastructure::event::manager_handle::LegacyEventManagerHandle;
     use chrono::Utc;
 
     fn repeating_hex(ch: char, len: usize) -> String {
@@ -74,7 +75,7 @@ mod tests {
 
     #[tokio::test]
     async fn handle_incoming_event_without_app_handle_succeeds() {
-        let manager = Arc::new(EventManager::new());
+        let manager: Arc<dyn EventManagerHandle> = Arc::new(LegacyEventManagerHandle::new());
         let gateway = LegacyEventManagerGateway::new(manager);
         let event = sample_domain_event();
 
@@ -97,7 +98,7 @@ mod tests {
 }
 
 impl LegacyEventManagerGateway {
-    pub fn new(manager: Arc<EventManager>) -> Self {
+    pub fn new(manager: Arc<dyn EventManagerHandle>) -> Self {
         Self {
             manager,
             app_handle: Arc::new(RwLock::new(None)),

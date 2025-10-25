@@ -97,8 +97,14 @@
 - ランブック／タスクでは本テストを Mainline DHT フローの再現ステップとして扱い、Sprint 2 要件であった「Gateway 経由の結合テスト」完了のエビデンスとする。
 
 ### Sprint 3（オプション, 2日）
+
 - SubscriptionInvoker もポート化し、Gateway との分離を完了。
 - `modules/event/manager` の `conversions` モジュールを完全に mapper へ移管。
+
+## Stage3（2025年10月25日）実装メモ
+- `infrastructure::event::manager_handle::EventManagerHandle` を新設し、`AppState` / `EventManagerSubscriptionInvoker` / `LegacyEventManagerGateway` から `modules::event` への直接参照を排除。DI では `LegacyEventManagerHandle` のみを生成する。
+- Gateway 経由の送信パスを `tests/integration/test_event_service_gateway.rs` でカバー。Publish/TopicPost/Reaction/Metadata/Delete の各メソッドが Gateway 実装を通じて `EventManagerHandle` に委譲されることを検証し、`EventService` のリグレッションを自動化。
+- Mainline DHT テスト群と合わせて Stage3 の完了条件（レガシー参照の封じ込め＋Gateway 経路の結合テスト）を満たした。以降は mapper/SubscriptionInvoker のポート化を順次行う。
 
 ## 残課題・フォローアップ
 - `EventGateway` に測定用メトリクスフックを追加するか検討（P2P ブロードキャスト成功率など）。

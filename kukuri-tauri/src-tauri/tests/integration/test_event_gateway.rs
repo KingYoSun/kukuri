@@ -6,8 +6,9 @@ use kukuri_lib::domain::value_objects::EventId;
 use kukuri_lib::infrastructure::database::{
     connection_pool::ConnectionPool, sqlite_repository::SqliteRepository, EventRepository,
 };
-use kukuri_lib::infrastructure::event::LegacyEventManagerGateway;
-use kukuri_lib::modules::event::manager::EventManager;
+use kukuri_lib::infrastructure::event::{
+    EventManagerHandle, LegacyEventManagerGateway, LegacyEventManagerHandle,
+};
 use sqlx::Row;
 use std::path::Path;
 use std::sync::Arc;
@@ -23,7 +24,8 @@ async fn gateway_persists_p2p_events_via_event_manager() -> anyhow::Result<()> {
     let repository = Arc::new(SqliteRepository::new(pool.clone()));
     repository.initialize().await?;
 
-    let event_manager = Arc::new(EventManager::new_with_connection_pool(pool.clone()));
+    let event_manager: Arc<dyn EventManagerHandle> =
+        Arc::new(LegacyEventManagerHandle::new_with_connection_pool(pool.clone()));
     event_manager
         .set_event_repository(Arc::clone(&repository) as Arc<dyn EventRepository>)
         .await;

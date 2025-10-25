@@ -1,27 +1,18 @@
-﻿use std::sync::Arc;
+use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use kukuri_lib::test_support::application::ports::offline_store::OfflinePersistence;
 use kukuri_lib::test_support::application::services::offline_service::{
-    OfflineActionsQuery,
-    OfflineService,
-    OfflineServiceTrait,
-    SaveOfflineActionParams,
+    OfflineActionsQuery, OfflineService, OfflineServiceTrait, SaveOfflineActionParams,
 };
 use kukuri_lib::test_support::domain::entities::offline::{CacheMetadataUpdate, SyncStatusUpdate};
 use kukuri_lib::test_support::domain::value_objects::event_gateway::PublicKey;
 use kukuri_lib::test_support::domain::value_objects::offline::{
-    CacheKey,
-    CacheType,
-    EntityId,
-    EntityType,
-    OfflineActionType,
-    OfflinePayload,
-    SyncStatus,
+    CacheKey, CacheType, EntityId, EntityType, OfflineActionType, OfflinePayload, SyncStatus,
 };
 use kukuri_lib::test_support::infrastructure::offline::SqliteOfflinePersistence;
 use serde_json::Value;
-use sqlx::{sqlite::SqlitePoolOptions, Executor, Pool, Sqlite};
+use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
 
 const PUBKEY_HEX: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -145,7 +136,10 @@ fn sample_save_params() -> SaveOfflineActionParams {
 async fn save_action_persists_record() {
     let (service, pool) = setup_service().await;
 
-    let saved = service.save_action(sample_save_params()).await.expect("save");
+    let saved = service
+        .save_action(sample_save_params())
+        .await
+        .expect("save");
 
     assert_eq!(saved.action.user_pubkey.as_hex(), PUBKEY_HEX);
     assert_eq!(
@@ -170,10 +164,16 @@ async fn save_action_persists_record() {
 async fn list_actions_applies_sync_filter() {
     let (service, pool) = setup_service().await;
 
-    let first = service.save_action(sample_save_params()).await.expect("save first");
+    let first = service
+        .save_action(sample_save_params())
+        .await
+        .expect("save first");
     let mut second_params = sample_save_params();
     second_params.entity_id = EntityId::new("post124".into()).expect("entity id");
-    service.save_action(second_params).await.expect("save second");
+    service
+        .save_action(second_params)
+        .await
+        .expect("save second");
 
     sqlx::query("UPDATE offline_actions SET is_synced = 1 WHERE id = ?1")
         .bind(first.action.record_id.expect("record id"))
@@ -206,7 +206,10 @@ async fn list_actions_applies_sync_filter() {
 async fn sync_actions_marks_records_and_enqueues() {
     let (service, pool) = setup_service().await;
 
-    service.save_action(sample_save_params()).await.expect("save action");
+    service
+        .save_action(sample_save_params())
+        .await
+        .expect("save action");
 
     let result = service
         .sync_actions(PublicKey::from_hex_str(PUBKEY_HEX).expect("pubkey"))
@@ -239,7 +242,10 @@ async fn cache_metadata_upsert_and_cleanup() {
         expiry: Some(Utc::now() + Duration::seconds(1)),
     };
 
-    service.upsert_cache_metadata(update).await.expect("upsert cache");
+    service
+        .upsert_cache_metadata(update)
+        .await
+        .expect("upsert cache");
 
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
@@ -264,7 +270,10 @@ async fn update_sync_status_performs_upsert() {
         Some(OfflinePayload::new(Value::String("conflict".into())).expect("payload")),
         Utc::now(),
     );
-    service.update_sync_status(pending).await.expect("initial update");
+    service
+        .update_sync_status(pending)
+        .await
+        .expect("initial update");
 
     let resolved = SyncStatusUpdate::new(
         EntityType::new("post".into()).expect("entity type"),
@@ -273,7 +282,10 @@ async fn update_sync_status_performs_upsert() {
         None,
         Utc::now(),
     );
-    service.update_sync_status(resolved).await.expect("second update");
+    service
+        .update_sync_status(resolved)
+        .await
+        .expect("second update");
 
     let (local_version, sync_status, conflict_data): (i64, String, Option<String>) =
         sqlx::query_as(

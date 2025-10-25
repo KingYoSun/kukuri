@@ -43,3 +43,21 @@ fn builder_can_disable_mainline_via_toggle() {
         "explicit toggle should override configuration flags"
     );
 }
+
+#[test]
+fn builder_honors_custom_discovery_overrides() {
+    let mut config = mainline_ready_config();
+    config.enable_dht = false;
+    config.enable_dns = true;
+    config.enable_local = false;
+    let secret = SecretKey::from_bytes(&[3u8; 32]);
+
+    let custom = DiscoveryOptions::new(true, true, false);
+    let builder = P2PService::builder(secret, config).with_discovery_options(custom);
+    let options = builder.discovery_options();
+
+    assert_eq!(
+        options, custom,
+        "custom discovery options should take precedence over network config"
+    );
+}

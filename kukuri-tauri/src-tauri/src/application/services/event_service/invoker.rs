@@ -1,4 +1,4 @@
-use crate::modules::event::manager::EventManager;
+use crate::infrastructure::event::EventManagerHandle;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use nostr_sdk::prelude::{PublicKey, Timestamp};
@@ -16,11 +16,11 @@ pub trait SubscriptionInvoker: Send + Sync {
 }
 
 pub struct EventManagerSubscriptionInvoker {
-    event_manager: Arc<EventManager>,
+    event_manager: Arc<dyn EventManagerHandle>,
 }
 
 impl EventManagerSubscriptionInvoker {
-    pub fn new(event_manager: Arc<EventManager>) -> Self {
+    pub fn new(event_manager: Arc<dyn EventManagerHandle>) -> Self {
         Self { event_manager }
     }
 }

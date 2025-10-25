@@ -5,7 +5,6 @@ mod application_container;
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
 use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
-use crate::modules::event::manager::EventManager;
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
@@ -26,7 +25,7 @@ use crate::infrastructure::{
         BookmarkRepository, EventRepository, PostRepository, Repository, TopicRepository,
         UserRepository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     },
-    event::LegacyEventManagerGateway,
+    event::{EventManagerHandle, LegacyEventManagerGateway, LegacyEventManagerHandle},
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
         GossipService, NetworkService,
@@ -69,7 +68,7 @@ pub struct AppState {
     pub key_manager: Arc<OldKeyManager>,
     #[allow(dead_code)]
     pub encryption_service: Arc<dyn EncryptionService>,
-    pub event_manager: Arc<EventManager>,
+    pub event_manager: Arc<dyn EventManagerHandle>,
     pub p2p_state: Arc<RwLock<P2PState>>,
     pub offline_reindex_job: Arc<OfflineReindexJob>,
 
@@ -132,9 +131,9 @@ impl AppState {
 
         let encryption_service: Arc<dyn EncryptionService> =
             Arc::new(DefaultEncryptionService::new());
-        let event_manager = Arc::new(EventManager::new_with_connection_pool(
-            connection_pool.clone(),
-        ));
+        let event_manager: Arc<dyn EventManagerHandle> = Arc::new(
+            LegacyEventManagerHandle::new_with_connection_pool(connection_pool.clone()),
+        );
         let offline_persistence_concrete =
             Arc::new(SqliteOfflinePersistence::new(sqlite_pool.clone()));
         let offline_reindex_job = OfflineReindexJob::create(
