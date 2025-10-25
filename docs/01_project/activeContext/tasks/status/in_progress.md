@@ -132,11 +132,12 @@
   - 2025年10月25日: `modules/offline`（manager/models/reindex/tests）と `infrastructure/offline/legacy_adapter.rs` を削除し、`SqliteOfflinePersistence` へ監視系 API を集約。`OfflineReindexJob` を新モジュールで再実装し、`state.rs` の DI を更新。
   - 2025年10月25日: Rust ユニットテストを `infrastructure/offline/{sqlite_store,reindex_job}.rs` 内へ移設。`phase5_dependency_inventory_template.md` / `phase5_offline_adapter_plan.md` を Stage 3 完了内容で更新。ローカル `cargo test` は `cc` リンクエラーで失敗（要 Docker 実行）だが、ビルド・フォーマットまでは完了。
   - 2025年10月24日: `sync_status` テーブルが行 ID カラムを持たない問題に合わせて `SELECT rowid AS id` を適用し、`list_sync_conflicts` ヘルパーが `SyncStatusRecord` を復元できるよう修正。Stage 3 の QA テストが `cargo test` でグリーンになったことを確認。
-- [ ] Phase 5 EventGateway Sprint 2（`docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md`）
-  - [ ] Sprint2-1: `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲と mapper 呼び出しを整理する。
-  - [ ] Sprint2-2: `state.rs` / `application_container.rs` の DI を Gateway 経由に更新する。
-  - [ ] Sprint2-3: `modules/event/manager` の Presentation 依存を Gateway 側へ閉じ込めるラッパを追加する。
-  - [ ] Sprint2-4: Mainline DHT / EventService 結合テストを Gateway 経由で実行するよう更新する。
+- [x] Phase 5 EventGateway Sprint 2（`docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md`）
+  - [x] Sprint2-1: `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲と mapper 呼び出しを整理する。
+  - [x] Sprint2-2: `state.rs` / `application_container.rs` の DI を Gateway 経由に更新する。
+  - [x] Sprint2-3: `modules/event/manager` の Presentation 依存を Gateway 側へ閉じ込めるラッパを追加する。
+  - [x] Sprint2-4: Mainline DHT / EventService 結合テストを Gateway 経由で実行するよう更新する。
+  - 2025年10月25日: `tests/integration/test_event_gateway.rs` を追加し、Gateway → EventManager → SQLite 永続化フローを実データベースで検証。P2P（Mainline）経由で受信した DomainEvent が mapper を通じて `events` / `event_topics` テーブルへ反映されることを確認し、Phase 5 Runbook の統合テスト要件に沿うよう更新済み。
   - 2025年10月24日: `LegacyEventManagerGateway` に `AppHandle` セッタと UI emit 機能を集約し、`EventManager` 本体から Presentation 依存を排除。DI で `Arc<dyn EventGateway>` を注入するよう `state.rs` を更新し、Gateway 単体テストを追加済み。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`

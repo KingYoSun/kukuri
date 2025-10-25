@@ -92,6 +92,10 @@
 - ApplicationContainer で生成した Gateway を `EventService` へ DI しつつ `AppHandle` を注入する初期化フローを再構築。`EventService` 側では Legacy 依存を意識せず `Arc<dyn EventGateway>` のみを扱う。
 - Gateway で DomainEvent→Nostr イベント変換後に UI emit を担保するテスト（ハンドル未設定時のノップ/ペイロード変換）を追加し、`cargo test` で網羅的に検証。
 
+#### EG-S2-02 実装メモ（2025年10月25日）
+- `tests/integration/test_event_gateway.rs` を追加し、P2P（Mainline DHT）経路で受信した DomainEvent が `LegacyEventManagerGateway` → `EventManager` → SQLite (`events` / `event_topics`) へ正しく反映されることを検証。`ConnectionPool` を実際にマイグレーションし、タグ `t` → Hashtag 変換や `event_topics` 登録まで通過することを確認した。
+- ランブック／タスクでは本テストを Mainline DHT フローの再現ステップとして扱い、Sprint 2 要件であった「Gateway 経由の結合テスト」完了のエビデンスとする。
+
 ### Sprint 3（オプション, 2日）
 - SubscriptionInvoker もポート化し、Gateway との分離を完了。
 - `modules/event/manager` の `conversions` モジュールを完全に mapper へ移管。
