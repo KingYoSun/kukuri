@@ -10,7 +10,6 @@ use application_container::ApplicationContainer;
 // アプリケーションサービスのインポート
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::secure_storage::SecureAccountStore;
-use crate::application::services::event_service::EventManagerSubscriptionInvoker;
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
     SyncService, TopicService, UserService,
@@ -25,7 +24,10 @@ use crate::infrastructure::{
         BookmarkRepository, EventRepository, PostRepository, Repository, TopicRepository,
         UserRepository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     },
-    event::{EventManagerHandle, LegacyEventManagerGateway, LegacyEventManagerHandle},
+    event::{
+        EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
+        LegacyEventManagerHandle,
+    },
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
         GossipService, NetworkService,

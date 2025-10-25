@@ -7,7 +7,8 @@ use common::mocks::{
     MockEventDist, MockEventGateway, MockEventRepo, MockSignatureServ, MockSubscriptionInvokerMock,
     MockSubscriptionStateMock,
 };
-use kukuri_lib::application::services::event_service::{invoker::SubscriptionInvoker, EventService};
+use kukuri_lib::application::ports::subscription_invoker::SubscriptionInvoker;
+use kukuri_lib::application::services::event_service::EventService;
 use kukuri_lib::application::services::subscription_state::{
     SubscriptionRecord, SubscriptionStateStore, SubscriptionStatus, SubscriptionTarget,
 };

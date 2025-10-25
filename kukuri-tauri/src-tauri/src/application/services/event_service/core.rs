@@ -1,7 +1,7 @@
 use super::distribution::distribute_hybrid;
 use super::factory::build_deletion_event;
-use super::invoker::SubscriptionInvoker;
 use crate::application::ports::event_gateway::EventGateway;
+use crate::application::ports::subscription_invoker::SubscriptionInvoker;
 use crate::application::services::{SubscriptionRecord, SubscriptionStateStore};
 use crate::application::shared::mappers::{
     domain_event_from_event, dto_to_profile_metadata, parse_event_id, parse_event_ids,

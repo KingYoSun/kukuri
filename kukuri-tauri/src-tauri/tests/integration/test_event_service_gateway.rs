@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use kukuri_lib::application::services::event_service::{
-    EventManagerSubscriptionInvoker, EventService,
-};
+use kukuri_lib::application::services::event_service::EventService;
 use kukuri_lib::application::services::subscription_state::{
     SubscriptionRecord, SubscriptionStateStore, SubscriptionStatus, SubscriptionTarget,
 };
@@ -9,7 +7,9 @@ use kukuri_lib::domain::entities::Event;
 use kukuri_lib::domain::value_objects::EventId;
 use kukuri_lib::infrastructure::crypto::SignatureService;
 use kukuri_lib::infrastructure::database::EventRepository;
-use kukuri_lib::infrastructure::event::{EventManagerHandle, LegacyEventManagerGateway};
+use kukuri_lib::infrastructure::event::{
+    EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
+};
 use kukuri_lib::infrastructure::p2p::GossipService;
 use kukuri_lib::infrastructure::p2p::event_distributor::{
     DistributionStrategy, EventDistributor,

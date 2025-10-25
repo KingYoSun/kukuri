@@ -140,6 +140,17 @@
   - [x] Sprint2-4: Mainline DHT / EventService 結合テストを Gateway 経由で実行するよう更新する。
   - 2025年10月25日: `tests/integration/test_event_gateway.rs` を追加し、Gateway → EventManager → SQLite 永続化フローを実データベースで検証。P2P（Mainline）経由で受信した DomainEvent が mapper を通じて `events` / `event_topics` テーブルへ反映されることを確認し、Phase 5 Runbook の統合テスト要件に沿うよう更新済み。
   - 2025年10月24日: `LegacyEventManagerGateway` に `AppHandle` セッタと UI emit 機能を集約し、`EventManager` 本体から Presentation 依存を排除。DI で `Arc<dyn EventGateway>` を注入するよう `state.rs` を更新し、Gateway 単体テストを追加済み。
+- [x] Phase 5 EventGateway Sprint 3（SubscriptionInvoker ポート化／mapper 残課題：`phase5_event_gateway_design.md` 99-112行）
+  - [x] Sprint3-1: SubscriptionInvoker を `application/ports` へ切り出し、`LegacyEventManagerGateway` と `EventManagerHandle` を新ポート経由で再配線して Gateway からの直接参照を排除する。
+  - [x] Sprint3-2: `modules/event/manager::conversions` に残っている Nostr ↔ Domain 変換を `application/shared/mappers/event` へ完全移管し、`phase5_event_gateway_design.md` の更新内容を反映する。
+  - [x] Sprint3-3: Gateway のメトリクスフック追加・EventManager ユニットテスト再配置（`application/shared/tests`）・NIP-65 など新 DTO の mapper 対応をまとめて実施し、`docs/03_implementation/p2p_mainline_runbook.md` へ検証手順を追記する。
+  - 2025年10月25日: `application::ports::subscription_invoker.rs` を追加し、`EventManagerSubscriptionInvoker` を `infrastructure::event` へ移設。`state.rs`・Unit/Integration テストの import を更新し、`EventService` からはポートのみを参照する構成に刷新。
+  - 2025年10月25日: Legacy `modules/event/manager/conversions.rs` を廃止し、`nostr_event_to_domain_event` を `application/shared/mappers/event/nostr_to_domain.rs` へ統合。`p2p.rs` は新 mapper 経由で DomainEvent を生成する。
+  - 2025年10月25日: `infrastructure::event::metrics` を新設し、Gateway の主要 API に成功/失敗カウンタを付与。`tests/infrastructure/event/event_manager_gateway.rs` にメトリクス検証ケースを追加し、`LegacyEventManagerGateway` の回帰テストを拡充。
+- [ ] Phase 5 SubscriptionStateMachine Repository 化（`phase5_dependency_inventory_template.md` 15-24行）
+  - [ ] SSR-01: `application/ports/subscription_state_repository.rs`（仮）とドメイン値オブジェクトを設計し、既存 `subscription_state.rs` から直書き SQL を切り離す。
+  - [ ] SSR-02: `SubscriptionStateMachine` / `SubscriptionStateStore` / Offline 再索引経路を新 Repository に接続し、再同期バックオフや `needs_resync` 遷移をドメイン層で管理できるよう変更する。
+  - [ ] SSR-03: `docs/01_project/refactoring_plan_2025-08-08_v3.md`・`phase5_dependency_inventory_template.md`・Runbook 類に移行結果を反映し、`cargo test --test subscription_state`（新設予定）でリグレッションを検証する。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 

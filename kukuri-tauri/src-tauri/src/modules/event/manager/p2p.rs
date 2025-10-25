@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
 use tracing::error;
 
 use super::EventManager;
-use super::conversions::nostr_to_domain_event;
+use crate::application::shared::mappers::nostr_event_to_domain_event;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::database::EventRepository as InfraEventRepository;
 use crate::infrastructure::p2p::GossipService;
@@ -51,7 +51,8 @@ impl EventManager {
             return Ok(());
         }
 
-        let domain_event = nostr_to_domain_event(nostr_event)?;
+        let domain_event =
+            nostr_event_to_domain_event(nostr_event).map_err(|err| anyhow!(err.to_string()))?;
         for topic in uniq.into_iter() {
             let _ = gossip.join_topic(&topic, vec![]).await;
             if let Err(e) = gossip.broadcast(&topic, &domain_event).await {
@@ -67,7 +68,8 @@ impl EventManager {
         topic_id: &str,
         nostr_event: &Event,
     ) -> Result<()> {
-        let domain_event = nostr_to_domain_event(nostr_event)?;
+        let domain_event =
+            nostr_event_to_domain_event(nostr_event).map_err(|err| anyhow!(err.to_string()))?;
         let _ = gossip.join_topic(topic_id, vec![]).await;
         gossip
             .broadcast(topic_id, &domain_event)

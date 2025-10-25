@@ -5,8 +5,9 @@ pub(crate) mod topics;
 pub(crate) mod users;
 
 pub(crate) use event::{
-    domain_event_from_event, domain_event_to_nostr_event, dto_to_profile_metadata, parse_event_id,
-    parse_event_ids, parse_optional_event_id, profile_metadata_to_nostr,
+    domain_event_from_event, domain_event_to_nostr_event, dto_to_profile_metadata,
+    nostr_event_to_domain_event, parse_event_id, parse_event_ids, parse_optional_event_id,
+    profile_metadata_to_nostr,
 };
 pub(crate) use events::map_event_row;
 pub(crate) use posts::map_post_row;

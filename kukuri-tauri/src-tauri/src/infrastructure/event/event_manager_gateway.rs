@@ -4,6 +4,7 @@ use crate::domain::entities::event_gateway::{DomainEvent, ProfileMetadata};
 use crate::domain::value_objects::event_gateway::{PublicKey, ReactionValue, TopicContent};
 use crate::domain::value_objects::{EventId, TopicId};
 use crate::infrastructure::event::manager_handle::EventManagerHandle;
+use crate::infrastructure::event::metrics::{self, GatewayMetricKind};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use nostr_sdk::prelude::{Event as NostrEvent, EventId as NostrEventId};
@@ -47,8 +48,117 @@ mod tests {
     use crate::domain::entities::EventKind;
     use crate::domain::entities::event_gateway::EventTag;
     use crate::domain::value_objects::EventId;
+    use crate::infrastructure::database::EventRepository as InfraEventRepository;
     use crate::infrastructure::event::manager_handle::LegacyEventManagerHandle;
+    use crate::infrastructure::event::metrics;
+    use crate::infrastructure::p2p::GossipService;
+    use anyhow::{Result as AnyResult, anyhow};
     use chrono::Utc;
+    use nostr_sdk::Timestamp;
+    use nostr_sdk::prelude::{Event as NostrEvent, EventId as NostrEventId, Metadata};
+
+    #[derive(Default)]
+    struct TestEventManagerHandle {
+        fail_handle_event: bool,
+        fail_publish_text: bool,
+    }
+
+    impl TestEventManagerHandle {
+        fn with_handle_failure() -> Self {
+            Self {
+                fail_handle_event: true,
+                fail_publish_text: false,
+            }
+        }
+
+        fn with_publish_failure() -> Self {
+            Self {
+                fail_handle_event: false,
+                fail_publish_text: true,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl EventManagerHandle for TestEventManagerHandle {
+        async fn set_gossip_service(&self, _: Arc<dyn GossipService>) {}
+
+        async fn set_event_repository(&self, _: Arc<dyn InfraEventRepository>) {}
+
+        async fn set_default_p2p_topic_id(&self, _: &str) {}
+
+        async fn set_default_p2p_topics(&self, _: Vec<String>) {}
+
+        async fn list_default_p2p_topics(&self) -> Vec<String> {
+            vec![]
+        }
+
+        async fn handle_p2p_event(&self, _: NostrEvent) -> AnyResult<()> {
+            if self.fail_handle_event {
+                Err(anyhow!("forced incoming failure"))
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn publish_text_note(&self, _: &str) -> AnyResult<NostrEventId> {
+            if self.fail_publish_text {
+                Err(anyhow!("forced publish failure"))
+            } else {
+                Ok(sample_nostr_event_id('1'))
+            }
+        }
+
+        async fn publish_topic_post(
+            &self,
+            _: &str,
+            _: &str,
+            _: Option<NostrEventId>,
+        ) -> AnyResult<NostrEventId> {
+            Ok(sample_nostr_event_id('2'))
+        }
+
+        async fn send_reaction(&self, _: &NostrEventId, _: &str) -> AnyResult<NostrEventId> {
+            Ok(sample_nostr_event_id('3'))
+        }
+
+        async fn update_metadata(&self, _: Metadata) -> AnyResult<NostrEventId> {
+            Ok(sample_nostr_event_id('4'))
+        }
+
+        async fn delete_events(
+            &self,
+            _: Vec<NostrEventId>,
+            _: Option<String>,
+        ) -> AnyResult<NostrEventId> {
+            Ok(sample_nostr_event_id('5'))
+        }
+
+        async fn disconnect(&self) -> AnyResult<()> {
+            Ok(())
+        }
+
+        async fn get_public_key(&self) -> Option<nostr_sdk::prelude::PublicKey> {
+            None
+        }
+
+        async fn subscribe_to_topic(&self, _: &str, _: Option<Timestamp>) -> AnyResult<()> {
+            Ok(())
+        }
+
+        async fn subscribe_to_user(
+            &self,
+            _: nostr_sdk::prelude::PublicKey,
+            _: Option<Timestamp>,
+        ) -> AnyResult<()> {
+            Ok(())
+        }
+    }
+
+    fn sample_nostr_event_id(ch: char) -> NostrEventId {
+        let hex: String = std::iter::repeat(ch).take(64).collect();
+        NostrEventId::from_hex(&hex).expect("valid nostr id")
+    }
 
     fn repeating_hex(ch: char, len: usize) -> String {
         std::iter::repeat(ch).take(len).collect()
@@ -94,6 +204,62 @@ mod tests {
         assert_eq!(payload.content, nostr_event.content);
         assert_eq!(payload.kind, nostr_event.kind.as_u16() as u32);
         assert_eq!(payload.tags.len(), nostr_event.tags.len());
+    }
+
+    #[tokio::test]
+    async fn gateway_metrics_record_incoming_success() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let before = metrics::snapshot();
+        let manager: Arc<dyn EventManagerHandle> = Arc::new(TestEventManagerHandle::default());
+        let gateway = LegacyEventManagerGateway::new(manager);
+        gateway
+            .handle_incoming_event(sample_domain_event())
+            .await
+            .expect("incoming event succeeds");
+
+        let snapshot = metrics::snapshot();
+        assert_eq!(snapshot.incoming.total, before.incoming.total + 1);
+        assert_eq!(snapshot.incoming.failures, before.incoming.failures);
+    }
+
+    #[tokio::test]
+    async fn gateway_metrics_record_incoming_failure() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let before = metrics::snapshot();
+        let manager: Arc<dyn EventManagerHandle> =
+            Arc::new(TestEventManagerHandle::with_handle_failure());
+        let gateway = LegacyEventManagerGateway::new(manager);
+        let result = gateway.handle_incoming_event(sample_domain_event()).await;
+        assert!(result.is_err());
+
+        let snapshot = metrics::snapshot();
+        assert_eq!(snapshot.incoming.failures, before.incoming.failures + 1);
+        assert_eq!(snapshot.incoming.total, before.incoming.total);
+    }
+
+    #[tokio::test]
+    async fn gateway_metrics_record_publish_failure() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let before = metrics::snapshot();
+        let manager: Arc<dyn EventManagerHandle> =
+            Arc::new(TestEventManagerHandle::with_publish_failure());
+        let gateway = LegacyEventManagerGateway::new(manager);
+
+        let result = gateway.publish_text_note("metrics-check").await;
+        assert!(result.is_err());
+
+        let snapshot = metrics::snapshot();
+        assert_eq!(
+            snapshot.publish_text_note.failures,
+            before.publish_text_note.failures + 1
+        );
+        assert_eq!(
+            snapshot.publish_text_note.total,
+            before.publish_text_note.total
+        );
     }
 }
 
@@ -146,22 +312,34 @@ impl LegacyEventManagerGateway {
 #[async_trait]
 impl EventGateway for LegacyEventManagerGateway {
     async fn handle_incoming_event(&self, event: DomainEvent) -> Result<(), AppError> {
-        let nostr_event = domain_event_to_nostr_event(&event)?;
-        self.manager
-            .handle_p2p_event(nostr_event.clone())
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))?;
-        self.emit_frontend_event(&nostr_event).await;
-        Ok(())
+        metrics::record_outcome(
+            async {
+                let nostr_event = domain_event_to_nostr_event(&event)?;
+                self.manager
+                    .handle_p2p_event(nostr_event.clone())
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                self.emit_frontend_event(&nostr_event).await;
+                Ok(())
+            }
+            .await,
+            GatewayMetricKind::Incoming,
+        )
     }
 
     async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError> {
-        let event_id = self
-            .manager
-            .publish_text_note(content)
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))?;
-        Self::to_domain_event_id(event_id)
+        metrics::record_outcome(
+            async {
+                let event_id = self
+                    .manager
+                    .publish_text_note(content)
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                Self::to_domain_event_id(event_id)
+            }
+            .await,
+            GatewayMetricKind::PublishTextNote,
+        )
     }
 
     async fn publish_topic_post(
@@ -170,18 +348,24 @@ impl EventGateway for LegacyEventManagerGateway {
         content: &TopicContent,
         reply_to: Option<&EventId>,
     ) -> Result<EventId, AppError> {
-        let reply_to_converted = if let Some(reply) = reply_to {
-            Some(Self::to_nostr_event_id(reply)?)
-        } else {
-            None
-        };
+        metrics::record_outcome(
+            async {
+                let reply_to_converted = if let Some(reply) = reply_to {
+                    Some(Self::to_nostr_event_id(reply)?)
+                } else {
+                    None
+                };
 
-        let event_id = self
-            .manager
-            .publish_topic_post(topic_id.as_str(), content.as_str(), reply_to_converted)
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))?;
-        Self::to_domain_event_id(event_id)
+                let event_id = self
+                    .manager
+                    .publish_topic_post(topic_id.as_str(), content.as_str(), reply_to_converted)
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                Self::to_domain_event_id(event_id)
+            }
+            .await,
+            GatewayMetricKind::PublishTopicPost,
+        )
     }
 
     async fn send_reaction(
@@ -189,26 +373,38 @@ impl EventGateway for LegacyEventManagerGateway {
         target: &EventId,
         reaction: &ReactionValue,
     ) -> Result<EventId, AppError> {
-        let nostr_event_id = Self::to_nostr_event_id(target)?;
-        let event_id = self
-            .manager
-            .send_reaction(&nostr_event_id, reaction.as_str())
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))?;
-        Self::to_domain_event_id(event_id)
+        metrics::record_outcome(
+            async {
+                let nostr_event_id = Self::to_nostr_event_id(target)?;
+                let event_id = self
+                    .manager
+                    .send_reaction(&nostr_event_id, reaction.as_str())
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                Self::to_domain_event_id(event_id)
+            }
+            .await,
+            GatewayMetricKind::Reaction,
+        )
     }
 
     async fn update_profile_metadata(
         &self,
         metadata: &ProfileMetadata,
     ) -> Result<EventId, AppError> {
-        let nostr_metadata = profile_metadata_to_nostr(metadata)?;
-        let event_id = self
-            .manager
-            .update_metadata(nostr_metadata)
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))?;
-        Self::to_domain_event_id(event_id)
+        metrics::record_outcome(
+            async {
+                let nostr_metadata = profile_metadata_to_nostr(metadata)?;
+                let event_id = self
+                    .manager
+                    .update_metadata(nostr_metadata)
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                Self::to_domain_event_id(event_id)
+            }
+            .await,
+            GatewayMetricKind::MetadataUpdate,
+        )
     }
 
     async fn delete_events(
@@ -216,23 +412,32 @@ impl EventGateway for LegacyEventManagerGateway {
         targets: &[EventId],
         reason: Option<&str>,
     ) -> Result<EventId, AppError> {
-        let nostr_ids = targets
-            .iter()
-            .map(Self::to_nostr_event_id)
-            .collect::<Result<Vec<_>, _>>()?;
-        let event_id = self
-            .manager
-            .delete_events(nostr_ids, reason.map(|value| value.to_string()))
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))?;
-        Self::to_domain_event_id(event_id)
+        metrics::record_outcome(
+            async {
+                let nostr_ids = targets
+                    .iter()
+                    .map(Self::to_nostr_event_id)
+                    .collect::<Result<Vec<_>, _>>()?;
+                let event_id = self
+                    .manager
+                    .delete_events(nostr_ids, reason.map(|value| value.to_string()))
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                Self::to_domain_event_id(event_id)
+            }
+            .await,
+            GatewayMetricKind::DeleteEvents,
+        )
     }
 
     async fn disconnect(&self) -> Result<(), AppError> {
-        self.manager
-            .disconnect()
-            .await
-            .map_err(|err| AppError::NostrError(err.to_string()))
+        metrics::record_outcome(
+            self.manager
+                .disconnect()
+                .await
+                .map_err(|err| AppError::NostrError(err.to_string())),
+            GatewayMetricKind::Disconnect,
+        )
     }
 
     async fn get_public_key(&self) -> Result<Option<PublicKey>, AppError> {

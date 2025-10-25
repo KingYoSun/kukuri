@@ -96,10 +96,24 @@
 - `tests/integration/test_event_gateway.rs` を追加し、P2P（Mainline DHT）経路で受信した DomainEvent が `LegacyEventManagerGateway` → `EventManager` → SQLite (`events` / `event_topics`) へ正しく反映されることを検証。`ConnectionPool` を実際にマイグレーションし、タグ `t` → Hashtag 変換や `event_topics` 登録まで通過することを確認した。
 - ランブック／タスクでは本テストを Mainline DHT フローの再現ステップとして扱い、Sprint 2 要件であった「Gateway 経由の結合テスト」完了のエビデンスとする。
 
-### Sprint 3（オプション, 2日）
+### Sprint 3（2日）
 
-- SubscriptionInvoker もポート化し、Gateway との分離を完了。
-- `modules/event/manager` の `conversions` モジュールを完全に mapper へ移管。
+- SubscriptionInvoker を `application::ports` へ切り出し、Gateway から Legacy EventManager への依存を遮断。
+- `modules/event/manager::conversions` に残っていた Nostr ↔ Domain 変換を `application/shared/mappers` に移し、Application 層で一元管理。
+- EventGateway にメトリクス記録フックを追加し、成功/失敗統計を `tests` で検証可能にする。
+
+#### EG-S3-01 実装メモ（2025年10月25日）
+- `application::ports::subscription_invoker.rs` を追加し、EventService から参照する購読ポートを定義。`set_subscription_invoker` など Application 層の公開 API は `Arc<dyn SubscriptionInvoker>` のみを扱う。
+- 具象実装 `EventManagerSubscriptionInvoker` を `infrastructure::event::subscription_invoker.rs` へ移管し、DI（`state.rs`）とテスト（`tests/common/mocks/event_service.rs` 等）の import を更新。`LegacyEventManagerGateway` との依存関係は `EventManagerHandle` に限定された。
+- `EventService` やユニットテストは新ポート経由で参照するように差し替え、`cargo fmt` / `cargo test --package kukuri-tauri --test event_service_gateway` で互換性を確認。
+
+#### EG-S3-02 実装メモ（2025年10月25日）
+- `modules/event/manager/conversions.rs` を削除し、Nostr イベント→Domain Event の変換ロジックを `application/shared/mappers/event/nostr_to_domain.rs` に移植。`nostr_event_to_domain_event` を追加し、`AppError::ValidationError` でバリデーション失敗を表現。
+- `modules/event/manager/p2p.rs` は新 mapper を参照し、`anyhow!` で AppError をラップする形に更新。Legacy モジュールに Application 層の mapper を導入したことで、後続の EventManager 分割時に再利用できる構成になった。
+
+#### EG-S3-03 実装メモ（2025年10月25日）
+- `infrastructure::event::metrics` を新設し、Incoming/PUBLISH/Reaction/Metadata/Delete/Disconnect それぞれの成功・失敗回数と最終時刻を原子的に記録。`EventGateway` 実装からは `metrics::record_outcome` を介して計測する。
+- `LegacyEventManagerGateway` の各メソッドに計測フックを追加し、`tests/infrastructure/event/event_manager_gateway.rs` へメトリクス検証ケース（成功/失敗）を追加。`metrics::snapshot()` で取得できる統計を Runbook から参照できるようにした。
 
 ## Stage3（2025年10月25日）実装メモ
 - `infrastructure::event::manager_handle::EventManagerHandle` を新設し、`AppState` / `EventManagerSubscriptionInvoker` / `LegacyEventManagerGateway` から `modules::event` への直接参照を排除。DI では `LegacyEventManagerHandle` のみを生成する。

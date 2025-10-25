@@ -1,4 +1,3 @@
-mod conversions;
 mod core;
 mod p2p;
 mod publishing;

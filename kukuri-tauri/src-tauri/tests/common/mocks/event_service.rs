@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use mockall::mock;
 use nostr_sdk::prelude::Timestamp;
 
-use kukuri_lib::application::services::event_service::invoker::SubscriptionInvoker;
+use kukuri_lib::application::ports::subscription_invoker::SubscriptionInvoker;
 use kukuri_lib::application::services::subscription_state::{
     SubscriptionRecord, SubscriptionStateStore, SubscriptionTarget,
 };
