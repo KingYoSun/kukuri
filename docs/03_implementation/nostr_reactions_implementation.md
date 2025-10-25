@@ -100,17 +100,19 @@ let event = EventBuilder::new(Kind::Repost, "")
 1. **いいね**: PostCard → TauriApi.likePost → like_post → EventManager.send_reaction
 2. **ブースト**: PostCard → TauriApi.boostPost → boost_post → EventManager.send_repost
 3. **カスタムリアクション**: ReactionPicker → NostrAPI.sendReaction → send_reaction → EventManager.send_reaction
-4. **ブックマーク**: PostCard → bookmarkStore → TauriApi.bookmarkPost → bookmark_post → BookmarkManager
+4. **ブックマーク**: PostCard → bookmarkStore → TauriApi.bookmarkPost → `post_handler::bookmark_post` → `PostService::bookmark_post`（`BookmarkRepository` 経由で `bookmarks` テーブルを更新）
 
 ### バックエンド処理
 
-```rust
-// EventManager内の処理フロー
-1. ensure_initialized() - 初期化確認
-2. EventPublisher.create_*() - イベント作成
-3. ClientManager.publish_event() - Nostrリレーへ送信
-4. EventSync.propagate_nostr_event() - P2Pネットワークへ配信
-```
+- **リアクション/リポスト**:  
+  ```rust
+  // EventManager内の処理フロー
+  1. ensure_initialized() - 初期化確認
+  2. EventPublisher.create_*() - イベント作成
+  3. ClientManager.publish_event() - Nostrリレーへ送信
+  4. EventSync.propagate_nostr_event() - P2Pネットワークへ配信
+  ```
+- **ブックマーク**: `PostService` が `BookmarkRepository` を介して `bookmarks` テーブルへ永続化／削除を行い、UI へは `get_bookmarked_post_ids` で結果を返す（EventManager とは独立）。
 
 ## 状態管理
 

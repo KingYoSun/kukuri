@@ -157,9 +157,11 @@
   - [x] Stage2: `modules::secure_storage` と関連テストを削除し、`lib.rs`／コマンド登録／TypeScript API（変更なし）を新ユーティリティへ置換。ランブックと依存棚卸しドキュメントを更新し、debug 手順を最新化。
   - 2025年10月25日: `DefaultSecureStorage::clear_all_accounts_for_test` を追加し、Tauri `clear_all_accounts_for_test` コマンドを新実装へ接続。Legacy 依存を排除しつつ Keyring 操作は Infrastructure 層へ集約。
   - 2025年10月25日: `modules/secure_storage`（mod/tests）を削除し、`refactoring_plan_2025-08-08_v3.md` / `phase5_dependency_inventory_template.md` に完了状況を記録。Windows `cargo test` は `STATUS_ENTRYPOINT_NOT_FOUND`（既知）で停止したが、`./scripts/test-docker.ps1 rust` / `pnpm test` / `kukuri-cli cargo test` で回帰を確認。
-- [ ] Phase 5 BookmarkManager アーカイブ（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 341行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 30行）
-  - [ ] Stage1: `modules::bookmark`（manager/tests）を `state.rs` や `presentation::handlers::post_handler` から完全に切り離し、`BookmarkRepository` 経路のみで bookmark API が動作することを `pnpm test` / `./scripts/test-docker.ps1 rust` で検証。
-  - [ ] Stage2: Legacy モジュール／テストを削除し、`modules/mod.rs` 再エクスポートと関連ドキュメントを更新。Migration 後に `.sqlx`／Plan／Runbook をメンテナンスし、完了ログを `tasks/completed/YYYY-MM-DD.md` へ記録。
+- [x] Phase 5 BookmarkManager アーカイブ（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 341行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 30行）
+  - [x] Stage1: `modules::bookmark` 依存を排除し、`PostService`／`post_handler` が `BookmarkRepository` 経由のみで動作することを 2025年10月25日時点で確認。
+  - [x] Stage2: UI/Tauri/Rust テスト導線を Repository ベースへ切替え、`.sqlx` 変更が不要であることを確認（2025年10月25日）。
+  - [x] Stage3: Legacy モジュール／ユニットテスト／`modules/mod.rs` の再エクスポートを削除し、関連ドキュメントとタスクリストを刷新（2025年10月26日）。
+  - 2025年10月26日: `modules::bookmark` ディレクトリを削除し、`phase5_dependency_inventory_template.md`／`refactoring_plan_2025-08-08_v3.md`／`tauri_app_implementation_plan.md`／`nostr_reactions_implementation.md` を更新。`cargo test`（kukuri-tauri/src-tauri, kukuri-cli）で回帰確認。
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 -メモ/進捗ログ:
