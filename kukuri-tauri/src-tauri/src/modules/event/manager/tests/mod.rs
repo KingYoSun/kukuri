@@ -1,7 +1,7 @@
 use super::*;
+use crate::application::ports::key_manager::KeyManager;
 use crate::domain::p2p::user_topic_id;
-use crate::infrastructure::p2p::GossipService;
-use crate::modules::auth::key_manager::KeyManager;
+use crate::infrastructure::{crypto::DefaultKeyManager, p2p::GossipService};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ use support::mocks::TestGossipService;
 #[tokio::test]
 async fn test_event_manager_initialization() {
     let manager = EventManager::new();
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
 
     key_manager.generate_keypair().await.unwrap();
 
@@ -42,7 +42,7 @@ async fn test_event_manager_not_initialized() {
 #[tokio::test]
 async fn test_initialize_and_disconnect() {
     let manager = EventManager::new();
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
 
     key_manager.generate_keypair().await.unwrap();
 
@@ -59,7 +59,7 @@ async fn test_initialize_and_disconnect() {
 #[tokio::test]
 async fn test_get_public_key() {
     let manager = EventManager::new();
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
 
     assert!(manager.get_public_key().await.is_none());
 
@@ -70,16 +70,15 @@ async fn test_get_public_key() {
         .unwrap();
 
     let public_key = manager.get_public_key().await.unwrap();
-    assert_eq!(
-        public_key,
-        key_manager.get_keys().await.unwrap().public_key()
-    );
+    let current_pubkey = key_manager.current_keypair().await.unwrap().public_key;
+    let expected = PublicKey::from_hex(&current_pubkey).expect("valid pubkey hex");
+    assert_eq!(public_key, expected);
 }
 
 #[tokio::test]
 async fn test_create_events() {
     let manager = EventManager::new();
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
 
     key_manager.generate_keypair().await.unwrap();
     manager
@@ -107,7 +106,7 @@ async fn test_ensure_initialized() {
 
     assert!(manager.ensure_initialized().await.is_err());
 
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
     key_manager.generate_keypair().await.unwrap();
     manager
         .initialize_with_key_manager(&key_manager)
@@ -142,7 +141,7 @@ async fn test_default_topics_api() {
 #[tokio::test]
 async fn test_routing_non_topic_includes_user_and_defaults() {
     let manager = EventManager::new();
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
 
     key_manager.generate_keypair().await.unwrap();
     manager

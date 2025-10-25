@@ -147,6 +147,17 @@
   - 2025年10月25日: `application::ports::subscription_invoker.rs` を追加し、`EventManagerSubscriptionInvoker` を `infrastructure::event` へ移設。`state.rs`・Unit/Integration テストの import を更新し、`EventService` からはポートのみを参照する構成に刷新。
   - 2025年10月25日: Legacy `modules/event/manager/conversions.rs` を廃止し、`nostr_event_to_domain_event` を `application/shared/mappers/event/nostr_to_domain.rs` へ統合。`p2p.rs` は新 mapper 経由で DomainEvent を生成する。
   - 2025年10月25日: `infrastructure::event::metrics` を新設し、Gateway の主要 API に成功/失敗カウンタを付与。`tests/infrastructure/event/event_manager_gateway.rs` にメトリクス検証ケースを追加し、`LegacyEventManagerGateway` の回帰テストを拡充。
+- [x] Phase 5 Legacy KeyManager 移行（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 343行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 28行）
+  - [x] Stage1: `application::ports::key_manager` を追加し、`AppState`／SecureStorage ハンドラー／Tauri コマンドが `Arc<dyn KeyManager>` の DI で動作するよう更新。`DefaultKeyManager` を Infrastructure 層実装として再配置。
+  - [x] Stage2: `LegacyEventManagerGateway` / `EventManagerHandle` / `SubscriptionInvoker` から旧 `modules::auth::key_manager` 依存を排除し、Gateway/Topic/Post 系テストを新ポート経由に切り替え。
+  - [x] Stage3: `modules::auth::key_manager` と関連テスト・再エクスポートを削除し、`refactoring_plan_2025-08-08_v3.md`／`phase5_dependency_inventory_template.md` を更新。Rust/TS テスト系は Phase 5 既定フロー（`cargo fmt` / `cargo clippy -- -D warnings` / `./scripts/test-docker.ps1 rust` / `pnpm test`）で回帰確認。
+  - 2025年10月25日: `application::ports::key_manager` + `DefaultKeyManager` への統一により、Legacy KeyManager はアーカイブ済み。AppState/Tauri/EventManager/SubscriptionInvoker からの直接依存は解消され、ドキュメント＆タスクも更新完了。
+- [ ] Phase 5 Legacy SecureStorage デバッグユーティリティ整理（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 342行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 31行）
+  - [ ] Stage1: `DefaultSecureStorage`（または `SecureAccountStore`）に debug 用クリア API を追加し、`clear_all_accounts_for_test` が Legacy `modules::secure_storage` を参照しない構成へ変更。`cargo fmt` / `./scripts/test-docker.ps1 rust` / `pnpm test` を実行して互換性を確認。
+  - [ ] Stage2: `modules::secure_storage` と関連テストを削除し、`lib.rs`／コマンド登録／TypeScript API を新ユーティリティへ置換。ランブックと依存棚卸しドキュメントを更新し、debug 手順を最新化。
+- [ ] Phase 5 BookmarkManager アーカイブ（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 341行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 30行）
+  - [ ] Stage1: `modules::bookmark`（manager/tests）を `state.rs` や `presentation::handlers::post_handler` から完全に切り離し、`BookmarkRepository` 経路のみで bookmark API が動作することを `pnpm test` / `./scripts/test-docker.ps1 rust` で検証。
+  - [ ] Stage2: Legacy モジュール／テストを削除し、`modules/mod.rs` 再エクスポートと関連ドキュメントを更新。Migration 後に `.sqlx`／Plan／Runbook をメンテナンスし、完了ログを `tasks/completed/YYYY-MM-DD.md` へ記録。
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 -メモ/進捗ログ:

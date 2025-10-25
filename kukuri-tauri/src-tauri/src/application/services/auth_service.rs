@@ -1,5 +1,5 @@
+use crate::application::ports::key_manager::KeyManager;
 use crate::domain::entities::User;
-use crate::infrastructure::crypto::KeyManager;
 use crate::infrastructure::storage::SecureStorage;
 use crate::shared::error::AppError;
 use std::sync::Arc;

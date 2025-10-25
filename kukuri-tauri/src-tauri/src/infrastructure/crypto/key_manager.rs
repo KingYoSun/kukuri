@@ -1,30 +1,11 @@
+use crate::application::ports::key_manager::{KeyManager, KeyPair};
 use crate::shared::error::AppError;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use nostr_sdk::prelude::*;
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KeyPair {
-    pub public_key: String,
-    pub private_key: String,
-    pub npub: String,
-    pub nsec: String,
-}
-
-/// 鍵管理のトレイト
-#[async_trait]
-pub trait KeyManager: Send + Sync {
-    async fn generate_keypair(&self) -> Result<KeyPair, AppError>;
-    async fn import_private_key(&self, nsec: &str) -> Result<KeyPair, AppError>;
-    async fn export_private_key(&self, npub: &str) -> Result<String, AppError>;
-    async fn get_public_key(&self, npub: &str) -> Result<String, AppError>;
-    async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), AppError>;
-    async fn delete_keypair(&self, npub: &str) -> Result<(), AppError>;
-    async fn list_npubs(&self) -> Result<Vec<String>, AppError>;
-}
 
 /// デフォルトのKeyManager実装
 #[derive(Clone)]
@@ -34,7 +15,7 @@ pub struct DefaultKeyManager {
 
 struct KeyManagerInner {
     keys: Option<Keys>,
-    stored_keys: std::collections::HashMap<String, KeyPair>,
+    stored_keys: HashMap<String, KeyPair>,
 }
 
 impl DefaultKeyManager {
@@ -196,6 +177,45 @@ impl KeyManager for DefaultKeyManager {
         Ok(())
     }
 
+    async fn current_keypair(&self) -> Result<KeyPair, AppError> {
+        let (npub, keys, cached_pair) = {
+            let inner = self.inner.read().await;
+            let keys = inner
+                .keys
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| AppError::Unauthorized("No keys loaded".into()))?;
+            let npub = keys
+                .public_key()
+                .to_bech32()
+                .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
+            let cached = inner.stored_keys.get(&npub).cloned();
+            (npub, keys, cached)
+        };
+
+        if let Some(pair) = cached_pair {
+            return Ok(pair);
+        }
+
+        let public_key = keys.public_key().to_hex();
+        let private_key = keys.secret_key().display_secret().to_string();
+        let nsec = keys
+            .secret_key()
+            .to_bech32()
+            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
+
+        let keypair = KeyPair {
+            public_key,
+            private_key,
+            npub: npub.clone(),
+            nsec,
+        };
+
+        let mut inner = self.inner.write().await;
+        inner.stored_keys.insert(npub, keypair.clone());
+        Ok(keypair)
+    }
+
     async fn list_npubs(&self) -> Result<Vec<String>, AppError> {
         let inner = self.inner.read().await;
         Ok(inner.stored_keys.keys().cloned().collect())
@@ -338,5 +358,22 @@ mod tests {
         // Verify current keys are also cleared
         let result = key_manager.get_keys().await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_current_keypair_returns_active_identity() {
+        let key_manager = DefaultKeyManager::new();
+        let generated = key_manager.generate_keypair().await.unwrap();
+
+        let current = key_manager.current_keypair().await.unwrap();
+        assert_eq!(current.public_key, generated.public_key);
+        assert_eq!(current.npub, generated.npub);
+    }
+
+    #[tokio::test]
+    async fn test_current_keypair_requires_active_keys() {
+        let key_manager = DefaultKeyManager::new();
+        let err = key_manager.current_keypair().await.unwrap_err();
+        assert!(matches!(err, AppError::Unauthorized(_)));
     }
 }

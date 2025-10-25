@@ -25,7 +25,7 @@
 | ApplicationContainer | `state/application_container.rs` | `application::services::p2p_service::{P2PService,P2PStack}`, `modules::p2p::P2PEvent`, `shared::config::AppConfig`, `tokio::fs`, `anyhow` | Application | Medium | P2P イベント型の差し替えとメトリクス初期化統合が必要。Phase 5 でブートストラップ専用モジュールへ再配置する。 |
 | EventManager | `modules/event/manager` | `application::shared::{default_topics,nostr::EventPublisher}`, `infrastructure::database::EventRepository`, `infrastructure::p2p::GossipService`, `modules::auth::key_manager::KeyManager`, `infrastructure::database::ConnectionPool` | Legacy | High | 2025年10月24日: `tauri::AppHandle` は `LegacyEventManagerGateway` に移設済み。残課題は Repository 参照をアプリ層経由へ閉じ込め、Legacy manager 自体を Infrastructure 化すること。 |
 | SqliteOfflinePersistence | `infrastructure/offline/sqlite_store.rs` | `sqlx`, `chrono`, `serde_json`, `uuid`, `application::ports::offline_store::OfflinePersistence` | Infrastructure | Medium | 2025年10月25日 Stage3: Legacy OfflineManager の SQL を移植。OfflineReindexJob とサービス双方から利用。`.sqlx` 再生成タイミングと DRY 化の追跡を継続。 |
-| Legacy KeyManager | `modules/auth/key_manager.rs` | `nostr_sdk::Keys`, `tokio::sync::RwLock`, `anyhow` | Legacy | Medium | AppState からのみ利用。`infrastructure::crypto::KeyManager` に置換し、旧実装はテスト専用へ縮退。 |
+| Legacy KeyManager | ~~`modules/auth/key_manager.rs`~~（2025年10月25日削除） | `nostr_sdk::Keys`, `tokio::sync::RwLock`, `anyhow` | Legacy | 完了 | 2025年10月25日: `application::ports::key_manager` + `DefaultKeyManager` へ完全移行。AppState/Tauri/EventManager/SubscriptionInvoker からの依存を解消。 |
 | Legacy Database Connection | `modules/database/connection.rs` | `sqlx`, `std::fs`, `Path`, `tracing` | Retired (2025年10月25日) | - | `ConnectionPool` への移行完了に伴い削除。参照先は `infrastructure::database::connection_pool` に集約済み。 |
 | BookmarkManager | `modules/bookmark` | `sqlx`, `chrono`, `uuid`, `sqlx::Pool<Sqlite>` | Infrastructure | Medium | Application 層の Bookmark API が未実装。`BookmarkRepository` と `PostService` 拡張で置換し、`AppState` の直接依存を解消する。 |
 | Legacy SecureStorage Module | `modules/secure_storage` | `keyring`, `serde_json`, `anyhow`, `tokio::sync::RwLock` | Legacy | Medium | Debug 用 `clear_all_accounts` のみ現役。`infrastructure::storage` へユーティリティ移植後に廃止する。 |
@@ -46,7 +46,7 @@
 - Application 層: 9件（AuthService, EventService, OfflineService, P2PService, PostService, TopicService, SyncService, SubscriptionStateMachine/Store, UserService）
 - Infrastructure 層: 8件（SQLiteRepository, ConnectionPool, EventDistributor, IrohNetworkService, IrohGossipService, Gossip Metrics, KeyManager, SecureStorage）
 - Presentation 層: 2件（Command Modules, Presentation Handlers）
-- Legacy 橋渡し: 4件（AppState, EventManager, Legacy KeyManager, Legacy Database Connection）
+- Legacy 橋渡し: 3件（AppState, EventManager, Legacy Database Connection）※Legacy KeyManager は 2025年10月25日に解体済み
 - ブートストラップ: ApplicationContainer（P2P スタック初期化）を別管理とし、Phase 5 Workstream A/B の対象に含める。
 
 ## 外部クレート棚卸し（主要カテゴリ）

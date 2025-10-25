@@ -15,12 +15,12 @@ use crate::{
 use tauri::State;
 
 async fn ensure_authenticated(state: &State<'_, AppState>) -> Result<String, AppError> {
-    let keys = state
+    state
         .key_manager
-        .get_keys()
+        .current_keypair()
         .await
-        .map_err(|e| AppError::Unauthorized(format!("ログインが必要です: {e}")))?;
-    Ok(keys.public_key().to_hex())
+        .map(|pair| pair.public_key.clone())
+        .map_err(|e| AppError::Unauthorized(format!("ログインが必要です: {e}")))
 }
 
 /// トピックを作成する

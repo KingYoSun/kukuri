@@ -1,10 +1,10 @@
+use crate::application::ports::key_manager::KeyManager;
 use crate::application::shared::default_topics::DefaultTopicsRegistry;
 use crate::application::shared::nostr::EventPublisher;
 use crate::infrastructure::database::{
     EventRepository as InfraEventRepository, connection_pool::ConnectionPool,
 };
 use crate::infrastructure::p2p::GossipService;
-use crate::modules::auth::key_manager::KeyManager;
 use crate::modules::event::handler::EventHandler;
 use crate::modules::event::nostr_client::NostrClientManager;
 use anyhow::{Result, anyhow};
@@ -85,13 +85,21 @@ impl EventManager {
     }
 
     /// KeyManagerからの秘密鍵でマネージャーを初期化
-    pub async fn initialize_with_key_manager(&self, key_manager: &KeyManager) -> Result<()> {
-        let keys = key_manager.get_keys().await?;
-        let secret_key = keys.secret_key();
+    pub async fn initialize_with_key_manager(
+        &self,
+        key_manager: &(dyn KeyManager + Send + Sync),
+    ) -> Result<()> {
+        let keypair = key_manager
+            .current_keypair()
+            .await
+            .map_err(|e| anyhow!("Failed to load current keypair: {e}"))?;
+        let secret_key = SecretKey::from_bech32(&keypair.nsec)
+            .map_err(|e| anyhow!("Invalid secret key: {e}"))?;
+        let keys = Keys::new(secret_key);
 
         // クライアントマネージャーを初期化
         let mut client_manager = self.client_manager.write().await;
-        client_manager.init_with_keys(secret_key).await?;
+        client_manager.init_with_keys(keys.secret_key()).await?;
 
         // パブリッシャーに鍵を設定
         let mut publisher = self.event_publisher.write().await;

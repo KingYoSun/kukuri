@@ -2,9 +2,9 @@
 
 mod application_container;
 
+use crate::application::ports::key_manager::KeyManager;
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
-use crate::modules::auth::key_manager::KeyManager as OldKeyManager;
 use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
@@ -18,8 +18,8 @@ use crate::application::services::{
 // プレゼンテーション層のハンドラーのインポート
 use crate::infrastructure::{
     crypto::{
-        DefaultEncryptionService, DefaultSignatureService, EncryptionService, KeyManager,
-        SignatureService, key_manager::DefaultKeyManager,
+        DefaultEncryptionService, DefaultKeyManager, DefaultSignatureService, EncryptionService,
+        SignatureService,
     },
     database::{
         BookmarkRepository, EventRepository, PostRepository, Repository,
@@ -68,8 +68,8 @@ pub struct P2PState {
 #[derive(Clone)]
 pub struct AppState {
     pub app_handle: tauri::AppHandle,
-    // 既存のマネージャー（後で移行予定）
-    pub key_manager: Arc<OldKeyManager>,
+    // 既存のマネージャー（Phase5でArc<dyn KeyManager>へ移行済み）
+    pub key_manager: Arc<dyn KeyManager>,
     #[allow(dead_code)]
     pub encryption_service: Arc<dyn EncryptionService>,
     pub event_manager: Arc<dyn EventManagerHandle>,
@@ -98,8 +98,6 @@ impl AppState {
     pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
         let container = ApplicationContainer::new(app_handle).await?;
         let app_data_dir = container.app_data_dir().to_path_buf();
-
-        let key_manager = Arc::new(OldKeyManager::new());
 
         // Use absolute path for database
         let db_path = app_data_dir.join("kukuri.db");
@@ -150,7 +148,7 @@ impl AppState {
         offline_reindex_job.trigger();
 
         // インフラストラクチャサービスの初期化
-        let key_manager_service: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());
+        let key_manager: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());
         let secure_storage_impl = Arc::new(DefaultSecureStorage::new());
         let secure_storage: Arc<dyn SecureStorage> = secure_storage_impl.clone();
         let secure_account_store: Arc<dyn SecureAccountStore> = secure_storage_impl.clone();
@@ -193,7 +191,7 @@ impl AppState {
 
         // AuthServiceの初期化（UserServiceとTopicServiceが必要）
         let auth_service = Arc::new(AuthService::new(
-            Arc::clone(&key_manager_service),
+            Arc::clone(&key_manager),
             Arc::clone(&secure_storage),
             Arc::clone(&user_service),
             Arc::clone(&topic_service),
