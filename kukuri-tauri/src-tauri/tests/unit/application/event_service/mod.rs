@@ -9,8 +9,9 @@ use common::mocks::{
 };
 use kukuri_lib::application::ports::subscription_invoker::SubscriptionInvoker;
 use kukuri_lib::application::services::event_service::EventService;
-use kukuri_lib::application::services::subscription_state::{
-    SubscriptionRecord, SubscriptionStateStore, SubscriptionStatus, SubscriptionTarget,
+use kukuri_lib::application::services::subscription_state::SubscriptionStateStore;
+use kukuri_lib::domain::value_objects::subscription::{
+    SubscriptionRecord, SubscriptionStatus, SubscriptionTarget,
 };
 use kukuri_lib::domain::entities::Event;
 use kukuri_lib::infrastructure::crypto::SignatureService;

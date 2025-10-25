@@ -1,79 +1,9 @@
-use crate::infrastructure::database::connection_pool::ConnectionPool;
+use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
+use crate::domain::value_objects::subscription::{SubscriptionRecord, SubscriptionTarget};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::Row;
-
-const RESYNC_BACKOFF_SECS: i64 = 300;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SubscriptionTarget {
-    Topic(String),
-    User(String),
-}
-
-impl SubscriptionTarget {
-    pub fn as_parts(&self) -> (&str, &str) {
-        match self {
-            SubscriptionTarget::Topic(id) => ("topic", id.as_str()),
-            SubscriptionTarget::User(id) => ("user", id.as_str()),
-        }
-    }
-
-    pub fn from_parts(target_type: &str, target: String) -> Result<Self, AppError> {
-        match target_type {
-            "topic" => Ok(SubscriptionTarget::Topic(target)),
-            "user" => Ok(SubscriptionTarget::User(target)),
-            other => Err(AppError::ValidationError(format!(
-                "Unknown subscription target type: {other}"
-            ))),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubscriptionStatus {
-    Pending,
-    Subscribed,
-    NeedsResync,
-}
-
-impl SubscriptionStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SubscriptionStatus::Pending => "pending",
-            SubscriptionStatus::Subscribed => "subscribed",
-            SubscriptionStatus::NeedsResync => "needs_resync",
-        }
-    }
-
-    pub fn from_str(value: &str) -> Option<Self> {
-        match value {
-            "pending" => Some(SubscriptionStatus::Pending),
-            "subscribed" => Some(SubscriptionStatus::Subscribed),
-            "needs_resync" => Some(SubscriptionStatus::NeedsResync),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SubscriptionRecord {
-    pub target: SubscriptionTarget,
-    pub status: SubscriptionStatus,
-    pub last_synced_at: Option<i64>,
-    pub last_attempt_at: Option<i64>,
-    pub failure_count: i64,
-    pub error_message: Option<String>,
-}
-
-impl SubscriptionRecord {
-    pub fn since_timestamp(&self) -> Option<nostr_sdk::prelude::Timestamp> {
-        let last_synced = self.last_synced_at?;
-        let adjusted = last_synced.saturating_sub(RESYNC_BACKOFF_SECS);
-        Some(nostr_sdk::prelude::Timestamp::from(adjusted as u64))
-    }
-}
+use std::sync::Arc;
 
 #[async_trait]
 pub trait SubscriptionStateStore: Send + Sync {
@@ -99,57 +29,22 @@ pub trait SubscriptionStateStore: Send + Sync {
 
 #[derive(Clone)]
 pub struct SubscriptionStateMachine {
-    pool: ConnectionPool,
+    repository: Arc<dyn SubscriptionStateRepository>,
 }
 
 impl SubscriptionStateMachine {
-    pub fn new(pool: ConnectionPool) -> Self {
-        Self { pool }
+    pub fn new(repository: Arc<dyn SubscriptionStateRepository>) -> Self {
+        Self { repository }
     }
 
-    async fn fetch_record(
+    async fn load_or_initialize(
         &self,
-        target_type: &str,
-        target: &str,
+        target: &SubscriptionTarget,
     ) -> Result<SubscriptionRecord, AppError> {
-        let row = sqlx::query(
-            r#"
-            SELECT target, target_type, status, last_synced_at, last_attempt_at, failure_count, error_message
-            FROM nostr_subscriptions
-            WHERE target_type = ? AND target = ?
-            "#,
-        )
-        .bind(target_type)
-        .bind(target)
-        .fetch_one(self.pool.get_pool())
-        .await?;
-
-        self.row_to_record(row)
-    }
-
-    fn row_to_record(&self, row: sqlx::sqlite::SqliteRow) -> Result<SubscriptionRecord, AppError> {
-        let target: String = row.try_get("target")?;
-        let target_type: String = row.try_get("target_type")?;
-        let status_str: String = row.try_get("status")?;
-        let last_synced_at: Option<i64> = row.try_get("last_synced_at")?;
-        let last_attempt_at: Option<i64> = row.try_get("last_attempt_at")?;
-        let failure_count: i64 = row.try_get("failure_count")?;
-        let error_message: Option<String> = row.try_get("error_message")?;
-
-        let status = SubscriptionStatus::from_str(&status_str).ok_or_else(|| {
-            AppError::ValidationError(format!("Unknown subscription status: {status_str}"))
-        })?;
-
-        let target = SubscriptionTarget::from_parts(&target_type, target)?;
-
-        Ok(SubscriptionRecord {
-            target,
-            status,
-            last_synced_at,
-            last_attempt_at,
-            failure_count,
-            error_message,
-        })
+        match self.repository.find(target).await? {
+            Some(record) => Ok(record),
+            None => Ok(SubscriptionRecord::new(target.clone())),
+        }
     }
 }
 
@@ -159,45 +54,16 @@ impl SubscriptionStateStore for SubscriptionStateMachine {
         &self,
         target: SubscriptionTarget,
     ) -> Result<SubscriptionRecord, AppError> {
-        let (target_type, target_value) = target.as_parts();
-        let now_ms = Utc::now().timestamp_millis();
         let now_secs = Utc::now().timestamp();
+        let mut record = self
+            .repository
+            .find(&target)
+            .await?
+            .unwrap_or_else(|| SubscriptionRecord::new(target.clone()));
 
-        sqlx::query(
-            r#"
-            INSERT OR IGNORE INTO nostr_subscriptions (
-                target, target_type, status, last_synced_at, last_attempt_at,
-                failure_count, error_message, created_at, updated_at
-            )
-            VALUES (?, ?, 'pending', NULL, ?, 0, NULL, ?, ?)
-            "#,
-        )
-        .bind(target_value)
-        .bind(target_type)
-        .bind(now_secs)
-        .bind(now_ms)
-        .bind(now_ms)
-        .execute(self.pool.get_pool())
-        .await?;
+        record.mark_requested(now_secs);
 
-        sqlx::query(
-            r#"
-            UPDATE nostr_subscriptions
-            SET status = 'pending',
-                last_attempt_at = ?,
-                updated_at = ?,
-                error_message = NULL
-            WHERE target_type = ? AND target = ?
-            "#,
-        )
-        .bind(now_secs)
-        .bind(now_ms)
-        .bind(target_type)
-        .bind(target_value)
-        .execute(self.pool.get_pool())
-        .await?;
-
-        self.fetch_record(target_type, target_value).await
+        self.repository.upsert(&record).await
     }
 
     async fn mark_subscribed(
@@ -205,122 +71,50 @@ impl SubscriptionStateStore for SubscriptionStateMachine {
         target: &SubscriptionTarget,
         synced_at: i64,
     ) -> Result<(), AppError> {
-        let (target_type, target_value) = target.as_parts();
-        let now_ms = Utc::now().timestamp_millis();
-
-        sqlx::query(
-            r#"
-            UPDATE nostr_subscriptions
-            SET status = 'subscribed',
-                last_synced_at = ?,
-                updated_at = ?,
-                failure_count = 0,
-                error_message = NULL
-            WHERE target_type = ? AND target = ?
-            "#,
-        )
-        .bind(synced_at)
-        .bind(now_ms)
-        .bind(target_type)
-        .bind(target_value)
-        .execute(self.pool.get_pool())
-        .await?;
-
+        let mut record = self.load_or_initialize(target).await?;
+        record.mark_subscribed(synced_at);
+        self.repository.upsert(&record).await?;
         Ok(())
     }
 
     async fn mark_failure(&self, target: &SubscriptionTarget, error: &str) -> Result<(), AppError> {
-        let (target_type, target_value) = target.as_parts();
-        let now_ms = Utc::now().timestamp_millis();
         let now_secs = Utc::now().timestamp();
-
-        sqlx::query(
-            r#"
-            UPDATE nostr_subscriptions
-            SET status = 'needs_resync',
-                failure_count = failure_count + 1,
-                last_attempt_at = ?,
-                updated_at = ?,
-                error_message = ?
-            WHERE target_type = ? AND target = ?
-            "#,
-        )
-        .bind(now_secs)
-        .bind(now_ms)
-        .bind(error)
-        .bind(target_type)
-        .bind(target_value)
-        .execute(self.pool.get_pool())
-        .await?;
-
+        let mut record = self.load_or_initialize(target).await?;
+        record.mark_failure(now_secs, error);
+        self.repository.upsert(&record).await?;
         Ok(())
     }
 
     async fn mark_all_need_resync(&self) -> Result<(), AppError> {
         let now_ms = Utc::now().timestamp_millis();
-
-        sqlx::query(
-            r#"
-            UPDATE nostr_subscriptions
-            SET status = 'needs_resync',
-                updated_at = ?,
-                error_message = NULL
-            WHERE status = 'subscribed'
-            "#,
-        )
-        .bind(now_ms)
-        .execute(self.pool.get_pool())
-        .await?;
-
-        Ok(())
+        self.repository.mark_all_need_resync(now_ms).await
     }
 
     async fn list_for_restore(&self) -> Result<Vec<SubscriptionRecord>, AppError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT target, target_type, status, last_synced_at, last_attempt_at, failure_count, error_message
-            FROM nostr_subscriptions
-            WHERE status IN ('pending', 'needs_resync')
-            ORDER BY updated_at ASC
-            "#,
-        )
-        .fetch_all(self.pool.get_pool())
-        .await?;
-
-        rows.into_iter()
-            .map(|row| self.row_to_record(row))
-            .collect()
+        self.repository.list_for_restore().await
     }
 
     async fn list_all(&self) -> Result<Vec<SubscriptionRecord>, AppError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT target, target_type, status, last_synced_at, last_attempt_at, failure_count, error_message
-            FROM nostr_subscriptions
-            ORDER BY target_type ASC, target ASC
-            "#,
-        )
-        .fetch_all(self.pool.get_pool())
-        .await?;
-
-        rows.into_iter()
-            .map(|row| self.row_to_record(row))
-            .collect()
+        self.repository.list_all().await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::value_objects::subscription::SubscriptionStatus;
+    use crate::infrastructure::database::{
+        SqliteSubscriptionStateRepository, connection_pool::ConnectionPool,
+    };
 
     async fn setup_state_machine() -> SubscriptionStateMachine {
         let pool = ConnectionPool::from_memory().await.unwrap();
-        let machine = SubscriptionStateMachine::new(pool.clone());
         sqlx::migrate!("./migrations")
             .run(pool.get_pool())
             .await
             .unwrap();
-        machine
+        let repository = Arc::new(SqliteSubscriptionStateRepository::new(pool));
+        SubscriptionStateMachine::new(repository)
     }
 
     #[tokio::test]
@@ -357,7 +151,11 @@ mod tests {
         let target = SubscriptionTarget::Topic("fail_topic".into());
         machine.record_request(target.clone()).await.unwrap();
         machine.mark_failure(&target, "error").await.unwrap();
-        let record = machine.fetch_record("topic", "fail_topic").await.unwrap();
+        let records = machine.list_all().await.unwrap();
+        let record = records
+            .into_iter()
+            .find(|record| matches!(&record.target, SubscriptionTarget::Topic(id) if id == "fail_topic"))
+            .unwrap();
         assert_eq!(record.status, SubscriptionStatus::NeedsResync);
         assert_eq!(record.failure_count, 1);
         assert_eq!(record.error_message.as_deref(), Some("error"));
@@ -370,7 +168,13 @@ mod tests {
         machine.record_request(target.clone()).await.unwrap();
         machine.mark_subscribed(&target, 200).await.unwrap();
         machine.mark_all_need_resync().await.unwrap();
-        let record = machine.fetch_record("topic", "resync").await.unwrap();
+        let records = machine.list_all().await.unwrap();
+        let record = records
+            .into_iter()
+            .find(
+                |record| matches!(&record.target, SubscriptionTarget::Topic(id) if id == "resync"),
+            )
+            .unwrap();
         assert_eq!(record.status, SubscriptionStatus::NeedsResync);
     }
 

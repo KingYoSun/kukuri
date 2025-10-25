@@ -440,7 +440,7 @@ export function PeerConnectionPanel() {
 - **WSA-03 Bookmark Repository 移行**: `domain::entities::bookmark` と `infrastructure::database::bookmark_repository` を追加し、`PostService`／`presentation::handlers::post_handler` を新 Repository に再配線する。`AppState` の `BookmarkManager` フィールドは互換ラッパに縮退させ、最終的に削除する。
 - **WSA-04 SecureStorage / Encryption 再構成**: `infrastructure::storage::secure_storage` に debug/テストユーティリティを移し、`SecureStorageHandler` は新しい `SecureStoragePort`（仮称）を経由。暗号処理は `infrastructure::crypto::encryption_service` トレイトへ集約し、`AppState` の Legacy EncryptionManager / KeyManager 依存を排除する。
 - **WSA-05 Legacy Database Connection 廃止（2025年10月25日完了）**: `state`／`EventManager`／`EventHandler` を `infrastructure::database::ConnectionPool` 経由へ再配線し、Legacy `modules::database::{connection,models}` を撤去済み。`.sqlx` は動的クエリのみのため再生成不要であることを確認。依存棚卸しドキュメントにも完了ステータスを反映した。
-- **SubscriptionStateMachine**: SQL を直書きしている箇所を `SubscriptionStateRepository`（新設）へ切り出し、再同期バックオフ計算を `domain::value_objects` に移す。WSA-02 完了後に着手し、Offline/P2P 双方の再購読ロジックを同一インターフェースに揃える。
+- **SubscriptionStateMachine**: 2025年10月25日 SSR-01/02 完了。`application::ports::subscription_state_repository.rs` と `infrastructure::database::subscription_state_repository.rs` で Repository を実装し、`SubscriptionStateMachine` はポート越しに遷移管理を行う。再同期バックオフ計算は `domain::value_objects::subscription` に移し、DI から `SqliteSubscriptionStateRepository` を注入する構成へ更新済み。
 
 ## MVP完成後の改善
 

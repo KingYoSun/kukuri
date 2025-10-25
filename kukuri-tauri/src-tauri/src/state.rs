@@ -10,6 +10,7 @@ use application_container::ApplicationContainer;
 // アプリケーションサービスのインポート
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::secure_storage::SecureAccountStore;
+use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
     SyncService, TopicService, UserService,
@@ -21,8 +22,9 @@ use crate::infrastructure::{
         SignatureService, key_manager::DefaultKeyManager,
     },
     database::{
-        BookmarkRepository, EventRepository, PostRepository, Repository, TopicRepository,
-        UserRepository, connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
+        BookmarkRepository, EventRepository, PostRepository, Repository,
+        SqliteSubscriptionStateRepository, TopicRepository, UserRepository,
+        connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     },
     event::{
         EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
@@ -125,6 +127,9 @@ impl AppState {
         // 新アーキテクチャのリポジトリとサービスを初期化
         let connection_pool = ConnectionPool::new(&db_url).await?;
         let repository = Arc::new(SqliteRepository::new(connection_pool.clone()));
+        let subscription_repository: Arc<dyn SubscriptionStateRepository> = Arc::new(
+            SqliteSubscriptionStateRepository::new(connection_pool.clone()),
+        );
 
         // リポジトリのマイグレーションを実行
         repository.initialize().await?;
@@ -201,7 +206,9 @@ impl AppState {
             Arc::clone(&event_distributor),
         ));
 
-        let subscription_state = Arc::new(SubscriptionStateMachine::new(connection_pool.clone()));
+        let subscription_state = Arc::new(SubscriptionStateMachine::new(Arc::clone(
+            &subscription_repository,
+        )));
 
         // EventServiceの初期化
         let legacy_event_gateway =

@@ -8,14 +8,15 @@ pub mod sync_service;
 pub mod topic_service;
 pub mod user_service;
 
+pub use crate::domain::value_objects::subscription::{
+    SubscriptionRecord, SubscriptionStatus, SubscriptionTarget,
+};
 pub use auth_service::AuthService;
 pub use event_service::EventService;
 pub use offline_service::OfflineService;
 pub use p2p_service::P2PService;
 pub use post_service::PostService;
-pub use subscription_state::{
-    SubscriptionRecord, SubscriptionStateMachine, SubscriptionStateStore, SubscriptionTarget,
-};
+pub use subscription_state::{SubscriptionStateMachine, SubscriptionStateStore};
 pub use sync_service::SyncService;
 pub use topic_service::TopicService;
 pub use user_service::UserService;

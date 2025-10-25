@@ -147,11 +147,6 @@
   - 2025年10月25日: `application::ports::subscription_invoker.rs` を追加し、`EventManagerSubscriptionInvoker` を `infrastructure::event` へ移設。`state.rs`・Unit/Integration テストの import を更新し、`EventService` からはポートのみを参照する構成に刷新。
   - 2025年10月25日: Legacy `modules/event/manager/conversions.rs` を廃止し、`nostr_event_to_domain_event` を `application/shared/mappers/event/nostr_to_domain.rs` へ統合。`p2p.rs` は新 mapper 経由で DomainEvent を生成する。
   - 2025年10月25日: `infrastructure::event::metrics` を新設し、Gateway の主要 API に成功/失敗カウンタを付与。`tests/infrastructure/event/event_manager_gateway.rs` にメトリクス検証ケースを追加し、`LegacyEventManagerGateway` の回帰テストを拡充。
-- [ ] Phase 5 SubscriptionStateMachine Repository 化（`phase5_dependency_inventory_template.md` 15-24行）
-  - [ ] SSR-01: `application/ports/subscription_state_repository.rs`（仮）とドメイン値オブジェクトを設計し、既存 `subscription_state.rs` から直書き SQL を切り離す。
-  - [ ] SSR-02: `SubscriptionStateMachine` / `SubscriptionStateStore` / Offline 再索引経路を新 Repository に接続し、再同期バックオフや `needs_resync` 遷移をドメイン層で管理できるよう変更する。
-  - [ ] SSR-03: `docs/01_project/refactoring_plan_2025-08-08_v3.md`・`phase5_dependency_inventory_template.md`・Runbook 類に移行結果を反映し、`cargo test --test subscription_state`（新設予定）でリグレッションを検証する。
-
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
 -メモ/進捗ログ:

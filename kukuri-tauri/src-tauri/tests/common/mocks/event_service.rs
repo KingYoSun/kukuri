@@ -3,9 +3,8 @@ use mockall::mock;
 use nostr_sdk::prelude::Timestamp;
 
 use kukuri_lib::application::ports::subscription_invoker::SubscriptionInvoker;
-use kukuri_lib::application::services::subscription_state::{
-    SubscriptionRecord, SubscriptionStateStore, SubscriptionTarget,
-};
+use kukuri_lib::application::services::subscription_state::SubscriptionStateStore;
+use kukuri_lib::domain::value_objects::subscription::{SubscriptionRecord, SubscriptionTarget};
 use kukuri_lib::domain::entities::Event;
 use kukuri_lib::infrastructure::crypto::SignatureService;
 use kukuri_lib::infrastructure::database::EventRepository;
