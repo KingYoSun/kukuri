@@ -90,9 +90,10 @@ pub async fn clear_all_accounts_for_test(
 
     #[cfg(debug_assertions)]
     {
-        use crate::modules::secure_storage::SecureStorage;
+        use crate::infrastructure::storage::secure_storage::DefaultSecureStorage;
 
-        SecureStorage::clear_all_accounts().map_err(|e| AppError::Storage(e.to_string()))?;
+        DefaultSecureStorage::clear_all_accounts_for_test()
+            .map_err(|e| AppError::Storage(e.to_string()))?;
         Ok(ApiResponse::success(()))
     }
 }

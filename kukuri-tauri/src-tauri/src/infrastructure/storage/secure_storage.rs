@@ -38,6 +38,21 @@ impl DefaultSecureStorage {
         Self
     }
 
+    #[cfg(debug_assertions)]
+    pub fn clear_all_accounts_for_test() -> Result<()> {
+        let metadata = Self::get_accounts_metadata()?;
+        for npub in metadata.accounts.keys() {
+            Self::delete_private_key(npub)?;
+        }
+
+        let entry =
+            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(anyhow::anyhow!("Failed to delete accounts metadata: {e}")),
+        }
+    }
+
     /// 秘密鍵を保存（npubごとに個別保存）
     pub fn save_private_key(npub: &str, nsec: &str) -> Result<()> {
         debug!("SecureStorage: Saving private key for npub={npub}");

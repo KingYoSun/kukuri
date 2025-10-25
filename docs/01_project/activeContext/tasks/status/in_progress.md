@@ -152,9 +152,11 @@
   - [x] Stage2: `LegacyEventManagerGateway` / `EventManagerHandle` / `SubscriptionInvoker` から旧 `modules::auth::key_manager` 依存を排除し、Gateway/Topic/Post 系テストを新ポート経由に切り替え。
   - [x] Stage3: `modules::auth::key_manager` と関連テスト・再エクスポートを削除し、`refactoring_plan_2025-08-08_v3.md`／`phase5_dependency_inventory_template.md` を更新。Rust/TS テスト系は Phase 5 既定フロー（`cargo fmt` / `cargo clippy -- -D warnings` / `./scripts/test-docker.ps1 rust` / `pnpm test`）で回帰確認。
   - 2025年10月25日: `application::ports::key_manager` + `DefaultKeyManager` への統一により、Legacy KeyManager はアーカイブ済み。AppState/Tauri/EventManager/SubscriptionInvoker からの直接依存は解消され、ドキュメント＆タスクも更新完了。
-- [ ] Phase 5 Legacy SecureStorage デバッグユーティリティ整理（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 342行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 31行）
-  - [ ] Stage1: `DefaultSecureStorage`（または `SecureAccountStore`）に debug 用クリア API を追加し、`clear_all_accounts_for_test` が Legacy `modules::secure_storage` を参照しない構成へ変更。`cargo fmt` / `./scripts/test-docker.ps1 rust` / `pnpm test` を実行して互換性を確認。
-  - [ ] Stage2: `modules::secure_storage` と関連テストを削除し、`lib.rs`／コマンド登録／TypeScript API を新ユーティリティへ置換。ランブックと依存棚卸しドキュメントを更新し、debug 手順を最新化。
+- [x] Phase 5 Legacy SecureStorage デバッグユーティリティ整理（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 342行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 31行）
+  - [x] Stage1: `DefaultSecureStorage`（または `SecureAccountStore`）に debug 用クリア API を追加し、`clear_all_accounts_for_test` が Legacy `modules::secure_storage` を参照しない構成へ変更。`cargo fmt` / `./scripts/test-docker.ps1 rust` / `pnpm test` を実行して互換性を確認。
+  - [x] Stage2: `modules::secure_storage` と関連テストを削除し、`lib.rs`／コマンド登録／TypeScript API（変更なし）を新ユーティリティへ置換。ランブックと依存棚卸しドキュメントを更新し、debug 手順を最新化。
+  - 2025年10月25日: `DefaultSecureStorage::clear_all_accounts_for_test` を追加し、Tauri `clear_all_accounts_for_test` コマンドを新実装へ接続。Legacy 依存を排除しつつ Keyring 操作は Infrastructure 層へ集約。
+  - 2025年10月25日: `modules/secure_storage`（mod/tests）を削除し、`refactoring_plan_2025-08-08_v3.md` / `phase5_dependency_inventory_template.md` に完了状況を記録。Windows `cargo test` は `STATUS_ENTRYPOINT_NOT_FOUND`（既知）で停止したが、`./scripts/test-docker.ps1 rust` / `pnpm test` / `kukuri-cli cargo test` で回帰を確認。
 - [ ] Phase 5 BookmarkManager アーカイブ（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 341行／`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md` 30行）
   - [ ] Stage1: `modules::bookmark`（manager/tests）を `state.rs` や `presentation::handlers::post_handler` から完全に切り離し、`BookmarkRepository` 経路のみで bookmark API が動作することを `pnpm test` / `./scripts/test-docker.ps1 rust` で検証。
   - [ ] Stage2: Legacy モジュール／テストを削除し、`modules/mod.rs` 再エクスポートと関連ドキュメントを更新。Migration 後に `.sqlx`／Plan／Runbook をメンテナンスし、完了ログを `tasks/completed/YYYY-MM-DD.md` へ記録。
