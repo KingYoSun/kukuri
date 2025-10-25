@@ -116,7 +116,17 @@ impl SqliteOfflinePersistence {
     pub async fn list_sync_conflicts(&self) -> Result<Vec<SyncStatusRecord>, AppError> {
         let rows = sqlx::query_as::<_, SyncStatusRow>(
             r#"
-            SELECT * FROM sync_status
+            SELECT
+                rowid as id,
+                entity_type,
+                entity_id,
+                local_version,
+                NULL AS remote_version,
+                last_local_update,
+                NULL AS last_remote_sync,
+                sync_status,
+                conflict_data
+            FROM sync_status
             WHERE sync_status IN ('conflict', 'failed', 'pending')
             ORDER BY last_local_update DESC
             "#,

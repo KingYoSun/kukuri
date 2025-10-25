@@ -87,6 +87,11 @@
 3. `modules/event/manager` 内の Presentation 依存（`tauri::AppHandle` など）を EventGateway 実装側に閉じ込めるためのラッパを追加。
 4. 結合テスト（Mainline DHT, EventService integration）を Gateway 経由で実行するように更新。
 
+#### EG-S2-01 実装メモ（2025年10月24日）
+- `EventManager` から `AppHandle` 保持・UI emit ロジックを削除し、`LegacyEventManagerGateway` 側に `set_app_handle` を追加して UI への `nostr://event/p2p` 通知を橋渡し。
+- ApplicationContainer で生成した Gateway を `EventService` へ DI しつつ `AppHandle` を注入する初期化フローを再構築。`EventService` 側では Legacy 依存を意識せず `Arc<dyn EventGateway>` のみを扱う。
+- Gateway で DomainEvent→Nostr イベント変換後に UI emit を担保するテスト（ハンドル未設定時のノップ/ペイロード変換）を追加し、`cargo test` で網羅的に検証。
+
 ### Sprint 3（オプション, 2日）
 - SubscriptionInvoker もポート化し、Gateway との分離を完了。
 - `modules/event/manager` の `conversions` モジュールを完全に mapper へ移管。

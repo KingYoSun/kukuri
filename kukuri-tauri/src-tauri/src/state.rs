@@ -203,17 +203,24 @@ impl AppState {
         let subscription_state = Arc::new(SubscriptionStateMachine::new(connection_pool.clone()));
 
         // EventServiceの初期化
+        let legacy_event_gateway =
+            Arc::new(LegacyEventManagerGateway::new(Arc::clone(&event_manager)));
+        let event_gateway: Arc<dyn crate::application::ports::event_gateway::EventGateway> =
+            legacy_event_gateway.clone();
         let mut event_service_inner = EventService::new(
             Arc::clone(&repository) as Arc<dyn EventRepository>,
             Arc::clone(&signature_service),
             Arc::clone(&event_distributor),
-            Arc::new(LegacyEventManagerGateway::new(Arc::clone(&event_manager))),
+            event_gateway,
             Arc::clone(&subscription_state)
                 as Arc<dyn crate::application::services::SubscriptionStateStore>,
         );
         event_service_inner.set_subscription_invoker(Arc::new(
             EventManagerSubscriptionInvoker::new(Arc::clone(&event_manager)),
         ));
+        legacy_event_gateway
+            .set_app_handle(app_handle.clone())
+            .await;
         let event_service = Arc::new(event_service_inner);
 
         // SyncServiceの初期化（PostServiceとEventServiceが必要）

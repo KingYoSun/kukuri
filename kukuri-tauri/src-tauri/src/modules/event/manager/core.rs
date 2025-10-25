@@ -10,7 +10,6 @@ use crate::modules::event::nostr_client::NostrClientManager;
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
-use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -21,7 +20,6 @@ pub struct EventManager {
     pub(crate) event_publisher: Arc<RwLock<EventPublisher>>,
     pub(crate) default_topics: Arc<DefaultTopicsRegistry>,
     is_initialized: Arc<RwLock<bool>>,
-    pub(crate) app_handle: Arc<RwLock<Option<AppHandle>>>,
     /// P2P配信用のGossipService（任意）
     pub(crate) gossip_service: Arc<RwLock<Option<Arc<dyn GossipService>>>>,
     /// 参照トピック解決用のEventRepository（任意）
@@ -38,7 +36,6 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             default_topics: Arc::new(DefaultTopicsRegistry::with_topics(["public".into()])),
             is_initialized: Arc::new(RwLock::new(false)),
-            app_handle: Arc::new(RwLock::new(None)),
             gossip_service: Arc::new(RwLock::new(None)),
             event_repository: Arc::new(RwLock::new(None)),
         }
@@ -55,16 +52,9 @@ impl EventManager {
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
             default_topics: Arc::new(DefaultTopicsRegistry::with_topics(["public".into()])),
             is_initialized: Arc::new(RwLock::new(false)),
-            app_handle: Arc::new(RwLock::new(None)),
             gossip_service: Arc::new(RwLock::new(None)),
             event_repository: Arc::new(RwLock::new(None)),
         }
-    }
-
-    /// AppHandleを設定
-    pub async fn set_app_handle(&self, app_handle: AppHandle) {
-        let mut handle = self.app_handle.write().await;
-        *handle = Some(app_handle);
     }
 
     /// 既定の配信先トピックIDを設定

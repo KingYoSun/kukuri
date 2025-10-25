@@ -88,7 +88,7 @@
   - 2025年10月23日: 旧 `tests/nip10_contract_tests.rs` を `tests/contract.rs` 経由のモジュール構成へ移し、`env!("CARGO_MANIFEST_DIR")` 連結で `testdata` を参照するよう修正。
   - 2025年10月23日: `scripts/test-docker.ps1` の `contracts` コマンドを Rust 新モジュールと TypeScript 契約テスト（`src/tests/unit/lib/nip10.contract.test.ts`）へ追随させ、`test-runner` サービス経由で実行するよう調整。
   - 2025年10月23日: `./scripts/test-docker.ps1 contracts` を実行し、Rust / TypeScript 契約テストを Docker で完走（Rust 側は既知の `description` 未使用警告のみ発生）。
-- [ ] Phase 5 依存関係棚卸し TODO 対応（`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）
+- [x] Phase 5 依存関係棚卸し TODO 対応（`docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）
   - 2025年10月23日: 主要サービス/Repository/コマンド/Legacy 25件を棚卸しし、High 難易度項目の対策メモを `tauri_app_implementation_plan.md` に追記。外部クレートもカテゴリ別に整理した。
   - 2025年10月23日: EventService/EventManager 向けの `EventGateway` 抽象と mapper 整理案を `docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md` にまとめ、Sprint 1〜3 の粒度を定義した。
   - 2025年10月23日: Sprint 1 着手タスク（EG-S1-01〜04）を `phase5_event_gateway_design.md` に起票し、`application::ports::event_gateway.rs` / `application/shared/mappers/event/*` の実装前準備を完了。
@@ -130,11 +130,13 @@
 - [x] Phase 5 OfflineService Adapter Stage 3（Legacy 解体／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 3）
   - 2025年10月25日: `modules/offline`（manager/models/reindex/tests）と `infrastructure/offline/legacy_adapter.rs` を削除し、`SqliteOfflinePersistence` へ監視系 API を集約。`OfflineReindexJob` を新モジュールで再実装し、`state.rs` の DI を更新。
   - 2025年10月25日: Rust ユニットテストを `infrastructure/offline/{sqlite_store,reindex_job}.rs` 内へ移設。`phase5_dependency_inventory_template.md` / `phase5_offline_adapter_plan.md` を Stage 3 完了内容で更新。ローカル `cargo test` は `cc` リンクエラーで失敗（要 Docker 実行）だが、ビルド・フォーマットまでは完了。
+  - 2025年10月24日: `sync_status` テーブルが行 ID カラムを持たない問題に合わせて `SELECT rowid AS id` を適用し、`list_sync_conflicts` ヘルパーが `SyncStatusRecord` を復元できるよう修正。Stage 3 の QA テストが `cargo test` でグリーンになったことを確認。
 - [ ] Phase 5 EventGateway Sprint 2（`docs/01_project/activeContext/artefacts/phase5_event_gateway_design.md`）
   - [ ] Sprint2-1: `infrastructure/event/event_manager_gateway.rs` を実装し、Legacy EventManager への委譲と mapper 呼び出しを整理する。
   - [ ] Sprint2-2: `state.rs` / `application_container.rs` の DI を Gateway 経由に更新する。
   - [ ] Sprint2-3: `modules/event/manager` の Presentation 依存を Gateway 側へ閉じ込めるラッパを追加する。
   - [ ] Sprint2-4: Mainline DHT / EventService 結合テストを Gateway 経由で実行するよう更新する。
+  - 2025年10月24日: `LegacyEventManagerGateway` に `AppHandle` セッタと UI emit 機能を集約し、`EventManager` 本体から Presentation 依存を排除。DI で `Arc<dyn EventGateway>` を注入するよう `state.rs` を更新し、Gateway 単体テストを追加済み。
 
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 

@@ -1,4 +1,3 @@
-use super::p2p::NostrEventPayload;
 use super::*;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::p2p::GossipService;
@@ -8,7 +7,6 @@ use std::sync::Arc;
 
 mod support;
 
-use support::fixtures::sample_signed_event;
 use support::mocks::TestGossipService;
 
 #[tokio::test]
@@ -117,25 +115,6 @@ async fn test_ensure_initialized() {
         .unwrap();
 
     assert!(manager.ensure_initialized().await.is_ok());
-}
-
-#[tokio::test]
-async fn test_event_payload_creation() {
-    let event = sample_signed_event();
-
-    let payload = NostrEventPayload {
-        id: event.id.to_string(),
-        author: event.pubkey.to_string(),
-        content: event.content.clone(),
-        created_at: event.created_at.as_u64(),
-        kind: event.kind.as_u16() as u32,
-        tags: event.tags.iter().map(|tag| tag.clone().to_vec()).collect(),
-    };
-
-    assert_eq!(payload.id, event.id.to_string());
-    assert_eq!(payload.content, "Test content");
-    assert_eq!(payload.kind, Kind::TextNote.as_u16() as u32);
-    assert!(!payload.tags.is_empty());
 }
 
 #[tokio::test]

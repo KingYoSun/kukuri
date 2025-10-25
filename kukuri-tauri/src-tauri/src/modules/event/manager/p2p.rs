@@ -3,8 +3,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use nostr_sdk::prelude::*;
-use serde::{Deserialize, Serialize};
-use tauri::Emitter;
 use tracing::error;
 
 use super::EventManager;
@@ -12,17 +10,6 @@ use super::conversions::nostr_to_domain_event;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::database::EventRepository as InfraEventRepository;
 use crate::infrastructure::p2p::GossipService;
-
-/// フロントエンドに送信するイベントペイロード
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NostrEventPayload {
-    pub id: String,
-    pub author: String,
-    pub content: String,
-    pub created_at: u64,
-    pub kind: u32,
-    pub tags: Vec<Vec<String>>,
-}
 
 impl EventManager {
     /// GossipServiceを接続（P2P配信用）。未設定でも動作は継続。
@@ -42,20 +29,6 @@ impl EventManager {
         if let Err(e) = self.event_handler.handle_event(event.clone()).await {
             error!("Error handling P2P event: {}", e);
             return Err(e);
-        }
-
-        if let Some(handle) = self.app_handle.read().await.clone() {
-            let payload = NostrEventPayload {
-                id: event.id.to_string(),
-                author: event.pubkey.to_string(),
-                content: event.content.clone(),
-                created_at: event.created_at.as_u64(),
-                kind: event.kind.as_u16() as u32,
-                tags: event.tags.iter().map(|tag| tag.clone().to_vec()).collect(),
-            };
-            if let Err(e) = handle.emit("nostr://event/p2p", payload) {
-                error!("Failed to emit nostr event to frontend: {}", e);
-            }
         }
 
         Ok(())

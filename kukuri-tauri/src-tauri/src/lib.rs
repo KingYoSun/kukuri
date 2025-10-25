@@ -137,12 +137,6 @@ pub fn run() {
                     .await
                     .expect("Failed to initialize app state");
 
-                // EventManagerにAppHandleを設定
-                app_state
-                    .event_manager
-                    .set_app_handle(app_handle.clone())
-                    .await;
-
                 // P2P機能を初期化
                 if let Err(e) = app_state.initialize_p2p().await {
                     tracing::warn!("Failed to initialize P2P: {}", e);
