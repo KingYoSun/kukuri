@@ -177,6 +177,7 @@
 - 2025年10月17日: `DiscoveryOptions` と `P2PService::builder` を導入し、Mainline DHT 切替対応のためのP2Pスタック組み立てを再構成。
 - 2025年10月21日: GitHub Actions `Native Test (Linux)` で発生していた TypeScript 型エラーを解消。Zustand 永続化ヘルパー（`persistHelpers.ts`）と `src/stores/config/persist.ts` をジェネリクス対応へ更新し、`pnpm type-check` と `gh act -j native-test-linux -W .github/workflows/test.yml` の成功を確認。
 - 2025年10月21日: Prettier ルールに合わせて `src/stores/config/persist.ts` を整形し、`pnpm format:check` および `gh act -j format-check -W .github/workflows/test.yml` が成功することを確認。
+- 2025年10月26日: GitHub Actions `Native Test (Linux)` で `clippy::should_implement_trait` により失敗していた `SubscriptionStatus`/`OfflineActionId`/`TopicContent`/`ReactionValue` の `from_str` 実装を `FromStr` トレイト＋`parse` ヘルパーへ置き換え。`cargo clippy -- -D warnings`（`kukuri-tauri/src-tauri` & `kukuri-cli`）と `./scripts/test-docker.ps1 rust`（Windowsローカルの `cargo test` は `STATUS_ENTRYPOINT_NOT_FOUND` のため代替）に加えて、`gh act -j native-test-linux` を完走させ CI 等価性を確認。
 - 2025年10月23日: GitHub Actions の `clippy::new_without_default` 失敗を解消するため、EventPublisher/TestGossipService/KeyManager/EventManager に `Default` を実装し、`cargo fmt` を実行。`gh act -j native-test-linux` と `gh act -j format-check` が成功することを確認。
 - 2025年10月23日: Format Check ジョブが Prettier 警告（`src/tests/...` 5件）で失敗していたため、対象テストファイルを `pnpm prettier --write` で整形し、`pnpm format:check` と `gh act -j format-check -W .github/workflows/test.yml` が成功することを確認。
 - 2025年10月23日: EventService ユニットテスト群を `tests/unit/application/event_service` へ移設し、`tests/common/mocks` に EventManager スタブとモック群を整理。`test_p2p_mainline.rs` を追加して Mainline DHT 設定の統合シナリオを整備。

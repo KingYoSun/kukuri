@@ -25,7 +25,7 @@ pub struct CacheTypeAggregate {
 }
 
 pub fn offline_action_from_row(row: OfflineActionRow) -> Result<OfflineActionRecord, AppError> {
-    let action_id = OfflineActionId::from_str(&row.local_id).map_err(AppError::ValidationError)?;
+    let action_id = OfflineActionId::parse(&row.local_id).map_err(AppError::ValidationError)?;
     let public_key =
         PublicKey::from_hex_str(&row.user_pubkey).map_err(AppError::ValidationError)?;
     let action_type =

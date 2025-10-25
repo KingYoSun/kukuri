@@ -32,9 +32,7 @@ impl SqliteSubscriptionStateRepository {
         let error_message: Option<String> = row.get("error_message");
 
         let target = SubscriptionTarget::from_parts(&target_type, target_value)?;
-        let status = SubscriptionStatus::from_str(&status).ok_or_else(|| {
-            AppError::ValidationError(format!("Unknown subscription status stored: {status}"))
-        })?;
+        let status = SubscriptionStatus::parse(&status)?;
 
         Ok(SubscriptionRecord {
             target,

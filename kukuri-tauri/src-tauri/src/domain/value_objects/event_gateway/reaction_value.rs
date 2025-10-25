@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 /// リアクション（例: 👍, ❤️）の値を表現する値オブジェクト。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -13,7 +13,7 @@ impl ReactionValue {
         Ok(Self(value))
     }
 
-    pub fn from_str(value: &str) -> Result<Self, String> {
+    pub fn parse(value: &str) -> Result<Self, String> {
         Self::validate(value)?;
         Ok(Self(value.to_string()))
     }
@@ -52,6 +52,14 @@ impl TryFrom<&str> for ReactionValue {
     type Error = String;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::from_str(value)
+        Self::parse(value)
+    }
+}
+
+impl FromStr for ReactionValue {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
     }
 }

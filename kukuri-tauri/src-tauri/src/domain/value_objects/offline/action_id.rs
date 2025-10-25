@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 /// アプリケーションが参照するオフラインアクションの識別子（`local_id` 相当）。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -11,7 +11,7 @@ impl OfflineActionId {
         Ok(Self(value))
     }
 
-    pub fn from_str(value: &str) -> Result<Self, String> {
+    pub fn parse(value: &str) -> Result<Self, String> {
         Self::validate(value)?;
         Ok(Self(value.to_string()))
     }
@@ -37,5 +37,13 @@ impl fmt::Display for OfflineActionId {
 impl From<OfflineActionId> for String {
     fn from(id: OfflineActionId) -> Self {
         id.0
+    }
+}
+
+impl FromStr for OfflineActionId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
     }
 }

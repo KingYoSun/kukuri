@@ -192,7 +192,7 @@ impl EventServiceTrait for EventService {
     ) -> Result<EventId, AppError> {
         let topic = TopicId::new(topic_id.to_string())
             .map_err(|err| AppError::ValidationError(format!("Invalid topic ID: {err}")))?;
-        let topic_content = TopicContent::from_str(content)
+        let topic_content = TopicContent::parse(content)
             .map_err(|err| AppError::ValidationError(format!("Invalid topic content: {err}")))?;
         let reply_to_id = parse_optional_event_id(reply_to)?;
         self.event_gateway
@@ -202,7 +202,7 @@ impl EventServiceTrait for EventService {
 
     async fn send_reaction(&self, event_id: &str, reaction: &str) -> Result<EventId, AppError> {
         let event_id = parse_event_id(event_id)?;
-        let reaction_value = ReactionValue::from_str(reaction)
+        let reaction_value = ReactionValue::parse(reaction)
             .map_err(|err| AppError::ValidationError(format!("Invalid reaction value: {err}")))?;
         self.event_gateway
             .send_reaction(&event_id, &reaction_value)

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 /// トピック投稿など、長文コンテンツを扱う値オブジェクト。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,7 +13,7 @@ impl TopicContent {
         Ok(Self(value))
     }
 
-    pub fn from_str(value: &str) -> Result<Self, String> {
+    pub fn parse(value: &str) -> Result<Self, String> {
         Self::validate(value)?;
         Ok(Self(value.to_string()))
     }
@@ -56,6 +56,14 @@ impl TryFrom<&str> for TopicContent {
     type Error = String;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::from_str(value)
+        Self::parse(value)
+    }
+}
+
+impl FromStr for TopicContent {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
     }
 }

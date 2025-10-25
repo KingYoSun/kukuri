@@ -1,5 +1,6 @@
 use crate::shared::error::AppError;
 use nostr_sdk::prelude::Timestamp;
+use std::str::FromStr;
 
 pub const RESYNC_BACKOFF_SECS: i64 = 300;
 
@@ -44,13 +45,23 @@ impl SubscriptionStatus {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse(value: &str) -> Result<Self, AppError> {
         match value {
-            "pending" => Some(SubscriptionStatus::Pending),
-            "subscribed" => Some(SubscriptionStatus::Subscribed),
-            "needs_resync" => Some(SubscriptionStatus::NeedsResync),
-            _ => None,
+            "pending" => Ok(SubscriptionStatus::Pending),
+            "subscribed" => Ok(SubscriptionStatus::Subscribed),
+            "needs_resync" => Ok(SubscriptionStatus::NeedsResync),
+            other => Err(AppError::ValidationError(format!(
+                "Unknown subscription status: {other}"
+            ))),
         }
+    }
+}
+
+impl FromStr for SubscriptionStatus {
+    type Err = AppError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
     }
 }
 
