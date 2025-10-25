@@ -1,24 +1,12 @@
-# Phase 5 OfflineService Adapter 設計
-最終更新日: 2025年10月23日
+﻿# Phase 5 OfflineService Adapter 險ｭ險・譛邨よ峩譁ｰ譌･: 2025蟷ｴ10譛・5譌･
 
-## 背景
-- `application::services::OfflineService` は `modules::offline::{OfflineManager, models::*}` に直接依存しており、Application 層内で SQLx 構造体（`OfflineAction`, `CacheMetadata` など）をそのまま公開している。
-- `phase5_dependency_inventory_template.md` で `OfflineService` / `OfflineManager` を High 難易度項目として特定済み。Infrastructure への移行と抽象化が求められている。
-- Phase 4 で追加された機能（SyncQueue、OptimisticUpdate など）が Manager に集中し、責務が肥大化している。
+## 閭梧勹
+- `application::services::OfflineService` 縺ｯ `modules::offline::{OfflineManager, models::*}` 縺ｫ逶ｴ謗･萓晏ｭ倥＠縺ｦ縺翫ｊ縲、pplication 螻､蜀・〒 SQLx 讒矩菴難ｼ・OfflineAction`, `CacheMetadata` 縺ｪ縺ｩ・峨ｒ縺昴・縺ｾ縺ｾ蜈ｬ髢九＠縺ｦ縺・ｋ縲・- `phase5_dependency_inventory_template.md` 縺ｧ `OfflineService` / `OfflineManager` 繧・High 髮｣譏灘ｺｦ鬆・岼縺ｨ縺励※迚ｹ螳壽ｸ医∩縲・nfrastructure 縺ｸ縺ｮ遘ｻ陦後→謚ｽ雎｡蛹悶′豎ゅａ繧峨ｌ縺ｦ縺・ｋ縲・- Phase 4 縺ｧ霑ｽ蜉縺輔ｌ縺滓ｩ溯・・・yncQueue縲＾ptimisticUpdate 縺ｪ縺ｩ・峨′ Manager 縺ｫ髮・ｸｭ縺励∬ｲｬ蜍吶′閧･螟ｧ蛹悶＠縺ｦ縺・ｋ縲・
+## 迴ｾ迥ｶ縺ｮ隱ｲ鬘・1. Application 螻､縺ｮ蜈ｬ髢句梛縺・Legacy 繝｢繧ｸ繝･繝ｼ繝ｫ萓晏ｭ・(`modules::offline::models::*`) 縺ｫ縺ｪ縺｣縺ｦ縺・ｋ縲・2. `serde_json::Value` 繧偵し繝ｼ繝薙せ蜀・〒螟夂畑縺励√ラ繝｡繧､繝ｳ繝｢繝・Ν縺御ｸ肴・迸ｭ縲・3. OfflineManager 縺ｸ縺ｮ蜻ｼ縺ｳ蜃ｺ縺励′蜷梧悄繝ｭ繧ｸ繝・け/繧ｭ繝｣繝・す繝･繝ｭ繧ｸ繝・け/繧ｭ繝･繝ｼ謫堺ｽ懊〒豺ｷ蝨ｨ縺励√ユ繧ｹ繝亥ｮｹ譏捺ｧ縺御ｽ弱＞縲・4. SQLx 讒矩菴薙・螟画峩縺・Application 螻､縺ｾ縺ｧ豕｢蜿翫☆繧九◆繧√￣hase 5 縺ｮ繝ｬ繧､繝､蜀肴ｧ区・縺ｫ荳榊髄縺阪・
+## 謠先｡医い繝ｼ繧ｭ繝・け繝√Ε
 
-## 現状の課題
-1. Application 層の公開型が Legacy モジュール依存 (`modules::offline::models::*`) になっている。
-2. `serde_json::Value` をサービス内で多用し、ドメインモデルが不明瞭。
-3. OfflineManager への呼び出しが同期ロジック/キャッシュロジック/キュー操作で混在し、テスト容易性が低い。
-4. SQLx 構造体の変更が Application 層まで波及するため、Phase 5 のレイヤ再構成に不向き。
-
-## 提案アーキテクチャ
-
-### 1. ポート（抽象化）設計
-- 新規追加: `kukuri-tauri/src-tauri/src/application/ports/offline_store.rs`
-- 役割: オフライン関連の永続化操作を抽象化し、サービスはポートのみに依存。
-- 抽象化を4つに分割し責務を明確化する。
-  ```rust
+### 1. 繝昴・繝茨ｼ域歓雎｡蛹厄ｼ芽ｨｭ險・- 譁ｰ隕剰ｿｽ蜉: `kukuri-tauri/src-tauri/src/application/ports/offline_store.rs`
+- 蠖ｹ蜑ｲ: 繧ｪ繝輔Λ繧､繝ｳ髢｢騾｣縺ｮ豌ｸ邯壼喧謫堺ｽ懊ｒ謚ｽ雎｡蛹悶＠縲√し繝ｼ繝薙せ縺ｯ繝昴・繝医・縺ｿ縺ｫ萓晏ｭ倥・- 謚ｽ雎｡蛹悶ｒ4縺､縺ｫ蛻・牡縺苓ｲｬ蜍吶ｒ譏守｢ｺ蛹悶☆繧九・  ```rust
   #[async_trait]
   pub trait OfflineActionStore {
       async fn save_action(&self, payload: OfflineActionDraft) -> Result<OfflineActionRecord, AppError>;
@@ -48,83 +36,32 @@
       async fn unresolved(&self) -> Result<Vec<OptimisticUpdateRecord>, AppError>;
   }
   ```
-- Application 層ではこれらのポートを束ねた `OfflinePersistence` を注入し、`OfflineService` は値オブジェクトとドメインロジックに集中する。
+- Application 螻､縺ｧ縺ｯ縺薙ｌ繧峨・繝昴・繝医ｒ譚溘・縺・`OfflinePersistence` 繧呈ｳｨ蜈･縺励～OfflineService` 縺ｯ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝医→繝峨Γ繧､繝ｳ繝ｭ繧ｸ繝・け縺ｫ髮・ｸｭ縺吶ｋ縲・
+### 2. 繝峨Γ繧､繝ｳ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝医・謨ｴ蛯・- 譌｢蟄倥・ `OfflineActionRecord`, `SyncResult`, `CacheStatusData` 縺ｪ縺ｩ繧・`domain::entities::offline`・域眠險ｭ・峨∈遘ｻ縺励ヾQLx 逕ｱ譚･縺ｮ `i64` / `String` 繧貞梛莉倥￠縺吶ｋ縲・  - 萓・ `OfflineActionId(String)`, `CacheKey(String)`, `SyncStatus(enum)`縲・- `serde_json::Value` 繧堤峩謗･霑斐＆縺壹～OfflinePayload`・亥・驛ｨ縺ｧ `serde_json::Value` 繧剃ｿ晄戟縺吶ｋ newtype・峨〒繝ｩ繝・・縺励ヰ繝ｪ繝・・繧ｷ繝ｧ繝ｳ繝昴う繝ｳ繝医ｒ譏守､ｺ縺吶ｋ縲・
+### 3. Infrastructure 螳溯｣・・谿ｵ髫守ｧｻ陦・- 譁ｰ繝・ぅ繝ｬ繧ｯ繝医Μ: `kukuri-tauri/src-tauri/src/infrastructure/offline/`
+  - `sqlite_store.rs`: SQLx 繝吶・繧ｹ縺ｮ螳溯｣・よ里蟄倥・ `OfflineManager` 繝ｭ繧ｸ繝・け繧貞・蜑ｲ遘ｻ讀阪・  - `mappers.rs`: SQLx Row 竊・繝峨Γ繧､繝ｳ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝医・螟画鋤縲・  - `mod.rs`: `OfflinePersistenceImpl` 繧貞・髢九・- 譌｢蟄倥・ `modules/offline` 縺ｯ Legacy 蛹悶＠縲∵ｮｵ髫守噪縺ｫ蜑企勁縲・
+### 4. 繧ｵ繝ｼ繝薙せ螻､繝ｪ繝輔ぃ繧ｯ繧ｿ繝ｪ繝ｳ繧ｰ譁ｹ驥・- `OfflineService` 縺ｧ縺ｯ莉･荳九ｒ蠕ｹ蠎・
+  - 繝昴・繝育ｵ檎罰縺ｧ繝・・繧ｿ蜿門ｾ励＠縲～SyncResult` 縺ｪ縺ｩ縺ｮ髮・ｨ医・縺ｿ諡・ｽ薙・  - UI 縺九ｉ蜿励￠蜿悶ｋ `serde_json::Value` 縺ｯ譁ｰ險ｭ mapper 縺ｧ繝舌Μ繝・・繧ｷ繝ｧ繝ｳ蠕後↓ `OfflinePayload` 縺ｸ螟画鋤縲・  - `manager` 繝輔ぅ繝ｼ繝ｫ繝峨ｒ `Arc<dyn OfflinePersistence>` 縺ｫ鄂ｮ謠帙・
+## 谿ｵ髫守噪遘ｻ陦瑚ｨ育判
 
-### 2. ドメイン値オブジェクトの整備
-- 既存の `OfflineActionRecord`, `SyncResult`, `CacheStatusData` などを `domain::entities::offline`（新設）へ移し、SQLx 由来の `i64` / `String` を型付けする。
-  - 例: `OfflineActionId(String)`, `CacheKey(String)`, `SyncStatus(enum)`。
-- `serde_json::Value` を直接返さず、`OfflinePayload`（内部で `serde_json::Value` を保持する newtype）でラップしバリデーションポイントを明示する。
-
-### 3. Infrastructure 実装の段階移行
-- 新ディレクトリ: `kukuri-tauri/src-tauri/src/infrastructure/offline/`
-  - `sqlite_store.rs`: SQLx ベースの実装。既存の `OfflineManager` ロジックを分割移植。
-  - `mappers.rs`: SQLx Row ↔ ドメイン値オブジェクトの変換。
-  - `mod.rs`: `OfflinePersistenceImpl` を公開。
-- 既存の `modules/offline` は Legacy 化し、段階的に削除。
-
-### 4. サービス層リファクタリング方針
-- `OfflineService` では以下を徹底:
-  - ポート経由でデータ取得し、`SyncResult` などの集計のみ担当。
-  - UI から受け取る `serde_json::Value` は新設 mapper でバリデーション後に `OfflinePayload` へ変換。
-  - `manager` フィールドを `Arc<dyn OfflinePersistence>` に置換。
-
-## 段階的移行計画
-
-### Stage 0（準備: 1日）
-1. ドメイン値オブジェクトとドラフト/フィルタ構造体を追加（`domain::entities::offline`）。
-2. `phase5_dependency_inventory_template.md` で `OfflineService` の課題項目にリンク。
-
-#### Stage 0 タスク一覧（2025年10月23日追加）
-| ID | 作業内容 | 対象パス/モジュール | チェックポイント |
+### Stage 0・域ｺ門ｙ: 1譌･・・1. 繝峨Γ繧､繝ｳ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝医→繝峨Λ繝輔ヨ/繝輔ぅ繝ｫ繧ｿ讒矩菴薙ｒ霑ｽ蜉・・domain::entities::offline`・峨・2. `phase5_dependency_inventory_template.md` 縺ｧ `OfflineService` 縺ｮ隱ｲ鬘碁・岼縺ｫ繝ｪ繝ｳ繧ｯ縲・
+#### Stage 0 繧ｿ繧ｹ繧ｯ荳隕ｧ・・025蟷ｴ10譛・3譌･霑ｽ蜉・・| ID | 菴懈･ｭ蜀・ｮｹ | 蟇ｾ雎｡繝代せ/繝｢繧ｸ繝･繝ｼ繝ｫ | 繝√ぉ繝・け繝昴う繝ｳ繝・|
 | --- | --- | --- | --- |
-| OFF-S0-01 | オフライン関連の値オブジェクト／エンティティ（`OfflineActionId`, `OfflinePayload`, `SyncStatus` など）を Domain 層へ追加。 | `kukuri-tauri/src-tauri/src/domain/entities/offline/*`<br>`kukuri-tauri/src-tauri/src/domain/value_objects/offline/*` | 既存 Application 型との互換性を確認し、Serde 派生を付与。 |
-| OFF-S0-02 | 新 VO への変換ヘルパを Application 層に仮実装し、`OfflineService` からの利用箇所を洗い出す。 | `kukuri-tauri/src-tauri/src/application/services/offline_service.rs` | 変換箇所の TODO をコメントで残し、後続 Stage 1 で差し替え可能な状態にする。 |
-| OFF-S0-03 | `.sqlx` ディレクトリの既存ファイルと OfflineManager の SQL を棚卸しし、準備段階での再生成要否を判定。 | `kukuri-tauri/src-tauri/.sqlx/`<br>`kukuri-tauri/src-tauri/src/modules/offline/manager.rs` | 動的 SQL のため即時再生成不要だが、Stage 2 で `query!` 導入時に `cargo sqlx prepare` が必要になる点をメモ。 |
+| OFF-S0-01 | 繧ｪ繝輔Λ繧､繝ｳ髢｢騾｣縺ｮ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝茨ｼ上お繝ｳ繝・ぅ繝・ぅ・・OfflineActionId`, `OfflinePayload`, `SyncStatus` 縺ｪ縺ｩ・峨ｒ Domain 螻､縺ｸ霑ｽ蜉縲・| `kukuri-tauri/src-tauri/src/domain/entities/offline/*`<br>`kukuri-tauri/src-tauri/src/domain/value_objects/offline/*` | 譌｢蟄・Application 蝙九→縺ｮ莠呈鋤諤ｧ繧堤｢ｺ隱阪＠縲ヾerde 豢ｾ逕溘ｒ莉倅ｸ弱・|
+| OFF-S0-02 | 譁ｰ VO 縺ｸ縺ｮ螟画鋤繝倥Ν繝代ｒ Application 螻､縺ｫ莉ｮ螳溯｣・＠縲～OfflineService` 縺九ｉ縺ｮ蛻ｩ逕ｨ邂・園繧呈ｴ励＞蜃ｺ縺吶・| `kukuri-tauri/src-tauri/src/application/services/offline_service.rs` | 螟画鋤邂・園縺ｮ TODO 繧偵さ繝｡繝ｳ繝医〒谿九＠縲∝ｾ檎ｶ・Stage 1 縺ｧ蟾ｮ縺玲崛縺亥庄閭ｽ縺ｪ迥ｶ諷九↓縺吶ｋ縲・|
+| OFF-S0-03 | `.sqlx` 繝・ぅ繝ｬ繧ｯ繝医Μ縺ｮ譌｢蟄倥ヵ繧｡繧､繝ｫ縺ｨ OfflineManager 縺ｮ SQL 繧呈｣壼査縺励＠縲∵ｺ門ｙ谿ｵ髫弱〒縺ｮ蜀咲函謌占ｦ∝凄繧貞愛螳壹・| `kukuri-tauri/src-tauri/.sqlx/`<br>`kukuri-tauri/src-tauri/src/modules/offline/manager.rs` | 蜍慕噪 SQL 縺ｮ縺溘ａ蜊ｳ譎ょ・逕滓・荳崎ｦ√□縺後ヾtage 2 縺ｧ `query!` 蟆主・譎ゅ↓ `cargo sqlx prepare` 縺悟ｿ・ｦ√↓縺ｪ繧狗せ繧偵Γ繝｢縲・|
 
-#### OFF-S0-01 実装メモ（2025年10月24日）
-- `domain::value_objects::offline` に `OfflineActionId`・`OfflinePayload`・`SyncStatus`・`SyncQueueStatus`・`CacheKey` などの値オブジェクトを追加し、従来の `String`／`i64` フィールドを型付けした。
-- `domain::entities::offline` では `OfflineActionRecord`・`SyncQueueItem`・`CacheMetadataRecord`・`OptimisticUpdateRecord`・`SyncStatusRecord`・`CacheStatusSnapshot` などを定義。`chrono::DateTime<Utc>` でタイムスタンプを扱い、`serde_json::Value` は `OfflinePayload` 経由で包んだ。
-- 新規スキーマ付きで `cargo check` を実行し、ビルド可能な状態を確認。Stage 1 以降はこれらの型を `OfflineService` から参照するよう変換ヘルパを実装予定。
+#### OFF-S0-01 螳溯｣・Γ繝｢・・025蟷ｴ10譛・4譌･・・- `domain::value_objects::offline` 縺ｫ `OfflineActionId`繝ｻ`OfflinePayload`繝ｻ`SyncStatus`繝ｻ`SyncQueueStatus`繝ｻ`CacheKey` 縺ｪ縺ｩ縺ｮ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝医ｒ霑ｽ蜉縺励∝ｾ捺擂縺ｮ `String`・汁i64` 繝輔ぅ繝ｼ繝ｫ繝峨ｒ蝙倶ｻ倥￠縺励◆縲・- `domain::entities::offline` 縺ｧ縺ｯ `OfflineActionRecord`繝ｻ`SyncQueueItem`繝ｻ`CacheMetadataRecord`繝ｻ`OptimisticUpdateRecord`繝ｻ`SyncStatusRecord`繝ｻ`CacheStatusSnapshot` 縺ｪ縺ｩ繧貞ｮ夂ｾｩ縲Ａchrono::DateTime<Utc>` 縺ｧ繧ｿ繧､繝繧ｹ繧ｿ繝ｳ繝励ｒ謇ｱ縺・～serde_json::Value` 縺ｯ `OfflinePayload` 邨檎罰縺ｧ蛹・ｓ縺縲・- 譁ｰ隕上せ繧ｭ繝ｼ繝樔ｻ倥″縺ｧ `cargo check` 繧貞ｮ溯｡後＠縲√ン繝ｫ繝牙庄閭ｽ縺ｪ迥ｶ諷九ｒ遒ｺ隱阪４tage 1 莉･髯阪・縺薙ｌ繧峨・蝙九ｒ `OfflineService` 縺九ｉ蜿ら・縺吶ｋ繧医≧螟画鋤繝倥Ν繝代ｒ螳溯｣・ｺ亥ｮ壹・
+### Stage 1・・dapter 蟆主・: 3譌･・・1. `application::ports::offline_store` 繧定ｿｽ蜉縺励～OfflineService` 縺ｫ豕ｨ蜈･繝昴う繝ｳ繝医ｒ逕ｨ諢擾ｼ域里蟄・`OfflineManager` 繧偵Λ繝・・縺吶ｋ證ｫ螳・Adapter 繧貞ｮ溯｣・ｼ峨・2. 證ｫ螳・Adapter (`LegacyOfflineManagerAdapter`) 繧・`modules/offline` 荳翫↓螳溯｣・＠縲√ユ繧ｹ繝医ｒ繝｢繝・け邨檎罰縺ｫ譖ｴ譁ｰ縲・3. `OfflineService` 蜀・・蝙句､画鋤繧偵ラ繝｡繧､繝ｳ蛟､繧ｪ繝悶ず繧ｧ繧ｯ繝医∈鄂ｮ謠幢ｼ井ｸ驛ｨ譌ｧ讒矩菴薙ｒ newtype 縺ｧ蛹・・・峨・
+### Stage 2・・nfrastructure 遘ｻ陦・ 4譌･・・1. `infrastructure/offline/sqlite_store.rs` 繧剃ｽ懈・縺励～OfflineManager` 縺ｮ CRUD 繝ｭ繧ｸ繝・け繧堤ｧｻ讀阪・2. `LegacyOfflineManagerAdapter` 縺九ｉ譁ｰ繧､繝ｳ繝輔Λ螳溯｣・∈蟾ｮ縺玲崛縺医Ａmodules/offline` 縺ｯ read-only 繝ｩ繝・ヱ縺ｫ邵ｮ騾縲・3. SQLx 繝・せ繝茨ｼ・offline_service` 縺ｮ邨仙粋繝・せ繝茨ｼ峨ｒ `tests/integration/offline/*` 縺ｫ遘ｻ縺励．ocker 繧ｹ繧ｯ繝ｪ繝励ヨ繧呈峩譁ｰ縲・
+#### Stage 2 螳溯｣・Γ繝｢・・025蟷ｴ10譛・4譌･・・- `SqliteOfflinePersistence` 繧貞ｮ溯｣・＠縲～modules::offline::manager` 縺九ｉ荳ｻ隕・CRUD 繝ｭ繧ｸ繝・け・医が繝輔Λ繧､繝ｳ繧｢繧ｯ繧ｷ繝ｧ繝ｳ菫晏ｭ倥・蜷梧悄縲√く繝｣繝・す繝･繝｡繧ｿ繝・・繧ｿ譖ｴ譁ｰ縲∝酔譛溘く繝･繝ｼ謫堺ｽ懊∵･ｽ隕ｳ逧・峩譁ｰ邂｡逅・∝酔譛溘せ繝・・繧ｿ繧ｹ譖ｴ譁ｰ・峨ｒ遘ｻ讀阪＠縺溘Ａuuid` / `chrono` / `sqlx::QueryBuilder` 繧呈ｴｻ逕ｨ縺励▽縺､縲∵綾繧雁､繧・`AppError` 繝吶・繧ｹ縺ｫ謨ｴ蛯吶・- `state.rs` 縺ｮ DI 繧呈眠螳溯｣・↓蛻・ｊ譖ｿ縺医～Arc<dyn OfflinePersistence>` 縺ｸ SQLite 繝励・繝ｫ繧堤峩謗･豕ｨ蜈･縲ゅ・繝ｬ繧ｼ繝ｳ繝・・繧ｷ繝ｧ繝ｳ螻､縺ｮ繝上Φ繝峨Λ繝ｼ繧・里蟄倥し繝ｼ繝薙せ縺ｯ繧､繝ｳ繧ｿ繝ｼ繝輔ぉ繧､繧ｹ縺ｮ縺ｿ蜿ら・縺吶ｋ讒区・縺ｫ邨ｱ荳縲・- OfflineService 縺ｮ繝ｦ繝九ャ繝医ユ繧ｹ繝医ｒ `LegacyOfflineManagerAdapter` 萓晏ｭ倥°繧・`SqliteOfflinePersistence` 縺ｸ蟾ｮ縺玲崛縺医√う繝ｳ繝｡繝｢繝ｪ SQLite 繧ｹ繧ｭ繝ｼ繝槫・譛溷喧蠕後↓蜷檎ｭ峨・繧ｷ繝翫Μ繧ｪ・井ｿ晏ｭ倥・蜷梧悄繝ｻ繧ｭ繝･繝ｼ繝ｻ繧ｭ繝｣繝・す繝･繝ｻ讌ｽ隕ｳ逧・峩譁ｰ・峨ｒ讀懆ｨｼ縲・- `infrastructure/offline/mod.rs` 縺九ｉ Legacy 繧｢繝繝励ち縺ｮ蜀阪お繧ｯ繧ｹ繝昴・繝医ｒ螟悶＠縲∵眠 API 繧貞━蜈井ｽｿ逕ｨ縺ｧ縺阪ｋ繧医≧蜈ｬ髢矩擇繧呈紛逅・４tage 3 縺ｧ縺ｮ Legacy 邵ｮ騾繧貞ｮｹ譏薙↓縺吶ｋ縺溘ａ縲∵立繧｢繝繝励ち縺ｯ繝｢繧ｸ繝･繝ｼ繝ｫ逶ｴ荳九〒邯ｭ謖√・- 繝薙Ν繝画紛蜷域ｧ遒ｺ隱阪→縺励※ `cargo fmt` 竊・`cargo clippy -- -D warnings` 竊・`./scripts/test-docker.ps1 rust` 繧貞ｮ溯｡後・ocker Rust 繝・せ繝亥ｮ瑚ｵｰ縺ｧ莠呈鋤諤ｧ繧堤｢ｺ隱搾ｼ域里遏･縺ｮ `Nip10Case::description` 隴ｦ蜻翫・縺ｿ・峨・
+### Stage 3・・egacy 隗｣菴・ 2譌･・・1. `modules/offline` 繧貞炎髯､縺励～infrastructure/offline::{rows,mappers,sqlite_store,reindex_job}` 縺ｫ邨ｱ蜷医０fflineReindexJob 縺ｯ譁ｰ Persistence 繧堤峩謗･蛻ｩ逕ｨ縺吶ｋ縲・2. `state.rs` 縺ｮ DI 縺ｨ繝・せ繝郁ｳ・肇繧貞姐譁ｰ縺励～SqliteOfflinePersistence` / `OfflineReindexJob` 繧貞・譛峨・3. Documentation 譖ｴ譁ｰ・域悽繝峨く繝･繝｡繝ｳ繝医～phase5_dependency_inventory_template.md` 縺ｪ縺ｩ・峨→繝・せ繝医・陬懷ｮ後・
+#### Stage 3 螳溯｣・Γ繝｢・・025蟷ｴ10譛・5譌･・・- `modules/offline` 荳蠑擾ｼ・anager/models/reindex/tests・峨ｒ蜑企勁縺励∬｡梧ｧ矩縺ｯ `infrastructure/offline/rows.rs` 縺ｨ mapper 縺ｸ遘ｻ讀阪・egacy adapter 繧よ彫蜴ｻ縲・- `SqliteOfflinePersistence` 縺ｫ蜷梧悄繧ｭ繝･繝ｼ繝ｻ繧ｭ繝｣繝・す繝･繝ｻ讌ｽ隕ｳ逧・峩譁ｰ繝ｻ蜷梧悄迥ｶ諷九・蜿門ｾ・API 繧定ｿｽ蜉縺励～OfflineReindexJob` 繧呈眠險ｭ繝｢繧ｸ繝･繝ｼ繝ｫ縺ｧ蜀榊ｮ溯｣・ＡAppState` 縺九ｉ縺ｯ `Arc<SqliteOfflinePersistence>` 繧貞・譛峨＠縺ｦ繧ｸ繝ｧ繝悶ｒ逕滓・縲・- `state.rs` 縺九ｉ Legacy `OfflineManager` 萓晏ｭ倥ｒ髯､蜴ｻ縺励．I 繧・`OfflineReindexJob` + `OfflineService` 縺ｮ莠檎ｵ瑚ｷｯ縺ｫ謨ｴ逅・・- Rust 繝ｦ繝九ャ繝医ユ繧ｹ繝医ｒ `sqlite_store.rs` / `reindex_job.rs` 蜀・∈蜀埼・鄂ｮ縺励※繧ｫ繝舌Ξ繝・ず繧堤ｶｭ謖√Ａcargo test` 縺ｯ繝ｭ繝ｼ繧ｫ繝ｫ繝ｪ繝ｳ繧ｯ繧ｨ繝ｩ繝ｼ縺ｧ螟ｱ謨暦ｼ・cc` 邨檎罰縺ｧ iroh 萓晏ｭ倥Λ繧､繝悶Λ繝ｪ link 荳榊庄・峨□縺後√ユ繧ｹ繝医さ繝ｼ繝芽・菴薙・繝薙Ν繝峨∪縺ｧ遒ｺ隱肴ｸ医∩縲・
+### `.sqlx` 蠖ｱ髻ｿ繝｡繝｢・・025蟷ｴ10譛・3譌･隱ｿ譟ｻ髢句ｧ具ｼ・- 迴ｾ陦・`OfflineManager` 縺ｯ `sqlx::query` / `query_as` 繧貞虚逧・SQL 譁・ｭ怜・縺ｧ蜻ｼ縺ｳ蜃ｺ縺励※縺翫ｊ縲～.sqlx/` 縺ｫ繝励Μ繧ｳ繝ｳ繝代う繝ｫ貂医∩繧ｯ繧ｨ繝ｪ縺ｯ蟄伜惠縺励↑縺・・- Stage 2 縺ｧ Repository 繧・Infrastructure 螻､縺ｸ遘ｻ陦後＠縲～query!` / `query_as!` 繧呈治逕ｨ縺吶ｋ蝣ｴ蜷医・ `cargo sqlx prepare` 繧貞・螳溯｡後＠縺ｦ `.sqlx/query-*.json` 繧堤函謌舌☆繧句ｿ・ｦ√′縺ゅｋ縲・- `.sqlx` 蜀咲函謌先凾縺ｯ `scripts` 驟堺ｸ九・ CI 謇矩・ｼ・./scripts/test-docker.ps1 rust`・峨→謨ｴ蜷医ｒ遒ｺ隱阪＠縲√い繝ｼ繝・ぅ繝輔ぃ繧ｯ繝医ｒ繝ｪ繝昴ず繝医Μ縺ｫ蜷ｫ繧√ｋ縺薙→縲・
+## 繝・せ繝域婿驥・- Stage 1: 譌｢蟄倥Θ繝九ャ繝医ユ繧ｹ繝医ｒ繝｢繝・け蟾ｮ縺玲崛縺医〒騾夐℃縺輔○繧九・- Stage 2: 譁ｰ險ｭ縺ｮ integration 繝・せ繝茨ｼ・QLite 螳・DB・峨ｒ Docker 繧ｸ繝ｧ繝悶↓霑ｽ蜉縲・- Stage 3: Regression 逕ｨ縺ｫ `scripts/test-docker.ps1 offline` 繧定ｿｽ蜉縺励，I 縺ｫ逋ｻ骭ｲ縲・
+## 繧ｪ繝ｼ繝励Φ隱ｲ鬘・- 繧ｪ繝輔Λ繧､繝ｳ繧ｭ繝･繝ｼ縺ｮ蜀埼√・繝ｪ繧ｷ繝ｼ繧偵←縺薙〒邂｡逅・☆繧九°・・ervice 縺・Infrastructure・峨４tage 2 縺ｧ豎ｺ螳壹・- `serde_json::Value` 縺ｮ繝舌Μ繝・・繧ｷ繝ｧ繝ｳ繧ｹ繧ｭ繝ｼ繝槫喧・・SON Schema or custom validator・峨↓縺､縺・※縺ｯ蛻･繧ｿ繧ｹ繧ｯ蛹悶・- 繝槭う繧ｰ繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ谿ｵ髫弱〒 `.sqlx/` 縺ｮ蜀咲函謌舌′蠢・ｦ√↓縺ｪ繧九◆繧√ヾtage 2 螳御ｺ・ｾ後↓蟇ｾ蠢懊・
 
-### Stage 1（Adapter 導入: 3日）
-1. `application::ports::offline_store` を追加し、`OfflineService` に注入ポイントを用意（既存 `OfflineManager` をラップする暫定 Adapter を実装）。
-2. 暫定 Adapter (`LegacyOfflineManagerAdapter`) を `modules/offline` 上に実装し、テストをモック経由に更新。
-3. `OfflineService` 内の型変換をドメイン値オブジェクトへ置換（一部旧構造体を newtype で包む）。
+## 進捗ログ
 
-### Stage 2（Infrastructure 移行: 4日）
-1. `infrastructure/offline/sqlite_store.rs` を作成し、`OfflineManager` の CRUD ロジックを移植。
-2. `LegacyOfflineManagerAdapter` から新インフラ実装へ差し替え。`modules/offline` は read-only ラッパに縮退。
-3. SQLx テスト（`offline_service` の結合テスト）を `tests/integration/offline/*` に移し、Docker スクリプトを更新。
+- 2025年10月25日: Stage2-3 で OfflineService の統合テストを `application/services/offline_service.rs` から `tests/integration/offline/mod.rs` へ移設。SQLite スキーマ初期化と永続化の DI を再確認し、Docker/CI で `cargo test --test offline_integration` を実行できるように整備。
 
-#### Stage 2 実装メモ（2025年10月24日）
-- `SqliteOfflinePersistence` を実装し、`modules::offline::manager` から主要 CRUD ロジック（オフラインアクション保存・同期、キャッシュメタデータ更新、同期キュー操作、楽観的更新管理、同期ステータス更新）を移植した。`uuid` / `chrono` / `sqlx::QueryBuilder` を活用しつつ、戻り値を `AppError` ベースに整備。
-- `state.rs` の DI を新実装に切り替え、`Arc<dyn OfflinePersistence>` へ SQLite プールを直接注入。プレゼンテーション層のハンドラーや既存サービスはインターフェイスのみ参照する構成に統一。
-- OfflineService のユニットテストを `LegacyOfflineManagerAdapter` 依存から `SqliteOfflinePersistence` へ差し替え、インメモリ SQLite スキーマ初期化後に同等のシナリオ（保存・同期・キュー・キャッシュ・楽観的更新）を検証。
-- `infrastructure/offline/mod.rs` から Legacy アダプタの再エクスポートを外し、新 API を優先使用できるよう公開面を整理。Stage 3 での Legacy 縮退を容易にするため、旧アダプタはモジュール直下で維持。
-- ビルド整合性確認として `cargo fmt` → `cargo clippy -- -D warnings` → `./scripts/test-docker.ps1 rust` を実行。Docker Rust テスト完走で互換性を確認（既知の `Nip10Case::description` 警告のみ）。
-
-### Stage 3（Legacy 解体: 2日）
-1. `modules/offline` を削除し、`infrastructure/offline::{rows,mappers,sqlite_store,reindex_job}` に統合。OfflineReindexJob は新 Persistence を直接利用する。
-2. `state.rs` の DI とテスト資産を刷新し、`SqliteOfflinePersistence` / `OfflineReindexJob` を共有。
-3. Documentation 更新（本ドキュメント、`phase5_dependency_inventory_template.md` など）とテストの補完。
-
-#### Stage 3 実装メモ（2025年10月25日）
-- `modules/offline` 一式（manager/models/reindex/tests）を削除し、行構造は `infrastructure/offline/rows.rs` と mapper へ移植。Legacy adapter も撤去。
-- `SqliteOfflinePersistence` に同期キュー・キャッシュ・楽観的更新・同期状態の取得 API を追加し、`OfflineReindexJob` を新設モジュールで再実装。`AppState` からは `Arc<SqliteOfflinePersistence>` を共有してジョブを生成。
-- `state.rs` から Legacy `OfflineManager` 依存を除去し、DI を `OfflineReindexJob` + `OfflineService` の二経路に整理。
-- Rust ユニットテストを `sqlite_store.rs` / `reindex_job.rs` 内へ再配置してカバレッジを維持。`cargo test` はローカルリンクエラーで失敗（`cc` 経由で iroh 依存ライブラリ link 不可）だが、テストコード自体はビルドまで確認済み。
-
-### `.sqlx` 影響メモ（2025年10月23日調査開始）
-- 現行 `OfflineManager` は `sqlx::query` / `query_as` を動的 SQL 文字列で呼び出しており、`.sqlx/` にプリコンパイル済みクエリは存在しない。
-- Stage 2 で Repository を Infrastructure 層へ移行し、`query!` / `query_as!` を採用する場合は `cargo sqlx prepare` を再実行して `.sqlx/query-*.json` を生成する必要がある。
-- `.sqlx` 再生成時は `scripts` 配下の CI 手順（`./scripts/test-docker.ps1 rust`）と整合を確認し、アーティファクトをリポジトリに含めること。
-
-## テスト方針
-- Stage 1: 既存ユニットテストをモック差し替えで通過させる。
-- Stage 2: 新設の integration テスト（SQLite 実 DB）を Docker ジョブに追加。
-- Stage 3: Regression 用に `scripts/test-docker.ps1 offline` を追加し、CI に登録。
-
-## オープン課題
-- オフラインキューの再送ポリシーをどこで管理するか（Service か Infrastructure）。Stage 2 で決定。
-- `serde_json::Value` のバリデーションスキーマ化（JSON Schema or custom validator）については別タスク化。
-- マイグレーション段階で `.sqlx/` の再生成が必要になるため、Stage 2 完了後に対応。

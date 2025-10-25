@@ -126,7 +126,8 @@
     - 2025年10月24日: `SqliteOfflinePersistence` へ CRUD ロジックを移設し、`serde_json` 変換・同期キュー処理・楽観的更新系 API を `AppError` 戻り値に統一。
   - [x] Stage2-2: DI を新実装へ切り替え、`modules/offline` を read-only ラッパに縮退させる。
     - 2025年10月24日: `state.rs` と OfflineService テストを新実装に差し替え、`infrastructure/offline/mod.rs` から Legacy 再エクスポートを除去。Docker Rust テストで回帰確認。
-  - [ ] Stage2-3: OfflineService 結合テストを `tests/integration/offline/*` へ移動し、Docker/CI スクリプトを更新する。
+  - [x] Stage2-3: OfflineService 結合テストを `tests/integration/offline/*` へ移動し、Docker/CI スクリプトを更新する。
+    - 2025年10月25日: `application/services/offline_service.rs` の統合テスト群を `tests/integration/offline/mod.rs` へ移設し、SQLite 初期化と `SqliteOfflinePersistence` の DI を再確認。`cargo test --test offline_integration` を Phase 5 ランブックの手順に織り込み可能な構成にした。
 - [x] Phase 5 OfflineService Adapter Stage 3（Legacy 解体／`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md` Stage 3）
   - 2025年10月25日: `modules/offline`（manager/models/reindex/tests）と `infrastructure/offline/legacy_adapter.rs` を削除し、`SqliteOfflinePersistence` へ監視系 API を集約。`OfflineReindexJob` を新モジュールで再実装し、`state.rs` の DI を更新。
   - 2025年10月25日: Rust ユニットテストを `infrastructure/offline/{sqlite_store,reindex_job}.rs` 内へ移設。`phase5_dependency_inventory_template.md` / `phase5_offline_adapter_plan.md` を Stage 3 完了内容で更新。ローカル `cargo test` は `cc` リンクエラーで失敗（要 Docker 実行）だが、ビルド・フォーマットまでは完了。
@@ -193,3 +194,4 @@
 - 2025年10月20日: Phase 4 の初期実装として `application/shared` モジュールを追加し、Sqliteマッパーと Nostr ファクトリを共通化。Zustand ストアの永続化設定を `persistHelpers` 経由に統一し、`cargo clippy -- -D warnings` / Docker 経由の `cargo test` / `pnpm lint` / `pnpm test` を完走。
 - 2025年10月20日: EventPublisher を `application/shared/nostr` へ移設し、EventManager/Service 双方で共通利用。DefaultTopicsRegistry を shared ユーティリティ化して DI を簡素化し、`cargo fmt` 実行後に Windows ローカル `cargo test` が linker 欠如で失敗したため Docker 経由 (`./scripts/test-docker.ps1 rust`) で Rust テストを完走。
 - 2025年10月20日: `modules/event` / `modules/p2p` テスト支援コードを `application/shared/tests` へ集約し、`support` モジュールから再エクスポートして Rust 側の DRY 化を完了。Zustand ストアは `withPersist` + `config/persist.ts` に刷新し、Map を扱うストアで `createMapAwareStorage` を適用。`pnpm test --run src/stores` と `./scripts/test-docker.ps1 rust` を実行し、後方互換を検証。
+

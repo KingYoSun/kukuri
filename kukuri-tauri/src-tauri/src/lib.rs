@@ -13,14 +13,17 @@ mod state;
 #[doc(hidden)]
 pub mod test_support {
     pub mod application {
+        pub use crate::application::ports;
         pub use crate::application::services;
         pub use crate::application::shared;
     }
     pub mod domain {
         pub use crate::domain::entities;
         pub use crate::domain::p2p;
+        pub use crate::domain::value_objects;
     }
     pub mod infrastructure {
+        pub use crate::infrastructure::offline;
         pub use crate::infrastructure::p2p;
     }
     pub mod shared {
