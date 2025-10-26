@@ -1,13 +1,11 @@
 #![allow(dead_code)]
 
-mod application_container;
-
 use crate::application::ports::key_manager::KeyManager;
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::ConnectionEvent;
-use application_container::ApplicationContainer;
 
 // アプリケーションサービスのインポート
+use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
@@ -19,6 +17,7 @@ use crate::application::services::{
     SyncService, TopicService, UserService,
 };
 // プレゼンテーション層のハンドラーのインポート
+use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
 use crate::infrastructure::{
     crypto::{
         DefaultEncryptionService, DefaultKeyManager, DefaultSignatureService, EncryptionService,
@@ -36,6 +35,7 @@ use crate::infrastructure::{
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
         GossipService, NetworkService,
+        bootstrap::P2PBootstrapper,
         event_distributor::{DefaultEventDistributor, EventDistributor},
     },
     storage::{SecureStorage, secure_storage::DefaultSecureStorage},
@@ -99,8 +99,8 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
-        let container = ApplicationContainer::new(app_handle).await?;
-        let app_data_dir = container.app_data_dir().to_path_buf();
+        let bootstrapper = P2PBootstrapper::new(app_handle).await?;
+        let app_data_dir = bootstrapper.app_data_dir().to_path_buf();
 
         // Use absolute path for database
         let db_path = app_data_dir.join("kukuri.db");
@@ -160,7 +160,7 @@ impl AppState {
 
         // P2Pサービスの初期化
         let (p2p_event_tx, p2p_event_rx) = mpsc::unbounded_channel();
-        let p2p_stack = container.build_p2p_stack(p2p_event_tx).await?;
+        let p2p_stack = bootstrapper.build_stack(p2p_event_tx).await?;
 
         let network_service: Arc<dyn NetworkService> =
             Arc::clone(&p2p_stack.network_service) as Arc<dyn NetworkService>;
@@ -194,11 +194,15 @@ impl AppState {
         event_manager.set_default_p2p_topic_id("public").await;
 
         // AuthServiceの初期化（UserServiceとTopicServiceが必要）
+        let lifecycle_port: Arc<dyn AuthLifecyclePort> = Arc::new(DefaultAuthLifecycle::new(
+            Arc::clone(&user_service),
+            Arc::clone(&topic_service),
+        ));
+
         let auth_service = Arc::new(AuthService::new(
             Arc::clone(&key_manager),
             Arc::clone(&secure_storage),
-            Arc::clone(&user_service),
-            Arc::clone(&topic_service),
+            lifecycle_port,
         ));
 
         let subscription_state = Arc::new(SubscriptionStateMachine::new(Arc::clone(

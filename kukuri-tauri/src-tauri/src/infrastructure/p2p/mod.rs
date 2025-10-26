@@ -1,3 +1,4 @@
+pub mod bootstrap;
 pub mod bootstrap_config;
 pub mod dht_bootstrap;
 pub mod dht_integration;

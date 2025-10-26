@@ -1,24 +1,21 @@
 use crate::application::services::p2p_service::{P2PService, P2PStack};
 use crate::domain::p2p::P2PEvent;
+use crate::infrastructure::p2p::metrics;
 use crate::shared::config::AppConfig;
 use anyhow::Context;
 use base64::prelude::*;
 use rand_core::{OsRng, TryRngCore};
-use std::convert::TryInto;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tokio::fs;
 use tokio::sync::mpsc::UnboundedSender;
 
-/// アプリケーション全体の初期化を担うDIコンテナ
-pub struct ApplicationContainer {
+pub struct P2PBootstrapper {
     app_data_dir: PathBuf,
     config: AppConfig,
 }
 
-impl ApplicationContainer {
-    /// AppHandleからコンテナを初期化し、必要なディレクトリや設定を確保する
+impl P2PBootstrapper {
     pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
         let app_data_dir = app_handle
             .path()
@@ -51,12 +48,10 @@ impl ApplicationContainer {
         })
     }
 
-    /// app_data_dirを返す
     pub fn app_data_dir(&self) -> &Path {
         &self.app_data_dir
     }
 
-    /// アプリケーション設定を返す
     pub fn config(&self) -> &AppConfig {
         &self.config
     }
@@ -65,11 +60,11 @@ impl ApplicationContainer {
         self.app_data_dir.join("p2p_node_secret.key")
     }
 
-    /// P2Pスタックを構築し、ネットワークサービス・Gossipサービスを返す
-    pub async fn build_p2p_stack(
+    pub async fn build_stack(
         &self,
         event_sender: UnboundedSender<P2PEvent>,
     ) -> anyhow::Result<P2PStack> {
+        metrics::reset_all();
         let secret_key = self.ensure_iroh_secret_key().await?;
         let builder = P2PService::builder(secret_key, self.config.network.clone())
             .with_event_sender(event_sender);
@@ -102,7 +97,7 @@ impl ApplicationContainer {
                 tracing::info!("Loaded persisted iroh secret key from {:?}", path);
                 Ok(iroh::SecretKey::from_bytes(&secret_bytes))
             }
-            Err(err) if err.kind() == ErrorKind::NotFound => {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 self.generate_and_store_secret(&path).await
             }
             Err(err) => {
@@ -149,17 +144,17 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn test_container(temp_dir: &TempDir) -> ApplicationContainer {
-        ApplicationContainer::from_parts(temp_dir.path().to_path_buf(), AppConfig::default())
+    fn test_bootstrapper(temp_dir: &TempDir) -> P2PBootstrapper {
+        P2PBootstrapper::from_parts(temp_dir.path().to_path_buf(), AppConfig::default())
     }
 
     #[tokio::test]
     async fn generates_secret_if_missing() {
         let dir = TempDir::new().unwrap();
-        let container = test_container(&dir);
-        let secret = container.ensure_iroh_secret_key().await.unwrap();
+        let bootstrapper = test_bootstrapper(&dir);
+        let secret = bootstrapper.ensure_iroh_secret_key().await.unwrap();
 
-        let stored = tokio::fs::read_to_string(container.node_key_path())
+        let stored = tokio::fs::read_to_string(bootstrapper.node_key_path())
             .await
             .unwrap();
         let stored_bytes = BASE64_STANDARD.decode(stored.trim()).unwrap();
@@ -172,9 +167,9 @@ mod tests {
     #[tokio::test]
     async fn reuses_existing_secret() {
         let dir = TempDir::new().unwrap();
-        let container = test_container(&dir);
-        let first = container.ensure_iroh_secret_key().await.unwrap();
-        let second = container.ensure_iroh_secret_key().await.unwrap();
+        let bootstrapper = test_bootstrapper(&dir);
+        let first = bootstrapper.ensure_iroh_secret_key().await.unwrap();
+        let second = bootstrapper.ensure_iroh_secret_key().await.unwrap();
 
         assert_eq!(first.to_bytes(), second.to_bytes());
     }

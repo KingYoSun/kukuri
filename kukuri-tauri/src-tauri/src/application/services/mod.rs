@@ -1,3 +1,4 @@
+pub mod auth_lifecycle;
 pub mod auth_service;
 pub mod event_service;
 pub mod offline_service;
@@ -11,6 +12,7 @@ pub mod user_service;
 pub use crate::domain::value_objects::subscription::{
     SubscriptionRecord, SubscriptionStatus, SubscriptionTarget,
 };
+pub use auth_lifecycle::DefaultAuthLifecycle;
 pub use auth_service::AuthService;
 pub use event_service::EventService;
 pub use offline_service::OfflineService;
