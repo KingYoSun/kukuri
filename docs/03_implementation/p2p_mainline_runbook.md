@@ -70,6 +70,12 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - テストジョブは `--test-threads=1` で直列化し、タイムアウトは 20 分に拡張する。
 - フレーク発生時は GitHub Actions のログから `iroh_tests` をフィルタし、対象シナリオをピンポイントで再実行する。
 
+### 6.1 Rustカバレッジ測定（Phase 5 Workstream B）
+- ローカル/CI 共通コマンド: `./scripts/test-docker.sh coverage`（PowerShell 版も同名）。内部で `docker compose run rust-coverage` を実行し、`cargo tarpaulin --locked --all-features --skip-clean --out Json --out Lcov --output-dir /app/test-results/tarpaulin --timeout 1800` を採用する。
+- 成果物: `test-results/tarpaulin/` に JSON と LCOV を出力し、スクリプト終了時に `docs/01_project/activeContext/artefacts/metrics/<timestamp>-tarpaulin.{json,lcov}` へ自動コピーする。
+- 閾値: Phase 5 時点では参考値（2025年10月26日: 25.23%）。Phase 6 移行後に 50% / 70% を順次クリアし、CI では `tarpaulin --fail-under <target>` を段階適用する。
+- Tarpaulin は ptrace を利用するため `rust-coverage` サービスに `SYS_PTRACE` 権限と `seccomp=unconfined` を付与済み。CI で同設定を反映する場合は GitHub Actions の `docker run` 手順で `--cap-add=SYS_PTRACE --security-opt seccomp=unconfined` を指定する。
+
 ## 7. トラブルシューティング
 - **`STATUS_ENTRYPOINT_NOT_FOUND`**: Windows で iroh バイナリの依存 DLL が見つからない場合に発生。`KUKURI_IROH_BIN` を明示し、`PATH` に `libssl` 等が含まれているか確認。Docker 実行で迂回可能。
 - **ブートストラップ接続失敗**: `KUKURI_BOOTSTRAP_PEERS` の NodeId/ポートを再確認し、ファイアウォールで該当ポートを開放する。

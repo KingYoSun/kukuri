@@ -97,6 +97,48 @@ services:
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-}"
       KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
 
+  # Rust カバレッジ計測（cargo tarpaulin）
+  rust-coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-rust-coverage
+    working_dir: /app/kukuri-tauri/src-tauri
+    network_mode: host
+    command: >
+      /bin/sh -c "
+        set -eu
+        mkdir -p /app/test-results/tarpaulin
+        rm -f /app/test-results/tarpaulin/tarpaulin-report.*
+        cargo tarpaulin --locked --all-features --skip-clean --out Json --out Lcov --output-dir /app/test-results/tarpaulin --timeout 1800
+      "
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro
+      - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
+      - ./kukuri-tauri/src-tauri/build.rs:/app/kukuri-tauri/src-tauri/build.rs:ro
+      - ./kukuri-tauri/src-tauri/tauri.conf.json:/app/kukuri-tauri/src-tauri/tauri.conf.json:ro
+      - ./kukuri-tauri/src-tauri/migrations:/app/kukuri-tauri/src-tauri/migrations:ro
+      - ./kukuri-tauri/src-tauri/.sqlx:/app/kukuri-tauri/src-tauri/.sqlx:ro
+      - ./test-results:/app/test-results
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      RUST_BACKTRACE: full
+      RUST_LOG: "${RUST_LOG:-info}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      ENABLE_P2P_INTEGRATION: "0"
+      KUKURI_FORCE_LOCALHOST_ADDRS: "1"
+
   # 個別のTypeScriptテスト実行
   ts-test:
     build:

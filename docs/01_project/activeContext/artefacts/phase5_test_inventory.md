@@ -14,6 +14,13 @@
 | Integration harness | `tests/integration/*` | 結合 | `tests/integration`（維持） | `test_p2p_mainline.rs` で Mainline DHT 設定の統合シナリオを追加。Offline 系統合ケースは引き続き未作成。 |
 | Unit harness | `tests/unit` | （空） | `tests/unit` | Phase 5 で `application/shared` や `state` のユニットテストを移植。 |
 
+### Rustカバレッジ（Workstream B）
+
+- コマンド: `./scripts/test-docker.sh coverage`（PowerShell 版も同名コマンド）。内部で `docker compose run rust-coverage` を呼び出し、`cargo tarpaulin --locked --all-features --skip-clean --out Json --out Lcov --output-dir /app/test-results/tarpaulin --timeout 1800` を実行する。
+- 成果物: `test-results/tarpaulin/tarpaulin-report.json` / `test-results/tarpaulin/lcov.info` を収集し、スクリプト完了時に `docs/01_project/activeContext/artefacts/metrics/YYYY-mm-dd-HHMMSS-tarpaulin.{json,lcov}` へコピーする。
+- 初回計測（2025年10月26日）: 総カバレッジ 25.23%（1630/6460 行）。当面の目標は Phase 5 完了時に 50%、Phase 6 で 70% を達成する。テスト不足領域は JSON レポートの `files` 配列を参照する。
+- 実行ポリシー: `cargo test` が通過した commit でのみ tarpaulin を実行。`ENABLE_P2P_INTEGRATION=0` のままユニット/結合テストを網羅し、P2P 系統合テストは別ジョブで担保する。
+
 ## TypeScript（kukuri-tauri/src）
 
 | グループ | 現行パス | 現行種別 | 移動先候補 | 状態/課題 |

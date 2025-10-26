@@ -1,7 +1,7 @@
 # kukuri テスト環境用 Dockerfile
 # Rust と Node.js の両方の環境を含むマルチステージビルド
 
-FROM rust:1.85-bookworm AS test-env
+FROM rust:1.86-bookworm AS test-env
 
 # 基本的なシステムパッケージのインストール
 RUN apt-get update && apt-get install -y \
@@ -28,6 +28,9 @@ RUN npm install -g pnpm@9
 
 # Rust の追加コンポーネント
 RUN rustup component add rustfmt clippy
+
+# cargo-tarpaulin を導入（Rustカバレッジ計測用）
+RUN cargo install cargo-tarpaulin --locked --version 0.33.0
 
 # 作業ディレクトリの設定
 WORKDIR /app

@@ -9,6 +9,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.test.yml"
 ENV_FILE="${REPO_ROOT}/kukuri-tauri/tests/.env.p2p"
 RESULTS_DIR="${REPO_ROOT}/test-results"
+COVERAGE_TMP_DIR="${RESULTS_DIR}/tarpaulin"
+COVERAGE_ARTEFACT_DIR="${REPO_ROOT}/docs/01_project/activeContext/artefacts/metrics"
 BOOTSTRAP_DEFAULT_PEER="03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
 
@@ -24,6 +26,7 @@ Commands:
   rust         Run Rust tests only
   ts           Run TypeScript tests only
   lint         Run lint/format checks only
+  coverage     Run cargo tarpaulin and export coverage artifacts
   build        Build the Docker image only
   clean        Clean containers and images
   cache-clean  Clean including cache volumes
@@ -67,6 +70,46 @@ build_image() {
   echo '[OK] Docker image built successfully'
 }
 
+prepare_coverage_dirs() {
+  mkdir -p "$COVERAGE_TMP_DIR" "$COVERAGE_ARTEFACT_DIR"
+  rm -f "${COVERAGE_TMP_DIR}/tarpaulin-report."* "${COVERAGE_TMP_DIR}/lcov.info"
+}
+
+save_coverage_artifacts() {
+  local timestamp
+  timestamp="$(date '+%Y-%m-%d-%H%M%S')"
+
+  local json_src="${COVERAGE_TMP_DIR}/tarpaulin-report.json"
+  local lcov_src="${COVERAGE_TMP_DIR}/tarpaulin-report.lcov"
+  if [[ ! -f "$lcov_src" && -f "${COVERAGE_TMP_DIR}/lcov.info" ]]; then
+    lcov_src="${COVERAGE_TMP_DIR}/lcov.info"
+  fi
+  local json_dest="${COVERAGE_ARTEFACT_DIR}/${timestamp}-tarpaulin.json"
+  local lcov_dest="${COVERAGE_ARTEFACT_DIR}/${timestamp}-tarpaulin.lcov"
+
+  if [[ -f "$json_src" ]]; then
+    cp "$json_src" "$json_dest"
+    echo "[OK] Coverage JSON saved to ${json_dest#$REPO_ROOT/}"
+  else
+    echo '[WARN] tarpaulin JSON report not found' >&2
+  fi
+
+  if [[ -f "$lcov_src" ]]; then
+    cp "$lcov_src" "$lcov_dest"
+    echo "[OK] Coverage LCOV saved to ${lcov_dest#$REPO_ROOT/}"
+  else
+    echo '[WARN] tarpaulin LCOV report not found' >&2
+  fi
+
+  if command -v jq >/dev/null 2>&1 && [[ -f "$json_src" ]]; then
+    local coverage
+    coverage="$(jq -r '.coverage // empty' "$json_src")"
+    if [[ -n "$coverage" ]]; then
+      echo "[INFO] Reported coverage: ${coverage}%"
+    fi
+  fi
+}
+
 run_all_tests() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   echo 'Running all tests in Docker...'
@@ -77,7 +120,7 @@ run_all_tests() {
 run_rust_tests() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   echo 'Running Rust tests in Docker...'
-  compose_run '' run --rm rust-test bash -lc "cargo test --workspace --all-features -- --nocapture"
+  compose_run '' run --rm rust-test
   echo '[OK] Rust tests passed'
 }
 
@@ -93,6 +136,15 @@ run_lint_check() {
   echo 'Running lint and format checks in Docker...'
   compose_run '' run --rm lint-check
   echo '[OK] Lint and format checks passed'
+}
+
+run_rust_coverage() {
+  [[ $NO_BUILD -eq 1 ]] || build_image
+  prepare_coverage_dirs
+  echo 'Running cargo tarpaulin (Rust coverage) in Docker...'
+  compose_run '' run --rm rust-coverage
+  save_coverage_artifacts
+  echo '[OK] Rust coverage collection completed'
 }
 
 cleanup() {
@@ -266,7 +318,7 @@ case "$COMMAND" in
     usage
     exit 0
     ;;
-  all|rust|ts|lint|build|clean|cache-clean)
+  all|rust|ts|lint|coverage|build|clean|cache-clean)
     ;;
   p2p)
     while [[ $# -gt 0 ]]; do
@@ -328,6 +380,10 @@ case "$COMMAND" in
     ;;
   lint)
     run_lint_check
+    show_cache_status
+    ;;
+  coverage)
+    run_rust_coverage
     show_cache_status
     ;;
   build)

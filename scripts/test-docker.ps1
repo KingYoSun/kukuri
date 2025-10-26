@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "build", "clean", "cache-clean", "metrics", "contracts")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "contracts")]
     [string]$Command = "all",
 
     [switch]$Integration,            # Rustテスト時にP2P統合テストのみを実行
@@ -52,6 +52,7 @@ Commands:
   integration  - P2P統合テスト（Rust）を実行
   ts           - TypeScriptのテストのみ実行
   lint         - リントとフォーマットチェックのみ実行
+  coverage     - Rustカバレッジ（cargo tarpaulin）を実行し成果物を保存
   metrics      - メトリクス関連のショートテスト（Rust test_get_status / TS P2P UI）
   contracts    - 契約テスト（NIP-10境界ケース）を実行
   build        - Dockerイメージのビルドのみ実行
@@ -284,6 +285,66 @@ function Invoke-LintCheck {
     Write-Success "Lint and format checks passed!"
 }
 
+function Invoke-RustCoverage {
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+
+    $tmpDir = Join-Path $repositoryRoot "test-results/tarpaulin"
+    $artefactDir = Join-Path $repositoryRoot "docs/01_project/activeContext/artefacts/metrics"
+    if (-not (Test-Path $tmpDir)) {
+        New-Item -ItemType Directory -Path $tmpDir | Out-Null
+    } else {
+        Get-ChildItem -Path $tmpDir -Recurse -Force | Remove-Item -Force
+    }
+    if (-not (Test-Path $artefactDir)) {
+        New-Item -ItemType Directory -Path $artefactDir | Out-Null
+    }
+
+    Write-Host "Running cargo tarpaulin (Rust coverage) in Docker..."
+    Invoke-DockerCompose @("run", "--rm", "rust-coverage")
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd-HHmmss"
+    $jsonSrc = Join-Path $tmpDir "tarpaulin-report.json"
+    $lcovSrc = Join-Path $tmpDir "tarpaulin-report.lcov"
+    if (Test-Path $jsonSrc) {
+        $jsonDest = Join-Path $artefactDir "$timestamp-tarpaulin.json"
+        Copy-Item $jsonSrc $jsonDest -Force
+        Write-Success "Coverage JSON saved: $jsonDest"
+    } else {
+        Write-Warning "tarpaulin-report.json was not generated"
+    }
+
+    $lcovCandidate = $null
+    if (Test-Path $lcovSrc) {
+        $lcovCandidate = $lcovSrc
+    } else {
+        $altLcov = Join-Path $tmpDir "lcov.info"
+        if (Test-Path $altLcov) {
+            $lcovCandidate = $altLcov
+        }
+    }
+
+    if ($lcovCandidate) {
+        $lcovDest = Join-Path $artefactDir "$timestamp-tarpaulin.lcov"
+        Copy-Item $lcovCandidate $lcovDest -Force
+        Write-Success "Coverage LCOV saved: $lcovDest"
+    } else {
+        Write-Warning "LCOV output was not generated"
+    }
+
+    if (Test-Path $jsonSrc) {
+        try {
+            $json = Get-Content $jsonSrc -Raw | ConvertFrom-Json
+            if ($json.coverage) {
+                Write-Info ("Reported coverage: {0}%" -f [math]::Round([double]$json.coverage, 2))
+            }
+        } catch {
+            Write-Warning ("Failed to parse coverage JSON: {0}" -f $_.Exception.Message)
+        }
+    }
+}
+
 function Invoke-MetricsTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -434,6 +495,10 @@ switch ($Command) {
     }
     "lint" {
         Invoke-LintCheck
+        Show-CacheStatus
+    }
+    "coverage" {
+        Invoke-RustCoverage
         Show-CacheStatus
     }
     "metrics" {

@@ -115,6 +115,13 @@
   - 2025年10月24日: `modules/p2p` 配下を完全撤去し、ドメイン層テストを `domain/p2p/tests` へ移設。`test_support` と統合テストを `domain::p2p` 参照に更新し、古い `modules::p2p` 参照を排除した。`cargo fmt` / `cargo clippy -D warnings` / Docker Rust テストで回帰確認（Windowsネイティブ `cargo test` は STATUS_ENTRYPOINT_NOT_FOUND の既知事象）。
   - 2025年10月24日: `refactoring_plan_2025-08-08_v3.md` に Legacy モジュール棚卸し表（event/offline/bookmark/secure_storage/crypto/database）を追記し、`phase5_dependency_inventory_template.md` に BookmarkManager／Legacy SecureStorage／Legacy EncryptionManager の行を追加。Workstream A ロードマップへ段階移行案を反映。
   - 2025年10月24日: `p2p_mainline_runbook.md`・`iroh-native-dht-plan.md`・`phase5_ci_path_audit.md`・`refactoring_phase34_gap_plan.md` ほか Phase 5 関連ドキュメントのテストコマンドを `tests/p2p_*` バイナリに統一し、旧モジュールパスの記述を除去。
+- [x] Phase 5 Workstream B: Rustカバレッジ計測（`cargo tarpaulin`）の定着（参照: `docs/01_project/refactoring_plan_2025-08-08_v3.md` 369-375行）
+  - [x] `cargo tarpaulin --locked --all-features --out Json` をベースに実行プロファイルを確定し、`scripts/test-docker.{ps1,sh}` / `docker-compose.test.yml` に Rust カバレッジ測定ターゲットを追加する。
+    - 2025年10月26日: `rust-coverage` サービスを Compose に追加し、`cargo tarpaulin --locked --all-features --skip-clean --out Json --out Lcov --output-dir /app/test-results/tarpaulin --timeout 1800` を実行。Shell/PowerShell 両スクリプトに `coverage` コマンドを実装し、成果物コピーと coverage 表示を自動化。
+  - [x] 収集した JSON / LCOV アーティファクトを `docs/01_project/activeContext/artefacts/metrics/` 配下へ保存し、`tasks/metrics/test_results.md` の Rust セクションに tarpaulin 結果と運用手順を追記する。
+    - 2025年10月26日: `./scripts/test-docker.sh coverage` を実行し、`docs/01_project/activeContext/artefacts/metrics/2025-10-26-153751-tarpaulin.{json,lcov}` を生成。Rust テスト結果と合わせて `tasks/metrics/test_results.md` を更新。
+  - [x] カバレッジ閾値と成功指標を `phase5_test_inventory.md`・`p2p_mainline_runbook.md` に追記し、GitHub Actions 側の経路（`phase5_ci_path_audit.md`）と `./scripts/test-docker.ps1` で同手順を辿れるよう同期する。
+    - 2025年10月26日: `phase5_test_inventory.md` に tarpaulin 実行手順・閾値・成果物配置を追記。`p2p_mainline_runbook.md` に Coverage セクションを追加し、`phase5_ci_path_audit.md` に coverage コマンドのパス依存を登録。
 - [x] Phase 5 OfflineService Adapter Stage 1（`docs/01_project/activeContext/artefacts/phase5_offline_adapter_plan.md`）
   - [x] Stage1-1: `application::ports::offline_store` を追加し、DI からポートを注入できるよう準備する。
     - 2025年10月24日: `application::ports::offline_store` に `OfflinePersistence` trait を定義し、既存サービスから `OfflineManager` 直接参照を排除。`cargo fmt` を実行。

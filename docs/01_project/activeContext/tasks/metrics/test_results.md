@@ -23,9 +23,9 @@
 - 対応: Lint 結果を `build_status.md` / `code_quality.md` に反映済み。`collect-metrics` スクリプト経由で定期収集へ組み込み。
 
 ### Rust（ユニット / 統合）
-- コマンド: `cargo test`
-- 結果: 失敗（Windows DLL 依存による `STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)`）
-- 対応: `scripts/run-rust-tests.ps1` を用いた Docker 実行へ移行中。次回計測で結果を記録予定。
+- コマンド: `./scripts/test-docker.sh rust`（内部で `docker compose run rust-test` → `cargo test --workspace --all-features -- --nocapture`。P2P スモークは `ENABLE_P2P_INTEGRATION=0` のためスキップ。）
+- 結果: 成功（2025年10月26日）。Docker 上で全 144 ユニット + 契約テスト + Offline/P2P スモークが通過。
+- メモ: Windows ネイティブ実行は引き続き `STATUS_ENTRYPOINT_NOT_FOUND` の既知事象のため、Rust テストは Docker 経由での実行を必須とする。
 
 ### 統合テスト（P2P）
 - コマンド: `./scripts/test-docker.ps1 integration`
@@ -33,8 +33,8 @@
 
 ## カバレッジ
 - TypeScript: 未計測（Vitest JSON から抽出するスクリプトを `collect-metrics` 構想に含める）。
-- Rust: 未計測（`cargo tarpaulin` 系ツールは今後検討）。
-- 目標: 最低 70% を維持。測定方法が確定した段階で数値を追加する。
+- Rust: `./scripts/test-docker.sh coverage` → `cargo tarpaulin --locked --all-features --skip-clean --out Json --out Lcov`. 2025年10月26日時点の結果は **25.23%（1630/6460 行）**。成果物: `docs/01_project/activeContext/artefacts/metrics/2025-10-26-153751-tarpaulin.{json,lcov}`。
+- 目標: Phase 5 で 50%、Phase 6 完了時に 70% へ。GitHub Actions へ組み込む際は tarpaulin の `--fail-under` を段階的に引き上げる。
 
 ## 次回アクション
 - Lint 失敗箇所を修正し、成功結果を再収集。
