@@ -63,6 +63,7 @@ static SEND_REACTION: AtomicMetric = AtomicMetric::new();
 static UPDATE_METADATA: AtomicMetric = AtomicMetric::new();
 static DELETE_EVENTS: AtomicMetric = AtomicMetric::new();
 static DISCONNECT: AtomicMetric = AtomicMetric::new();
+static REPOST_EVENTS: AtomicMetric = AtomicMetric::new();
 
 #[cfg(test)]
 static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -128,6 +129,7 @@ pub enum GatewayMetricKind {
     MetadataUpdate,
     DeleteEvents,
     Disconnect,
+    Repost,
 }
 
 fn metric(kind: GatewayMetricKind) -> &'static AtomicMetric {
@@ -139,6 +141,7 @@ fn metric(kind: GatewayMetricKind) -> &'static AtomicMetric {
         GatewayMetricKind::MetadataUpdate => &UPDATE_METADATA,
         GatewayMetricKind::DeleteEvents => &DELETE_EVENTS,
         GatewayMetricKind::Disconnect => &DISCONNECT,
+        GatewayMetricKind::Repost => &REPOST_EVENTS,
     }
 }
 
@@ -159,6 +162,7 @@ pub struct EventGatewayMetrics {
     pub metadata_updates: GatewayMetricSnapshot,
     pub deletions: GatewayMetricSnapshot,
     pub disconnects: GatewayMetricSnapshot,
+    pub reposts: GatewayMetricSnapshot,
 }
 
 fn current_unix_ms() -> u64 {
@@ -208,6 +212,7 @@ pub fn snapshot() -> EventGatewayMetrics {
         metadata_updates: UPDATE_METADATA.snapshot(),
         deletions: DELETE_EVENTS.snapshot(),
         disconnects: DISCONNECT.snapshot(),
+        reposts: REPOST_EVENTS.snapshot(),
     }
 }
 
@@ -221,4 +226,5 @@ pub fn reset() {
     UPDATE_METADATA.reset();
     DELETE_EVENTS.reset();
     DISCONNECT.reset();
+    REPOST_EVENTS.reset();
 }

@@ -224,6 +224,11 @@ impl NetworkService for IrohNetworkService {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent> {
+        self.connection_events.subscribe()
+    }
+
     async fn connect(&self) -> Result<(), AppError> {
         let mut connected = self.connected.write().await;
         let was_connected = *connected;

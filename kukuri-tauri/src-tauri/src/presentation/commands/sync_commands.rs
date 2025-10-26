@@ -9,7 +9,7 @@ use tauri::State;
 pub async fn start_sync(
     sync_service: State<'_, Arc<SyncService>>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = sync_service.start_sync().await.map_err(AppError::from);
+    let result = sync_service.start_sync().await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -17,7 +17,7 @@ pub async fn start_sync(
 pub async fn stop_sync(
     sync_service: State<'_, Arc<SyncService>>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = sync_service.stop_sync().await.map_err(AppError::from);
+    let result = sync_service.stop_sync().await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -34,7 +34,7 @@ pub async fn get_sync_status(
 pub async fn reset_sync(
     sync_service: State<'_, Arc<SyncService>>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = sync_service.reset_sync().await.map_err(AppError::from);
+    let result = sync_service.reset_sync().await;
     Ok(ApiResponse::from_result(result))
 }
 

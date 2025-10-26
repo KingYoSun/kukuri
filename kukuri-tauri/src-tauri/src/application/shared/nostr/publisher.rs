@@ -64,6 +64,19 @@ impl EventPublisher {
         debug!("Created reaction event: {}", event.id);
         Ok(event)
     }
+    pub fn create_repost(&self, event_id: &EventId) -> Result<Event> {
+        let keys = self
+            .keys
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Keys not set"))?;
+
+        let event = EventBuilder::new(Kind::Repost, "")
+            .tag(Tag::event(*event_id))
+            .sign_with_keys(keys)?;
+
+        info!("Created repost event: {}", event.id);
+        Ok(event)
+    }
 
     /// 削除イベントを作成
     pub fn create_deletion(&self, event_ids: Vec<EventId>, reason: Option<&str>) -> Result<Event> {
@@ -188,6 +201,17 @@ mod tests {
         let event = publisher.create_metadata(metadata).unwrap();
         assert_eq!(event.kind, Kind::Metadata);
         assert!(event.content.contains("Test User"));
+    }
+
+    #[test]
+    fn test_create_repost() {
+        let mut publisher = EventPublisher::new();
+        let keys = Keys::generate();
+        publisher.set_keys(keys);
+
+        let event_id = EventId::from_slice(&[4; 32]).unwrap();
+        let event = publisher.create_repost(&event_id).unwrap();
+        assert_eq!(event.kind, Kind::Repost);
     }
 
     #[test]

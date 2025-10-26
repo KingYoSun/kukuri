@@ -118,6 +118,10 @@ mod tests {
             Ok(sample_nostr_event_id('2'))
         }
 
+        async fn publish_repost(&self, _: &NostrEventId) -> AnyResult<NostrEventId> {
+            Ok(sample_nostr_event_id('4'))
+        }
+
         async fn send_reaction(&self, _: &NostrEventId, _: &str) -> AnyResult<NostrEventId> {
             Ok(sample_nostr_event_id('3'))
         }
@@ -427,6 +431,22 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::DeleteEvents,
+        )
+    }
+
+    async fn publish_repost(&self, target: &EventId) -> Result<EventId, AppError> {
+        metrics::record_outcome(
+            async {
+                let nostr_id = Self::to_nostr_event_id(target)?;
+                let event_id = self
+                    .manager
+                    .publish_repost(&nostr_id)
+                    .await
+                    .map_err(|err| AppError::NostrError(err.to_string()))?;
+                Self::to_domain_event_id(event_id)
+            }
+            .await,
+            GatewayMetricKind::Repost,
         )
     }
 

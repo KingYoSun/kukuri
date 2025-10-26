@@ -1,17 +1,17 @@
+use super::p2p_service::P2PServiceTrait;
 use crate::domain::entities::Topic;
 use crate::infrastructure::database::TopicRepository;
-use crate::infrastructure::p2p::GossipService;
 use crate::shared::error::AppError;
 use std::sync::Arc;
 
 pub struct TopicService {
     repository: Arc<dyn TopicRepository>,
-    gossip: Arc<dyn GossipService>,
+    p2p: Arc<dyn P2PServiceTrait>,
 }
 
 impl TopicService {
-    pub fn new(repository: Arc<dyn TopicRepository>, gossip: Arc<dyn GossipService>) -> Self {
-        Self { repository, gossip }
+    pub fn new(repository: Arc<dyn TopicRepository>, p2p: Arc<dyn P2PServiceTrait>) -> Self {
+        Self { repository, p2p }
     }
 
     pub async fn create_topic(
@@ -23,7 +23,7 @@ impl TopicService {
         self.repository.create_topic(&topic).await?;
 
         // Join gossip topic
-        self.gossip.join_topic(&topic.id, vec![]).await?;
+        self.p2p.join_topic(&topic.id, vec![]).await?;
 
         Ok(topic)
     }
@@ -42,13 +42,13 @@ impl TopicService {
 
     pub async fn join_topic(&self, id: &str, user_pubkey: &str) -> Result<(), AppError> {
         self.repository.join_topic(id, user_pubkey).await?;
-        self.gossip.join_topic(id, vec![]).await?;
+        self.p2p.join_topic(id, Vec::new()).await?;
         Ok(())
     }
 
     pub async fn leave_topic(&self, id: &str, user_pubkey: &str) -> Result<(), AppError> {
         self.repository.leave_topic(id, user_pubkey).await?;
-        self.gossip.leave_topic(id).await?;
+        self.p2p.leave_topic(id).await?;
         Ok(())
     }
 
@@ -62,7 +62,7 @@ impl TopicService {
             return Err("Cannot delete public topic".into());
         }
 
-        self.gossip.leave_topic(id).await?;
+        self.p2p.leave_topic(id).await?;
         self.repository.delete_topic(id).await
     }
 
@@ -78,7 +78,7 @@ impl TopicService {
         if self.repository.get_topic("public").await?.is_none() {
             let public_topic = Topic::public_topic();
             self.repository.create_topic(&public_topic).await?;
-            self.gossip.join_topic("public", vec![]).await?;
+            self.p2p.join_topic("public", Vec::new()).await?;
         }
         Ok(())
     }
@@ -87,8 +87,8 @@ impl TopicService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::services::p2p_service::{P2PServiceTrait, P2PStatus};
     use crate::infrastructure::database::TopicRepository as InfraTopicRepository;
-    use crate::infrastructure::p2p::GossipService;
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
 
@@ -115,18 +115,17 @@ mod tests {
     }
 
     mock! {
-        pub GossipSvc {}
+        pub P2P {}
 
         #[async_trait]
-        impl GossipService for GossipSvc {
-            async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
-            async fn leave_topic(&self, topic: &str) -> Result<(), AppError>;
-            async fn broadcast(&self, topic: &str, event: &crate::domain::entities::Event) -> Result<(), AppError>;
-            async fn subscribe(&self, topic: &str) -> Result<tokio::sync::mpsc::Receiver<crate::domain::entities::Event>, AppError>;
-            async fn get_joined_topics(&self) -> Result<Vec<String>, AppError>;
-            async fn get_topic_peers(&self, topic: &str) -> Result<Vec<String>, AppError>;
-            async fn get_topic_stats(&self, topic: &str) -> Result<Option<crate::domain::p2p::TopicStats>, AppError>;
-            async fn broadcast_message(&self, topic: &str, message: &[u8]) -> Result<(), AppError>;
+        impl P2PServiceTrait for P2P {
+            async fn initialize(&self) -> Result<(), AppError>;
+            async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
+            async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError>;
+            async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError>;
+            async fn get_status(&self) -> Result<P2PStatus, AppError>;
+            async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
+            fn generate_topic_id(&self, topic_name: &str) -> String;
         }
     }
 
@@ -137,16 +136,15 @@ mod tests {
             .with(eq("tech"), eq("pubkey1"))
             .times(1)
             .returning(|_, _| Ok(()));
-        let mut gossip = MockGossipSvc::new();
-        gossip
-            .expect_join_topic()
+        let mut p2p = MockP2P::new();
+        p2p.expect_join_topic()
             .with(eq("tech"), eq(Vec::<String>::new()))
             .times(1)
             .returning(|_, _| Ok(()));
 
         let repo_arc: Arc<dyn InfraTopicRepository> = Arc::new(repo);
-        let gossip_arc: Arc<dyn GossipService> = Arc::new(gossip);
-        let service = TopicService::new(repo_arc, gossip_arc);
+        let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
+        let service = TopicService::new(repo_arc, p2p_arc);
 
         let result = service.join_topic("tech", "pubkey1").await;
         assert!(result.is_ok());
@@ -159,16 +157,15 @@ mod tests {
             .with(eq("tech"), eq("pubkey1"))
             .times(1)
             .returning(|_, _| Ok(()));
-        let mut gossip = MockGossipSvc::new();
-        gossip
-            .expect_leave_topic()
+        let mut p2p = MockP2P::new();
+        p2p.expect_leave_topic()
             .with(eq("tech"))
             .times(1)
             .returning(|_| Ok(()));
 
         let repo_arc: Arc<dyn InfraTopicRepository> = Arc::new(repo);
-        let gossip_arc: Arc<dyn GossipService> = Arc::new(gossip);
-        let service = TopicService::new(repo_arc, gossip_arc);
+        let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
+        let service = TopicService::new(repo_arc, p2p_arc);
 
         let result = service.leave_topic("tech", "pubkey1").await;
         assert!(result.is_ok());
@@ -181,11 +178,9 @@ mod tests {
             .with(eq("pubkey1"))
             .times(1)
             .returning(|_| Ok(vec![]));
-        let gossip = MockGossipSvc::new();
-
         let repo_arc: Arc<dyn InfraTopicRepository> = Arc::new(repo);
-        let gossip_arc: Arc<dyn GossipService> = Arc::new(gossip);
-        let service = TopicService::new(repo_arc, gossip_arc);
+        let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
+        let service = TopicService::new(repo_arc, p2p_arc);
         let result = service.get_joined_topics("pubkey1").await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);

@@ -164,6 +164,7 @@ pub trait EventServiceTrait: Send + Sync {
     async fn subscribe_to_topic(&self, topic_id: &str) -> Result<(), AppError>;
     async fn subscribe_to_user(&self, pubkey: &str) -> Result<(), AppError>;
     async fn get_public_key(&self) -> Result<Option<String>, AppError>;
+    async fn boost_post(&self, event_id: &str) -> Result<EventId, AppError>;
     async fn delete_events(
         &self,
         event_ids: Vec<String>,
@@ -229,6 +230,11 @@ impl EventServiceTrait for EventService {
             .map(|key| key.map(|pk| pk.as_hex().to_string()))
     }
 
+    async fn boost_post(&self, event_id: &str) -> Result<EventId, AppError> {
+        let target_id = parse_event_id(event_id)?;
+        self.event_gateway.publish_repost(&target_id).await
+    }
+
     async fn delete_events(
         &self,
         event_ids: Vec<String>,
@@ -273,5 +279,12 @@ impl EventServiceTrait for EventService {
 
     async fn list_subscriptions(&self) -> Result<Vec<SubscriptionRecord>, AppError> {
         super::subscription::list_subscriptions_internal(self).await
+    }
+}
+
+#[async_trait]
+impl super::super::sync_service::SyncParticipant for EventService {
+    async fn sync_pending(&self) -> Result<u32, AppError> {
+        self.sync_pending_events().await
     }
 }

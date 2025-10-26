@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月24日
+最終更新日: 2025年10月26日
 
 ## 方針（2025年09月15日 更新）
 
@@ -171,7 +171,64 @@
   - 2025年10月26日: `modules::bookmark` ディレクトリを削除し、`phase5_dependency_inventory_template.md`／`refactoring_plan_2025-08-08_v3.md`／`tauri_app_implementation_plan.md`／`nostr_reactions_implementation.md` を更新。`cargo test`（kukuri-tauri/src-tauri, kukuri-cli）で回帰確認。
 関連: `docs/01_project/activeContext/iroh-native-dht-plan.md`
 
--メモ/進捗ログ:
+## Phase 5 残タスク整理（2025年10月26日 棚卸し）
+
+### アーキテクチャ／サービス
+
+- [ ] AuthService の認証/初期トピック処理をイベント駆動ポートに分離し、User/TopicService との同期依存を解消する（`phase5_dependency_inventory_template.md:15`）。
+- [ ] P2PService/Builder の iroh 固有型を Builder 内に閉じ込め、Domain P2PEvent へマッピング＋trait 化を完了する（`phase5_dependency_inventory_template.md:18`）。
+  - 2025年10月26日: `P2PStack` は Iroh 具象型を内部に保持しつつ、AppState には `NetworkService`/`GossipService` trait として注入する構成に変更。Mainline/Gossip smoke テストは `./scripts/test-docker.ps1 rust` で回帰確認済み。
+- [ ] PostService の `nostr_sdk::Keys` 依存を共有ファクトリ＋EventService 経由へ集約し、イベント生成経路を統一する（`phase5_dependency_inventory_template.md:19`）。
+  - 2025年10月26日: `PostService` の作成/反応/削除/再送フローを EventService 経由に統一し、`EventGateway` を通じた Nostr 送信へ切替。ブックマーク/同期テストは Docker Rust テストでグリーン。
+- [ ] TopicService の gossip 直接呼び出しを P2PService 経由へ置換し、参加/離脱トリガーをサービス層に集約する（`phase5_dependency_inventory_template.md:20`）。
+  - 2025年10月26日: GossipService 依存を `P2PServiceTrait` に置換し、UI からの join/leave/broadcast を P2PService に一本化。既存ユニットテストも trait モックに合わせて更新。
+- [ ] SyncService に同期オーケストレータ trait を追加し、PostService/EventService との循環依存を防止する（`phase5_dependency_inventory_template.md:21`）。
+  - 2025年10月26日: `SyncParticipant` trait を新設し、Post/Event 両サービスに実装。`SyncService` は trait object を受け取る形へ DI を再編し、AppState 側では Legacy Aggregator から独立して注入。
+- [ ] UserService でフォロー/メタデータ取得をドメインユースケースとして抽象化し、Phase 5 の Low 項目を消化する（`phase5_dependency_inventory_template.md:23`）。
+- [ ] AppState（legacy aggregator）の Legacy modules 依存を段階的に除去し、各サービスの DI 経路へ移譲する（`phase5_dependency_inventory_template.md:24`）。
+  - 2025年10月26日: P2P/Sync/Post/Event 周りの DI をすべて trait object 経由に揃え、`AppState` から Legacy Gossip/Network 具象参照を排除。Windows 既知問題によりローカル `cargo test` は失敗するが、Docker Rust テストで挙動を確認。
+- [ ] ApplicationContainer を P2P ブートストラップ専用モジュールへ再配置し、P2P イベント型とメトリクス初期化を統合する（`phase5_dependency_inventory_template.md:25`）。
+- [ ] EventManager の Repository 参照をアプリ層ポートへ閉じ込め、Infrastructure 化を完了する（`phase5_dependency_inventory_template.md:26`）。
+- [ ] SQLiteRepository の Domain 構造体直接 import を Mapper 経由の DTO 化に置き換える（`phase5_dependency_inventory_template.md:34`）。
+- [ ] EventDistributor に DistributionStrategy trait と共通メトリクスフックを導入する（`phase5_dependency_inventory_template.md:36`）。
+- [ ] IrohNetworkService のネットワークイベントを P2PService 用イベントバスに統合し、broadcast の直接露出を廃止する（`phase5_dependency_inventory_template.md:37`）。
+- [ ] IrohGossipService のイベントを Domain DTO へ正規化し、モック/API 差異をなくす（`phase5_dependency_inventory_template.md:38`）。
+- [ ] Gossip Metrics の登録処理を ApplicationContainer で一元化し、CI 指標へ反映する（`phase5_dependency_inventory_template.md:39`）。
+- [ ] KeyManager（infrastructure）と SecureStorage の責務を再分割し、鍵メタデータ更新を別トレイトへ切り出す（`phase5_dependency_inventory_template.md:40`）。
+- [ ] SecureStorage の永続化スキーマを Domain 値オブジェクトへ揃えるマイグレーションを設計する（`phase5_dependency_inventory_template.md:41`）。
+- [ ] Phase 5 EncryptionService Stage2/3 の完了（`refactoring_plan_2025-08-08_v3.md:344-345`, `phase5_dependency_inventory_template.md:32`）
+  - [ ] Stage2: `SecureStorageHandler` / `AppState` / テストの DI を `Arc<dyn EncryptionService>` 起点に統合し、Legacy `modules::crypto::encryption` と `#[allow(dead_code)]` を排除する。
+  - [ ] Stage3: `modules::crypto::encryption` ディレクトリと関連テストを削除し、依存表（`phase5_dependency_inventory_template.md` / `tauri_app_implementation_plan.md` / Runbook）を更新する。
+- [ ] EventGateway 残課題（`phase5_event_gateway_design.md:123-126`）
+  - [ ] Gateway 経由 API にメトリクスフックを追加し、P2P 成功率を計測する。
+  - [ ] EventManager ユニットテストを `application/shared/tests` ベースへ再編する。
+  - [ ] Presentation DTO（NIP-65 など）の mapper 対応を拡充する。
+  - 2025年10月26日: `publish_repost` API と `REPOST` メトリクスを EventGateway/LegacyEventManagerGateway/metrics に追加し、Boost 経路のカバレッジを拡充。
+
+### P2P / DHT / Offline
+
+- [ ] `dht_bootstrap.rs::leave_topic` とアプリコマンドを接続し、iroh-gossip quit の意味整理を完了する（`iroh-native-dht-plan.md:64` / `185` / `355`）。
+- [ ] 同様に broadcast API の連動仕様を固め、未参加時の自動 join 挙動を定義する（`iroh-native-dht-plan.md:64` / `185` / `356`）。
+- [ ] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI 更新）方針を決めて記録する（`iroh-native-dht-plan.md:192`）。
+- [ ] `KUKURI_ENABLE_{DHT,DNS,LOCAL}` / `KUKURI_BOOTSTRAP_PEERS` の環境変数トグルと UI 上書きルールを整理し、実装へ反映する（`iroh-native-dht-plan.md:197-199`）。
+- [ ] Offline再索引ジョブの未決事項を確定する（`iroh-native-dht-plan.md:272-275`）
+  - [ ] `OfflineManager` に `enqueue_if_missing` / `get_pending_sync_items` などの補助メソッドを実装。
+  - [ ] P2P 接続状態の購読 API（イベントストリーム or P2PState watch）を選定する。
+  - [ ] フロントエンドでの再索引用イベントハンドラ責務（store 直更新 vs TanStack Query）を決定する。
+- [ ] `recovery.rs` を追加し、OfflineService 結合テストを Runbook 手順へ組み込む（`p2p_mainline_runbook.md:85-86`）。
+- [ ] GitHub Actions 向け iroh バイナリのキャッシュ戦略を整備し、ダウンロード時間を短縮する（`p2p_mainline_runbook.md:86-87`）。
+- [ ] NIPs 準拠イベントスキーマ（NIP-01/10/19/30078 等）の検証/テスト方針を確定する（`iroh-native-dht-plan.md:357`）。
+- [ ] DHT メトリクス/ログ（tracing レベル、カウンタ）を拡充し、Runbook へ記載する（`iroh-native-dht-plan.md:358`）。
+
+### テスト / CI
+
+- [ ] EventManager 結合テストを `tests/integration/event/manager` に追加し、AppHandle 非依存シナリオを `./scripts/test-docker.ps1 rust --test event_manager_integration` から呼び出せるよう CI / Runbook / `phase5_test_inventory.md` を更新する（`phase5_test_inventory.md:10`）。
+- [ ] パフォーマンスハーネスを `tests/performance/*.rs` へ分割し、計測条件・成果物の保存手順を `phase5_test_inventory.md` / `p2p_mainline_runbook.md` に追記、`scripts/test-docker.{sh,ps1}` に `performance` サブコマンドを追加する（`phase5_test_inventory.md:13`, `p2p_mainline_runbook.md:73-78`）。
+- [ ] Offline 系統合テストの不足シナリオ（再索引/再接続/キャッシュ復元）を `tests/integration/offline` に追加し、Inventory を更新する（`phase5_test_inventory.md:14`）。
+- [ ] TypeScript `src/tests/unit/lib/syncEngine` 系に競合解決シナリオテストを追加する（`phase5_test_inventory.md:31`）。
+- [ ] `docker-compose.test.yml` の `./kukuri-tauri/src-tauri/tests` マウント追加と CI/Runbook の反映を完了する（`phase5_ci_path_audit.md:10`）。
+
+# メモ/進捗ログ:
 - 2025年10月17日: Iroh DHT/Discovery 残タスクを完了し、Mainline DHT 統合フェーズへ移行。Phase 7 の残項目（Mainline DHT/OfflineService/EventService/エラーハンドリング）を次スプリントの主テーマに設定。
 - 2025年10月17日: 運用・品質セクションの TODO を見直し、メトリクス更新フローと Windows テスト運用の標準化タスクを切り出した。
 - 2025年10月20日: 運用/品質・観測タスク群の実作業を開始。メトリクス更新フロー整備と Windows テスト運用ガイド策定に向けて現状調査を進行中。

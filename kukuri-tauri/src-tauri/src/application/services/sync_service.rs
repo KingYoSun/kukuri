@@ -1,6 +1,13 @@
 use crate::infrastructure::p2p::NetworkService;
+use crate::shared::error::AppError;
+use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+#[async_trait]
+pub trait SyncParticipant: Send + Sync {
+    async fn sync_pending(&self) -> Result<u32, AppError>;
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SyncStatus {
@@ -13,21 +20,21 @@ pub struct SyncStatus {
 
 pub struct SyncService {
     network: Arc<dyn NetworkService>,
-    post_service: Arc<super::PostService>,
-    event_service: Arc<super::EventService>,
+    post_participant: Arc<dyn SyncParticipant>,
+    event_participant: Arc<dyn SyncParticipant>,
     status: Arc<RwLock<SyncStatus>>,
 }
 
 impl SyncService {
     pub fn new(
         network: Arc<dyn NetworkService>,
-        post_service: Arc<super::PostService>,
-        event_service: Arc<super::EventService>,
+        post_participant: Arc<dyn SyncParticipant>,
+        event_participant: Arc<dyn SyncParticipant>,
     ) -> Self {
         Self {
             network,
-            post_service,
-            event_service,
+            post_participant,
+            event_participant,
             status: Arc::new(RwLock::new(SyncStatus {
                 is_syncing: false,
                 pending_posts: 0,
@@ -38,7 +45,7 @@ impl SyncService {
         }
     }
 
-    pub async fn start_sync(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start_sync(&self) -> Result<(), AppError> {
         let mut status = self.status.write().await;
 
         if status.is_syncing {
@@ -48,18 +55,13 @@ impl SyncService {
         status.is_syncing = true;
         drop(status);
 
-        // Ensure network is connected
         if !self.network.is_connected().await {
             self.network.connect().await?;
         }
 
-        // Sync pending posts
-        let synced_posts = self.post_service.sync_pending_posts().await?;
+        let synced_posts = self.post_participant.sync_pending().await?;
+        let synced_events = self.event_participant.sync_pending().await?;
 
-        // Sync pending events
-        let synced_events = self.event_service.sync_pending_events().await?;
-
-        // Update status
         let mut status = self.status.write().await;
         status.is_syncing = false;
         status.last_sync = Some(chrono::Utc::now().timestamp());
@@ -69,7 +71,7 @@ impl SyncService {
         Ok(())
     }
 
-    pub async fn stop_sync(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn stop_sync(&self) -> Result<(), AppError> {
         let mut status = self.status.write().await;
         status.is_syncing = false;
         Ok(())
@@ -79,7 +81,7 @@ impl SyncService {
         self.status.read().await.clone()
     }
 
-    pub async fn reset_sync(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn reset_sync(&self) -> Result<(), AppError> {
         let mut status = self.status.write().await;
         status.pending_posts = 0;
         status.pending_events = 0;
@@ -110,8 +112,8 @@ impl Clone for SyncService {
     fn clone(&self) -> Self {
         Self {
             network: self.network.clone(),
-            post_service: self.post_service.clone(),
-            event_service: self.event_service.clone(),
+            post_participant: self.post_participant.clone(),
+            event_participant: self.event_participant.clone(),
             status: self.status.clone(),
         }
     }

@@ -11,6 +11,9 @@ use application_container::ApplicationContainer;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
+use crate::application::services::event_service::EventServiceTrait;
+use crate::application::services::p2p_service::P2PServiceTrait;
+use crate::application::services::sync_service::SyncParticipant;
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
     SyncService, TopicService, UserService,
@@ -159,9 +162,10 @@ impl AppState {
         let (p2p_event_tx, p2p_event_rx) = mpsc::unbounded_channel();
         let p2p_stack = container.build_p2p_stack(p2p_event_tx).await?;
 
-        let network_service: Arc<dyn NetworkService> = p2p_stack.network_service.clone();
-        let gossip_service_concrete = p2p_stack.gossip_service.clone();
-        let gossip_service: Arc<dyn GossipService> = gossip_service_concrete.clone();
+        let network_service: Arc<dyn NetworkService> =
+            Arc::clone(&p2p_stack.network_service) as Arc<dyn NetworkService>;
+        let gossip_service: Arc<dyn GossipService> =
+            Arc::clone(&p2p_stack.gossip_service) as Arc<dyn GossipService>;
         let p2p_service = Arc::clone(&p2p_stack.p2p_service);
         // EventManagerへGossipServiceを接続（P2P配信経路の直結）
         event_manager
@@ -180,7 +184,7 @@ impl AppState {
         // TopicServiceを初期化（AuthServiceの依存）
         let topic_service = Arc::new(TopicService::new(
             Arc::clone(&repository) as Arc<dyn TopicRepository>,
-            Arc::clone(&gossip_service),
+            Arc::clone(&p2p_service) as Arc<dyn P2PServiceTrait>,
         ));
         // 既定トピック（public）を保証し、EventManagerの既定配信先に設定
         topic_service
@@ -195,13 +199,6 @@ impl AppState {
             Arc::clone(&secure_storage),
             Arc::clone(&user_service),
             Arc::clone(&topic_service),
-        ));
-
-        // PostServiceの初期化
-        let post_service = Arc::new(PostService::new(
-            Arc::clone(&repository) as Arc<dyn PostRepository>,
-            Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
-            Arc::clone(&event_distributor),
         ));
 
         let subscription_state = Arc::new(SubscriptionStateMachine::new(Arc::clone(
@@ -229,11 +226,20 @@ impl AppState {
             .await;
         let event_service = Arc::new(event_service_inner);
 
-        // SyncServiceの初期化（PostServiceとEventServiceが必要）
+        // PostService縺ｮ蛻晄悄蛹・
+        let post_service = Arc::new(PostService::new(
+            Arc::clone(&repository) as Arc<dyn PostRepository>,
+            Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
+            Arc::clone(&event_service) as Arc<dyn EventServiceTrait>,
+        ));
+
+        let post_sync_participant: Arc<dyn SyncParticipant> = post_service.clone();
+        let event_sync_participant: Arc<dyn SyncParticipant> = event_service.clone();
+
         let sync_service = Arc::new(SyncService::new(
             Arc::clone(&network_service),
-            Arc::clone(&post_service),
-            Arc::clone(&event_service),
+            post_sync_participant,
+            event_sync_participant,
         ));
 
         // OfflineServiceの初期化

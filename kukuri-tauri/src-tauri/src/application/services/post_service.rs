@@ -1,39 +1,32 @@
-use crate::domain::entities::{Event, Post, User};
+use crate::application::services::event_service::EventServiceTrait;
+use crate::domain::entities::{Post, User};
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::infrastructure::cache::PostCacheService;
 use crate::infrastructure::database::{BookmarkRepository, PostRepository};
-use crate::infrastructure::p2p::EventDistributor;
-use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
 use crate::shared::error::AppError;
-use nostr_sdk::prelude::*;
+use async_trait::async_trait;
 use std::sync::Arc;
+use tracing::warn;
 
 pub struct PostService {
     repository: Arc<dyn PostRepository>,
     bookmark_repository: Arc<dyn BookmarkRepository>,
-    distributor: Arc<dyn EventDistributor>,
+    event_service: Arc<dyn EventServiceTrait>,
     cache: Arc<PostCacheService>,
-    keys: Option<Keys>,
 }
 
 impl PostService {
     pub fn new(
         repository: Arc<dyn PostRepository>,
         bookmark_repository: Arc<dyn BookmarkRepository>,
-        distributor: Arc<dyn EventDistributor>,
+        event_service: Arc<dyn EventServiceTrait>,
     ) -> Self {
         Self {
             repository,
             bookmark_repository,
-            distributor,
+            event_service,
             cache: Arc::new(PostCacheService::new()),
-            keys: None,
         }
-    }
-
-    pub fn with_keys(mut self, keys: Keys) -> Self {
-        self.keys = Some(keys);
-        self
     }
 
     pub async fn create_post(
@@ -42,41 +35,28 @@ impl PostService {
         author: User,
         topic_id: String,
     ) -> Result<Post, AppError> {
-        let mut post = Post::new(content.clone(), author.clone(), topic_id.clone());
-
-        // Save to database
+        let mut post = Post::new(content.clone(), author, topic_id.clone());
         self.repository.create_post(&post).await?;
 
-        // Convert to Nostr event and distribute
-        if let Some(ref keys) = self.keys {
-            // Create Nostr event with topic tag
-            let tag = Tag::hashtag(topic_id.clone());
-
-            let mut event_builder = EventBuilder::text_note(&content);
-            event_builder = event_builder.tag(tag);
-            let nostr_event = event_builder.sign_with_keys(keys)?;
-
-            // Convert to domain Event
-            let mut event = Event::new(
-                1, // Kind 1 for text notes
-                content,
-                author.pubkey.clone(),
-            );
-            event.tags = vec![vec!["t".to_string(), topic_id]];
-
-            // Distribute via P2P
-            self.distributor
-                .distribute(&event, DistributionStrategy::Hybrid)
-                .await?;
-
-            // Mark post as synced
-            post.mark_as_synced(nostr_event.id.to_hex());
-            self.repository.update_post(&post).await?;
+        match self
+            .event_service
+            .publish_topic_post(&topic_id, &content, None)
+            .await
+        {
+            Ok(event_id) => {
+                let event_hex = event_id.to_string();
+                post.mark_as_synced(event_hex.clone());
+                self.repository
+                    .mark_post_synced(&post.id, &event_hex)
+                    .await?;
+            }
+            Err(err) => {
+                self.cache.add(post.clone()).await;
+                return Err(err);
+            }
         }
 
-        // 新規作成した投稿をキャッシュに保存
         self.cache.add(post.clone()).await;
-
         Ok(post)
     }
 
@@ -115,92 +95,25 @@ impl PostService {
     }
 
     pub async fn like_post(&self, post_id: &str) -> Result<(), AppError> {
-        if let Some(mut post) = self.repository.get_post(post_id).await? {
-            post.increment_likes();
-            self.repository.update_post(&post).await?;
-
-            // キャッシュを無効化
-            self.cache.remove(post_id).await;
-
-            // Send like event (Nostr reaction)
-            if let Some(ref keys) = self.keys {
-                let event_id = nostr_sdk::EventId::from_hex(post_id)?;
-                // Create a simple reaction event
-                let _reaction_event = EventBuilder::text_note("+")
-                    .tag(Tag::event(event_id))
-                    .sign_with_keys(keys)?;
-
-                // Convert to domain Event and distribute
-                let mut event = Event::new(
-                    7, // Kind 7 for reactions
-                    "+".to_string(),
-                    keys.public_key().to_hex(),
-                );
-                event.tags = vec![vec!["e".to_string(), post_id.to_string()]];
-
-                self.distributor
-                    .distribute(&event, DistributionStrategy::Nostr)
-                    .await?;
-            }
-        }
-        Ok(())
+        self.react_to_post(post_id, "+").await
     }
 
     pub async fn boost_post(&self, post_id: &str) -> Result<(), AppError> {
+        self.event_service.boost_post(post_id).await?;
+
         if let Some(mut post) = self.repository.get_post(post_id).await? {
             post.increment_boosts();
             self.repository.update_post(&post).await?;
-
-            // キャッシュを無効化
             self.cache.remove(post_id).await;
-
-            // Send boost event (Nostr repost)
-            if let Some(ref keys) = self.keys {
-                let event_id = nostr_sdk::EventId::from_hex(post_id)?;
-                // Create a repost event
-                let _repost_event = EventBuilder::text_note("")
-                    .tag(Tag::event(event_id))
-                    .sign_with_keys(keys)?;
-
-                // Convert to domain Event and distribute
-                let mut event = Event::new(
-                    6, // Kind 6 for reposts
-                    "".to_string(),
-                    keys.public_key().to_hex(),
-                );
-                event.tags = vec![vec!["e".to_string(), post_id.to_string()]];
-
-                self.distributor
-                    .distribute(&event, DistributionStrategy::Nostr)
-                    .await?;
-            }
         }
+
         Ok(())
     }
 
     pub async fn delete_post(&self, id: &str) -> Result<(), AppError> {
-        // Send deletion event
-        if let Some(ref keys) = self.keys {
-            let event_id = nostr_sdk::EventId::from_hex(id)?;
-            // Create a deletion event
-            let _deletion_event = EventBuilder::text_note("Post deleted")
-                .tag(Tag::event(event_id))
-                .sign_with_keys(keys)?;
-
-            // Convert to domain Event and distribute
-            let mut event = Event::new(
-                5, // Kind 5 for deletions
-                "Post deleted".to_string(),
-                keys.public_key().to_hex(),
-            );
-            event.tags = vec![vec!["e".to_string(), id.to_string()]];
-
-            self.distributor
-                .distribute(&event, DistributionStrategy::Nostr)
-                .await?;
-        }
-
-        // Mark as deleted in database
+        self.event_service
+            .delete_events(vec![id.to_string()], Some("Post deleted".to_string()))
+            .await?;
         self.repository.delete_post(id).await
     }
 
@@ -219,13 +132,17 @@ impl PostService {
     }
 
     pub async fn react_to_post(&self, post_id: &str, reaction: &str) -> Result<(), AppError> {
-        // TODO: Implement reaction logic
+        self.event_service.send_reaction(post_id, reaction).await?;
+
         if reaction == "+" {
-            self.like_post(post_id).await
-        } else {
-            // Custom reaction
-            Ok(())
+            if let Some(mut post) = self.repository.get_post(post_id).await? {
+                post.increment_likes();
+                self.repository.update_post(&post).await?;
+                self.cache.remove(post_id).await;
+            }
         }
+
+        Ok(())
     }
 
     pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
@@ -267,30 +184,26 @@ impl PostService {
     }
 
     pub async fn sync_pending_posts(&self) -> Result<u32, AppError> {
-        let unsync_posts = self.repository.get_unsync_posts().await?;
+        let unsynced_posts = self.repository.get_unsync_posts().await?;
         let mut synced_count = 0;
 
-        for post in unsync_posts {
-            // Convert to Event and distribute
-            let mut event = Event::new(
-                1, // Kind 1 for text notes
-                post.content.clone(),
-                post.author.pubkey.clone(), // Use pubkey from author
-            );
-            event.tags = vec![vec!["t".to_string(), post.topic_id.clone()]];
-
-            // Try to distribute
-            if self
-                .distributor
-                .distribute(&event, DistributionStrategy::Hybrid)
+        for mut post in unsynced_posts {
+            match self
+                .event_service
+                .publish_topic_post(&post.topic_id, &post.content, None)
                 .await
-                .is_ok()
             {
-                // Mark as synced
-                self.repository
-                    .mark_post_synced(&post.id, &event.id)
-                    .await?;
-                synced_count += 1;
+                Ok(event_id) => {
+                    let event_hex = event_id.to_string();
+                    post.mark_as_synced(event_hex.clone());
+                    self.repository
+                        .mark_post_synced(&post.id, &event_hex)
+                        .await?;
+                    synced_count += 1;
+                }
+                Err(err) => {
+                    warn!("failed to sync post {post_id}: {err}", post_id = post.id);
+                }
             }
         }
 
@@ -298,42 +211,76 @@ impl PostService {
     }
 }
 
+#[async_trait]
+impl super::sync_service::SyncParticipant for PostService {
+    async fn sync_pending(&self) -> Result<u32, AppError> {
+        self.sync_pending_posts().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::services::SubscriptionRecord;
     use crate::infrastructure::database::{
         BookmarkRepository, PostRepository, connection_pool::ConnectionPool,
         sqlite_repository::SqliteRepository,
     };
-    use async_trait::async_trait;
+    use crate::presentation::dto::event::NostrMetadataDto;
     use std::sync::Arc;
 
-    struct NoopDistributor;
+    #[derive(Default)]
+    struct TestEventService;
 
     #[async_trait]
-    impl EventDistributor for NoopDistributor {
-        async fn distribute(
-            &self,
-            _event: &Event,
-            _strategy: DistributionStrategy,
-        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    impl EventServiceTrait for TestEventService {
+        async fn initialize(&self) -> Result<(), AppError> {
             Ok(())
         }
-
-        async fn receive(&self) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
+        async fn publish_text_note(&self, _: &str) -> Result<EventId, AppError> {
+            Ok(EventId::generate())
+        }
+        async fn publish_topic_post(
+            &self,
+            _: &str,
+            _: &str,
+            _: Option<&str>,
+        ) -> Result<EventId, AppError> {
+            Ok(EventId::generate())
+        }
+        async fn send_reaction(&self, _: &str, _: &str) -> Result<EventId, AppError> {
+            Ok(EventId::generate())
+        }
+        async fn update_metadata(&self, _: NostrMetadataDto) -> Result<EventId, AppError> {
+            Ok(EventId::generate())
+        }
+        async fn subscribe_to_topic(&self, _: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn subscribe_to_user(&self, _: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn get_public_key(&self) -> Result<Option<String>, AppError> {
             Ok(None)
         }
-
-        async fn set_strategy(&self, _strategy: DistributionStrategy) {}
-
-        async fn get_pending_events(
-            &self,
-        ) -> Result<Vec<Event>, Box<dyn std::error::Error + Send + Sync>> {
-            Ok(vec![])
+        async fn boost_post(&self, _: &str) -> Result<EventId, AppError> {
+            Ok(EventId::generate())
         }
-
-        async fn retry_failed(&self) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
-            Ok(0)
+        async fn delete_events(
+            &self,
+            _: Vec<String>,
+            _: Option<String>,
+        ) -> Result<EventId, AppError> {
+            Ok(EventId::generate())
+        }
+        async fn disconnect(&self) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn set_default_p2p_topic(&self, _: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+        async fn list_subscriptions(&self) -> Result<Vec<SubscriptionRecord>, AppError> {
+            Ok(vec![])
         }
     }
 
@@ -358,12 +305,12 @@ mod tests {
         .expect("failed to create bookmarks table");
 
         let repository = Arc::new(SqliteRepository::new(pool));
-        let distributor: Arc<dyn EventDistributor> = Arc::new(NoopDistributor);
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
 
         PostService::new(
             Arc::clone(&repository) as Arc<dyn PostRepository>,
             Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
-            distributor,
+            event_service,
         )
     }
 

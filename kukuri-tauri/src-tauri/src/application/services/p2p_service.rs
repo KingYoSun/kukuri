@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc::UnboundedSender};
 
-/// P2Pネットワークのステータス情報
+/// P2P繝阪ャ繝医Ρ繝ｼ繧ｯ縺ｮ繧ｹ繝・・繧ｿ繧ｹ諠・ｱ
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PStatus {
     pub connected: bool,
@@ -21,7 +21,7 @@ pub struct P2PStatus {
     pub metrics_summary: GossipMetricsSummary,
 }
 
-/// Gossipメトリクスのサマリー
+/// Gossip繝｡繝医Μ繧ｯ繧ｹ縺ｮ繧ｵ繝槭Μ繝ｼ
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GossipMetricsSummary {
     pub joins: u64,
@@ -30,7 +30,7 @@ pub struct GossipMetricsSummary {
     pub messages_received: u64,
 }
 
-/// トピック情報
+/// 繝医ヴ繝・け諠・ｱ
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopicInfo {
     pub id: String,
@@ -39,32 +39,32 @@ pub struct TopicInfo {
     pub last_activity: i64,
 }
 
-/// P2Pサービスのトレイト
+/// P2P繧ｵ繝ｼ繝薙せ縺ｮ繝医Ξ繧､繝・
 #[async_trait]
 pub trait P2PServiceTrait: Send + Sync {
-    /// P2Pネットワークを初期化
+    /// P2P繝阪ャ繝医Ρ繝ｼ繧ｯ繧貞・譛溷喧
     async fn initialize(&self) -> Result<(), AppError>;
 
-    /// トピックに参加
+    /// 繝医ヴ繝・け縺ｫ蜿ょ刈
     async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
 
-    /// トピックから離脱
+    /// 繝医ヴ繝・け縺九ｉ髮｢閼ｱ
     async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError>;
 
-    /// メッセージをブロードキャスト
+    /// 繝｡繝・そ繝ｼ繧ｸ繧偵ヶ繝ｭ繝ｼ繝峨く繝｣繧ｹ繝・
     async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError>;
 
-    /// P2Pステータスを取得
+    /// P2P繧ｹ繝・・繧ｿ繧ｹ繧貞叙蠕・
     async fn get_status(&self) -> Result<P2PStatus, AppError>;
 
-    /// ノードアドレスを取得
+    /// 繝弱・繝峨い繝峨Ξ繧ｹ繧貞叙蠕・
     async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
 
-    /// トピックIDを生成
+    /// 繝医ヴ繝・けID繧堤函謌・
     fn generate_topic_id(&self, topic_name: &str) -> String;
 }
 
-/// P2Pサービスの実装
+/// P2P繧ｵ繝ｼ繝薙せ縺ｮ螳溯｣・
 pub struct P2PService {
     network_service: Arc<dyn NetworkService>,
     gossip_service: Arc<dyn GossipService>,
@@ -106,7 +106,7 @@ impl P2PService {
     }
 }
 
-/// P2Pレイヤーの構築結果
+/// P2P繝ｬ繧､繝､繝ｼ縺ｮ讒狗ｯ臥ｵ先棡
 pub struct P2PStack {
     pub network_service: Arc<IrohNetworkService>,
     pub gossip_service: Arc<IrohGossipService>,
@@ -173,8 +173,8 @@ impl P2PServiceBuilder {
         let network_service_dyn: Arc<dyn NetworkService> = network_service.clone();
         let gossip_service_dyn: Arc<dyn GossipService> = gossip_service.clone();
         let p2p_service = Arc::new(P2PService::with_discovery(
-            network_service_dyn,
-            gossip_service_dyn,
+            Arc::clone(&network_service_dyn),
+            Arc::clone(&gossip_service_dyn),
             discovery_options,
         ));
 
@@ -189,8 +189,8 @@ impl P2PServiceBuilder {
 #[async_trait]
 impl P2PServiceTrait for P2PService {
     async fn initialize(&self) -> Result<(), AppError> {
-        // P2Pネットワークの初期化処理
-        // 既にstate.rsのinitialize_p2pで初期化されている場合はチェックのみ
+        // P2P繝阪ャ繝医Ρ繝ｼ繧ｯ縺ｮ蛻晄悄蛹門・逅・
+        // 譌｢縺ｫstate.rs縺ｮinitialize_p2p縺ｧ蛻晄悄蛹悶＆繧後※縺・ｋ蝣ｴ蜷医・繝√ぉ繝・け縺ｮ縺ｿ
         Ok(())
     }
 
@@ -216,14 +216,14 @@ impl P2PServiceTrait for P2PService {
     }
 
     async fn get_status(&self) -> Result<P2PStatus, AppError> {
-        // ステータス情報を収集
+        // 繧ｹ繝・・繧ｿ繧ｹ諠・ｱ繧貞庶髮・
         let endpoint_id = self
             .network_service
             .get_node_id()
             .await
             .map_err(|e| AppError::P2PError(e.to_string()))?;
 
-        // 実際のトピック情報を取得
+        // 螳滄圀縺ｮ繝医ヴ繝・け諠・ｱ繧貞叙蠕・
         let joined_topics = self
             .gossip_service
             .get_joined_topics()
@@ -286,7 +286,7 @@ impl P2PServiceTrait for P2PService {
     }
 
     fn generate_topic_id(&self, topic_name: &str) -> String {
-        // トピック名からIDを生成（例：ハッシュを使用）
+        // 繝医ヴ繝・け蜷阪°繧迂D繧堤函謌撰ｼ井ｾ具ｼ壹ワ繝・す繝･繧剃ｽｿ逕ｨ・・
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(topic_name.as_bytes());
@@ -298,13 +298,14 @@ impl P2PServiceTrait for P2PService {
 mod tests {
     use super::*;
     use crate::domain::p2p::TopicStats;
-    use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
+    use crate::infrastructure::p2p::{ConnectionEvent, GossipService, NetworkService, metrics};
     use async_trait::async_trait;
     use chrono::Utc;
     use mockall::{mock, predicate::*};
     use std::sync::Mutex;
+    use tokio::sync::broadcast;
 
-    // NetworkServiceのモック - 手動実装
+    // NetworkService縺ｮ繝｢繝・け - 謇句虚螳溯｣・
     pub struct MockNetworkServ {
         node_id: Mutex<Option<String>>,
         addresses: Mutex<Option<Vec<String>>>,
@@ -351,6 +352,11 @@ mod tests {
     impl NetworkService for MockNetworkServ {
         fn as_any(&self) -> &dyn std::any::Any {
             self
+        }
+
+        fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent> {
+            let (_tx, rx) = broadcast::channel(1);
+            rx
         }
 
         async fn connect(&self) -> Result<(), AppError> {
@@ -404,7 +410,7 @@ mod tests {
         }
     }
 
-    // GossipServiceのモック
+    // GossipService縺ｮ繝｢繝・け
     mock! {
         pub GossipServ {}
 
@@ -643,9 +649,9 @@ mod tests {
         let topic_id2 = service.generate_topic_id("test_topic");
         let topic_id3 = service.generate_topic_id("different_topic");
 
-        // 同じトピック名から同じIDが生成される
+        // 蜷後§繝医ヴ繝・け蜷阪°繧牙酔縺露D縺檎函謌舌＆繧後ｋ
         assert_eq!(topic_id1, topic_id2);
-        // 異なるトピック名からは異なるIDが生成される
+        // 逡ｰ縺ｪ繧九ヨ繝斐ャ繧ｯ蜷阪°繧峨・逡ｰ縺ｪ繧紀D縺檎函謌舌＆繧後ｋ
         assert_ne!(topic_id1, topic_id3);
     }
 }

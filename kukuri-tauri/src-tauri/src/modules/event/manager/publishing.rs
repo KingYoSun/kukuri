@@ -94,6 +94,41 @@ impl EventManager {
         Ok(result_id)
     }
 
+    /// 投稿を再配信 (Repost) する
+    pub async fn publish_repost(&self, target: &EventId) -> Result<EventId> {
+        self.ensure_initialized().await?;
+
+        let publisher = self.event_publisher.read().await;
+        let event = publisher.create_repost(target)?;
+        drop(publisher);
+
+        let client_manager = self.client_manager.read().await;
+        let result_id = client_manager.publish_event(event.clone()).await?;
+        drop(client_manager);
+
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            let topic_list = if let Some(resolved_topics) = self
+                .resolve_topics_for_referenced_event(&target.to_hex())
+                .await
+            {
+                if resolved_topics.is_empty() {
+                    self.default_topics_with_user_topic().await
+                } else {
+                    let unique: HashSet<_> = resolved_topics.into_iter().collect();
+                    unique.into_iter().collect()
+                }
+            } else {
+                self.default_topics_with_user_topic().await
+            };
+
+            if let Err(e) = self.broadcast_to_topics(&gossip, &topic_list, &event).await {
+                error!("Failed to broadcast repost to P2P: {}", e);
+            }
+        }
+
+        Ok(result_id)
+    }
+
     /// 指定したイベントを削除するための削除イベントを発行
     pub async fn delete_events(
         &self,
