@@ -11,17 +11,6 @@ pub mod metrics;
 pub mod network_service;
 pub mod utils;
 
-use serde::{Deserialize, Serialize};
-
-pub use iroh_network_service::ConnectionEvent;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DistributionStrategy {
-    Hybrid,
-    Nostr,
-    P2P,
-}
-
 pub use discovery_options::DiscoveryOptions;
 pub use event_distributor::EventDistributor;
 pub use gossip_service::GossipService;

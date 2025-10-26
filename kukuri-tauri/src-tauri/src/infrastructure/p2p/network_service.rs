@@ -1,8 +1,6 @@
-use super::ConnectionEvent;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::sync::broadcast;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
@@ -25,7 +23,6 @@ pub struct NetworkStats {
 pub trait NetworkService: Send + Sync {
     // Type conversion helper for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
-    fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent>;
 
     async fn connect(&self) -> Result<(), AppError>;
     async fn disconnect(&self) -> Result<(), AppError>;

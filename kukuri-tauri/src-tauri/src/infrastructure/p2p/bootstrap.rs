@@ -8,7 +8,7 @@ use rand_core::{OsRng, TryRngCore};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tokio::fs;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::broadcast;
 
 pub struct P2PBootstrapper {
     app_data_dir: PathBuf,
@@ -62,7 +62,7 @@ impl P2PBootstrapper {
 
     pub async fn build_stack(
         &self,
-        event_sender: UnboundedSender<P2PEvent>,
+        event_sender: broadcast::Sender<P2PEvent>,
     ) -> anyhow::Result<P2PStack> {
         metrics::reset_all();
         let secret_key = self.ensure_iroh_secret_key().await?;

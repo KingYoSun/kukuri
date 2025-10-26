@@ -2,7 +2,6 @@
 
 use crate::application::ports::key_manager::KeyManager;
 use crate::domain::p2p::P2PEvent;
-use crate::infrastructure::p2p::ConnectionEvent;
 
 // アプリケーションサービスのインポート
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
@@ -50,14 +49,14 @@ use std::collections::{HashSet as StdHashSet, VecDeque as StdVecDeque};
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
+use tokio::sync::broadcast;
 
 const P2P_DEDUP_MAX: usize = 8192;
 
 /// P2P関連の状態
 pub struct P2PState {
     /// Message event channel
-    pub event_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<P2PEvent>>>>,
+    pub event_rx: Arc<RwLock<Option<broadcast::Receiver<P2PEvent>>>>,
     /// GossipService 本体（UI購読導線で使用）
     pub gossip_service: Arc<dyn GossipService>,
     /// UI購読済みトピック集合（重複購読防止）
@@ -163,8 +162,8 @@ impl AppState {
         let event_distributor: Arc<dyn EventDistributor> = Arc::new(DefaultEventDistributor::new());
 
         // P2Pサービスの初期化
-        let (p2p_event_tx, p2p_event_rx) = mpsc::unbounded_channel();
-        let p2p_stack = bootstrapper.build_stack(p2p_event_tx).await?;
+        let (p2p_event_tx, _initial_rx) = broadcast::channel(512);
+        let p2p_stack = bootstrapper.build_stack(p2p_event_tx.clone()).await?;
 
         let network_service: Arc<dyn NetworkService> = Arc::clone(&p2p_stack.network_service);
         let gossip_service: Arc<dyn GossipService> = Arc::clone(&p2p_stack.gossip_service);
@@ -267,11 +266,11 @@ impl AppState {
 
         // P2P接続イベントを監視し、再接続時に再索引ジョブをトリガー
         {
-            let mut connection_rx = p2p_stack.network_service.subscribe_connection_events();
+            let mut event_rx = p2p_event_tx.subscribe();
             let job = Arc::clone(&offline_reindex_job);
             tauri::async_runtime::spawn(async move {
-                while let Ok(event) = connection_rx.recv().await {
-                    if matches!(event, ConnectionEvent::Connected) {
+                while let Ok(event) = event_rx.recv().await {
+                    if matches!(event, P2PEvent::NetworkConnected { .. }) {
                         job.trigger();
                     }
                 }
@@ -279,18 +278,18 @@ impl AppState {
         }
 
         {
-            let mut connection_rx = p2p_stack.network_service.subscribe_connection_events();
+            let mut event_rx = p2p_event_tx.subscribe();
             let event_service_clone = Arc::clone(&event_service);
             tauri::async_runtime::spawn(async move {
-                while let Ok(event) = connection_rx.recv().await {
+                while let Ok(event) = event_rx.recv().await {
                     match event {
-                        ConnectionEvent::Disconnected => {
+                        P2PEvent::NetworkDisconnected { .. } => {
                             if let Err(e) = event_service_clone.handle_network_disconnected().await
                             {
                                 tracing::warn!("Failed to mark subscriptions for resync: {}", e);
                             }
                         }
-                        ConnectionEvent::Connected => {
+                        P2PEvent::NetworkConnected { .. } => {
                             if let Err(e) = event_service_clone.handle_network_connected().await {
                                 tracing::warn!(
                                     "Failed to restore subscriptions after reconnect: {}",
@@ -298,10 +297,14 @@ impl AppState {
                                 );
                             }
                         }
+                        _ => {}
                     }
                 }
             });
         }
+
+        // UI向けイベント購読を確保
+        let p2p_event_rx = p2p_event_tx.subscribe();
 
         // P2P状態の初期化
         let p2p_state = Arc::new(RwLock::new(P2PState {

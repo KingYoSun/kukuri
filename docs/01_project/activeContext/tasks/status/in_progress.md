@@ -193,9 +193,12 @@
   - 2025年10月26日: `infrastructure::p2p::bootstrap::P2PBootstrapper` を新設し、Iroh SecretKey 生成や `metrics::reset_all` を含む P2P 初期化を集約。`AppState` からは builder/SecretKey へ直接触れずにスタックを取得する形へ整理。
 - [x] EventManager の Repository 参照をアプリ層ポートへ閉じ込め、Infrastructure 化を完了する（`phase5_dependency_inventory_template.md:26`）。
 - [ ] SQLiteRepository の Domain 構造体直接 import を Mapper 経由の DTO 化に置き換える（`phase5_dependency_inventory_template.md:34`）。
-- [ ] EventDistributor に DistributionStrategy trait と共通メトリクスフックを導入する（`phase5_dependency_inventory_template.md:36`）。
-- [ ] IrohNetworkService のネットワークイベントを P2PService 用イベントバスに統合し、broadcast の直接露出を廃止する（`phase5_dependency_inventory_template.md:37`）。
-- [ ] IrohGossipService のイベントを Domain DTO へ正規化し、モック/API 差異をなくす（`phase5_dependency_inventory_template.md:38`）。
+- [x] EventDistributor に DistributionStrategy trait と共通メトリクスフックを導入する（`phase5_dependency_inventory_template.md:36`）。
+  - 2025年10月27日: DistributionStrategy を `domain::p2p` に移設し、`DistributionMetrics` トレイトを新設。`DefaultEventDistributor` をメトリクス実装でラップして EventGateway/Hybrid 配信から `p2p::metrics` へ成功/失敗を送出する構成に更新。
+- [x] IrohNetworkService のネットワークイベントを P2PService 用イベントバスに統合し、broadcast の直接露出を廃止する（`phase5_dependency_inventory_template.md:37`）。
+  - 2025年10月27日: `broadcast::Sender<P2PEvent>` を DI するよう初期化を拡張し、接続/切断時に `P2PEvent::NetworkConnected/Disconnected` を発火。`NetworkService` トレイトから `subscribe_connection_events` を削除し、AppState/OfflineService/EventService 側は P2P イベントバス経由で再索引・再購読をトリガーする構成に統一。
+- [x] IrohGossipService のイベントを Domain DTO へ正規化し、モック/API 差異をなくす（`phase5_dependency_inventory_template.md:38`）。
+  - 2025年10月27日: Gossip 受信タスクを `broadcast::Sender<P2PEvent>` ベースに刷新し、モックと同じ `P2PEvent` で UI/テストへ配信。`wait_for_peer_join_event` などテスト支援も broadcast レシーバーへ移行し、イベントバス実装と齟齬が出ないよう調整。
 - [ ] Gossip Metrics の登録処理を ApplicationContainer で一元化し、CI 指標へ反映する（`phase5_dependency_inventory_template.md:39`）。
   - 2025年10月26日: P2PBootstrapper で `metrics::reset_all` を呼び出し、P2P スタック生成時にメトリクスを初期化。CI 連携向けの export API 整備は継続課題。
 - [ ] KeyManager（infrastructure）と SecureStorage の責務を再分割し、鍵メタデータ更新を別トレイトへ切り出す（`phase5_dependency_inventory_template.md:40`）。

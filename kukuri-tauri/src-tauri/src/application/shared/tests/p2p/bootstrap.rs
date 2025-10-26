@@ -4,6 +4,7 @@ use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
 use iroh::{Endpoint, NodeAddr};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tokio::time::{Duration, sleep, timeout};
 
 use super::logging::log_step;
@@ -91,7 +92,7 @@ pub async fn wait_for_topic_membership(
 }
 
 pub async fn wait_for_peer_join_event(
-    receivers: &mut [&mut tokio::sync::mpsc::UnboundedReceiver<P2PEvent>],
+    receivers: &mut [&mut broadcast::Receiver<P2PEvent>],
     max_wait: Duration,
 ) -> bool {
     log_step!(
@@ -102,12 +103,18 @@ pub async fn wait_for_peer_join_event(
     let start = tokio::time::Instant::now();
     while start.elapsed() < max_wait {
         for rx in receivers.iter_mut() {
-            if let Ok(Some(evt)) =
+            if let Ok(recv_result) =
                 timeout(Duration::from_millis(150), async { rx.recv().await }).await
             {
-                if matches!(evt, P2PEvent::PeerJoined { .. }) {
-                    log_step!("received PeerJoined event after {:?}", start.elapsed());
-                    return true;
+                match recv_result {
+                    Ok(P2PEvent::PeerJoined { .. }) => {
+                        log_step!("received PeerJoined event after {:?}", start.elapsed());
+                        return true;
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        log_step!("peer join receiver error: {:?}", err);
+                    }
                 }
             }
         }

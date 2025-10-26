@@ -2,6 +2,7 @@ use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
 };
+use crate::domain::p2p::P2PEvent;
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -9,12 +10,6 @@ use iroh::{Endpoint, protocol::Router};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing;
-
-#[derive(Debug, Clone)]
-pub enum ConnectionEvent {
-    Connected,
-    Disconnected,
-}
 
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
@@ -25,7 +20,7 @@ pub struct IrohNetworkService {
     dht_gossip: Option<Arc<DhtGossip>>,
     discovery_options: Arc<RwLock<DiscoveryOptions>>,
     network_config: AppNetworkConfig,
-    connection_events: broadcast::Sender<ConnectionEvent>,
+    p2p_event_tx: Option<broadcast::Sender<P2PEvent>>,
 }
 
 impl IrohNetworkService {
@@ -33,6 +28,7 @@ impl IrohNetworkService {
         secret_key: iroh::SecretKey,
         net_cfg: AppNetworkConfig,
         discovery_options: DiscoveryOptions,
+        event_tx: Option<broadcast::Sender<P2PEvent>>,
     ) -> Result<Self, AppError> {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
         let builder = Endpoint::builder().secret_key(secret_key);
@@ -59,8 +55,6 @@ impl IrohNetworkService {
             }
         };
 
-        let (connection_events, _) = broadcast::channel(16);
-
         let service = Self {
             endpoint: Arc::new(endpoint),
             router: Arc::new(router),
@@ -76,7 +70,7 @@ impl IrohNetworkService {
             dht_gossip,
             discovery_options: Arc::new(RwLock::new(discovery_options)),
             network_config: net_cfg,
-            connection_events,
+            p2p_event_tx: event_tx,
         };
 
         service.apply_bootstrap_peers_from_config().await;
@@ -90,6 +84,12 @@ impl IrohNetworkService {
 
     pub fn router(&self) -> &Arc<Router> {
         &self.router
+    }
+
+    fn emit_event(&self, event: P2PEvent) {
+        if let Some(tx) = &self.p2p_event_tx {
+            let _ = tx.send(event);
+        }
     }
 
     async fn apply_bootstrap_peers_from_config(&self) {
@@ -114,10 +114,6 @@ impl IrohNetworkService {
 
     pub async fn discovery_options(&self) -> DiscoveryOptions {
         *self.discovery_options.read().await
-    }
-
-    pub fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent> {
-        self.connection_events.subscribe()
     }
 
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
@@ -225,17 +221,21 @@ impl NetworkService for IrohNetworkService {
         self
     }
 
-    fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent> {
-        self.connection_events.subscribe()
-    }
-
     async fn connect(&self) -> Result<(), AppError> {
         let mut connected = self.connected.write().await;
         let was_connected = *connected;
         *connected = true;
         drop(connected);
         if !was_connected {
-            let _ = self.connection_events.send(ConnectionEvent::Connected);
+            let node_id = self.endpoint.node_id().to_string();
+            let addresses = match self.node_addr().await {
+                Ok(addresses) => addresses,
+                Err(err) => {
+                    tracing::warn!("Failed to resolve node addresses on connect: {}", err);
+                    Vec::new()
+                }
+            };
+            self.emit_event(P2PEvent::NetworkConnected { node_id, addresses });
         }
         tracing::info!("Network service connected");
         Ok(())
@@ -254,7 +254,8 @@ impl NetworkService for IrohNetworkService {
 
         tracing::info!("Network service disconnected");
         if was_connected {
-            let _ = self.connection_events.send(ConnectionEvent::Disconnected);
+            let node_id = self.endpoint.node_id().to_string();
+            self.emit_event(P2PEvent::NetworkDisconnected { node_id });
         }
         Ok(())
     }

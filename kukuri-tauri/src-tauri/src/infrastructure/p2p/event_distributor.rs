@@ -1,19 +1,11 @@
+use super::metrics;
 use crate::domain::entities::Event;
+use crate::domain::p2p::distribution::{DistributionMetrics, DistributionStrategy};
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
-
-#[derive(Debug, Clone)]
-pub enum DistributionStrategy {
-    Broadcast,      // 全ピアに配信
-    Gossip,         // Gossipプロトコルで配信
-    Direct(String), // 特定のピアに直接配信
-    Hybrid,         // NostrとP2Pの両方で配信
-    Nostr,          // Nostrリレー経由のみ
-    P2P,            // P2Pネットワークのみ
-}
 
 #[async_trait]
 pub trait EventDistributor: Send + Sync {
@@ -33,6 +25,7 @@ pub trait EventDistributor: Send + Sync {
 /// デフォルトのEventDistributor実装
 pub struct DefaultEventDistributor {
     inner: Arc<RwLock<EventDistributorInner>>,
+    metrics: Arc<dyn DistributionMetrics>,
 }
 
 struct EventDistributorInner {
@@ -44,17 +37,20 @@ struct EventDistributorInner {
 
 impl DefaultEventDistributor {
     pub fn new() -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(EventDistributorInner {
-                strategy: DistributionStrategy::Hybrid,
-                pending_events: VecDeque::new(),
-                failed_events: Vec::new(),
-                max_retries: 3,
-            })),
-        }
+        Self::with_strategy(DistributionStrategy::Hybrid)
     }
 
     pub fn with_strategy(strategy: DistributionStrategy) -> Self {
+        Self::with_strategy_and_metrics(
+            strategy,
+            Arc::new(P2PDistributionMetrics) as Arc<dyn DistributionMetrics>,
+        )
+    }
+
+    pub fn with_strategy_and_metrics(
+        strategy: DistributionStrategy,
+        metrics: Arc<dyn DistributionMetrics>,
+    ) -> Self {
         Self {
             inner: Arc::new(RwLock::new(EventDistributorInner {
                 strategy,
@@ -62,6 +58,7 @@ impl DefaultEventDistributor {
                 failed_events: Vec::new(),
                 max_retries: 3,
             })),
+            metrics,
         }
     }
 
@@ -135,15 +132,18 @@ impl EventDistributor for DefaultEventDistributor {
             "Distributing event {} with strategy {:?}",
             event.id, strategy
         );
+        self.metrics.record_attempt(&strategy);
 
         // 配信を試行
         match self.distribute_internal(event, &strategy).await {
             Ok(()) => {
                 info!("Event {} distributed successfully", event.id);
+                self.metrics.record_success(&strategy);
                 Ok(())
             }
             Err(e) => {
                 error!("Failed to distribute event {}: {}", event.id, e);
+                self.metrics.record_failure(&strategy);
 
                 // 失敗したイベントを記録
                 let mut inner = self.inner.write().await;
@@ -183,10 +183,12 @@ impl EventDistributor for DefaultEventDistributor {
             match self.distribute_internal(&event, &strategy).await {
                 Ok(()) => {
                     info!("Event {} successfully distributed on retry", event.id);
+                    self.metrics.record_success(&strategy);
                     retry_count += 1;
                 }
                 Err(e) => {
                     error!("Event {} failed again on retry: {}", event.id, e);
+                    self.metrics.record_failure(&strategy);
                     still_failed.push((event, strategy));
                 }
             }
@@ -196,6 +198,32 @@ impl EventDistributor for DefaultEventDistributor {
         inner.failed_events = still_failed;
 
         Ok(retry_count)
+    }
+}
+
+struct P2PDistributionMetrics;
+
+impl DistributionMetrics for P2PDistributionMetrics {
+    fn record_success(&self, strategy: &DistributionStrategy) {
+        match strategy {
+            DistributionStrategy::Nostr => metrics::record_broadcast_success(),
+            DistributionStrategy::P2P
+            | DistributionStrategy::Broadcast
+            | DistributionStrategy::Gossip
+            | DistributionStrategy::Direct(_)
+            | DistributionStrategy::Hybrid => metrics::record_broadcast_success(),
+        }
+    }
+
+    fn record_failure(&self, strategy: &DistributionStrategy) {
+        match strategy {
+            DistributionStrategy::Nostr => metrics::record_broadcast_failure(),
+            DistributionStrategy::P2P
+            | DistributionStrategy::Broadcast
+            | DistributionStrategy::Gossip
+            | DistributionStrategy::Direct(_)
+            | DistributionStrategy::Hybrid => metrics::record_broadcast_failure(),
+        }
     }
 }
 

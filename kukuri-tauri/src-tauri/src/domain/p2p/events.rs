@@ -15,4 +15,11 @@ pub enum P2PEvent {
         topic_id: String,
         peer_id: Vec<u8>,
     },
+    NetworkConnected {
+        node_id: String,
+        addresses: Vec<String>,
+    },
+    NetworkDisconnected {
+        node_id: String,
+    },
 }

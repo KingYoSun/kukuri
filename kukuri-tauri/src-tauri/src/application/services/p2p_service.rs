@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use iroh::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc::UnboundedSender};
+use tokio::sync::{RwLock, broadcast};
 
 /// P2P繝阪ャ繝医Ρ繝ｼ繧ｯ縺ｮ繧ｹ繝・・繧ｿ繧ｹ諠・ｱ
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,7 +117,7 @@ pub struct P2PServiceBuilder {
     secret_key: SecretKey,
     network_config: AppNetworkConfig,
     discovery_options: DiscoveryOptions,
-    event_sender: Option<UnboundedSender<P2PEvent>>,
+    event_sender: Option<broadcast::Sender<P2PEvent>>,
 }
 
 impl P2PServiceBuilder {
@@ -144,7 +144,7 @@ impl P2PServiceBuilder {
         self
     }
 
-    pub fn with_event_sender(mut self, sender: UnboundedSender<P2PEvent>) -> Self {
+    pub fn with_event_sender(mut self, sender: broadcast::Sender<P2PEvent>) -> Self {
         self.event_sender = Some(sender);
         self
     }
@@ -161,11 +161,23 @@ impl P2PServiceBuilder {
             event_sender,
         } = self;
 
-        let iroh_network =
-            Arc::new(IrohNetworkService::new(secret_key, network_config, discovery_options).await?);
+        let (network_event_sender, gossip_event_sender) = match event_sender {
+            Some(sender) => (Some(sender.clone()), Some(sender)),
+            None => (None, None),
+        };
+
+        let iroh_network = Arc::new(
+            IrohNetworkService::new(
+                secret_key,
+                network_config,
+                discovery_options,
+                network_event_sender,
+            )
+            .await?,
+        );
         let endpoint_arc = iroh_network.endpoint().clone();
         let mut gossip_inner = IrohGossipService::new(endpoint_arc)?;
-        if let Some(tx) = event_sender {
+        if let Some(tx) = gossip_event_sender {
             gossip_inner.set_event_sender(tx);
         }
         let iroh_gossip = Arc::new(gossip_inner);
@@ -298,12 +310,11 @@ impl P2PServiceTrait for P2PService {
 mod tests {
     use super::*;
     use crate::domain::p2p::TopicStats;
-    use crate::infrastructure::p2p::{ConnectionEvent, GossipService, NetworkService, metrics};
+    use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
     use async_trait::async_trait;
     use chrono::Utc;
     use mockall::{mock, predicate::*};
     use std::sync::Mutex;
-    use tokio::sync::broadcast;
 
     // NetworkService縺ｮ繝｢繝・け - 謇句虚螳溯｣・
     pub struct MockNetworkServ {
@@ -352,11 +363,6 @@ mod tests {
     impl NetworkService for MockNetworkServ {
         fn as_any(&self) -> &dyn std::any::Any {
             self
-        }
-
-        fn subscribe_connection_events(&self) -> broadcast::Receiver<ConnectionEvent> {
-            let (_tx, rx) = broadcast::channel(1);
-            rx
         }
 
         async fn connect(&self) -> Result<(), AppError> {

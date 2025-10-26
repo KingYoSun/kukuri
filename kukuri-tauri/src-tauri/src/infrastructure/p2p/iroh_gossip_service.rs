@@ -13,10 +13,8 @@ use iroh_gossip::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
 use std::time::Duration;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::{Mutex as TokioMutex, RwLock, mpsc};
+use tokio::sync::{Mutex as TokioMutex, RwLock, broadcast, mpsc};
 use tokio::time::timeout;
 
 use crate::domain::p2p::events::P2PEvent;
@@ -31,7 +29,7 @@ pub struct IrohGossipService {
     gossip: Arc<Gossip>,
     router: Arc<Router>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
-    event_tx: Option<Arc<StdMutex<UnboundedSender<P2PEvent>>>>,
+    event_tx: Option<broadcast::Sender<P2PEvent>>,
 }
 
 struct TopicHandle {
@@ -62,8 +60,8 @@ impl IrohGossipService {
         })
     }
 
-    pub fn set_event_sender(&mut self, tx: UnboundedSender<P2PEvent>) {
-        self.event_tx = Some(Arc::new(StdMutex::new(tx)));
+    pub fn set_event_sender(&mut self, tx: broadcast::Sender<P2PEvent>) {
+        self.event_tx = Some(tx);
     }
 
     pub fn local_peer_hint(&self) -> Option<String> {
@@ -270,7 +268,7 @@ impl GossipService for IrohGossipService {
                         if let (Some(tx), Some(message)) =
                             (event_tx_clone.as_ref(), decoded_message.clone())
                         {
-                            let _ = tx.lock().unwrap().send(P2PEvent::MessageReceived {
+                            let _ = tx.send(P2PEvent::MessageReceived {
                                 topic_id: topic_clone.clone(),
                                 message,
                                 _from_peer: msg.delivered_from.as_bytes().to_vec(),
@@ -331,7 +329,7 @@ impl GossipService for IrohGossipService {
                     Ok(GossipApiEvent::NeighborUp(peer)) => {
                         let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
-                            let _ = tx.lock().unwrap().send(P2PEvent::PeerJoined {
+                            let _ = tx.send(P2PEvent::PeerJoined {
                                 topic_id: topic_clone.clone(),
                                 peer_id: peer_bytes.clone(),
                             });
@@ -343,7 +341,7 @@ impl GossipService for IrohGossipService {
                     Ok(GossipApiEvent::NeighborDown(peer)) => {
                         let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
-                            let _ = tx.lock().unwrap().send(P2PEvent::PeerLeft {
+                            let _ = tx.send(P2PEvent::PeerLeft {
                                 topic_id: topic_clone.clone(),
                                 peer_id: peer_bytes.clone(),
                             });

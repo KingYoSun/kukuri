@@ -76,8 +76,7 @@ impl UserService {
             Ok(())
         } else {
             Err(AppError::NotFound(format!(
-                "{} is not following {}",
-                follower_npub, target_npub
+                "{follower_npub} is not following {target_npub}"
             )))
         }
     }

@@ -1,4 +1,5 @@
 use tauri::{Emitter, Manager};
+use tokio::sync::broadcast;
 use tracing::info;
 
 // モジュール定義
@@ -199,48 +200,78 @@ fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
         };
 
         if let Some(mut rx) = rx {
-            while let Some(event) = rx.recv().await {
-                match event {
-                    crate::domain::p2p::P2PEvent::MessageReceived {
-                        topic_id,
-                        message,
-                        _from_peer: _,
-                    } => {
-                        // 旧GossipMessage経路はUIの期待ペイロードと形状が異なるため、
-                        // 衝突回避のためイベント名を変更（デバッグ用途）
-                        let event_data = P2PMessageEvent {
+            loop {
+                match rx.recv().await {
+                    Ok(event) => match event {
+                        crate::domain::p2p::P2PEvent::MessageReceived {
                             topic_id,
-                            message_type: format!("{:?}", message.msg_type),
-                            payload: message.payload,
-                            sender: message.sender,
-                            timestamp: message.timestamp,
-                        };
+                            message,
+                            _from_peer: _,
+                        } => {
+                            // 旧GossipMessage経路はUIの期待ペイロードと形状が異なるため、
+                            // 衝突回避のためイベント名を変更（デバッグ用途）
+                            let event_data = P2PMessageEvent {
+                                topic_id,
+                                message_type: format!("{:?}", message.msg_type),
+                                payload: message.payload,
+                                sender: message.sender,
+                                timestamp: message.timestamp,
+                            };
 
-                        if let Err(e) = app_handle.emit("p2p://message/raw", event_data) {
-                            tracing::error!("Failed to emit P2P raw message event: {}", e);
+                            if let Err(e) = app_handle.emit("p2p://message/raw", event_data) {
+                                tracing::error!("Failed to emit P2P raw message event: {}", e);
+                            }
                         }
-                    }
-                    crate::domain::p2p::P2PEvent::PeerJoined { topic_id, peer_id } => {
-                        let event_data = P2PPeerEvent {
-                            topic_id,
-                            peer_id,
-                            event_type: "joined".to_string(),
-                        };
+                        crate::domain::p2p::P2PEvent::PeerJoined { topic_id, peer_id } => {
+                            let event_data = P2PPeerEvent {
+                                topic_id,
+                                peer_id,
+                                event_type: "joined".to_string(),
+                            };
 
-                        if let Err(e) = app_handle.emit("p2p://peer", event_data) {
-                            tracing::error!("Failed to emit P2P peer joined event: {}", e);
+                            if let Err(e) = app_handle.emit("p2p://peer", event_data) {
+                                tracing::error!("Failed to emit P2P peer joined event: {}", e);
+                            }
                         }
-                    }
-                    crate::domain::p2p::P2PEvent::PeerLeft { topic_id, peer_id } => {
-                        let event_data = P2PPeerEvent {
-                            topic_id,
-                            peer_id,
-                            event_type: "left".to_string(),
-                        };
+                        crate::domain::p2p::P2PEvent::PeerLeft { topic_id, peer_id } => {
+                            let event_data = P2PPeerEvent {
+                                topic_id,
+                                peer_id,
+                                event_type: "left".to_string(),
+                            };
 
-                        if let Err(e) = app_handle.emit("p2p://peer", event_data) {
-                            tracing::error!("Failed to emit P2P peer left event: {}", e);
+                            if let Err(e) = app_handle.emit("p2p://peer", event_data) {
+                                tracing::error!("Failed to emit P2P peer left event: {}", e);
+                            }
                         }
+                        crate::domain::p2p::P2PEvent::NetworkConnected { node_id, addresses } => {
+                            if let Err(e) = app_handle.emit(
+                                "p2p://network",
+                                serde_json::json!({
+                                    "event": "connected",
+                                    "nodeId": node_id,
+                                    "addresses": addresses,
+                                }),
+                            ) {
+                                tracing::error!("Failed to emit P2P network connected: {}", e);
+                            }
+                        }
+                        crate::domain::p2p::P2PEvent::NetworkDisconnected { node_id } => {
+                            if let Err(e) = app_handle.emit(
+                                "p2p://network",
+                                serde_json::json!({
+                                    "event": "disconnected",
+                                    "nodeId": node_id,
+                                }),
+                            ) {
+                                tracing::error!("Failed to emit P2P network disconnected: {}", e);
+                            }
+                        }
+                    },
+                    Err(broadcast::error::RecvError::Closed) => break,
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        tracing::warn!("P2P event handler lagged and skipped {} events", skipped);
+                        continue;
                     }
                 }
             }

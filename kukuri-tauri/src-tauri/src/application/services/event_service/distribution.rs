@@ -1,6 +1,6 @@
 use crate::domain::entities::Event;
+use crate::domain::p2p::DistributionStrategy;
 use crate::infrastructure::p2p::EventDistributor;
-use crate::infrastructure::p2p::event_distributor::DistributionStrategy;
 use crate::shared::error::AppError;
 use std::sync::Arc;
 

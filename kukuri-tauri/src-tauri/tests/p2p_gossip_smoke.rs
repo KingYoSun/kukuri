@@ -8,7 +8,7 @@ use kukuri_lib::test_support::application::shared::tests::p2p::logging::init_tra
 use kukuri_lib::test_support::domain::p2p::generate_topic_id;
 use kukuri_lib::test_support::infrastructure::p2p::gossip_service::GossipService;
 use nostr_sdk::prelude::*;
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::broadcast;
 use tokio::time::{Duration, sleep, timeout};
 
 macro_rules! log_step {
@@ -93,8 +93,10 @@ async fn test_peer_connection_stability_bidirectional() {
         "svc_b failed to join topic {topic}"
     );
 
-    let (tx_a_evt, mut rx_a_evt) = unbounded_channel();
-    let (tx_b_evt, mut rx_b_evt) = unbounded_channel();
+    let (tx_a_evt, _) = broadcast::channel(64);
+    let mut rx_a_evt = tx_a_evt.subscribe();
+    let (tx_b_evt, _) = broadcast::channel(64);
+    let mut rx_b_evt = tx_b_evt.subscribe();
     svc_a.set_event_sender(tx_a_evt);
     svc_b.set_event_sender(tx_b_evt);
 
@@ -156,8 +158,10 @@ async fn test_two_nodes_broadcast_and_receive() {
     let mut svc_a = create_service(&ctx).await;
     let mut svc_b = create_service(&ctx).await;
 
-    let (tx_a, mut rx_a_evt) = unbounded_channel();
-    let (tx_b, mut rx_b_evt) = unbounded_channel();
+    let (tx_a, _) = broadcast::channel(64);
+    let mut rx_a_evt = tx_a.subscribe();
+    let (tx_b, _) = broadcast::channel(64);
+    let mut rx_b_evt = tx_b.subscribe();
     svc_a.set_event_sender(tx_a);
     svc_b.set_event_sender(tx_b);
 
@@ -297,8 +301,10 @@ async fn test_p2p_reply_flow() {
         "svc_b failed to join topic {topic}"
     );
 
-    let (tx_a_evt, mut rx_a_evt) = unbounded_channel();
-    let (tx_b_evt, mut rx_b_evt) = unbounded_channel();
+    let (tx_a_evt, _) = broadcast::channel(64);
+    let mut rx_a_evt = tx_a_evt.subscribe();
+    let (tx_b_evt, _) = broadcast::channel(64);
+    let mut rx_b_evt = tx_b_evt.subscribe();
     svc_a.set_event_sender(tx_a_evt);
     svc_b.set_event_sender(tx_b_evt);
 
@@ -397,8 +403,10 @@ async fn test_p2p_quote_flow() {
         "svc_b failed to join topic {topic}"
     );
 
-    let (tx_a_evt, mut rx_a_evt) = unbounded_channel();
-    let (tx_b_evt, mut rx_b_evt) = unbounded_channel();
+    let (tx_a_evt, _) = broadcast::channel(64);
+    let mut rx_a_evt = tx_a_evt.subscribe();
+    let (tx_b_evt, _) = broadcast::channel(64);
+    let mut rx_b_evt = tx_b_evt.subscribe();
     svc_a.set_event_sender(tx_a_evt);
     svc_b.set_event_sender(tx_b_evt);
 

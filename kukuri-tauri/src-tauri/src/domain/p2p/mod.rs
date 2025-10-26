@@ -1,3 +1,4 @@
+pub mod distribution;
 pub mod error;
 pub mod events;
 pub mod message;
@@ -6,6 +7,7 @@ pub mod topic_mesh;
 #[cfg(test)]
 mod tests;
 
+pub use distribution::{DistributionMetrics, DistributionStrategy};
 pub use error::{P2PError, Result};
 pub use events::P2PEvent;
 pub use message::{
