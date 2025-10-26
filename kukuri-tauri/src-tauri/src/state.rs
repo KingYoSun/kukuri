@@ -6,6 +6,7 @@ use crate::infrastructure::p2p::ConnectionEvent;
 
 // アプリケーションサービスのインポート
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
+use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
@@ -30,7 +31,7 @@ use crate::infrastructure::{
     },
     event::{
         EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
-        LegacyEventManagerHandle,
+        LegacyEventManagerHandle, RepositoryEventTopicStore,
     },
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
@@ -128,6 +129,9 @@ impl AppState {
         // 新アーキテクチャのリポジトリとサービスを初期化
         let connection_pool = ConnectionPool::new(&db_url).await?;
         let repository = Arc::new(SqliteRepository::new(connection_pool.clone()));
+        let event_topic_store: Arc<dyn EventTopicStore> = Arc::new(RepositoryEventTopicStore::new(
+            Arc::clone(&repository) as Arc<dyn EventRepository>,
+        ));
         let subscription_repository: Arc<dyn SubscriptionStateRepository> = Arc::new(
             SqliteSubscriptionStateRepository::new(connection_pool.clone()),
         );
@@ -162,10 +166,8 @@ impl AppState {
         let (p2p_event_tx, p2p_event_rx) = mpsc::unbounded_channel();
         let p2p_stack = bootstrapper.build_stack(p2p_event_tx).await?;
 
-        let network_service: Arc<dyn NetworkService> =
-            Arc::clone(&p2p_stack.network_service) as Arc<dyn NetworkService>;
-        let gossip_service: Arc<dyn GossipService> =
-            Arc::clone(&p2p_stack.gossip_service) as Arc<dyn GossipService>;
+        let network_service: Arc<dyn NetworkService> = Arc::clone(&p2p_stack.network_service);
+        let gossip_service: Arc<dyn GossipService> = Arc::clone(&p2p_stack.gossip_service);
         let p2p_service = Arc::clone(&p2p_stack.p2p_service);
         // EventManagerへGossipServiceを接続（P2P配信経路の直結）
         event_manager
@@ -173,7 +175,7 @@ impl AppState {
             .await;
         // EventManagerへEventRepositoryを接続（参照トピック解決用）
         event_manager
-            .set_event_repository(Arc::clone(&repository) as Arc<dyn EventRepository>)
+            .set_event_topic_store(Arc::clone(&event_topic_store))
             .await;
 
         // UserServiceを先に初期化（他のサービスの依存）

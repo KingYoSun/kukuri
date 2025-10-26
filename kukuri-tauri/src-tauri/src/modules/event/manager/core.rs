@@ -1,9 +1,7 @@
-use crate::application::ports::key_manager::KeyManager;
+use crate::application::ports::{event_topic_store::EventTopicStore, key_manager::KeyManager};
 use crate::application::shared::default_topics::DefaultTopicsRegistry;
 use crate::application::shared::nostr::EventPublisher;
-use crate::infrastructure::database::{
-    EventRepository as InfraEventRepository, connection_pool::ConnectionPool,
-};
+use crate::infrastructure::database::connection_pool::ConnectionPool;
 use crate::infrastructure::p2p::GossipService;
 use crate::modules::event::handler::EventHandler;
 use crate::modules::event::nostr_client::NostrClientManager;
@@ -22,8 +20,8 @@ pub struct EventManager {
     is_initialized: Arc<RwLock<bool>>,
     /// P2P配信用のGossipService（任意）
     pub(crate) gossip_service: Arc<RwLock<Option<Arc<dyn GossipService>>>>,
-    /// 参照トピック解決用のEventRepository（任意）
-    pub(crate) event_repository: Arc<RwLock<Option<Arc<dyn InfraEventRepository>>>>,
+    /// 参照トピック解決用のEventTopicStore（任意）
+    pub(crate) event_topic_store: Arc<RwLock<Option<Arc<dyn EventTopicStore>>>>,
 }
 
 impl EventManager {
@@ -37,7 +35,7 @@ impl EventManager {
             default_topics: Arc::new(DefaultTopicsRegistry::with_topics(["public".into()])),
             is_initialized: Arc::new(RwLock::new(false)),
             gossip_service: Arc::new(RwLock::new(None)),
-            event_repository: Arc::new(RwLock::new(None)),
+            event_topic_store: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -53,7 +51,7 @@ impl EventManager {
             default_topics: Arc::new(DefaultTopicsRegistry::with_topics(["public".into()])),
             is_initialized: Arc::new(RwLock::new(false)),
             gossip_service: Arc::new(RwLock::new(None)),
-            event_repository: Arc::new(RwLock::new(None)),
+            event_topic_store: Arc::new(RwLock::new(None)),
         }
     }
 

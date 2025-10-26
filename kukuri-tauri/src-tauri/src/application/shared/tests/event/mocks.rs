@@ -44,6 +44,10 @@ impl Default for TestGossipService {
 
 #[async_trait]
 impl GossipService for TestGossipService {
+    fn local_peer_hint(&self) -> Option<String> {
+        None
+    }
+
     async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {
         let mut j = self.joined.write().await;
         j.insert(topic.to_string());

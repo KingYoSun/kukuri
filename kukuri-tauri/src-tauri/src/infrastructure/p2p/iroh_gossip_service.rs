@@ -136,6 +136,10 @@ impl IrohGossipService {
 
 #[async_trait]
 impl GossipService for IrohGossipService {
+    fn local_peer_hint(&self) -> Option<String> {
+        IrohGossipService::local_peer_hint(self)
+    }
+
     async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
         eprintln!(
             "[iroh_gossip_service] join_topic start: {} (initial peers: {:?})",

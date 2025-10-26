@@ -177,7 +177,7 @@
 
 - [x] AuthService の認証/初期トピック処理をイベント駆動ポートに分離し、User/TopicService との同期依存を解消する（`phase5_dependency_inventory_template.md:15`）。
   - 2025年10月26日: `AuthLifecyclePort` / `DefaultAuthLifecycle` を導入し、AuthService から User/TopicService 依存を排除。アカウント作成/ログインはイベント経由でプロビジョニングされ、ユニットテストでイベント分岐を検証済み。
-- [ ] P2PService/Builder の iroh 固有型を Builder 内に閉じ込め、Domain P2PEvent へマッピング＋trait 化を完了する（`phase5_dependency_inventory_template.md:18`）。
+- [x] P2PService/Builder の iroh 固有型を Builder 内に閉じ込め、Domain P2PEvent へマッピング＋trait 化を完了する（`phase5_dependency_inventory_template.md:18`）。
   - 2025年10月26日: `P2PStack` は Iroh 具象型を内部に保持しつつ、AppState には `NetworkService`/`GossipService` trait として注入する構成に変更。Mainline/Gossip smoke テストは `./scripts/test-docker.ps1 rust` で回帰確認済み。
 - [ ] PostService の `nostr_sdk::Keys` 依存を共有ファクトリ＋EventService 経由へ集約し、イベント生成経路を統一する（`phase5_dependency_inventory_template.md:19`）。
   - 2025年10月26日: `PostService` の作成/反応/削除/再送フローを EventService 経由に統一し、`EventGateway` を通じた Nostr 送信へ切替。ブックマーク/同期テストは Docker Rust テストでグリーン。
@@ -191,7 +191,7 @@
   - 2025年10月26日: P2P/Sync/Post/Event 周りの DI をすべて trait object 経由に揃え、`AppState` から Legacy Gossip/Network 具象参照を排除。Windows 既知問題によりローカル `cargo test` は失敗するが、Docker Rust テストで挙動を確認。
 - [x] ApplicationContainer を P2P ブートストラップ専用モジュールへ再配置し、P2P イベント型とメトリクス初期化を統合する（`phase5_dependency_inventory_template.md:25`）。
   - 2025年10月26日: `infrastructure::p2p::bootstrap::P2PBootstrapper` を新設し、Iroh SecretKey 生成や `metrics::reset_all` を含む P2P 初期化を集約。`AppState` からは builder/SecretKey へ直接触れずにスタックを取得する形へ整理。
-- [ ] EventManager の Repository 参照をアプリ層ポートへ閉じ込め、Infrastructure 化を完了する（`phase5_dependency_inventory_template.md:26`）。
+- [x] EventManager の Repository 参照をアプリ層ポートへ閉じ込め、Infrastructure 化を完了する（`phase5_dependency_inventory_template.md:26`）。
 - [ ] SQLiteRepository の Domain 構造体直接 import を Mapper 経由の DTO 化に置き換える（`phase5_dependency_inventory_template.md:34`）。
 - [ ] EventDistributor に DistributionStrategy trait と共通メトリクスフックを導入する（`phase5_dependency_inventory_template.md:36`）。
 - [ ] IrohNetworkService のネットワークイベントを P2PService 用イベントバスに統合し、broadcast の直接露出を廃止する（`phase5_dependency_inventory_template.md:37`）。

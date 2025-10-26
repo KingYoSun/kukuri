@@ -1,6 +1,5 @@
-use crate::infrastructure::database::{
-    EventRepository as InfraEventRepository, connection_pool::ConnectionPool,
-};
+use crate::application::ports::event_topic_store::EventTopicStore;
+use crate::infrastructure::database::connection_pool::ConnectionPool;
 use crate::infrastructure::p2p::GossipService;
 use crate::modules::event::manager::EventManager;
 use anyhow::Result;
@@ -12,7 +11,7 @@ use std::sync::Arc;
 #[async_trait]
 pub trait EventManagerHandle: Send + Sync {
     async fn set_gossip_service(&self, gossip: Arc<dyn GossipService>);
-    async fn set_event_repository(&self, repo: Arc<dyn InfraEventRepository>);
+    async fn set_event_topic_store(&self, store: Arc<dyn EventTopicStore>);
     async fn set_default_p2p_topic_id(&self, topic_id: &str);
     async fn set_default_p2p_topics(&self, topics: Vec<String>);
     async fn list_default_p2p_topics(&self) -> Vec<String>;
@@ -79,8 +78,8 @@ impl EventManagerHandle for LegacyEventManagerHandle {
         self.inner.set_gossip_service(gossip).await;
     }
 
-    async fn set_event_repository(&self, repo: Arc<dyn InfraEventRepository>) {
-        self.inner.set_event_repository(repo).await;
+    async fn set_event_topic_store(&self, store: Arc<dyn EventTopicStore>) {
+        self.inner.set_event_topic_store(store).await;
     }
 
     async fn set_default_p2p_topic_id(&self, topic_id: &str) {

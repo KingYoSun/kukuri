@@ -52,8 +52,8 @@ impl EventManager {
             }
         }
 
-        if let Some(repo) = self.event_repository.read().await.as_ref().cloned() {
-            let _ = repo.add_event_topic(&event.id.to_string(), topic_id).await;
+        if let Some(store) = self.event_topic_store.read().await.as_ref().cloned() {
+            let _ = store.add_event_topic(&event.id.to_string(), topic_id).await;
         }
 
         Ok(event_id)

@@ -6,9 +6,9 @@ use nostr_sdk::prelude::*;
 use tracing::error;
 
 use super::EventManager;
+use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::shared::mappers::nostr_event_to_domain_event;
 use crate::domain::p2p::user_topic_id;
-use crate::infrastructure::database::EventRepository as InfraEventRepository;
 use crate::infrastructure::p2p::GossipService;
 
 impl EventManager {
@@ -18,10 +18,10 @@ impl EventManager {
         *gs = Some(gossip);
     }
 
-    /// EventRepositoryを接続（参照トピック解決用）。未設定でも動作は継続。
-    pub async fn set_event_repository(&self, repo: Arc<dyn InfraEventRepository>) {
-        let mut r = self.event_repository.write().await;
-        *r = Some(repo);
+    /// EventTopicStoreを接続（参照トピック解決用）。未設定でも動作は継続。
+    pub async fn set_event_topic_store(&self, store: Arc<dyn EventTopicStore>) {
+        let mut r = self.event_topic_store.write().await;
+        *r = Some(store);
     }
 
     /// P2Pネットワークから受信したNostrイベントを処理
@@ -82,8 +82,8 @@ impl EventManager {
         &self,
         event_id: &str,
     ) -> Option<Vec<String>> {
-        if let Some(repo) = self.event_repository.read().await.as_ref().cloned() {
-            match repo.get_event_topics(event_id).await {
+        if let Some(store) = self.event_topic_store.read().await.as_ref().cloned() {
+            match store.get_event_topics(event_id).await {
                 Ok(v) if !v.is_empty() => return Some(v),
                 _ => {}
             }

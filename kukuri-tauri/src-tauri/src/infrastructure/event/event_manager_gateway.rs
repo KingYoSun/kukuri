@@ -45,10 +45,10 @@ impl From<&NostrEvent> for FrontendEventPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::ports::event_topic_store::EventTopicStore;
     use crate::domain::entities::EventKind;
     use crate::domain::entities::event_gateway::EventTag;
     use crate::domain::value_objects::EventId;
-    use crate::infrastructure::database::EventRepository as InfraEventRepository;
     use crate::infrastructure::event::manager_handle::LegacyEventManagerHandle;
     use crate::infrastructure::event::metrics;
     use crate::infrastructure::p2p::GossipService;
@@ -83,7 +83,7 @@ mod tests {
     impl EventManagerHandle for TestEventManagerHandle {
         async fn set_gossip_service(&self, _: Arc<dyn GossipService>) {}
 
-        async fn set_event_repository(&self, _: Arc<dyn InfraEventRepository>) {}
+        async fn set_event_topic_store(&self, _: Arc<dyn EventTopicStore>) {}
 
         async fn set_default_p2p_topic_id(&self, _: &str) {}
 

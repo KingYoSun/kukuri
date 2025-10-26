@@ -108,8 +108,8 @@ impl P2PService {
 
 /// P2P繝ｬ繧､繝､繝ｼ縺ｮ讒狗ｯ臥ｵ先棡
 pub struct P2PStack {
-    pub network_service: Arc<IrohNetworkService>,
-    pub gossip_service: Arc<IrohGossipService>,
+    pub network_service: Arc<dyn NetworkService>,
+    pub gossip_service: Arc<dyn GossipService>,
     pub p2p_service: Arc<P2PService>,
 }
 
@@ -161,17 +161,17 @@ impl P2PServiceBuilder {
             event_sender,
         } = self;
 
-        let network_service =
+        let iroh_network =
             Arc::new(IrohNetworkService::new(secret_key, network_config, discovery_options).await?);
-        let endpoint_arc = network_service.endpoint().clone();
+        let endpoint_arc = iroh_network.endpoint().clone();
         let mut gossip_inner = IrohGossipService::new(endpoint_arc)?;
         if let Some(tx) = event_sender {
             gossip_inner.set_event_sender(tx);
         }
-        let gossip_service = Arc::new(gossip_inner);
+        let iroh_gossip = Arc::new(gossip_inner);
 
-        let network_service_dyn: Arc<dyn NetworkService> = network_service.clone();
-        let gossip_service_dyn: Arc<dyn GossipService> = gossip_service.clone();
+        let network_service_dyn: Arc<dyn NetworkService> = iroh_network.clone();
+        let gossip_service_dyn: Arc<dyn GossipService> = iroh_gossip.clone();
         let p2p_service = Arc::new(P2PService::with_discovery(
             Arc::clone(&network_service_dyn),
             Arc::clone(&gossip_service_dyn),
@@ -179,8 +179,8 @@ impl P2PServiceBuilder {
         ));
 
         Ok(P2PStack {
-            network_service,
-            gossip_service,
+            network_service: network_service_dyn,
+            gossip_service: gossip_service_dyn,
             p2p_service,
         })
     }
@@ -416,6 +416,7 @@ mod tests {
 
         #[async_trait]
         impl GossipService for GossipServ {
+            fn local_peer_hint(&self) -> Option<String>;
             async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
             async fn leave_topic(&self, topic: &str) -> Result<(), AppError>;
             async fn broadcast(&self, topic: &str, event: &crate::domain::entities::Event) -> Result<(), AppError>;

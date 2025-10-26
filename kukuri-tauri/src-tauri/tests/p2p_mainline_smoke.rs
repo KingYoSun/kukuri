@@ -3,10 +3,10 @@ use iroh::SecretKey;
 use kukuri_lib::test_support::application::services::p2p_service::{P2PService, P2PServiceTrait};
 use kukuri_lib::test_support::infrastructure::p2p::{
     DiscoveryOptions, NetworkService, gossip_service::GossipService,
-    iroh_gossip_service::IrohGossipService, iroh_network_service::IrohNetworkService,
 };
 use kukuri_lib::test_support::shared::config::{AppConfig, NetworkConfig as AppNetworkConfig};
 use rand::{RngCore, SeedableRng, rngs::StdRng};
+use std::sync::Arc;
 use tokio::time::{Duration, Instant, sleep};
 
 macro_rules! log_step {
@@ -58,7 +58,7 @@ fn random_secret(rng: &mut StdRng) -> SecretKey {
 }
 
 async fn wait_for_bootstrap_peer(
-    service: &IrohNetworkService,
+    service: &Arc<dyn NetworkService>,
     min_peers: usize,
     deadline: Duration,
 ) -> bool {
@@ -75,7 +75,7 @@ async fn wait_for_bootstrap_peer(
 }
 
 async fn wait_for_local_peer_hint(
-    service: &IrohGossipService,
+    service: &Arc<dyn GossipService>,
     deadline: Duration,
 ) -> Option<String> {
     let start = Instant::now();
@@ -89,7 +89,7 @@ async fn wait_for_local_peer_hint(
 }
 
 async fn wait_for_topic_membership(
-    service: &IrohGossipService,
+    service: &Arc<dyn GossipService>,
     topic: &str,
     deadline: Duration,
 ) -> bool {
