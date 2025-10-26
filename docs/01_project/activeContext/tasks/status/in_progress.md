@@ -185,7 +185,8 @@
   - 2025年10月26日: GossipService 依存を `P2PServiceTrait` に置換し、UI からの join/leave/broadcast を P2PService に一本化。既存ユニットテストも trait モックに合わせて更新。
 - [ ] SyncService に同期オーケストレータ trait を追加し、PostService/EventService との循環依存を防止する（`phase5_dependency_inventory_template.md:21`）。
   - 2025年10月26日: `SyncParticipant` trait を新設し、Post/Event 両サービスに実装。`SyncService` は trait object を受け取る形へ DI を再編し、AppState 側では Legacy Aggregator から独立して注入。
-- [ ] UserService でフォロー/メタデータ取得をドメインユースケースとして抽象化し、Phase 5 の Low 項目を消化する（`phase5_dependency_inventory_template.md:23`）。
+- [x] UserService でフォロー/メタデータ取得をドメインユースケースとして抽象化し、Phase 5 の Low 項目を消化する（`phase5_dependency_inventory_template.md:23`）。
+  - 2025年10月26日: フォロー/アンフォロー処理を UserRepository ポート経由に実装し、Self follow 検証と NotFound 応答を追加。SQLite リポジトリに follow テーブル操作を実装し、Rust ユニットテストでフォロー導線をカバー。
 - [ ] AppState（legacy aggregator）の Legacy modules 依存を段階的に除去し、各サービスの DI 経路へ移譲する（`phase5_dependency_inventory_template.md:24`）。
   - 2025年10月26日: P2P/Sync/Post/Event 周りの DI をすべて trait object 経由に揃え、`AppState` から Legacy Gossip/Network 具象参照を排除。Windows 既知問題によりローカル `cargo test` は失敗するが、Docker Rust テストで挙動を確認。
 - [x] ApplicationContainer を P2P ブートストラップ専用モジュールへ再配置し、P2P イベント型とメトリクス初期化を統合する（`phase5_dependency_inventory_template.md:25`）。

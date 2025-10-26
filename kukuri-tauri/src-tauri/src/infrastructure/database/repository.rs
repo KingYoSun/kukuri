@@ -56,6 +56,16 @@ pub trait UserRepository: Send + Sync {
     async fn delete_user(&self, npub: &str) -> Result<(), AppError>;
     async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError>;
     async fn get_following(&self, npub: &str) -> Result<Vec<User>, AppError>;
+    async fn add_follow_relation(
+        &self,
+        follower_pubkey: &str,
+        followed_pubkey: &str,
+    ) -> Result<bool, AppError>;
+    async fn remove_follow_relation(
+        &self,
+        follower_pubkey: &str,
+        followed_pubkey: &str,
+    ) -> Result<bool, AppError>;
 }
 
 #[async_trait]

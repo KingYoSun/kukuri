@@ -1,8 +1,8 @@
 use super::SqliteRepository;
 use super::mapper::map_user_row;
 use super::queries::{
-    DELETE_USER, INSERT_USER, SELECT_FOLLOWERS, SELECT_FOLLOWING, SELECT_USER_BY_NPUB,
-    SELECT_USER_BY_PUBKEY, UPDATE_USER,
+    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SELECT_FOLLOWERS, SELECT_FOLLOWING,
+    SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER, UPSERT_FOLLOW_RELATION,
 };
 use crate::domain::entities::User;
 use crate::infrastructure::database::UserRepository;
@@ -100,5 +100,33 @@ impl UserRepository for SqliteRepository {
         }
 
         Ok(users)
+    }
+
+    async fn add_follow_relation(
+        &self,
+        follower_pubkey: &str,
+        followed_pubkey: &str,
+    ) -> Result<bool, AppError> {
+        let result = sqlx::query(UPSERT_FOLLOW_RELATION)
+            .bind(follower_pubkey)
+            .bind(followed_pubkey)
+            .execute(self.pool.get_pool())
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn remove_follow_relation(
+        &self,
+        follower_pubkey: &str,
+        followed_pubkey: &str,
+    ) -> Result<bool, AppError> {
+        let result = sqlx::query(DELETE_FOLLOW_RELATION)
+            .bind(follower_pubkey)
+            .bind(followed_pubkey)
+            .execute(self.pool.get_pool())
+            .await?;
+
+        Ok(result.rows_affected() > 0)
     }
 }

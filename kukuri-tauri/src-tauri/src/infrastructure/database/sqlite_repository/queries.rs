@@ -200,6 +200,17 @@ pub(super) const SELECT_FOLLOWING: &str = r#"
     WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
 "#;
 
+pub(super) const UPSERT_FOLLOW_RELATION: &str = r#"
+    INSERT INTO follows (follower_pubkey, followed_pubkey)
+    VALUES (?1, ?2)
+    ON CONFLICT(follower_pubkey, followed_pubkey) DO NOTHING
+"#;
+
+pub(super) const DELETE_FOLLOW_RELATION: &str = r#"
+    DELETE FROM follows
+    WHERE follower_pubkey = ?1 AND followed_pubkey = ?2
+"#;
+
 pub(super) const INSERT_EVENT: &str = r#"
     INSERT INTO events (event_id, public_key, content, kind, tags, created_at, sig)
     VALUES (?, ?, ?, ?, ?, ?, ?)
