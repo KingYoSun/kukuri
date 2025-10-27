@@ -9,6 +9,15 @@ pub trait SyncParticipant: Send + Sync {
     async fn sync_pending(&self) -> Result<u32, AppError>;
 }
 
+#[async_trait]
+pub trait SyncServiceTrait: Send + Sync {
+    async fn start_sync(&self) -> Result<(), AppError>;
+    async fn stop_sync(&self) -> Result<(), AppError>;
+    async fn get_status(&self) -> SyncStatus;
+    async fn reset_sync(&self) -> Result<(), AppError>;
+    async fn schedule_sync(&self, interval_secs: u64);
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SyncStatus {
     pub is_syncing: bool,
@@ -116,5 +125,28 @@ impl Clone for SyncService {
             event_participant: self.event_participant.clone(),
             status: self.status.clone(),
         }
+    }
+}
+
+#[async_trait]
+impl SyncServiceTrait for SyncService {
+    async fn start_sync(&self) -> Result<(), AppError> {
+        SyncService::start_sync(self).await
+    }
+
+    async fn stop_sync(&self) -> Result<(), AppError> {
+        SyncService::stop_sync(self).await
+    }
+
+    async fn get_status(&self) -> SyncStatus {
+        SyncService::get_status(self).await
+    }
+
+    async fn reset_sync(&self) -> Result<(), AppError> {
+        SyncService::reset_sync(self).await
+    }
+
+    async fn schedule_sync(&self, interval_secs: u64) {
+        SyncService::schedule_sync(self, interval_secs).await
     }
 }

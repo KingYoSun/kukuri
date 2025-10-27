@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore};
 use crate::domain::p2p::P2PEvent;
 
@@ -15,7 +13,7 @@ use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
 use crate::application::services::event_service::EventServiceTrait;
 use crate::application::services::p2p_service::P2PServiceTrait;
-use crate::application::services::sync_service::SyncParticipant;
+use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
     AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
     SyncService, TopicService, UserService,
@@ -89,7 +87,7 @@ pub struct AppState {
     pub topic_service: Arc<TopicService>,
     pub user_service: Arc<UserService>,
     pub event_service: Arc<EventService>,
-    pub sync_service: Arc<SyncService>,
+    pub sync_service: Arc<dyn SyncServiceTrait>,
     pub p2p_service: Arc<P2PService>,
     pub offline_service: Arc<OfflineService>,
 
@@ -250,7 +248,7 @@ impl AppState {
         let post_sync_participant: Arc<dyn SyncParticipant> = post_service.clone();
         let event_sync_participant: Arc<dyn SyncParticipant> = event_service.clone();
 
-        let sync_service = Arc::new(SyncService::new(
+        let sync_service: Arc<dyn SyncServiceTrait> = Arc::new(SyncService::new(
             Arc::clone(&network_service),
             post_sync_participant,
             event_sync_participant,

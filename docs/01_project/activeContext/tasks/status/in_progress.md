@@ -185,12 +185,14 @@
 - [x] TopicService の gossip 直接呼び出しを P2PService 経由へ置換し、参加/離脱トリガーをサービス層に集約する（`phase5_dependency_inventory_template.md:20`）。
   - 2025年10月26日: GossipService 依存を `P2PServiceTrait` に置換し、UI からの join/leave/broadcast を P2PService に一本化。既存ユニットテストも trait モックに合わせて更新。
   - 2025年10月27日: フロントエンド（`topicStore` / `syncEngine`）の参加・離脱処理を Tauri `join_topic` / `leave_topic` コマンドへ切替。UI 参加時の `ensure_ui_subscription` / 離脱時の `stop_ui_subscription` をバックエンドで補完し、`pnpm vitest run src/tests/unit/stores/topicStore.test.ts` / `optimisticUpdates.test.ts` / `lib/sync/syncEngine.test.ts` で回帰確認。
-- [ ] SyncService に同期オーケストレータ trait を追加し、PostService/EventService との循環依存を防止する（`phase5_dependency_inventory_template.md:21`）。
+- [x] SyncService に同期オーケストレータ trait を追加し、PostService/EventService との循環依存を防止する（`phase5_dependency_inventory_template.md:21`）。
   - 2025年10月26日: `SyncParticipant` trait を新設し、Post/Event 両サービスに実装。`SyncService` は trait object を受け取る形へ DI を再編し、AppState 側では Legacy Aggregator から独立して注入。
+  - 2025年10月27日: `SyncServiceTrait` を追加してコマンド層を含む呼び出し元を trait 依存に統一。`state.rs` の `sync_service` フィールドを `Arc<dyn SyncServiceTrait>` 化し、`sync_commands` は `AppState` 経由で同期操作を実行するよう更新。`cargo test`（Docker）で回帰確認。
 - [x] UserService でフォロー/メタデータ取得をドメインユースケースとして抽象化し、Phase 5 の Low 項目を消化する（`phase5_dependency_inventory_template.md:23`）。
   - 2025年10月26日: フォロー/アンフォロー処理を UserRepository ポート経由に実装し、Self follow 検証と NotFound 応答を追加。SQLite リポジトリに follow テーブル操作を実装し、Rust ユニットテストでフォロー導線をカバー。
-- [ ] AppState（legacy aggregator）の Legacy modules 依存を段階的に除去し、各サービスの DI 経路へ移譲する（`phase5_dependency_inventory_template.md:24`）。
+- [x] AppState（legacy aggregator）の Legacy modules 依存を段階的に除去し、各サービスの DI 経路へ移譲する（`phase5_dependency_inventory_template.md:24`）。
   - 2025年10月26日: P2P/Sync/Post/Event 周りの DI をすべて trait object 経由に揃え、`AppState` から Legacy Gossip/Network 具象参照を排除。Windows 既知問題によりローカル `cargo test` は失敗するが、Docker Rust テストで挙動を確認。
+  - 2025年10月27日: `AppState` から `SyncService` 具象依存を削除し、同期サービスを trait object で公開。`#![allow(dead_code)]` を撤去し、残存している未使用フィールド警告は Phase 5 Cleanup（プレゼン層 DI 移行）で解消予定として記録。Docker Rust テストで動作確認。
 - [x] ApplicationContainer を P2P ブートストラップ専用モジュールへ再配置し、P2P イベント型とメトリクス初期化を統合する（`phase5_dependency_inventory_template.md:25`）。
   - 2025年10月26日: `infrastructure::p2p::bootstrap::P2PBootstrapper` を新設し、Iroh SecretKey 生成や `metrics::reset_all` を含む P2P 初期化を集約。`AppState` からは builder/SecretKey へ直接触れずにスタックを取得する形へ整理。
 - [x] EventManager の Repository 参照をアプリ層ポートへ閉じ込め、Infrastructure 化を完了する（`phase5_dependency_inventory_template.md:26`）。

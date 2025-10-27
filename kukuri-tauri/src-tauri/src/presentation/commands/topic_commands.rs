@@ -103,11 +103,7 @@ pub async fn join_topic(
     match handler.join_topic(request, &user_pubkey).await {
         Ok(_) => {
             if let Err(e) = state.ensure_ui_subscription(&topic_id).await {
-                tracing::warn!(
-                    "Failed to ensure UI subscription for {}: {}",
-                    topic_id,
-                    e
-                );
+                tracing::warn!("Failed to ensure UI subscription for {}: {}", topic_id, e);
             }
             Ok(ApiResponse::success(()))
         }
@@ -127,11 +123,7 @@ pub async fn leave_topic(
     match handler.leave_topic(request, &user_pubkey).await {
         Ok(_) => {
             if let Err(e) = state.stop_ui_subscription(&topic_id).await {
-                tracing::warn!(
-                    "Failed to stop UI subscription for {}: {}",
-                    topic_id,
-                    e
-                );
+                tracing::warn!("Failed to stop UI subscription for {}: {}", topic_id, e);
             }
             Ok(ApiResponse::success(()))
         }

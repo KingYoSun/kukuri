@@ -19,6 +19,6 @@ pub use offline_service::OfflineService;
 pub use p2p_service::P2PService;
 pub use post_service::PostService;
 pub use subscription_state::{SubscriptionStateMachine, SubscriptionStateStore};
-pub use sync_service::SyncService;
+pub use sync_service::{SyncService, SyncServiceTrait};
 pub use topic_service::TopicService;
 pub use user_service::UserService;
