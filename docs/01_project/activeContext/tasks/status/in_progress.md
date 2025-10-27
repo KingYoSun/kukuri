@@ -207,11 +207,11 @@
 - [ ] Phase 5 EncryptionService Stage2/3 の完了（`refactoring_plan_2025-08-08_v3.md:344-345`, `phase5_dependency_inventory_template.md:32`）
   - [ ] Stage2: `SecureStorageHandler` / `AppState` / テストの DI を `Arc<dyn EncryptionService>` 起点に統合し、Legacy `modules::crypto::encryption` と `#[allow(dead_code)]` を排除する。
   - [ ] Stage3: `modules::crypto::encryption` ディレクトリと関連テストを削除し、依存表（`phase5_dependency_inventory_template.md` / `tauri_app_implementation_plan.md` / Runbook）を更新する。
-- [ ] EventGateway 残課題（`phase5_event_gateway_design.md:123-126`）
-  - [ ] Gateway 経由 API にメトリクスフックを追加し、P2P 成功率を計測する。
-  - [ ] EventManager ユニットテストを `application/shared/tests` ベースへ再編する。
-  - [ ] Presentation DTO（NIP-65 など）の mapper 対応を拡充する。
-  - 2025年10月26日: `publish_repost` API と `REPOST` メトリクスを EventGateway/LegacyEventManagerGateway/metrics に追加し、Boost 経路のカバレッジを拡充。
+- [x] EventGateway 残課題（`phase5_event_gateway_design.md:123-126`）
+  - [x] Gateway 経由 API にメトリクスフックを追加し、P2P 成功率を計測する。
+  - [x] EventManager ユニットテストを `application/shared/tests` ベースへ再編する。
+  - [x] Presentation DTO（NIP-65 など）の mapper 対応を拡充する。
+  - 2025年10月27日: LegacyEventManagerGateway から `infrastructure::p2p::metrics` へ成功/失敗を送出し、Publish/Reaction/Delete/Repost/Metadata の各 API で Gossip 成功率を可視化。`modules/event/manager/tests` を `application/shared/tests/event/manager_tests.rs` へ移設し、Gateway/Publisher/DefaultTopics の結合ケースを crate 内ユーティリティで共通化。NIP-65 Relay List DTO (`Nip65RelayDto`) と `RelayEndpoint` 値オブジェクトを追加し、Mapper で Relay 配列を JSON/Domain 双方向に変換する単体テストを整備。
 
 ### P2P / DHT / Offline
 

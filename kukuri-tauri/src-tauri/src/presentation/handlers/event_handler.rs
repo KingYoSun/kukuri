@@ -101,6 +101,7 @@ impl EventHandler {
             nip05: request.metadata.nip05,
             lud16: request.metadata.lud16,
             website: request.metadata.website,
+            relays: request.metadata.relays,
         };
 
         let event_id = self.event_service.update_metadata(metadata).await?;

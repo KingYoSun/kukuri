@@ -5,6 +5,7 @@ use crate::domain::value_objects::event_gateway::{PublicKey, ReactionValue, Topi
 use crate::domain::value_objects::{EventId, TopicId};
 use crate::infrastructure::event::manager_handle::EventManagerHandle;
 use crate::infrastructure::event::metrics::{self, GatewayMetricKind};
+use crate::infrastructure::p2p::metrics as p2p_metrics;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use nostr_sdk::prelude::{Event as NostrEvent, EventId as NostrEventId};
@@ -313,6 +314,19 @@ impl LegacyEventManagerGateway {
     }
 }
 
+fn record_p2p_broadcast_metrics<T>(result: Result<T, AppError>) -> Result<T, AppError> {
+    match result {
+        Ok(value) => {
+            p2p_metrics::record_broadcast_success();
+            Ok(value)
+        }
+        Err(err) => {
+            p2p_metrics::record_broadcast_failure();
+            Err(err)
+        }
+    }
+}
+
 #[async_trait]
 impl EventGateway for LegacyEventManagerGateway {
     async fn handle_incoming_event(&self, event: DomainEvent) -> Result<(), AppError> {
@@ -332,7 +346,7 @@ impl EventGateway for LegacyEventManagerGateway {
     }
 
     async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError> {
-        metrics::record_outcome(
+        record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
                 let event_id = self
                     .manager
@@ -343,7 +357,7 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::PublishTextNote,
-        )
+        ))
     }
 
     async fn publish_topic_post(
@@ -352,7 +366,7 @@ impl EventGateway for LegacyEventManagerGateway {
         content: &TopicContent,
         reply_to: Option<&EventId>,
     ) -> Result<EventId, AppError> {
-        metrics::record_outcome(
+        record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
                 let reply_to_converted = if let Some(reply) = reply_to {
                     Some(Self::to_nostr_event_id(reply)?)
@@ -369,7 +383,7 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::PublishTopicPost,
-        )
+        ))
     }
 
     async fn send_reaction(
@@ -377,7 +391,7 @@ impl EventGateway for LegacyEventManagerGateway {
         target: &EventId,
         reaction: &ReactionValue,
     ) -> Result<EventId, AppError> {
-        metrics::record_outcome(
+        record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
                 let nostr_event_id = Self::to_nostr_event_id(target)?;
                 let event_id = self
@@ -389,14 +403,14 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::Reaction,
-        )
+        ))
     }
 
     async fn update_profile_metadata(
         &self,
         metadata: &ProfileMetadata,
     ) -> Result<EventId, AppError> {
-        metrics::record_outcome(
+        record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
                 let nostr_metadata = profile_metadata_to_nostr(metadata)?;
                 let event_id = self
@@ -408,7 +422,7 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::MetadataUpdate,
-        )
+        ))
     }
 
     async fn delete_events(
@@ -416,7 +430,7 @@ impl EventGateway for LegacyEventManagerGateway {
         targets: &[EventId],
         reason: Option<&str>,
     ) -> Result<EventId, AppError> {
-        metrics::record_outcome(
+        record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
                 let nostr_ids = targets
                     .iter()
@@ -431,11 +445,11 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::DeleteEvents,
-        )
+        ))
     }
 
     async fn publish_repost(&self, target: &EventId) -> Result<EventId, AppError> {
-        metrics::record_outcome(
+        record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
                 let nostr_id = Self::to_nostr_event_id(target)?;
                 let event_id = self
@@ -447,7 +461,7 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::Repost,
-        )
+        ))
     }
 
     async fn disconnect(&self) -> Result<(), AppError> {

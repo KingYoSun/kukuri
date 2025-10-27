@@ -1,32 +1,30 @@
-use super::*;
+#![cfg(test)]
+
+use super::mocks::TestGossipService;
 use crate::application::ports::key_manager::KeyManager;
 use crate::domain::p2p::user_topic_id;
-use crate::infrastructure::{crypto::DefaultKeyManager, p2p::GossipService};
+use crate::infrastructure::crypto::DefaultKeyManager;
+use crate::infrastructure::p2p::GossipService;
+use crate::modules::event::manager::EventManager;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 
-mod support;
-
-use support::mocks::TestGossipService;
-
 #[tokio::test]
-async fn test_event_manager_initialization() {
+async fn event_manager_initializes_with_key_manager() {
     let manager = EventManager::new();
     let key_manager = DefaultKeyManager::new();
 
     key_manager.generate_keypair().await.unwrap();
 
-    assert!(
-        manager
-            .initialize_with_key_manager(&key_manager)
-            .await
-            .is_ok()
-    );
+    manager
+        .initialize_with_key_manager(&key_manager)
+        .await
+        .expect("initialization succeeds");
     assert!(manager.get_public_key().await.is_some());
 }
 
 #[tokio::test]
-async fn test_event_manager_not_initialized() {
+async fn operations_fail_before_initialization() {
     let manager = EventManager::new();
 
     assert!(manager.publish_text_note("test").await.is_err());
@@ -40,24 +38,22 @@ async fn test_event_manager_not_initialized() {
 }
 
 #[tokio::test]
-async fn test_initialize_and_disconnect() {
+async fn initialize_and_disconnect_cycle() {
     let manager = EventManager::new();
     let key_manager = DefaultKeyManager::new();
-
     key_manager.generate_keypair().await.unwrap();
-
     manager
         .initialize_with_key_manager(&key_manager)
         .await
         .unwrap();
-    assert!(manager.ensure_initialized().await.is_ok());
 
+    assert!(manager.ensure_initialized().await.is_ok());
     manager.disconnect().await.unwrap();
     assert!(manager.ensure_initialized().await.is_err());
 }
 
 #[tokio::test]
-async fn test_get_public_key() {
+async fn get_public_key_matches_key_manager() {
     let manager = EventManager::new();
     let key_manager = DefaultKeyManager::new();
 
@@ -76,48 +72,7 @@ async fn test_get_public_key() {
 }
 
 #[tokio::test]
-async fn test_create_events() {
-    let manager = EventManager::new();
-    let key_manager = DefaultKeyManager::new();
-
-    key_manager.generate_keypair().await.unwrap();
-    manager
-        .initialize_with_key_manager(&key_manager)
-        .await
-        .unwrap();
-
-    let publisher = manager.event_publisher.read().await;
-
-    let text_event = publisher.create_text_note("Test note", vec![]).unwrap();
-    assert_eq!(text_event.kind, Kind::TextNote);
-
-    let metadata = Metadata::new().name("Test User");
-    let metadata_event = publisher.create_metadata(metadata).unwrap();
-    assert_eq!(metadata_event.kind, Kind::Metadata);
-
-    let event_id = EventId::from_slice(&[1; 32]).unwrap();
-    let reaction_event = publisher.create_reaction(&event_id, "+").unwrap();
-    assert_eq!(reaction_event.kind, Kind::Reaction);
-}
-
-#[tokio::test]
-async fn test_ensure_initialized() {
-    let manager = EventManager::new();
-
-    assert!(manager.ensure_initialized().await.is_err());
-
-    let key_manager = DefaultKeyManager::new();
-    key_manager.generate_keypair().await.unwrap();
-    manager
-        .initialize_with_key_manager(&key_manager)
-        .await
-        .unwrap();
-
-    assert!(manager.ensure_initialized().await.is_ok());
-}
-
-#[tokio::test]
-async fn test_default_topics_api() {
+async fn default_topics_api_behaves_idempotently() {
     let manager = EventManager::new();
 
     let mut topics = manager.list_default_p2p_topics().await;
@@ -139,7 +94,7 @@ async fn test_default_topics_api() {
 }
 
 #[tokio::test]
-async fn test_routing_non_topic_includes_user_and_defaults() {
+async fn routing_non_topic_broadcasts_to_user_topic() {
     let manager = EventManager::new();
     let key_manager = DefaultKeyManager::new();
 
@@ -187,4 +142,44 @@ async fn test_routing_non_topic_includes_user_and_defaults() {
         v.sort();
         v
     });
+}
+
+#[tokio::test]
+async fn publisher_creates_expected_event_kinds() {
+    let manager = EventManager::new();
+    let key_manager = DefaultKeyManager::new();
+
+    key_manager.generate_keypair().await.unwrap();
+    manager
+        .initialize_with_key_manager(&key_manager)
+        .await
+        .unwrap();
+
+    let publisher = manager.event_publisher.read().await;
+
+    let text_event = publisher.create_text_note("Test note", vec![]).unwrap();
+    assert_eq!(text_event.kind, Kind::TextNote);
+
+    let metadata = Metadata::new().name("Test User");
+    let metadata_event = publisher.create_metadata(metadata).unwrap();
+    assert_eq!(metadata_event.kind, Kind::Metadata);
+
+    let event_id = EventId::from_slice(&[1; 32]).unwrap();
+    let reaction_event = publisher.create_reaction(&event_id, "+").unwrap();
+    assert_eq!(reaction_event.kind, Kind::Reaction);
+}
+
+#[tokio::test]
+async fn ensure_initialized_requires_keypair() {
+    let manager = EventManager::new();
+    assert!(manager.ensure_initialized().await.is_err());
+
+    let key_manager = DefaultKeyManager::new();
+    key_manager.generate_keypair().await.unwrap();
+    manager
+        .initialize_with_key_manager(&key_manager)
+        .await
+        .unwrap();
+
+    assert!(manager.ensure_initialized().await.is_ok());
 }

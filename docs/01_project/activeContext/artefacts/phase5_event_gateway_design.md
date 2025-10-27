@@ -121,6 +121,6 @@
 - Mainline DHT テスト群と合わせて Stage3 の完了条件（レガシー参照の封じ込め＋Gateway 経路の結合テスト）を満たした。以降は mapper/SubscriptionInvoker のポート化を順次行う。
 
 ## 残課題・フォローアップ
-- `EventGateway` に測定用メトリクスフックを追加するか検討（P2P ブロードキャスト成功率など）。
-- Gateway 化に伴う `EventManager` のユニットテスト再編（`application/shared/tests` への移行）。
-- Presentation DTO の追加項目（例: NIP-65）の mapper 対応。
+- 2025年10月27日: `LegacyEventManagerGateway` の Publish/Reaction/Delete/Metadata/Repost を `infrastructure::p2p::metrics` へ連動させ、Gateway 層で P2P 成功率を観測できるようにした。Runbook では EventGateway メトリクスに加えて Gossip 成功率の取得手順を追記する。
+- 2025年10月27日: `modules/event/manager/tests` を廃止し、`application/shared/tests/event/manager_tests.rs` に統合。Gateway/Publisher/DefaultTopics 挙動の結合テストを crate 内共通モックで再構成したため、新レイヤ構成でも継続的に検証可能。
+- 2025年10月27日: Presentation DTO に `Nip65RelayDto` を追加し、ProfileMetadata/Mapper 双方で Relay List（NIP-65）を扱えるよう拡張。Relay URL の検証を DTO/Domain の双方で行い、Mapper の単体テストで JSON ラウンドトリップを保証。

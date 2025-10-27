@@ -1,4 +1,36 @@
+use nostr_sdk::prelude::Url;
 use serde::{Deserialize, Serialize};
+
+/// NIP-65 Relay Listエントリ。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RelayEndpoint {
+    pub url: String,
+    pub read: bool,
+    pub write: bool,
+}
+
+impl RelayEndpoint {
+    pub fn new(url: String, read: bool, write: bool) -> Result<Self, String> {
+        Self::validate_url(&url)?;
+        Ok(Self { url, read, write })
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        Self::validate_url(&self.url)
+    }
+
+    fn validate_url(value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Err("Relay URL must not be empty".to_string());
+        }
+        let parsed =
+            Url::parse(value).map_err(|_| "Relay URL must be a valid websocket URL".to_string())?;
+        match parsed.scheme() {
+            "ws" | "wss" => Ok(()),
+            _ => Err("Relay URL must use ws:// or wss://".to_string()),
+        }
+    }
+}
 
 /// プロフィール更新時に利用するメタデータ。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -11,6 +43,7 @@ pub struct ProfileMetadata {
     pub nip05: Option<String>,
     pub lud16: Option<String>,
     pub website: Option<String>,
+    pub relays: Option<Vec<RelayEndpoint>>,
 }
 
 impl ProfileMetadata {
@@ -18,6 +51,7 @@ impl ProfileMetadata {
     const DISPLAY_NAME_LIMIT: usize = 100;
     const ABOUT_LIMIT: usize = 1_000;
     const URL_LIMIT: usize = 1_024;
+    const MAX_RELAYS: usize = 64;
 
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -29,6 +63,7 @@ impl ProfileMetadata {
         nip05: Option<String>,
         lud16: Option<String>,
         website: Option<String>,
+        relays: Option<Vec<RelayEndpoint>>,
     ) -> Result<Self, String> {
         let metadata = Self {
             name,
@@ -39,6 +74,7 @@ impl ProfileMetadata {
             nip05,
             lud16,
             website,
+            relays,
         };
         metadata.validate()?;
         Ok(metadata)
@@ -84,6 +120,18 @@ impl ProfileMetadata {
             Self::validate_url_length(website, "Website")?;
         }
 
+        if let Some(relays) = self.relays.as_ref() {
+            if relays.len() > Self::MAX_RELAYS {
+                return Err(format!(
+                    "Relay list is too long (max {} entries)",
+                    Self::MAX_RELAYS
+                ));
+            }
+            for relay in relays {
+                relay.validate()?;
+            }
+        }
+
         Ok(())
     }
 
@@ -107,5 +155,9 @@ impl ProfileMetadata {
             && self.nip05.is_none()
             && self.lud16.is_none()
             && self.website.is_none()
+            && self
+                .relays
+                .as_ref()
+                .map_or(true, |relays| relays.is_empty())
     }
 }
