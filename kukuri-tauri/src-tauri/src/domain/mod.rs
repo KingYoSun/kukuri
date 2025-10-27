@@ -3,7 +3,6 @@
 
 pub mod entities;
 pub mod p2p;
-pub mod repositories;
 pub mod value_objects;
 
 pub use entities::{Event, Post, Topic, User};

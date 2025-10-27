@@ -5,8 +5,8 @@ use super::queries::{
     SELECT_POSTS_BY_AUTHOR, SELECT_POSTS_BY_TOPIC, SELECT_RECENT_POSTS, SELECT_UNSYNC_POSTS,
     UPDATE_POST_CONTENT,
 };
+use crate::application::ports::repositories::PostRepository;
 use crate::domain::entities::Post;
-use crate::infrastructure::database::PostRepository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;

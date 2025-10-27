@@ -5,8 +5,8 @@ use super::queries::{
     SELECT_JOINED_TOPICS, SELECT_TOPIC_BY_ID, SELECT_TOPIC_MEMBER_COUNT, UPDATE_TOPIC,
     UPDATE_TOPIC_MEMBER_COUNT, UPDATE_TOPIC_STATS, UPSERT_USER_TOPIC,
 };
+use crate::application::ports::repositories::TopicRepository;
 use crate::domain::entities::Topic;
-use crate::infrastructure::database::TopicRepository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;

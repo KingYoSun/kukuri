@@ -1,6 +1,6 @@
 use super::p2p_service::P2PServiceTrait;
+use crate::application::ports::repositories::TopicRepository;
 use crate::domain::entities::Topic;
-use crate::infrastructure::database::TopicRepository;
 use crate::shared::error::AppError;
 use std::sync::Arc;
 
@@ -87,8 +87,8 @@ impl TopicService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::ports::repositories::TopicRepository as PortTopicRepository;
     use crate::application::services::p2p_service::{P2PServiceTrait, P2PStatus};
-    use crate::infrastructure::database::TopicRepository as InfraTopicRepository;
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
 
@@ -96,7 +96,7 @@ mod tests {
         pub TopicRepo {}
 
         #[async_trait]
-        impl InfraTopicRepository for TopicRepo {
+        impl PortTopicRepository for TopicRepo {
             async fn create_topic(&self, topic: &Topic) -> Result<(), AppError>;
             async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError>;
             async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError>;
@@ -142,7 +142,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let repo_arc: Arc<dyn InfraTopicRepository> = Arc::new(repo);
+        let repo_arc: Arc<dyn PortTopicRepository> = Arc::new(repo);
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
         let service = TopicService::new(repo_arc, p2p_arc);
 
@@ -163,7 +163,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let repo_arc: Arc<dyn InfraTopicRepository> = Arc::new(repo);
+        let repo_arc: Arc<dyn PortTopicRepository> = Arc::new(repo);
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
         let service = TopicService::new(repo_arc, p2p_arc);
 
@@ -178,7 +178,7 @@ mod tests {
             .with(eq("pubkey1"))
             .times(1)
             .returning(|_| Ok(vec![]));
-        let repo_arc: Arc<dyn InfraTopicRepository> = Arc::new(repo);
+        let repo_arc: Arc<dyn PortTopicRepository> = Arc::new(repo);
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
         let service = TopicService::new(repo_arc, p2p_arc);
         let result = service.get_joined_topics("pubkey1").await;

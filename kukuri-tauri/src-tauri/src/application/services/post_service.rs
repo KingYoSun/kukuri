@@ -1,8 +1,8 @@
+use crate::application::ports::repositories::{BookmarkRepository, PostRepository};
 use crate::application::services::event_service::EventServiceTrait;
 use crate::domain::entities::{Post, User};
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::infrastructure::cache::PostCacheService;
-use crate::infrastructure::database::{BookmarkRepository, PostRepository};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -221,10 +221,10 @@ impl super::sync_service::SyncParticipant for PostService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::ports::repositories::{BookmarkRepository, PostRepository};
     use crate::application::services::SubscriptionRecord;
     use crate::infrastructure::database::{
-        BookmarkRepository, PostRepository, connection_pool::ConnectionPool,
-        sqlite_repository::SqliteRepository,
+        connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     };
     use crate::presentation::dto::event::NostrMetadataDto;
     use std::sync::Arc;

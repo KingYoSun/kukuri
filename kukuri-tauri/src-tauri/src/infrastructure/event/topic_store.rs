@@ -1,5 +1,5 @@
 use crate::application::ports::event_topic_store::EventTopicStore;
-use crate::infrastructure::database::EventRepository;
+use crate::application::ports::repositories::EventRepository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use std::sync::Arc;

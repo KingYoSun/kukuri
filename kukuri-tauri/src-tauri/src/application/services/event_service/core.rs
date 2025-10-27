@@ -1,6 +1,7 @@
 use super::distribution::distribute_hybrid;
 use super::factory::build_deletion_event;
 use crate::application::ports::event_gateway::EventGateway;
+use crate::application::ports::repositories::EventRepository;
 use crate::application::ports::subscription_invoker::SubscriptionInvoker;
 use crate::application::services::{SubscriptionRecord, SubscriptionStateStore};
 use crate::application::shared::mappers::{
@@ -11,7 +12,6 @@ use crate::domain::entities::{Event, EventKind};
 use crate::domain::value_objects::event_gateway::{ReactionValue, TopicContent};
 use crate::domain::value_objects::{EventId, TopicId};
 use crate::infrastructure::crypto::SignatureService;
-use crate::infrastructure::database::EventRepository;
 use crate::infrastructure::p2p::EventDistributor;
 use crate::presentation::dto::event::NostrMetadataDto;
 use crate::shared::error::AppError;

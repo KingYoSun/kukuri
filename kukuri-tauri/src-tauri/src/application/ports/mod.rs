@@ -3,6 +3,7 @@ pub mod event_gateway;
 pub mod event_topic_store;
 pub mod key_manager;
 pub mod offline_store;
+pub mod repositories;
 pub mod secure_storage;
 pub mod subscription_invoker;
 pub mod subscription_state_repository;

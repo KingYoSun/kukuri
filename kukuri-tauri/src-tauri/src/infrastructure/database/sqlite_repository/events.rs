@@ -4,8 +4,8 @@ use super::queries::{
     INSERT_EVENT, INSERT_EVENT_TOPIC, MARK_EVENT_DELETED, MARK_EVENT_SYNCED, SELECT_EVENT_BY_ID,
     SELECT_EVENT_TOPICS, SELECT_EVENTS_BY_AUTHOR, SELECT_EVENTS_BY_KIND, SELECT_UNSYNC_EVENTS,
 };
+use crate::application::ports::repositories::EventRepository;
 use crate::domain::entities::Event;
-use crate::infrastructure::database::EventRepository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;

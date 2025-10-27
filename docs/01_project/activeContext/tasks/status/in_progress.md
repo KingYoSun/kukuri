@@ -192,7 +192,8 @@
 - [x] ApplicationContainer を P2P ブートストラップ専用モジュールへ再配置し、P2P イベント型とメトリクス初期化を統合する（`phase5_dependency_inventory_template.md:25`）。
   - 2025年10月26日: `infrastructure::p2p::bootstrap::P2PBootstrapper` を新設し、Iroh SecretKey 生成や `metrics::reset_all` を含む P2P 初期化を集約。`AppState` からは builder/SecretKey へ直接触れずにスタックを取得する形へ整理。
 - [x] EventManager の Repository 参照をアプリ層ポートへ閉じ込め、Infrastructure 化を完了する（`phase5_dependency_inventory_template.md:26`）。
-- [ ] SQLiteRepository の Domain 構造体直接 import を Mapper 経由の DTO 化に置き換える（`phase5_dependency_inventory_template.md:34`）。
+- [x] SQLiteRepository の Domain 構造体直接 import を Mapper 経由の DTO 化に置き換える（`phase5_dependency_inventory_template.md:34`）。
+  - 2025年10月27日: `application::ports::repositories` を新設し、Post/Topic/User/Event/Bookmark の各 Repository トレイトを application 層へ移動。`SqliteRepository` 実装と `state.rs`/EventTopicStore/サービス群を新ポートへ差し替え、`domain::repositories` を削除してレイヤ依存を一本化。
 - [x] EventDistributor に DistributionStrategy trait と共通メトリクスフックを導入する（`phase5_dependency_inventory_template.md:36`）。
   - 2025年10月27日: DistributionStrategy を `domain::p2p` に移設し、`DistributionMetrics` トレイトを新設。`DefaultEventDistributor` をメトリクス実装でラップして EventGateway/Hybrid 配信から `p2p::metrics` へ成功/失敗を送出する構成に更新。
 - [x] IrohNetworkService のネットワークイベントを P2PService 用イベントバスに統合し、broadcast の直接露出を廃止する（`phase5_dependency_inventory_template.md:37`）。

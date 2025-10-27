@@ -7,6 +7,9 @@ use crate::domain::p2p::P2PEvent;
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
 use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::ports::offline_store::OfflinePersistence;
+use crate::application::ports::repositories::{
+    BookmarkRepository, EventRepository, PostRepository, TopicRepository, UserRepository,
+};
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
 use crate::application::services::event_service::EventServiceTrait;
@@ -24,9 +27,8 @@ use crate::infrastructure::{
         SignatureService,
     },
     database::{
-        BookmarkRepository, EventRepository, PostRepository, Repository,
-        SqliteSubscriptionStateRepository, TopicRepository, UserRepository,
-        connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
+        Repository, SqliteSubscriptionStateRepository, connection_pool::ConnectionPool,
+        sqlite_repository::SqliteRepository,
     },
     event::{
         EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,

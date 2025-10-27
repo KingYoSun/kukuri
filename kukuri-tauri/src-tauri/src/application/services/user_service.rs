@@ -1,5 +1,5 @@
+use crate::application::ports::repositories::UserRepository;
 use crate::domain::entities::{User, UserMetadata};
-use crate::infrastructure::database::UserRepository;
 use crate::shared::error::AppError;
 use std::sync::Arc;
 
@@ -104,7 +104,7 @@ impl UserService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::database::UserRepository;
+    use crate::application::ports::repositories::UserRepository;
     use async_trait::async_trait;
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;

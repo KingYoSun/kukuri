@@ -4,8 +4,8 @@ use super::queries::{
     DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SELECT_FOLLOWERS, SELECT_FOLLOWING,
     SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER, UPSERT_FOLLOW_RELATION,
 };
+use crate::application::ports::repositories::UserRepository;
 use crate::domain::entities::User;
-use crate::infrastructure::database::UserRepository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 

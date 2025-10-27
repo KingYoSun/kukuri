@@ -2,9 +2,9 @@ use super::SqliteRepository;
 use super::queries::{
     DELETE_BOOKMARK, INSERT_BOOKMARK, SELECT_BOOKMARK_BY_USER_AND_POST, SELECT_BOOKMARKS_BY_USER,
 };
+use crate::application::ports::repositories::BookmarkRepository;
 use crate::domain::entities::Bookmark;
 use crate::domain::value_objects::{BookmarkId, EventId, PublicKey};
-use crate::infrastructure::database::BookmarkRepository;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
