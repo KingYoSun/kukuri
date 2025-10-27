@@ -1,8 +1,8 @@
+use crate::application::ports::cache::PostCache;
 use crate::application::ports::repositories::{BookmarkRepository, PostRepository};
 use crate::application::services::event_service::EventServiceTrait;
 use crate::domain::entities::{Post, User};
 use crate::domain::value_objects::{EventId, PublicKey};
-use crate::infrastructure::cache::PostCacheService;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ pub struct PostService {
     repository: Arc<dyn PostRepository>,
     bookmark_repository: Arc<dyn BookmarkRepository>,
     event_service: Arc<dyn EventServiceTrait>,
-    cache: Arc<PostCacheService>,
+    cache: Arc<dyn PostCache>,
 }
 
 impl PostService {
@@ -20,12 +20,13 @@ impl PostService {
         repository: Arc<dyn PostRepository>,
         bookmark_repository: Arc<dyn BookmarkRepository>,
         event_service: Arc<dyn EventServiceTrait>,
+        cache: Arc<dyn PostCache>,
     ) -> Self {
         Self {
             repository,
             bookmark_repository,
             event_service,
-            cache: Arc::new(PostCacheService::new()),
+            cache,
         }
     }
 
@@ -221,16 +222,47 @@ impl super::sync_service::SyncParticipant for PostService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::ports::cache::PostCache;
     use crate::application::ports::repositories::{BookmarkRepository, PostRepository};
     use crate::application::services::SubscriptionRecord;
+    use crate::infrastructure::cache::PostCacheService;
+    use crate::infrastructure::database::Repository;
     use crate::infrastructure::database::{
         connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     };
     use crate::presentation::dto::event::NostrMetadataDto;
+    use chrono::Utc;
     use std::sync::Arc;
+    use tokio::sync::Mutex;
 
-    #[derive(Default)]
-    struct TestEventService;
+    struct TestEventService {
+        publish_topic_post_result: Mutex<Option<Result<EventId, AppError>>>,
+    }
+
+    impl TestEventService {
+        fn new() -> Self {
+            Self {
+                publish_topic_post_result: Mutex::new(None),
+            }
+        }
+
+        fn with_publish_result(result: Result<EventId, AppError>) -> Self {
+            Self {
+                publish_topic_post_result: Mutex::new(Some(result)),
+            }
+        }
+
+        async fn next_publish_result(&self) -> Result<EventId, AppError> {
+            let mut guard = self.publish_topic_post_result.lock().await;
+            guard.take().unwrap_or_else(|| Ok(EventId::generate()))
+        }
+    }
+
+    impl Default for TestEventService {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     #[async_trait]
     impl EventServiceTrait for TestEventService {
@@ -246,7 +278,7 @@ mod tests {
             _: &str,
             _: Option<&str>,
         ) -> Result<EventId, AppError> {
-            Ok(EventId::generate())
+            self.next_publish_result().await
         }
         async fn send_reaction(&self, _: &str, _: &str) -> Result<EventId, AppError> {
             Ok(EventId::generate())
@@ -284,7 +316,9 @@ mod tests {
         }
     }
 
-    async fn setup_post_service() -> PostService {
+    async fn setup_post_service_with_deps(
+        event_service: Arc<dyn EventServiceTrait>,
+    ) -> (PostService, Arc<SqliteRepository>, Arc<PostCacheService>) {
         let pool = ConnectionPool::new("sqlite::memory:?cache=shared")
             .await
             .expect("failed to create pool");
@@ -305,13 +339,42 @@ mod tests {
         .expect("failed to create bookmarks table");
 
         let repository = Arc::new(SqliteRepository::new(pool));
-        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        repository
+            .initialize()
+            .await
+            .expect("failed to initialize repository schema");
+        let cache = Arc::new(PostCacheService::new());
 
-        PostService::new(
+        let service = PostService::new(
             Arc::clone(&repository) as Arc<dyn PostRepository>,
             Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
             event_service,
-        )
+            Arc::clone(&cache) as Arc<dyn PostCache>,
+        );
+
+        (service, repository, cache)
+    }
+
+    async fn setup_post_service() -> PostService {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        setup_post_service_with_deps(event_service).await.0
+    }
+
+    fn sample_user() -> User {
+        User {
+            npub: "npub1test".to_string(),
+            pubkey: "test_pubkey".to_string(),
+            profile: crate::domain::entities::user::UserProfile {
+                display_name: "Test User".to_string(),
+                bio: "Test bio".to_string(),
+                avatar_url: None,
+            },
+            name: Some("Test User".to_string()),
+            nip05: None,
+            lud16: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
     }
 
     const SAMPLE_PUBKEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -343,5 +406,83 @@ mod tests {
             .await
             .expect("list bookmarks after removal");
         assert!(bookmarked.is_empty());
+    }
+
+    #[tokio::test]
+    async fn create_post_marks_synced_after_publish() {
+        let expected_event = EventId::generate();
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(
+            TestEventService::with_publish_result(Ok(expected_event.clone())),
+        );
+
+        let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
+        let expected_event_hex = expected_event.to_string();
+
+        let post = service
+            .create_post("hello world".into(), sample_user(), "topic-sync".into())
+            .await
+            .expect("post creation succeeds");
+
+        assert!(post.is_synced);
+        assert_eq!(post.event_id.as_deref(), Some(expected_event_hex.as_str()));
+
+        let stored = repository
+            .get_post(&post.id)
+            .await
+            .expect("db query succeeds")
+            .expect("post present in db");
+        assert_eq!(stored.id, post.id);
+
+        let unsynced = repository
+            .get_unsync_posts()
+            .await
+            .expect("unsynced query succeeds");
+        assert!(unsynced.is_empty(), "all posts should be marked synced");
+
+        let cached = cache
+            .get(&post.id)
+            .await
+            .expect("post cached after creation");
+        assert_eq!(cached.event_id.as_deref(), post.event_id.as_deref());
+    }
+
+    #[tokio::test]
+    async fn create_post_caches_on_publish_failure() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(
+            TestEventService::with_publish_result(Err(AppError::NostrError("failed".into()))),
+        );
+        let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
+
+        let err = service
+            .create_post("offline".into(), sample_user(), "topic-offline".into())
+            .await
+            .expect_err("publish failure propagates");
+        assert!(matches!(err, AppError::NostrError(_)));
+
+        let stored = repository
+            .get_posts_by_topic("topic-offline", 10)
+            .await
+            .expect("query succeeds");
+        assert_eq!(stored.len(), 1);
+        let stored_post = &stored[0];
+        assert!(!stored_post.is_synced);
+        assert!(stored_post.event_id.is_none());
+
+        let unsynced = repository
+            .get_unsync_posts()
+            .await
+            .expect("unsynced query succeeds");
+        assert_eq!(
+            unsynced.len(),
+            1,
+            "failed publish should remain in unsynced queue"
+        );
+
+        let cached = cache
+            .get(&stored_post.id)
+            .await
+            .expect("unsynced post cached for retry");
+        assert_eq!(cached.id, stored_post.id);
+        assert!(!cached.is_synced);
     }
 }

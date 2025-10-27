@@ -5,6 +5,7 @@ use crate::domain::p2p::P2PEvent;
 
 // アプリケーションサービスのインポート
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
+use crate::application::ports::cache::PostCache;
 use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::repositories::{
@@ -22,6 +23,7 @@ use crate::application::services::{
 // プレゼンテーション層のハンドラーのインポート
 use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
 use crate::infrastructure::{
+    cache::PostCacheService,
     crypto::{
         DefaultEncryptionService, DefaultKeyManager, DefaultSignatureService, EncryptionService,
         SignatureService,
@@ -236,11 +238,13 @@ impl AppState {
             .await;
         let event_service = Arc::new(event_service_inner);
 
-        // PostService縺ｮ蛻晄悄蛹・
+        let post_cache: Arc<dyn PostCache> = Arc::new(PostCacheService::new());
+        // PostServiceの初期化
         let post_service = Arc::new(PostService::new(
             Arc::clone(&repository) as Arc<dyn PostRepository>,
             Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
             Arc::clone(&event_service) as Arc<dyn EventServiceTrait>,
+            Arc::clone(&post_cache),
         ));
 
         let post_sync_participant: Arc<dyn SyncParticipant> = post_service.clone();

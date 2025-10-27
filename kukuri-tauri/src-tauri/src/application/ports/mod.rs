@@ -1,4 +1,5 @@
 pub mod auth_lifecycle;
+pub mod cache;
 pub mod event_gateway;
 pub mod event_topic_store;
 pub mod key_manager;

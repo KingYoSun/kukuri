@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use keyring::Entry;
-use nostr_sdk::{prelude::SecretKey, FromBech32};
+use nostr_sdk::{FromBech32, prelude::SecretKey};
 use tracing::{debug, error};
 
 const SERVICE_NAME: &str = "kukuri";

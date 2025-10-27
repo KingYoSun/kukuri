@@ -179,8 +179,9 @@
   - 2025年10月26日: `AuthLifecyclePort` / `DefaultAuthLifecycle` を導入し、AuthService から User/TopicService 依存を排除。アカウント作成/ログインはイベント経由でプロビジョニングされ、ユニットテストでイベント分岐を検証済み。
 - [x] P2PService/Builder の iroh 固有型を Builder 内に閉じ込め、Domain P2PEvent へマッピング＋trait 化を完了する（`phase5_dependency_inventory_template.md:18`）。
   - 2025年10月26日: `P2PStack` は Iroh 具象型を内部に保持しつつ、AppState には `NetworkService`/`GossipService` trait として注入する構成に変更。Mainline/Gossip smoke テストは `./scripts/test-docker.ps1 rust` で回帰確認済み。
-- [ ] PostService の `nostr_sdk::Keys` 依存を共有ファクトリ＋EventService 経由へ集約し、イベント生成経路を統一する（`phase5_dependency_inventory_template.md:19`）。
+- [x] PostService の `nostr_sdk::Keys` 依存を共有ファクトリ＋EventService 経由へ集約し、イベント生成経路を統一する（`phase5_dependency_inventory_template.md:19`）。
   - 2025年10月26日: `PostService` の作成/反応/削除/再送フローを EventService 経由に統一し、`EventGateway` を通じた Nostr 送信へ切替。ブックマーク/同期テストは Docker Rust テストでグリーン。
+  - 2025年10月27日: `PostCache` ポートを導入して `PostService` からインフラ実装を切り離し、`AppState` で DI を更新。publish 失敗時のキャッシュ保持と同期成功時の整合性を検証するユニットテストを追加。
 - [ ] TopicService の gossip 直接呼び出しを P2PService 経由へ置換し、参加/離脱トリガーをサービス層に集約する（`phase5_dependency_inventory_template.md:20`）。
   - 2025年10月26日: GossipService 依存を `P2PServiceTrait` に置換し、UI からの join/leave/broadcast を P2PService に一本化。既存ユニットテストも trait モックに合わせて更新。
 - [ ] SyncService に同期オーケストレータ trait を追加し、PostService/EventService との循環依存を防止する（`phase5_dependency_inventory_template.md:21`）。

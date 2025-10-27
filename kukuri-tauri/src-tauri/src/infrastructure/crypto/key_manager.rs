@@ -2,7 +2,7 @@ use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore, KeyPa
 use crate::shared::error::AppError;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use nostr_sdk::{prelude::*, FromBech32};
+use nostr_sdk::{FromBech32, prelude::*};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

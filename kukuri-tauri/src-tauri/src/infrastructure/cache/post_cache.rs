@@ -1,4 +1,6 @@
+use crate::application::ports::cache::PostCache;
 use crate::domain::entities::Post;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -74,6 +76,21 @@ impl PostCacheService {
 impl Default for PostCacheService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[async_trait]
+impl PostCache for PostCacheService {
+    async fn add(&self, post: Post) {
+        PostCacheService::add(self, post).await;
+    }
+
+    async fn get(&self, id: &str) -> Option<Post> {
+        PostCacheService::get(self, id).await
+    }
+
+    async fn remove(&self, id: &str) -> Option<Post> {
+        PostCacheService::remove(self, id).await
     }
 }
 
