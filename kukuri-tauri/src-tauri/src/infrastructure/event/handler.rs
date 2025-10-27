@@ -236,10 +236,7 @@ impl EventHandler {
 
     /// リアクションイベントを処理
     async fn handle_reaction(&self, event: &Event) -> Result<()> {
-        info!(
-            "Received reaction from {}: {}",
-            event.pubkey, event.content
-        );
+        info!("Received reaction from {}: {}", event.pubkey, event.content);
 
         // リアクションをデータベースに保存
         if let Some(pool) = &self.connection_pool {

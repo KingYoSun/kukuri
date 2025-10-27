@@ -155,9 +155,6 @@ impl ProfileMetadata {
             && self.nip05.is_none()
             && self.lud16.is_none()
             && self.website.is_none()
-            && self
-                .relays
-                .as_ref()
-                .map_or(true, |relays| relays.is_empty())
+            && self.relays.as_ref().is_none_or(|relays| relays.is_empty())
     }
 }

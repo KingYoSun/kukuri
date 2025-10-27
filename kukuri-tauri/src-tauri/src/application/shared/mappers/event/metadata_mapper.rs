@@ -79,7 +79,7 @@ fn convert_relays(relays: Vec<Nip65RelayDto>) -> Result<Vec<RelayEndpoint>, AppE
         .into_iter()
         .map(|relay| {
             RelayEndpoint::new(relay.url, relay.read, relay.write)
-                .map_err(|err| AppError::ValidationError(err))
+                .map_err(AppError::ValidationError)
         })
         .collect()
 }

@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use kukuri_lib::ops::p2p::metrics;
-use serde_json;
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -60,7 +59,7 @@ fn main() -> Result<()> {
         write_output(&path, &payload)?;
         println!("Metrics written to {}", path.display());
     } else {
-        println!("{}", payload);
+        println!("{payload}");
     }
 
     Ok(())

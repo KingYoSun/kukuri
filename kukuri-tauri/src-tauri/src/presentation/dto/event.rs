@@ -117,8 +117,7 @@ impl Validate for UpdateMetadataRequest {
         if let Some(relays) = &self.metadata.relays {
             if relays.len() > MAX_NIP65_RELAYS {
                 return Err(format!(
-                    "Relay list is too long (max {} entries)",
-                    MAX_NIP65_RELAYS
+                    "Relay list is too long (max {MAX_NIP65_RELAYS} entries)"
                 ));
             }
             for relay in relays {
