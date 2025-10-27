@@ -21,3 +21,13 @@ pub trait KeyManager: Send + Sync {
     async fn list_npubs(&self) -> Result<Vec<String>, AppError>;
     async fn current_keypair(&self) -> Result<KeyPair, AppError>;
 }
+
+#[async_trait]
+pub trait KeyMaterialStore: Send + Sync {
+    async fn save_keypair(&self, keypair: &KeyPair) -> Result<(), AppError>;
+    async fn delete_keypair(&self, npub: &str) -> Result<(), AppError>;
+    async fn get_keypair(&self, npub: &str) -> Result<Option<KeyPair>, AppError>;
+    async fn list_keypairs(&self) -> Result<Vec<KeyPair>, AppError>;
+    async fn set_current(&self, npub: &str) -> Result<(), AppError>;
+    async fn current_keypair(&self) -> Result<Option<KeyPair>, AppError>;
+}

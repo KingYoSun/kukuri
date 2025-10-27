@@ -200,13 +200,16 @@
   - 2025年10月27日: `broadcast::Sender<P2PEvent>` を DI するよう初期化を拡張し、接続/切断時に `P2PEvent::NetworkConnected/Disconnected` を発火。`NetworkService` トレイトから `subscribe_connection_events` を削除し、AppState/OfflineService/EventService 側は P2P イベントバス経由で再索引・再購読をトリガーする構成に統一。
 - [x] IrohGossipService のイベントを Domain DTO へ正規化し、モック/API 差異をなくす（`phase5_dependency_inventory_template.md:38`）。
   - 2025年10月27日: Gossip 受信タスクを `broadcast::Sender<P2PEvent>` ベースに刷新し、モックと同じ `P2PEvent` で UI/テストへ配信。`wait_for_peer_join_event` などテスト支援も broadcast レシーバーへ移行し、イベントバス実装と齟齬が出ないよう調整。
-- [ ] Gossip Metrics の登録処理を ApplicationContainer で一元化し、CI 指標へ反映する（`phase5_dependency_inventory_template.md:39`）。
-  - 2025年10月26日: P2PBootstrapper で `metrics::reset_all` を呼び出し、P2P スタック生成時にメトリクスを初期化。CI 連携向けの export API 整備は継続課題。
-- [ ] KeyManager（infrastructure）と SecureStorage の責務を再分割し、鍵メタデータ更新を別トレイトへ切り出す（`phase5_dependency_inventory_template.md:40`）。
-- [ ] SecureStorage の永続化スキーマを Domain 値オブジェクトへ揃えるマイグレーションを設計する（`phase5_dependency_inventory_template.md:41`）。
-- [ ] Phase 5 EncryptionService Stage2/3 の完了（`refactoring_plan_2025-08-08_v3.md:344-345`, `phase5_dependency_inventory_template.md:32`）
-  - [ ] Stage2: `SecureStorageHandler` / `AppState` / テストの DI を `Arc<dyn EncryptionService>` 起点に統合し、Legacy `modules::crypto::encryption` と `#[allow(dead_code)]` を排除する。
-  - [ ] Stage3: `modules::crypto::encryption` ディレクトリと関連テストを削除し、依存表（`phase5_dependency_inventory_template.md` / `tauri_app_implementation_plan.md` / Runbook）を更新する。
+- [x] Gossip Metrics の登録処理を ApplicationContainer で一元化し、CI 指標へ反映する（`phase5_dependency_inventory_template.md:39`）。
+  - 2025年10月27日: `p2p_metrics_export` バイナリと `scripts/metrics/export-p2p.{sh,ps1}` を追加し、AppState 初期化でリセットしたメトリクスを CLI から JSON として収集できるようにした。CI では artefacts/metrics 配下へ自動保存する運用を確立。
+- [x] KeyManager（infrastructure）と SecureStorage の責務を再分割し、鍵メタデータ更新を別トレイトへ切り出す（`phase5_dependency_inventory_template.md:40`）。
+  - 2025年10月27日: `KeyMaterialStore` ポートを追加し、DefaultKeyManager をストレージ非依存のトレイト委譲構成へ再実装。SecureStorage/PowerShell から同トレイトを実装することで、鍵の保存・削除・現在値切替がインフラ層に集約された。
+- [x] SecureStorage の永続化スキーマを Domain 値オブジェクトへ揃えるマイグレーションを設計する（`phase5_dependency_inventory_template.md:41`）。
+  - 2025年10月27日: `KeyMaterialLedger` / `KeyMaterialRecord` 値オブジェクトを追加し、SecureStorage による keyring 保存を台帳経由で管理。アカウント追加/切替/削除と KeyManager 保存が同じレコードを更新するよう同期させた。
+- [x] Phase 5 EncryptionService Stage2/3 の完了（`refactoring_plan_2025-08-08_v3.md:344-345`, `phase5_dependency_inventory_template.md:32`）
+  - [x] Stage2: `SecureStorageHandler` / `AppState` / テストの DI を `Arc<dyn EncryptionService>` 起点に統合し、Legacy `modules::crypto::encryption` と `#[allow(dead_code)]` を排除する。
+  - [x] Stage3: `modules::crypto::encryption` ディレクトリと関連テストを削除し、依存表（`phase5_dependency_inventory_template.md` / `tauri_app_implementation_plan.md` / Runbook）を更新する。
+  - 2025年10月27日: Legacy EncryptionManager を完全削除し、`DefaultEncryptionService` への依存で一本化。AppState/ハンドラーの DI は既存構成を維持しつつ dead code 許容を解消。
 - [x] EventGateway 残課題（`phase5_event_gateway_design.md:123-126`）
   - [x] Gateway 経由 API にメトリクスフックを追加し、P2P 成功率を計測する。
   - [x] EventManager ユニットテストを `application/shared/tests` ベースへ再編する。

@@ -76,6 +76,14 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - 閾値: Phase 5 時点では参考値（2025年10月26日: 25.23%）。Phase 6 移行後に 50% / 70% を順次クリアし、CI では `tarpaulin --fail-under <target>` を段階適用する。
 - Tarpaulin は ptrace を利用するため `rust-coverage` サービスに `SYS_PTRACE` 権限と `seccomp=unconfined` を付与済み。CI で同設定を反映する場合は GitHub Actions の `docker run` 手順で `--cap-add=SYS_PTRACE --security-opt seccomp=unconfined` を指定する。
 
+### 6.2 P2Pメトリクス採取
+- Phase 5 で `p2p_metrics_export` バイナリとラッパースクリプト `scripts/metrics/export-p2p.{sh,ps1}` を追加した。CI ではテスト後に下記コマンドで `docs/01_project/activeContext/artefacts/metrics/<timestamp>-p2p-metrics.json` を生成し、成果物として保存すること。
+  ```bash
+  ./scripts/metrics/export-p2p.sh --pretty
+  ```
+- PowerShell 版は `./scripts/metrics/export-p2p.ps1 -Pretty` で同じ JSON を出力する。`--output` / `-Output` オプションで保存先を上書き可能。
+- エクスポートされた JSON には Gossip/Mainline 双方のカウンタ・直近タイムスタンプが含まれるため、CI で期待件数との差分を検証したり、進捗レポートに添付する。
+
 ## 7. トラブルシューティング
 - **`STATUS_ENTRYPOINT_NOT_FOUND`**: Windows で iroh バイナリの依存 DLL が見つからない場合に発生。`KUKURI_IROH_BIN` を明示し、`PATH` に `libssl` 等が含まれているか確認。Docker 実行で迂回可能。
 - **ブートストラップ接続失敗**: `KUKURI_BOOTSTRAP_PEERS` の NodeId/ポートを再確認し、ファイアウォールで該当ポートを開放する。

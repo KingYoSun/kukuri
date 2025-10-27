@@ -1,16 +1,22 @@
-use crate::application::ports::secure_storage::SecureAccountStore;
+use crate::application::ports::{
+    key_manager::{KeyMaterialStore, KeyPair},
+    secure_storage::SecureAccountStore,
+};
 use crate::domain::entities::{
     AccountMetadata, AccountRegistration, AccountsMetadata, CurrentAccountSecret,
 };
+use crate::domain::value_objects::keychain::{KeyMaterialLedger, KeyMaterialRecord};
 use crate::shared::error::AppError;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use keyring::Entry;
+use nostr_sdk::{prelude::SecretKey, FromBech32};
 use tracing::{debug, error};
 
 const SERVICE_NAME: &str = "kukuri";
 const ACCOUNTS_KEY: &str = "accounts_metadata";
+const KEY_MANAGER_LEDGER_KEY: &str = "key_manager_ledger";
 
 /// セキュアストレージのトレイト
 #[async_trait]
@@ -161,6 +167,28 @@ impl DefaultSecureStorage {
             }
         }
     }
+
+    fn get_key_material_ledger() -> Result<KeyMaterialLedger> {
+        let entry = Entry::new(SERVICE_NAME, KEY_MANAGER_LEDGER_KEY)
+            .context("Failed to create keyring entry")?;
+        match entry.get_password() {
+            Ok(json) => {
+                debug!("SecureStorage: Retrieved key ledger JSON");
+                serde_json::from_str(&json).context("Failed to deserialize key material ledger")
+            }
+            Err(keyring::Error::NoEntry) => Ok(KeyMaterialLedger::default()),
+            Err(e) => Err(anyhow::anyhow!("Failed to get key ledger: {e}")),
+        }
+    }
+
+    fn save_key_material_ledger(ledger: &KeyMaterialLedger) -> Result<()> {
+        let json = serde_json::to_string(ledger).context("Failed to serialize key ledger")?;
+        let entry = Entry::new(SERVICE_NAME, KEY_MANAGER_LEDGER_KEY)
+            .context("Failed to create keyring entry")?;
+        entry
+            .set_password(&json)
+            .map_err(|e| anyhow::anyhow!("Failed to save key ledger: {e}"))
+    }
 }
 
 impl Default for DefaultSecureStorage {
@@ -226,12 +254,31 @@ impl SecureStorage for DefaultSecureStorage {
         }
         // メタデータをクリア
         Self::save_accounts_metadata(&AccountsMetadata::default()).map_err(|e| e.to_string())?;
+        let entry = Entry::new(SERVICE_NAME, KEY_MANAGER_LEDGER_KEY).map_err(|e| e.to_string())?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+        }
         Ok(())
     }
 }
 
 fn to_storage_error(err: anyhow::Error) -> AppError {
     AppError::Storage(err.to_string())
+}
+
+fn build_keypair_from_record(
+    record: &KeyMaterialRecord,
+    nsec: String,
+) -> Result<KeyPair, AppError> {
+    let secret_key = SecretKey::from_bech32(&nsec)
+        .map_err(|e| AppError::Crypto(format!("Invalid nsec: {e}")))?;
+    Ok(KeyPair {
+        public_key: record.public_key.clone(),
+        private_key: secret_key.display_secret().to_string(),
+        npub: record.npub.clone(),
+        nsec,
+    })
 }
 
 #[async_trait]
@@ -252,6 +299,19 @@ impl SecureAccountStore for DefaultSecureStorage {
             .insert(metadata.npub.clone(), metadata.clone());
         accounts.current_npub = Some(metadata.npub.clone());
         Self::save_accounts_metadata(&accounts).map_err(to_storage_error)?;
+        {
+            let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+            let entry = ledger
+                .records
+                .entry(metadata.npub.clone())
+                .or_insert_with(|| {
+                    KeyMaterialRecord::new(metadata.npub.clone(), metadata.pubkey.clone())
+                });
+            entry.public_key = metadata.pubkey.clone();
+            entry.touch();
+            ledger.touch_current(&metadata.npub);
+            Self::save_key_material_ledger(&ledger).map_err(to_storage_error)?;
+        }
 
         Ok(metadata)
     }
@@ -272,6 +332,9 @@ impl SecureAccountStore for DefaultSecureStorage {
             metadata.current_npub = metadata.accounts.keys().next().cloned();
         }
         Self::save_accounts_metadata(&metadata).map_err(to_storage_error)?;
+        let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        ledger.remove(npub);
+        Self::save_key_material_ledger(&ledger).map_err(to_storage_error)?;
 
         Ok(())
     }
@@ -286,6 +349,9 @@ impl SecureAccountStore for DefaultSecureStorage {
         let updated = account.clone();
         metadata.current_npub = Some(npub.to_string());
         Self::save_accounts_metadata(&metadata).map_err(to_storage_error)?;
+        let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        ledger.touch_current(npub);
+        Self::save_key_material_ledger(&ledger).map_err(to_storage_error)?;
 
         Ok(updated)
     }
@@ -303,6 +369,87 @@ impl SecureAccountStore for DefaultSecureStorage {
                         metadata: account.clone(),
                         nsec,
                     }));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
+#[async_trait]
+impl KeyMaterialStore for DefaultSecureStorage {
+    async fn save_keypair(&self, keypair: &KeyPair) -> Result<(), AppError> {
+        Self::save_private_key(&keypair.npub, &keypair.nsec).map_err(to_storage_error)?;
+        let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        let entry = ledger
+            .records
+            .entry(keypair.npub.clone())
+            .or_insert_with(|| {
+                KeyMaterialRecord::new(keypair.npub.clone(), keypair.public_key.clone())
+            });
+        entry.public_key = keypair.public_key.clone();
+        entry.touch();
+        ledger.touch_current(&keypair.npub);
+        Self::save_key_material_ledger(&ledger).map_err(to_storage_error)
+    }
+
+    async fn delete_keypair(&self, npub: &str) -> Result<(), AppError> {
+        let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        ledger.remove(npub);
+        Self::delete_private_key(npub).map_err(to_storage_error)?;
+        Self::save_key_material_ledger(&ledger).map_err(to_storage_error)
+    }
+
+    async fn get_keypair(&self, npub: &str) -> Result<Option<KeyPair>, AppError> {
+        let ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        match ledger.records.get(npub) {
+            Some(record) => {
+                let nsec = Self::get_private_key(&record.npub).map_err(to_storage_error)?;
+                if let Some(nsec) = nsec {
+                    build_keypair_from_record(record, nsec)
+                } else {
+                    Err(AppError::NotFound(format!(
+                        "Private key not found for {}",
+                        record.npub
+                    )))
+                }
+                .map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn list_keypairs(&self) -> Result<Vec<KeyPair>, AppError> {
+        let ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        let mut pairs = Vec::with_capacity(ledger.records.len());
+        for record in ledger.records.values() {
+            let nsec = Self::get_private_key(&record.npub).map_err(to_storage_error)?;
+            if let Some(nsec) = nsec {
+                pairs.push(build_keypair_from_record(record, nsec)?);
+            }
+        }
+        Ok(pairs)
+    }
+
+    async fn set_current(&self, npub: &str) -> Result<(), AppError> {
+        let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        if ledger.records.contains_key(npub) {
+            ledger.touch_current(npub);
+            Self::save_key_material_ledger(&ledger).map_err(to_storage_error)
+        } else {
+            Err(AppError::NotFound(format!(
+                "Keypair not found for npub {npub}"
+            )))
+        }
+    }
+
+    async fn current_keypair(&self) -> Result<Option<KeyPair>, AppError> {
+        let ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
+        if let Some(npub) = ledger.current_npub.as_deref() {
+            if let Some(record) = ledger.records.get(npub) {
+                let nsec = Self::get_private_key(&record.npub).map_err(to_storage_error)?;
+                if let Some(nsec) = nsec {
+                    return build_keypair_from_record(record, nsec).map(Some);
                 }
             }
         }

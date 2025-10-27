@@ -11,6 +11,12 @@ mod presentation;
 mod shared;
 mod state;
 
+pub mod ops {
+    pub mod p2p {
+        pub use crate::infrastructure::p2p::metrics;
+    }
+}
+
 #[doc(hidden)]
 pub mod test_support {
     pub mod application {

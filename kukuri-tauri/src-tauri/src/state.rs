@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::application::ports::key_manager::KeyManager;
+use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore};
 use crate::domain::p2p::P2PEvent;
 
 // アプリケーションサービスのインポート
@@ -156,8 +156,11 @@ impl AppState {
         offline_reindex_job.trigger();
 
         // インフラストラクチャサービスの初期化
-        let key_manager: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::new());
         let secure_storage_impl = Arc::new(DefaultSecureStorage::new());
+        let key_material_store: Arc<dyn KeyMaterialStore> = secure_storage_impl.clone();
+        let key_manager: Arc<dyn KeyManager> = Arc::new(DefaultKeyManager::with_store(Arc::clone(
+            &key_material_store,
+        )));
         let secure_storage: Arc<dyn SecureStorage> = secure_storage_impl.clone();
         let secure_account_store: Arc<dyn SecureAccountStore> = secure_storage_impl.clone();
         let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());

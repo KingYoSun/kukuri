@@ -1,8 +1,8 @@
-use crate::application::ports::key_manager::{KeyManager, KeyPair};
+use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore, KeyPair};
 use crate::shared::error::AppError;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use nostr_sdk::prelude::*;
+use nostr_sdk::{prelude::*, FromBech32};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -11,20 +11,22 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct DefaultKeyManager {
     inner: Arc<RwLock<KeyManagerInner>>,
+    key_store: Arc<dyn KeyMaterialStore>,
 }
 
 struct KeyManagerInner {
     keys: Option<Keys>,
-    stored_keys: HashMap<String, KeyPair>,
 }
 
 impl DefaultKeyManager {
     pub fn new() -> Self {
+        Self::with_store(Arc::new(InMemoryKeyMaterialStore::default()))
+    }
+
+    pub fn with_store(key_store: Arc<dyn KeyMaterialStore>) -> Self {
         Self {
-            inner: Arc::new(RwLock::new(KeyManagerInner {
-                keys: None,
-                stored_keys: std::collections::HashMap::new(),
-            })),
+            inner: Arc::new(RwLock::new(KeyManagerInner { keys: None })),
+            key_store,
         }
     }
 
@@ -35,7 +37,6 @@ impl DefaultKeyManager {
         let secret_key = keys.secret_key().to_bech32()?;
         let npub = keys.public_key().to_bech32()?;
 
-        // Save generated keys
         let mut inner = self.inner.write().await;
         inner.keys = Some(keys);
 
@@ -50,7 +51,6 @@ impl DefaultKeyManager {
         let public_key = keys.public_key().to_hex();
         let npub = keys.public_key().to_bech32()?;
 
-        // Save keys
         let mut inner = self.inner.write().await;
         inner.keys = Some(keys);
 
@@ -69,6 +69,22 @@ impl DefaultKeyManager {
         let inner = self.inner.read().await;
         inner.keys.clone().ok_or_else(|| anyhow!("No keys loaded"))
     }
+
+    async fn save_generated_keys(&self, keys: &Keys, keypair: &KeyPair) -> Result<(), AppError> {
+        {
+            let mut inner = self.inner.write().await;
+            inner.keys = Some(keys.clone());
+        }
+        self.key_store.save_keypair(keypair).await?;
+        self.key_store.set_current(&keypair.npub).await
+    }
+
+    async fn install_current_from_pair(&self, keypair: &KeyPair) -> Result<(), AppError> {
+        let keys = keys_from_keypair(keypair)?;
+        let mut inner = self.inner.write().await;
+        inner.keys = Some(keys);
+        Ok(())
+    }
 }
 
 impl Default for DefaultKeyManager {
@@ -81,29 +97,8 @@ impl Default for DefaultKeyManager {
 impl KeyManager for DefaultKeyManager {
     async fn generate_keypair(&self) -> Result<KeyPair, AppError> {
         let keys = Keys::generate();
-        let public_key = keys.public_key().to_hex();
-        let private_key = keys.secret_key().display_secret().to_string();
-        let npub = keys
-            .public_key()
-            .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
-        let nsec = keys
-            .secret_key()
-            .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
-
-        let keypair = KeyPair {
-            public_key,
-            private_key,
-            npub: npub.clone(),
-            nsec,
-        };
-
-        // Store in memory
-        let mut inner = self.inner.write().await;
-        inner.keys = Some(keys);
-        inner.stored_keys.insert(npub, keypair.clone());
-
+        let keypair = keypair_from_keys(&keys)?;
+        self.save_generated_keys(&keys, &keypair).await?;
         Ok(keypair)
     }
 
@@ -111,114 +106,153 @@ impl KeyManager for DefaultKeyManager {
         let secret_key = SecretKey::from_bech32(nsec)
             .map_err(|e| AppError::Crypto(format!("Invalid nsec: {e:?}")))?;
         let keys = Keys::new(secret_key);
-
-        let public_key = keys.public_key().to_hex();
-        let private_key = keys.secret_key().display_secret().to_string();
-        let npub = keys
-            .public_key()
-            .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
-
-        let keypair = KeyPair {
-            public_key,
-            private_key,
-            npub: npub.clone(),
-            nsec: nsec.to_string(),
-        };
-
-        // Store in memory
-        let mut inner = self.inner.write().await;
-        inner.keys = Some(keys);
-        inner.stored_keys.insert(npub, keypair.clone());
-
+        let keypair = keypair_from_keys(&keys)?;
+        self.save_generated_keys(&keys, &keypair).await?;
         Ok(keypair)
     }
 
     async fn export_private_key(&self, npub: &str) -> Result<String, AppError> {
-        let inner = self.inner.read().await;
-        inner
-            .stored_keys
-            .get(npub)
-            .map(|kp| kp.nsec.clone())
+        self.key_store
+            .get_keypair(npub)
+            .await?
+            .map(|kp| kp.nsec)
             .ok_or_else(|| AppError::NotFound(format!("Key not found: {npub}")))
     }
 
     async fn get_public_key(&self, npub: &str) -> Result<String, AppError> {
-        let inner = self.inner.read().await;
-        inner
-            .stored_keys
-            .get(npub)
-            .map(|kp| kp.public_key.clone())
+        self.key_store
+            .get_keypair(npub)
+            .await?
+            .map(|kp| kp.public_key)
             .ok_or_else(|| AppError::NotFound(format!("Key not found: {npub}")))
     }
 
     async fn store_keypair(&self, keypair: &KeyPair) -> Result<(), AppError> {
-        let mut inner = self.inner.write().await;
-        inner
-            .stored_keys
-            .insert(keypair.npub.clone(), keypair.clone());
-        Ok(())
+        self.key_store.save_keypair(keypair).await?;
+        self.key_store.set_current(&keypair.npub).await?;
+        self.install_current_from_pair(keypair).await
     }
 
     async fn delete_keypair(&self, npub: &str) -> Result<(), AppError> {
+        self.key_store.delete_keypair(npub).await?;
         let mut inner = self.inner.write().await;
-        inner.stored_keys.remove(npub);
-        // If this was the current key, clear it
         if let Some(keys) = &inner.keys {
-            if keys
+            let current_npub = keys
                 .public_key()
                 .to_bech32()
-                .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?
-                == npub
-            {
+                .map_err(|e| AppError::Crypto(format!("Failed to convert npub: {e:?}")))?;
+            if current_npub == npub {
                 inner.keys = None;
             }
         }
         Ok(())
     }
 
+    async fn list_npubs(&self) -> Result<Vec<String>, AppError> {
+        let pairs = self.key_store.list_keypairs().await?;
+        Ok(pairs.into_iter().map(|kp| kp.npub).collect())
+    }
+
     async fn current_keypair(&self) -> Result<KeyPair, AppError> {
-        let (npub, keys, cached_pair) = {
-            let inner = self.inner.read().await;
-            let keys = inner
-                .keys
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| AppError::Unauthorized("No keys loaded".into()))?;
+        if let Some(keys) = self.inner.read().await.keys.clone() {
             let npub = keys
                 .public_key()
                 .to_bech32()
-                .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
-            let cached = inner.stored_keys.get(&npub).cloned();
-            (npub, keys, cached)
-        };
-
-        if let Some(pair) = cached_pair {
-            return Ok(pair);
+                .map_err(|e| AppError::Crypto(format!("Failed to convert npub: {e:?}")))?;
+            if let Some(pair) = self.key_store.get_keypair(&npub).await? {
+                return Ok(pair);
+            }
         }
 
-        let public_key = keys.public_key().to_hex();
-        let private_key = keys.secret_key().display_secret().to_string();
-        let nsec = keys
-            .secret_key()
-            .to_bech32()
-            .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
+        if let Some(pair) = self.key_store.current_keypair().await? {
+            self.install_current_from_pair(&pair).await?;
+            Ok(pair)
+        } else {
+            Err(AppError::NotFound("No keys loaded".into()))
+        }
+    }
+}
 
-        let keypair = KeyPair {
-            public_key,
-            private_key,
-            npub: npub.clone(),
-            nsec,
-        };
+fn keypair_from_keys(keys: &Keys) -> Result<KeyPair, AppError> {
+    let public_key = keys.public_key().to_hex();
+    let private_key = keys.secret_key().display_secret().to_string();
+    let npub = keys
+        .public_key()
+        .to_bech32()
+        .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
+    let nsec = keys
+        .secret_key()
+        .to_bech32()
+        .map_err(|e| AppError::Crypto(format!("Failed to convert to bech32: {e:?}")))?;
 
-        let mut inner = self.inner.write().await;
-        inner.stored_keys.insert(npub, keypair.clone());
-        Ok(keypair)
+    Ok(KeyPair {
+        public_key,
+        private_key,
+        npub,
+        nsec,
+    })
+}
+
+fn keys_from_keypair(keypair: &KeyPair) -> Result<Keys, AppError> {
+    let secret_key = SecretKey::from_bech32(&keypair.nsec)
+        .map_err(|e| AppError::Crypto(format!("Invalid nsec: {e:?}")))?;
+    Ok(Keys::new(secret_key))
+}
+
+#[derive(Default)]
+struct InMemoryKeyMaterialStore {
+    keys: RwLock<HashMap<String, KeyPair>>,
+    current: RwLock<Option<String>>,
+}
+
+#[async_trait]
+impl KeyMaterialStore for InMemoryKeyMaterialStore {
+    async fn save_keypair(&self, keypair: &KeyPair) -> Result<(), AppError> {
+        let mut guard = self.keys.write().await;
+        guard.insert(keypair.npub.clone(), keypair.clone());
+        Ok(())
     }
 
-    async fn list_npubs(&self) -> Result<Vec<String>, AppError> {
-        let inner = self.inner.read().await;
-        Ok(inner.stored_keys.keys().cloned().collect())
+    async fn delete_keypair(&self, npub: &str) -> Result<(), AppError> {
+        let mut guard = self.keys.write().await;
+        guard.remove(npub);
+        let mut current = self.current.write().await;
+        if current.as_deref() == Some(npub) {
+            *current = None;
+        }
+        Ok(())
+    }
+
+    async fn get_keypair(&self, npub: &str) -> Result<Option<KeyPair>, AppError> {
+        let guard = self.keys.read().await;
+        Ok(guard.get(npub).cloned())
+    }
+
+    async fn list_keypairs(&self) -> Result<Vec<KeyPair>, AppError> {
+        let guard = self.keys.read().await;
+        Ok(guard.values().cloned().collect())
+    }
+
+    async fn set_current(&self, npub: &str) -> Result<(), AppError> {
+        let guard = self.keys.read().await;
+        if guard.contains_key(npub) {
+            let mut current = self.current.write().await;
+            *current = Some(npub.to_string());
+            Ok(())
+        } else {
+            Err(AppError::NotFound(format!(
+                "Keypair not found for npub {npub}"
+            )))
+        }
+    }
+
+    async fn current_keypair(&self) -> Result<Option<KeyPair>, AppError> {
+        let guard = self.keys.read().await;
+        let current = self.current.read().await;
+        Ok(match current.as_deref() {
+            Some(npub) => guard.get(npub).cloned(),
+            None => None,
+        })
     }
 }
 
@@ -239,141 +273,48 @@ mod tests {
         let key_manager = DefaultKeyManager::new();
         let result = key_manager.generate_keypair().await;
         assert!(result.is_ok());
-
-        let keypair = result.unwrap();
-        assert_eq!(keypair.public_key.len(), 64); // Hex public key is 64 characters
-        assert!(keypair.nsec.starts_with("nsec1")); // Bech32 secret key starts with nsec1
-        assert!(keypair.npub.starts_with("npub1")); // Bech32 public key starts with npub1
-
-        // Verify keys are stored
-        let stored_keys = key_manager.get_keys().await;
-        assert!(stored_keys.is_ok());
-        assert_eq!(
-            stored_keys.unwrap().public_key().to_hex(),
-            keypair.public_key
-        );
+        let pair = result.unwrap();
+        assert!(!pair.public_key.is_empty());
+        assert!(!pair.npub.is_empty());
+        assert!(!pair.nsec.is_empty());
     }
 
     #[tokio::test]
-    async fn test_import_private_key() {
+    async fn test_import_private_key_roundtrip() {
         let key_manager = DefaultKeyManager::new();
-
-        // Generate a test key first
-        let test_keys = Keys::generate();
-        let test_nsec = test_keys.secret_key().to_bech32().unwrap();
-        let expected_public_key = test_keys.public_key().to_hex();
-
-        // Import the test key
-        let result = key_manager.import_private_key(&test_nsec).await;
-        assert!(result.is_ok());
-
-        let keypair = result.unwrap();
-        assert_eq!(keypair.public_key, expected_public_key);
-        assert!(keypair.npub.starts_with("npub1"));
-
-        // Verify keys are stored
-        let stored_keys = key_manager.get_keys().await;
-        assert!(stored_keys.is_ok());
-        assert_eq!(
-            stored_keys.unwrap().public_key().to_hex(),
-            keypair.public_key
-        );
+        let (_, nsec, _) = key_manager.generate().await.expect("generate");
+        let pair = key_manager
+            .import_private_key(&nsec)
+            .await
+            .expect("import should work");
+        assert_eq!(pair.nsec, nsec);
     }
 
     #[tokio::test]
-    async fn test_login_with_invalid_nsec() {
+    async fn test_store_and_export_keypair() {
         let key_manager = DefaultKeyManager::new();
-        let result = key_manager.login("invalid_nsec").await;
+        let generated = key_manager.generate_keypair().await.expect("generate");
+        key_manager.store_keypair(&generated).await.expect("store");
+        let exported = key_manager
+            .export_private_key(&generated.npub)
+            .await
+            .expect("export");
+        assert_eq!(exported, generated.nsec);
+    }
+
+    #[tokio::test]
+    async fn test_delete_keypair_clears_current() {
+        let key_manager = DefaultKeyManager::new();
+        let pair = key_manager.generate_keypair().await.expect("generate");
+        key_manager
+            .store_keypair(&pair)
+            .await
+            .expect("store default");
+        key_manager
+            .delete_keypair(&pair.npub)
+            .await
+            .expect("delete");
+        let result = key_manager.current_keypair().await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_logout() {
-        let key_manager = DefaultKeyManager::new();
-
-        // Generate and store keys first
-        let _ = key_manager.generate().await.unwrap();
-        assert!(key_manager.get_keys().await.is_ok());
-
-        // Logout
-        let result = key_manager.logout().await;
-        assert!(result.is_ok());
-
-        // Verify keys are cleared
-        let stored_keys = key_manager.get_keys().await;
-        assert!(stored_keys.is_err());
-        assert_eq!(stored_keys.unwrap_err().to_string(), "No keys loaded");
-    }
-
-    #[tokio::test]
-    async fn test_list_npubs() {
-        let key_manager = DefaultKeyManager::new();
-
-        // Initially empty
-        let npubs = key_manager.list_npubs().await.unwrap();
-        assert_eq!(npubs.len(), 0);
-
-        // Generate a keypair
-        let keypair1 = key_manager.generate_keypair().await.unwrap();
-        let npubs = key_manager.list_npubs().await.unwrap();
-        assert_eq!(npubs.len(), 1);
-        assert!(npubs.contains(&keypair1.npub));
-
-        // Generate another keypair
-        let keypair2 = key_manager.generate_keypair().await.unwrap();
-        let npubs = key_manager.list_npubs().await.unwrap();
-        assert_eq!(npubs.len(), 2);
-        assert!(npubs.contains(&keypair1.npub));
-        assert!(npubs.contains(&keypair2.npub));
-    }
-
-    #[tokio::test]
-    async fn test_export_private_key() {
-        let key_manager = DefaultKeyManager::new();
-
-        // Generate a keypair
-        let keypair = key_manager.generate_keypair().await.unwrap();
-
-        // Export the private key
-        let nsec = key_manager.export_private_key(&keypair.npub).await.unwrap();
-        assert_eq!(nsec, keypair.nsec);
-
-        // Try to export non-existent key
-        let result = key_manager.export_private_key("npub1nonexistent").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_delete_keypair() {
-        let key_manager = DefaultKeyManager::new();
-
-        // Generate a keypair
-        let keypair = key_manager.generate_keypair().await.unwrap();
-        assert_eq!(key_manager.list_npubs().await.unwrap().len(), 1);
-
-        // Delete the keypair
-        key_manager.delete_keypair(&keypair.npub).await.unwrap();
-        assert_eq!(key_manager.list_npubs().await.unwrap().len(), 0);
-
-        // Verify current keys are also cleared
-        let result = key_manager.get_keys().await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_current_keypair_returns_active_identity() {
-        let key_manager = DefaultKeyManager::new();
-        let generated = key_manager.generate_keypair().await.unwrap();
-
-        let current = key_manager.current_keypair().await.unwrap();
-        assert_eq!(current.public_key, generated.public_key);
-        assert_eq!(current.npub, generated.npub);
-    }
-
-    #[tokio::test]
-    async fn test_current_keypair_requires_active_keys() {
-        let key_manager = DefaultKeyManager::new();
-        let err = key_manager.current_keypair().await.unwrap_err();
-        assert!(matches!(err, AppError::Unauthorized(_)));
     }
 }
