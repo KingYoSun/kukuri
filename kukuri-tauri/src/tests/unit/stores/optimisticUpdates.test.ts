@@ -4,7 +4,6 @@ import { useTopicStore } from '@/stores/topicStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { setupPersistMock } from '@/stores/utils/testHelpers';
 import { TauriApi } from '@/lib/api/tauri';
-import { p2pApi } from '@/lib/api/p2p';
 import { OfflineActionType, EntityType } from '@/types/offline';
 
 // モック設定
@@ -12,11 +11,6 @@ vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     createPost: vi.fn(),
     likePost: vi.fn(),
-  },
-}));
-
-vi.mock('@/lib/api/p2p', () => ({
-  p2pApi: {
     joinTopic: vi.fn(),
     leaveTopic: vi.fn(),
   },
@@ -259,7 +253,7 @@ describe('楽観的UI更新', () => {
 
   describe('トピック参加の楽観的更新', () => {
     it('オンライン時: 即座に参加状態になり、P2P接続が実行される', async () => {
-      vi.mocked(p2pApi.joinTopic).mockResolvedValue(undefined);
+      vi.mocked(TauriApi.joinTopic).mockResolvedValue(undefined);
 
       const joinTopic = useTopicStore.getState().joinTopic;
 
@@ -272,7 +266,7 @@ describe('楽観的UI更新', () => {
       await joinPromise;
 
       // P2P接続が実行されたか確認
-      expect(p2pApi.joinTopic).toHaveBeenCalledWith('topic1');
+      expect(TauriApi.joinTopic).toHaveBeenCalledWith('topic1');
     });
 
     it('オフライン時: 即座に参加状態になり、オフラインアクションとして保存される', async () => {
@@ -299,11 +293,11 @@ describe('楽観的UI更新', () => {
       });
 
       // P2P接続が実行されていないことを確認
-      expect(p2pApi.joinTopic).not.toHaveBeenCalled();
+      expect(TauriApi.joinTopic).not.toHaveBeenCalled();
     });
 
     it('エラー時: 参加状態がロールバックされる', async () => {
-      vi.mocked(p2pApi.joinTopic).mockRejectedValue(new Error('接続エラー'));
+      vi.mocked(TauriApi.joinTopic).mockRejectedValue(new Error('接続エラー'));
 
       const joinTopic = useTopicStore.getState().joinTopic;
 
@@ -324,7 +318,7 @@ describe('楽観的UI更新', () => {
     });
 
     it('オンライン時: 即座に離脱状態になり、P2P切断が実行される', async () => {
-      vi.mocked(p2pApi.leaveTopic).mockResolvedValue(undefined);
+      vi.mocked(TauriApi.leaveTopic).mockResolvedValue(undefined);
 
       const leaveTopic = useTopicStore.getState().leaveTopic;
 
@@ -337,7 +331,7 @@ describe('楽観的UI更新', () => {
       await leavePromise;
 
       // P2P切断が実行されたか確認
-      expect(p2pApi.leaveTopic).toHaveBeenCalledWith('topic1');
+      expect(TauriApi.leaveTopic).toHaveBeenCalledWith('topic1');
     });
 
     it('オフライン時: 即座に離脱状態になり、オフラインアクションとして保存される', async () => {
@@ -364,11 +358,11 @@ describe('楽観的UI更新', () => {
       });
 
       // P2P切断が実行されていないことを確認
-      expect(p2pApi.leaveTopic).not.toHaveBeenCalled();
+      expect(TauriApi.leaveTopic).not.toHaveBeenCalled();
     });
 
     it('エラー時: 離脱状態がロールバックされる', async () => {
-      vi.mocked(p2pApi.leaveTopic).mockRejectedValue(new Error('切断エラー'));
+      vi.mocked(TauriApi.leaveTopic).mockRejectedValue(new Error('切断エラー'));
 
       const leaveTopic = useTopicStore.getState().leaveTopic;
 

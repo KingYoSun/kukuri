@@ -111,6 +111,14 @@ export class TauriApi {
     await invokeCommandVoid('delete_topic', { request: { id } });
   }
 
+  static async joinTopic(topicId: string): Promise<void> {
+    await invokeCommandVoid('join_topic', { request: { topic_id: topicId } });
+  }
+
+  static async leaveTopic(topicId: string): Promise<void> {
+    await invokeCommandVoid('leave_topic', { request: { topic_id: topicId } });
+  }
+
   // ポスト関連
   static async getPosts(request: GetPostsRequest = {}): Promise<Post[]> {
     return await invokeCommand<Post[]>('get_posts', { request });

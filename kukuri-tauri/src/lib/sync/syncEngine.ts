@@ -1,7 +1,6 @@
 import type { OfflineAction } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 import { TauriApi } from '@/lib/api/tauri';
-import { p2pApi } from '@/lib/api/p2p';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -304,12 +303,12 @@ export class SyncEngine {
         break;
 
       case OfflineActionType.JOIN_TOPIC:
-        await p2pApi.joinTopic(actionData.topicId);
+        await TauriApi.joinTopic(actionData.topicId);
         await nostrSubscribe(actionData.topicId);
         break;
 
       case OfflineActionType.LEAVE_TOPIC:
-        await p2pApi.leaveTopic(actionData.topicId);
+        await TauriApi.leaveTopic(actionData.topicId);
         break;
 
       default:

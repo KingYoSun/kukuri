@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useTopicStore } from '@/stores/topicStore';
 import type { Topic } from '@/stores/types';
-import { p2pApi } from '@/lib/api/p2p';
+import { TauriApi } from '@/lib/api/tauri';
 import * as nostrApi from '@/lib/api/nostr';
 import { errorHandler } from '@/lib/errorHandler';
 
 vi.mock('@/lib/api/tauri');
-vi.mock('@/lib/api/p2p');
 vi.mock('@/lib/api/nostr');
 vi.mock('@/lib/errorHandler');
 
@@ -145,14 +144,14 @@ describe('useTopicStore', () => {
       const topicId = 'test-topic-1';
       const { joinTopic } = useTopicStore.getState();
 
-      vi.mocked(p2pApi.joinTopic).mockResolvedValue(undefined);
+      vi.mocked(TauriApi.joinTopic).mockResolvedValue(undefined);
       vi.mocked(nostrApi.subscribeToTopic).mockResolvedValue(undefined);
 
       await joinTopic(topicId);
 
       const { joinedTopics } = useTopicStore.getState();
       expect(joinedTopics).toContain(topicId);
-      expect(p2pApi.joinTopic).toHaveBeenCalledWith(topicId);
+      expect(TauriApi.joinTopic).toHaveBeenCalledWith(topicId);
       expect(nostrApi.subscribeToTopic).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(500);
@@ -170,7 +169,7 @@ describe('useTopicStore', () => {
 
       await joinTopic(topicId);
 
-      expect(p2pApi.joinTopic).not.toHaveBeenCalled();
+      expect(TauriApi.joinTopic).not.toHaveBeenCalled();
       expect(nostrApi.subscribeToTopic).not.toHaveBeenCalled();
     });
 
@@ -179,7 +178,7 @@ describe('useTopicStore', () => {
       const { joinTopic } = useTopicStore.getState();
 
       const error = new Error('P2P connection failed');
-      vi.mocked(p2pApi.joinTopic).mockRejectedValue(error);
+      vi.mocked(TauriApi.joinTopic).mockRejectedValue(error);
 
       await expect(joinTopic(topicId)).rejects.toThrow('P2P connection failed');
 
@@ -201,7 +200,7 @@ describe('useTopicStore', () => {
       const topicId = 'test-topic-1';
       const { joinTopic } = useTopicStore.getState();
 
-      vi.mocked(p2pApi.joinTopic).mockResolvedValue(undefined);
+      vi.mocked(TauriApi.joinTopic).mockResolvedValue(undefined);
       const nostrError = new Error('Nostr subscription failed');
       vi.mocked(nostrApi.subscribeToTopic).mockRejectedValue(nostrError);
 
@@ -232,13 +231,13 @@ describe('useTopicStore', () => {
         joinedTopics: [topicId],
       });
 
-      vi.mocked(p2pApi.leaveTopic).mockResolvedValue(undefined);
+      vi.mocked(TauriApi.leaveTopic).mockResolvedValue(undefined);
 
       await leaveTopic(topicId);
 
       const { joinedTopics } = useTopicStore.getState();
       expect(joinedTopics).not.toContain(topicId);
-      expect(p2pApi.leaveTopic).toHaveBeenCalledWith(topicId);
+      expect(TauriApi.leaveTopic).toHaveBeenCalledWith(topicId);
     });
 
     it('参加していないトピックからは離脱しない', async () => {
@@ -247,7 +246,7 @@ describe('useTopicStore', () => {
 
       await leaveTopic(topicId);
 
-      expect(p2pApi.leaveTopic).not.toHaveBeenCalled();
+      expect(TauriApi.leaveTopic).not.toHaveBeenCalled();
     });
 
     it('P2P切断に失敗した場合、ストアの状態を元に戻す', async () => {
@@ -259,7 +258,7 @@ describe('useTopicStore', () => {
       });
 
       const error = new Error('P2P disconnect failed');
-      vi.mocked(p2pApi.leaveTopic).mockRejectedValue(error);
+      vi.mocked(TauriApi.leaveTopic).mockRejectedValue(error);
 
       await expect(leaveTopic(topicId)).rejects.toThrow('P2P disconnect failed');
 
@@ -296,7 +295,7 @@ describe('useTopicStore', () => {
         currentTopic: topic,
       });
 
-      vi.mocked(p2pApi.leaveTopic).mockResolvedValue(undefined);
+      vi.mocked(TauriApi.leaveTopic).mockResolvedValue(undefined);
 
       await leaveTopic(topicId);
 

@@ -98,9 +98,21 @@ pub async fn join_topic(
     request: JoinTopicRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     let user_pubkey = ensure_authenticated(&state).await?;
+    let topic_id = request.topic_id.clone();
     let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.join_topic(request, &user_pubkey).await;
-    Ok(ApiResponse::from_result(result))
+    match handler.join_topic(request, &user_pubkey).await {
+        Ok(_) => {
+            if let Err(e) = state.ensure_ui_subscription(&topic_id).await {
+                tracing::warn!(
+                    "Failed to ensure UI subscription for {}: {}",
+                    topic_id,
+                    e
+                );
+            }
+            Ok(ApiResponse::success(()))
+        }
+        Err(err) => Ok(ApiResponse::from_app_error(err)),
+    }
 }
 
 /// トピックから離脱する
@@ -110,9 +122,21 @@ pub async fn leave_topic(
     request: JoinTopicRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     let user_pubkey = ensure_authenticated(&state).await?;
+    let topic_id = request.topic_id.clone();
     let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.leave_topic(request, &user_pubkey).await;
-    Ok(ApiResponse::from_result(result))
+    match handler.leave_topic(request, &user_pubkey).await {
+        Ok(_) => {
+            if let Err(e) = state.stop_ui_subscription(&topic_id).await {
+                tracing::warn!(
+                    "Failed to stop UI subscription for {}: {}",
+                    topic_id,
+                    e
+                );
+            }
+            Ok(ApiResponse::success(()))
+        }
+        Err(err) => Ok(ApiResponse::from_app_error(err)),
+    }
 }
 
 /// トピックの統計情報を取得する

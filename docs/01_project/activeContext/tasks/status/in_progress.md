@@ -182,8 +182,9 @@
 - [x] PostService の `nostr_sdk::Keys` 依存を共有ファクトリ＋EventService 経由へ集約し、イベント生成経路を統一する（`phase5_dependency_inventory_template.md:19`）。
   - 2025年10月26日: `PostService` の作成/反応/削除/再送フローを EventService 経由に統一し、`EventGateway` を通じた Nostr 送信へ切替。ブックマーク/同期テストは Docker Rust テストでグリーン。
   - 2025年10月27日: `PostCache` ポートを導入して `PostService` からインフラ実装を切り離し、`AppState` で DI を更新。publish 失敗時のキャッシュ保持と同期成功時の整合性を検証するユニットテストを追加。
-- [ ] TopicService の gossip 直接呼び出しを P2PService 経由へ置換し、参加/離脱トリガーをサービス層に集約する（`phase5_dependency_inventory_template.md:20`）。
+- [x] TopicService の gossip 直接呼び出しを P2PService 経由へ置換し、参加/離脱トリガーをサービス層に集約する（`phase5_dependency_inventory_template.md:20`）。
   - 2025年10月26日: GossipService 依存を `P2PServiceTrait` に置換し、UI からの join/leave/broadcast を P2PService に一本化。既存ユニットテストも trait モックに合わせて更新。
+  - 2025年10月27日: フロントエンド（`topicStore` / `syncEngine`）の参加・離脱処理を Tauri `join_topic` / `leave_topic` コマンドへ切替。UI 参加時の `ensure_ui_subscription` / 離脱時の `stop_ui_subscription` をバックエンドで補完し、`pnpm vitest run src/tests/unit/stores/topicStore.test.ts` / `optimisticUpdates.test.ts` / `lib/sync/syncEngine.test.ts` で回帰確認。
 - [ ] SyncService に同期オーケストレータ trait を追加し、PostService/EventService との循環依存を防止する（`phase5_dependency_inventory_template.md:21`）。
   - 2025年10月26日: `SyncParticipant` trait を新設し、Post/Event 両サービスに実装。`SyncService` は trait object を受け取る形へ DI を再編し、AppState 側では Legacy Aggregator から独立して注入。
 - [x] UserService でフォロー/メタデータ取得をドメインユースケースとして抽象化し、Phase 5 の Low 項目を消化する（`phase5_dependency_inventory_template.md:23`）。

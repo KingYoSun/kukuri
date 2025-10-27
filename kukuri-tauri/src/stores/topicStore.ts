@@ -3,7 +3,6 @@ import { create } from 'zustand';
 import type { TopicState, Topic } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
-import { p2pApi } from '@/lib/api/p2p';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { useOfflineStore } from './offlineStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
@@ -200,8 +199,8 @@ export const useTopicStore = create<TopicStore>()(
         }
 
         try {
-          // P2P接続を先に実行
-          await p2pApi.joinTopic(topicId);
+          // バックエンドのサービス層経由で参加処理を実行（P2P join + DB更新）
+          await TauriApi.joinTopic(topicId);
 
           // P2P接続が安定した後にNostrサブスクリプションを開始
           // リレー接続が無効化されている場合でも、将来的な互換性のために呼び出しは維持
@@ -257,8 +256,8 @@ export const useTopicStore = create<TopicStore>()(
         }
 
         try {
-          // P2P切断を実行（Nostrは現在アンサブスクライブAPIがない）
-          await p2pApi.leaveTopic(topicId);
+          // バックエンドのサービス層経由で離脱処理を実行（P2P leave + DB更新）
+          await TauriApi.leaveTopic(topicId);
         } catch (error) {
           // エラーが発生した場合は状態を元に戻す
           set((state) => ({
