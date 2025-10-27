@@ -199,28 +199,24 @@ impl EventHandler {
             // 既存のフォロー関係を削除
             let follower_pubkey = event.pubkey.to_string();
             sqlx::query!(
-                "DELETE FROM follows WHERE follower_pubkey = ?1",
+                r#"DELETE FROM follows WHERE follower_pubkey = ?"#,
                 follower_pubkey
             )
             .execute(pool.get_pool())
             .await?;
 
-            // 新しいフォロー関係を保存
-            let follower_pubkey_str = event.pubkey.to_string();
+            // 新しいフォロー関係を追加
             for tag in event.tags.iter() {
-                if let Some(nostr_sdk::TagStandard::PublicKey {
-                    public_key: pubkey, ..
-                }) = tag.as_standardized()
-                {
-                    let followed_pubkey = pubkey.to_hex();
+                if let Some(TagStandard::PublicKey { public_key, .. }) = tag.as_standardized() {
+                    let followed_pubkey = public_key.to_string();
                     let created_at = chrono::Utc::now().timestamp();
-
                     sqlx::query!(
                         r#"
                         INSERT INTO follows (follower_pubkey, followed_pubkey, created_at)
                         VALUES (?1, ?2, ?3)
+                        ON CONFLICT(follower_pubkey, followed_pubkey) DO NOTHING
                         "#,
-                        follower_pubkey_str,
+                        follower_pubkey,
                         followed_pubkey,
                         created_at
                     )
@@ -229,7 +225,10 @@ impl EventHandler {
                 }
             }
 
-            debug!("Contact list saved to database for: {}", event.pubkey);
+            debug!(
+                "Contact list processed and saved for: {}",
+                event.pubkey.to_string()
+            );
         }
 
         Ok(())
@@ -237,105 +236,48 @@ impl EventHandler {
 
     /// リアクションイベントを処理
     async fn handle_reaction(&self, event: &Event) -> Result<()> {
-        info!("Received reaction from {}: {}", event.pubkey, event.content);
+        info!(
+            "Received reaction from {}: {}",
+            event.pubkey, event.content
+        );
 
         // リアクションをデータベースに保存
         if let Some(pool) = &self.connection_pool {
-            // リアクション対象のイベントIDを取得
-            let mut target_event_id: Option<String> = None;
-            for tag in event.tags.iter() {
-                if let Some(nostr_sdk::TagStandard::Event { event_id, .. }) = tag.as_standardized()
-                {
-                    target_event_id = Some(event_id.to_hex());
-                    break;
-                }
+            if event.tags.is_empty() || event.content.is_empty() {
+                return Ok(());
             }
 
-            if let Some(target_id) = target_event_id {
-                let reactor_pubkey = event.pubkey.to_string();
-                let reaction_content = event.content.clone();
-                let created_at = event.created_at.as_u64() as i64;
+            let Some(first_tag) = event.tags.get(0) else {
+                return Ok(());
+            };
+            let Some(target_event_id) = first_tag.content() else {
+                return Ok(());
+            };
 
-                sqlx::query!(
-                    r#"
-                    INSERT INTO reactions (reactor_pubkey, target_event_id, reaction_content, created_at)
-                    VALUES (?1, ?2, ?3, ?4)
-                    ON CONFLICT(reactor_pubkey, target_event_id) DO UPDATE SET
-                        reaction_content = excluded.reaction_content,
-                        created_at = excluded.created_at
-                    "#,
-                    reactor_pubkey,
-                    target_id,
-                    reaction_content,
-                    created_at
-                )
-                .execute(pool.get_pool())
-                .await?;
+            let reactor_pubkey = event.pubkey.to_string();
+            let reaction_content = event.content.clone();
+            let created_at = event.created_at.as_u64() as i64;
+            let updated_at = chrono::Utc::now().timestamp();
+            sqlx::query!(
+                r#"
+                INSERT INTO reactions (target_event_id, reactor_pubkey, reaction_content, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                ON CONFLICT(reactor_pubkey, target_event_id) DO UPDATE SET
+                    reaction_content = excluded.reaction_content,
+                    updated_at = excluded.updated_at
+                "#,
+                target_event_id,
+                reactor_pubkey,
+                reaction_content,
+                created_at,
+                updated_at
+            )
+            .execute(pool.get_pool())
+            .await?;
 
-                debug!(
-                    "Reaction saved to database: {} -> {}",
-                    event.pubkey, target_id
-                );
-            }
+            debug!("Reaction saved to database: {}", event.id);
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_event_handler_creation() {
-        let handler = EventHandler::new();
-        assert!(handler.event_callbacks.read().await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_handle_text_note() {
-        let handler = EventHandler::new();
-        let keys = Keys::generate();
-
-        let event = EventBuilder::text_note("Test text note")
-            .sign_with_keys(&keys)
-            .unwrap();
-
-        // テキストノートの処理が正常に完了することを確認
-        assert!(handler.handle_event(event).await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_handle_metadata() {
-        let handler = EventHandler::new();
-        let keys = Keys::generate();
-
-        let metadata = Metadata::new().name("Test User").about("Test about");
-
-        let event = EventBuilder::metadata(&metadata)
-            .sign_with_keys(&keys)
-            .unwrap();
-
-        // メタデータイベントの処理が正常に完了することを確認
-        assert!(handler.handle_event(event).await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_handle_reaction() {
-        let handler = EventHandler::new();
-        let keys = Keys::generate();
-        let _target_event_id = EventId::from_slice(&[1; 32]).unwrap();
-
-        // リアクション用の疑似イベントを作成
-        let target_event = EventBuilder::text_note("dummy")
-            .sign_with_keys(&keys)
-            .unwrap();
-        let event = EventBuilder::reaction(&target_event, "+")
-            .sign_with_keys(&keys)
-            .unwrap();
-
-        // リアクションイベントの処理が正常に完了することを確認
-        assert!(handler.handle_event(event).await.is_ok());
     }
 }

@@ -2,9 +2,8 @@ use crate::application::ports::{event_topic_store::EventTopicStore, key_manager:
 use crate::application::shared::default_topics::DefaultTopicsRegistry;
 use crate::application::shared::nostr::EventPublisher;
 use crate::infrastructure::database::connection_pool::ConnectionPool;
+use crate::infrastructure::event::{handler::EventHandler, nostr_client_manager::NostrClientManager};
 use crate::infrastructure::p2p::GossipService;
-use crate::modules::event::handler::EventHandler;
-use crate::modules::event::nostr_client::NostrClientManager;
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;

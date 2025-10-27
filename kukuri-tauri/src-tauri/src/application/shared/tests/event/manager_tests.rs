@@ -4,8 +4,8 @@ use super::mocks::TestGossipService;
 use crate::application::ports::key_manager::KeyManager;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::crypto::DefaultKeyManager;
+use crate::infrastructure::event::EventManager;
 use crate::infrastructure::p2p::GossipService;
-use crate::modules::event::manager::EventManager;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 

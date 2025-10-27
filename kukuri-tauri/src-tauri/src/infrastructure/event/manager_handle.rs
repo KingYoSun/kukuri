@@ -1,7 +1,7 @@
 use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::infrastructure::database::connection_pool::ConnectionPool;
+use crate::infrastructure::event::EventManager;
 use crate::infrastructure::p2p::GossipService;
-use crate::modules::event::manager::EventManager;
 use anyhow::Result;
 use async_trait::async_trait;
 use nostr_sdk::Timestamp;
