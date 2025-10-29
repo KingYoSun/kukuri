@@ -3,10 +3,10 @@ use crate::{
     presentation::dto::{
         ApiResponse,
         p2p::{
-            BootstrapConfigResponse, BroadcastRequest, GossipMetricDetailsResponse,
-            GossipMetricsResponse, JoinTopicByNameRequest, JoinTopicByNameResponse,
-            JoinTopicRequest, LeaveTopicRequest, MainlineMetricsResponse, NodeAddressResponse,
-            P2PMetricsResponse, P2PStatusResponse,
+            BootstrapConfigResponse, BootstrapMetricsResponse, BroadcastRequest,
+            GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicByNameRequest,
+            JoinTopicByNameResponse, JoinTopicRequest, LeaveTopicRequest, MainlineMetricsResponse,
+            NodeAddressResponse, P2PMetricsResponse, P2PStatusResponse,
         },
     },
     shared::AppError,
@@ -129,21 +129,53 @@ pub async fn join_topic_by_name(
 #[tauri::command]
 pub async fn get_bootstrap_config() -> Result<ApiResponse<BootstrapConfigResponse>, AppError> {
     use crate::infrastructure::p2p::bootstrap_config;
-    let nodes = bootstrap_config::load_user_bootstrap_nodes();
-    let mode = if nodes.is_empty() {
+    let user_nodes = bootstrap_config::load_user_bootstrap_nodes();
+    let selection = bootstrap_config::load_effective_bootstrap_nodes();
+    let env_locked = bootstrap_config::load_env_bootstrap_nodes().is_some();
+    let mode = if env_locked {
+        "custom".to_string()
+    } else if user_nodes.is_empty() {
         "default".to_string()
     } else {
         "custom".to_string()
     };
+    let source = match selection.source {
+        crate::shared::config::BootstrapSource::Env => "env",
+        crate::shared::config::BootstrapSource::User => "user",
+        crate::shared::config::BootstrapSource::Bundle => "bundle",
+        crate::shared::config::BootstrapSource::Fallback => "fallback",
+        crate::shared::config::BootstrapSource::None => "none",
+    }
+    .to_string();
+
     Ok(ApiResponse::success(BootstrapConfigResponse {
         mode,
-        nodes,
+        nodes: user_nodes,
+        effective_nodes: selection.nodes,
+        source,
+        env_locked,
     }))
 }
 
 #[tauri::command]
 pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<ApiResponse<()>, AppError> {
     use crate::infrastructure::p2p::bootstrap_config;
+
+    if bootstrap_config::load_env_bootstrap_nodes().is_some() {
+        return Err(AppError::ConfigurationError(
+            "Environment override is enabled; bootstrap nodes are read-only".to_string(),
+        ));
+    }
+
+    for node in &nodes {
+        if !node.contains('@') {
+            return Err(AppError::ConfigurationError(format!(
+                "Invalid bootstrap node format (expected node_id@host:port): {}",
+                node
+            )));
+        }
+    }
+
     bootstrap_config::save_user_bootstrap_nodes(&nodes)
         .map_err(|e| AppError::ConfigurationError(e.to_string()))?;
     Ok(ApiResponse::success(()))
@@ -152,6 +184,13 @@ pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<ApiResponse<()>, 
 #[tauri::command]
 pub async fn clear_bootstrap_nodes() -> Result<ApiResponse<()>, AppError> {
     use crate::infrastructure::p2p::bootstrap_config;
+
+    if bootstrap_config::load_env_bootstrap_nodes().is_some() {
+        return Err(AppError::ConfigurationError(
+            "Environment override is enabled; bootstrap nodes are read-only".to_string(),
+        ));
+    }
+
     bootstrap_config::clear_user_bootstrap_nodes()
         .map_err(|e| AppError::ConfigurationError(e.to_string()))?;
     Ok(ApiResponse::success(()))
@@ -191,6 +230,14 @@ pub async fn get_p2p_metrics() -> Result<ApiResponse<P2PMetricsResponse>, AppErr
             reconnect_failures: snap.mainline.reconnect_failures,
             last_reconnect_success_ms: snap.mainline.last_reconnect_success_ms,
             last_reconnect_failure_ms: snap.mainline.last_reconnect_failure_ms,
+            bootstrap: BootstrapMetricsResponse {
+                env_uses: snap.mainline.bootstrap.env_uses,
+                user_uses: snap.mainline.bootstrap.user_uses,
+                bundle_uses: snap.mainline.bootstrap.bundle_uses,
+                fallback_uses: snap.mainline.bootstrap.fallback_uses,
+                last_source: snap.mainline.bootstrap.last_source,
+                last_applied_ms: snap.mainline.bootstrap.last_applied_ms,
+            },
         },
     };
     Ok(ApiResponse::success(response))

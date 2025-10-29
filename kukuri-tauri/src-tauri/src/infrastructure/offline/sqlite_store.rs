@@ -35,10 +35,7 @@ impl SqliteOfflinePersistence {
         &self.pool
     }
 
-    pub async fn ensure_action_in_sync_queue(
-        &self,
-        action: &OfflineActionRecord,
-    ) -> Result<bool, AppError> {
+    pub async fn enqueue_if_missing(&self, action: &OfflineActionRecord) -> Result<bool, AppError> {
         let payload = payload_to_string(&action.payload)?;
 
         let existing = sqlx::query(
@@ -506,6 +503,26 @@ impl OfflinePersistence for SqliteOfflinePersistence {
 
         Ok(())
     }
+
+    async fn enqueue_if_missing(&self, action: &OfflineActionRecord) -> Result<bool, AppError> {
+        SqliteOfflinePersistence::enqueue_if_missing(self, action).await
+    }
+
+    async fn pending_sync_items(&self) -> Result<Vec<SyncQueueItem>, AppError> {
+        SqliteOfflinePersistence::list_pending_sync_queue(self).await
+    }
+
+    async fn stale_cache_entries(&self) -> Result<Vec<CacheMetadataRecord>, AppError> {
+        SqliteOfflinePersistence::list_stale_cache_entries(self).await
+    }
+
+    async fn unconfirmed_updates(&self) -> Result<Vec<OptimisticUpdateRecord>, AppError> {
+        SqliteOfflinePersistence::list_unconfirmed_updates(self).await
+    }
+
+    async fn sync_conflicts(&self) -> Result<Vec<SyncStatusRecord>, AppError> {
+        SqliteOfflinePersistence::list_sync_conflicts(self).await
+    }
 }
 
 #[cfg(test)]
@@ -585,17 +602,11 @@ mod tests {
             .unwrap();
         let action = unsynced.first().unwrap();
 
-        let inserted = persistence
-            .ensure_action_in_sync_queue(action)
-            .await
-            .unwrap();
+        let inserted = persistence.enqueue_if_missing(action).await.unwrap();
         assert!(inserted);
 
         // 重複登録は false を返す
-        let duplicated = persistence
-            .ensure_action_in_sync_queue(action)
-            .await
-            .unwrap();
+        let duplicated = persistence.enqueue_if_missing(action).await.unwrap();
         assert!(!duplicated);
 
         let pending = persistence.list_pending_sync_queue().await.unwrap();

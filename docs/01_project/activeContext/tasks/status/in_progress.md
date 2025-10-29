@@ -222,20 +222,25 @@
   - 2025年10月27日: LegacyEventManagerGateway から `infrastructure::p2p::metrics` へ成功/失敗を送出し、Publish/Reaction/Delete/Repost/Metadata の各 API で Gossip 成功率を可視化。`modules/event/manager/tests` を `application/shared/tests/event/manager_tests.rs` へ移設し、Gateway/Publisher/DefaultTopics の結合ケースを crate 内ユーティリティで共通化。NIP-65 Relay List DTO (`Nip65RelayDto`) と `RelayEndpoint` 値オブジェクトを追加し、Mapper で Relay 配列を JSON/Domain 双方向に変換する単体テストを整備。
 
 ### P2P / DHT / Offline
+### P2P / DHT / Offline
 
 - [x] `dht_bootstrap.rs::leave_topic` とアプリコマンドを接続し、iroh-gossip quit の意味整理を完了する（`iroh-native-dht-plan.md:64` / `185` / `355`）。
 - [x] 同様に broadcast API の連動仕様を固め、未参加時の自動 join 挙動を定義する（`iroh-native-dht-plan.md:64` / `185` / `356`）。
-- [ ] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI 更新）方針を決めて記録する（`iroh-native-dht-plan.md:192`）。
-- [ ] `KUKURI_ENABLE_{DHT,DNS,LOCAL}` / `KUKURI_BOOTSTRAP_PEERS` の環境変数トグルと UI 上書きルールを整理し、実装へ反映する（`iroh-native-dht-plan.md:197-199`）。
-- [ ] Offline再索引ジョブの未決事項を確定する（`iroh-native-dht-plan.md:272-275`）
-  - [ ] `OfflineManager` に `enqueue_if_missing` / `get_pending_sync_items` などの補助メソッドを実装。
-  - [ ] P2P 接続状態の購読 API（イベントストリーム or P2PState watch）を選定する。
-  - [ ] フロントエンドでの再索引用イベントハンドラ責務（store 直更新 vs TanStack Query）を決定する。
-- [ ] `recovery.rs` を追加し、OfflineService 結合テストを Runbook 手順へ組み込む（`p2p_mainline_runbook.md:85-86`）。
-- [ ] GitHub Actions 向け iroh バイナリのキャッシュ戦略を整備し、ダウンロード時間を短縮する（`p2p_mainline_runbook.md:86-87`）。
+- [x] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI 更新）方針を決めて記録する（`iroh-native-dht-plan.md:192`）。
+  - 2025年10月30日: `load_effective_bootstrap_nodes` で優先度を統一し、Runbook に署名手順・配布チェックリストを追記。UI は環境変数指定時にロック表示。
+- [x] `KUKURI_ENABLE_{DHT,DNS,LOCAL}` / `KUKURI_BOOTSTRAP_PEERS` の環境変数トグルと UI 上書きルールを整理し、実装へ反映する（`iroh-native-dht-plan.md:197-199`）。
+  - 2025年10月30日: `BootstrapConfigResponse` に `effective_nodes` / `env_locked` / `source` を追加し、設定パネルでソースが確認できるよう整備。
+- [x] Offline再索引ジョブの未決事項を確定する（`iroh-native-dht-plan.md:272-275`）。
+  - 2025年10月30日: `OfflinePersistence` に補助 API を追加し、`OfflineReindexJob` はトレイト経由で動作。`state.rs` で `p2p_event_tx` ブロードキャストを監視し再接続後にトリガー。
+  - 2025年10月30日: フロントエンドの `offlineStore` イベントハンドラを確認し、再索引完了時に保留アクションを再読込する動作を維持。
+- [x] `recovery.rs` を追加し、OfflineService 結合テストを Runbook 手順へ組み込む（`p2p_mainline_runbook.md:85-89`）。
+  - 2025年10月30日: `tests/integration/offline/recovery.rs` で再索引レポートとキュー再投入を検証し、Runbook にテスト概要を追記。
+- [x] GitHub Actions 向け iroh バイナリのキャッシュ戦略を整備し、ダウンロード時間を短縮する（`p2p_mainline_runbook.md:89-98`）。
+  - 2025年10月30日: Runbook に `actions/cache@v4` の設定とローカル `--use-cache` オプションを記載。
 - [ ] NIPs 準拠イベントスキーマ（NIP-01/10/19/30078 等）の検証/テスト方針を確定する（`iroh-native-dht-plan.md:357`）。
-- [ ] DHT メトリクス/ログ（tracing レベル、カウンタ）を拡充し、Runbook へ記載する（`iroh-native-dht-plan.md:358`）。
-
+  - 2025年10月30日: Runbook の TODO に移管（Phase 6 で受信バリデーションを整理）。
+- [x] DHT メトリクス/ログ（tracing レベル、カウンタ）を拡充し、Runbook へ記載する（`iroh-native-dht-plan.md:358`）。
+  - 2025年10月30日: `BootstrapMetricsSnapshot` を追加し、P2PDebugPanel で環境/ユーザー/同梱/フォールバックの適用回数と最終ソースを表示。
 ### テスト / CI
 
 - [ ] EventManager 結合テストを `tests/integration/event/manager` に追加し、AppHandle 非依存シナリオを `./scripts/test-docker.ps1 rust --test event_manager_integration` から呼び出せるよう CI / Runbook / `phase5_test_inventory.md` を更新する（`phase5_test_inventory.md:10`）。

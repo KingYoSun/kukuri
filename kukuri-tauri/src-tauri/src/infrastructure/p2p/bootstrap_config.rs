@@ -1,4 +1,5 @@
-/// ブートストラップノード設定モジュール
+﻿/// ブートストラップノード設定モジュール
+use crate::shared::config::BootstrapSource;
 use crate::shared::error::AppError;
 use dirs;
 use iroh::{NodeAddr, NodeId};
@@ -7,7 +8,7 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootstrapConfig {
@@ -19,6 +20,12 @@ pub struct BootstrapConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentConfig {
     pub description: String,
+    pub nodes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BootstrapSelection {
+    pub source: BootstrapSource,
     pub nodes: Vec<String>,
 }
 
@@ -119,6 +126,86 @@ impl BootstrapConfig {
         }
 
         out
+    }
+}
+
+fn parse_bootstrap_list(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// 環境変数 `KUKURI_BOOTSTRAP_PEERS` に設定されたブートストラップノードを取得する
+pub fn load_env_bootstrap_nodes() -> Option<Vec<String>> {
+    match std::env::var("KUKURI_BOOTSTRAP_PEERS") {
+        Ok(raw) => {
+            let nodes = parse_bootstrap_list(&raw);
+            if nodes.is_empty() { None } else { Some(nodes) }
+        }
+        Err(_) => None,
+    }
+}
+
+fn format_node_addrs(node_addr: &NodeAddr) -> Vec<String> {
+    let node_id = node_addr.node_id.to_string();
+    let direct: Vec<_> = node_addr.direct_addresses().collect();
+    if direct.is_empty() {
+        vec![node_id]
+    } else {
+        direct
+            .into_iter()
+            .map(|addr| format!("{node_id}@{addr}"))
+            .collect()
+    }
+}
+
+fn load_bundle_bootstrap_strings() -> Vec<String> {
+    match load_bootstrap_node_addrs() {
+        Ok(node_addrs) => node_addrs
+            .iter()
+            .flat_map(format_node_addrs)
+            .collect::<Vec<_>>(),
+        Err(err) => {
+            warn!("Failed to load bundled bootstrap nodes: {}", err);
+            Vec::new()
+        }
+    }
+}
+
+/// UI・設定ファイル・環境変数を考慮したブートストラップノードの決定結果を返す。
+/// 優先順位: 環境変数 > ユーザー設定 > 同梱JSON > なし
+pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
+    if let Some(nodes) = load_env_bootstrap_nodes() {
+        trace!("Using bootstrap peers from environment variable");
+        return BootstrapSelection {
+            source: BootstrapSource::Env,
+            nodes,
+        };
+    }
+
+    let user_nodes = load_user_bootstrap_nodes();
+    if !user_nodes.is_empty() {
+        trace!("Using bootstrap peers from user configuration");
+        return BootstrapSelection {
+            source: BootstrapSource::User,
+            nodes: user_nodes,
+        };
+    }
+
+    let bundle_nodes = load_bundle_bootstrap_strings();
+    if !bundle_nodes.is_empty() {
+        trace!("Using bootstrap peers from bundled configuration");
+        return BootstrapSelection {
+            source: BootstrapSource::Bundle,
+            nodes: bundle_nodes,
+        };
+    }
+
+    BootstrapSelection {
+        source: BootstrapSource::None,
+        nodes: Vec::new(),
     }
 }
 

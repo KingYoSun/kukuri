@@ -1,5 +1,22 @@
 use serde::{Deserialize, Serialize};
 
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BootstrapSource {
+    Env,
+    User,
+    Bundle,
+    Fallback,
+    None,
+}
+
+impl Default for BootstrapSource {
+    fn default() -> Self {
+        BootstrapSource::None
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub database: DatabaseConfig,
@@ -25,6 +42,8 @@ pub struct NetworkConfig {
     pub enable_dht: bool,
     pub enable_dns: bool,
     pub enable_local: bool,
+    #[serde(default)]
+    pub bootstrap_source: BootstrapSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +77,7 @@ impl Default for AppConfig {
                 enable_dht: true,
                 enable_dns: true,
                 enable_local: false,
+                bootstrap_source: BootstrapSource::None,
             },
             sync: SyncConfig {
                 auto_sync: true,
@@ -78,6 +98,7 @@ impl AppConfig {
     pub fn from_env() -> Self {
         // 既定値
         let mut cfg = Self::default();
+        let mut bootstrap_source = BootstrapSource::None;
 
         // ネットワーク設定の環境変数反映
         if let Ok(v) = std::env::var("KUKURI_ENABLE_DHT") {
@@ -98,8 +119,11 @@ impl AppConfig {
                 .collect();
             if !peers.is_empty() {
                 cfg.network.bootstrap_peers = peers;
+                bootstrap_source = BootstrapSource::Env;
             }
         }
+
+        cfg.network.bootstrap_source = bootstrap_source;
 
         cfg
     }

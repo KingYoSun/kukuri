@@ -1,6 +1,5 @@
-use crate::application::ports::offline_store::OfflinePersistence;
+﻿use crate::application::ports::offline_store::OfflinePersistence;
 use crate::domain::entities::offline::{OfflineActionFilter, OfflineActionRecord};
-use crate::infrastructure::offline::sqlite_store::SqliteOfflinePersistence;
 use crate::shared::error::AppError;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -52,14 +51,14 @@ pub struct OfflineReindexReport {
 
 pub struct OfflineReindexJob {
     event_emitter: Option<Arc<dyn ReindexEventEmitter>>,
-    persistence: Arc<SqliteOfflinePersistence>,
+    persistence: Arc<dyn OfflinePersistence>,
     gate: Mutex<()>,
 }
 
 impl OfflineReindexJob {
     pub fn create(
         app_handle: Option<tauri::AppHandle>,
-        persistence: Arc<SqliteOfflinePersistence>,
+        persistence: Arc<dyn OfflinePersistence>,
     ) -> Arc<Self> {
         let emitter = app_handle
             .map(|handle| Arc::new(TauriEventEmitter { handle }) as Arc<dyn ReindexEventEmitter>);
@@ -68,7 +67,7 @@ impl OfflineReindexJob {
 
     pub fn with_emitter(
         event_emitter: Option<Arc<dyn ReindexEventEmitter>>,
-        persistence: Arc<SqliteOfflinePersistence>,
+        persistence: Arc<dyn OfflinePersistence>,
     ) -> Arc<Self> {
         Arc::new(Self {
             event_emitter,
@@ -100,10 +99,10 @@ impl OfflineReindexJob {
             }
         }
 
-        let pending_queue = self.persistence.list_pending_sync_queue().await?;
-        let stale_cache = self.persistence.list_stale_cache_entries().await?;
-        let optimistic_updates = self.persistence.list_unconfirmed_updates().await?;
-        let conflicts = self.persistence.list_sync_conflicts().await?;
+        let pending_queue = self.persistence.pending_sync_items().await?;
+        let stale_cache = self.persistence.stale_cache_entries().await?;
+        let optimistic_updates = self.persistence.unconfirmed_updates().await?;
+        let conflicts = self.persistence.sync_conflicts().await?;
 
         let report = OfflineReindexReport {
             offline_action_count: unsynced.len(),
@@ -133,7 +132,7 @@ impl OfflineReindexJob {
     }
 
     async fn ensure_action_in_queue(&self, action: &OfflineActionRecord) -> Result<bool, AppError> {
-        self.persistence.ensure_action_in_sync_queue(action).await
+        self.persistence.enqueue_if_missing(action).await
     }
 
     async fn run_guarded(self: Arc<Self>) {
@@ -186,11 +185,12 @@ mod tests {
     use crate::domain::entities::offline::{OfflineActionDraft, OfflineActionFilter};
     use crate::domain::value_objects::event_gateway::PublicKey;
     use crate::domain::value_objects::offline::{EntityId, OfflineActionType, OfflinePayload};
+    use crate::infrastructure::offline::sqlite_store::SqliteOfflinePersistence;
     use sqlx::sqlite::SqlitePoolOptions;
 
     const PUBKEY: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-    async fn setup_persistence() -> Arc<SqliteOfflinePersistence> {
+    async fn setup_persistence() -> Arc<dyn OfflinePersistence> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")

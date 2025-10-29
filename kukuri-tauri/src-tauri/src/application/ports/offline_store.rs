@@ -1,6 +1,7 @@
 use crate::domain::entities::offline::{
-    CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionDraft, OfflineActionFilter,
-    OfflineActionRecord, OptimisticUpdateDraft, SavedOfflineAction, SyncQueueItemDraft, SyncResult,
+    CacheMetadataRecord, CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionDraft,
+    OfflineActionFilter, OfflineActionRecord, OptimisticUpdateDraft, OptimisticUpdateRecord,
+    SavedOfflineAction, SyncQueueItem, SyncQueueItemDraft, SyncResult, SyncStatusRecord,
     SyncStatusUpdate,
 };
 use crate::domain::value_objects::event_gateway::PublicKey;
@@ -43,4 +44,14 @@ pub trait OfflinePersistence: Send + Sync {
     async fn cleanup_expired_cache(&self) -> Result<u32, AppError>;
 
     async fn update_sync_status(&self, update: SyncStatusUpdate) -> Result<(), AppError>;
+
+    async fn enqueue_if_missing(&self, action: &OfflineActionRecord) -> Result<bool, AppError>;
+
+    async fn pending_sync_items(&self) -> Result<Vec<SyncQueueItem>, AppError>;
+
+    async fn stale_cache_entries(&self) -> Result<Vec<CacheMetadataRecord>, AppError>;
+
+    async fn unconfirmed_updates(&self) -> Result<Vec<OptimisticUpdateRecord>, AppError>;
+
+    async fn sync_conflicts(&self) -> Result<Vec<SyncStatusRecord>, AppError>;
 }

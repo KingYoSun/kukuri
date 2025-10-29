@@ -1,4 +1,4 @@
-# P2P Mainline Runbook
+﻿# P2P Mainline Runbook
 最終更新日: 2025年10月22日
 
 ## 1. 目的
@@ -11,6 +11,7 @@
 - 必要に応じて `KUKURI_IROH_BIN` で利用する `iroh` バイナリのパスを上書きできる（未設定時は PATH を参照）。
 - Windows 環境では PowerShell 用スクリプト `./scripts/start-bootstrap-nodes.ps1` を用い、テスト前にノード群を起動する。
 
+環境変数で `KUKURI_BOOTSTRAP_PEERS` を指定した場合、設定画面のブートストラップパネルは読み取り専用となり、適用済みノードとソース種別（env/user/bundle/n0）が UI に表示される。ローカルで値を確認したい場合は `pnpm tauri dev` → Settings→「ブートストラップ設定」を開く。
 ### 2.1 推奨環境変数セット（例）
 ```powershell
 $env:ENABLE_P2P_INTEGRATION = "1"
@@ -23,6 +24,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   - `p2p_gossip_smoke.rs`: Gossip 経路のスモークテスト。Phase 5 で `tests/` 配下に再編したテストバイナリ。
   - `p2p_mainline_smoke.rs`: Mainline DHT 経路のスモークテスト。ブートストラップ接続とルーティングの健全性を検証する。
   - `tests/integration/test_p2p_mainline.rs`: P2PService Builder と `DiscoveryOptions` の回帰テスト。2025年10月25日にカスタムディスカバリ override ケースを追加し、Mainline DHT フローの構成が自動検証されるようにした。
+  - `tests/integration/offline` : OfflineService と再索引ジョブの結合テスト（2025年10月30日追加）。`recovery.rs` で再索引レポートとキュー再投入の挙動を確認する。
   - `scripts/docker/run-smoke-tests.sh` / `scripts/test-docker.{sh,ps1}` は両テストを順次実行する構成に統一済みで、旧バイナリへのフォールバックは存在しない。
 
 ### 3.1 共通ユーティリティの活用
@@ -84,6 +86,9 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - PowerShell 版は `./scripts/metrics/export-p2p.ps1 -Pretty` で同じ JSON を出力する。`--output` / `-Output` オプションで保存先を上書き可能。
 - エクスポートされた JSON には Gossip/Mainline 双方のカウンタ・直近タイムスタンプが含まれるため、CI で期待件数との差分を検証したり、進捗レポートに添付する。
 
+### 6.3 iroh バイナリキャッシュ
+- GitHub Actions では `actions/cache@v4` を利用し、`~/.cache/kukuri/iroh`（PowerShell 版は `%LocalAppData%\kukuri\iroh`）をキャッシュする。キーは `iroh-${{ runner.os }}-${{ hashFiles("scripts/install-iroh.ps1") }}` を推奨し、`scripts/install-iroh.{sh,ps1}` でキャッシュヒット時はダウンロードをスキップする。
+- ローカル環境でも `./scripts/install-iroh.ps1 -UseCache`（PowerShell）または `./scripts/install-iroh.sh --use-cache` を使用することで同ディレクトリを再利用し、`docker` テスト前のセットアップ時間を短縮できる。
 ## 7. トラブルシューティング
 - **`STATUS_ENTRYPOINT_NOT_FOUND`**: Windows で iroh バイナリの依存 DLL が見つからない場合に発生。`KUKURI_IROH_BIN` を明示し、`PATH` に `libssl` 等が含まれているか確認。Docker 実行で迂回可能。
 - **ブートストラップ接続失敗**: `KUKURI_BOOTSTRAP_PEERS` の NodeId/ポートを再確認し、ファイアウォールで該当ポートを開放する。
@@ -91,5 +96,8 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - **ログが出力されない**: 既に別のサブスクライバが設定されている可能性。テスト起動前に `RUST_LOG` を設定し、`tracing_subscriber::fmt` 初期化が一度だけ呼ばれているかを確認。
 
 ## 8. 今後の TODO
+- NIP-01/10/19/30078 に沿ったイベントバリデーションテーブルを整備し、受信フィルタの結合テストを追加（Phase 6）。
+- Mainline DHT フォールバックノードの自動ローテーション（署名付きリストと稼働監視）の実装方針を検討。
+
 - 再接続・再索引シナリオ用の `recovery.rs` を実装し、OfflineService との結合テストを追加。
 - iroh バイナリのキャッシュ戦略（GitHub Actions 用）を整備し、ダウンロード時間を短縮する。

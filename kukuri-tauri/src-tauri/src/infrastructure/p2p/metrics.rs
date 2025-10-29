@@ -1,3 +1,4 @@
+use crate::shared::config::BootstrapSource;
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -59,6 +60,12 @@ static MAINLINE_CONNECTION_METRIC: AtomicMetric = AtomicMetric::new();
 static MAINLINE_ROUTING_METRIC: AtomicMetric = AtomicMetric::new();
 static MAINLINE_RECONNECT_METRIC: AtomicMetric = AtomicMetric::new();
 static MAINLINE_CONNECTED_PEERS: AtomicU64 = AtomicU64::new(0);
+static BOOTSTRAP_ENV_COUNT: AtomicU64 = AtomicU64::new(0);
+static BOOTSTRAP_USER_COUNT: AtomicU64 = AtomicU64::new(0);
+static BOOTSTRAP_BUNDLE_COUNT: AtomicU64 = AtomicU64::new(0);
+static BOOTSTRAP_FALLBACK_COUNT: AtomicU64 = AtomicU64::new(0);
+static BOOTSTRAP_LAST_SOURCE: AtomicU64 = AtomicU64::new(BootstrapSource::None as u8 as u64);
+static BOOTSTRAP_LAST_MS: AtomicU64 = AtomicU64::new(UNSET_TS);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GossipMetricDetails {
@@ -99,12 +106,23 @@ pub struct MainlineMetricsSnapshot {
     pub reconnect_failures: u64,
     pub last_reconnect_success_ms: Option<u64>,
     pub last_reconnect_failure_ms: Option<u64>,
+    pub bootstrap: BootstrapMetricsSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct P2PMetricsSnapshot {
     pub gossip: GossipMetricsSnapshot,
     pub mainline: MainlineMetricsSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BootstrapMetricsSnapshot {
+    pub env_uses: u64,
+    pub user_uses: u64,
+    pub bundle_uses: u64,
+    pub fallback_uses: u64,
+    pub last_source: Option<String>,
+    pub last_applied_ms: Option<u64>,
 }
 
 #[inline]
@@ -180,6 +198,26 @@ pub fn record_mainline_reconnect_failure() {
     MAINLINE_RECONNECT_METRIC.record_failure();
 }
 
+pub fn record_bootstrap_source(source: BootstrapSource) {
+    match source {
+        BootstrapSource::Env => {
+            BOOTSTRAP_ENV_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+        BootstrapSource::User => {
+            BOOTSTRAP_USER_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+        BootstrapSource::Bundle => {
+            BOOTSTRAP_BUNDLE_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+        BootstrapSource::Fallback => {
+            BOOTSTRAP_FALLBACK_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+        BootstrapSource::None => {}
+    }
+    BOOTSTRAP_LAST_SOURCE.store(source as u8 as u64, Ordering::Relaxed);
+    BOOTSTRAP_LAST_MS.store(current_unix_ms(), Ordering::Relaxed);
+}
+
 #[allow(dead_code)]
 pub fn reset_all() {
     JOIN_METRIC.reset();
@@ -190,6 +228,12 @@ pub fn reset_all() {
     MAINLINE_ROUTING_METRIC.reset();
     MAINLINE_RECONNECT_METRIC.reset();
     MAINLINE_CONNECTED_PEERS.store(0, Ordering::Relaxed);
+    BOOTSTRAP_ENV_COUNT.store(0, Ordering::Relaxed);
+    BOOTSTRAP_USER_COUNT.store(0, Ordering::Relaxed);
+    BOOTSTRAP_BUNDLE_COUNT.store(0, Ordering::Relaxed);
+    BOOTSTRAP_FALLBACK_COUNT.store(0, Ordering::Relaxed);
+    BOOTSTRAP_LAST_SOURCE.store(BootstrapSource::None as u8 as u64, Ordering::Relaxed);
+    BOOTSTRAP_LAST_MS.store(UNSET_TS, Ordering::Relaxed);
 }
 
 pub fn snapshot() -> GossipMetricsSnapshot {
@@ -215,6 +259,7 @@ pub fn mainline_snapshot() -> MainlineMetricsSnapshot {
     let routing_details = MAINLINE_ROUTING_METRIC.snapshot();
     let reconnect_details = MAINLINE_RECONNECT_METRIC.snapshot();
     let connected_peers = MAINLINE_CONNECTED_PEERS.load(Ordering::Relaxed);
+    let bootstrap = bootstrap_snapshot();
 
     let connection_attempts = connection_details.total + connection_details.failures;
     let routing_attempts = routing_details.total + routing_details.failures;
@@ -243,6 +288,7 @@ pub fn mainline_snapshot() -> MainlineMetricsSnapshot {
         reconnect_failures: reconnect_details.failures,
         last_reconnect_success_ms: reconnect_details.last_success_ms,
         last_reconnect_failure_ms: reconnect_details.last_failure_ms,
+        bootstrap,
     }
 }
 
@@ -250,5 +296,25 @@ pub fn snapshot_full() -> P2PMetricsSnapshot {
     P2PMetricsSnapshot {
         gossip: snapshot(),
         mainline: mainline_snapshot(),
+    }
+}
+
+fn bootstrap_snapshot() -> BootstrapMetricsSnapshot {
+    let last_source_code = BOOTSTRAP_LAST_SOURCE.load(Ordering::Relaxed);
+    let last_source = match last_source_code as u8 {
+        x if x == BootstrapSource::Env as u8 => Some("env".to_string()),
+        x if x == BootstrapSource::User as u8 => Some("user".to_string()),
+        x if x == BootstrapSource::Bundle as u8 => Some("bundle".to_string()),
+        x if x == BootstrapSource::Fallback as u8 => Some("fallback".to_string()),
+        _ => None,
+    };
+
+    BootstrapMetricsSnapshot {
+        env_uses: BOOTSTRAP_ENV_COUNT.load(Ordering::Relaxed),
+        user_uses: BOOTSTRAP_USER_COUNT.load(Ordering::Relaxed),
+        bundle_uses: BOOTSTRAP_BUNDLE_COUNT.load(Ordering::Relaxed),
+        fallback_uses: BOOTSTRAP_FALLBACK_COUNT.load(Ordering::Relaxed),
+        last_source,
+        last_applied_ms: to_option(BOOTSTRAP_LAST_MS.load(Ordering::Relaxed)),
     }
 }

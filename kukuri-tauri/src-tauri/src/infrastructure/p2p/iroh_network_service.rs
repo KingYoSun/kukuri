@@ -93,6 +93,7 @@ impl IrohNetworkService {
     }
 
     async fn apply_bootstrap_peers_from_config(&self) {
+        let mut success_count = 0usize;
         for peer in &self.network_config.bootstrap_peers {
             let trimmed = peer.trim();
             if trimmed.is_empty() {
@@ -100,11 +101,18 @@ impl IrohNetworkService {
             }
 
             match self.add_peer(trimmed).await {
-                Ok(_) => tracing::info!("Connected to bootstrap peer from config: {}", trimmed),
+                Ok(_) => {
+                    success_count += 1;
+                    tracing::info!("Connected to bootstrap peer from config: {}", trimmed);
+                }
                 Err(err) => {
                     tracing::warn!("Failed to connect to bootstrap peer '{}': {}", trimmed, err)
                 }
             }
+        }
+
+        if success_count > 0 {
+            super::metrics::record_bootstrap_source(self.network_config.bootstrap_source);
         }
     }
 

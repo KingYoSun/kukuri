@@ -57,6 +57,23 @@ export function P2PDebugPanel() {
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString();
   };
 
+  const bootstrapSourceLabel = (source: string | null | undefined) => {
+    switch (source) {
+      case 'env':
+        return '環境変数';
+      case 'user':
+        return 'ユーザー設定';
+      case 'bundle':
+        return '同梱設定';
+      case 'fallback':
+        return 'フォールバック';
+      case 'none':
+        return 'n0 デフォルト';
+      default:
+        return '未適用';
+    }
+  };
+
   const renderMetricCard = (
     label: string,
     total: number,
@@ -316,7 +333,7 @@ export function P2PDebugPanel() {
                             {metrics.mainline.reconnect_failures}）
                           </span>
                         </div>
-                        <div className="space-y-0.5">
+                      <div className="space-y-0.5">
                           <span className="text-muted-foreground">最終再接続</span>
                           <span>
                             成功: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
@@ -325,6 +342,24 @@ export function P2PDebugPanel() {
                             失敗: {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}
                           </span>
                         </div>
+                      </div>
+                      <Separator className="my-2" />
+                      <div className="space-y-0.5 text-muted-foreground">
+                        <span className="text-muted-foreground">ブートストラップ適用状況</span>
+                        <span>
+                          環境 {metrics.mainline.bootstrap.env_uses} / ユーザー{' '}
+                          {metrics.mainline.bootstrap.user_uses} / 同梱{' '}
+                          {metrics.mainline.bootstrap.bundle_uses} / フォールバック{' '}
+                          {metrics.mainline.bootstrap.fallback_uses}
+                        </span>
+                        <span>
+                          最終ソース:{' '}
+                          {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
+                        </span>
+                        <span>
+                          適用時刻:{' '}
+                          {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
+                        </span>
                       </div>
                     </div>
                   </div>

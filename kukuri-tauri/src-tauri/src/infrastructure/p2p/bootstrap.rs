@@ -1,6 +1,6 @@
 use crate::application::services::p2p_service::{P2PService, P2PStack};
 use crate::domain::p2p::P2PEvent;
-use crate::infrastructure::p2p::metrics;
+use crate::infrastructure::p2p::{bootstrap_config, metrics};
 use crate::shared::config::AppConfig;
 use anyhow::Context;
 use base64::prelude::*;
@@ -34,7 +34,16 @@ impl P2PBootstrapper {
             tracing::info!("App data directory already exists");
         }
 
-        let config = AppConfig::from_env();
+        let mut config = AppConfig::from_env();
+        let selection = bootstrap_config::load_effective_bootstrap_nodes();
+        config.network.bootstrap_peers = selection.nodes.clone();
+        config.network.bootstrap_source = selection.source;
+        tracing::info!(
+            "Bootstrap peers source={:?} count={}",
+            selection.source,
+            selection.nodes.len()
+        );
+
         if let Err(err) = config.validate() {
             return Err(anyhow::anyhow!(
                 "Invalid application configuration: {}",

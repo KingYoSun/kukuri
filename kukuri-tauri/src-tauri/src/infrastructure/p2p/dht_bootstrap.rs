@@ -1,6 +1,7 @@
-//! DHT基盤のブートストラップ実装
+﻿//! DHT基盤のブートストラップ実装
 //! irohのビルトインDHTディスカバリーを使用した分散型ピア発見
 use super::utils::parse_node_addr;
+use crate::shared::config::BootstrapSource;
 use crate::shared::error::AppError;
 use iroh::Endpoint;
 use iroh_gossip::{
@@ -316,6 +317,8 @@ pub mod fallback {
             ));
         }
 
+        metrics::record_bootstrap_source(BootstrapSource::Fallback);
+
         Ok(connected_nodes)
     }
 
@@ -348,6 +351,8 @@ pub mod fallback {
                 "Failed to connect to nodes from bootstrap_nodes.json".to_string(),
             ));
         }
+
+        metrics::record_bootstrap_source(BootstrapSource::Fallback);
 
         Ok(connected)
     }

@@ -40,6 +40,15 @@ export interface GossipMetricsSection {
   receive_details: GossipMetricDetails;
 }
 
+export interface BootstrapMetrics {
+  env_uses: number;
+  user_uses: number;
+  bundle_uses: number;
+  fallback_uses: number;
+  last_source: string | null;
+  last_applied_ms: number | null;
+}
+
 export interface MainlineMetrics {
   connected_peers: number;
   connection_attempts: number;
@@ -58,6 +67,7 @@ export interface MainlineMetrics {
   reconnect_failures: number;
   last_reconnect_success_ms: number | null;
   last_reconnect_failure_ms: number | null;
+  bootstrap: BootstrapMetrics;
 }
 
 export interface P2PMetrics {
@@ -68,6 +78,9 @@ export interface P2PMetrics {
 export interface BootstrapConfig {
   mode: 'default' | 'custom';
   nodes: string[];
+  effective_nodes: string[];
+  source: 'env' | 'user' | 'bundle' | 'fallback' | 'none';
+  env_locked: boolean;
 }
 
 export const p2pApi = {

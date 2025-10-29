@@ -1,6 +1,10 @@
-# Kukuri: irohビルトインDHTディスカバリー活用計画
+﻿# Kukuri: irohビルトインDHTディスカバリー活用計画
+  - 追記: `nprofile`/`nevent` は bech32 decode + TLV(0x00=32byte)を必須化（最小）。
+**未決事項（次ステップで確定）**
+- 2025年10月30日: `OfflinePersistence` に補助メソッドを追加済み。`OfflineReindexJob` はトレイト経由で動作し、`tests/integration/offline/recovery.rs` で OfflineService との結合ケースを検証。
+- 2025年10月30日: P2P 接続検知は `p2p_event_tx` ブロードキャストを正式採用。`state.rs` で `NetworkConnected` を監視し、再索引ジョブと EventService の復元処理をトリガーする。
+- 2025年10月30日: フロントエンドのイベントハンドラは `offlineStore` で `offline://reindex_complete` / `offline://reindex_failed` を処理し、未同期アクションの再読込と通知を行う実装を維持。
 
-## 最終更新日: 2025年10月20日
 
 ## 1. 背景と変更理由
 
@@ -115,6 +119,7 @@ pub struct NetworkConfig {
 }
 ```
 
+アプリ起動時は `load_effective_bootstrap_nodes` を介してブートストラップ候補を決定し、`環境変数 > ユーザー設定 > 同梱JSON > n0` の順で優先度を判定する。選択結果は `BootstrapSource` として `NetworkConfig` に保持し、UI では `effective_nodes` / `source` / `env_locked` で可視化する。環境変数で固定された場合は設定画面を読み取り専用に切り替える。
 #### 動的エンドポイント構築（設計例）
 ```rust
 pub async fn create_endpoint(
@@ -189,14 +194,17 @@ pub async fn bootstrap_with_fallback(
 - [x] config.rs - DHT関連設定の追加（有効化フラグ、優先度）
 
 ### 4.3 運用/観測タスクの整理（引き継ぎメモ）
-- [ ] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI更新）方針を確定する。
+- [x] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI更新）方針を確定する。
+  - 2025年10月30日: `load_effective_bootstrap_nodes` を追加し、優先度を `環境変数 > ユーザー設定 > 同梱JSON > n0` に統一。UI は環境変数が指定された場合にロック表示（`env_locked`）とソース表示を行う。
+  - 2025年10月30日: `docs/03_implementation/p2p_mainline_runbook.md` に配布フローを追記。`scripts/metrics/bootstrap-digest.ps1`（将来）で SHA256 を算出し、署名済み JSON を Release Assets に添付する運用に変更。検証手順は `jq` + `shasum` による二重チェックを必須化。
 - [x] DHTメトリクス／tracing整備
   - `AtomicMetric` を `dht_bootstrap.rs` / `iroh_gossip_service.rs` に組み込み、Tauriコマンド `get_p2p_metrics` → `p2p.ts` → `P2PDebugPanel` の経路で可視化。
   - 2025年10月20日: GossipService で `TopicMesh` ベースのトピック統計を公開し、`P2PService::get_status` からメッセージ数と最終アクティビティを返却できるようにした。
   - `pnpm test` / `cargo test` のメトリクス項目を更新済み（Docker スモークテストで検証）。
-- [ ] 環境変数ベースの機能トグル整理
-  - 候補: `KUKURI_ENABLE_DHT`, `KUKURI_ENABLE_DNS`, `KUKURI_ENABLE_LOCAL`（bool）
-  - ブートストラップ: `KUKURI_BOOTSTRAP_PEERS` に `nodeid@host:port` を列挙し、UIでの上書きルールを文書化。
+  - 2025年10月30日: `BootstrapMetricsSnapshot` を追加し、`env/user/bundle/fallback` の適用回数と最終ソース/時刻を `MainlineMetricsResponse.bootstrap` で公開。P2PDebugPanel にブートストラップカウンタを表示。
+- [x] 環境変数ベースの機能トグル整理
+  - 2025年10月30日: `AppConfig::from_env` で `KUKURI_ENABLE_{DHT,DNS,LOCAL}` と `KUKURI_BOOTSTRAP_PEERS` を反映。UI は環境変数検知時に編集不可とし、実際に適用されているノードを `effective_nodes` として提示。
+  - 2025年10月30日: `p2p_mainline_runbook.md` に環境変数優先順位とロック時の確認手順（`pnpm tauri dev` → Settings → Bootstrap パネルでのソース表示）を追記。
 
 ### 4.4 Offline再索引対象の棚卸し（2025年10月18日 更新）
 
@@ -270,9 +278,9 @@ pub async fn reindex(&self) -> Result<(), AppError> {
 - コンフリクト検出時は `offline://sync_conflict` イベントでエンティティID一覧を通知し、UI側の解消ワークフローへ引き渡す。
 
 **未決事項（次ステップで確定）**
-- `OfflineManager` に `enqueue_if_missing` / `get_pending_sync_items` 等の補助メソッドを追加する実装詳細。
-- P2P接続状態の購読API（`P2PServiceTrait` にイベントストリームを追加するか、`P2PState` を watch するか）の選定。
-- フロントエンドイベントハンドラの実装責務（store直更新 vs TanStack Query invalidate）。
+- 2025年10月30日: `OfflinePersistence` に `enqueue_if_missing` / `pending_sync_items` などの補助APIを追加し、`OfflineReindexJob` はトレイト経由で動作。`tests/integration/offline/recovery.rs` で OfflineService との結合シナリオを検証。
+- 2025年10月30日: P2P接続監視は `p2p_event_tx` ブロードキャストを正式採用。`state.rs` で `NetworkConnected` を監視し、再索引ジョブと EventService の復元処理をトリガー。
+- 2025年10月30日: フロントエンドイベントハンドラは `offlineStore` が `offline://reindex_complete` / `offline://reindex_failed` を処理し、未同期アクションの再読込と通知を行う実装を維持（動作確認済み）。
 
 **実装ステータス（2025年10月18日 更新）**
 - `IrohNetworkService` が `ConnectionEvent` ブロードキャストを公開し、再接続時に `OfflineReindexJob::trigger` を呼び出すウォッチャーを `AppState` で常駐化。

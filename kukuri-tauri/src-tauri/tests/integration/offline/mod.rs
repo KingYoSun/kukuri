@@ -14,9 +14,10 @@ use kukuri_lib::test_support::infrastructure::offline::SqliteOfflinePersistence;
 use serde_json::Value;
 use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
 
-const PUBKEY_HEX: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+pub(super) const PUBKEY_HEX: &str =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-async fn setup_service() -> (OfflineService, Pool<Sqlite>) {
+pub(super) async fn setup_service() -> (OfflineService, Pool<Sqlite>) {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:?cache=shared")
@@ -122,7 +123,7 @@ async fn initialize_schema(pool: &Pool<Sqlite>) {
     .expect("sync_status table");
 }
 
-fn sample_save_params() -> SaveOfflineActionParams {
+pub(super) fn sample_save_params() -> SaveOfflineActionParams {
     SaveOfflineActionParams {
         user_pubkey: PublicKey::from_hex_str(PUBKEY_HEX).expect("pubkey"),
         action_type: OfflineActionType::new("create_post".into()).expect("action type"),
@@ -303,3 +304,5 @@ async fn update_sync_status_performs_upsert() {
     assert_eq!(sync_status, "resolved");
     assert!(conflict_data.is_none());
 }
+
+mod recovery;

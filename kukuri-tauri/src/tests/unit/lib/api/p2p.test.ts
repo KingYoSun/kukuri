@@ -211,12 +211,20 @@ describe('p2pApi', () => {
           routing_success_rate: 0.888,
           routing_last_success_ms: 6200,
           routing_last_failure_ms: 6300,
-          reconnect_attempts: 3,
-          reconnect_successes: 2,
-          reconnect_failures: 1,
-          last_reconnect_success_ms: 6400,
-          last_reconnect_failure_ms: 6500,
+        reconnect_attempts: 3,
+        reconnect_successes: 2,
+        reconnect_failures: 1,
+        last_reconnect_success_ms: 6400,
+        last_reconnect_failure_ms: 6500,
+        bootstrap: {
+          env_uses: 1,
+          user_uses: 2,
+          bundle_uses: 0,
+          fallback_uses: 0,
+          last_source: 'user',
+          last_applied_ms: 7000,
         },
+      },
       };
       vi.mocked(invoke).mockResolvedValueOnce(successResponse(mockMetrics));
 

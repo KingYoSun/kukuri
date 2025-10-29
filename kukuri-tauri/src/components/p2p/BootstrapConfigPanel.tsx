@@ -12,6 +12,9 @@ type Mode = 'default' | 'custom';
 export function BootstrapConfigPanel() {
   const [mode, setMode] = useState<Mode>('default');
   const [nodes, setNodes] = useState<string[]>([]);
+  const [effectiveNodes, setEffectiveNodes] = useState<string[]>([]);
+  const [source, setSource] = useState<'env' | 'user' | 'bundle' | 'fallback' | 'none'>('none');
+  const [envLocked, setEnvLocked] = useState(false);
   const [newNode, setNewNode] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -21,13 +24,32 @@ export function BootstrapConfigPanel() {
         const data = await p2pApi.getBootstrapConfig();
         setMode(data.mode as Mode);
         setNodes(data.nodes ?? []);
+        setEffectiveNodes(data.effective_nodes ?? []);
+        setSource(data.source ?? 'none');
+        setEnvLocked(Boolean(data.env_locked));
       } catch (e) {
         errorHandler.log('Failed to load bootstrap config', e);
       }
     })();
   }, []);
 
+  const sourceLabel = {
+    env: '環境変数 (KUKURI_BOOTSTRAP_PEERS)',
+    user: 'ユーザー設定',
+    bundle: '同梱設定ファイル',
+    fallback: 'フォールバック接続',
+    none: 'n0 デフォルト',
+  }[source];
+
+  const handleSetMode = (value: Mode) => {
+    if (envLocked) return;
+    setMode(value);
+  };
+
   const addNode = () => {
+    if (envLocked) {
+      return;
+    }
     const v = newNode.trim();
     if (!v) return;
     if (!v.includes('@')) {
@@ -43,10 +65,20 @@ export function BootstrapConfigPanel() {
   };
 
   const removeNode = (entry: string) => {
+    if (envLocked) {
+      return;
+    }
     setNodes((prev) => prev.filter((n) => n !== entry));
   };
 
   const save = async () => {
+    if (envLocked) {
+      errorHandler.log('環境変数でブートストラップノードが固定されているため保存できません', undefined, {
+        showToast: true,
+        toastTitle: '環境変数でロックされています',
+      });
+      return;
+    }
     try {
       setSaving(true);
       if (mode === 'custom') {
@@ -54,6 +86,12 @@ export function BootstrapConfigPanel() {
       } else {
         await p2pApi.clearBootstrapNodes();
       }
+      const refreshed = await p2pApi.getBootstrapConfig();
+      setMode(refreshed.mode as Mode);
+      setNodes(refreshed.nodes ?? []);
+      setEnvLocked(Boolean(refreshed.env_locked));
+      setEffectiveNodes(refreshed.effective_nodes ?? []);
+      setSource(refreshed.source ?? 'none');
       errorHandler.log(
         mode === 'custom' ? 'カスタムノードを保存しました' : 'デフォルト(n0)に戻しました',
         undefined,
@@ -83,6 +121,28 @@ export function BootstrapConfigPanel() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
+          <Label>適用中のノード</Label>
+          {effectiveNodes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">n0 の公開ノードを利用しています。</p>
+          ) : (
+            <div className="space-y-2">
+              {effectiveNodes.map((n) => (
+                <div key={n} className="rounded-md border px-3 py-2 font-mono text-sm truncate">
+                  {n}
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">ソース: {sourceLabel}</p>
+          {envLocked && (
+            <p className="text-xs text-muted-foreground">
+              <code className="font-mono text-xs">KUKURI_BOOTSTRAP_PEERS</code>{' '}
+              が設定されているため UI から変更できません。
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
           <Label>モード</Label>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
@@ -90,7 +150,8 @@ export function BootstrapConfigPanel() {
                 type="radio"
                 name="bootstrap-mode"
                 checked={mode === 'default'}
-                onChange={() => setMode('default')}
+                onChange={() => handleSetMode('default')}
+                disabled={envLocked}
               />
               デフォルト（n0）
             </label>
@@ -99,7 +160,8 @@ export function BootstrapConfigPanel() {
                 type="radio"
                 name="bootstrap-mode"
                 checked={mode === 'custom'}
-                onChange={() => setMode('custom')}
+                onChange={() => handleSetMode('custom')}
+                disabled={envLocked}
               />
               カスタム指定
             </label>
@@ -117,8 +179,9 @@ export function BootstrapConfigPanel() {
                   value={newNode}
                   onChange={(e) => setNewNode(e.target.value)}
                   className="font-mono"
+                  disabled={envLocked}
                 />
-                <Button onClick={addNode} disabled={!newNode.trim()}>
+                <Button onClick={addNode} disabled={envLocked || !newNode.trim()}>
                   追加
                 </Button>
               </div>
@@ -132,7 +195,12 @@ export function BootstrapConfigPanel() {
                       className="flex items-center justify-between rounded-md border px-3 py-2"
                     >
                       <span className="font-mono text-sm truncate">{n}</span>
-                      <Button size="sm" variant="ghost" onClick={() => removeNode(n)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeNode(n)}
+                        disabled={envLocked}
+                      >
                         削除
                       </Button>
                     </div>
@@ -144,8 +212,8 @@ export function BootstrapConfigPanel() {
         )}
 
         <div className="pt-2">
-          <Button onClick={save} disabled={saving}>
-            {saving ? '保存中...' : '保存'}
+          <Button onClick={save} disabled={saving || envLocked}>
+            {envLocked ? '環境変数でロック中' : saving ? '保存中...' : '保存'}
           </Button>
         </div>
       </CardContent>

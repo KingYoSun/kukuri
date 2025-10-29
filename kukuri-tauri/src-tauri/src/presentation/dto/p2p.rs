@@ -78,6 +78,9 @@ pub struct NodeAddressResponse {
 pub struct BootstrapConfigResponse {
     pub mode: String,
     pub nodes: Vec<String>,
+    pub effective_nodes: Vec<String>,
+    pub source: String,
+    pub env_locked: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,12 +122,23 @@ pub struct MainlineMetricsResponse {
     pub reconnect_failures: u64,
     pub last_reconnect_success_ms: Option<u64>,
     pub last_reconnect_failure_ms: Option<u64>,
+    pub bootstrap: BootstrapMetricsResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PMetricsResponse {
     pub gossip: GossipMetricsResponse,
     pub mainline: MainlineMetricsResponse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BootstrapMetricsResponse {
+    pub env_uses: u64,
+    pub user_uses: u64,
+    pub bundle_uses: u64,
+    pub fallback_uses: u64,
+    pub last_source: Option<String>,
+    pub last_applied_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

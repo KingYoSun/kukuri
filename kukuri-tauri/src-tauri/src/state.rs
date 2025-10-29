@@ -149,10 +149,9 @@ impl AppState {
         );
         let offline_persistence_concrete =
             Arc::new(SqliteOfflinePersistence::new(sqlite_pool.clone()));
-        let offline_reindex_job = OfflineReindexJob::create(
-            Some(app_handle.clone()),
-            Arc::clone(&offline_persistence_concrete),
-        );
+        let offline_persistence: Arc<dyn OfflinePersistence> = offline_persistence_concrete.clone();
+        let offline_reindex_job =
+            OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_persistence));
         offline_reindex_job.trigger();
 
         // インフラストラクチャサービスの初期化
@@ -255,7 +254,6 @@ impl AppState {
         ));
 
         // OfflineServiceの初期化
-        let offline_persistence: Arc<dyn OfflinePersistence> = offline_persistence_concrete.clone();
         let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
         // プレゼンテーション層のハンドラーを初期化
