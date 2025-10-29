@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 use tracing::info;
@@ -146,6 +148,12 @@ pub fn run() {
                 let app_state = AppState::new(app_handle)
                     .await
                     .expect("Failed to initialize app state");
+                let offline_reindex_job = Arc::clone(&app_state.offline_reindex_job);
+                let user_service = Arc::clone(&app_state.user_service);
+                let event_service = Arc::clone(&app_state.event_service);
+                let p2p_service = Arc::clone(&app_state.p2p_service);
+                let offline_service = Arc::clone(&app_state.offline_service);
+                let user_handler = Arc::clone(&app_state.user_handler);
 
                 // P2P機能を初期化
                 if let Err(e) = app_state.initialize_p2p().await {
@@ -155,7 +163,13 @@ pub fn run() {
                 // P2Pイベントハンドラーを起動
                 spawn_p2p_event_handler(app_handle.clone(), app_state.clone());
 
-                app_handle.manage(app_state);
+                app_handle.manage(app_state.clone());
+                app_handle.manage(offline_reindex_job);
+                app_handle.manage(user_service);
+                app_handle.manage(event_service);
+                app_handle.manage(p2p_service);
+                app_handle.manage(offline_service);
+                app_handle.manage(user_handler);
             });
 
             info!("Application setup complete");

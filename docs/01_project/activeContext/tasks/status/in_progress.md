@@ -286,6 +286,7 @@
 - 2025年10月19日: Phase 3A（SqliteRepository 分割）に着手し、現行実装の棚卸しと移行ステップを `docs/01_project/activeContext/refactoring_phase3a_sqlite_repository_plan.md` にまとめ。Post/Topic/User/Event 各リポジトリの責務・依存・検証手順を洗い出し、`.sqlx/` 更新手順を明示。
 - 2025年10月19日: Phase 3A の実装を完了し、`sqlite_repository` を posts/topics/users/events/mapper/queries モジュールへ分割。SQLx オフラインデータを再生成し、`cargo fmt` / `cargo clippy -- -D warnings` / `./scripts/test-docker.ps1 rust` で検証済み。
 - 2025年10月19日: GitHub Actions ワークフロー失敗の原因特定に着手。`gh run list` で最新失敗ジョブを洗い出し、`gh act` によるローカル再現準備を開始。
+- 2025年10月29日: Docker Test Suite の `dead_code` ビルド失敗を解消すべく `src-tauri/src/lib.rs` で AppState の依存を Tauri State 登録へ拡張。`gh act --action-offline-mode -b -j docker-test` で再実行し、manifest 参照エラーが Windows 由来で残存する点を確認。代替として `docker compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh` で CI 相当のテスト完走を確認済み。
 - 2025年10月19日: `src/lib/api/tauri.ts` を Prettier で整形し、`pnpm format:check` と `gh act -j format-check` が成功することを確認。CI フォーマットジョブの失敗を解消。
 - 2025年10月28日: Rust 側の `Option::map_or` 警告を `is_none_or` へ置換し、Clippy エラーを解消。`cargo fmt`/`cargo clippy --workspace --all-features -- -D warnings -A dead_code -A unused_variables`/`cargo test --workspace --all-features` に加えて `gh act -j format-check` と `gh act -j native-test-linux` を root ユーザー実行で成功確認。CI の Native Test / Format Check / Docker Test 失敗要因を除去。
 - 2025年10月19日: Phase 3B（EventService モジュール化）実行計画を `docs/01_project/activeContext/refactoring_phase34_gap_plan.md` に追記し、WBS/検証/リスク/完了条件を明文化。
