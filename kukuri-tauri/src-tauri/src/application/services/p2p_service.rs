@@ -100,6 +100,31 @@ impl P2PService {
         *options = options.with_mainline(enabled);
     }
 
+    async fn mainline_enabled(&self) -> bool {
+        self.discovery_options.read().await.enable_mainline()
+    }
+
+    async fn ensure_topic_joined(&self, topic_id: &str) -> Result<(), AppError> {
+        let joined_topics = self
+            .gossip_service
+            .get_joined_topics()
+            .await
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+
+        if !joined_topics.iter().any(|topic| topic == topic_id) {
+            self.gossip_service
+                .join_topic(topic_id, Vec::new())
+                .await
+                .map_err(|e| AppError::P2PError(e.to_string()))?;
+        }
+
+        if self.mainline_enabled().await {
+            self.network_service.join_dht_topic(topic_id).await?;
+        }
+
+        Ok(())
+    }
+
     pub fn builder(secret_key: SecretKey, network_config: AppNetworkConfig) -> P2PServiceBuilder {
         let discovery_options = DiscoveryOptions::from(&network_config);
         P2PServiceBuilder::new(secret_key, network_config, discovery_options)
@@ -210,21 +235,43 @@ impl P2PServiceTrait for P2PService {
         self.gossip_service
             .join_topic(topic_id, initial_peers)
             .await
-            .map_err(|e| AppError::P2PError(e.to_string()))
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+
+        if self.mainline_enabled().await {
+            self.network_service.join_dht_topic(topic_id).await?;
+        }
+
+        Ok(())
     }
 
     async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError> {
         self.gossip_service
             .leave_topic(topic_id)
             .await
-            .map_err(|e| AppError::P2PError(e.to_string()))
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+
+        if self.mainline_enabled().await {
+            self.network_service.leave_dht_topic(topic_id).await?;
+        }
+
+        Ok(())
     }
 
     async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError> {
+        self.ensure_topic_joined(topic_id).await?;
+
         self.gossip_service
             .broadcast_message(topic_id, content.as_bytes())
             .await
-            .map_err(|e| AppError::P2PError(e.to_string()))
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+
+        if self.mainline_enabled().await {
+            self.network_service
+                .broadcast_dht(topic_id, content.as_bytes().to_vec())
+                .await?;
+        }
+
+        Ok(())
     }
 
     async fn get_status(&self) -> Result<P2PStatus, AppError> {
@@ -314,12 +361,15 @@ mod tests {
     use async_trait::async_trait;
     use chrono::Utc;
     use mockall::{mock, predicate::*};
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     // NetworkService縺ｮ繝｢繝・け - 謇句虚螳溯｣・
     pub struct MockNetworkServ {
         node_id: Mutex<Option<String>>,
         addresses: Mutex<Option<Vec<String>>>,
+        join_dht: Mutex<Vec<String>>,
+        leave_dht: Mutex<Vec<String>>,
+        broadcast_dht: Mutex<Vec<(String, Vec<u8>)>>,
     }
 
     impl MockNetworkServ {
@@ -327,6 +377,9 @@ mod tests {
             Self {
                 node_id: Mutex::new(None),
                 addresses: Mutex::new(None),
+                join_dht: Mutex::new(Vec::new()),
+                leave_dht: Mutex::new(Vec::new()),
+                broadcast_dht: Mutex::new(Vec::new()),
             }
         }
 
@@ -356,6 +409,18 @@ mod tests {
                 *self.addresses.lock().unwrap() = Some(value);
             }
             self
+        }
+
+        pub fn join_dht_calls(&self) -> Vec<String> {
+            self.join_dht.lock().unwrap().clone()
+        }
+
+        pub fn leave_dht_calls(&self) -> Vec<String> {
+            self.leave_dht.lock().unwrap().clone()
+        }
+
+        pub fn broadcast_dht_calls(&self) -> Vec<(String, Vec<u8>)> {
+            self.broadcast_dht.lock().unwrap().clone()
         }
     }
 
@@ -414,6 +479,24 @@ mod tests {
             let addresses = self.addresses.lock().unwrap();
             Ok(addresses.clone().unwrap_or_else(std::vec::Vec::new))
         }
+
+        async fn join_dht_topic(&self, topic: &str) -> Result<(), AppError> {
+            self.join_dht.lock().unwrap().push(topic.to_string());
+            Ok(())
+        }
+
+        async fn leave_dht_topic(&self, topic: &str) -> Result<(), AppError> {
+            self.leave_dht.lock().unwrap().push(topic.to_string());
+            Ok(())
+        }
+
+        async fn broadcast_dht(&self, topic: &str, message: Vec<u8>) -> Result<(), AppError> {
+            self.broadcast_dht
+                .lock()
+                .unwrap()
+                .push((topic.to_string(), message));
+            Ok(())
+        }
     }
 
     // GossipService縺ｮ繝｢繝・け
@@ -436,10 +519,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialize() {
-        let mock_network = MockNetworkServ::new();
-        let mock_gossip = MockGossipServ::new();
+        let network = Arc::new(MockNetworkServ::new());
+        let gossip = Arc::new(MockGossipServ::new());
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network, gossip);
 
         let result = service.initialize().await;
         assert!(result.is_ok());
@@ -447,7 +530,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_join_topic_success() {
-        let mock_network = MockNetworkServ::new();
+        let network = Arc::new(MockNetworkServ::new());
         let mut mock_gossip = MockGossipServ::new();
 
         mock_gossip
@@ -459,17 +542,18 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
 
         let result = service
             .join_topic("test_topic", vec!["peer1".to_string(), "peer2".to_string()])
             .await;
         assert!(result.is_ok());
+        assert_eq!(network.join_dht_calls(), vec!["test_topic".to_string()]);
     }
 
     #[tokio::test]
     async fn test_join_topic_failure() {
-        let mock_network = MockNetworkServ::new();
+        let network = Arc::new(MockNetworkServ::new());
         let mut mock_gossip = MockGossipServ::new();
 
         mock_gossip
@@ -478,7 +562,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Err(AppError::P2PError("Failed to join topic".to_string())));
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
 
         let result = service.join_topic("test_topic", vec![]).await;
         assert!(result.is_err());
@@ -488,11 +572,12 @@ mod tests {
                 .to_string()
                 .contains("Failed to join topic")
         );
+        assert!(network.join_dht_calls().is_empty());
     }
 
     #[tokio::test]
     async fn test_leave_topic() {
-        let mock_network = MockNetworkServ::new();
+        let network = Arc::new(MockNetworkServ::new());
         let mut mock_gossip = MockGossipServ::new();
 
         mock_gossip
@@ -501,16 +586,22 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
 
         let result = service.leave_topic("test_topic").await;
         assert!(result.is_ok());
+        assert_eq!(network.leave_dht_calls(), vec!["test_topic".to_string()]);
     }
 
     #[tokio::test]
     async fn test_broadcast_message() {
-        let mock_network = MockNetworkServ::new();
+        let network = Arc::new(MockNetworkServ::new());
         let mut mock_gossip = MockGossipServ::new();
+
+        mock_gossip
+            .expect_get_joined_topics()
+            .times(1)
+            .returning(|| Ok(vec!["test_topic".to_string()]));
 
         let test_content = "Test message";
         mock_gossip
@@ -519,10 +610,53 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
 
         let result = service.broadcast_message("test_topic", test_content).await;
         assert!(result.is_ok());
+        assert_eq!(network.join_dht_calls(), vec!["test_topic".to_string()]);
+        let broadcast_calls = network.broadcast_dht_calls();
+        assert_eq!(broadcast_calls.len(), 1);
+        assert_eq!(broadcast_calls[0].0, "test_topic".to_string());
+        assert_eq!(String::from_utf8_lossy(&broadcast_calls[0].1), test_content);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_message_auto_join_when_not_joined() {
+        let network = Arc::new(MockNetworkServ::new());
+        let mut mock_gossip = MockGossipServ::new();
+
+        mock_gossip
+            .expect_get_joined_topics()
+            .times(1)
+            .returning(|| Ok(vec![]));
+
+        mock_gossip
+            .expect_join_topic()
+            .with(eq("auto_topic"), eq(Vec::<String>::new()))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        mock_gossip
+            .expect_broadcast_message()
+            .with(eq("auto_topic"), eq("auto payload".as_bytes()))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
+        let result = service
+            .broadcast_message("auto_topic", "auto payload")
+            .await;
+        assert!(result.is_ok());
+
+        assert_eq!(network.join_dht_calls(), vec!["auto_topic".to_string()]);
+        let broadcast_calls = network.broadcast_dht_calls();
+        assert_eq!(broadcast_calls.len(), 1);
+        assert_eq!(broadcast_calls[0].0, "auto_topic".to_string());
+        assert_eq!(
+            String::from_utf8_lossy(&broadcast_calls[0].1),
+            "auto payload"
+        );
     }
 
     #[tokio::test]
@@ -532,6 +666,7 @@ mod tests {
         mock_network
             .expect_get_node_id()
             .returning(|| Ok("node123".to_string()));
+        let network = Arc::new(mock_network);
 
         let mut mock_gossip = MockGossipServ::new();
         mock_gossip
@@ -563,7 +698,7 @@ mod tests {
                 }))
             });
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network, Arc::new(mock_gossip));
 
         let result = service.get_status().await;
         assert!(result.is_ok());
@@ -590,6 +725,7 @@ mod tests {
         mock_network
             .expect_get_node_id()
             .returning(|| Ok("node123".to_string()));
+        let network = Arc::new(mock_network);
 
         let mut mock_gossip = MockGossipServ::new();
         mock_gossip
@@ -609,7 +745,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(vec!["peer1".to_string(), "peer2".to_string()]));
 
-        let service = P2PService::new(Arc::new(mock_network), Arc::new(mock_gossip));
+        let service = P2PService::new(network, Arc::new(mock_gossip));
 
         let before = Utc::now().timestamp();
         let status = service.get_status().await.unwrap();

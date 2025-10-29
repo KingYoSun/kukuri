@@ -33,4 +33,16 @@ pub trait NetworkService: Send + Sync {
     async fn is_connected(&self) -> bool;
     async fn get_node_id(&self) -> Result<String, AppError>;
     async fn get_addresses(&self) -> Result<Vec<String>, AppError>;
+
+    async fn join_dht_topic(&self, _topic: &str) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn leave_dht_topic(&self, _topic: &str) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn broadcast_dht(&self, _topic: &str, _message: Vec<u8>) -> Result<(), AppError> {
+        Ok(())
+    }
 }

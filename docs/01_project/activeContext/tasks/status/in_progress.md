@@ -223,8 +223,8 @@
 
 ### P2P / DHT / Offline
 
-- [ ] `dht_bootstrap.rs::leave_topic` とアプリコマンドを接続し、iroh-gossip quit の意味整理を完了する（`iroh-native-dht-plan.md:64` / `185` / `355`）。
-- [ ] 同様に broadcast API の連動仕様を固め、未参加時の自動 join 挙動を定義する（`iroh-native-dht-plan.md:64` / `185` / `356`）。
+- [x] `dht_bootstrap.rs::leave_topic` とアプリコマンドを接続し、iroh-gossip quit の意味整理を完了する（`iroh-native-dht-plan.md:64` / `185` / `355`）。
+- [x] 同様に broadcast API の連動仕様を固め、未参加時の自動 join 挙動を定義する（`iroh-native-dht-plan.md:64` / `185` / `356`）。
 - [ ] `bootstrap_nodes.json` の維持運用（署名付き配布 or UI 更新）方針を決めて記録する（`iroh-native-dht-plan.md:192`）。
 - [ ] `KUKURI_ENABLE_{DHT,DNS,LOCAL}` / `KUKURI_BOOTSTRAP_PEERS` の環境変数トグルと UI 上書きルールを整理し、実装へ反映する（`iroh-native-dht-plan.md:197-199`）。
 - [ ] Offline再索引ジョブの未決事項を確定する（`iroh-native-dht-plan.md:272-275`）

@@ -348,4 +348,16 @@ impl NetworkService for IrohNetworkService {
     async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
         self.node_addr().await
     }
+
+    async fn join_dht_topic(&self, topic: &str) -> Result<(), AppError> {
+        IrohNetworkService::join_dht_topic(self, topic).await
+    }
+
+    async fn leave_dht_topic(&self, topic: &str) -> Result<(), AppError> {
+        IrohNetworkService::leave_dht_topic(self, topic).await
+    }
+
+    async fn broadcast_dht(&self, topic: &str, message: Vec<u8>) -> Result<(), AppError> {
+        IrohNetworkService::broadcast_dht(self, topic, message).await
+    }
 }
