@@ -333,7 +333,7 @@ export function P2PDebugPanel() {
                             {metrics.mainline.reconnect_failures}）
                           </span>
                         </div>
-                      <div className="space-y-0.5">
+                        <div className="space-y-0.5">
                           <span className="text-muted-foreground">最終再接続</span>
                           <span>
                             成功: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
@@ -353,12 +353,10 @@ export function P2PDebugPanel() {
                           {metrics.mainline.bootstrap.fallback_uses}
                         </span>
                         <span>
-                          最終ソース:{' '}
-                          {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
+                          最終ソース: {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
                         </span>
                         <span>
-                          適用時刻:{' '}
-                          {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
+                          適用時刻: {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
                         </span>
                       </div>
                     </div>

@@ -73,10 +73,14 @@ export function BootstrapConfigPanel() {
 
   const save = async () => {
     if (envLocked) {
-      errorHandler.log('環境変数でブートストラップノードが固定されているため保存できません', undefined, {
-        showToast: true,
-        toastTitle: '環境変数でロックされています',
-      });
+      errorHandler.log(
+        '環境変数でブートストラップノードが固定されているため保存できません',
+        undefined,
+        {
+          showToast: true,
+          toastTitle: '環境変数でロックされています',
+        },
+      );
       return;
     }
     try {
@@ -136,8 +140,8 @@ export function BootstrapConfigPanel() {
           <p className="text-xs text-muted-foreground">ソース: {sourceLabel}</p>
           {envLocked && (
             <p className="text-xs text-muted-foreground">
-              <code className="font-mono text-xs">KUKURI_BOOTSTRAP_PEERS</code>{' '}
-              が設定されているため UI から変更できません。
+              <code className="font-mono text-xs">KUKURI_BOOTSTRAP_PEERS</code> が設定されているため
+              UI から変更できません。
             </p>
           )}
         </div>

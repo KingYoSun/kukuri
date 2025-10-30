@@ -1,20 +1,15 @@
 use serde::{Deserialize, Serialize};
 
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BootstrapSource {
     Env,
     User,
     Bundle,
     Fallback,
+    #[default]
     None,
-}
-
-impl Default for BootstrapSource {
-    fn default() -> Self {
-        BootstrapSource::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
