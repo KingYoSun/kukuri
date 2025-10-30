@@ -10,7 +10,7 @@
 | EventManager tests | `src/modules/event/manager/tests` | 結合 | `tests/integration/event/manager` | 2025年10月30日: AppHandle 非依存の結合テスト `event_manager_integration` を追加。`cargo test --package kukuri-tauri --test event_manager_integration` と `./scripts/test-docker.ps1 rust -Test event_manager_integration` で実行可能。 |
 | P2P module tests | `src-tauri/tests/p2p_gossip_smoke.rs`, `src-tauri/tests/p2p_mainline_smoke.rs` | 結合 | 同上 | Mainline DHT シナリオは接続統計で検証。Docker / CI 実行時は `ENABLE_P2P_INTEGRATION=1` を設定する。 |
 | Contract tests | `tests/contract/nip10.rs`（+ 新規 `nip19.rs` / `kind30078.rs`） | 契約 | （現行維持） | JSON フィクスチャ（`tests/testdata/nip*_contract_cases.json`）で Pass/Fail を管理。 |
-| Performance tests | `tests/performance_tests.rs` | パフォーマンス | `tests/performance/*.rs` | 実行条件と計測方法のドキュメント不足、要整備。 |
+| Performance tests | `tests/performance/*.rs` | パフォーマンス | `./scripts/test-docker.{sh,ps1} performance` | `cargo test --test performance -- --ignored --nocapture` を Docker 経由で実行し、レポート JSON を `test-results/performance/*.json` へ保存。`KUKURI_PERFORMANCE_OUTPUT` で保存先を上書き可能。 |
 | Integration harness | `tests/integration/*` | 結合 | `tests/integration`（維持） | `test_p2p_mainline.rs` で Mainline DHT 設定の統合シナリオを追加。Offline 系統合ケースは引き続き未作成。 |
 | Unit harness | `tests/unit` | （空） | `tests/unit` | Phase 5 で `application/shared` や `state` のユニットテストを移植。 |
 
@@ -40,7 +40,7 @@
 | ドメインユニット | `kukuri-tauri/src-tauri/src/domain/entities/event.rs` （`#[cfg(test)]`） | NIP-01 / NIP-10 / NIP-19 / kind30078 | バリデータの境界値テストと PRE 上書き優先順位を確認する。 |
 | 契約 | `kukuri-tauri/src-tauri/tests/contract/nip10.rs`、新規 `nip19.rs`、`kind30078.rs`（各 JSON フィクスチャ） | NIP-10 / NIP-19 / kind30078 | 公式仕様と kukuri 拡張の Pass/Fail サンプルを管理。 |
 | P2P 統合 | `kukuri-tauri/src-tauri/tests/p2p_gossip_smoke.rs`、`p2p_mainline_smoke.rs`、新規 `p2p_kind30078.rs` | NIP-01 / NIP-10 / NIP-19 / kind30078 | 受信ドロップ・PRE 最新採用・メトリクス収集を end-to-end で検証。 |
-| Offline 統合 | `kukuri-tauri/src-tauri/tests/integration/offline/recovery.rs` | kind30078 | 再索引時に最新 revision のみ再投入されることを保証。 |
+| Offline 統合 | `kukuri-tauri/src-tauri/tests/integration/offline/recovery.rs` / `.../offline/mod.rs` | 再索引・再接続・キャッシュ復元 | `reindex_job_*` が既存同期済みアクションを除外し、`cache_status_reports_per_type` でメタデータ整合を確認。`sync_actions_after_reindex_clears_pending` で再接続後に未同期が残らないことを検証。 |
 | フロントユニット | `kukuri-tauri/src/tests/unit/hooks/useNostrEvents.test.tsx` | kind30078 | フロントエンドのイベント処理とトピック投稿数反映を網羅。 |
 | メトリクス検証 | `scripts/metrics/export-p2p.sh` / `scripts/metrics/export-p2p.ps1` | 全体（受信/送信） | `receive_failures` / PRE リジェクト件数を可視化し、Runbook 9章のチェックリストに連携。 |
 

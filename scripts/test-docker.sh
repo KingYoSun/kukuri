@@ -30,6 +30,7 @@ Commands:
   build        Build the Docker image only
   clean        Clean containers and images
   cache-clean  Clean including cache volumes
+  performance  Run the Rust performance harness (ignored tests) and export reports
   p2p          Run P2P integration tests inside Docker
 
 Options for p2p:
@@ -145,6 +146,14 @@ run_rust_coverage() {
   compose_run '' run --rm rust-coverage
   save_coverage_artifacts
   echo '[OK] Rust coverage collection completed'
+}
+
+run_performance_tests() {
+  [[ $NO_BUILD -eq 1 ]] || build_image
+  echo 'Running Rust performance harness (ignored tests)...'
+  compose_run '' run --rm --env KUKURI_PERFORMANCE_OUTPUT=/app/test-results/performance \
+    rust-test cargo test --test performance -- --ignored --nocapture
+  echo '[OK] Performance harness completed. Reports stored under test-results/performance'
 }
 
 cleanup() {
@@ -318,7 +327,7 @@ case "$COMMAND" in
     usage
     exit 0
     ;;
-  all|rust|ts|lint|coverage|build|clean|cache-clean)
+  all|rust|ts|lint|coverage|build|clean|cache-clean|performance)
     ;;
   p2p)
     while [[ $# -gt 0 ]]; do
@@ -384,6 +393,10 @@ case "$COMMAND" in
     ;;
   coverage)
     run_rust_coverage
+    show_cache_status
+    ;;
+  performance)
+    run_performance_tests
     show_cache_status
     ;;
   build)

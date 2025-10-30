@@ -264,12 +264,18 @@
 
 - [x] EventManager 結合テストを `tests/integration/event/manager` に追加し、AppHandle 非依存シナリオを `./scripts/test-docker.ps1 rust -Test event_manager_integration` から呼び出せるよう CI / Runbook / `phase5_test_inventory.md` を更新する（`phase5_test_inventory.md:10`）。
   - 2025年10月30日: `event_manager_integration` テストバイナリを追加し、`./scripts/test-docker.ps1` に `-Test` オプションを実装。`phase5_test_inventory.md` と `p2p_mainline_runbook.md` に運用手順を追記し、`phase5_ci_path_audit.md` の CI パスを更新。
-- [ ] パフォーマンスハーネスを `tests/performance/*.rs` へ分割し、計測条件・成果物の保存手順を `phase5_test_inventory.md` / `p2p_mainline_runbook.md` に追記、`scripts/test-docker.{sh,ps1}` に `performance` サブコマンドを追加する（`phase5_test_inventory.md:13`, `p2p_mainline_runbook.md:73-78`）。
-- [ ] Offline 系統合テストの不足シナリオ（再索引/再接続/キャッシュ復元）を `tests/integration/offline` に追加し、Inventory を更新する（`phase5_test_inventory.md:14`）。
-- [ ] TypeScript `src/tests/unit/lib/syncEngine` 系に競合解決シナリオテストを追加する（`phase5_test_inventory.md:31`）。
+- [x] パフォーマンスハーネスを `tests/performance/*.rs` へ分割し、計測条件・成果物の保存手順を `phase5_test_inventory.md` / `p2p_mainline_runbook.md` に追記、`scripts/test-docker.{sh,ps1}` に `performance` サブコマンドを追加する（`phase5_test_inventory.md:13`, `p2p_mainline_runbook.md:73-78`）。
+  - 2025年10月31日: `tests/performance.rs` 経由でキャッシュ/再索引/同期ハーネスを編成し、`PerformanceRecorder` で `test-results/performance/*.json` を出力。`scripts/test-docker.{ps1,sh} performance` から `cargo test --test performance -- --ignored --nocapture` を実行できることを確認。
+- [x] Offline 系統合テストの不足シナリオ（再索引/再接続/キャッシュ復元）を `tests/integration/offline` に追加し、Inventory を更新する（`phase5_test_inventory.md:14`）。
+  - 2025年10月31日: `offline/mod.rs` を `offline_support` ベースに再構築し、`cache_status_reports_per_type` / `sync_actions_after_reindex_clears_pending` を追加。`recovery.rs` に再索引スキップ検証（synced除外）を実装し、`cargo test --test offline_integration` でグリーンを確認。
+- [x] TypeScript `src/tests/unit/lib/syncEngine` 系に競合解決シナリオテストを追加する（`phase5_test_inventory.md:31`）。
+  - 2025年10月31日: LWW とバージョン競合のリモート優先ケースを追加し、`pnpm vitest run src/tests/unit/lib/sync/syncEngine.test.ts` で 21 件成功を確認。
 - [ ] `docker-compose.test.yml` の `./kukuri-tauri/src-tauri/tests` マウント追加と CI/Runbook の反映を完了する（`phase5_ci_path_audit.md:10`）。
 
 # メモ/進捗ログ:
+- 2025年10月31日: Rust パフォーマンスハーネスを `tests/performance/*.rs` へ分割し、`scripts/test-docker.{ps1,sh} performance` で計測レポート (`test-results/performance/*.json`) を取得できるよう Runbook / Test Inventory を更新。
+- 2025年10月31日: Offline 統合テストを再編（再索引キュー重複の排除・キャッシュステータス検証・再接続後の pending 解消）し、`cargo test --test offline_integration` を実行。
+- 2025年10月31日: `syncEngine` 競合解決テストにリモート優先ケースを追加し、Vitest で 21 件を通過確認。
 - 2025年10月17日: Iroh DHT/Discovery 残タスクを完了し、Mainline DHT 統合フェーズへ移行。Phase 7 の残項目（Mainline DHT/OfflineService/EventService/エラーハンドリング）を次スプリントの主テーマに設定。
 - 2025年10月17日: 運用・品質セクションの TODO を見直し、メトリクス更新フローと Windows テスト運用の標準化タスクを切り出した。
 - 2025年10月20日: 運用/品質・観測タスク群の実作業を開始。メトリクス更新フロー整備と Windows テスト運用ガイド策定に向けて現状調査を進行中。

@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "contracts")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts")]
     [string]$Command = "all",
 
     [switch]$Integration,            # Rustテスト時にP2P統合テストのみを実行
@@ -64,6 +64,7 @@ Commands:
   lint         - リントとフォーマットチェックのみ実行
   coverage     - Rustカバレッジ（cargo tarpaulin）を実行し成果物を保存
   metrics      - メトリクス関連のショートテスト（Rust test_get_status / TS P2P UI）
+  performance  - パフォーマンスハーネス（Rust ignored テスト）を実行し成果物を生成
   contracts    - 契約テスト（NIP-10境界ケース）を実行
   build        - Dockerイメージのビルドのみ実行
   clean        - Dockerコンテナとイメージをクリーンアップ
@@ -85,6 +86,7 @@ Examples:
   .\test-docker.ps1 rust -Test event_manager_integration
   .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
   .\test-docker.ps1 rust -NoBuild  # ビルドをスキップしてRustテストを実行
+  .\test-docker.ps1 performance    # パフォーマンス計測用テストバイナリを実行
   .\test-docker.ps1 cache-clean    # キャッシュを含めて完全クリーンアップ
   .\test-docker.ps1 -Help          # ヘルプを表示
 
@@ -410,6 +412,28 @@ function Invoke-MetricsTests {
     Write-Success "Metrics-focused tests passed!"
 }
 
+function Invoke-PerformanceTests {
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+    Write-Host "Running Rust performance harness (ignored tests)..."
+    Invoke-DockerCompose @(
+        "run",
+        "--rm",
+        "--env",
+        "KUKURI_PERFORMANCE_OUTPUT=/app/test-results/performance",
+        "rust-test",
+        "cargo",
+        "test",
+        "--test",
+        "performance",
+        "--",
+        "--ignored",
+        "--nocapture"
+    )
+    Write-Success "Performance harness completed. Reports stored in test-results/performance"
+}
+
 function Invoke-ContractTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -549,6 +573,10 @@ switch ($Command) {
     }
     "metrics" {
         Invoke-MetricsTests
+        Show-CacheStatus
+    }
+    "performance" {
+        Invoke-PerformanceTests
         Show-CacheStatus
     }
     "contracts" {

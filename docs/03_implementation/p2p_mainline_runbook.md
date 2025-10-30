@@ -37,6 +37,11 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - `infrastructure::event::metrics` で Gateway API（受信／Publish／Reaction／Metadata／削除／Disconnect）の成功・失敗回数と直近タイムスタンプを記録する仕組みを導入。`LegacyEventManagerGateway` すべてのパスが `metrics::record_outcome` を経由する。
 - メトリクスの動作と Gateway の DI を確認するには `cargo test --package kukuri-tauri --test test_event_service_gateway -- --nocapture` を実行し、`tests/integration/test_event_service_gateway.rs` を通過させる。失敗時は `metrics::snapshot()`（`presentation/commands` 追加予定）で現在値を取得し、`incoming.failures` 等のカウンタから再現手順を追跡する。
 
+### 3.3 パフォーマンスハーネス（2025年10月31日追加）
+- Phase 5 で `tests/performance/cache.rs`（OfflineService の save/list・キャッシュクリーニング）と `tests/performance/sync.rs`（OfflineReindexJob・sync_actions）の計測ケースを分割。`tests/common/performance/recorder.rs` に計測結果を JSON 化するユーティリティを追加した。
+- 実行は `./scripts/test-docker.ps1 performance` または `./scripts/test-docker.sh performance` で行う。内部で `cargo test --test performance -- --ignored --nocapture` を呼び出し、成果物を `test-results/performance/*.json` に出力する。
+- デフォルトの保存先は `KUKURI_PERFORMANCE_OUTPUT` 環境変数で上書き可能。CI で保持する場合は `test-results/performance` を artefact として収集する。反復計測時は JSON に含まれる `iterations` や `metrics.*_per_sec` を比較してリグレッションを検出する。
+
 ## 4. 実行手順
 1. ブートストラップノードを起動（例: `./scripts/start-bootstrap-nodes.ps1 -ReplicaCount 3`）。
 2. 上述の環境変数を設定。

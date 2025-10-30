@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+﻿import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import type { OfflineAction, SyncConflict } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
@@ -244,6 +244,37 @@ describe('SyncEngine', () => {
       expect(resolved.resolution).toBe('local');
     });
 
+    it('リモートのタイムスタンプが新しい場合はremoteを選択', () => {
+      const localAction: OfflineAction = {
+        id: 1,
+        localId: 'local_1',
+        userPubkey: 'user123',
+        actionType: OfflineActionType.UPDATE_POST,
+        actionData: {},
+        createdAt: '2024-01-01T00:00:00Z',
+        isSynced: false,
+      };
+
+      const remoteAction: OfflineAction = {
+        id: 2,
+        localId: 'remote_1',
+        userPubkey: 'user123',
+        actionType: OfflineActionType.UPDATE_POST,
+        actionData: {},
+        createdAt: '2024-01-02T00:00:00Z',
+        isSynced: true,
+      };
+
+      const conflict: SyncConflict = {
+        localAction,
+        remoteAction,
+        conflictType: 'timestamp',
+      };
+
+      const resolved = syncEngine['resolveLWW'](conflict);
+      expect(resolved.resolution).toBe('remote');
+    });
+
     it('トピック参加アクションはLWWで解決', async () => {
       const localAction: OfflineAction = {
         id: 1,
@@ -262,6 +293,37 @@ describe('SyncEngine', () => {
 
       const resolved = await syncEngine['resolveConflict'](conflict);
       expect(resolved.resolution).toBe('local');
+    });
+
+    it('バージョン競合は高い方を選択（remote優先）', async () => {
+      const localAction: OfflineAction = {
+        id: 1,
+        localId: 'local_123',
+        userPubkey: 'user123',
+        actionType: OfflineActionType.UPDATE_POST,
+        actionData: { version: 3 },
+        createdAt: '2024-01-01T00:00:00Z',
+        isSynced: false,
+      };
+
+      const remoteAction: OfflineAction = {
+        id: 2,
+        localId: 'remote_123',
+        userPubkey: 'user123',
+        actionType: OfflineActionType.UPDATE_POST,
+        actionData: { version: 5 },
+        createdAt: '2024-01-01T00:00:00Z',
+        isSynced: true,
+      };
+
+      const conflict: SyncConflict = {
+        localAction,
+        remoteAction,
+        conflictType: 'version',
+      };
+
+      const resolved = await syncEngine['resolveConflict'](conflict);
+      expect(resolved.resolution).toBe('remote');
     });
 
     it('投稿作成はローカルを優先', async () => {
