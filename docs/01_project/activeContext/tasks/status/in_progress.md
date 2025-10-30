@@ -270,7 +270,8 @@
   - 2025年10月31日: `offline/mod.rs` を `offline_support` ベースに再構築し、`cache_status_reports_per_type` / `sync_actions_after_reindex_clears_pending` を追加。`recovery.rs` に再索引スキップ検証（synced除外）を実装し、`cargo test --test offline_integration` でグリーンを確認。
 - [x] TypeScript `src/tests/unit/lib/syncEngine` 系に競合解決シナリオテストを追加する（`phase5_test_inventory.md:31`）。
   - 2025年10月31日: LWW とバージョン競合のリモート優先ケースを追加し、`pnpm vitest run src/tests/unit/lib/sync/syncEngine.test.ts` で 21 件成功を確認。
-- [ ] `docker-compose.test.yml` の `./kukuri-tauri/src-tauri/tests` マウント追加と CI/Runbook の反映を完了する（`phase5_ci_path_audit.md:10`）。
+- [x] `docker-compose.test.yml` の `./kukuri-tauri/src-tauri/tests` マウント追加と CI/Runbook の反映を完了する（`phase5_ci_path_audit.md:10`）。
+  - 2025年10月31日: Compose のマウント構成を確認し、`phase5_ci_path_audit.md` と Docker / Windows Runbook に `src-tauri/tests` バインドマウントの運用を追記。
 
 # メモ/進捗ログ:
 - 2025年10月31日: Rust パフォーマンスハーネスを `tests/performance/*.rs` へ分割し、`scripts/test-docker.{ps1,sh} performance` で計測レポート (`test-results/performance/*.json`) を取得できるよう Runbook / Test Inventory を更新。

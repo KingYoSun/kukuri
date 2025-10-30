@@ -1,7 +1,7 @@
 # Docker環境でのテスト実行ガイド
 
 **作成日**: 2025年08月05日
-**最終更新**: 2025年10月22日
+**最終更新**: 2025年10月31日
 
 ## 概要
 
@@ -132,6 +132,8 @@ docker compose -f docker-compose.test.yml down --rmi local --volumes
 - `rust-test`: Rustテストのみ実行
 - `ts-test`: TypeScriptテストのみ実行
 - `lint-check`: リントとフォーマットチェック
+
+Phase 5 で Rust テスト資産が `kukuri-tauri/src-tauri/tests` 配下に集約されたため、`test-runner` / `rust-test` / `rust-coverage` は該当ディレクトリを read-only でバインドマウントし、ローカル編集を再ビルドなしで反映できるようにしている。テスト結果は従来どおり `test-results/` へ書き出される。
 
 `p2p-bootstrap` は固定シークレットで決定論的な NodeId を生成し、11233/TCP と 6881/UDP を公開してテスト用 DHT ブートストラップとして常駐します。テストスクリプト側がヘルスチェックの完了を待ってから `rust-test` / `test-runner` のコンテナを起動し、`.env.p2p` や PowerShell の一時環境変数を通じて `KUKURI_BOOTSTRAP_PEERS` を参照します。
 

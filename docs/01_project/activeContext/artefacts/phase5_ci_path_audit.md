@@ -1,5 +1,5 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年10月30日
+最終更新日: 2025年10月31日
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
@@ -8,5 +8,5 @@
 | `scripts/test-docker.ps1` | `cargo test --package kukuri-tauri --test p2p_gossip_smoke`<br>`cargo test --package kukuri-tauri --test p2p_mainline_smoke`<br>`cargo test --package kukuri-tauri --test <target>`<br>`./scripts/test-docker.ps1 performance` | Windows 用 Docker テストでスモーク + 個別ターゲット + 性能ハーネスを切替。`performance` 実行時は `cargo test --test performance -- --ignored --nocapture` を呼び、成果物を `test-results/performance` に出力。 | 2025年10月22日: 新バイナリ固定化とログ整備を完了。<br>2025年10月30日: `-Test` オプションを追加し、`event_manager_integration` など個別テストを `./scripts/test-docker.ps1 rust -Test <target>` で実行可能にした。<br>2025年10月31日: `performance` コマンドを追加し、成果物出力先を PowerShell からも制御可能にした。 |
 | `scripts/test-docker.{sh,ps1}` coverage コマンド | `./scripts/test-docker.sh coverage` → `docker compose run rust-coverage`（`cargo tarpaulin --locked --all-features --out Json --out Lcov --output-dir /app/test-results/tarpaulin`） | Rust カバレッジ測定を Docker 上で再現し、成果物を `docs/01_project/activeContext/artefacts/metrics/*.json/.lcov` に出力。 | 2025年10月26日: `rust-coverage` サービスを Compose に追加し、tarpaulin の JSON/LCOV を `test-results/tarpaulin` 経由で保存。Shell/PowerShell の両方から同一フローで呼び出せるようにした。 |
 | `scripts/metrics/export-p2p.{sh,ps1}` | `cargo run --manifest-path kukuri-tauri/src-tauri/Cargo.toml --bin p2p_metrics_export -- --output <path>` | Gossip/Mainline メトリクスを JSON として保存し、CI から artefacts/metrics に収集する。 | 2025年10月27日: Phase 5 Workstream A/B のメトリクス要件に合わせて追加。`--pretty` を指定すると human readable。 |
-| `docker-compose.test.yml` (`test-runner` / `rust-test`) | ボリューム: `./kukuri-tauri/src-tauri/src` のみマウント（`src-tauri/tests` はイメージ内） | Phase 5 で Rust テスト資産を `src-tauri/tests` へ集約すると、ローカル変更がコンテナに反映されず再ビルドが必要。 | `./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro` を追加し、ローカル編集を即座に反映させる。`test-runner` と `rust-test` の双方を更新する。 |
+| `docker-compose.test.yml` (`test-runner` / `rust-test`) | ボリューム: `./kukuri-tauri/src-tauri/src` / `./kukuri-tauri/src-tauri/tests` を read-only でマウント | Phase 5 で Rust テスト資産を `src-tauri/tests` へ集約しても、ローカル編集が即座に反映される。 | 2025年10月31日: `test-runner` と `rust-test` に加え `rust-coverage` へも `./kukuri-tauri/src-tauri/tests` のマウントを追加し、`docker_test_environment.md` / `windows_test_docker_runbook.md` に反映済み。 |
 | GitHub Actions `test.yml`（Docker ジョブ） | `/app/run-tests.sh` → `cargo test --workspace`（`tests/` 配下の新バイナリを網羅実行） | `run-tests.sh` が Phase 5 更新後の `cargo test` を利用できるようにする必要がある。 | `run-tests.sh` 内で個別モジュールパスを指定しないため直接の修正は不要だが、P2P スモークを追加する際は `--test p2p_gossip_smoke` / `--test p2p_mainline_smoke` を明示する。 |
