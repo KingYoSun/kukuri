@@ -3,7 +3,7 @@ use crate::application::ports::repositories::{BookmarkRepository, PostRepository
 use crate::application::services::event_service::EventServiceTrait;
 use crate::domain::entities::{Post, User};
 use crate::domain::value_objects::{EventId, PublicKey};
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::warn;
@@ -147,8 +147,10 @@ impl PostService {
     }
 
     pub async fn bookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        let event_id = EventId::from_hex(post_id).map_err(AppError::ValidationError)?;
-        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(AppError::ValidationError)?;
+        let event_id = EventId::from_hex(post_id)
+            .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err))?;
+        let public_key = PublicKey::from_hex_str(user_pubkey)
+            .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err))?;
 
         self.bookmark_repository
             .create_bookmark(&public_key, &event_id)
@@ -159,8 +161,10 @@ impl PostService {
     }
 
     pub async fn unbookmark_post(&self, post_id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        let event_id = EventId::from_hex(post_id).map_err(AppError::ValidationError)?;
-        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(AppError::ValidationError)?;
+        let event_id = EventId::from_hex(post_id)
+            .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err))?;
+        let public_key = PublicKey::from_hex_str(user_pubkey)
+            .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err))?;
 
         self.bookmark_repository
             .delete_bookmark(&public_key, &event_id)
@@ -174,7 +178,8 @@ impl PostService {
         &self,
         user_pubkey: &str,
     ) -> Result<Vec<String>, AppError> {
-        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(AppError::ValidationError)?;
+        let public_key = PublicKey::from_hex_str(user_pubkey)
+            .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err))?;
 
         let bookmarks = self.bookmark_repository.list_bookmarks(&public_key).await?;
 

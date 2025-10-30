@@ -1,9 +1,13 @@
 use crate::domain::value_objects::EventId;
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 
 pub(crate) fn parse_event_id(hex: &str) -> Result<EventId, AppError> {
-    EventId::from_hex(hex)
-        .map_err(|err| AppError::ValidationError(format!("Invalid event ID: {err}")))
+    EventId::from_hex(hex).map_err(|err| {
+        AppError::validation(
+            ValidationFailureKind::Generic,
+            format!("Invalid event ID: {err}"),
+        )
+    })
 }
 
 pub(crate) fn parse_optional_event_id(hex: Option<&str>) -> Result<Option<EventId>, AppError> {

@@ -8,7 +8,7 @@ use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::offline::{
     EntityId, EntityType, OfflineActionType, OfflinePayload, OptimisticUpdateId, SyncQueueId,
 };
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
@@ -75,8 +75,9 @@ impl OfflineService {
         let mut map = match payload_value {
             Value::Object(map) => map,
             _ => {
-                return Err(AppError::ValidationError(
-                    "Offline action payload must be a JSON object".to_string(),
+                return Err(AppError::validation(
+                    ValidationFailureKind::Generic,
+                    "Offline action payload must be a JSON object",
                 ));
             }
         };
@@ -90,8 +91,8 @@ impl OfflineService {
             Value::String(params.entity_id.to_string()),
         );
 
-        let enriched_payload =
-            OfflinePayload::new(Value::Object(map)).map_err(AppError::ValidationError)?;
+        let enriched_payload = OfflinePayload::new(Value::Object(map))
+            .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err.to_string()))?;
 
         Ok(OfflineActionDraft::new(
             params.user_pubkey.clone(),

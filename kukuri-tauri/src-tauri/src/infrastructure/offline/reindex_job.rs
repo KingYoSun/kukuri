@@ -121,7 +121,7 @@ impl OfflineReindexJob {
                 .map(|record| SyncConflictDigest {
                     entity_type: record.entity_type.to_string(),
                     entity_id: record.entity_id.to_string(),
-                    sync_status: record.sync_status.as_str().to_string(),
+                    sync_status: record.sync_status.as_str().into_owned(),
                 })
                 .collect(),
             queued_offline_action_ids: queued_local_ids,

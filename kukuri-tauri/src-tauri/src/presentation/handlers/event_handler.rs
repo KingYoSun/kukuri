@@ -5,7 +5,7 @@ use crate::presentation::dto::event::{
     PublishTextNoteRequest, PublishTopicPostRequest, SendReactionRequest,
     SetDefaultP2PTopicRequest, SubscribeRequest, UpdateMetadataRequest,
 };
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -130,7 +130,8 @@ impl EventHandler {
     /// ユーザーをサブスクライブ
     pub async fn subscribe_to_user(&self, pubkey: String) -> Result<serde_json::Value, AppError> {
         if pubkey.is_empty() {
-            return Err(AppError::ValidationError(
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
                 "Public key is required".to_string(),
             ));
         }

@@ -1,3 +1,4 @@
+use crate::shared::validation::ValidationFailureKind;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -19,8 +20,11 @@ pub enum AppError {
     NotFound(String),
     #[error("Invalid input: {0}")]
     InvalidInput(String),
-    #[error("Validation error: {0}")]
-    ValidationError(String),
+    #[error("Validation error ({kind}): {message}")]
+    ValidationError {
+        kind: ValidationFailureKind,
+        message: String,
+    },
     #[error("Nostr error: {0}")]
     NostrError(String),
     #[error("P2P error: {0}")]
@@ -38,6 +42,31 @@ pub enum AppError {
 }
 
 impl AppError {
+    pub fn validation(kind: ValidationFailureKind, message: impl Into<String>) -> Self {
+        AppError::ValidationError {
+            kind,
+            message: message.into(),
+        }
+    }
+
+    pub fn validation_kind(&self) -> Option<ValidationFailureKind> {
+        match self {
+            AppError::ValidationError { kind, .. } => Some(*kind),
+            _ => None,
+        }
+    }
+
+    pub fn validation_message(&self) -> Option<&str> {
+        match self {
+            AppError::ValidationError { message, .. } => Some(message.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn validation_mapper(kind: ValidationFailureKind) -> impl FnOnce(String) -> Self {
+        move |message| AppError::validation(kind, message)
+    }
+
     pub fn code(&self) -> &'static str {
         match self {
             AppError::Database(_) => "DATABASE_ERROR",
@@ -48,7 +77,7 @@ impl AppError {
             AppError::Unauthorized(_) => "UNAUTHORIZED",
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::InvalidInput(_) => "INVALID_INPUT",
-            AppError::ValidationError(_) => "VALIDATION_ERROR",
+            AppError::ValidationError { .. } => "VALIDATION_ERROR",
             AppError::NostrError(_) => "NOSTR_ERROR",
             AppError::P2PError(_) => "P2P_ERROR",
             AppError::ConfigurationError(_) => "CONFIGURATION_ERROR",
@@ -61,24 +90,27 @@ impl AppError {
 
     pub fn user_message(&self) -> String {
         match self {
-            AppError::Database(_) => "データベース処理中にエラーが発生しました。",
-            AppError::Network(_) => "ネットワーク通信でエラーが発生しました。",
-            AppError::Crypto(_) => "暗号処理でエラーが発生しました。",
-            AppError::Storage(_) => "ストレージ操作でエラーが発生しました。",
-            AppError::Auth(_) => "認証処理に失敗しました。",
-            AppError::Unauthorized(_) => "この操作を行うにはログインが必要です。",
-            AppError::NotFound(_) => "対象のデータが見つかりませんでした。",
-            AppError::InvalidInput(_) => "入力値に誤りがあります。",
-            AppError::ValidationError(_) => "入力の検証でエラーが発生しました。",
-            AppError::NostrError(_) => "Nostr処理でエラーが発生しました。",
-            AppError::P2PError(_) => "P2P処理でエラーが発生しました。",
-            AppError::ConfigurationError(_) => "アプリ設定に問題があります。",
-            AppError::SerializationError(_) => "データ変換でエラーが発生しました。",
-            AppError::DeserializationError(_) => "データ読み込みでエラーが発生しました。",
-            AppError::NotImplemented(_) => "この機能はまだ実装されていません。",
-            AppError::Internal(_) => "内部エラーが発生しました。",
+            AppError::Database(_) => "Database operation failed".to_string(),
+            AppError::Network(_) => "Network request failed".to_string(),
+            AppError::Crypto(_) => "Cryptographic operation failed".to_string(),
+            AppError::Storage(_) => "Storage access failed".to_string(),
+            AppError::Auth(_) => "Authentication failed".to_string(),
+            AppError::Unauthorized(_) => {
+                "You are not authorized to perform this action".to_string()
+            }
+            AppError::NotFound(_) => "The requested resource was not found".to_string(),
+            AppError::InvalidInput(_) => "Input data is invalid".to_string(),
+            AppError::ValidationError { message, .. } => {
+                format!("Validation failed: {}", message)
+            }
+            AppError::NostrError(_) => "Nostr operation failed".to_string(),
+            AppError::P2PError(_) => "Peer-to-peer operation failed".to_string(),
+            AppError::ConfigurationError(_) => "Configuration error detected".to_string(),
+            AppError::SerializationError(_) => "Serialization error occurred".to_string(),
+            AppError::DeserializationError(_) => "Deserialization error occurred".to_string(),
+            AppError::NotImplemented(_) => "This feature is not implemented".to_string(),
+            AppError::Internal(_) => "An internal error occurred".to_string(),
         }
-        .to_string()
     }
 }
 

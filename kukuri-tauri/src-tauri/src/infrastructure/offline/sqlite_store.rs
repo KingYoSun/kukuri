@@ -125,6 +125,7 @@ impl SqliteOfflinePersistence {
                 conflict_data
             FROM sync_status
             WHERE sync_status IN ('conflict', 'failed', 'pending')
+               OR sync_status LIKE 'invalid:%'
             ORDER BY last_local_update DESC
             "#,
         )
@@ -496,7 +497,7 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         .bind(update.entity_type.as_str())
         .bind(update.entity_id.as_str())
         .bind(updated_at)
-        .bind(update.sync_status.as_str())
+        .bind(update.sync_status.as_str().as_ref())
         .bind(&conflict_data)
         .execute(self.pool())
         .await?;

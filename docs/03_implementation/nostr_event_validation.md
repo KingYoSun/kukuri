@@ -20,7 +20,7 @@
 | 対象 | Pass 条件 | Fail 条件 |
 | --- | --- | --- |
 | **NIP-01 基本整合性** | `id`/`pubkey`/`sig` が 64/64/128 桁の hex、`id` 再計算一致、`created_at` が `現在 ±10分` 以内、JSON スキーマ妥当 | hex 形式不正、署名再計算不一致、タイムスタンプ乖離、シリアライズ失敗 |
-| **NIP-10 返信タグ** | `e`/`p` タグが 64hex または bech32（`note`/`nevent`/`npub`/`nprofile`）、`relay_url` は空 or `ws[s]://`、`marker` は `root`/`reply`/`mention` のみ、`root`/`reply` は高々 1 件、`reply` 出現時に `root` も存在 | marker 未定義、`relay_url` が http(s) 以外、`root`/`reply` 重複、`reply` 単独、bech32 不整合 |
+| **NIP-10 返信タグ** | `e`/`p` タグが 64hex または bech32（`note`/`nevent`/`npub`/`nprofile`）、`relay_url` は空 or `ws[s]://`、`marker` は `root`/`reply`/`mention` のみ、`root`/`reply` はそれぞれ高々 1 件（`reply` 単独は互換モードで許容） | marker 未定義、`relay_url` が http(s) 以外、`root`/`reply` 重複、bech32 不整合 |
 | **NIP-19 bech32 TLV** | `npub`/`nprofile`: tag=0 が 32byte 公開鍵、relay tag ≤16・ASCII・`ws[s]://`。`nevent`: tag=0=event ID、tag=2=author(32byte 任意)、tag=3=kind(4byte BE)。 | TLV 長超過、非 ASCII、relay 上限超過、`hrp` 不一致、未定義 tag が 1KB 超 |
 | **kind:30078 PRE** | `kind`=30078、`["d","kukuri:topic:<slug>:post:<revision>"]` 必須（`slug` は `TopicId` 準拠、`revision` は base32 26文字またはハイフン無し UUID）、`["k","topic-post"]` 固定、`["t","topic:<slug>"]` 単一指定、`["a","30078:<pubkey>:kukuri:topic:<slug>:post:<revision>"]` 一致、`content` は JSON `{body,attachments,metadata}` で 1MB 未満、timestamp が最新（同一時刻は `id` 比較） | `d` 欠如/形式不正、`k`/`t`/`a` 欠落または不一致、複数トピック指定、`content` サイズ超過/JSON 不正、古い timestamp が最新を上書き |
 | **共通制限** | `content` ≤ 1MB、`tags` ≤ 512、内容が UTF-8 妥当 | サイズ超過、非 UTF-8、未知タグによる重大フォーマット崩れ |
@@ -46,7 +46,7 @@
   - `metadata.app_version`: セマンティックバージョン文字列。  
   - `metadata.edited`: PRE 上書き時に `true` を設定。  
 - **PRE 上書き優先順位**: `created_at` が新しい方を採用。同一タイムスタンプの場合は `EventId` の lexicographical 比較で勝者を決定する。敗者は `nostr_event_validation::Precedence::Rejected` としてログに出力し、Offline 再索引で破棄する。  
-- **返信・引用**: NIP-10 に従い、`["e",<event_id>,"","reply"]` および `["e",<event_id>,"","mention"]` を併用。`reply` が存在する場合は `root` も必須。メンション対象には `["p",<pubkey>]` を追加する。  
+- **返信・引用**: NIP-10 に従い、`["e",<event_id>,"","reply"]` および `["e",<event_id>,"","mention"]` を併用。互換性のため `reply` 単独も許容するが、`root` を併記することを推奨する。メンション対象には `["p",<pubkey>]` を追加する。  
 
 ## 4. 実装ポイント
 1. `kukuri-tauri/src-tauri/src/domain/entities/event.rs`  
@@ -104,3 +104,10 @@
 4. **整合性検証**  
    - `offline::reindex` 系テストで `Invalid` 判定がレポートに反映され、同じイベントが再度キューへ載らないことを検証する。  
    - Runbook 第9章に、メトリクスとレポートで理由別件数を確認する手順を追記する。
+
+## 5. 実装ステータス（2025年10月30日）
+- ドメイン: `Event::validate_for_gateway` を新設し、NIP-01/10/19 および kind:30078 の検証を一元化。kind:30078 用のタグ検証と JSON スキーマ検証は `validate_kind30078` 系ヘルパーで 16 件の添付制限・Crockford base32/hex 判定・SemVer チェックまで実装済み。
+- 共通エラー: `shared::validation::ValidationFailureKind` と `AppError::ValidationError` を拡張し、P2P 受信・Offline 同期・DTO バリデーションが同じ理由コードを返すよう統合。`SyncStatus::Invalid(<kind>)` で再索引結果に理由文字列を保持する。
+- メトリクス/ログ: `infrastructure::p2p::metrics` に `receive_failures_by_reason` を追加し、`EventManagerGateway`/`iroh_gossip_service` で失敗理由をカウント。60 秒ウィンドウ内 3 回超過で WARN→DEBUG へレートリミットする `log_validation_failure` を導入。
+- 契約/ユニットテスト: `domain/entities/event.rs` に NIP-10/19/kind30078 の境界テストを追加、`tests/contract/nip10.rs` の JSON ケースを最新仕様に揃えて `cargo test --test contract` で確認。`reply` 単独は互換モードとして許容し、契約テストと実装の整合を維持。
+- テスト実行: `cd kukuri-tauri/src-tauri && cargo fmt && cargo test` を完走し、ドメインユニット・契約・統合（P2P/Offline）全てで Validation 変更が後方互換であることを確認済み。

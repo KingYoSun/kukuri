@@ -17,7 +17,7 @@ use crate::presentation::dto::offline::{
     SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
     UpdateSyncStatusRequest,
 };
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use std::convert::{TryFrom, TryInto};
@@ -105,12 +105,17 @@ impl OfflineHandler {
 
         let draft = SyncQueueItemDraft::new(
             parse_action_type(&request.action_type)?,
-            OfflinePayload::new(request.payload.clone()).map_err(AppError::ValidationError)?,
+            OfflinePayload::new(request.payload.clone())
+                .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?,
             request
                 .priority
                 .map(|value| {
-                    u8::try_from(value)
-                        .map_err(|_| AppError::ValidationError("Priority must fit in u8".into()))
+                    u8::try_from(value).map_err(|_| {
+                        AppError::validation(
+                            ValidationFailureKind::Generic,
+                            "Priority must fit in u8",
+                        )
+                    })
                 })
                 .transpose()?,
         );
@@ -125,14 +130,17 @@ impl OfflineHandler {
         request.validate()?;
 
         let update = CacheMetadataUpdate {
-            cache_key: CacheKey::new(request.cache_key).map_err(AppError::ValidationError)?,
-            cache_type: CacheType::new(request.cache_type).map_err(AppError::ValidationError)?,
+            cache_key: CacheKey::new(request.cache_key)
+                .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?,
+            cache_type: CacheType::new(request.cache_type)
+                .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?,
             metadata: request.metadata,
             expiry: request
                 .expiry_seconds
                 .map(|seconds| {
                     if seconds <= 0 {
-                        return Err(AppError::ValidationError(
+                        return Err(AppError::validation(
+                            ValidationFailureKind::Generic,
                             "Expiry seconds must be positive".to_string(),
                         ));
                     }
@@ -167,12 +175,14 @@ impl OfflineHandler {
 
     pub async fn confirm_optimistic_update(&self, update_id: String) -> Result<Value, AppError> {
         if update_id.is_empty() {
-            return Err(AppError::ValidationError(
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
                 "Update ID is required".to_string(),
             ));
         }
 
-        let id = OptimisticUpdateId::new(update_id).map_err(AppError::ValidationError)?;
+        let id = OptimisticUpdateId::new(update_id)
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
         self.offline_service.confirm_optimistic_update(id).await?;
 
         Ok(json!({ "success": true }))
@@ -183,12 +193,14 @@ impl OfflineHandler {
         update_id: String,
     ) -> Result<Option<String>, AppError> {
         if update_id.is_empty() {
-            return Err(AppError::ValidationError(
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
                 "Update ID is required".to_string(),
             ));
         }
 
-        let id = OptimisticUpdateId::new(update_id).map_err(AppError::ValidationError)?;
+        let id = OptimisticUpdateId::new(update_id)
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
         let original = self.offline_service.rollback_optimistic_update(id).await?;
 
         let serialized = original
@@ -226,23 +238,28 @@ impl OfflineHandler {
 }
 
 fn parse_public_key(value: &str) -> Result<PublicKey, AppError> {
-    PublicKey::from_hex_str(value).map_err(AppError::ValidationError)
+    PublicKey::from_hex_str(value)
+        .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))
 }
 
 fn parse_action_type(value: &str) -> Result<OfflineActionType, AppError> {
-    OfflineActionType::new(value.to_string()).map_err(AppError::ValidationError)
+    OfflineActionType::new(value.to_string())
+        .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))
 }
 
 fn parse_entity_type(value: &str) -> Result<EntityType, AppError> {
-    EntityType::new(value.to_string()).map_err(AppError::ValidationError)
+    EntityType::new(value.to_string())
+        .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))
 }
 
 fn parse_entity_id(value: &str) -> Result<EntityId, AppError> {
-    EntityId::new(value.to_string()).map_err(AppError::ValidationError)
+    EntityId::new(value.to_string())
+        .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))
 }
 
 fn parse_payload(data: &str) -> Result<OfflinePayload, AppError> {
-    OfflinePayload::from_json_str(data).map_err(AppError::ValidationError)
+    OfflinePayload::from_json_str(data)
+        .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))
 }
 
 fn parse_optional_payload(data: Option<String>) -> Result<Option<OfflinePayload>, AppError> {
@@ -252,7 +269,7 @@ fn parse_optional_payload(data: Option<String>) -> Result<Option<OfflinePayload>
                 serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| Value::String(raw.clone()));
             OfflinePayload::new(parsed)
                 .map(Some)
-                .map_err(AppError::ValidationError)
+                .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))
         }
         None => Ok(None),
     }

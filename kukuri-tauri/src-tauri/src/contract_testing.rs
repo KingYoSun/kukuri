@@ -6,5 +6,5 @@ pub fn validate_nip10_tags(tags: Vec<Vec<String>>) -> Result<(), String> {
     event.sig = "f".repeat(128);
     event.created_at = chrono::Utc::now();
     event.tags = tags;
-    event.validate_nip10_19()
+    event.validate_nip10_19().map_err(|err| err.message)
 }

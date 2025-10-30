@@ -1,6 +1,6 @@
 use crate::domain::entities::event_gateway::{ProfileMetadata, RelayEndpoint};
 use crate::presentation::dto::event::{Nip65RelayDto, NostrMetadataDto};
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use nostr_sdk::JsonUtil;
 use nostr_sdk::prelude::{Metadata, Url};
 use serde_json::{Map, Value};
@@ -19,13 +19,19 @@ pub(crate) fn dto_to_profile_metadata(dto: NostrMetadataDto) -> Result<ProfileMe
         dto.website,
         relays,
     )
-    .map_err(|err| AppError::ValidationError(format!("Invalid profile metadata: {err}")))
+    .map_err(|err| {
+        AppError::validation(
+            ValidationFailureKind::Generic,
+            format!("Invalid profile metadata: {err}"),
+        )
+    })
 }
 
 pub(crate) fn profile_metadata_to_nostr(metadata: &ProfileMetadata) -> Result<Metadata, AppError> {
     if let Some(website) = metadata.website.as_ref() {
-        Url::parse(website)
-            .map_err(|_| AppError::ValidationError("Invalid website URL".to_string()))?;
+        Url::parse(website).map_err(|_| {
+            AppError::validation(ValidationFailureKind::Generic, "Invalid website URL")
+        })?;
     }
 
     let mut map = Map::new();
@@ -79,7 +85,7 @@ fn convert_relays(relays: Vec<Nip65RelayDto>) -> Result<Vec<RelayEndpoint>, AppE
         .into_iter()
         .map(|relay| {
             RelayEndpoint::new(relay.url, relay.read, relay.write)
-                .map_err(AppError::ValidationError)
+                .map_err(|err| AppError::validation(ValidationFailureKind::Generic, err))
         })
         .collect()
 }

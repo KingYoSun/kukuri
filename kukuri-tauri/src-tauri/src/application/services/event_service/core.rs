@@ -14,7 +14,7 @@ use crate::domain::value_objects::{EventId, TopicId};
 use crate::infrastructure::crypto::SignatureService;
 use crate::infrastructure::p2p::EventDistributor;
 use crate::presentation::dto::event::NostrMetadataDto;
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -191,10 +191,18 @@ impl EventServiceTrait for EventService {
         content: &str,
         reply_to: Option<&str>,
     ) -> Result<EventId, AppError> {
-        let topic = TopicId::new(topic_id.to_string())
-            .map_err(|err| AppError::ValidationError(format!("Invalid topic ID: {err}")))?;
-        let topic_content = TopicContent::parse(content)
-            .map_err(|err| AppError::ValidationError(format!("Invalid topic content: {err}")))?;
+        let topic = TopicId::new(topic_id.to_string()).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid topic ID: {err}"),
+            )
+        })?;
+        let topic_content = TopicContent::parse(content).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid topic content: {err}"),
+            )
+        })?;
         let reply_to_id = parse_optional_event_id(reply_to)?;
         self.event_gateway
             .publish_topic_post(&topic, &topic_content, reply_to_id.as_ref())
@@ -203,8 +211,12 @@ impl EventServiceTrait for EventService {
 
     async fn send_reaction(&self, event_id: &str, reaction: &str) -> Result<EventId, AppError> {
         let event_id = parse_event_id(event_id)?;
-        let reaction_value = ReactionValue::parse(reaction)
-            .map_err(|err| AppError::ValidationError(format!("Invalid reaction value: {err}")))?;
+        let reaction_value = ReactionValue::parse(reaction).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid reaction value: {err}"),
+            )
+        })?;
         self.event_gateway
             .send_reaction(&event_id, &reaction_value)
             .await
@@ -241,8 +253,9 @@ impl EventServiceTrait for EventService {
         reason: Option<String>,
     ) -> Result<EventId, AppError> {
         if event_ids.is_empty() {
-            return Err(AppError::ValidationError(
-                "No event IDs provided".to_string(),
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "No event IDs provided",
             ));
         }
 
@@ -265,12 +278,17 @@ impl EventServiceTrait for EventService {
 
     async fn set_default_p2p_topic(&self, topic_id: &str) -> Result<(), AppError> {
         if topic_id.is_empty() {
-            return Err(AppError::ValidationError(
-                "Topic ID is required".to_string(),
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Topic ID is required",
             ));
         }
-        let topic = TopicId::new(topic_id.to_string())
-            .map_err(|err| AppError::ValidationError(format!("Invalid topic ID: {err}")))?;
+        let topic = TopicId::new(topic_id.to_string()).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid topic ID: {err}"),
+            )
+        })?;
         self.event_gateway
             .set_default_topics(std::slice::from_ref(&topic))
             .await?;

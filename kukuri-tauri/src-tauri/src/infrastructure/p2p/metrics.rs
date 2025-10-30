@@ -1,5 +1,9 @@
 use crate::shared::config::BootstrapSource;
+use crate::shared::validation::ValidationFailureKind;
+use once_cell::sync::Lazy;
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -56,6 +60,8 @@ static JOIN_METRIC: AtomicMetric = AtomicMetric::new();
 static LEAVE_METRIC: AtomicMetric = AtomicMetric::new();
 static BROADCAST_METRIC: AtomicMetric = AtomicMetric::new();
 static RECEIVE_METRIC: AtomicMetric = AtomicMetric::new();
+static RECEIVE_FAILURES_BY_REASON: Lazy<Mutex<HashMap<ValidationFailureKind, u64>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 static MAINLINE_CONNECTION_METRIC: AtomicMetric = AtomicMetric::new();
 static MAINLINE_ROUTING_METRIC: AtomicMetric = AtomicMetric::new();
 static MAINLINE_RECONNECT_METRIC: AtomicMetric = AtomicMetric::new();
@@ -76,6 +82,12 @@ pub struct GossipMetricDetails {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ReceiveFailureBreakdown {
+    pub reason: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct GossipMetricsSnapshot {
     pub joins: u64,
     pub leaves: u64,
@@ -85,6 +97,7 @@ pub struct GossipMetricsSnapshot {
     pub leave_details: GossipMetricDetails,
     pub broadcast_details: GossipMetricDetails,
     pub receive_details: GossipMetricDetails,
+    pub receive_failures_by_reason: Vec<ReceiveFailureBreakdown>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,7 +180,14 @@ pub fn record_receive_success() {
 }
 
 pub fn record_receive_failure() {
+    record_receive_failure_with_reason(ValidationFailureKind::Generic);
+}
+
+pub fn record_receive_failure_with_reason(kind: ValidationFailureKind) {
     RECEIVE_METRIC.record_failure();
+    if let Ok(mut map) = RECEIVE_FAILURES_BY_REASON.lock() {
+        *map.entry(kind).or_insert(0) += 1;
+    }
 }
 
 pub fn record_mainline_connection_success() {
@@ -224,6 +244,9 @@ pub fn reset_all() {
     LEAVE_METRIC.reset();
     BROADCAST_METRIC.reset();
     RECEIVE_METRIC.reset();
+    if let Ok(mut map) = RECEIVE_FAILURES_BY_REASON.lock() {
+        map.clear();
+    }
     MAINLINE_CONNECTION_METRIC.reset();
     MAINLINE_ROUTING_METRIC.reset();
     MAINLINE_RECONNECT_METRIC.reset();
@@ -241,6 +264,16 @@ pub fn snapshot() -> GossipMetricsSnapshot {
     let leave_details = LEAVE_METRIC.snapshot();
     let broadcast_details = BROADCAST_METRIC.snapshot();
     let receive_details = RECEIVE_METRIC.snapshot();
+    let receive_failures_by_reason = if let Ok(map) = RECEIVE_FAILURES_BY_REASON.lock() {
+        map.iter()
+            .map(|(kind, count)| ReceiveFailureBreakdown {
+                reason: kind.as_str().to_string(),
+                count: *count,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     GossipMetricsSnapshot {
         joins: join_details.total,
@@ -251,6 +284,7 @@ pub fn snapshot() -> GossipMetricsSnapshot {
         leave_details,
         broadcast_details,
         receive_details,
+        receive_failures_by_reason,
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use nostr_sdk::prelude::Timestamp;
 use std::str::FromStr;
 
@@ -22,9 +22,10 @@ impl SubscriptionTarget {
         match target_type {
             "topic" => Ok(SubscriptionTarget::Topic(target)),
             "user" => Ok(SubscriptionTarget::User(target)),
-            other => Err(AppError::ValidationError(format!(
-                "Unknown subscription target type: {other}"
-            ))),
+            other => Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Unknown subscription target type: {other}"),
+            )),
         }
     }
 }
@@ -50,9 +51,10 @@ impl SubscriptionStatus {
             "pending" => Ok(SubscriptionStatus::Pending),
             "subscribed" => Ok(SubscriptionStatus::Subscribed),
             "needs_resync" => Ok(SubscriptionStatus::NeedsResync),
-            other => Err(AppError::ValidationError(format!(
-                "Unknown subscription status: {other}"
-            ))),
+            other => Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Unknown subscription status: {other}"),
+            )),
         }
     }
 }

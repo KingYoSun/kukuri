@@ -6,11 +6,14 @@ use crate::domain::value_objects::{EventId, TopicId};
 use crate::infrastructure::event::manager_handle::EventManagerHandle;
 use crate::infrastructure::event::metrics::{self, GatewayMetricKind};
 use crate::infrastructure::p2p::metrics as p2p_metrics;
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
 use nostr_sdk::prelude::{Event as NostrEvent, EventId as NostrEventId};
+use once_cell::sync::Lazy;
 use serde::Serialize;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 use tracing::error;
@@ -19,6 +22,17 @@ pub struct LegacyEventManagerGateway {
     manager: Arc<dyn EventManagerHandle>,
     app_handle: Arc<RwLock<Option<AppHandle>>>,
 }
+
+const VALIDATION_LOG_WINDOW: Duration = Duration::from_secs(60);
+const VALIDATION_WARN_THRESHOLD: u32 = 3;
+
+struct ValidationLogWindow {
+    window_start: Instant,
+    count: u32,
+}
+
+static VALIDATION_LOG_WINDOWS: Lazy<Mutex<HashMap<ValidationFailureKind, ValidationLogWindow>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Clone, Serialize)]
 struct FrontendEventPayload {
@@ -282,13 +296,21 @@ impl LegacyEventManagerGateway {
     }
 
     fn to_domain_event_id(event_id: NostrEventId) -> Result<EventId, AppError> {
-        EventId::from_hex(&event_id.to_hex())
-            .map_err(|err| AppError::ValidationError(format!("Invalid event ID returned: {err}")))
+        EventId::from_hex(&event_id.to_hex()).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid event ID returned: {err}"),
+            )
+        })
     }
 
     fn to_domain_public_key(pk: nostr_sdk::prelude::PublicKey) -> Result<PublicKey, AppError> {
-        PublicKey::from_hex_str(&pk.to_hex())
-            .map_err(|err| AppError::ValidationError(format!("Invalid public key: {err}")))
+        PublicKey::from_hex_str(&pk.to_hex()).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid public key: {err}"),
+            )
+        })
     }
 
     pub async fn set_app_handle(&self, handle: AppHandle) {
@@ -330,7 +352,7 @@ fn record_p2p_broadcast_metrics<T>(result: Result<T, AppError>) -> Result<T, App
 #[async_trait]
 impl EventGateway for LegacyEventManagerGateway {
     async fn handle_incoming_event(&self, event: DomainEvent) -> Result<(), AppError> {
-        metrics::record_outcome(
+        let result = metrics::record_outcome(
             async {
                 let nostr_event = domain_event_to_nostr_event(&event)?;
                 self.manager
@@ -342,7 +364,23 @@ impl EventGateway for LegacyEventManagerGateway {
             }
             .await,
             GatewayMetricKind::Incoming,
-        )
+        );
+
+        match &result {
+            Ok(_) => {
+                p2p_metrics::record_receive_success();
+            }
+            Err(err) => {
+                if let Some(kind) = err.validation_kind() {
+                    p2p_metrics::record_receive_failure_with_reason(kind);
+                    log_validation_failure(&event, kind, err.validation_message());
+                } else {
+                    p2p_metrics::record_receive_failure();
+                }
+            }
+        }
+
+        result
     }
 
     async fn publish_text_note(&self, content: &str) -> Result<EventId, AppError> {
@@ -494,9 +532,46 @@ impl EventGateway for LegacyEventManagerGateway {
             .into_iter()
             .map(|t| {
                 TopicId::new(t).map_err(|err| {
-                    AppError::ValidationError(format!("Invalid topic identifier returned: {err}"))
+                    AppError::validation(
+                        ValidationFailureKind::Generic,
+                        format!("Invalid topic identifier returned: {err}"),
+                    )
                 })
             })
             .collect()
+    }
+}
+
+fn log_validation_failure(event: &DomainEvent, kind: ValidationFailureKind, message: Option<&str>) {
+    if let Ok(mut map) = VALIDATION_LOG_WINDOWS.lock() {
+        let entry = map.entry(kind).or_insert(ValidationLogWindow {
+            window_start: Instant::now(),
+            count: 0,
+        });
+        if entry.window_start.elapsed() > VALIDATION_LOG_WINDOW {
+            entry.window_start = Instant::now();
+            entry.count = 0;
+        }
+        entry.count += 1;
+        let log_message = message.unwrap_or("");
+        let event_kind = u32::from(event.kind);
+        let event_id = event.id.to_hex();
+        if entry.count <= VALIDATION_WARN_THRESHOLD {
+            tracing::warn!(
+                reason = %kind,
+                event_id = %event_id,
+                event_kind,
+                message = log_message,
+                "dropped invalid nostr event",
+            );
+        } else {
+            tracing::debug!(
+                reason = %kind,
+                event_id = %event_id,
+                event_kind,
+                message = log_message,
+                "dropped invalid nostr event",
+            );
+        }
     }
 }

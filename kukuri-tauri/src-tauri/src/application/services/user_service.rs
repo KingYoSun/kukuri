@@ -1,6 +1,6 @@
 use crate::application::ports::repositories::UserRepository;
 use crate::domain::entities::{User, UserMetadata};
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use std::sync::Arc;
 
 pub struct UserService {
@@ -44,8 +44,9 @@ impl UserService {
         target_npub: &str,
     ) -> Result<(), AppError> {
         if follower_npub == target_npub {
-            return Err(AppError::ValidationError(
-                "Cannot follow yourself".to_string(),
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Cannot follow yourself",
             ));
         }
 
@@ -278,7 +279,7 @@ mod tests {
             .follow_user(ALICE_NPUB, ALICE_NPUB)
             .await
             .expect_err("self follow should fail");
-        assert!(matches!(err, AppError::ValidationError(_)));
+        assert!(matches!(err, AppError::ValidationError { .. }));
     }
 
     #[tokio::test]

@@ -1,3 +1,4 @@
+use crate::domain::value_objects::offline::SyncStatus;
 use crate::presentation::dto::Validate;
 use serde::{Deserialize, Serialize};
 
@@ -210,11 +211,11 @@ impl Validate for UpdateSyncStatusRequest {
         if self.sync_status.is_empty() {
             return Err("Sync status is required".to_string());
         }
-        let valid_statuses = ["pending", "syncing", "synced", "failed", "conflict"];
-        if !valid_statuses.contains(&self.sync_status.as_str()) {
-            return Err(format!(
-                "Invalid sync status. Must be one of: {valid_statuses:?}"
-            ));
+        let status = self.sync_status.as_str();
+        let parsed = SyncStatus::from(status);
+        let legacy_allowed = matches!(status, "syncing" | "synced");
+        if matches!(parsed, SyncStatus::Unknown(_)) && !legacy_allowed {
+            return Err("Invalid sync status. Supported values include pending, sent_to_nostr, sent_to_p2p, fully_synced, failed, conflict, invalid:<reason>".to_string());
         }
         Ok(())
     }

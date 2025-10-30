@@ -1,5 +1,5 @@
 # Phase 5 テスト分類インベントリ
-最終更新日: 2025年10月23日
+最終更新日: 2025年10月30日
 
 ## Rust（kukuri-tauri/src-tauri）
 
@@ -56,9 +56,9 @@
 
 | レイヤ | ファイル/テスト | 対象 NIP/kind | 備考 |
 | --- | --- | --- | --- |
-| ドメインユニット |  () | NIP-01/10/19/kind30078 | バリデータの境界値テスト。PRE 上書き含む |
-| 契約 |  / 新規  /  | NIP-10/19/kind30078 | JSON フィクスチャで Pass/Fail カバー |
-| P2P 統合 | , , 新規  | NIP-01/10/19/kind30078 | 受信ドロップ・PRE 最新採用を検証 |
-| Offline 統合 |  | kind30078 | 再索引時の最新採用と旧データ排除 |
-| フロントユニット |  | kind30078 | フロントのイベント処理/投稿数反映 |
-| メトリクス検証 |  | 全体 |  や PRE リジェクト件数を監視 |
+| ドメインユニット | `src/domain/entities/event.rs` (kind30078_tests 等) | NIP-01/10/19/kind30078 | 2025年10月30日: NIP-10/19 bech32・kind30078 PRE スキーマの境界値テストを追加済み。 |
+| 契約 | `tests/contract/nip10.rs` | NIP-10 | 2025年10月30日: JSON フィクスチャを更新しドメイン実装と同期。`nip19.rs`/`kind30078.rs` は未着手。 |
+| P2P 統合 | `tests/p2p_gossip_smoke.rs` / `tests/p2p_mainline_smoke.rs` | NIP-01/10 | 無効イベントはドロップ＆メトリクス記録されることを確認。kind30078 専用シナリオは追加検討中。 |
+| Offline 統合 | `tests/integration/offline/recovery.rs` | kind30078 | Invalid 判定を `SyncStatus::Invalid` に反映し、再索引レポートへ理由を出力。 |
+| フロントユニット | `src/tests/unit/hooks/useNostrEvents.test.tsx` | kind30078 | PRE 投稿の配信・購読が UI へ反映されることを確認済み。 |
+| メトリクス検証 | `scripts/metrics/export-p2p.{sh,ps1}` | 全体 | 2025年10月30日: `receive_failures_by_reason` を含む JSON をエクスポートして Runbook 9章で参照。 |

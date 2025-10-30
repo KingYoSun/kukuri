@@ -5,7 +5,7 @@ use super::queries::{
 use crate::application::ports::repositories::BookmarkRepository;
 use crate::domain::entities::Bookmark;
 use crate::domain::value_objects::{BookmarkId, EventId, PublicKey};
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use sqlx::FromRow;
@@ -20,12 +20,24 @@ struct BookmarkRow {
 
 impl BookmarkRow {
     fn into_domain(self) -> Result<Bookmark, AppError> {
-        let id = BookmarkId::new(self.id)
-            .map_err(|err| AppError::ValidationError(format!("Invalid BookmarkId: {err}")))?;
-        let user_pubkey = PublicKey::from_hex_str(&self.user_pubkey)
-            .map_err(|err| AppError::ValidationError(format!("Invalid public key: {err}")))?;
-        let post_id = EventId::from_hex(&self.post_id)
-            .map_err(|err| AppError::ValidationError(format!("Invalid post id: {err}")))?;
+        let id = BookmarkId::new(self.id).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid BookmarkId: {err}"),
+            )
+        })?;
+        let user_pubkey = PublicKey::from_hex_str(&self.user_pubkey).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid public key: {err}"),
+            )
+        })?;
+        let post_id = EventId::from_hex(&self.post_id).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid post id: {err}"),
+            )
+        })?;
         let created_at = Utc
             .timestamp_millis_opt(self.created_at)
             .single()

@@ -1,5 +1,5 @@
 use crate::application::services::{SubscriptionRecord, SubscriptionTarget};
-use crate::shared::error::AppError;
+use crate::shared::{AppError, ValidationFailureKind};
 use chrono::Utc;
 use tracing::warn;
 
@@ -75,7 +75,8 @@ pub(crate) async fn subscribe_to_topic_internal(
     topic_id: &str,
 ) -> Result<(), AppError> {
     if topic_id.is_empty() {
-        return Err(AppError::ValidationError(
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
             "Topic ID is required".to_string(),
         ));
     }
@@ -119,7 +120,8 @@ pub(crate) async fn subscribe_to_user_internal(
     pubkey: &str,
 ) -> Result<(), AppError> {
     if pubkey.is_empty() {
-        return Err(AppError::ValidationError(
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
             "Public key is required".to_string(),
         ));
     }

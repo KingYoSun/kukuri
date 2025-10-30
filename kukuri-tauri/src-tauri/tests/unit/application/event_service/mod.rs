@@ -163,7 +163,7 @@ async fn test_delete_events_requires_ids() {
         .await
         .expect_err("empty ids should result in validation error");
 
-    assert!(matches!(err, AppError::ValidationError(_)));
+    assert!(matches!(err, AppError::ValidationError { .. }));
 }
 
 #[tokio::test]
@@ -181,7 +181,7 @@ async fn test_delete_events_with_invalid_id() {
         .await
         .expect_err("invalid id should fail");
 
-    assert!(matches!(err, AppError::ValidationError(_)));
+    assert!(matches!(err, AppError::ValidationError { .. }));
 }
 
 #[tokio::test]
