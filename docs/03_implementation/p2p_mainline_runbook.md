@@ -96,8 +96,29 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - **ログが出力されない**: 既に別のサブスクライバが設定されている可能性。テスト起動前に `RUST_LOG` を設定し、`tracing_subscriber::fmt` 初期化が一度だけ呼ばれているかを確認。
 
 ## 8. 今後の TODO
-- NIP-01/10/19/30078 に沿ったイベントバリデーションテーブルを整備し、受信フィルタの結合テストを追加（Phase 6）。
+- NIP-01/10/19/30078 の受信フィルタ結合テストを Phase 6 で追加し、9章の検証ポリシーを自動検証する。
 - Mainline DHT フォールバックノードの自動ローテーション（署名付きリストと稼働監視）の実装方針を検討。
 
 - 再接続・再索引シナリオ用の `recovery.rs` を実装し、OfflineService との結合テストを追加。
 - iroh バイナリのキャッシュ戦略（GitHub Actions 用）を整備し、ダウンロード時間を短縮する。
+
+## 9. NIP 準拠検証ポリシー（確定版）
+
+詳細仕様と背景は `docs/03_implementation/nostr_event_validation.md` を参照。ここでは運用時に参照すべき Pass/Fail 条件と担当レイヤをまとめる。
+
+| 対象 | Pass 条件 | Fail 条件 | 主担当 |
+| --- | --- | --- | --- |
+| **NIP-01（基本整合性）** | `id/pubkey/sig` は 64/64/128 桁 hex、`id` 再計算一致、`created_at` は `now ±10分` 以内、JSON スキーマ妥当 | hex 形式不正、署名再計算不一致、タイムスタンプ乖離、シリアライズ失敗 | アプリケーション層（`EventGateway`/`EventService`） |
+| **NIP-10（返信タグ）** | `e`/`p` タグは 64hex または bech32（`note`/`nevent`/`npub`/`nprofile`）、`relay_url` は空 or `ws[s]://`、`marker` は `root`/`reply`/`mention` のみ、`root`/`reply` は最大 1 件、`reply` 出現時に `root` も存在 | marker 未定義、`relay_url` が http 等、`root`/`reply` 重複、`reply` 単独、bech32 不整合 | アプリケーション層 |
+| **NIP-19（bech32 TLV）** | `npub`/`nprofile` は tag=0 32byte 公開鍵、relay tag ≤16・ASCII・`ws[s]://`、`nevent` は tag=0=event ID・tag=2=author(32byte 任意)・tag=3=kind(4byte BE) | TLV 長超過、非 ASCII、relay 上限超過、`hrp` 不一致、未定義 tag が 1KB 超 | アプリケーション層 |
+| **kind:30078（Parameterised Replaceable Event）** | `kind`=30078、`["d","kukuri:topic:<slug>:post:<revision>"]` が必須（`slug` は `TopicId` に準拠、`revision` は base32/UUID 文字列）、`["k","topic-post"]` 固定、`["t","topic:<slug>"]` 単一指定、`["a","30078:<pubkey>:kukuri:topic:<slug>:post:<revision>"]` 一致、`content` は JSON `{body,attachments,metadata}` で 1MB 未満、時系列で最新のみ有効 | `d` 欠如や形式不正、`k`/`t`/`a` の欠落・不一致、複数トピック指定、`content` サイズ超過、古い timestamp が最新を上書き | アプリケーション層 |
+| **共通制限** | `content` ≤ 1MB、`tags` ≤ 512、UTF-8 妥当 | サイズ超過、非 UTF-8、未知種別での重大フォーマット崩れ | アプリケーション層 |
+
+### 運用メモ
+- インフラ層（`IrohGossipService`）は JSON デコード失敗やシグネチャ検証失敗といった明確な異常値を受信時に破棄し、詳細な NIP 判定はアプリケーション層へ移譲する。
+- 検証失敗時は `EventGateway` が `AppError::ValidationError` を発行し、`metrics::record_receive_failure()` に記録する。Offline リプレイからの除外や隔離は `nostr_event_validation.md` の手順に従う。
+- 契約テストは `kukuri-tauri/src-tauri/tests/contract` に NIP-10/NIP-19/kind30078 のサンプルベクトルを追加し、P2P 経路の回帰は `tests/integration/p2p_*` で担保する。Docker ベースの統合テスト実行時には 9章の条件に違反したイベントが無効化されているかをログとメトリクスで確認する。
+  - JSON フィクスチャ: `tests/testdata/nip10_contract_cases.json` / `nip19_contract_cases.json` / `kind30078_contract_cases.json` を利用し、`case_id`・`description`・`expected` を揃える。
+- kind:30078 の PRE は `kukuri:topic:<slug>:post:<revision>` 単位で最新を採用する。再投稿検知時は `metadata.edited=true` を付与し、旧イベントは Offline 再索引ジョブが自動的に破棄する。
+- `ValidationFailureKind` に応じた `receive_failures_by_reason` を監視し、異常があれば WARN ログの `reason` と Offline レポートの `SyncStatus::Invalid` 記録を突合して原因を特定する。レポートは `offline://reindex_complete` イベントで取得できる。
+- 各テストの配置と責務は `docs/03_implementation/nostr_event_validation.md` 5.1節のマッピング表を参照。Runbook 更新時は対応するテスト名も必ず記録する。

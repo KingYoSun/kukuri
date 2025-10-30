@@ -239,6 +239,25 @@
   - 2025年10月30日: Runbook に `actions/cache@v4` の設定とローカル `--use-cache` オプションを記載。
 - [ ] NIPs 準拠イベントスキーマ（NIP-01/10/19/30078 等）の検証/テスト方針を確定する（`iroh-native-dht-plan.md:357`）。
   - 2025年10月30日: Runbook の TODO に移管（Phase 6 で受信バリデーションを整理）。
+  - 論点整理
+    - [ ] 「P2P 受信・イベント生成・オフライン再索引の各層で、NIP 検証責務をどのように分担し、Runbook/Plan のどこに反映するか？」
+      - 2025年10月30日: レイヤ責務を確定。インフラ層は P2P 受信時に JSON 解析失敗・署名不正等の異常値を直ちに破棄するゲートとし、NIP 仕様（01/10/19/30078）の厳密検証と後続処理判断はアプリケーション層の `EventGateway`/`EventService` 系で統括する。
+      - [ ] 実装作業
+    - [ ] 「NIP-01/10/19 について、許容する marker・relay URL・TLV 長さなどの Pass/Fail 条件をどう定義し、どのドキュメントに確定版を記載するか？」
+      - 2025年10月30日: NIP-01/10/19/kind30078 の Pass/Fail 条件（marker、relay URL、TLV 長、identifier 等）を確定し、Runbook および `docs/03_implementation/nostr_event_validation.md` に反映する方針を決定。
+      - [ ] 実装作業
+    - [ ] 「kind:30078（アプリ固有イベント）の ["d", …] 必須性や PRE 上書きルールなど、イベントスキーマをどのように規定し、コード/テストへ落とし込むか？」
+      - 2025年10月30日: PRE スキーマ方針を確定。`d` タグは `kukuri:topic:<topic_id>:post:<revision_id>` 形式で必須、`k` タグは `topic-post` 固定、`t` は単一トピック slug、`a` タグに PRE 完全キーを保持。`content` は JSON（body/attachments/metadata）で 1MB 以内。作業は `nostr_event_validation.md` / Runbook へ反映済み、実装タスクを追加予定。
+      - [ ] 実装作業
+    - [ ] 「NIP-01/10/19/30078 の検証ケースを、ドメインユニット・契約テスト・P2P/Offline 統合テストのどこで扱うか、テストインベントリへどうマッピングするか？」
+      - 2025年10月30日: ドメインユニット（`domain/entities/event.rs` テスト）、契約（`tests/contract/nip10.rs` + 新規 `nip19`/`kind30078`）、P2P 統合（`p2p_*_smoke.rs`/新規 `p2p_kind30078.rs`）、Offline 統合（`tests/integration/offline`）でカバレッジを分担し、`phase5_test_inventory.md` と `nostr_event_validation.md` にマッピング表を追加。
+      - [ ] 実装作業
+    - [ ] 「NIP-19 と kind30078 用の契約テストを JSON フィクスチャ方式で拡張するのか、それとも別手段を採用するのか？」
+      - 2025年10月30日: 既存の JSON フィクスチャ方式を採用。`tests/contract/nip19.rs` / `kind30078.rs` を追加し、`nip19_contract_cases.json` / `kind30078_contract_cases.json` を作成して Pass/Fail ケースを管理する方針を決定。補助として property-based テストは任意。
+      - [ ] 実装作業
+    - [ ] 「検証失敗時のメトリクス蓄積やログ出力、無効イベントの終端処理（破棄・隔離・保存）をどう定義し、Offline リプレイとの整合をどう取るか？」
+      - 2025年10月30日: `ValidationFailureKind` を導入し、メトリクス（`receive_failures_by_reason`）、ログ（reason 単位で WARN → DEBUG へのレートリミット）、Offline 再索引（`SyncStatus::Invalid` で隔離）の振る舞いを整理。Runbook と `nostr_event_validation.md` に反映。
+      - [ ] 実装作業
 - [x] DHT メトリクス/ログ（tracing レベル、カウンタ）を拡充し、Runbook へ記載する（`iroh-native-dht-plan.md:358`）。
   - 2025年10月30日: `BootstrapMetricsSnapshot` を追加し、P2PDebugPanel で環境/ユーザー/同梱/フォールバックの適用回数と最終ソースを表示。
 ### テスト / CI

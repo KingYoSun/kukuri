@@ -363,10 +363,13 @@ mod tests {
 - [ ] iroh-gossip: quit の意味整理と API 連動実装（例: `dht_bootstrap.rs::leave_topic`）
 - [ ] iroh-gossip: broadcast の意味整理と API 連動実装（例: `dht_bootstrap.rs::broadcast`）
 - [ ] NIPs 準拠イベントスキーマの確定・検証（NIP-01/10/19/30078 など）
+  - 2025年10月30日: 検証ポリシーを `docs/03_implementation/nostr_event_validation.md` および `p2p_mainline_runbook.md` 第9章に反映。残タスクは受信フィルタ結合テストの整備。
+  - 2025年10月30日: kind:30078 PRE スキーマ（`d`/`k`/`t`/`a` フォーマット、`content` JSON 構造、PRE 上書き優先順位）を確定し、ドキュメント更新済み。
 - [ ] DHT メトリクス/ログの整備（tracing, counters, レベル設定）
 
 備考:
 - Nostr リレー連携（Kukuri ↔ Nostr ブリッジのリレー接続機能）はバックログ。外部インデックスサーバー等の導入時に検討する。
+- NIP バリデーションに関するレイヤ責務: iroh ベースのインフラ層では受信時の JSON 解析エラーや署名不正など明らかな異常値を即座に破棄し、NIP-01/10/19/30078 の厳密な整合性判定と再試行・通知などの意思決定はアプリケーション層（`EventGateway`/`EventService` 等）が担う。
 
 ## 10. 結論
 irohのビルトインDHTディスカバリーを中核に、DNS/ブートストラップ/ローカル発見をハイブリッドで併用する方針は維持します。Cargo設定は完了済みのため、次はコード側で `discovery_dht()` を有効化し、quit/broadcastの意味整理とメトリクス整備を優先して仕上げます。

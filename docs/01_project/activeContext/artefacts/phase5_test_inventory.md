@@ -9,7 +9,7 @@
 | Shared test utilities | `src/application/shared/tests` | 共通モック | `tests/common`（既存）へ統合 | 既に汎用化済。Phase 5 後は Rust 側共通モックの唯一の配置として維持する。 |
 | EventManager tests | `src/modules/event/manager/tests` | 結合 | `tests/integration/event/manager` | Tauri `AppHandle` 依存がないシナリオを追加予定（不足）。 |
 | P2P module tests | `src-tauri/tests/p2p_gossip_smoke.rs`, `src-tauri/tests/p2p_mainline_smoke.rs` | 結合 | 同上 | Mainline DHT シナリオは接続統計で検証。Docker / CI 実行時は `ENABLE_P2P_INTEGRATION=1` を設定する。 |
-| Contract tests | `tests/contract/nip10.rs` | 契約 | （現行維持） | Phase 5 でカテゴリディレクトリを明確化済み。 |
+| Contract tests | `tests/contract/nip10.rs`（+ 新規 `nip19.rs` / `kind30078.rs`） | 契約 | （現行維持） | JSON フィクスチャ（`tests/testdata/nip*_contract_cases.json`）で Pass/Fail を管理。 |
 | Performance tests | `tests/performance_tests.rs` | パフォーマンス | `tests/performance/*.rs` | 実行条件と計測方法のドキュメント不足、要整備。 |
 | Integration harness | `tests/integration/*` | 結合 | `tests/integration`（維持） | `test_p2p_mainline.rs` で Mainline DHT 設定の統合シナリオを追加。Offline 系統合ケースは引き続き未作成。 |
 | Unit harness | `tests/unit` | （空） | `tests/unit` | Phase 5 で `application/shared` や `state` のユニットテストを移植。 |
@@ -33,6 +33,17 @@
 | Integration DI tests | `src/tests/integration/di/*.integration.test.ts` | サービス依存統合 | （新設） | `store_di.integration.test.ts` で `useP2PStore` と `offlineSyncService` の依存注入を検証。 |
 | Legacy root tests | （廃止） | - | - | `src/__tests__` ディレクトリを撤去。新構成へ完全移行済み。 |
 
+## NIP バリデーション対応テスト
+
+| レイヤ | ファイル/テスト | 対象 NIP/kind | 備考 |
+| --- | --- | --- | --- |
+| ドメインユニット | `kukuri-tauri/src-tauri/src/domain/entities/event.rs` （`#[cfg(test)]`） | NIP-01 / NIP-10 / NIP-19 / kind30078 | バリデータの境界値テストと PRE 上書き優先順位を確認する。 |
+| 契約 | `kukuri-tauri/src-tauri/tests/contract/nip10.rs`、新規 `nip19.rs`、`kind30078.rs`（各 JSON フィクスチャ） | NIP-10 / NIP-19 / kind30078 | 公式仕様と kukuri 拡張の Pass/Fail サンプルを管理。 |
+| P2P 統合 | `kukuri-tauri/src-tauri/tests/p2p_gossip_smoke.rs`、`p2p_mainline_smoke.rs`、新規 `p2p_kind30078.rs` | NIP-01 / NIP-10 / NIP-19 / kind30078 | 受信ドロップ・PRE 最新採用・メトリクス収集を end-to-end で検証。 |
+| Offline 統合 | `kukuri-tauri/src-tauri/tests/integration/offline/recovery.rs` | kind30078 | 再索引時に最新 revision のみ再投入されることを保証。 |
+| フロントユニット | `kukuri-tauri/src/tests/unit/hooks/useNostrEvents.test.tsx` | kind30078 | フロントエンドのイベント処理とトピック投稿数反映を網羅。 |
+| メトリクス検証 | `scripts/metrics/export-p2p.sh` / `scripts/metrics/export-p2p.ps1` | 全体（受信/送信） | `receive_failures` / PRE リジェクト件数を可視化し、Runbook 9章のチェックリストに連携。 |
+
 ## 移動／追加タスク（ドラフト）
 
 - [x] `tests/unit` へ EventService の純粋ユニットテストを移動し、EventManager 依存をモック化する。
@@ -40,3 +51,14 @@
 - [x] TypeScript の `__tests__` 直下の UI テストを `src/tests/unit` 配下へ移動し、ダブりを解消する。
 - [x] Integration テストで `App` の複数アカウントシナリオ（`src/tests/integration/ui/multipleAccounts.test.tsx`）を新ディレクトリへ移管し、依存モックを再利用可能にする。
 - [x] DI 依存の統合テストを `src/tests/integration/di/store_di.integration.test.ts` に追加し、P2P／Offline 系の初期化パスを検証する。
+
+## NIP バリデーション対応テスト
+
+| レイヤ | ファイル/テスト | 対象 NIP/kind | 備考 |
+| --- | --- | --- | --- |
+| ドメインユニット |  () | NIP-01/10/19/kind30078 | バリデータの境界値テスト。PRE 上書き含む |
+| 契約 |  / 新規  /  | NIP-10/19/kind30078 | JSON フィクスチャで Pass/Fail カバー |
+| P2P 統合 | , , 新規  | NIP-01/10/19/kind30078 | 受信ドロップ・PRE 最新採用を検証 |
+| Offline 統合 |  | kind30078 | 再索引時の最新採用と旧データ排除 |
+| フロントユニット |  | kind30078 | フロントのイベント処理/投稿数反映 |
+| メトリクス検証 |  | 全体 |  や PRE リジェクト件数を監視 |
