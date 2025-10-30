@@ -7,7 +7,7 @@
 | --- | --- | --- | --- | --- |
 | EventService tests | `tests/unit/application/event_service` | ユニット | （現行維持） | EventManager 連携ケースは `tests/common/mocks` のスタブへ集約済み。Publish/Distribution モックも共有化したため追加作業なし。 |
 | Shared test utilities | `src/application/shared/tests` | 共通モック | `tests/common`（既存）へ統合 | 既に汎用化済。Phase 5 後は Rust 側共通モックの唯一の配置として維持する。 |
-| EventManager tests | `src/modules/event/manager/tests` | 結合 | `tests/integration/event/manager` | Tauri `AppHandle` 依存がないシナリオを追加予定（不足）。 |
+| EventManager tests | `src/modules/event/manager/tests` | 結合 | `tests/integration/event/manager` | 2025年10月30日: AppHandle 非依存の結合テスト `event_manager_integration` を追加。`cargo test --package kukuri-tauri --test event_manager_integration` と `./scripts/test-docker.ps1 rust -Test event_manager_integration` で実行可能。 |
 | P2P module tests | `src-tauri/tests/p2p_gossip_smoke.rs`, `src-tauri/tests/p2p_mainline_smoke.rs` | 結合 | 同上 | Mainline DHT シナリオは接続統計で検証。Docker / CI 実行時は `ENABLE_P2P_INTEGRATION=1` を設定する。 |
 | Contract tests | `tests/contract/nip10.rs`（+ 新規 `nip19.rs` / `kind30078.rs`） | 契約 | （現行維持） | JSON フィクスチャ（`tests/testdata/nip*_contract_cases.json`）で Pass/Fail を管理。 |
 | Performance tests | `tests/performance_tests.rs` | パフォーマンス | `tests/performance/*.rs` | 実行条件と計測方法のドキュメント不足、要整備。 |

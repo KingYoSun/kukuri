@@ -262,7 +262,8 @@
   - 2025年10月30日: `BootstrapMetricsSnapshot` を追加し、P2PDebugPanel で環境/ユーザー/同梱/フォールバックの適用回数と最終ソースを表示。
 ### テスト / CI
 
-- [ ] EventManager 結合テストを `tests/integration/event/manager` に追加し、AppHandle 非依存シナリオを `./scripts/test-docker.ps1 rust --test event_manager_integration` から呼び出せるよう CI / Runbook / `phase5_test_inventory.md` を更新する（`phase5_test_inventory.md:10`）。
+- [x] EventManager 結合テストを `tests/integration/event/manager` に追加し、AppHandle 非依存シナリオを `./scripts/test-docker.ps1 rust -Test event_manager_integration` から呼び出せるよう CI / Runbook / `phase5_test_inventory.md` を更新する（`phase5_test_inventory.md:10`）。
+  - 2025年10月30日: `event_manager_integration` テストバイナリを追加し、`./scripts/test-docker.ps1` に `-Test` オプションを実装。`phase5_test_inventory.md` と `p2p_mainline_runbook.md` に運用手順を追記し、`phase5_ci_path_audit.md` の CI パスを更新。
 - [ ] パフォーマンスハーネスを `tests/performance/*.rs` へ分割し、計測条件・成果物の保存手順を `phase5_test_inventory.md` / `p2p_mainline_runbook.md` に追記、`scripts/test-docker.{sh,ps1}` に `performance` サブコマンドを追加する（`phase5_test_inventory.md:13`, `p2p_mainline_runbook.md:73-78`）。
 - [ ] Offline 系統合テストの不足シナリオ（再索引/再接続/キャッシュ復元）を `tests/integration/offline` に追加し、Inventory を更新する（`phase5_test_inventory.md:14`）。
 - [ ] TypeScript `src/tests/unit/lib/syncEngine` 系に競合解決シナリオテストを追加する（`phase5_test_inventory.md:31`）。

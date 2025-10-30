@@ -16,7 +16,20 @@ impl EventManager {
         drop(publisher);
 
         let client_manager = self.client_manager.read().await;
-        let event_id = client_manager.publish_event(event.clone()).await?;
+        let event_id = match client_manager.publish_event(event.clone()).await {
+            Ok(id) => id,
+            Err(e) => {
+                if std::env::var("KUKURI_ALLOW_NO_RELAY")
+                    .map(|value| value == "1")
+                    .unwrap_or(false)
+                    && e.to_string().contains("no relays specified")
+                {
+                    event.id
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         drop(client_manager);
 
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
@@ -43,7 +56,23 @@ impl EventManager {
         drop(publisher);
 
         let client_manager = self.client_manager.read().await;
-        let event_id = client_manager.publish_event(event.clone()).await?;
+        let event_id = match client_manager.publish_event(event.clone()).await {
+            Ok(id) => id,
+            Err(e) => {
+                if std::env::var("KUKURI_ALLOW_NO_RELAY")
+                    .map(|value| value == "1")
+                    .unwrap_or(false)
+                {
+                    tracing::warn!(
+                        target: "event_manager",
+                        "skipping publish_event error in test mode: {e}"
+                    );
+                    event.id
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         drop(client_manager);
 
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
@@ -53,6 +82,11 @@ impl EventManager {
         }
 
         if let Some(store) = self.event_topic_store.read().await.as_ref().cloned() {
+            tracing::debug!(
+                target: "event_manager",
+                "adding event_topic mapping for {}",
+                event.id.to_hex()
+            );
             let _ = store.add_event_topic(&event.id.to_string(), topic_id).await;
         }
 

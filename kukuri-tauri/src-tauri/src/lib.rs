@@ -32,11 +32,14 @@ pub mod test_support {
         pub use crate::domain::value_objects;
     }
     pub mod infrastructure {
+        pub use crate::infrastructure::crypto;
+        pub use crate::infrastructure::database;
+        pub use crate::infrastructure::event;
         pub use crate::infrastructure::offline;
         pub use crate::infrastructure::p2p;
     }
     pub mod shared {
-        pub use crate::shared::config;
+        pub use crate::shared::{config, error};
     }
 }
 

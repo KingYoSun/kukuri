@@ -6,6 +6,8 @@ param(
     [string]$Command = "all",
 
     [switch]$Integration,            # Rustテスト時にP2P統合テストのみを実行
+    [Alias("Test", "tests")]
+    [string]$TestTarget,             # Rustテスト時に特定バイナリのみ実行
     [string]$BootstrapPeers,         # 統合テスト用のブートストラップピア指定
     [string]$IrohBin,                # iroh バイナリのパス
     [string]$IntegrationLog = "info,iroh_tests=debug", # 統合テスト用のRUST_LOG
@@ -41,6 +43,14 @@ function Write-Info {
     Write-Host "ℹ $Message" -ForegroundColor Cyan
 }
 
+if ($Integration -and $TestTarget) {
+    Write-ErrorMessage "-Integration と -Test は同時には指定できません。"
+}
+
+if ($TestTarget -and $Command -ne "rust") {
+    Write-ErrorMessage "-Test は rust コマンドのみに指定できます。"
+}
+
 # ヘルプ表示
 function Show-Help {
     Write-Host @"
@@ -61,6 +71,7 @@ Commands:
 
 Options:
   -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
+  -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
   -IntegrationLog <level> - 統合テスト時の RUST_LOG 設定（既定: info,iroh_tests=debug）
@@ -71,6 +82,7 @@ Options:
 Examples:
   .\test-docker.ps1                # すべてのテストを実行
   .\test-docker.ps1 rust           # Rustテストのみ実行
+  .\test-docker.ps1 rust -Test event_manager_integration
   .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
   .\test-docker.ps1 rust -NoBuild  # ビルドをスキップしてRustテストを実行
   .\test-docker.ps1 cache-clean    # キャッシュを含めて完全クリーンアップ
@@ -144,6 +156,38 @@ function Invoke-RustTests {
     Write-Host "Running Rust tests in Docker..."
     Invoke-DockerCompose @("run", "--rm", "rust-test")
     Write-Success "Rust tests passed!"
+}
+
+function Invoke-RustTestTarget {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Target
+    )
+
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+
+    Write-Host "Running Rust test target '$Target' in Docker..."
+    $cargoArgs = @(
+        "run",
+        "--rm",
+        "rust-test",
+        "cargo",
+        "test",
+        "--package",
+        "kukuri-tauri",
+        "--test",
+        $Target,
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+    )
+    $exitCode = Invoke-DockerCompose $cargoArgs -IgnoreFailure
+    if ($exitCode -ne 0) {
+        Write-ErrorMessage "Rust test target '$Target' failed (exit code $exitCode)"
+    }
+    Write-Success "Rust test target '$Target' passed!"
 }
 
 function Invoke-IntegrationTests {
@@ -478,7 +522,9 @@ switch ($Command) {
         Show-CacheStatus
     }
     "rust" {
-        if ($Integration) {
+        if ($TestTarget) {
+            Invoke-RustTestTarget -Target $TestTarget
+        } elseif ($Integration) {
             Invoke-IntegrationTests -BootstrapPeersParam $BootstrapPeers -IrohBinParam $IrohBin -LogLevel $IntegrationLog
         } else {
             Invoke-RustTests

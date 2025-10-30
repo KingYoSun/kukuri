@@ -1,5 +1,5 @@
 ﻿# P2P Mainline Runbook
-最終更新日: 2025年10月22日
+?????: 2025?10?30?
 
 ## 1. 目的
 - Mainline DHT を有効にした P2P ネットワークの運用手順と統合テスト実行フローを共有する。
@@ -25,6 +25,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   - `p2p_mainline_smoke.rs`: Mainline DHT 経路のスモークテスト。ブートストラップ接続とルーティングの健全性を検証する。
   - `tests/integration/test_p2p_mainline.rs`: P2PService Builder と `DiscoveryOptions` の回帰テスト。2025年10月25日にカスタムディスカバリ override ケースを追加し、Mainline DHT フローの構成が自動検証されるようにした。
   - `tests/integration/offline` : OfflineService と再索引ジョブの結合テスト（2025年10月30日追加）。`recovery.rs` で再索引レポートとキュー再投入の挙動を確認する。
+  - `tests/integration/event/manager` : EventManager ? AppHandle ?????????2025?10?30?????`cargo test --package kukuri-tauri --test event_manager_integration` ??????
   - `scripts/docker/run-smoke-tests.sh` / `scripts/test-docker.{sh,ps1}` は両テストを順次実行する構成に統一済みで、旧バイナリへのフォールバックは存在しない。
 
 ### 3.1 共通ユーティリティの活用
@@ -56,6 +57,14 @@ $env:RUST_LOG = "info,iroh_tests=debug"
    - `-IntegrationLog` で `RUST_LOG` を上書き可能。
    - `integration` コマンド単体でも同様のオプションを利用できる（例: `./scripts/test-docker.ps1 integration -BootstrapPeers ...`）。
    - PowerShell 版スクリプトは `p2p_gossip_smoke` / `p2p_mainline_smoke` の双方を順次実行する。
+6. EventManager ???????????????:
+   ```powershell
+   cargo test --package kukuri-tauri --test event_manager_integration -- --nocapture
+   ```
+   Docker ????????????
+   ```powershell
+   ./scripts/test-docker.ps1 rust -Test event_manager_integration
+   ```
 
 ## 5. ログとトレース
 - `support/logging.rs` で `tracing_subscriber` を初期化し、`iroh_tests` ターゲットでログを出力する。
