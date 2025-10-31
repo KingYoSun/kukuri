@@ -132,6 +132,16 @@ impl TopicMesh {
             subscribers.insert(subscription_id, tx.clone());
         }
 
+        // Receiver がクローズされたら自動的に購読登録を解除する
+        {
+            let drop_tx = tx.clone();
+            let mesh = self.clone();
+            tokio::spawn(async move {
+                drop_tx.closed().await;
+                mesh.unsubscribe(subscription_id).await;
+            });
+        }
+
         // 直近メッセージを購読開始直後に配信（最新→古い順で保持し、古→新順で送信）
         if let Err(_e) = self
             .replay_recent_messages(tx.clone(), DEFAULT_REPLAY_LIMIT)
@@ -236,6 +246,7 @@ pub struct TopicMeshSubscription {
 mod tests {
     use super::*;
     use crate::domain::p2p::message::MessageType;
+    use tokio::time::{Duration, sleep};
 
     #[tokio::test]
     async fn test_duplicate_detection() {
@@ -355,6 +366,24 @@ mod tests {
         assert!(
             !subscribers.contains_key(&dropped_id),
             "closed channel should be removed automatically"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_subscription_auto_unsubscribes_on_drop() {
+        let mesh = TopicMesh::new("topic_auto_unsubscribe".into());
+        let subscription = mesh.subscribe().await;
+        assert_eq!(mesh.subscriber_count().await, 1);
+
+        drop(subscription);
+
+        // Allow the drop guard to execute unsubscribe inside spawned task
+        sleep(Duration::from_millis(10)).await;
+
+        assert_eq!(
+            mesh.subscriber_count().await,
+            0,
+            "subscription drop should trigger unsubscribe"
         );
     }
 }

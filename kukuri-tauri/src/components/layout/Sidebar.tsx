@@ -146,7 +146,11 @@ export function Sidebar() {
                         </div>
                       </div>
                       {topic.unreadCount > 0 && (
-                        <Badge variant="default" className="ml-2 h-5 px-1.5 text-xs">
+                        <Badge
+                          variant="default"
+                          className="ml-2 h-5 px-1.5 text-xs"
+                          data-testid={`topic-${topic.id}-unread`}
+                        >
                           {topic.unreadCount}
                         </Badge>
                       )}

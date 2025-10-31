@@ -197,7 +197,34 @@ describe('Sidebar', () => {
 
     render(<Sidebar />);
 
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByTestId('topic-topic-a-unread')).toHaveTextContent('5');
+  });
+
+  it('未読カウントが0の場合はバッジを表示しない', () => {
+    const topic = buildTopic({ id: 'topic-a', name: 'Topic A' });
+    useTopicStore.setState((state) => ({
+      ...state,
+      topics: new Map([[topic.id, topic]]),
+      joinedTopics: [topic.id],
+      topicUnreadCounts: new Map([[topic.id, 0]]),
+    }));
+
+    render(<Sidebar />);
+
+    expect(screen.queryByTestId('topic-topic-a-unread')).not.toBeInTheDocument();
+  });
+
+  it('最後の活動が存在しない場合は未投稿と表示する', () => {
+    const topic = buildTopic({ id: 'topic-a', name: 'Topic A', lastActive: 0 });
+    useTopicStore.setState((state) => ({
+      ...state,
+      topics: new Map([[topic.id, topic]]),
+      joinedTopics: [topic.id],
+    }));
+
+    render(<Sidebar />);
+
+    expect(screen.getByText('未投稿')).toBeInTheDocument();
   });
 
   it('トピックをクリックするとナビゲーションと選択状態が更新される', async () => {

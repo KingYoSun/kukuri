@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年10月31日
+最終更新日: 2025年11月01日
 
 ## 方針（2025年09月15日 更新）
 
@@ -22,11 +22,12 @@
 
 - [x] `infrastructure/p2p/event_distributor.rs` のブロードキャスト/配信経路 TODO を実装（2025年10月31日: Gossip/DHT配信処理と依存注入を追加し、Docker経由で Rust テストを完走）
 - [x] `infrastructure/p2p/dht_integration.rs` の実装 TODO を完了（2025年10月31日: Nostr⇔ドメイン変換実装と単体テスト追加）
-- [ ] `domain/p2p/topic_mesh.rs` の購読処理 TODO を実装
+- [x] `domain/p2p/topic_mesh.rs` の購読処理 TODO を実装
   - 2025年10月31日: Codex作業開始。TopicMesh購読APIとIroh連携の実装方針を調査中。
-  - 2025年11月01日: 購読初期リプレイと自動解除の実装・ユニットテスト追加を進行中（UI購読での履歴配信を確認予定）。
-- [ ] `application/services/post_service.rs` のトピック別投稿キャッシュ TODO に対応
-  - 2025年11月01日: キャッシュ削除ロジックの整合性改善（delete_post時の無効化とテスト）に着手。
-- [ ] `src/components/layout/Sidebar.tsx` の未読カウント TODO を実装しテストを追加
-  - 2025年11月01日: P2Pメッセージタイムスタンプの正規化と未読数表示のズレ修正を実装中（テスト更新含む）。
-- [ ] 残存 TODO の棚卸し結果を `phase5_dependency_inventory_template.md` に追記
+  - 2025年11月01日: 購読初期リプレイと自動解除を実装し、Receiver切断時に購読が解除されるガードとユニットテストを追加。
+- [x] `application/services/post_service.rs` のトピック別投稿キャッシュ TODO に対応
+  - 2025年11月01日: キャッシュとDB結果を統合し、キャッシュ専用投稿が維持されるユニットテストを追加。
+- [x] `src/components/layout/Sidebar.tsx` の未読カウント TODO を実装しテストを追加
+  - 2025年11月01日: 未読バッジ表示のテストIDを追加し、未投稿表示と未読0件時の挙動テストを整備。
+- [x] 残存 TODO の棚卸し結果を `phase5_dependency_inventory_template.md` に追記
+  - 2025年11月01日: TopicMesh/PostService/Sidebarの依存棚卸しメモを更新。

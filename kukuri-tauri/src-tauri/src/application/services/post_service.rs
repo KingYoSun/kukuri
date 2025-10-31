@@ -5,6 +5,7 @@ use crate::domain::entities::{Post, User};
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -87,17 +88,28 @@ impl PostService {
             return Ok(Vec::new());
         }
 
-        let cached = self.cache.get_by_topic(topic_id, limit).await;
-        if !cached.is_empty() && cached.len() == limit {
-            return Ok(cached);
+        let cached_all = self.cache.get_by_topic(topic_id, usize::MAX).await;
+        if cached_all.len() >= limit {
+            return Ok(cached_all.into_iter().take(limit).collect());
         }
 
-        let posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
+        let mut posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
 
-        // キャッシュを最新の取得結果に置き換える
+        if !cached_all.is_empty() {
+            let mut seen: HashSet<String> = posts.iter().map(|post| post.id.clone()).collect();
+            for cached in cached_all {
+                if seen.insert(cached.id.clone()) {
+                    posts.push(cached);
+                }
+            }
+        }
+
+        posts.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        // キャッシュにも最新の取得結果を反映
         self.cache.set_topic_posts(topic_id, posts.clone()).await;
 
-        Ok(posts)
+        Ok(posts.into_iter().take(limit).collect())
     }
 
     pub async fn like_post(&self, post_id: &str) -> Result<(), AppError> {
@@ -543,6 +555,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_posts_by_topic_merges_cached_entries_not_in_db() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
+        let topic_id = "topic-cache-merge";
+
+        let mut db_post = Post::new("db-post".into(), sample_user(), topic_id.to_string());
+        db_post.created_at = Utc.timestamp_opt(50, 0).unwrap();
+        db_post.is_synced = true;
+        repository
+            .create_post(&db_post)
+            .await
+            .expect("seed repository with db post");
+
+        let mut cached_only = Post::new("cached-only".into(), sample_user(), topic_id.to_string());
+        cached_only.created_at = Utc.timestamp_opt(200, 0).unwrap();
+        cache.add(cached_only.clone()).await;
+
+        let result = service
+            .get_posts_by_topic(topic_id, 2)
+            .await
+            .expect("fetch posts should include cached-only entry");
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].content, "cached-only");
+        assert_eq!(result[1].content, "db-post");
+
+        let cached_snapshot = cache.get_by_topic(topic_id, 5).await;
+        assert!(
+            cached_snapshot.iter().any(|post| post.id == cached_only.id),
+            "cached-only post should remain cached after merge"
+        );
+    }
+
+    #[tokio::test]
     async fn delete_post_removes_from_cache() {
         let (service, _repository, cache) =
             setup_post_service_with_deps(Arc::new(TestEventService::default())).await;
@@ -566,6 +612,5 @@ mod tests {
             cache.get(&post.id).await.is_none(),
             "post should be evicted from cache after deletion"
         );
-
     }
 }
