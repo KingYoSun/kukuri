@@ -163,7 +163,9 @@ impl AppState {
         let secure_storage: Arc<dyn SecureStorage> = secure_storage_impl.clone();
         let secure_account_store: Arc<dyn SecureAccountStore> = secure_storage_impl.clone();
         let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());
-        let event_distributor: Arc<dyn EventDistributor> = Arc::new(DefaultEventDistributor::new());
+        let default_event_distributor = Arc::new(DefaultEventDistributor::new());
+        let event_distributor: Arc<dyn EventDistributor> =
+            default_event_distributor.clone() as Arc<dyn EventDistributor>;
 
         // P2Pサービスの初期化
         let (p2p_event_tx, _initial_rx) = broadcast::channel(512);
@@ -172,6 +174,13 @@ impl AppState {
         let network_service: Arc<dyn NetworkService> = Arc::clone(&p2p_stack.network_service);
         let gossip_service: Arc<dyn GossipService> = Arc::clone(&p2p_stack.gossip_service);
         let p2p_service = Arc::clone(&p2p_stack.p2p_service);
+
+        default_event_distributor
+            .set_gossip_service(Arc::clone(&gossip_service))
+            .await;
+        default_event_distributor
+            .set_network_service(Arc::clone(&network_service))
+            .await;
         // EventManagerへGossipServiceを接続（P2P配信経路の直結）
         event_manager
             .set_gossip_service(Arc::clone(&gossip_service))
@@ -197,6 +206,10 @@ impl AppState {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to ensure public topic: {}", e))?;
         event_manager.set_default_p2p_topic_id("public").await;
+        let distributor_default_topics = event_manager.list_default_p2p_topics().await;
+        default_event_distributor
+            .set_default_topics(distributor_default_topics)
+            .await;
 
         // AuthServiceの初期化（UserServiceとTopicServiceが必要）
         let lifecycle_port: Arc<dyn AuthLifecyclePort> = Arc::new(DefaultAuthLifecycle::new(
