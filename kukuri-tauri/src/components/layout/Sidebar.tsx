@@ -37,9 +37,14 @@ export function Sidebar() {
 
         // P2Pメッセージから最終活動時刻を取得
         const messages = getTopicMessages(id);
+        const messageTimestamps = messages.map((m) =>
+          m.timestamp > 1_000_000_000_000
+            ? Math.floor(m.timestamp / 1000)
+            : Math.floor(m.timestamp),
+        );
         const lastMessageTime =
-          messages.length > 0
-            ? Math.max(...messages.map((m) => m.timestamp))
+          messageTimestamps.length > 0
+            ? Math.max(...messageTimestamps)
             : topic.lastActive || 0;
 
         const unreadCount = topicUnreadCounts.get(topic.id) ?? 0;

@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{RwLock, mpsc};
 
 const DEFAULT_SUBSCRIBER_BUFFER: usize = 128;
+const DEFAULT_REPLAY_LIMIT: usize = 64;
 
 #[derive(Clone)]
 pub struct TopicMesh {
@@ -126,8 +127,19 @@ impl TopicMesh {
         let (tx, rx) = mpsc::channel(DEFAULT_SUBSCRIBER_BUFFER);
         let subscription_id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
 
-        let mut subscribers = self.subscribers.write().await;
-        subscribers.insert(subscription_id, tx);
+        {
+            let mut subscribers = self.subscribers.write().await;
+            subscribers.insert(subscription_id, tx.clone());
+        }
+
+        // 直近メッセージを購読開始直後に配信（最新→古い順で保持し、古→新順で送信）
+        if let Err(_e) = self
+            .replay_recent_messages(tx.clone(), DEFAULT_REPLAY_LIMIT)
+            .await
+        {
+            // リプレイ開始前に購読者が離脱した場合は登録を解除
+            self.unsubscribe(subscription_id).await;
+        }
 
         TopicMeshSubscription {
             id: subscription_id,
@@ -172,6 +184,40 @@ impl TopicMesh {
                 subscribers.remove(&id);
             }
         }
+    }
+
+    async fn replay_recent_messages(
+        &self,
+        sender: mpsc::Sender<GossipMessage>,
+        limit: usize,
+    ) -> Result<(), ()> {
+        if limit == 0 {
+            return Ok(());
+        }
+
+        let messages = {
+            let cache = self.message_cache.read().await;
+            let mut cached: Vec<_> = cache.iter().map(|(_, msg)| msg.clone()).collect();
+            if cached.is_empty() {
+                return Ok(());
+            }
+            // LruCacheは最新アクセス順なので一度降順に並べ替えて上位limit件を確保
+            cached.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            cached.truncate(limit.min(DEFAULT_SUBSCRIBER_BUFFER));
+            cached.reverse();
+            cached
+        };
+
+        for message in messages {
+            if sender.send(message).await.is_err() {
+                // 送信に失敗した場合は購読終了とみなし、呼び出し元で解除する
+                return Err(());
+            }
+        }
+
+        // 送信完了
+        let _ = sender;
+        Ok(())
     }
 
     #[cfg(test)]
@@ -257,6 +303,31 @@ mod tests {
             .expect("subscriber should receive message");
         assert_eq!(received.payload, message.payload);
         assert_eq!(received.msg_type as u8, MessageType::NostrEvent as u8);
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_replays_recent_messages() {
+        let mesh = TopicMesh::new("topic_replay".into());
+
+        for ts in 0..5 {
+            let mut message =
+                GossipMessage::new(MessageType::TopicSync, vec![ts as u8], vec![0x02; 33]);
+            message.timestamp = ts;
+            mesh.handle_message(message).await.unwrap();
+        }
+
+        let mut subscription = mesh.subscribe().await;
+        let mut received = Vec::new();
+        for _ in 0..5 {
+            let message = subscription
+                .receiver
+                .recv()
+                .await
+                .expect("replay should deliver cached message");
+            received.push(message.timestamp);
+        }
+
+        assert_eq!(received, vec![0, 1, 2, 3, 4]);
     }
 
     #[tokio::test]

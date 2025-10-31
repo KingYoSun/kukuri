@@ -150,6 +150,20 @@ describe('useTopicStore', () => {
       expect(useTopicStore.getState().topicUnreadCounts.get('topic1')).toBe(0);
     });
 
+    it('handleIncomingTopicMessageがミリ秒タイムスタンプを秒へ正規化すること', () => {
+      const nowMs = Date.now();
+      useTopicStore.setState({
+        currentTopic: mockTopic1,
+        topicUnreadCounts: new Map([['topic1', 1]]),
+        topicLastReadAt: new Map([['topic1', 0]]),
+      });
+
+      useTopicStore.getState().handleIncomingTopicMessage('topic1', nowMs);
+
+      const stored = useTopicStore.getState().topicLastReadAt.get('topic1');
+      expect(stored).toBe(Math.floor(nowMs / 1000));
+    });
+
     it('joinTopicメソッドが重複を許容せず未読カウントを初期化すること', async () => {
       vi.mocked(TauriApi.joinTopic).mockResolvedValue(undefined);
 

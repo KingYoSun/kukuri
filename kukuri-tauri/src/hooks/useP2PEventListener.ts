@@ -110,9 +110,14 @@ export function useP2PEventListener() {
         // P2Pストアに追加
         addMessage(p2pMessage);
 
+        const messageTimestampSeconds =
+          message.timestamp > 1_000_000_000_000
+            ? Math.floor(message.timestamp / 1000)
+            : Math.floor(message.timestamp);
+
         useTopicStore
           .getState()
-          .handleIncomingTopicMessage(topic_id, message.timestamp);
+          .handleIncomingTopicMessage(topic_id, messageTimestampSeconds);
 
         // 投稿として処理（リアルタイム更新）
         handleP2PMessageAsPost(p2pMessage, topic_id);

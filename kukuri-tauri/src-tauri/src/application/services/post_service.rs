@@ -120,7 +120,9 @@ impl PostService {
         self.event_service
             .delete_events(vec![id.to_string()], Some("Post deleted".to_string()))
             .await?;
-        self.repository.delete_post(id).await
+        self.repository.delete_post(id).await?;
+        self.cache.remove(id).await;
+        Ok(())
     }
 
     pub async fn get_posts_by_author(
@@ -538,5 +540,32 @@ mod tests {
 
         let cached_full = cache.get_by_topic(topic_id, 5).await;
         assert_eq!(cached_full.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn delete_post_removes_from_cache() {
+        let (service, _repository, cache) =
+            setup_post_service_with_deps(Arc::new(TestEventService::default())).await;
+
+        let post = service
+            .create_post("to delete".into(), sample_user(), "topic-del".into())
+            .await
+            .expect("post creation succeeds");
+
+        assert!(
+            cache.get(&post.id).await.is_some(),
+            "post should be present in cache after creation"
+        );
+
+        service
+            .delete_post(&post.id)
+            .await
+            .expect("delete_post should succeed");
+
+        assert!(
+            cache.get(&post.id).await.is_none(),
+            "post should be evicted from cache after deletion"
+        );
+
     }
 }

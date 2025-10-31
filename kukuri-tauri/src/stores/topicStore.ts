@@ -417,10 +417,14 @@ export const useTopicStore = create<TopicStore>()(
         set((state) => {
           const unread = new Map(state.topicUnreadCounts);
           const lastRead = new Map(state.topicLastReadAt);
+          const normalisedTimestamp =
+            timestamp > 1_000_000_000_000
+              ? Math.floor(timestamp / 1000)
+              : Math.floor(timestamp);
 
           if (state.currentTopic?.id === topicId) {
             unread.set(topicId, 0);
-            lastRead.set(topicId, timestamp);
+            lastRead.set(topicId, normalisedTimestamp);
           } else {
             const current = unread.get(topicId) ?? 0;
             unread.set(topicId, current + 1);
