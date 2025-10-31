@@ -21,7 +21,7 @@
 ### 残存 TODO 実装
 
 - [ ] `infrastructure/p2p/event_distributor.rs` のブロードキャスト/配信経路 TODO を実装
-- [ ] `infrastructure/p2p/dht_integration.rs` の実装 TODO を完了
+- [x] `infrastructure/p2p/dht_integration.rs` の実装 TODO を完了（2025年10月31日: Nostr⇔ドメイン変換実装と単体テスト追加）
 - [ ] `domain/p2p/topic_mesh.rs` の購読処理 TODO を実装
 - [ ] `application/services/post_service.rs` のトピック別投稿キャッシュ TODO に対応
 - [ ] `src/components/layout/Sidebar.tsx` の未読カウント TODO を実装しテストを追加

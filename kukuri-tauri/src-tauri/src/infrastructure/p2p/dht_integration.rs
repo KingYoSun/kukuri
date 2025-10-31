@@ -94,21 +94,95 @@ impl DhtIntegration {
 /// NostrとDHTのブリッジ
 pub mod bridge {
     use super::*;
-    use nostr_sdk::Event as NostrEvent;
+    use nostr_sdk::{Event as NostrEvent, JsonUtil};
+    use serde_json::json;
+    use std::convert::TryFrom;
 
     /// NostrイベントをKukuriイベントに変換
-    pub fn nostr_to_kukuri(_event: &NostrEvent) -> Result<Event, AppError> {
-        // TODO: 実装
-        Err(AppError::NotImplemented(
-            "Conversion not implemented".to_string(),
-        ))
+    pub fn nostr_to_kukuri(event: &NostrEvent) -> Result<Event, AppError> {
+        let timestamp_raw = event.created_at.as_u64();
+        let timestamp = i64::try_from(timestamp_raw).map_err(|_| {
+            AppError::DeserializationError(format!(
+                "Timestamp overflow when converting nostr event: {}",
+                timestamp_raw
+            ))
+        })?;
+        let created_at =
+            chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).ok_or_else(|| {
+                AppError::DeserializationError(format!(
+                    "Invalid timestamp in nostr event: {}",
+                    timestamp
+                ))
+            })?;
+
+        Ok(Event {
+            id: event.id.to_string(),
+            pubkey: event.pubkey.to_string(),
+            created_at,
+            kind: event.kind.as_u16() as u32,
+            tags: event.tags.iter().map(|tag| tag.clone().to_vec()).collect(),
+            content: event.content.clone(),
+            sig: event.sig.to_string(),
+        })
     }
 
     /// KukuriイベントをNostrイベントに変換
-    pub fn kukuri_to_nostr(_event: &Event) -> Result<NostrEvent, AppError> {
-        // TODO: 実装
-        Err(AppError::NotImplemented(
-            "Conversion not implemented".to_string(),
-        ))
+    pub fn kukuri_to_nostr(event: &Event) -> Result<NostrEvent, AppError> {
+        let payload = json!({
+            "id": event.id,
+            "pubkey": event.pubkey,
+            "created_at": event.created_at.timestamp(),
+            "kind": event.kind,
+            "tags": event.tags,
+            "content": event.content,
+            "sig": event.sig,
+        });
+
+        NostrEvent::from_json(payload.to_string())
+            .map_err(|e| AppError::NostrError(format!("Failed to convert event: {e}")))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use nostr_sdk::{EventBuilder, Keys, Tag};
+
+        #[test]
+        fn convert_nostr_to_domain_event() {
+            let keys = Keys::generate();
+            let event = EventBuilder::text_note("hello nostr to domain")
+                .tags(vec![Tag::hashtag("kukuri")])
+                .sign_with_keys(&keys)
+                .expect("signing succeeds");
+
+            let converted = nostr_to_kukuri(&event).expect("conversion succeeds");
+            assert_eq!(converted.id, event.id.to_string());
+            assert_eq!(converted.pubkey, event.pubkey.to_string());
+            assert_eq!(converted.kind, event.kind.as_u16() as u32);
+            assert_eq!(converted.content, event.content);
+            assert_eq!(converted.tags.len(), 1);
+            assert_eq!(converted.tags[0][0], "t");
+            assert_eq!(converted.sig, event.sig.to_string());
+        }
+
+        #[test]
+        fn convert_domain_to_nostr_event() {
+            let keys = Keys::generate();
+            let nostr_event = EventBuilder::text_note("roundtrip conversion")
+                .tags(vec![Tag::hashtag("kukuri")])
+                .sign_with_keys(&keys)
+                .expect("signing succeeds");
+
+            let domain_event = nostr_to_kukuri(&nostr_event).expect("conversion succeeds");
+
+            let rebuilt = kukuri_to_nostr(&domain_event).expect("rebuild succeeds");
+            assert_eq!(rebuilt.id, nostr_event.id);
+            assert_eq!(rebuilt.pubkey, nostr_event.pubkey);
+            assert_eq!(rebuilt.kind, nostr_event.kind);
+            assert_eq!(rebuilt.content, nostr_event.content);
+            assert_eq!(rebuilt.tags, nostr_event.tags);
+            assert_eq!(rebuilt.sig, nostr_event.sig);
+            assert_eq!(rebuilt.created_at, nostr_event.created_at);
+        }
     }
 }
