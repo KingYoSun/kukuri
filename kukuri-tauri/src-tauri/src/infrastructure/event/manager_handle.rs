@@ -72,6 +72,12 @@ impl LegacyEventManagerHandle {
     }
 }
 
+impl Default for LegacyEventManagerHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl EventManagerHandle for LegacyEventManagerHandle {
     async fn set_gossip_service(&self, gossip: Arc<dyn GossipService>) {

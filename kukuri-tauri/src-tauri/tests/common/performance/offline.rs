@@ -1,21 +1,19 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chrono::{Duration, Utc};
 use kukuri_lib::test_support::application::ports::offline_store::OfflinePersistence;
 use kukuri_lib::test_support::application::services::offline_service::{
     OfflineService, OfflineServiceTrait, SaveOfflineActionParams,
 };
-use kukuri_lib::test_support::domain::entities::offline::{
-    CacheMetadataUpdate, SyncStatusUpdate,
-};
+use kukuri_lib::test_support::domain::entities::offline::{CacheMetadataUpdate, SyncStatusUpdate};
 use kukuri_lib::test_support::domain::value_objects::event_gateway::PublicKey;
 use kukuri_lib::test_support::domain::value_objects::offline::{
     CacheKey, CacheType, EntityId, EntityType, OfflineActionType, OfflinePayload, SyncStatus,
 };
 use kukuri_lib::test_support::infrastructure::offline::SqliteOfflinePersistence;
-use serde_json::{json, Value};
-use sqlx::{sqlite::SqlitePoolOptions, Executor, Pool, Sqlite};
+use serde_json::{Value, json};
+use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
 
 pub const TEST_PUBKEY_HEX: &str =
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -118,9 +116,7 @@ pub async fn insert_sync_status(
     conflict: Option<Value>,
 ) -> Result<()> {
     let payload = conflict
-        .map(|value| {
-            OfflinePayload::from_json_str(&value.to_string()).map_err(|err| anyhow!(err))
-        })
+        .map(|value| OfflinePayload::from_json_str(&value.to_string()).map_err(|err| anyhow!(err)))
         .transpose()?;
 
     let update = SyncStatusUpdate::new(

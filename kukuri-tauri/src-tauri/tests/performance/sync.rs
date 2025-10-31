@@ -1,12 +1,10 @@
 use std::{sync::Arc, time::Instant};
 
-use anyhow::{anyhow, Result};
 use super::performance_common::{
-    offline::{
-        seed_offline_actions, setup_offline_service, OfflineTestContext, TEST_PUBKEY_HEX,
-    },
-    recorder::{duration_secs, PerformanceRecorder},
+    offline::{OfflineTestContext, TEST_PUBKEY_HEX, seed_offline_actions, setup_offline_service},
+    recorder::{PerformanceRecorder, duration_secs},
 };
+use anyhow::{Result, anyhow};
 use kukuri_lib::test_support::application::ports::offline_store::OfflinePersistence;
 use kukuri_lib::test_support::application::services::offline_service::OfflineServiceTrait;
 use kukuri_lib::test_support::domain::value_objects::event_gateway::PublicKey;
@@ -42,7 +40,10 @@ async fn offline_reindex_throughput() -> Result<()> {
             "description",
             "OfflineReindexJob::reindex_once after seeding offline actions",
         )
-        .note("environment", std::env::var("CI").unwrap_or_else(|_| "local".into()))
+        .note(
+            "environment",
+            std::env::var("CI").unwrap_or_else(|_| "local".into()),
+        )
         .write()?;
 
     assert_eq!(report.offline_action_count as usize, ACTION_COUNT);
@@ -59,9 +60,7 @@ async fn offline_sync_actions_throughput() -> Result<()> {
 
     let user_pubkey = PublicKey::from_hex_str(TEST_PUBKEY_HEX).map_err(|err| anyhow!(err))?;
     let started = Instant::now();
-    let result = service
-        .sync_actions(user_pubkey)
-        .await?;
+    let result = service.sync_actions(user_pubkey).await?;
     let elapsed = started.elapsed();
     let secs = duration_secs(elapsed);
 
@@ -75,7 +74,10 @@ async fn offline_sync_actions_throughput() -> Result<()> {
             "description",
             "OfflineService::sync_actions with seeded offline queue entries",
         )
-        .note("environment", std::env::var("CI").unwrap_or_else(|_| "local".into()))
+        .note(
+            "environment",
+            std::env::var("CI").unwrap_or_else(|_| "local".into()),
+        )
         .write()?;
 
     assert_eq!(result.synced_count as usize, ACTION_COUNT);

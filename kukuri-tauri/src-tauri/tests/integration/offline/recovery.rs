@@ -1,11 +1,13 @@
-﻿use super::offline_support::{
-    build_params_for_index, sample_save_params, setup_offline_service, OfflineTestContext,
+use super::offline_support::{
+    OfflineTestContext, build_params_for_index, sample_save_params, setup_offline_service,
 };
 use kukuri_lib::test_support::application::ports::offline_store::OfflinePersistence;
 use kukuri_lib::test_support::application::services::offline_service::{
     OfflineActionsQuery, OfflineServiceTrait, SaveOfflineActionParams,
 };
-use kukuri_lib::test_support::infrastructure::offline::{OfflineReindexJob, SqliteOfflinePersistence};
+use kukuri_lib::test_support::infrastructure::offline::{
+    OfflineReindexJob, SqliteOfflinePersistence,
+};
 
 use std::sync::Arc;
 
@@ -107,5 +109,4 @@ async fn reindex_job_ignores_already_synced_actions() {
         .expect("list unsynced")
         .len();
     assert_eq!(unsynced, 1);
-
 }

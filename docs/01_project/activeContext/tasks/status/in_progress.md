@@ -14,8 +14,8 @@
 ### Clippy 完全解消
 
 - [ ] `cargo clippy --workspace --all-features -- -D warnings` をゼロエラーで完走させる
-  - [ ] `domain/entities/event.rs` の `format!` 最適化と `as_bytes` 警告を解消
-  - [ ] `DefaultEncryptionService` / `EventHandler` / `LegacyEventManagerHandle` / `NostrClientManager` に `Default` 実装を追加
+  - [x] `domain/entities/event.rs` の `format!` 最適化と `as_bytes` 警告を解消
+  - [x] `DefaultEncryptionService` / `EventHandler` / `LegacyEventManagerHandle` / `NostrClientManager` に `Default` 実装を追加
   - [ ] Clippy 結果と手順を `phase5_ci_path_audit.md` と `refactoring_plan_2025-08-08_v3.md` に反映
 
 ### 巨大ファイル分割

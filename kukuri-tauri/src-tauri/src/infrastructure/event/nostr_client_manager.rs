@@ -78,6 +78,12 @@ impl NostrClientManager {
     }
 }
 
+impl Default for NostrClientManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

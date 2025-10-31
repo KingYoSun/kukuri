@@ -262,10 +262,7 @@ impl Event {
         if drift_secs > TIMESTAMP_DRIFT_SECS {
             return Err(EventValidationError::new(
                 ValidationFailureKind::TimestampOutOfRange,
-                format!(
-                    "created_at outside ±{}s window (drift={}s)",
-                    TIMESTAMP_DRIFT_SECS, drift_secs
-                ),
+                format!("created_at outside ±{TIMESTAMP_DRIFT_SECS}s window (drift={drift_secs}s)"),
             ));
         }
 
@@ -280,14 +277,11 @@ impl Event {
             ));
         }
 
-        if self.content.as_bytes().len() > MAX_EVENT_CONTENT_BYTES {
+        let content_len = self.content.len();
+        if content_len > MAX_EVENT_CONTENT_BYTES {
             return Err(EventValidationError::new(
                 ValidationFailureKind::ContentTooLarge,
-                format!(
-                    "content exceeds {} bytes (actual {})",
-                    MAX_EVENT_CONTENT_BYTES,
-                    self.content.as_bytes().len()
-                ),
+                format!("content exceeds {MAX_EVENT_CONTENT_BYTES} bytes (actual {content_len})"),
             ));
         }
 
@@ -514,10 +508,7 @@ impl Event {
         if topic_value != expected_topic {
             return Err(EventValidationError::new(
                 ValidationFailureKind::Kind30078TagMismatch,
-                format!(
-                    "t tag must equal \"{}\" (value={})",
-                    expected_topic, topic_value
-                ),
+                format!("t tag must equal \"{expected_topic}\" (value={topic_value})"),
             ));
         }
 
@@ -535,10 +526,7 @@ impl Event {
         if address_value != expected_address {
             return Err(EventValidationError::new(
                 ValidationFailureKind::Kind30078TagMismatch,
-                format!(
-                    "a tag must equal \"{}\" (value={})",
-                    expected_address, address_value
-                ),
+                format!("a tag must equal \"{expected_address}\" (value={address_value})"),
             ));
         }
 
@@ -555,17 +543,18 @@ impl Event {
             )
         })?;
 
-        if parsed.body.as_bytes().len() > MAX_EVENT_CONTENT_BYTES {
+        let body_len = parsed.body.len();
+        if body_len > MAX_EVENT_CONTENT_BYTES {
             return Err(EventValidationError::new(
                 ValidationFailureKind::Kind30078ContentSize,
-                format!("body exceeds {} bytes", MAX_EVENT_CONTENT_BYTES),
+                format!("body exceeds {MAX_EVENT_CONTENT_BYTES} bytes"),
             ));
         }
 
         if parsed.attachments.len() > KIND30078_MAX_ATTACHMENTS {
             return Err(EventValidationError::new(
                 ValidationFailureKind::Kind30078ContentSize,
-                format!("attachments exceed max {}", KIND30078_MAX_ATTACHMENTS),
+                format!("attachments exceed max {KIND30078_MAX_ATTACHMENTS}"),
             ));
         }
 
@@ -596,7 +585,7 @@ impl Event {
         Version::parse(&parsed.metadata.app_version).map_err(|err| {
             EventValidationError::new(
                 ValidationFailureKind::Kind30078ContentSchema,
-                format!("metadata.app_version must be semantic version: {}", err),
+                format!("metadata.app_version must be semantic version: {err}"),
             )
         })?;
 
@@ -1067,13 +1056,13 @@ fn parse_kind30078_identifier(value: &str) -> ValidationResult<(String, String)>
     let rest = value.strip_prefix("kukuri:topic:").ok_or_else(|| {
         EventValidationError::new(
             ValidationFailureKind::Kind30078TagMismatch,
-            format!("d tag must start with kukuri:topic: (value={})", value),
+            format!("d tag must start with kukuri:topic: (value={value})"),
         )
     })?;
     let (slug, revision) = rest.split_once(":post:").ok_or_else(|| {
         EventValidationError::new(
             ValidationFailureKind::Kind30078TagMismatch,
-            format!("d tag must contain :post: separator (value={})", value),
+            format!("d tag must contain :post: separator (value={value})"),
         )
     })?;
     Ok((slug.to_string(), revision.to_string()))
@@ -1083,7 +1072,7 @@ fn ensure_slug_valid(slug: &str) -> ValidationResult<()> {
     if slug.is_empty() || slug.len() > 48 {
         return Err(EventValidationError::new(
             ValidationFailureKind::Kind30078TagMismatch,
-            format!("slug must be 1..48 characters (slug={})", slug),
+            format!("slug must be 1..48 characters (slug={slug})"),
         ));
     }
     if !slug
@@ -1092,7 +1081,7 @@ fn ensure_slug_valid(slug: &str) -> ValidationResult<()> {
     {
         return Err(EventValidationError::new(
             ValidationFailureKind::Kind30078TagMismatch,
-            format!("slug contains invalid characters: {}", slug),
+            format!("slug contains invalid characters: {slug}"),
         ));
     }
     Ok(())
@@ -1107,7 +1096,7 @@ fn ensure_revision_valid(revision: &str) -> ValidationResult<()> {
     }
     Err(EventValidationError::new(
         ValidationFailureKind::Kind30078TagMismatch,
-        format!("invalid revision identifier: {}", revision),
+        format!("invalid revision identifier: {revision}"),
     ))
 }
 

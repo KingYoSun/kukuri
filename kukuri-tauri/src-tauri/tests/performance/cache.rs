@@ -1,18 +1,18 @@
 use std::time::Instant;
 
-use anyhow::{anyhow, Result};
 use super::performance_common::{
     offline::{
-        build_params_for_index, seed_cache_metadata, setup_offline_service, OfflineTestContext,
-        TEST_PUBKEY_HEX,
+        OfflineTestContext, TEST_PUBKEY_HEX, build_params_for_index, seed_cache_metadata,
+        setup_offline_service,
     },
-    recorder::{duration_secs, PerformanceRecorder},
+    recorder::{PerformanceRecorder, duration_secs},
 };
+use anyhow::{Result, anyhow};
 use kukuri_lib::test_support::application::services::offline_service::{
     OfflineActionsQuery, OfflineServiceTrait,
 };
 use kukuri_lib::test_support::domain::value_objects::event_gateway::PublicKey;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 #[tokio::test]
 #[ignore]
@@ -49,7 +49,10 @@ async fn offline_action_save_throughput() -> Result<()> {
             "description",
             "OfflineService::save_action and list_actions against in-memory SQLite",
         )
-        .note("environment", std::env::var("CI").unwrap_or_else(|_| "local".into()))
+        .note(
+            "environment",
+            std::env::var("CI").unwrap_or_else(|_| "local".into()),
+        )
         .write()?;
 
     assert_eq!(records.len(), ACTION_COUNT);
@@ -80,7 +83,10 @@ async fn cache_cleanup_latency() -> Result<()> {
             "description",
             "OfflineService::cleanup_expired_cache after staged expiry seeding",
         )
-        .note("environment", std::env::var("CI").unwrap_or_else(|_| "local".into()))
+        .note(
+            "environment",
+            std::env::var("CI").unwrap_or_else(|_| "local".into()),
+        )
         .write()?;
 
     Ok(())

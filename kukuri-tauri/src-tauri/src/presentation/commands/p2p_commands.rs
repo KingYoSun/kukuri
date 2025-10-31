@@ -170,8 +170,7 @@ pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<ApiResponse<()>, 
     for node in &nodes {
         if !node.contains('@') {
             return Err(AppError::ConfigurationError(format!(
-                "Invalid bootstrap node format (expected node_id@host:port): {}",
-                node
+                "Invalid bootstrap node format (expected node_id@host:port): {node}"
             )));
         }
     }

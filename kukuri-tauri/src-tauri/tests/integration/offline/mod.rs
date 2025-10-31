@@ -1,9 +1,6 @@
-﻿#[path = "../../common/performance/offline.rs"]
+#[path = "../../common/performance/offline.rs"]
 mod offline_support;
 
-use offline_support::{
-    sample_save_params, setup_offline_service, OfflineTestContext, TEST_PUBKEY_HEX,
-};
 use chrono::{Duration, Utc};
 use kukuri_lib::test_support::application::services::offline_service::{
     OfflineActionsQuery, OfflineServiceTrait,
@@ -13,7 +10,12 @@ use kukuri_lib::test_support::domain::value_objects::event_gateway::PublicKey;
 use kukuri_lib::test_support::domain::value_objects::offline::{
     CacheKey, CacheType, EntityId, EntityType, OfflinePayload, SyncStatus,
 };
-use kukuri_lib::test_support::infrastructure::offline::{OfflineReindexJob, SqliteOfflinePersistence};
+use kukuri_lib::test_support::infrastructure::offline::{
+    OfflineReindexJob, SqliteOfflinePersistence,
+};
+use offline_support::{
+    OfflineTestContext, TEST_PUBKEY_HEX, sample_save_params, setup_offline_service,
+};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -266,12 +268,11 @@ async fn sync_actions_after_reindex_clears_pending() {
     assert_eq!(result.synced_count, 2);
     assert_eq!(result.pending_count, 0);
 
-    let (unsynced,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM offline_actions WHERE is_synced = 0",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("unsynced count");
+    let (unsynced,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM offline_actions WHERE is_synced = 0")
+            .fetch_one(&pool)
+            .await
+            .expect("unsynced count");
     assert_eq!(unsynced, 0);
 }
 

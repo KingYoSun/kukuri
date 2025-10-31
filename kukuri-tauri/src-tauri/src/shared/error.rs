@@ -101,7 +101,7 @@ impl AppError {
             AppError::NotFound(_) => "The requested resource was not found".to_string(),
             AppError::InvalidInput(_) => "Input data is invalid".to_string(),
             AppError::ValidationError { message, .. } => {
-                format!("Validation failed: {}", message)
+                format!("Validation failed: {message}")
             }
             AppError::NostrError(_) => "Nostr operation failed".to_string(),
             AppError::P2PError(_) => "Peer-to-peer operation failed".to_string(),

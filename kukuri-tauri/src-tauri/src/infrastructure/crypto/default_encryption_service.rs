@@ -67,6 +67,12 @@ impl DefaultEncryptionService {
     }
 }
 
+impl Default for DefaultEncryptionService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl EncryptionService for DefaultEncryptionService {
     async fn encrypt(
