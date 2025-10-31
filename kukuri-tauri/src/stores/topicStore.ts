@@ -22,6 +22,8 @@ interface TopicStore extends TopicState {
   joinTopic: (topicId: string) => Promise<void>;
   leaveTopic: (topicId: string) => Promise<void>;
   updateTopicPostCount: (topicId: string, delta: number) => void;
+   markTopicRead: (topicId: string) => void;
+   handleIncomingTopicMessage: (topicId: string, timestamp: number) => void;
 }
 
 export const useTopicStore = create<TopicStore>()(
@@ -30,17 +32,37 @@ export const useTopicStore = create<TopicStore>()(
       topics: new Map(),
       currentTopic: null,
       joinedTopics: [],
+      topicUnreadCounts: new Map(),
+      topicLastReadAt: new Map(),
 
       setTopics: (topics: Topic[]) =>
-        set({
-          topics: new Map(topics.map((t) => [t.id, t])),
+        set((state) => {
+          const nextTopics = new Map(topics.map((t) => [t.id, t]));
+          const topicIds = new Set(nextTopics.keys());
+
+          const unread = new Map(
+            Array.from(state.topicUnreadCounts.entries()).filter(([id]) => topicIds.has(id)),
+          );
+          const lastRead = new Map(
+            Array.from(state.topicLastReadAt.entries()).filter(([id]) => topicIds.has(id)),
+          );
+
+          return {
+            topics: nextTopics,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
         }),
 
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
           if (!apiTopics) {
-            set({ topics: new Map() });
+            set({
+              topics: new Map(),
+              topicUnreadCounts: new Map(),
+              topicLastReadAt: new Map(),
+            });
             return;
           }
           const topics: Topic[] = apiTopics.map((t) => ({
@@ -53,8 +75,22 @@ export const useTopicStore = create<TopicStore>()(
             isActive: true,
             tags: [],
           }));
-          set({
-            topics: new Map(topics.map((t) => [t.id, t])),
+          set((state) => {
+            const nextTopics = new Map(topics.map((t) => [t.id, t]));
+            const topicIds = new Set(nextTopics.keys());
+
+            const unread = new Map(
+              Array.from(state.topicUnreadCounts.entries()).filter(([id]) => topicIds.has(id)),
+            );
+            const lastRead = new Map(
+              Array.from(state.topicLastReadAt.entries()).filter(([id]) => topicIds.has(id)),
+            );
+
+            return {
+              topics: nextTopics,
+              topicUnreadCounts: unread,
+              topicLastReadAt: lastRead,
+            };
           });
         } catch (error) {
           errorHandler.log('Failed to fetch topics', error, {
@@ -141,9 +177,18 @@ export const useTopicStore = create<TopicStore>()(
         set((state) => {
           const newTopics = new Map(state.topics);
           newTopics.delete(id);
+
+          const unread = new Map(state.topicUnreadCounts);
+          unread.delete(id);
+
+          const lastRead = new Map(state.topicLastReadAt);
+          lastRead.delete(id);
+
           return {
             topics: newTopics,
             currentTopic: state.currentTopic?.id === id ? null : state.currentTopic,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
           };
         }),
 
@@ -153,9 +198,18 @@ export const useTopicStore = create<TopicStore>()(
           set((state) => {
             const newTopics = new Map(state.topics);
             newTopics.delete(id);
+
+            const unread = new Map(state.topicUnreadCounts);
+            unread.delete(id);
+
+            const lastRead = new Map(state.topicLastReadAt);
+            lastRead.delete(id);
+
             return {
               topics: newTopics,
               currentTopic: state.currentTopic?.id === id ? null : state.currentTopic,
+              topicUnreadCounts: unread,
+              topicLastReadAt: lastRead,
             };
           });
         } catch (error) {
@@ -168,7 +222,24 @@ export const useTopicStore = create<TopicStore>()(
         }
       },
 
-      setCurrentTopic: (topic: Topic | null) => set({ currentTopic: topic }),
+      setCurrentTopic: (topic: Topic | null) =>
+        set((state) => {
+          if (!topic) {
+            return { currentTopic: null };
+          }
+
+          const unread = new Map(state.topicUnreadCounts);
+          unread.set(topic.id, 0);
+
+          const lastRead = new Map(state.topicLastReadAt);
+          lastRead.set(topic.id, Math.floor(Date.now() / 1000));
+
+          return {
+            currentTopic: topic,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
+        }),
 
       joinTopic: async (topicId: string) => {
         // 既に参加している場合は何もしない
@@ -181,9 +252,19 @@ export const useTopicStore = create<TopicStore>()(
         const isOnline = offlineStore.isOnline;
 
         // 先にUIを更新（楽観的UI更新）
-        set((state) => ({
-          joinedTopics: [...new Set([...state.joinedTopics, topicId])],
-        }));
+        set((state) => {
+          const joinedTopics = [...new Set([...state.joinedTopics, topicId])];
+          const unread = new Map(state.topicUnreadCounts);
+          unread.set(topicId, 0);
+          const lastRead = new Map(state.topicLastReadAt);
+          lastRead.set(topicId, Math.floor(Date.now() / 1000));
+
+          return {
+            joinedTopics,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
+        });
 
         // オフラインの場合、アクションを保存して後で同期
         if (!isOnline) {
@@ -214,9 +295,18 @@ export const useTopicStore = create<TopicStore>()(
           }, 500); // 500msの遅延
         } catch (error) {
           // エラーが発生した場合は状態を元に戻す
-          set((state) => ({
-            joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
-          }));
+          set((state) => {
+            const joinedTopics = state.joinedTopics.filter((id) => id !== topicId);
+            const unread = new Map(state.topicUnreadCounts);
+            unread.delete(topicId);
+            const lastRead = new Map(state.topicLastReadAt);
+            lastRead.delete(topicId);
+            return {
+              joinedTopics,
+              topicUnreadCounts: unread,
+              topicLastReadAt: lastRead,
+            };
+          });
           errorHandler.log('Failed to join topic', error, {
             context: 'TopicStore.joinTopic',
             showToast: true,
@@ -237,10 +327,25 @@ export const useTopicStore = create<TopicStore>()(
         const isOnline = offlineStore.isOnline;
 
         // 先にUIを更新（楽観的UI更新）
-        set((state) => ({
-          joinedTopics: state.joinedTopics.filter((id) => id !== topicId),
-          currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
-        }));
+        let previousUnread: number | undefined;
+        let previousLastRead: number | undefined;
+        set((state) => {
+          previousUnread = state.topicUnreadCounts.get(topicId);
+          previousLastRead = state.topicLastReadAt.get(topicId);
+
+          const joinedTopics = state.joinedTopics.filter((id) => id !== topicId);
+          const unread = new Map(state.topicUnreadCounts);
+          unread.delete(topicId);
+          const lastRead = new Map(state.topicLastReadAt);
+          lastRead.delete(topicId);
+
+          return {
+            joinedTopics,
+            currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
+        });
 
         // オフラインの場合、アクションを保存して後で同期
         if (!isOnline) {
@@ -260,9 +365,20 @@ export const useTopicStore = create<TopicStore>()(
           await TauriApi.leaveTopic(topicId);
         } catch (error) {
           // エラーが発生した場合は状態を元に戻す
-          set((state) => ({
-            joinedTopics: [...new Set([...state.joinedTopics, topicId])],
-          }));
+          set((state) => {
+            const joinedTopics = [...new Set([...state.joinedTopics, topicId])];
+            const unread = new Map(state.topicUnreadCounts);
+            unread.set(topicId, previousUnread ?? 0);
+            const lastRead = new Map(state.topicLastReadAt);
+            if (previousLastRead !== undefined) {
+              lastRead.set(topicId, previousLastRead);
+            }
+            return {
+              joinedTopics,
+              topicUnreadCounts: unread,
+              topicLastReadAt: lastRead,
+            };
+          });
           errorHandler.log('Failed to leave topic', error, {
             context: 'TopicStore.leaveTopic',
             showToast: true,
@@ -283,6 +399,37 @@ export const useTopicStore = create<TopicStore>()(
             });
           }
           return { topics: newTopics };
+        }),
+      markTopicRead: (topicId: string) =>
+        set((state) => {
+          const unread = new Map(state.topicUnreadCounts);
+          unread.set(topicId, 0);
+
+          const lastRead = new Map(state.topicLastReadAt);
+          lastRead.set(topicId, Math.floor(Date.now() / 1000));
+
+          return {
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
+        }),
+      handleIncomingTopicMessage: (topicId: string, timestamp: number) =>
+        set((state) => {
+          const unread = new Map(state.topicUnreadCounts);
+          const lastRead = new Map(state.topicLastReadAt);
+
+          if (state.currentTopic?.id === topicId) {
+            unread.set(topicId, 0);
+            lastRead.set(topicId, timestamp);
+          } else {
+            const current = unread.get(topicId) ?? 0;
+            unread.set(topicId, current + 1);
+          }
+
+          return {
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
         }),
     }),
     createTopicPersistConfig<TopicStore>(),

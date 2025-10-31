@@ -1,4 +1,4 @@
-use super::{metrics, GossipService, NetworkService};
+use super::{GossipService, NetworkService, metrics};
 use crate::domain::entities::Event;
 use crate::domain::p2p::distribution::{DistributionMetrics, DistributionStrategy};
 use crate::shared::error::AppError;
@@ -148,7 +148,10 @@ impl DefaultEventDistributor {
             }
 
             gossip.broadcast(topic, event).await.map_err(|err| {
-                warn!("Failed to broadcast event {} on topic {} via gossip: {}", event.id, topic, err);
+                warn!(
+                    "Failed to broadcast event {} on topic {} via gossip: {}",
+                    event.id, topic, err
+                );
                 Box::new(err) as DynError
             })?;
         }
@@ -186,10 +189,7 @@ impl DefaultEventDistributor {
             }
 
             if let Err(err) = network.join_dht_topic(topic).await {
-                warn!(
-                    "Failed to join DHT topic {topic} before broadcast: {}",
-                    err
-                );
+                warn!("Failed to join DHT topic {topic} before broadcast: {}", err);
             }
 
             network
@@ -209,7 +209,9 @@ impl DefaultEventDistributor {
 
     async fn broadcast_direct(&self, event: &Event, peer_id: &str) -> Result<(), DynError> {
         if peer_id.trim().is_empty() {
-            warn!("Direct distribution requested with empty peer id; falling back to standard P2P broadcast");
+            warn!(
+                "Direct distribution requested with empty peer id; falling back to standard P2P broadcast"
+            );
         } else {
             let network = {
                 let guard = self.network_service.read().await;
@@ -227,7 +229,9 @@ impl DefaultEventDistributor {
                     );
                 }
             } else {
-                warn!("NetworkService not configured; direct distribution cannot target specific peer");
+                warn!(
+                    "NetworkService not configured; direct distribution cannot target specific peer"
+                );
             }
         }
 
@@ -512,7 +516,7 @@ mod tests {
     use async_trait::async_trait;
     use std::collections::HashSet;
     use std::sync::Arc;
-    use tokio::sync::{mpsc, Mutex};
+    use tokio::sync::{Mutex, mpsc};
 
     #[derive(Clone, Default)]
     struct DummyGossipService {
@@ -537,7 +541,11 @@ mod tests {
             None
         }
 
-        async fn join_topic(&self, topic: &str, _initial_peers: Vec<String>) -> Result<(), AppError> {
+        async fn join_topic(
+            &self,
+            topic: &str,
+            _initial_peers: Vec<String>,
+        ) -> Result<(), AppError> {
             let mut guard = self.joined.lock().await;
             guard.insert(topic.to_string());
             Ok(())
@@ -555,10 +563,7 @@ mod tests {
             Ok(())
         }
 
-        async fn subscribe(
-            &self,
-            _topic: &str,
-        ) -> Result<mpsc::Receiver<Event>, AppError> {
+        async fn subscribe(&self, _topic: &str) -> Result<mpsc::Receiver<Event>, AppError> {
             let (_tx, rx) = mpsc::channel(1);
             Ok(rx)
         }
@@ -588,11 +593,7 @@ mod tests {
             }
         }
 
-        async fn broadcast_message(
-            &self,
-            topic: &str,
-            _message: &[u8],
-        ) -> Result<(), AppError> {
+        async fn broadcast_message(&self, topic: &str, _message: &[u8]) -> Result<(), AppError> {
             let mut guard = self.broadcasts.lock().await;
             guard.push((topic.to_string(), "<raw>".into()));
             Ok(())

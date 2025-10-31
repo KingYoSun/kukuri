@@ -21,7 +21,8 @@ const categories = [
 ];
 
 export function Sidebar() {
-  const { topics, joinedTopics, currentTopic, setCurrentTopic } = useTopicStore();
+  const { topics, joinedTopics, currentTopic, setCurrentTopic, topicUnreadCounts } =
+    useTopicStore();
   const { sidebarOpen } = useUIStore();
   const navigate = useNavigate();
 
@@ -41,10 +42,12 @@ export function Sidebar() {
             ? Math.max(...messages.map((m) => m.timestamp))
             : topic.lastActive || 0;
 
+        const unreadCount = topicUnreadCounts.get(topic.id) ?? 0;
+
         return {
           ...topic,
           lastActive: lastMessageTime,
-          unreadCount: 0, // TODO: 将来的に未読カウントを実装
+          unreadCount,
         };
       })
       .filter(Boolean) as NonNullable<ReturnType<typeof topics.get> & { unreadCount: number }>[];
@@ -55,7 +58,7 @@ export function Sidebar() {
       const bTime = b.lastActive || 0;
       return bTime - aTime;
     });
-  }, [joinedTopics, topics, getTopicMessages]);
+  }, [joinedTopics, topics, topicUnreadCounts, getTopicMessages]);
 
   const handleTopicClick = (topicId: string) => {
     const topic = topics.get(topicId);

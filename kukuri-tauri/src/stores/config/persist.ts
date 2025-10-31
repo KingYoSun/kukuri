@@ -53,12 +53,22 @@ export const createP2PPersistConfig = <
 });
 
 export const createTopicPersistConfig = <
-  T extends { joinedTopics: string[]; currentTopic: unknown | null },
+  T extends {
+    joinedTopics: string[];
+    currentTopic: unknown | null;
+    topicUnreadCounts: Map<string, number>;
+    topicLastReadAt: Map<string, number>;
+  },
 >(): PersistOptions<T> => ({
   name: persistKeys.topic,
-  partialize: createPartializer<T, 'joinedTopics' | 'currentTopic'>([
+  partialize: createPartializer<
+    T,
+    'joinedTopics' | 'currentTopic' | 'topicUnreadCounts' | 'topicLastReadAt'
+  >([
     'joinedTopics',
     'currentTopic',
+    'topicUnreadCounts',
+    'topicLastReadAt',
   ]),
   storage: createMapAwareStorage(),
 });

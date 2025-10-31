@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useTopicStore } from '@/stores/topicStore';
 import type { Topic } from '@/stores/types';
 import { TauriApi } from '@/lib/api/tauri';
@@ -16,6 +16,8 @@ const resetStore = () => {
     topics: new Map(),
     joinedTopics: [],
     currentTopic: null,
+    topicUnreadCounts: new Map(),
+    topicLastReadAt: new Map(),
   });
 };
 
@@ -61,6 +63,8 @@ describe('useTopicStore', () => {
       expect(state.topics.size).toBe(0);
       expect(state.currentTopic).toBeNull();
       expect(state.joinedTopics).toEqual([]);
+      expect(state.topicUnreadCounts.size).toBe(0);
+      expect(state.topicLastReadAt.size).toBe(0);
     });
 
     it('setTopicsメソッドが正しく動作すること', () => {
@@ -98,6 +102,11 @@ describe('useTopicStore', () => {
           ['topic2', mockTopic2],
         ]),
         currentTopic: mockTopic1,
+        topicUnreadCounts: new Map([
+          ['topic1', 2],
+          ['topic2', 0],
+        ]),
+        topicLastReadAt: new Map([['topic1', 123]]),
       });
 
       useTopicStore.getState().removeTopic('topic1');
@@ -106,15 +115,44 @@ describe('useTopicStore', () => {
       expect(state.topics.size).toBe(1);
       expect(state.topics.has('topic1')).toBe(false);
       expect(state.currentTopic).toBeNull();
+      expect(state.topicUnreadCounts.has('topic1')).toBe(false);
+      expect(state.topicLastReadAt.has('topic1')).toBe(false);
     });
 
     it('setCurrentTopicメソッドが正しく動作すること', () => {
       useTopicStore.getState().setCurrentTopic(mockTopic1);
 
-      expect(useTopicStore.getState().currentTopic).toEqual(mockTopic1);
+      const state = useTopicStore.getState();
+      expect(state.currentTopic).toEqual(mockTopic1);
+      expect(state.topicUnreadCounts.get(mockTopic1.id)).toBe(0);
+      expect(state.topicLastReadAt.has(mockTopic1.id)).toBe(true);
     });
 
-    it('joinTopicメソッドが重複を許容しないこと', async () => {
+    it('handleIncomingTopicMessageが未読件数を増加させること', () => {
+      useTopicStore.setState({
+        currentTopic: null,
+        topicUnreadCounts: new Map([['topic1', 0]]),
+      });
+
+      useTopicStore.getState().handleIncomingTopicMessage('topic1', Date.now());
+
+      expect(useTopicStore.getState().topicUnreadCounts.get('topic1')).toBe(1);
+    });
+
+    it('ハンドラが閲覧中のトピックでは未読件数をリセットすること', () => {
+      useTopicStore.setState({
+        currentTopic: mockTopic1,
+        topicUnreadCounts: new Map([['topic1', 3]]),
+      });
+
+      useTopicStore.getState().handleIncomingTopicMessage('topic1', Date.now());
+
+      expect(useTopicStore.getState().topicUnreadCounts.get('topic1')).toBe(0);
+    });
+
+    it('joinTopicメソッドが重複を許容せず未読カウントを初期化すること', async () => {
+      vi.mocked(TauriApi.joinTopic).mockResolvedValue(undefined);
+
       const { joinTopic } = useTopicStore.getState();
       await joinTopic('topic1');
       await joinTopic('topic2');
@@ -122,6 +160,8 @@ describe('useTopicStore', () => {
 
       const state = useTopicStore.getState();
       expect(state.joinedTopics).toEqual(['topic1', 'topic2']);
+      expect(state.topicUnreadCounts.get('topic1')).toBe(0);
+      expect(state.topicUnreadCounts.get('topic2')).toBe(0);
     });
 
     it('leaveTopicメソッドが現在のトピックを解除すること', async () => {
@@ -229,15 +269,19 @@ describe('useTopicStore', () => {
 
       useTopicStore.setState({
         joinedTopics: [topicId],
+        topicUnreadCounts: new Map([[topicId, 3]]),
+        topicLastReadAt: new Map([[topicId, 99]]),
       });
 
       vi.mocked(TauriApi.leaveTopic).mockResolvedValue(undefined);
 
       await leaveTopic(topicId);
 
-      const { joinedTopics } = useTopicStore.getState();
+      const { joinedTopics, topicUnreadCounts, topicLastReadAt } = useTopicStore.getState();
       expect(joinedTopics).not.toContain(topicId);
       expect(TauriApi.leaveTopic).toHaveBeenCalledWith(topicId);
+      expect(topicUnreadCounts.has(topicId)).toBe(false);
+      expect(topicLastReadAt.has(topicId)).toBe(false);
     });
 
     it('参加していないトピックからは離脱しない', async () => {
@@ -255,6 +299,8 @@ describe('useTopicStore', () => {
 
       useTopicStore.setState({
         joinedTopics: [topicId],
+        topicUnreadCounts: new Map([[topicId, 4]]),
+        topicLastReadAt: new Map([[topicId, 55]]),
       });
 
       const error = new Error('P2P disconnect failed');
@@ -262,8 +308,10 @@ describe('useTopicStore', () => {
 
       await expect(leaveTopic(topicId)).rejects.toThrow('P2P disconnect failed');
 
-      const { joinedTopics } = useTopicStore.getState();
+      const { joinedTopics, topicUnreadCounts, topicLastReadAt } = useTopicStore.getState();
       expect(joinedTopics).toContain(topicId);
+      expect(topicUnreadCounts.get(topicId)).toBe(4);
+      expect(topicLastReadAt.get(topicId)).toBe(55);
 
       expect(errorHandler.log).toHaveBeenCalledWith(
         'Failed to leave topic',
@@ -293,14 +341,18 @@ describe('useTopicStore', () => {
       useTopicStore.setState({
         joinedTopics: [topicId],
         currentTopic: topic,
+        topicUnreadCounts: new Map([[topicId, 1]]),
+        topicLastReadAt: new Map([[topicId, 10]]),
       });
 
       vi.mocked(TauriApi.leaveTopic).mockResolvedValue(undefined);
 
       await leaveTopic(topicId);
 
-      const { currentTopic } = useTopicStore.getState();
+      const { currentTopic, topicUnreadCounts, topicLastReadAt } = useTopicStore.getState();
       expect(currentTopic).toBeNull();
+      expect(topicUnreadCounts.has(topicId)).toBe(false);
+      expect(topicLastReadAt.has(topicId)).toBe(false);
     });
   });
 });

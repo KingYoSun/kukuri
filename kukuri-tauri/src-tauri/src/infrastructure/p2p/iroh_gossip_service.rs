@@ -18,7 +18,7 @@ use tokio::sync::{Mutex as TokioMutex, RwLock, broadcast, mpsc};
 use tokio::time::timeout;
 
 use crate::domain::p2p::events::P2PEvent;
-use crate::domain::p2p::message::GossipMessage;
+use crate::domain::p2p::message::{GossipMessage, MessageType};
 use crate::domain::p2p::{TopicMesh, TopicStats};
 
 const LOG_TARGET: &str = "kukuri::p2p::gossip";
@@ -37,7 +37,6 @@ struct TopicHandle {
     iroh_topic_id: TopicId,
     sender: Arc<TokioMutex<GossipSender>>, // GossipSenderでbroadcast可能
     receiver_task: tokio::task::JoinHandle<()>,
-    subscribers: Arc<RwLock<Vec<mpsc::Sender<Event>>>>,
     mesh: Arc<TopicMesh>,
 }
 
@@ -234,8 +233,6 @@ impl GossipService for IrohGossipService {
         // 受信タスクを起動（UI配信用にサブスクライバへ配布 & 任意でP2PEventを送出）
         let topic_clone = topic.to_string();
         let event_tx_clone = self.event_tx.clone();
-        let subscribers: Arc<RwLock<Vec<mpsc::Sender<Event>>>> = Arc::new(RwLock::new(Vec::new()));
-        let subscribers_for_task = subscribers.clone();
         let mesh_for_task = mesh.clone();
         let receiver_task = tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
@@ -292,11 +289,6 @@ impl GossipService for IrohGossipService {
                                             receive_failures = snap.receive_details.failures,
                                             "Validated gossip payload"
                                         );
-
-                                        let subs = subscribers_for_task.read().await;
-                                        for s in subs.iter() {
-                                            let _ = s.send(domain_event.clone()).await;
-                                        }
                                     }
                                     Err(e) => {
                                         super::metrics::record_receive_failure();
@@ -365,7 +357,6 @@ impl GossipService for IrohGossipService {
             iroh_topic_id: topic_id,
             sender,
             receiver_task,
-            subscribers,
             mesh,
         };
 
@@ -419,15 +410,60 @@ impl GossipService for IrohGossipService {
         // トピックに参加していることを確認
         self.join_topic(topic, vec![]).await?;
 
-        let topics = self.topics.read().await;
+        let mesh = {
+            let topics = self.topics.read().await;
+            topics.get(topic).map(|handle| handle.mesh.clone())
+        };
 
-        if let Some(handle) = topics.get(topic) {
-            // 新しいレシーバーを作成し、サブスクライバに登録
+        if let Some(mesh) = mesh {
+            let topic_name = topic.to_string();
+            let subscription = mesh.subscribe().await;
+            let subscription_id = subscription.id;
+            let mut message_rx = subscription.receiver;
+            let mesh_clone = mesh.clone();
             let (tx, rx) = mpsc::channel(100);
-            {
-                let mut subs = handle.subscribers.write().await;
-                subs.push(tx);
-            }
+
+            tokio::spawn(async move {
+                while let Some(message) = message_rx.recv().await {
+                    if !matches!(message.msg_type, MessageType::NostrEvent) {
+                        continue;
+                    }
+
+                    match serde_json::from_slice::<Event>(&message.payload) {
+                        Ok(domain_event) => {
+                            match domain_event
+                                .validate_nip01()
+                                .and_then(|_| domain_event.validate_nip10_19())
+                            {
+                                Ok(_) => {
+                                    if tx.send(domain_event.clone()).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::debug!(
+                                        target: LOG_TARGET,
+                                        topic = %topic_name,
+                                        error = %e,
+                                        "Dropped invalid domain event in subscription bridge"
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!(
+                                target: LOG_TARGET,
+                                topic = %topic_name,
+                                error = ?e,
+                                "Failed to decode gossip payload into Event for subscription"
+                            );
+                        }
+                    }
+                }
+
+                mesh_clone.unsubscribe(subscription_id).await;
+            });
+
             Ok(rx)
         } else {
             Err(format!("Not joined to topic: {topic}").into())

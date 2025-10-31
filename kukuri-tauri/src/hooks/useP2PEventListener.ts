@@ -110,6 +110,10 @@ export function useP2PEventListener() {
         // P2Pストアに追加
         addMessage(p2pMessage);
 
+        useTopicStore
+          .getState()
+          .handleIncomingTopicMessage(topic_id, message.timestamp);
+
         // 投稿として処理（リアルタイム更新）
         handleP2PMessageAsPost(p2pMessage, topic_id);
 

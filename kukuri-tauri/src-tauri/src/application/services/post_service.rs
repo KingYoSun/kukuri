@@ -83,14 +83,19 @@ impl PostService {
         topic_id: &str,
         limit: usize,
     ) -> Result<Vec<Post>, AppError> {
-        // TODO: トピック別の投稿キャッシュを実装
-        // 現在は直接DBから取得（キャッシュの無効化が複雑なため）
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let cached = self.cache.get_by_topic(topic_id, limit).await;
+        if !cached.is_empty() && cached.len() == limit {
+            return Ok(cached);
+        }
+
         let posts = self.repository.get_posts_by_topic(topic_id, limit).await?;
 
-        // 個別の投稿をキャッシュに保存
-        for post in &posts {
-            self.cache.add(post.clone()).await;
-        }
+        // キャッシュを最新の取得結果に置き換える
+        self.cache.set_topic_posts(topic_id, posts.clone()).await;
 
         Ok(posts)
     }
@@ -236,7 +241,7 @@ mod tests {
         connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
     };
     use crate::presentation::dto::event::NostrMetadataDto;
-    use chrono::Utc;
+    use chrono::{TimeZone, Utc};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -489,5 +494,49 @@ mod tests {
             .expect("unsynced post cached for retry");
         assert_eq!(cached.id, stored_post.id);
         assert!(!cached.is_synced);
+    }
+
+    #[tokio::test]
+    async fn get_posts_by_topic_prefers_cache_when_available() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
+        let topic_id = "topic-cache";
+
+        let mut posts = Vec::new();
+        for (idx, ts) in [10_i64, 20, 30].into_iter().enumerate() {
+            let mut post = Post::new(format!("post-{idx}"), sample_user(), topic_id.to_string());
+            post.created_at = Utc.timestamp_opt(ts, 0).unwrap();
+            post.is_synced = true;
+            posts.push(post);
+        }
+
+        for post in &posts {
+            repository.create_post(post).await.expect("seed repository");
+        }
+
+        let initial = service
+            .get_posts_by_topic(topic_id, 3)
+            .await
+            .expect("initial fetch");
+        assert_eq!(initial.len(), 3);
+
+        // DBから削除してもキャッシュから取得できることを確認
+        for post in &initial {
+            repository
+                .delete_post(&post.id)
+                .await
+                .expect("delete seeded post");
+        }
+
+        let cached = service
+            .get_posts_by_topic(topic_id, 2)
+            .await
+            .expect("fetch from cache");
+        assert_eq!(cached.len(), 2);
+        assert_eq!(cached[0].id, initial[0].id);
+        assert_eq!(cached[1].id, initial[1].id);
+
+        let cached_full = cache.get_by_topic(topic_id, 5).await;
+        assert_eq!(cached_full.len(), 3);
     }
 }

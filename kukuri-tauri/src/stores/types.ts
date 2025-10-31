@@ -50,6 +50,8 @@ export interface TopicState {
   topics: Map<string, Topic>;
   currentTopic: Topic | null;
   joinedTopics: string[];
+  topicUnreadCounts: Map<string, number>;
+  topicLastReadAt: Map<string, number>;
 }
 
 export interface PostState {

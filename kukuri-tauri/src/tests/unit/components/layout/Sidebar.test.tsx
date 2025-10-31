@@ -49,10 +49,14 @@ describe('Sidebar', () => {
       topics: new Map(),
       joinedTopics: [],
       currentTopic: null,
+      topicUnreadCounts: new Map(),
+      topicLastReadAt: new Map(),
       setCurrentTopic: vi.fn(),
       joinTopic: vi.fn(),
       leaveTopic: vi.fn(),
       fetchTopics: vi.fn(),
+      markTopicRead: vi.fn(),
+      handleIncomingTopicMessage: vi.fn(),
     });
     useUIStore.setState({
       sidebarOpen: true,
@@ -180,6 +184,20 @@ describe('Sidebar', () => {
     render(<Sidebar />);
 
     expect(screen.getByText('参加中のトピックはありません')).toBeInTheDocument();
+  });
+
+  it('未読件数をバッジ表示する', () => {
+    const topic = buildTopic({ id: 'topic-a', name: 'Topic A' });
+    useTopicStore.setState((state) => ({
+      ...state,
+      topics: new Map([[topic.id, topic]]),
+      joinedTopics: [topic.id],
+      topicUnreadCounts: new Map([[topic.id, 5]]),
+    }));
+
+    render(<Sidebar />);
+
+    expect(screen.getByText('5')).toBeInTheDocument();
   });
 
   it('トピックをクリックするとナビゲーションと選択状態が更新される', async () => {

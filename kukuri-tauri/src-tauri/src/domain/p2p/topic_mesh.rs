@@ -3,17 +3,22 @@ use crate::domain::p2p::{
     message::{GossipMessage, MessageId},
 };
 use lru::LruCache;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::{RwLock, mpsc};
 
+const DEFAULT_SUBSCRIBER_BUFFER: usize = 128;
+
+#[derive(Clone)]
 pub struct TopicMesh {
     #[allow(dead_code)]
-    topic_id: String,
-    // TODO: iroh-gossipのsubscription実装
+    topic_id: Arc<String>,
     peers: Arc<RwLock<HashSet<Vec<u8>>>>, // PublicKeyのバイト表現
     message_cache: Arc<RwLock<LruCache<MessageId, GossipMessage>>>,
+    subscribers: Arc<RwLock<HashMap<u64, mpsc::Sender<GossipMessage>>>>,
+    next_subscription_id: Arc<AtomicU64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -29,9 +34,11 @@ impl TopicMesh {
         let cache_size = NonZeroUsize::new(1000).unwrap(); // 最大1000メッセージをキャッシュ
 
         Self {
-            topic_id,
+            topic_id: Arc::new(topic_id),
             peers: Arc::new(RwLock::new(HashSet::new())),
             message_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
+            subscribers: Arc::new(RwLock::new(HashMap::new())),
+            next_subscription_id: Arc::new(AtomicU64::new(1)),
         }
     }
 
@@ -49,6 +56,9 @@ impl TopicMesh {
         // ピアリストに送信者を追加
         let mut peers = self.peers.write().await;
         peers.insert(message.sender.clone());
+        drop(peers);
+
+        self.notify_subscribers(&message).await;
 
         Ok(())
     }
@@ -110,6 +120,70 @@ impl TopicMesh {
         let mut cache = self.message_cache.write().await;
         cache.clear();
     }
+
+    /// Gossipメッセージ購読用のチャネルを生成
+    pub async fn subscribe(&self) -> TopicMeshSubscription {
+        let (tx, rx) = mpsc::channel(DEFAULT_SUBSCRIBER_BUFFER);
+        let subscription_id = self.next_subscription_id.fetch_add(1, Ordering::Relaxed);
+
+        let mut subscribers = self.subscribers.write().await;
+        subscribers.insert(subscription_id, tx);
+
+        TopicMeshSubscription {
+            id: subscription_id,
+            receiver: rx,
+        }
+    }
+
+    /// 指定された購読IDを解除
+    pub async fn unsubscribe(&self, subscription_id: u64) {
+        let mut subscribers = self.subscribers.write().await;
+        subscribers.remove(&subscription_id);
+    }
+
+    async fn notify_subscribers(&self, message: &GossipMessage) {
+        let subscribers = self.subscribers.read().await;
+        if subscribers.is_empty() {
+            return;
+        }
+
+        let senders: Vec<(u64, mpsc::Sender<GossipMessage>)> = subscribers
+            .iter()
+            .map(|(&id, sender)| (id, sender.clone()))
+            .collect();
+        drop(subscribers);
+
+        let mut closed_ids = Vec::new();
+        for (id, sender) in senders {
+            match sender.try_send(message.clone()) {
+                Ok(_) => {}
+                Err(mpsc::error::TrySendError::Full(pending)) => {
+                    if sender.send(pending).await.is_err() {
+                        closed_ids.push(id);
+                    }
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => closed_ids.push(id),
+            }
+        }
+
+        if !closed_ids.is_empty() {
+            let mut subscribers = self.subscribers.write().await;
+            for id in closed_ids {
+                subscribers.remove(&id);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub async fn subscriber_count(&self) -> usize {
+        let subscribers = self.subscribers.read().await;
+        subscribers.len()
+    }
+}
+
+pub struct TopicMeshSubscription {
+    pub id: u64,
+    pub receiver: mpsc::Receiver<GossipMessage>,
 }
 
 #[cfg(test)]
@@ -165,5 +239,51 @@ mod tests {
         assert_eq!(stats.peer_count, 1);
         assert_eq!(stats.message_count, 5);
         assert_eq!(stats.last_activity, 4);
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_and_receive_messages() {
+        let mesh = TopicMesh::new("topic_subscribe".into());
+        let mut subscription = mesh.subscribe().await;
+        assert_eq!(mesh.subscriber_count().await, 1);
+
+        let message = GossipMessage::new(MessageType::NostrEvent, vec![42, 24], vec![0x02; 33]);
+        mesh.handle_message(message.clone()).await.unwrap();
+
+        let received = subscription
+            .receiver
+            .recv()
+            .await
+            .expect("subscriber should receive message");
+        assert_eq!(received.payload, message.payload);
+        assert_eq!(received.msg_type as u8, MessageType::NostrEvent as u8);
+    }
+
+    #[tokio::test]
+    async fn test_unsubscribe_removes_channel() {
+        let mesh = TopicMesh::new("topic_unsubscribe".into());
+        let subscription = mesh.subscribe().await;
+        let subscription_id = subscription.id;
+        assert_eq!(mesh.subscriber_count().await, 1);
+
+        mesh.unsubscribe(subscription_id).await;
+        assert_eq!(mesh.subscriber_count().await, 0);
+
+        // Drop receiver without explicit unsubscribe: should be cleaned up on notify
+        let subscription = mesh.subscribe().await;
+        let dropped_id = subscription.id;
+        drop(subscription);
+
+        let message = GossipMessage::new(MessageType::TopicSync, vec![1, 2, 3], vec![0x02; 33]);
+        mesh.handle_message(message).await.unwrap();
+
+        // 送信エラー処理が走る時間を確保
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let subscribers = mesh.subscribers.read().await;
+        assert!(
+            !subscribers.contains_key(&dropped_id),
+            "closed channel should be removed automatically"
+        );
     }
 }

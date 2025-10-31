@@ -23,6 +23,7 @@
 - [x] `infrastructure/p2p/event_distributor.rs` のブロードキャスト/配信経路 TODO を実装（2025年10月31日: Gossip/DHT配信処理と依存注入を追加し、Docker経由で Rust テストを完走）
 - [x] `infrastructure/p2p/dht_integration.rs` の実装 TODO を完了（2025年10月31日: Nostr⇔ドメイン変換実装と単体テスト追加）
 - [ ] `domain/p2p/topic_mesh.rs` の購読処理 TODO を実装
+  - 2025年10月31日: Codex作業開始。TopicMesh購読APIとIroh連携の実装方針を調査中。
 - [ ] `application/services/post_service.rs` のトピック別投稿キャッシュ TODO に対応
 - [ ] `src/components/layout/Sidebar.tsx` の未読カウント TODO を実装しテストを追加
 - [ ] 残存 TODO の棚卸し結果を `phase5_dependency_inventory_template.md` に追記
