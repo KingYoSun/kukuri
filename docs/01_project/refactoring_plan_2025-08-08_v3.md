@@ -1,6 +1,6 @@
 # リファクタリング計画（改善版）
 作成日: 2025年08月08日
-最終更新: 2025年08月08日
+最終更新: 2025年10月31日
 
 ## 現状分析結果（完全版）
 
@@ -59,9 +59,11 @@ connection.rs           - 3箇所
 - `modules/offline/manager_old.rs` - 古いバージョンのファイル（413行）
 - `modules/offline/mod.rs:9` - 未使用のインポート `models::*`
 
-#### 2.3 Clippyエラー（13件）
+#### 2.3 Clippyエラー（0件／2025年10月31日確認）
 
-**主なエラータイプ:**
+2025年10月31日: `kukuri-tauri/src-tauri` と `kukuri-cli` の両ディレクトリで `cargo clippy --workspace --all-features -- -D warnings` を実行し、警告ゼロで完走したことを確認。共通ワークスペースは存在しないため、CI では同コマンドをそれぞれのディレクトリから呼び出す運用に更新する。
+
+**過去の検出内容（2025年08月時点）:**
 1. **未使用インポート（1件）:**
    - `offline/mod.rs:9` - `models::*`の未使用インポート
 
@@ -396,7 +398,7 @@ tests/
 ## 成功指標（改善版）
 
 ### 技術的指標
-- [ ] Clippyエラー0件
+- [x] Clippyエラー0件（2025年10月31日確認済み）
 - [x] TODOコメント50%削減（39件→20件以下）
 - [x] #[allow(dead_code)]を50%削減（97件→50件以下）
 - [ ] 700行超のファイル0件（現在0件を維持）
@@ -441,11 +443,15 @@ tests/
 ## 次のアクション
 
 ### 即座に実行（Day 1）
-1. **Clippyエラーの修正**
+1. **Clippyエラーの修正と検証**
    ```bash
    cd kukuri-tauri/src-tauri
    cargo clippy --fix --workspace --all-features
+   cargo clippy --workspace --all-features -- -D warnings
+   cd ../../kukuri-cli
+   cargo clippy --workspace --all-features -- -D warnings
    ```
+   - 共通ワークスペースは存在しないため、Tauri アプリと CLI の両方で `cargo clippy --workspace --all-features -- -D warnings` を実行し、警告ゼロを確認する。
 
 2. **manager_old.rsの削除確認**
    ```bash

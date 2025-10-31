@@ -13,10 +13,10 @@
 
 ### Clippy 完全解消
 
-- [ ] `cargo clippy --workspace --all-features -- -D warnings` をゼロエラーで完走させる
+- [x] `cargo clippy --workspace --all-features -- -D warnings` をゼロエラーで完走させる（2025年10月31日: `kukuri-tauri/src-tauri` と `kukuri-cli` の両方で実行し警告ゼロを確認）
   - [x] `domain/entities/event.rs` の `format!` 最適化と `as_bytes` 警告を解消
   - [x] `DefaultEncryptionService` / `EventHandler` / `LegacyEventManagerHandle` / `NostrClientManager` に `Default` 実装を追加
-  - [ ] Clippy 結果と手順を `phase5_ci_path_audit.md` と `refactoring_plan_2025-08-08_v3.md` に反映
+  - [x] Clippy 結果と手順を `phase5_ci_path_audit.md` と `refactoring_plan_2025-08-08_v3.md` に反映（2025年10月31日更新）
 
 ### 巨大ファイル分割
 
