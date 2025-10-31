@@ -18,12 +18,6 @@
   - [x] `DefaultEncryptionService` / `EventHandler` / `LegacyEventManagerHandle` / `NostrClientManager` に `Default` 実装を追加
   - [x] Clippy 結果と手順を `phase5_ci_path_audit.md` と `refactoring_plan_2025-08-08_v3.md` に反映（2025年10月31日更新）
 
-### 巨大ファイル分割
-
-- [ ] `application/services/p2p_service.rs`（約797行）を責務別モジュールへ分割しテストを更新
-- [ ] `domain/entities/event.rs`（約1310行）をバリデーション/変換ごとに分割しテストを更新
-- [ ] 分割結果を `refactoring_plan_2025-08-08_v3.md` と関連 artefact に反映
-
 ### 残存 TODO 実装
 
 - [ ] `infrastructure/p2p/event_distributor.rs` のブロードキャスト/配信経路 TODO を実装
