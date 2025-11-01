@@ -26,5 +26,8 @@
   - 2025年11月01日: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` を起票し、画面別導線と改善候補を整理。
 - [ ] Tauri コマンド呼び出し状況（フロントエンド `invoke` 探索結果）と未使用 API の整理結果をドキュメントへ反映
   - 2025年11月01日: `TauriApi`・`SecureStorageApi`・`p2pApi`・`nostr`ユーティリティの `invoke` 使用箇所を洗い出し、未使用コマンド候補（例: `add_relay`, `subscribe_to_user`, `join_topic_by_name` など）を整理中。
+  - 2025年11月01日: `offlineApi` 系コマンドと `syncEngine` の直接 `invoke`（`get_post_metadata` など）を棚卸しし、`phase5_user_flow_inventory.md` の 3.1/3.2 に追記。
 - [ ] `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標チェックボックスを更新し、未達項目のフォロータスクを連携
+  - 2025年11月01日: 「UIから到達可能な全機能の文書化完了」を達成済みに更新し、参照ドキュメントと更新日を記録。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
+  - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。

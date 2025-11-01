@@ -415,7 +415,7 @@ tests/
 - [ ] コード重複率30%削減
 
 ### ユーザー導線指標【新規追加】
-- [ ] UIから到達可能な全機能の文書化完了
+- [x] UIから到達可能な全機能の文書化完了 — `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` に導線マップとギャップ分析を追記（2025年11月01日）
 - [ ] 未使用APIエンドポイント0件
 - [ ] 孤立コンポーネント0件
 - [ ] dead_codeのうち80%以上が削除または使用開始
@@ -512,3 +512,4 @@ cargo clippy --workspace --all-features -- -W unused-imports
 **ユーザー導線の最適化**を重視して作成されました。
 特にdead_codeの97箇所とTODOの39件は、実使用状況を確認した上で
 適切に対処する必要があります。
+

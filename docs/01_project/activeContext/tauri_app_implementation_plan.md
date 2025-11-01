@@ -433,6 +433,7 @@ export function PeerConnectionPanel() {
 ## Phase 5: アーキテクチャ再構成（準備中）
 
 依存関係棚卸し（2025年10月23日更新, `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）で抽出したハイリスク領域に対応するためのメモ。
+- 2025年11月01日: UI 導線と `invoke` 利用状況は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` を参照し、Phase 5 タスクのインプットとする。
 
 ### ハイリスク依存対策メモ（2025年10月24日更新）
 - **WSA-01 EventGateway 再配線**: `phase5_event_gateway_design.md` Sprint 2 に沿って `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーは `Arc<dyn EventGateway>` を受け取る。UI との境界は `application::shared::mappers::event` 経由で正規化する。

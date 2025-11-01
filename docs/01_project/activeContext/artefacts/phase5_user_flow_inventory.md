@@ -52,6 +52,7 @@
 - `RelayStatus`（サイドバー下部）: `get_relay_status` を 30 秒ごとにポーリングしステータス表示。
 - `P2PStatus`: `useP2PStore` の状態を表示（接続ピア数、メッセージ数）。
 - `useP2PEventListener` / `useDataSync`: アプリ起動時にバックグラウンド処理を登録、`pubkey_to_npub` などのコマンドを使用。
+- `offlineStore` / `syncEngine`: ネットワーク断やバックグラウンド同期で `save_offline_action` / `sync_offline_actions` / `save_optimistic_update` などを経由し、投稿・トピック操作の再送と楽観的更新を制御。
 
 ## 2. 確認できた導線ギャップ
 - サイドバー上部の「新規投稿」ボタンに onClick が未設定で、クリックしても `PostComposer` が開かない。
@@ -95,6 +96,15 @@
 | `list_nostr_subscriptions` | `listNostrSubscriptions` | `useNostrSubscriptions` → `P2PDebugPanel` | DEV デバッグ画面 |
 | `pubkey_to_npub` / `npub_to_pubkey` | `nostr.utils` | `postStore`, `useP2PEventListener` | 投稿・P2Pイベント正規化 |
 
+#### オフライン同期
+| コマンド | ラッパー | 呼び出し元 | UI導線 |
+| --- | --- | --- | --- |
+| `save_offline_action` / `get_offline_actions` / `sync_offline_actions` | `offlineApi.*` | `offlineStore.saveOfflineAction` / `.syncPendingActions` / `.loadPendingActions` | 投稿・トピック操作失敗時の再送（PostComposer、TopicFormModal など） |
+| `cleanup_expired_cache` | `offlineApi.cleanupExpiredCache` | `offlineStore.cleanupExpiredCache`（1時間ごと） | バックグラウンドで古いオフラインアクションを整理 |
+| `save_optimistic_update` / `confirm_optimistic_update` / `rollback_optimistic_update` | `offlineApi.*` | `offlineStore.applyOptimisticUpdate` / `.confirmUpdate` / `.rollbackUpdate` | PostCard のリアクション・ブックマークなど楽観的更新の確定 |
+
+`syncEngine.getEntityLastModified` は `@tauri-apps/api/core` を動的 import し、`get_post_metadata` / `get_topic_metadata` / `get_user_metadata` / `get_reaction_metadata` を直接 `invoke` している（TypeScript ラッパー未整備）。
+
 #### P2P 関連
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
 | --- | --- | --- | --- |
@@ -115,6 +125,12 @@
 | `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。 |
 | `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。 |
 | `clear_all_accounts_for_test` | `SecureStorageApi.clearAllAccountsForTest` | テスト用リセット | デバッグ UI 未接続。 |
+| `get_cache_status` | `offlineApi.getCacheStatus` | キャッシュ診断 | 取得結果の表示先が未決定で、ストアからは未呼び出し。 |
+| `add_to_sync_queue` | `offlineApi.addToSyncQueue` | 手動キュー投入 | 既存フローから未使用。今後の再索引拡張候補。 |
+| `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
+| `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
+
+統合テストでは `invoke('import_key' | 'connect_relay' | 'disconnect_relay')` を直接呼び、バックエンド API の接続確認を行っている（UI 導線なし）。
 
 ## 4. 次のアクション候補
 1. `Sidebar` の「新規投稿」ボタンを `PostComposer` と連携させ、どの画面からでも投稿できるようにする。
