@@ -1,5 +1,6 @@
-use super::builder::P2PServiceBuilder;
-use super::status::{GossipMetricsSummary, P2PStatus, TopicInfo};
+use super::bootstrap::P2PServiceBuilder;
+use super::metrics::GossipMetricsSummary;
+use super::status::{P2PStatus, TopicInfo};
 use crate::infrastructure::p2p::{DiscoveryOptions, GossipService, NetworkService, metrics};
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use crate::shared::error::AppError;
@@ -178,13 +179,7 @@ impl P2PServiceTrait for P2PService {
             });
         }
 
-        let metrics_snapshot = metrics::snapshot();
-        let metrics_summary = GossipMetricsSummary {
-            joins: metrics_snapshot.joins,
-            leaves: metrics_snapshot.leaves,
-            broadcasts_sent: metrics_snapshot.broadcasts_sent,
-            messages_received: metrics_snapshot.messages_received,
-        };
+        let metrics_summary = GossipMetricsSummary::from_snapshot(&metrics::snapshot());
 
         Ok(P2PStatus {
             connected: true,

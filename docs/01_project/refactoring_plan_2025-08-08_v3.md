@@ -409,7 +409,7 @@ tests/
 - [x] Clippyエラー0件（2025年11月01日再確認済み）
 - [x] TODOコメント50%削減（39件→20件以下）
 - [x] #[allow(dead_code)]を50%削減（97件→50件以下）
-- [ ] 700行超のファイル0件（現在0件を維持）
+- [x] 700行超のファイル0件（現在0件を維持） — 2025年11月01日: `infrastructure/p2p/event_distributor` を責務別モジュールへ分割し、`application/services/p2p_service` を `core` / `bootstrap` / `metrics` 構成に再編。
 - [x] manager_old.rsの削除
 - [ ] すべてのRustテスト成功
 - [ ] コード重複率30%削減

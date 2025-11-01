@@ -19,13 +19,6 @@
 - [x] `kukuri-cli` 側でも `cargo clippy --all-features -- -D warnings` を実行し、警告ゼロ継続を確認
 - [x] Clippy 対応後に `refactoring_plan_2025-08-08_v3.md` の成功指標欄を更新し、再発防止タスクを記録
 
-### 巨大ファイル分割（Phase 5 継続）
-
-- [ ] `infrastructure/p2p/event_distributor.rs` を役割単位（戦略・リトライ・メトリクス等）に分割し、公開 API を `mod.rs` で再輸出
-- [ ] `application/services/p2p_service.rs` の 700 行超箇所を `core` / `bootstrap` / `metrics` など Phase 5 計画に沿ったモジュールへ切り出し、既存テスト (`tests.rs`) を更新
-- [ ] 分割後に `cargo test`（Rust 全体）と `pnpm test`（該当ユニット）を実行し、リグレッションがないことを確認
-- [ ] 変更内容を `refactoring_plan_2025-08-08_v3.md` と `phase5_dependency_inventory_template.md` に反映し、成功指標「700行超のファイル0件」の状態を更新
-
 ### ユーザー導線ドキュメント整備
 
 - [ ] UI から到達可能な機能一覧を棚卸しし、`docs/01_project/activeContext/artefacts/` 配下にサマリードキュメントを作成

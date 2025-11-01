@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::metrics::GossipMetricsSummary;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PStatus {
     pub connected: bool,
@@ -7,14 +9,6 @@ pub struct P2PStatus {
     pub active_topics: Vec<TopicInfo>,
     pub peer_count: usize,
     pub metrics_summary: GossipMetricsSummary,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GossipMetricsSummary {
-    pub joins: u64,
-    pub leaves: u64,
-    pub broadcasts_sent: u64,
-    pub messages_received: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
