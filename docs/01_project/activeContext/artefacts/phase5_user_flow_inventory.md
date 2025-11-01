@@ -1,6 +1,6 @@
 # Phase 5 ユーザー導線棚卸し
 作成日: 2025年11月01日  
-最終更新: 2025年11月01日
+最終更新: 2025年11月02日
 
 ## 目的
 - Phase 5 で想定しているデスクトップアプリ体験のうち、現状 UI から到達できる機能と欠落導線を把握する。
@@ -49,10 +49,12 @@
 | P2P デバッグ (DEVのみ) | `/settings` `import.meta.env.DEV` 条件 | `P2PDebugPanel` – Gossip/Mainline メトリクス取得、トピック参加、ブロードキャスト、サブスクリプション一覧 | `get_p2p_metrics`, `join_p2p_topic`, `leave_p2p_topic`, `broadcast_to_topic`, `list_nostr_subscriptions` |
 
 ### 1.6 その他グローバル要素
-- `RelayStatus`（サイドバー下部）: `get_relay_status` を 30 秒ごとにポーリングしステータス表示。
-- `P2PStatus`: `useP2PStore` の状態を表示（接続ピア数、メッセージ数）。
-- `useP2PEventListener` / `useDataSync`: アプリ起動時にバックグラウンド処理を登録、`pubkey_to_npub` などのコマンドを使用。
-- `offlineStore` / `syncEngine`: ネットワーク断やバックグラウンド同期で `save_offline_action` / `sync_offline_actions` / `save_optimistic_update` などを経由し、投稿・トピック操作の再送と楽観的更新を制御。
+- サイドバー参加中トピックリスト: `topicStore` の `topicUnreadCounts` と `handleIncomingTopicMessage` で未読数と最終活動時刻を更新し、P2Pメッセージのタイムスタンプを秒換算して降順表示。
+- `PostComposer` / `DraftManager`: シンプル/Markdown 切替と 2 秒デバウンスの自動保存で下書きを保持し、一覧から再開・削除が可能。
+- `RelayStatus`（サイドバー下部）: `get_relay_status` を 30 秒ごとにポーリングし接続状態を表示。
+- `P2PStatus`: `useP2PStore` の接続状況と `p2pApi.getStatus` のメトリクス要約をヘッダーで通知。
+- `useP2PEventListener` / `useDataSync`: P2Pイベントを購読して投稿/トピックの React Query キャッシュを無効化し、5 分ごとの再フェッチとオンライン復帰時の全体再同期を実施。
+- `offlineSyncService` と `offlineStore` / `syncEngine`: ネットワークイベントを監視し 30 秒間隔で同期、失敗時は指数バックオフで再試行しつつ `save_offline_action` / `sync_offline_actions` / `save_optimistic_update` などを通じて再送・競合解消を制御。
 
 ## 2. 確認できた導線ギャップ
 - サイドバー上部の「新規投稿」ボタンに onClick が未設定で、クリックしても `PostComposer` が開かない。
@@ -61,6 +63,7 @@
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
 - 投稿の削除導線（`delete_post`）が UI から利用できず、`postStore.deletePostRemote` は未接続。
 - 設定画面の「プロフィール編集」「鍵管理」ボタンは UI 表示のみで実装が無い。
+- `TopicPage` (`/topics/$topicId`) の「最終更新」表示は 2025年11月02日時点で `topic.lastActive` を秒→ミリ秒換算する修正を適用済み。
 
 ## 3. Tauri コマンド呼び出しマップ
 
@@ -130,7 +133,10 @@
 | `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
 | `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
 
-統合テストでは `invoke('import_key' | 'connect_relay' | 'disconnect_relay')` を直接呼び、バックエンド API の接続確認を行っている（UI 導線なし）。
+統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
+- 認証 E2E: `import_key`, `get_public_key`
+- リレー接続: `connect_relay`, `disconnect_relay`, `get_relay_status`
+- 投稿/トピック状態検証: `create_post`, `create_topic`, `list_posts`, `list_topics`
 
 ## 4. 次のアクション候補
 1. `Sidebar` の「新規投稿」ボタンを `PostComposer` と連携させ、どの画面からでも投稿できるようにする。

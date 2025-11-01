@@ -184,6 +184,7 @@ grep -r "関数名" kukuri-tauri/src --include="*.rs" --include="*.ts"
    # フロントエンドからの実際の呼び出し
    grep -r "invoke(" kukuri-tauri/src --include="*.ts" --include="*.tsx"
    ```
+   - 2025年11月02日: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` 3.1/3.2/3.3 に呼び出し状況・未導線API・統合テスト専用コマンドを反映し、`TopicPage` の最終更新表示バグ（`lastActive` 秒単位）を改善候補に登録。
 
 3. **ルーティングとページアクセス**
    ```bash
@@ -415,8 +416,9 @@ tests/
 - [ ] コード重複率30%削減
 
 ### ユーザー導線指標【新規追加】
-- [x] UIから到達可能な全機能の文書化完了 — `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` に導線マップとギャップ分析を追記（2025年11月01日）
+- [x] UIから到達可能な全機能の文書化完了 — `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` に導線マップとギャップ分析を追記（2025年11月01日作成、2025年11月02日: グローバル導線と統合テスト専用コマンドを追記）
 - [ ] 未使用APIエンドポイント0件
+  - 2025年11月02日: 同ドキュメント 3.2/3.3 に未導線API（`delete_post` / `add_relay` など）とテスト専用 `invoke` コマンドを整理。UI導線追加または削除方針の判断待ち。
 - [ ] 孤立コンポーネント0件
 - [ ] dead_codeのうち80%以上が削除または使用開始
 - [ ] すべてのTauriコマンドがフロントエンドから呼び出し可能

@@ -60,7 +60,9 @@ function TopicPage() {
             <span>•</span>
             <span>
               最終更新:{' '}
-              {topic.lastActive ? new Date(topic.lastActive).toLocaleDateString('ja-JP') : '-'}
+              {topic.lastActive
+                ? new Date(topic.lastActive * 1000).toLocaleDateString('ja-JP')
+                : '-'}
             </span>
           </div>
           <div className="flex items-center gap-2">
