@@ -64,11 +64,6 @@ export const createTopicPersistConfig = <
   partialize: createPartializer<
     T,
     'joinedTopics' | 'currentTopic' | 'topicUnreadCounts' | 'topicLastReadAt'
-  >([
-    'joinedTopics',
-    'currentTopic',
-    'topicUnreadCounts',
-    'topicLastReadAt',
-  ]),
+  >(['joinedTopics', 'currentTopic', 'topicUnreadCounts', 'topicLastReadAt']),
   storage: createMapAwareStorage(),
 });

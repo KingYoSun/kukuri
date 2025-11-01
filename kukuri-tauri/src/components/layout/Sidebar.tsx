@@ -43,9 +43,7 @@ export function Sidebar() {
             : Math.floor(m.timestamp),
         );
         const lastMessageTime =
-          messageTimestamps.length > 0
-            ? Math.max(...messageTimestamps)
-            : topic.lastActive || 0;
+          messageTimestamps.length > 0 ? Math.max(...messageTimestamps) : topic.lastActive || 0;
 
         const unreadCount = topicUnreadCounts.get(topic.id) ?? 0;
 

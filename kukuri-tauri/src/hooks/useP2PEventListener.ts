@@ -115,9 +115,7 @@ export function useP2PEventListener() {
             ? Math.floor(message.timestamp / 1000)
             : Math.floor(message.timestamp);
 
-        useTopicStore
-          .getState()
-          .handleIncomingTopicMessage(topic_id, messageTimestampSeconds);
+        useTopicStore.getState().handleIncomingTopicMessage(topic_id, messageTimestampSeconds);
 
         // 投稿として処理（リアルタイム更新）
         handleP2PMessageAsPost(p2pMessage, topic_id);

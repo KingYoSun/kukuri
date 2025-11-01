@@ -22,8 +22,8 @@ interface TopicStore extends TopicState {
   joinTopic: (topicId: string) => Promise<void>;
   leaveTopic: (topicId: string) => Promise<void>;
   updateTopicPostCount: (topicId: string, delta: number) => void;
-   markTopicRead: (topicId: string) => void;
-   handleIncomingTopicMessage: (topicId: string, timestamp: number) => void;
+  markTopicRead: (topicId: string) => void;
+  handleIncomingTopicMessage: (topicId: string, timestamp: number) => void;
 }
 
 export const useTopicStore = create<TopicStore>()(
@@ -418,9 +418,7 @@ export const useTopicStore = create<TopicStore>()(
           const unread = new Map(state.topicUnreadCounts);
           const lastRead = new Map(state.topicLastReadAt);
           const normalisedTimestamp =
-            timestamp > 1_000_000_000_000
-              ? Math.floor(timestamp / 1000)
-              : Math.floor(timestamp);
+            timestamp > 1_000_000_000_000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
 
           if (state.currentTopic?.id === topicId) {
             unread.set(topicId, 0);

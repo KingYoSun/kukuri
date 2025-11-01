@@ -272,7 +272,17 @@ impl GossipService for IrohGossipService {
                             });
                         }
 
-                        match serde_json::from_slice::<Event>(&msg.content) {
+                        let event_result = if let Some(message) = decoded_message
+                            .as_ref()
+                            .filter(|m| matches!(m.msg_type, MessageType::NostrEvent))
+                        {
+                            serde_json::from_slice::<Event>(&message.payload)
+                        } else {
+                            // 後方互換のため、生バイト列をそのまま JSON として扱う
+                            serde_json::from_slice::<Event>(&msg.content)
+                        };
+
+                        match event_result {
                             Ok(domain_event) => {
                                 match domain_event
                                     .validate_nip01()
@@ -387,7 +397,12 @@ impl GossipService for IrohGossipService {
 
         if let Some(handle) = topics.get(topic) {
             // イベントをシリアライズ
-            let message_bytes = serde_json::to_vec(event)?;
+            let payload = serde_json::to_vec(event)?;
+            let sender_id = self.endpoint.node_addr().node_id.to_string().into_bytes();
+            let gossip_message = GossipMessage::new(MessageType::NostrEvent, payload, sender_id);
+            let message_bytes = gossip_message.to_bytes().map_err(|e| {
+                AppError::P2PError(format!("Failed to serialize gossip message: {e}"))
+            })?;
 
             // Senderを取得してブロードキャスト
             let sender = handle.sender.clone();
