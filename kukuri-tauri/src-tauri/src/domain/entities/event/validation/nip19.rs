@@ -44,7 +44,7 @@ pub(super) fn validate_nprofile_tlv(s: &str) -> ValidationResult<()> {
             if relay_count > MAX_TLV_RELAY_URLS {
                 return Err(EventValidationError::new(
                     ValidationFailureKind::Nip19Tlv,
-                    format!("nprofile relay entries exceed max {}", MAX_TLV_RELAY_URLS),
+                    format!("nprofile relay entries exceed max {MAX_TLV_RELAY_URLS}"),
                 ));
             }
             validate_tlv_relay(value)
@@ -100,7 +100,7 @@ pub(super) fn validate_nevent_tlv(s: &str) -> ValidationResult<()> {
             if relay_count > MAX_TLV_RELAY_URLS {
                 return Err(EventValidationError::new(
                     ValidationFailureKind::Nip19Tlv,
-                    format!("nevent relay entries exceed max {}", MAX_TLV_RELAY_URLS),
+                    format!("nevent relay entries exceed max {MAX_TLV_RELAY_URLS}"),
                 ));
             }
             validate_tlv_relay(value)
@@ -171,7 +171,7 @@ fn validate_tlv_relay(value: &[u8]) -> ValidationResult<()> {
     if value.len() > MAX_TLV_RELAY_URL_LEN {
         return Err(EventValidationError::new(
             ValidationFailureKind::Nip19Tlv,
-            format!("relay url exceeds {} bytes", MAX_TLV_RELAY_URL_LEN),
+            format!("relay url exceeds {MAX_TLV_RELAY_URL_LEN} bytes"),
         ));
     }
     if value.is_empty() {

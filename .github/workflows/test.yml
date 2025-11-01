@@ -134,6 +134,11 @@ jobs:
           cd kukuri-tauri/src-tauri
           cargo clippy --workspace --all-features -- -D warnings -A dead_code -A unused_variables
 
+      - name: Run CLI clippy
+        run: |
+          cd kukuri-cli
+          cargo clippy --workspace --all-features -- -D warnings
+
       - name: Run TypeScript tests
         run: |
           cd kukuri-tauri

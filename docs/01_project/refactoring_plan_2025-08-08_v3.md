@@ -62,6 +62,11 @@ connection.rs           - 3箇所
 #### 2.3 Clippyエラー（0件／2025年10月31日確認）
 
 2025年10月31日: `kukuri-tauri/src-tauri` と `kukuri-cli` の両ディレクトリで `cargo clippy --workspace --all-features -- -D warnings` を実行し、警告ゼロで完走したことを確認。共通ワークスペースは存在しないため、CI では同コマンドをそれぞれのディレクトリから呼び出す運用に更新する。
+2025年11月01日: 指定の 2 ディレクトリで `cargo clippy --all-features -- -D warnings` を再実行し、警告ゼロ継続を確認。実行ログは `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` に追記済み。
+
+**再発防止タスク（2025年11月01日追加）:**
+- [x] `.github/workflows/test.yml` の lint 系ジョブに kukuri-cli の `cargo clippy --all-features -- -D warnings` を組み込み、Tauri 側と同等の自動チェックを保証する。（2025年11月01日 完了）
+- [x] 週次レビューのチェックリストに `phase5_ci_path_audit.md` の lint ログ確認を追加し、記録の欠落を防ぐ運用手順を整備する。（2025年11月01日 完了）
 
 **過去の検出内容（2025年08月時点）:**
 1. **未使用インポート（1件）:**
@@ -401,7 +406,7 @@ tests/
 ## 成功指標（改善版）
 
 ### 技術的指標
-- [x] Clippyエラー0件（2025年10月31日確認済み）
+- [x] Clippyエラー0件（2025年11月01日再確認済み）
 - [x] TODOコメント50%削減（39件→20件以下）
 - [x] #[allow(dead_code)]を50%削減（97件→50件以下）
 - [ ] 700行超のファイル0件（現在0件を維持）
@@ -475,6 +480,7 @@ tests/
 1. **進捗の週次レビュー**
    - 成功指標の達成状況確認
    - 計画の調整
+   - `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` の lint ログ更新状況を確認し、最新記録の有無とギャップをレビュー
 
 2. **ドキュメント更新**
    - 機能使用マップの維持

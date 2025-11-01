@@ -41,7 +41,9 @@ impl DhtEventHandler {
     async fn deserialize_message(&self, data: &[u8]) -> Result<Event, AppError> {
         bincode::serde::decode_from_slice::<Event, _>(data, bincode::config::standard())
             .map(|(event, _)| event)
-            .map_err(|e| AppError::DeserializationError(format!("Failed to deserialize: {e:?}")))
+            .map_err(|e| {
+                AppError::DeserializationError(format!("failed to deserialize DHT event: {e:?}"))
+            })
     }
 }
 
@@ -86,7 +88,7 @@ impl DhtIntegration {
         // DHTにブロードキャスト
         self.dht_gossip.broadcast(topic.as_bytes(), message).await?;
 
-        debug!("Event broadcast to topic: {}", topic);
+        debug!("Event broadcast to topic: {topic}");
         Ok(())
     }
 }
@@ -103,15 +105,13 @@ pub mod bridge {
         let timestamp_raw = event.created_at.as_u64();
         let timestamp = i64::try_from(timestamp_raw).map_err(|_| {
             AppError::DeserializationError(format!(
-                "Timestamp overflow when converting nostr event: {}",
-                timestamp_raw
+                "timestamp overflow when converting nostr event: {timestamp_raw}"
             ))
         })?;
         let created_at =
             chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).ok_or_else(|| {
                 AppError::DeserializationError(format!(
-                    "Invalid timestamp in nostr event: {}",
-                    timestamp
+                    "invalid timestamp in nostr event: {timestamp}"
                 ))
             })?;
 
