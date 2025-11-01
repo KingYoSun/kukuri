@@ -11,23 +11,24 @@
 
 ## 現在のタスク
 
-### Clippy 完全解消
+### Clippy 警告ゼロ体制の復帰
 
-- [x] `cargo clippy --workspace --all-features -- -D warnings` をゼロエラーで完走させる（2025年10月31日: `kukuri-tauri/src-tauri` と `kukuri-cli` の両方で実行し警告ゼロを確認）
-  - [x] `domain/entities/event.rs` の `format!` 最適化と `as_bytes` 警告を解消
-  - [x] `DefaultEncryptionService` / `EventHandler` / `LegacyEventManagerHandle` / `NostrClientManager` に `Default` 実装を追加
-  - [x] Clippy 結果と手順を `phase5_ci_path_audit.md` と `refactoring_plan_2025-08-08_v3.md` に反映（2025年10月31日更新）
+- [ ] `domain/entities/event/validation/nip19.rs` の `format!` 文字列を埋め込み式へ置換し、Clippy (`uninlined_format_args`) を解消
+- [ ] `infrastructure/p2p/dht_integration.rs` の `format!` 文字列を修正し、`AppError::DeserializationError` 周辺のログ表現を統一
+- [ ] `cargo clippy --all-features -- -D warnings` を `kukuri-tauri/src-tauri` で再実行し、警告ゼロを確認（ログ取得・`phase5_ci_path_audit.md` へ反映）
+- [ ] `kukuri-cli` 側でも `cargo clippy --all-features -- -D warnings` を実行し、警告ゼロ継続を確認
+- [ ] Clippy 対応後に `refactoring_plan_2025-08-08_v3.md` の成功指標欄を更新し、再発防止タスクを記録
 
-### 残存 TODO 実装
+### 巨大ファイル分割（Phase 5 継続）
 
-- [x] `infrastructure/p2p/event_distributor.rs` のブロードキャスト/配信経路 TODO を実装（2025年10月31日: Gossip/DHT配信処理と依存注入を追加し、Docker経由で Rust テストを完走）
-- [x] `infrastructure/p2p/dht_integration.rs` の実装 TODO を完了（2025年10月31日: Nostr⇔ドメイン変換実装と単体テスト追加）
-- [x] `domain/p2p/topic_mesh.rs` の購読処理 TODO を実装
-  - 2025年10月31日: Codex作業開始。TopicMesh購読APIとIroh連携の実装方針を調査中。
-  - 2025年11月01日: 購読初期リプレイと自動解除を実装し、Receiver切断時に購読が解除されるガードとユニットテストを追加。
-- [x] `application/services/post_service.rs` のトピック別投稿キャッシュ TODO に対応
-  - 2025年11月01日: キャッシュとDB結果を統合し、キャッシュ専用投稿が維持されるユニットテストを追加。
-- [x] `src/components/layout/Sidebar.tsx` の未読カウント TODO を実装しテストを追加
-  - 2025年11月01日: 未読バッジ表示のテストIDを追加し、未投稿表示と未読0件時の挙動テストを整備。
-- [x] 残存 TODO の棚卸し結果を `phase5_dependency_inventory_template.md` に追記
-  - 2025年11月01日: TopicMesh/PostService/Sidebarの依存棚卸しメモを更新。
+- [ ] `infrastructure/p2p/event_distributor.rs` を役割単位（戦略・リトライ・メトリクス等）に分割し、公開 API を `mod.rs` で再輸出
+- [ ] `application/services/p2p_service.rs` の 700 行超箇所を `core` / `bootstrap` / `metrics` など Phase 5 計画に沿ったモジュールへ切り出し、既存テスト (`tests.rs`) を更新
+- [ ] 分割後に `cargo test`（Rust 全体）と `pnpm test`（該当ユニット）を実行し、リグレッションがないことを確認
+- [ ] 変更内容を `refactoring_plan_2025-08-08_v3.md` と `phase5_dependency_inventory_template.md` に反映し、成功指標「700行超のファイル0件」の状態を更新
+
+### ユーザー導線ドキュメント整備
+
+- [ ] UI から到達可能な機能一覧を棚卸しし、`docs/01_project/activeContext/artefacts/` 配下にサマリードキュメントを作成
+- [ ] Tauri コマンド呼び出し状況（フロントエンド `invoke` 探索結果）と未使用 API の整理結果をドキュメントへ反映
+- [ ] `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標チェックボックスを更新し、未達項目のフォロータスクを連携
+- [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
