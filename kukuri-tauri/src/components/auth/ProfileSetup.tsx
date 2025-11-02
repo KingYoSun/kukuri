@@ -5,7 +5,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-import { ProfileForm, type ProfileFormValues } from './ProfileForm';
+import { ProfileForm, type ProfileFormSubmitPayload, type ProfileFormValues } from './ProfileForm';
+import { TauriApi } from '@/lib/api/tauri';
+import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
 
 export function ProfileSetup() {
   const navigate = useNavigate();
@@ -20,7 +22,7 @@ export function ProfileSetup() {
     nip05: currentUser?.nip05 || '',
   };
 
-  const handleSubmit = async (profile: ProfileFormValues) => {
+  const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
     if (!profile.name.trim()) {
       toast.error('名前を入力してください');
       return;
@@ -28,12 +30,34 @@ export function ProfileSetup() {
 
     setIsLoading(true);
     try {
+      let updatedPicture = profile.picture || currentUser?.picture || '';
+      let updatedAvatar = currentUser?.avatar ?? null;
+      let nostrPicture =
+        profile.picture || currentUser?.avatar?.nostrUri || currentUser?.picture || '';
+
+      if (profile.avatarFile) {
+        if (!currentUser?.npub) {
+          throw new Error('Missing npub for avatar upload');
+        }
+
+        const uploadResult = await TauriApi.uploadProfileAvatar({
+          npub: currentUser.npub,
+          data: profile.avatarFile.bytes,
+          format: profile.avatarFile.format,
+          accessLevel: 'contacts_only',
+        });
+        const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
+        updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
+        updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
+        nostrPicture = updatedAvatar.nostrUri;
+      }
+
       // Nostrプロフィールメタデータを更新
       await updateNostrMetadata({
         name: profile.name,
         display_name: profile.displayName || profile.name,
         about: profile.about,
-        picture: profile.picture,
+        picture: nostrPicture,
         nip05: profile.nip05,
       });
 
@@ -42,8 +66,9 @@ export function ProfileSetup() {
         name: profile.name,
         displayName: profile.displayName || profile.name,
         about: profile.about,
-        picture: profile.picture,
+        picture: updatedPicture,
         nip05: profile.nip05,
+        avatar: updatedAvatar,
       });
 
       toast.success('プロフィールを設定しました');

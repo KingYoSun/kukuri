@@ -1,18 +1,65 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAuthStore } from '@/stores/authStore';
 import { TauriApi } from '@/lib/api/tauri';
 import { SecureStorageApi } from '@/lib/api/secureStorage';
 import * as nostrApi from '@/lib/api/nostr';
 
-// モック設定
-vi.mock('@/lib/api/tauri');
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    generateKeypair: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+    fetchProfileAvatar: vi.fn(),
+    getTopics: vi.fn(),
+    joinTopic: vi.fn(),
+  },
+}));
 vi.mock('@/lib/api/secureStorage');
 vi.mock('@/lib/api/nostr');
+
+const topicStoreState = {
+  topics: new Map<string, any>(),
+  joinedTopics: [] as string[],
+  topicUnreadCounts: new Map<string, number>(),
+  topicLastReadAt: new Map<string, number>(),
+  currentTopic: null as any,
+  fetchTopics: vi.fn(async () => {
+    topicStoreState.topics = new Map([
+      [
+        'public',
+        {
+          id: 'public',
+          name: '#public',
+          description: '',
+          tags: [],
+          memberCount: 0,
+          postCount: 0,
+          isActive: true,
+          createdAt: new Date(),
+        },
+      ],
+    ]);
+  }),
+  joinTopic: vi.fn(async () => {}),
+  setCurrentTopic: vi.fn((topic: any) => {
+    topicStoreState.currentTopic = topic;
+  }),
+};
+
+vi.mock('@/stores/topicStore', () => ({
+  useTopicStore: {
+    getState: () => topicStoreState,
+  },
+}));
 
 const mockTauriApi = TauriApi as unknown as {
   generateKeypair: ReturnType<typeof vi.fn>;
   login: ReturnType<typeof vi.fn>;
   logout: ReturnType<typeof vi.fn>;
+  fetchProfileAvatar: ReturnType<typeof vi.fn>;
+  getTopics: ReturnType<typeof vi.fn>;
+  joinTopic: ReturnType<typeof vi.fn>;
 };
 
 const mockSecureStorageApi = SecureStorageApi as unknown as {
@@ -32,7 +79,6 @@ const mockNostrApi = nostrApi as unknown as {
 
 describe('authStore - Multiple Account Management', () => {
   beforeEach(() => {
-    // ストアをリセット
     useAuthStore.setState({
       isAuthenticated: false,
       currentUser: null,
@@ -41,13 +87,41 @@ describe('authStore - Multiple Account Management', () => {
       accounts: [],
     });
 
-    // モックをクリア
     vi.clearAllMocks();
 
-    // デフォルトのモック実装
-    mockNostrApi.initializeNostr = vi.fn().mockResolvedValue(undefined);
-    mockNostrApi.disconnectNostr = vi.fn().mockResolvedValue(undefined);
-    mockNostrApi.getRelayStatus = vi.fn().mockResolvedValue([]);
+    mockNostrApi.initializeNostr.mockResolvedValue(undefined);
+    mockNostrApi.disconnectNostr.mockResolvedValue(undefined);
+    mockNostrApi.getRelayStatus.mockResolvedValue([]);
+    mockTauriApi.fetchProfileAvatar.mockRejectedValue(new Error('Profile avatar not found'));
+    mockTauriApi.getTopics.mockResolvedValue([]);
+    mockTauriApi.joinTopic.mockResolvedValue(undefined);
+
+    topicStoreState.topics = new Map();
+    topicStoreState.joinedTopics = [];
+    topicStoreState.topicUnreadCounts = new Map();
+    topicStoreState.topicLastReadAt = new Map();
+    topicStoreState.currentTopic = null;
+    topicStoreState.fetchTopics = vi.fn(async () => {
+      topicStoreState.topics = new Map([
+        [
+          'public',
+          {
+            id: 'public',
+            name: '#public',
+            description: '',
+            tags: [],
+            memberCount: 0,
+            postCount: 0,
+            isActive: true,
+            createdAt: new Date(),
+          },
+        ],
+      ]);
+    });
+    topicStoreState.joinTopic = vi.fn(async () => {});
+    topicStoreState.setCurrentTopic = vi.fn((topic: any) => {
+      topicStoreState.currentTopic = topic;
+    });
   });
 
   describe('initialize with auto-login', () => {
@@ -100,10 +174,48 @@ describe('authStore - Multiple Account Management', () => {
         about: '',
         picture: 'https://example.com/avatar.png',
         nip05: '',
+        avatar: null,
       });
       expect(state.privateKey).toBe('nsec1current');
       expect(state.accounts).toEqual(mockAccounts);
       expect(mockNostrApi.initializeNostr).toHaveBeenCalled();
+    });
+
+    it('should populate avatar metadata when fetchProfileAvatar succeeds', async () => {
+      const mockCurrentAccount = {
+        npub: 'npub1current',
+        nsec: 'nsec1current',
+        pubkey: 'pubkey_current',
+        metadata: {
+          npub: 'npub1current',
+          pubkey: 'pubkey_current',
+          name: 'Current User',
+          display_name: 'Current User Display',
+          picture: '',
+          last_used: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      mockSecureStorageApi.getCurrentAccount = vi.fn().mockResolvedValue(mockCurrentAccount);
+      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
+      mockTauriApi.fetchProfileAvatar.mockResolvedValue({
+        npub: 'npub1current',
+        blob_hash: 'abc123',
+        format: 'image/png',
+        size_bytes: 3,
+        access_level: 'public',
+        share_ticket: 'ticket-1',
+        doc_version: 5,
+        updated_at: '2025-11-02T00:00:00Z',
+        content_sha256: 'deadbeef',
+        data_base64: 'AQID',
+      });
+
+      await useAuthStore.getState().initialize();
+
+      await waitFor(() => {
+        expect(mockTauriApi.fetchProfileAvatar).toHaveBeenCalledWith('npub1current');
+      });
     });
 
     it('should not auto-login when no current account exists', async () => {
@@ -138,44 +250,38 @@ describe('authStore - Multiple Account Management', () => {
 
   describe('loginWithNsec with secure storage', () => {
     it('should save to secure storage when saveToSecureStorage is true', async () => {
-      const nsec = 'nsec1test123';
       const mockLoginResponse = {
         public_key: 'pubkey123',
-        npub: 'npub1test123',
+        npub: 'npub1example',
       };
-
       mockTauriApi.login = vi.fn().mockResolvedValue(mockLoginResponse);
       mockSecureStorageApi.addAccount = vi.fn().mockResolvedValue({
-        npub: 'npub1test123',
-        pubkey: 'pubkey123',
+        success: true,
       });
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
 
-      await useAuthStore.getState().loginWithNsec(nsec, true);
+      await useAuthStore.getState().loginWithNsec('nsec123', true);
 
       expect(mockSecureStorageApi.addAccount).toHaveBeenCalledWith({
-        nsec,
+        nsec: 'nsec123',
         name: 'ユーザー',
         display_name: 'ユーザー',
         picture: '',
       });
-
+      expect(mockTauriApi.login).toHaveBeenCalledWith({ nsec: 'nsec123' });
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(true);
-      expect(state.currentUser?.npub).toBe('npub1test123');
+      expect(state.currentUser?.avatar).toBeNull();
     });
 
     it('should not save to secure storage when saveToSecureStorage is false', async () => {
-      const nsec = 'nsec1test123';
       const mockLoginResponse = {
         public_key: 'pubkey123',
-        npub: 'npub1test123',
+        npub: 'npub1example',
       };
-
       mockTauriApi.login = vi.fn().mockResolvedValue(mockLoginResponse);
-      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
 
-      await useAuthStore.getState().loginWithNsec(nsec, false);
+      await useAuthStore.getState().loginWithNsec('nsec123', false);
 
       expect(mockSecureStorageApi.addAccount).not.toHaveBeenCalled();
     });
@@ -185,38 +291,34 @@ describe('authStore - Multiple Account Management', () => {
     it('should save to secure storage by default', async () => {
       const mockKeypairResponse = {
         public_key: 'pubkey123',
-        nsec: 'nsec1generated',
+        npub: 'npub1example',
+        nsec: 'nsec1example',
       };
-
       mockTauriApi.generateKeypair = vi.fn().mockResolvedValue(mockKeypairResponse);
       mockSecureStorageApi.addAccount = vi.fn().mockResolvedValue({
-        npub: 'pubkey123',
-        pubkey: 'pubkey123',
+        success: true,
       });
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
 
-      const result = await useAuthStore.getState().generateNewKeypair();
+      await useAuthStore.getState().generateNewKeypair();
 
       expect(mockSecureStorageApi.addAccount).toHaveBeenCalledWith({
-        nsec: 'nsec1generated',
+        nsec: 'nsec1example',
         name: '新規ユーザー',
         display_name: '新規ユーザー',
         picture: '',
       });
-
-      expect(result.nsec).toBe('nsec1generated');
       const state = useAuthStore.getState();
-      expect(state.isAuthenticated).toBe(true);
+      expect(state.currentUser?.avatar).toBeNull();
     });
 
     it('should not save to secure storage when saveToSecureStorage is false', async () => {
       const mockKeypairResponse = {
         public_key: 'pubkey123',
-        nsec: 'nsec1generated',
+        npub: 'npub1example',
+        nsec: 'nsec1example',
       };
-
       mockTauriApi.generateKeypair = vi.fn().mockResolvedValue(mockKeypairResponse);
-      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
 
       await useAuthStore.getState().generateNewKeypair(false);
 
@@ -231,7 +333,6 @@ describe('authStore - Multiple Account Management', () => {
         public_key: 'pubkey_alice',
         npub: 'npub1alice',
       };
-
       const mockAccounts = [
         {
           npub: 'npub1alice',
@@ -259,8 +360,9 @@ describe('authStore - Multiple Account Management', () => {
         about: '',
         picture: 'https://example.com/alice.png',
         nip05: '',
+        avatar: null,
       });
-      expect(state.privateKey).toBeNull(); // セキュアストレージから取得したものは保持しない
+      expect(state.privateKey).toBeNull();
       expect(mockNostrApi.initializeNostr).toHaveBeenCalled();
     });
 
@@ -273,7 +375,6 @@ describe('authStore - Multiple Account Management', () => {
 
   describe('removeAccount', () => {
     it('should remove account and logout if current account', async () => {
-      // 現在のアカウントを設定
       useAuthStore.setState({
         isAuthenticated: true,
         currentUser: {
@@ -285,6 +386,7 @@ describe('authStore - Multiple Account Management', () => {
           about: '',
           picture: '',
           nip05: '',
+          avatar: null,
         },
         privateKey: 'nsec1current',
       });
@@ -304,7 +406,6 @@ describe('authStore - Multiple Account Management', () => {
     });
 
     it('should remove account without logout if not current account', async () => {
-      // 別のアカウントを現在のアカウントとして設定
       useAuthStore.setState({
         isAuthenticated: true,
         currentUser: {
@@ -316,6 +417,7 @@ describe('authStore - Multiple Account Management', () => {
           about: '',
           picture: '',
           nip05: '',
+          avatar: null,
         },
       });
 

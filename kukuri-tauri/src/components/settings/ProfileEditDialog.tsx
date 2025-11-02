@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ProfileForm, type ProfileFormValues } from '@/components/auth/ProfileForm';
+import { ProfileForm, type ProfileFormSubmitPayload, type ProfileFormValues } from '@/components/auth/ProfileForm';
 import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
+import { TauriApi } from '@/lib/api/tauri';
+import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
 
 interface ProfileEditDialogProps {
   open: boolean;
@@ -31,7 +33,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
     onOpenChange(false);
   };
 
-  const handleSubmit = async (profile: ProfileFormValues) => {
+  const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
     if (!profile.name.trim()) {
       toast.error('名前を入力してください');
       return;
@@ -44,11 +46,31 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
     setIsSubmitting(true);
     try {
+      let updatedPicture = profile.picture || currentUser.picture || '';
+      let updatedAvatar = currentUser.avatar ?? null;
+      let nostrPicture = profile.picture || currentUser.avatar?.nostrUri || currentUser.picture || '';
+
+      if (profile.avatarFile) {
+        if (!currentUser.npub) {
+          throw new Error('Missing npub for avatar upload');
+        }
+        const uploadResult = await TauriApi.uploadProfileAvatar({
+          npub: currentUser.npub,
+          data: profile.avatarFile.bytes,
+          format: profile.avatarFile.format,
+          accessLevel: 'contacts_only',
+        });
+        const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
+        updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
+        updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
+        nostrPicture = updatedAvatar.nostrUri;
+      }
+
       await updateNostrMetadata({
         name: profile.name,
         display_name: profile.displayName || profile.name,
         about: profile.about,
-        picture: profile.picture,
+        picture: nostrPicture,
         nip05: profile.nip05,
       });
 
@@ -56,8 +78,9 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         name: profile.name,
         displayName: profile.displayName || profile.name,
         about: profile.about,
-        picture: profile.picture,
+        picture: updatedPicture,
         nip05: profile.nip05,
+        avatar: updatedAvatar,
       });
 
       toast.success('プロフィールを更新しました');

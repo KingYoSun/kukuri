@@ -1,3 +1,17 @@
+import type { ProfileAvatarAccessLevel } from '@/lib/api/tauri';
+
+export interface UserAvatarMetadata {
+  blobHash: string;
+  format: string;
+  sizeBytes: number;
+  accessLevel: ProfileAvatarAccessLevel;
+  shareTicket: string;
+  docVersion: number;
+  updatedAt: string;
+  contentSha256: string;
+  nostrUri: string;
+}
+
 export interface User {
   id: string;
   pubkey: string;
@@ -7,6 +21,7 @@ export interface User {
   picture: string;
   about: string;
   nip05: string;
+  avatar?: UserAvatarMetadata | null;
 }
 
 // Profile は User のエイリアス

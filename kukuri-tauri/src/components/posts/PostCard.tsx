@@ -17,6 +17,7 @@ import { ReplyForm } from './ReplyForm';
 import { QuoteForm } from './QuoteForm';
 import { ReactionPicker } from './ReactionPicker';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
+import defaultAvatar from '@/assets/profile/default_avatar.png';
 
 interface PostCardProps {
   post: Post;
@@ -124,12 +125,15 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       .slice(0, 2);
   };
 
+  const authorAvatarSrc =
+    post.author.picture && post.author.picture.trim() ? post.author.picture : defaultAvatar;
+
   return (
     <Card data-testid={dataTestId}>
       <CardHeader>
         <div className="flex items-start gap-3">
           <Avatar>
-            <AvatarImage src={post.author.picture} />
+            <AvatarImage src={authorAvatarSrc} />
             <AvatarFallback>
               {getInitials(post.author.displayName || post.author.name || 'U')}
             </AvatarFallback>

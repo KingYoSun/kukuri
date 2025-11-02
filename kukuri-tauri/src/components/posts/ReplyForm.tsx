@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores';
 import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
+import defaultAvatar from '@/assets/profile/default_avatar.png';
 
 interface ReplyFormProps {
   postId: string;
@@ -99,11 +100,13 @@ export function ReplyForm({
     return null;
   }
 
+  const avatarSrc = currentUser.picture?.trim() ? currentUser.picture : defaultAvatar;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="flex gap-3">
         <Avatar className="h-8 w-8">
-          <AvatarImage src={currentUser.picture} />
+          <AvatarImage src={avatarSrc} />
           <AvatarFallback>
             {getInitials(currentUser.displayName || currentUser.name || 'U')}
           </AvatarFallback>

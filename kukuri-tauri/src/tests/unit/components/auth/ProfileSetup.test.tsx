@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProfileSetup } from '@/components/auth/ProfileSetup';
@@ -31,6 +31,24 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 
+const mockOpen = vi.fn();
+const mockReadBinaryFile = vi.fn();
+vi.mock('@tauri-apps/api/dialog', () => ({
+  open: mockOpen,
+}));
+vi.mock('@tauri-apps/api/fs', () => ({
+  readBinaryFile: mockReadBinaryFile,
+}));
+
+const mockUploadProfileAvatar = vi.fn();
+const mockFetchProfileAvatar = vi.fn();
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    uploadProfileAvatar: mockUploadProfileAvatar,
+    fetchProfileAvatar: mockFetchProfileAvatar,
+  },
+}));
+
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -44,6 +62,19 @@ const createWrapper = () => {
   );
 };
 
+const originalCreateObjectURL = global.URL.createObjectURL;
+const originalRevokeObjectURL = global.URL.revokeObjectURL;
+
+beforeAll(() => {
+  global.URL.createObjectURL = vi.fn(() => 'blob:profile-setup');
+  global.URL.revokeObjectURL = vi.fn();
+});
+
+afterAll(() => {
+  global.URL.createObjectURL = originalCreateObjectURL;
+  global.URL.revokeObjectURL = originalRevokeObjectURL;
+});
+
 describe('ProfileSetup', () => {
   const mockUpdateUser = vi.fn();
   const mockCurrentUser = {
@@ -55,10 +86,15 @@ describe('ProfileSetup', () => {
     about: '',
     picture: '',
     nip05: '',
+    avatar: null,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOpen.mockResolvedValue(null);
+    mockReadBinaryFile.mockReset();
+    mockUploadProfileAvatar.mockReset();
+    mockFetchProfileAvatar.mockReset();
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       currentUser: mockCurrentUser,
       updateUser: mockUpdateUser,
@@ -66,7 +102,7 @@ describe('ProfileSetup', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('プロフィール設定フォームが正しく表示される', () => {
@@ -101,6 +137,7 @@ describe('ProfileSetup', () => {
       about: '既存の自己紹介',
       picture: 'https://example.com/avatar.jpg',
       nip05: 'existing@example.com',
+      avatar: null,
     };
 
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
@@ -175,6 +212,7 @@ describe('ProfileSetup', () => {
         about: 'テストユーザーです',
         picture: 'https://example.com/test.jpg',
         nip05: 'test@example.com',
+        avatar: null,
       });
     });
 
@@ -186,6 +224,82 @@ describe('ProfileSetup', () => {
     // ホーム画面への遷移
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+    });
+  });
+
+  it('画像をアップロードして保存すると Tauri API が呼び出される', async () => {
+    (updateNostrMetadata as vi.Mock).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    const mockBytes = Uint8Array.from([1, 2, 3, 4]);
+
+    mockOpen.mockResolvedValue('C:/temp/avatar.png');
+    mockReadBinaryFile.mockResolvedValue(mockBytes);
+    mockUploadProfileAvatar.mockResolvedValue({
+      npub: 'npub1test',
+      blob_hash: 'hash123',
+      format: 'image/png',
+      size_bytes: mockBytes.byteLength,
+      access_level: 'contacts_only',
+      share_ticket: 'ticket-1',
+      doc_version: 2,
+      updated_at: '2025-11-03T00:00:00Z',
+      content_sha256: 'deadbeef',
+    });
+    mockFetchProfileAvatar.mockResolvedValue({
+      npub: 'npub1test',
+      blob_hash: 'hash123',
+      format: 'image/png',
+      size_bytes: mockBytes.byteLength,
+      access_level: 'contacts_only',
+      share_ticket: 'ticket-1',
+      doc_version: 2,
+      updated_at: '2025-11-03T00:00:00Z',
+      content_sha256: 'deadbeef',
+      data_base64: 'AQIDBA==',
+    });
+
+    render(<ProfileSetup />, { wrapper: createWrapper() });
+
+    await user.type(screen.getByLabelText('名前 *'), 'テストユーザー');
+    await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));
+    await user.click(screen.getByRole('button', { name: '設定を完了' }));
+
+    await waitFor(() => {
+      expect(mockUploadProfileAvatar).toHaveBeenCalledWith({
+        npub: 'npub1test',
+        data: mockBytes,
+        format: 'image/png',
+        accessLevel: 'contacts_only',
+      });
+    });
+
+    expect(mockFetchProfileAvatar).toHaveBeenCalledWith('npub1test');
+
+    const expectedNostrUri = `iroh+avatar://profile_avatars?${new URLSearchParams({
+      npub: 'npub1test',
+      hash: 'hash123',
+      v: '2',
+    }).toString()}`;
+
+    await waitFor(() => {
+      expect(updateNostrMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({
+          picture: expectedNostrUri,
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          picture: 'data:image/png;base64,AQIDBA==',
+          avatar: expect.objectContaining({
+            blobHash: 'hash123',
+            docVersion: 2,
+            nostrUri: expectedNostrUri,
+          }),
+        }),
+      );
     });
   });
 
@@ -217,6 +331,7 @@ describe('ProfileSetup', () => {
         expect.objectContaining({
           name: 'テストユーザー',
           displayName: 'テストユーザー', // 名前と同じ
+          avatar: null,
         }),
       );
     });

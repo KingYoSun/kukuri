@@ -50,3 +50,6 @@
 
 - [ ] フロントの `ProfileForm` など既存 UI から新 `upload_profile_avatar` / `fetch_profile_avatar` API を呼び出す配線と UX チューニングを実施
   - 2025年11月02日: 現行フォームの画像アップロード導線・プレビュー処理を調査し、新コマンドに合わせたストア更新とエラーハンドリング改善の洗い出しを開始。
+  - 2025年11月02日: `ProfileForm` に Tauri ダイアログ経由の画像選択・プレビュー・バリデーションを実装し、`ProfileSetup` / `ProfileEditDialog` から `upload_profile_avatar` / `fetch_profile_avatar` を呼び出すよう接続。アップロード後は `authStore` にメタデータ（`avatar`）とデータURLを反映し、Vitest の関連ユニットテストを更新済み。
+  - 2025年11月02日: `authStore` がログイン／初期化／アカウント切替時に `fetch_profile_avatar` を呼び出して `currentUser.avatar` と `picture` を同期し、`AccountSwitcher` / `ReplyForm` / `QuoteForm` でデフォルトアバターにフォールバックするようリファレンスを更新。ユニットテストにリモート取得ケースを追加し、全体テストを実行済み。
+  - [ ] 全体の UI で新アバターメタデータを参照している箇所を洗い、必要に応じて default_avatar フォールバックを適用しきれているか確認

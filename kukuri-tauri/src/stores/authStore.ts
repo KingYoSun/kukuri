@@ -8,6 +8,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { useTopicStore } from './topicStore';
 import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
+import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
 
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
@@ -28,7 +29,49 @@ interface AuthStore extends AuthState {
 
 export const useAuthStore = create<AuthStore>()(
   withPersist<AuthStore>(
-    (set, get) => ({
+    (set, get) => {
+      const isAvatarNotFoundError = (error: unknown) => {
+        if (!error) {
+          return false;
+        }
+        const message =
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : undefined;
+        return typeof message === 'string' && message.includes('Profile avatar not found');
+      };
+
+      const fetchAndApplyAvatar = async (npub: string) => {
+        try {
+          const result = await TauriApi.fetchProfileAvatar(npub);
+          const metadata = buildUserAvatarMetadataFromFetch(npub, result);
+          const picture = buildAvatarDataUrl(result.format, result.data_base64);
+          set((state) => {
+            if (!state.currentUser || state.currentUser.npub !== npub) {
+              return {};
+            }
+            return {
+              currentUser: {
+                ...state.currentUser,
+                picture,
+                avatar: metadata,
+              },
+            };
+          });
+        } catch (error) {
+          if (isAvatarNotFoundError(error)) {
+            return;
+          }
+          errorHandler.log('Failed to fetch profile avatar', error, {
+            context: 'AuthStore.fetchAndApplyAvatar',
+            npub,
+          });
+        }
+      };
+
+      return {
       isAuthenticated: false,
       currentUser: null,
       privateKey: null,
@@ -43,6 +86,7 @@ export const useAuthStore = create<AuthStore>()(
         });
         try {
           await initializeNostr();
+          await fetchAndApplyAvatar(user.npub);
         } catch (error) {
           errorHandler.log('Failed to initialize Nostr', error, {
             context: 'AuthStore.login',
@@ -62,6 +106,7 @@ export const useAuthStore = create<AuthStore>()(
             about: '',
             picture: '',
             nip05: '',
+            avatar: null,
           };
 
           // セキュアストレージに保存
@@ -103,6 +148,8 @@ export const useAuthStore = create<AuthStore>()(
               topicStore.setCurrentTopic(publicTopic);
             }
           }
+
+          await fetchAndApplyAvatar(response.npub);
         } catch (error) {
           errorHandler.log('Login failed', error, {
             context: 'AuthStore.loginWithNsec',
@@ -125,6 +172,7 @@ export const useAuthStore = create<AuthStore>()(
             about: '',
             picture: '',
             nip05: '',
+            avatar: null,
           };
 
           // セキュアストレージに保存
@@ -171,6 +219,8 @@ export const useAuthStore = create<AuthStore>()(
               topicStore.setCurrentTopic(publicTopic);
             }
           }
+
+          await fetchAndApplyAvatar(response.npub);
 
           return { nsec: response.nsec };
         } catch (error) {
@@ -256,6 +306,7 @@ export const useAuthStore = create<AuthStore>()(
               about: '',
               picture: currentAccount.metadata.picture || '',
               nip05: '',
+              avatar: null,
             };
 
             set({
@@ -269,6 +320,8 @@ export const useAuthStore = create<AuthStore>()(
             // リレー状態を更新
             await useAuthStore.getState().updateRelayStatus();
             errorHandler.info('Auto-login completed successfully', 'AuthStore.initialize');
+
+            await fetchAndApplyAvatar(currentAccount.npub);
           } else {
             errorHandler.info('No current account found in secure storage', 'AuthStore.initialize');
             // アカウントが見つからない場合は初期状態
@@ -320,6 +373,7 @@ export const useAuthStore = create<AuthStore>()(
             about: '',
             picture: account.picture || '',
             nip05: '',
+            avatar: null,
           };
 
           set({
@@ -332,6 +386,8 @@ export const useAuthStore = create<AuthStore>()(
           await initializeNostr();
           // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
+
+          await fetchAndApplyAvatar(response.npub);
         } catch (error) {
           errorHandler.log('Failed to switch account', error, {
             context: 'AuthStore.switchAccount',
@@ -379,7 +435,8 @@ export const useAuthStore = create<AuthStore>()(
       get isLoggedIn() {
         return get().isAuthenticated;
       },
-    }),
+      };
+    },
     createAuthPersistConfig<AuthStore>(),
   ),
 );
