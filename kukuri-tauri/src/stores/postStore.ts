@@ -453,22 +453,24 @@ newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
 
 
 
-useAuthStore.subscribe(
-  (state) => state.currentUser,
-  (currentUser) => {
-    if (!currentUser) {
-      return;
-    }
-    usePostStore.getState().refreshAuthorMetadata(currentUser.npub);
-  },
-);
+useAuthStore.subscribe((state, previousState) => {
+  const nextNpub = state.currentUser?.npub;
+  const previousNpub = previousState?.currentUser?.npub;
+  if (nextNpub && nextNpub !== previousNpub) {
+    usePostStore.getState().refreshAuthorMetadata(nextNpub);
+  }
+});
 
-useAuthStore.subscribe(
-  (state) => state.accounts,
-  (accounts) => {
-    const refresh = usePostStore.getState().refreshAuthorMetadata;
-    accounts.forEach((account) => {
-      refresh(account.npub);
-    });
-  },
-);
+useAuthStore.subscribe((state, previousState) => {
+  const prevAccounts = previousState?.accounts ?? [];
+  const hasAccountsChanged =
+    prevAccounts.length !== state.accounts.length ||
+    prevAccounts.some((account, index) => account.npub !== state.accounts[index]?.npub);
+  if (!hasAccountsChanged) {
+    return;
+  }
+  const refresh = usePostStore.getState().refreshAuthorMetadata;
+  state.accounts.forEach((account) => {
+    refresh(account.npub);
+  });
+});

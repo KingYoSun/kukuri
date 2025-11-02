@@ -1,4 +1,3 @@
-export async function readBinaryFile(): Promise<unknown> {
-  throw new Error('Mock for @tauri-apps/api/fs.readBinaryFile is not configured');
+export async function readFile(): Promise<unknown> {
+  throw new Error('Mock for @tauri-apps/plugin-fs.readFile is not configured');
 }
-

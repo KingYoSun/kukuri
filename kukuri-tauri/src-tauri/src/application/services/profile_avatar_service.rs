@@ -76,20 +76,20 @@ impl ProfileAvatarService {
         let encrypted_key_b64 = BASE64_STANDARD.encode(encrypted_session_key.ciphertext);
         let encryption_nonce_b64 = BASE64_STANDARD.encode(encrypted.nonce);
 
-        let entry = ProfileAvatarDocEntry::new(
-            input.npub,
+        let entry = ProfileAvatarDocEntry {
+            npub: input.npub,
             blob_hash,
-            input.format,
-            input.bytes.len() as u64,
-            input.access_level,
+            format: input.format,
+            size_bytes: input.bytes.len() as u64,
+            access_level: input.access_level,
             share_ticket,
-            encrypted_key_b64,
-            key_nonce_b64,
-            encryption_nonce_b64,
+            encrypted_key: encrypted_key_b64,
+            key_nonce: key_nonce_b64,
+            encryption_nonce: encryption_nonce_b64,
             content_sha256,
-            chrono::Utc::now(),
-            0,
-        );
+            updated_at: chrono::Utc::now(),
+            version: 0,
+        };
 
         self.store.upsert_entry(entry).await
     }

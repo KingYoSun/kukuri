@@ -190,8 +190,7 @@ export class TauriApi {
   static async uploadProfileAvatar(
     options: UploadProfileAvatarOptions,
   ): Promise<UploadProfileAvatarResult> {
-    const bytes =
-      options.data instanceof Uint8Array ? Array.from(options.data) : [...options.data];
+    const bytes = options.data instanceof Uint8Array ? Array.from(options.data) : [...options.data];
     return await invokeCommand<UploadProfileAvatarResult>('upload_profile_avatar', {
       request: {
         npub: options.npub,

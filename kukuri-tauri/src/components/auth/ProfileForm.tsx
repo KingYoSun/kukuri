@@ -1,8 +1,8 @@
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Upload, User } from 'lucide-react';
-import { open } from '@tauri-apps/api/dialog';
-import { readBinaryFile } from '@tauri-apps/api/fs';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -116,7 +116,7 @@ export function ProfileForm({
         return;
       }
 
-      const rawBytes = await readBinaryFile(filePath);
+      const rawBytes = await readFile(filePath);
       const bytes = rawBytes instanceof Uint8Array ? rawBytes : Uint8Array.from(rawBytes);
       if (bytes.byteLength > MAX_PROFILE_AVATAR_BYTES) {
         toast.error('画像サイズが大きすぎます（最大2MBまで）');
@@ -188,7 +188,8 @@ export function ProfileForm({
           {isAvatarLoading ? '読み込み中...' : '画像をアップロード'}
         </Button>
         <p className="text-xs text-muted-foreground">
-          PNG/JPG/GIF/WEBP（最大2MB）をご利用ください。{selectedAvatar && (
+          PNG/JPG/GIF/WEBP（最大2MB）をご利用ください。
+          {selectedAvatar && (
             <span className="ml-1">
               {selectedAvatar.fileName}（{formatFileSize(selectedAvatar.sizeBytes)}）を選択中
             </span>

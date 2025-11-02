@@ -31,11 +31,11 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 
-vi.mock('@tauri-apps/api/dialog', () => ({
+vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(),
 }));
-vi.mock('@tauri-apps/api/fs', () => ({
-  readBinaryFile: vi.fn(),
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  readFile: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tauri', () => ({
@@ -62,16 +62,16 @@ const originalCreateObjectURL = global.URL.createObjectURL;
 const originalRevokeObjectURL = global.URL.revokeObjectURL;
 
 let mockOpen: ReturnType<typeof vi.fn>;
-let mockReadBinaryFile: ReturnType<typeof vi.fn>;
+let mockReadFile: ReturnType<typeof vi.fn>;
 let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
-  const dialogModule = await import('@tauri-apps/api/dialog');
-  const fsModule = await import('@tauri-apps/api/fs');
+  const dialogModule = await import('@tauri-apps/plugin-dialog');
+  const fsModule = await import('@tauri-apps/plugin-fs');
   const tauriModule = await import('@/lib/api/tauri');
   mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
-  mockReadBinaryFile = fsModule.readBinaryFile as unknown as ReturnType<typeof vi.fn>;
+  mockReadFile = fsModule.readFile as unknown as ReturnType<typeof vi.fn>;
   mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<typeof vi.fn>;
   mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<typeof vi.fn>;
 });
@@ -103,7 +103,7 @@ describe('ProfileSetup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOpen.mockResolvedValue(null);
-    mockReadBinaryFile.mockReset();
+    mockReadFile.mockReset();
     mockUploadProfileAvatar.mockReset();
     mockFetchProfileAvatar.mockReset();
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
@@ -244,7 +244,7 @@ describe('ProfileSetup', () => {
     const mockBytes = Uint8Array.from([1, 2, 3, 4]);
 
     mockOpen.mockResolvedValue('C:/temp/avatar.png');
-    mockReadBinaryFile.mockResolvedValue(mockBytes);
+    mockReadFile.mockResolvedValue(mockBytes);
     mockUploadProfileAvatar.mockResolvedValue({
       npub: 'npub1test',
       blob_hash: 'hash123',

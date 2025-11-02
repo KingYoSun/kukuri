@@ -4,9 +4,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// プロフィールアバターの共有範囲
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ProfileAvatarAccessLevel {
+    #[default]
     Public,
     ContactsOnly,
     Private,
@@ -35,12 +36,6 @@ impl FromStr for ProfileAvatarAccessLevel {
     }
 }
 
-impl Default for ProfileAvatarAccessLevel {
-    fn default() -> Self {
-        ProfileAvatarAccessLevel::Public
-    }
-}
-
 /// Doc に保存するプロフィールアバターのメタデータ
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileAvatarDocEntry {
@@ -56,36 +51,4 @@ pub struct ProfileAvatarDocEntry {
     pub content_sha256: String,
     pub updated_at: DateTime<Utc>,
     pub version: u64,
-}
-
-impl ProfileAvatarDocEntry {
-    pub fn new(
-        npub: String,
-        blob_hash: String,
-        format: String,
-        size_bytes: u64,
-        access_level: ProfileAvatarAccessLevel,
-        share_ticket: String,
-        encrypted_key: String,
-        key_nonce: String,
-        encryption_nonce: String,
-        content_sha256: String,
-        updated_at: DateTime<Utc>,
-        version: u64,
-    ) -> Self {
-        Self {
-            npub,
-            blob_hash,
-            format,
-            size_bytes,
-            access_level,
-            share_ticket,
-            encrypted_key,
-            key_nonce,
-            encryption_nonce,
-            content_sha256,
-            updated_at,
-            version,
-        }
-    }
 }

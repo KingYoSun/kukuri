@@ -1,4 +1,3 @@
 export async function open(): Promise<unknown> {
-  throw new Error('Mock for @tauri-apps/api/dialog.open is not configured');
+  throw new Error('Mock for @tauri-apps/plugin-dialog.open is not configured');
 }
-

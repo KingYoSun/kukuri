@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ProfileForm, type ProfileFormSubmitPayload, type ProfileFormValues } from '@/components/auth/ProfileForm';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  ProfileForm,
+  type ProfileFormSubmitPayload,
+  type ProfileFormValues,
+} from '@/components/auth/ProfileForm';
 import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
@@ -48,7 +58,8 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
     try {
       let updatedPicture = profile.picture || currentUser.picture || '';
       let updatedAvatar = currentUser.avatar ?? null;
-      let nostrPicture = profile.picture || currentUser.avatar?.nostrUri || currentUser.picture || '';
+      let nostrPicture =
+        profile.picture || currentUser.avatar?.nostrUri || currentUser.picture || '';
 
       if (profile.avatarFile) {
         if (!currentUser.npub) {

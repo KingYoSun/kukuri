@@ -1,7 +1,7 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
@@ -14,8 +14,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@tauri-apps/api/dialog': path.resolve(__dirname, './src/tests/mocks/tauri-dialog.ts'),
-      '@tauri-apps/api/fs': path.resolve(__dirname, './src/tests/mocks/tauri-fs.ts'),
+      '@tauri-apps/plugin-dialog': path.resolve(__dirname, './src/tests/mocks/tauri-dialog.ts'),
+      '@tauri-apps/plugin-fs': path.resolve(__dirname, './src/tests/mocks/tauri-fs.ts'),
     },
   },
-})
+});

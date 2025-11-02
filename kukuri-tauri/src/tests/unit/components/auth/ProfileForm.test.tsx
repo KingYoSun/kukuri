@@ -6,12 +6,12 @@ import { MAX_PROFILE_AVATAR_BYTES } from '@/lib/profile/avatar';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 
-vi.mock('@tauri-apps/api/dialog', () => ({
+vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/fs', () => ({
-  readBinaryFile: vi.fn(),
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  readFile: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -31,13 +31,13 @@ const originalCreateObjectURL = global.URL.createObjectURL;
 const originalRevokeObjectURL = global.URL.revokeObjectURL;
 
 let mockOpen: ReturnType<typeof vi.fn>;
-let mockReadBinaryFile: ReturnType<typeof vi.fn>;
+let mockReadFile: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
-  const dialogModule = await import('@tauri-apps/api/dialog');
-  const fsModule = await import('@tauri-apps/api/fs');
+  const dialogModule = await import('@tauri-apps/plugin-dialog');
+  const fsModule = await import('@tauri-apps/plugin-fs');
   mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
-  mockReadBinaryFile = fsModule.readBinaryFile as unknown as ReturnType<typeof vi.fn>;
+  mockReadFile = fsModule.readFile as unknown as ReturnType<typeof vi.fn>;
 });
 
 beforeAll(() => {
@@ -147,7 +147,7 @@ describe('ProfileForm', () => {
     const mockBytes = Uint8Array.from([1, 2, 3]);
 
     mockOpen.mockResolvedValue('C:/temp/avatar.png');
-    mockReadBinaryFile.mockResolvedValue(mockBytes);
+    mockReadFile.mockResolvedValue(mockBytes);
 
     render(
       <ProfileForm
@@ -161,7 +161,7 @@ describe('ProfileForm', () => {
     await user.click(screen.getByRole('button', { name: '保存' }));
 
     expect(mockOpen).toHaveBeenCalledTimes(1);
-    expect(mockReadBinaryFile).toHaveBeenCalledWith('C:/temp/avatar.png');
+    expect(mockReadFile).toHaveBeenCalledWith('C:/temp/avatar.png');
     expect(handleSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         avatarFile: expect.objectContaining({
@@ -191,7 +191,7 @@ describe('ProfileForm', () => {
     await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));
     await user.click(screen.getByRole('button', { name: '保存' }));
 
-    expect(mockReadBinaryFile).not.toHaveBeenCalled();
+    expect(mockReadFile).not.toHaveBeenCalled();
     expect(handleSubmit).toHaveBeenCalledWith(expect.objectContaining({ avatarFile: undefined }));
   });
 
@@ -201,7 +201,7 @@ describe('ProfileForm', () => {
     const largeBytes = new Uint8Array(MAX_PROFILE_AVATAR_BYTES + 1);
 
     mockOpen.mockResolvedValue('C:/temp/large.png');
-    mockReadBinaryFile.mockResolvedValue(largeBytes);
+    mockReadFile.mockResolvedValue(largeBytes);
 
     render(
       <ProfileForm
@@ -224,7 +224,7 @@ describe('ProfileForm', () => {
     const readError = new Error('read failure');
 
     mockOpen.mockResolvedValue('C:/temp/avatar.png');
-    mockReadBinaryFile.mockRejectedValue(readError);
+    mockReadFile.mockRejectedValue(readError);
 
     render(
       <ProfileForm

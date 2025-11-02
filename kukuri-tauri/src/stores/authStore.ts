@@ -65,8 +65,7 @@ export const useAuthStore = create<AuthStore>()(
             return;
           }
           errorHandler.log('Failed to fetch profile avatar', error, {
-            context: 'AuthStore.fetchAndApplyAvatar',
-            npub,
+            context: `AuthStore.fetchAndApplyAvatar (npub: ${npub})`,
           });
         }
       };

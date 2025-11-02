@@ -45,9 +45,7 @@ export function applyKnownUserMetadata(user: User): User {
     };
   }
 
-  const account =
-    authState.accounts?.find((item) => isSameUser(base, item)) ??
-    null;
+  const account = authState.accounts?.find((item) => isSameUser(base, item)) ?? null;
 
   if (account) {
     return {

@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+﻿import type { ComponentProps } from 'react';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,7 +6,6 @@ import userEvent from '@testing-library/user-event';
 import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
 import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
-import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -33,27 +32,31 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 
-vi.mock('@tauri-apps/api/dialog', () => ({
+vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/fs', () => ({
-  readBinaryFile: vi.fn(),
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  readFile: vi.fn(),
 }));
 
 let mockOpen: ReturnType<typeof vi.fn>;
-let mockReadBinaryFile: ReturnType<typeof vi.fn>;
+let mockReadFile: ReturnType<typeof vi.fn>;
 let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
-  const dialogModule = await import('@tauri-apps/api/dialog');
-  const fsModule = await import('@tauri-apps/api/fs');
+  const dialogModule = await import('@tauri-apps/plugin-dialog');
+  const fsModule = await import('@tauri-apps/plugin-fs');
   const tauriModule = await import('@/lib/api/tauri');
   mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
-  mockReadBinaryFile = fsModule.readBinaryFile as unknown as ReturnType<typeof vi.fn>;
-  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<typeof vi.fn>;
-  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<typeof vi.fn>;
+  mockReadFile = fsModule.readFile as unknown as ReturnType<typeof vi.fn>;
+  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<
+    typeof vi.fn
+  >;
 });
 
 const mockUseAuthStore = useAuthStore as unknown as vi.Mock;
@@ -136,7 +139,7 @@ describe('ProfileEditDialog', () => {
       data_base64: 'AQIDBA==',
     });
     mockOpen.mockResolvedValue(null);
-    mockReadBinaryFile.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+    mockReadFile.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
   });
 
   it('初期値をフォームに表示する', () => {
@@ -195,7 +198,7 @@ describe('ProfileEditDialog', () => {
     renderDialog();
 
     mockOpen.mockResolvedValue('C:/temp/avatar.png');
-    mockReadBinaryFile.mockResolvedValue(new Uint8Array([10, 11, 12]));
+    mockReadFile.mockResolvedValue(new Uint8Array([10, 11, 12]));
 
     await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));
     await user.click(screen.getByRole('button', { name: '保存' }));

@@ -1,6 +1,6 @@
 use aes_gcm::{
     Aes256Gcm, Key,
-    aead::{Aead, AeadCore, KeyInit, OsRng, generic_array::GenericArray},
+    aead::{Aead, AeadCore, KeyInit, OsRng},
 };
 use rand::RngCore;
 
@@ -8,6 +8,8 @@ use crate::shared::AppError;
 
 const AES_KEY_SIZE: usize = 32;
 const AES_NONCE_SIZE: usize = 12;
+
+type AesGcmNonce = aes_gcm::Nonce<<Aes256Gcm as AeadCore>::NonceSize>;
 
 /// ストリーム暗号化結果
 #[derive(Debug, Clone)]
@@ -32,8 +34,8 @@ impl StreamEncryptor {
         let mut session_key = [0u8; AES_KEY_SIZE];
         OsRng.fill_bytes(&mut session_key);
 
-        let key = Key::<Aes256Gcm>::from_slice(&session_key);
-        let cipher = Aes256Gcm::new(key);
+        let key = Key::<Aes256Gcm>::from(session_key);
+        let cipher = Aes256Gcm::new(&key);
 
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = cipher
@@ -55,11 +57,11 @@ impl StreamEncryptor {
         session_key: &[u8; AES_KEY_SIZE],
         nonce: &[u8; AES_NONCE_SIZE],
     ) -> Result<Vec<u8>, AppError> {
-        let key = Key::<Aes256Gcm>::from_slice(session_key);
-        let cipher = Aes256Gcm::new(key);
-        let nonce = GenericArray::from_slice(nonce);
+        let key = Key::<Aes256Gcm>::from(*session_key);
+        let cipher = Aes256Gcm::new(&key);
+        let nonce = AesGcmNonce::from(*nonce);
         cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|err| AppError::Crypto(format!("Failed to decrypt stream: {err}")))
     }
 }
@@ -72,8 +74,8 @@ impl CapabilityEncryptor {
         session_key: &[u8; AES_KEY_SIZE],
         capability_key: &[u8; AES_KEY_SIZE],
     ) -> Result<EncryptedSessionKey, AppError> {
-        let key = Key::<Aes256Gcm>::from_slice(capability_key);
-        let cipher = Aes256Gcm::new(key);
+        let key = Key::<Aes256Gcm>::from(*capability_key);
+        let cipher = Aes256Gcm::new(&key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = cipher
             .encrypt(&nonce, session_key.as_slice())
@@ -92,11 +94,11 @@ impl CapabilityEncryptor {
         encrypted: &EncryptedSessionKey,
         capability_key: &[u8; AES_KEY_SIZE],
     ) -> Result<[u8; AES_KEY_SIZE], AppError> {
-        let key = Key::<Aes256Gcm>::from_slice(capability_key);
-        let cipher = Aes256Gcm::new(key);
-        let nonce = GenericArray::from_slice(&encrypted.nonce);
+        let key = Key::<Aes256Gcm>::from(*capability_key);
+        let cipher = Aes256Gcm::new(&key);
+        let nonce = AesGcmNonce::from(encrypted.nonce);
         let decrypted = cipher
-            .decrypt(nonce, encrypted.ciphertext.as_slice())
+            .decrypt(&nonce, encrypted.ciphertext.as_slice())
             .map_err(|err| AppError::Crypto(format!("Failed to decrypt session key: {err}")))?;
 
         if decrypted.len() != AES_KEY_SIZE {
