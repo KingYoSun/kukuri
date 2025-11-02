@@ -4,6 +4,7 @@ pub mod event;
 pub mod event_gateway;
 pub mod offline;
 pub mod post;
+pub mod profile_avatar;
 pub mod topic;
 pub mod user;
 
@@ -18,5 +19,6 @@ pub use offline::{
     SyncStatusUpdate,
 };
 pub use post::Post;
+pub use profile_avatar::{ProfileAvatarAccessLevel, ProfileAvatarDocEntry};
 pub use topic::Topic;
 pub use user::{User, UserMetadata, UserProfile};

@@ -73,6 +73,40 @@ export interface GetPostsRequest {
   offset?: number;
 }
 
+export type ProfileAvatarAccessLevel = 'public' | 'contacts_only' | 'private';
+
+export interface UploadProfileAvatarOptions {
+  npub: string;
+  data: Uint8Array | number[];
+  format: string;
+  accessLevel: ProfileAvatarAccessLevel;
+}
+
+export interface UploadProfileAvatarResult {
+  npub: string;
+  blob_hash: string;
+  format: string;
+  size_bytes: number;
+  access_level: ProfileAvatarAccessLevel;
+  share_ticket: string;
+  doc_version: number;
+  updated_at: string;
+  content_sha256: string;
+}
+
+export interface FetchProfileAvatarResult {
+  npub: string;
+  blob_hash: string;
+  format: string;
+  size_bytes: number;
+  access_level: ProfileAvatarAccessLevel;
+  share_ticket: string;
+  doc_version: number;
+  updated_at: string;
+  content_sha256: string;
+  data_base64: string;
+}
+
 // Tauri API クラス
 export class TauriApi {
   // 認証関連
@@ -150,6 +184,27 @@ export class TauriApi {
 
   static async getBookmarkedPostIds(): Promise<string[]> {
     return await invokeCommand<string[]>('get_bookmarked_post_ids');
+  }
+
+  static async uploadProfileAvatar(
+    options: UploadProfileAvatarOptions,
+  ): Promise<UploadProfileAvatarResult> {
+    const bytes =
+      options.data instanceof Uint8Array ? Array.from(options.data) : [...options.data];
+    return await invokeCommand<UploadProfileAvatarResult>('upload_profile_avatar', {
+      request: {
+        npub: options.npub,
+        bytes,
+        format: options.format,
+        access_level: options.accessLevel,
+      },
+    });
+  }
+
+  static async fetchProfileAvatar(npub: string): Promise<FetchProfileAvatarResult> {
+    return await invokeCommand<FetchProfileAvatarResult>('fetch_profile_avatar', {
+      request: { npub },
+    });
   }
 }
 

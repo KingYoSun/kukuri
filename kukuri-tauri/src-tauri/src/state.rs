@@ -15,8 +15,8 @@ use crate::application::services::event_service::EventServiceTrait;
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
-    AuthService, EventService, OfflineService, P2PService, PostService, SubscriptionStateMachine,
-    SyncService, TopicService, UserService,
+    AuthService, EventService, OfflineService, P2PService, PostService, ProfileAvatarService,
+    SubscriptionStateMachine, SyncService, TopicService, UserService,
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
@@ -90,6 +90,7 @@ pub struct AppState {
     pub sync_service: Arc<dyn SyncServiceTrait>,
     pub p2p_service: Arc<P2PService>,
     pub offline_service: Arc<OfflineService>,
+    pub profile_avatar_service: Arc<ProfileAvatarService>,
 
     // プレゼンテーション層のハンドラー（最適化用）
     pub user_handler: Arc<UserHandler>,
@@ -103,6 +104,7 @@ impl AppState {
     pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
         let bootstrapper = P2PBootstrapper::new(app_handle).await?;
         let app_data_dir = bootstrapper.app_data_dir().to_path_buf();
+        let profile_avatar_dir = app_data_dir.join("profile_avatars");
 
         // Use absolute path for database
         let db_path = app_data_dir.join("kukuri.db");
@@ -269,6 +271,12 @@ impl AppState {
         // OfflineServiceの初期化
         let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
+        let profile_avatar_service = Arc::new(
+            ProfileAvatarService::new(profile_avatar_dir.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize profile avatar service: {e}"))?,
+        );
+
         // プレゼンテーション層のハンドラーを初期化
         let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
         let secure_storage_handler = Arc::new(SecureStorageHandler::new(
@@ -351,6 +359,7 @@ impl AppState {
             sync_service,
             p2p_service,
             offline_service,
+            profile_avatar_service,
             user_handler,
             secure_storage_handler,
             event_handler,

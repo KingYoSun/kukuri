@@ -78,6 +78,16 @@ pub fn run() {
             presentation::commands::secure_login,
             // テスト用コマンド
             presentation::commands::clear_all_accounts_for_test,
+            // ユーザー関連コマンド
+            presentation::commands::get_user,
+            presentation::commands::get_user_by_pubkey,
+            presentation::commands::update_profile,
+            presentation::commands::follow_user,
+            presentation::commands::unfollow_user,
+            presentation::commands::get_followers,
+            presentation::commands::get_following,
+            presentation::commands::upload_profile_avatar,
+            presentation::commands::fetch_profile_avatar,
             // トピック関連コマンド
             presentation::commands::create_topic,
             presentation::commands::get_topic,
@@ -156,6 +166,7 @@ pub fn run() {
                 let event_service = Arc::clone(&app_state.event_service);
                 let p2p_service = Arc::clone(&app_state.p2p_service);
                 let offline_service = Arc::clone(&app_state.offline_service);
+                let profile_avatar_service = Arc::clone(&app_state.profile_avatar_service);
                 let user_handler = Arc::clone(&app_state.user_handler);
 
                 // P2P機能を初期化
@@ -172,6 +183,7 @@ pub fn run() {
                 app_handle.manage(event_service);
                 app_handle.manage(p2p_service);
                 app_handle.manage(offline_service);
+                app_handle.manage(profile_avatar_service);
                 app_handle.manage(user_handler);
             });
 

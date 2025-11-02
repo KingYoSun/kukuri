@@ -20,4 +20,4 @@
 - `src/tests/unit/components/RelayStatus.test.tsx`（新規）: `useAuthStore` をモックし、①リスト表示、②空配列で `null` を返すケース、③`updateRelayStatus` が初回マウント時・フェイクタイマー 30 秒経過時に呼ばれること、④エラー状態のハイライトが表示されることを検証。
 - `src/tests/unit/components/P2PStatus.test.tsx`（新規）: `useP2P` をモックし、①`connectionStatus` の各状態（`disconnected`/`connecting`/`connected`/`error`）の描画、②`refreshStatus` が接続時に 30 秒間隔で呼び出されること、③手動更新ボタン押下時に追加で呼び出されること、④エラー表示と `clearError` ボタンの動作を検証。
 - 両テストとも `vi.useFakeTimers()` を利用し、`setInterval`/`clearInterval` の挙動を確認する。`errorHandler` へのロギングはスパイで監視し、副作用が発生しないことを検証。
-- `src/tests/integration/profileAvatarSync.test.ts`（新規予定）: `upload_profile_avatar` コマンドをモックした iroh-blobs 0.96.0 / iroh-docs 0.94.0 のリモート同期フローを再現し、Doc 更新 → Blob ダウンロード → `authStore.updateUser` 反映までを確認。Docker ベースの多ノードシナリオを `docker-compose.test.yml` へ追加する。
+- `src/tests/integration/profileAvatarSync.test.ts`（2025年11月02日実装）: `upload_profile_avatar` / `fetch_profile_avatar` をモックし、Doc レプリケーションと Blob 復号フローを検証。Vitest 統合テストに組み込み済みで、Rust 側の `tests/profile_avatar_sync.rs` ではマルチノード同期と `StreamEncryptor` 復号パスをカバー。

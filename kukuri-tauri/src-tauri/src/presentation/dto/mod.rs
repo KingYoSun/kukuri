@@ -4,6 +4,7 @@ pub mod event;
 pub mod offline;
 pub mod p2p;
 pub mod post_dto;
+pub mod profile_avatar_dto;
 pub mod topic_dto;
 pub mod user_dto;
 

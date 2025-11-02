@@ -4,6 +4,7 @@ pub mod event_service;
 pub mod offline_service;
 pub mod p2p_service;
 pub mod post_service;
+pub mod profile_avatar_service;
 mod subscription_state;
 pub mod sync_service;
 pub mod topic_service;
@@ -18,6 +19,9 @@ pub use event_service::EventService;
 pub use offline_service::OfflineService;
 pub use p2p_service::P2PService;
 pub use post_service::PostService;
+pub use profile_avatar_service::{
+    ProfileAvatarFetchResult, ProfileAvatarService, UploadProfileAvatarInput,
+};
 pub use subscription_state::{SubscriptionStateMachine, SubscriptionStateStore};
 pub use sync_service::{SyncService, SyncServiceTrait};
 pub use topic_service::TopicService;
