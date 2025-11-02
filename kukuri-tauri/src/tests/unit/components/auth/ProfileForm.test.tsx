@@ -6,15 +6,12 @@ import { MAX_PROFILE_AVATAR_BYTES } from '@/lib/profile/avatar';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 
-const mockOpen = vi.fn();
-const mockReadBinaryFile = vi.fn();
-
 vi.mock('@tauri-apps/api/dialog', () => ({
-  open: mockOpen,
+  open: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/api/fs', () => ({
-  readBinaryFile: mockReadBinaryFile,
+  readBinaryFile: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -32,6 +29,16 @@ vi.mock('@/lib/errorHandler', () => ({
 
 const originalCreateObjectURL = global.URL.createObjectURL;
 const originalRevokeObjectURL = global.URL.revokeObjectURL;
+
+let mockOpen: ReturnType<typeof vi.fn>;
+let mockReadBinaryFile: ReturnType<typeof vi.fn>;
+
+beforeAll(async () => {
+  const dialogModule = await import('@tauri-apps/api/dialog');
+  const fsModule = await import('@tauri-apps/api/fs');
+  mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
+  mockReadBinaryFile = fsModule.readBinaryFile as unknown as ReturnType<typeof vi.fn>;
+});
 
 beforeAll(() => {
   global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');

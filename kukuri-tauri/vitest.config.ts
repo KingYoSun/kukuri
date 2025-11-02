@@ -14,6 +14,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@tauri-apps/api/dialog': path.resolve(__dirname, './src/tests/mocks/tauri-dialog.ts'),
+      '@tauri-apps/api/fs': path.resolve(__dirname, './src/tests/mocks/tauri-fs.ts'),
     },
   },
 })

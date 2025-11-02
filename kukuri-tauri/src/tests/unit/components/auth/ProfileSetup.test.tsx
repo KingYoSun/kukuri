@@ -31,21 +31,17 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 
-const mockOpen = vi.fn();
-const mockReadBinaryFile = vi.fn();
 vi.mock('@tauri-apps/api/dialog', () => ({
-  open: mockOpen,
+  open: vi.fn(),
 }));
 vi.mock('@tauri-apps/api/fs', () => ({
-  readBinaryFile: mockReadBinaryFile,
+  readBinaryFile: vi.fn(),
 }));
 
-const mockUploadProfileAvatar = vi.fn();
-const mockFetchProfileAvatar = vi.fn();
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
-    uploadProfileAvatar: mockUploadProfileAvatar,
-    fetchProfileAvatar: mockFetchProfileAvatar,
+    uploadProfileAvatar: vi.fn(),
+    fetchProfileAvatar: vi.fn(),
   },
 }));
 
@@ -64,6 +60,21 @@ const createWrapper = () => {
 
 const originalCreateObjectURL = global.URL.createObjectURL;
 const originalRevokeObjectURL = global.URL.revokeObjectURL;
+
+let mockOpen: ReturnType<typeof vi.fn>;
+let mockReadBinaryFile: ReturnType<typeof vi.fn>;
+let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
+let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
+
+beforeAll(async () => {
+  const dialogModule = await import('@tauri-apps/api/dialog');
+  const fsModule = await import('@tauri-apps/api/fs');
+  const tauriModule = await import('@/lib/api/tauri');
+  mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
+  mockReadBinaryFile = fsModule.readBinaryFile as unknown as ReturnType<typeof vi.fn>;
+  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<typeof vi.fn>;
+  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<typeof vi.fn>;
+});
 
 beforeAll(() => {
   global.URL.createObjectURL = vi.fn(() => 'blob:profile-setup');
