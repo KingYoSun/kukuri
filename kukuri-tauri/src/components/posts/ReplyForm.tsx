@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores';
 import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-import defaultAvatar from '@/assets/profile/default_avatar.png';
+import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 
 interface ReplyFormProps {
   postId: string;
@@ -100,7 +100,7 @@ export function ReplyForm({
     return null;
   }
 
-  const avatarSrc = currentUser.picture?.trim() ? currentUser.picture : defaultAvatar;
+  const avatarSrc = resolveUserAvatarSrc(currentUser);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">

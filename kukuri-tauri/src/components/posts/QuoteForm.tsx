@@ -12,7 +12,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import type { Post } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import defaultAvatar from '@/assets/profile/default_avatar.png';
+import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 
 interface QuoteFormProps {
   post: Post;
@@ -107,7 +107,7 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
     return null;
   }
 
-  const avatarSrc = currentUser.picture?.trim() ? currentUser.picture : defaultAvatar;
+  const avatarSrc = resolveUserAvatarSrc(currentUser);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">

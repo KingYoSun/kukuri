@@ -44,6 +44,7 @@ describe('usePosts hooks', () => {
       picture: '',
       about: '',
       nip05: '',
+      avatar: null,
     };
     useAuthStore.setState({
       isAuthenticated: true,
@@ -60,10 +61,13 @@ describe('usePosts hooks', () => {
           id: '1',
           content: 'Test post',
           author_pubkey: 'pubkey1',
+          author_npub: 'npub1pubkey1',
           topic_id: 'tech',
           created_at: Math.floor(Date.now() / 1000),
           likes: 5,
           replies: 0,
+          boosts: 0,
+          is_synced: true,
         },
       ]);
 
@@ -97,13 +101,16 @@ describe('usePosts hooks', () => {
       const { TauriApi } = await import('@/lib/api/tauri');
       vi.mocked(TauriApi.createPost).mockResolvedValue({
         id: 'new-post-id',
-        content: '新しい投稿',
+        content: 'created-post',
         author_pubkey: 'pubkey1',
+        author_npub: 'npub1pubkey1',
         topic_id: 'tech',
         created_at: Math.floor(Date.now() / 1000),
         likes: 0,
+        boosts: 0,
         replies: 0,
-      });
+        is_synced: true,
+});
 
       const { result } = renderHook(() => useCreatePost(), {
         wrapper: createWrapper(),
@@ -118,8 +125,7 @@ describe('usePosts hooks', () => {
 
       await waitFor(() => {
         const state = usePostStore.getState();
-        const posts = Array.from(state.posts.values());
-        const createdPost = posts.find((p) => p.content === '新しい投稿');
+        const createdPost = state.posts.get('new-post-id');
         expect(createdPost).toBeDefined();
         expect(createdPost?.author).toBeDefined();
         expect(createdPost?.topicId).toBe('tech');
@@ -135,10 +141,13 @@ describe('usePosts hooks', () => {
           id: '1',
           content: 'Timeline post',
           author_pubkey: 'pubkey1',
+          author_npub: 'npub1pubkey1',
           topic_id: 'general',
           created_at: Math.floor(Date.now() / 1000),
           likes: 10,
+          boosts: 0,
           replies: 2,
+          is_synced: true,
         },
       ]);
 

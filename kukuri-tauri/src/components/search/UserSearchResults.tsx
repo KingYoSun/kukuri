@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, UserPlus } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import type { Profile } from '@/stores';
+import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 
 interface UserSearchResultsProps {
   query: string;
@@ -97,6 +98,7 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
 }
 
 function UserCard({ user }: { user: Profile }) {
+  const avatarSrc = resolveUserAvatarSrc(user);
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -111,7 +113,7 @@ function UserCard({ user }: { user: Profile }) {
       <CardContent className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12">
-            <AvatarImage src={user.picture} />
+            <AvatarImage src={avatarSrc} />
             <AvatarFallback>{getInitials(user.displayName || user.name || 'U')}</AvatarFallback>
           </Avatar>
           <div>

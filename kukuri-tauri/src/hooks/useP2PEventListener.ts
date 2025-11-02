@@ -8,6 +8,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
 import type { Post } from '@/stores/types';
 import { pubkeyToNpub } from '@/lib/utils/nostr';
+import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 
 // P2Pイベントの型定義
 interface P2PMessageEvent {
@@ -45,21 +46,24 @@ export function useP2PEventListener() {
     async (message: P2PMessage, topicId: string) => {
       try {
         // P2Pメッセージを投稿形式に変換
+        const author = applyKnownUserMetadata({
+          id: message.author,
+          pubkey: message.author,
+          npub: await pubkeyToNpub(message.author),
+          name: 'P2P繝ｦ繝ｼ繧ｶ繝ｼ',
+          displayName: 'P2P繝ｦ繝ｼ繧ｶ繝ｼ',
+          about: '',
+          picture: '',
+          nip05: '',
+          avatar: null,
+        });
+
         const post: Post = {
           id: message.id,
           content: message.content,
-          author: {
-            id: message.author,
-            pubkey: message.author,
-            npub: await pubkeyToNpub(message.author),
-            name: 'P2Pユーザー',
-            displayName: 'P2Pユーザー',
-            about: '',
-            picture: '',
-            nip05: '',
-          },
+          author: author,
           topicId,
-          created_at: Math.floor(message.timestamp / 1000), // ミリ秒から秒に変換
+          created_at: Math.floor(message.timestamp / 1000), // 繝溘Μ遘偵°繧臥ｧ偵↓螟画鋤
           tags: [],
           likes: 0,
           boosts: 0,

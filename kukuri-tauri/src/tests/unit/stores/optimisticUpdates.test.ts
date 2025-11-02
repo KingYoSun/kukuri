@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
 import { useOfflineStore } from '@/stores/offlineStore';
+import { useAuthStore } from '@/stores/authStore';
 import { setupPersistMock } from '@/stores/utils/testHelpers';
 import { TauriApi } from '@/lib/api/tauri';
 import { OfflineActionType, EntityType } from '@/types/offline';
@@ -40,6 +41,18 @@ vi.mock('@/api/offline', () => ({
   },
 }));
 
+const mockCurrentUser = {
+  id: 'current-user',
+  pubkey: 'test-user-pubkey',
+  npub: 'npubtest-user',
+  name: 'Current User',
+  displayName: 'Current User',
+  picture: '',
+  about: '',
+  nip05: '',
+  avatar: null,
+};
+
 describe('楽観的UI更新', () => {
   let localStorageMock: ReturnType<typeof setupPersistMock>;
 
@@ -60,14 +73,26 @@ describe('楽観的UI更新', () => {
       joinedTopics: [],
     });
 
-    useOfflineStore.setState({
-      isOnline: true,
-      lastSyncedAt: undefined,
-      pendingActions: [],
-      syncQueue: [],
-      optimisticUpdates: new Map(),
-      isSyncing: false,
-      syncErrors: new Map(),
+  useOfflineStore.setState({
+    isOnline: true,
+    lastSyncedAt: undefined,
+    pendingActions: [],
+    syncQueue: [],
+    optimisticUpdates: new Map(),
+    isSyncing: false,
+    syncErrors: new Map(),
+  });
+
+    useAuthStore.setState({
+      isAuthenticated: true,
+      currentUser: mockCurrentUser,
+      privateKey: 'test-private-key',
+    });
+
+    useAuthStore.setState({
+      isAuthenticated: true,
+      currentUser: mockCurrentUser,
+      privateKey: 'test-private-key',
     });
   });
 
@@ -81,6 +106,7 @@ describe('楽観的UI更新', () => {
         id: 'real-post-id',
         content: 'テスト投稿',
         author_pubkey: 'test-user',
+        author_npub: 'npubtest-user',
         topic_id: 'topic1',
         created_at: Date.now(),
         likes: 0,

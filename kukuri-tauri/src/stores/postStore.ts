@@ -1,11 +1,13 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type { PostState, Post } from './types';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { useOfflineStore } from './offlineStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
 import { v4 as uuidv4 } from 'uuid';
-import { pubkeyToNpub } from '@/lib/utils/nostr';
+import { mapPostResponseToDomain, enrichPostAuthorMetadata } from '@/lib/posts/postMapper';
+import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
+import { useAuthStore } from './authStore';
 
 interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
@@ -27,6 +29,7 @@ interface PostStore extends PostState {
   getPostsByTopic: (topicId: string) => Post[];
   incrementLikes: (postId: string) => void;
   updatePostLikes: (postId: string, likes: number) => void;
+  refreshAuthorMetadata: (npub: string) => void;
 }
 
 export const usePostStore = create<PostStore>()((set, get) => ({
@@ -34,10 +37,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   postsByTopic: new Map(),
 
   setPosts: (posts: Post[]) => {
-    const postsMap = new Map(posts.map((p) => [p.id, p]));
+    const enrichedPosts = posts.map((post) => enrichPostAuthorMetadata(post));
+    const postsMap = new Map(enrichedPosts.map((p) => [p.id, p]));
     const postsByTopicMap = new Map<string, string[]>();
 
-    posts.forEach((post) => {
+    enrichedPosts.forEach((post) => {
       const existing = postsByTopicMap.get(post.topicId) || [];
       postsByTopicMap.set(post.topicId, [...existing, post.id]);
     });
@@ -52,27 +56,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     try {
       const apiPosts = await TauriApi.getPosts({ topic_id: topicId, limit, offset });
       const posts: Post[] = await Promise.all(
-        apiPosts.map(async (p) => ({
-          id: p.id,
-          content: p.content,
-          author: {
-            id: p.author_pubkey,
-            pubkey: p.author_pubkey,
-            npub: await pubkeyToNpub(p.author_pubkey),
-            name: '匿名ユーザー',
-            displayName: '匿名ユーザー',
-            about: '',
-            picture: '',
-            nip05: '',
-          },
-          topicId: p.topic_id,
-          created_at: p.created_at,
-          tags: [],
-          likes: p.likes,
-          boosts: p.boosts || 0,
-          replies: [],
-          isSynced: p.is_synced ?? true, // DBのis_syncedフィールドを使用（未定義の場合はtrue）
-        })),
+        apiPosts.map(async (post) => enrichPostAuthorMetadata(await mapPostResponseToDomain(post))),
       );
 
       const postsMap = new Map(posts.map((p) => [p.id, p]));
@@ -91,7 +75,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       errorHandler.log('Failed to fetch posts', error, {
         context: 'PostStore.fetchPosts',
         showToast: true,
-        toastTitle: '投稿の取得に失敗しました',
+        toastTitle: '謚慕ｨｿ縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆',
       });
       throw error;
     }
@@ -100,7 +84,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   addPost: (post: Post) =>
     set((state) => {
       const newPosts = new Map(state.posts);
-      newPosts.set(post.id, post);
+      newPosts.set(post.id, enrichPostAuthorMetadata(post));
 
       const newPostsByTopic = new Map(state.postsByTopic);
       const topicPosts = newPostsByTopic.get(post.topicId) || [];
@@ -123,39 +107,40 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
 
-    // 楽観的投稿データを作成
+    const authState = useAuthStore.getState();
+    const currentUser = authState.currentUser;
+
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const author = applyKnownUserMetadata({
+      ...currentUser,
+    });
+
     const tempId = `temp-${uuidv4()}`;
     const optimisticPost: Post = {
       id: tempId,
       content,
-      author: {
-        id: 'current-user', // 実際のユーザー情報を取得する必要があります
-        pubkey: 'current-user',
-        npub: 'current-user',
-        name: 'あなた',
-        displayName: 'あなた',
-        about: '',
-        picture: '',
-        nip05: '',
-      },
+      author,
       topicId,
-      created_at: Date.now(),
+      created_at: Math.floor(Date.now() / 1000),
       tags: [],
       likes: 0,
       boosts: 0,
       replies: [],
-      isSynced: false, // 未同期として表示
+      isSynced: false, // 譛ｪ蜷梧悄縺ｨ縺励※陦ｨ遉ｺ
     };
 
-    // 楽観的更新: 即座にUIに反映
-    set((state) => {
+    // 讌ｽ隕ｳ逧・峩譁ｰ: 蜊ｳ蠎ｧ縺ｫUI縺ｫ蜿肴丐
+      set((state) => {
       const newPosts = new Map(state.posts);
       newPosts.set(tempId, optimisticPost);
 
       const newPostsByTopic = new Map(state.postsByTopic);
       const topicPosts = newPostsByTopic.get(topicId) || [];
-      // 新しい投稿を先頭に追加（最新の投稿が上に表示されるように）
-      newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
+      // 譁ｰ縺励＞謚慕ｨｿ繧貞・鬆ｭ縺ｫ霑ｽ蜉・域怙譁ｰ縺ｮ謚慕ｨｿ縺御ｸ翫↓陦ｨ遉ｺ縺輔ｌ繧九ｈ縺・↓・・     
+newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
 
       return {
         posts: newPosts,
@@ -163,7 +148,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       };
     });
 
-    // オフラインの場合、アクションを保存して後で同期
+    // 繧ｪ繝輔Λ繧､繝ｳ縺ｮ蝣ｴ蜷医√い繧ｯ繧ｷ繝ｧ繝ｳ繧剃ｿ晏ｭ倥＠縺ｦ蠕後〒蜷梧悄
     if (!isOnline) {
       const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
       await offlineStore.saveOfflineAction({
@@ -182,7 +167,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return optimisticPost;
     }
 
-    // オンラインの場合、バックグラウンドでサーバーに送信
+    // 繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｮ蝣ｴ蜷医√ヰ繝・け繧ｰ繝ｩ繧ｦ繝ｳ繝峨〒繧ｵ繝ｼ繝舌・縺ｫ騾∽ｿ｡
     try {
       const apiPost = await TauriApi.createPost({
         content,
@@ -191,29 +176,9 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         quoted_post: options?.quotedPost,
       });
 
-      const realPost: Post = {
-        id: apiPost.id,
-        content: apiPost.content,
-        author: {
-          id: apiPost.author_pubkey,
-          pubkey: apiPost.author_pubkey,
-          npub: apiPost.author_pubkey,
-          name: 'あなた',
-          displayName: 'あなた',
-          about: '',
-          picture: '',
-          nip05: '',
-        },
-        topicId: apiPost.topic_id,
-        created_at: apiPost.created_at,
-        tags: [],
-        likes: apiPost.likes,
-        boosts: apiPost.boosts || 0,
-        replies: [],
-        isSynced: true, // サーバーに送信成功
-      };
+      const realPost = enrichPostAuthorMetadata(await mapPostResponseToDomain(apiPost));
 
-      // 一時IDを実際のIDに置き換え
+      // 荳譎・D繧貞ｮ滄圀縺ｮID縺ｫ鄂ｮ縺肴鋤縺・     
       set((state) => {
         const newPosts = new Map(state.posts);
         newPosts.delete(tempId);
@@ -232,7 +197,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
       return realPost;
     } catch (error) {
-      // 失敗した場合、ロールバック
+      // 螟ｱ謨励＠縺溷ｴ蜷医√Ο繝ｼ繝ｫ繝舌ャ繧ｯ
       set((state) => {
         const newPosts = new Map(state.posts);
         newPosts.delete(tempId);
@@ -251,7 +216,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       errorHandler.log('Failed to create post', error, {
         context: 'PostStore.createPost',
         showToast: true,
-        toastTitle: '投稿の作成に失敗しました',
+        toastTitle: '謚慕ｨｿ縺ｮ菴懈・縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
       });
       throw error;
     }
@@ -314,7 +279,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       errorHandler.log('Failed to delete post', error, {
         context: 'PostStore.deletePostRemote',
         showToast: true,
-        toastTitle: '投稿の削除に失敗しました',
+        toastTitle: '謚慕ｨｿ縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
       });
       throw error;
     }
@@ -324,7 +289,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
 
-    // 楽観的更新: 即座にUIに反映
+    // 讌ｽ隕ｳ逧・峩譁ｰ: 蜊ｳ蠎ｧ縺ｫUI縺ｫ蜿肴丐
     const previousLikes = get().posts.get(postId)?.likes || 0;
     set((state) => {
       const newPosts = new Map(state.posts);
@@ -338,7 +303,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return { posts: newPosts };
     });
 
-    // オフラインの場合、アクションを保存して後で同期
+    // 繧ｪ繝輔Λ繧､繝ｳ縺ｮ蝣ｴ蜷医√い繧ｯ繧ｷ繝ｧ繝ｳ繧剃ｿ晏ｭ倥＠縺ｦ蠕後〒蜷梧悄
     if (!isOnline) {
       const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
       await offlineStore.saveOfflineAction({
@@ -351,12 +316,12 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return;
     }
 
-    // オンラインの場合、バックグラウンドでサーバーに送信
+    // 繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｮ蝣ｴ蜷医√ヰ繝・け繧ｰ繝ｩ繧ｦ繝ｳ繝峨〒繧ｵ繝ｼ繝舌・縺ｫ騾∽ｿ｡
     try {
       await TauriApi.likePost(postId);
-      // 成功した場合は特に何もしない（既に楽観的更新済み）
+      // 謌仙粥縺励◆蝣ｴ蜷医・迚ｹ縺ｫ菴輔ｂ縺励↑縺・ｼ域里縺ｫ讌ｽ隕ｳ逧・峩譁ｰ貂医∩・・   
     } catch (error) {
-      // 失敗した場合、ロールバック
+      // 螟ｱ謨励＠縺溷ｴ蜷医√Ο繝ｼ繝ｫ繝舌ャ繧ｯ
       set((state) => {
         const newPosts = new Map(state.posts);
         const post = newPosts.get(postId);
@@ -372,7 +337,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       errorHandler.log('Failed to like post', error, {
         context: 'PostStore.likePost',
         showToast: true,
-        toastTitle: 'いいねに失敗しました',
+        toastTitle: '縺・＞縺ｭ縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
       });
       throw error;
     }
@@ -414,6 +379,64 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return { posts: newPosts };
     }),
 
+  refreshAuthorMetadata: (npub: string) =>
+    set((state) => {
+      if (!npub) {
+        return state;
+      }
+
+      const normalized = npub.toLowerCase();
+      let hasChanges = false;
+
+      const updatePostAuthor = (post: Post): Post => {
+        const authorNpub = post.author.npub?.toLowerCase() ?? '';
+        const authorPubkey = post.author.pubkey?.toLowerCase() ?? '';
+        const shouldUpdate = authorNpub === normalized || authorPubkey === normalized;
+
+        const repliesSource = post.replies ?? [];
+        const updatedReplies = repliesSource.map(updatePostAuthor);
+        const repliesChanged =
+          updatedReplies.length !== repliesSource.length ||
+          updatedReplies.some((reply, index) => reply !== repliesSource[index]);
+
+        let updatedAuthor = post.author;
+        let authorChanged = false;
+
+        if (shouldUpdate) {
+          const applied = applyKnownUserMetadata(post.author);
+          authorChanged = JSON.stringify(applied) !== JSON.stringify(post.author);
+          updatedAuthor = applied;
+        }
+
+        if (authorChanged || repliesChanged) {
+          hasChanges = true;
+          return {
+            ...post,
+            author: updatedAuthor,
+            replies: updatedReplies,
+          };
+        }
+
+        return post;
+      };
+
+      const newPosts = new Map(state.posts);
+      newPosts.forEach((post, id) => {
+        const updated = updatePostAuthor(post);
+        if (updated !== post) {
+          newPosts.set(id, updated);
+        }
+      });
+
+      if (!hasChanges) {
+        return state;
+      }
+
+      return {
+        posts: newPosts,
+      };
+    }),
+
   updatePostLikes: (postId: string, likes: number) =>
     set((state) => {
       const newPosts = new Map(state.posts);
@@ -427,3 +450,25 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return { posts: newPosts };
     }),
 }));
+
+
+
+useAuthStore.subscribe(
+  (state) => state.currentUser,
+  (currentUser) => {
+    if (!currentUser) {
+      return;
+    }
+    usePostStore.getState().refreshAuthorMetadata(currentUser.npub);
+  },
+);
+
+useAuthStore.subscribe(
+  (state) => state.accounts,
+  (accounts) => {
+    const refresh = usePostStore.getState().refreshAuthorMetadata;
+    accounts.forEach((account) => {
+      refresh(account.npub);
+    });
+  },
+);

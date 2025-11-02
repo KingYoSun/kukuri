@@ -16,6 +16,7 @@ vi.mock('@/lib/api/tauri', () => ({
 
 import { usePostStore } from '@/stores/postStore';
 import { useOfflineStore } from '@/stores/offlineStore';
+import { useAuthStore } from '@/stores/authStore';
 import type { Post } from '@/stores/types';
 
 describe('postStore', () => {
@@ -28,6 +29,7 @@ describe('postStore', () => {
     picture: '',
     about: '',
     nip05: '',
+    avatar: null,
   };
 
   const mockUser2 = {
@@ -39,6 +41,7 @@ describe('postStore', () => {
     picture: '',
     about: '',
     nip05: '',
+    avatar: null,
   };
 
   const mockUser3 = {
@@ -50,6 +53,7 @@ describe('postStore', () => {
     picture: '',
     about: '',
     nip05: '',
+    avatar: null,
   };
 
   const mockPost1: Post = {
@@ -101,6 +105,12 @@ describe('postStore', () => {
       syncErrors: new Map(),
       syncQueue: [],
       isSyncing: false,
+    });
+
+    useAuthStore.setState({
+      isAuthenticated: true,
+      currentUser: mockUser1,
+      privateKey: 'test-private-key',
     });
   });
 
@@ -222,6 +232,7 @@ describe('postStore', () => {
       id: 'real-post',
       content: 'こんにちは',
       author_pubkey: 'pubkey123',
+      author_npub: 'npub1pubkey123',
       topic_id: 'topic1',
       created_at: 1_725_000_000,
       likes: 0,
@@ -252,6 +263,7 @@ describe('postStore', () => {
       id: 'reply-post',
       content: '返信本文',
       author_pubkey: 'pubkey123',
+      author_npub: 'npub1pubkey123',
       topic_id: 'topic1',
       created_at: 1_725_000_100,
       likes: 0,
@@ -277,6 +289,7 @@ describe('postStore', () => {
       id: 'quote-post',
       content: '引用本文',
       author_pubkey: 'pubkey123',
+      author_npub: 'npub1pubkey123',
       topic_id: 'topic1',
       created_at: 1_725_000_200,
       likes: 0,
@@ -303,7 +316,8 @@ describe('postStore', () => {
       {
         id: 'api-post-1',
         content: 'P2Pからの投稿',
-        author_pubkey: 'pubkey999',
+      author_pubkey: 'pubkey999',
+      author_npub: 'npub1pubkey999',
         topic_id: 'topic1',
         created_at: now,
         likes: 2,

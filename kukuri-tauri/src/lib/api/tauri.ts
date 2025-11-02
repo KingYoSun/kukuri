@@ -51,6 +51,7 @@ export interface Post {
   id: string;
   content: string;
   author_pubkey: string;
+  author_npub: string;
   topic_id: string;
   created_at: number;
   likes: number;

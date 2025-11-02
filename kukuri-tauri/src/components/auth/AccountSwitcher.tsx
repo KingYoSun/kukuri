@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ChevronDown, User, LogOut, Trash2 } from 'lucide-react';
 import { errorHandler } from '@/lib/errorHandler';
 import { useNavigate } from '@tanstack/react-router';
-import defaultAvatar from '@/assets/profile/default_avatar.png';
+import { resolveAvatarSrc, resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 
 export function AccountSwitcher() {
   const { currentUser, accounts, switchAccount, removeAccount, logout } = useAuthStore();
@@ -22,6 +22,8 @@ export function AccountSwitcher() {
     return null;
   }
 
+  const currentUserAvatarSrc = resolveUserAvatarSrc(currentUser);
+
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -29,11 +31,6 @@ export function AccountSwitcher() {
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  };
-
-  const resolveAvatarSrc = (value?: string | null) => {
-    const trimmed = value?.trim();
-    return trimmed ? trimmed : defaultAvatar;
   };
 
   const handleSwitchAccount = async (npub: string) => {
@@ -63,10 +60,7 @@ export function AccountSwitcher() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="flex items-center gap-2">
           <Avatar className="h-8 w-8">
-            <AvatarImage
-              src={resolveAvatarSrc(currentUser.picture)}
-              alt={currentUser.displayName}
-            />
+            <AvatarImage src={currentUserAvatarSrc} alt={currentUser.displayName} />
             <AvatarFallback>{getInitials(currentUser.displayName)}</AvatarFallback>
           </Avatar>
           <span className="max-w-[150px] truncate">{currentUser.displayName}</span>
@@ -81,10 +75,7 @@ export function AccountSwitcher() {
         <DropdownMenuItem disabled className="opacity-100">
           <div className="flex items-center gap-3 w-full">
             <Avatar className="h-8 w-8">
-              <AvatarImage
-                src={resolveAvatarSrc(currentUser.picture)}
-                alt={currentUser.displayName}
-              />
+              <AvatarImage src={currentUserAvatarSrc} alt={currentUser.displayName} />
               <AvatarFallback>{getInitials(currentUser.displayName)}</AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
