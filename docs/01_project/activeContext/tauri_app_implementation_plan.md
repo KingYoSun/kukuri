@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年10月23日  
+**最終更新**: 2025年11月02日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## Phase 1: 認証フローの修正 ✓ 完了
@@ -434,6 +434,15 @@ export function PeerConnectionPanel() {
 
 依存関係棚卸し（2025年10月23日更新, `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）で抽出したハイリスク領域に対応するためのメモ。
 - 2025年11月01日: UI 導線と `invoke` 利用状況は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` を参照し、Phase 5 タスクのインプットとする。
+- 2025年11月02日: 同ドキュメントに RootRoute/MainLayout の遷移制御と設定>プライバシーの未接続トグルを追記。導線ギャップ解消タスク（新規投稿ショートカット/プロフィール編集/プライバシー設定連携）を Phase 5 backlog に取り込む。
+
+### Phase 5 優先度更新（2025年11月02日）
+- 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。QA/バックエンド連携は今後の課題。
+1. 投稿導線統一: `Sidebar`「新規投稿」ボタン → グローバルコンポーザー起動（`useComposerStore` 新設）。
+2. プロフィール編集再利用: `ProfileSetup` 共通化と設定画面モーダル導線の実装。
+3. プライバシー設定反映: `usePrivacySettingsStore` でトグル状態を管理し、将来のバックエンド連携を見据えて永続化。
+4. トレンド/フォロー中タブ: UI 上で「準備中」表示を行いつつ、必要な API/データ取得要件を整理。
+5. テスト/UX 確認: 新規コンポーザー導線とプロフィール編集モーダルのユニット・統合テストを整備し、操作ログを `phase5_ci_path_audit.md` に追記する。
 
 ### ハイリスク依存対策メモ（2025年10月24日更新）
 - **WSA-01 EventGateway 再配線**: `phase5_event_gateway_design.md` Sprint 2 に沿って `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーは `Arc<dyn EventGateway>` を受け取る。UI との境界は `application::shared::mappers::event` 経由で正規化する。

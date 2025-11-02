@@ -1,11 +1,10 @@
-import { useState } from 'react';
 import { useTimelinePosts, usePostsByTopic } from '@/hooks/usePosts';
 import { PostCard } from '@/components/posts/PostCard';
-import { PostComposer } from '@/components/posts/PostComposer';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { useTopicStore } from '@/stores/topicStore';
+import { useComposerStore } from '@/stores/composerStore';
 
 function Home() {
   const { joinedTopics, currentTopic } = useTopicStore();
@@ -15,7 +14,7 @@ function Home() {
   const topicQuery = usePostsByTopic(currentTopic?.id || '');
 
   const { data: posts, isLoading, error, refetch } = currentTopic ? topicQuery : timelineQuery;
-  const [showComposer, setShowComposer] = useState(false);
+  const { openComposer, isOpen } = useComposerStore();
 
   if (isLoading) {
     return (
@@ -43,28 +42,26 @@ function Home() {
     );
   }
 
-  const handlePostSuccess = () => {
-    setShowComposer(false);
-    refetch(); // 投稿一覧を再取得
+  const handleOpenComposer = () => {
+    openComposer({
+      topicId: currentTopic?.id,
+      onSuccess: () => {
+        refetch();
+      },
+    });
   };
 
   return (
     <div className="max-w-2xl mx-auto" data-testid="home-page">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">{currentTopic ? currentTopic.name : 'タイムライン'}</h2>
-        {joinedTopics.length > 0 && !showComposer && (
-          <Button onClick={() => setShowComposer(true)} size="sm" data-testid="create-post-button">
+        {joinedTopics.length > 0 && !isOpen && (
+          <Button onClick={handleOpenComposer} size="sm" data-testid="create-post-button">
             <PlusCircle className="h-4 w-4 mr-2" />
             投稿する
           </Button>
         )}
       </div>
-
-      {showComposer && (
-        <div className="mb-6">
-          <PostComposer onSuccess={handlePostSuccess} onCancel={() => setShowComposer(false)} />
-        </div>
-      )}
 
       <div className="space-y-4" data-testid="posts-list">
         {posts && posts.length > 0 ? (

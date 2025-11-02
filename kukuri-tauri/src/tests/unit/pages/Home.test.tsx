@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import Home from '@/pages/Home';
 import type { Post as TauriPost } from '@/lib/api/tauri';
 import { useTopicStore } from '@/stores/topicStore';
+import { useComposerStore } from '@/stores/composerStore';
 
 // Mock Tauri API
 vi.mock('@/lib/api/tauri', () => ({
@@ -20,25 +21,6 @@ vi.mock('@/components/posts/PostCard', () => ({
   PostCard: ({ post }: { post: TauriPost }) => (
     <div data-testid="post-card">
       <div>{post.content}</div>
-    </div>
-  ),
-}));
-
-// Mock PostComposer component
-vi.mock('@/components/posts/PostComposer', () => ({
-  PostComposer: ({ onSuccess, onCancel }: { onSuccess?: () => void; onCancel?: () => void }) => (
-    <div data-testid="post-composer">
-      <button
-        data-testid="post-composer-submit"
-        onClick={() => {
-          onSuccess?.();
-        }}
-      >
-        投稿する
-      </button>
-      <button data-testid="post-composer-cancel" onClick={() => onCancel?.()}>
-        キャンセル
-      </button>
     </div>
   ),
 }));
@@ -67,7 +49,9 @@ const mockPosts: TauriPost[] = [
   },
 ];
 
-const renderWithQueryClient = (ui: React.ReactElement) => {
+const renderWithQueryClient = (
+  ui: React.ReactElement = <Home />,
+) => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -82,6 +66,7 @@ describe('Home', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useComposerStore.getState().reset();
     // デフォルトのトピック状態
     mockUseTopicStore.mockReturnValue({
       joinedTopics: [],
@@ -89,7 +74,7 @@ describe('Home', () => {
   });
 
   it('タイトルを表示する', () => {
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
     expect(screen.getByText('タイムライン')).toBeInTheDocument();
   });
 
@@ -97,7 +82,7 @@ describe('Home', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockImplementation(() => new Promise(() => {})); // Never resolves
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     expect(screen.getByTestId('loader')).toBeInTheDocument();
   });
@@ -106,7 +91,7 @@ describe('Home', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       const postCards = screen.getAllByTestId('post-card');
@@ -121,7 +106,7 @@ describe('Home', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockResolvedValue([]);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(screen.getByText('トピックに参加すると、投稿が表示されます。')).toBeInTheDocument();
@@ -135,7 +120,7 @@ describe('Home', () => {
       joinedTopics: ['topic1'],
     } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(
@@ -148,7 +133,7 @@ describe('Home', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockRejectedValue(new Error('Failed to fetch'));
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(
@@ -161,7 +146,7 @@ describe('Home', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(TauriApi.getPosts).toHaveBeenCalledWith({ limit: 50 });
@@ -175,7 +160,7 @@ describe('Home', () => {
       joinedTopics: ['topic1'],
     } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
@@ -186,7 +171,7 @@ describe('Home', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /投稿する/i })).not.toBeInTheDocument();
@@ -201,7 +186,7 @@ describe('Home', () => {
       joinedTopics: ['topic1'],
     } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
 
-    renderWithQueryClient(<Home />);
+    renderWithQueryClient();
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
@@ -209,69 +194,10 @@ describe('Home', () => {
 
     await user.click(screen.getByRole('button', { name: /投稿する/i }));
 
-    expect(screen.getByTestId('post-composer')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(useComposerStore.getState().isOpen).toBe(true);
+    });
+
   });
 
-  it('投稿フォームのキャンセルボタンをクリックするとフォームが閉じる', async () => {
-    const user = userEvent.setup();
-    const { TauriApi } = await import('@/lib/api/tauri');
-    vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
-    mockUseTopicStore.mockReturnValue({
-      joinedTopics: ['topic1'],
-    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
-
-    renderWithQueryClient(<Home />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /投稿する/i }));
-    expect(screen.getByTestId('post-composer')).toBeInTheDocument();
-
-    await user.click(screen.getByTestId('post-composer-cancel'));
-    expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
-  });
-
-  it('投稿が成功するとフォームが閉じて投稿ボタンが再度表示される', async () => {
-    const user = userEvent.setup();
-    const { TauriApi } = await import('@/lib/api/tauri');
-    vi.mocked(TauriApi.getPosts).mockResolvedValue(mockPosts);
-    vi.mocked(TauriApi.createPost).mockResolvedValue({
-      id: '3',
-      content: '新しい投稿',
-      author_pubkey: 'pubkey3',
-      topic_id: 'topic1',
-      created_at: Math.floor(Date.now() / 1000),
-      likes: 0,
-      replies: 0,
-    });
-    mockUseTopicStore.mockReturnValue({
-      joinedTopics: ['topic1'],
-    } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
-
-    renderWithQueryClient(<Home />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
-    });
-
-    // 投稿ボタンをクリックしてフォームを表示
-    await user.click(screen.getByRole('button', { name: /投稿する/i }));
-    expect(screen.getByTestId('post-composer')).toBeInTheDocument();
-
-    // PostComposerのモック内で定義した「投稿する」ボタンをクリック
-    const submitButton = screen.getByTestId('post-composer-submit');
-
-    // クリックイベントを実行
-    await user.click(submitButton);
-
-    // フォームが閉じることを確認
-    await waitFor(() => {
-      expect(screen.queryByTestId('post-composer')).not.toBeInTheDocument();
-    });
-
-    // 投稿ボタンが再表示されることを確認
-    expect(screen.getByRole('button', { name: /投稿する/i })).toBeInTheDocument();
-  });
 });

@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
+import { GlobalComposer } from '@/components/posts/GlobalComposer';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -25,6 +26,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div className="container mx-auto p-6">{children}</div>
         </main>
       </div>
+      <GlobalComposer />
     </div>
   );
 }

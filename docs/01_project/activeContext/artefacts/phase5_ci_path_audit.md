@@ -1,5 +1,5 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年10月31日
+最終更新日: 2025年11月02日
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
@@ -13,4 +13,5 @@
 | `cargo clippy`（Rust Lint） | `kukuri-tauri/src-tauri`: `cargo clippy --workspace --all-features -- -D warnings`<br>`kukuri-cli`: `cargo clippy --workspace --all-features -- -D warnings` | Phase 5 のゲート条件として、Tauri アプリと CLI の双方で Clippy 警告ゼロを維持する。CI では共通ルートに `Cargo.toml` が無いため、各ディレクトリで明示的に呼び出す必要がある。 | 2025年10月31日: 両ディレクトリでコマンドを実行し、警告ゼロで完走することを確認。`lint` 系ジョブでは 2 回の `cargo clippy` を順番に呼ぶ手順を記載した。<br>2025年11月01日: 指示どおり `cargo clippy --all-features -- -D warnings` を kukuri-tauri/src-tauri と kukuri-cli の両方で再実行し、警告ゼロ継続を確認。CI lint ジョブにも kukuri-cli 向け Clippy 実行を追加済み。 |
 
 ## 関連ドキュメント
-- `phase5_user_flow_inventory.md` — UI 導線と Tauri コマンドの棚卸し結果（2025年11月01日更新）
+- `phase5_user_flow_inventory.md` — UI 導線と Tauri コマンドの棚卸し結果（2025年11月02日更新: RootRoute/MainLayout の遷移制御と設定>プライバシーギャップを追記）
+- 新導線テスト: `src/tests/unit/stores/composerStore.test.ts` / `src/tests/unit/stores/privacySettingsStore.test.ts` / `src/tests/unit/pages/Home.test.tsx` — グローバルコンポーザーとプライバシー設定のユニットテストを2025年11月02日に追加。

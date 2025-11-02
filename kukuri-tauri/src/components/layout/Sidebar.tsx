@@ -3,7 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Hash, Plus, TrendingUp, Users, List, Search, MessageSquare } from 'lucide-react';
-import { useTopicStore, useUIStore } from '@/stores';
+import { useTopicStore, useUIStore, useComposerStore } from '@/stores';
 import { useP2P } from '@/hooks/useP2P';
 import { cn } from '@/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
@@ -24,6 +24,7 @@ export function Sidebar() {
   const { topics, joinedTopics, currentTopic, setCurrentTopic, topicUnreadCounts } =
     useTopicStore();
   const { sidebarOpen } = useUIStore();
+  const { openComposer } = useComposerStore();
   const navigate = useNavigate();
 
   const { getTopicMessages } = useP2P();
@@ -71,6 +72,13 @@ export function Sidebar() {
     }
   };
 
+  const handleCreatePost = () => {
+    const fallbackTopicId = currentTopic?.id ?? joinedTopics[0] ?? undefined;
+    openComposer({
+      topicId: fallbackTopicId,
+    });
+  };
+
   return (
     <aside
       role="complementary"
@@ -82,7 +90,7 @@ export function Sidebar() {
     >
       <div className="flex flex-col h-full w-64">
         <div className="p-4">
-          <Button className="w-full" variant="default">
+          <Button className="w-full" variant="default" onClick={handleCreatePost}>
             <Plus className="mr-2 h-4 w-4" />
             新規投稿
           </Button>

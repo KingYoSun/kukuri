@@ -7,6 +7,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useP2P } from '@/hooks/useP2P';
 import { useNavigate } from '@tanstack/react-router';
 import type { Topic } from '@/stores/types';
+import { useComposerStore } from '@/stores/composerStore';
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(),
@@ -44,6 +45,7 @@ describe('Sidebar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useComposerStore.getState().reset();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
     useTopicStore.setState({
       topics: new Map(),
@@ -94,6 +96,27 @@ describe('Sidebar', () => {
     expect(screen.getByText('参加中のトピック')).toBeInTheDocument();
     expect(screen.getByText('Relay Status')).toBeInTheDocument();
     expect(screen.getByText('P2P Status')).toBeInTheDocument();
+  });
+
+  it('新規投稿ボタンをクリックするとコンポーザーが開く', async () => {
+    const user = userEvent.setup();
+    const topic = buildTopic({ id: 'topic-a', name: 'Topic A' });
+
+    useTopicStore.setState({
+      topics: new Map([[topic.id, topic]]),
+      joinedTopics: [topic.id],
+      currentTopic: topic,
+      topicUnreadCounts: new Map(),
+      topicLastReadAt: new Map(),
+    });
+
+    render(<Sidebar />);
+
+    await user.click(screen.getByRole('button', { name: '新規投稿' }));
+
+    const composerState = useComposerStore.getState();
+    expect(composerState.isOpen).toBe(true);
+    expect(composerState.topicId).toBe('topic-a');
   });
 
   it('最終活動時刻を考慮してトピックが降順で表示される', () => {

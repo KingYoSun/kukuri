@@ -10,6 +10,7 @@ export const persistKeys = {
   offline: 'offline-store',
   p2p: 'p2p-storage',
   topic: 'topic-storage',
+  privacy: 'privacy-settings',
 } as const;
 
 export const createAuthPersistConfig = <

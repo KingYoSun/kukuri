@@ -1,13 +1,15 @@
+import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { useUIStore } from '@/stores';
+import { useUIStore, usePrivacySettingsStore } from '@/stores';
 import { NostrTestPanel } from '@/components/NostrTestPanel';
 import { P2PDebugPanel } from '@/components/P2PDebugPanel';
 import { PeerConnectionPanel } from '@/components/p2p/PeerConnectionPanel';
 import { BootstrapConfigPanel } from '@/components/p2p/BootstrapConfigPanel';
+import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -15,6 +17,9 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsPage() {
   const { theme, setTheme } = useUIStore();
+  const { publicProfile, showOnlineStatus, setPublicProfile, setShowOnlineStatus } =
+    usePrivacySettingsStore();
+  const [isProfileDialogOpen, setProfileDialogOpen] = useState(false);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -48,7 +53,9 @@ function SettingsPage() {
               <p className="font-medium">プロフィール編集</p>
               <p className="text-sm text-muted-foreground">表示名、自己紹介、アバター画像を編集</p>
             </div>
-            <Button variant="outline">編集</Button>
+            <Button variant="outline" onClick={() => setProfileDialogOpen(true)}>
+              編集
+            </Button>
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -68,11 +75,19 @@ function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <Label htmlFor="public-profile">プロフィールを公開</Label>
-            <Switch id="public-profile" defaultChecked />
+            <Switch
+              id="public-profile"
+              checked={publicProfile}
+              onCheckedChange={(checked) => setPublicProfile(checked)}
+            />
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="show-online">オンライン状態を表示</Label>
-            <Switch id="show-online" />
+            <Switch
+              id="show-online"
+              checked={showOnlineStatus}
+              onCheckedChange={(checked) => setShowOnlineStatus(checked)}
+            />
           </div>
         </CardContent>
       </Card>
@@ -96,6 +111,13 @@ function SettingsPage() {
           <P2PDebugPanel />
         </>
       )}
+
+      <ProfileEditDialog
+        open={isProfileDialogOpen}
+        onOpenChange={(open) => setProfileDialogOpen(open)}
+      />
     </div>
   );
 }
+
+export { SettingsPage };

@@ -5,3 +5,5 @@ export { usePostStore } from './postStore';
 export { useUIStore } from './uiStore';
 export { useP2PStore } from './p2pStore';
 export { useBookmarkStore } from './bookmarkStore';
+export { usePrivacySettingsStore } from './privacySettingsStore';
+export { useComposerStore } from './composerStore';

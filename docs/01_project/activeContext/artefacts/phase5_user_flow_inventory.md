@@ -42,7 +42,7 @@
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 主なコマンド |
 | --- | --- | --- | --- |
-| 外観・アカウント | `/settings` | テーマ切替、プロフィール編集/鍵管理ボタン（押下時の処理未実装） | なし（UIスタブ） |
+| 外観・アカウント | `/settings` | テーマ切替、プロフィール編集モーダル、鍵管理ボタン（未実装） | プロフィール編集モーダル（ProfileEditDialog） |
 | P2P 接続状況 | `/settings` | `PeerConnectionPanel` – ノード初期化、手動接続、履歴管理 | `initialize_p2p`, `get_node_address`, `get_p2p_status`, `connect_to_peer` |
 | Bootstrap 設定 | `/settings` | `BootstrapConfigPanel` – ノード一覧取得/保存/リセット | `get_bootstrap_config`, `set_bootstrap_nodes`, `clear_bootstrap_nodes` |
 | Nostr テスト (DEVのみ) | `/settings` `import.meta.env.DEV` 条件 | `NostrTestPanel` – テキストノート送信、トピック投稿、購読、リアクション送信、イベント受信ログ | `publish_text_note`, `publish_topic_post`, `send_reaction`, `subscribe_to_topic` |
@@ -55,15 +55,16 @@
 - `P2PStatus`: `useP2PStore` の接続状況と `p2pApi.getStatus` のメトリクス要約をヘッダーで通知。
 - `useP2PEventListener` / `useDataSync`: P2Pイベントを購読して投稿/トピックの React Query キャッシュを無効化し、5 分ごとの再フェッチとオンライン復帰時の全体再同期を実施。
 - `offlineSyncService` と `offlineStore` / `syncEngine`: ネットワークイベントを監視し 30 秒間隔で同期、失敗時は指数バックオフで再試行しつつ `save_offline_action` / `sync_offline_actions` / `save_optimistic_update` などを通じて再送・競合解消を制御。
+- `RootRoute` / `MainLayout`: 起動時に `authStore.initialize` と `useTopics` を待機し、未認証時は `/welcome` へ強制遷移、認証後はヘッダー・サイドバー付きレイアウトへ切り替える。
+- `TopicPage` ヘッダーの最終更新表示: `topic.lastActive` を秒→ミリ秒換算して日付を描画（2025年11月02日修正適用）。
 
 ## 2. 確認できた導線ギャップ
-- サイドバー上部の「新規投稿」ボタンに onClick が未設定で、クリックしても `PostComposer` が開かない。
 - サイドバーの「トレンド」「フォロー中」は routing 未実装のプレースホルダー。
 - `UserSearchResults` が `/profile/$userId` へ遷移させるが、該当ルート/画面が未定義のため 404 となる。
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
 - 投稿の削除導線（`delete_post`）が UI から利用できず、`postStore.deletePostRemote` は未接続。
-- 設定画面の「プロフィール編集」「鍵管理」ボタンは UI 表示のみで実装が無い。
-- `TopicPage` (`/topics/$topicId`) の「最終更新」表示は 2025年11月02日時点で `topic.lastActive` を秒→ミリ秒換算する修正を適用済み。
+- 設定画面の「鍵管理」ボタンは依然として UI 表示のみで実装が無い。
+- 設定画面の「プライバシー」トグル（プロフィール公開/オンライン表示）は 2025年11月02日時点で `usePrivacySettingsStore` によるローカル永続化まで対応済み。バックエンド連携と反映タイミングは未実装。
 
 ## 3. Tauri コマンド呼び出しマップ
 
@@ -139,9 +140,37 @@
 - 投稿/トピック状態検証: `create_post`, `create_topic`, `list_posts`, `list_topics`
 
 ## 4. 次のアクション候補
-1. `Sidebar` の「新規投稿」ボタンを `PostComposer` と連携させ、どの画面からでも投稿できるようにする。
+1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。
 2. 「トレンド」「フォロー中」カテゴリー用のルーティング／一覧画面を定義するか、未実装である旨を UI 上に表示する。
 3. `UserSearchResults` のリンク先 `/profile/$userId` を実装するか、リンクを無効化する。
 4. 投稿削除フローを設計し、`delete_post` コマンドを UI から使用できるようにする。
 5. 将来的に利用予定の未使用コマンド（例: `add_relay`, `subscribe_to_user`）について、要否を `refactoring_plan_2025-08-08_v3.md` に整理する。
-6. 設定画面の「プロフィール編集」「鍵管理」ボタンに対し、実際の編集/バックアップ導線を定義する。
+6. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
+
+## 5. 優先実装メモ（2025年11月02日更新）
+
+### 5.1 設定画面のプライバシー設定・プロフィール編集導線
+- **目的**: 設定画面から即時にユーザー情報と公開状態を更新できるようにし、オンボーディング後も同一フォームでプロフィールを保守できるようにする。
+- **UI 実装案**
+  - `settings.tsx` の「プロフィール編集」ボタン押下でモーダルを開き、`ProfileSetup` フォームを再利用する。入力部分を共通コンポーネント `ProfileForm` に切り出し、起動モードに応じて `navigate` の代わりにコールバックを受け取れるようにする。
+  - プライバシーセクションは `Switch` から `usePrivacySettingsStore`（新規）を更新するようにし、状態を UI にバインドする。永続化には既存の `withPersist` + `createMapAwareStorage` を使用し、キー名は `privacyPreferences` を想定。
+  - 保存ボタンをモーダルに追加し、`updateNostrMetadata` / `authStore.updateUser` を呼び出す。結果はトーストで通知し、`errorHandler` を利用する。
+- 実装状況: 2025年11月02日に `ProfileForm` 抽出と設定画面モーダル導線のプロトタイプを実装済み（Stage1 完了、Stage2 はバックエンド連携待ち）。
+- **バックエンド連携**
+  - プライバシー設定（例: プロフィール公開/オンライン表示）は現状 API が無いため、Stage1 ではローカルストアの値をフロントで参照するのみとする。Stage2 で `nostr` / `p2p` へ伝播するコマンドを追加予定として `tauri_app_implementation_plan.md` にフォローアップタスクを記録する。
+- **テスト計画**
+  - `SettingsPage` の単体テストでモーダルの開閉とストア更新を検証。
+  - `usePrivacySettingsStore` のストアテストで初期値・永続化を確認。
+  - 既存 `ProfileSetup` のテストは共通化後も成功することを確認し、モーダルモード用のケースを追加。
+
+### 5.2 サイドバー「新規投稿」ボタンと未導線機能
+- **目的**: タイムライン以外の画面からも投稿を開始できるようにし、未結線の UI 要素（トレンド/フォロー中）を段階的に解消する。
+- **UI 実装案**
+  - `Home` ページのローカル状態 `showComposer` を `useComposerStore`（新規）へ移し、`Sidebar` のボタンから `openComposer({ topicId })` を呼び出す。モーダルは現在のページに関係なく描画できるよう、`MainLayout` に `PostComposerContainer`（ポータル）を追加する。
+  - 未実装カテゴリー（トレンド/フォロー中）は一旦 `navigate` を無効化し、`tooltip` で「準備中」と表示するか、バックログで実装優先度を下げる旨を UI 上で明示する。
+- 実装状況: 2025年11月02日に `useComposerStore` とグローバルコンポーザー・モーダルを実装し、Sidebar / Home / MainLayout からの導線をプロトタイプ化済み。
+- **バックログ調整案**
+  - フェーズ 5 の優先度を「投稿導線統一」「プロフィール編集再利用」「プライバシー設定反映」「トレンド/フォロー中の導線定義」の順に再編し、`tauri_app_implementation_plan.md` に反映する。
+- **テスト計画**
+  - `Sidebar` のテストにコンポーザートリガーのケースを追加。
+  - `Home` の統合テストでストア経由の `openComposer` 呼び出しを検証。
