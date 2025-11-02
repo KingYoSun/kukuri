@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月01日
+最終更新日: 2025年11月03日
 
 ## 方針（2025年09月15日 更新）
 
@@ -30,6 +30,8 @@
   - 2025年11月02日: `usePrivacySettingsStore` と `ProfileEditDialog` を実装し、設定画面からプロフィール編集モーダルを起動できるようにした。
   - 2025年11月02日: `useComposerStore` / `GlobalComposer` を追加し、Home/Sidebar の「投稿する」「新規投稿」ボタンからグローバルコンポーザーを開閉できるように接続。
   - 2025年11月02日: 次ステップ候補を整理 — (1) プライバシー設定のバックエンド連携/API 仕様検討、(2) グローバルコンポーザーのUI/UX改善（トピック選択・ショートカット）の要件定義。
+  - 2025年11月03日: プロフィール画像アップロード導線をリモート同期必須に更新し、iroh-blobs 0.96.0 / iroh-docs 0.94.0 を用いた設計案を `phase5_user_flow_inventory.md` に追記。鍵管理モーダルとの連携方針を整理し、ギャップ欄に画像アップロード実装待ちを登録。
+  - 2025年11月03日: 共有スコープの Capability 分岐と `StreamEncryptor` 採用、外部 URL フォールバック廃止を決定し、データ構造・処理フロー・セキュリティ節へ反映。
 - [x] Tauri コマンド呼び出し状況（フロントエンド `invoke` 探索結果）と未使用 API の整理結果をドキュメントへ反映
   - 2025年11月01日: `TauriApi`・`SecureStorageApi`・`p2pApi`・`nostr`ユーティリティの `invoke` 使用箇所を洗い出し、未使用コマンド候補（例: `add_relay`, `subscribe_to_user`, `join_topic_by_name` など）を整理中。
   - 2025年11月01日: `offlineApi` 系コマンドと `syncEngine` の直接 `invoke`（`get_post_metadata` など）を棚卸しし、`phase5_user_flow_inventory.md` の 3.1/3.2 に追記。
@@ -37,7 +39,9 @@
 - [ ] `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標チェックボックスを更新し、未達項目のフォロータスクを連携
   - 2025年11月01日: 「UIから到達可能な全機能の文書化完了」を達成済みに更新し、参照ドキュメントと更新日を記録。
   - 2025年11月02日: 指標欄に最新ドキュメント更新（統合テスト専用コマンド整理）と未導線APIの整理状況を追記、Phase2.5セクションへ `TopicPage` 最終更新バグの改善候補を登録。
+  - 2025年11月03日: 2.5節を棚卸し結果サマリーへ差し替え、Relay/P2Pステータスカードとプロフィール編集導線の進捗メモを追記。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。
   - 2025年11月02日: Phase 5 backlog の優先順位を再定義（投稿導線統一→プロフィール編集→プライバシー設定→トレンド/フォロー中→テスト整備）し、`tauri_app_implementation_plan.md` に反映。
+  - 2025年11月03日: `phase5_ci_path_audit.md` に Relay/P2P ステータスカードのユニットテスト計画と `profileAvatarSync` 統合テスト計画を追記。`tauri_app_implementation_plan.md` へステータスカード検証・鍵管理モーダル・プロフィール画像リモート同期を Phase 5 優先度として追加。

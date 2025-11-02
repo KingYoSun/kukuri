@@ -435,14 +435,20 @@ export function PeerConnectionPanel() {
 依存関係棚卸し（2025年10月23日更新, `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md`）で抽出したハイリスク領域に対応するためのメモ。
 - 2025年11月01日: UI 導線と `invoke` 利用状況は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` を参照し、Phase 5 タスクのインプットとする。
 - 2025年11月02日: 同ドキュメントに RootRoute/MainLayout の遷移制御と設定>プライバシーの未接続トグルを追記。導線ギャップ解消タスク（新規投稿ショートカット/プロフィール編集/プライバシー設定連携）を Phase 5 backlog に取り込む。
+- 2025年11月03日: サイドバーの `RelayStatus`/`P2PStatus` 監視内容とグローバルコンポーザー導線、プロフィール編集モーダルの反映手順を同ドキュメントに追記。追加ギャップ（プロフィール画像アップロード導線など）をバックログへ登録。
 
-### Phase 5 優先度更新（2025年11月02日）
-- 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。QA/バックエンド連携は今後の課題。
+### Phase 5 優先度更新（2025年11月03日）
+- 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。2025年11月03日はステータス監視カードとプロフィール編集モーダルの反映手順を整理し、未実装の画像アップロード・鍵管理・未接続コマンド対応をバックログに追加。QA/バックエンド連携は今後の課題。
 1. 投稿導線統一: `Sidebar`「新規投稿」ボタン → グローバルコンポーザー起動（`useComposerStore` 新設）。
 2. プロフィール編集再利用: `ProfileSetup` 共通化と設定画面モーダル導線の実装。
 3. プライバシー設定反映: `usePrivacySettingsStore` でトグル状態を管理し、将来のバックエンド連携を見据えて永続化。
 4. トレンド/フォロー中タブ: UI 上で「準備中」表示を行いつつ、必要な API/データ取得要件を整理。
-5. テスト/UX 確認: 新規コンポーザー導線とプロフィール編集モーダルのユニット・統合テストを整備し、操作ログを `phase5_ci_path_audit.md` に追記する。
+5. テスト/UX 確認: 新規コンポーザー導線とプロフィール編集モーダル、`RelayStatus`/`P2PStatus` のステータス表示をユニット・統合テストでカバーし、操作ログを `phase5_ci_path_audit.md` に追記する。
+6. プロフィール画像アップロード: `ProfileForm` のアップロードボタン導線を実装し、`ProfileEditDialog`/オンボーディング双方で同一コードパスを利用できるようにする。
+7. 鍵管理モーダル: `export_private_key`/`SecureStorageApi.addAccount` を利用したバックアップ・インポート導線を実装し、保存/復旧手順の注意喚起とロギング方針を明文化する。
+8. プロフィール画像リモート同期: iroh-blobs 0.96.0 と iroh-docs 0.94.0 を組み合わせた `upload_profile_avatar` / `fetch_profile_avatar` コマンド、Capability ベースのアクセス制御、`StreamEncryptor` による暗号化、Doc レプリケーション監視フローを実装し、ローカル保存のみの経路を廃止する。
+
+> 詳細設計は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` のセクション6を参照。
 
 ### ハイリスク依存対策メモ（2025年10月24日更新）
 - **WSA-01 EventGateway 再配線**: `phase5_event_gateway_design.md` Sprint 2 に沿って `LegacyEventManagerGateway` を `infrastructure::event` へ移設し、`state/application_container.rs`・各ハンドラーは `Arc<dyn EventGateway>` を受け取る。UI との境界は `application::shared::mappers::event` 経由で正規化する。

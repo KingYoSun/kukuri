@@ -1,5 +1,5 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年11月02日
+最終更新日: 2025年11月03日
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
@@ -13,5 +13,11 @@
 | `cargo clippy`（Rust Lint） | `kukuri-tauri/src-tauri`: `cargo clippy --workspace --all-features -- -D warnings`<br>`kukuri-cli`: `cargo clippy --workspace --all-features -- -D warnings` | Phase 5 のゲート条件として、Tauri アプリと CLI の双方で Clippy 警告ゼロを維持する。CI では共通ルートに `Cargo.toml` が無いため、各ディレクトリで明示的に呼び出す必要がある。 | 2025年10月31日: 両ディレクトリでコマンドを実行し、警告ゼロで完走することを確認。`lint` 系ジョブでは 2 回の `cargo clippy` を順番に呼ぶ手順を記載した。<br>2025年11月01日: 指示どおり `cargo clippy --all-features -- -D warnings` を kukuri-tauri/src-tauri と kukuri-cli の両方で再実行し、警告ゼロ継続を確認。CI lint ジョブにも kukuri-cli 向け Clippy 実行を追加済み。 |
 
 ## 関連ドキュメント
-- `phase5_user_flow_inventory.md` — UI 導線と Tauri コマンドの棚卸し結果（2025年11月02日更新: RootRoute/MainLayout の遷移制御と設定>プライバシーギャップを追記）
-- 新導線テスト: `src/tests/unit/stores/composerStore.test.ts` / `src/tests/unit/stores/privacySettingsStore.test.ts` / `src/tests/unit/pages/Home.test.tsx` — グローバルコンポーザーとプライバシー設定のユニットテストを2025年11月02日に追加。
+- `phase5_user_flow_inventory.md` — UI 導線と Tauri コマンドの棚卸し結果（2025年11月03日更新: サイドバーのステータスカードとプロフィール編集導線の詳細を追記）
+- 新導線テスト: `src/tests/unit/stores/composerStore.test.ts` / `src/tests/unit/stores/privacySettingsStore.test.ts` / `src/tests/unit/pages/Home.test.tsx` — グローバルコンポーザーとプライバシー設定のユニットテストを2025年11月02日に追加。Relay/P2P ステータスカードのテスト計画は下記参照。
+
+## テスト追加計画（2025年11月03日）
+- `src/tests/unit/components/RelayStatus.test.tsx`（新規）: `useAuthStore` をモックし、①リスト表示、②空配列で `null` を返すケース、③`updateRelayStatus` が初回マウント時・フェイクタイマー 30 秒経過時に呼ばれること、④エラー状態のハイライトが表示されることを検証。
+- `src/tests/unit/components/P2PStatus.test.tsx`（新規）: `useP2P` をモックし、①`connectionStatus` の各状態（`disconnected`/`connecting`/`connected`/`error`）の描画、②`refreshStatus` が接続時に 30 秒間隔で呼び出されること、③手動更新ボタン押下時に追加で呼び出されること、④エラー表示と `clearError` ボタンの動作を検証。
+- 両テストとも `vi.useFakeTimers()` を利用し、`setInterval`/`clearInterval` の挙動を確認する。`errorHandler` へのロギングはスパイで監視し、副作用が発生しないことを検証。
+- `src/tests/integration/profileAvatarSync.test.ts`（新規予定）: `upload_profile_avatar` コマンドをモックした iroh-blobs 0.96.0 / iroh-docs 0.94.0 のリモート同期フローを再現し、Doc 更新 → Blob ダウンロード → `authStore.updateUser` 反映までを確認。Docker ベースの多ノードシナリオを `docker-compose.test.yml` へ追加する。
