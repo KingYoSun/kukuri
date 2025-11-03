@@ -64,13 +64,7 @@ describe('ProfileForm', () => {
   };
 
   it('初期値を表示する', () => {
-    render(
-      <ProfileForm
-        initialValues={initialValues}
-        onSubmit={vi.fn()}
-        submitLabel="保存"
-      />,
-    );
+    render(<ProfileForm initialValues={initialValues} onSubmit={vi.fn()} submitLabel="保存" />);
 
     expect(screen.getByDisplayValue('テスター')).toBeInTheDocument();
     expect(screen.getByDisplayValue('@tester')).toBeInTheDocument();
@@ -84,11 +78,7 @@ describe('ProfileForm', () => {
     const handleSubmit = vi.fn();
 
     render(
-      <ProfileForm
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        submitLabel="保存"
-      />,
+      <ProfileForm initialValues={initialValues} onSubmit={handleSubmit} submitLabel="保存" />,
     );
 
     await user.clear(screen.getByLabelText('名前 *'));
@@ -150,11 +140,7 @@ describe('ProfileForm', () => {
     mockReadFile.mockResolvedValue(mockBytes);
 
     render(
-      <ProfileForm
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        submitLabel="保存"
-      />,
+      <ProfileForm initialValues={initialValues} onSubmit={handleSubmit} submitLabel="保存" />,
     );
 
     await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));
@@ -181,11 +167,7 @@ describe('ProfileForm', () => {
     mockOpen.mockResolvedValue(null);
 
     render(
-      <ProfileForm
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        submitLabel="保存"
-      />,
+      <ProfileForm initialValues={initialValues} onSubmit={handleSubmit} submitLabel="保存" />,
     );
 
     await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));
@@ -204,11 +186,7 @@ describe('ProfileForm', () => {
     mockReadFile.mockResolvedValue(largeBytes);
 
     render(
-      <ProfileForm
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        submitLabel="保存"
-      />,
+      <ProfileForm initialValues={initialValues} onSubmit={handleSubmit} submitLabel="保存" />,
     );
 
     await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));
@@ -227,11 +205,7 @@ describe('ProfileForm', () => {
     mockReadFile.mockRejectedValue(readError);
 
     render(
-      <ProfileForm
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        submitLabel="保存"
-      />,
+      <ProfileForm initialValues={initialValues} onSubmit={handleSubmit} submitLabel="保存" />,
     );
 
     await user.click(screen.getByRole('button', { name: /画像をアップロード/ }));

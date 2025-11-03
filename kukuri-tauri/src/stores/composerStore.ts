@@ -21,7 +21,10 @@ interface ComposerState {
   reset: () => void;
 }
 
-const createInitialState = (): Omit<ComposerState, 'openComposer' | 'closeComposer' | 'complete' | 'reset'> => ({
+const createInitialState = (): Omit<
+  ComposerState,
+  'openComposer' | 'closeComposer' | 'complete' | 'reset'
+> => ({
   isOpen: false,
   topicId: null,
   replyTo: null,

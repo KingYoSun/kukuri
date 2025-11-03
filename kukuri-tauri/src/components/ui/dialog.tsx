@@ -64,9 +64,9 @@ const DialogContent = React.forwardRef<
     showCloseButton?: boolean;
   }
 >(({ className, children, showCloseButton = true, ...props }, ref) => {
-  const ariaDescribedBy = (
-    props as React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
-  )['aria-describedby'];
+  const ariaDescribedBy = (props as React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>)[
+    'aria-describedby'
+  ];
 
   return (
     <DialogPortal data-slot="dialog-portal">

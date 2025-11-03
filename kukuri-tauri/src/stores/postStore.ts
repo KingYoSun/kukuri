@@ -133,14 +133,14 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     };
 
     // 讌ｽ隕ｳ逧・峩譁ｰ: 蜊ｳ蠎ｧ縺ｫUI縺ｫ蜿肴丐
-      set((state) => {
+    set((state) => {
       const newPosts = new Map(state.posts);
       newPosts.set(tempId, optimisticPost);
 
       const newPostsByTopic = new Map(state.postsByTopic);
       const topicPosts = newPostsByTopic.get(topicId) || [];
-      // 譁ｰ縺励＞謚慕ｨｿ繧貞・鬆ｭ縺ｫ霑ｽ蜉・域怙譁ｰ縺ｮ謚慕ｨｿ縺御ｸ翫↓陦ｨ遉ｺ縺輔ｌ繧九ｈ縺・↓・・     
-newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
+      // 譁ｰ縺励＞謚慕ｨｿ繧貞・鬆ｭ縺ｫ霑ｽ蜉・域怙譁ｰ縺ｮ謚慕ｨｿ縺御ｸ翫↓陦ｨ遉ｺ縺輔ｌ繧九ｈ縺・↓・・
+      newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
 
       return {
         posts: newPosts,
@@ -178,7 +178,7 @@ newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
 
       const realPost = enrichPostAuthorMetadata(await mapPostResponseToDomain(apiPost));
 
-      // 荳譎・D繧貞ｮ滄圀縺ｮID縺ｫ鄂ｮ縺肴鋤縺・     
+      // 荳譎・D繧貞ｮ滄圀縺ｮID縺ｫ鄂ｮ縺肴鋤縺・
       set((state) => {
         const newPosts = new Map(state.posts);
         newPosts.delete(tempId);
@@ -319,7 +319,7 @@ newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
     // 繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｮ蝣ｴ蜷医√ヰ繝・け繧ｰ繝ｩ繧ｦ繝ｳ繝峨〒繧ｵ繝ｼ繝舌・縺ｫ騾∽ｿ｡
     try {
       await TauriApi.likePost(postId);
-      // 謌仙粥縺励◆蝣ｴ蜷医・迚ｹ縺ｫ菴輔ｂ縺励↑縺・ｼ域里縺ｫ讌ｽ隕ｳ逧・峩譁ｰ貂医∩・・   
+      // 謌仙粥縺励◆蝣ｴ蜷医・迚ｹ縺ｫ菴輔ｂ縺励↑縺・ｼ域里縺ｫ讌ｽ隕ｳ逧・峩譁ｰ貂医∩・・
     } catch (error) {
       // 螟ｱ謨励＠縺溷ｴ蜷医√Ο繝ｼ繝ｫ繝舌ャ繧ｯ
       set((state) => {
@@ -450,8 +450,6 @@ newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
       return { posts: newPosts };
     }),
 }));
-
-
 
 useAuthStore.subscribe((state, previousState) => {
   const nextNpub = state.currentUser?.npub;

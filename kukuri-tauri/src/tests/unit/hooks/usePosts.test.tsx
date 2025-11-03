@@ -110,7 +110,7 @@ describe('usePosts hooks', () => {
         boosts: 0,
         replies: 0,
         is_synced: true,
-});
+      });
 
       const { result } = renderHook(() => useCreatePost(), {
         wrapper: createWrapper(),

@@ -316,8 +316,8 @@ describe('postStore', () => {
       {
         id: 'api-post-1',
         content: 'P2Pからの投稿',
-      author_pubkey: 'pubkey999',
-      author_npub: 'npub1pubkey999',
+        author_pubkey: 'pubkey999',
+        author_npub: 'npub1pubkey999',
         topic_id: 'topic1',
         created_at: now,
         likes: 2,

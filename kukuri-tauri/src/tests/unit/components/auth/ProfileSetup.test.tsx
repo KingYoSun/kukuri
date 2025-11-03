@@ -72,8 +72,12 @@ beforeAll(async () => {
   const tauriModule = await import('@/lib/api/tauri');
   mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
   mockReadFile = fsModule.readFile as unknown as ReturnType<typeof vi.fn>;
-  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<typeof vi.fn>;
-  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<typeof vi.fn>;
+  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<
+    typeof vi.fn
+  >;
 });
 
 beforeAll(() => {

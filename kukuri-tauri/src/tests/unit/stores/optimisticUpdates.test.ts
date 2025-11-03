@@ -73,15 +73,15 @@ describe('楽観的UI更新', () => {
       joinedTopics: [],
     });
 
-  useOfflineStore.setState({
-    isOnline: true,
-    lastSyncedAt: undefined,
-    pendingActions: [],
-    syncQueue: [],
-    optimisticUpdates: new Map(),
-    isSyncing: false,
-    syncErrors: new Map(),
-  });
+    useOfflineStore.setState({
+      isOnline: true,
+      lastSyncedAt: undefined,
+      pendingActions: [],
+      syncQueue: [],
+      optimisticUpdates: new Map(),
+      isSyncing: false,
+      syncErrors: new Map(),
+    });
 
     useAuthStore.setState({
       isAuthenticated: true,

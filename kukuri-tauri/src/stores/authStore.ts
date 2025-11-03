@@ -28,49 +28,44 @@ interface AuthStore extends AuthState {
 }
 
 export const useAuthStore = create<AuthStore>()(
-  withPersist<AuthStore>(
-    (set, get) => {
-      const isAvatarNotFoundError = (error: unknown) => {
-        if (!error) {
-          return false;
-        }
-        const message =
-          error instanceof Error
-            ? error.message
-            : typeof error === 'string'
-              ? error
-              : undefined;
-        return typeof message === 'string' && message.includes('Profile avatar not found');
-      };
+  withPersist<AuthStore>((set, get) => {
+    const isAvatarNotFoundError = (error: unknown) => {
+      if (!error) {
+        return false;
+      }
+      const message =
+        error instanceof Error ? error.message : typeof error === 'string' ? error : undefined;
+      return typeof message === 'string' && message.includes('Profile avatar not found');
+    };
 
-      const fetchAndApplyAvatar = async (npub: string) => {
-        try {
-          const result = await TauriApi.fetchProfileAvatar(npub);
-          const metadata = buildUserAvatarMetadataFromFetch(npub, result);
-          const picture = buildAvatarDataUrl(result.format, result.data_base64);
-          set((state) => {
-            if (!state.currentUser || state.currentUser.npub !== npub) {
-              return {};
-            }
-            return {
-              currentUser: {
-                ...state.currentUser,
-                picture,
-                avatar: metadata,
-              },
-            };
-          });
-        } catch (error) {
-          if (isAvatarNotFoundError(error)) {
-            return;
+    const fetchAndApplyAvatar = async (npub: string) => {
+      try {
+        const result = await TauriApi.fetchProfileAvatar(npub);
+        const metadata = buildUserAvatarMetadataFromFetch(npub, result);
+        const picture = buildAvatarDataUrl(result.format, result.data_base64);
+        set((state) => {
+          if (!state.currentUser || state.currentUser.npub !== npub) {
+            return {};
           }
-          errorHandler.log('Failed to fetch profile avatar', error, {
-            context: `AuthStore.fetchAndApplyAvatar (npub: ${npub})`,
-          });
+          return {
+            currentUser: {
+              ...state.currentUser,
+              picture,
+              avatar: metadata,
+            },
+          };
+        });
+      } catch (error) {
+        if (isAvatarNotFoundError(error)) {
+          return;
         }
-      };
+        errorHandler.log('Failed to fetch profile avatar', error, {
+          context: `AuthStore.fetchAndApplyAvatar (npub: ${npub})`,
+        });
+      }
+    };
 
-      return {
+    return {
       isAuthenticated: false,
       currentUser: null,
       privateKey: null,
@@ -434,8 +429,6 @@ export const useAuthStore = create<AuthStore>()(
       get isLoggedIn() {
         return get().isAuthenticated;
       },
-      };
-    },
-    createAuthPersistConfig<AuthStore>(),
-  ),
+    };
+  }, createAuthPersistConfig<AuthStore>()),
 );

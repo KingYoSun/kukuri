@@ -33,7 +33,7 @@ const mockPosts: TauriPost[] = [
     id: '1',
     content: 'テスト投稿1',
     author_pubkey: 'pubkey1',
-          author_npub: 'npubpubkey1',
+    author_npub: 'npubpubkey1',
     topic_id: 'topic1',
     created_at: Math.floor(Date.now() / 1000),
     likes: 5,
@@ -43,7 +43,7 @@ const mockPosts: TauriPost[] = [
     id: '2',
     content: 'テスト投稿2',
     author_pubkey: 'pubkey2',
-          author_npub: 'npubpubkey2',
+    author_npub: 'npubpubkey2',
     topic_id: 'topic2',
     created_at: Math.floor(Date.now() / 1000) - 3600,
     likes: 10,
@@ -51,9 +51,7 @@ const mockPosts: TauriPost[] = [
   },
 ];
 
-const renderWithQueryClient = (
-  ui: React.ReactElement = <Home />,
-) => {
+const renderWithQueryClient = (ui: React.ReactElement = <Home />) => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -199,7 +197,5 @@ describe('Home', () => {
     await waitFor(() => {
       expect(useComposerStore.getState().isOpen).toBe(true);
     });
-
   });
-
 });

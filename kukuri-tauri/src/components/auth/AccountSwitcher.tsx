@@ -99,10 +99,7 @@ export function AccountSwitcher() {
             >
               <div className="flex items-center gap-3 w-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src={resolveAvatarSrc(account.picture)}
-                    alt={account.display_name}
-                  />
+                  <AvatarImage src={resolveAvatarSrc(account.picture)} alt={account.display_name} />
                   <AvatarFallback>{getInitials(account.display_name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 overflow-hidden">

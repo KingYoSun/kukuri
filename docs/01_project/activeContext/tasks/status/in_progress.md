@@ -11,6 +11,13 @@
 
 ## 現在のタスク
 
+### GitHub Actions ワークフロー失敗調査
+
+- [ ] Format Check での Prettier エラー解消と再発防止
+  - 2025年11月03日: `gh run view` で `Format Check` ジョブが `pnpm format:check` に失敗していることを確認。15ファイルにフォーマット差分が残っているのを特定。
+  - 2025年11月03日: `kukuri-tauri` で `pnpm format` を実行し、続けて `pnpm format:check` を通過することを確認。
+  - 2025年11月03日: `gh act -j format-check` を実行し、ローカル再現でワークフローが成功することを検証。ログを `tmp/gh_act_format.log` に保管。
+
 ### Clippy 警告ゼロ体制の復帰
 
 - [x] `domain/entities/event/validation/nip19.rs` の `format!` 文字列を埋め込み式へ置換し、Clippy (`uninlined_format_args`) を解消
