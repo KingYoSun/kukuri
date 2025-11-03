@@ -108,3 +108,8 @@ build.err
 
 # Optional local bootstrap config (override via UI)
 kukuri-tauri/src-tauri/bootstrap_nodes.json
+
+# kamui
+.kamui/
+
+target/
