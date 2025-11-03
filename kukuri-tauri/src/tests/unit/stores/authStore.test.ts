@@ -36,10 +36,11 @@ vi.mock('@/lib/api/secureStorage', () => ({
   },
 }));
 
-import { initializeNostr, disconnectNostr } from '@/lib/api/nostr';
+import { initializeNostr, disconnectNostr, getRelayStatus } from '@/lib/api/nostr';
 
 const mockInitializeNostr = initializeNostr as MockedFunction<typeof initializeNostr>;
 const mockDisconnectNostr = disconnectNostr as MockedFunction<typeof disconnectNostr>;
+const mockGetRelayStatus = getRelayStatus as MockedFunction<typeof getRelayStatus>;
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -49,6 +50,11 @@ describe('authStore', () => {
       currentUser: null,
       privateKey: null,
       relayStatus: [],
+      relayStatusError: null,
+      relayStatusBackoffMs: 30_000,
+      lastRelayStatusFetchedAt: null,
+      isFetchingRelayStatus: false,
+      accounts: [],
     });
   });
 
@@ -57,6 +63,11 @@ describe('authStore', () => {
     expect(state.isAuthenticated).toBe(false);
     expect(state.currentUser).toBeNull();
     expect(state.privateKey).toBeNull();
+    expect(state.relayStatus).toEqual([]);
+    expect(state.relayStatusError).toBeNull();
+    expect(state.relayStatusBackoffMs).toBe(30_000);
+    expect(state.lastRelayStatusFetchedAt).toBeNull();
+    expect(state.isFetchingRelayStatus).toBe(false);
   });
 
   it('loginメソッドが正しく動作すること', () => {
@@ -95,6 +106,17 @@ describe('authStore', () => {
       isAuthenticated: true,
       currentUser: testUser,
       privateKey: 'nsec123',
+      relayStatus: [
+        {
+          url: 'wss://relay.example',
+          status: 'connected',
+        },
+      ],
+      relayStatusError: 'error',
+      relayStatusBackoffMs: 120_000,
+      lastRelayStatusFetchedAt: Date.now(),
+      isFetchingRelayStatus: true,
+      accounts: [],
     });
 
     await useAuthStore.getState().logout();
@@ -103,6 +125,40 @@ describe('authStore', () => {
     expect(state.isAuthenticated).toBe(false);
     expect(state.currentUser).toBeNull();
     expect(state.privateKey).toBeNull();
+    expect(state.relayStatus).toEqual([]);
+    expect(state.relayStatusError).toBeNull();
+    expect(state.relayStatusBackoffMs).toBe(30_000);
+    expect(state.lastRelayStatusFetchedAt).toBeNull();
+    expect(state.isFetchingRelayStatus).toBe(false);
+  });
+
+  it('updateRelayStatusが成功すると状態とバックオフがリセットされる', async () => {
+    mockGetRelayStatus.mockResolvedValueOnce([
+      { url: 'wss://relay.example', status: 'connected' },
+    ]);
+
+    await useAuthStore.getState().updateRelayStatus();
+
+    const state = useAuthStore.getState();
+    expect(state.relayStatus).toHaveLength(1);
+    expect(state.relayStatusError).toBeNull();
+    expect(state.relayStatusBackoffMs).toBe(30_000);
+    expect(state.isFetchingRelayStatus).toBe(false);
+    expect(state.lastRelayStatusFetchedAt).not.toBeNull();
+  });
+
+  it('updateRelayStatusが失敗するとバックオフが増加しエラーが保持される', async () => {
+    mockGetRelayStatus.mockRejectedValueOnce(new Error('network error'));
+
+    const previousBackoff = useAuthStore.getState().relayStatusBackoffMs;
+
+    await useAuthStore.getState().updateRelayStatus();
+
+    const state = useAuthStore.getState();
+    expect(state.relayStatusError).toBe('network error');
+    expect(state.relayStatusBackoffMs).toBeGreaterThan(previousBackoff);
+    expect(state.isFetchingRelayStatus).toBe(false);
+    expect(state.lastRelayStatusFetchedAt).not.toBeNull();
   });
 
   it('updateUserメソッドが正しく動作すること', () => {

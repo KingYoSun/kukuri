@@ -105,6 +105,7 @@ describe('p2pApi', () => {
     it('should get P2P status', async () => {
       const mockStatus: P2PStatus = {
         connected: true,
+        connection_status: 'connected',
         endpoint_id: 'node123',
         active_topics: [
           {
@@ -115,6 +116,7 @@ describe('p2pApi', () => {
           },
         ],
         peer_count: 10,
+        peers: [],
         metrics_summary: {
           joins: 3,
           leaves: 1,
@@ -134,9 +136,11 @@ describe('p2pApi', () => {
     it('should handle disconnected status', async () => {
       const mockStatus: P2PStatus = {
         connected: false,
+        connection_status: 'disconnected',
         endpoint_id: '',
         active_topics: [],
         peer_count: 0,
+        peers: [],
         metrics_summary: {
           joins: 0,
           leaves: 0,

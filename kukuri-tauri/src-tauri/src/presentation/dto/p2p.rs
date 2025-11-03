@@ -1,12 +1,56 @@
+use crate::application::services::p2p_service::{
+    ConnectionStatus as ServiceConnectionStatus, PeerStatus as ServicePeerStatus,
+};
 use crate::presentation::dto::Validate;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionStatusResponse {
+    Connected,
+    Connecting,
+    Disconnected,
+    Error,
+}
+
+impl From<ServiceConnectionStatus> for ConnectionStatusResponse {
+    fn from(value: ServiceConnectionStatus) -> Self {
+        match value {
+            ServiceConnectionStatus::Connected => ConnectionStatusResponse::Connected,
+            ServiceConnectionStatus::Connecting => ConnectionStatusResponse::Connecting,
+            ServiceConnectionStatus::Disconnected => ConnectionStatusResponse::Disconnected,
+            ServiceConnectionStatus::Error => ConnectionStatusResponse::Error,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerStatusResponse {
+    pub node_id: String,
+    pub address: String,
+    pub connected_at: i64,
+    pub last_seen: i64,
+}
+
+impl From<ServicePeerStatus> for PeerStatusResponse {
+    fn from(value: ServicePeerStatus) -> Self {
+        Self {
+            node_id: value.node_id,
+            address: value.address,
+            connected_at: value.connected_at,
+            last_seen: value.last_seen,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PStatusResponse {
     pub connected: bool,
+    pub connection_status: ConnectionStatusResponse,
     pub endpoint_id: String,
     pub active_topics: Vec<TopicStatus>,
     pub peer_count: usize,
+    pub peers: Vec<PeerStatusResponse>,
     pub metrics_summary: GossipMetricsSummaryResponse,
 }
 

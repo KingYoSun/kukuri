@@ -13,7 +13,7 @@
 
 ### GitHub Actions ワークフロー失敗調査
 
-- [ ] Format Check での Prettier エラー解消と再発防止
+- [x] Format Check での Prettier エラー解消と再発防止
   - 2025年11月03日: `gh run view` で `Format Check` ジョブが `pnpm format:check` に失敗していることを確認。15ファイルにフォーマット差分が残っているのを特定。
   - 2025年11月03日: `kukuri-tauri` で `pnpm format` を実行し、続けて `pnpm format:check` を通過することを確認。
   - 2025年11月03日: `gh act -j format-check` を実行し、ローカル再現でワークフローが成功することを検証。ログを `tmp/gh_act_format.log` に保管。
@@ -39,6 +39,9 @@
   - 2025年11月02日: 次ステップ候補を整理 — (1) プライバシー設定のバックエンド連携/API 仕様検討、(2) グローバルコンポーザーのUI/UX改善（トピック選択・ショートカット）の要件定義。
   - 2025年11月03日: プロフィール画像アップロード導線をリモート同期必須に更新し、iroh-blobs 0.96.0 / iroh-docs 0.94.0 を用いた設計案を `phase5_user_flow_inventory.md` に追記。鍵管理モーダルとの連携方針を整理し、ギャップ欄に画像アップロード実装待ちを登録。
   - 2025年11月03日: 共有スコープの Capability 分岐と `StreamEncryptor` 採用、外部 URL フォールバック廃止を決定し、データ構造・処理フロー・セキュリティ節へ反映。
+  - 2025年11月03日: サイドバーのステータスカードと同期インジケーター群の挙動を再チェックし、`phase5_user_flow_inventory.md` セクション1.6/5.5にポーリング条件・エラー表示ギャップ・テスト計画を追記。`tauri_app_implementation_plan.md` Phase 5 記録を更新し、`phase5_ci_path_audit.md` のテスト項目とリンク付け。
+  - 2025年11月03日: `RelayStatus` / `P2PStatus` ユニットテストをフェイクタイマー対応で刷新し、`npx vitest run src/tests/unit/components/RelayStatus.test.tsx src/tests/unit/components/P2PStatus.test.tsx` を実行。5.5節に `get_relay_status` エラー UI / リトライ設計を追加し、`p2p_mainline_runbook.md` へ `get_p2p_status` 拡張準備メモ（connection_status/peers）を追記。
+  - 2025年11月03日: バックオフ実装後の検証として `npx vitest run … components/stores/hooks/lib/api` と `cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を実施し、Runbook と CI パス監査に反映。`phase5_user_flow_inventory.md` 5.5節を実装結果ベースの記述へ更新。
 - [x] Tauri コマンド呼び出し状況（フロントエンド `invoke` 探索結果）と未使用 API の整理結果をドキュメントへ反映
   - 2025年11月01日: `TauriApi`・`SecureStorageApi`・`p2pApi`・`nostr`ユーティリティの `invoke` 使用箇所を洗い出し、未使用コマンド候補（例: `add_relay`, `subscribe_to_user`, `join_topic_by_name` など）を整理中。
   - 2025年11月01日: `offlineApi` 系コマンドと `syncEngine` の直接 `invoke`（`get_post_metadata` など）を棚卸しし、`phase5_user_flow_inventory.md` の 3.1/3.2 に追記。

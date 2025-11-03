@@ -292,16 +292,19 @@ describe('p2pStore', () => {
     it('エラーをクリアできる', () => {
       // エラーを設定
       act(() => {
-        useP2PStore.setState({ error: 'Test error' });
+        useP2PStore.setState({ error: 'Test error', statusError: 'Status error' });
       });
 
       expect(useP2PStore.getState().error).toBe('Test error');
+      expect(useP2PStore.getState().statusError).toBe('Status error');
 
       act(() => {
         useP2PStore.getState().clearError();
       });
 
-      expect(useP2PStore.getState().error).toBe(null);
+      const state = useP2PStore.getState();
+      expect(state.error).toBe(null);
+      expect(state.statusError).toBe(null);
     });
   });
 
@@ -324,6 +327,18 @@ describe('p2pStore', () => {
           nodeAddr: '/ip4/127.0.0.1/tcp/4001',
           connectionStatus: 'connected',
           activeTopics,
+          peers: new Map(),
+          error: 'error',
+          metricsSummary: {
+            joins: 1,
+            leaves: 1,
+            broadcasts_sent: 1,
+            messages_received: 1,
+          },
+          statusError: 'Status error',
+          statusBackoffMs: 120_000,
+          lastStatusFetchedAt: Date.now(),
+          isRefreshingStatus: true,
         });
       });
 
@@ -337,6 +352,10 @@ describe('p2pStore', () => {
       expect(useP2PStore.getState().connectionStatus).toBe('disconnected');
       expect(useP2PStore.getState().activeTopics.size).toBe(0);
       expect(useP2PStore.getState().metricsSummary).toBeNull();
+      expect(useP2PStore.getState().statusError).toBeNull();
+      expect(useP2PStore.getState().statusBackoffMs).toBe(30_000);
+      expect(useP2PStore.getState().lastStatusFetchedAt).toBeNull();
+      expect(useP2PStore.getState().isRefreshingStatus).toBe(false);
     });
   });
 });

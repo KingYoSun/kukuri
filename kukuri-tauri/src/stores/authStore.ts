@@ -10,8 +10,24 @@ import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
 
+const DEFAULT_RELAY_STATUS_INTERVAL = 30_000;
+const RELAY_STATUS_BACKOFF_SEQUENCE = [120_000, 300_000, 600_000];
+
+const nextRelayStatusBackoff = (current: number) => {
+  for (const value of RELAY_STATUS_BACKOFF_SEQUENCE) {
+    if (current < value) {
+      return value;
+    }
+  }
+  return RELAY_STATUS_BACKOFF_SEQUENCE[RELAY_STATUS_BACKOFF_SEQUENCE.length - 1];
+};
+
 interface AuthStore extends AuthState {
   relayStatus: RelayInfo[];
+  relayStatusError: string | null;
+  relayStatusBackoffMs: number;
+  lastRelayStatusFetchedAt: number | null;
+  isFetchingRelayStatus: boolean;
   accounts: AccountMetadata[];
   login: (privateKey: string, user: User) => Promise<void>;
   loginWithNsec: (nsec: string, saveToSecureStorage?: boolean) => Promise<void>;
@@ -70,6 +86,10 @@ export const useAuthStore = create<AuthStore>()(
       currentUser: null,
       privateKey: null,
       relayStatus: [],
+      relayStatusError: null,
+      relayStatusBackoffMs: DEFAULT_RELAY_STATUS_INTERVAL,
+      lastRelayStatusFetchedAt: null,
+      isFetchingRelayStatus: false,
       accounts: [],
 
       login: async (privateKey: string, user: User) => {
@@ -247,6 +267,10 @@ export const useAuthStore = create<AuthStore>()(
           currentUser: null,
           privateKey: null,
           relayStatus: [],
+          relayStatusError: null,
+          relayStatusBackoffMs: DEFAULT_RELAY_STATUS_INTERVAL,
+          lastRelayStatusFetchedAt: null,
+          isFetchingRelayStatus: false,
         });
       },
 
@@ -261,18 +285,44 @@ export const useAuthStore = create<AuthStore>()(
         })),
 
       updateRelayStatus: async () => {
+        if (get().isFetchingRelayStatus) {
+          return;
+        }
+
+        set({ isFetchingRelayStatus: true });
+
         try {
           const status = await getRelayStatus();
-          set({ relayStatus: status });
+          set({
+            relayStatus: status,
+            relayStatusError: null,
+            relayStatusBackoffMs: DEFAULT_RELAY_STATUS_INTERVAL,
+            lastRelayStatusFetchedAt: Date.now(),
+            isFetchingRelayStatus: false,
+          });
         } catch (error) {
           errorHandler.log('Failed to get relay status', error, {
             context: 'AuthStore.updateRelayStatus',
+          });
+          const message =
+            error instanceof Error ? error.message : 'Failed to get relay status';
+          set({
+            relayStatusError: message,
+            relayStatusBackoffMs: nextRelayStatusBackoff(get().relayStatusBackoffMs),
+            lastRelayStatusFetchedAt: Date.now(),
+            isFetchingRelayStatus: false,
           });
         }
       },
 
       setRelayStatus: (status: RelayInfo[]) => {
-        set({ relayStatus: status });
+        set({
+          relayStatus: status,
+          relayStatusError: null,
+          relayStatusBackoffMs: DEFAULT_RELAY_STATUS_INTERVAL,
+          lastRelayStatusFetchedAt: Date.now(),
+          isFetchingRelayStatus: false,
+        });
       },
 
       initialize: async () => {
@@ -324,6 +374,10 @@ export const useAuthStore = create<AuthStore>()(
               currentUser: null,
               privateKey: null,
               relayStatus: [],
+              relayStatusError: null,
+              relayStatusBackoffMs: DEFAULT_RELAY_STATUS_INTERVAL,
+              lastRelayStatusFetchedAt: null,
+              isFetchingRelayStatus: false,
             });
           }
 
@@ -341,6 +395,10 @@ export const useAuthStore = create<AuthStore>()(
             privateKey: null,
             relayStatus: [],
             accounts: [],
+            relayStatusError: null,
+            relayStatusBackoffMs: DEFAULT_RELAY_STATUS_INTERVAL,
+            lastRelayStatusFetchedAt: null,
+            isFetchingRelayStatus: false,
           });
         }
       },

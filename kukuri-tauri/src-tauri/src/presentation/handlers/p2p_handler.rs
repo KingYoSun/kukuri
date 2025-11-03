@@ -52,9 +52,11 @@ impl P2PHandler {
         let status = self.p2p_service.get_status().await?;
         let crate::application::services::p2p_service::P2PStatus {
             connected,
+            connection_status,
             endpoint_id,
             active_topics,
             peer_count,
+            peers,
             metrics_summary,
         } = status;
 
@@ -71,9 +73,11 @@ impl P2PHandler {
 
         Ok(P2PStatusResponse {
             connected,
+            connection_status: connection_status.into(),
             endpoint_id,
             active_topics: topic_statuses,
             peer_count,
+            peers: peers.into_iter().map(Into::into).collect(),
             metrics_summary: GossipMetricsSummaryResponse {
                 joins: metrics_summary.joins,
                 leaves: metrics_summary.leaves,

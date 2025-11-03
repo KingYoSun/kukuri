@@ -14,6 +14,10 @@ export interface UseP2PReturn {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   error: string | null;
   metricsSummary: GossipMetricsSummary | null;
+  statusError: string | null;
+  statusBackoffMs: number;
+  lastStatusFetchedAt: number | null;
+  isRefreshingStatus: boolean;
 
   // アクション
   joinTopic: (topicId: string, initialPeers?: string[]) => Promise<void>;
@@ -48,6 +52,10 @@ export function useP2P(): UseP2PReturn {
     refreshStatus,
     clearError,
     metricsSummary,
+    statusError,
+    statusBackoffMs,
+    lastStatusFetchedAt,
+    isRefreshingStatus,
   } = useP2PStore();
 
   // P2Pイベントリスナーを設定
@@ -62,14 +70,16 @@ export function useP2P(): UseP2PReturn {
 
   // 定期的な状態更新
   useEffect(() => {
-    if (initialized && connectionStatus === 'connected') {
-      const interval = setInterval(() => {
-        refreshStatus();
-      }, 30000); // 30秒ごとに更新
-
-      return () => clearInterval(interval);
+    if (!initialized) {
+      return;
     }
-  }, [initialized, connectionStatus, refreshStatus]);
+
+    const timeout = setTimeout(() => {
+      refreshStatus();
+    }, statusBackoffMs);
+
+    return () => clearTimeout(timeout);
+  }, [initialized, statusBackoffMs, refreshStatus, lastStatusFetchedAt]);
 
   // トピックのメッセージを取得
   const getTopicMessages = useCallback(
@@ -119,6 +129,10 @@ export function useP2P(): UseP2PReturn {
     connectionStatus,
     error,
     metricsSummary,
+    statusError,
+    statusBackoffMs,
+    lastStatusFetchedAt,
+    isRefreshingStatus,
 
     // アクション
     joinTopic,

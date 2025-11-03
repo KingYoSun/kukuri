@@ -1,10 +1,22 @@
 import { create } from 'zustand';
 
 import { p2pApi } from '@/lib/api/p2p';
-import type { GossipMetricsSummary } from '@/lib/api/p2p';
+import type { GossipMetricsSummary, PeerStatus } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 import { withPersist } from './utils/persistHelpers';
 import { createP2PPersistConfig } from './config/persist';
+
+const DEFAULT_STATUS_POLL_INTERVAL = 30_000;
+const STATUS_BACKOFF_SEQUENCE = [120_000, 300_000, 600_000];
+
+const nextBackoff = (current: number) => {
+  for (const value of STATUS_BACKOFF_SEQUENCE) {
+    if (current < value) {
+      return value;
+    }
+  }
+  return STATUS_BACKOFF_SEQUENCE[STATUS_BACKOFF_SEQUENCE.length - 1];
+};
 
 // P2Pメッセージ
 export interface P2PMessage {
@@ -32,6 +44,7 @@ export interface PeerInfo {
   topics: string[];
   last_seen: number;
   connection_status: 'connected' | 'disconnected' | 'connecting';
+  connected_at?: number;
 }
 
 // P2Pストア
@@ -46,6 +59,10 @@ interface P2PStore {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   error: string | null;
   metricsSummary: GossipMetricsSummary | null;
+  statusError: string | null;
+  statusBackoffMs: number;
+  lastStatusFetchedAt: number | null;
+  isRefreshingStatus: boolean;
 
   // アクション
   initialize: () => Promise<void>;
@@ -73,6 +90,10 @@ export const useP2PStore = create<P2PStore>()(
       connectionStatus: 'disconnected',
       error: null,
       metricsSummary: null,
+      statusError: null,
+      statusBackoffMs: DEFAULT_STATUS_POLL_INTERVAL,
+      lastStatusFetchedAt: null,
+      isRefreshingStatus: false,
 
       // P2P初期化
       initialize: async () => {
@@ -88,12 +109,19 @@ export const useP2PStore = create<P2PStore>()(
           // P2P状態を取得
           const status = await p2pApi.getStatus();
 
+          const peers = mapPeersFromStatus(status?.peers ?? [], get().peers);
+
           set({
             initialized: true,
             nodeAddr: nodeAddr ? nodeAddr.join(', ') : '',
             nodeId: status?.endpoint_id || '',
-            connectionStatus: 'connected',
+            connectionStatus: status?.connection_status ?? 'connected',
             metricsSummary: status?.metrics_summary ?? null,
+            peers,
+            statusError: null,
+            statusBackoffMs: DEFAULT_STATUS_POLL_INTERVAL,
+            lastStatusFetchedAt: Date.now(),
+            isRefreshingStatus: false,
           });
         } catch (error) {
           errorHandler.log('Failed to initialize P2P', error, {
@@ -104,6 +132,10 @@ export const useP2PStore = create<P2PStore>()(
           set({
             connectionStatus: 'error',
             error: error instanceof Error ? error.message : 'P2P initialization failed',
+            statusError: error instanceof Error ? error.message : 'P2P initialization failed',
+            statusBackoffMs: nextBackoff(get().statusBackoffMs),
+            lastStatusFetchedAt: Date.now(),
+            isRefreshingStatus: false,
           });
         }
       },
@@ -183,8 +215,15 @@ export const useP2PStore = create<P2PStore>()(
 
       // 状態更新
       refreshStatus: async () => {
+        if (get().isRefreshingStatus) {
+          return;
+        }
+
+        set({ isRefreshingStatus: true });
+
         try {
           const status = await p2pApi.getStatus();
+          const previousPeers = get().peers;
 
           // アクティブトピックの統計情報を更新
           const activeTopics = new Map<string, TopicStats>();
@@ -205,13 +244,28 @@ export const useP2PStore = create<P2PStore>()(
             });
           }
 
+          const peers = mapPeersFromStatus(status.peers ?? [], previousPeers);
+
           set({
             activeTopics,
             metricsSummary: status.metrics_summary ?? null,
+            connectionStatus: status.connection_status,
+            peers,
+            statusError: null,
+            statusBackoffMs: DEFAULT_STATUS_POLL_INTERVAL,
+            lastStatusFetchedAt: Date.now(),
+            isRefreshingStatus: false,
           });
         } catch (error) {
           errorHandler.log('Failed to refresh P2P status', error, {
             context: 'P2PStore.refreshStatus',
+          });
+          const message = error instanceof Error ? error.message : 'Failed to refresh P2P status';
+          set({
+            statusError: message,
+            statusBackoffMs: nextBackoff(get().statusBackoffMs),
+            lastStatusFetchedAt: Date.now(),
+            isRefreshingStatus: false,
           });
         }
       },
@@ -258,7 +312,7 @@ export const useP2PStore = create<P2PStore>()(
 
       // エラークリア
       clearError: () => {
-        set({ error: null });
+        set({ error: null, statusError: null });
       },
 
       // リセット
@@ -273,9 +327,33 @@ export const useP2PStore = create<P2PStore>()(
           connectionStatus: 'disconnected',
           error: null,
           metricsSummary: null,
+          statusError: null,
+          statusBackoffMs: DEFAULT_STATUS_POLL_INTERVAL,
+          lastStatusFetchedAt: null,
+          isRefreshingStatus: false,
         });
       },
     }),
     createP2PPersistConfig<P2PStore>(),
   ),
 );
+
+function mapPeersFromStatus(
+  peers: PeerStatus[],
+  existingPeers: Map<string, PeerInfo>,
+): Map<string, PeerInfo> {
+  const peerMap = new Map<string, PeerInfo>();
+  for (const peer of peers) {
+    const existing = existingPeers.get(peer.node_id);
+    peerMap.set(peer.node_id, {
+      node_id: peer.node_id,
+      node_addr: peer.address,
+      topics: existing?.topics ?? [],
+      last_seen: peer.last_seen,
+      connection_status: 'connected',
+      connected_at: peer.connected_at,
+    });
+  }
+
+  return peerMap;
+}

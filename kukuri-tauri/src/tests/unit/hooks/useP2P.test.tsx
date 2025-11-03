@@ -71,6 +71,10 @@ describe('useP2P', () => {
         error: null,
         peers: new Map(),
         metricsSummary: null,
+        statusError: null,
+        statusBackoffMs: 30_000,
+        lastStatusFetchedAt: null,
+        isRefreshingStatus: false,
       });
     });
   });
@@ -90,9 +94,11 @@ describe('useP2P', () => {
       getNodeAddressMock.mockResolvedValueOnce(['/ip4/127.0.0.1/tcp/4001']);
       getStatusMock.mockResolvedValueOnce({
         connected: true,
+        connection_status: 'connected',
         endpoint_id: 'node123',
         active_topics: [],
         peer_count: 0,
+        peers: [],
         metrics_summary: {
           joins: 0,
           leaves: 0,
@@ -142,6 +148,7 @@ describe('useP2P', () => {
     it('refreshStatusが状態を正しく更新する', async () => {
       vi.mocked(p2pApi.getStatus).mockResolvedValueOnce({
         connected: true,
+        connection_status: 'connected',
         endpoint_id: 'node123',
         active_topics: [
           {
@@ -152,6 +159,13 @@ describe('useP2P', () => {
           },
         ],
         peer_count: 2,
+        peers: [],
+        metrics_summary: {
+          joins: 0,
+          leaves: 0,
+          broadcasts_sent: 0,
+          messages_received: 0,
+        },
       });
 
       await act(async () => {

@@ -1,5 +1,5 @@
 import { useP2P } from '@/hooks/useP2P';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,10 @@ import {
   NetworkIcon,
   AlertCircleIcon,
   CircleIcon,
+  Loader2,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 export function P2PStatus() {
   const {
@@ -27,25 +30,43 @@ export function P2PStatus() {
     clearError,
     refreshStatus,
     metricsSummary,
+    statusError,
+    statusBackoffMs,
+    lastStatusFetchedAt,
+    isRefreshingStatus,
   } = useP2P();
 
   useEffect(() => {
-    if (initialized && connectionStatus === 'connected') {
-      refreshStatus();
-      const t = setInterval(() => {
-        refreshStatus();
-      }, 30000);
-      return () => clearInterval(t);
+    if (!initialized || isRefreshingStatus) {
+      return;
     }
-  }, [initialized, connectionStatus, refreshStatus]);
+    if (lastStatusFetchedAt === null) {
+      void refreshStatus();
+    }
+  }, [initialized, lastStatusFetchedAt, isRefreshingStatus, refreshStatus]);
+
+  useEffect(() => {
+    if (!initialized || lastStatusFetchedAt === null) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void refreshStatus();
+    }, statusBackoffMs);
+
+    return () => clearTimeout(timer);
+  }, [initialized, statusBackoffMs, lastStatusFetchedAt, refreshStatus]);
 
   const handleRefresh = useCallback(async () => {
+    if (isRefreshingStatus) {
+      return;
+    }
     try {
       await refreshStatus();
     } catch {
       // 既に refreshStatus 内でロギング済み
     }
-  }, [refreshStatus]);
+  }, [refreshStatus, isRefreshingStatus]);
 
   const metrics = metricsSummary;
 
@@ -83,6 +104,26 @@ export function P2PStatus() {
   // 接続中のピア数を計算
   const connectedPeerCount = peers.filter((p) => p.connection_status === 'connected').length;
 
+  const lastUpdatedLabel = useMemo(() => {
+    if (!lastStatusFetchedAt) {
+      return '未取得';
+    }
+    return formatDistanceToNow(lastStatusFetchedAt, { addSuffix: true, locale: ja });
+  }, [lastStatusFetchedAt]);
+
+  const nextRefreshLabel = useMemo(() => {
+    if (statusBackoffMs >= 600_000) {
+      return '約10分';
+    }
+    if (statusBackoffMs >= 300_000) {
+      return '約5分';
+    }
+    if (statusBackoffMs >= 120_000) {
+      return '約2分';
+    }
+    return '約30秒';
+  }, [statusBackoffMs]);
+
   return (
     <Card className="w-full">
       <CardHeader className="pb-3">
@@ -91,6 +132,28 @@ export function P2PStatus() {
           {getConnectionIcon()}
         </div>
         <CardDescription className="text-xs">分散型ネットワーク接続状態</CardDescription>
+        <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>最終更新: {lastUpdatedLabel}</span>
+          <span>次回再取得: {nextRefreshLabel}</span>
+        </div>
+        <div className="mt-2 flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={handleRefresh}
+            disabled={isRefreshingStatus}
+          >
+            {isRefreshingStatus ? (
+              <>
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                更新中…
+              </>
+            ) : (
+              '再取得'
+            )}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* 接続状態 */}
@@ -100,15 +163,42 @@ export function P2PStatus() {
         </div>
 
         {/* エラー表示 */}
-        {error && (
+        {(error || statusError) && (
           <div className="bg-red-50 dark:bg-red-950 rounded-md p-3">
             <div className="flex items-start space-x-2">
               <AlertCircleIcon className="h-4 w-4 text-red-500 mt-0.5" />
               <div className="flex-1">
-                <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-                <Button variant="ghost" size="sm" className="mt-1 h-6 text-xs" onClick={clearError}>
-                  閉じる
-                </Button>
+                {error && (
+                  <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+                )}
+                {statusError && (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    状態取得エラー: {statusError}
+                  </p>
+                )}
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {error && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={clearError}
+                    >
+                      閉じる
+                    </Button>
+                  )}
+                  {statusError && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={handleRefresh}
+                      disabled={isRefreshingStatus}
+                    >
+                      再取得
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -147,6 +237,7 @@ export function P2PStatus() {
                   size="sm"
                   className="h-6 text-xs"
                   onClick={handleRefresh}
+                  disabled={isRefreshingStatus}
                 >
                   更新
                 </Button>

@@ -136,3 +136,12 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - kind:30078 の PRE は `kukuri:topic:<slug>:post:<revision>` 単位で最新を採用する。再投稿検知時は `metadata.edited=true` を付与し、旧イベントは Offline 再索引ジョブが自動的に破棄する。
 - `ValidationFailureKind` に応じた `receive_failures_by_reason` を監視し、異常があれば WARN ログの `reason` と Offline レポートの `SyncStatus::Invalid` 記録を突合して原因を特定する。レポートは `offline://reindex_complete` イベントで取得できる。
 - 各テストの配置と責務は `docs/03_implementation/nostr_event_validation.md` 5.1節のマッピング表を参照。Runbook 更新時は対応するテスト名も必ず記録する。
+
+## 9. get_p2p_status API 拡張実装（2025年11月03日）
+- `application::services::p2p_service::P2PStatus` に `connection_status: ConnectionStatus`（`connected` / `connecting` / `disconnected` / `error`）と `peers: Vec<PeerStatus>` を追加し、`presentation::handlers::p2p_handler::get_p2p_status` → `presentation::dto::p2p::P2PStatusResponse` 経由でフロントへ返却する。`PeerStatus` は Node ID・endpoint アドレス・最終観測時刻を含む。
+- `p2pApi.getStatus` / `useP2PStore.refreshStatus` / `useP2P` を更新し、`connectionStatus`・`peers`・バックオフ関連フィールド（`statusBackoffMs` / `lastStatusFetchedAt` / `statusError` / `isRefreshingStatus`）をストアと `P2PStatus` コンポーネントへ反映する。UI はヘッダーに最終更新時刻と次回再取得目安、手動 `再取得` ボタン、エラーバナーを表示。
+- 検証手順:
+  1. `npx vitest run src/tests/unit/components/P2PStatus.test.tsx src/tests/unit/stores/p2pStore.test.ts src/tests/unit/hooks/useP2P.test.tsx` — バックオフ制御・新フィールド描画・手動リトライをフェイクタイマーで検証。
+  2. `cargo test --package kukuri-tauri --lib application::services::p2p_service::tests`（または `cargo test`）— `connection_status` / `peers` 拡張後のフォールバックシナリオ（メトリクス欠落 → peers 参照）を確認。
+  3. 手動動作確認: `pnpm tauri dev` で起動し、サイドバー `P2P ネットワーク` カードの `再取得` ボタンが `isRefreshingStatus` 中に `更新中…` へ変化し、最終更新/次回再取得表示が更新されることを確認。
+- 本 Runbook 内の監視手順（メトリクスダッシュボード、手動 `connect_to_peer`）を実施する際は、`connection_status` が `disconnected`→`connected` に遷移するタイミング、`peers` セクションに Node ID が表示されることを確認する。UI の詳細は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` 5.5 節を参照。

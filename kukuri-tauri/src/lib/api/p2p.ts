@@ -2,10 +2,19 @@
 
 export interface P2PStatus {
   connected: boolean;
+  connection_status: 'connected' | 'connecting' | 'disconnected' | 'error';
   endpoint_id: string;
   active_topics: TopicStatus[];
   peer_count: number;
+  peers: PeerStatus[];
   metrics_summary: GossipMetricsSummary;
+}
+
+export interface PeerStatus {
+  node_id: string;
+  address: string;
+  connected_at: number;
+  last_seen: number;
 }
 
 export interface TopicStatus {

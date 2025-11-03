@@ -1,6 +1,6 @@
 use super::bootstrap::P2PServiceBuilder;
 use super::metrics::GossipMetricsSummary;
-use super::status::{P2PStatus, TopicInfo};
+use super::status::{ConnectionStatus, PeerStatus, P2PStatus, TopicInfo};
 use crate::infrastructure::p2p::{DiscoveryOptions, GossipService, NetworkService, metrics};
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use crate::shared::error::AppError;
@@ -179,13 +179,37 @@ impl P2PServiceTrait for P2PService {
             });
         }
 
+        let peers = self
+            .network_service
+            .get_peers()
+            .await
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+
+        let network_connected = self.network_service.is_connected().await && !peers.is_empty();
+
+        let peer_status: Vec<PeerStatus> = peers
+            .into_iter()
+            .map(|peer| PeerStatus {
+                node_id: peer.id,
+                address: peer.address,
+                connected_at: peer.connected_at,
+                last_seen: peer.last_seen,
+            })
+            .collect();
+
         let metrics_summary = GossipMetricsSummary::from_snapshot(&metrics::snapshot());
 
         Ok(P2PStatus {
-            connected: true,
+            connected: network_connected,
+            connection_status: if network_connected {
+                ConnectionStatus::Connected
+            } else {
+                ConnectionStatus::Disconnected
+            },
             endpoint_id,
             active_topics,
             peer_count: total_peer_count,
+            peers: peer_status,
             metrics_summary,
         })
     }

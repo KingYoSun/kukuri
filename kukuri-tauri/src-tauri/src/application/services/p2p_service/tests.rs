@@ -1,6 +1,8 @@
 use super::core::{P2PService, P2PServiceTrait};
+use crate::application::services::p2p_service::status::ConnectionStatus;
 use crate::domain::p2p::TopicStats;
-use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
+use crate::infrastructure::p2p::{metrics, GossipService, NetworkService};
+use crate::infrastructure::p2p::network_service::Peer;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -13,6 +15,8 @@ pub struct MockNetworkServ {
     join_dht: Mutex<Vec<String>>,
     leave_dht: Mutex<Vec<String>>,
     broadcast_dht: Mutex<Vec<(String, Vec<u8>)>>,
+    connected: Mutex<bool>,
+    peers: Mutex<Vec<Peer>>,
 }
 
 impl MockNetworkServ {
@@ -23,6 +27,8 @@ impl MockNetworkServ {
             join_dht: Mutex::new(Vec::new()),
             leave_dht: Mutex::new(Vec::new()),
             broadcast_dht: Mutex::new(Vec::new()),
+            connected: Mutex::new(true),
+            peers: Mutex::new(Vec::new()),
         }
     }
 
@@ -65,6 +71,14 @@ impl MockNetworkServ {
     pub fn broadcast_dht_calls(&self) -> Vec<(String, Vec<u8>)> {
         self.broadcast_dht.lock().unwrap().clone()
     }
+
+    pub fn set_connected(&self, connected: bool) {
+        *self.connected.lock().unwrap() = connected;
+    }
+
+    pub fn set_peers(&self, peers: Vec<Peer>) {
+        *self.peers.lock().unwrap() = peers;
+    }
 }
 
 #[async_trait]
@@ -84,7 +98,7 @@ impl NetworkService for MockNetworkServ {
     async fn get_peers(
         &self,
     ) -> Result<Vec<crate::infrastructure::p2p::network_service::Peer>, AppError> {
-        Ok(vec![])
+        Ok(self.peers.lock().unwrap().clone())
     }
 
     async fn add_peer(&self, _address: &str) -> Result<(), AppError> {
@@ -108,7 +122,7 @@ impl NetworkService for MockNetworkServ {
     }
 
     async fn is_connected(&self) -> bool {
-        true
+        *self.connected.lock().unwrap()
     }
 
     async fn get_node_id(&self) -> Result<String, AppError> {
@@ -321,6 +335,26 @@ async fn test_get_status() {
         .expect_get_node_id()
         .returning(|| Ok("node123".to_string()));
     let network = Arc::new(mock_network);
+    network.set_connected(false);
+    network.set_peers(Vec::new());
+    assert!(!network.is_connected().await);
+
+    network.set_connected(true);
+    let now = Utc::now().timestamp();
+    network.set_peers(vec![
+        Peer {
+            id: "peer-1".to_string(),
+            address: "/ip4/127.0.0.1/tcp/4001".to_string(),
+            connected_at: now,
+            last_seen: now,
+        },
+        Peer {
+            id: "peer-2".to_string(),
+            address: "/ip4/127.0.0.1/tcp/4002".to_string(),
+            connected_at: now,
+            last_seen: now,
+        },
+    ]);
 
     let mut mock_gossip = MockGossipServ::new();
     mock_gossip
@@ -360,6 +394,7 @@ async fn test_get_status() {
     let status = result.unwrap();
     assert_eq!(status.endpoint_id, "node123");
     assert!(status.connected);
+    assert_eq!(status.connection_status, ConnectionStatus::Connected);
     assert_eq!(status.active_topics.len(), 2);
     assert_eq!(status.peer_count, 8);
     assert_eq!(status.metrics_summary.joins, 0);
@@ -370,6 +405,8 @@ async fn test_get_status() {
     assert_eq!(status.active_topics[0].last_activity, 1_700_000_000);
     assert_eq!(status.active_topics[1].message_count, 4);
     assert_eq!(status.active_topics[1].last_activity, 1_700_000_100);
+    assert_eq!(status.peers.len(), 2);
+    assert_eq!(status.peers[0].node_id, "peer-1");
 }
 
 #[tokio::test]
@@ -411,6 +448,7 @@ async fn test_get_status_fallback_to_peers_when_stats_missing() {
     assert_eq!(topic.message_count, 0);
     assert!(topic.last_activity >= before);
     assert!(topic.last_activity <= after);
+    assert_eq!(status.connection_status, ConnectionStatus::Disconnected);
 }
 
 #[tokio::test]
