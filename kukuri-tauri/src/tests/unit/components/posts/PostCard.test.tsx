@@ -1,44 +1,41 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { PostCard } from '@/components/posts/PostCard';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { Post } from '@/stores';
 import React from 'react';
 
-// Mock Tauri API
-vi.mock('@/lib/api/tauri', () => ({
-  TauriApi: {
-    likePost: vi.fn(),
-    boostPost: vi.fn(),
-    createPost: vi.fn(),
-  },
-}));
+const {
+  bookmarkStoreMock,
+  offlineStoreState,
+  likePostMock,
+  boostPostMock,
+  createPostMock,
+  deletePostMock,
+  toastMock,
+  usePostStoreMock,
+  useAuthStoreMock,
+} = vi.hoisted(() => {
+  const bookmarkStore = {
+    fetchBookmarks: vi.fn(),
+    toggleBookmark: vi.fn(),
+    isBookmarked: vi.fn(() => false),
+  };
 
-// Mock sonner
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}));
+  const offlineState = {
+    isOnline: true,
+    pendingActions: [] as Array<{ actionType: string; localId?: string }>,
+  };
 
-// Mock Collapsible components
-vi.mock('@/components/ui/collapsible', () => ({
-  Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
-    <div data-state={open ? 'open' : 'closed'}>{open ? children : null}</div>
-  ),
-  CollapsibleContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
+  const deletePost = vi.fn<[string], Promise<void>>();
 
-// Mock stores
-const bookmarkStoreMock = {
-  fetchBookmarks: vi.fn(),
-  toggleBookmark: vi.fn(),
-  isBookmarked: vi.fn(() => false),
-};
+  const usePostStore = vi.fn((selector?: (state: { deletePostRemote: typeof deletePost }) => unknown) => {
+    const state = {
+      deletePostRemote: deletePost,
+    };
+    return typeof selector === 'function' ? selector(state) : state;
+  });
 
-vi.mock('@/stores', () => ({
-  useAuthStore: vi.fn(() => ({
+  const authState = {
     currentUser: {
       pubkey: 'user-pubkey',
       npub: 'npub1user',
@@ -46,19 +43,117 @@ vi.mock('@/stores', () => ({
       displayName: 'Current User Display',
       picture: 'https://example.com/current-user.jpg',
     },
-  })),
-  useBookmarkStore: vi.fn(() => bookmarkStoreMock),
+  };
+
+  const useAuthStore = vi.fn((selector?: (state: typeof authState) => unknown) => {
+    return typeof selector === 'function' ? selector(authState) : authState;
+  });
+
+  return {
+    bookmarkStoreMock: bookmarkStore,
+    offlineStoreState: offlineState,
+    likePostMock: vi.fn(),
+    boostPostMock: vi.fn(),
+    createPostMock: vi.fn(),
+    deletePostMock: deletePost,
+    toastMock: {
+      error: vi.fn(),
+      success: vi.fn(),
+    },
+    usePostStoreMock: usePostStore,
+    useAuthStoreMock: useAuthStore,
+  };
+});
+
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    likePost: likePostMock,
+    boostPost: boostPostMock,
+    createPost: createPostMock,
+  },
 }));
 
-const offlineStoreState = {
-  isOnline: true,
-  pendingActions: [] as Array<{ actionType: string; localId?: string }>,
-};
+vi.mock('sonner', () => ({
+  toast: toastMock,
+}));
+
+vi.mock('@/components/ui/collapsible', () => ({
+  Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
+    <div data-state={open ? 'open' : 'closed'}>{open ? children : null}</div>
+  ),
+  CollapsibleContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+  }) => (
+    <button type='button' onClick={onClick}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@/components/ui/alert-dialog', () => ({
+  AlertDialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open: boolean;
+    onOpenChange?: (next: boolean) => void;
+  }) => (open ? <div>{children}</div> : null),
+  AlertDialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: { children: React.ReactNode }) => <h3>{children}</h3>,
+  AlertDialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
+  AlertDialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AlertDialogCancel: ({
+    children,
+    disabled,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    disabled?: boolean;
+    onClick?: () => void;
+  }) => (
+    <button type='button' disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  ),
+  AlertDialogAction: ({
+    children,
+    disabled,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    disabled?: boolean;
+    onClick?: () => void;
+  }) => (
+    <button type='button' disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@/stores', () => ({
+  useAuthStore: useAuthStoreMock,
+  useBookmarkStore: vi.fn(() => bookmarkStoreMock),
+  usePostStore: usePostStoreMock,
+}));
 
 vi.mock('@/stores/offlineStore', () => ({
   useOfflineStore: vi.fn(() => offlineStoreState),
 }));
 
+import { PostCard } from '@/components/posts/PostCard';
 const mockPost: Post = {
   id: '1',
   content: 'テスト投稿です',
@@ -103,11 +198,25 @@ const getBookmarkButton = () => {
 
 describe('PostCard', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    bookmarkStoreMock.fetchBookmarks.mockClear();
-    bookmarkStoreMock.toggleBookmark.mockClear();
+    usePostStoreMock.mockImplementation((selector?: (state: { deletePostRemote: typeof deletePostMock }) => unknown) => {
+      const state = {
+        deletePostRemote: deletePostMock,
+      };
+      return typeof selector === 'function' ? selector(state) : state;
+    });
+    usePostStoreMock.mockClear();
+    useAuthStoreMock.mockClear();
+    deletePostMock.mockReset();
+    deletePostMock.mockImplementation(async () => undefined);
+    likePostMock.mockReset();
+    boostPostMock.mockReset();
+    createPostMock.mockReset();
+    bookmarkStoreMock.fetchBookmarks.mockReset();
+    bookmarkStoreMock.toggleBookmark.mockReset();
     bookmarkStoreMock.isBookmarked.mockReset();
     bookmarkStoreMock.isBookmarked.mockReturnValue(false);
+    toastMock.error.mockReset();
+    toastMock.success.mockReset();
     offlineStoreState.isOnline = true;
     offlineStoreState.pendingActions = [];
   });
@@ -570,6 +679,68 @@ describe('PostCard', () => {
     });
   });
 
+  describe('削除メニュー', () => {
+    const createOwnPost = (): Post => ({
+      ...mockPost,
+      author: {
+        ...mockPost.author,
+        pubkey: 'user-pubkey',
+        npub: 'npub1user',
+      },
+    });
+
+    it('他人の投稿には削除メニューが表示されない', () => {
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      expect(screen.queryByRole('button', { name: /削除/ })).not.toBeInTheDocument();
+    });
+
+    it('削除を確定すると deletePostRemote が呼び出される', async () => {
+      const ownPost = createOwnPost();
+      const { toast } = await import('sonner');
+      const { useAuthStore } = await import('@/stores');
+      renderWithQueryClient(<PostCard post={ownPost} />);
+      // eslint-disable-next-line no-console
+
+      fireEvent.click(screen.getByRole('button', { name: /削除/ }));
+      expect(screen.getByText('投稿を削除しますか？')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('削除する'));
+
+      await waitFor(() => {
+        expect(deletePostMock).toHaveBeenCalledWith(ownPost.id);
+      });
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith('投稿を削除しました');
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText('投稿を削除しますか？')).not.toBeInTheDocument();
+      });
+    });
+
+    it('削除に失敗した場合はエラートーストを表示する', async () => {
+      const ownPost = createOwnPost();
+      const { toast } = await import('sonner');
+      deletePostMock.mockRejectedValueOnce(new Error('failed'));
+
+      renderWithQueryClient(<PostCard post={ownPost} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /削除/ }));
+
+      fireEvent.click(screen.getByText('削除する'));
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('投稿の削除に失敗しました');
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText('投稿を削除しますか？')).not.toBeInTheDocument();
+      });
+    });
+  });
+
   it('マウント時にブックマーク状態を取得する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -616,3 +787,7 @@ describe('PostCard', () => {
     });
   });
 });
+
+
+
+

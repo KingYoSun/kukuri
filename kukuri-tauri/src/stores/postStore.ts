@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import type { PostState, Post } from './types';
-import { TauriApi } from '@/lib/api/tauri';
+import { TauriApi, type GetPostsRequest } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { useOfflineStore } from './offlineStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
@@ -54,7 +54,13 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
   fetchPosts: async (topicId?: string, limit?: number, offset?: number) => {
     try {
-      const apiPosts = await TauriApi.getPosts({ topic_id: topicId, limit, offset });
+      const requestPayload: GetPostsRequest = {
+        topic_id: topicId,
+      };
+      if (limit !== undefined || offset !== undefined) {
+        requestPayload.pagination = { limit, offset };
+      }
+      const apiPosts = await TauriApi.getPosts(requestPayload);
       const posts: Post[] = await Promise.all(
         apiPosts.map(async (post) => enrichPostAuthorMetadata(await mapPostResponseToDomain(post))),
       );
@@ -255,6 +261,46 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
   deletePostRemote: async (id: string) => {
     try {
+      const offlineStore = useOfflineStore.getState();
+      const isOnline = offlineStore.isOnline;
+
+      const authState = useAuthStore.getState();
+      const currentUser = authState.currentUser;
+
+      if (!currentUser) {
+        throw new Error('Not authenticated');
+      }
+
+      if (!isOnline) {
+        await offlineStore.saveOfflineAction({
+          userPubkey: currentUser.pubkey,
+          actionType: OfflineActionType.DELETE_POST,
+          entityType: EntityType.POST,
+          entityId: id,
+          data: JSON.stringify({ postId: id }),
+        });
+        set((state) => {
+          const post = state.posts.get(id);
+          if (!post) return state;
+
+          const newPosts = new Map(state.posts);
+          newPosts.delete(id);
+
+          const newPostsByTopic = new Map(state.postsByTopic);
+          const topicPosts = newPostsByTopic.get(post.topicId) || [];
+          newPostsByTopic.set(
+            post.topicId,
+            topicPosts.filter((postId) => postId !== id),
+          );
+
+          return {
+            posts: newPosts,
+            postsByTopic: newPostsByTopic,
+          };
+        });
+        return;
+      }
+
       await TauriApi.deletePost(id);
       set((state) => {
         const post = state.posts.get(id);

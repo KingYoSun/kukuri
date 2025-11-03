@@ -149,6 +149,7 @@ export enum OfflineActionType {
   TOPIC_UPDATE = 'topic_update',
   TOPIC_DELETE = 'topic_delete',
   PROFILE_UPDATE = 'profile_update',
+  DELETE_POST = 'delete_post',
 }
 
 // エンティティタイプの列挙

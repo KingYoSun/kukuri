@@ -90,7 +90,7 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
       <p className="text-sm text-muted-foreground">{results.length}人のユーザーが見つかりました</p>
       <div className="space-y-4">
         {results.map((user) => (
-          <UserCard key={user.id} user={user} />
+          <UserCard key={user.npub || user.id} user={user} />
         ))}
       </div>
     </div>
@@ -119,7 +119,7 @@ function UserCard({ user }: { user: Profile }) {
           <div>
             <Link
               to="/profile/$userId"
-              params={{ userId: user.id }}
+              params={{ userId: user.npub || user.id }}
               className="font-semibold hover:underline"
             >
               {user.displayName || user.name || 'ユーザー'}
@@ -131,7 +131,7 @@ function UserCard({ user }: { user: Profile }) {
             <p className="text-xs text-muted-foreground mt-1">{user.npub}</p>
           </div>
         </div>
-        <Button size="sm" variant="outline">
+        <Button size="sm" variant="outline" disabled>
           <UserPlus className="h-4 w-4 mr-1" />
           フォロー
         </Button>

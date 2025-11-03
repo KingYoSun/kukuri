@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年11月02日  
+**最終更新**: 2025年11月03日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## Phase 1: 認証フローの修正 ✓ 完了
@@ -436,6 +436,7 @@ export function PeerConnectionPanel() {
 - 2025年11月01日: UI 導線と `invoke` 利用状況は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` を参照し、Phase 5 タスクのインプットとする。
 - 2025年11月02日: 同ドキュメントに RootRoute/MainLayout の遷移制御と設定>プライバシーの未接続トグルを追記。導線ギャップ解消タスク（新規投稿ショートカット/プロフィール編集/プライバシー設定連携）を Phase 5 backlog に取り込む。
 - 2025年11月03日: サイドバーの `RelayStatus`/`P2PStatus` 監視内容とグローバルコンポーザー導線、プロフィール編集モーダルの反映手順を同ドキュメントに追記。セクション5.5でポーリング失敗時の挙動・リトライ UI・テスト計画を整理し、`phase5_ci_path_audit.md` のステータスカード検証項目と連携。追加ギャップ（プロフィール画像アップロード導線など）をバックログへ登録。
+- 2025年11月03日: `pnpm vitest run src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/stores/postStore.test.ts` を実行し、削除メニューとオフライン削除キューの回帰を確認（`postStore.deletePostRemote` がオフライン時に `TauriApi.deletePost` を呼ばないことを検証）。
 - 2025年11月03日: Relay/P2P ステータスカードのバックオフ実装を完了。`npx vitest run …` でコンポーネント/ストア/フックのユニットテストを実行し、`cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）で `connection_status` / `peers` 拡張後のフォールバック動作を確認。Runbook 9章および CI パス監査に反映。
 
 ### Phase 5 優先度更新（2025年11月03日）

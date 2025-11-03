@@ -68,10 +68,29 @@ export interface CreatePostRequest {
   quoted_post?: string;
 }
 
-export interface GetPostsRequest {
-  topic_id?: string;
+export interface PaginationRequest {
   limit?: number;
   offset?: number;
+}
+
+export interface GetPostsRequest {
+  topic_id?: string;
+  author_pubkey?: string;
+  pagination?: PaginationRequest;
+  limit?: number;
+  offset?: number;
+}
+
+export interface UserProfile {
+  npub: string;
+  pubkey: string;
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+  banner?: string | null;
+  website?: string | null;
+  nip05?: string | null;
 }
 
 export type ProfileAvatarAccessLevel = 'public' | 'contacts_only' | 'private';
@@ -156,15 +175,48 @@ export class TauriApi {
 
   // ポスト関連
   static async getPosts(request: GetPostsRequest = {}): Promise<Post[]> {
-    return await invokeCommand<Post[]>('get_posts', { request });
+    const { topic_id, author_pubkey, pagination, limit, offset } = request;
+    const payload: {
+      request: {
+        topic_id?: string;
+        author_pubkey?: string;
+        pagination?: PaginationRequest;
+      };
+    } = {
+      request: {},
+    };
+
+    if (topic_id) {
+      payload.request.topic_id = topic_id;
+    }
+
+    if (author_pubkey) {
+      payload.request.author_pubkey = author_pubkey;
+    }
+
+    if (pagination) {
+      payload.request.pagination = pagination;
+    } else if (limit !== undefined || offset !== undefined) {
+      payload.request.pagination = {
+        limit,
+        offset,
+      };
+    }
+
+    return await invokeCommand<Post[]>('get_posts', payload);
   }
 
   static async createPost(request: CreatePostRequest): Promise<Post> {
     return await invokeCommand<Post>('create_post', { request });
   }
 
-  static async deletePost(id: string): Promise<void> {
-    await invokeCommandVoid('delete_post', { id });
+  static async deletePost(id: string, reason?: string): Promise<void> {
+    await invokeCommandVoid('delete_post', {
+      request: {
+        post_id: id,
+        reason: reason ?? null,
+      },
+    });
   }
 
   static async likePost(postId: string): Promise<void> {
@@ -205,6 +257,23 @@ export class TauriApi {
     return await invokeCommand<FetchProfileAvatarResult>('fetch_profile_avatar', {
       request: { npub },
     });
+  }
+
+  // ユーザー関連
+  static async getUserProfile(npub: string): Promise<UserProfile | null> {
+    return await invokeCommand<UserProfile | null>('get_user', { npub });
+  }
+
+  static async getUserProfileByPubkey(pubkey: string): Promise<UserProfile | null> {
+    return await invokeCommand<UserProfile | null>('get_user_by_pubkey', { pubkey });
+  }
+
+  static async getFollowers(npub: string): Promise<UserProfile[]> {
+    return await invokeCommand<UserProfile[]>('get_followers', { npub });
+  }
+
+  static async getFollowing(npub: string): Promise<UserProfile[]> {
+    return await invokeCommand<UserProfile[]>('get_following', { npub });
   }
 }
 

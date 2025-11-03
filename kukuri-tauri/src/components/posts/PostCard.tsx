@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { WifiOff } from 'lucide-react';
+import {
+  WifiOff,
+  Heart,
+  MessageCircle,
+  Repeat2,
+  Share,
+  Bookmark,
+  Quote,
+  MoreVertical,
+  Trash2,
+  Loader2,
+} from 'lucide-react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Repeat2, Share, Bookmark, Quote } from 'lucide-react';
 import type { Post } from '@/stores';
-import { useBookmarkStore } from '@/stores';
+import { useBookmarkStore, usePostStore, useAuthStore } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +28,22 @@ import { QuoteForm } from './QuoteForm';
 import { ReactionPicker } from './ReactionPicker';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface PostCardProps {
   post: Post;
@@ -29,8 +55,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const queryClient = useQueryClient();
   const { isBookmarked, toggleBookmark, fetchBookmarks } = useBookmarkStore();
+  const deletePost = usePostStore((state) => state.deletePostRemote);
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const isPostBookmarked = isBookmarked(post.id);
   const { isOnline, pendingActions } = useOfflineStore();
+  const canDelete = currentUser?.pubkey === post.author.pubkey;
 
   // この投稿が未同期かどうかを確認
   const isPostPending = pendingActions.some(
@@ -109,6 +139,28 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     bookmarkMutation.mutate();
   };
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await deletePost(post.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
+      queryClient.invalidateQueries({ queryKey: ['userPosts', post.author.pubkey] });
+      toast.success('投稿を削除しました');
+    },
+    onError: () => {
+      toast.error('投稿の削除に失敗しました');
+    },
+    onSettled: () => {
+      setShowDeleteDialog(false);
+    },
+  });
+
+  const handleConfirmDelete = () => {
+    deleteMutation.mutate();
+  };
+
   // 時間表示のフォーマット
   const timeAgo = formatDistanceToNow(new Date(post.created_at * 1000), {
     addSuffix: true,
@@ -130,44 +182,64 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   return (
     <Card data-testid={dataTestId}>
       <CardHeader>
-        <div className="flex items-start gap-3">
-          <Avatar>
-            <AvatarImage src={authorAvatarSrc} />
-            <AvatarFallback>
-              {getInitials(post.author.displayName || post.author.name || 'U')}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h4 className="font-semibold">
-                {post.author.displayName || post.author.name || 'ユーザー'}
-              </h4>
-              <span className="text-sm text-muted-foreground">{timeAgo}</span>
-              {(post.isSynced === false || isPostPending) && (
-                <Badge
-                  variant="outline"
-                  className={`text-xs flex items-center gap-1 ${
-                    !isOnline
-                      ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-                      : 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
-                  }`}
-                >
-                  {!isOnline ? (
-                    <>
-                      <WifiOff className="h-3 w-3" />
-                      オフライン保存
-                    </>
-                  ) : (
-                    <>
-                      <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-                      同期待ち
-                    </>
-                  )}
-                </Badge>
-              )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-1 items-start gap-3">
+            <Avatar>
+              <AvatarImage src={authorAvatarSrc} />
+              <AvatarFallback>
+                {getInitials(post.author.displayName || post.author.name || 'U')}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h4 className="font-semibold">
+                  {post.author.displayName || post.author.name || 'ユーザー'}
+                </h4>
+                <span className="text-sm text-muted-foreground">{timeAgo}</span>
+                {(post.isSynced === false || isPostPending) && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs flex items-center gap-1 ${
+                      !isOnline
+                        ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+                        : 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
+                    }`}
+                  >
+                    {!isOnline ? (
+                      <>
+                        <WifiOff className="h-3 w-3" />
+                        オフライン保存
+                      </>
+                    ) : (
+                      <>
+                        <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                        同期待ち
+                      </>
+                    )}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">{post.author.npub}</p>
             </div>
-            <p className="text-sm text-muted-foreground">{post.author.npub}</p>
           </div>
+          {canDelete && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="投稿メニュー">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  削除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -246,6 +318,31 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>投稿を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              一度削除するとこの投稿は復元できません。よろしければ「削除する」を押してください。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleConfirmDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

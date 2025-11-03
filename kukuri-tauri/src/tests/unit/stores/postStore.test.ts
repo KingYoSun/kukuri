@@ -18,6 +18,7 @@ import { usePostStore } from '@/stores/postStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import type { Post } from '@/stores/types';
+import { OfflineActionType, EntityType } from '@/types/offline';
 
 describe('postStore', () => {
   const mockUser1 = {
@@ -89,9 +90,12 @@ describe('postStore', () => {
     replies: [],
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockCreatePost.mockReset();
     mockGetPosts.mockReset();
+    const { TauriApi } = await import('@/lib/api/tauri');
+    vi.mocked(TauriApi.deletePost).mockReset();
+    vi.mocked(TauriApi.likePost).mockReset();
 
     usePostStore.setState({
       posts: new Map(),
@@ -332,8 +336,6 @@ describe('postStore', () => {
     expect(mockGetPosts).toHaveBeenCalledTimes(1);
     expect(mockGetPosts).toHaveBeenCalledWith({
       topic_id: 'topic1',
-      limit: undefined,
-      offset: undefined,
     });
 
     const posts = usePostStore.getState().getPostsByTopic('topic1');
@@ -341,4 +343,72 @@ describe('postStore', () => {
     expect(posts[0].id).toBe('api-post-1');
     expect(posts[0].content).toBe('P2Pからの投稿');
   });
+
+  it('オンライン時に投稿を削除できること', async () => {
+    const { TauriApi } = await import('@/lib/api/tauri');
+    vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
+
+    usePostStore.setState({
+      posts: new Map([
+        [
+          mockPost1.id,
+          {
+            ...mockPost1,
+          },
+        ],
+      ]),
+      postsByTopic: new Map([['topic1', [mockPost1.id]]]),
+    });
+
+
+    await usePostStore.getState().deletePostRemote(mockPost1.id);
+
+    expect(TauriApi.deletePost).toHaveBeenCalledWith(mockPost1.id);
+    expect(usePostStore.getState().posts.has(mockPost1.id)).toBe(false);
+    expect(usePostStore.getState().postsByTopic.get('topic1')).toEqual([]);
+  });
+
+  it('オフライン時は削除アクションとして保存されること', async () => {
+    const { TauriApi } = await import('@/lib/api/tauri');
+    vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
+
+    const originalOfflineState = useOfflineStore.getState();
+    const saveOfflineActionMock = vi.fn().mockResolvedValue(undefined);
+    const getStateSpy = vi
+      .spyOn(useOfflineStore, 'getState')
+      .mockImplementation(() => ({
+        ...originalOfflineState,
+        isOnline: false,
+        saveOfflineAction: saveOfflineActionMock,
+      }));
+
+    usePostStore.setState({
+      posts: new Map([
+        [
+          mockPost1.id,
+          {
+            ...mockPost1,
+          },
+        ],
+      ]),
+      postsByTopic: new Map([['topic1', [mockPost1.id]]]),
+    });
+
+    await usePostStore.getState().deletePostRemote(mockPost1.id);
+    // eslint-disable-next-line no-console
+
+    expect(saveOfflineActionMock).toHaveBeenCalledWith({
+      userPubkey: mockUser1.pubkey,
+      actionType: OfflineActionType.DELETE_POST,
+      entityType: EntityType.POST,
+      entityId: mockPost1.id,
+      data: JSON.stringify({ postId: mockPost1.id }),
+    });
+    expect(TauriApi.deletePost).not.toHaveBeenCalled();
+    expect(usePostStore.getState().posts.has(mockPost1.id)).toBe(false);
+
+    getStateSpy.mockRestore();
+    useOfflineStore.setState(originalOfflineState, true);
+  });
 });
+

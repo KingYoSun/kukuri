@@ -12,7 +12,9 @@ export const usePosts = () => {
   return useQuery({
     queryKey: ['posts', 'all'],
     queryFn: async () => {
-      const apiPosts = await TauriApi.getPosts({ limit: 1000 });
+      const apiPosts = await TauriApi.getPosts({
+        pagination: { limit: 1000 },
+      });
       // APIレスポンスをフロントエンドの型に変換
       const posts: Post[] = await Promise.all(
         apiPosts.map((post) => mapPostResponseToDomain(post)),
@@ -31,7 +33,9 @@ export const useTimelinePosts = () => {
   return useQuery({
     queryKey: ['timeline'],
     queryFn: async () => {
-      const apiPosts = await TauriApi.getPosts({ limit: 50 });
+      const apiPosts = await TauriApi.getPosts({
+        pagination: { limit: 50 },
+      });
       // APIレスポンスをフロントエンドの型に変換
       const posts: Post[] = await Promise.all(
         apiPosts.map((post) => mapPostResponseToDomain(post)),
@@ -61,7 +65,10 @@ export const usePostsByTopic = (topicId: string) => {
   return useQuery({
     queryKey: ['posts', topicId],
     queryFn: async () => {
-      const apiPosts = await TauriApi.getPosts({ topic_id: topicId, limit: 50 });
+      const apiPosts = await TauriApi.getPosts({
+        topic_id: topicId,
+        pagination: { limit: 50 },
+      });
       const posts: Post[] = await Promise.all(
         apiPosts.map((post) => mapPostResponseToDomain(post)),
       );

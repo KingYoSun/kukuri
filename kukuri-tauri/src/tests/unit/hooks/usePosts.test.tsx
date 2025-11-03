@@ -79,6 +79,11 @@ describe('usePosts hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
+      expect(TauriApi.getPosts).toHaveBeenCalledWith({
+        topic_id: 'tech',
+        pagination: { limit: 50 },
+      });
+
       const state = usePostStore.getState();
       expect(state.posts.size).toBeGreaterThan(0);
       expect(state.postsByTopic.get('tech')).toBeDefined();
@@ -157,6 +162,10 @@ describe('usePosts hooks', () => {
 
       await waitFor(() => {
         expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(TauriApi.getPosts).toHaveBeenCalledWith({
+        pagination: { limit: 50 },
       });
 
       expect(result.current.data).toHaveLength(1);
