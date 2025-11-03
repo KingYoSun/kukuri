@@ -29,11 +29,6 @@ services:
         condition: service_healthy
     network_mode: host
     volumes:
-      # ソースコードをマウント（開発時の変更を即座に反映）
-      - ./kukuri-tauri/src:/app/kukuri-tauri/src:ro
-      - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
-      - ./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro
-      - ./kukuri-tauri/tests:/app/kukuri-tauri/tests:ro
       # テスト結果の出力用
       - ./test-results:/app/test-results
       # Cargoキャッシュの永続化

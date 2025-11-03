@@ -4,6 +4,7 @@ export interface ErrorLogOptions {
   showToast?: boolean;
   toastTitle?: string;
   context?: string;
+  metadata?: Record<string, unknown>;
 }
 
 class ErrorHandler {
@@ -38,7 +39,11 @@ class ErrorHandler {
     // 開発環境のみコンソールに出力
     if (this.isDevelopment) {
       // console.warnを使用（console.errorは使わない）
-      console.warn(`[ERROR] ${options?.context || 'App'}: ${message}`, error);
+      if (options?.metadata) {
+        console.warn(`[ERROR] ${options.context || 'App'}: ${message}`, error, options.metadata);
+      } else {
+        console.warn(`[ERROR] ${options?.context || 'App'}: ${message}`, error);
+      }
     }
 
     // ユーザーへの通知（オプション）

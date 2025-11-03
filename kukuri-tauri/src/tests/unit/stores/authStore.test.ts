@@ -133,9 +133,7 @@ describe('authStore', () => {
   });
 
   it('updateRelayStatusが成功すると状態とバックオフがリセットされる', async () => {
-    mockGetRelayStatus.mockResolvedValueOnce([
-      { url: 'wss://relay.example', status: 'connected' },
-    ]);
+    mockGetRelayStatus.mockResolvedValueOnce([{ url: 'wss://relay.example', status: 'connected' }]);
 
     await useAuthStore.getState().updateRelayStatus();
 

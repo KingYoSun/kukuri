@@ -168,9 +168,7 @@ export function P2PStatus() {
             <div className="flex items-start space-x-2">
               <AlertCircleIcon className="h-4 w-4 text-red-500 mt-0.5" />
               <div className="flex-1">
-                {error && (
-                  <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-                )}
+                {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
                 {statusError && (
                   <p className="text-xs text-red-600 dark:text-red-400">
                     状態取得エラー: {statusError}
@@ -178,12 +176,7 @@ export function P2PStatus() {
                 )}
                 <div className="mt-1 flex flex-wrap gap-2">
                   {error && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={clearError}
-                    >
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearError}>
                       閉じる
                     </Button>
                   )}

@@ -14,6 +14,7 @@ import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileSetupRouteImport } from './routes/profile-setup'
+import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TopicsTopicIdRouteImport } from './routes/topics.$topicId'
@@ -43,6 +44,11 @@ const ProfileSetupRoute = ProfileSetupRouteImport.update({
   path: '/profile-setup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
+  id: '/profile/$userId',
+  path: '/profile/$userId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/profile-setup'
+    | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/profile-setup'
+    | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/profile-setup'
+    | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   ProfileSetupRoute: typeof ProfileSetupRoute
+  ProfileUserIdRoute: typeof ProfileUserIdRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   TopicsRoute: typeof TopicsRouteWithChildren
@@ -170,6 +183,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile/$userId': {
+      id: '/profile/$userId'
+      path: '/profile/$userId'
+      fullPath: '/profile/$userId'
+      preLoaderRoute: typeof ProfileUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -209,6 +229,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   ProfileSetupRoute: ProfileSetupRoute,
+  ProfileUserIdRoute: ProfileUserIdRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   TopicsRoute: TopicsRouteWithChildren,

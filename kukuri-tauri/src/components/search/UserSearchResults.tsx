@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,15 @@ import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 
+type QueryOptionsWithHandlers<TData, TKey extends readonly unknown[]> = UseQueryOptions<
+  TData,
+  Error,
+  TData,
+  TKey
+> & {
+  onError?: (error: unknown) => void;
+};
+
 interface UserSearchResultsProps {
   query: string;
 }
@@ -23,25 +32,30 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const sanitizedQuery = query.trim();
 
-  const searchResults = useQuery({
-    queryKey: ['search-users', sanitizedQuery],
+  const searchResults = useQuery<Profile[], Error, Profile[], readonly ['search-users', string]>({
+    queryKey: ['search-users', sanitizedQuery] as const,
     enabled: sanitizedQuery.length > 0,
     retry: false,
     queryFn: async () => {
       const profiles = await TauriApi.searchUsers(sanitizedQuery, 24);
       return profiles.map(mapUserProfileToUser);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       errorHandler.log('UserSearchResults.searchFailed', error, {
         context: 'UserSearchResults.searchResults',
-        query: sanitizedQuery,
+        metadata: { query: sanitizedQuery },
       });
       toast.error('ユーザー検索に失敗しました');
     },
-  });
+  } as QueryOptionsWithHandlers<Profile[], readonly ['search-users', string]>);
 
-  const followingQuery = useQuery({
-    queryKey: ['social', 'following', currentUser?.npub],
+  const followingQuery = useQuery<
+    Profile[],
+    Error,
+    Profile[],
+    readonly ['social', 'following', string | undefined]
+  >({
+    queryKey: ['social', 'following', currentUser?.npub] as const,
     enabled: Boolean(currentUser),
     retry: false,
     queryFn: async () => {
@@ -51,13 +65,13 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
       const profiles = await TauriApi.getFollowing(currentUser.npub);
       return profiles.map(mapUserProfileToUser);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       errorHandler.log('UserSearchResults.followingFetchFailed', error, {
         context: 'UserSearchResults.followingQuery',
       });
       toast.error('フォロー中ユーザーの取得に失敗しました');
     },
-  });
+  } as QueryOptionsWithHandlers<Profile[], readonly ['social', 'following', string | undefined]>);
 
   const followMutation = useMutation<void, unknown, Profile>({
     mutationFn: async (target: Profile) => {
@@ -88,7 +102,7 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
       }
       errorHandler.log('UserSearchResults.followFailed', error, {
         context: 'UserSearchResults.followMutation',
-        targetNpub: target.npub,
+        metadata: { targetNpub: target.npub },
       });
       toast.error('フォローに失敗しました');
     },
@@ -115,7 +129,7 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
       }
       errorHandler.log('UserSearchResults.unfollowFailed', error, {
         context: 'UserSearchResults.unfollowMutation',
-        targetNpub: target.npub,
+        metadata: { targetNpub: target.npub },
       });
       toast.error('フォロー解除に失敗しました');
     },
@@ -170,7 +184,9 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
     return (
       <div className="text-center py-12">
         <p className="text-lg font-medium">検索結果が見つかりませんでした</p>
-        <p className="text-muted-foreground mt-2">「{sanitizedQuery}」に一致するユーザーはいません</p>
+        <p className="text-muted-foreground mt-2">
+          「{sanitizedQuery}」に一致するユーザーはいません
+        </p>
       </div>
     );
   }
@@ -223,10 +239,10 @@ function UserCard({
   const followLabel = isSelf
     ? 'あなた'
     : isFollowing
-    ? 'フォロー中'
-    : canFollow
-    ? 'フォロー'
-    : 'ログインが必要';
+      ? 'フォロー中'
+      : canFollow
+        ? 'フォロー'
+        : 'ログインが必要';
 
   const handleClick = () => {
     if (isProcessing || isSelf || !canFollow) {

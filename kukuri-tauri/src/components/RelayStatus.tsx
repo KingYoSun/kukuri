@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { useShallow } from 'zustand/react/shallow';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, Loader2 } from 'lucide-react';
@@ -14,14 +15,16 @@ export function RelayStatus() {
     relayStatusBackoffMs,
     lastRelayStatusFetchedAt,
     isFetchingRelayStatus,
-  } = useAuthStore((state) => ({
-    relayStatus: state.relayStatus,
-    updateRelayStatus: state.updateRelayStatus,
-    relayStatusError: state.relayStatusError,
-    relayStatusBackoffMs: state.relayStatusBackoffMs,
-    lastRelayStatusFetchedAt: state.lastRelayStatusFetchedAt,
-    isFetchingRelayStatus: state.isFetchingRelayStatus,
-  }));
+  } = useAuthStore(
+    useShallow((state) => ({
+      relayStatus: state.relayStatus,
+      updateRelayStatus: state.updateRelayStatus,
+      relayStatusError: state.relayStatusError,
+      relayStatusBackoffMs: state.relayStatusBackoffMs,
+      lastRelayStatusFetchedAt: state.lastRelayStatusFetchedAt,
+      isFetchingRelayStatus: state.isFetchingRelayStatus,
+    })),
+  );
 
   useEffect(() => {
     if (lastRelayStatusFetchedAt === null && !isFetchingRelayStatus) {

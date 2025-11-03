@@ -60,9 +60,7 @@ describe('UserSearchResults', () => {
 
   beforeEach(() => {
     avatarImageSources.length = 0;
-    searchUsersSpy = vi
-      .spyOn(TauriApi, 'searchUsers')
-      .mockResolvedValue([
+    searchUsersSpy = vi.spyOn(TauriApi, 'searchUsers').mockResolvedValue([
       {
         npub: 'npub1alice',
         pubkey: 'pubkey1alice',

@@ -2,19 +2,14 @@ use serde::{Deserialize, Serialize};
 
 use super::metrics::GossipMetricsSummary;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionStatus {
     Connected,
     Connecting,
+    #[default]
     Disconnected,
     Error,
-}
-
-impl Default for ConnectionStatus {
-    fn default() -> Self {
-        ConnectionStatus::Disconnected
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

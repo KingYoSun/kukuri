@@ -149,7 +149,7 @@ describe('Home', () => {
     renderWithQueryClient();
 
     await waitFor(() => {
-      expect(TauriApi.getPosts).toHaveBeenCalledWith({ limit: 50 });
+      expect(TauriApi.getPosts).toHaveBeenCalledWith({ pagination: { limit: 50 } });
     });
   });
 

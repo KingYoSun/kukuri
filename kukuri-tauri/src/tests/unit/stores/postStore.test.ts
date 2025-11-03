@@ -360,7 +360,6 @@ describe('postStore', () => {
       postsByTopic: new Map([['topic1', [mockPost1.id]]]),
     });
 
-
     await usePostStore.getState().deletePostRemote(mockPost1.id);
 
     expect(TauriApi.deletePost).toHaveBeenCalledWith(mockPost1.id);
@@ -374,13 +373,11 @@ describe('postStore', () => {
 
     const originalOfflineState = useOfflineStore.getState();
     const saveOfflineActionMock = vi.fn().mockResolvedValue(undefined);
-    const getStateSpy = vi
-      .spyOn(useOfflineStore, 'getState')
-      .mockImplementation(() => ({
-        ...originalOfflineState,
-        isOnline: false,
-        saveOfflineAction: saveOfflineActionMock,
-      }));
+    const getStateSpy = vi.spyOn(useOfflineStore, 'getState').mockImplementation(() => ({
+      ...originalOfflineState,
+      isOnline: false,
+      saveOfflineAction: saveOfflineActionMock,
+    }));
 
     usePostStore.setState({
       posts: new Map([
@@ -395,7 +392,6 @@ describe('postStore', () => {
     });
 
     await usePostStore.getState().deletePostRemote(mockPost1.id);
-    // eslint-disable-next-line no-console
 
     expect(saveOfflineActionMock).toHaveBeenCalledWith({
       userPubkey: mockUser1.pubkey,
@@ -411,4 +407,3 @@ describe('postStore', () => {
     useOfflineStore.setState(originalOfflineState, true);
   });
 });
-

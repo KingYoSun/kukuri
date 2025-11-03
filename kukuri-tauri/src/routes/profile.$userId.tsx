@@ -1,11 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from '@/components/ui/avatar';
+import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +16,15 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/stores';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
+
+type QueryOptionsWithHandlers<TData, TKey extends readonly unknown[]> = UseQueryOptions<
+  TData,
+  Error,
+  TData,
+  TKey
+> & {
+  onError?: (error: unknown) => void;
+};
 
 export const Route = createFileRoute('/profile/$userId')({
   component: ProfilePage,
@@ -60,8 +65,13 @@ function ProfilePage() {
     },
   });
 
-  const followersQuery = useQuery({
-    queryKey: ['profile', profile?.npub ?? userId, 'followers'],
+  const followersQuery = useQuery<
+    Profile[],
+    Error,
+    Profile[],
+    readonly ['profile', string, 'followers']
+  >({
+    queryKey: ['profile', profile?.npub ?? userId, 'followers'] as const,
     enabled: Boolean(profile),
     retry: false,
     queryFn: async () => {
@@ -71,17 +81,22 @@ function ProfilePage() {
       const response = await TauriApi.getFollowers(profile.npub);
       return response.map(mapUserProfileToUser);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       errorHandler.log('ProfilePage.followersFetchFailed', error, {
         context: 'ProfilePage.followersQuery',
-        userId,
+        metadata: { userId },
       });
       toast.error('フォロワーの取得に失敗しました');
     },
-  });
+  } as QueryOptionsWithHandlers<Profile[], readonly ['profile', string, 'followers']>);
 
-  const followingQuery = useQuery({
-    queryKey: ['profile', profile?.npub ?? userId, 'following'],
+  const followingQuery = useQuery<
+    Profile[],
+    Error,
+    Profile[],
+    readonly ['profile', string, 'following']
+  >({
+    queryKey: ['profile', profile?.npub ?? userId, 'following'] as const,
     enabled: Boolean(profile),
     retry: false,
     queryFn: async () => {
@@ -91,14 +106,14 @@ function ProfilePage() {
       const response = await TauriApi.getFollowing(profile.npub);
       return response.map(mapUserProfileToUser);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       errorHandler.log('ProfilePage.followingFetchFailed', error, {
         context: 'ProfilePage.followingQuery',
-        userId,
+        metadata: { userId },
       });
       toast.error('フォロー中ユーザーの取得に失敗しました');
     },
-  });
+  } as QueryOptionsWithHandlers<Profile[], readonly ['profile', string, 'following']>);
 
   const posts = postsQuery.data ?? [];
   const followers = followersQuery.data ?? [];
@@ -126,7 +141,7 @@ function ProfilePage() {
         } catch (error) {
           errorHandler.log('ProfilePage.subscribeToUserFailed', error, {
             context: 'ProfilePage.followMutation',
-            targetPubkey: target.pubkey,
+            metadata: { targetPubkey: target.pubkey },
           });
         }
       }
@@ -161,7 +176,7 @@ function ProfilePage() {
       }
       errorHandler.log('ProfilePage.followFailed', error, {
         context: 'ProfilePage.followMutation',
-        targetNpub: target.npub,
+        metadata: { targetNpub: target.npub },
       });
       toast.error('フォローに失敗しました');
     },
@@ -194,7 +209,7 @@ function ProfilePage() {
       }
       errorHandler.log('ProfilePage.unfollowFailed', error, {
         context: 'ProfilePage.unfollowMutation',
-        targetNpub: target.npub,
+        metadata: { targetNpub: target.npub },
       });
       toast.error('フォロー解除に失敗しました');
     },
@@ -219,10 +234,10 @@ function ProfilePage() {
   const followButtonLabel = isCurrentUser
     ? 'あなた'
     : !canFollow
-    ? 'ログインが必要'
-    : isFollowing
-    ? 'フォロー中'
-    : 'フォロー';
+      ? 'ログインが必要'
+      : isFollowing
+        ? 'フォロー中'
+        : 'フォロー';
   const isFollowProcessing =
     (followMutation.isPending && followMutation.variables?.npub === profile?.npub) ||
     (unfollowMutation.isPending && unfollowMutation.variables?.npub === profile?.npub);
@@ -231,7 +246,7 @@ function ProfilePage() {
     try {
       await navigator.clipboard.writeText(npub);
       toast.success('npub をコピーしました');
-    } catch (error) {
+    } catch {
       toast.error('コピーに失敗しました');
     }
   };
@@ -261,7 +276,8 @@ function ProfilePage() {
           </CardHeader>
           <CardContent className="text-muted-foreground">
             <p className="text-sm leading-relaxed">
-              指定されたユーザー（{userId}）のプロフィール情報が取得できませんでした。Nostr ネットワークの同期状況をご確認ください。
+              指定されたユーザー（{userId}）のプロフィール情報が取得できませんでした。Nostr
+              ネットワークの同期状況をご確認ください。
             </p>
           </CardContent>
         </Card>
@@ -307,15 +323,11 @@ function ProfilePage() {
             </div>
             <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
               <span>
-                <span className="font-semibold text-foreground">
-                  {followerCount ?? '…'}
-                </span>{' '}
+                <span className="font-semibold text-foreground">{followerCount ?? '…'}</span>{' '}
                 フォロワー
               </span>
               <span>
-                <span className="font-semibold text-foreground">
-                  {followingCount ?? '…'}
-                </span>{' '}
+                <span className="font-semibold text-foreground">{followingCount ?? '…'}</span>{' '}
                 フォロー中
               </span>
             </div>

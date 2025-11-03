@@ -28,12 +28,14 @@ const {
 
   const deletePost = vi.fn<[string], Promise<void>>();
 
-  const usePostStore = vi.fn((selector?: (state: { deletePostRemote: typeof deletePost }) => unknown) => {
-    const state = {
-      deletePostRemote: deletePost,
-    };
-    return typeof selector === 'function' ? selector(state) : state;
-  });
+  const usePostStore = vi.fn(
+    (selector?: (state: { deletePostRemote: typeof deletePost }) => unknown) => {
+      const state = {
+        deletePostRemote: deletePost,
+      };
+      return typeof selector === 'function' ? selector(state) : state;
+    },
+  );
 
   const authState = {
     currentUser: {
@@ -95,7 +97,7 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
     children: React.ReactNode;
     onClick?: () => void;
   }) => (
-    <button type='button' onClick={onClick}>
+    <button type="button" onClick={onClick}>
       {children}
     </button>
   ),
@@ -124,7 +126,7 @@ vi.mock('@/components/ui/alert-dialog', () => ({
     disabled?: boolean;
     onClick?: () => void;
   }) => (
-    <button type='button' disabled={disabled} onClick={onClick}>
+    <button type="button" disabled={disabled} onClick={onClick}>
       {children}
     </button>
   ),
@@ -137,7 +139,7 @@ vi.mock('@/components/ui/alert-dialog', () => ({
     disabled?: boolean;
     onClick?: () => void;
   }) => (
-    <button type='button' disabled={disabled} onClick={onClick}>
+    <button type="button" disabled={disabled} onClick={onClick}>
       {children}
     </button>
   ),
@@ -198,12 +200,14 @@ const getBookmarkButton = () => {
 
 describe('PostCard', () => {
   beforeEach(() => {
-    usePostStoreMock.mockImplementation((selector?: (state: { deletePostRemote: typeof deletePostMock }) => unknown) => {
-      const state = {
-        deletePostRemote: deletePostMock,
-      };
-      return typeof selector === 'function' ? selector(state) : state;
-    });
+    usePostStoreMock.mockImplementation(
+      (selector?: (state: { deletePostRemote: typeof deletePostMock }) => unknown) => {
+        const state = {
+          deletePostRemote: deletePostMock,
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+      },
+    );
     usePostStoreMock.mockClear();
     useAuthStoreMock.mockClear();
     deletePostMock.mockReset();
@@ -698,9 +702,7 @@ describe('PostCard', () => {
     it('削除を確定すると deletePostRemote が呼び出される', async () => {
       const ownPost = createOwnPost();
       const { toast } = await import('sonner');
-      const { useAuthStore } = await import('@/stores');
       renderWithQueryClient(<PostCard post={ownPost} />);
-      // eslint-disable-next-line no-console
 
       fireEvent.click(screen.getByRole('button', { name: /削除/ }));
       expect(screen.getByText('投稿を削除しますか？')).toBeInTheDocument();
@@ -787,7 +789,3 @@ describe('PostCard', () => {
     });
   });
 });
-
-
-
-

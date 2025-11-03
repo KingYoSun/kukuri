@@ -304,8 +304,7 @@ export const useAuthStore = create<AuthStore>()(
           errorHandler.log('Failed to get relay status', error, {
             context: 'AuthStore.updateRelayStatus',
           });
-          const message =
-            error instanceof Error ? error.message : 'Failed to get relay status';
+          const message = error instanceof Error ? error.message : 'Failed to get relay status';
           set({
             relayStatusError: message,
             relayStatusBackoffMs: nextRelayStatusBackoff(get().relayStatusBackoffMs),
