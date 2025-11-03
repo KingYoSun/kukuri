@@ -175,6 +175,17 @@ pub(super) const SELECT_USER_BY_PUBKEY: &str = r#"
     WHERE pubkey = ?
 "#;
 
+pub(super) const SEARCH_USERS: &str = r#"
+    SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
+    FROM users
+    WHERE display_name LIKE '%' || ?1 || '%' COLLATE NOCASE
+       OR npub LIKE '%' || ?1 || '%' COLLATE NOCASE
+       OR pubkey LIKE '%' || ?1 || '%' COLLATE NOCASE
+       OR bio LIKE '%' || ?1 || '%' COLLATE NOCASE
+    ORDER BY updated_at DESC
+    LIMIT ?2
+"#;
+
 pub(super) const UPDATE_USER: &str = r#"
     UPDATE users
     SET display_name = ?, bio = ?, avatar_url = ?, updated_at = ?

@@ -43,6 +43,7 @@
   - 2025年11月03日: `RelayStatus` / `P2PStatus` ユニットテストをフェイクタイマー対応で刷新し、`npx vitest run src/tests/unit/components/RelayStatus.test.tsx src/tests/unit/components/P2PStatus.test.tsx` を実行。5.5節に `get_relay_status` エラー UI / リトライ設計を追加し、`p2p_mainline_runbook.md` へ `get_p2p_status` 拡張準備メモ（connection_status/peers）を追記。
   - 2025年11月03日: バックオフ実装後の検証として `npx vitest run … components/stores/hooks/lib/api` と `cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を実施し、Runbook と CI パス監査に反映。`phase5_user_flow_inventory.md` 5.5節を実装結果ベースの記述へ更新。
   - 2025年11月03日: UI 導線の状態を一覧できるサマリードキュメント `docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md` を作成。稼働中/改善中/未実装の別と主要ギャップを整理し、`phase5_ci_path_audit.md`・`tauri_app_implementation_plan.md`・`refactoring_plan_2025-08-08_v3.md` へ参照リンクを追加。
+  - 2025年11月03日: ユーザー検索導線と `/profile/$userId` の現状を反映するため、`phase5_user_flow_inventory.md` 2章/3章/4章を更新し、未使用コマンドに `get_followers` / `get_following` を追記。あわせて `phase5_user_flow_summary.md` の Quick View と優先度表を最新化。
   - 2025年11月03日: `/profile/$userId` ルートをプレースホルダーから差し替え、`get_user` / `get_posts(author_pubkey)` 連携でプロフィール基本情報と投稿一覧を表示。フォロー・フォロワー導線は backlog として整理。
   - 2025年11月03日: サマリーを用いて未実装導線の優先度を再評価し、`phase5_user_flow_summary.md` に優先度テーブルを追記。`tauri_app_implementation_plan.md` の Phase 5 優先度リストを更新し、`/profile/$userId` ルート実装・投稿削除導線・鍵管理ダイアログを最優先に再配置。
 - [x] 投稿削除導線（delete_post）実装準備

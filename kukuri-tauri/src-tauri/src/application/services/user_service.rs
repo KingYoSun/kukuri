@@ -26,6 +26,13 @@ impl UserService {
         self.repository.get_user_by_pubkey(pubkey).await
     }
 
+    pub async fn search_users(&self, query: &str, limit: usize) -> Result<Vec<User>, AppError> {
+        if query.trim().is_empty() {
+            return Ok(vec![]);
+        }
+        self.repository.search_users(query, limit).await
+    }
+
     pub async fn update_profile(&self, npub: &str, metadata: UserMetadata) -> Result<(), AppError> {
         if let Some(mut user) = self.repository.get_user(npub).await? {
             user.update_metadata(metadata);
@@ -138,6 +145,34 @@ mod tests {
         async fn get_user_by_pubkey(&self, pubkey: &str) -> Result<Option<User>, AppError> {
             let users = self.users.read().await;
             Ok(users.values().find(|u| u.pubkey == pubkey).cloned())
+        }
+
+        async fn search_users(&self, query: &str, limit: usize) -> Result<Vec<User>, AppError> {
+            if query.trim().is_empty() {
+                return Ok(vec![]);
+            }
+
+            let query_lower = query.to_lowercase();
+            let users = self.users.read().await;
+            let mut results: Vec<User> = users
+                .values()
+                .filter(|user| {
+                    let display_name = user.profile.display_name.to_lowercase();
+                    let bio = user.profile.bio.to_lowercase();
+                    display_name.contains(&query_lower)
+                        || bio.contains(&query_lower)
+                        || user.npub.to_lowercase().contains(&query_lower)
+                        || user.pubkey.to_lowercase().contains(&query_lower)
+                })
+                .cloned()
+                .collect();
+
+            results.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            if results.len() > limit {
+                results.truncate(limit);
+            }
+
+            Ok(results)
         }
 
         async fn update_user(&self, user: &User) -> Result<(), AppError> {
@@ -292,5 +327,64 @@ mod tests {
             .await
             .expect_err("missing target");
         assert!(matches!(err, AppError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn search_users_returns_matching_records() {
+        let service = setup_service().await;
+        seed_user(&service, ALICE_NPUB, ALICE_PUB).await;
+        seed_user(&service, BOB_NPUB, BOB_PUB).await;
+
+        service
+            .update_profile(
+                ALICE_NPUB,
+                UserMetadata {
+                    name: Some("alice".to_string()),
+                    display_name: Some("Alice Wonderland".to_string()),
+                    about: Some("nostr developer".to_string()),
+                    picture: None,
+                    banner: None,
+                    nip05: None,
+                    lud16: None,
+                },
+            )
+            .await
+            .expect("update alice profile");
+
+        service
+            .update_profile(
+                BOB_NPUB,
+                UserMetadata {
+                    name: Some("bob".to_string()),
+                    display_name: Some("Bob Smith".to_string()),
+                    about: Some("bitcoin enthusiast".to_string()),
+                    picture: None,
+                    banner: None,
+                    nip05: None,
+                    lud16: None,
+                },
+            )
+            .await
+            .expect("update bob profile");
+
+        let results = service
+            .search_users("alice", 10)
+            .await
+            .expect("search users");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].npub, ALICE_NPUB);
+
+        let bio_match = service
+            .search_users("bitcoin", 10)
+            .await
+            .expect("search by bio");
+        assert_eq!(bio_match.len(), 1);
+        assert_eq!(bio_match[0].npub, BOB_NPUB);
+
+        let none = service
+            .search_users("charlie", 10)
+            .await
+            .expect("empty search");
+        assert!(none.is_empty());
     }
 }

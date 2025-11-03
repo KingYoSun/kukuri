@@ -6,11 +6,27 @@ use crate::presentation::dto::{
         FetchProfileAvatarRequest, FetchProfileAvatarResponse, UploadProfileAvatarRequest,
         UploadProfileAvatarResponse,
     },
+    user_dto::UserProfile as UserProfileDto,
 };
 use crate::shared::AppError;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
+
+fn user_to_value(user: crate::domain::entities::User) -> Result<Value, AppError> {
+    let profile = UserProfileDto {
+        npub: user.npub,
+        pubkey: user.pubkey,
+        name: user.name,
+        display_name: Some(user.profile.display_name),
+        about: Some(user.profile.bio),
+        picture: user.profile.avatar_url,
+        banner: None,
+        website: None,
+        nip05: user.nip05,
+    };
+    serde_json::to_value(profile).map_err(AppError::from)
+}
 
 #[tauri::command]
 pub async fn get_user(
@@ -36,6 +52,31 @@ pub async fn get_user_by_pubkey(
             user.map(|u| serde_json::to_value(u).map_err(AppError::from))
                 .transpose()
         });
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn search_users(
+    query: String,
+    limit: Option<u32>,
+    user_service: State<'_, Arc<UserService>>,
+) -> Result<ApiResponse<Vec<Value>>, AppError> {
+    let trimmed = query.trim().to_string();
+    if trimmed.is_empty() {
+        return Ok(ApiResponse::from_result(Ok(Vec::new())));
+    }
+
+    let limit = limit.unwrap_or(20).min(100) as usize;
+    let result = user_service
+        .search_users(&trimmed, limit)
+        .await
+        .and_then(|users| {
+            users
+                .into_iter()
+                .map(user_to_value)
+                .collect::<Result<Vec<_>, _>>()
+        });
+
     Ok(ApiResponse::from_result(result))
 }
 
@@ -79,12 +120,7 @@ pub async fn get_followers(
     let result = user_service
         .get_followers(&npub)
         .await
-        .and_then(|followers| {
-            followers
-                .into_iter()
-                .map(|u| serde_json::to_value(u).map_err(AppError::from))
-                .collect::<Result<Vec<_>, _>>()
-        });
+        .and_then(|followers| followers.into_iter().map(user_to_value).collect());
     Ok(ApiResponse::from_result(result))
 }
 
@@ -96,12 +132,7 @@ pub async fn get_following(
     let result = user_service
         .get_following(&npub)
         .await
-        .and_then(|following| {
-            following
-                .into_iter()
-                .map(|u| serde_json::to_value(u).map_err(AppError::from))
-                .collect::<Result<Vec<_>, _>>()
-        });
+        .and_then(|following| following.into_iter().map(user_to_value).collect());
     Ok(ApiResponse::from_result(result))
 }
 

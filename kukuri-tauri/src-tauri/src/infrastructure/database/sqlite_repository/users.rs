@@ -1,8 +1,9 @@
 use super::SqliteRepository;
 use super::mapper::map_user_row;
 use super::queries::{
-    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SELECT_FOLLOWERS, SELECT_FOLLOWING,
-    SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER, UPSERT_FOLLOW_RELATION,
+    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SEARCH_USERS, SELECT_FOLLOWERS,
+    SELECT_FOLLOWING, SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER,
+    UPSERT_FOLLOW_RELATION,
 };
 use crate::application::ports::repositories::UserRepository;
 use crate::domain::entities::User;
@@ -48,6 +49,25 @@ impl UserRepository for SqliteRepository {
             Some(row) => Ok(Some(map_user_row(&row)?)),
             None => Ok(None),
         }
+    }
+
+    async fn search_users(&self, query: &str, limit: usize) -> Result<Vec<User>, AppError> {
+        if query.trim().is_empty() {
+            return Ok(vec![]);
+        }
+
+        let rows = sqlx::query(SEARCH_USERS)
+            .bind(query)
+            .bind(limit as i64)
+            .fetch_all(self.pool.get_pool())
+            .await?;
+
+        let mut users = Vec::with_capacity(rows.len());
+        for row in rows {
+            users.push(map_user_row(&row)?);
+        }
+
+        Ok(users)
     }
 
     async fn update_user(&self, user: &User) -> Result<(), AppError> {

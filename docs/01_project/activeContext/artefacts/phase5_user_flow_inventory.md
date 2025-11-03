@@ -37,7 +37,7 @@
 | --- | --- | --- | --- |
 | 投稿検索 | `/search` (Tab: posts) | `usePosts` 全件からクライアントフィルタ | Tauri 呼び出し：初回ロード時の `get_posts` |
 | トピック検索 | `/search` (Tab: topics) | `useTopics` データからクライアントフィルタ | `get_topics` を再利用 |
-| ユーザー検索 | `/search` (Tab: users) | `mockUsers` を用いたダミー結果、`/profile/$userId` リンクは未実装ルート | 将来の API 連携が未整備 |
+| ユーザー検索 | `/search` (Tab: users) | `mockUsers` を用いたダミー結果、プロフィール詳細ページへのリンク | `/profile/$userId` で閲覧のみ可能。フォロー/DM ボタンはプレースホルダーで、Nostr API 連携待ち |
 
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 主なコマンド |
@@ -66,12 +66,12 @@
 
 ## 2. 確認できた導線ギャップ
 - サイドバーの「トレンド」「フォロー中」は routing 未実装のプレースホルダー。
-- `UserSearchResults` が `/profile/$userId` へ遷移させるが、該当ルート/画面が未定義のため 404 となる。
+- ユーザー検索は実ユーザーを返すが、ページネーション・検索エラーUI・入力バリデーションが未整備。
+- `/profile/$userId` はフォロー導線とフォロワーリストを備えたが、メッセージ導線とリストのフィルタリング/ソートが未実装。
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
-- 投稿の削除導線（`delete_post`）が UI から利用できず、`postStore.deletePostRemote` は未接続。
+- 投稿削除は UI から利用可能になったが、React Query のキャッシュ無効化と `delete_post` コマンド統合テスト整備が未完了。
 - 設定画面の「鍵管理」ボタンは依然として UI 表示のみで実装が無い。
 - 設定画面の「プライバシー」トグル（プロフィール公開/オンライン表示）は 2025年11月02日時点で `usePrivacySettingsStore` によるローカル永続化まで対応済み。バックエンド連携と反映タイミングは未実装。
-- プロフィール編集モーダル内の「画像をアップロード」ボタンはプレースホルダーで、ファイル選択導線が未実装。
 
 ## 3. Tauri コマンド呼び出しマップ
 
@@ -94,6 +94,16 @@
 | `create_post` | `TauriApi.createPost` | `PostComposer`, `ReplyForm`, `QuoteForm`, `syncEngine` | 投稿作成/返信/引用/オフライン同期 |
 | `like_post` / `boost_post` | `TauriApi.*` | `PostCard` アクション, `syncEngine` | いいね/ブーストボタン |
 | `bookmark_post` / `unbookmark_post` / `get_bookmarked_post_ids` | `TauriApi.*` | `bookmarkStore`, `PostCard` | ブックマーク操作と初期ロード |
+| `delete_post` | `TauriApi.deletePost` | `postStore.deletePostRemote`, `PostCard` | 投稿メニュー（自分の投稿のみ）から削除。オフライン時は待機アクションとして保存 |
+
+#### プロフィール・ユーザー
+| コマンド | ラッパー | 呼び出し元 | UI導線 |
+| --- | --- | --- | --- |
+| `get_user` / `get_user_by_pubkey` | `TauriApi.getUserProfile`, `.getUserProfileByPubkey` | `/profile/$userId` ルート（`ProfilePage`） | ユーザー検索・直接アクセスからプロフィール表示 |
+| `search_users` | `TauriApi.searchUsers` | `UserSearchResults` | `/search` (users) タブでプロフィール候補を取得 |
+| `follow_user` / `unfollow_user` | `TauriApi.followUser`, `.unfollowUser` | `UserSearchResults`, `/profile/$userId` | フォローボタン経由で Tauri API と `subscribe_to_user` を呼び出す |
+| `get_followers` / `get_following` | `TauriApi.getFollowers`, `.getFollowing` | `/profile/$userId` | フォロワー/フォロー中リスト表示 |
+| `upload_profile_avatar` / `fetch_profile_avatar` | `TauriApi.*` | `ProfileForm`（オンボーディング/設定モーダル）、`ProfileEditDialog`, `authStore.initialize` | プロフィール画像のアップロードと同期済みアバターの取得 |
 
 #### Nostr 関連
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
@@ -129,9 +139,9 @@
 ### 3.2 未使用・要確認コマンド
 | コマンド | ラッパー | 想定用途 | 備考 |
 | --- | --- | --- | --- |
-| `delete_post` | `TauriApi.deletePost` | 投稿削除 | `postStore.deletePostRemote` のみ参照。UI導線未実装。 |
 | `add_relay` | `nostrApi.addRelay` / `NostrAPI.addRelay` | リレー追加 | 現状テスト専用。UIからの追加導線なし。 |
 | `subscribe_to_user` | `nostrApi.subscribeToUser` / `NostrAPI.subscribeToUser` | ユーザー購読 | UI未接続。 |
+| `get_followers` / `get_following` | `TauriApi.getFollowers`, `.getFollowing` | フォロー/フォロワー一覧表示 | プロフィール画面には未接続。今後の導線拡張候補。 |
 | `get_nostr_pubkey` | `nostrApi.getNostrPubkey` / `NostrAPI.getNostrPubkey` | 現在の公開鍵取得 | 呼び出し箇所なし。 |
 | `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。 |
 | `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。 |
@@ -149,10 +159,11 @@
 ## 4. 次のアクション候補
 1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。
 2. 「トレンド」「フォロー中」カテゴリー用のルーティング／一覧画面を定義するか、未実装である旨を UI 上に表示する。
-3. `UserSearchResults` のリンク先 `/profile/$userId` を実装するか、リンクを無効化する。
-4. 投稿削除フローを設計し、`delete_post` コマンドを UI から使用できるようにする。
-5. 将来的に利用予定の未使用コマンド（例: `add_relay`, `subscribe_to_user`）について、要否を `refactoring_plan_2025-08-08_v3.md` に整理する。
-6. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
+3. ユーザー検索のページネーション、検索エラーUI、入力バリデーションを整備し、`search_users` のレート制御を決定する。
+4. `/profile/$userId` のメッセージ導線とフォロワー/フォロー中リストのソート・フィルタリング、ページングを実装する。
+5. 投稿削除後の React Query キャッシュ無効化と `delete_post` コマンド統合テストを整備する。
+6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
+7. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
 
 ## 5. 優先実装メモ（2025年11月02日更新）
 

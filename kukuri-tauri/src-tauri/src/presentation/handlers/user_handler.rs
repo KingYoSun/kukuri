@@ -1,6 +1,6 @@
 use crate::{
-    application::services::UserService, presentation::dto::user_dto::UserProfile,
-    shared::error::AppError,
+    application::services::UserService, domain::entities::User,
+    presentation::dto::user_dto::UserProfile, shared::error::AppError,
 };
 use std::sync::Arc;
 
@@ -11,6 +11,20 @@ pub struct UserHandler {
 impl UserHandler {
     pub fn new(user_service: Arc<UserService>) -> Self {
         Self { user_service }
+    }
+
+    fn map_user_to_profile(user: User) -> UserProfile {
+        UserProfile {
+            npub: user.npub,
+            pubkey: user.pubkey,
+            name: user.name,
+            display_name: Some(user.profile.display_name),
+            about: Some(user.profile.bio),
+            picture: user.profile.avatar_url,
+            banner: None,
+            website: None,
+            nip05: user.nip05,
+        }
     }
 
     pub async fn get_user_profile(&self, npub: String) -> Result<UserProfile, AppError> {
@@ -31,6 +45,22 @@ impl UserHandler {
             website: None,
             nip05: user.nip05.clone(),
         })
+    }
+
+    pub async fn search_users(
+        &self,
+        query: String,
+        limit: Option<usize>,
+    ) -> Result<Vec<UserProfile>, AppError> {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let limit = limit.unwrap_or(20).min(100);
+        let users = self.user_service.search_users(trimmed, limit).await?;
+
+        Ok(users.into_iter().map(Self::map_user_to_profile).collect())
     }
 
     pub async fn update_user_profile(&self, profile: UserProfile) -> Result<(), AppError> {
@@ -58,17 +88,7 @@ impl UserHandler {
 
         Ok(followers
             .into_iter()
-            .map(|user| UserProfile {
-                npub: user.npub,
-                pubkey: user.pubkey,
-                name: user.name,
-                display_name: Some(user.profile.display_name),
-                about: Some(user.profile.bio),
-                picture: user.profile.avatar_url,
-                banner: None,
-                website: None,
-                nip05: user.nip05,
-            })
+            .map(Self::map_user_to_profile)
             .collect())
     }
 
@@ -77,17 +97,7 @@ impl UserHandler {
 
         Ok(following
             .into_iter()
-            .map(|user| UserProfile {
-                npub: user.npub,
-                pubkey: user.pubkey,
-                name: user.name,
-                display_name: Some(user.profile.display_name),
-                about: Some(user.profile.bio),
-                picture: user.profile.avatar_url,
-                banner: None,
-                website: None,
-                nip05: user.nip05,
-            })
+            .map(Self::map_user_to_profile)
             .collect())
     }
 }

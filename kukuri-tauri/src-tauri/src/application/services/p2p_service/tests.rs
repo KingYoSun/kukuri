@@ -1,8 +1,8 @@
 use super::core::{P2PService, P2PServiceTrait};
 use crate::application::services::p2p_service::status::ConnectionStatus;
 use crate::domain::p2p::TopicStats;
-use crate::infrastructure::p2p::{metrics, GossipService, NetworkService};
 use crate::infrastructure::p2p::network_service::Peer;
+use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;

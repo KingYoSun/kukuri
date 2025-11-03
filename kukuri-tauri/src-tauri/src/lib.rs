@@ -83,6 +83,7 @@ pub fn run() {
             // ユーザー関連コマンド
             presentation::commands::get_user,
             presentation::commands::get_user_by_pubkey,
+            presentation::commands::search_users,
             presentation::commands::update_profile,
             presentation::commands::follow_user,
             presentation::commands::unfollow_user,

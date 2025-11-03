@@ -14,7 +14,7 @@
 | --- | --- | --- | --- | --- |
 | Welcome | `/welcome` | 新規アカウント作成、ログイン導線 | 稼働中 | `generate_keypair` で鍵を生成、SecureStorage 登録まで完了 |
 | Login | `/login` | nsec ログイン、セキュア保存、リレー接続表示 | 稼働中 | `login`/`add_account`/`initialize_nostr` 連携、保存後の自動ログインあり |
-| Profile Setup | `/profile-setup` | プロフィール入力、画像選択（外部 URL） | 改善中 | `update_nostr_metadata` で即時反映。画像アップロードはリモート同期実装待ち |
+| Profile Setup | `/profile-setup` | プロフィール入力、画像選択（ローカルファイル） | 改善中 | `upload_profile_avatar` / `fetch_profile_avatar` でリモート同期。`update_nostr_metadata` と連動し、アクセスレベルは `contacts_only` 固定 |
 
 ### 1.2 認証後の主要導線
 | セクション | パス/配置 | 主な機能 | 導線状態 | 備考 |
@@ -36,7 +36,7 @@
 | --- | --- | --- | --- | --- |
 | 投稿 | `/search` (posts) | フロント側フィルタで投稿検索 | 稼働中 | 初回ロードで `get_posts` 呼び出し |
 | トピック | `/search` (topics) | トピック名/説明で検索 | 稼働中 | `get_topics` 再利用 |
-| ユーザー | `/search` (users) | モックデータ表示、プロフィールリンク | 改善中 | `/profile/$userId` は基本情報と投稿一覧を表示（フォロー導線は準備中） |
+| ユーザー | `/search` (users) | `search_users` で実ユーザー検索、フォローボタン | 改善中 | `/profile/$userId` でフォロー状況を表示。エラーUIとページネーションは今後対応 |
 
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 導線状態 | 備考 |
@@ -56,11 +56,11 @@
 
 ## 3. 導線ギャップ Quick View
 1. サイドバー「トレンド」「フォロー中」リンクに対する画面が未実装。
-2. `/profile/$userId` は基本情報・投稿一覧のみで、フォローや相互操作の導線が未整備。
+2. `/profile/$userId` はフォロー導線とフォロワーリストを備えたが、メッセージ導線とリストのソート/フィルタリングが未実装。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
 5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
-6. プロフィール画像アップロードのローカル→リモート同期が設計段階。
+6. ユーザー検索タブは `search_users` で動作するが、ページネーションとエラーUI、入力バリデーションが未整備。
 
 ## 4. テストカバレッジ概要
 - フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`。
@@ -81,7 +81,7 @@
 | B | `/profile/$userId` ルート | プロフィールの基本情報と投稿一覧は表示できるが、フォロー/フォロワー導線やアクションボタンが未実装。 | プロフィール閲覧は可能だが、関係構築や自己管理操作ができず UX が限定的。 | フォロー操作 UI・フォロワー一覧・プロフィール編集への導線設計を行い、本導線を Phase 5 backlog に追加。 |
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
-| B | プロフィール画像リモート同期 | 設計済みだが実装前。現在は URL 入力やローカルのみ。 | 複数端末でアバターが一致しない。共有体験に影響。 | `upload_profile_avatar`/`fetch_profile_avatar` の実装とテストを Phase 5 スプリントに組み込み。 |
+| B | ユーザー検索（Nostr 連携） | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーションとエラーUIが未整備。 | 検索結果が多い場合に追跡・再試行が困難で、UX が限定的。 | `search_users` のレート制御とページネーション、 input バリデーション、エラー表示を実装し、`subscribe_to_user` の失敗時ハンドリングを強化。 |
 | C | サイドバー「トレンド」「フォロー中」 | ルーティング未実装で実用導線なし。 | クリックしても結果が出ず混乱。致命的ではないが UX を損なう。 | UI 上で「準備中」を表示する暫定対応後、データ要件を定義し正式実装を検討。 |
 
 > 優先度A: 現行体験に致命的影響があるもの。<br>

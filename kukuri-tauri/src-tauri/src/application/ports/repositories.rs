@@ -44,6 +44,7 @@ pub trait UserRepository: Send + Sync {
     async fn create_user(&self, user: &User) -> Result<(), AppError>;
     async fn get_user(&self, npub: &str) -> Result<Option<User>, AppError>;
     async fn get_user_by_pubkey(&self, pubkey: &str) -> Result<Option<User>, AppError>;
+    async fn search_users(&self, query: &str, limit: usize) -> Result<Vec<User>, AppError>;
     async fn update_user(&self, user: &User) -> Result<(), AppError>;
     async fn delete_user(&self, npub: &str) -> Result<(), AppError>;
     async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError>;

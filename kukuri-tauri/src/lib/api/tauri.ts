@@ -260,6 +260,10 @@ export class TauriApi {
   }
 
   // ユーザー関連
+  static async searchUsers(query: string, limit = 20): Promise<UserProfile[]> {
+    return await invokeCommand<UserProfile[]>('search_users', { query, limit });
+  }
+
   static async getUserProfile(npub: string): Promise<UserProfile | null> {
     return await invokeCommand<UserProfile | null>('get_user', { npub });
   }
@@ -274,6 +278,20 @@ export class TauriApi {
 
   static async getFollowing(npub: string): Promise<UserProfile[]> {
     return await invokeCommand<UserProfile[]>('get_following', { npub });
+  }
+
+  static async followUser(followerNpub: string, targetNpub: string): Promise<void> {
+    await invokeCommandVoid('follow_user', {
+      follower_npub: followerNpub,
+      target_npub: targetNpub,
+    });
+  }
+
+  static async unfollowUser(followerNpub: string, targetNpub: string): Promise<void> {
+    await invokeCommandVoid('unfollow_user', {
+      follower_npub: followerNpub,
+      target_npub: targetNpub,
+    });
   }
 }
 

@@ -1,6 +1,6 @@
 use super::bootstrap::P2PServiceBuilder;
 use super::metrics::GossipMetricsSummary;
-use super::status::{ConnectionStatus, PeerStatus, P2PStatus, TopicInfo};
+use super::status::{ConnectionStatus, P2PStatus, PeerStatus, TopicInfo};
 use crate::infrastructure::p2p::{DiscoveryOptions, GossipService, NetworkService, metrics};
 use crate::shared::config::NetworkConfig as AppNetworkConfig;
 use crate::shared::error::AppError;

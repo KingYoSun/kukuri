@@ -1,7 +1,28 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { vi, type SpyInstance } from 'vitest';
+
+import { UserSearchResults } from '@/components/search/UserSearchResults';
+import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
+import { TauriApi } from '@/lib/api/tauri';
+import { useAuthStore } from '@/stores/authStore';
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    to,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: Record<string, unknown>;
+  }) => (
+    <a href={typeof to === 'string' ? to : '#'} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 const avatarImageSources: string[] = [];
 
@@ -32,28 +53,40 @@ vi.mock('@/components/ui/avatar', () => ({
   ),
 }));
 
-import { UserSearchResults } from '@/components/search/UserSearchResults';
-import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
-
-vi.mock('@tanstack/react-router', () => ({
-  Link: ({
-    children,
-    to,
-    ...rest
-  }: {
-    children: React.ReactNode;
-    to: string;
-    params?: Record<string, unknown>;
-  }) => (
-    <a href={typeof to === 'string' ? to : '#'} {...rest}>
-      {children}
-    </a>
-  ),
-}));
-
 describe('UserSearchResults', () => {
+  const originalAuthState = useAuthStore.getState();
+  let searchUsersSpy: SpyInstance;
+  let getFollowingSpy: SpyInstance;
+
   beforeEach(() => {
     avatarImageSources.length = 0;
+    searchUsersSpy = vi
+      .spyOn(TauriApi, 'searchUsers')
+      .mockResolvedValue([
+      {
+        npub: 'npub1alice',
+        pubkey: 'pubkey1alice',
+        name: 'alice',
+        display_name: 'Alice',
+        about: 'Nostr開発者',
+        picture: '',
+        banner: null,
+        website: null,
+        nip05: 'alice@example.com',
+      },
+    ]);
+    getFollowingSpy = vi.spyOn(TauriApi, 'getFollowing').mockResolvedValue([]);
+    useAuthStore.setState({
+      ...originalAuthState,
+      isAuthenticated: false,
+      currentUser: null,
+    });
+  });
+
+  afterEach(() => {
+    searchUsersSpy.mockRestore();
+    getFollowingSpy.mockRestore();
+    useAuthStore.setState(originalAuthState);
   });
 
   const renderWithQueryClient = (query: string) => {
@@ -81,6 +114,10 @@ describe('UserSearchResults', () => {
 
   it('検索結果のアバターがフォールバック画像を使用する', async () => {
     const { container, queryClient } = renderWithQueryClient('alice');
+
+    await waitFor(() => {
+      expect(searchUsersSpy).toHaveBeenCalledWith('alice', 24);
+    });
 
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
