@@ -23,7 +23,7 @@
 | サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | 「トレンド」「フォロー中」は未実装。新規投稿は `useComposerStore` でモーダル起動 |
 | ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher` | 稼働中 | アカウント切替/追加/削除、同期状態表示、オフライン通知を提供 |
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。トピック初期選択とショートカット改善が backlog |
-| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` とフォロワー無限スクロールを設計中。メッセージ送信コマンドとソート/ページネーションは未実装。 |
+| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は実装済みだが `send_direct_message` (Tauri) が未実装で送信失敗。フォロワー無限スクロールは導入済み、ソート/ページネーションは未対応。 |
 
 ### 1.3 トピック関連
 | 画面 | パス | 主な機能 | 導線状態 | 備考 |
@@ -54,11 +54,11 @@
 - **同期系 UI**: `SyncStatusIndicator`／`OfflineIndicator` が `offlineStore` と `syncEngine` の状態を表示し、未同期アクションの再送を支援。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。
-- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` で kind 4 DM を送受信する仕様を設計中（モーダル UI / 未読バッジ / オフライン再送対応）。2025年11月04日時点でモーダルのユニットテスト（`DirectMessageDialog.test.tsx`）と `pnpm test:unit` の回帰確認を完了。
+- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は UI/楽観送信が整備済みで、Inventory 5.6.1 に Tauri 実装計画（コマンド・永続化・テスト）が確定。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
 
 ## 3. 導線ギャップ Quick View
 1. サイドバー「トレンド」「フォロー中」リンクに対する画面が未実装。
-2. `/profile/$userId` はフォロー導線とフォロワーリストを備えたが、DirectMessageDialog・フォロワーソート/ページネーションの実装が未着手。
+2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備えたが、DirectMessageDialog は Tauri 側の `send_direct_message` / `list_direct_messages` が未実装で送受信不可。Inventory 5.6.1/5.6.2 に実装計画を追記済みで、次ステップは Tauri コマンド実装 + React Query ソート/ページネーション接続とテスト整備。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
 5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
@@ -80,7 +80,7 @@
 | 優先度 | 項目 | 現状/課題 | ユーザー影響 | 次アクション |
 | --- | --- | --- | --- | --- |
 | A | 投稿削除 (`delete_post`) | 2025年11月03日: PostCard 削除メニューと `postStore.deletePostRemote` のオフライン対応を実装し、ユニットテストで検証済み。 | 楽観削除は機能するが、React Query キャッシュと Rust 統合テストが未整備。 | React Query 側のキャッシュ無効化と `delete_post` コマンドの統合テスト追加、CI での回帰監視をフォローアップ。 |
-| B | `/profile/$userId` ルート | プロフィール情報と投稿一覧、フォロー/フォロー解除・フォロワー表示は実装済み。メッセージ導線とリストのソート/ページネーションが未対応。 | DM 開始や大量フォロワーの閲覧ができず、コミュニケーション導線が限定的。 | `DirectMessageDialog` + `send_direct_message` / `list_direct_messages` の追加、フォロワー無限スクロールとソート UI、React Query / Rust テスト整備を順次実装。 |
+| B | `/profile/$userId` ルート | `DirectMessageDialog` は UI/楽観送信を備えるが、Tauri の `send_direct_message` / `list_direct_messages` が未実装。Inventory 5.6.1/5.6.2 にコマンド・永続化・ソート/ページネーションの実装計画を追記済み。 | DM が送れず、フォロワー一覧もソート切替・ページングができない。 | `direct_message_service` / `messaging_gateway` / `direct_message_repository` 実装とマイグレーション、コマンド配線後に React Query から履歴ロード。続けて `get_followers` 拡張（sort/cursor）と `FollowerList` のソート UI + 無限スクロールテスト、Vitest / Rust / Docker シナリオを追加。 |
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
 | B | ユーザー検索（Nostr 連携） | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーションとエラーUIが未整備。 | 検索結果が多い場合に追跡・再試行が困難で、UX が限定的。 | `search_users` のレート制御とページネーション、 input バリデーション、エラー表示を実装し、`subscribe_to_user` の失敗時ハンドリングを強化。 |

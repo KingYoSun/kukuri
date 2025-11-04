@@ -110,9 +110,15 @@
 | --- | --- | --- | --- |
 | `get_user` / `get_user_by_pubkey` | `TauriApi.getUserProfile`, `.getUserProfileByPubkey` | `/profile/$userId` ルート（`ProfilePage`） | ユーザー検索・直接アクセスからプロフィール表示 |
 | `search_users` | `TauriApi.searchUsers` | `UserSearchResults` | `/search` (users) タブでプロフィール候補を取得 |
-| `follow_user` / `unfollow_user` | `TauriApi.followUser`, `.unfollowUser` | `UserSearchResults`, `/profile/$userId` | フォローボタン経由で Tauri API と `subscribe_to_user` を呼び出す |
-| `get_followers` / `get_following` | `TauriApi.getFollowers`, `.getFollowing` | `/profile/$userId` | フォロワー/フォロー中リスト表示 |
+| `follow_user` / `unfollow_user` | `TauriApi.followUser`, `.unfollowUser` | `UserSearchResults`, `/profile/$userId` | 検索/プロフィール双方で同一ミューテーションを共有し、成功時に `subscribe_to_user` を呼び出す |
+| `get_followers` / `get_following` | `TauriApi.getFollowers`, `.getFollowing` | `/profile/$userId` | フォロワー/フォロー中カードを React Query の無限スクロールで表示（ソート切替は未実装） |
 | `upload_profile_avatar` / `fetch_profile_avatar` | `TauriApi.*` | `ProfileForm`（オンボーディング/設定モーダル）、`ProfileEditDialog`, `authStore.initialize` | プロフィール画像のアップロードと同期済みアバターの取得 |
+
+#### ダイレクトメッセージ
+| コマンド | ラッパー | 呼び出し元 | UI導線 |
+| --- | --- | --- | --- |
+| `send_direct_message` | `TauriApi.sendDirectMessage` | `DirectMessageDialog`, `useDirectMessageStore` | `/profile/$userId`「メッセージ」ボタン→モーダル。2025年11月04日時点で Tauri 側は `AppError::NotImplemented` を返し、UI はトースト＋楽観メッセージ失敗表示でフォールバック |
+| `list_direct_messages` | `TauriApi.listDirectMessages` | （未配線） | コマンド定義済みだが UI から未呼び出し。会話履歴ロード処理が未実装 |
 
 #### Nostr 関連
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
@@ -150,7 +156,6 @@
 | --- | --- | --- | --- |
 | `add_relay` | `nostrApi.addRelay` / `NostrAPI.addRelay` | リレー追加 | 現状テスト専用。UIからの追加導線なし。 |
 | `subscribe_to_user` | `nostrApi.subscribeToUser` / `NostrAPI.subscribeToUser` | ユーザー購読 | UI未接続。 |
-| `get_followers` / `get_following` | `TauriApi.getFollowers`, `.getFollowing` | フォロー/フォロワー一覧表示 | プロフィール画面には未接続。今後の導線拡張候補。 |
 | `get_nostr_pubkey` | `nostrApi.getNostrPubkey` / `NostrAPI.getNostrPubkey` | 現在の公開鍵取得 | 呼び出し箇所なし。 |
 | `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。 |
 | `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。 |
@@ -159,6 +164,7 @@
 | `add_to_sync_queue` | `offlineApi.addToSyncQueue` | 手動キュー投入 | 既存フローから未使用。今後の再索引拡張候補。 |
 | `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
 | `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
+| `list_direct_messages` | `TauriApi.listDirectMessages` | DM 履歴取得 | UI 未配線。プレゼンテーション層のコマンドのみ存在し、実装時に再利用予定。 |
 
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
 - 認証 E2E: `import_key`, `get_public_key`
@@ -169,7 +175,7 @@
 1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。
 2. 「トレンド」「フォロー中」カテゴリー用のルーティング／一覧画面を定義するか、未実装である旨を UI 上に表示する。
 3. ユーザー検索のページネーション、検索エラーUI、入力バリデーションを整備し、`search_users` のレート制御を決定する。
-4. `/profile/$userId` のメッセージ導線とフォロワー/フォロー中リストのソート・フィルタリング、ページングを実装する。
+4. `/profile/$userId` のメッセージ導線について、`send_direct_message` / `list_direct_messages` の Tauri 実装と会話履歴ロード、フォロワー/フォロー中リストのソート・フィルタリング、ページングを整備する。
 5. 投稿削除後の React Query キャッシュ無効化と `delete_post` コマンド統合テストを整備する。
 6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
 7. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
@@ -261,31 +267,72 @@
   - 2025年11月03日: プレースホルダールートを差し替え、`getUserProfile` / `getUserProfileByPubkey` / `getPosts({ author_pubkey })` を用いた実データ取得と、フォロー/フォロー解除ボタンを実装。
   - `follow_user` / `unfollow_user` 成功時に `React Query` の `['social','following']` / `['profile',npub,'followers']` キャッシュを即時更新し、`subscribe_to_user` でイベント購読を開始する。
   - `UserSearchResults` からのフォロー操作も同一ミューテーションを共有し、検索結果→プロフィール詳細間の導線差異を解消。
+  - 2025年11月04日: `DirectMessageDialog` と `useDirectMessageStore` を追加し、プロフィール画面の「メッセージ」ボタンからモーダルを開閉できるよう接続。`DirectMessageDialog` 単体テストで楽観的更新・失敗時の `toast` 表示を検証。
+  - 同日: `TauriApi.sendDirectMessage` を `DirectMessageDialog` に接続（Rust 側は `AppError::NotImplemented` を返却するため、UI は `failOptimisticMessage` で失敗状態を表示）。`TauriApi.listDirectMessages` は定義済みだが UI 未配線で、会話履歴の初期ロードは未実装。
 - **残課題**
+  - `send_direct_message` / `list_direct_messages` の Tauri 実装が存在せず、現状は常に `NotImplemented` が返る。Application 層でメッセージ保存・送信キューを整備する必要がある。
   - プロフィール投稿一覧は 50 件固定で pagination 未対応。スクロールロードや日付ソートなどの UX 改善が必要。
   - フォロワー/フォロー中リストに検索・ソートが無く、件数が多い場合の利用性が下がる。
   - メッセージボタンは disabled のまま。直接メッセージ仕様（Nostr DM or P2P Note）を定義し、導線を接続する必要がある。
   - Tauri 経由のエラーハンドリングはトースト表示のみに留まるため、再試行 UI の追加と `errorHandler` のメタデータ拡充を検討。
-- **メッセージ導線仕様（案）**
-  1. UI: `ProfilePage` の `MessageCircle` ボタン押下で `DirectMessageDialog`（新規）を開き、会話ヘッダーに相手の `displayName` / `nip05` / `follow` 状態を表示する。ダイアログはモーダル + ドロワーのハイブリッド（デスクトップは右カラム固定、狭幅はフルスクリーン）とし、直近 50 件のメッセージを既定表示。
-  2. フロント状態管理: `useDirectMessageStore` を新設し、`activeConversationNpub`・`optimisticMessages`・`unreadCounts` を保持。React Query の `useInfiniteQuery(['direct-messages', npub], ...)` で過去ログをフェッチし、`fetchPreviousPage` で遡り取得する。
-  3. Tauri コマンド: `list_direct_messages({ counterpart_npub, cursor?, limit })` / `send_direct_message({ counterpart_npub, plaintext, attachments? })` / `mark_direct_messages_read({ counterpart_npub, up_to_event_id })` を追加し、返却値は NIP-04 準拠（セッションキー共有）を前提とした暗号化イベント（kind 4）とする。暗号化方式は `nostr-sdk` の NIP-04（XChaCha20-Poly1305）を初期実装として採用し、将来の NIP-44 移行を想定したバージョンフィールドを含める。
-  4. 配信: `send_direct_message` は `nostr::Client::send_direct_msg` を利用し、送信後に `EventId` と送信タイムスタンプを返却。受信は `nostr` サブスクリプションで kind 4 を購読し、`DirectMessageWorker`（新規）が `EventService` と同様に React Query キャッシュを更新、未読件数を `useDirectMessageStore` に反映する。
-  5. オフライン対応: `offlineStore` に `direct_message` 種別を追加し、送信失敗時は暗号化済みイベントをキューイング。オンライン復帰時に `sync_offline_actions` がまとめて再送し、成功後に `confirm_optimistic_update` で UI を更新する。
-  6. セキュリティ/プライバシー: 端末内では暗号化済みペイロードのみを保存し、復号はメモリ上に限定。チャットログのエクスポートには専用許可（設定 > プライバシー）を必要とし、送信前に受信者との共有鍵初期化（`nip04::shared_secret`）が成立しているか検証して失敗時はエラーを返す。
-- **フォロワー一覧ソート/ページネーション計画**
-  1. UX 要件: `フォロワー` / `フォロー中` カードにソートセレクター（「最新順」「名前順」「逆順」）とページネーション UI（無限スクロール + 「さらに読み込む」ボタン）を追加し、件数が多い場合でも操作性を担保する。
-  2. API 拡張: `get_followers` / `get_following` に `pagination` パラメーター（`{ cursor?: string, limit?: number }`）と `sort` フィールド（`followed_at_desc` / `display_name_asc` など）を追加。カーソルは `"{timestamp}:{pubkey}"` 形式で、Rust 側は SQL の `ORDER BY` に合わせて `WHERE (followed_at, pubkey) < (:timestamp, :pubkey)` 条件を生成する。
-  3. フロント実装: `useInfiniteQuery` を利用し、`fetchNextPage` で追加ロード。取得結果は `concatMap` で去重し、`ProfilePage` の `UserList` に `VirtualizedList`（`react-virtual`）を導入して描画負荷を軽減する。ソート変更時は `queryClient.invalidateQueries(['profile', npub, 'followers'])` を呼び出して照会をリセットする。
-  4. メタ情報: API で総件数（`total_count`）と最終カーソルを返却し、UI は「12 / 240」といった進捗表示を行う。未ログイン時は API 呼び出しをブロックし、プライベートアカウントの場合は `403` を返却して UI 上に「非公開」のメッセージを表示する。
+- **対応計画（2025年11月04日）**
+  - Direct Message は 5.6.1 に実装計画を記載。Tauri コマンドと永続化、React Query ロード/未読更新、テスト観点まで具体化。
+  - フォロワー一覧のソート/ページネーションは 5.6.2 に実装計画を記載。API 拡張・フロント実装・テストカバレッジを網羅。
+
+#### 5.6.1 DirectMessage Tauri 実装計画（2025年11月04日更新）
+- **範囲と前提**
+  - kind 4（NIP-04）準拠の DM を送受信し、ローカル SQLite には暗号化済みイベントのみを保存する。
+  - 送信導線は `DirectMessageDialog`、受信は Gossip/Tauri 側のイベント購読で反映する。
+- **データモデル / スキーマ**
+  - 新規テーブル `direct_messages`（`id` PK, `conversation_npub`, `sender_npub`, `recipient_npub`, `event_id`, `client_message_id`, `payload_cipher_base64`, `created_at`, `delivered`, `direction`）。`direction` は `outbound` / `inbound`。
+  - `migrations/` に up/down SQL を追加し、`.sqlx/` を更新（`cargo sqlx prepare`）。カーソル検索用に `(created_at, event_id)` 複合インデックスを付与。
+  - ドメイン層へ `DirectMessage` 値オブジェクトと `ConversationId` を追加し、Application 層は SQL へ直接依存しないようにする。
+- **Rust 実装ステップ**
+  1. **サービス**: `application/services/direct_message_service.rs`（新規）で `send_direct_message`, `list_direct_messages`, `mark_direct_messages_read`, `ingest_incoming_message` を定義。
+  2. **ポート**: `application/ports/messaging_gateway.rs` を追加し、Nostr クライアントの暗号化・送信・購読を抽象化。実装は `infrastructure/messaging/nostr_gateway.rs` で `nostr_sdk::Client` を委譲。
+  3. **永続化**: `infrastructure/persistence/direct_message_repository.rs` を追加し、`sqlx` でテーブルを読み書き。`list_direct_messages` はカーソル（`"{created_at}:{event_id}"`）を解析し、`LIMIT :limit` + `WHERE` 条件を構築。
+  4. **コマンド**: `presentation/commands/direct_message_commands.rs` でサービスを呼び出す。送信時は (a) 認証チェック → (b) plaintext を `MessagingGateway::encrypt_and_send` へ委譲 → (c) 送信結果を DB に保存 → (d) `SendDirectMessageResponse` を返却。
+  5. **受信**: 既存 `EventService` の Nostr 購読に kind 4 ハンドラを追加し、`DirectMessageService::ingest_incoming_message` を実行。`tokio::spawn` で非同期保存し、完了後に IPC でフロントへ通知。
+  6. **オフライン**: `offline_service` に `OfflineActionKind::DirectMessage` を追加。送信失敗時は暗号化済み payload を保存し、`sync_offline_actions` 再試行時に `send_direct_message` を呼び出す。
+  7. **エラー処理**: `AppError::Messaging`（新設）で暗号化失敗/共有鍵なし/配信失敗を分類。UI には `errorHandler` キー `DirectMessageService.send_failed` 等を発行。
+- **TypeScript 実装タスク**
+  - `TauriApi.listDirectMessages` を `useInfiniteQuery(['direct-messages', conversationNpub, sortKey], …)` に接続し、`getNextPageParam` で `nextCursor` を利用。
+  - `DirectMessageDialog` オープン時に初回フェッチ、スクロール上端で `fetchPreviousPage`。queued 応答の場合は `status: 'pending'` のまま、IPC から `delivered` を受け取ったら更新。
+  - Tauri から `direct-messages:updated` イベントを発火し、`DirectMessageStore` が `appendOptimisticMessage` / `resolveOptimisticMessage` を同期。未読件数は `incrementUnreadCount` で反映。
+  - `markConversationAsRead` をモーダルクローズで呼び出し、バックエンドの `mark_direct_messages_read` へ伝播。
 - **テスト計画**
-  - 既存 `ProfilePage` のユニットテスト（新規作成）でフォロー/フォロー解除の成功・失敗・自身への操作のガードを検証し、React Query キャッシュの更新がモックされることを確認する。`renderWithQueryClient` を使い、`follow_user` モックが解決/拒否するパターンを網羅。
-  - `DirectMessageDialog` コンポーネントのユニットテストを追加し、未読件数のバッジ更新・オフライン時の再送キュー登録・暗号化失敗時のトースト表示を検証する。
-  - `get_followers` のソート/ページネーションは Vitest のモックで無限スクロールをシミュレートし、`fetchNextPage` がカーソルを連鎖的に渡すこと、ソート切り替えでキャッシュが切り替わることを確認。あわせて Rust 側に `followers::queries::list_followers` 用の単体テストを追加し、カーソル境界条件と非公開アカウントのハンドリングをカバーする。
+  - Rust: `direct_message_service` ユニットテストで (a) 共有鍵未初期化→エラー, (b) 正常送信→DB 保存, (c) カーソル境界, (d) オフライン再送を検証。`nostr_gateway` はモック化して暗号化ペイロードを確認。
+  - Rust: `direct_message_commands` のコマンドテストで認証必須・queued true/false パターンを網羅。
+  - TypeScript: `DirectMessageDialog.test.tsx` を拡張し、無限スクロール・queued 表示・IPC による未読更新・エラートーストを検証。
+  - E2E（後続）: `pnpm test:integration --run directMessages` で UI→Tauri→DB→UI のラウンドトリップを自動化し、CI では feature flag で任意実行。
+- **フォローアップ**
+  - `.sqlx/` 更新、`docs/03_implementation/error_handling_guidelines.md` に Messaging 系キーを追記。
+  - `nostr_sdk::Client::get_shared_secret` 失敗時は `MessagingError::MissingSharedSecret` を返却し、UI で「共有鍵を生成できませんでした」トーストと再試行導線を表示。
+
+#### 5.6.2 フォロワー一覧ソート/ページネーション実装計画（2025年11月04日更新）
+- **UX と機能要件**
+  - デフォルトは「最新順（フォロー日時降順）」で 20 件ずつ表示。ソートオプションは「最新順」「古い順」「名前順（A→Z）」「名前順（Z→A)」。
+  - 無限スクロールを基本に、末尾に「さらに読み込む」ボタンを配置。ロード中/終端/エラーで表示を切り替える。
+  - プライベートアカウントは 403 を返し、「このユーザーのフォロワーは非公開です」を表示。
+- **バックエンド拡張**
+  - `presentation/dto/user_dto.rs` の `ListFollowersRequest` を拡張し、`sort`（enum）と `cursor`（`Option<String>`）を追加。レスポンスに `total_count` と `next_cursor`。
+  - `application/services/user_service.rs` に `list_followers_with_sort` を追加し、`followers_repository` で `ORDER BY` と `WHERE` を動的生成。カーソルは `"{timestamp}:{pubkey}"` を解析して `created_at` と `pubkey` を抽出。
+  - SQLite クエリでは `display_name COLLATE NOCASE` を用いて大文字小文字を無視。`display_name` が NULL の場合は `COALESCE(display_name, npub)` でソート。
+  - 既存コマンドの後方互換性を保つため、`sort` と `cursor` は省略可能引数として扱い、指定が無い場合は従来どおり 50 件固定で返却。
+- **フロント実装**
+  - `ProfilePage` に `useInfiniteQuery(['profile', npub, 'followers', sortKey], …)` を導入。`fetchNextPage` は `nextCursor` を `pageParam` として渡す。
+  - `FollowerList`（新規）でソートセレクタ UI を提供。`Select` 変更時には `queryClient.removeQueries` で前のデータをクリアし初期ページを再取得。
+  - `IntersectionObserver` + フォールバックボタンで無限スクロールを実装。`react-virtual` で描画コストを抑制し、Skeleton を表示。
+  - カウント表示のため、API の `total_count` をヘッダーに表示。「表示中 X / Y 件」形式。
 - **テスト計画**
-  - `UserSearchResults` の既存ユニットテストに合わせ、`ProfilePage` のフォロー/フォロー解除と投稿一覧レンダリングを検証するテストを追加（成功・失敗・未ログインケース）。
-  - React Query キャッシュ更新の副作用を確認するため、`follow_user`/`unfollow_user` ミューテーションをモックしつつキャッシュの差分検証を行う。
-  - `/profile/$userId` への直接アクセス（npub / pubkey）の双方をルーター統合テストで確認し、404 シナリオではトースト表示と空状態が描画されることを保証する。
+  - TypeScript: `ProfileFollowersList.test.tsx`（新規）でソート変更・追加ロード・エラーリトライを検証。`fetchNextPage` が適切な cursor で呼ばれることをアサート。
+  - TypeScript: ルートテストで `?followersSort=` パラメーターがセレクタに反映されること、URL 変更でクエリが再実行されることを確認。
+  - Rust: `followers_repository::list_followers` のテストでカーソル境界、NULL `display_name`、プライベートアカウント（403）をカバー。
+  - Rust: `get_followers` / `get_following` コマンドテストで後方互換パラメーター、ソート/ページネーション組み合わせを検証。
+  - Docker: `docker-compose.test.yml` に followers-pagination シナリオを追加し、Windows では `./scripts/test-docker.ps1 ts` を案内。
+- **フォローアップ**
+  - `docs/03_implementation/error_handling_guidelines.md` に `FollowersList.fetch_failed` を追加し、ログ/トーストの整合を保つ。
+  - `phase5_dependency_inventory_template.md` と `tauri_app_implementation_plan.md` に API 変更とタスクを追記予定。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 
