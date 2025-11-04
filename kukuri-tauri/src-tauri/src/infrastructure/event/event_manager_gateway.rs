@@ -137,6 +137,10 @@ mod tests {
             Ok(sample_nostr_event_id('4'))
         }
 
+        async fn publish_event(&self, _: NostrEvent) -> AnyResult<NostrEventId> {
+            Ok(sample_nostr_event_id('6'))
+        }
+
         async fn send_reaction(&self, _: &NostrEventId, _: &str) -> AnyResult<NostrEventId> {
             Ok(sample_nostr_event_id('3'))
         }

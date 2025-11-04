@@ -63,6 +63,7 @@
   - 2025年11月02日: 指標欄に最新ドキュメント更新（統合テスト専用コマンド整理）と未導線APIの整理状況を追記、Phase2.5セクションへ `TopicPage` 最終更新バグの改善候補を登録。
   - 2025年11月03日: 2.5節を棚卸し結果サマリーへ差し替え、Relay/P2Pステータスカードとプロフィール編集導線の進捗メモを追記。
   - 2025年11月04日: 2.5節に `/profile/$userId` 導線の現状（フォロー/フォロワー表示）と残課題を反映し、ユーザー導線指標欄へ 1.4/1.7/5.6 更新（ユーザー検索・プロフィール導線・フォロー体験）を記録。
+  - 2025年11月04日: Rust 側で `direct_message_service` / `messaging_gateway` / `direct_message_repository` を実装し、`send_direct_message` と `list_direct_messages` コマンドを配線。kind4 DM の暗号化送信・SQLite 永続化・カーソルページング・復号レスポンスまで通し、`cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri -q` / `kukuri-cli`）を実行して新規ユニットテストを含めて確認。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。

@@ -1,5 +1,6 @@
 pub mod account;
 pub mod bookmark;
+pub mod direct_message;
 pub mod event;
 pub mod event_gateway;
 pub mod offline;
@@ -10,6 +11,7 @@ pub mod user;
 
 pub use account::{AccountMetadata, AccountRegistration, AccountsMetadata, CurrentAccountSecret};
 pub use bookmark::Bookmark;
+pub use direct_message::{DirectMessage, MessageDirection, NewDirectMessage};
 pub use event::{Event, EventKind};
 pub use event_gateway::{DomainEvent, EventTag, ProfileMetadata};
 pub use offline::{

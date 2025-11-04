@@ -1,5 +1,6 @@
 pub mod auth_lifecycle;
 pub mod auth_service;
+pub mod direct_message_service;
 pub mod event_service;
 pub mod offline_service;
 pub mod p2p_service;
@@ -15,6 +16,10 @@ pub use crate::domain::value_objects::subscription::{
 };
 pub use auth_lifecycle::DefaultAuthLifecycle;
 pub use auth_service::AuthService;
+pub use direct_message_service::{
+    DirectMessagePageResult, DirectMessageService,
+    MessagePageDirection as DirectMessageServiceDirection, SendDirectMessageResult,
+};
 pub use event_service::EventService;
 pub use offline_service::OfflineService;
 pub use p2p_service::P2PService;

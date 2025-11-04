@@ -4,6 +4,7 @@ use crate::shared::error::AppError;
 use async_trait::async_trait;
 
 mod bookmarks;
+mod direct_messages;
 mod events;
 mod mapper;
 mod posts;

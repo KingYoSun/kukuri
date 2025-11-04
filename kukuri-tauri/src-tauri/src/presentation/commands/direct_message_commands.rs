@@ -6,12 +6,13 @@ use crate::{
             SendDirectMessageResponse,
         },
     },
-    shared::{AppError, Result as AppResult},
+    presentation::handlers::DirectMessageHandler,
+    shared::AppError,
     state::AppState,
 };
 use tauri::State;
 
-async fn ensure_authenticated(state: &State<'_, AppState>) -> AppResult<String> {
+async fn ensure_authenticated(state: &State<'_, AppState>) -> Result<String, AppError> {
     state
         .key_manager
         .current_keypair()
@@ -26,13 +27,9 @@ pub async fn send_direct_message(
     state: State<'_, AppState>,
     request: SendDirectMessageRequest,
 ) -> Result<ApiResponse<SendDirectMessageResponse>, AppError> {
-    let _sender_pubkey = ensure_authenticated(&state).await?;
-
-    let result: AppResult<SendDirectMessageResponse> = Err(AppError::NotImplemented(format!(
-        "send_direct_message for recipient {} is not implemented yet",
-        request.recipient_npub
-    )));
-
+    let owner_npub = ensure_authenticated(&state).await?;
+    let handler = DirectMessageHandler::new(state.direct_message_service.clone());
+    let result = handler.send_direct_message(&owner_npub, request).await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -42,12 +39,8 @@ pub async fn list_direct_messages(
     state: State<'_, AppState>,
     request: ListDirectMessagesRequest,
 ) -> Result<ApiResponse<DirectMessagePage>, AppError> {
-    let _sender_pubkey = ensure_authenticated(&state).await?;
-
-    let result: AppResult<DirectMessagePage> = Err(AppError::NotImplemented(format!(
-        "list_direct_messages for conversation {} is not implemented yet",
-        request.conversation_npub
-    )));
-
+    let owner_npub = ensure_authenticated(&state).await?;
+    let handler = DirectMessageHandler::new(state.direct_message_service.clone());
+    let result = handler.list_direct_messages(&owner_npub, request).await;
     Ok(ApiResponse::from_result(result))
 }

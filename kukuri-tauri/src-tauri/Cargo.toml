@@ -29,7 +29,7 @@ serde_json = "1"
 once_cell = "1.19"
 
 # Nostr Protocol
-nostr-sdk = "0.42.0"
+nostr-sdk = { version = "0.42.0", features = ["nip04"] }
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "migrate"] }

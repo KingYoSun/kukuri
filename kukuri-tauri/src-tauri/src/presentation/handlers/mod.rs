@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 pub mod auth_handler;
+pub mod direct_message_handler;
 pub mod event_handler;
 pub mod offline_handler;
 pub mod p2p_handler;
@@ -10,6 +11,7 @@ pub mod topic_handler;
 pub mod user_handler;
 
 pub use auth_handler::AuthHandler;
+pub use direct_message_handler::DirectMessageHandler;
 pub use event_handler::EventHandler;
 pub use offline_handler::OfflineHandler;
 pub use p2p_handler::P2PHandler;

@@ -153,10 +153,12 @@ impl UserRepository for SqliteRepository {
             users.push(map_user_row(&row)?);
         }
 
+        let has_more = next_cursor.is_some();
+
         Ok(UserCursorPage {
             users,
             next_cursor,
-            has_more: next_cursor.is_some(),
+            has_more,
         })
     }
 
@@ -204,10 +206,12 @@ impl UserRepository for SqliteRepository {
             users.push(map_user_row(&row)?);
         }
 
+        let has_more = next_cursor.is_some();
+
         Ok(UserCursorPage {
             users,
             next_cursor,
-            has_more: next_cursor.is_some(),
+            has_more,
         })
     }
 

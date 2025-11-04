@@ -5,9 +5,11 @@ use crate::domain::p2p::P2PEvent;
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
 use crate::application::ports::cache::PostCache;
 use crate::application::ports::event_topic_store::EventTopicStore;
+use crate::application::ports::messaging_gateway::MessagingGateway;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::repositories::{
-    BookmarkRepository, EventRepository, PostRepository, TopicRepository, UserRepository,
+    BookmarkRepository, DirectMessageRepository, EventRepository, PostRepository, TopicRepository,
+    UserRepository,
 };
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
@@ -15,8 +17,8 @@ use crate::application::services::event_service::EventServiceTrait;
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
-    AuthService, EventService, OfflineService, P2PService, PostService, ProfileAvatarService,
-    SubscriptionStateMachine, SyncService, TopicService, UserService,
+    AuthService, DirectMessageService, EventService, OfflineService, P2PService, PostService,
+    ProfileAvatarService, SubscriptionStateMachine, SyncService, TopicService, UserService,
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
@@ -34,6 +36,7 @@ use crate::infrastructure::{
         EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
         LegacyEventManagerHandle, RepositoryEventTopicStore,
     },
+    messaging::NostrMessagingGateway,
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
         GossipService, NetworkService,
@@ -87,6 +90,7 @@ pub struct AppState {
     pub topic_service: Arc<TopicService>,
     pub user_service: Arc<UserService>,
     pub event_service: Arc<EventService>,
+    pub direct_message_service: Arc<DirectMessageService>,
     pub sync_service: Arc<dyn SyncServiceTrait>,
     pub p2p_service: Arc<P2PService>,
     pub offline_service: Arc<OfflineService>,
@@ -250,6 +254,16 @@ impl AppState {
             .await;
         let event_service = Arc::new(event_service_inner);
 
+        let messaging_gateway: Arc<dyn MessagingGateway> = Arc::new(NostrMessagingGateway::new(
+            Arc::clone(&key_manager),
+            Arc::clone(&event_manager),
+        ));
+
+        let direct_message_service = Arc::new(DirectMessageService::new(
+            Arc::clone(&repository) as Arc<dyn DirectMessageRepository>,
+            Arc::clone(&messaging_gateway),
+        ));
+
         let post_cache: Arc<dyn PostCache> = Arc::new(PostCacheService::new());
         // PostServiceの初期化
         let post_service = Arc::new(PostService::new(
@@ -356,6 +370,7 @@ impl AppState {
             topic_service,
             user_service,
             event_service,
+            direct_message_service,
             sync_service,
             p2p_service,
             offline_service,

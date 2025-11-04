@@ -22,6 +22,45 @@ pub(super) const SELECT_BOOKMARKS_BY_USER: &str = r#"
     ORDER BY created_at DESC
 "#;
 
+pub(super) const INSERT_DIRECT_MESSAGE: &str = r#"
+    INSERT INTO direct_messages (
+        owner_npub,
+        conversation_npub,
+        sender_npub,
+        recipient_npub,
+        event_id,
+        client_message_id,
+        payload_cipher_base64,
+        created_at,
+        delivered,
+        direction
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+"#;
+
+pub(super) const MARK_DIRECT_MESSAGE_DELIVERED_BY_CLIENT_ID: &str = r#"
+    UPDATE direct_messages
+    SET delivered = ?4,
+        event_id = COALESCE(?3, event_id)
+    WHERE owner_npub = ?1
+      AND client_message_id = ?2
+"#;
+
+pub(super) const SELECT_DIRECT_MESSAGE_BY_ID: &str = r#"
+    SELECT id,
+           owner_npub,
+           conversation_npub,
+           sender_npub,
+           recipient_npub,
+           event_id,
+           client_message_id,
+           payload_cipher_base64,
+           created_at,
+           delivered,
+           direction
+    FROM direct_messages
+    WHERE id = ?1
+"#;
+
 pub(super) const INSERT_POST_EVENT: &str = r#"
     INSERT INTO events (event_id, public_key, content, kind, tags, created_at)
     VALUES (?, ?, ?, ?, ?, ?)

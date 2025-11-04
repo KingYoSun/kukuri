@@ -324,10 +324,12 @@ mod tests {
                 }
             }
 
+            let has_more = next_cursor.is_some();
+
             Ok(UserCursorPage {
                 users: items,
                 next_cursor,
-                has_more: next_cursor.is_some(),
+                has_more,
             })
         }
 
@@ -386,10 +388,12 @@ mod tests {
                 }
             }
 
+            let has_more = next_cursor.is_some();
+
             Ok(UserCursorPage {
                 users: items,
                 next_cursor,
-                has_more: next_cursor.is_some(),
+                has_more,
             })
         }
 

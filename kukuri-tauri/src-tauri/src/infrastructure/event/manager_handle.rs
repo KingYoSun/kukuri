@@ -25,6 +25,7 @@ pub trait EventManagerHandle: Send + Sync {
     ) -> Result<NostrEventId>;
     async fn send_reaction(&self, target: &NostrEventId, reaction: &str) -> Result<NostrEventId>;
     async fn publish_repost(&self, target: &NostrEventId) -> Result<NostrEventId>;
+    async fn publish_event(&self, event: NostrEvent) -> Result<NostrEventId>;
     async fn update_metadata(&self, metadata: Metadata) -> Result<NostrEventId>;
     async fn delete_events(
         &self,
@@ -121,6 +122,10 @@ impl EventManagerHandle for LegacyEventManagerHandle {
 
     async fn publish_repost(&self, target: &NostrEventId) -> Result<NostrEventId> {
         self.inner.publish_repost(target).await
+    }
+
+    async fn publish_event(&self, event: NostrEvent) -> Result<NostrEventId> {
+        self.inner.publish_event(event).await
     }
 
     async fn send_reaction(&self, target: &NostrEventId, reaction: &str) -> Result<NostrEventId> {

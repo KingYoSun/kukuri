@@ -1,4 +1,6 @@
-use crate::domain::entities::{Bookmark, Event, Post, Topic, User};
+use crate::domain::entities::{
+    Bookmark, DirectMessage, Event, NewDirectMessage, Post, Topic, User,
+};
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -120,4 +122,68 @@ pub trait BookmarkRepository: Send + Sync {
     ) -> Result<(), AppError>;
 
     async fn list_bookmarks(&self, user_pubkey: &PublicKey) -> Result<Vec<Bookmark>, AppError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectMessageCursor {
+    pub created_at: i64,
+    pub event_id: Option<String>,
+}
+
+impl DirectMessageCursor {
+    pub fn parse(cursor: &str) -> Option<Self> {
+        let mut parts = cursor.splitn(2, ':');
+        let created_at = parts.next()?.parse().ok()?;
+        let event_id = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        Some(Self {
+            created_at,
+            event_id,
+        })
+    }
+
+    pub fn to_string(&self) -> String {
+        let event_part = self.event_id.clone().unwrap_or_default();
+        format!("{}:{}", self.created_at, event_part)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DirectMessageListDirection {
+    Backward,
+    Forward,
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectMessagePageRaw {
+    pub items: Vec<DirectMessage>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+#[async_trait]
+pub trait DirectMessageRepository: Send + Sync {
+    async fn insert_direct_message(
+        &self,
+        message: &NewDirectMessage,
+    ) -> Result<DirectMessage, AppError>;
+
+    async fn list_direct_messages(
+        &self,
+        owner_npub: &str,
+        conversation_npub: &str,
+        cursor: Option<DirectMessageCursor>,
+        limit: usize,
+        direction: DirectMessageListDirection,
+    ) -> Result<DirectMessagePageRaw, AppError>;
+
+    async fn mark_delivered_by_client_id(
+        &self,
+        owner_npub: &str,
+        client_message_id: &str,
+        event_id: Option<String>,
+        delivered: bool,
+    ) -> Result<(), AppError>;
 }
