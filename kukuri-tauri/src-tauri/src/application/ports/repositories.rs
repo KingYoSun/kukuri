@@ -28,6 +28,44 @@ pub trait PostRepository: Send + Sync {
         limit: usize,
     ) -> Result<Vec<Post>, AppError>;
     async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, AppError>;
+    async fn list_following_feed(
+        &self,
+        follower_pubkey: &str,
+        cursor: Option<PostFeedCursor>,
+        limit: usize,
+    ) -> Result<PostFeedPage, AppError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct PostFeedCursor {
+    pub created_at: i64,
+    pub event_id: String,
+}
+
+impl PostFeedCursor {
+    pub fn parse(cursor: &str) -> Option<Self> {
+        let mut parts = cursor.splitn(2, ':');
+        let created_at = parts.next()?.parse().ok()?;
+        let event_id = parts.next()?.to_string();
+        if event_id.is_empty() {
+            return None;
+        }
+        Some(Self {
+            created_at,
+            event_id,
+        })
+    }
+
+    pub fn to_string(&self) -> String {
+        format!("{}:{}", self.created_at, self.event_id)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PostFeedPage {
+    pub items: Vec<Post>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
 }
 
 #[async_trait]

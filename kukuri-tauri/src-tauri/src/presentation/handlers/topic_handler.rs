@@ -4,7 +4,8 @@ use crate::{
         Validate,
         topic_dto::{
             CreateTopicRequest, DeleteTopicRequest, GetTopicStatsRequest, JoinTopicRequest,
-            TopicResponse, TopicStatsResponse, UpdateTopicRequest,
+            ListTrendingTopicsRequest, ListTrendingTopicsResponse, TopicResponse,
+            TopicStatsResponse, TrendingTopicDto, UpdateTopicRequest,
         },
     },
     shared::error::AppError,
@@ -201,6 +202,36 @@ impl TopicHandler {
             post_count,
             active_users_24h,
             trending_score,
+        })
+    }
+
+    pub async fn list_trending_topics(
+        &self,
+        request: ListTrendingTopicsRequest,
+    ) -> Result<ListTrendingTopicsResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let limit = request.limit.unwrap_or(10).clamp(1, 100) as usize;
+        let entries = self.topic_service.list_trending_topics(limit).await?;
+
+        let topics: Vec<TrendingTopicDto> = entries
+            .into_iter()
+            .enumerate()
+            .map(|(index, entry)| TrendingTopicDto {
+                topic_id: entry.topic.id.clone(),
+                name: entry.topic.name.clone(),
+                description: entry.topic.description.clone(),
+                member_count: entry.topic.member_count,
+                post_count: entry.topic.post_count,
+                trending_score: entry.trending_score,
+                rank: (index as u32) + 1,
+                score_change: None,
+            })
+            .collect();
+
+        Ok(ListTrendingTopicsResponse {
+            generated_at: Utc::now().timestamp(),
+            topics,
         })
     }
 }

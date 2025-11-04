@@ -1,28 +1,72 @@
 use crate::{
-    application::services::{AuthService, PostService},
+    application::services::{AuthService, PostService, TopicService},
+    domain::entities::Post,
     presentation::dto::{
         Validate,
         post_dto::{
             BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest, BookmarkAction,
-            BookmarkPostRequest, CreatePostRequest, DeletePostRequest, GetPostsRequest,
-            PostResponse, ReactToPostRequest,
+            BookmarkPostRequest, CreatePostRequest, DeletePostRequest, FollowingFeedPageResponse,
+            GetPostsRequest, ListFollowingFeedRequest, ListTrendingPostsRequest,
+            ListTrendingPostsResponse, PostResponse, ReactToPostRequest,
+            TrendingTopicPostsResponse,
         },
     },
     shared::error::AppError,
 };
+use chrono::Utc;
 use futures::future::join_all;
 use std::sync::Arc;
 
 pub struct PostHandler {
     post_service: Arc<PostService>,
     auth_service: Arc<AuthService>,
+    topic_service: Arc<TopicService>,
 }
 
 impl PostHandler {
-    pub fn new(post_service: Arc<PostService>, auth_service: Arc<AuthService>) -> Self {
+    async fn map_post(post: Post) -> PostResponse {
+        let author_pubkey = post.author.pubkey.clone();
+        let npub = tokio::task::spawn_blocking({
+            let pubkey = author_pubkey.clone();
+            move || {
+                use nostr_sdk::prelude::*;
+                PublicKey::from_hex(&pubkey)
+                    .ok()
+                    .and_then(|pk| pk.to_bech32().ok())
+                    .unwrap_or(pubkey)
+            }
+        })
+        .await
+        .unwrap_or(author_pubkey.clone());
+
+        PostResponse {
+            id: post.id.to_string(),
+            content: post.content,
+            author_pubkey: author_pubkey.clone(),
+            author_npub: npub,
+            topic_id: post.topic_id,
+            created_at: post.created_at.timestamp(),
+            likes: post.likes,
+            boosts: post.boosts,
+            replies: post.replies.len() as u32,
+            is_synced: post.is_synced,
+        }
+    }
+
+    async fn map_posts(posts: Vec<Post>) -> Vec<PostResponse> {
+        let futures = posts.into_iter().map(Self::map_post);
+        join_all(futures).await
+    }
+
+    pub fn new(
+        post_service: Arc<PostService>,
+        auth_service: Arc<AuthService>,
+        topic_service: Arc<TopicService>,
+    ) -> Self {
         Self {
             post_service,
             auth_service,
+            topic_service,
         }
     }
 
@@ -43,24 +87,7 @@ impl PostHandler {
             .await?;
 
         // DTOに変換
-        Ok(PostResponse {
-            id: post.id.to_string(),
-            content: post.content,
-            author_pubkey: post.author.pubkey.clone(),
-            author_npub: {
-                use nostr_sdk::prelude::*;
-                PublicKey::from_hex(&post.author.pubkey)
-                    .ok()
-                    .and_then(|pk| pk.to_bech32().ok())
-                    .unwrap_or_else(|| post.author.pubkey.clone())
-            },
-            topic_id: post.topic_id,
-            created_at: post.created_at.timestamp(),
-            likes: post.likes,
-            boosts: post.boosts,
-            replies: post.replies.len() as u32,
-            is_synced: post.is_synced,
-        })
+        Ok(Self::map_post(post).await)
     }
 
     pub async fn get_posts(&self, request: GetPostsRequest) -> Result<Vec<PostResponse>, AppError> {
@@ -80,40 +107,7 @@ impl PostHandler {
                 .await?
         };
 
-        // 並行処理でnpub変換を行う
-        let futures = posts.into_iter().map(|post| {
-            async move {
-                // npub変換をブロッキングタスクで並行実行
-                let npub = tokio::task::spawn_blocking({
-                    let pubkey = post.author.pubkey.clone();
-                    move || {
-                        use nostr_sdk::prelude::*;
-                        PublicKey::from_hex(&pubkey)
-                            .ok()
-                            .and_then(|pk| pk.to_bech32().ok())
-                            .unwrap_or(pubkey)
-                    }
-                })
-                .await
-                .unwrap_or_else(|_| post.author.pubkey.clone());
-
-                PostResponse {
-                    id: post.id.to_string(),
-                    content: post.content,
-                    author_pubkey: post.author.pubkey.clone(),
-                    author_npub: npub,
-                    topic_id: post.topic_id,
-                    created_at: post.created_at.timestamp(),
-                    likes: post.likes,
-                    boosts: post.boosts,
-                    replies: post.replies.len() as u32,
-                    is_synced: post.is_synced,
-                }
-            }
-        });
-
-        // すべての変換を並行実行
-        let results = join_all(futures).await;
+        let results = Self::map_posts(posts).await;
         Ok(results)
     }
 
@@ -187,41 +181,12 @@ impl PostHandler {
 
         let results = join_all(futures).await;
 
-        let mut posts = Vec::new();
-        for post in results
+        let posts: Vec<Post> = results
             .into_iter()
             .filter_map(|result| result.ok().flatten())
-        {
-            // npub変換を並行実行
-            let author_pubkey = post.author.pubkey.clone();
-            let npub = tokio::task::spawn_blocking({
-                let pubkey = author_pubkey.clone();
-                move || {
-                    use nostr_sdk::prelude::*;
-                    PublicKey::from_hex(&pubkey)
-                        .ok()
-                        .and_then(|pk| pk.to_bech32().ok())
-                        .unwrap_or(pubkey)
-                }
-            })
-            .await
-            .unwrap_or(author_pubkey.clone());
+            .collect();
 
-            posts.push(PostResponse {
-                id: post.id.to_string(),
-                content: post.content,
-                author_pubkey: post.author.pubkey.clone(),
-                author_npub: npub,
-                topic_id: post.topic_id,
-                created_at: post.created_at.timestamp(),
-                likes: post.likes,
-                boosts: post.boosts,
-                replies: post.replies.len() as u32,
-                is_synced: post.is_synced,
-            });
-        }
-
-        Ok(posts)
+        Ok(Self::map_posts(posts).await)
     }
 
     pub async fn batch_react(
@@ -276,5 +241,59 @@ impl PostHandler {
 
         let results = join_all(futures).await;
         Ok(results)
+    }
+
+    pub async fn list_trending_posts(
+        &self,
+        request: ListTrendingPostsRequest,
+    ) -> Result<ListTrendingPostsResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let per_topic = request.per_topic.unwrap_or(3).clamp(1, 20) as usize;
+        let mut topics = Vec::new();
+
+        for (index, topic_id) in request.topic_ids.iter().enumerate() {
+            if let Some(topic) = self.topic_service.get_topic(topic_id).await? {
+                let posts = self
+                    .post_service
+                    .get_posts_by_topic(topic_id, per_topic)
+                    .await?;
+                let responses = Self::map_posts(posts).await;
+                topics.push(TrendingTopicPostsResponse {
+                    topic_id: topic.id.clone(),
+                    topic_name: topic.name.clone(),
+                    relative_rank: (index + 1) as u32,
+                    posts: responses,
+                });
+            }
+        }
+
+        Ok(ListTrendingPostsResponse {
+            generated_at: Utc::now().timestamp(),
+            topics,
+        })
+    }
+
+    pub async fn list_following_feed(
+        &self,
+        follower_pubkey: &str,
+        request: ListFollowingFeedRequest,
+    ) -> Result<FollowingFeedPageResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let limit = request.limit.unwrap_or(20).clamp(1, 100) as usize;
+        let _include_reactions = request.include_reactions.unwrap_or(false);
+        let feed = self
+            .post_service
+            .list_following_feed(follower_pubkey, request.cursor.as_deref(), limit)
+            .await?;
+        let items = Self::map_posts(feed.items).await;
+
+        Ok(FollowingFeedPageResponse {
+            items,
+            next_cursor: feed.next_cursor,
+            has_more: feed.has_more,
+            server_time: feed.server_time,
+        })
     }
 }

@@ -1,15 +1,15 @@
 use crate::application::ports::messaging_gateway::MessagingGateway;
+#[cfg(test)]
+use crate::application::ports::messaging_gateway::MessagingSendResult;
 use crate::application::ports::repositories::{
     DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw, DirectMessageRepository,
 };
+#[cfg(test)]
+use crate::domain::entities::MessageDirection;
 use crate::domain::entities::{DirectMessage, NewDirectMessage};
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{DateTime, TimeZone, Utc};
 use std::sync::Arc;
-#[cfg(test)]
-use crate::application::ports::messaging_gateway::MessagingSendResult;
-#[cfg(test)]
-use crate::domain::entities::MessageDirection;
 
 pub struct DirectMessageService {
     repository: Arc<dyn DirectMessageRepository>,

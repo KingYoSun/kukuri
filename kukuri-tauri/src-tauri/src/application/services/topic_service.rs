@@ -4,6 +4,12 @@ use crate::domain::entities::Topic;
 use crate::shared::error::AppError;
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+pub struct TopicTrendingEntry {
+    pub topic: Topic,
+    pub trending_score: f64,
+}
+
 pub struct TopicService {
     repository: Arc<dyn TopicRepository>,
     p2p: Arc<dyn P2PServiceTrait>,
@@ -81,6 +87,45 @@ impl TopicService {
             self.p2p.join_topic("public", Vec::new()).await?;
         }
         Ok(())
+    }
+
+    pub async fn list_trending_topics(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<TopicTrendingEntry>, AppError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut entries: Vec<TopicTrendingEntry> = self
+            .repository
+            .get_all_topics()
+            .await?
+            .into_iter()
+            .map(|topic| TopicTrendingEntry {
+                trending_score: Self::calculate_trending_score(&topic),
+                topic,
+            })
+            .collect();
+
+        entries.sort_by(|a, b| {
+            b.trending_score
+                .partial_cmp(&a.trending_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.topic.updated_at.cmp(&a.topic.updated_at))
+                .then_with(|| a.topic.name.cmp(&b.topic.name))
+        });
+
+        entries.truncate(limit);
+        Ok(entries)
+    }
+
+    fn calculate_trending_score(topic: &Topic) -> f64 {
+        if topic.member_count == 0 && topic.post_count == 0 {
+            0.0
+        } else {
+            (topic.post_count as f64 * 0.6) + (topic.member_count as f64 * 0.4)
+        }
     }
 }
 
@@ -169,6 +214,46 @@ mod tests {
 
         let result = service.leave_topic("tech", "pubkey1").await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn list_trending_topics_orders_by_score() {
+        let mut repo = MockTopicRepo::new();
+        let mut topic_alpha = Topic::new("Alpha".into(), Some("A".into()));
+        topic_alpha.id = "alpha".into();
+        topic_alpha.member_count = 5;
+        topic_alpha.post_count = 20;
+
+        let mut topic_beta = Topic::new("Beta".into(), Some("B".into()));
+        topic_beta.id = "beta".into();
+        topic_beta.member_count = 15;
+        topic_beta.post_count = 10;
+
+        let mut topic_gamma = Topic::new("Gamma".into(), Some("G".into()));
+        topic_gamma.id = "gamma".into();
+        topic_gamma.member_count = 2;
+        topic_gamma.post_count = 5;
+
+        repo.expect_get_all_topics().times(1).returning(move || {
+            Ok(vec![
+                topic_alpha.clone(),
+                topic_beta.clone(),
+                topic_gamma.clone(),
+            ])
+        });
+
+        let repo_arc: Arc<dyn PortTopicRepository> = Arc::new(repo);
+        let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
+        let service = TopicService::new(repo_arc, p2p_arc);
+
+        let result = service
+            .list_trending_topics(3)
+            .await
+            .expect("trending topics");
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].topic.id, "alpha");
+        assert!(result[0].trending_score >= result[1].trending_score);
     }
 
     #[tokio::test]

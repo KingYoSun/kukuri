@@ -155,3 +155,69 @@ impl Validate for BatchBookmarkRequest {
         Ok(())
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListTrendingPostsRequest {
+    pub topic_ids: Vec<String>,
+    pub per_topic: Option<u32>,
+}
+
+impl Validate for ListTrendingPostsRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.topic_ids.is_empty() {
+            return Err("トピックIDを少なくとも1つ指定してください".to_string());
+        }
+        if let Some(per_topic) = self.per_topic {
+            if per_topic == 0 {
+                return Err("トピックごとの取得件数は1以上を指定してください".to_string());
+            }
+            if per_topic > 20 {
+                return Err("トピックごとの取得件数は最大20件までです".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TrendingTopicPostsResponse {
+    pub topic_id: String,
+    pub topic_name: String,
+    pub relative_rank: u32,
+    pub posts: Vec<PostResponse>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListTrendingPostsResponse {
+    pub generated_at: i64,
+    pub topics: Vec<TrendingTopicPostsResponse>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListFollowingFeedRequest {
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+    pub include_reactions: Option<bool>,
+}
+
+impl Validate for ListFollowingFeedRequest {
+    fn validate(&self) -> Result<(), String> {
+        if let Some(limit) = self.limit {
+            if limit == 0 {
+                return Err("取得件数は1以上で指定してください".to_string());
+            }
+            if limit > 100 {
+                return Err("取得件数は最大100件までです".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FollowingFeedPageResponse {
+    pub items: Vec<PostResponse>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+    pub server_time: i64,
+}

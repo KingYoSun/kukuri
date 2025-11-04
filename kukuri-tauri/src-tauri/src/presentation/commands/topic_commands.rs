@@ -4,7 +4,8 @@ use crate::{
             ApiResponse,
             topic_dto::{
                 CreateTopicRequest, DeleteTopicRequest, GetTopicStatsRequest, JoinTopicRequest,
-                TopicResponse, TopicStatsResponse, UpdateTopicRequest,
+                ListTrendingTopicsRequest, ListTrendingTopicsResponse, TopicResponse,
+                TopicStatsResponse, UpdateTopicRequest,
             },
         },
         handlers::TopicHandler,
@@ -139,5 +140,17 @@ pub async fn get_topic_stats(
 ) -> Result<ApiResponse<TopicStatsResponse>, AppError> {
     let handler = TopicHandler::new(state.topic_service.clone());
     let result = handler.get_topic_stats(request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// トレンドトピック一覧を取得する
+#[tauri::command]
+pub async fn list_trending_topics(
+    state: State<'_, AppState>,
+    request: Option<ListTrendingTopicsRequest>,
+) -> Result<ApiResponse<ListTrendingTopicsResponse>, AppError> {
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let payload = request.unwrap_or_default();
+    let result = handler.list_trending_topics(payload).await;
     Ok(ApiResponse::from_result(result))
 }

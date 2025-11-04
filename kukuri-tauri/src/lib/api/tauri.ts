@@ -40,6 +40,23 @@ export interface TopicStats {
   trending_score: number;
 }
 
+
+export interface TrendingTopic {
+  topic_id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+  post_count: number;
+  trending_score: number;
+  rank: number;
+  score_change: number | null;
+}
+
+export interface ListTrendingTopicsResult {
+  generated_at: number;
+  topics: TrendingTopic[];
+}
+
 export interface UpdateTopicRequest {
   id: string;
   name: string;
@@ -58,6 +75,23 @@ export interface Post {
   boosts: number;
   replies: number;
   is_synced: boolean;
+}
+
+export interface ListTrendingPostsRequestParams {
+  topicIds: string[];
+  perTopic?: number;
+}
+
+export interface TrendingTopicPosts {
+  topic_id: string;
+  topic_name: string;
+  relative_rank: number;
+  posts: Post[];
+}
+
+export interface ListTrendingPostsResult {
+  generated_at: number;
+  topics: TrendingTopicPosts[];
 }
 
 export interface CreatePostRequest {
@@ -145,6 +179,19 @@ export interface SendDirectMessageResult {
   queued: boolean;
 }
 
+export interface ListFollowingFeedParams {
+  cursor?: string | null;
+  limit?: number;
+  includeReactions?: boolean;
+}
+
+export interface FollowingFeedPage {
+  items: Post[];
+  next_cursor: string | null;
+  has_more: boolean;
+  server_time: number;
+}
+
 export type ProfileAvatarAccessLevel = 'public' | 'contacts_only' | 'private';
 
 export interface UploadProfileAvatarOptions {
@@ -205,6 +252,11 @@ export class TauriApi {
     });
   }
 
+  static async listTrendingTopics(limit?: number): Promise<ListTrendingTopicsResult> {
+    const payload = limit !== undefined ? { request: { limit } } : undefined;
+    return await invokeCommand<ListTrendingTopicsResult>('list_trending_topics', payload);
+  }
+
   static async createTopic(request: CreateTopicRequest): Promise<Topic> {
     return await invokeCommand<Topic>('create_topic', { request });
   }
@@ -256,6 +308,33 @@ export class TauriApi {
     }
 
     return await invokeCommand<Post[]>('get_posts', payload);
+  }
+
+  static async listTrendingPosts(
+    params: ListTrendingPostsRequestParams,
+  ): Promise<ListTrendingPostsResult> {
+    const request: Record<string, unknown> = {
+      topic_ids: params.topicIds,
+    };
+    if (params.perTopic !== undefined) {
+      request.per_topic = params.perTopic;
+    }
+    return await invokeCommand<ListTrendingPostsResult>('list_trending_posts', { request });
+  }
+
+  static async listFollowingFeed(
+    params: ListFollowingFeedParams = {},
+  ): Promise<FollowingFeedPage> {
+    const request: Record<string, unknown> = {
+      cursor: params.cursor ?? null,
+    };
+    if (params.limit !== undefined) {
+      request.limit = params.limit;
+    }
+    if (params.includeReactions !== undefined) {
+      request.include_reactions = params.includeReactions;
+    }
+    return await invokeCommand<FollowingFeedPage>('list_following_feed', { request });
   }
 
   static async createPost(request: CreatePostRequest): Promise<Post> {

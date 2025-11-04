@@ -4,8 +4,9 @@ use crate::{
             ApiResponse,
             post_dto::{
                 BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest, BookmarkPostRequest,
-                CreatePostRequest, DeletePostRequest, GetPostsRequest, PostResponse,
-                ReactToPostRequest,
+                CreatePostRequest, DeletePostRequest, FollowingFeedPageResponse, GetPostsRequest,
+                ListFollowingFeedRequest, ListTrendingPostsRequest, ListTrendingPostsResponse,
+                PostResponse, ReactToPostRequest,
             },
         },
         handlers::PostHandler,
@@ -30,7 +31,11 @@ pub async fn create_post(
     state: State<'_, AppState>,
     request: CreatePostRequest,
 ) -> Result<ApiResponse<PostResponse>, AppError> {
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.create_post(request).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -41,8 +46,27 @@ pub async fn get_posts(
     state: State<'_, AppState>,
     request: GetPostsRequest,
 ) -> Result<ApiResponse<Vec<PostResponse>>, AppError> {
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.get_posts(request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// トレンドトピックごとの投稿を取得する
+#[tauri::command]
+pub async fn list_trending_posts(
+    state: State<'_, AppState>,
+    request: ListTrendingPostsRequest,
+) -> Result<ApiResponse<ListTrendingPostsResponse>, AppError> {
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
+    let result = handler.list_trending_posts(request).await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -52,7 +76,11 @@ pub async fn delete_post(
     state: State<'_, AppState>,
     request: DeletePostRequest,
 ) -> Result<ApiResponse<()>, AppError> {
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.delete_post(request).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -64,7 +92,11 @@ pub async fn react_to_post(
     request: ReactToPostRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.react_to_post(request).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -76,7 +108,11 @@ pub async fn bookmark_post(
     request: BookmarkPostRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     let user_pubkey = ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.bookmark_post(request, &user_pubkey).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -88,7 +124,11 @@ pub async fn unbookmark_post(
     request: BookmarkPostRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     let user_pubkey = ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.unbookmark_post(request, &user_pubkey).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -113,8 +153,28 @@ pub async fn get_bookmarked_post_ids(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<String>>, AppError> {
     let user_pubkey = ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.get_bookmarked_post_ids(&user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// フォロー中フィードを取得する
+#[tauri::command]
+pub async fn list_following_feed(
+    state: State<'_, AppState>,
+    request: ListFollowingFeedRequest,
+) -> Result<ApiResponse<FollowingFeedPageResponse>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
+    let result = handler.list_following_feed(&user_pubkey, request).await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -126,7 +186,11 @@ pub async fn batch_get_posts(
     state: State<'_, AppState>,
     request: BatchGetPostsRequest,
 ) -> Result<ApiResponse<Vec<PostResponse>>, AppError> {
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.batch_get_posts(request).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -138,7 +202,11 @@ pub async fn batch_react(
     request: BatchReactRequest,
 ) -> Result<ApiResponse<Vec<Result<(), String>>>, AppError> {
     ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.batch_react(request).await;
     Ok(ApiResponse::from_result(result))
 }
@@ -150,7 +218,11 @@ pub async fn batch_bookmark(
     request: BatchBookmarkRequest,
 ) -> Result<ApiResponse<Vec<Result<(), String>>>, AppError> {
     let user_pubkey = ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(state.post_service.clone(), state.auth_service.clone());
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
     let result = handler.batch_bookmark(request, &user_pubkey).await;
     Ok(ApiResponse::from_result(result))
 }

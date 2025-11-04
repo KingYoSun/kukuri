@@ -5,11 +5,12 @@ use super::queries::{
     SELECT_POSTS_BY_AUTHOR, SELECT_POSTS_BY_TOPIC, SELECT_RECENT_POSTS, SELECT_UNSYNC_POSTS,
     UPDATE_POST_CONTENT,
 };
-use crate::application::ports::repositories::PostRepository;
+use crate::application::ports::repositories::{PostFeedCursor, PostFeedPage, PostRepository};
 use crate::domain::entities::Post;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use chrono::Utc;
+use sqlx::{QueryBuilder, Sqlite};
 
 fn serialize_topic_tags(topic_id: &str) -> String {
     serde_json::to_string(&vec![vec!["t".to_string(), topic_id.to_string()]])
@@ -150,5 +151,70 @@ impl PostRepository for SqliteRepository {
         }
 
         Ok(posts)
+    }
+
+    async fn list_following_feed(
+        &self,
+        follower_pubkey: &str,
+        cursor: Option<PostFeedCursor>,
+        limit: usize,
+    ) -> Result<PostFeedPage, AppError> {
+        let limit = limit.clamp(1, 100);
+        let fetch_limit = limit + 1;
+
+        let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(
+            "SELECT e.event_id, e.public_key, e.content, e.tags, e.created_at \
+             FROM events e \
+             INNER JOIN follows f ON f.followed_pubkey = e.public_key \
+             WHERE f.follower_pubkey = ",
+        );
+        builder.push_bind(follower_pubkey);
+        builder.push(" AND e.kind = 1 AND e.deleted = 0");
+
+        if let Some(cursor) = cursor {
+            builder.push(" AND (e.created_at < ");
+            builder.push_bind(cursor.created_at);
+            builder.push(" OR (e.created_at = ");
+            builder.push_bind(cursor.created_at);
+            builder.push(" AND e.event_id < ");
+            builder.push_bind(cursor.event_id);
+            builder.push("))");
+        }
+
+        builder.push(" ORDER BY e.created_at DESC, e.event_id DESC LIMIT ");
+        builder.push_bind(fetch_limit as i64);
+
+        let rows = builder.build().fetch_all(self.pool.get_pool()).await?;
+
+        let mut rows_iter = rows.into_iter();
+        let mut posts = Vec::with_capacity(limit.min(fetch_limit));
+
+        for _ in 0..limit {
+            if let Some(row) = rows_iter.next() {
+                let post = map_post_row(&row, None)?;
+                posts.push(post);
+            } else {
+                break;
+            }
+        }
+
+        let has_more = rows_iter.next().is_some();
+        let next_cursor = if has_more {
+            posts.last().map(|post| {
+                PostFeedCursor {
+                    created_at: post.created_at.timestamp_millis(),
+                    event_id: post.id.clone(),
+                }
+                .to_string()
+            })
+        } else {
+            None
+        };
+
+        Ok(PostFeedPage {
+            items: posts,
+            next_cursor,
+            has_more,
+        })
     }
 }

@@ -126,3 +126,40 @@ pub struct TopicStatsResponse {
     pub active_users_24h: u32,
     pub trending_score: f64,
 }
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct ListTrendingTopicsRequest {
+    pub limit: Option<u32>,
+}
+
+impl Validate for ListTrendingTopicsRequest {
+    fn validate(&self) -> Result<(), String> {
+        if let Some(limit) = self.limit {
+            if limit == 0 {
+                return Err("取得件数は1以上で指定してください".to_string());
+            }
+            if limit > 100 {
+                return Err("取得件数は最大100件までです".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TrendingTopicDto {
+    pub topic_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub member_count: u32,
+    pub post_count: u32,
+    pub trending_score: f64,
+    pub rank: u32,
+    pub score_change: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListTrendingTopicsResponse {
+    pub generated_at: i64,
+    pub topics: Vec<TrendingTopicDto>,
+}

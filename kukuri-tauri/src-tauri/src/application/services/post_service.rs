@@ -1,10 +1,11 @@
 use crate::application::ports::cache::PostCache;
-use crate::application::ports::repositories::{BookmarkRepository, PostRepository};
+use crate::application::ports::repositories::{BookmarkRepository, PostFeedCursor, PostRepository};
 use crate::application::services::event_service::EventServiceTrait;
 use crate::domain::entities::{Post, User};
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
+use chrono::Utc;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::warn;
@@ -14,6 +15,14 @@ pub struct PostService {
     bookmark_repository: Arc<dyn BookmarkRepository>,
     event_service: Arc<dyn EventServiceTrait>,
     cache: Arc<dyn PostCache>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FollowingFeedPage {
+    pub items: Vec<Post>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+    pub server_time: i64,
 }
 
 impl PostService {
@@ -151,6 +160,27 @@ impl PostService {
         self.repository.get_recent_posts(limit).await
     }
 
+    pub async fn list_following_feed(
+        &self,
+        follower_pubkey: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<FollowingFeedPage, AppError> {
+        let limit = limit.clamp(1, 100);
+        let parsed_cursor = cursor.and_then(PostFeedCursor::parse);
+        let page = self
+            .repository
+            .list_following_feed(follower_pubkey, parsed_cursor, limit)
+            .await?;
+
+        Ok(FollowingFeedPage {
+            items: page.items,
+            next_cursor: page.next_cursor,
+            has_more: page.has_more,
+            server_time: Utc::now().timestamp_millis(),
+        })
+    }
+
     pub async fn react_to_post(&self, post_id: &str, reaction: &str) -> Result<(), AppError> {
         self.event_service.send_reaction(post_id, reaction).await?;
 
@@ -247,7 +277,7 @@ impl super::sync_service::SyncParticipant for PostService {
 mod tests {
     use super::*;
     use crate::application::ports::cache::PostCache;
-    use crate::application::ports::repositories::{BookmarkRepository, PostRepository};
+    use crate::application::ports::repositories::{BookmarkRepository, PostRepository, UserRepository};
     use crate::application::services::SubscriptionRecord;
     use crate::infrastructure::cache::PostCacheService;
     use crate::infrastructure::database::Repository;
@@ -257,7 +287,9 @@ mod tests {
     use crate::presentation::dto::event::NostrMetadataDto;
     use chrono::{TimeZone, Utc};
     use std::sync::Arc;
+    use std::time::Duration;
     use tokio::sync::Mutex;
+    use tokio::time::sleep;
 
     struct TestEventService {
         publish_topic_post_result: Mutex<Option<Result<EventId, AppError>>>,
@@ -511,6 +543,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_following_feed_returns_posts_in_desc_order() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
+
+        let follower_pubkey = "followerpub";
+        let followed_pubkey = "followedpub";
+
+        repository
+            .add_follow_relation(follower_pubkey, followed_pubkey)
+            .await
+            .expect("follow relation");
+
+        let mut author = sample_user();
+        author.pubkey = followed_pubkey.to_string();
+        author.npub = format!("npub_{followed_pubkey}");
+
+        let first_post = service
+            .create_post("first".into(), author.clone(), "trend".into())
+            .await
+            .expect("create first post");
+        sleep(Duration::from_millis(5)).await;
+        let second_post = service
+            .create_post("second".into(), author.clone(), "trend".into())
+            .await
+            .expect("create second post");
+
+        assert_ne!(first_post.id, second_post.id);
+
+        let raw_page = repository
+            .list_following_feed(follower_pubkey, None, 5)
+            .await
+            .expect("raw page");
+        assert_eq!(raw_page.items.len(), 2);
+
+        let page_one = service
+            .list_following_feed(follower_pubkey, None, 1)
+            .await
+            .expect("page one");
+        assert_eq!(page_one.items.len(), 1);
+        let newest_id = page_one.items[0].id.clone();
+        assert_eq!(newest_id, second_post.id);
+        assert!(page_one.has_more);
+        let next_cursor = page_one.next_cursor.clone();
+
+        let page_two = service
+            .list_following_feed(follower_pubkey, next_cursor.as_deref(), 1)
+            .await
+            .expect("page two");
+        assert_eq!(page_two.items.len(), 1);
+        assert_eq!(page_two.items[0].id, first_post.id);
+        assert!(!page_two.has_more);
+    }
+
     async fn get_posts_by_topic_prefers_cache_when_available() {
         let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
         let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
