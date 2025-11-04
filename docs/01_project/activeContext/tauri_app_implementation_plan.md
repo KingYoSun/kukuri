@@ -444,11 +444,12 @@ export function PeerConnectionPanel() {
 1. 投稿導線統一: `Sidebar`「新規投稿」ボタン → グローバルコンポーザー起動（`useComposerStore` 新設）。
 2. プロフィール編集再利用: `ProfileSetup` 共通化と設定画面モーダル導線の実装。
 3. プライバシー設定反映: `usePrivacySettingsStore` でトグル状態を管理し、将来のバックエンド連携を見据えて永続化。
-4. トレンド/フォロー中タブ: UI 上で「準備中」表示を行いつつ、必要な API/データ取得要件を整理。
-5. テスト/UX 確認: 新規コンポーザー導線とプロフィール編集モーダル、`RelayStatus`/`P2PStatus` のステータス表示をユニット・統合テストでカバーし、操作ログを `phase5_ci_path_audit.md` に追記する。2025年11月03日: `pnpm test:unit` スクリプトと Nightly Frontend Unit Tests ワークフロー（cron 実行）を追加し、定期実行とローカル検証手順を共通化。フェイクタイマーを用いた `RelayStatus`/`P2PStatus` テストを整備し、同日付で `phase5_user_flow_inventory.md` 5.5節にリレー取得失敗時の UI/リトライ設計とバックオフ方針を追記。
-6. プロフィール画像アップロード: `ProfileForm` のアップロードボタン導線を実装し、`ProfileEditDialog`/オンボーディング双方で同一コードパスを利用できるようにする。
-7. 鍵管理モーダル: `export_private_key`/`SecureStorageApi.addAccount` を利用したバックアップ・インポート導線を実装し、保存/復旧手順の注意喚起とロギング方針を明文化する。
-8. プロフィール画像リモート同期: iroh-blobs 0.96.0 と iroh-docs 0.94.0 を組み合わせた `upload_profile_avatar` / `fetch_profile_avatar` コマンド、Capability ベースのアクセス制御、`StreamEncryptor` による暗号化、Doc レプリケーション監視フローを実装し、ローカル保存のみの経路を廃止する。
+4. トレンド/フォロー中フィード新設: Inventory 5.7 で定義した `/trending`・`/following` ルート、`list_trending_topics`/`list_following_feed` コマンド、React Query フック（prefetch/無限スクロール）を実装し、トピック発見とフォロー体験を分離する。メトリクス集計ジョブと Nightly テストの整備を含む。
+5. ユーザー検索導線改善: Inventory 5.8 に基づき `search_users` コマンド拡張（cursor/sort/レートリミット）、`useUserSearchQuery` のデバウンス + 無限スクロール対応、`SearchErrorState` コンポーネント、Vitest/Rust/Docker テストを追加して検索 UX を底上げする。
+6. テスト/UX 確認: 新規コンポーザー導線とプロフィール編集モーダル、`RelayStatus`/`P2PStatus` のステータス表示をユニット・統合テストでカバーし、操作ログを `phase5_ci_path_audit.md` に追記する。2025年11月03日: `pnpm test:unit` スクリプトと Nightly Frontend Unit Tests ワークフロー（cron 実行）を追加し、定期実行とローカル検証手順を共通化。フェイクタイマーを用いた `RelayStatus`/`P2PStatus` テストを整備し、同日付で `phase5_user_flow_inventory.md` 5.5節にリレー取得失敗時の UI/リトライ設計とバックオフ方針を追記。
+7. プロフィール画像アップロード: `ProfileForm` のアップロードボタン導線を実装し、`ProfileEditDialog`/オンボーディング双方で同一コードパスを利用できるようにする。
+8. 鍵管理モーダル: `export_private_key`/`SecureStorageApi.addAccount` を利用したバックアップ・インポート導線を実装し、保存/復旧手順の注意喚起とロギング方針を明文化する。
+9. プロフィール画像リモート同期: iroh-blobs 0.96.0 と iroh-docs 0.94.0 を組み合わせた `upload_profile_avatar` / `fetch_profile_avatar` コマンド、Capability ベースのアクセス制御、`StreamEncryptor` による暗号化、Doc レプリケーション監視フローを実装し、ローカル保存のみの経路を廃止する。
 
 > 詳細設計は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` のセクション6を参照。
 

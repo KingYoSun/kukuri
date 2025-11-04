@@ -50,6 +50,12 @@
   - 2025年11月04日: DirectMessageDialog のスケルトンを基にコマンド/ストアの挙動を確認し、ユニットテスト `src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を整備。`pnpm test:unit` を実行して DM ダイアログ・プロフィール導線の回帰を確認し、`phase5_user_flow_summary.md` に DM 導線のテスト状況を追記。
   - 2025年11月04日: `phase5_user_flow_inventory.md` にダイレクトメッセージ節を追加し、`send_direct_message` が UI 接続済みながら Tauri で `NotImplemented` を返している点と `list_direct_messages` 未配線を明記。併せて残課題・次アクションを更新し、`phase5_user_flow_summary.md` のプロフィール行・グローバル要素・優先度表を最新の状況に差し替え。
   - 2025年11月04日: Inventory 5.6.1/5.6.2 に `send_direct_message` / `list_direct_messages` Tauri 実装計画（サービス/ポート/リポジトリ/マイグレーション/テスト）とフォロワー一覧ソート・ページネーション設計を詳細化。サマリードキュメントの Quick View / 優先度表を同計画と紐付け、React Query・Rust・Docker テストのフォローアップ項目を明文化。
+  - [ ] `phase5_user_flow_inventory.md` に「トレンド/フォロー中」導線のデータ要件・UI 仕様・テスト計画を追加し、`phase5_user_flow_summary.md`（セクション1.2/3章）と `tauri_app_implementation_plan.md` Phase 5 backlog を同期させる。
+  - [ ] ユーザー検索タブのページネーション／エラー UI／入力バリデーション方針を「ユーザー検索導線改善」節として整理し、`phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md`、`docs/03_implementation/error_handling_guidelines.md` に反映する。
+  - [ ] ホーム/サイドバーからのトピック作成導線（グローバルコンポーザー連携案）の仕様・依存コマンド・テスト計画をまとめ、Inventory と Summary に追記する。
+  - [ ] 投稿削除後の React Query キャッシュ無効化と `delete_post` 統合テスト整備をフォローアップする文書（Inventory・Summary・`phase5_ci_path_audit.md`）を作成し、進捗と整合性を確認する。
+  - [ ] DM/フォロワー/プロフィール画像導線のフォローアップ項目に合わせ、`docs/03_implementation/error_handling_guidelines.md`・`phase5_dependency_inventory_template.md`・`tauri_app_implementation_plan.md` の該当節を更新する。
+  - [ ] `phase5_user_flow_summary.md` と `phase5_user_flow_inventory.md` の最終更新日・Quick View・優先度表・ギャップ一覧が上記残タスクと整合するよう再確認し、必要な差分を反映する。
 - [x] 投稿削除導線（delete_post）実装準備
   - 2025年11月03日: `phase5_user_flow_inventory.md` セクション5.6に UX / バックエンド / テスト仕様を整理。`delete_post` コマンドを活用した削除フローと楽観更新、オフライン再送の方針を定義。
   - 2025年11月03日: `phase5_user_flow_summary.md` 優先度表を更新し、本タスクを Priority A として再掲。`PostCard` に削除メニューと確認ダイアログを追加し、`postStore.deletePostRemote` をオフライン対応込みで接続。関連ユニットテスト（PostCard / postStore）を更新。

@@ -185,6 +185,18 @@ try {
 }
 ```
 
+## UIコンポーネント別エラーハンドリングキー（2025年11月04日追加）
+
+| キー | 想定コンポーネント / コンテキスト | 推奨 `toastTitle` | 備考 |
+| --- | --- | --- | --- |
+| `TrendingFeed.fetch_failed` | `/trending` ルートの `TrendingRoute` / `TrendingTopicList` | `トレンド情報の取得に失敗しました` | `context: 'TrendingRoute.load'`。再試行ボタン押下時は `errorHandler.log` に `retry: true` を付加。 |
+| `FollowingFeed.fetch_failed` | `/following` ルートの `FollowingFeed` | `フォロー中の最新投稿を読み込めませんでした` | 429（レート制限）は `retryAfterSeconds` を `meta` に含め、UI でカウントダウン表示。 |
+| `UserSearch.invalid_query` | `/search` (users) の `UserSearchResults` | `2文字以上入力してください` | クエリ長が足りない場合に表示。入力欄へエラースタイルを適用し、既存結果は保持。 |
+| `UserSearch.fetch_failed` | `UserSearchResults` / `useUserSearchQuery` | `ユーザー検索に失敗しました` | ネットワーク/サーバーエラー時。`context` に `statusCode` を含める。 |
+| `UserSearch.rate_limited` | 同上 | `一定時間後に再試行してください` | `meta.retryAfter`（秒）を UI に表示し、再試行ボタンを無効化。 |
+
+> 新しいキーを追加する場合は、`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` の該当節と照合し、命名の一貫性を保つ。
+
 ## 今後の拡張予定
 
 ## バックエンド（Tauri/Rust）との連携

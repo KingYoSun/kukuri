@@ -20,7 +20,9 @@
 | 要素 | パス/配置 | 主な機能 | 関連コマンド/ストア |
 | --- | --- | --- | --- |
 | Home タイムライン | `/` | 参加中トピックがあればフィルタリング、`PostComposer` で投稿/下書き/Markdown、`PostCard` でいいね・ブースト・返信・引用・ブックマーク | `get_posts`, `create_post`, `like_post`, `boost_post`, `bookmark_post`, `unbookmark_post`, `get_bookmarked_post_ids`, `send_reaction` |
-| サイドバー | 共通 | 参加トピック一覧（P2P最終活動時刻でソート）、未読バッジ、`新規投稿`ボタンでグローバルコンポーザーを起動、カテゴリー（`トピック一覧`/`検索`/`トレンド`/`フォロー中`） | `join_topic`/`leave_topic`（`TopicCard` 経由、`subscribe_to_topic` と連動）、`useComposerStore.openComposer`。※「トレンド」「フォロー中」はパス未割り当て |
+| サイドバー | 共通 | 参加トピック一覧（P2P最終活動時刻でソート）、未読バッジ、`新規投稿`ボタンでグローバルコンポーザーを起動、カテゴリー（`トピック一覧`/`検索`/`トレンド`/`フォロー中`） | `join_topic`/`leave_topic`（`TopicCard` 経由、`subscribe_to_topic` と連動）、`useComposerStore.openComposer`。※「トレンド」「フォロー中」は `/trending`・`/following` ルート追加を予定（仕様は 5.7 節）。 |
+| トレンドフィード | `/trending`（新設予定, `routes/trending.tsx`） | トレンドスコア上位トピックのランキングカード表示、関連投稿プレビュー、参加/ブックマーク導線 | `list_trending_topics`（新設予定）, `list_trending_posts`（新設予定）, `get_topic_stats`, `join_topic`, `bookmark_post` |
+| フォロー中フィード | `/following`（新設予定, `routes/following.tsx`） | フォロー中ユーザーの最新投稿タイムライン、未読境界、プロフィール遷移/フォロー解除ショートカット | `list_following_feed`（新設予定）, `get_posts`, `follow_user`/`unfollow_user`, `subscribe_to_user`, `list_direct_messages` |
 | ヘッダー | 共通 | `RealtimeIndicator`, `SyncStatusIndicator`, 通知アイコン（ダミー）、`AccountSwitcher`（アカウント切替/追加/削除/ログアウト） | `switch_account`, `list_accounts`, `remove_account`, `logout`, `disconnect_nostr`, `secure_login`（自動ログイン時） |
 | グローバル同期 | 共通 | `SyncStatusIndicator` でオフライン同期進捗/競合対応、`useSyncManager` によるローカル→Tauri リクエスト | `create_post`, `like_post`, `join_topic`, `leave_topic`（未同期操作の再送） |
 
@@ -74,8 +76,8 @@
 | メッセージ導線 | `/profile/$userId` (`ProfilePage`) | `MessageCircle` ボタンをプレースホルダーとして表示し、現在は disabled。 | 直接メッセージ機能は未実装。Phase 5 backlog で別タスクとして管理。 |
 
 ## 2. 確認できた導線ギャップ
-- サイドバーの「トレンド」「フォロー中」は routing 未実装のプレースホルダー。
-- ユーザー検索は実ユーザーを返すが、ページネーション・検索エラーUI・入力バリデーションが未整備。
+- サイドバーの「トレンド」「フォロー中」は 5.7 節の仕様に従った `/trending`・`/following` ルートとバックエンド API 実装が完了するまでプレースホルダー。
+- ユーザー検索は実ユーザーを返すが、ページネーション・検索エラーUI・入力バリデーションが未整備（改善計画は 5.8 節を参照）。
 - `/profile/$userId` はフォロー導線とフォロワーリストを備えたが、メッセージ導線とリストのフィルタリング/ソートが未実装。
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
 - 投稿削除は UI から利用可能になったが、React Query のキャッシュ無効化と `delete_post` コマンド統合テスト整備が未完了。
@@ -333,6 +335,59 @@
 - **フォローアップ**
   - `docs/03_implementation/error_handling_guidelines.md` に `FollowersList.fetch_failed` を追加し、ログ/トーストの整合を保つ。
   - `phase5_dependency_inventory_template.md` と `tauri_app_implementation_plan.md` に API 変更とタスクを追記予定。
+
+### 5.7 トレンド/フォロー中導線実装計画（2025年11月04日追加）
+- **目的**: サイドバーカテゴリー「トレンド」「フォロー中」からアクセスできる発見導線とマイフィード導線を整備し、Home タイムラインとの差別化と優先度の可視化を実現する。
+- **UI 実装案**
+  - `routes/trending.tsx`（新規）で `TrendingRoute` を定義し、`TrendingTopicList`（ランキングカード）と `TrendingPostPreviewList`（各トピック最新 3 件）を表示。ランキングカードは順位・トピック名・`trending_score`・前日比・参加ボタンを含む。
+  - `routes/following.tsx`（新規）で `FollowingRoute` を定義し、`FollowingFeed`（フォロー中ユーザー投稿の無限スクロール）と `FollowingSummaryPanel`（最近フォローしたユーザー、DM 未読、フォロー解除ショートカット）を表示。
+  - サイドバーは `useUIStore` に `activeCategory` を追加して状態を同期し、選択中カテゴリーのボタンを強調。ルート離脱時は状態をリセット。
+  - ローディング時は Skeleton、エラー時は `ErrorStateCard`（共通化）で `errorHandler` メッセージと再試行ボタン・サポートリンクを表示。空状態は `EmptyStateCard` で案内文とアクション（例: トピック参加、ユーザー検索）を案内。
+- **バックエンド/コマンド設計**
+  - `list_trending_topics`（新コマンド）: `topic_metrics`（新テーブル: topic_id, window_start, posts_24h, new_members_24h, active_users_24h, trend_score）から最新ウィンドウを取得し、`trend_score = posts_24h * 0.6 + new_members_24h * 0.4` を返却。レスポンスは `{ topics: Vec<TrendingTopicDto>, generated_at }`。
+  - `list_trending_posts`（新コマンド）: 引数 `{ topic_ids: Vec<String>, per_topic: u16 }` を受け取り、各トピックの最新投稿をまとめて返却。`PostDto` に `topic_name` と `relative_rank` を含める。
+  - `list_following_feed`（新コマンド）: フォロー中ユーザーの投稿を `cursor = "{created_at}:{event_id}"` 形式でページングしつつ、`has_more` と `server_time` を返却。`include_reactions` フラグでリアクション状態を同梱。
+  - メトリクス集計は新ワーカー `trending_metrics_job`（5 分毎）で `posts` テーブルを走査し、`topic_metrics` を更新。ワーカーは `tokio::spawn` で起動し、`AppState` にハンドルを保持。
+- **状態管理・ストア**
+  - `useTrendingTopicsQuery` / `useTrendingPostsQuery`（新規 React Query フック）を追加し、`staleTime = 60_000`、`refetchInterval = 120_000`。`TrendingRoute` は両方のクエリを `Promise.all` で取得。
+  - `useFollowingFeedQuery`（新規）で `keepPreviousData` を有効化し、`followingFeedStore`（Zustand）に `lastSeenAt` / `scrollPosition` / `unreadCount` を保持。ルート入場時に未読境界をセット、離脱時に更新。
+  - どちらのルートも `prefetchQuery` を `Sidebar` クリック時に呼び出すことで体感速度を改善（`queryClient.prefetchQuery` 利用）。
+- **テスト計画**
+  - TypeScript: `TrendingRoute.test.tsx`（ランキング表示、エラー→再試行、空状態）、`FollowingRoute.test.tsx`（無限スクロール、未読境界、プロフィール遷移）を追加。`msw` で API モック。
+  - TypeScript: `Sidebar.test.tsx` を更新し、`category-trending`/`category-フォロー中` クリック時に `navigate({ to: '/trending' })` / `/following` が呼ばれること、`useUIStore` の `activeCategory` が更新されることを確認。
+  - Rust: `trending_metrics_job` の単体テストでウィンドウ計算・0件時の初期値・複数トピック同時集計を検証。`list_following_feed` の統合テストでカーソル境界・フォロー解除直後の結果・レートリミットを確認。
+  - Docker: `docker-compose.test.yml` に `trending-feed` シナリオを追加し、複数ピア投稿でトレンド順位が同期されることを検証。Windows では `./scripts/test-docker.ps1 ts -Scenario trending-feed` を案内。
+- **フォローアップ**
+  - `phase5_user_flow_summary.md`（1.2節 / 3節 / 6節）と `tauri_app_implementation_plan.md` Phase 5 優先度に本計画をリンク済み。
+  - `docs/03_implementation/p2p_mainline_runbook.md` にトレンドメトリクス監視手順としきい値、アラート対応を追記予定。
+  - CI: `phase5_ci_path_audit.md` に `TrendingRoute`/`FollowingRoute` のユニット・統合テスト ID を追加し、Nightly テストでの実行対象に含める。
+
+### 5.8 ユーザー検索導線改善計画（2025年11月04日追加）
+- **目的**: `/search` (users) タブで安定した検索体験（ページネーション・エラー復旧・レート制御）を提供し、フォロー導線とプロフィール遷移を促進する。
+- **UI 実装案**
+  - 検索入力は `query.trim().length >= 2` を必須条件とし、それ未満の場合はリクエストを発行せず空状態カードを表示。「2文字以上入力してください」とガイダンスを提示。
+  - `UserSearchResults` を `useInfiniteQuery` に切り替え、カーソルによる追加取得・`Load more` ボタン・`IntersectionObserver` を併用。`keepPreviousData` を有効化し、再検索時にフラッシュを抑制。
+  - エラー表示は `SearchErrorState`（新規）で `errorHandler` のキーを解釈し、`再試行` ボタン・サポートリンク・レートリミット残り時間表示を提供。無結果時は `EmptyStateCard` を表示。
+  - 入力欄下部に検索時間・ヒット件数を表示し、結果差分が発生した場合は `diff` ハイライト（CSS アニメーション）で通知。フォロー操作成功時は該当行で楽観的更新し、エラー時は `errorHandler` でロールバック。
+- **バックエンド/コマンド**
+  - `search_users` コマンドを `SearchUsersRequest { query: String, cursor: Option<String>, limit: u16, sort: Option<SearchSort>, allow_incomplete: bool }` へ拡張。
+    - `cursor` は `"{last_seen_at}:{pubkey}"` 形式。`sort` は `relevance`（デフォルト）/`recency`。`allow_incomplete` はフォールバック（キャッシュ結果のみ返す）を許可するフラグ。
+    - クエリ長が 2 未満の場合は `AppError::InvalidInput`（コード: `USER_SEARCH_QUERY_TOO_SHORT`）を返却。
+  - `UserSearchService`（新規）を追加し、Nostr インデックスから取得したプロフィールとローカルキャッシュを統合。`rank = text_score * 0.7 + mutual_follow * 0.2 + recent_activity * 0.1` を計算し、`relevance` ソートに利用。
+  - レートリミットはユーザー単位で 10 秒間に 30 リクエストまで。超過時は `AppError::RateLimited { retry_after_seconds }` を返し、UI がカウントダウンを表示できるようにする。
+- **エラーハンドリング**
+  - `errorHandler` に `UserSearch.fetch_failed`, `UserSearch.invalid_query`, `UserSearch.rate_limited` を追加（詳細は `docs/03_implementation/error_handling_guidelines.md`）。
+  - `SearchErrorState` は `invalid_query` の場合に入力欄へ警告スタイルを適用し、レートリミットの場合は再試行ボタンを無効化してクールダウンタイマーを表示。
+  - バックエンドは `AppError::RateLimited` を 429 としてラップし、`retry_after_seconds` の値をレスポンス JSON に含める。
+- **テスト計画**
+  - TypeScript: `UserSearchResults.test.tsx` の拡張で (1) クエリ長 < 2 ではリクエストが送信されない、(2) 正常系で `fetchNextPage` が cursor を渡す、(3) レートリミット→カウントダウン→自動再取得、(4) エラー再試行時に既存データを保持する、の各ケースを検証。
+  - TypeScript: `useUserSearchQuery.test.ts`（新規）でデバウンス・キャンセル・クリーンアップをテスト（`vi.useFakeTimers()` 使用）。
+  - Rust: `user_search_service` ユニットテストで短いクエリ・レートリミット・ソート順・カーソル境界を網羅。`AppError` 変換のテストを追加。
+  - Docker: `docker-compose.test.yml` に `user-search-pagination` シナリオを追加し、Nostr リレー未接続時でもキャッシュのみで検索可能か検証。Windows 用には `./scripts/test-docker.ps1 ts -Scenario user-search-pagination` を案内。
+- **フォローアップ**
+  - `phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md` Phase 5 優先度表へ本節をリンク。
+  - `docs/03_implementation/error_handling_guidelines.md` に新しいキーとユーザー向けトースト文言を追記。
+  - CI では Nightly Frontend Unit Tests に `UserSearchResults` / `useUserSearchQuery` テストの実行ログを追加し、`phase5_ci_path_audit.md` にテスト ID を記録。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 
