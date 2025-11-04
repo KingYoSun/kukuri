@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import { GlobalComposer } from '@/components/posts/GlobalComposer';
+import { DirectMessageDialog } from '@/components/directMessages/DirectMessageDialog';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -27,6 +28,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         </main>
       </div>
       <GlobalComposer />
+      <DirectMessageDialog />
     </div>
   );
 }

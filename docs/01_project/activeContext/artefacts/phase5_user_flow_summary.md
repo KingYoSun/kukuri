@@ -54,7 +54,7 @@
 - **同期系 UI**: `SyncStatusIndicator`／`OfflineIndicator` が `offlineStore` と `syncEngine` の状態を表示し、未同期アクションの再送を支援。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。
-- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` で kind 4 DM を送受信する仕様を設計中（モーダル UI / 未読バッジ / オフライン再送対応）。
+- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` で kind 4 DM を送受信する仕様を設計中（モーダル UI / 未読バッジ / オフライン再送対応）。2025年11月04日時点でモーダルのユニットテスト（`DirectMessageDialog.test.tsx`）と `pnpm test:unit` の回帰確認を完了。
 
 ## 3. 導線ギャップ Quick View
 1. サイドバー「トレンド」「フォロー中」リンクに対する画面が未実装。

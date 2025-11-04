@@ -1,4 +1,4 @@
-use crate::application::ports::repositories::UserRepository;
+use crate::application::ports::repositories::{UserCursorPage, UserRepository};
 use crate::domain::entities::{User, UserMetadata};
 use crate::shared::{AppError, ValidationFailureKind};
 use std::sync::Arc;
@@ -89,12 +89,76 @@ impl UserService {
         }
     }
 
+    pub async fn get_followers_paginated(
+        &self,
+        npub: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<UserCursorPage, AppError> {
+        self.repository
+            .get_followers_paginated(npub, cursor, limit)
+            .await
+    }
+
+    pub async fn get_following_paginated(
+        &self,
+        npub: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<UserCursorPage, AppError> {
+        self.repository
+            .get_following_paginated(npub, cursor, limit)
+            .await
+    }
+
     pub async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError> {
-        self.repository.get_followers(npub).await
+        let mut all_users = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        loop {
+            let UserCursorPage {
+                users,
+                next_cursor,
+                has_more,
+            } = self
+                .get_followers_paginated(npub, cursor.as_deref(), 100)
+                .await?;
+
+            all_users.extend(users.into_iter());
+
+            if !has_more || next_cursor.is_none() {
+                break;
+            }
+
+            cursor = next_cursor;
+        }
+
+        Ok(all_users)
     }
 
     pub async fn get_following(&self, npub: &str) -> Result<Vec<User>, AppError> {
-        self.repository.get_following(npub).await
+        let mut all_users = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        loop {
+            let UserCursorPage {
+                users,
+                next_cursor,
+                has_more,
+            } = self
+                .get_following_paginated(npub, cursor.as_deref(), 100)
+                .await?;
+
+            all_users.extend(users.into_iter());
+
+            if !has_more || next_cursor.is_none() {
+                break;
+            }
+
+            cursor = next_cursor;
+        }
+
+        Ok(all_users)
     }
 
     pub async fn delete_user(&self, npub: &str) -> Result<(), AppError> {
@@ -123,6 +187,19 @@ mod tests {
     const BOB_NPUB: &str = "npub1bob";
     const BOB_PUB: &str = "bob_pub";
 
+    fn parse_cursor(cursor: &str) -> Result<(i64, String), AppError> {
+        let mut parts = cursor.splitn(2, ':');
+        let timestamp = parts
+            .next()
+            .ok_or_else(|| AppError::InvalidInput("Invalid cursor format".into()))?
+            .parse::<i64>()
+            .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
+        let pubkey = parts
+            .next()
+            .ok_or_else(|| AppError::InvalidInput("Invalid cursor format".into()))?
+            .to_string();
+        Ok((timestamp, pubkey))
+    }
     #[derive(Default)]
     struct InMemoryUserRepository {
         users: RwLock<HashMap<String, User>>,
@@ -192,40 +269,128 @@ mod tests {
             Ok(())
         }
 
-        async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError> {
+        async fn get_followers_paginated(
+            &self,
+            npub: &str,
+            cursor: Option<&str>,
+            limit: usize,
+        ) -> Result<UserCursorPage, AppError> {
             let users = self.users.read().await;
             let target_pubkey = match users.get(npub) {
                 Some(user) => user.pubkey.clone(),
-                None => return Ok(vec![]),
+                None => {
+                    return Ok(UserCursorPage {
+                        users: vec![],
+                        next_cursor: None,
+                        has_more: false,
+                    });
+                }
             };
             let follows = self.follows.read().await;
-            let mut result = Vec::new();
-            for (follower, followed) in follows.iter() {
-                if followed == &target_pubkey {
-                    if let Some(user) = users.values().find(|u| u.pubkey == *follower) {
-                        result.push(user.clone());
+            let mut follower_pubkeys: Vec<String> = follows
+                .iter()
+                .filter_map(|(follower, followed)| {
+                    if followed == &target_pubkey {
+                        Some(follower.clone())
+                    } else {
+                        None
                     }
+                })
+                .collect();
+
+            follower_pubkeys.sort();
+            follower_pubkeys.reverse();
+
+            let mut start_index = 0usize;
+            if let Some(cursor) = cursor {
+                let (_, cursor_pubkey) = parse_cursor(cursor)?;
+                if let Some(position) = follower_pubkeys
+                    .iter()
+                    .position(|pubkey| pubkey == &cursor_pubkey)
+                {
+                    start_index = position.saturating_add(1);
                 }
             }
-            Ok(result)
+
+            let mut items = Vec::new();
+            let mut next_cursor = None;
+            for (index, pubkey) in follower_pubkeys.into_iter().enumerate().skip(start_index) {
+                if items.len() >= limit {
+                    next_cursor = Some(format!("{index}:{pubkey}"));
+                    break;
+                }
+                if let Some(user) = users.values().find(|u| u.pubkey == pubkey) {
+                    items.push(user.clone());
+                }
+            }
+
+            Ok(UserCursorPage {
+                users: items,
+                next_cursor,
+                has_more: next_cursor.is_some(),
+            })
         }
 
-        async fn get_following(&self, npub: &str) -> Result<Vec<User>, AppError> {
+        async fn get_following_paginated(
+            &self,
+            npub: &str,
+            cursor: Option<&str>,
+            limit: usize,
+        ) -> Result<UserCursorPage, AppError> {
             let users = self.users.read().await;
             let follower_pubkey = match users.get(npub) {
                 Some(user) => user.pubkey.clone(),
-                None => return Ok(vec![]),
+                None => {
+                    return Ok(UserCursorPage {
+                        users: vec![],
+                        next_cursor: None,
+                        has_more: false,
+                    });
+                }
             };
             let follows = self.follows.read().await;
-            let mut result = Vec::new();
-            for (follower, followed) in follows.iter() {
-                if follower == &follower_pubkey {
-                    if let Some(user) = users.values().find(|u| u.pubkey == *followed) {
-                        result.push(user.clone());
+            let mut followed_pubkeys: Vec<String> = follows
+                .iter()
+                .filter_map(|(follower, followed)| {
+                    if follower == &follower_pubkey {
+                        Some(followed.clone())
+                    } else {
+                        None
                     }
+                })
+                .collect();
+
+            followed_pubkeys.sort();
+            followed_pubkeys.reverse();
+
+            let mut start_index = 0usize;
+            if let Some(cursor) = cursor {
+                let (_, cursor_pubkey) = parse_cursor(cursor)?;
+                if let Some(position) = followed_pubkeys
+                    .iter()
+                    .position(|pubkey| pubkey == &cursor_pubkey)
+                {
+                    start_index = position.saturating_add(1);
                 }
             }
-            Ok(result)
+
+            let mut items = Vec::new();
+            let mut next_cursor = None;
+            for (index, pubkey) in followed_pubkeys.into_iter().enumerate().skip(start_index) {
+                if items.len() >= limit {
+                    next_cursor = Some(format!("{index}:{pubkey}"));
+                    break;
+                }
+                if let Some(user) = users.values().find(|u| u.pubkey == pubkey) {
+                    items.push(user.clone());
+                }
+            }
+
+            Ok(UserCursorPage {
+                users: items,
+                next_cursor,
+                has_more: next_cursor.is_some(),
+            })
         }
 
         async fn add_follow_relation(

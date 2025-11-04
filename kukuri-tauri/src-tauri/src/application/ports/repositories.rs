@@ -3,6 +3,13 @@ use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 
+#[derive(Debug, Clone)]
+pub struct UserCursorPage {
+    pub users: Vec<User>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
 #[async_trait]
 pub trait PostRepository: Send + Sync {
     async fn create_post(&self, post: &Post) -> Result<(), AppError>;
@@ -47,8 +54,18 @@ pub trait UserRepository: Send + Sync {
     async fn search_users(&self, query: &str, limit: usize) -> Result<Vec<User>, AppError>;
     async fn update_user(&self, user: &User) -> Result<(), AppError>;
     async fn delete_user(&self, npub: &str) -> Result<(), AppError>;
-    async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError>;
-    async fn get_following(&self, npub: &str) -> Result<Vec<User>, AppError>;
+    async fn get_followers_paginated(
+        &self,
+        npub: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<UserCursorPage, AppError>;
+    async fn get_following_paginated(
+        &self,
+        npub: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<UserCursorPage, AppError>;
     async fn add_follow_relation(
         &self,
         follower_pubkey: &str,

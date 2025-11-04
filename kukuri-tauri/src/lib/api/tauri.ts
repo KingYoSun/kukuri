@@ -93,6 +93,58 @@ export interface UserProfile {
   nip05?: string | null;
 }
 
+export interface UserListPage {
+  items: UserProfile[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface GetFollowersParams {
+  npub: string;
+  cursor?: string | null;
+  limit?: number;
+}
+
+export interface GetFollowingParams {
+  npub: string;
+  cursor?: string | null;
+  limit?: number;
+}
+
+export interface SendDirectMessagePayload {
+  recipientNpub: string;
+  content: string;
+  clientMessageId?: string;
+}
+
+export interface DirectMessageItem {
+  eventId: string | null;
+  clientMessageId: string | null;
+  senderNpub: string;
+  recipientNpub: string;
+  content: string;
+  createdAt: number;
+  delivered: boolean;
+}
+
+export interface DirectMessagePage {
+  items: DirectMessageItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface ListDirectMessagesParams {
+  conversationNpub: string;
+  cursor?: string | null;
+  limit?: number;
+  direction?: 'backward' | 'forward';
+}
+
+export interface SendDirectMessageResult {
+  eventId: string | null;
+  queued: boolean;
+}
+
 export type ProfileAvatarAccessLevel = 'public' | 'contacts_only' | 'private';
 
 export interface UploadProfileAvatarOptions {
@@ -272,12 +324,102 @@ export class TauriApi {
     return await invokeCommand<UserProfile | null>('get_user_by_pubkey', { pubkey });
   }
 
-  static async getFollowers(npub: string): Promise<UserProfile[]> {
-    return await invokeCommand<UserProfile[]>('get_followers', { npub });
+  static async getFollowers(params: GetFollowersParams): Promise<UserListPage> {
+    const response = await invokeCommand<{
+      items: UserProfile[];
+      next_cursor: string | null;
+      has_more: boolean;
+    }>('get_followers', {
+      request: {
+        npub: params.npub,
+        cursor: params.cursor ?? null,
+        limit: params.limit,
+      },
+    });
+
+    return {
+      items: response?.items ?? [],
+      nextCursor: response?.next_cursor ?? null,
+      hasMore: response?.has_more ?? false,
+    };
   }
 
-  static async getFollowing(npub: string): Promise<UserProfile[]> {
-    return await invokeCommand<UserProfile[]>('get_following', { npub });
+  static async getFollowing(params: GetFollowingParams): Promise<UserListPage> {
+    const response = await invokeCommand<{
+      items: UserProfile[];
+      next_cursor: string | null;
+      has_more: boolean;
+    }>('get_following', {
+      request: {
+        npub: params.npub,
+        cursor: params.cursor ?? null,
+        limit: params.limit,
+      },
+    });
+
+    return {
+      items: response?.items ?? [],
+      nextCursor: response?.next_cursor ?? null,
+      hasMore: response?.has_more ?? false,
+    };
+  }
+
+  static async sendDirectMessage(payload: SendDirectMessagePayload): Promise<SendDirectMessageResult> {
+    const response = await invokeCommand<{
+      event_id: string | null;
+      queued: boolean;
+    }>('send_direct_message', {
+      request: {
+        recipient_npub: payload.recipientNpub,
+        content: payload.content,
+        client_message_id: payload.clientMessageId,
+      },
+    });
+
+    return {
+      eventId: response?.event_id ?? null,
+      queued: response?.queued ?? false,
+    };
+  }
+
+  static async listDirectMessages(
+    params: ListDirectMessagesParams,
+  ): Promise<DirectMessagePage> {
+    const response = await invokeCommand<{
+      items: Array<{
+        event_id: string | null;
+        client_message_id: string | null;
+        sender_npub: string;
+        recipient_npub: string;
+        content: string;
+        created_at: number;
+        delivered: boolean;
+      }>;
+      next_cursor: string | null;
+      has_more: boolean;
+    }>('list_direct_messages', {
+      request: {
+        conversation_npub: params.conversationNpub,
+        cursor: params.cursor ?? null,
+        limit: params.limit,
+        direction: params.direction,
+      },
+    });
+
+    return {
+      items:
+        response?.items?.map((item) => ({
+          eventId: item.event_id,
+          clientMessageId: item.client_message_id,
+          senderNpub: item.sender_npub,
+          recipientNpub: item.recipient_npub,
+          content: item.content,
+          createdAt: item.created_at,
+          delivered: item.delivered,
+        })) ?? [],
+      nextCursor: response?.next_cursor ?? null,
+      hasMore: response?.has_more ?? false,
+    };
   }
 
   static async followUser(followerNpub: string, targetNpub: string): Promise<void> {

@@ -89,6 +89,8 @@ pub fn run() {
             presentation::commands::unfollow_user,
             presentation::commands::get_followers,
             presentation::commands::get_following,
+            presentation::commands::send_direct_message,
+            presentation::commands::list_direct_messages,
             presentation::commands::upload_profile_avatar,
             presentation::commands::fetch_profile_avatar,
             // トピック関連コマンド

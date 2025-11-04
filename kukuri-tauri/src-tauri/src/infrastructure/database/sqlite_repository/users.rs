@@ -1,14 +1,31 @@
 use super::SqliteRepository;
 use super::mapper::map_user_row;
 use super::queries::{
-    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SEARCH_USERS, SELECT_FOLLOWERS,
-    SELECT_FOLLOWING, SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER,
-    UPSERT_FOLLOW_RELATION,
+    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SEARCH_USERS, SELECT_USER_BY_NPUB,
+    SELECT_USER_BY_PUBKEY, UPDATE_USER, UPSERT_FOLLOW_RELATION,
 };
-use crate::application::ports::repositories::UserRepository;
+use crate::application::ports::repositories::{UserCursorPage, UserRepository};
 use crate::domain::entities::User;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
+use sqlx::{QueryBuilder, Row, Sqlite};
+
+fn parse_follow_cursor(cursor: &str) -> Result<(i64, String), AppError> {
+    let mut parts = cursor.splitn(2, ':');
+    let timestamp = parts
+        .next()
+        .ok_or_else(|| AppError::InvalidInput("Invalid cursor format".into()))?
+        .parse::<i64>()
+        .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
+    let pubkey = parts
+        .next()
+        .ok_or_else(|| AppError::InvalidInput("Invalid cursor format".into()))?
+        .to_string();
+    if pubkey.is_empty() {
+        return Err(AppError::InvalidInput("Invalid cursor pubkey".into()));
+    }
+    Ok((timestamp, pubkey))
+}
 
 #[async_trait]
 impl UserRepository for SqliteRepository {
@@ -92,34 +109,106 @@ impl UserRepository for SqliteRepository {
         Ok(())
     }
 
-    async fn get_followers(&self, npub: &str) -> Result<Vec<User>, AppError> {
-        let rows = sqlx::query(SELECT_FOLLOWERS)
-            .bind(npub)
-            .fetch_all(self.pool.get_pool())
-            .await?;
+    async fn get_followers_paginated(
+        &self,
+        npub: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<UserCursorPage, AppError> {
+        let limit = limit.clamp(1, 100);
+        let fetch_limit = limit + 1;
 
-        let mut users = Vec::with_capacity(rows.len());
-        for row in rows {
-            let user = map_user_row(&row)?;
-            users.push(user);
+        let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(
+            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at, \
+                f.created_at AS relation_created_at, f.follower_pubkey AS relation_pubkey \
+             FROM users u \
+             INNER JOIN follows f ON u.pubkey = f.follower_pubkey \
+             WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
+        );
+        builder.push_bind(npub);
+
+        if let Some(cursor) = cursor {
+            let (timestamp, pubkey) = parse_follow_cursor(cursor)?;
+            builder.push(" AND (f.created_at < ? OR (f.created_at = ? AND f.follower_pubkey < ?))");
+            builder.push_bind(timestamp);
+            builder.push_bind(timestamp);
+            builder.push_bind(pubkey);
         }
 
-        Ok(users)
+        builder.push(" ORDER BY f.created_at DESC, f.follower_pubkey DESC LIMIT ?");
+        builder.push_bind(fetch_limit as i64);
+
+        let rows = builder.build().fetch_all(self.pool.get_pool()).await?;
+
+        let mut users = Vec::with_capacity(rows.len().min(limit));
+        let mut next_cursor = None;
+
+        for (index, row) in rows.into_iter().enumerate() {
+            if index >= limit {
+                let timestamp: i64 = row.try_get("relation_created_at")?;
+                let pubkey: String = row.try_get("relation_pubkey")?;
+                next_cursor = Some(format!("{timestamp}:{pubkey}"));
+                break;
+            }
+            users.push(map_user_row(&row)?);
+        }
+
+        Ok(UserCursorPage {
+            users,
+            next_cursor,
+            has_more: next_cursor.is_some(),
+        })
     }
 
-    async fn get_following(&self, npub: &str) -> Result<Vec<User>, AppError> {
-        let rows = sqlx::query(SELECT_FOLLOWING)
-            .bind(npub)
-            .fetch_all(self.pool.get_pool())
-            .await?;
+    async fn get_following_paginated(
+        &self,
+        npub: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<UserCursorPage, AppError> {
+        let limit = limit.clamp(1, 100);
+        let fetch_limit = limit + 1;
 
-        let mut users = Vec::with_capacity(rows.len());
-        for row in rows {
-            let user = map_user_row(&row)?;
-            users.push(user);
+        let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(
+            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at, \
+                f.created_at AS relation_created_at, f.followed_pubkey AS relation_pubkey \
+             FROM users u \
+             INNER JOIN follows f ON u.pubkey = f.followed_pubkey \
+             WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
+        );
+        builder.push_bind(npub);
+
+        if let Some(cursor) = cursor {
+            let (timestamp, pubkey) = parse_follow_cursor(cursor)?;
+            builder.push(" AND (f.created_at < ? OR (f.created_at = ? AND f.followed_pubkey < ?))");
+            builder.push_bind(timestamp);
+            builder.push_bind(timestamp);
+            builder.push_bind(pubkey);
         }
 
-        Ok(users)
+        builder.push(" ORDER BY f.created_at DESC, f.followed_pubkey DESC LIMIT ?");
+        builder.push_bind(fetch_limit as i64);
+
+        let rows = builder.build().fetch_all(self.pool.get_pool()).await?;
+
+        let mut users = Vec::with_capacity(rows.len().min(limit));
+        let mut next_cursor = None;
+
+        for (index, row) in rows.into_iter().enumerate() {
+            if index >= limit {
+                let timestamp: i64 = row.try_get("relation_created_at")?;
+                let pubkey: String = row.try_get("relation_pubkey")?;
+                next_cursor = Some(format!("{timestamp}:{pubkey}"));
+                break;
+            }
+            users.push(map_user_row(&row)?);
+        }
+
+        Ok(UserCursorPage {
+            users,
+            next_cursor,
+            has_more: next_cursor.is_some(),
+        })
     }
 
     async fn add_follow_relation(

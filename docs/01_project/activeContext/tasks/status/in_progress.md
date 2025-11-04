@@ -47,6 +47,7 @@
   - 2025年11月03日: `/profile/$userId` ルートをプレースホルダーから差し替え、`get_user` / `get_posts(author_pubkey)` 連携でプロフィール基本情報と投稿一覧を表示。フォロー・フォロワー導線は backlog として整理。
   - 2025年11月03日: サマリーを用いて未実装導線の優先度を再評価し、`phase5_user_flow_summary.md` に優先度テーブルを追記。`tauri_app_implementation_plan.md` の Phase 5 優先度リストを更新し、`/profile/$userId` ルート実装・投稿削除導線・鍵管理ダイアログを最優先に再配置。
   - 2025年11月04日: `phase5_user_flow_inventory.md` に 1.7「プロフィール詳細」と 5.6「フォロー体験」節を追加し、1.4 のユーザー検索行を現行実装（`search_users`/フォロー操作）に更新。`phase5_user_flow_summary.md` に `/profile/$userId` の導線行とグローバル要素「プロフィール導線」を追記し、優先度表の `/profile` 行を最新化。
+  - 2025年11月04日: DirectMessageDialog のスケルトンを基にコマンド/ストアの挙動を確認し、ユニットテスト `src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を整備。`pnpm test:unit` を実行して DM ダイアログ・プロフィール導線の回帰を確認し、`phase5_user_flow_summary.md` に DM 導線のテスト状況を追記。
 - [x] 投稿削除導線（delete_post）実装準備
   - 2025年11月03日: `phase5_user_flow_inventory.md` セクション5.6に UX / バックエンド / テスト仕様を整理。`delete_post` コマンドを活用した削除フローと楽観更新、オフライン再送の方針を定義。
   - 2025年11月03日: `phase5_user_flow_summary.md` 優先度表を更新し、本タスクを Priority A として再掲。`PostCard` に削除メニューと確認ダイアログを追加し、`postStore.deletePostRemote` をオフライン対応込みで接続。関連ユニットテスト（PostCard / postStore）を更新。

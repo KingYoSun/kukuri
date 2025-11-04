@@ -1,6 +1,12 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,21 +20,19 @@ import type { Post, Profile } from '@/stores';
 import { PostCard } from '@/components/posts/PostCard';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores';
+import { useDirectMessageStore } from '@/stores/directMessageStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
-
-type QueryOptionsWithHandlers<TData, TKey extends readonly unknown[]> = UseQueryOptions<
-  TData,
-  Error,
-  TData,
-  TKey
-> & {
-  onError?: (error: unknown) => void;
-};
 
 export const Route = createFileRoute('/profile/$userId')({
   component: ProfilePage,
 });
+
+type ProfileListPage = {
+  items: Profile[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
 
 function ProfilePage() {
   const { userId } = Route.useParams();
@@ -52,6 +56,8 @@ function ProfilePage() {
 
   const profile = profileQuery.data;
 
+  const openDirectMessage = useDirectMessageStore((state) => state.openDialog);
+
   const postsQuery = useQuery({
     queryKey: ['userPosts', profile?.pubkey],
     enabled: Boolean(profile),
@@ -65,22 +71,28 @@ function ProfilePage() {
     },
   });
 
-  const followersQuery = useQuery<
-    Profile[],
-    Error,
-    Profile[],
-    readonly ['profile', string, 'followers']
-  >({
-    queryKey: ['profile', profile?.npub ?? userId, 'followers'] as const,
+  const followersQuery = useInfiniteQuery<ProfileListPage, Error>({
+    queryKey: ['profile', profile?.npub ?? userId, 'followers'],
     enabled: Boolean(profile),
     retry: false,
-    queryFn: async () => {
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
       if (!profile) {
-        return [] as Profile[];
+        return { items: [], nextCursor: null, hasMore: false };
       }
-      const response = await TauriApi.getFollowers(profile.npub);
-      return response.map(mapUserProfileToUser);
+      const response = await TauriApi.getFollowers({
+        npub: profile.npub,
+        cursor: pageParam ?? null,
+        limit: 25,
+      });
+      return {
+        items: response.items.map(mapUserProfileToUser),
+        nextCursor: response.nextCursor,
+        hasMore: response.hasMore,
+      };
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
     onError: (error: unknown) => {
       errorHandler.log('ProfilePage.followersFetchFailed', error, {
         context: 'ProfilePage.followersQuery',
@@ -88,24 +100,30 @@ function ProfilePage() {
       });
       toast.error('フォロワーの取得に失敗しました');
     },
-  } as QueryOptionsWithHandlers<Profile[], readonly ['profile', string, 'followers']>);
+  });
 
-  const followingQuery = useQuery<
-    Profile[],
-    Error,
-    Profile[],
-    readonly ['profile', string, 'following']
-  >({
-    queryKey: ['profile', profile?.npub ?? userId, 'following'] as const,
+  const followingQuery = useInfiniteQuery<ProfileListPage, Error>({
+    queryKey: ['profile', profile?.npub ?? userId, 'following'],
     enabled: Boolean(profile),
     retry: false,
-    queryFn: async () => {
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
       if (!profile) {
-        return [] as Profile[];
+        return { items: [], nextCursor: null, hasMore: false };
       }
-      const response = await TauriApi.getFollowing(profile.npub);
-      return response.map(mapUserProfileToUser);
+      const response = await TauriApi.getFollowing({
+        npub: profile.npub,
+        cursor: pageParam ?? null,
+        limit: 25,
+      });
+      return {
+        items: response.items.map(mapUserProfileToUser),
+        nextCursor: response.nextCursor,
+        hasMore: response.hasMore,
+      };
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
     onError: (error: unknown) => {
       errorHandler.log('ProfilePage.followingFetchFailed', error, {
         context: 'ProfilePage.followingQuery',
@@ -113,14 +131,44 @@ function ProfilePage() {
       });
       toast.error('フォロー中ユーザーの取得に失敗しました');
     },
-  } as QueryOptionsWithHandlers<Profile[], readonly ['profile', string, 'following']>);
+  });
+
+  const {
+    data: followersData,
+    isLoading: followersLoading,
+    isFetchingNextPage: followersFetchingNext,
+    hasNextPage: followersHasNext,
+    fetchNextPage: fetchFollowersNext,
+  } = followersQuery;
+
+  const {
+    data: followingData,
+    isLoading: followingLoading,
+    isFetchingNextPage: followingFetchingNext,
+    hasNextPage: followingHasNext,
+    fetchNextPage: fetchFollowingNext,
+  } = followingQuery;
+
+  const followers = followersData?.pages.flatMap((page) => page.items) ?? [];
+  const following = followingData?.pages.flatMap((page) => page.items) ?? [];
+
+  const handleFollowersLoadMore = useCallback(() => {
+    if (followersHasNext && !followersFetchingNext) {
+      void fetchFollowersNext();
+    }
+  }, [followersHasNext, followersFetchingNext, fetchFollowersNext]);
+
+  const handleFollowingLoadMore = useCallback(() => {
+    if (followingHasNext && !followingFetchingNext) {
+      void fetchFollowingNext();
+    }
+  }, [followingHasNext, followingFetchingNext, fetchFollowingNext]);
 
   const posts = postsQuery.data ?? [];
-  const followers = followersQuery.data ?? [];
-  const following = followingQuery.data ?? [];
 
   const isCurrentUser = Boolean(profile && currentUser?.npub === profile.npub);
   const canFollow = Boolean(currentUser) && Boolean(profile) && !isCurrentUser;
+  const canMessage = Boolean(currentUser) && Boolean(profile) && !isCurrentUser;
 
   const isFollowing = useMemo(() => {
     if (!profile || !currentUser || isCurrentUser) {
@@ -148,13 +196,45 @@ function ProfilePage() {
     },
     onSuccess: (_, target) => {
       if (currentUser) {
-        queryClient.setQueryData<Profile[] | undefined>(
+        const followerProfile = { ...currentUser };
+        queryClient.setQueryData<InfiniteData<ProfileListPage> | undefined>(
           ['profile', target.npub, 'followers'],
-          (prev = []) => {
-            if (prev.some((item) => item.npub === currentUser.npub)) {
+          (prev) => {
+            if (!prev) {
+              return {
+                pages: [
+                  {
+                    items: [followerProfile],
+                    nextCursor: null,
+                    hasMore: false,
+                  },
+                ],
+                pageParams: [undefined],
+              };
+            }
+            const exists = prev.pages.some((page) =>
+              page.items.some((item) => item.npub === followerProfile.npub),
+            );
+            if (exists) {
               return prev;
             }
-            return [...prev, { ...currentUser }];
+            const pages = prev.pages.length > 0 ? [...prev.pages] : [];
+            if (pages.length === 0) {
+              pages.push({
+                items: [followerProfile],
+                nextCursor: null,
+                hasMore: false,
+              });
+            } else {
+              pages[0] = {
+                ...pages[0],
+                items: [followerProfile, ...pages[0].items],
+              };
+            }
+            return {
+              ...prev,
+              pages,
+            };
           },
         );
         queryClient.setQueryData<Profile[] | undefined>(
@@ -191,9 +271,21 @@ function ProfilePage() {
     },
     onSuccess: (_, target) => {
       if (currentUser) {
-        queryClient.setQueryData<Profile[] | undefined>(
+        queryClient.setQueryData<InfiniteData<ProfileListPage> | undefined>(
           ['profile', target.npub, 'followers'],
-          (prev = []) => prev.filter((item) => item.npub !== currentUser.npub),
+          (prev) => {
+            if (!prev) {
+              return prev;
+            }
+            const pages = prev.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((item) => item.npub !== currentUser.npub),
+            }));
+            return {
+              ...prev,
+              pages,
+            };
+          },
         );
         queryClient.setQueryData<Profile[] | undefined>(
           ['social', 'following', currentUser.npub],
@@ -229,8 +321,8 @@ function ProfilePage() {
     }
   }, [profile, canFollow, isFollowing, followMutation, unfollowMutation]);
 
-  const followerCount = followersQuery.isLoading ? null : followers.length;
-  const followingCount = followingQuery.isLoading ? null : following.length;
+  const followerCount = followersLoading ? null : followers.length;
+  const followingCount = followingLoading ? null : following.length;
   const followButtonLabel = isCurrentUser
     ? 'あなた'
     : !canFollow
@@ -241,6 +333,17 @@ function ProfilePage() {
   const isFollowProcessing =
     (followMutation.isPending && followMutation.variables?.npub === profile?.npub) ||
     (unfollowMutation.isPending && unfollowMutation.variables?.npub === profile?.npub);
+
+  const handleOpenDirectMessage = useCallback(() => {
+    if (!profile) {
+      return;
+    }
+    if (!currentUser) {
+      toast.error('メッセージを送信するにはログインが必要です。');
+      return;
+    }
+    openDirectMessage(profile.npub);
+  }, [currentUser, openDirectMessage, profile]);
 
   const handleCopyNpub = async (npub: string) => {
     try {
@@ -348,9 +451,15 @@ function ProfilePage() {
                 )}
                 {followButtonLabel}
               </Button>
-              <Button variant="outline" size="sm" disabled className="min-w-[140px]">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!canMessage}
+                className="min-w-[140px]"
+                onClick={() => handleOpenDirectMessage()}
+              >
                 <MessageCircle className="h-4 w-4 mr-2" />
-                メッセージ（準備中）
+                メッセージ
               </Button>
             </div>
           </div>
@@ -365,14 +474,20 @@ function ProfilePage() {
           <UserList
             title="フォロワー"
             users={followers}
-            isLoading={followersQuery.isLoading}
+            isLoading={followersLoading}
             emptyText="フォロワーはいません。"
+            onLoadMore={handleFollowersLoadMore}
+            hasNextPage={Boolean(followersHasNext)}
+            isFetchingNextPage={followersFetchingNext}
           />
           <UserList
             title="フォロー中"
             users={following}
-            isLoading={followingQuery.isLoading}
+            isLoading={followingLoading}
             emptyText="フォロー中のユーザーはいません。"
+            onLoadMore={handleFollowingLoadMore}
+            hasNextPage={Boolean(followingHasNext)}
+            isFetchingNextPage={followingFetchingNext}
           />
         </CardContent>
       </Card>
@@ -417,14 +532,56 @@ function ProfilePage() {
   );
 }
 
+export { ProfilePage };
+
 interface UserListProps {
   title: string;
   users: Profile[];
   isLoading: boolean;
   emptyText: string;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
 }
 
-function UserList({ title, users, isLoading, emptyText }: UserListProps) {
+function UserList({
+  title,
+  users,
+  isLoading,
+  emptyText,
+  hasNextPage = false,
+  isFetchingNextPage = false,
+  onLoadMore,
+}: UserListProps) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!hasNextPage || !onLoadMore) {
+      return;
+    }
+    const sentinel = sentinelRef.current;
+    if (!sentinel) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !isFetchingNextPage) {
+            onLoadMore();
+          }
+        });
+      },
+      { rootMargin: '200px 0px' },
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasNextPage, isFetchingNextPage, onLoadMore]);
+
   return (
     <div>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -459,6 +616,16 @@ function UserList({ title, users, isLoading, emptyText }: UserListProps) {
               </div>
             );
           })}
+          <div ref={sentinelRef} className="h-1 w-full" />
+          {isFetchingNextPage && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>さらに読み込み中…</span>
+            </div>
+          )}
+          {!hasNextPage && users.length > 0 && (
+            <div className="text-xs text-muted-foreground">すべてのユーザーを表示しました。</div>
+          )}
         </div>
       )}
     </div>

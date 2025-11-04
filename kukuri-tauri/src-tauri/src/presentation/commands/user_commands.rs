@@ -6,15 +6,18 @@ use crate::presentation::dto::{
         FetchProfileAvatarRequest, FetchProfileAvatarResponse, UploadProfileAvatarRequest,
         UploadProfileAvatarResponse,
     },
-    user_dto::UserProfile as UserProfileDto,
+    user_dto::{
+        GetFollowersRequest, GetFollowingRequest, PaginatedUserProfiles,
+        UserProfile as UserProfileDto,
+    },
 };
 use crate::shared::AppError;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
 
-fn user_to_value(user: crate::domain::entities::User) -> Result<Value, AppError> {
-    let profile = UserProfileDto {
+fn map_user_to_profile(user: crate::domain::entities::User) -> UserProfileDto {
+    UserProfileDto {
         npub: user.npub,
         pubkey: user.pubkey,
         name: user.name,
@@ -24,8 +27,11 @@ fn user_to_value(user: crate::domain::entities::User) -> Result<Value, AppError>
         banner: None,
         website: None,
         nip05: user.nip05,
-    };
-    serde_json::to_value(profile).map_err(AppError::from)
+    }
+}
+
+fn user_to_value(user: crate::domain::entities::User) -> Result<Value, AppError> {
+    serde_json::to_value(map_user_to_profile(user)).map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -114,25 +120,35 @@ pub async fn unfollow_user(
 
 #[tauri::command]
 pub async fn get_followers(
-    npub: String,
+    request: GetFollowersRequest,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<ApiResponse<Vec<Value>>, AppError> {
+) -> Result<ApiResponse<PaginatedUserProfiles>, AppError> {
+    let limit = request.limit.unwrap_or(25).min(100) as usize;
     let result = user_service
-        .get_followers(&npub)
+        .get_followers_paginated(&request.npub, request.cursor.as_deref(), limit)
         .await
-        .and_then(|followers| followers.into_iter().map(user_to_value).collect());
+        .map(|page| PaginatedUserProfiles {
+            items: page.users.into_iter().map(map_user_to_profile).collect(),
+            next_cursor: page.next_cursor,
+            has_more: page.has_more,
+        });
     Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
 pub async fn get_following(
-    npub: String,
+    request: GetFollowingRequest,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<ApiResponse<Vec<Value>>, AppError> {
+) -> Result<ApiResponse<PaginatedUserProfiles>, AppError> {
+    let limit = request.limit.unwrap_or(25).min(100) as usize;
     let result = user_service
-        .get_following(&npub)
+        .get_following_paginated(&request.npub, request.cursor.as_deref(), limit)
         .await
-        .and_then(|following| following.into_iter().map(user_to_value).collect());
+        .map(|page| PaginatedUserProfiles {
+            items: page.users.into_iter().map(map_user_to_profile).collect(),
+            next_cursor: page.next_cursor,
+            has_more: page.has_more,
+        });
     Ok(ApiResponse::from_result(result))
 }
 
