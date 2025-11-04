@@ -1,6 +1,6 @@
 # Phase 5 ユーザー導線棚卸し
 作成日: 2025年11月01日  
-最終更新: 2025年11月03日
+最終更新: 2025年11月04日
 
 ## 目的
 - Phase 5 で想定しているデスクトップアプリ体験のうち、現状 UI から到達できる機能と欠落導線を把握する。
@@ -37,7 +37,7 @@
 | --- | --- | --- | --- |
 | 投稿検索 | `/search` (Tab: posts) | `usePosts` 全件からクライアントフィルタ | Tauri 呼び出し：初回ロード時の `get_posts` |
 | トピック検索 | `/search` (Tab: topics) | `useTopics` データからクライアントフィルタ | `get_topics` を再利用 |
-| ユーザー検索 | `/search` (Tab: users) | `mockUsers` を用いたダミー結果、プロフィール詳細ページへのリンク | `/profile/$userId` で閲覧のみ可能。フォロー/DM ボタンはプレースホルダーで、Nostr API 連携待ち |
+| ユーザー検索 | `/search` (Tab: users) | `search_users` で実ユーザーを取得し、フォロー/フォロー解除ボタンと `/profile/$userId` へのリンクを表示 | フォロー状態は React Query で即時更新。ページネーションとエラーUI・入力バリデーションは未整備。 |
 
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 主なコマンド |
@@ -63,6 +63,15 @@
 - `offlineSyncService` と `offlineStore` / `syncEngine`: ネットワークイベントを監視し 30 秒間隔で同期、失敗時は指数バックオフで再試行しつつ `save_offline_action` / `sync_offline_actions` / `save_optimistic_update` などを通じて再送・競合解消を制御。
 - `RootRoute` / `MainLayout`: 起動時に `authStore.initialize` と `useTopics` を待機し、未認証時は `/welcome` へ強制遷移、認証後はヘッダー・サイドバー付きレイアウトへ切り替える。
 - `TopicPage` ヘッダーの最終更新表示: `topic.lastActive` を秒→ミリ秒換算して日付を描画（2025年11月02日修正適用）。
+
+### 1.7 プロフィール詳細
+| 要素 | パス/コンポーネント | 主な機能 | 備考 |
+| --- | --- | --- | --- |
+| プロフィール取得 | `/profile/$userId` (`ProfilePage`) | `getUserProfile` / `getUserProfileByPubkey` を順に呼び、存在するユーザー情報を `mapUserProfileToUser` で整形して表示。 | `npub` / `pubkey` の双方に対応。存在しない場合は空表示を返し、トーストで通知。 |
+| 投稿一覧 | `/profile/$userId` (`ProfilePage`) | `getPosts({ author_pubkey, pagination: { limit: 50 } })` で個人投稿を取得し、`PostCard` を並べて表示。 | 50件固定でページネーションは未実装。読み込み中はスピナーを表示し、投稿ゼロ時はプレースホルダーを出す。 |
+| フォロー操作 | `/profile/$userId`, `UserSearchResults` | `follow_user` / `unfollow_user` を呼び出し、成功時は React Query キャッシュで `['social','following']` と `['profile',npub,'followers']` を更新。`subscribe_to_user` を併用し購読を開始。 | 未ログイン時や自身への操作はブロック。処理中はボタンを無効化し、トーストで成功/失敗を通知。 |
+| フォロワー/フォロー中リスト | `/profile/$userId` (`UserList`) | `get_followers` / `get_following` の結果をカード内で 2 カラム表示。 | 並び替え・検索は未実装で backlog。取得失敗時は `errorHandler` を通じてログとトーストを表示。 |
+| メッセージ導線 | `/profile/$userId` (`ProfilePage`) | `MessageCircle` ボタンをプレースホルダーとして表示し、現在は disabled。 | 直接メッセージ機能は未実装。Phase 5 backlog で別タスクとして管理。 |
 
 ## 2. 確認できた導線ギャップ
 - サイドバーの「トレンド」「フォロー中」は routing 未実装のプレースホルダー。
@@ -165,7 +174,7 @@
 6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
 7. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
 
-## 5. 優先実装メモ（2025年11月02日更新）
+## 5. 優先実装メモ（2025年11月04日更新）
 
 ### 5.1 設定画面のプライバシー設定・プロフィール編集導線
 - **目的**: 設定画面から即時にユーザー情報と公開状態を更新できるようにし、オンボーディング後も同一フォームでプロフィールを保守できるようにする。
@@ -245,6 +254,38 @@
   - 2025年11月03日: `src/tests/unit/components/RelayStatus.test.tsx` / `src/tests/unit/components/P2PStatus.test.tsx` を更新し、バックオフ・手動リトライ・エラー表示をフェイクタイマーで検証。`npx vitest run src/tests/unit/components/RelayStatus.test.tsx src/tests/unit/components/P2PStatus.test.tsx` を実行し成功。
   - 同日、`src/tests/unit/stores/authStore.test.ts` / `src/tests/unit/stores/p2pStore.test.ts` / `src/tests/unit/hooks/useP2P.test.tsx` を拡張し、バックオフ遷移・エラー保持・`isRefreshingStatus` 排他制御を検証。
   - Rust 側では `cargo test`（`kukuri-tauri/src-tauri` / `kukuri-cli`）を実行し、`application::services::p2p_service::tests` における `connection_status` / `peers` の復帰とフォールバック動作を確認。Runbook 9章に新フィールドと検証手順を追記済み。
+
+### 5.6 プロフィール詳細導線とフォロー体験（2025年11月04日更新）
+- **目的**: `/profile/$userId` を起点にプロフィール閲覧・フォロー操作・投稿参照を一貫した導線として提供し、検索結果や他画面からの遷移後も同等の体験を維持する。
+- **実装状況**
+  - 2025年11月03日: プレースホルダールートを差し替え、`getUserProfile` / `getUserProfileByPubkey` / `getPosts({ author_pubkey })` を用いた実データ取得と、フォロー/フォロー解除ボタンを実装。
+  - `follow_user` / `unfollow_user` 成功時に `React Query` の `['social','following']` / `['profile',npub,'followers']` キャッシュを即時更新し、`subscribe_to_user` でイベント購読を開始する。
+  - `UserSearchResults` からのフォロー操作も同一ミューテーションを共有し、検索結果→プロフィール詳細間の導線差異を解消。
+- **残課題**
+  - プロフィール投稿一覧は 50 件固定で pagination 未対応。スクロールロードや日付ソートなどの UX 改善が必要。
+  - フォロワー/フォロー中リストに検索・ソートが無く、件数が多い場合の利用性が下がる。
+  - メッセージボタンは disabled のまま。直接メッセージ仕様（Nostr DM or P2P Note）を定義し、導線を接続する必要がある。
+  - Tauri 経由のエラーハンドリングはトースト表示のみに留まるため、再試行 UI の追加と `errorHandler` のメタデータ拡充を検討。
+- **メッセージ導線仕様（案）**
+  1. UI: `ProfilePage` の `MessageCircle` ボタン押下で `DirectMessageDialog`（新規）を開き、会話ヘッダーに相手の `displayName` / `nip05` / `follow` 状態を表示する。ダイアログはモーダル + ドロワーのハイブリッド（デスクトップは右カラム固定、狭幅はフルスクリーン）とし、直近 50 件のメッセージを既定表示。
+  2. フロント状態管理: `useDirectMessageStore` を新設し、`activeConversationNpub`・`optimisticMessages`・`unreadCounts` を保持。React Query の `useInfiniteQuery(['direct-messages', npub], ...)` で過去ログをフェッチし、`fetchPreviousPage` で遡り取得する。
+  3. Tauri コマンド: `list_direct_messages({ counterpart_npub, cursor?, limit })` / `send_direct_message({ counterpart_npub, plaintext, attachments? })` / `mark_direct_messages_read({ counterpart_npub, up_to_event_id })` を追加し、返却値は NIP-04 準拠（セッションキー共有）を前提とした暗号化イベント（kind 4）とする。暗号化方式は `nostr-sdk` の NIP-04（XChaCha20-Poly1305）を初期実装として採用し、将来の NIP-44 移行を想定したバージョンフィールドを含める。
+  4. 配信: `send_direct_message` は `nostr::Client::send_direct_msg` を利用し、送信後に `EventId` と送信タイムスタンプを返却。受信は `nostr` サブスクリプションで kind 4 を購読し、`DirectMessageWorker`（新規）が `EventService` と同様に React Query キャッシュを更新、未読件数を `useDirectMessageStore` に反映する。
+  5. オフライン対応: `offlineStore` に `direct_message` 種別を追加し、送信失敗時は暗号化済みイベントをキューイング。オンライン復帰時に `sync_offline_actions` がまとめて再送し、成功後に `confirm_optimistic_update` で UI を更新する。
+  6. セキュリティ/プライバシー: 端末内では暗号化済みペイロードのみを保存し、復号はメモリ上に限定。チャットログのエクスポートには専用許可（設定 > プライバシー）を必要とし、送信前に受信者との共有鍵初期化（`nip04::shared_secret`）が成立しているか検証して失敗時はエラーを返す。
+- **フォロワー一覧ソート/ページネーション計画**
+  1. UX 要件: `フォロワー` / `フォロー中` カードにソートセレクター（「最新順」「名前順」「逆順」）とページネーション UI（無限スクロール + 「さらに読み込む」ボタン）を追加し、件数が多い場合でも操作性を担保する。
+  2. API 拡張: `get_followers` / `get_following` に `pagination` パラメーター（`{ cursor?: string, limit?: number }`）と `sort` フィールド（`followed_at_desc` / `display_name_asc` など）を追加。カーソルは `"{timestamp}:{pubkey}"` 形式で、Rust 側は SQL の `ORDER BY` に合わせて `WHERE (followed_at, pubkey) < (:timestamp, :pubkey)` 条件を生成する。
+  3. フロント実装: `useInfiniteQuery` を利用し、`fetchNextPage` で追加ロード。取得結果は `concatMap` で去重し、`ProfilePage` の `UserList` に `VirtualizedList`（`react-virtual`）を導入して描画負荷を軽減する。ソート変更時は `queryClient.invalidateQueries(['profile', npub, 'followers'])` を呼び出して照会をリセットする。
+  4. メタ情報: API で総件数（`total_count`）と最終カーソルを返却し、UI は「12 / 240」といった進捗表示を行う。未ログイン時は API 呼び出しをブロックし、プライベートアカウントの場合は `403` を返却して UI 上に「非公開」のメッセージを表示する。
+- **テスト計画**
+  - 既存 `ProfilePage` のユニットテスト（新規作成）でフォロー/フォロー解除の成功・失敗・自身への操作のガードを検証し、React Query キャッシュの更新がモックされることを確認する。`renderWithQueryClient` を使い、`follow_user` モックが解決/拒否するパターンを網羅。
+  - `DirectMessageDialog` コンポーネントのユニットテストを追加し、未読件数のバッジ更新・オフライン時の再送キュー登録・暗号化失敗時のトースト表示を検証する。
+  - `get_followers` のソート/ページネーションは Vitest のモックで無限スクロールをシミュレートし、`fetchNextPage` がカーソルを連鎖的に渡すこと、ソート切り替えでキャッシュが切り替わることを確認。あわせて Rust 側に `followers::queries::list_followers` 用の単体テストを追加し、カーソル境界条件と非公開アカウントのハンドリングをカバーする。
+- **テスト計画**
+  - `UserSearchResults` の既存ユニットテストに合わせ、`ProfilePage` のフォロー/フォロー解除と投稿一覧レンダリングを検証するテストを追加（成功・失敗・未ログインケース）。
+  - React Query キャッシュ更新の副作用を確認するため、`follow_user`/`unfollow_user` ミューテーションをモックしつつキャッシュの差分検証を行う。
+  - `/profile/$userId` への直接アクセス（npub / pubkey）の双方をルーター統合テストで確認し、404 シナリオではトースト表示と空状態が描画されることを保証する。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 

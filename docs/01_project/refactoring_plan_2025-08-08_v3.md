@@ -1,6 +1,6 @@
 # リファクタリング計画（改善版）
 作成日: 2025年08月08日
-最終更新: 2025年11月03日
+最終更新: 2025年11月04日
 
 ## 現状分析結果（完全版）
 
@@ -88,9 +88,9 @@ connection.rs           - 3箇所
 
 #### 2.5 ユーザー導線の現状（Phase 5 棚卸し結果）
 
-- 参照ドキュメント: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（2025年11月03日更新）
-- 主要導線: サイドバーの `openComposer` 経由で任意画面から投稿モーダルを起動できるようになり、`RelayStatus`/`P2PStatus` が 30 秒間隔で接続状況とメトリクスを通知。設定画面の `ProfileEditDialog` は `update_nostr_metadata` → `authStore.updateUser` で即時反映。
-- 残るギャップ: 「トレンド」「フォロー中」ルート未定義、`/profile/$userId` リンク未実装、`delete_post` / `add_relay` など未使用コマンドの棚卸し待ち、鍵管理ボタン未実装、プライバシートグルはローカル永続化のみ、プロフィール画像アップロード導線はリモート同期要件実装前の設計段階。
+- 参照ドキュメント: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（2025年11月04日更新）
+- 主要導線: サイドバーの `openComposer` 経由で任意画面から投稿モーダルを起動できるほか、`RelayStatus`/`P2PStatus` が 30 秒間隔で接続状況とメトリクスを通知。設定画面の `ProfileEditDialog` は `update_nostr_metadata` → `authStore.updateUser` で即時反映し、ユーザー検索→`/profile/$userId` の導線でフォロー/フォロー解除・フォロワー一覧を閲覧できるようになった。
+- 残るギャップ: 「トレンド」「フォロー中」ルート未定義、`/profile/$userId` のメッセージ導線とフォロワー/フォロー中リストのソート・ページネーション未実装、`delete_post` / `add_relay` など未使用コマンドの棚卸し待ち、鍵管理ボタン未実装、プライバシートグルはローカル永続化のみ、プロフィール画像アップロード導線はリモート同期要件の実装フェーズ。
 
 #### 2.6 重複コードパターン
 
@@ -416,6 +416,7 @@ tests/
 ### ユーザー導線指標【新規追加】
 - [x] UIから到達可能な全機能の文書化完了 — `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` に導線マップとギャップ分析を追記（2025年11月01日作成、2025年11月02日: グローバル導線と統合テスト専用コマンドを追記）
   - 2025年11月03日: 同ドキュメント 1.2/1.6 にサイドバーのグローバルコンポーザー連携と `RelayStatus`/`P2PStatus` の監視内容、設定画面のプロフィール編集モーダル詳細を追加。
+  - 2025年11月04日: 同ドキュメント 1.4/1.7/5.6 にユーザー検索の実装状況、`/profile/$userId` 導線、フォロー体験の優先課題を追記。
 - [ ] 未使用APIエンドポイント0件
   - 2025年11月02日: 同ドキュメント 3.2/3.3 に未導線API（`delete_post` / `add_relay` など）とテスト専用 `invoke` コマンドを整理。UI導線追加または削除方針の判断待ち。
 - [ ] 孤立コンポーネント0件

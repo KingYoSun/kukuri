@@ -46,6 +46,7 @@
   - 2025年11月03日: ユーザー検索導線と `/profile/$userId` の現状を反映するため、`phase5_user_flow_inventory.md` 2章/3章/4章を更新し、未使用コマンドに `get_followers` / `get_following` を追記。あわせて `phase5_user_flow_summary.md` の Quick View と優先度表を最新化。
   - 2025年11月03日: `/profile/$userId` ルートをプレースホルダーから差し替え、`get_user` / `get_posts(author_pubkey)` 連携でプロフィール基本情報と投稿一覧を表示。フォロー・フォロワー導線は backlog として整理。
   - 2025年11月03日: サマリーを用いて未実装導線の優先度を再評価し、`phase5_user_flow_summary.md` に優先度テーブルを追記。`tauri_app_implementation_plan.md` の Phase 5 優先度リストを更新し、`/profile/$userId` ルート実装・投稿削除導線・鍵管理ダイアログを最優先に再配置。
+  - 2025年11月04日: `phase5_user_flow_inventory.md` に 1.7「プロフィール詳細」と 5.6「フォロー体験」節を追加し、1.4 のユーザー検索行を現行実装（`search_users`/フォロー操作）に更新。`phase5_user_flow_summary.md` に `/profile/$userId` の導線行とグローバル要素「プロフィール導線」を追記し、優先度表の `/profile` 行を最新化。
 - [x] 投稿削除導線（delete_post）実装準備
   - 2025年11月03日: `phase5_user_flow_inventory.md` セクション5.6に UX / バックエンド / テスト仕様を整理。`delete_post` コマンドを活用した削除フローと楽観更新、オフライン再送の方針を定義。
   - 2025年11月03日: `phase5_user_flow_summary.md` 優先度表を更新し、本タスクを Priority A として再掲。`PostCard` に削除メニューと確認ダイアログを追加し、`postStore.deletePostRemote` をオフライン対応込みで接続。関連ユニットテスト（PostCard / postStore）を更新。
@@ -58,11 +59,13 @@
   - 2025年11月01日: 「UIから到達可能な全機能の文書化完了」を達成済みに更新し、参照ドキュメントと更新日を記録。
   - 2025年11月02日: 指標欄に最新ドキュメント更新（統合テスト専用コマンド整理）と未導線APIの整理状況を追記、Phase2.5セクションへ `TopicPage` 最終更新バグの改善候補を登録。
   - 2025年11月03日: 2.5節を棚卸し結果サマリーへ差し替え、Relay/P2Pステータスカードとプロフィール編集導線の進捗メモを追記。
+  - 2025年11月04日: 2.5節に `/profile/$userId` 導線の現状（フォロー/フォロワー表示）と残課題を反映し、ユーザー導線指標欄へ 1.4/1.7/5.6 更新（ユーザー検索・プロフィール導線・フォロー体験）を記録。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。
   - 2025年11月02日: Phase 5 backlog の優先順位を再定義（投稿導線統一→プロフィール編集→プライバシー設定→トレンド/フォロー中→テスト整備）し、`tauri_app_implementation_plan.md` に反映。
   - 2025年11月03日: `phase5_ci_path_audit.md` に Relay/P2P ステータスカードのユニットテスト計画と `profileAvatarSync` 統合テスト計画を追記。`tauri_app_implementation_plan.md` へステータスカード検証・鍵管理モーダル・プロフィール画像リモート同期を Phase 5 優先度として追加。
+  - 2025年11月04日: `phase5_ci_path_audit.md` の最終更新日と関連ドキュメント欄を更新し、ユーザー検索/プロフィール導線の差分反映と整合性を確認。追加で「追加予定のテスト」節を起票し、ProfilePage フォロー導線・DirectMessageDialog・フォロワー無限スクロールのテスト計画を記録。
 
 ### プロフィールアバター UI 連携
 
