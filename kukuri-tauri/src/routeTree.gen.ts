@@ -18,6 +18,8 @@ import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TopicsTopicIdRouteImport } from './routes/topics.$topicId'
+import { Route as TrendingRouteImport } from './routes/trending'
+import { Route as FollowingRouteImport } from './routes/following'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -54,6 +56,16 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrendingRoute = TrendingRouteImport.update({
+  id: '/trending',
+  path: '/trending',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FollowingRoute = FollowingRouteImport.update({
+  id: '/following',
+  path: '/following',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -67,35 +79,41 @@ const TopicsTopicIdRoute = TopicsTopicIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/following': typeof FollowingRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
   '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
+  '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/following': typeof FollowingRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
   '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
+  '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/following': typeof FollowingRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
   '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
+  '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
@@ -103,34 +121,40 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/following'
     | '/login'
     | '/profile-setup'
     | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
+    | '/trending'
     | '/welcome'
     | '/topics/$topicId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/following'
     | '/login'
     | '/profile-setup'
     | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
+    | '/trending'
     | '/welcome'
     | '/topics/$topicId'
   id:
     | '__root__'
     | '/'
+    | '/following'
     | '/login'
     | '/profile-setup'
     | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
+    | '/trending'
     | '/welcome'
     | '/topics/$topicId'
   fileRoutesById: FileRoutesById
@@ -142,6 +166,8 @@ export interface RootRouteChildren {
   ProfileUserIdRoute: typeof ProfileUserIdRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
+  FollowingRoute: typeof FollowingRoute
+  TrendingRoute: typeof TrendingRoute
   TopicsRoute: typeof TopicsRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
 }
@@ -195,6 +221,20 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trending': {
+      id: '/trending'
+      path: '/trending'
+      fullPath: '/trending'
+      preLoaderRoute: typeof TrendingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/following': {
+      id: '/following'
+      path: '/following'
+      fullPath: '/following'
+      preLoaderRoute: typeof FollowingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {

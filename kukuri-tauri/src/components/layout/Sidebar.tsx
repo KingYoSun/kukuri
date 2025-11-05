@@ -16,8 +16,8 @@ import { useMemo } from 'react';
 const categories = [
   { name: 'トピック一覧', icon: List, path: '/topics' },
   { name: '検索', icon: Search, path: '/search' },
-  { name: 'トレンド', icon: TrendingUp },
-  { name: 'フォロー中', icon: Users },
+  { name: 'トレンド', icon: TrendingUp, path: '/trending' },
+  { name: 'フォロー中', icon: Users, path: '/following' },
 ];
 
 export function Sidebar() {
