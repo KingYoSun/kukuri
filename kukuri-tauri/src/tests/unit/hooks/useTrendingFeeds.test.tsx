@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import {
   useTrendingTopicsQuery,
   useTrendingPostsQuery,
   useFollowingFeedQuery,
+  prefetchTrendingCategory,
+  prefetchFollowingCategory,
+  trendingTopicsQueryKey,
+  trendingPostsQueryKey,
+  followingFeedQueryKey,
+  type FollowingFeedPageResult,
 } from '@/hooks/useTrendingFeeds';
 
 vi.mock('@/lib/api/tauri', () => ({
@@ -49,21 +55,28 @@ vi.mock('@/lib/errorHandler', () => ({
 }));
 
 describe('useTrendingFeeds hooks', () => {
-  const createWrapper = () => {
-    const queryClient = new QueryClient({
+  const createQueryClient = () =>
+    new QueryClient({
       defaultOptions: {
         queries: { retry: false },
         mutations: { retry: false },
       },
     });
 
+  const createWrapper = () => {
+    const queryClient = createQueryClient();
+
     return ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { TauriApi } = await import('@/lib/api/tauri');
+    vi.mocked(TauriApi.listTrendingTopics).mockReset();
+    vi.mocked(TauriApi.listTrendingPosts).mockReset();
+    vi.mocked(TauriApi.listFollowingFeed).mockReset();
   });
 
   it('fetches trending topics successfully', async () => {
@@ -192,6 +205,7 @@ describe('useTrendingFeeds hooks', () => {
     expect(TauriApi.listFollowingFeed).toHaveBeenLastCalledWith({
       cursor: null,
       limit: 1,
+      includeReactions: false,
     });
 
     await act(async () => {
@@ -206,6 +220,100 @@ describe('useTrendingFeeds hooks', () => {
     expect(TauriApi.listFollowingFeed).toHaveBeenLastCalledWith({
       cursor: 'cursor-1',
       limit: 1,
+      includeReactions: false,
     });
+  });
+
+  it('prefetches trending category data', async () => {
+    const { TauriApi } = await import('@/lib/api/tauri');
+    const queryClient = createQueryClient();
+
+    vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue({
+      generated_at: 1_700_000_000,
+      topics: [
+        {
+          topic_id: 'topic-1',
+          name: 'Topic One',
+          description: 'desc',
+          member_count: 12,
+          post_count: 30,
+          trending_score: 24.0,
+          rank: 1,
+          score_change: null,
+        },
+      ],
+    });
+    vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue({
+      generated_at: 1_700_000_100,
+      topics: [
+        {
+          topic_id: 'topic-1',
+          topic_name: 'Topic One',
+          relative_rank: 1,
+          posts: [
+            {
+              id: 'post-1',
+              content: 'prefetch',
+              author_pubkey: 'author-1',
+              author_npub: 'npub1author',
+              topic_id: 'topic-1',
+              created_at: 1_700_000_050,
+              likes: 3,
+              boosts: 0,
+              replies: 0,
+              is_synced: true,
+            },
+          ],
+        },
+      ],
+    });
+
+    await prefetchTrendingCategory(queryClient, { topicsLimit: 2, postsPerTopic: 2 });
+
+    expect(TauriApi.listTrendingTopics).toHaveBeenCalledWith(2);
+    const topicsCache = queryClient.getQueryData(trendingTopicsQueryKey(2));
+    expect(topicsCache).toBeDefined();
+
+    const postsCache = queryClient.getQueryData(trendingPostsQueryKey(['topic-1'], 2));
+    expect(postsCache).toBeDefined();
+  });
+
+  it('prefetches following category data', async () => {
+    const { TauriApi } = await import('@/lib/api/tauri');
+    const queryClient = createQueryClient();
+
+    vi.mocked(TauriApi.listFollowingFeed).mockResolvedValue({
+      items: [
+        {
+          id: 'post-1',
+          content: 'hello',
+          author_pubkey: 'author-1',
+          author_npub: 'npub1author',
+          topic_id: 'topic-1',
+          created_at: 1_700_000_000,
+          likes: 2,
+          boosts: 0,
+          replies: 0,
+          is_synced: true,
+        },
+      ],
+      next_cursor: null,
+      has_more: false,
+      server_time: 1_700_000_000,
+    });
+
+    await prefetchFollowingCategory(queryClient, { limit: 5, includeReactions: false });
+
+    expect(TauriApi.listFollowingFeed).toHaveBeenCalledWith({
+      cursor: null,
+      limit: 5,
+      includeReactions: false,
+    });
+
+    const cached = queryClient.getQueryData<InfiniteData<FollowingFeedPageResult>>(
+      followingFeedQueryKey(5, false),
+    );
+    expect(cached).toBeDefined();
+    expect(cached?.pages[0].items[0].id).toBe('post-1');
   });
 });

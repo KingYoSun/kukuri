@@ -3,31 +3,65 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Hash, Plus, TrendingUp, Users, List, Search, MessageSquare } from 'lucide-react';
-import { useTopicStore, useUIStore, useComposerStore } from '@/stores';
+import { useTopicStore, useUIStore, useComposerStore, type SidebarCategory } from '@/stores';
 import { useP2P } from '@/hooks/useP2P';
 import { cn } from '@/lib/utils';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useLocation } from '@tanstack/react-router';
 import { RelayStatus } from '@/components/RelayStatus';
 import { P2PStatus } from '@/components/P2PStatus';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchTrendingCategory, prefetchFollowingCategory } from '@/hooks/useTrendingFeeds';
 
-const categories = [
-  { name: 'トピック一覧', icon: List, path: '/topics' },
-  { name: '検索', icon: Search, path: '/search' },
-  { name: 'トレンド', icon: TrendingUp, path: '/trending' },
-  { name: 'フォロー中', icon: Users, path: '/following' },
+interface SidebarCategoryItem {
+  key: SidebarCategory;
+  name: string;
+  icon: typeof List;
+  path: string;
+}
+
+const categories: SidebarCategoryItem[] = [
+  { key: 'topics', name: 'トピック一覧', icon: List, path: '/topics' },
+  { key: 'search', name: '検索', icon: Search, path: '/search' },
+  { key: 'trending', name: 'トレンド', icon: TrendingUp, path: '/trending' },
+  { key: 'following', name: 'フォロー中', icon: Users, path: '/following' },
 ];
+
+const deriveCategoryFromPath = (pathname: string): SidebarCategory | null => {
+  if (pathname.startsWith('/topics')) {
+    return 'topics';
+  }
+  if (pathname.startsWith('/search')) {
+    return 'search';
+  }
+  if (pathname.startsWith('/trending')) {
+    return 'trending';
+  }
+  if (pathname.startsWith('/following')) {
+    return 'following';
+  }
+  return null;
+};
 
 export function Sidebar() {
   const { topics, joinedTopics, currentTopic, setCurrentTopic, topicUnreadCounts } =
     useTopicStore();
-  const { sidebarOpen } = useUIStore();
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
+  const activeSidebarCategory = useUIStore((state) => state.activeSidebarCategory);
+  const setActiveSidebarCategory = useUIStore((state) => state.setActiveSidebarCategory);
   const { openComposer } = useComposerStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
 
   const { getTopicMessages } = useP2P();
+
+  useEffect(() => {
+    const derivedCategory = deriveCategoryFromPath(location.pathname);
+    setActiveSidebarCategory(derivedCategory);
+  }, [location.pathname, setActiveSidebarCategory]);
 
   // 参加中トピックを最終活動時刻でソート
   const joinedTopicsList = useMemo(() => {
@@ -68,6 +102,7 @@ export function Sidebar() {
     const topic = topics.get(topicId);
     if (topic) {
       setCurrentTopic(topic);
+      setActiveSidebarCategory(null);
       navigate({ to: '/' }); // ホーム（タイムライン）に遷移
     }
   };
@@ -78,6 +113,22 @@ export function Sidebar() {
       topicId: fallbackTopicId,
     });
   };
+
+  const handleCategoryClick = useCallback(
+    (category: SidebarCategoryItem) => {
+      setCurrentTopic(null);
+      setActiveSidebarCategory(category.key);
+
+      if (category.key === 'trending') {
+        void prefetchTrendingCategory(queryClient);
+      } else if (category.key === 'following') {
+        void prefetchFollowingCategory(queryClient);
+      }
+
+      navigate({ to: category.path });
+    },
+    [navigate, queryClient, setActiveSidebarCategory, setCurrentTopic],
+  );
 
   return (
     <aside
@@ -103,11 +154,15 @@ export function Sidebar() {
           <div className="space-y-1">
             {categories.map((category) => (
               <Button
-                key={category.name}
-                variant="ghost"
-                className="w-full justify-start"
-                data-testid={`category-${category.name.toLowerCase().replace(/\s+/g, '-')}`}
-                onClick={() => category.path && navigate({ to: category.path })}
+                key={category.key}
+                variant={activeSidebarCategory === category.key ? 'secondary' : 'ghost'}
+                className={cn(
+                  'w-full justify-start',
+                  activeSidebarCategory === category.key && 'font-semibold',
+                )}
+                data-testid={`category-${category.key}`}
+                aria-current={activeSidebarCategory === category.key ? 'page' : undefined}
+                onClick={() => handleCategoryClick(category)}
               >
                 <category.icon className="mr-2 h-4 w-4" />
                 {category.name}

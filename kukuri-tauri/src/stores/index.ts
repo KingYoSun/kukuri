@@ -2,7 +2,7 @@ export * from './types';
 export { useAuthStore } from './authStore';
 export { useTopicStore } from './topicStore';
 export { usePostStore } from './postStore';
-export { useUIStore } from './uiStore';
+export { useUIStore, type SidebarCategory } from './uiStore';
 export { useP2PStore } from './p2pStore';
 export { useBookmarkStore } from './bookmarkStore';
 export { usePrivacySettingsStore } from './privacySettingsStore';

@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { QueryClient, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { TauriApi, type FollowingFeedPage, type ListFollowingFeedParams } from '@/lib/api/tauri';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import type { Post } from '@/stores';
@@ -49,31 +49,90 @@ interface FollowingFeedQueryOptions {
   includeReactions?: boolean;
 }
 
+const TRENDING_STALE_TIME = 60_000;
+const TRENDING_REFETCH_INTERVAL = 120_000;
+const FOLLOWING_FEED_STALE_TIME = 60_000;
+
+export const trendingTopicsQueryKey = (limit = 10) =>
+  ['trending', 'topics', limit] as const;
+
+export const trendingPostsQueryKey = (topicIds: string[], perTopic: number) =>
+  ['trending', 'posts', { topicIds, perTopic }] as const;
+
+export const followingFeedQueryKey = (limit: number, includeReactions: boolean) =>
+  ['followingFeed', { limit, includeReactions }] as const;
+
+async function fetchTrendingTopics(limit = 10): Promise<TrendingTopicsResult> {
+  const response = await TauriApi.listTrendingTopics(limit);
+  return {
+    generatedAt: response.generated_at,
+    topics: response.topics.map((topic) => ({
+      topicId: topic.topic_id,
+      name: topic.name,
+      description: topic.description,
+      memberCount: topic.member_count,
+      postCount: topic.post_count,
+      trendingScore: topic.trending_score,
+      rank: topic.rank,
+      scoreChange: topic.score_change ?? null,
+    })),
+  };
+}
+
+async function fetchTrendingPosts(
+  topicIds: string[],
+  perTopic = 3,
+): Promise<TrendingPostsResult> {
+  if (topicIds.length === 0) {
+    return { generatedAt: Date.now(), topics: [] };
+  }
+
+  const response = await TauriApi.listTrendingPosts({
+    topicIds,
+    perTopic,
+  });
+
+  const topics = await Promise.all(
+    response.topics.map(async (topic) => ({
+      topicId: topic.topic_id,
+      topicName: topic.topic_name,
+      relativeRank: topic.relative_rank,
+      posts: await Promise.all(topic.posts.map((post) => mapPostResponseToDomain(post))),
+    })),
+  );
+
+  return {
+    generatedAt: response.generated_at,
+    topics,
+  };
+}
+
+async function fetchFollowingFeedPage(
+  params: ListFollowingFeedParams,
+): Promise<FollowingFeedPageResult> {
+  const response: FollowingFeedPage = await TauriApi.listFollowingFeed(params);
+  const posts = await Promise.all(response.items.map((item) => mapPostResponseToDomain(item)));
+
+  return {
+    cursor: params.cursor ?? null,
+    items: posts,
+    nextCursor: response.next_cursor,
+    hasMore: response.has_more,
+    serverTime: response.server_time,
+  };
+}
+
 export const useTrendingTopicsQuery = (limit = 10) =>
   useQuery({
-    queryKey: ['trending', 'topics', limit],
-    queryFn: async (): Promise<TrendingTopicsResult> => {
-      const response = await TauriApi.listTrendingTopics(limit);
-      return {
-        generatedAt: response.generated_at,
-        topics: response.topics.map((topic) => ({
-          topicId: topic.topic_id,
-          name: topic.name,
-          description: topic.description,
-          memberCount: topic.member_count,
-          postCount: topic.post_count,
-          trendingScore: topic.trending_score,
-          rank: topic.rank,
-          scoreChange: topic.score_change ?? null,
-        })),
-      };
-    },
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+    queryKey: trendingTopicsQueryKey(limit),
+    queryFn: () => fetchTrendingTopics(limit),
+    staleTime: TRENDING_STALE_TIME,
+    refetchInterval: TRENDING_REFETCH_INTERVAL,
     retry: 1,
     onError: (error) => {
       errorHandler.log('TrendingTopics.fetchFailed', error, {
         context: 'useTrendingTopicsQuery',
+        limit,
       });
     },
   });
@@ -84,34 +143,11 @@ export const useTrendingPostsQuery = (
   options?: TrendingPostsQueryOptions,
 ) =>
   useQuery({
-    queryKey: ['trending', 'posts', { topicIds, perTopic }],
+    queryKey: trendingPostsQueryKey(topicIds, perTopic),
     enabled: options?.enabled ?? topicIds.length > 0,
-    queryFn: async (): Promise<TrendingPostsResult> => {
-      if (topicIds.length === 0) {
-        return { generatedAt: Date.now(), topics: [] };
-      }
-
-      const response = await TauriApi.listTrendingPosts({
-        topicIds,
-        perTopic,
-      });
-
-      const topics = await Promise.all(
-        response.topics.map(async (topic) => ({
-          topicId: topic.topic_id,
-          topicName: topic.topic_name,
-          relativeRank: topic.relative_rank,
-          posts: await Promise.all(topic.posts.map((post) => mapPostResponseToDomain(post))),
-        })),
-      );
-
-      return {
-        generatedAt: response.generated_at,
-        topics,
-      };
-    },
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+    queryFn: () => fetchTrendingPosts(topicIds, perTopic),
+    staleTime: TRENDING_STALE_TIME,
+    refetchInterval: TRENDING_REFETCH_INTERVAL,
     retry: 1,
     onError: (error) => {
       errorHandler.log('TrendingPosts.fetchFailed', error, {
@@ -123,45 +159,98 @@ export const useTrendingPostsQuery = (
 
 export const useFollowingFeedQuery = (options: FollowingFeedQueryOptions = {}) => {
   const limit = options.limit ?? 20;
-  const includeReactions = options.includeReactions;
+  const includeReactions = options.includeReactions ?? false;
 
   return useInfiniteQuery<FollowingFeedPageResult>({
-    queryKey: [
-      'followingFeed',
-      {
-        limit,
-        includeReactions: includeReactions ?? false,
-      },
-    ],
+    queryKey: followingFeedQueryKey(limit, includeReactions),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     keepPreviousData: true,
-    staleTime: 60_000,
+    staleTime: FOLLOWING_FEED_STALE_TIME,
     retry: 1,
-    queryFn: async ({ pageParam }): Promise<FollowingFeedPageResult> => {
-      const params: ListFollowingFeedParams = {
+    queryFn: ({ pageParam }) =>
+      fetchFollowingFeedPage({
         cursor: pageParam ?? null,
         limit,
-      };
-      if (includeReactions !== undefined) {
-        params.includeReactions = includeReactions;
-      }
-
-      const response: FollowingFeedPage = await TauriApi.listFollowingFeed(params);
-      const posts = await Promise.all(response.items.map((item) => mapPostResponseToDomain(item)));
-
-      return {
-        cursor: pageParam ?? null,
-        items: posts,
-        nextCursor: response.next_cursor,
-        hasMore: response.has_more,
-        serverTime: response.server_time,
-      };
-    },
+        includeReactions,
+      }),
     onError: (error) => {
       errorHandler.log('FollowingFeed.fetchFailed', error, {
         context: 'useFollowingFeedQuery',
+        limit,
+        includeReactions,
       });
     },
   });
+};
+
+export interface PrefetchTrendingCategoryOptions {
+  topicsLimit?: number;
+  postsPerTopic?: number;
+}
+
+export const prefetchTrendingCategory = async (
+  queryClient: QueryClient,
+  options: PrefetchTrendingCategoryOptions = {},
+) => {
+  const topicsLimit = options.topicsLimit ?? 10;
+  const postsPerTopic = options.postsPerTopic ?? 3;
+
+  try {
+    const topics = await queryClient.fetchQuery({
+      queryKey: trendingTopicsQueryKey(topicsLimit),
+      queryFn: () => fetchTrendingTopics(topicsLimit),
+      staleTime: TRENDING_STALE_TIME,
+    });
+
+    const topicIds = topics.topics.map((topic) => topic.topicId);
+    if (topicIds.length === 0) {
+      return;
+    }
+
+    await queryClient.prefetchQuery({
+      queryKey: trendingPostsQueryKey(topicIds, postsPerTopic),
+      queryFn: () => fetchTrendingPosts(topicIds, postsPerTopic),
+      staleTime: TRENDING_STALE_TIME,
+    });
+  } catch (error) {
+    errorHandler.log('Sidebar.prefetchFailed', error, {
+      category: 'trending',
+      topicsLimit,
+      postsPerTopic,
+    });
+  }
+};
+
+export interface PrefetchFollowingCategoryOptions {
+  limit?: number;
+  includeReactions?: boolean;
+}
+
+export const prefetchFollowingCategory = async (
+  queryClient: QueryClient,
+  options: PrefetchFollowingCategoryOptions = {},
+) => {
+  const limit = options.limit ?? 10;
+  const includeReactions = options.includeReactions ?? true;
+
+  try {
+    await queryClient.prefetchInfiniteQuery({
+      queryKey: followingFeedQueryKey(limit, includeReactions),
+      initialPageParam: null,
+      staleTime: FOLLOWING_FEED_STALE_TIME,
+      queryFn: ({ pageParam }) =>
+        fetchFollowingFeedPage({
+          cursor: pageParam ?? null,
+          limit,
+          includeReactions,
+        }),
+    });
+  } catch (error) {
+    errorHandler.log('Sidebar.prefetchFailed', error, {
+      category: 'following',
+      limit,
+      includeReactions,
+    });
+  }
 };

@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 
+export type SidebarCategory = 'topics' | 'search' | 'trending' | 'following';
+
 interface UIState {
   sidebarOpen: boolean;
   theme: 'light' | 'dark' | 'system';
   isLoading: boolean;
   error: string | null;
+  activeSidebarCategory: SidebarCategory | null;
 }
 
 interface UIStore extends UIState {
@@ -14,6 +17,8 @@ interface UIStore extends UIState {
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
+  setActiveSidebarCategory: (category: SidebarCategory | null) => void;
+  resetActiveSidebarCategory: () => void;
 }
 
 export const useUIStore = create<UIStore>()((set) => ({
@@ -21,6 +26,7 @@ export const useUIStore = create<UIStore>()((set) => ({
   theme: 'system',
   isLoading: false,
   error: null,
+  activeSidebarCategory: null,
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
@@ -33,4 +39,14 @@ export const useUIStore = create<UIStore>()((set) => ({
   setError: (error: string | null) => set({ error }),
 
   clearError: () => set({ error: null }),
+
+  setActiveSidebarCategory: (category: SidebarCategory | null) =>
+    set((state) =>
+      state.activeSidebarCategory === category ? state : { activeSidebarCategory: category },
+    ),
+
+  resetActiveSidebarCategory: () =>
+    set((state) =>
+      state.activeSidebarCategory === null ? state : { activeSidebarCategory: null },
+    ),
 }));

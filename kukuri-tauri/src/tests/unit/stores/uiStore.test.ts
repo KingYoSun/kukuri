@@ -8,6 +8,7 @@ describe('uiStore', () => {
       theme: 'system',
       isLoading: false,
       error: null,
+      activeSidebarCategory: null,
     });
   });
 
@@ -17,6 +18,7 @@ describe('uiStore', () => {
     expect(state.theme).toBe('system');
     expect(state.isLoading).toBe(false);
     expect(state.error).toBeNull();
+    expect(state.activeSidebarCategory).toBeNull();
   });
 
   it('toggleSidebarメソッドが正しく動作すること', () => {
@@ -74,5 +76,23 @@ describe('uiStore', () => {
     const { clearError } = useUIStore.getState();
     clearError();
     expect(useUIStore.getState().error).toBeNull();
+  });
+
+  it('setActiveSidebarCategoryメソッドが正しく動作すること', () => {
+    const { setActiveSidebarCategory } = useUIStore.getState();
+    setActiveSidebarCategory('trending');
+    expect(useUIStore.getState().activeSidebarCategory).toBe('trending');
+
+    // 同じ値の場合は更新されない
+    const previousState = useUIStore.getState();
+    setActiveSidebarCategory('trending');
+    expect(useUIStore.getState()).toBe(previousState);
+  });
+
+  it('resetActiveSidebarCategoryメソッドが正しく動作すること', () => {
+    useUIStore.setState({ activeSidebarCategory: 'search' });
+    const { resetActiveSidebarCategory } = useUIStore.getState();
+    resetActiveSidebarCategory();
+    expect(useUIStore.getState().activeSidebarCategory).toBeNull();
   });
 });

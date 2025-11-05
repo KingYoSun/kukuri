@@ -1,6 +1,6 @@
 # Phase 5 ユーザー導線棚卸し
 作成日: 2025年11月01日  
-最終更新: 2025年11月04日
+最終更新: 2025年11月05日
 
 ## 目的
 - Phase 5 で想定しているデスクトップアプリ体験のうち、現状 UI から到達できる機能と欠落導線を把握する。
@@ -20,9 +20,9 @@
 | 要素 | パス/配置 | 主な機能 | 関連コマンド/ストア |
 | --- | --- | --- | --- |
 | Home タイムライン | `/` | 参加中トピックがあればフィルタリング、`PostComposer` で投稿/下書き/Markdown、`PostCard` でいいね・ブースト・返信・引用・ブックマーク | `get_posts`, `create_post`, `like_post`, `boost_post`, `bookmark_post`, `unbookmark_post`, `get_bookmarked_post_ids`, `send_reaction` |
-| サイドバー | 共通 | 参加トピック一覧（P2P最終活動時刻でソート）、未読バッジ、`新規投稿`ボタンでグローバルコンポーザーを起動、カテゴリー（`トピック一覧`/`検索`/`トレンド`/`フォロー中`） | `join_topic`/`leave_topic`（`TopicCard` 経由、`subscribe_to_topic` と連動）、`useComposerStore.openComposer`。※「トレンド」「フォロー中」は `/trending`・`/following` ルート追加を予定（仕様は 5.7 節）。 |
-| トレンドフィード | `/trending`（新設予定, `routes/trending.tsx`） | トレンドスコア上位トピックのランキングカード表示、関連投稿プレビュー、参加/ブックマーク導線 | `list_trending_topics`（新設予定）, `list_trending_posts`（新設予定）, `get_topic_stats`, `join_topic`, `bookmark_post` |
-| フォロー中フィード | `/following`（新設予定, `routes/following.tsx`） | フォロー中ユーザーの最新投稿タイムライン、未読境界、プロフィール遷移/フォロー解除ショートカット | `list_following_feed`（新設予定）, `get_posts`, `follow_user`/`unfollow_user`, `subscribe_to_user`, `list_direct_messages` |
+| サイドバー | 共通 | 参加トピック一覧（P2P最終活動時刻でソート）、未読バッジ、`新規投稿`ボタンでグローバルコンポーザーを起動、カテゴリー（`トピック一覧`/`検索`/`トレンド`/`フォロー中`） | `join_topic`/`leave_topic`（`TopicCard` 経由、`subscribe_to_topic` と連動）、`useComposerStore.openComposer`、`useUIStore`（`activeSidebarCategory` でボタンをハイライト）、`prefetchTrendingCategory` / `prefetchFollowingCategory` でクエリを事前取得 |
+| トレンドフィード | `/trending` (`routes/trending.tsx`) | トレンドスコア上位トピックのランキングカード表示、最新投稿プレビュー、更新時刻表示、参加/ブックマーク導線 | `list_trending_topics`, `list_trending_posts`, `get_topic_stats`, `join_topic`, `bookmark_post` |
+| フォロー中フィード | `/following` (`routes/following.tsx`) | フォロー中ユーザーの最新投稿タイムライン、無限スクロール、再試行ボタン、プロフィール導線 | `list_following_feed`（`include_reactions` 対応）, `get_posts`, `follow_user`/`unfollow_user`, `subscribe_to_user`, `list_direct_messages` |
 | ヘッダー | 共通 | `RealtimeIndicator`, `SyncStatusIndicator`, 通知アイコン（ダミー）、`AccountSwitcher`（アカウント切替/追加/削除/ログアウト） | `switch_account`, `list_accounts`, `remove_account`, `logout`, `disconnect_nostr`, `secure_login`（自動ログイン時） |
 | グローバル同期 | 共通 | `SyncStatusIndicator` でオフライン同期進捗/競合対応、`useSyncManager` によるローカル→Tauri リクエスト | `create_post`, `like_post`, `join_topic`, `leave_topic`（未同期操作の再送） |
 
@@ -338,25 +338,29 @@
 
 ### 5.7 トレンド/フォロー中導線実装計画（2025年11月04日追加）
 - **目的**: サイドバーカテゴリー「トレンド」「フォロー中」からアクセスできる発見導線とマイフィード導線を整備し、Home タイムラインとの差別化と優先度の可視化を実現する。
+- **進捗（2025年11月05日更新）**
+  - `Sidebar` のカテゴリーは `useUIStore.activeSidebarCategory` でハイライトを同期し、`prefetchTrendingCategory` / `prefetchFollowingCategory` によりクリック時に関連クエリを事前取得できるようにした。
+  - `useTrendingFeeds.ts` をリファクタリングし、`trendingTopicsQueryKey` などの共有ロジックとプリフェッチ API を整備。`routes/trending.tsx` / `routes/following.tsx` は新ヘルパーを利用してロード/エラー/空状態をハンドリング済み。
+  - テスト実行: `npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`（2025年11月05日）。カテゴリ状態の同期・プリフェッチ分岐・クエリマッピングをユニットテストで検証。
+  - 未実装: `FollowingSummaryPanel` の UI、DM 未読ハイライト、Docker シナリオ（`trending-feed`）は引き続きバックログ管理。
 - **UI 実装案**
-  - `routes/trending.tsx`（新規）で `TrendingRoute` を定義し、`TrendingTopicList`（ランキングカード）と `TrendingPostPreviewList`（各トピック最新 3 件）を表示。ランキングカードは順位・トピック名・`trending_score`・前日比・参加ボタンを含む。
-  - `routes/following.tsx`（新規）で `FollowingRoute` を定義し、`FollowingFeed`（フォロー中ユーザー投稿の無限スクロール）と `FollowingSummaryPanel`（最近フォローしたユーザー、DM 未読、フォロー解除ショートカット）を表示。
-  - サイドバーは `useUIStore` に `activeCategory` を追加して状態を同期し、選択中カテゴリーのボタンを強調。ルート離脱時は状態をリセット。
-  - ローディング時は Skeleton、エラー時は `ErrorStateCard`（共通化）で `errorHandler` メッセージと再試行ボタン・サポートリンクを表示。空状態は `EmptyStateCard` で案内文とアクション（例: トピック参加、ユーザー検索）を案内。
+  - ✅ `routes/trending.tsx` でランキングカードと投稿プレビューを実装済み。更新タイムスタンプとスコア差分、再試行導線を画面ヘッダーに配置。
+  - ✅ `routes/following.tsx` で無限スクロール版タイムラインを実装。フォロー解除やプロフィール遷移の導線は引き続き拡張予定（Summary Panel は backlog）。
+  - ✅ サイドバーでカテゴリーごとにボタン強調を行い、別画面遷移後に `activeSidebarCategory` をリセット。
+  - Skeleton / `ErrorStateCard` / `EmptyStateCard` は両ルートで共通利用。文言・サポートリンクは `errorHandler` のキーに合わせて整理済み。
 - **バックエンド/コマンド設計**
   - `list_trending_topics`（新コマンド）: `topic_metrics`（新テーブル: topic_id, window_start, posts_24h, new_members_24h, active_users_24h, trend_score）から最新ウィンドウを取得し、`trend_score = posts_24h * 0.6 + new_members_24h * 0.4` を返却。レスポンスは `{ topics: Vec<TrendingTopicDto>, generated_at }`。
   - `list_trending_posts`（新コマンド）: 引数 `{ topic_ids: Vec<String>, per_topic: u16 }` を受け取り、各トピックの最新投稿をまとめて返却。`PostDto` に `topic_name` と `relative_rank` を含める。
   - `list_following_feed`（新コマンド）: フォロー中ユーザーの投稿を `cursor = "{created_at}:{event_id}"` 形式でページングしつつ、`has_more` と `server_time` を返却。`include_reactions` フラグでリアクション状態を同梱。
   - メトリクス集計は新ワーカー `trending_metrics_job`（5 分毎）で `posts` テーブルを走査し、`topic_metrics` を更新。ワーカーは `tokio::spawn` で起動し、`AppState` にハンドルを保持。
 - **状態管理・ストア**
-  - `useTrendingTopicsQuery` / `useTrendingPostsQuery`（新規 React Query フック）を追加し、`staleTime = 60_000`、`refetchInterval = 120_000`。`TrendingRoute` は両方のクエリを `Promise.all` で取得。
-  - `useFollowingFeedQuery`（新規）で `keepPreviousData` を有効化し、`followingFeedStore`（Zustand）に `lastSeenAt` / `scrollPosition` / `unreadCount` を保持。ルート入場時に未読境界をセット、離脱時に更新。
-  - どちらのルートも `prefetchQuery` を `Sidebar` クリック時に呼び出すことで体感速度を改善（`queryClient.prefetchQuery` 利用）。
+  - ✅ `useTrendingTopicsQuery` / `useTrendingPostsQuery` をヘルパー化し、`fetchTrendingTopics` などの共通ロジックを導入。`QueryClient.prefetchQuery` からも再利用可能にした。
+  - ✅ `useFollowingFeedQuery` は `prefetchFollowingCategory` からも呼び出せるよう拡張。`keepPreviousData` と `includeReactions` オプションを統一。
+  - ✅ `useUIStore` に `activeSidebarCategory` とリセット関数を追加。`Sidebar` ではセレクタで購読し、余計なレンダーを避けつつ状態を同期。
 - **テスト計画**
-  - TypeScript: `TrendingRoute.test.tsx`（ランキング表示、エラー→再試行、空状態）、`FollowingRoute.test.tsx`（無限スクロール、未読境界、プロフィール遷移）を追加。`msw` で API モック。
-  - TypeScript: `Sidebar.test.tsx` を更新し、`category-trending`/`category-フォロー中` クリック時に `navigate({ to: '/trending' })` / `/following` が呼ばれること、`useUIStore` の `activeCategory` が更新されることを確認。
-  - Rust: `trending_metrics_job` の単体テストでウィンドウ計算・0件時の初期値・複数トピック同時集計を検証。`list_following_feed` の統合テストでカーソル境界・フォロー解除直後の結果・レートリミットを確認。
-  - Docker: `docker-compose.test.yml` に `trending-feed` シナリオを追加し、複数ピア投稿でトレンド順位が同期されることを検証。Windows では `./scripts/test-docker.ps1 ts -Scenario trending-feed` を案内。
+  - TypeScript: `Sidebar.test.tsx`（カテゴリーハイライト・プリフェッチ分岐）、`useTrendingFeeds.test.tsx`（マッピングとプリフェッチ）、`uiStore.test.ts`（新しいアクション）を整備済み。
+  - 実行コマンド: `npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`（2025年11月05日）。今後 `TrendingRoute.test.tsx` / `FollowingRoute.test.tsx` の追加と Docker シナリオ実装を継続。
+  - Rust / Docker のテスト項目と Nightly 実行計画は据え置き（未消化）。完了時に `phase5_ci_path_audit.md` へ追記する。
 - **フォローアップ**
   - `phase5_user_flow_summary.md`（1.2節 / 3節 / 6節）と `tauri_app_implementation_plan.md` Phase 5 優先度に本計画をリンク済み。
   - `docs/03_implementation/p2p_mainline_runbook.md` にトレンドメトリクス監視手順としきい値、アラート対応を追記予定。

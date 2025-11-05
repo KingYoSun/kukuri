@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月04日
+最終更新: 2025年11月05日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -20,11 +20,11 @@
 | セクション | パス/配置 | 主な機能 | 導線状態 | 備考 |
 | --- | --- | --- | --- | --- |
 | Home タイムライン | `/` | 投稿閲覧、いいね・ブースト・ブックマーク、グローバルコンポーザー | 稼働中 | `PostComposer` 下書き保存、`PostCard` アクション完備 |
-| サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | 「トレンド」「フォロー中」は `/trending`・`/following` ルート実装待ち（Inventory 5.7 参照）。新規投稿は `useComposerStore` でモーダル起動 |
+| サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。`prefetchTrendingCategory`/`prefetchFollowingCategory` によりトレンド/フォロー導線のレスポンスを改善。追加要素（サマリーパネル）を継続検討 |
 | ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher` | 稼働中 | アカウント切替/追加/削除、同期状態表示、オフライン通知を提供 |
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。トピック初期選択とショートカット改善が backlog |
-| トレンドフィード | `/trending`（新設予定） | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 未実装（計画済み） | ランキング/UI/テスト仕様は Inventory 5.7 と Phase5 Implementation Plan を参照 |
-| フォロー中フィード | `/following`（新設予定） | フォロー中ユーザーの専用タイムライン、未読境界・フォロー解除ショートカット | 未実装（計画済み） | 無限スクロール/API 設計は Inventory 5.7 と Phase5 Implementation Plan を参照 |
+| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | ランキング表示・投稿プレビュー・再試行導線は実装済み。ユニットテスト（`npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`）でプリフェッチ経路を検証。参加ボタンの体験向上と Docker シナリオは継続課題 |
+| フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | クエリプリフェッチと `include_reactions` 対応を実装。上記ユニットテストでフォロー中フィードのマッピングを確認済み。サマリーパネルと DM 未読表示は backlog |
 | プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は実装済みだが `send_direct_message` (Tauri) が未実装で送信失敗。フォロワー無限スクロールは導入済み、ソート/ページネーションは未対応。 |
 
 ### 1.3 トピック関連
@@ -59,7 +59,7 @@
 - **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は UI/楽観送信が整備済みで、Inventory 5.6.1 に Tauri 実装計画（コマンド・永続化・テスト）が確定。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
 
 ## 3. 導線ギャップ Quick View
-1. `/trending`・`/following` ルートは未実装（Inventory 5.7 で UI/バックエンド/テスト計画を定義済み）。
+1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 に残タスクとテスト計画を記載）。Summary Panel や Docker シナリオなど改善タスクを継続。
 2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備えたが、DirectMessageDialog は Tauri 側の `send_direct_message` / `list_direct_messages` が未実装で送受信不可。Inventory 5.6.1/5.6.2 に実装計画を追記済みで、次ステップは Tauri コマンド実装 + React Query ソート/ページネーション接続とテスト整備。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。

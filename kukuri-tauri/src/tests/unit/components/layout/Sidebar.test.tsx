@@ -1,16 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useTopicStore } from '@/stores/topicStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useUIStore as useUIStoreFromIndex } from '@/stores';
 import { useP2P } from '@/hooks/useP2P';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useLocation } from '@tanstack/react-router';
+import {
+  prefetchTrendingCategory,
+  prefetchFollowingCategory,
+} from '@/hooks/useTrendingFeeds';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Topic } from '@/stores/types';
 import { useComposerStore } from '@/stores/composerStore';
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(),
+  useLocation: vi.fn(),
 }));
 
 vi.mock('@/components/RelayStatus', () => ({
@@ -25,6 +32,11 @@ vi.mock('@/hooks/useP2P', () => ({
   useP2P: vi.fn(() => ({
     getTopicMessages: vi.fn(() => []),
   })),
+}));
+
+vi.mock('@/hooks/useTrendingFeeds', () => ({
+  prefetchTrendingCategory: vi.fn(),
+  prefetchFollowingCategory: vi.fn(),
 }));
 
 const buildTopic = (overrides: Partial<Topic>): Topic => ({
@@ -42,11 +54,29 @@ const buildTopic = (overrides: Partial<Topic>): Topic => ({
 
 describe('Sidebar', () => {
   const mockNavigate = vi.fn();
+  const renderSidebar = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>,
+    );
+  };
+
+  it('UIストアのエクスポートが同一インスタンスであること', () => {
+    expect(useUIStore).toBe(useUIStoreFromIndex);
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
     useComposerStore.getState().reset();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+    vi.mocked(useLocation).mockReturnValue({ pathname: '/' } as { pathname: string });
     useTopicStore.setState({
       topics: new Map(),
       joinedTopics: [],
@@ -65,10 +95,7 @@ describe('Sidebar', () => {
       theme: 'system',
       isLoading: false,
       error: null,
-      toggleSidebar: vi.fn(),
-      setTheme: vi.fn(),
-      setLoading: vi.fn(),
-      setError: vi.fn(),
+      activeSidebarCategory: null,
     });
     vi.mocked(useP2P).mockReturnValue({
       getTopicMessages: vi.fn(() => []),
@@ -89,7 +116,7 @@ describe('Sidebar', () => {
       joinedTopics: [topicA.id, topicB.id],
     });
 
-    render(<Sidebar />);
+    renderSidebar();
 
     expect(screen.getByRole('button', { name: '新規投稿' })).toBeInTheDocument();
     expect(screen.getByText('カテゴリー')).toBeInTheDocument();
@@ -110,7 +137,7 @@ describe('Sidebar', () => {
       topicLastReadAt: new Map(),
     });
 
-    render(<Sidebar />);
+    renderSidebar();
 
     await user.click(screen.getByRole('button', { name: '新規投稿' }));
 
@@ -146,7 +173,7 @@ describe('Sidebar', () => {
       joinedTopics: [topicA.id, topicB.id, topicC.id],
     });
 
-    render(<Sidebar />);
+    renderSidebar();
 
     const buttons = screen.getAllByRole('button', { name: /Topic/ });
     expect(buttons[0]).toHaveTextContent('Topic B');
@@ -196,7 +223,7 @@ describe('Sidebar', () => {
       joinedTopics: [topicA.id, topicB.id],
     });
 
-    render(<Sidebar />);
+    renderSidebar();
 
     const buttons = screen.getAllByRole('button', { name: /Topic/ });
     expect(buttons[0]).toHaveTextContent('Topic B');
@@ -204,7 +231,7 @@ describe('Sidebar', () => {
   });
 
   it('参加中のトピックがない場合はメッセージを表示する', () => {
-    render(<Sidebar />);
+    renderSidebar();
 
     expect(screen.getByText('参加中のトピックはありません')).toBeInTheDocument();
   });
@@ -218,7 +245,7 @@ describe('Sidebar', () => {
       topicUnreadCounts: new Map([[topic.id, 5]]),
     }));
 
-    render(<Sidebar />);
+    renderSidebar();
 
     expect(screen.getByTestId('topic-topic-a-unread')).toHaveTextContent('5');
   });
@@ -232,7 +259,7 @@ describe('Sidebar', () => {
       topicUnreadCounts: new Map([[topic.id, 0]]),
     }));
 
-    render(<Sidebar />);
+    renderSidebar();
 
     expect(screen.queryByTestId('topic-topic-a-unread')).not.toBeInTheDocument();
   });
@@ -245,7 +272,7 @@ describe('Sidebar', () => {
       joinedTopics: [topic.id],
     }));
 
-    render(<Sidebar />);
+    renderSidebar();
 
     expect(screen.getByText('未投稿')).toBeInTheDocument();
   });
@@ -261,13 +288,14 @@ describe('Sidebar', () => {
       setCurrentTopic,
     });
 
-    render(<Sidebar />);
+    renderSidebar();
 
     const button = screen.getByRole('button', { name: /Topic A/ });
     await user.click(button);
 
     expect(setCurrentTopic).toHaveBeenCalledWith(topic);
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+    expect(useUIStore.getState().activeSidebarCategory).toBeNull();
   });
 
   it('選択中のトピックはセカンダリスタイルで表示される', () => {
@@ -279,7 +307,7 @@ describe('Sidebar', () => {
       currentTopic: topic,
     });
 
-    render(<Sidebar />);
+    renderSidebar();
 
     const button = screen.getByRole('button', { name: /Topic A/ });
     expect(button.className).toContain('bg-secondary');
@@ -294,8 +322,37 @@ describe('Sidebar', () => {
 
     useUIStore.setState({ sidebarOpen: false });
 
-    const { container } = render(<Sidebar />);
+    const { container } = renderSidebar();
     const sidebar = container.querySelector('aside');
     expect(sidebar).toHaveClass('w-0');
+  });
+
+  it('トレンドカテゴリーをクリックするとprefetchとナビゲーションが実行される', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(screen.getByTestId('category-trending'));
+
+    expect(prefetchTrendingCategory).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/trending' });
+    expect(useUIStore.getState().activeSidebarCategory).toBe('trending');
+  });
+
+  it('フォロー中カテゴリーをクリックするとprefetchとナビゲーションが実行される', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(screen.getByTestId('category-following'));
+
+    expect(prefetchFollowingCategory).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/following' });
+    expect(useUIStore.getState().activeSidebarCategory).toBe('following');
+  });
+
+  it('現在のルートに応じてカテゴリーが強調される', async () => {
+    vi.mocked(useLocation).mockReturnValue({ pathname: '/trending' } as { pathname: string });
+    renderSidebar();
+
+    await waitFor(() => expect(useUIStore.getState().activeSidebarCategory).toBe('trending'));
   });
 });
