@@ -136,11 +136,7 @@ export function TrendingPage() {
             )}
           </div>
           {postsIsError && (
-            <Alert
-              variant="destructive"
-              className="max-w-md"
-              data-testid="trending-posts-error"
-            >
+            <Alert variant="destructive" className="max-w-md" data-testid="trending-posts-error">
               <AlertTitle>投稿プレビューの取得に失敗しました</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
                 <span>
@@ -192,10 +188,7 @@ export function TrendingPage() {
               <CardContent className="space-y-3">
                 <h3 className="text-sm font-semibold text-muted-foreground">最新の投稿</h3>
                 {topic.posts.length > 0 ? (
-                  <ul
-                    className="space-y-2"
-                    data-testid={`trending-topic-${topic.topicId}-posts`}
-                  >
+                  <ul className="space-y-2" data-testid={`trending-topic-${topic.topicId}-posts`}>
                     {topic.posts.map((post) => (
                       <li
                         key={post.id}

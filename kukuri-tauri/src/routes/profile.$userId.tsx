@@ -98,7 +98,7 @@ function ProfilePage() {
       };
     },
     getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined,
+      lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
   });
 
   const followingQuery = useInfiniteQuery<
@@ -128,7 +128,7 @@ function ProfilePage() {
       };
     },
     getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined,
+      lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
   });
 
   const {

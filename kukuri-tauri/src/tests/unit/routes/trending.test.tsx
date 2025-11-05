@@ -135,9 +135,7 @@ describe('TrendingPage', () => {
     expect(screen.getByText('技術トレンド')).toBeInTheDocument();
     expect(screen.getByText('スコア')).toBeInTheDocument();
     expect(screen.getByTestId('trending-topic-topic-1-posts')).toBeInTheDocument();
-    expect(
-      screen.getByText('分散型SNSの最新動向について共有します。'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('分散型SNSの最新動向について共有します。')).toBeInTheDocument();
   });
 
   it('トレンドが空の場合は案内カードを表示する', () => {

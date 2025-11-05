@@ -8,10 +8,7 @@ import { cn } from '@/lib/utils';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
 import { useAuthStore } from '@/stores/authStore';
-import {
-  useDirectMessageStore,
-  type DirectMessageModel,
-} from '@/stores/directMessageStore';
+import { useDirectMessageStore, type DirectMessageModel } from '@/stores/directMessageStore';
 
 const fallbackMessageId = () => `dm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -100,11 +97,7 @@ export function DirectMessageDialog() {
         content: trimmed,
         clientMessageId,
       });
-      resolveOptimisticMessage(
-        activeConversationNpub,
-        clientMessageId,
-        response?.eventId ?? null,
-      );
+      resolveOptimisticMessage(activeConversationNpub, clientMessageId, response?.eventId ?? null);
       toast.success('メッセージを送信しました。');
     } catch (error) {
       failOptimisticMessage(activeConversationNpub, clientMessageId, error);
@@ -144,9 +137,7 @@ export function DirectMessageDialog() {
       <DialogContent className="max-w-xl space-y-4">
         <DialogHeader>
           <DialogTitle>ダイレクトメッセージ</DialogTitle>
-          <p className="text-sm text-muted-foreground break-all">
-            宛先: {activeConversationNpub}
-          </p>
+          <p className="text-sm text-muted-foreground break-all">宛先: {activeConversationNpub}</p>
         </DialogHeader>
         <ScrollArea className="h-72 rounded-md border border-border p-3">
           <div className="flex flex-col gap-3">

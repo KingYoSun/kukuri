@@ -59,18 +59,21 @@ const mockFollowingQuery = (options: FollowingQueryOverride = {}) => {
     refetch = vi.fn(),
   } = options;
 
-  const data = isLoading && posts.length === 0 && !isError ? undefined : {
-    pages: [
-      {
-        cursor: null,
-        items: posts,
-        nextCursor: null,
-        hasMore: hasNextPage,
-        serverTime: Date.now(),
-      },
-    ],
-    pageParams: [null],
-  };
+  const data =
+    isLoading && posts.length === 0 && !isError
+      ? undefined
+      : {
+          pages: [
+            {
+              cursor: null,
+              items: posts,
+              nextCursor: null,
+              hasMore: hasNextPage,
+              serverTime: Date.now(),
+            },
+          ],
+          pageParams: [null],
+        };
 
   followingMocks.useFollowingFeedQueryMock.mockReturnValue({
     data,

@@ -20,10 +20,7 @@ export function FollowingPage() {
     fetchNextPage,
   } = useFollowingFeedQuery({ limit: 10, includeReactions: true });
 
-  const posts = useMemo(
-    () => data?.pages.flatMap((page) => page.items) ?? [],
-    [data?.pages],
-  );
+  const posts = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data?.pages]);
 
   const isInitialLoading = isLoading && !data;
 

@@ -9,12 +9,13 @@ import { subscribeToUser } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 
 vi.mock('@tanstack/react-router', async () => {
-  const actual = await vi.importActual<typeof import('@tanstack/react-router')>(
-    '@tanstack/react-router',
-  );
-  const Link = ({ children, params: _params, ...rest }: PropsWithChildren<Record<string, unknown>>) => (
-    <a {...rest}>{children}</a>
-  );
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router');
+  const Link = ({
+    children,
+    params: _params,
+    ...rest
+  }: PropsWithChildren<Record<string, unknown>>) => <a {...rest}>{children}</a>;
 
   return {
     ...actual,
@@ -175,7 +176,9 @@ describe('ProfilePage route', () => {
     renderWithClient(queryClient);
 
     await waitFor(() =>
-      expect(screen.getByText(targetUserProfile.display_name ?? targetUserProfile.npub)).toBeInTheDocument(),
+      expect(
+        screen.getByText(targetUserProfile.display_name ?? targetUserProfile.npub),
+      ).toBeInTheDocument(),
     );
 
     const followButton = await screen.findByRole('button', { name: 'フォロー' });
@@ -211,7 +214,9 @@ describe('ProfilePage route', () => {
     renderWithClient(queryClient);
 
     await waitFor(() =>
-      expect(screen.getByText(targetUserProfile.display_name ?? targetUserProfile.npub)).toBeInTheDocument(),
+      expect(
+        screen.getByText(targetUserProfile.display_name ?? targetUserProfile.npub),
+      ).toBeInTheDocument(),
     );
 
     const messageButton = await screen.findByRole('button', { name: 'メッセージ' });
@@ -227,7 +232,9 @@ describe('ProfilePage route', () => {
     renderWithClient(queryClient);
 
     await waitFor(() =>
-      expect(screen.getByText(targetUserProfile.display_name ?? targetUserProfile.npub)).toBeInTheDocument(),
+      expect(
+        screen.getByText(targetUserProfile.display_name ?? targetUserProfile.npub),
+      ).toBeInTheDocument(),
     );
 
     const messageButton = await screen.findByRole('button', { name: 'メッセージ' });

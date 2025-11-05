@@ -7,10 +7,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useUIStore as useUIStoreFromIndex } from '@/stores';
 import { useP2P } from '@/hooks/useP2P';
 import { useNavigate, useLocation } from '@tanstack/react-router';
-import {
-  prefetchTrendingCategory,
-  prefetchFollowingCategory,
-} from '@/hooks/useTrendingFeeds';
+import { prefetchTrendingCategory, prefetchFollowingCategory } from '@/hooks/useTrendingFeeds';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Topic } from '@/stores/types';
 import { useComposerStore } from '@/stores/composerStore';

@@ -40,7 +40,6 @@ export interface TopicStats {
   trending_score: number;
 }
 
-
 export interface TrendingTopic {
   topic_id: string;
   name: string;
@@ -322,9 +321,7 @@ export class TauriApi {
     return await invokeCommand<ListTrendingPostsResult>('list_trending_posts', { request });
   }
 
-  static async listFollowingFeed(
-    params: ListFollowingFeedParams = {},
-  ): Promise<FollowingFeedPage> {
+  static async listFollowingFeed(params: ListFollowingFeedParams = {}): Promise<FollowingFeedPage> {
     const request: Record<string, unknown> = {
       cursor: params.cursor ?? null,
     };
@@ -443,7 +440,9 @@ export class TauriApi {
     };
   }
 
-  static async sendDirectMessage(payload: SendDirectMessagePayload): Promise<SendDirectMessageResult> {
+  static async sendDirectMessage(
+    payload: SendDirectMessagePayload,
+  ): Promise<SendDirectMessageResult> {
     const response = await invokeCommand<{
       event_id: string | null;
       queued: boolean;
@@ -461,9 +460,7 @@ export class TauriApi {
     };
   }
 
-  static async listDirectMessages(
-    params: ListDirectMessagesParams,
-  ): Promise<DirectMessagePage> {
+  static async listDirectMessages(params: ListDirectMessagesParams): Promise<DirectMessagePage> {
     const response = await invokeCommand<{
       items: Array<{
         event_id: string | null;

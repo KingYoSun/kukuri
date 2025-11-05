@@ -36,7 +36,11 @@ interface DirectMessageStoreState {
     clientMessageId: string,
     eventId?: string | null,
   ) => void;
-  failOptimisticMessage: (conversationNpub: string, clientMessageId: string, error?: unknown) => void;
+  failOptimisticMessage: (
+    conversationNpub: string,
+    clientMessageId: string,
+    error?: unknown,
+  ) => void;
   setMessages: (
     conversationNpub: string,
     messages: DirectMessageModel[],
@@ -133,7 +137,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
               eventId: eventId ?? target.eventId,
             },
           ]
-        : state.conversations[conversationNpub] ?? [];
+        : (state.conversations[conversationNpub] ?? []);
 
       return {
         ...state,

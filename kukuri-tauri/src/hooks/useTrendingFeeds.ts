@@ -1,9 +1,4 @@
-import {
-  QueryClient,
-  useInfiniteQuery,
-  useQuery,
-  type InfiniteData,
-} from '@tanstack/react-query';
+import { QueryClient, useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
 import { TauriApi, type FollowingFeedPage, type ListFollowingFeedParams } from '@/lib/api/tauri';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import type { Post } from '@/stores';
@@ -58,8 +53,7 @@ const TRENDING_STALE_TIME = 60_000;
 const TRENDING_REFETCH_INTERVAL = 120_000;
 const FOLLOWING_FEED_STALE_TIME = 60_000;
 
-export const trendingTopicsQueryKey = (limit = 10) =>
-  ['trending', 'topics', limit] as const;
+export const trendingTopicsQueryKey = (limit = 10) => ['trending', 'topics', limit] as const;
 
 export const trendingPostsQueryKey = (topicIds: string[], perTopic: number) =>
   ['trending', 'posts', { topicIds, perTopic }] as const;
@@ -92,10 +86,7 @@ async function fetchTrendingTopics(limit = 10): Promise<TrendingTopicsResult> {
   }
 }
 
-async function fetchTrendingPosts(
-  topicIds: string[],
-  perTopic = 3,
-): Promise<TrendingPostsResult> {
+async function fetchTrendingPosts(topicIds: string[], perTopic = 3): Promise<TrendingPostsResult> {
   if (topicIds.length === 0) {
     return { generatedAt: Date.now(), topics: [] };
   }
