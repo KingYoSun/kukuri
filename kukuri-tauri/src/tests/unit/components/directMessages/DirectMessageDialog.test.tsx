@@ -1,12 +1,10 @@
 ﻿import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import userEvent from '@testing-library/user-event';
 import { DirectMessageDialog } from '@/components/directMessages/DirectMessageDialog';
-import {
-  useDirectMessageStore,
-  getDirectMessageInitialState,
-  type DirectMessageModel,
-} from '@/stores/directMessageStore';
+import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/directMessageStore';
 import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
 
@@ -67,25 +65,30 @@ vi.mock('sonner', () => {
 
 const targetNpub = 'npub1target';
 
-const setDialogState = (messages: DirectMessageModel[] = [], draft = '') => {
+const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: Infinity,
+      },
+    },
+  });
+
+const renderWithQueryClient = (ui: ReactElement, client = createQueryClient()) => {
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
+  };
+};
+
+const openDialog = (draft = '') => {
   const baseState = getDirectMessageInitialState();
   useDirectMessageStore.setState({
     ...baseState,
     isDialogOpen: true,
     activeConversationNpub: targetNpub,
     messageDraft: draft,
-    conversations: {
-      ...baseState.conversations,
-      [targetNpub]: messages,
-    },
-    optimisticMessages: {
-      ...baseState.optimisticMessages,
-      [targetNpub]: [],
-    },
-    unreadCounts: {
-      ...baseState.unreadCounts,
-      [targetNpub]: 0,
-    },
   });
 };
 
@@ -98,6 +101,12 @@ describe('DirectMessageDialog', () => {
     toast.success.mockClear();
     toast.error.mockClear();
     vi.mocked(TauriApi.sendDirectMessage).mockReset();
+    vi.mocked(TauriApi.listDirectMessages).mockReset();
+    vi.mocked(TauriApi.listDirectMessages).mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
     useDirectMessageStore.setState(getDirectMessageInitialState());
     if (typeof useDirectMessageStore.getState().setDraft !== 'function') {
       throw new Error('setDraft is not initialized');
@@ -109,40 +118,59 @@ describe('DirectMessageDialog', () => {
   });
 
   it('閉じているときは描画されない', () => {
-    const { container } = render(<DirectMessageDialog />);
+    const { container } = renderWithQueryClient(<DirectMessageDialog />);
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByText('ダイレクトメッセージ')).not.toBeInTheDocument();
   });
 
-  it('既存メッセージが表示される', () => {
-    setDialogState([
-      {
-        eventId: 'evt-1',
-        clientMessageId: 'client-1',
-        senderNpub: targetNpub,
-        recipientNpub: mockAuthState.currentUser!.npub,
-        content: 'こんにちは',
-        createdAt: 1_730_000_000_000,
-        status: 'sent',
-      },
-    ]);
+  it('既存メッセージが表示される', async () => {
+    vi.mocked(TauriApi.listDirectMessages).mockResolvedValue({
+      items: [
+        {
+          eventId: 'evt-1',
+          clientMessageId: 'client-1',
+          senderNpub: targetNpub,
+          recipientNpub: mockAuthState.currentUser!.npub,
+          content: 'こんにちは',
+          createdAt: 1_730_000_000_000,
+          delivered: true,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
 
-    render(<DirectMessageDialog />);
+    openDialog();
+    renderWithQueryClient(<DirectMessageDialog />);
 
-    expect(screen.getByText('ダイレクトメッセージ')).toBeInTheDocument();
-    expect(screen.getByText('こんにちは')).toBeInTheDocument();
+    await waitFor(() => expect(TauriApi.listDirectMessages).toHaveBeenCalled());
+
+    expect(await screen.findByText('ダイレクトメッセージ')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(useDirectMessageStore.getState().conversations[targetNpub]).toHaveLength(1),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText('まだメッセージはありません。最初のメッセージを送信してみましょう。'),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText((content) => typeof content === 'string' && content.includes('こんにちは')),
+    ).toBeInTheDocument();
     expect(screen.getByText(`宛先: ${targetNpub}`)).toBeInTheDocument();
   });
 
   it('メッセージ送信で Tauri API を呼び出しストアが更新される', async () => {
-    setDialogState([], 'test message');
+    openDialog('test message');
     vi.mocked(TauriApi.sendDirectMessage).mockResolvedValue({
       eventId: 'evt-123',
       queued: false,
     });
 
     const user = userEvent.setup();
-    render(<DirectMessageDialog />);
+    renderWithQueryClient(<DirectMessageDialog />);
+
+    await waitFor(() => expect(TauriApi.listDirectMessages).toHaveBeenCalled());
 
     expect(useAuthStoreMock).toHaveBeenCalled();
     expect(useDirectMessageStore.getState().messageDraft).toBe('test message');

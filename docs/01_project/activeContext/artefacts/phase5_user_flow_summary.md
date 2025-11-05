@@ -25,7 +25,7 @@
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。トピック初期選択とショートカット改善が backlog |
 | トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | ランキング表示・投稿プレビュー・再試行導線は実装済み。ユニットテスト（`npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`）でプリフェッチ経路を検証。参加ボタンの体験向上と Docker シナリオは継続課題 |
 | フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | クエリプリフェッチと `include_reactions` 対応を実装。上記ユニットテストでフォロー中フィードのマッピングを確認済み。サマリーパネルと DM 未読表示は backlog |
-| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は実装済みだが `send_direct_message` (Tauri) が未実装で送信失敗。フォロワー無限スクロールは導入済み、ソート/ページネーションは未対応。 |
+| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は React Query で履歴読み込み・未読リセット・無限スクロールを実装済み。Kind4 IPC 同期とフォロワー無限スクロールのソート/ページネーションは backlog。 |
 
 ### 1.3 トピック関連
 | 画面 | パス | 主な機能 | 導線状態 | 備考 |
@@ -56,11 +56,11 @@
 - **同期系 UI**: `SyncStatusIndicator`／`OfflineIndicator` が `offlineStore` と `syncEngine` の状態を表示し、未同期アクションの再送を支援。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。
-- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は UI/楽観送信が整備済みで、Inventory 5.6.1 に Tauri 実装計画（コマンド・永続化・テスト）が確定。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
+- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済みで、Inventory 5.6.1 に IPC 連携と再送タスクを追加。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
 
 ## 3. 導線ギャップ Quick View
 1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 に残タスクとテスト計画を記載）。Summary Panel や Docker シナリオなど改善タスクを継続。
-2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備えたが、DirectMessageDialog は Tauri 側の `send_direct_message` / `list_direct_messages` が未実装で送受信不可。Inventory 5.6.1/5.6.2 に実装計画を追記済みで、次ステップは Tauri コマンド実装 + React Query ソート/ページネーション接続とテスト整備。
+2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備え、DirectMessageDialog も React Query で履歴読み込み・未読リセット・無限スクロールを実装済み。引き続き Kind4 IPC 連携と会話リスト未読バッジ、フォロワー一覧のソート/ページネーションを Inventory 5.6.1/5.6.2 に沿って進める。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
 5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
@@ -77,12 +77,12 @@
 - `phase5_ci_path_audit.md` — 関連テストと CI パスの依存関係。
 - `refactoring_plan_2025-08-08_v3.md` 2.5 節 — 導線指標と未対応項目チェックリスト。
 
-## 6. 未実装項目の優先度見直し（2025年11月04日）
+## 6. 未実装項目の優先度見直し（2025年11月05日）
 
 | 優先度 | 項目 | 現状/課題 | ユーザー影響 | 次アクション |
 | --- | --- | --- | --- | --- |
 | A | 投稿削除 (`delete_post`) | 2025年11月03日: PostCard 削除メニューと `postStore.deletePostRemote` のオフライン対応を実装し、ユニットテストで検証済み。 | 楽観削除は機能するが、React Query キャッシュと Rust 統合テストが未整備。 | React Query 側のキャッシュ無効化と `delete_post` コマンドの統合テスト追加、CI での回帰監視をフォローアップ。 |
-| B | `/profile/$userId` ルート | `DirectMessageDialog` は UI/楽観送信を備えるが、Tauri の `send_direct_message` / `list_direct_messages` が未実装。Inventory 5.6.1/5.6.2 にコマンド・永続化・ソート/ページネーションの実装計画を追記済み。 | DM が送れず、フォロワー一覧もソート切替・ページングができない。 | `direct_message_service` / `messaging_gateway` / `direct_message_repository` 実装とマイグレーション、コマンド配線後に React Query から履歴ロード。続けて `get_followers` 拡張（sort/cursor）と `FollowerList` のソート UI + 無限スクロールテスト、Vitest / Rust / Docker シナリオを追加。 |
+| B | `/profile/$userId` ルート | `DirectMessageDialog` は React Query で履歴読み込み・未読リセットまで完了。Kind4 IPC 同期とフォロワー一覧のソート/ページネーションは未実装。 | DM 履歴はモーダル表示で確認できるが、会話リストの未読バッジとフォロワー一覧の絞り込みが不足し、継続的な会話/フォロー管理が難しい。 | Inventory 5.6.1 に沿って IPC イベント連携・会話リスト未読同期・再送 UI を実装し、`get_followers` sort/cursor 拡張と `FollowerList` のソート UI、Vitest/Rust/Docker のシナリオを整備。 |
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
 | B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーション・エラー UI・入力バリデーションが未整備。 | 検索結果が多い場合に追跡・再試行が困難で UX が限定的。 | Inventory 5.8 の設計に沿って `search_users` コマンド拡張（cursor/sort/limit/レートリミット）と React Query リファクタ、`SearchErrorState` コンポーネント、Vitest/Rust/Docker テストを追加。 |

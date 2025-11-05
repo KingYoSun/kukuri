@@ -119,8 +119,8 @@
 #### ダイレクトメッセージ
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
 | --- | --- | --- | --- |
-| `send_direct_message` | `TauriApi.sendDirectMessage` | `DirectMessageDialog`, `useDirectMessageStore` | `/profile/$userId`「メッセージ」ボタン→モーダル。2025年11月04日時点で Tauri 側は `AppError::NotImplemented` を返し、UI はトースト＋楽観メッセージ失敗表示でフォールバック |
-| `list_direct_messages` | `TauriApi.listDirectMessages` | （未配線） | コマンド定義済みだが UI から未呼び出し。会話履歴ロード処理が未実装 |
+| `send_direct_message` | `TauriApi.sendDirectMessage` | `DirectMessageDialog`, `useDirectMessageStore` | `/profile/$userId`「メッセージ」ボタン→モーダル。2025年11月04日: `DirectMessageService` / `NostrMessagingGateway` / SQLite リポジトリを実装し、kind4 を暗号化送信できるようになった。UI は Optimistic Update＋トースト通知で成功/失敗を反映し、`queued` フラグで未配信状態も扱う。 |
+| `list_direct_messages` | `TauriApi.listDirectMessages` | （未配線） | `DirectMessageService::list_direct_messages` で暗号化データを復号し、カーソル（`"{created_at}:{event_id}"`）と方向指定をサポート。UI 側の React Query 接続・無限スクロールは未対応で 5.6.2 backlog。 |
 
 #### Nostr 関連
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
@@ -166,7 +166,7 @@
 | `add_to_sync_queue` | `offlineApi.addToSyncQueue` | 手動キュー投入 | 既存フローから未使用。今後の再索引拡張候補。 |
 | `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
 | `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
-| `list_direct_messages` | `TauriApi.listDirectMessages` | DM 履歴取得 | UI 未配線。プレゼンテーション層のコマンドのみ存在し、実装時に再利用予定。 |
+| `list_direct_messages` | `TauriApi.listDirectMessages` | DM 履歴取得 | Tauri サービス／SQLite リポジトリは実装済み。UI からの初期ロード・無限スクロールは未配線（5.6.2 で React Query 接続予定）。 |
 
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
 - 認証 E2E: `import_key`, `get_public_key`
@@ -177,7 +177,7 @@
 1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。
 2. 「トレンド」「フォロー中」カテゴリー用のルーティング／一覧画面を定義するか、未実装である旨を UI 上に表示する。
 3. ユーザー検索のページネーション、検索エラーUI、入力バリデーションを整備し、`search_users` のレート制御を決定する。
-4. `/profile/$userId` のメッセージ導線について、`send_direct_message` / `list_direct_messages` の Tauri 実装と会話履歴ロード、フォロワー/フォロー中リストのソート・フィルタリング、ページングを整備する。
+4. `/profile/$userId` のメッセージ導線について、実装済みの `send_direct_message` / `list_direct_messages` を React Query へ接続し、会話履歴ロード・未読更新・フォロワー/フォロー中リストのソート／フィルタリング／ページングを整備する。
 5. 投稿削除後の React Query キャッシュ無効化と `delete_post` コマンド統合テストを整備する。
 6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
 7. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
@@ -263,54 +263,43 @@
   - 同日、`src/tests/unit/stores/authStore.test.ts` / `src/tests/unit/stores/p2pStore.test.ts` / `src/tests/unit/hooks/useP2P.test.tsx` を拡張し、バックオフ遷移・エラー保持・`isRefreshingStatus` 排他制御を検証。
   - Rust 側では `cargo test`（`kukuri-tauri/src-tauri` / `kukuri-cli`）を実行し、`application::services::p2p_service::tests` における `connection_status` / `peers` の復帰とフォールバック動作を確認。Runbook 9章に新フィールドと検証手順を追記済み。
 
-### 5.6 プロフィール詳細導線とフォロー体験（2025年11月04日更新）
+### 5.6 プロフィール詳細導線とフォロー体験（2025年11月05日更新）
 - **目的**: `/profile/$userId` を起点にプロフィール閲覧・フォロー操作・投稿参照を一貫した導線として提供し、検索結果や他画面からの遷移後も同等の体験を維持する。
 - **実装状況**
   - 2025年11月03日: プレースホルダールートを差し替え、`getUserProfile` / `getUserProfileByPubkey` / `getPosts({ author_pubkey })` を用いた実データ取得と、フォロー/フォロー解除ボタンを実装。
   - `follow_user` / `unfollow_user` 成功時に `React Query` の `['social','following']` / `['profile',npub,'followers']` キャッシュを即時更新し、`subscribe_to_user` でイベント購読を開始する。
   - `UserSearchResults` からのフォロー操作も同一ミューテーションを共有し、検索結果→プロフィール詳細間の導線差異を解消。
   - 2025年11月04日: `DirectMessageDialog` と `useDirectMessageStore` を追加し、プロフィール画面の「メッセージ」ボタンからモーダルを開閉できるよう接続。`DirectMessageDialog` 単体テストで楽観的更新・失敗時の `toast` 表示を検証。
-  - 同日: `TauriApi.sendDirectMessage` を `DirectMessageDialog` に接続（Rust 側は `AppError::NotImplemented` を返却するため、UI は `failOptimisticMessage` で失敗状態を表示）。`TauriApi.listDirectMessages` は定義済みだが UI 未配線で、会話履歴の初期ロードは未実装。
+  - 同日: Rust 側で `direct_message_service` / `messaging_gateway` / SQLite リポジトリを実装し、`TauriApi.sendDirectMessage` から暗号化送信→永続化まで通るよう更新。
+  - 2025年11月05日: `DirectMessageDialog` を `useInfiniteQuery(['direct-messages', npub])` と `TauriApi.listDirectMessages` で接続し、初期履歴ロード・IntersectionObserver ベースの無限スクロール・`markConversationAsRead` による未読リセットを実装。`Load more` ボタンとローディング/エラー UI を追加し、ストアの既存会話と React Query の結果を `dedupeMessages` で統合。
 - **残課題**
-  - `send_direct_message` / `list_direct_messages` の Tauri 実装が存在せず、現状は常に `NotImplemented` が返る。Application 層でメッセージ保存・送信キューを整備する必要がある。
+  - Kind4 受信イベントを IPC で検知し、`useDirectMessageStore` の未読数と会話一覧をリアルタイムで更新する。会話リスト側の未読バッジ連携も整理が必要。
   - プロフィール投稿一覧は 50 件固定で pagination 未対応。スクロールロードや日付ソートなどの UX 改善が必要。
   - フォロワー/フォロー中リストに検索・ソートが無く、件数が多い場合の利用性が下がる。
-  - メッセージボタンは disabled のまま。直接メッセージ仕様（Nostr DM or P2P Note）を定義し、導線を接続する必要がある。
-  - Tauri 経由のエラーハンドリングはトースト表示のみに留まるため、再試行 UI の追加と `errorHandler` のメタデータ拡充を検討。
+  - 送信失敗時の再試行 UI、レート制御、バックオフは未整備。`useDirectMessageStore` に再送キューを追加する。
+  - Tauri 経由のエラーハンドリングはトースト表示に偏っているため、`errorHandler` のメタデータ拡充とリトライ導線を検討。
 - **対応計画（2025年11月04日）**
-  - Direct Message は 5.6.1 に実装計画を記載。Tauri コマンドと永続化、React Query ロード/未読更新、テスト観点まで具体化。
+  - Direct Message は 5.6.1 の実装状況を参照。React Query 連携と無限スクロール、未読リセットの挙動を踏まえて今後の IPC 連携を検討する。
   - フォロワー一覧のソート/ページネーションは 5.6.2 に実装計画を記載。API 拡張・フロント実装・テストカバレッジを網羅。
 
-#### 5.6.1 DirectMessage Tauri 実装計画（2025年11月04日更新）
-- **範囲と前提**
-  - kind 4（NIP-04）準拠の DM を送受信し、ローカル SQLite には暗号化済みイベントのみを保存する。
-  - 送信導線は `DirectMessageDialog`、受信は Gossip/Tauri 側のイベント購読で反映する。
-- **データモデル / スキーマ**
-  - 新規テーブル `direct_messages`（`id` PK, `conversation_npub`, `sender_npub`, `recipient_npub`, `event_id`, `client_message_id`, `payload_cipher_base64`, `created_at`, `delivered`, `direction`）。`direction` は `outbound` / `inbound`。
-  - `migrations/` に up/down SQL を追加し、`.sqlx/` を更新（`cargo sqlx prepare`）。カーソル検索用に `(created_at, event_id)` 複合インデックスを付与。
-  - ドメイン層へ `DirectMessage` 値オブジェクトと `ConversationId` を追加し、Application 層は SQL へ直接依存しないようにする。
-- **Rust 実装ステップ**
-  1. **サービス**: `application/services/direct_message_service.rs`（新規）で `send_direct_message`, `list_direct_messages`, `mark_direct_messages_read`, `ingest_incoming_message` を定義。
-  2. **ポート**: `application/ports/messaging_gateway.rs` を追加し、Nostr クライアントの暗号化・送信・購読を抽象化。実装は `infrastructure/messaging/nostr_gateway.rs` で `nostr_sdk::Client` を委譲。
-  3. **永続化**: `infrastructure/persistence/direct_message_repository.rs` を追加し、`sqlx` でテーブルを読み書き。`list_direct_messages` はカーソル（`"{created_at}:{event_id}"`）を解析し、`LIMIT :limit` + `WHERE` 条件を構築。
-  4. **コマンド**: `presentation/commands/direct_message_commands.rs` でサービスを呼び出す。送信時は (a) 認証チェック → (b) plaintext を `MessagingGateway::encrypt_and_send` へ委譲 → (c) 送信結果を DB に保存 → (d) `SendDirectMessageResponse` を返却。
-  5. **受信**: 既存 `EventService` の Nostr 購読に kind 4 ハンドラを追加し、`DirectMessageService::ingest_incoming_message` を実行。`tokio::spawn` で非同期保存し、完了後に IPC でフロントへ通知。
-  6. **オフライン**: `offline_service` に `OfflineActionKind::DirectMessage` を追加。送信失敗時は暗号化済み payload を保存し、`sync_offline_actions` 再試行時に `send_direct_message` を呼び出す。
-  7. **エラー処理**: `AppError::Messaging`（新設）で暗号化失敗/共有鍵なし/配信失敗を分類。UI には `errorHandler` キー `DirectMessageService.send_failed` 等を発行。
-- **TypeScript 実装タスク**
-  - `TauriApi.listDirectMessages` を `useInfiniteQuery(['direct-messages', conversationNpub, sortKey], …)` に接続し、`getNextPageParam` で `nextCursor` を利用。
-  - `DirectMessageDialog` オープン時に初回フェッチ、スクロール上端で `fetchPreviousPage`。queued 応答の場合は `status: 'pending'` のまま、IPC から `delivered` を受け取ったら更新。
-  - Tauri から `direct-messages:updated` イベントを発火し、`DirectMessageStore` が `appendOptimisticMessage` / `resolveOptimisticMessage` を同期。未読件数は `incrementUnreadCount` で反映。
-  - `markConversationAsRead` をモーダルクローズで呼び出し、バックエンドの `mark_direct_messages_read` へ伝播。
-- **テスト計画**
-  - Rust: `direct_message_service` ユニットテストで (a) 共有鍵未初期化→エラー, (b) 正常送信→DB 保存, (c) カーソル境界, (d) オフライン再送を検証。`nostr_gateway` はモック化して暗号化ペイロードを確認。
-  - Rust: `direct_message_commands` のコマンドテストで認証必須・queued true/false パターンを網羅。
-  - TypeScript: `DirectMessageDialog.test.tsx` を拡張し、無限スクロール・queued 表示・IPC による未読更新・エラートーストを検証。
-  - E2E（後続）: `pnpm test:integration --run directMessages` で UI→Tauri→DB→UI のラウンドトリップを自動化し、CI では feature flag で任意実行。
-- **フォローアップ**
-  - `.sqlx/` 更新、`docs/03_implementation/error_handling_guidelines.md` に Messaging 系キーを追記。
-  - `nostr_sdk::Client::get_shared_secret` 失敗時は `MessagingError::MissingSharedSecret` を返却し、UI で「共有鍵を生成できませんでした」トーストと再試行導線を表示。
-
+#### 5.6.1 DirectMessage Tauri 実装状況（2025年11月05日更新）
+- **実装済みコンポーネント**
+  - `application/services/direct_message_service.rs` が `send_direct_message` / `list_direct_messages` を提供。空メッセージは `ValidationFailureKind::Generic` で検証し、暗号化と配送は `MessagingGateway` に委譲。
+  - `infrastructure/messaging/nostr_gateway.rs` が kind 4 の生成と配信を担当し、`KeyManager.export_private_key` から秘密鍵を取得して `nip04` で暗号化・復号。
+  - `infrastructure/database/sqlite_repository/direct_messages.rs` が SQLite 永続化とカーソルページング（"{created_at}:{event_id}"）・方向指定（Backward/Forward）を実装。
+  - `presentation/commands/direct_message_commands.rs` が Tauri コマンド `send_direct_message` / `list_direct_messages` を公開し、`ensure_authenticated` で owner npub を決定した上で `ApiResponse` を返却。
+- **UI 連携**
+  - `DirectMessageDialog` は `useInfiniteQuery(['direct-messages', npub])` で `list_direct_messages` を呼び出し、IntersectionObserver と `Load more` ボタンで無限スクロール・再取得を制御。取得したページは `dedupeMessages` でストアの会話履歴に統合し、読み込み成功時に `markConversationAsRead` で未読カウントをリセットする。
+  - `DirectMessageDialog` からの送信は従来どおり楽観更新を行い、`resolveOptimisticMessage` / `failOptimisticMessage` で状態同期。sonner toast で成功/失敗を通知し、`queued` フラグは `status: 'pending'` 表示に対応。
+  - `useDirectMessageStore` が既読カウントと会話ログを保持し、`dedupeMessages` で `eventId` / `clientMessageId` をキーに重複排除。
+- **テスト / 検証**
+  - Rust: `cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で Direct Message サービスとリポジトリのユニットテストを実行済み。
+  - 2025年11月05日: `pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を実行し、履歴ロード・送信フローが回帰しないことを確認。
+  - TypeScript: `DirectMessageDialog.test.tsx` で Optimistic Update・エラーハンドリング・トースト表示・初期履歴の描画を検証し、Vitest 結果を記録。
+- **残課題**
+  - kind 4 受信イベントを IPC で通知し、`useDirectMessageStore` へ同期するフローが未実装。モーダル非表示時の未読蓄積と通知経路を整備する。
+  - 会話リスト（サイドバー想定）に履歴の最新メッセージを反映する仕組みは未整備。React Query のキャッシュ共有も含めた一覧更新方式を検討する。
+  - 送信レート制御・暗号化鍵キャッシュ・失敗時のバックオフは運用シナリオでの検証が必要。
 #### 5.6.2 フォロワー一覧ソート/ページネーション実装計画（2025年11月04日更新）
 - **UX と機能要件**
   - デフォルトは「最新順（フォロー日時降順）」で 20 件ずつ表示。ソートオプションは「最新順」「古い順」「名前順（A→Z）」「名前順（Z→A)」。
@@ -456,3 +445,5 @@
 - 共有スコープは `share_ticket` の Capability に埋め込むアクセスレベル（`public` / `contacts_only` / `private`) で分岐し、Doc 参加者はチケット検証によって権限を判断する。設計詳細を `phase5_dependency_inventory_template.md` に反映する。
 - Blob の End-to-end 暗号化には `iroh_blobs::crypto::StreamEncryptor` を採用し、アップロード前にクライアント側で暗号化→Blob 登録を行う。鍵管理は Doc 内のメタデータに暗号化された形で保持し、共有先は Capability から復号キーを取得する。
 - 既存の外部 URL フォールバックは廃止し、リモート同期が失敗した場合は Tauri アプリ内に同梱したデフォルトアバター（`assets/profile/default_avatar.png`）を表示する。Doc/Blob 未取得時はこのローカル画像を使用し、同期完了後に差し替える。
+
+
