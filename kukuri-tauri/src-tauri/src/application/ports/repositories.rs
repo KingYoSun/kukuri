@@ -4,6 +4,7 @@ use crate::domain::entities::{
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct UserCursorPage {
@@ -55,9 +56,11 @@ impl PostFeedCursor {
             event_id,
         })
     }
+}
 
-    pub fn to_string(&self) -> String {
-        format!("{}:{}", self.created_at, self.event_id)
+impl fmt::Display for PostFeedCursor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.created_at, self.event_id)
     }
 }
 
@@ -181,10 +184,12 @@ impl DirectMessageCursor {
             event_id,
         })
     }
+}
 
-    pub fn to_string(&self) -> String {
-        let event_part = self.event_id.clone().unwrap_or_default();
-        format!("{}:{}", self.created_at, event_part)
+impl fmt::Display for DirectMessageCursor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let event_part = self.event_id.as_deref().unwrap_or_default();
+        write!(f, "{}:{}", self.created_at, event_part)
     }
 }
 

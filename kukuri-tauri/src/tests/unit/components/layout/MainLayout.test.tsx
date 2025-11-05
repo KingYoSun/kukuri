@@ -1,11 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuthStore, useTopicStore, useUIStore } from '@/stores';
 
 // モック
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(() => vi.fn()),
+  useLocation: vi.fn(() => ({
+    pathname: '/',
+    search: '',
+    hash: '',
+    params: {},
+  })),
 }));
 
 // P2P APIのモック
@@ -42,8 +50,11 @@ vi.mock('@/components/P2PStatus', () => ({
 }));
 
 describe('MainLayout', () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    queryClient = new QueryClient();
 
     // デフォルトのストア状態
     useAuthStore.setState({
@@ -68,8 +79,12 @@ describe('MainLayout', () => {
       toggleSidebar: vi.fn(),
     });
   });
+
+  const renderWithProviders = (ui: ReactNode) =>
+    render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+
   it('レイアウトが正しくレンダリングされること', () => {
-    render(
+    renderWithProviders(
       <MainLayout>
         <div data-testid="test-content">テストコンテンツ</div>
       </MainLayout>,
@@ -90,7 +105,7 @@ describe('MainLayout', () => {
   });
 
   it('レスポンシブなレイアウト構造を持つこと', () => {
-    const { container } = render(
+    const { container } = renderWithProviders(
       <MainLayout>
         <div>コンテンツ</div>
       </MainLayout>,

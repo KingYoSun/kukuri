@@ -73,17 +73,17 @@ fn to_page_dto(page: DirectMessagePageResult) -> DirectMessagePage {
     let items = page
         .items
         .into_iter()
-        .map(|message| DirectMessageDto {
-            event_id: message.event_id.clone(),
-            client_message_id: message.client_message_id.clone(),
-            sender_npub: message.sender_npub.clone(),
-            recipient_npub: message.recipient_npub.clone(),
-            content: message
-                .decrypted_content
-                .clone()
-                .unwrap_or_else(|| "".to_string()),
-            created_at: message.created_at_millis(),
-            delivered: message.delivered,
+        .map(|message| {
+            let content = message.decrypted_content.clone().unwrap_or_default();
+            DirectMessageDto {
+                event_id: message.event_id.clone(),
+                client_message_id: message.client_message_id.clone(),
+                sender_npub: message.sender_npub.clone(),
+                recipient_npub: message.recipient_npub.clone(),
+                content,
+                created_at: message.created_at_millis(),
+                delivered: message.delivered,
+            }
         })
         .collect();
 

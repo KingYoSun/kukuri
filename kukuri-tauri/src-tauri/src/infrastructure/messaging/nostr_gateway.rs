@@ -70,7 +70,7 @@ impl MessagingGateway for NostrMessagingGateway {
         let ciphertext = Self::encrypt_payload(keys.secret_key(), &recipient_pk, plaintext)?;
 
         let event = EventBuilder::new(Kind::EncryptedDirectMessage, ciphertext.clone())
-            .tags([Tag::public_key(recipient_pk.clone())])
+            .tags([Tag::public_key(recipient_pk)])
             .sign_with_keys(&keys)?;
 
         if let Err(err) = self.event_manager.publish_event(event.clone()).await {

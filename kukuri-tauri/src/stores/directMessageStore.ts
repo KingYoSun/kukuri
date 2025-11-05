@@ -93,7 +93,7 @@ const dedupeMessages = (messages: DirectMessageModel[]) => {
 
 export const getDirectMessageInitialState = () => createInitialState();
 
-export const useDirectMessageStore = create<DirectMessageStoreState>((set, get) => ({
+export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get) => ({
   ...createInitialState(),
   openDialog: (conversationNpub) =>
     set((state) => ({

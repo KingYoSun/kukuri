@@ -4,9 +4,7 @@ use crate::application::ports::messaging_gateway::MessagingSendResult;
 use crate::application::ports::repositories::{
     DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw, DirectMessageRepository,
 };
-#[cfg(test)]
-use crate::domain::entities::MessageDirection;
-use crate::domain::entities::{DirectMessage, NewDirectMessage};
+use crate::domain::entities::{DirectMessage, MessageDirection, NewDirectMessage};
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{DateTime, TimeZone, Utc};
 use std::sync::Arc;
@@ -30,16 +28,11 @@ pub struct DirectMessagePageResult {
     pub has_more: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum MessagePageDirection {
+    #[default]
     Backward,
     Forward,
-}
-
-impl Default for MessagePageDirection {
-    fn default() -> Self {
-        MessagePageDirection::Backward
-    }
 }
 
 impl From<MessagePageDirection> for DirectMessageListDirection {
@@ -89,17 +82,18 @@ impl DirectMessageService {
             .filter(|id| !id.trim().is_empty())
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-        let new_message = NewDirectMessage::new_outbound(
-            owner_npub.to_string(),
-            recipient_npub.to_string(),
-            owner_npub.to_string(),
-            recipient_npub.to_string(),
-            messaging_result.event_id.clone(),
-            Some(generated_client_id.clone()),
-            messaging_result.ciphertext.clone(),
+        let new_message = NewDirectMessage {
+            owner_npub: owner_npub.to_string(),
+            conversation_npub: recipient_npub.to_string(),
+            sender_npub: owner_npub.to_string(),
+            recipient_npub: recipient_npub.to_string(),
+            event_id: messaging_result.event_id.clone(),
+            client_message_id: Some(generated_client_id.clone()),
+            payload_cipher_base64: messaging_result.ciphertext.clone(),
             created_at,
-            messaging_result.delivered,
-        );
+            delivered: messaging_result.delivered,
+            direction: MessageDirection::Outbound,
+        };
 
         let stored = self
             .repository

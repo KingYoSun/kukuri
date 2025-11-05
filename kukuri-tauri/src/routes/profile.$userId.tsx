@@ -71,18 +71,24 @@ function ProfilePage() {
     },
   });
 
-  const followersQuery = useInfiniteQuery<ProfileListPage, Error>({
+  const followersQuery = useInfiniteQuery<
+    ProfileListPage,
+    Error,
+    InfiniteData<ProfileListPage>,
+    ['profile', string, 'followers'],
+    string | null
+  >({
     queryKey: ['profile', profile?.npub ?? userId, 'followers'],
     enabled: Boolean(profile),
     retry: false,
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: null,
     queryFn: async ({ pageParam }) => {
       if (!profile) {
         return { items: [], nextCursor: null, hasMore: false };
       }
       const response = await TauriApi.getFollowers({
         npub: profile.npub,
-        cursor: pageParam ?? null,
+        cursor: pageParam,
         limit: 25,
       });
       return {
@@ -92,28 +98,27 @@ function ProfilePage() {
       };
     },
     getNextPageParam: (lastPage) =>
-      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
-    onError: (error: unknown) => {
-      errorHandler.log('ProfilePage.followersFetchFailed', error, {
-        context: 'ProfilePage.followersQuery',
-        metadata: { userId },
-      });
-      toast.error('フォロワーの取得に失敗しました');
-    },
+      lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined,
   });
 
-  const followingQuery = useInfiniteQuery<ProfileListPage, Error>({
+  const followingQuery = useInfiniteQuery<
+    ProfileListPage,
+    Error,
+    InfiniteData<ProfileListPage>,
+    ['profile', string, 'following'],
+    string | null
+  >({
     queryKey: ['profile', profile?.npub ?? userId, 'following'],
     enabled: Boolean(profile),
     retry: false,
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: null,
     queryFn: async ({ pageParam }) => {
       if (!profile) {
         return { items: [], nextCursor: null, hasMore: false };
       }
       const response = await TauriApi.getFollowing({
         npub: profile.npub,
-        cursor: pageParam ?? null,
+        cursor: pageParam,
         limit: 25,
       });
       return {
@@ -123,14 +128,7 @@ function ProfilePage() {
       };
     },
     getNextPageParam: (lastPage) =>
-      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
-    onError: (error: unknown) => {
-      errorHandler.log('ProfilePage.followingFetchFailed', error, {
-        context: 'ProfilePage.followingQuery',
-        metadata: { userId },
-      });
-      toast.error('フォロー中ユーザーの取得に失敗しました');
-    },
+      lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined,
   });
 
   const {
@@ -148,6 +146,26 @@ function ProfilePage() {
     hasNextPage: followingHasNext,
     fetchNextPage: fetchFollowingNext,
   } = followingQuery;
+
+  useEffect(() => {
+    if (followersQuery.isError && followersQuery.error) {
+      errorHandler.log('ProfilePage.followersFetchFailed', followersQuery.error, {
+        context: 'ProfilePage.followersQuery',
+        metadata: { userId: profile?.npub ?? userId },
+      });
+      toast.error('フォロワーの取得に失敗しました');
+    }
+  }, [followersQuery.isError, followersQuery.error, profile?.npub, userId]);
+
+  useEffect(() => {
+    if (followingQuery.isError && followingQuery.error) {
+      errorHandler.log('ProfilePage.followingFetchFailed', followingQuery.error, {
+        context: 'ProfilePage.followingQuery',
+        metadata: { userId: profile?.npub ?? userId },
+      });
+      toast.error('フォロー中ユーザーの取得に失敗しました');
+    }
+  }, [followingQuery.isError, followingQuery.error, profile?.npub, userId]);
 
   const followers = followersData?.pages.flatMap((page) => page.items) ?? [];
   const following = followingData?.pages.flatMap((page) => page.items) ?? [];

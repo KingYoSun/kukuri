@@ -1,5 +1,6 @@
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -15,12 +16,16 @@ impl MessageDirection {
             MessageDirection::Inbound => "inbound",
         }
     }
+}
 
-    pub fn from_str(value: &str) -> Option<Self> {
+impl FromStr for MessageDirection {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "outbound" => Some(MessageDirection::Outbound),
-            "inbound" => Some(MessageDirection::Inbound),
-            _ => None,
+            "outbound" => Ok(MessageDirection::Outbound),
+            "inbound" => Ok(MessageDirection::Inbound),
+            _ => Err(()),
         }
     }
 }
@@ -37,58 +42,6 @@ pub struct NewDirectMessage {
     pub created_at: DateTime<Utc>,
     pub delivered: bool,
     pub direction: MessageDirection,
-}
-
-impl NewDirectMessage {
-    pub fn new_outbound(
-        owner_npub: String,
-        conversation_npub: String,
-        sender_npub: String,
-        recipient_npub: String,
-        event_id: Option<String>,
-        client_message_id: Option<String>,
-        payload_cipher_base64: String,
-        created_at: DateTime<Utc>,
-        delivered: bool,
-    ) -> Self {
-        Self {
-            owner_npub,
-            conversation_npub,
-            sender_npub,
-            recipient_npub,
-            event_id,
-            client_message_id,
-            payload_cipher_base64,
-            created_at,
-            delivered,
-            direction: MessageDirection::Outbound,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn new_inbound(
-        owner_npub: String,
-        conversation_npub: String,
-        sender_npub: String,
-        recipient_npub: String,
-        event_id: Option<String>,
-        payload_cipher_base64: String,
-        created_at: DateTime<Utc>,
-        delivered: bool,
-    ) -> Self {
-        Self {
-            owner_npub,
-            conversation_npub,
-            sender_npub,
-            recipient_npub,
-            event_id,
-            client_message_id: None,
-            payload_cipher_base64,
-            created_at,
-            delivered,
-            direction: MessageDirection::Inbound,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -127,7 +80,7 @@ impl DirectMessage {
             _ => Utc
                 .timestamp_millis_opt(0)
                 .single()
-                .unwrap_or_else(|| Utc::now()),
+                .unwrap_or_else(Utc::now),
         };
 
         Self {

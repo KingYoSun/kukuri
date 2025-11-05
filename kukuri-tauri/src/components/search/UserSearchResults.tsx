@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -13,15 +13,6 @@ import { useAuthStore } from '@/stores';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { toast } from 'sonner';
-
-type QueryOptionsWithHandlers<TData, TKey extends readonly unknown[]> = UseQueryOptions<
-  TData,
-  Error,
-  TData,
-  TKey
-> & {
-  onError?: (error: unknown) => void;
-};
 
 interface UserSearchResultsProps {
   query: string;
@@ -37,17 +28,19 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
     enabled: sanitizedQuery.length > 0,
     retry: false,
     queryFn: async () => {
-      const profiles = await TauriApi.searchUsers(sanitizedQuery, 24);
-      return profiles.map(mapUserProfileToUser);
+      try {
+        const profiles = await TauriApi.searchUsers(sanitizedQuery, 24);
+        return profiles.map(mapUserProfileToUser);
+      } catch (error) {
+        errorHandler.log('UserSearchResults.searchFailed', error, {
+          context: 'UserSearchResults.searchResults',
+          metadata: { query: sanitizedQuery },
+        });
+        toast.error('ユーザー検索に失敗しました');
+        throw error;
+      }
     },
-    onError: (error: unknown) => {
-      errorHandler.log('UserSearchResults.searchFailed', error, {
-        context: 'UserSearchResults.searchResults',
-        metadata: { query: sanitizedQuery },
-      });
-      toast.error('ユーザー検索に失敗しました');
-    },
-  } as QueryOptionsWithHandlers<Profile[], readonly ['search-users', string]>);
+  });
 
   const followingQuery = useQuery<
     Profile[],
@@ -59,19 +52,23 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
     enabled: Boolean(currentUser),
     retry: false,
     queryFn: async () => {
-      if (!currentUser) {
-        return [] as Profile[];
+      try {
+        if (!currentUser) {
+          return [] as Profile[];
+        }
+        const page = await TauriApi.getFollowing({
+          npub: currentUser.npub,
+        });
+        return page.items.map(mapUserProfileToUser);
+      } catch (error) {
+        errorHandler.log('UserSearchResults.followingFetchFailed', error, {
+          context: 'UserSearchResults.followingQuery',
+        });
+        toast.error('フォロー中ユーザーの取得に失敗しました');
+        throw error;
       }
-      const profiles = await TauriApi.getFollowing(currentUser.npub);
-      return profiles.map(mapUserProfileToUser);
     },
-    onError: (error: unknown) => {
-      errorHandler.log('UserSearchResults.followingFetchFailed', error, {
-        context: 'UserSearchResults.followingQuery',
-      });
-      toast.error('フォロー中ユーザーの取得に失敗しました');
-    },
-  } as QueryOptionsWithHandlers<Profile[], readonly ['social', 'following', string | undefined]>);
+  });
 
   const followMutation = useMutation<void, unknown, Profile>({
     mutationFn: async (target: Profile) => {

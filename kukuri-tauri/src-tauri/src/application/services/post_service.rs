@@ -277,7 +277,9 @@ impl super::sync_service::SyncParticipant for PostService {
 mod tests {
     use super::*;
     use crate::application::ports::cache::PostCache;
-    use crate::application::ports::repositories::{BookmarkRepository, PostRepository, UserRepository};
+    use crate::application::ports::repositories::{
+        BookmarkRepository, PostRepository, UserRepository,
+    };
     use crate::application::services::SubscriptionRecord;
     use crate::infrastructure::cache::PostCacheService;
     use crate::infrastructure::database::Repository;

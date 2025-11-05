@@ -48,8 +48,7 @@ impl<'r> FromRow<'r, SqliteRow> for DirectMessageRow {
 
 impl From<DirectMessageRow> for DirectMessage {
     fn from(row: DirectMessageRow) -> Self {
-        let direction =
-            MessageDirection::from_str(&row.direction).unwrap_or(MessageDirection::Outbound);
+        let direction = row.direction.parse().unwrap_or(MessageDirection::Outbound);
         let delivered = row.delivered != 0;
         DirectMessage::new(
             row.id,
