@@ -39,7 +39,7 @@
 | --- | --- | --- | --- | --- |
 | 投稿 | `/search` (posts) | フロント側フィルタで投稿検索 | 稼働中 | 初回ロードで `get_posts` 呼び出し |
 | トピック | `/search` (topics) | トピック名/説明で検索 | 稼働中 | `get_topics` 再利用 |
-| ユーザー | `/search` (users) | `search_users` で実ユーザー検索、フォロー/解除ボタン | 改善中 | フォロー結果は即時反映。エラーUI・ページネーション・入力バリデーションは未整備。 |
+| ユーザー | `/search` (users) | `search_users` で実ユーザー検索、フォロー/解除ボタン | 改善中 | フォロー結果は即時反映。ページネーション仕様・SearchErrorState・入力バリデーション指針を Inventory 5.8（2025年11月06日更新）/エラーハンドリングガイドラインへ反映済み。実装待ち。 |
 
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 導線状態 | 備考 |
@@ -57,6 +57,7 @@
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。
 - **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済みで、Inventory 5.6.1 に IPC 連携と再送タスクを追加。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
+- **ユーザー検索**: `UserSearchResults` の状態遷移（idle/typing/ready/loading/success/empty/rateLimited/error）と `SearchErrorState` ハンドリング、`query` バリデーション（2〜64文字、制御文字除去、連続スペース正規化）を Inventory 5.8 と `error_handling_guidelines.md` に記録。React Query のデバウンス・AbortController 方針もドキュメント化。
 
 ## 3. 導線ギャップ Quick View
 1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 に残タスクとテスト計画を記載）。2025年11月06日時点でデータ要件とテスト計画を整理済み。`generated_at` をミリ秒エポックへ揃えること、Summary Panel や Docker シナリオの整備を継続。
@@ -64,7 +65,7 @@
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
 5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
-6. ユーザー検索タブは `search_users` で動作するが、ページネーション・エラー UI・バリデーションの整備が未実装（改善計画は Inventory 5.8 に整理済み）。
+6. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
 
 ## 4. テストカバレッジ概要
 - フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx`。
@@ -85,7 +86,7 @@
 | B | `/profile/$userId` ルート | `DirectMessageDialog` は React Query で履歴読み込み・未読リセットまで完了。Kind4 IPC 同期とフォロワー一覧のソート/ページネーションは未実装。 | DM 履歴はモーダル表示で確認できるが、会話リストの未読バッジとフォロワー一覧の絞り込みが不足し、継続的な会話/フォロー管理が難しい。 | Inventory 5.6.1 に沿って IPC イベント連携・会話リスト未読同期・再送 UI を実装し、`get_followers` sort/cursor 拡張と `FollowerList` のソート UI、Vitest/Rust/Docker のシナリオを整備。 |
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
-| B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーション・エラー UI・入力バリデーションが未整備。 | 検索結果が多い場合に追跡・再試行が困難で UX が限定的。 | Inventory 5.8 の設計に沿って `search_users` コマンド拡張（cursor/sort/limit/レートリミット）と React Query リファクタ、`SearchErrorState` コンポーネント、Vitest/Rust/Docker テストを追加。 |
+| B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーション・エラー UI・入力バリデーションが未整備。 | 検索結果が多い場合に追跡・再試行が困難で UX が限定的。 | Inventory 5.8 の状態遷移図・入力ガード・`SearchErrorState` 設計に沿って `search_users` コマンド拡張（cursor/sort/limit/レートリミット）と React Query リファクタ、Vitest/Rust/Docker テストを追加。 |
 | B | `/trending` / `/following` フィード | 2025年11月05日: ルート・コマンド実装済み。`list_trending_topics`/`list_following_feed` で稼働中だが、`generated_at` のミリ秒化・Summary Panel・Docker シナリオ・DM 未読バッジが未対応。 | フィード自体は閲覧できるものの、更新時刻表示のずれや周辺メトリクス不足で発見体験が限定的。 | Inventory 5.7 と Phase 5 計画に沿って `generated_at` をミリ秒へ修正、Summary Panel / DM 未読バッジ追加、`trending_metrics_job` 実装と Nightly テスト追加、Docker シナリオを整備。 |
 
 > 優先度A: 現行体験に致命的影響があるもの。<br>

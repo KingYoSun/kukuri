@@ -439,6 +439,7 @@ export function PeerConnectionPanel() {
 - 2025年11月03日: `pnpm vitest run src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/stores/postStore.test.ts` を実行し、削除メニューとオフライン削除キューの回帰を確認（`postStore.deletePostRemote` がオフライン時に `TauriApi.deletePost` を呼ばないことを検証）。
 - 2025年11月03日: Relay/P2P ステータスカードのバックオフ実装を完了。`npx vitest run …` でコンポーネント/ストア/フックのユニットテストを実行し、`cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）で `connection_status` / `peers` 拡張後のフォールバック動作を確認。Runbook 9章および CI パス監査に反映。
 - 2025年11月06日: `phase5_user_flow_inventory.md` 5.7 節を更新し、`list_trending_topics`/`list_trending_posts`/`list_following_feed` のデータ要件（limit/per_topic/cursor/キャッシュポリシー）とテスト計画を明記。`generated_at` をミリ秒エポックで返す必要性、Summary Panel・`trending_metrics_job`・Docker シナリオを backlog として追記し、Summary/CI 計画と同期。
+- 2025年11月06日: ユーザー検索導線のページネーション/状態遷移/エラー UI/入力バリデーション方針を `phase5_user_flow_inventory.md` 5.8 節と `phase5_user_flow_summary.md`、`docs/03_implementation/error_handling_guidelines.md` に追記し、`SearchErrorState` コンポーネントと React Query デバウンス/AbortController 戦略を整理。`tauri_app_implementation_plan.md` の優先度項目を同方針と同期。
 
 ### Phase 5 優先度更新（2025年11月03日）
 - 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。2025年11月03日はステータス監視カードとプロフィール編集モーダルの反映手順を整理し、未実装の画像アップロード・鍵管理・未接続コマンド対応をバックログに追加。2025年11月06日はトレンド/フォロー導線のデータ要件・テスト計画を Inventory/Summary/CI 計画に反映し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job` をフォロータスクとして明示。QA/バックエンド連携は引き続き課題。
@@ -446,7 +447,7 @@ export function PeerConnectionPanel() {
 2. プロフィール編集再利用: `ProfileSetup` 共通化と設定画面モーダル導線の実装。
 3. プライバシー設定反映: `usePrivacySettingsStore` でトグル状態を管理し、将来のバックエンド連携を見据えて永続化。
 4. トレンド/フォロー中フィード拡張: Inventory 5.7 に沿って `/trending`・`/following` の既存実装をブラッシュアップし、`generated_at` をミリ秒エポックへ修正、Summary Panel / DM 未読バッジを追加、`trending_metrics_job`・Docker シナリオ・Nightly テストを整備して発見体験を底上げする。
-5. ユーザー検索導線改善: Inventory 5.8 に基づき `search_users` コマンド拡張（cursor/sort/レートリミット）、`useUserSearchQuery` のデバウンス + 無限スクロール対応、`SearchErrorState` コンポーネント、Vitest/Rust/Docker テストを追加して検索 UX を底上げする。
+5. ユーザー検索導線改善: Inventory 5.8 に基づき `search_users` コマンド拡張（cursor/sort/limit/レートリミット）、`useUserSearchQuery` のデバウンス + 無限スクロール対応、`SearchErrorState` コンポーネントと入力バリデーション（2〜64文字/制御文字除去）を実装し、Vitest/Rust/Docker テストを追加して検索 UX を底上げする。
 6. テスト/UX 確認: 新規コンポーザー導線とプロフィール編集モーダル、`RelayStatus`/`P2PStatus` のステータス表示をユニット・統合テストでカバーし、操作ログを `phase5_ci_path_audit.md` に追記する。2025年11月03日: `pnpm test:unit` スクリプトと Nightly Frontend Unit Tests ワークフロー（cron 実行）を追加し、定期実行とローカル検証手順を共通化。フェイクタイマーを用いた `RelayStatus`/`P2PStatus` テストを整備し、同日付で `phase5_user_flow_inventory.md` 5.5節にリレー取得失敗時の UI/リトライ設計とバックオフ方針を追記。
 7. プロフィール画像アップロード: `ProfileForm` のアップロードボタン導線を実装し、`ProfileEditDialog`/オンボーディング双方で同一コードパスを利用できるようにする。
 8. 鍵管理モーダル: `export_private_key`/`SecureStorageApi.addAccount` を利用したバックアップ・インポート導線を実装し、保存/復旧手順の注意喚起とロギング方針を明文化する。

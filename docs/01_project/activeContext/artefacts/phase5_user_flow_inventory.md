@@ -369,12 +369,20 @@
   - 検索入力は `query.trim().length >= 2` を必須条件とし、それ未満の場合はリクエストを発行せず空状態カードを表示。「2文字以上入力してください」とガイダンスを提示。
   - `UserSearchResults` を `useInfiniteQuery` に切り替え、カーソルによる追加取得・`Load more` ボタン・`IntersectionObserver` を併用。`keepPreviousData` を有効化し、再検索時にフラッシュを抑制。
   - エラー表示は `SearchErrorState`（新規）で `errorHandler` のキーを解釈し、`再試行` ボタン・サポートリンク・レートリミット残り時間表示を提供。無結果時は `EmptyStateCard` を表示。
+  - `UserSearchResults` の状態遷移は `idle`（入力なし）→`typing`（2文字未満）→`ready`（バリデーション通過）→`loading`（リクエスト中）→`success`/`empty`/`rateLimited`/`error` を明示し、`rateLimited` 到達時は `retryAfter` カウントダウン完了後に自動で `ready` に戻す。React Query の `status` とローカルステートを組み合わせ、UI レベルで分岐を管理する。
   - 入力欄下部に検索時間・ヒット件数を表示し、結果差分が発生した場合は `diff` ハイライト（CSS アニメーション）で通知。フォロー操作成功時は該当行で楽観的更新し、エラー時は `errorHandler` でロールバック。
+- **入力バリデーション方針**
+  - 入力欄では `query` を `trim` し、全角半角スペース・改行・タブを除去。長さは 2〜64 文字に制限し、上限超過時は自動でスライス（UI は「64文字まで」のヒントを表示）。
+  - 制御文字と `[\u0000-\u001F\u007F]` を除外し、違反した場合は `invalid_query` を発火させてフィールド下にバリデーションエラーを表示。Nostr キー（npub/hex）・表示名・Bio 断片を入力できるよう、英数/記号/日本語を許可する。
+  - 連続スペースを 1 つに正規化し、`query` の前後に `#` や `@` がある場合は補助検索（タグ/npub）と認識。UI では補助検索ラベルを表示し、結果が空でも「部分一致で検索中」のトーストを表示する。
+  - リクエスト発行は 300ms デバウンス＋最新の `AbortController` を用いてキャンセル。`allow_incomplete=true` の場合のみ、直前のレスポンスを保持したままスピナーを表示する。
 - **バックエンド/コマンド**
   - `search_users` コマンドを `SearchUsersRequest { query: String, cursor: Option<String>, limit: u16, sort: Option<SearchSort>, allow_incomplete: bool }` へ拡張。
     - `cursor` は `"{last_seen_at}:{pubkey}"` 形式。`sort` は `relevance`（デフォルト）/`recency`。`allow_incomplete` はフォールバック（キャッシュ結果のみ返す）を許可するフラグ。
     - クエリ長が 2 未満の場合は `AppError::InvalidInput`（コード: `USER_SEARCH_QUERY_TOO_SHORT`）を返却。
+    - `limit` はデフォルト 20、最大 50。上限を超えるリクエストは 50 にクランプし、`AppError::InvalidInput` の `details` に `requested_limit` を格納する。
   - `UserSearchService`（新規）を追加し、Nostr インデックスから取得したプロフィールとローカルキャッシュを統合。`rank = text_score * 0.7 + mutual_follow * 0.2 + recent_activity * 0.1` を計算し、`relevance` ソートに利用。
+    - `allow_incomplete=true` の場合はキャッシュヒットのみを返却しつつ `has_more=false` を設定。Nostr リレーへ接続不可でも UX を保つ。
   - レートリミットはユーザー単位で 10 秒間に 30 リクエストまで。超過時は `AppError::RateLimited { retry_after_seconds }` を返し、UI がカウントダウンを表示できるようにする。
 - **エラーハンドリング**
   - `errorHandler` に `UserSearch.fetch_failed`, `UserSearch.invalid_query`, `UserSearch.rate_limited` を追加（詳細は `docs/03_implementation/error_handling_guidelines.md`）。

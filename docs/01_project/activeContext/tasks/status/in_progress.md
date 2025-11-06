@@ -48,7 +48,8 @@
   - 2025年11月05日: Direct Message 導線の進捗を反映し、`phase5_user_flow_inventory.md` 5.6.1 を実装状況ベースに更新。`send_direct_message` / `list_direct_messages` の Tauri サービス内容とテスト結果を追記し、`phase5_user_flow_summary.md` のプロフィール行・Quick View・優先度表も同内容に同期。
   - 2025年11月05日: `DirectMessageDialog` を `useInfiniteQuery` と `list_direct_messages` で接続し、IntersectionObserver 無限スクロール・既読リセット・エラー/再試行 UI を実装。`pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を再実行して回帰を確認し、Inventory 5.6 / Summary 1.2・2・3・6 節に React Query 連携と残課題（Kind4 IPC・会話リスト未読・フォロワーソート）を反映。
   - 2025年11月06日: `phase5_user_flow_inventory.md` 5.7節にトレンド/フォロー中のデータ要件（limit/per_topic/cursor/キャッシュ方針）とテスト計画を追記し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job`・Docker シナリオをフォロー項目として明記。`phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md` を同内容に更新し、Quick View / 優先度表 / テストカバレッジを同期。
-  - [ ] ユーザー検索タブのページネーション／エラー UI／入力バリデーション方針を「ユーザー検索導線改善」節として整理し、`phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md`、`docs/03_implementation/error_handling_guidelines.md` に反映する。
+  - [x] ユーザー検索タブのページネーション／エラー UI／入力バリデーション方針を「ユーザー検索導線改善」節として整理し、`phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md`、`docs/03_implementation/error_handling_guidelines.md` に反映する。
+    - 2025年11月06日: Inventory 5.8 に状態遷移図と入力ガード（2〜64文字・制御文字除去・`#`/`@` 補助検索）を追記し、Summary・Phase5計画・エラーハンドリングガイドラインへ `SearchErrorState`/React Query デバウンス方針を同期。`tauri_app_implementation_plan.md` の優先度項目とエラーキー記載を更新。
   - [ ] ホーム/サイドバーからのトピック作成導線（グローバルコンポーザー連携案）の仕様・依存コマンド・テスト計画をまとめ、Inventory と Summary に追記する。
   - [ ] 投稿削除後の React Query キャッシュ無効化と `delete_post` 統合テスト整備をフォローアップする文書（Inventory・Summary・`phase5_ci_path_audit.md`）を作成し、進捗と整合性を確認する。
   - [ ] DM/フォロワー/プロフィール画像導線のフォローアップ項目に合わせ、`docs/03_implementation/error_handling_guidelines.md`・`phase5_dependency_inventory_template.md`・`tauri_app_implementation_plan.md` の該当節を更新する。

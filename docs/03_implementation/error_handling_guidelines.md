@@ -197,6 +197,13 @@ try {
 
 > 新しいキーを追加する場合は、`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` の該当節と照合し、命名の一貫性を保つ。
 
+### SearchErrorState コンポーネント指針（2025年11月06日更新）
+- `SearchErrorState` は `/search` (users) の共通エラービューとして利用し、`props` には `errorKey`（`UserSearch.*`）・`retryAfterSeconds`（任意）・`onRetry` を渡す。`errorKey` は必ず本ガイドラインのテーブルに列挙されたキーを使用する。
+- `errorKey === 'UserSearch.invalid_query'` の場合は再試行ボタンを非表示にし、入力欄へ `aria-invalid` とヒントテキスト（`2文字以上入力してください`）を付与する。`UserSearch.rate_limited` の場合は `retryAfterSeconds` からカウントダウンを開始し、0 になったタイミングで `onCooldownComplete`（`UserSearchResults` 側で定義）を呼び出して検索を再開する。
+- 任意の `errorKey` で `meta.details` が渡された場合は補助情報として `Accordion` 内に表示する。特に `AppError::InvalidInput` の `requested_limit` などはデバッグ時に参照できるよう `details` を JSON で整形し、`copy-to-clipboard` ボタンを提供する。
+- Toast 通知は `showToast` フラグで制御し、`invalid_query` ではフィールド内メッセージのみに留める。`fetch_failed` と `rate_limited` は `toastTitle`/`toastDescription` を併用し、詳細は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` 5.8 の状態遷移に合わせる。
+- コンポーネント内で `errorHandler.log` を再度呼び出さない（呼び出し元で既に記録済みのため）。表示のみを担い、副作用は `UserSearchResults` など上位で処理する。
+
 ## 今後の拡張予定
 
 ## バックエンド（Tauri/Rust）との連携
