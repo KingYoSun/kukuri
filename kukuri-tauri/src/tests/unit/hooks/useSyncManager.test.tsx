@@ -41,6 +41,7 @@ describe('useSyncManager', () => {
     clearPendingActions: vi.fn(),
     setSyncError: vi.fn(),
     clearSyncError: vi.fn(),
+    refreshCacheMetadata: vi.fn().mockResolvedValue(undefined),
   };
 
   const defaultAuthState = {

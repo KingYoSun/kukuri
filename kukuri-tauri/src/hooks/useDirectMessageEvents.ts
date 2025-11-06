@@ -30,6 +30,24 @@ export function useDirectMessageEvents() {
       return;
     }
 
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const tauriWindow = window as Window & {
+      __TAURI_INTERNALS__?: { transformCallback?: unknown };
+      __TAURI__?: unknown;
+      __TAURI_IPC__?: unknown;
+    };
+
+    if (
+      !tauriWindow.__TAURI_INTERNALS__?.transformCallback &&
+      !tauriWindow.__TAURI__ &&
+      !tauriWindow.__TAURI_IPC__
+    ) {
+      return;
+    }
+
     const unlistenPromise = listen<DirectMessageEventPayload>(
       'direct-message:received',
       (event) => {
