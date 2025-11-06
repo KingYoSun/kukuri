@@ -18,6 +18,7 @@ pub struct PaginatedUserProfiles {
     pub items: Vec<UserProfile>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
+    pub total_count: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -25,6 +26,8 @@ pub struct GetFollowersRequest {
     pub npub: String,
     pub cursor: Option<String>,
     pub limit: Option<u32>,
+    pub sort: Option<String>,
+    pub search: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -32,4 +35,6 @@ pub struct GetFollowingRequest {
     pub npub: String,
     pub cursor: Option<String>,
     pub limit: Option<u32>,
+    pub sort: Option<String>,
+    pub search: Option<String>,
 }

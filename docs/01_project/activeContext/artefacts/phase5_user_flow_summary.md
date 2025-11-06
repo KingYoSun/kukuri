@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月06日
+最終更新: 2025年11月07日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -25,7 +25,7 @@
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。TopicSelector に新規作成ショートカットと `createAndJoinTopic` 連携を追加予定（Inventory 5.9）。 |
 | トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）。`generated_at` は `topic_handler.rs` / `post_handler.rs` でミリ秒エポックを返却済み。Summary Panel でトレンド件数・プレビュー件数・平均スコア・最終更新を表示。Docker シナリオと `trending_metrics_job` は未実装。 |
 | フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Summary Panel に DM 未読カードを追加し、Prefetch + Retry 導線と `routes/following.test.tsx` のカバレッジあり。 |
-| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は Kind4 IPC によるリアルタイム受信・未読管理・失敗時の再送ボタンを提供。フォロワー無限スクロールのソート/ページネーションと既読同期の多端末共有が backlog。 |
+| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、件数表示を追加済み。既読同期の多端末共有とページング拡張が backlog。 |
 
 ### 1.3 トピック関連
 | 画面 | パス | 主な機能 | 導線状態 | 備考 |
@@ -56,12 +56,12 @@
 - **同期系 UI**: `SyncStatusIndicator`／`OfflineIndicator` が `offlineStore` と `syncEngine` の状態を表示し、未同期アクションの再送を支援。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。TopicSelector へ「新しいトピックを作成」ショートカットを追加し、`TopicFormModal`（mode=`create-from-composer`）を介して `createAndJoinTopic` を実行する計画を Inventory 5.9 に記載。
-- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済みで、Inventory 5.6.1 に IPC 連携と再送タスクを追加。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
+- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済み。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、`totalCount` 表示を実装済みで、Inventory 5.6.2 に詳細を記録。既読同期の多端末共有とページング拡張は Inventory 5.6.1/5.6.2 で継続。
 - **ユーザー検索**: `UserSearchResults` の状態遷移（idle/typing/ready/loading/success/empty/rateLimited/error）と `SearchErrorState` ハンドリング、`query` バリデーション（2〜64文字、制御文字除去、連続スペース正規化）を Inventory 5.8 と `error_handling_guidelines.md` に記録。React Query のデバウンス・AbortController 方針もドキュメント化。
 
 ## 3. 導線ギャップ Quick View
 1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 参照）。2025年11月06日: Summary Panel と DM 未読カードを導入済み。次ステップは (a) Docker シナリオ → (b) `trending_metrics_job` の順で進める。
-2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備え、DirectMessageDialog も Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。引き続き 既読同期の多端末共有とフォロワー一覧のソート/ページネーションを Inventory 5.6.1/5.6.2 に沿って進める。
+2. `/profile/$userId` はフォロー導線とフォロワー/フォロー一覧（ソート・検索・件数表示）を備え、DirectMessageDialog も Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。引き続き 既読同期の多端末共有とページング拡張を Inventory 5.6.1/5.6.2 に沿って進める。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。Inventory 5.10 で React Query キャッシュ無効化・Docker シナリオ・統合テストのフォローアップを整理済み。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
 5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
@@ -84,7 +84,7 @@
 | 優先度 | 項目 | 現状/課題 | ユーザー影響 | 次アクション |
 | --- | --- | --- | --- | --- |
 | A | 投稿削除 (`delete_post`) | 2025年11月03日: PostCard 削除メニューと `postStore.deletePostRemote` のオフライン対応を実装し、ユニットテストで検証済み。 | 楽観削除は機能するが、React Query キャッシュと Rust 統合テストが未整備。 | Inventory 5.10 に沿って React Query 側のキャッシュ無効化と `delete_post` コマンドの統合テスト追加、CI での回帰監視をフォローアップ。 |
-| B | `/profile/$userId` ルート | `DirectMessageDialog` は Kind4 IPC・未読管理・再送ボタンまで実装済み。フォロワー/フォロー一覧のソート/ページネーションと既読同期の多端末共有は未実装。 | DM 履歴はモーダル表示で確認できるが、会話既読の多端末反映とフォロワー一覧の絞り込みが不足し、継続的な会話/フォロー管理が難しい。 | Inventory 5.6.1 に沿って delivered/既読同期と Docker/contract テストを追加し、`get_followers` sort/cursor 拡張と `FollowerList` のソート UI を整備。 |
+| B | `/profile/$userId` ルート | `DirectMessageDialog` は Kind4 IPC・未読管理・再送ボタンまで実装済み。フォロワー/フォロー一覧のソート（最新/古い/名前）・検索・件数表示を実装済みで、既読同期の多端末共有とページング拡張が残課題。 | DM 履歴はモーダル表示で確認でき、フォロー一覧もソート/検索可能になったが、会話既読の多端末反映と 2 ページ目以降の自動補充が未対応。 | Inventory 5.6.1 で delivered/既読同期と Docker/contract テストを追加し、Inventory 5.6.2 でページング整合性とフォローアップテストを進める。 |
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
 | B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーション・エラー UI・入力バリデーションが未整備。 | 検索結果が多い場合に追跡・再試行が困難で UX が限定的。 | Inventory 5.8 の状態遷移図・入力ガード・`SearchErrorState` 設計に沿って `search_users` コマンド拡張（cursor/sort/limit/レートリミット）と React Query リファクタ、Vitest/Rust/Docker テストを追加。 |

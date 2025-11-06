@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren } from 'react';
 import { ProfilePage, Route } from '@/routes/profile.$userId';
 import { TauriApi } from '@/lib/api/tauri';
+import type { UserProfile as UserProfileDto } from '@/lib/api/tauri';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 
@@ -117,6 +118,9 @@ const currentUserProfile = {
   nip05: '',
 };
 
+let followersMock: UserProfileDto[] = [];
+let followingMock: UserProfileDto[] = [];
+
 const renderWithClient = (client: QueryClient) =>
   render(
     <QueryClientProvider client={client}>
@@ -149,16 +153,20 @@ describe('ProfilePage route', () => {
     vi.mocked(TauriApi.getUserProfile).mockResolvedValue(targetUserProfile);
     vi.mocked(TauriApi.getUserProfileByPubkey).mockResolvedValue(null);
     vi.mocked(TauriApi.getPosts).mockResolvedValue([]);
-    vi.mocked(TauriApi.getFollowers).mockResolvedValue({
-      items: [],
+    followersMock = [];
+    followingMock = [];
+    vi.mocked(TauriApi.getFollowers).mockImplementation(async () => ({
+      items: followersMock,
       nextCursor: null,
       hasMore: false,
-    });
-    vi.mocked(TauriApi.getFollowing).mockResolvedValue({
-      items: [],
+      totalCount: followersMock.length,
+    }));
+    vi.mocked(TauriApi.getFollowing).mockImplementation(async () => ({
+      items: followingMock,
       nextCursor: null,
       hasMore: false,
-    });
+      totalCount: followingMock.length,
+    }));
     vi.mocked(TauriApi.followUser).mockResolvedValue(undefined);
     vi.mocked(TauriApi.unfollowUser).mockResolvedValue(undefined);
     vi.mocked(subscribeToUser).mockResolvedValue(undefined);
@@ -182,6 +190,17 @@ describe('ProfilePage route', () => {
     );
 
     const followButton = await screen.findByRole('button', { name: 'フォロー' });
+    followersMock.push({
+      npub: currentUserProfile.npub,
+      pubkey: currentUserProfile.pubkey,
+      name: currentUserProfile.name,
+      display_name: currentUserProfile.displayName,
+      about: currentUserProfile.about,
+      picture: currentUserProfile.picture,
+      banner: null,
+      website: null,
+      nip05: currentUserProfile.nip05 || null,
+    });
     await user.click(followButton);
 
     await waitFor(() =>
@@ -196,6 +215,7 @@ describe('ProfilePage route', () => {
     expect(subscribeToUser).toHaveBeenCalledWith(targetUserProfile.pubkey);
 
     const followActiveButton = await screen.findByRole('button', { name: 'フォロー中' });
+    followersMock = [];
     await user.click(followActiveButton);
 
     await waitFor(() =>
@@ -239,5 +259,32 @@ describe('ProfilePage route', () => {
 
     const messageButton = await screen.findByRole('button', { name: 'メッセージ' });
     expect(messageButton).toBeDisabled();
+  });
+
+  it('フォロワー一覧のソート変更で API を再取得する', async () => {
+    const user = userEvent.setup();
+    renderWithClient(queryClient);
+
+    await waitFor(() => expect(TauriApi.getFollowers).toHaveBeenCalled());
+    expect(TauriApi.getFollowers).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sort: 'recent',
+        search: undefined,
+      }),
+    );
+
+    const sortTriggers = await screen.findAllByRole('combobox');
+    await user.click(sortTriggers[0]);
+    const nameAscOption = await screen.findByRole('option', { name: '名前順 (A→Z)' });
+    await user.click(nameAscOption);
+
+    await waitFor(() =>
+      expect(TauriApi.getFollowers).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sort: 'name_asc',
+          search: undefined,
+        }),
+      ),
+    );
   });
 });

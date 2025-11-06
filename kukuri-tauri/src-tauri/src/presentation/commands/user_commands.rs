@@ -1,3 +1,4 @@
+use crate::application::ports::repositories::FollowListSort;
 use crate::application::services::{ProfileAvatarService, UploadProfileAvatarInput, UserService};
 use crate::domain::entities::UserMetadata;
 use crate::presentation::dto::{
@@ -124,13 +125,30 @@ pub async fn get_followers(
     user_service: State<'_, Arc<UserService>>,
 ) -> Result<ApiResponse<PaginatedUserProfiles>, AppError> {
     let limit = request.limit.unwrap_or(25).min(100) as usize;
+    let sort = match request.sort.as_deref() {
+        Some(value) => FollowListSort::try_from(value)
+            .map_err(|_| AppError::InvalidInput(format!("Unsupported followers sort: {value}")))?,
+        None => FollowListSort::Recent,
+    };
+    let search = request
+        .search
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
     let result = user_service
-        .get_followers_paginated(&request.npub, request.cursor.as_deref(), limit)
+        .get_followers_paginated(
+            &request.npub,
+            request.cursor.as_deref(),
+            limit,
+            sort,
+            search,
+        )
         .await
         .map(|page| PaginatedUserProfiles {
             items: page.users.into_iter().map(map_user_to_profile).collect(),
             next_cursor: page.next_cursor,
             has_more: page.has_more,
+            total_count: page.total_count,
         });
     Ok(ApiResponse::from_result(result))
 }
@@ -141,13 +159,30 @@ pub async fn get_following(
     user_service: State<'_, Arc<UserService>>,
 ) -> Result<ApiResponse<PaginatedUserProfiles>, AppError> {
     let limit = request.limit.unwrap_or(25).min(100) as usize;
+    let sort = match request.sort.as_deref() {
+        Some(value) => FollowListSort::try_from(value)
+            .map_err(|_| AppError::InvalidInput(format!("Unsupported following sort: {value}")))?,
+        None => FollowListSort::Recent,
+    };
+    let search = request
+        .search
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
     let result = user_service
-        .get_following_paginated(&request.npub, request.cursor.as_deref(), limit)
+        .get_following_paginated(
+            &request.npub,
+            request.cursor.as_deref(),
+            limit,
+            sort,
+            search,
+        )
         .await
         .map(|page| PaginatedUserProfiles {
             items: page.users.into_iter().map(map_user_to_profile).collect(),
             next_cursor: page.next_cursor,
             has_more: page.has_more,
+            total_count: page.total_count,
         });
     Ok(ApiResponse::from_result(result))
 }

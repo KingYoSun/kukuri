@@ -11,6 +11,40 @@ pub struct UserCursorPage {
     pub users: Vec<User>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
+    pub total_count: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FollowListSort {
+    Recent,
+    Oldest,
+    NameAsc,
+    NameDesc,
+}
+
+impl FollowListSort {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Recent => "recent",
+            Self::Oldest => "oldest",
+            Self::NameAsc => "name_asc",
+            Self::NameDesc => "name_desc",
+        }
+    }
+}
+
+impl TryFrom<&str> for FollowListSort {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "recent" => Ok(Self::Recent),
+            "oldest" => Ok(Self::Oldest),
+            "name_asc" => Ok(Self::NameAsc),
+            "name_desc" => Ok(Self::NameDesc),
+            _ => Err(()),
+        }
+    }
 }
 
 #[async_trait]
@@ -102,12 +136,16 @@ pub trait UserRepository: Send + Sync {
         npub: &str,
         cursor: Option<&str>,
         limit: usize,
+        sort: FollowListSort,
+        search: Option<&str>,
     ) -> Result<UserCursorPage, AppError>;
     async fn get_following_paginated(
         &self,
         npub: &str,
         cursor: Option<&str>,
         limit: usize,
+        sort: FollowListSort,
+        search: Option<&str>,
     ) -> Result<UserCursorPage, AppError>;
     async fn add_follow_relation(
         &self,

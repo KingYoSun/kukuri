@@ -1,6 +1,6 @@
 # Phase 5 ユーザー導線棚卸し
 作成日: 2025年11月01日  
-最終更新: 2025年11月06日
+最終更新: 2025年11月07日
 
 ## 目的
 - Phase 5 で想定しているデスクトップアプリ体験のうち、現状 UI から到達できる機能と欠落導線を把握する。
@@ -72,13 +72,13 @@
 | プロフィール取得 | `/profile/$userId` (`ProfilePage`) | `getUserProfile` / `getUserProfileByPubkey` を順に呼び、存在するユーザー情報を `mapUserProfileToUser` で整形して表示。 | `npub` / `pubkey` の双方に対応。存在しない場合は空表示を返し、トーストで通知。 |
 | 投稿一覧 | `/profile/$userId` (`ProfilePage`) | `getPosts({ author_pubkey, pagination: { limit: 50 } })` で個人投稿を取得し、`PostCard` を並べて表示。 | 50件固定でページネーションは未実装。読み込み中はスピナーを表示し、投稿ゼロ時はプレースホルダーを出す。 |
 | フォロー操作 | `/profile/$userId`, `UserSearchResults` | `follow_user` / `unfollow_user` を呼び出し、成功時は React Query キャッシュで `['social','following']` と `['profile',npub,'followers']` を更新。`subscribe_to_user` を併用し購読を開始。 | 未ログイン時や自身への操作はブロック。処理中はボタンを無効化し、トーストで成功/失敗を通知。 |
-| フォロワー/フォロー中リスト | `/profile/$userId` (`UserList`) | `get_followers` / `get_following` の結果をカード内で 2 カラム表示。 | 並び替え・検索は未実装で backlog。取得失敗時は `errorHandler` を通じてログとトーストを表示。 |
-| メッセージ導線 | `/profile/$userId` (`ProfilePage`) | `MessageCircle` ボタンをプレースホルダーとして表示し、現在は disabled。 | 直接メッセージ機能は未実装。Phase 5 backlog で別タスクとして管理。 |
+| フォロワー/フォロー中リスト | `/profile/$userId` (`UserList`) | `get_followers` / `get_following` の結果をカード内で 2 カラム表示。 | 2025年11月07日: ソート（最新/古い/名前）とキーワード検索を実装。React Query の `totalCount` を利用し、表示件数と合計を同期。取得失敗時は `errorHandler` を通じてログとトーストを表示。 |
+| メッセージ導線 | `/profile/$userId` (`ProfilePage`) | `MessageCircle` ボタンで `DirectMessageDialog` を開き、Kind4 IPC 経由のリアルタイム受信と未読バッジを連動 | `TauriApi.sendDirectMessage` / `.listDirectMessages` と `useDirectMessageStore` を接続済み。再送・未読リセット対応。既読の多端末同期は backlog。 |
 
 ## 2. 確認できた導線ギャップ
 - サイドバーの「トレンド」「フォロー中」は 5.7 節の仕様に従った `/trending`・`/following` ルートとバックエンド API 実装が完了するまでプレースホルダー。
 - ユーザー検索は実ユーザーを返すが、ページネーション・検索エラーUI・入力バリデーションが未整備（改善計画は 5.8 節を参照）。
-- `/profile/$userId` はフォロー導線とフォロワーリストを備えたが、メッセージ導線とリストのフィルタリング/ソートが未実装。
+- `/profile/$userId` はフォロー導線と DM モーダル、フォロワー/フォロー中リストのソート・検索を備えたが、既読ステータスの多端末同期とページング拡張（2ページ目以降の自動補充/差分同期）が未実装。
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
 - 投稿削除は UI から利用可能になったが、React Query のキャッシュ無効化と `delete_post` コマンド統合テスト整備が未完了。
 - 設定画面の「鍵管理」ボタンは依然として UI 表示のみで実装が無い。
@@ -311,33 +311,23 @@
   - 2025年11月05日: `pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を実行し、履歴ロード・送信フローが回帰しないことを確認。
   - TypeScript: `DirectMessageDialog.test.tsx` で Optimistic Update・エラーハンドリング・トースト表示・初期履歴の描画を検証し、Vitest 結果を記録。
 - **残課題**
-  - kind 4 受信イベントを IPC で通知し、`useDirectMessageStore` へ同期するフローが未実装。モーダル非表示時の未読蓄積と通知経路を整備する。
+  - 既読ステータスの多端末同期（`markConversationAsRead` → IPC → SQLite 反映）と Docker / contract テストの追加が必要。
   - 会話リスト（サイドバー想定）に履歴の最新メッセージを反映する仕組みは未整備。React Query のキャッシュ共有も含めた一覧更新方式を検討する。
   - 送信レート制御・暗号化鍵キャッシュ・失敗時のバックオフは運用シナリオでの検証が必要。
-#### 5.6.2 フォロワー一覧ソート/ページネーション実装計画（2025年11月04日更新）
-- **UX と機能要件**
-  - デフォルトは「最新順（フォロー日時降順）」で 20 件ずつ表示。ソートオプションは「最新順」「古い順」「名前順（A→Z）」「名前順（Z→A)」。
-  - 無限スクロールを基本に、末尾に「さらに読み込む」ボタンを配置。ロード中/終端/エラーで表示を切り替える。
-  - プライベートアカウントは 403 を返し、「このユーザーのフォロワーは非公開です」を表示。
-- **バックエンド拡張**
-  - `presentation/dto/user_dto.rs` の `ListFollowersRequest` を拡張し、`sort`（enum）と `cursor`（`Option<String>`）を追加。レスポンスに `total_count` と `next_cursor`。
-  - `application/services/user_service.rs` に `list_followers_with_sort` を追加し、`followers_repository` で `ORDER BY` と `WHERE` を動的生成。カーソルは `"{timestamp}:{pubkey}"` を解析して `created_at` と `pubkey` を抽出。
-  - SQLite クエリでは `display_name COLLATE NOCASE` を用いて大文字小文字を無視。`display_name` が NULL の場合は `COALESCE(display_name, npub)` でソート。
-  - 既存コマンドの後方互換性を保つため、`sort` と `cursor` は省略可能引数として扱い、指定が無い場合は従来どおり 50 件固定で返却。
-- **フロント実装**
-  - `ProfilePage` に `useInfiniteQuery(['profile', npub, 'followers', sortKey], …)` を導入。`fetchNextPage` は `nextCursor` を `pageParam` として渡す。
-  - `FollowerList`（新規）でソートセレクタ UI を提供。`Select` 変更時には `queryClient.removeQueries` で前のデータをクリアし初期ページを再取得。
-  - `IntersectionObserver` + フォールバックボタンで無限スクロールを実装。`react-virtual` で描画コストを抑制し、Skeleton を表示。
-  - カウント表示のため、API の `total_count` をヘッダーに表示。「表示中 X / Y 件」形式。
-- **テスト計画**
-  - TypeScript: `ProfileFollowersList.test.tsx`（新規）でソート変更・追加ロード・エラーリトライを検証。`fetchNextPage` が適切な cursor で呼ばれることをアサート。
-  - TypeScript: ルートテストで `?followersSort=` パラメーターがセレクタに反映されること、URL 変更でクエリが再実行されることを確認。
-  - Rust: `followers_repository::list_followers` のテストでカーソル境界、NULL `display_name`、プライベートアカウント（403）をカバー。
-  - Rust: `get_followers` / `get_following` コマンドテストで後方互換パラメーター、ソート/ページネーション組み合わせを検証。
-  - Docker: `docker-compose.test.yml` に followers-pagination シナリオを追加し、Windows では `./scripts/test-docker.ps1 ts` を案内。
-- **フォローアップ**
-  - `docs/03_implementation/error_handling_guidelines.md` に `FollowersList.fetch_failed` を追加し、ログ/トーストの整合を保つ。
-  - `phase5_dependency_inventory_template.md` と `tauri_app_implementation_plan.md` に API 変更とタスクを追記予定。
+#### 5.6.2 フォロワー一覧ソート/検索実装状況（2025年11月07日更新）
+  - **実装内容**
+    - `get_followers` / `get_following` リクエストに `sort`（`recent` / `oldest` / `name_asc` / `name_desc`）と `search` を追加し、レスポンスへ `total_count` を含めるよう更新。既存呼び出しとの後方互換は維持。
+    - SQLite リポジトリでソート種別ごとのカーソル式（`{sort}|{base64(primary)}|{pubkey}`）を導入し、`LIKE` フィルターと件数取得を同条件で構築。`QueryBuilder` でバインド順を統一。
+    - `ProfilePage` の `UserList` に `Select`（ソート）と `Input`（検索）を追加。`useInfiniteQuery` のキーへソート/検索を含め、ヘッダーに「表示中 X / totalCount 件」を表示。
+    - フォロー/フォロー解除時に現在のソート・検索条件へ一致するデータを楽観更新し、それ以外の条件は `invalidateQueries(['profile', npub, 'followers'])` で再取得させる。
+  - **テスト / 検証**
+    - `pnpm vitest run src/tests/unit/routes/profile.$userId.test.tsx`
+    - `cargo fmt`
+    - `cargo test`（`kukuri-tauri/src-tauri` は Windows 環境で `STATUS_ENTRYPOINT_NOT_FOUND` により実行時エラー、`kukuri-cli` は成功）
+  - **残課題**
+    - Windows 環境での `cargo test` 実行時エラー（`STATUS_ENTRYPOINT_NOT_FOUND`）の原因調査と解消。
+    - 2 ページ目以降を自動補充する際のキャッシュ整合性（`FOLLOW_PAGE_SIZE` 超過時の繰り上げ）と E2E カバレッジの整備。
+    - フォロワー非公開（403）ケースや多端末既読同期など、残タスクのシナリオテストを Rust / Vitest 側に追加。
 
 ### 5.7 トレンド/フォロー中導線実装計画（2025年11月04日追加）
 - **目的**: サイドバーカテゴリー「トレンド」「フォロー中」からアクセスできる発見導線とマイフィード導線を整備し、Home タイムラインとの差別化と優先度の可視化を実現する。

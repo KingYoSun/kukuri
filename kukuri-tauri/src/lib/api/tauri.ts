@@ -130,19 +130,26 @@ export interface UserListPage {
   items: UserProfile[];
   nextCursor: string | null;
   hasMore: boolean;
+  totalCount: number;
 }
 
 export interface GetFollowersParams {
   npub: string;
   cursor?: string | null;
   limit?: number;
+  sort?: FollowListSort;
+  search?: string;
 }
 
 export interface GetFollowingParams {
   npub: string;
   cursor?: string | null;
   limit?: number;
+  sort?: FollowListSort;
+  search?: string;
 }
+
+export type FollowListSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
 export interface SendDirectMessagePayload {
   recipientNpub: string;
@@ -405,11 +412,14 @@ export class TauriApi {
       items: UserProfile[];
       next_cursor: string | null;
       has_more: boolean;
+      total_count: number;
     }>('get_followers', {
       request: {
         npub: params.npub,
         cursor: params.cursor ?? null,
         limit: params.limit,
+        sort: params.sort,
+        search: params.search && params.search.trim().length > 0 ? params.search.trim() : null,
       },
     });
 
@@ -417,6 +427,7 @@ export class TauriApi {
       items: response?.items ?? [],
       nextCursor: response?.next_cursor ?? null,
       hasMore: response?.has_more ?? false,
+      totalCount: response?.total_count ?? 0,
     };
   }
 
@@ -425,11 +436,14 @@ export class TauriApi {
       items: UserProfile[];
       next_cursor: string | null;
       has_more: boolean;
+      total_count: number;
     }>('get_following', {
       request: {
         npub: params.npub,
         cursor: params.cursor ?? null,
         limit: params.limit,
+        sort: params.sort,
+        search: params.search && params.search.trim().length > 0 ? params.search.trim() : null,
       },
     });
 
@@ -437,6 +451,7 @@ export class TauriApi {
       items: response?.items ?? [],
       nextCursor: response?.next_cursor ?? null,
       hasMore: response?.has_more ?? false,
+      totalCount: response?.total_count ?? 0,
     };
   }
 

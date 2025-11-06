@@ -1,4 +1,4 @@
-use crate::application::ports::repositories::{UserCursorPage, UserRepository};
+use crate::application::ports::repositories::{FollowListSort, UserCursorPage, UserRepository};
 use crate::domain::entities::{User, UserMetadata};
 use crate::shared::{AppError, ValidationFailureKind};
 use std::sync::Arc;
@@ -94,9 +94,11 @@ impl UserService {
         npub: &str,
         cursor: Option<&str>,
         limit: usize,
+        sort: FollowListSort,
+        search: Option<&str>,
     ) -> Result<UserCursorPage, AppError> {
         self.repository
-            .get_followers_paginated(npub, cursor, limit)
+            .get_followers_paginated(npub, cursor, limit, sort, search)
             .await
     }
 
@@ -105,9 +107,11 @@ impl UserService {
         npub: &str,
         cursor: Option<&str>,
         limit: usize,
+        sort: FollowListSort,
+        search: Option<&str>,
     ) -> Result<UserCursorPage, AppError> {
         self.repository
-            .get_following_paginated(npub, cursor, limit)
+            .get_following_paginated(npub, cursor, limit, sort, search)
             .await
     }
 
@@ -120,8 +124,9 @@ impl UserService {
                 users,
                 next_cursor,
                 has_more,
+                total_count: _,
             } = self
-                .get_followers_paginated(npub, cursor.as_deref(), 100)
+                .get_followers_paginated(npub, cursor.as_deref(), 100, FollowListSort::Recent, None)
                 .await?;
 
             all_users.extend(users.into_iter());
@@ -145,8 +150,9 @@ impl UserService {
                 users,
                 next_cursor,
                 has_more,
+                total_count: _,
             } = self
-                .get_following_paginated(npub, cursor.as_deref(), 100)
+                .get_following_paginated(npub, cursor.as_deref(), 100, FollowListSort::Recent, None)
                 .await?;
 
             all_users.extend(users.into_iter());
@@ -187,18 +193,21 @@ mod tests {
     const BOB_NPUB: &str = "npub1bob";
     const BOB_PUB: &str = "bob_pub";
 
-    fn parse_cursor(cursor: &str) -> Result<(i64, String), AppError> {
-        let mut parts = cursor.splitn(2, ':');
-        let timestamp = parts
-            .next()
+    fn parse_offset_cursor(cursor: &str) -> Result<usize, AppError> {
+        cursor
+            .strip_prefix("offset:")
             .ok_or_else(|| AppError::InvalidInput("Invalid cursor format".into()))?
-            .parse::<i64>()
-            .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-        let pubkey = parts
-            .next()
-            .ok_or_else(|| AppError::InvalidInput("Invalid cursor format".into()))?
-            .to_string();
-        Ok((timestamp, pubkey))
+            .parse::<usize>()
+            .map_err(|_| AppError::InvalidInput("Invalid cursor offset".into()))
+    }
+
+    fn name_key(user: &User) -> String {
+        let display_name = user.profile.display_name.trim();
+        if display_name.is_empty() {
+            user.npub.to_lowercase()
+        } else {
+            display_name.to_lowercase()
+        }
     }
     #[derive(Default)]
     struct InMemoryUserRepository {
@@ -274,6 +283,8 @@ mod tests {
             npub: &str,
             cursor: Option<&str>,
             limit: usize,
+            sort: FollowListSort,
+            search: Option<&str>,
         ) -> Result<UserCursorPage, AppError> {
             let users = self.users.read().await;
             let target_pubkey = match users.get(npub) {
@@ -283,11 +294,12 @@ mod tests {
                         users: vec![],
                         next_cursor: None,
                         has_more: false,
+                        total_count: 0,
                     });
                 }
             };
             let follows = self.follows.read().await;
-            let mut follower_pubkeys: Vec<String> = follows
+            let mut entries: Vec<User> = follows
                 .iter()
                 .filter_map(|(follower, followed)| {
                     if followed == &target_pubkey {
@@ -296,40 +308,58 @@ mod tests {
                         None
                     }
                 })
+                .filter_map(|pubkey| users.values().find(|u| u.pubkey == pubkey).cloned())
                 .collect();
 
-            follower_pubkeys.sort();
-            follower_pubkeys.reverse();
+            let search_lower = search.map(|s| s.to_lowercase());
+            if let Some(search_value) = search_lower.as_ref() {
+                entries.retain(|user| {
+                    let display = user.profile.display_name.to_lowercase();
+                    let npub = user.npub.to_lowercase();
+                    let pubkey = user.pubkey.to_lowercase();
+                    display.contains(search_value)
+                        || npub.contains(search_value)
+                        || pubkey.contains(search_value)
+                });
+            }
 
-            let mut start_index = 0usize;
+            match sort {
+                FollowListSort::Recent => {
+                    entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+                }
+                FollowListSort::Oldest => {
+                    entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
+                }
+                FollowListSort::NameAsc => {
+                    entries.sort_by(|a, b| name_key(a).cmp(&name_key(b)));
+                }
+                FollowListSort::NameDesc => {
+                    entries.sort_by(|a, b| name_key(b).cmp(&name_key(a)));
+                }
+            }
+
+            let total_entries = entries.len();
+            let mut offset = 0usize;
             if let Some(cursor) = cursor {
-                let (_, cursor_pubkey) = parse_cursor(cursor)?;
-                if let Some(position) = follower_pubkeys
-                    .iter()
-                    .position(|pubkey| pubkey == &cursor_pubkey)
-                {
-                    start_index = position.saturating_add(1);
-                }
+                offset = parse_offset_cursor(cursor)?;
             }
+            offset = offset.min(total_entries);
 
-            let mut items = Vec::new();
-            let mut next_cursor = None;
-            for (index, pubkey) in follower_pubkeys.into_iter().enumerate().skip(start_index) {
-                if items.len() >= limit {
-                    next_cursor = Some(format!("{index}:{pubkey}"));
-                    break;
-                }
-                if let Some(user) = users.values().find(|u| u.pubkey == pubkey) {
-                    items.push(user.clone());
-                }
-            }
+            let end = offset.saturating_add(limit);
+            let has_more = end < total_entries;
+            let next_cursor = if has_more {
+                Some(format!("offset:{}", end))
+            } else {
+                None
+            };
 
-            let has_more = next_cursor.is_some();
+            let items: Vec<User> = entries.into_iter().skip(offset).take(limit).collect();
 
             Ok(UserCursorPage {
                 users: items,
                 next_cursor,
                 has_more,
+                total_count: total_entries as u64,
             })
         }
 
@@ -338,6 +368,8 @@ mod tests {
             npub: &str,
             cursor: Option<&str>,
             limit: usize,
+            sort: FollowListSort,
+            search: Option<&str>,
         ) -> Result<UserCursorPage, AppError> {
             let users = self.users.read().await;
             let follower_pubkey = match users.get(npub) {
@@ -347,11 +379,12 @@ mod tests {
                         users: vec![],
                         next_cursor: None,
                         has_more: false,
+                        total_count: 0,
                     });
                 }
             };
             let follows = self.follows.read().await;
-            let mut followed_pubkeys: Vec<String> = follows
+            let mut entries: Vec<User> = follows
                 .iter()
                 .filter_map(|(follower, followed)| {
                     if follower == &follower_pubkey {
@@ -360,40 +393,58 @@ mod tests {
                         None
                     }
                 })
+                .filter_map(|pubkey| users.values().find(|u| u.pubkey == pubkey).cloned())
                 .collect();
 
-            followed_pubkeys.sort();
-            followed_pubkeys.reverse();
+            let search_lower = search.map(|s| s.to_lowercase());
+            if let Some(search_value) = search_lower.as_ref() {
+                entries.retain(|user| {
+                    let display = user.profile.display_name.to_lowercase();
+                    let npub = user.npub.to_lowercase();
+                    let pubkey = user.pubkey.to_lowercase();
+                    display.contains(search_value)
+                        || npub.contains(search_value)
+                        || pubkey.contains(search_value)
+                });
+            }
 
-            let mut start_index = 0usize;
+            match sort {
+                FollowListSort::Recent => {
+                    entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+                }
+                FollowListSort::Oldest => {
+                    entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
+                }
+                FollowListSort::NameAsc => {
+                    entries.sort_by(|a, b| name_key(a).cmp(&name_key(b)));
+                }
+                FollowListSort::NameDesc => {
+                    entries.sort_by(|a, b| name_key(b).cmp(&name_key(a)));
+                }
+            }
+
+            let total_entries = entries.len();
+            let mut offset = 0usize;
             if let Some(cursor) = cursor {
-                let (_, cursor_pubkey) = parse_cursor(cursor)?;
-                if let Some(position) = followed_pubkeys
-                    .iter()
-                    .position(|pubkey| pubkey == &cursor_pubkey)
-                {
-                    start_index = position.saturating_add(1);
-                }
+                offset = parse_offset_cursor(cursor)?;
             }
+            offset = offset.min(total_entries);
 
-            let mut items = Vec::new();
-            let mut next_cursor = None;
-            for (index, pubkey) in followed_pubkeys.into_iter().enumerate().skip(start_index) {
-                if items.len() >= limit {
-                    next_cursor = Some(format!("{index}:{pubkey}"));
-                    break;
-                }
-                if let Some(user) = users.values().find(|u| u.pubkey == pubkey) {
-                    items.push(user.clone());
-                }
-            }
+            let end = offset.saturating_add(limit);
+            let has_more = end < total_entries;
+            let next_cursor = if has_more {
+                Some(format!("offset:{}", end))
+            } else {
+                None
+            };
 
-            let has_more = next_cursor.is_some();
+            let items: Vec<User> = entries.into_iter().skip(offset).take(limit).collect();
 
             Ok(UserCursorPage {
                 users: items,
                 next_cursor,
                 has_more,
+                total_count: total_entries as u64,
             })
         }
 

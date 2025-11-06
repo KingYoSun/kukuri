@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   useQuery,
@@ -11,8 +11,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Loader2, Copy, ArrowLeft, UserPlus, UserCheck, MessageCircle } from 'lucide-react';
-import { TauriApi } from '@/lib/api/tauri';
+import { TauriApi, type FollowListSort } from '@/lib/api/tauri';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
 import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
@@ -23,6 +31,7 @@ import { useAuthStore } from '@/stores';
 import { useDirectMessageStore } from '@/stores/directMessageStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export const Route = createFileRoute('/profile/$userId')({
   component: ProfilePage,
@@ -32,7 +41,31 @@ type ProfileListPage = {
   items: Profile[];
   nextCursor: string | null;
   hasMore: boolean;
+  totalCount: number;
 };
+
+const FOLLOW_SORT_OPTIONS: Array<{ value: FollowListSort; label: string }> = [
+  { value: 'recent', label: '最新順' },
+  { value: 'oldest', label: '古い順' },
+  { value: 'name_asc', label: '名前順 (A→Z)' },
+  { value: 'name_desc', label: '名前順 (Z→A)' },
+];
+
+const FOLLOW_PAGE_SIZE = 25;
+
+function matchesProfileSearch(profile: Profile, search?: string) {
+  if (!search) {
+    return true;
+  }
+  const normalized = search.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  const display = (profile.displayName ?? '').toLowerCase();
+  const name = (profile.name ?? '').toLowerCase();
+  const npub = profile.npub.toLowerCase();
+  return display.includes(normalized) || name.includes(normalized) || npub.includes(normalized);
+}
 
 function ProfilePage() {
   const { userId } = Route.useParams();
@@ -57,6 +90,17 @@ function ProfilePage() {
   const profile = profileQuery.data;
 
   const openDirectMessage = useDirectMessageStore((state) => state.openDialog);
+  const [followersSort, setFollowersSort] = useState<FollowListSort>('recent');
+  const [followersSearchInput, setFollowersSearchInput] = useState('');
+  const debouncedFollowersSearch = useDebounce(followersSearchInput, 300);
+  const followerSearchTerm = debouncedFollowersSearch.trim();
+  const followerSearchQuery = followerSearchTerm.length > 0 ? followerSearchTerm : undefined;
+
+  const [followingSort, setFollowingSort] = useState<FollowListSort>('recent');
+  const [followingSearchInput, setFollowingSearchInput] = useState('');
+  const debouncedFollowingSearch = useDebounce(followingSearchInput, 300);
+  const followingSearchTerm = debouncedFollowingSearch.trim();
+  const followingSearchQuery = followingSearchTerm.length > 0 ? followingSearchTerm : undefined;
 
   const postsQuery = useQuery({
     queryKey: ['userPosts', profile?.pubkey],
@@ -78,23 +122,32 @@ function ProfilePage() {
     ['profile', string, 'followers'],
     string | null
   >({
-    queryKey: ['profile', profile?.npub ?? userId, 'followers'],
+    queryKey: [
+      'profile',
+      profile?.npub ?? userId,
+      'followers',
+      followersSort,
+      followerSearchQuery ?? '',
+    ],
     enabled: Boolean(profile),
     retry: false,
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
       if (!profile) {
-        return { items: [], nextCursor: null, hasMore: false };
+        return { items: [], nextCursor: null, hasMore: false, totalCount: 0 };
       }
       const response = await TauriApi.getFollowers({
         npub: profile.npub,
         cursor: pageParam,
-        limit: 25,
+        limit: FOLLOW_PAGE_SIZE,
+        sort: followersSort,
+        search: followerSearchQuery,
       });
       return {
         items: response.items.map(mapUserProfileToUser),
         nextCursor: response.nextCursor,
         hasMore: response.hasMore,
+        totalCount: response.totalCount,
       };
     },
     getNextPageParam: (lastPage) =>
@@ -108,23 +161,32 @@ function ProfilePage() {
     ['profile', string, 'following'],
     string | null
   >({
-    queryKey: ['profile', profile?.npub ?? userId, 'following'],
+    queryKey: [
+      'profile',
+      profile?.npub ?? userId,
+      'following',
+      followingSort,
+      followingSearchQuery ?? '',
+    ],
     enabled: Boolean(profile),
     retry: false,
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
       if (!profile) {
-        return { items: [], nextCursor: null, hasMore: false };
+        return { items: [], nextCursor: null, hasMore: false, totalCount: 0 };
       }
       const response = await TauriApi.getFollowing({
         npub: profile.npub,
         cursor: pageParam,
-        limit: 25,
+        limit: FOLLOW_PAGE_SIZE,
+        sort: followingSort,
+        search: followingSearchQuery,
       });
       return {
         items: response.items.map(mapUserProfileToUser),
         nextCursor: response.nextCursor,
         hasMore: response.hasMore,
+        totalCount: response.totalCount,
       };
     },
     getNextPageParam: (lastPage) =>
@@ -169,6 +231,8 @@ function ProfilePage() {
 
   const followers = followersData?.pages.flatMap((page) => page.items) ?? [];
   const following = followingData?.pages.flatMap((page) => page.items) ?? [];
+  const followersTotalCount = followersData?.pages[0]?.totalCount ?? 0;
+  const followingTotalCount = followingData?.pages[0]?.totalCount ?? 0;
 
   const handleFollowersLoadMore = useCallback(() => {
     if (followersHasNext && !followersFetchingNext) {
@@ -215,9 +279,20 @@ function ProfilePage() {
     onSuccess: (_, target) => {
       if (currentUser) {
         const followerProfile = { ...currentUser };
+        const followersKey = [
+          'profile',
+          target.npub,
+          'followers',
+          followersSort,
+          followerSearchQuery ?? '',
+        ] as const;
+        const matchesFilter = matchesProfileSearch(followerProfile, followerSearchQuery);
         queryClient.setQueryData<InfiniteData<ProfileListPage> | undefined>(
-          ['profile', target.npub, 'followers'],
+          followersKey,
           (prev) => {
+            if (!matchesFilter) {
+              return prev;
+            }
             if (!prev) {
               return {
                 pages: [
@@ -225,6 +300,7 @@ function ProfilePage() {
                     items: [followerProfile],
                     nextCursor: null,
                     hasMore: false,
+                    totalCount: 1,
                   },
                 ],
                 pageParams: [undefined],
@@ -236,25 +312,32 @@ function ProfilePage() {
             if (exists) {
               return prev;
             }
-            const pages = prev.pages.length > 0 ? [...prev.pages] : [];
-            if (pages.length === 0) {
-              pages.push({
-                items: [followerProfile],
-                nextCursor: null,
-                hasMore: false,
-              });
-            } else {
-              pages[0] = {
-                ...pages[0],
-                items: [followerProfile, ...pages[0].items],
+            const pages = prev.pages.map((page, index) => {
+              if (index === 0) {
+                const items = [followerProfile, ...page.items];
+                const trimmedItems = items.slice(0, FOLLOW_PAGE_SIZE);
+                return {
+                  ...page,
+                  items: trimmedItems,
+                  totalCount: page.totalCount + 1,
+                  hasMore: page.hasMore || items.length > FOLLOW_PAGE_SIZE,
+                };
+              }
+              return {
+                ...page,
+                totalCount: page.totalCount + 1,
               };
-            }
+            });
             return {
               ...prev,
               pages,
             };
           },
         );
+        void queryClient.invalidateQueries({
+          queryKey: ['profile', target.npub, 'followers'],
+          exact: false,
+        });
         queryClient.setQueryData<Profile[] | undefined>(
           ['social', 'following', currentUser.npub],
           (prev = []) => {
@@ -289,15 +372,33 @@ function ProfilePage() {
     },
     onSuccess: (_, target) => {
       if (currentUser) {
+        const followersKey = [
+          'profile',
+          target.npub,
+          'followers',
+          followersSort,
+          followerSearchQuery ?? '',
+        ] as const;
         queryClient.setQueryData<InfiniteData<ProfileListPage> | undefined>(
-          ['profile', target.npub, 'followers'],
+          followersKey,
           (prev) => {
             if (!prev) {
               return prev;
             }
-            const pages = prev.pages.map((page) => ({
+            const updatedPages = prev.pages.map((page) => ({
               ...page,
               items: page.items.filter((item) => item.npub !== currentUser.npub),
+            }));
+            const removedCount = prev.pages.reduce((acc, page, index) => {
+              const removed = page.items.length - updatedPages[index].items.length;
+              return acc + removed;
+            }, 0);
+            if (removedCount === 0) {
+              return prev;
+            }
+            const pages = updatedPages.map((page) => ({
+              ...page,
+              totalCount: Math.max(page.totalCount - removedCount, 0),
             }));
             return {
               ...prev,
@@ -305,6 +406,10 @@ function ProfilePage() {
             };
           },
         );
+        void queryClient.invalidateQueries({
+          queryKey: ['profile', target.npub, 'followers'],
+          exact: false,
+        });
         queryClient.setQueryData<Profile[] | undefined>(
           ['social', 'following', currentUser.npub],
           (prev = []) => prev.filter((item) => item.npub !== target.npub),
@@ -339,8 +444,8 @@ function ProfilePage() {
     }
   }, [profile, canFollow, isFollowing, followMutation, unfollowMutation]);
 
-  const followerCount = followersLoading ? null : followers.length;
-  const followingCount = followingLoading ? null : following.length;
+  const followerCount = followersLoading ? null : followersTotalCount;
+  const followingCount = followingLoading ? null : followingTotalCount;
   const followButtonLabel = isCurrentUser
     ? 'あなた'
     : !canFollow
@@ -497,6 +602,12 @@ function ProfilePage() {
             onLoadMore={handleFollowersLoadMore}
             hasNextPage={Boolean(followersHasNext)}
             isFetchingNextPage={followersFetchingNext}
+            sort={followersSort}
+            sortOptions={FOLLOW_SORT_OPTIONS}
+            onSortChange={setFollowersSort}
+            searchTerm={followersSearchInput}
+            onSearchChange={setFollowersSearchInput}
+            totalCount={followersTotalCount}
           />
           <UserList
             title="フォロー中"
@@ -506,6 +617,12 @@ function ProfilePage() {
             onLoadMore={handleFollowingLoadMore}
             hasNextPage={Boolean(followingHasNext)}
             isFetchingNextPage={followingFetchingNext}
+            sort={followingSort}
+            sortOptions={FOLLOW_SORT_OPTIONS}
+            onSortChange={setFollowingSort}
+            searchTerm={followingSearchInput}
+            onSearchChange={setFollowingSearchInput}
+            totalCount={followingTotalCount}
           />
         </CardContent>
       </Card>
@@ -560,6 +677,12 @@ interface UserListProps {
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
+  sort: FollowListSort;
+  sortOptions: Array<{ value: FollowListSort; label: string }>;
+  onSortChange: (value: FollowListSort) => void;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  totalCount: number;
 }
 
 function UserList({
@@ -570,6 +693,12 @@ function UserList({
   hasNextPage = false,
   isFetchingNextPage = false,
   onLoadMore,
+  sort,
+  sortOptions,
+  onSortChange,
+  searchTerm,
+  onSearchChange,
+  totalCount,
 }: UserListProps) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -602,7 +731,35 @@ function UserList({
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <span className="text-xs text-muted-foreground">
+            表示中 {users.length} / {totalCount} 件
+          </span>
+        </div>
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <Select value={sort} onValueChange={(value) => onSortChange(value as FollowListSort)}>
+            <SelectTrigger className="md:w-40">
+              <SelectValue placeholder="並び替え" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={searchTerm}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="ユーザーを検索..."
+            className="md:w-48"
+            aria-label={`${title}の検索`}
+          />
+        </div>
+      </div>
       {isLoading ? (
         <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
