@@ -82,7 +82,7 @@ describe('useTrendingFeeds hooks', () => {
   it('fetches trending topics successfully', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue({
-      generated_at: 1_700_000_000,
+      generated_at: 1_700_000_000_000,
       topics: [
         {
           topic_id: 'topic-1',
@@ -112,7 +112,7 @@ describe('useTrendingFeeds hooks', () => {
   it('fetches trending posts for topics', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue({
-      generated_at: 1_700_000_100,
+      generated_at: 1_700_000_100_000,
       topics: [
         {
           topic_id: 'topic-1',
@@ -229,7 +229,7 @@ describe('useTrendingFeeds hooks', () => {
     const queryClient = createQueryClient();
 
     vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue({
-      generated_at: 1_700_000_000,
+      generated_at: 1_700_000_000_000,
       topics: [
         {
           topic_id: 'topic-1',
@@ -244,7 +244,7 @@ describe('useTrendingFeeds hooks', () => {
       ],
     });
     vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue({
-      generated_at: 1_700_000_100,
+      generated_at: 1_700_000_100_000,
       topics: [
         {
           topic_id: 'topic-1',

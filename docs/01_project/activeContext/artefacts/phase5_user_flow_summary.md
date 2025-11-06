@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月05日
+最終更新: 2025年11月06日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -23,8 +23,8 @@
 | サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。`prefetchTrendingCategory`/`prefetchFollowingCategory` によりトレンド/フォロー導線のレスポンスを改善。追加要素（サマリーパネル）を継続検討 |
 | ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher` | 稼働中 | アカウント切替/追加/削除、同期状態表示、オフライン通知を提供 |
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。トピック初期選択とショートカット改善が backlog |
-| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | ランキング表示・投稿プレビュー・再試行導線は実装済み。ユニットテスト（`npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`）でプリフェッチ経路を検証。参加ボタンの体験向上と Docker シナリオは継続課題 |
-| フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | クエリプリフェッチと `include_reactions` 対応を実装。上記ユニットテストでフォロー中フィードのマッピングを確認済み。サマリーパネルと DM 未読表示は backlog |
+| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）を利用。`generated_at` はミリ秒エポック要件（Inventory 5.7）。`routes/trending.test.tsx` と Sidebar/Hook テストで Loading/Error/Empty/Prefetch を検証済み。参加ボタンの体験向上と Docker シナリオは backlog |
+| フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Prefetch + Retry 導線は整備済み。`routes/following.test.tsx` でローディング/追加ロード/エラー/終端を確認。Summary Panel と DM 未読表示は backlog |
 | プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は React Query で履歴読み込み・未読リセット・無限スクロールを実装済み。Kind4 IPC 同期とフォロワー無限スクロールのソート/ページネーションは backlog。 |
 
 ### 1.3 トピック関連
@@ -59,7 +59,7 @@
 - **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済みで、Inventory 5.6.1 に IPC 連携と再送タスクを追加。フォロワー一覧は無限スクロール運用中で、5.6.2 にソート/ページネーションの詳細仕様とテスト計画を追記済み。
 
 ## 3. 導線ギャップ Quick View
-1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 に残タスクとテスト計画を記載）。Summary Panel や Docker シナリオなど改善タスクを継続。
+1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 に残タスクとテスト計画を記載）。2025年11月06日時点でデータ要件とテスト計画を整理済み。`generated_at` をミリ秒エポックへ揃えること、Summary Panel や Docker シナリオの整備を継続。
 2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備え、DirectMessageDialog も React Query で履歴読み込み・未読リセット・無限スクロールを実装済み。引き続き Kind4 IPC 連携と会話リスト未読バッジ、フォロワー一覧のソート/ページネーションを Inventory 5.6.1/5.6.2 に沿って進める。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
@@ -67,7 +67,7 @@
 6. ユーザー検索タブは `search_users` で動作するが、ページネーション・エラー UI・バリデーションの整備が未実装（改善計画は Inventory 5.8 に整理済み）。
 
 ## 4. テストカバレッジ概要
-- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`。
+- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx`。
 - Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で P2P ステータスおよびプロフィール同期を検証。
 - Docker: `./scripts/test-docker.sh p2p`・`./scripts/test-docker.ps1 rust` で Gossip/Mainline スモークを再現。
 
@@ -86,7 +86,7 @@
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
 | B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーション・エラー UI・入力バリデーションが未整備。 | 検索結果が多い場合に追跡・再試行が困難で UX が限定的。 | Inventory 5.8 の設計に沿って `search_users` コマンド拡張（cursor/sort/limit/レートリミット）と React Query リファクタ、`SearchErrorState` コンポーネント、Vitest/Rust/Docker テストを追加。 |
-| B | `/trending` / `/following` フィード | サイドバーからの発見導線がプレースホルダーのまま。トレンド指標/フォロー中タイムラインの UI・API が未実装。 | カテゴリークリックが無反応で混乱。トピック発見・フォロー体験の向上機会を逃す。 | Inventory 5.7 と Phase 5 計画に沿って `list_trending_topics`/`list_following_feed` コマンド実装、React Query フック・新規ルートの追加、メトリクス集計ジョブとユニット/統合テストを整備。 |
+| B | `/trending` / `/following` フィード | 2025年11月05日: ルート・コマンド実装済み。`list_trending_topics`/`list_following_feed` で稼働中だが、`generated_at` のミリ秒化・Summary Panel・Docker シナリオ・DM 未読バッジが未対応。 | フィード自体は閲覧できるものの、更新時刻表示のずれや周辺メトリクス不足で発見体験が限定的。 | Inventory 5.7 と Phase 5 計画に沿って `generated_at` をミリ秒へ修正、Summary Panel / DM 未読バッジ追加、`trending_metrics_job` 実装と Nightly テスト追加、Docker シナリオを整備。 |
 
 > 優先度A: 現行体験に致命的影響があるもの。<br>
 > 優先度B: 早期に手当てしたいが依存タスクがあるもの。<br>

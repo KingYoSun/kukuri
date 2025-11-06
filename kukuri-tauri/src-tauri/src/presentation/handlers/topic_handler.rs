@@ -230,7 +230,7 @@ impl TopicHandler {
             .collect();
 
         Ok(ListTrendingTopicsResponse {
-            generated_at: Utc::now().timestamp(),
+            generated_at: Utc::now().timestamp_millis(),
             topics,
         })
     }

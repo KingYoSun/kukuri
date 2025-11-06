@@ -269,7 +269,7 @@ impl PostHandler {
         }
 
         Ok(ListTrendingPostsResponse {
-            generated_at: Utc::now().timestamp(),
+            generated_at: Utc::now().timestamp_millis(),
             topics,
         })
     }
