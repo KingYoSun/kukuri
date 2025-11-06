@@ -1,5 +1,6 @@
 use crate::domain::entities::{
-    Bookmark, DirectMessage, Event, NewDirectMessage, Post, Topic, User,
+    Bookmark, DirectMessage, Event, MetricsWindow, NewDirectMessage, Post, Topic, TopicActivityRow,
+    TopicMetricsUpsert, User,
 };
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
@@ -121,6 +122,16 @@ pub trait TopicRepository: Send + Sync {
         member_count: u32,
         post_count: u32,
     ) -> Result<(), AppError>;
+}
+
+#[async_trait]
+pub trait TopicMetricsRepository: Send + Sync {
+    async fn upsert_metrics(&self, metrics: TopicMetricsUpsert) -> Result<(), AppError>;
+    async fn cleanup_expired(&self, cutoff_millis: i64) -> Result<u64, AppError>;
+    async fn collect_activity(
+        &self,
+        window: MetricsWindow,
+    ) -> Result<Vec<TopicActivityRow>, AppError>;
 }
 
 #[async_trait]

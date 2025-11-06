@@ -197,6 +197,61 @@ pub(super) const UPDATE_TOPIC_STATS: &str = r#"
     WHERE topic_id = ?
 "#;
 
+pub(super) const UPSERT_TOPIC_METRICS: &str = r#"
+    INSERT INTO topic_metrics (
+        topic_id,
+        window_start,
+        window_end,
+        posts_24h,
+        posts_6h,
+        unique_authors,
+        boosts,
+        replies,
+        bookmarks,
+        participant_delta,
+        score_24h,
+        score_6h,
+        updated_at
+    ) VALUES (
+        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
+    )
+    ON CONFLICT(topic_id, window_start) DO UPDATE SET
+        window_end = excluded.window_end,
+        posts_24h = excluded.posts_24h,
+        posts_6h = excluded.posts_6h,
+        unique_authors = excluded.unique_authors,
+        boosts = excluded.boosts,
+        replies = excluded.replies,
+        bookmarks = excluded.bookmarks,
+        participant_delta = excluded.participant_delta,
+        score_24h = excluded.score_24h,
+        score_6h = excluded.score_6h,
+        updated_at = excluded.updated_at
+"#;
+
+pub(super) const CLEANUP_TOPIC_METRICS: &str = r#"
+    DELETE FROM topic_metrics
+    WHERE window_end < ?1
+"#;
+
+pub(super) const COLLECT_TOPIC_ACTIVITY: &str = r#"
+    SELECT
+        et.topic_id AS topic_id,
+        COUNT(DISTINCT e.event_id) AS posts_count,
+        COUNT(DISTINCT e.public_key) AS unique_authors,
+        0 AS boosts,
+        0 AS replies,
+        0 AS bookmarks,
+        0 AS participant_delta
+    FROM event_topics et
+    INNER JOIN events e ON e.event_id = et.event_id
+    WHERE e.kind = 1
+      AND e.deleted = 0
+      AND e.created_at >= ?1
+      AND e.created_at < ?2
+    GROUP BY et.topic_id
+"#;
+
 pub(super) const INSERT_USER: &str = r#"
     INSERT INTO users (npub, pubkey, display_name, bio, avatar_url, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)

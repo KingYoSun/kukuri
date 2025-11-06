@@ -73,6 +73,7 @@
   - 2025年11月07日: `/trending` `/following` 導線の手動 QA を実施し、`phase5_user_flow_inventory.md` 2章・5.7節、`phase5_user_flow_summary.md` Quick View、`phase5_ci_path_audit.md` のテスト項目を更新。Summary Panel 指標と Nightly テストコマンドの整合性を確認しつつ、Docker シナリオ `trending-feed` と `trending_metrics_job` を backlog として明記。
   - 2025年11月07日: Docker シナリオ `trending-feed` の要件を整理し、`phase5_user_flow_inventory.md` 5.7節・`phase5_ci_path_audit.md`・`phase5_user_flow_summary.md`・`docs/03_implementation/docker_test_environment.md`・`windows_test_docker_runbook.md` へ反映。`scripts/test-docker.{sh,ps1}` の `--scenario/-Scenario` 追加と Nightly `Trending Feed (Docker)` ジョブの組み込み方針を明文化。
   - 2025年11月07日: `docs/03_implementation/trending_metrics_job.md` を起草し、集計ジョブの要件・アーキテクチャ・監視指針・テスト計画を整理。`phase5_dependency_inventory_template.md` に `TrendingMetricsJob` 行を追加し、実装と CI 連携の依存を記録。
+  - 2025年11月07日: `scripts/test-docker.{sh,ps1}` に `--scenario/-Scenario trending-feed` 実装と成果物出力処理を追加し、Nightly `Trending Feed (Docker)` ジョブ（`nightly.yml`）を稼働化。`topic_metrics` 用 migration（`20251107094500_*`）と `sqlx prepare` を実行し、`TopicMetricsRepository`・`TrendingMetricsJob`（ステップ1〜3）を Rust 層へ追加。
 - [x] 投稿削除導線（delete_post）実装準備
   - 2025年11月03日: `phase5_user_flow_inventory.md` セクション5.6に UX / バックエンド / テスト仕様を整理。`delete_post` コマンドを活用した削除フローと楽観更新、オフライン再送の方針を定義。
   - 2025年11月03日: `phase5_user_flow_summary.md` 優先度表を更新し、本タスクを Priority A として再掲。`PostCard` に削除メニューと確認ダイアログを追加し、`postStore.deletePostRemote` をオフライン対応込みで接続。関連ユニットテスト（PostCard / postStore）を更新。

@@ -9,6 +9,7 @@ mod events;
 mod mapper;
 mod posts;
 mod queries;
+mod topic_metrics;
 mod topics;
 mod users;
 

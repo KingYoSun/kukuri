@@ -8,6 +8,8 @@ param(
     [switch]$Integration,            # Rustテスト時にP2P統合テストのみを実行
     [Alias("Test", "tests")]
     [string]$TestTarget,             # Rustテスト時に特定バイナリのみ実行
+    [string]$Scenario,               # TypeScriptテスト用のシナリオ指定
+    [string]$Fixture,                # シナリオ用フィクスチャパス
     [string]$BootstrapPeers,         # 統合テスト用のブートストラップピア指定
     [string]$IrohBin,                # iroh バイナリのパス
     [string]$IntegrationLog = "info,iroh_tests=debug", # 統合テスト用のRUST_LOG
@@ -51,6 +53,14 @@ if ($TestTarget -and $Command -ne "rust") {
     Write-ErrorMessage "-Test は rust コマンドのみに指定できます。"
 }
 
+if ($Scenario -and $Command -ne "ts") {
+    Write-ErrorMessage "-Scenario は ts コマンドでのみ使用できます。"
+}
+
+if ($Fixture -and $Command -ne "ts") {
+    Write-ErrorMessage "-Fixture は ts コマンドでのみ使用できます。"
+}
+
 # ヘルプ表示
 function Show-Help {
     Write-Host @"
@@ -60,7 +70,7 @@ Commands:
   all          - すべてのテストを実行（デフォルト）
   rust         - Rustのテストのみ実行
   integration  - P2P統合テスト（Rust）を実行
-  ts           - TypeScriptのテストのみ実行
+  ts           - TypeScriptのテストのみ実行（-Scenario でシナリオ指定可）
   lint         - リントとフォーマットチェックのみ実行
   coverage     - Rustカバレッジ（cargo tarpaulin）を実行し成果物を保存
   metrics      - メトリクス関連のショートテスト（Rust test_get_status / TS P2P UI）
@@ -73,6 +83,8 @@ Commands:
 Options:
   -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
   -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
+  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed）
+  -Fixture <path>  - シナリオ用フィクスチャパスを上書き（既定: tests/fixtures/trending/default.json）
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
   -IntegrationLog <level> - 統合テスト時の RUST_LOG 設定（既定: info,iroh_tests=debug）
@@ -86,6 +98,7 @@ Examples:
   .\test-docker.ps1 rust -Test event_manager_integration
   .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
   .\test-docker.ps1 rust -NoBuild  # ビルドをスキップしてRustテストを実行
+  .\test-docker.ps1 ts -Scenario trending-feed
   .\test-docker.ps1 performance    # パフォーマンス計測用テストバイナリを実行
   .\test-docker.ps1 cache-clean    # キャッシュを含めて完全クリーンアップ
   .\test-docker.ps1 -Help          # ヘルプを表示
@@ -312,13 +325,68 @@ function Invoke-IntegrationTests {
 }
 
 # TypeScriptテストのみ実行
+function Invoke-TypeScriptTrendingFeedScenario {
+    $fixturePath = if ($Fixture) {
+        $Fixture
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:VITE_TRENDING_FIXTURE_PATH)) {
+        $env:VITE_TRENDING_FIXTURE_PATH
+    } else {
+        "tests/fixtures/trending/default.json"
+    }
+
+    $scenarioDir = Join-Path $repositoryRoot "test-results/trending-feed"
+    if (-not (Test-Path $scenarioDir)) {
+        New-Item -ItemType Directory -Path $scenarioDir | Out-Null
+    }
+
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $reportRelPath = "test-results/trending-feed/$timestamp-vitest.json"
+    $reportContainerPath = "/app/$reportRelPath"
+
+    Write-Host "Running TypeScript scenario 'trending-feed' (fixture: $fixturePath)..."
+    $args = @(
+        "run", "--rm",
+        "-e", "VITE_TRENDING_FIXTURE_PATH=$fixturePath",
+        "ts-test",
+        "pnpm", "vitest", "run",
+        "src/tests/unit/routes/trending.test.tsx",
+        "src/tests/unit/routes/following.test.tsx",
+        "src/tests/unit/hooks/useTrendingFeeds.test.tsx",
+        "--runInBand",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=$reportContainerPath"
+    )
+
+    Invoke-DockerCompose $args | Out-Null
+
+    $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+    if (Test-Path $reportHostPath) {
+        Write-Success "Scenario report saved to $reportRelPath"
+    } else {
+        Write-Warning "Scenario report not found at $reportRelPath"
+    }
+}
+
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
         Build-TestImage
     }
-    Write-Host "Running TypeScript tests in Docker..."
-    Invoke-DockerCompose @("run", "--rm", "ts-test")
-    Write-Success "TypeScript tests passed!"
+
+    if ([string]::IsNullOrWhiteSpace($Scenario)) {
+        Write-Host "Running TypeScript tests in Docker..."
+        Invoke-DockerCompose @("run", "--rm", "ts-test")
+        Write-Success "TypeScript tests passed!"
+    } else {
+        switch ($Scenario.ToLower()) {
+            "trending-feed" {
+                Invoke-TypeScriptTrendingFeedScenario
+            }
+            default {
+                Write-ErrorMessage "Unknown TypeScript scenario: $Scenario"
+            }
+        }
+    }
 }
 
 # リントとフォーマットチェック

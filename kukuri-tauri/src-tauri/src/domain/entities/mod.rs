@@ -7,6 +7,7 @@ pub mod offline;
 pub mod post;
 pub mod profile_avatar;
 pub mod topic;
+pub mod topic_metrics;
 pub mod user;
 
 pub use account::{AccountMetadata, AccountRegistration, AccountsMetadata, CurrentAccountSecret};
@@ -23,4 +24,5 @@ pub use offline::{
 pub use post::Post;
 pub use profile_avatar::{ProfileAvatarAccessLevel, ProfileAvatarDocEntry};
 pub use topic::Topic;
+pub use topic_metrics::{MetricsWindow, ScoreWeights, TopicActivityRow, TopicMetricsUpsert};
 pub use user::{User, UserMetadata, UserProfile};

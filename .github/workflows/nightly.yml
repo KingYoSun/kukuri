@@ -43,3 +43,22 @@ jobs:
         run: |
           cd kukuri-tauri
           pnpm test:unit
+
+  trending-feed:
+    name: Trending Feed (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run trending feed scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario trending-feed
+
+      - name: Upload trending feed artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trending-feed-reports
+          path: test-results/trending-feed
+          if-no-files-found: error

@@ -1,0 +1,197 @@
+use crate::application::ports::repositories::TopicMetricsRepository;
+use crate::domain::entities::{MetricsWindow, ScoreWeights, TopicActivityRow, TopicMetricsUpsert};
+use crate::shared::error::AppError;
+use chrono::Duration;
+use chrono::Utc;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+#[derive(Debug, Default, Clone)]
+struct AggregatedTopicMetrics {
+    posts_24h: i64,
+    posts_6h: i64,
+    unique_authors: i64,
+    boosts: i64,
+    replies: i64,
+    bookmarks: i64,
+    participant_delta: i64,
+}
+
+pub struct TrendingMetricsJob {
+    metrics_repository: Arc<dyn TopicMetricsRepository>,
+    score_weights: ScoreWeights,
+    ttl_hours: u64,
+}
+
+impl TrendingMetricsJob {
+    pub fn new(
+        metrics_repository: Arc<dyn TopicMetricsRepository>,
+        score_weights: Option<ScoreWeights>,
+        ttl_hours: u64,
+    ) -> Self {
+        Self {
+            metrics_repository,
+            score_weights: score_weights.unwrap_or_default(),
+            ttl_hours,
+        }
+    }
+
+    pub fn score_weights(&self) -> ScoreWeights {
+        self.score_weights
+    }
+
+    pub async fn run_once(&self) -> Result<(), AppError> {
+        let now = Utc::now().timestamp_millis();
+        let window_24h = MetricsWindow::new(now - Duration::hours(24).num_milliseconds(), now);
+        let window_6h = MetricsWindow::new(now - Duration::hours(6).num_milliseconds(), now);
+
+        let activity_24h = self.metrics_repository.collect_activity(window_24h).await?;
+        let activity_6h = self.metrics_repository.collect_activity(window_6h).await?;
+
+        let aggregated = merge_activity(activity_24h, activity_6h);
+
+        let mut upserted = 0usize;
+        for (topic_id, metrics) in aggregated {
+            let score_24h =
+                self.score_weights
+                    .score(metrics.posts_24h, metrics.unique_authors, metrics.boosts);
+            let score_6h =
+                self.score_weights
+                    .score(metrics.posts_6h, metrics.unique_authors, metrics.boosts);
+
+            let upsert = TopicMetricsUpsert {
+                topic_id,
+                window_start: window_24h.start,
+                window_end: window_24h.end,
+                posts_24h: metrics.posts_24h,
+                posts_6h: metrics.posts_6h,
+                unique_authors: metrics.unique_authors,
+                boosts: metrics.boosts,
+                replies: metrics.replies,
+                bookmarks: metrics.bookmarks,
+                participant_delta: metrics.participant_delta,
+                score_24h,
+                score_6h,
+                updated_at: now,
+            };
+
+            self.metrics_repository.upsert_metrics(upsert).await?;
+            upserted += 1;
+        }
+
+        let cutoff = now - (self.ttl_hours as i64 * Duration::hours(1).num_milliseconds());
+        let removed = self.metrics_repository.cleanup_expired(cutoff).await?;
+
+        tracing::info!(
+            target: "metrics::trending",
+            topics_upserted = upserted,
+            cutoff_millis = cutoff,
+            removed_records = removed,
+            "trending metrics job completed"
+        );
+
+        Ok(())
+    }
+}
+
+fn merge_activity(
+    activity_24h: Vec<TopicActivityRow>,
+    activity_6h: Vec<TopicActivityRow>,
+) -> HashMap<String, AggregatedTopicMetrics> {
+    let mut aggregated: HashMap<String, AggregatedTopicMetrics> = HashMap::new();
+
+    for row in activity_24h {
+        let entry = aggregated
+            .entry(row.topic_id.clone())
+            .or_insert_with(AggregatedTopicMetrics::default);
+        entry.posts_24h = row.posts_count;
+        entry.unique_authors = row.unique_authors;
+        entry.boosts = row.boosts;
+        entry.replies = row.replies;
+        entry.bookmarks = row.bookmarks;
+        entry.participant_delta = row.participant_delta;
+    }
+
+    for row in activity_6h {
+        let entry = aggregated
+            .entry(row.topic_id.clone())
+            .or_insert_with(AggregatedTopicMetrics::default);
+        entry.posts_6h = row.posts_count;
+
+        if entry.unique_authors == 0 {
+            entry.unique_authors = row.unique_authors;
+        }
+        if entry.boosts == 0 {
+            entry.boosts = row.boosts;
+        }
+        if entry.replies == 0 {
+            entry.replies = row.replies;
+        }
+        if entry.bookmarks == 0 {
+            entry.bookmarks = row.bookmarks;
+        }
+        if entry.participant_delta == 0 {
+            entry.participant_delta = row.participant_delta;
+        }
+    }
+
+    aggregated
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_activity_prefers_24h_metrics() {
+        let topic = "topic-1";
+        let activity_24h = vec![TopicActivityRow {
+            topic_id: topic.to_string(),
+            posts_count: 12,
+            unique_authors: 5,
+            boosts: 3,
+            replies: 1,
+            bookmarks: 2,
+            participant_delta: 1,
+        }];
+
+        let activity_6h = vec![TopicActivityRow {
+            topic_id: topic.to_string(),
+            posts_count: 4,
+            unique_authors: 2,
+            boosts: 1,
+            replies: 0,
+            bookmarks: 0,
+            participant_delta: 0,
+        }];
+
+        let merged = merge_activity(activity_24h, activity_6h);
+        let metrics = merged.get(topic).expect("metrics");
+        assert_eq!(metrics.posts_24h, 12);
+        assert_eq!(metrics.posts_6h, 4);
+        assert_eq!(metrics.unique_authors, 5);
+        assert_eq!(metrics.boosts, 3);
+        assert_eq!(metrics.replies, 1);
+        assert_eq!(metrics.bookmarks, 2);
+    }
+
+    #[test]
+    fn merge_activity_falls_back_to_6h_when_24h_missing() {
+        let topic = "topic-2";
+        let activity_6h = vec![TopicActivityRow {
+            topic_id: topic.to_string(),
+            posts_count: 2,
+            unique_authors: 1,
+            boosts: 0,
+            replies: 0,
+            bookmarks: 0,
+            participant_delta: 0,
+        }];
+
+        let merged = merge_activity(vec![], activity_6h);
+        let metrics = merged.get(topic).expect("metrics");
+        assert_eq!(metrics.posts_24h, 0);
+        assert_eq!(metrics.posts_6h, 2);
+        assert_eq!(metrics.unique_authors, 1);
+    }
+}

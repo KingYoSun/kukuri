@@ -24,7 +24,7 @@ Usage: ./test-docker.sh [command] [options]
 Commands:
   all          Run all tests (default)
   rust         Run Rust tests only
-  ts           Run TypeScript tests only
+  ts           Run TypeScript tests only (or specific scenarios with --scenario)
   lint         Run lint/format checks only
   coverage     Run cargo tarpaulin and export coverage artifacts
   build        Build the Docker image only
@@ -32,6 +32,11 @@ Commands:
   cache-clean  Clean including cache volumes
   performance  Run the Rust performance harness (ignored tests) and export reports
   p2p          Run P2P integration tests inside Docker
+
+Options for ts:
+  --scenario <name>      Execute a preset scenario (e.g. trending-feed)
+  --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
+  --no-build             Skip Docker image build (use existing image)
 
 Options for p2p:
   --tests <name>          Cargo test filter (default: p2p_gossip_smoke)
@@ -125,11 +130,53 @@ run_rust_tests() {
   echo '[OK] Rust tests passed'
 }
 
+run_ts_trending_feed() {
+  local fixture_path="${TS_FIXTURE}"
+  if [[ -z "$fixture_path" ]]; then
+    fixture_path="${VITE_TRENDING_FIXTURE_PATH:-tests/fixtures/trending/default.json}"
+  fi
+
+  local scenario_dir="${RESULTS_DIR}/trending-feed"
+  mkdir -p "$scenario_dir"
+
+  local timestamp
+  timestamp="$(date '+%Y%m%d-%H%M%S')"
+  local report_rel_path="test-results/trending-feed/${timestamp}-vitest.json"
+  local report_container_path="/app/${report_rel_path}"
+
+  echo "Running TypeScript scenario 'trending-feed' (fixture: ${fixture_path})..."
+  compose_run '' run --rm \
+    -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
+    ts-test pnpm vitest run \
+    src/tests/unit/routes/trending.test.tsx \
+    src/tests/unit/routes/following.test.tsx \
+    src/tests/unit/hooks/useTrendingFeeds.test.tsx \
+    --runInBand --reporter=default --reporter=json --outputFile "$report_container_path"
+
+  if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+    echo "[OK] Scenario report saved to ${report_rel_path}"
+  else
+    echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+  fi
+}
+
 run_ts_tests() {
   [[ $NO_BUILD -eq 1 ]] || build_image
-  echo 'Running TypeScript tests in Docker...'
-  compose_run '' run --rm ts-test
-  echo '[OK] TypeScript tests passed'
+  if [[ -z "$TS_SCENARIO" ]]; then
+    echo 'Running TypeScript tests in Docker...'
+    compose_run '' run --rm ts-test
+    echo '[OK] TypeScript tests passed'
+  else
+    case "$TS_SCENARIO" in
+      trending-feed)
+        run_ts_trending_feed
+        ;;
+      *)
+        echo "Unknown TypeScript scenario: $TS_SCENARIO" >&2
+        exit 1
+        ;;
+    esac
+  fi
 }
 
 run_lint_check() {
@@ -321,13 +368,41 @@ NO_BUILD=0
 KEEP_ENV=0
 RUST_LOG="debug"
 RUST_BACKTRACE="full"
+TS_SCENARIO=""
+TS_FIXTURE=""
 
 case "$COMMAND" in
   -h|--help)
     usage
     exit 0
     ;;
-  all|rust|ts|lint|coverage|build|clean|cache-clean|performance)
+  all|rust|lint|coverage|build|clean|cache-clean|performance)
+    ;;
+  ts)
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --scenario)
+          TS_SCENARIO="$2"
+          shift 2
+          ;;
+        --fixture)
+          TS_FIXTURE="$2"
+          shift 2
+          ;;
+        --no-build)
+          NO_BUILD=1
+          shift
+          ;;
+        -h|--help)
+          usage
+          exit 0
+          ;;
+        *)
+          echo "Unknown option for ts command: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
     ;;
   p2p)
     while [[ $# -gt 0 ]]; do
