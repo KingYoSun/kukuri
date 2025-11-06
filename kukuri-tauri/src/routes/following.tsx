@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useFollowingFeedQuery } from '@/hooks/useTrendingFeeds';
+import { FollowingSummaryPanel } from '@/components/following/FollowingSummaryPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -18,6 +19,7 @@ export function FollowingPage() {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    isFetching,
   } = useFollowingFeedQuery({ limit: 10, includeReactions: true });
 
   const posts = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data?.pages]);
@@ -72,6 +74,12 @@ export function FollowingPage() {
   return (
     <div className="container mx-auto px-4 py-8" data-testid="following-page">
       <div className="max-w-3xl mx-auto space-y-6">
+        <FollowingSummaryPanel
+          data={data}
+          isLoading={isLoading && !data}
+          isFetching={isFetching}
+          hasNextPage={Boolean(hasNextPage)}
+        />
         <header className="space-y-1">
           <h1 className="text-3xl font-bold">フォロー中</h1>
           <p className="text-sm text-muted-foreground">

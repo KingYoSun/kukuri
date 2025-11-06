@@ -95,6 +95,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: true,
     });
     trendingMocks.useTrendingPostsQueryMock.mockReturnValue({
       data: undefined,
@@ -102,6 +103,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
 
     renderTrendingPage();
@@ -119,6 +121,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
     trendingMocks.useTrendingPostsQueryMock.mockReturnValue({
       data: postsResult,
@@ -126,6 +129,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
 
     renderTrendingPage();
@@ -145,6 +149,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
     trendingMocks.useTrendingPostsQueryMock.mockReturnValue({
       data: buildPostsResult({ topics: [] }),
@@ -152,6 +157,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
 
     renderTrendingPage();
@@ -169,6 +175,7 @@ describe('TrendingPage', () => {
       isError: true,
       error: new Error('取得に失敗しました'),
       refetch: refetchMock,
+      isFetching: false,
     });
     trendingMocks.useTrendingPostsQueryMock.mockReturnValue({
       data: undefined,
@@ -176,6 +183,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
 
     const user = userEvent.setup();
@@ -194,6 +202,7 @@ describe('TrendingPage', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     });
     const refetchPosts = vi.fn();
     trendingMocks.useTrendingPostsQueryMock.mockReturnValue({
@@ -202,6 +211,7 @@ describe('TrendingPage', () => {
       isError: true,
       error: new Error('プレビュー失敗'),
       refetch: refetchPosts,
+      isFetching: false,
     });
 
     const user = userEvent.setup();
@@ -214,5 +224,78 @@ describe('TrendingPage', () => {
     const retryButton = screen.getByRole('button', { name: '再試行' });
     await user.click(retryButton);
     expect(refetchPosts).toHaveBeenCalled();
+  });
+
+  it('Summary Panel で派生メトリクスを表示する', () => {
+    const generatedAt = Date.now() - 60_000;
+    trendingMocks.useTrendingTopicsQueryMock.mockReturnValue({
+      data: buildTopicsResult({
+        generatedAt,
+        topics: [
+          {
+            topicId: 'topic-1',
+            name: '技術トレンド',
+            description: null,
+            memberCount: 100,
+            postCount: 200,
+            trendingScore: 80,
+            rank: 1,
+            scoreChange: null,
+          },
+          {
+            topicId: 'topic-2',
+            name: '分散システム',
+            description: null,
+            memberCount: 50,
+            postCount: 120,
+            trendingScore: 60,
+            rank: 2,
+            scoreChange: -2,
+          },
+        ],
+      }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+    trendingMocks.useTrendingPostsQueryMock.mockReturnValue({
+      data: buildPostsResult({
+        topics: [
+          {
+            topicId: 'topic-1',
+            topicName: '技術トレンド',
+            relativeRank: 1,
+            posts: [buildPostsResult().topics[0].posts[0]],
+          },
+          {
+            topicId: 'topic-2',
+            topicName: '分散システム',
+            relativeRank: 2,
+            posts: [
+              {
+                ...buildPostsResult().topics[0].posts[0],
+                id: 'post-2',
+              },
+            ],
+          },
+        ],
+        generatedAt,
+      }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    renderTrendingPage();
+
+    expect(screen.getByTestId('trending-summary-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('trending-summary-topics')).toHaveTextContent('2件');
+    expect(screen.getByTestId('trending-summary-posts')).toHaveTextContent('2件');
+    expect(screen.getByTestId('trending-summary-score')).toHaveTextContent('70.0pt');
+    expect(screen.getByTestId('trending-summary-updated')).toBeInTheDocument();
   });
 });

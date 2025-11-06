@@ -327,21 +327,23 @@
 
 ### 5.7 トレンド/フォロー中導線実装計画（2025年11月04日追加）
 - **目的**: サイドバーカテゴリー「トレンド」「フォロー中」からアクセスできる発見導線とマイフィード導線を整備し、Home タイムラインとの差別化と優先度の可視化を実現する。
-- **進捗（2025年11月05日更新）**
+- **進捗（2025年11月06日更新）**
   - `Sidebar` のカテゴリーは `useUIStore.activeSidebarCategory` でハイライトを同期し、`prefetchTrendingCategory` / `prefetchFollowingCategory` によりクリック時に関連クエリを事前取得できるようにした。
   - `useTrendingFeeds.ts` をリファクタリングし、`trendingTopicsQueryKey` などの共有ロジックとプリフェッチ API を整備。`routes/trending.tsx` / `routes/following.tsx` は新ヘルパーを利用してロード/エラー/空状態をハンドリング済み。
   - テスト実行: `npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`（2025年11月05日）。カテゴリ状態の同期・プリフェッチ分岐・クエリマッピングをユニットテストで検証。
-  - 2025年11月06日: `list_trending_topics` / `list_trending_posts` / `list_following_feed` のデータ仕様と UI/ST テスト要件を整理し、本節ならびに Summary・実装計画へ反映。`generated_at` をミリ秒エポックで返す必要性と Query キャッシュ境界条件を明記。
-  - 未実装: `FollowingSummaryPanel` の UI、DM 未読ハイライト、Docker シナリオ（`trending-feed`）は引き続きバックログ管理。
+  - 2025年11月06日: `list_trending_topics` / `list_trending_posts` / `list_following_feed` のデータ仕様と UI/ST テスト要件を整理し、本節ならびに Summary・実装計画へ反映。`topic_handler.rs` / `post_handler.rs` で `Utc::now().timestamp_millis()` を採用していることを確認し、Query キャッシュ境界条件も記録。
+  - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を追加し、派生メトリクス（トピック数・プレビュー件数・平均スコア・最終更新・ユニーク投稿者・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` で新UIと集計値のテストを実施。
+- **未実装**: DM 未読ハイライト（IPC + バッジ）、Docker シナリオ（`trending-feed`）、集計ジョブ `trending_metrics_job` の導入と監視整備。
 - **データ要件（2025年11月06日更新）**
-  - `list_trending_topics` は `TopicService::list_trending_topics`（`topic_service.rs`）が `topics` テーブルの `member_count` と `post_count` を基に `trending_score = post_count * 0.6 + member_count * 0.4` を計算し、`TrendingTopicDto { topic_id, name, description, member_count, post_count, trending_score, rank, score_change }` を `limit` 件返却する。UI 側は `limit=10` をデフォルトとし、`staleTime=60秒` / `refetchInterval=120秒` でキャッシュするため、レスポンスの `generated_at` は **ミリ秒エポック** である必要がある（現状は秒単位なので、Rust 側を `Utc::now().timestamp_millis()` に更新するフォローアップを追記）。
+  - `list_trending_topics` は `TopicService::list_trending_topics`（`topic_service.rs`）が `topics` テーブルの `member_count` と `post_count` を基に `trending_score = post_count * 0.6 + member_count * 0.4` を計算し、`TrendingTopicDto { topic_id, name, description, member_count, post_count, trending_score, rank, score_change }` を `limit` 件返却する。UI 側は `limit=10` をデフォルトとし、`staleTime=60秒` / `refetchInterval=120秒` でキャッシュするため、レスポンスの `generated_at` は **ミリ秒エポック**（`topic_handler.rs` で `Utc::now().timestamp_millis()` を返却済み）となる。フォローアップでは集計ジョブ導入後の値の安定性を監視する。
   - `list_trending_posts` は `ListTrendingPostsRequest { topic_ids, per_topic }` を受け取り、`per_topic` を `1..=20` にクランプ（デフォルト 3）。`TrendingTopicPostsResponse` には `topic_id`・`topic_name`・`relative_rank` と `PostResponse` 配列（`id`/`content`/`author_pubkey`/`author_npub`/`topic_id`/`created_at`(秒)/`likes`/`boosts`/`replies`/`is_synced`）が含まれる。フロントは `mapPostResponseToDomain` で `created_at` を秒→`Date` に変換しつつ Markdown を表示する。
   - `list_following_feed` は認証必須。`ListFollowingFeedRequest` の `limit` は `1..=100`、デフォルト 20。`cursor` には `"{created_at}:{event_id}"` 形式、`include_reactions` は現状プレースホルダだが true 時にリアクション数を同梱する設計を維持。レスポンスは `FollowingFeedPageResponse { items, next_cursor, has_more, server_time }` で `server_time` はミリ秒。UI は `useInfiniteQuery` で `cursor` を繋ぎ、フォールバックボタンを併用する。
   - 例外時は各 DTO の `Validate` 実装により `AppError::InvalidInput`（HTTP 400）が返る。UI 側では `errorHandler.log('TrendingTopics.fetchFailed'|...)` / `errorHandler.log('Sidebar.prefetchFailed', …)` を使用し、ログキー単位で通知文面を切り替える。
   - Prefetch ロジックは `prefetchTrendingCategory` が `trendingTopicsQueryKey(limit)` → `trendingPostsQueryKey(topicIds, perTopic)` を順に取得、`prefetchFollowingCategory` は `prefetchInfiniteQuery` で初回ページをキャッシュする。`QueryClient` のキー、`staleTime`、`enabled` 条件をドキュメント化し、キャッシュミス時の遅延を許容する。
 - **UI 実装案**
   - ✅ `routes/trending.tsx` でランキングカードと投稿プレビューを実装済み。更新タイムスタンプとスコア差分、再試行導線を画面ヘッダーに配置。
-  - ✅ `routes/following.tsx` で無限スクロール版タイムラインを実装。フォロー解除やプロフィール遷移の導線は引き続き拡張予定（Summary Panel は backlog）。
+  - ✅ `routes/following.tsx` で無限スクロール版タイムラインを実装。フォロー解除やプロフィール遷移の導線は引き続き拡張予定。
+  - ✅ `TrendingSummaryPanel` / `FollowingSummaryPanel` を追加し、派生メトリクスをまとめて表示。
   - ✅ サイドバーでカテゴリーごとにボタン強調を行い、別画面遷移後に `activeSidebarCategory` をリセット。
   - Skeleton / `ErrorStateCard` / `EmptyStateCard` は両ルートで共通利用。文言・サポートリンクは `errorHandler` のキーに合わせて整理済み。
 - **バックエンド/コマンド設計**
@@ -355,9 +357,26 @@
   - ✅ `useUIStore` に `activeSidebarCategory` とリセット関数を追加。`Sidebar` ではセレクタで購読し、余計なレンダーを避けつつ状態を同期。
 - **テスト計画**
   - TypeScript（既存）: `Sidebar.test.tsx`（カテゴリー遷移/プリフェッチ）、`useTrendingFeeds.test.tsx`（引数検証・prefetch・cursor）、`uiStore.test.ts`（状態遷移）を維持。
-  - TypeScript（追加）: `routes/trending.test.tsx` / `routes/following.test.tsx` で Loading/Error/Empty/Success・`fetchNextPage` をカバー済み。今後は `prefetchTrendingCategory` のクエリキャッシュ検証と `formatDistanceToNow` の時刻調整（generated_at ミリ秒化後）をスナップショット化する。
+  - TypeScript（追加）: `routes/trending.test.tsx` / `routes/following.test.tsx` で Loading/Error/Empty/Success・`fetchNextPage` をカバー済み。今後は `prefetchTrendingCategory` のクエリキャッシュ検証と `formatDistanceToNow` の時刻表示（generated_at ミリ秒値）をスナップショット化する。
   - Rust: `topic_handler::list_trending_topics` / `post_handler::list_trending_posts` / `post_handler::list_following_feed` の単体テストを追加し、(1) limit / per_topic / cursor の境界値、(2) `AppError::InvalidInput` の伝播、(3) `server_time` がミリ秒で返ること、(4) Topic 未検出時にスキップされる挙動を確認する。`PostFeedCursor` の parse/recompose テストも追加する。
   - Docker / Nightly: `docker-compose.test.yml` に `trending-feed` シナリオを追加し、Windows 向け `./scripts/test-docker.ps1 ts -Scenario trending-feed` を案内。Nightly では Trending/Follower ルートの Vitest をジョブに追加し、`phase5_ci_path_audit.md` にテスト ID を記録する。
+- **次の着手順序（2025年11月06日更新）**
+  1. ✅ Summary Panel 実装（2025年11月06日完了）  
+     - `TrendingSummaryPanel` / `FollowingSummaryPanel` で派生メトリクスを表示し、Vitest で検証済み。  
+  2. **DM 未読ハイライト**  
+     - 目的: フォロー中/トレンド表示中でも未読メッセージを把握できるよう、ヘッダー・Sidebar・Summary Panel に DM 未読数を表示し、リアルタイム更新を実現する。  
+     - フロント: `useDirectMessageStore` の `unreadCounts` を監視する `useDirectMessageBadge` フックを追加。Summary Panel 内に未読数や直近メッセージ誘導ボタンを表示。モーダル非表示時に `incrementUnreadCount` が走るよう、IPC 経由のイベントを購読。  
+     - バックエンド: `direct_message_service` 内で新着受信時に `tauri::AppHandle::emit_all("direct-message:received", payload)` を送出。`MessagingGateway` で受信イベント→DB 永続化後にフロントへ通知する IPC パイプを実装。  
+     - テスト: Rust で IPC イベント送出をモックし、ユニットテストを追加。フロントは Vitest でストア + バッジ表示の状態遷移を検証。  
+  3. **Docker シナリオ `trending-feed` 整備**  
+     - 目的: CI / ローカル検証でトレンド・フォロー導線の動作を再現できるよう、docker-compose.test.yml に専用ジョブを追加。  
+     - 具体: `test-runner` コンテナでシードデータ投入スクリプト（トピック作成 / 投稿ブースト / フォロー関係）を実行し、Tauri コマンド経由で `list_trending_topics` / `list_following_feed` が安定応答するかを検証。`pnpm vitest run ...trending.test.tsx ...following.test.tsx` をジョブ内で呼び出し、成功/失敗を CI に反映。  
+     - 付随: Windows 向け `./scripts/test-docker.ps1 ts -Scenario trending-feed` を追加し、README のテスト手順に追記。  
+  4. **`trending_metrics_job` 導入**  
+     - 目的: Summary Panel とトレンド表示の精度を高めるため、24h 集計ジョブで `topic_metrics` を更新し、トレンドスコアや参加者数の時間ベース推移を取得可能にする。  
+     - バックエンド: 新規ジョブ `trending_metrics_job` を `tokio::task` で起動し、`topics` / `posts` テーブルから統計値を集計して `topic_metrics` テーブルへ反映。`TopicService::list_trending_topics` をメトリクスを活用する実装にリファクタ。  
+     - テスト: Rust で集計ジョブの単体テスト + 統合テストを追加。Docker シナリオ内でジョブ実行を確認し、Summary Panel の表示値が集計結果と一致するかを検証。  
+     - ドキュメント: `docs/03_implementation/p2p_mainline_runbook.md` に監視・障害対応手順を追記し、`phase5_ci_path_audit.md` にジョブ用テストケース ID を登録。
 - **フォローアップ**
   - `phase5_user_flow_summary.md`（1.2節 / 3節 / 6節）と `tauri_app_implementation_plan.md` Phase 5 優先度に本計画をリンク済み。
   - `docs/03_implementation/p2p_mainline_runbook.md` にトレンドメトリクス監視手順としきい値、アラート対応を追記予定。

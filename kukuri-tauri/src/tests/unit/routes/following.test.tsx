@@ -45,6 +45,8 @@ interface FollowingQueryOverride {
   isFetchingNextPage?: boolean;
   fetchNextPage?: () => void;
   refetch?: () => void;
+  serverTime?: number;
+  isFetching?: boolean;
 }
 
 const mockFollowingQuery = (options: FollowingQueryOverride = {}) => {
@@ -57,6 +59,8 @@ const mockFollowingQuery = (options: FollowingQueryOverride = {}) => {
     isFetchingNextPage = false,
     fetchNextPage = vi.fn(),
     refetch = vi.fn(),
+    serverTime = Date.now(),
+    isFetching = false,
   } = options;
 
   const data =
@@ -69,7 +73,7 @@ const mockFollowingQuery = (options: FollowingQueryOverride = {}) => {
               items: posts,
               nextCursor: null,
               hasMore: hasNextPage,
-              serverTime: Date.now(),
+              serverTime,
             },
           ],
           pageParams: [null],
@@ -84,6 +88,7 @@ const mockFollowingQuery = (options: FollowingQueryOverride = {}) => {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    isFetching,
   });
 };
 
@@ -168,5 +173,33 @@ describe('FollowingPage', () => {
     const loadMoreButton = screen.getByTestId('following-load-more');
     await user.click(loadMoreButton);
     expect(fetchNextPage).toHaveBeenCalled();
+  });
+
+  it('Summary Panel でフォロー中フィードの統計を表示する', () => {
+    const baseAuthor = buildPost().author;
+    const posts = [
+      buildPost({
+        id: 'post-1',
+        author: { ...baseAuthor, id: 'user-1', npub: 'npub-1', pubkey: 'pubkey-1' },
+      }),
+      buildPost({
+        id: 'post-2',
+        author: { ...baseAuthor, id: 'user-2', npub: 'npub-2', pubkey: 'pubkey-2' },
+      }),
+    ];
+
+    mockFollowingQuery({
+      posts,
+      hasNextPage: true,
+      serverTime: Date.now() - 30_000,
+      isFetching: false,
+    });
+
+    renderFollowingPage();
+
+    expect(screen.getByTestId('following-summary-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('following-summary-posts')).toHaveTextContent('2件');
+    expect(screen.getByTestId('following-summary-authors')).toHaveTextContent('2人');
+    expect(screen.getByTestId('following-summary-remaining')).toHaveTextContent('あり');
   });
 });

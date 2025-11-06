@@ -5,6 +5,7 @@ import {
   useTrendingPostsQuery,
   type TrendingTopicSummary,
 } from '@/hooks/useTrendingFeeds';
+import { TrendingSummaryPanel } from '@/components/trending/TrendingSummaryPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ export function TrendingPage() {
     isError: topicsIsError,
     error: topicsError,
     refetch: refetchTopics,
+    isFetching: topicsFetching,
   } = useTrendingTopicsQuery();
 
   const topicIds = topicsData?.topics.map((topic) => topic.topicId) ?? [];
@@ -42,6 +44,7 @@ export function TrendingPage() {
     isError: postsIsError,
     error: postsError,
     refetch: refetchPosts,
+    isFetching: postsFetching,
   } = useTrendingPostsQuery(topicIds, 3, { enabled: topicIds.length > 0 });
 
   const topicsWithPosts = useMemo<TopicWithPosts[]>(() => {
@@ -122,6 +125,12 @@ export function TrendingPage() {
   return (
     <div className="container mx-auto px-4 py-8" data-testid="trending-page">
       <div className="max-w-5xl mx-auto space-y-6">
+        <TrendingSummaryPanel
+          topics={topicsData}
+          posts={postsData}
+          isTopicsFetching={topicsFetching}
+          isPostsFetching={postsFetching}
+        />
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold">トレンド</h1>

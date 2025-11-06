@@ -23,8 +23,8 @@
 | サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。`prefetchTrendingCategory`/`prefetchFollowingCategory` によりトレンド/フォロー導線のレスポンスを改善。追加要素（サマリーパネル）を継続検討 |
 | ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher` | 稼働中 | アカウント切替/追加/削除、同期状態表示、オフライン通知を提供 |
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。トピック初期選択とショートカット改善が backlog |
-| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）を利用。`generated_at` はミリ秒エポック要件（Inventory 5.7）。`routes/trending.test.tsx` と Sidebar/Hook テストで Loading/Error/Empty/Prefetch を検証済み。参加ボタンの体験向上と Docker シナリオは backlog |
-| フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Prefetch + Retry 導線は整備済み。`routes/following.test.tsx` でローディング/追加ロード/エラー/終端を確認。Summary Panel と DM 未読表示は backlog |
+| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）。`generated_at` は `topic_handler.rs` / `post_handler.rs` でミリ秒エポックを返却済み。Summary Panel でトレンド件数・プレビュー件数・平均スコア・最終更新を表示。Docker シナリオと `trending_metrics_job` は未実装。 |
+| フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Summary Panel で取得済み投稿数・ユニーク投稿者・最終更新・残ページを表示。Prefetch + Retry 導線と `routes/following.test.tsx` のカバレッジあり。DM 未読バッジは backlog。 |
 | プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は React Query で履歴読み込み・未読リセット・無限スクロールを実装済み。Kind4 IPC 同期とフォロワー無限スクロールのソート/ページネーションは backlog。 |
 
 ### 1.3 トピック関連
@@ -60,7 +60,7 @@
 - **ユーザー検索**: `UserSearchResults` の状態遷移（idle/typing/ready/loading/success/empty/rateLimited/error）と `SearchErrorState` ハンドリング、`query` バリデーション（2〜64文字、制御文字除去、連続スペース正規化）を Inventory 5.8 と `error_handling_guidelines.md` に記録。React Query のデバウンス・AbortController 方針もドキュメント化。
 
 ## 3. 導線ギャップ Quick View
-1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 に残タスクとテスト計画を記載）。2025年11月06日時点でデータ要件とテスト計画を整理済み。`generated_at` をミリ秒エポックへ揃えること、Summary Panel や Docker シナリオの整備を継続。
+1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 参照）。2025年11月06日: Summary Panel を導入し、主要メトリクスを表示できるようになった。次ステップは (a) DM 未読ハイライト → (b) Docker シナリオ → (c) `trending_metrics_job` の順で進める。
 2. `/profile/$userId` はフォロー導線とフォロワーリスト（無限スクロール）を備え、DirectMessageDialog も React Query で履歴読み込み・未読リセット・無限スクロールを実装済み。引き続き Kind4 IPC 連携と会話リスト未読バッジ、フォロワー一覧のソート/ページネーションを Inventory 5.6.1/5.6.2 に沿って進める。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。今後は React Query キャッシュ無効化とバックエンド統合テストのフォローアップが必要。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
@@ -87,7 +87,7 @@
 | B | 鍵管理ダイアログ | 設定>鍵管理ボタンがダミー。バックアップ・復旧手段が提供できていない。 | 端末故障時に復旧不能。運用リスク高。 | `KeyManagementDialog` 実装（エクスポート/インポート）、`export_private_key`/`SecureStorageApi.addAccount` 連携、注意喚起 UI とテスト追加。 |
 | B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
 | B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示できるが、ページネーション・エラー UI・入力バリデーションが未整備。 | 検索結果が多い場合に追跡・再試行が困難で UX が限定的。 | Inventory 5.8 の状態遷移図・入力ガード・`SearchErrorState` 設計に沿って `search_users` コマンド拡張（cursor/sort/limit/レートリミット）と React Query リファクタ、Vitest/Rust/Docker テストを追加。 |
-| B | `/trending` / `/following` フィード | 2025年11月05日: ルート・コマンド実装済み。`list_trending_topics`/`list_following_feed` で稼働中だが、`generated_at` のミリ秒化・Summary Panel・Docker シナリオ・DM 未読バッジが未対応。 | フィード自体は閲覧できるものの、更新時刻表示のずれや周辺メトリクス不足で発見体験が限定的。 | Inventory 5.7 と Phase 5 計画に沿って `generated_at` をミリ秒へ修正、Summary Panel / DM 未読バッジ追加、`trending_metrics_job` 実装と Nightly テスト追加、Docker シナリオを整備。 |
+| B | `/trending` / `/following` フィード | Summary Panel で派生メトリクスを表示できるようになったが、DM 未読ハイライト・Docker シナリオ・`trending_metrics_job` は未実装。 | フィード自体は閲覧できるものの、通知導線とデータ鮮度の監視が不足。 | 5.7 節の順序 (DM 未読 → Docker シナリオ → `trending_metrics_job`) に沿って実装し、各ステップ後にテスト/ドキュメント/CI を更新。 |
 
 > 優先度A: 現行体験に致命的影響があるもの。<br>
 > 優先度B: 早期に手当てしたいが依存タスクがあるもの。<br>

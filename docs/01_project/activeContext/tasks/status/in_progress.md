@@ -53,7 +53,11 @@
   - [ ] ホーム/サイドバーからのトピック作成導線（グローバルコンポーザー連携案）の仕様・依存コマンド・テスト計画をまとめ、Inventory と Summary に追記する。
   - [ ] 投稿削除後の React Query キャッシュ無効化と `delete_post` 統合テスト整備をフォローアップする文書（Inventory・Summary・`phase5_ci_path_audit.md`）を作成し、進捗と整合性を確認する。
   - [ ] DM/フォロワー/プロフィール画像導線のフォローアップ項目に合わせ、`docs/03_implementation/error_handling_guidelines.md`・`phase5_dependency_inventory_template.md`・`tauri_app_implementation_plan.md` の該当節を更新する。
-  - [ ] `phase5_user_flow_summary.md` と `phase5_user_flow_inventory.md` の最終更新日・Quick View・優先度表・ギャップ一覧が上記残タスクと整合するよう再確認し、必要な差分を反映する。
+  - [x] `phase5_user_flow_summary.md` と `phase5_user_flow_inventory.md` の最終更新日・Quick View・優先度表・ギャップ一覧が上記残タスクと整合するよう再確認し、必要な差分を反映する。
+    - 2025年11月06日: `/trending`・`/following` で利用している `generated_at` / `server_time` が `timestamp_millis` で返却されていることをコードベース（`topic_handler.rs` / `post_handler.rs`）で確認し、Inventory 5.7 および Summary の記述を更新。Quick View と優先度表からミリ秒化フォローアップを削除し、未対応項目（Summary Panel・Docker シナリオ・DM 未読ハイライト）のみに絞り込んだ。
+  - [x] Summary Panel / DM 未読ハイライト / Docker シナリオ / `trending_metrics_job` の着手順序とタスク粒度を整理し、5.7 節・Summary・実装計画に反映する。
+    - 2025年11月06日: 5.7 節に「Summary Panel → DM 未読ハイライト → Docker シナリオ → `trending_metrics_job`」の順序と各ステップの前提・テスト計画を追記。Summary Quick View と優先度表に同順序を連動させ、タスク着手時の参照位置を明確化した。
+    - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を実装し、派生メトリクス（件数・平均スコア・最終更新・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` を実行して新UIの挙動を確認。
 - [x] 投稿削除導線（delete_post）実装準備
   - 2025年11月03日: `phase5_user_flow_inventory.md` セクション5.6に UX / バックエンド / テスト仕様を整理。`delete_post` コマンドを活用した削除フローと楽観更新、オフライン再送の方針を定義。
   - 2025年11月03日: `phase5_user_flow_summary.md` 優先度表を更新し、本タスクを Priority A として再掲。`PostCard` に削除メニューと確認ダイアログを追加し、`postStore.deletePostRemote` をオフライン対応込みで接続。関連ユニットテスト（PostCard / postStore）を更新。
