@@ -51,7 +51,7 @@ impl DirectMessageNotifier for IpcDirectMessageNotifier {
                 content: message
                     .decrypted_content
                     .clone()
-                    .unwrap_or_else(String::new),
+                    .unwrap_or_default(),
                 created_at: message.created_at_millis(),
                 delivered: message.delivered,
                 direction: message.direction.as_str(),
