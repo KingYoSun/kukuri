@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月05日
+最終更新日: 2025年11月06日
 
 ## 方針（2025年09月15日 更新）
 
@@ -50,9 +50,12 @@
   - 2025年11月06日: `phase5_user_flow_inventory.md` 5.7節にトレンド/フォロー中のデータ要件（limit/per_topic/cursor/キャッシュ方針）とテスト計画を追記し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job`・Docker シナリオをフォロー項目として明記。`phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md` を同内容に更新し、Quick View / 優先度表 / テストカバレッジを同期。
   - [x] ユーザー検索タブのページネーション／エラー UI／入力バリデーション方針を「ユーザー検索導線改善」節として整理し、`phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md`、`docs/03_implementation/error_handling_guidelines.md` に反映する。
     - 2025年11月06日: Inventory 5.8 に状態遷移図と入力ガード（2〜64文字・制御文字除去・`#`/`@` 補助検索）を追記し、Summary・Phase5計画・エラーハンドリングガイドラインへ `SearchErrorState`/React Query デバウンス方針を同期。`tauri_app_implementation_plan.md` の優先度項目とエラーキー記載を更新。
-  - [ ] ホーム/サイドバーからのトピック作成導線（グローバルコンポーザー連携案）の仕様・依存コマンド・テスト計画をまとめ、Inventory と Summary に追記する。
-  - [ ] 投稿削除後の React Query キャッシュ無効化と `delete_post` 統合テスト整備をフォローアップする文書（Inventory・Summary・`phase5_ci_path_audit.md`）を作成し、進捗と整合性を確認する。
-  - [ ] DM/フォロワー/プロフィール画像導線のフォローアップ項目に合わせ、`docs/03_implementation/error_handling_guidelines.md`・`phase5_dependency_inventory_template.md`・`tauri_app_implementation_plan.md` の該当節を更新する。
+  - [x] ホーム/サイドバーからのトピック作成導線（グローバルコンポーザー連携案）の仕様・依存コマンド・テスト計画をまとめ、Inventory と Summary に追記する。
+    - 2025年11月06日: `phase5_user_flow_inventory.md` 5.9 節を追加し、TopicSelector ショートカット／`createAndJoinTopic` ヘルパー／`OfflineActionType::CREATE_TOPIC`／テスト計画を整理。`phase5_user_flow_summary.md`・`tauri_app_implementation_plan.md`・`phase5_ci_path_audit.md` に同内容を連携。
+  - [x] 投稿削除後の React Query キャッシュ無効化と `delete_post` 統合テスト整備をフォローアップする文書（Inventory・Summary・`phase5_ci_path_audit.md`）を作成し、進捗と整合性を確認する。
+    - 2025年11月06日: Inventory 5.10 に `useDeletePost` ミューテーション／`invalidatePostCaches` 方針／Docker シナリオとテスト計画を追記し、Summary・実装計画・CI 監査の各ドキュメントを更新。`phase5_ci_path_audit.md` に `post-delete-cache` テスト ID を登録。
+  - [x] DM/フォロワー/プロフィール画像導線のフォローアップ項目に合わせ、`docs/03_implementation/error_handling_guidelines.md`・`phase5_dependency_inventory_template.md`・`tauri_app_implementation_plan.md` の該当節を更新する。
+    - 2025年11月06日: エラーハンドリングガイドラインへ `Topic.*` / `Post.*` / `DirectMessage.*` / `ProfileAvatar.upload_failed` キーを追加し、依存棚卸しに `useDeletePost`・`GlobalComposer TopicCreation`・`DirectMessageService`・`ProfileAvatarSync` 行を新設。実装計画 Phase 5 の優先項目へ新タスクを追加。
   - [x] `phase5_user_flow_summary.md` と `phase5_user_flow_inventory.md` の最終更新日・Quick View・優先度表・ギャップ一覧が上記残タスクと整合するよう再確認し、必要な差分を反映する。
     - 2025年11月06日: `/trending`・`/following` で利用している `generated_at` / `server_time` が `timestamp_millis` で返却されていることをコードベース（`topic_handler.rs` / `post_handler.rs`）で確認し、Inventory 5.7 および Summary の記述を更新。Quick View と優先度表からミリ秒化フォローアップを削除し、未対応項目（Summary Panel・Docker シナリオ・DM 未読ハイライト）のみに絞り込んだ。
   - [x] Summary Panel / DM 未読ハイライト / Docker シナリオ / `trending_metrics_job` の着手順序とタスク粒度を整理し、5.7 節・Summary・実装計画に反映する。

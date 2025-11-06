@@ -1,5 +1,5 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年11月04日
+最終更新日: 2025年11月06日
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
@@ -14,6 +14,8 @@
 | `cargo clippy`（Rust Lint） | `kukuri-tauri/src-tauri`: `cargo clippy --workspace --all-features -- -D warnings`<br>`kukuri-cli`: `cargo clippy --workspace --all-features -- -D warnings` | Phase 5 のゲート条件として、Tauri アプリと CLI の双方で Clippy 警告ゼロを維持する。CI では共通ルートに `Cargo.toml` が無いため、各ディレクトリで明示的に呼び出す必要がある。 | 2025年10月31日: 両ディレクトリでコマンドを実行し、警告ゼロで完走することを確認。`lint` 系ジョブでは 2 回の `cargo clippy` を順番に呼ぶ手順を記載した。<br>2025年11月01日: 指示どおり `cargo clippy --all-features -- -D warnings` を kukuri-tauri/src-tauri と kukuri-cli の両方で再実行し、警告ゼロ継続を確認。CI lint ジョブにも kukuri-cli 向け Clippy 実行を追加済み。 |
 | トレンド/フォロー中フィード UI テスト | `pnpm vitest run src/tests/unit/hooks/useTrendingFeeds.test.tsx`（ページテストは後続） | `/trending`・`/following` ルートのランキング表示、無限スクロール、エラー再試行をカバー。Nightly Frontend Unit Tests へ追加する。 | 2025年11月05日: フック層ユニットテストと `docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner test-runner` を完走。ページコンポーネントの導線テストと Nightly ワークフロー組み込みは継続課題。 |
 | ユーザー検索導線テスト | `pnpm vitest run src/tests/unit/components/search/UserSearchResults.test.tsx src/tests/unit/hooks/useUserSearchQuery.test.ts`（新設予定） | `/search` (users) のデバウンス・ページネーション・レート制限ハンドリング。Nightly Frontend Unit Tests に 2025年11月導入予定。 | 2025年11月04日: Inventory 5.8 にテスト観点を追加。Vitest ファイルを作成後、Nightly ワークフローへ追記し、レートリミットケースは `vi.useFakeTimers` で安定化させる。Docker シナリオ `user-search-pagination` を PowerShell スクリプトに追加予定。 |
+| グローバルコンポーザー トピック作成テスト | `pnpm vitest run src/tests/unit/components/posts/GlobalComposer.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx` | グローバルコンポーザーとサイドバーのトピック作成ショートカット（`GlobalComposer.topic-create` / `TopicSelector.create-shortcut`）を検証。Nightly Frontend Unit Tests に組み込む。 | 2025年11月06日: Inventory 5.9 に沿ってテストケースを追加し、PowerShell 版 `test-docker.ps1 ts` にも同ケースを連携。 |
+| 投稿削除キャッシュ整合性テスト | `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.ts src/tests/unit/components/posts/PostCard.test.tsx`<br>`docker compose -f docker-compose.test.yml run --rm test-runner pnpm vitest run --runInBand post-delete-cache` | React Query キャッシュ無効化と Docker シナリオ `post-delete-cache` を通じて `useDeletePost` / `post_delete_flow` の整合性を監視。 | 2025年11月06日: Inventory 5.10 に基づきテスト ID を登録し、Nightly Frontend Unit Tests と Docker ワークフローに含める計画を追加。PowerShell 版 `test-docker.ps1 ts -Scenario post-delete-cache` を新設予定。 |
 
 ## 関連ドキュメント
 - `phase5_user_flow_inventory.md` — UI 導線と Tauri コマンドの棚卸し結果（2025年11月04日更新: ユーザー検索実装状況、`/profile/$userId` 導線、フォロー体験の優先課題を追記）

@@ -185,7 +185,7 @@ try {
 }
 ```
 
-## UIコンポーネント別エラーハンドリングキー（2025年11月04日追加）
+## UIコンポーネント別エラーハンドリングキー（2025年11月06日更新）
 
 | キー | 想定コンポーネント / コンテキスト | 推奨 `toastTitle` | 備考 |
 | --- | --- | --- | --- |
@@ -194,6 +194,13 @@ try {
 | `UserSearch.invalid_query` | `/search` (users) の `UserSearchResults` | `2文字以上入力してください` | クエリ長が足りない場合に表示。入力欄へエラースタイルを適用し、既存結果は保持。 |
 | `UserSearch.fetch_failed` | `UserSearchResults` / `useUserSearchQuery` | `ユーザー検索に失敗しました` | ネットワーク/サーバーエラー時。`context` に `statusCode` を含める。 |
 | `UserSearch.rate_limited` | 同上 | `一定時間後に再試行してください` | `meta.retryAfter`（秒）を UI に表示し、再試行ボタンを無効化。 |
+| `Topic.create_failed` | `TopicFormModal` / `TopicCreationDialog` | `トピックの作成に失敗しました` | Inventory 5.9 参照。モーダル内にインラインエラーを表示し、`metadata` に `formValues` を含める。 |
+| `Topic.join_failed` | `TopicFormModal` / `createAndJoinTopic` | `トピックへの参加に失敗しました` | 新規作成直後の `join_topic` が失敗した場合に発火。`metadata.topicId` を付与し、`OfflineActionType::CREATE_TOPIC` の再送で解消する旨をガイド。 |
+| `Post.delete_failed` | `PostCard` / `useDeletePost` | `投稿の削除に失敗しました` | Inventory 5.10 参照。`metadata` に `postId` / `topicId` を含め、再試行ボタンを削除モーダルに表示。 |
+| `Post.delete_offline_enqueued` | `PostCard` / `useDeletePost` | `削除は接続後に自動で反映されます` | オフラインで `OfflineActionType::DELETE_POST` を保存した際に通知。Toast は情報レベルで表示し、再接続後に自動で閉じる。 |
+| `DirectMessage.send_failed` | `DirectMessageDialog` / `useDirectMessageStore.failOptimisticMessage` | `メッセージの送信に失敗しました` | Kind4 送信失敗時に使用。`metadata.conversationNpub` と `clientMessageId` を記録し、再送ボタンを有効化。 |
+| `DirectMessage.retry_failed` | `DirectMessageDialog` 再送ボタン | `再送に失敗しました` | バックオフ中は再送ボタンを無効化し、`metadata.retryCount` を記録。Inventory 5.6.1 のレート制御計画に合わせる。 |
+| `ProfileAvatar.upload_failed` | `ProfileForm` / `upload_profile_avatar` | `プロフィール画像のアップロードに失敗しました` | Inventory 6 で定義した iroh-blobs / iroh-docs 同期が失敗した際に使用。再試行時はローカルキャッシュをクリアし、`metadata.docVersion` を記録する。 |
 
 > 新しいキーを追加する場合は、`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` の該当節と照合し、命名の一貫性を保つ。
 

@@ -413,7 +413,53 @@
 - **フォローアップ**
   - `phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md` Phase 5 優先度表へ本節をリンク。
   - `docs/03_implementation/error_handling_guidelines.md` に新しいキーとユーザー向けトースト文言を追記。
-  - CI では Nightly Frontend Unit Tests に `UserSearchResults` / `useUserSearchQuery` テストの実行ログを追加し、`phase5_ci_path_audit.md` にテスト ID を記録。
+- CI では Nightly Frontend Unit Tests に `UserSearchResults` / `useUserSearchQuery` テストの実行ログを追加し、`phase5_ci_path_audit.md` にテスト ID を記録。
+
+### 5.9 ホーム/サイドバーからのトピック作成導線（2025年11月06日追加）
+- **目的**: タイムラインやサイドバーから離脱せずに新しいトピックを作成し、そのまま投稿作成へ移行できる導線を提供する。
+- **現状**: トピック作成は `/topics` ルートの `TopicFormModal` に限定され、`GlobalComposer` やサイドバーからはアクセスできない。`TopicSelector` も参加済みトピックのみ表示するため、新規ユーザーは投稿開始前に必ず一覧ページへ遷移する必要がある。
+- **UI 実装案**
+  - `GlobalComposer` 内のトピック行に「新しいトピックを作成」アクションを追加し、押下時に `TopicFormModal` を再利用した `TopicCreationDialog`（mode=`create-from-composer`）を表示する。作成完了後は `useComposerStore` に新しい `applyTopicAndResume(topicId)` を実装して投稿モードへ復帰させる。
+  - `TopicSelector` にショートカット項目（`CommandItem` + `data-testid="create-topic-shortcut"`）を追加し、検索結果が 0 件の場合も同アクションを提示する。キーボード操作（`Ctrl+Enter` / `⌘+Enter`）で作成モーダルを起動できるようアクセラレーターを設定する。
+  - サイドバーの「新規投稿」ボタンは参加トピックが 0 件の場合に作成モーダルを優先表示し、完了後 `openComposer({ topicId: createdTopic.id })` を呼び出す。参加済みの場合は従来どおり投稿モーダルを開く。
+  - トピック作成モーダルに公開設定トグル（公開/非公開）とカテゴリタグ入力を追加し、将来的なフィルタリング要件を見越したフォーム構造へ拡張する。
+- **バックエンド / コマンド**
+  - `TauriApi.createTopic` の成功時に `join_topic` を連続実行する `createAndJoinTopic` ヘルパーを TypeScript 側へ追加し、UI からの二重呼び出しを防ぐ。Rust 側でも `TopicService::create_topic` 内で作成者の自動参加を保証する。
+  - オフライン時に備えて `OfflineActionType::CREATE_TOPIC` を新設し、`TopicFormModal` で楽観的にトピックをストアへ追加→`syncEngine` がオンライン復帰後に `create_topic` / `join_topic` を再送するフローを定義する。
+- **エラーハンドリング / UX**
+  - `errorHandler` に `Topic.create_failed` / `Topic.join_failed` キーを追加し、モーダル内にインラインエラーと再試行ボタンを表示する。成功時は `toast` で「トピックを作成しました」を通知し、直後にコンポーザー本文へフォーカスを戻す。
+  - 作成途中でキャンセルした場合は `TopicFormModal` の入力値をドラフトとして保持し、再度開いた際に復元する。オフライン登録時は「接続後に自動作成されます」とガイダンスを表示する。
+- **テスト計画**
+  - TypeScript: `GlobalComposer.test.tsx` にトピック作成ショートカット → モーダル → 作成完了 → コンポーザー再開のフローを追加。
+  - TypeScript: `TopicSelector.test.tsx` へショートカット項目の描画、検索 0 件時の表示、ショートカットキーのハンドリングを検証するケースを追加。
+  - TypeScript: `Sidebar.test.tsx` / `Home.test.tsx` で参加トピックが 0 件の際に `createAndJoinTopic` が呼ばれることを確認する。
+  - Rust: `tests/integration/topic_create_join.rs`（新規）で `create_topic` → `join_topic` → `list_topics` が一連で成功し、`OfflineActionType::CREATE_TOPIC` の再送が反映されることを検証する。
+- **フォローアップ**
+  - `phase5_user_flow_summary.md` の 1.2 / 1.3 節と Quick View に新規導線を追記。
+  - `tauri_app_implementation_plan.md` Phase 5 優先度へ「Global Composer からのトピック作成」タスクを追加。
+  - `phase5_ci_path_audit.md` に `GlobalComposer.topic-create` / `TopicSelector.create-shortcut` テスト ID を登録し、Nightly Frontend Unit Tests の対象に含める。
+
+### 5.10 投稿削除後の React Query キャッシュ整合性（2025年11月06日追加）
+- **目的**: 投稿削除操作後に全てのフィードで即時に結果を反映し、Zustand ストアと React Query キャッシュの不整合を解消する。
+- **現状**: `postStore.deletePostRemote` は `posts` / `postsByTopic` を更新するが、`useTimelinePosts` / `usePostsByTopic` / `useTrendingPostsQuery` / `useFollowingFeedQuery` のキャッシュを無効化しておらず、削除済み投稿が再表示される。オフライン削除キュー登録時も React Query へ通知されない。
+- **改善案**
+  - `usePosts.ts` に `useDeletePost` ミューテーションを追加し、成功時に `invalidateQueries`（`['timeline']`, `['posts', 'all']`, `['posts', topicId]`）とトピックメトリクスの再取得をトリガーする。`prefetchTrendingCategory` / `prefetchFollowingCategory` が用いるキーもまとめて無効化する。
+  - `useTrendingFeeds.ts` へ `removePostFromTrendingCache` / `removePostFromFollowingCache` ヘルパーを実装し、`QueryClient.setQueryData` で `InfiniteData` から対象投稿を除去する。`PostCard` から呼び出すユーティリティ `invalidatePostCaches(queryClient, post)` を作成する。
+  - オフライン時に `OfflineActionType::DELETE_POST` を保存した直後、`queryClient.invalidateQueries` を呼び出してローカルキャッシュを stale とマークし、同期完了後に `syncEngine` が再度無効化する。`useTopicStore.updateTopicPostCount(post.topicId, -1)` を即時反映してサイドバー統計とトレンドスコアを更新する。
+- **バックエンド / コマンド**
+  - `PostService::delete_post` で `PostCache::remove` を呼び出し、フロントからの再フェッチが削除済み投稿を返さないようにする。
+  - `tests/integration/post_delete_flow.rs`（新規）で `create_post` → `delete_post` → `list_following_feed` / `list_trending_posts` が削除済み投稿を含まないことを検証する。Docker シナリオ `post-delete-cache` を追加し、CI で `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.ts` と連動させる。
+- **エラーハンドリング**
+  - `errorHandler` に `Post.delete_failed` / `Post.delete_offline_enqueued` を追加し、失敗時は「投稿の削除に失敗しました」、オフライン時は「削除は接続後に自動で反映されます」と案内する。
+  - `PostCard` の削除メニュー内で再試行ボタンとバックオフ状態を表示し、エラー詳細は `metadata`（`postId`, `topicId`）に記録する。
+- **テスト計画**
+  - TypeScript: `useDeletePost.test.ts`（新規）でミューテーション成功時の `invalidateQueries` / `setQueryData` 呼び出しとオフライン経路を検証する。
+  - TypeScript: `PostCard.test.tsx` に `useDeletePost` フローとオフラインキュー UI を追加し、`topicStore.updateTopicPostCount` 呼び出しを確認する。
+  - Rust: `tests/integration/post_delete_flow.rs` と `application/tests/post_service_delete.rs` でキャッシュ削除とイベント発行をユニット/統合テストする。
+- **フォローアップ**
+  - `phase5_user_flow_summary.md` のタイムライン行および優先度表へキャッシュ整合性改善計画を追記する。
+  - `phase5_ci_path_audit.md` に `useDeletePost` / `post_delete_flow` テスト ID を追加し、Nightly テストのカバレッジに含める。
+  - `tauri_app_implementation_plan.md` Phase 5 の優先タスクへ「投稿削除キャッシュ整合性」を追加する。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 
