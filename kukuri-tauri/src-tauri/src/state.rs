@@ -49,10 +49,12 @@ use crate::presentation::handlers::{
     event_handler::EventHandler, offline_handler::OfflineHandler, p2p_handler::P2PHandler,
     secure_storage_handler::SecureStorageHandler, user_handler::UserHandler,
 };
+use crate::presentation::ipc::direct_message_notifier::IpcDirectMessageNotifier;
 
+use nostr_sdk::prelude::{Event as NostrEvent, Kind, TagStandard, ToBech32};
 use std::collections::{HashSet as StdHashSet, VecDeque as StdVecDeque};
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, async_runtime};
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 
@@ -262,7 +264,88 @@ impl AppState {
         let direct_message_service = Arc::new(DirectMessageService::new(
             Arc::clone(&repository) as Arc<dyn DirectMessageRepository>,
             Arc::clone(&messaging_gateway),
+            Some(Arc::new(IpcDirectMessageNotifier::new(app_handle))),
         ));
+
+        {
+            let event_manager_for_dm = Arc::clone(&event_manager);
+            let key_manager_for_dm = Arc::clone(&key_manager);
+            let direct_message_service_for_dm = Arc::clone(&direct_message_service);
+
+            event_manager_for_dm
+                .register_event_callback(Arc::new(move |event: NostrEvent| {
+                    if event.kind != Kind::EncryptedDirectMessage {
+                        return;
+                    }
+
+                    let recipient_pubkey =
+                        event
+                            .tags
+                            .iter()
+                            .find_map(|tag| match tag.as_standardized() {
+                                Some(TagStandard::PublicKey { public_key, .. }) => Some(public_key),
+                                _ => None,
+                            });
+
+                    let Some(recipient_pubkey) = recipient_pubkey else {
+                        return;
+                    };
+
+                    let recipient_hex = recipient_pubkey.to_string();
+                    let key_manager = Arc::clone(&key_manager_for_dm);
+                    let dm_service = Arc::clone(&direct_message_service_for_dm);
+                    let event_clone = event.clone();
+
+                    async_runtime::spawn(async move {
+                        let keypair = match key_manager.current_keypair().await {
+                            Ok(pair) => pair,
+                            Err(err) => {
+                                tracing::error!(
+                                    error = %err,
+                                    "Failed to load current keypair for direct message ingestion"
+                                );
+                                return;
+                            }
+                        };
+
+                        if keypair.public_key != recipient_hex {
+                            return;
+                        }
+
+                        let sender_npub = match event_clone.pubkey.to_bech32() {
+                            Ok(value) => value,
+                            Err(err) => {
+                                tracing::error!(
+                                    error = %err,
+                                    "Failed to convert sender pubkey to npub for direct message"
+                                );
+                                return;
+                            }
+                        };
+
+                        let created_at_millis =
+                            (event_clone.created_at.as_u64() as i64).saturating_mul(1000);
+                        if let Err(err) = dm_service
+                            .ingest_incoming_message(
+                                &keypair.npub,
+                                &sender_npub,
+                                &event_clone.content,
+                                Some(event_clone.id.to_string()),
+                                created_at_millis,
+                            )
+                            .await
+                        {
+                            tracing::error!(
+                                error = %err,
+                                sender = sender_npub,
+                                owner = keypair.npub,
+                                "Failed to ingest incoming direct message"
+                            );
+                        }
+                    });
+                }))
+                .await;
+        }
 
         let post_cache: Arc<dyn PostCache> = Arc::new(PostCacheService::new());
         // PostServiceの初期化

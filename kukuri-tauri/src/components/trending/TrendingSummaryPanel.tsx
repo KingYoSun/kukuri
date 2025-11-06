@@ -3,6 +3,7 @@ import { ja } from 'date-fns/locale';
 
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import type { TrendingPostsResult, TrendingTopicsResult } from '@/hooks/useTrendingFeeds';
+import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
 
 interface TrendingSummaryPanelProps {
   topics?: TrendingTopicsResult;
@@ -29,6 +30,8 @@ export function TrendingSummaryPanel({
   isTopicsFetching = false,
   isPostsFetching = false,
 }: TrendingSummaryPanelProps) {
+  const { unreadTotal, latestMessage } = useDirectMessageBadge();
+
   const topicsCount =
     topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
 
@@ -53,9 +56,13 @@ export function TrendingSummaryPanel({
     topics?.generatedAt ?? null,
   );
 
+  const { display: dmDisplay, helper: dmHelper } = formatRelativeTime(
+    latestMessage ? latestMessage.createdAt : null,
+  );
+
   return (
     <section
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
       data-testid="trending-summary-panel"
     >
       <SummaryMetricCard
@@ -85,6 +92,13 @@ export function TrendingSummaryPanel({
         helperText={updatedHelper}
         isLoading={isTopicsFetching && !topics}
         testId="trending-summary-updated"
+      />
+      <SummaryMetricCard
+        label="DM未読"
+        value={`${unreadTotal.toLocaleString()}件`}
+        helperText={dmDisplay ?? dmHelper ?? '受信履歴なし'}
+        isLoading={false}
+        testId="trending-summary-direct-messages"
       />
     </section>
   );

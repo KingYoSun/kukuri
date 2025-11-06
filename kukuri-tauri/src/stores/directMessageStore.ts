@@ -18,6 +18,11 @@ interface SetMessagesOptions {
   replace?: boolean;
 }
 
+interface ReceiveMessageOptions {
+  incrementUnread?: boolean;
+  incrementAmount?: number;
+}
+
 interface DirectMessageStoreState {
   isDialogOpen: boolean;
   activeConversationNpub: string | null;
@@ -46,6 +51,12 @@ interface DirectMessageStoreState {
     messages: DirectMessageModel[],
     options?: SetMessagesOptions,
   ) => void;
+  receiveIncomingMessage: (
+    conversationNpub: string,
+    message: DirectMessageModel,
+    options?: ReceiveMessageOptions,
+  ) => void;
+  removeOptimisticMessage: (conversationNpub: string, clientMessageId: string) => void;
   markConversationAsRead: (conversationNpub: string) => void;
   incrementUnreadCount: (conversationNpub: string, amount?: number) => void;
   reset: () => void;
@@ -185,6 +196,69 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
           ...state.conversations,
           [conversationNpub]: dedupeMessages(next),
         },
+      };
+    }),
+  receiveIncomingMessage: (conversationNpub, message, options = {}) =>
+    set((state) => {
+      const existingMessages = state.conversations[conversationNpub] ?? [];
+      const mergedMessages = dedupeMessages([...existingMessages, message]);
+
+      const nextConversations = {
+        ...state.conversations,
+        [conversationNpub]: mergedMessages,
+      };
+
+      const nextOptimistic = { ...state.optimisticMessages };
+      if (message.clientMessageId) {
+        const queue = nextOptimistic[conversationNpub];
+        if (queue) {
+          const filtered = queue.filter(
+            (item) => item.clientMessageId !== message.clientMessageId,
+          );
+          if (filtered.length > 0) {
+            nextOptimistic[conversationNpub] = filtered;
+          } else {
+            delete nextOptimistic[conversationNpub];
+          }
+        }
+      }
+
+      const nextUnread = { ...state.unreadCounts };
+      const shouldMarkAsRead =
+        state.isDialogOpen && state.activeConversationNpub === conversationNpub;
+
+      if (shouldMarkAsRead) {
+        nextUnread[conversationNpub] = 0;
+      } else if (options.incrementUnread !== false) {
+        nextUnread[conversationNpub] =
+          (nextUnread[conversationNpub] ?? 0) + (options.incrementAmount ?? 1);
+      }
+
+      return {
+        ...state,
+        conversations: nextConversations,
+        optimisticMessages: nextOptimistic,
+        unreadCounts: nextUnread,
+      };
+    }),
+  removeOptimisticMessage: (conversationNpub, clientMessageId) =>
+    set((state) => {
+      const queue = state.optimisticMessages[conversationNpub];
+      if (!queue) {
+        return state;
+      }
+      const filtered = queue.filter(
+        (message) => message.clientMessageId !== clientMessageId,
+      );
+      const nextOptimistic = { ...state.optimisticMessages };
+      if (filtered.length > 0) {
+        nextOptimistic[conversationNpub] = filtered;
+      } else {
+        delete nextOptimistic[conversationNpub];
+      }
+      return {
+        ...state,
+        optimisticMessages: nextOptimistic,
       };
     }),
   markConversationAsRead: (conversationNpub) =>

@@ -4,6 +4,7 @@ import { useTopics, useP2P } from '@/hooks';
 import { useNostrEvents } from '@/hooks/useNostrEvents';
 import { useP2PEventListener } from '@/hooks/useP2PEventListener';
 import { useDataSync } from '@/hooks/useDataSync';
+import { useDirectMessageEvents } from '@/hooks/useDirectMessageEvents';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
@@ -19,6 +20,7 @@ function RootComponent() {
   // グローバルイベントリスナーの設定
   useNostrEvents();
   useP2PEventListener();
+  useDirectMessageEvents();
 
   // データ同期の設定
   useDataSync();

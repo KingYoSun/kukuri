@@ -120,7 +120,7 @@
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
 | --- | --- | --- | --- |
 | `send_direct_message` | `TauriApi.sendDirectMessage` | `DirectMessageDialog`, `useDirectMessageStore` | `/profile/$userId`「メッセージ」ボタン→モーダル。2025年11月04日: `DirectMessageService` / `NostrMessagingGateway` / SQLite リポジトリを実装し、kind4 を暗号化送信できるようになった。UI は Optimistic Update＋トースト通知で成功/失敗を反映し、`queued` フラグで未配信状態も扱う。 |
-| `list_direct_messages` | `TauriApi.listDirectMessages` | （未配線） | `DirectMessageService::list_direct_messages` で暗号化データを復号し、カーソル（`"{created_at}:{event_id}"`）と方向指定をサポート。UI 側の React Query 接続・無限スクロールは未対応で 5.6.2 backlog。 |
+| `list_direct_messages` | `TauriApi.listDirectMessages` | `DirectMessageDialog`, `useDirectMessageStore` | `/profile/$userId` モーダルで履歴ロード・無限スクロールを実装（2025年11月05日）。`{created_at}:{event_id}` カーソルと `direction='backward'` を利用し、`dedupeMessages` でストアと統合。2025年11月06日: Kind4 IPC 経由でリアルタイム受信→未読バッジ更新→ヘッダー/サマリーパネルへの反映を実装し、失敗メッセージの再送 UI を追加。 |
 
 #### Nostr 関連
 | コマンド | ラッパー | 呼び出し元 | UI導線 |
@@ -166,7 +166,6 @@
 | `add_to_sync_queue` | `offlineApi.addToSyncQueue` | 手動キュー投入 | 既存フローから未使用。今後の再索引拡張候補。 |
 | `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
 | `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
-| `list_direct_messages` | `TauriApi.listDirectMessages` | DM 履歴取得 | Tauri サービス／SQLite リポジトリは実装済み。UI からの初期ロード・無限スクロールは未配線（5.6.2 で React Query 接続予定）。 |
 
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
 - 認証 E2E: `import_key`, `get_public_key`
@@ -177,7 +176,7 @@
 1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。
 2. 「トレンド」「フォロー中」カテゴリー用のルーティング／一覧画面を定義するか、未実装である旨を UI 上に表示する。
 3. ユーザー検索のページネーション、検索エラーUI、入力バリデーションを整備し、`search_users` のレート制御を決定する。
-4. `/profile/$userId` のメッセージ導線について、実装済みの `send_direct_message` / `list_direct_messages` を React Query へ接続し、会話履歴ロード・未読更新・フォロワー/フォロー中リストのソート／フィルタリング／ページングを整備する。
+4. `/profile/$userId` のメッセージ導線で既読同期の多端末反映と Docker/contract テストを整備し、フォロワー/フォロー中リストのソート／フィルタリング／ページングを含めてブラッシュアップする。
 5. 投稿削除後の React Query キャッシュ無効化と `delete_post` コマンド統合テストを整備する。
 6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
 7. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
@@ -273,13 +272,13 @@
   - 同日: Rust 側で `direct_message_service` / `messaging_gateway` / SQLite リポジトリを実装し、`TauriApi.sendDirectMessage` から暗号化送信→永続化まで通るよう更新。
   - 2025年11月05日: `DirectMessageDialog` を `useInfiniteQuery(['direct-messages', npub])` と `TauriApi.listDirectMessages` で接続し、初期履歴ロード・IntersectionObserver ベースの無限スクロール・`markConversationAsRead` による未読リセットを実装。`Load more` ボタンとローディング/エラー UI を追加し、ストアの既存会話と React Query の結果を `dedupeMessages` で統合。
 - **残課題**
-  - Kind4 受信イベントを IPC で検知し、`useDirectMessageStore` の未読数と会話一覧をリアルタイムで更新する。会話リスト側の未読バッジ連携も整理が必要。
+  - Kind4 既読状態を他端末と同期する仕組み（delivered/ack 更新・contract テスト）と Docker シナリオを整備する。
   - プロフィール投稿一覧は 50 件固定で pagination 未対応。スクロールロードや日付ソートなどの UX 改善が必要。
   - フォロワー/フォロー中リストに検索・ソートが無く、件数が多い場合の利用性が下がる。
-  - 送信失敗時の再試行 UI、レート制御、バックオフは未整備。`useDirectMessageStore` に再送キューを追加する。
+  - 送信失敗後の自動バックオフやレート制御は未整備。現状は手動の「再送」ボタンのみのため、再送間隔と失敗履歴のコントロールを追加する。
   - Tauri 経由のエラーハンドリングはトースト表示に偏っているため、`errorHandler` のメタデータ拡充とリトライ導線を検討。
-- **対応計画（2025年11月04日）**
-  - Direct Message は 5.6.1 の実装状況を参照。React Query 連携と無限スクロール、未読リセットの挙動を踏まえて今後の IPC 連携を検討する。
+- **対応計画（2025年11月06日更新）**
+  - Direct Message は 5.6.1 の実装状況を参照。Kind4 IPC 実装済みのため、既読同期・Docker シナリオ・contract テストを追加しつつレート制御/バックオフの設計を進める。
   - フォロワー一覧のソート/ページネーションは 5.6.2 に実装計画を記載。API 拡張・フロント実装・テストカバレッジを網羅。
 
 #### 5.6.1 DirectMessage Tauri 実装状況（2025年11月05日更新）
@@ -333,7 +332,7 @@
   - テスト実行: `npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`（2025年11月05日）。カテゴリ状態の同期・プリフェッチ分岐・クエリマッピングをユニットテストで検証。
   - 2025年11月06日: `list_trending_topics` / `list_trending_posts` / `list_following_feed` のデータ仕様と UI/ST テスト要件を整理し、本節ならびに Summary・実装計画へ反映。`topic_handler.rs` / `post_handler.rs` で `Utc::now().timestamp_millis()` を採用していることを確認し、Query キャッシュ境界条件も記録。
   - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を追加し、派生メトリクス（トピック数・プレビュー件数・平均スコア・最終更新・ユニーク投稿者・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` で新UIと集計値のテストを実施。
-- **未実装**: DM 未読ハイライト（IPC + バッジ）、Docker シナリオ（`trending-feed`）、集計ジョブ `trending_metrics_job` の導入と監視整備。
+- **未実装**: Docker シナリオ（`trending-feed`）、集計ジョブ `trending_metrics_job` の導入と監視整備。
 - **データ要件（2025年11月06日更新）**
   - `list_trending_topics` は `TopicService::list_trending_topics`（`topic_service.rs`）が `topics` テーブルの `member_count` と `post_count` を基に `trending_score = post_count * 0.6 + member_count * 0.4` を計算し、`TrendingTopicDto { topic_id, name, description, member_count, post_count, trending_score, rank, score_change }` を `limit` 件返却する。UI 側は `limit=10` をデフォルトとし、`staleTime=60秒` / `refetchInterval=120秒` でキャッシュするため、レスポンスの `generated_at` は **ミリ秒エポック**（`topic_handler.rs` で `Utc::now().timestamp_millis()` を返却済み）となる。フォローアップでは集計ジョブ導入後の値の安定性を監視する。
   - `list_trending_posts` は `ListTrendingPostsRequest { topic_ids, per_topic }` を受け取り、`per_topic` を `1..=20` にクランプ（デフォルト 3）。`TrendingTopicPostsResponse` には `topic_id`・`topic_name`・`relative_rank` と `PostResponse` 配列（`id`/`content`/`author_pubkey`/`author_npub`/`topic_id`/`created_at`(秒)/`likes`/`boosts`/`replies`/`is_synced`）が含まれる。フロントは `mapPostResponseToDomain` で `created_at` を秒→`Date` に変換しつつ Markdown を表示する。
@@ -363,11 +362,10 @@
 - **次の着手順序（2025年11月06日更新）**
   1. ✅ Summary Panel 実装（2025年11月06日完了）  
      - `TrendingSummaryPanel` / `FollowingSummaryPanel` で派生メトリクスを表示し、Vitest で検証済み。  
-  2. **DM 未読ハイライト**  
-     - 目的: フォロー中/トレンド表示中でも未読メッセージを把握できるよう、ヘッダー・Sidebar・Summary Panel に DM 未読数を表示し、リアルタイム更新を実現する。  
-     - フロント: `useDirectMessageStore` の `unreadCounts` を監視する `useDirectMessageBadge` フックを追加。Summary Panel 内に未読数や直近メッセージ誘導ボタンを表示。モーダル非表示時に `incrementUnreadCount` が走るよう、IPC 経由のイベントを購読。  
-     - バックエンド: `direct_message_service` 内で新着受信時に `tauri::AppHandle::emit_all("direct-message:received", payload)` を送出。`MessagingGateway` で受信イベント→DB 永続化後にフロントへ通知する IPC パイプを実装。  
-     - テスト: Rust で IPC イベント送出をモックし、ユニットテストを追加。フロントは Vitest でストア + バッジ表示の状態遷移を検証。  
+  2. ✅ DM 未読ハイライト & Kind4 IPC 対応（2025年11月06日完了）  
+     - `direct_message_service` が Kind4 受信時に `direct-message:received` を emit し、`DirectMessageService::ingest_incoming_message` で暗号化ペイロードを復号→永続化→通知まで一貫処理。  
+     - `DirectMessageDialog` に未読管理・失敗メッセージの再送 UI を追加し、`useDirectMessageEvents` / `useDirectMessageBadge` フックでヘッダーと Trending/Following Summary Panel のバッジ表示を同期。  
+     - Vitest（Dialog/Trending/Following/Header）と `cargo test` で動作を検証。  
   3. **Docker シナリオ `trending-feed` 整備**  
      - 目的: CI / ローカル検証でトレンド・フォロー導線の動作を再現できるよう、docker-compose.test.yml に専用ジョブを追加。  
      - 具体: `test-runner` コンテナでシードデータ投入スクリプト（トピック作成 / 投稿ブースト / フォロー関係）を実行し、Tauri コマンド経由で `list_trending_topics` / `list_following_feed` が安定応答するかを検証。`pnpm vitest run ...trending.test.tsx ...following.test.tsx` をジョブ内で呼び出し、成功/失敗を CI に反映。  

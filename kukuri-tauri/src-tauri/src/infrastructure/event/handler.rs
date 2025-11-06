@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 /// イベントコールバックの型エイリアス
-type EventCallback = Box<dyn Fn(Event) + Send + Sync>;
+type EventCallback = Arc<dyn Fn(Event) + Send + Sync>;
 
 /// Nostrイベントハンドラー
 pub struct EventHandler {
@@ -26,6 +26,11 @@ impl EventHandler {
     /// データベースプールを設定
     pub fn set_connection_pool(&mut self, pool: ConnectionPool) {
         self.connection_pool = Some(pool);
+    }
+
+    pub async fn register_callback(&self, callback: EventCallback) {
+        let mut callbacks = self.event_callbacks.write().await;
+        callbacks.push(callback);
     }
 
     /// イベントを処理

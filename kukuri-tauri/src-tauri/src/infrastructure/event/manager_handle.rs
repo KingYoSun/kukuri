@@ -36,6 +36,7 @@ pub trait EventManagerHandle: Send + Sync {
     async fn get_public_key(&self) -> Option<PublicKey>;
     async fn subscribe_to_topic(&self, topic_id: &str, since: Option<Timestamp>) -> Result<()>;
     async fn subscribe_to_user(&self, pubkey: PublicKey, since: Option<Timestamp>) -> Result<()>;
+    async fn register_event_callback(&self, callback: Arc<dyn Fn(NostrEvent) + Send + Sync>);
 }
 
 #[derive(Clone)]
@@ -158,5 +159,9 @@ impl EventManagerHandle for LegacyEventManagerHandle {
 
     async fn subscribe_to_user(&self, pubkey: PublicKey, since: Option<Timestamp>) -> Result<()> {
         self.inner.subscribe_to_user(pubkey, since).await
+    }
+
+    async fn register_event_callback(&self, callback: Arc<dyn Fn(NostrEvent) + Send + Sync>) {
+        self.inner.register_event_callback(callback).await;
     }
 }

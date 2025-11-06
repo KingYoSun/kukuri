@@ -41,6 +41,9 @@ describe('Header', () => {
     const menuButton = screen.getByRole('button', { name: /メニュー切り替え/i });
     expect(menuButton).toBeInTheDocument();
 
+    const dmButton = screen.getByRole('button', { name: /ダイレクトメッセージ/i });
+    expect(dmButton).toBeInTheDocument();
+
     // 通知ボタンが存在すること
     const notificationButton = screen.getByRole('button', { name: /通知/i });
     expect(notificationButton).toBeInTheDocument();

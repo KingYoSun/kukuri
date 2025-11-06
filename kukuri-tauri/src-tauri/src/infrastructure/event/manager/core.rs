@@ -83,6 +83,10 @@ impl EventManager {
         self.default_topics.list().await
     }
 
+    pub async fn register_event_callback(&self, callback: Arc<dyn Fn(Event) + Send + Sync>) {
+        self.event_handler.register_callback(callback).await;
+    }
+
     /// KeyManagerからの秘密鍵でマネージャーを初期化
     pub async fn initialize_with_key_manager(
         &self,

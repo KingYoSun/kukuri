@@ -297,5 +297,6 @@ describe('TrendingPage', () => {
     expect(screen.getByTestId('trending-summary-posts')).toHaveTextContent('2件');
     expect(screen.getByTestId('trending-summary-score')).toHaveTextContent('70.0pt');
     expect(screen.getByTestId('trending-summary-updated')).toBeInTheDocument();
+    expect(screen.getByTestId('trending-summary-direct-messages')).toHaveTextContent('0件');
   });
 });

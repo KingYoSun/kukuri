@@ -53,6 +53,7 @@ export function DirectMessageDialog() {
     failOptimisticMessage,
     setMessages,
     markConversationAsRead,
+    removeOptimisticMessage,
   } = useDirectMessageStore((state) => ({
     isDialogOpen: state.isDialogOpen,
     activeConversationNpub: state.activeConversationNpub,
@@ -68,6 +69,7 @@ export function DirectMessageDialog() {
     failOptimisticMessage: state.failOptimisticMessage,
     setMessages: state.setMessages,
     markConversationAsRead: state.markConversationAsRead,
+    removeOptimisticMessage: state.removeOptimisticMessage,
   }));
 
   const scrollAreaWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -228,63 +230,94 @@ export function DirectMessageDialog() {
     hasLoadedAtLeastOnePage && Boolean(hasNextPage) && !isFetchingNextPage;
   const showTopSpinner = hasLoadedAtLeastOnePage && isFetchingNextPage;
 
-  const handleSend = useCallback(async () => {
-    if (!activeConversationNpub || !currentUser) {
-      toast.error('メッセージを送信するにはログインが必要です。');
-      return;
-    }
-    const trimmed = messageDraft.trim();
-    if (!trimmed) {
-      return;
-    }
+  const sendMessage = useCallback(
+    async (
+      rawContent: string,
+      options: { retryingClientId?: string; preserveDraft?: boolean } = {},
+    ) => {
+      if (!activeConversationNpub || !currentUser) {
+        toast.error('メッセージを送信するにはログインが必要です。');
+        return;
+      }
 
-    const clientMessageId =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : fallbackMessageId();
+      const trimmed = rawContent.trim();
+      if (!trimmed || isSending) {
+        return;
+      }
 
-    const optimistic: DirectMessageModel = {
-      eventId: null,
-      clientMessageId,
-      senderNpub: currentUser.npub,
-      recipientNpub: activeConversationNpub,
-      content: trimmed,
-      createdAt: Date.now(),
-      status: 'pending',
-    };
+      if (options.retryingClientId) {
+        removeOptimisticMessage(activeConversationNpub, options.retryingClientId);
+      }
 
-    appendOptimisticMessage(activeConversationNpub, optimistic);
-    setDraft('');
-    setIsSending(true);
+      const clientMessageId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : fallbackMessageId();
 
-    try {
-      const response = await TauriApi.sendDirectMessage({
+      const optimistic: DirectMessageModel = {
+        eventId: null,
+        clientMessageId,
+        senderNpub: currentUser.npub,
         recipientNpub: activeConversationNpub,
         content: trimmed,
-        clientMessageId,
-      });
-      resolveOptimisticMessage(activeConversationNpub, clientMessageId, response?.eventId ?? null);
-      toast.success('メッセージを送信しました。');
-    } catch (error) {
-      failOptimisticMessage(activeConversationNpub, clientMessageId, error);
-      toast.error('メッセージの送信に失敗しました。');
-      errorHandler.log('DirectMessageDialog.sendFailed', error, {
-        context: 'DirectMessageDialog.handleSend',
-        metadata: { recipient: activeConversationNpub, clientMessageId },
-      });
-    } finally {
-      setIsSending(false);
-    }
-  }, [
-    activeConversationNpub,
-    appendOptimisticMessage,
-    currentUser,
-    failOptimisticMessage,
-    messageDraft,
-    resolveOptimisticMessage,
-    setDraft,
-    setIsSending,
-  ]);
+        createdAt: Date.now(),
+        status: 'pending',
+      };
+
+      appendOptimisticMessage(activeConversationNpub, optimistic);
+      if (!options.preserveDraft) {
+        setDraft('');
+      }
+      setIsSending(true);
+
+      try {
+        const response = await TauriApi.sendDirectMessage({
+          recipientNpub: activeConversationNpub,
+          content: trimmed,
+          clientMessageId,
+        });
+        resolveOptimisticMessage(
+          activeConversationNpub,
+          clientMessageId,
+          response?.eventId ?? null,
+        );
+        toast.success('メッセージを送信しました。');
+      } catch (error) {
+        failOptimisticMessage(activeConversationNpub, clientMessageId, error);
+        toast.error('メッセージの送信に失敗しました。');
+        errorHandler.log('DirectMessageDialog.sendFailed', error, {
+          context: options.retryingClientId
+            ? 'DirectMessageDialog.retrySend'
+            : 'DirectMessageDialog.handleSend',
+          metadata: { recipient: activeConversationNpub, clientMessageId },
+        });
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [
+      activeConversationNpub,
+      appendOptimisticMessage,
+      currentUser,
+      failOptimisticMessage,
+      isSending,
+      removeOptimisticMessage,
+      resolveOptimisticMessage,
+      setDraft,
+      setIsSending,
+    ],
+  );
+
+  const handleSend = useCallback(async () => {
+    await sendMessage(messageDraft);
+  }, [messageDraft, sendMessage]);
+
+  const handleRetry = useCallback(
+    async (target: DirectMessageModel) => {
+      await sendMessage(target.content, { retryingClientId: target.clientMessageId, preserveDraft: true });
+    },
+    [sendMessage],
+  );
 
   if (!isDialogOpen || !activeConversationNpub) {
     return null;
@@ -379,6 +412,18 @@ export function DirectMessageDialog() {
                             ? ' ・送信失敗'
                             : ''}
                       </span>
+                      {isSelf && message.status === 'failed' && (
+                        <Button
+                          size="sm"
+                          variant="link"
+                          className="h-auto px-0 text-xs"
+                          onClick={() => {
+                            void handleRetry(message);
+                          }}
+                        >
+                          再送
+                        </Button>
+                      )}
                     </div>
                   );
                 })

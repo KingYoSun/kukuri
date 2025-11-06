@@ -4,6 +4,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import type { FollowingFeedPageResult } from '@/hooks/useTrendingFeeds';
+import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
 
 interface FollowingSummaryPanelProps {
   data?: InfiniteData<FollowingFeedPageResult>;
@@ -30,6 +31,8 @@ export function FollowingSummaryPanel({
   isFetching = false,
   hasNextPage = false,
 }: FollowingSummaryPanelProps) {
+  const { unreadTotal, latestMessage } = useDirectMessageBadge();
+
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
   const postsCount =
     posts.length > 0 || data ? `${posts.length.toLocaleString()}件` : null;
@@ -54,9 +57,13 @@ export function FollowingSummaryPanel({
 
   const showLoadingState = (condition: boolean) => (isLoading || isFetching) && condition;
 
+  const { display: dmDisplay, helper: dmHelper } = formatRelativeTime(
+    latestMessage ? latestMessage.createdAt : null,
+  );
+
   return (
     <section
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
       data-testid="following-summary-panel"
     >
       <SummaryMetricCard
@@ -86,6 +93,13 @@ export function FollowingSummaryPanel({
         isLoading={isFetching && !data}
         helperText="追加ロードの必要有無"
         testId="following-summary-remaining"
+      />
+      <SummaryMetricCard
+        label="DM未読"
+        value={`${unreadTotal.toLocaleString()}件`}
+        helperText={dmDisplay ?? dmHelper ?? '受信履歴なし'}
+        isLoading={false}
+        testId="following-summary-direct-messages"
       />
     </section>
   );

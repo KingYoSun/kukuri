@@ -201,5 +201,6 @@ describe('FollowingPage', () => {
     expect(screen.getByTestId('following-summary-posts')).toHaveTextContent('2件');
     expect(screen.getByTestId('following-summary-authors')).toHaveTextContent('2人');
     expect(screen.getByTestId('following-summary-remaining')).toHaveTextContent('あり');
+    expect(screen.getByTestId('following-summary-direct-messages')).toHaveTextContent('0件');
   });
 });

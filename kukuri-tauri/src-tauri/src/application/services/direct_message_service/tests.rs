@@ -1,6 +1,7 @@
 use super::*;
-use crate::application::ports::repositories::{
-    DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw,
+use crate::application::ports::{
+    direct_message_notifier::DirectMessageNotifier,
+    repositories::{DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw},
 };
 use async_trait::async_trait;
 use mockall::mock;
@@ -63,6 +64,19 @@ mock! {
     }
 }
 
+mock! {
+    pub Notifier {}
+
+    #[async_trait]
+    impl DirectMessageNotifier for Notifier {
+        async fn notify(
+            &self,
+            owner_npub: &str,
+            message: &DirectMessage,
+        ) -> Result<(), AppError>;
+    }
+}
+
 #[tokio::test]
 async fn send_direct_message_success() {
     let mut repo = MockRepo::new();
@@ -104,7 +118,7 @@ async fn send_direct_message_success() {
 
     let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
     let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
-    let service = DirectMessageService::new(repo, gateway);
+    let service = DirectMessageService::new(repo, gateway, None);
 
     let result = service
         .send_direct_message(
@@ -154,7 +168,7 @@ async fn list_direct_messages_decrypts_payloads() {
 
     let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
     let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
-    let service = DirectMessageService::new(repo, gateway);
+    let service = DirectMessageService::new(repo, gateway, None);
 
     let page = service
         .list_direct_messages(
@@ -183,7 +197,105 @@ async fn send_direct_message_rejects_empty_content() {
 
     let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
     let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
-    let service = DirectMessageService::new(repo, gateway);
+    let service = DirectMessageService::new(repo, gateway, None);
+
+    #[tokio::test]
+    async fn ingest_incoming_message_stores_and_notifies() {
+        let mut repo = MockRepo::new();
+        repo.expect_insert_direct_message()
+            .times(1)
+            .withf(|message| {
+                message.owner_npub == "npub_owner"
+                    && message.conversation_npub == "npub_sender"
+                    && message.direction == MessageDirection::Inbound
+                    && message.delivered
+            })
+            .returning(|message| {
+                Ok(DirectMessage::new(
+                    1,
+                    message.owner_npub.clone(),
+                    message.conversation_npub.clone(),
+                    message.sender_npub.clone(),
+                    message.recipient_npub.clone(),
+                    message.event_id.clone(),
+                    message.client_message_id.clone(),
+                    message.payload_cipher_base64.clone(),
+                    message.created_at.timestamp_millis(),
+                    message.delivered,
+                    message.direction,
+                ))
+            });
+
+        let mut gateway = MockGateway::new();
+        gateway
+            .expect_decrypt_with_counterparty()
+            .times(1)
+            .returning(|_, _, _| Ok("hello inbound".to_string()));
+
+        let mut notifier = MockNotifier::new();
+        notifier
+            .expect_notify()
+            .times(1)
+            .withf(|owner, message| {
+                owner == "npub_owner"
+                    && message.conversation_npub == "npub_sender"
+                    && message.direction == MessageDirection::Inbound
+            })
+            .return_once(|_, _| Ok(()));
+
+        let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
+        let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
+        let notifier: Arc<dyn DirectMessageNotifier> = Arc::new(notifier);
+        let service = DirectMessageService::new(repo, gateway, Some(notifier));
+
+        let stored = service
+            .ingest_incoming_message(
+                "npub_owner",
+                "npub_sender",
+                "ciphertext",
+                Some("event1".to_string()),
+                1_730_000_000_000,
+            )
+            .await
+            .expect("ingest succeeds");
+
+        let message = stored.expect("message stored");
+        assert_eq!(message.decrypted_content.as_deref(), Some("hello inbound"));
+        assert_eq!(message.direction, MessageDirection::Inbound);
+    }
+
+    #[tokio::test]
+    async fn ingest_incoming_message_ignores_duplicates() {
+        let mut repo = MockRepo::new();
+        repo.expect_insert_direct_message().times(1).returning(|_| {
+            Err(AppError::Database(
+                "UNIQUE constraint failed: direct_messages.owner_npub, event_id".to_string(),
+            ))
+        });
+
+        let mut gateway = MockGateway::new();
+        gateway
+            .expect_decrypt_with_counterparty()
+            .times(1)
+            .returning(|_, _, _| Ok("ignored".to_string()));
+
+        let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
+        let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
+        let service = DirectMessageService::new(repo, gateway, None);
+
+        let result = service
+            .ingest_incoming_message(
+                "npub_owner",
+                "npub_sender",
+                "cipher",
+                Some("evt".into()),
+                10,
+            )
+            .await
+            .expect("duplicate ignored");
+
+        assert!(result.is_none());
+    }
 
     let error = service
         .send_direct_message("npub_owner", "npub_partner", "   ", None)

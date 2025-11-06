@@ -1,17 +1,21 @@
-use crate::application::ports::messaging_gateway::MessagingGateway;
 #[cfg(test)]
 use crate::application::ports::messaging_gateway::MessagingSendResult;
 use crate::application::ports::repositories::{
     DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw, DirectMessageRepository,
 };
+use crate::application::ports::{
+    direct_message_notifier::DirectMessageNotifier, messaging_gateway::MessagingGateway,
+};
 use crate::domain::entities::{DirectMessage, MessageDirection, NewDirectMessage};
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{DateTime, TimeZone, Utc};
 use std::sync::Arc;
+use tracing::{debug, error};
 
 pub struct DirectMessageService {
     repository: Arc<dyn DirectMessageRepository>,
     messaging_gateway: Arc<dyn MessagingGateway>,
+    notifier: Option<Arc<dyn DirectMessageNotifier>>,
 }
 
 #[derive(Debug)]
@@ -48,10 +52,12 @@ impl DirectMessageService {
     pub fn new(
         repository: Arc<dyn DirectMessageRepository>,
         messaging_gateway: Arc<dyn MessagingGateway>,
+        notifier: Option<Arc<dyn DirectMessageNotifier>>,
     ) -> Self {
         Self {
             repository,
             messaging_gateway,
+            notifier,
         }
     }
 
@@ -101,6 +107,8 @@ impl DirectMessageService {
             .await?
             .with_decrypted_content(trimmed.to_string());
 
+        self.dispatch_notification(owner_npub, &stored).await;
+
         Ok(SendDirectMessageResult {
             event_id: messaging_result.event_id,
             queued: !messaging_result.delivered,
@@ -149,6 +157,68 @@ impl DirectMessageService {
             has_more: raw_page.has_more,
         })
     }
+
+    pub async fn ingest_incoming_message(
+        &self,
+        owner_npub: &str,
+        sender_npub: &str,
+        ciphertext: &str,
+        event_id: Option<String>,
+        created_at_millis: i64,
+    ) -> Result<Option<DirectMessage>, AppError> {
+        let plaintext = self
+            .messaging_gateway
+            .decrypt_with_counterparty(owner_npub, sender_npub, ciphertext)
+            .await?;
+
+        let created_at =
+            millis_to_datetime(created_at_millis).unwrap_or_else(|| chrono::Utc::now());
+
+        let new_message = NewDirectMessage {
+            owner_npub: owner_npub.to_string(),
+            conversation_npub: sender_npub.to_string(),
+            sender_npub: sender_npub.to_string(),
+            recipient_npub: owner_npub.to_string(),
+            event_id: event_id.clone(),
+            client_message_id: None,
+            payload_cipher_base64: ciphertext.to_string(),
+            created_at,
+            delivered: true,
+            direction: MessageDirection::Inbound,
+        };
+
+        match self.repository.insert_direct_message(&new_message).await {
+            Ok(record) => {
+                let stored = record.with_decrypted_content(plaintext);
+                self.dispatch_notification(owner_npub, &stored).await;
+                Ok(Some(stored))
+            }
+            Err(err) => {
+                if is_unique_violation(&err) {
+                    debug!(
+                        event_id = event_id.as_deref().unwrap_or(""),
+                        owner_npub, "Duplicate direct message detected; skipping insertion"
+                    );
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    async fn dispatch_notification(&self, owner_npub: &str, message: &DirectMessage) {
+        if let Some(notifier) = &self.notifier {
+            if let Err(err) = notifier.notify(owner_npub, message).await {
+                error!(
+                    error = %err,
+                    owner_npub,
+                    conversation = message.conversation_npub,
+                    "Failed to emit direct message notification"
+                );
+            }
+        }
+    }
 }
 
 fn parse_cursor(cursor: Option<&str>) -> Result<Option<DirectMessageCursor>, AppError> {
@@ -167,6 +237,18 @@ fn parse_cursor(cursor: Option<&str>) -> Result<Option<DirectMessageCursor>, App
 
 fn millis_to_datetime(millis: i64) -> Option<DateTime<Utc>> {
     Utc.timestamp_millis_opt(millis).single()
+}
+
+fn is_unique_violation(error: &AppError) -> bool {
+    match error {
+        AppError::Database(message) => {
+            message.contains("UNIQUE constraint failed: direct_messages.owner_npub, event_id")
+                || message.contains(
+                    "UNIQUE constraint failed: direct_messages.owner_npub, client_message_id",
+                )
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

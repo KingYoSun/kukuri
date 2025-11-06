@@ -79,6 +79,8 @@
   - 2025年11月03日: `phase5_ci_path_audit.md` に Relay/P2P ステータスカードのユニットテスト計画と `profileAvatarSync` 統合テスト計画を追記。`tauri_app_implementation_plan.md` へステータスカード検証・鍵管理モーダル・プロフィール画像リモート同期を Phase 5 優先度として追加。
   - 2025年11月04日: `phase5_ci_path_audit.md` の最終更新日と関連ドキュメント欄を更新し、ユーザー検索/プロフィール導線の差分反映と整合性を確認。追加で「追加予定のテスト」節を起票し、ProfilePage フォロー導線・DirectMessageDialog・フォロワー無限スクロールのテスト計画を記録。
   - 2025年11月05日: `Sidebar` のカテゴリー状態管理とクエリプリフェッチを実装し、`phase5_user_flow_inventory.md`（5.7節）と `phase5_user_flow_summary.md` のトレンド/フォロー導線を更新。`npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx` を実行してカテゴリ同期とプリフェッチの回帰を確認。
+  - 2025年11月06日: Kind4 IPC で DM 受信→永続化→通知まで一貫処理を追加し、`useDirectMessageEvents` / `useDirectMessageBadge` を導入。ヘッダーと Trending/Following Summary Panel に未読バッジを表示、`DirectMessageDialog` に送信失敗時の再送ボタンを実装。`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx` と `cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を実行し、導線ドキュメント（inventory/summary）を更新。
+  - 2025年11月06日: ダイレクトメッセージ履歴導線の現状を `phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` に反映し、`list_direct_messages` を UI 接続済みとして整理。未使用コマンド表を更新し、Quick View/次アクションを DM 未読バッジ・送信再試行・IPC 連携のフォローアップへ書き換え。
 
 ### プロフィールアバター UI 連携
 
