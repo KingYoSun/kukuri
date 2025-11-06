@@ -1,5 +1,5 @@
 ﻿import { useMemo, useCallback, useEffect, useRef } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -115,7 +115,7 @@ export function DirectMessageDialog() {
   const directMessagesQuery = useInfiniteQuery<
     DirectMessagePage,
     Error,
-    DirectMessagePage,
+    InfiniteData<DirectMessagePage, string | null>,
     ['direct-messages', string],
     string | null
   >({

@@ -177,11 +177,7 @@ mod tests {
             Ok(())
         }
 
-        async fn register_event_callback(
-            &self,
-            _: Arc<dyn Fn(NostrEvent) + Send + Sync>,
-        ) {
-        }
+        async fn register_event_callback(&self, _: Arc<dyn Fn(NostrEvent) + Send + Sync>) {}
     }
 
     fn sample_nostr_event_id(ch: char) -> NostrEventId {

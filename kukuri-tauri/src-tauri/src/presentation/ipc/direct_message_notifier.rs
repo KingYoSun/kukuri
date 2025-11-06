@@ -48,10 +48,7 @@ impl DirectMessageNotifier for IpcDirectMessageNotifier {
                 client_message_id: message.client_message_id.clone(),
                 sender_npub: message.sender_npub.clone(),
                 recipient_npub: message.recipient_npub.clone(),
-                content: message
-                    .decrypted_content
-                    .clone()
-                    .unwrap_or_default(),
+                content: message.decrypted_content.clone().unwrap_or_default(),
                 created_at: message.created_at_millis(),
                 delivered: message.delivered,
                 direction: message.direction.as_str(),

@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月06日
+最終更新日: 2025年11月07日
 
 ## 方針（2025年09月15日 更新）
 
@@ -10,6 +10,13 @@
 - テスト戦略: Tauri v2 では E2E が困難なため、層別テスト（ユニット/結合/契約）＋スモーク最小限に切替。
 
 ## 現在のタスク
+
+### GitHub Actions ワークフロー失敗調査
+
+- [ ] `Test` ワークフローの失敗要因を切り分け、ローカルで再現・修正・再検証する
+  - 2025年11月07日: `gh run view 19134966693 --log` で `native-test-linux` の TypeScript 型エラーと `format-check` の Rust フォーマッタ失敗を特定。`DirectMessageStore` 初期状態の Omit 漏れと `DirectMessageDialog` の `useInfiniteQuery` ジェネリクス設定ミスを修正し、`cargo fmt` で Rust 側の差分を整形。
+  - 2025年11月07日: `npx vitest run` / `npx tsc --noEmit` / `npx eslint …` に加え、`cargo test`・`cargo clippy --all-features -- -D warnings`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を再実行してローカル環境での回帰を確認。
+  - 2025年11月07日: `gh act push -j native-test-linux -W .github/workflows/test.yml` を実行し、`Test/Native Test (Linux)` ジョブが `Job succeeded` となることをログ (`act-native-ps.log`) で確認。
 
 ### Clippy 警告ゼロ体制の復帰
 

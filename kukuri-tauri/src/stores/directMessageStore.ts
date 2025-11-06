@@ -79,6 +79,8 @@ const createInitialState = (): Omit<
   | 'resolveOptimisticMessage'
   | 'failOptimisticMessage'
   | 'setMessages'
+  | 'receiveIncomingMessage'
+  | 'removeOptimisticMessage'
   | 'markConversationAsRead'
   | 'incrementUnreadCount'
   | 'reset'

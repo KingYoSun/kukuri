@@ -171,8 +171,7 @@ impl DirectMessageService {
             .decrypt_with_counterparty(owner_npub, sender_npub, ciphertext)
             .await?;
 
-        let created_at =
-            millis_to_datetime(created_at_millis).unwrap_or_else(chrono::Utc::now);
+        let created_at = millis_to_datetime(created_at_millis).unwrap_or_else(chrono::Utc::now);
 
         let new_message = NewDirectMessage {
             owner_npub: owner_npub.to_string(),
