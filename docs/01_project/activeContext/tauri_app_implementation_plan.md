@@ -446,7 +446,7 @@ export function PeerConnectionPanel() {
 - 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata`・`update_sync_status` を自動更新。`SyncStatusIndicator` の最終同期時刻がバックエンドのスナップショットに追従することを確認。
 
 ### Phase 5 優先度更新（2025年11月03日）
-- 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。2025年11月03日はステータス監視カードとプロフィール編集モーダルの反映手順を整理し、未実装の画像アップロード・鍵管理・未接続コマンド対応をバックログに追加。2025年11月06日はトレンド/フォロー導線のデータ要件・テスト計画を Inventory/Summary/CI 計画に反映し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job` をフォロータスクとして明示。QA/バックエンド連携は引き続き課題。
+- 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。2025年11月03日はステータス監視カードとプロフィール編集モーダルの反映手順を整理し、未実装の画像アップロード・鍵管理・未接続コマンド対応をバックログに追加。2025年11月06日はトレンド/フォロー導線のデータ要件・テスト計画を Inventory/Summary/CI 計画に反映し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job` をフォロータスクとして明示。2025年11月07日は Docker シナリオ `trending-feed` の実行要件と Nightly / スクリプト統合方針を整理し、`docs/03_implementation/trending_metrics_job.md` に集計ジョブの実装・監視ドラフトを作成。QA/バックエンド連携は引き続き課題。
 1. 投稿導線統一: `Sidebar`「新規投稿」ボタン → グローバルコンポーザー起動（`useComposerStore` 新設）に加え、TopicSelector の「新しいトピックを作成」ショートカットと `TopicFormModal` mode=`create-from-composer` を実装し、`createAndJoinTopic` で作成直後に投稿へ遷移する UX を整備。
 2. プロフィール編集再利用: `ProfileSetup` 共通化と設定画面モーダル導線の実装。
 3. プライバシー設定反映: `usePrivacySettingsStore` でトグル状態を管理し、将来のバックエンド連携を見据えて永続化。

@@ -60,7 +60,7 @@
 - **ユーザー検索**: `UserSearchResults` の状態遷移（idle/typing/ready/loading/success/empty/rateLimited/error）と `SearchErrorState` ハンドリング、`query` バリデーション（2〜64文字、制御文字除去、連続スペース正規化）を Inventory 5.8 と `error_handling_guidelines.md` に記録。React Query のデバウンス・AbortController 方針もドキュメント化。
 
 ## 3. 導線ギャップ Quick View
-1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 参照）。2025年11月06日: Summary Panel と DM 未読カードを導入済み。次ステップは (a) Docker シナリオ → (b) `trending_metrics_job` の順で進める。
+1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 参照）。2025年11月06日: Summary Panel と DM 未読カードを導入済み。2025年11月07日: 手動 QA で `formatDistanceToNow` のミリ秒入力、無限スクロール境界、未読バッジ連携を確認し、サマリー指標とテストリンクを更新。次ステップは (a) Docker シナリオ → (b) `trending_metrics_job` の順で進める。
 2. `/profile/$userId` はフォロー導線とフォロワー/フォロー一覧（ソート・検索・件数表示）を備え、DirectMessageDialog も Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。引き続き 既読同期の多端末共有とページング拡張を Inventory 5.6.1/5.6.2 に沿って進める。
 3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。Inventory 5.10 で React Query キャッシュ無効化・Docker シナリオ・統合テストのフォローアップを整理済み。
 4. 設定 > 鍵管理ボタンがバックエンドと未接続。
@@ -71,13 +71,14 @@
 ## 4. テストカバレッジ概要
 - フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx`。
 - Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で P2P ステータスおよびプロフィール同期を検証。
-- Docker: `./scripts/test-docker.sh p2p`・`./scripts/test-docker.ps1 rust` で Gossip/Mainline スモークを再現。
+- Docker: `./scripts/test-docker.sh p2p`・`./scripts/test-docker.ps1 rust` で Gossip/Mainline スモークを再現。`./scripts/test-docker.sh ts --scenario trending-feed` / `.\scripts\test-docker.ps1 ts -Scenario trending-feed` でトレンド/フォロー導線の Vitest を Docker 上で実行（フィクスチャは `tests/fixtures/trending/default.json`）。
 
 ## 5. 関連資料
 - `phase5_user_flow_inventory.md` — 詳細な導線/コマンド対応表・設計メモ。
 - `tauri_app_implementation_plan.md` Phase 5 — 導線改善タスクとスケジュール。
 - `phase5_ci_path_audit.md` — 関連テストと CI パスの依存関係。
 - `refactoring_plan_2025-08-08_v3.md` 2.5 節 — 導線指標と未対応項目チェックリスト。
+- `docs/03_implementation/trending_metrics_job.md` — トレンドメトリクス集計ジョブの設計案と監視手順ドラフト。
 
 ## 6. 未実装項目の優先度見直し（2025年11月05日）
 

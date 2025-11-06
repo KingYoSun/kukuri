@@ -1,7 +1,7 @@
 # Docker環境でのテスト実行ガイド
 
 **作成日**: 2025年08月05日
-**最終更新**: 2025年10月31日
+**最終更新**: 2025年11月07日
 
 ## 概要
 
@@ -51,6 +51,7 @@ Windows では DLL 依存の問題を避けるため `scripts/test-docker.ps1` �
 .\scripts\test-docker.ps1 rust        # Rust テストのみ
 .\scripts\test-docker.ps1 integration # P2P 統合テスト
 .\scripts\test-docker.ps1 ts          # TypeScript テスト
+.\scripts\test-docker.ps1 ts -Scenario trending-feed # トレンド/フォロー導線の Vitest シナリオ（Docker）
 .\scripts\test-docker.ps1 lint        # Lint / format チェック
 .\scripts\test-docker.ps1 build       # テスト用イメージの再ビルド
 .\scripts\test-docker.ps1 clean       # コンテナとネットワークの削除
@@ -77,6 +78,9 @@ docker compose -f docker-compose.test.yml up --build --exit-code-from test-runne
 # フルスイート（従来どおりの全テスト）
 docker compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh
 
+# トレンド/フォロー導線（trending-feed シナリオ）のみ実行
+./scripts/test-docker.sh ts --scenario trending-feed
+
 # 個別のサービスを実行
 docker compose -f docker-compose.test.yml run --rm rust-test
 docker compose -f docker-compose.test.yml run --rm ts-test
@@ -97,6 +101,15 @@ P2P統合テスト用に追加された `p2p` サブコマンドでは次のオ�
 `p2p` サブコマンドは PowerShell 版 `integration` と同様に `p2p-bootstrap` を自動で起動し、ヘルスチェックが `healthy` になるまで待機してからテストを実行します。既定では `cargo test --package kukuri-tauri --test p2p_gossip_smoke -- --nocapture --test-threads=1` を実行し、`--tests mainline` などで他のスモークも選択できます。
 
 詳細な設計背景と検証手順は `docs/03_implementation/p2p_dht_test_strategy.md` を参照してください。
+
+### シナリオ: trending-feed
+- **概要**: `/trending` `/following` ルートで使用する Vitest (`routes/trending.test.tsx`, `routes/following.test.tsx`, `hooks/useTrendingFeeds.test.tsx`) を Docker 内で実行し、バックエンド API の仕様変更やフィクスチャ更新によるリグレッションを検知する。
+- **実行コマンド**
+  - Linux/macOS: `./scripts/test-docker.sh ts --scenario trending-feed`
+  - Windows: `.\scripts\test-docker.ps1 ts -Scenario trending-feed`
+- **フィクスチャ**: 既定値は `kukuri-tauri/tests/fixtures/trending/default.json`。`VITE_TRENDING_FIXTURE_PATH` を環境変数として渡すことでシナリオごとのデータセットを切り替え可能。
+- **成果物**: 実行結果とログを `test-results/trending-feed/latest.log` に出力し、Nightly ワークフローでは artefact としてアップロードする。
+- **注意点**: Docker イメージを更新した直後は `--no-build` オプションを付けずに実行し、依存パッケージを最新化してからキャッシュ運用に切り替える。Vitest 実行時は `CI=true` を付与してスナップショット差分を強制的に fail させる。
 
 ### docker-composeコマンドでの直接実行
 

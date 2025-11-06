@@ -67,9 +67,12 @@
     - 2025年11月06日: `/trending`・`/following` で利用している `generated_at` / `server_time` が `timestamp_millis` で返却されていることをコードベース（`topic_handler.rs` / `post_handler.rs`）で確認し、Inventory 5.7 および Summary の記述を更新。Quick View と優先度表からミリ秒化フォローアップを削除し、未対応項目（Summary Panel・Docker シナリオ・DM 未読ハイライト）のみに絞り込んだ。
   - [x] Summary Panel / DM 未読ハイライト / Docker シナリオ / `trending_metrics_job` の着手順序とタスク粒度を整理し、5.7 節・Summary・実装計画に反映する。
     - 2025年11月06日: 5.7 節に「Summary Panel → DM 未読ハイライト → Docker シナリオ → `trending_metrics_job`」の順序と各ステップの前提・テスト計画を追記。Summary Quick View と優先度表に同順序を連動させ、タスク着手時の参照位置を明確化した。
-    - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を実装し、派生メトリクス（件数・平均スコア・最終更新・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` を実行して新UIの挙動を確認。
+  - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を実装し、派生メトリクス（件数・平均スコア・最終更新・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` を実行して新UIの挙動を確認。
   - 2025年11月07日: `/profile/$userId` のメッセージ導線が稼働していることを確認し、`phase5_user_flow_inventory.md` のサマリー表・ギャップ欄・5.6.1「残課題」を更新。`phase5_user_flow_summary.md` の最終更新日も同期。
   - 2025年11月07日: フォロワー/フォロー一覧にソート（最新/古い/名前）、検索、`totalCount` 表示を追加。Rust 側は `FollowListSort` と新カーソル形式を導入し、`pnpm vitest run src/tests/unit/routes/profile.$userId.test.tsx`・`cargo test`（`kukuri-tauri/src-tauri` は `STATUS_ENTRYPOINT_NOT_FOUND` で異常終了、`kukuri-cli` は成功）で検証。ドキュメント（Inventory 5.6.2 / Summary / in_progress）を更新。
+  - 2025年11月07日: `/trending` `/following` 導線の手動 QA を実施し、`phase5_user_flow_inventory.md` 2章・5.7節、`phase5_user_flow_summary.md` Quick View、`phase5_ci_path_audit.md` のテスト項目を更新。Summary Panel 指標と Nightly テストコマンドの整合性を確認しつつ、Docker シナリオ `trending-feed` と `trending_metrics_job` を backlog として明記。
+  - 2025年11月07日: Docker シナリオ `trending-feed` の要件を整理し、`phase5_user_flow_inventory.md` 5.7節・`phase5_ci_path_audit.md`・`phase5_user_flow_summary.md`・`docs/03_implementation/docker_test_environment.md`・`windows_test_docker_runbook.md` へ反映。`scripts/test-docker.{sh,ps1}` の `--scenario/-Scenario` 追加と Nightly `Trending Feed (Docker)` ジョブの組み込み方針を明文化。
+  - 2025年11月07日: `docs/03_implementation/trending_metrics_job.md` を起草し、集計ジョブの要件・アーキテクチャ・監視指針・テスト計画を整理。`phase5_dependency_inventory_template.md` に `TrendingMetricsJob` 行を追加し、実装と CI 連携の依存を記録。
 - [x] 投稿削除導線（delete_post）実装準備
   - 2025年11月03日: `phase5_user_flow_inventory.md` セクション5.6に UX / バックエンド / テスト仕様を整理。`delete_post` コマンドを活用した削除フローと楽観更新、オフライン再送の方針を定義。
   - 2025年11月03日: `phase5_user_flow_summary.md` 優先度表を更新し、本タスクを Priority A として再掲。`PostCard` に削除メニューと確認ダイアログを追加し、`postStore.deletePostRemote` をオフライン対応込みで接続。関連ユニットテスト（PostCard / postStore）を更新。
