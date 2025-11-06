@@ -442,6 +442,8 @@ export function PeerConnectionPanel() {
 - 2025年11月06日: ユーザー検索導線のページネーション/状態遷移/エラー UI/入力バリデーション方針を `phase5_user_flow_inventory.md` 5.8 節と `phase5_user_flow_summary.md`、`docs/03_implementation/error_handling_guidelines.md` に追記し、`SearchErrorState` コンポーネントと React Query デバウンス/AbortController 戦略を整理。`tauri_app_implementation_plan.md` の優先度項目を同方針と同期。
 - 2025年11月06日: Inventory 5.9 にホーム/サイドバーからのトピック作成導線を追加。TopicSelector ショートカット／`TopicFormModal` mode=`create-from-composer`／`createAndJoinTopic` ヘルパー／`OfflineActionType::CREATE_TOPIC` を定義し、Summary・CI・依存関係ドキュメントへ反映。
 - 2025年11月06日: Inventory 5.10 に投稿削除後の React Query キャッシュ整合性（`useDeletePost` ミューテーション、トレンド/フォローキャッシュ更新、Docker シナリオ `post-delete-cache`、Rust 統合テスト）と `error_handling_guidelines.md` のトーストキー更新を追加。`phase5_ci_path_audit.md` のテスト ID と Nightly 実行計画を同期。
+- 2025年11月06日: Inventory 5.6 と `phase5_user_flow_summary.md` 2章に Kind4 DM 未読バッジ・再送導線・DirectMessageDialog 改修を反映し、`phase5_ci_path_audit.md` の `test:unit` 更新（DirectMessageDialog / Summary Panel / UserSearchResults）と整合を取った。
+- 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata`・`update_sync_status` を自動更新。`SyncStatusIndicator` の最終同期時刻がバックエンドのスナップショットに追従することを確認。
 
 ### Phase 5 優先度更新（2025年11月03日）
 - 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。2025年11月03日はステータス監視カードとプロフィール編集モーダルの反映手順を整理し、未実装の画像アップロード・鍵管理・未接続コマンド対応をバックログに追加。2025年11月06日はトレンド/フォロー導線のデータ要件・テスト計画を Inventory/Summary/CI 計画に反映し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job` をフォロータスクとして明示。QA/バックエンド連携は引き続き課題。

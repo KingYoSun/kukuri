@@ -157,7 +157,6 @@
 | コマンド | ラッパー | 想定用途 | 備考 |
 | --- | --- | --- | --- |
 | `add_relay` | `nostrApi.addRelay` / `NostrAPI.addRelay` | リレー追加 | 現状テスト専用。UIからの追加導線なし。 |
-| `subscribe_to_user` | `nostrApi.subscribeToUser` / `NostrAPI.subscribeToUser` | ユーザー購読 | UI未接続。 |
 | `get_nostr_pubkey` | `nostrApi.getNostrPubkey` / `NostrAPI.getNostrPubkey` | 現在の公開鍵取得 | 呼び出し箇所なし。 |
 | `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。 |
 | `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。 |
@@ -167,10 +166,26 @@
 | `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
 | `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
 
+### 3.3 未接続コマンドの対応優先度（2025年11月06日更新）
+
+`follow_user` / `unfollow_user` 経由で `subscribe_to_user` を利用開始したため未接続一覧から除外した。残るコマンドについて、Phase 5 backlog での対応順を下記のとおり整理する。
+
+1. **`update_cache_metadata`** — オフライン同期テーブルのメタデータを正しく蓄積しないと `get_cache_status` が提供できる統計値が空になる。Inventory 5.5（SyncStatusIndicator）と 5.10（削除後キャッシュ整合性）で参照するデータ源となるため最優先で実装・配線する。
+2. **`update_sync_status`** — 同期失敗やコンフリクト情報を Tauri 側に記録し、`SyncStatusIndicator` や今後追加予定の再試行 UI から状態を追跡できるようにする。`update_cache_metadata` を先行させた上で、同一スプリント内で着手する。
+3. **`get_cache_status`** — 上記 2 コマンドで蓄積した情報を Surfacing する読み取り API。サイドバーのステータスカード（Inventory 5.5）や開発者向けダイアログに組み込むことで、未同期アクション数や最終同期時刻を可視化する。
+4. **`add_to_sync_queue`** — 手動再送の導線を実装するためのコマンド。`update_sync_status` で失敗状態が把握できるようになった後、`SyncStatusIndicator` からの「再送キューへ追加」アクションとして利用する。
+5. **`join_topic_by_name`** — トピック ID が未確定でも参加できるようにするための P2P コマンド。Inventory 5.9 の「Global Composer からトピック作成」シナリオで、名前入力のみで参加→投稿へ接続する際のフォールバックとして整備する。
+6. **`delete_events`** — `delete_post` 実装（Inventory 5.10）と組み合わせて Nostr 側のイベントを確実に削除するためのコマンド。P2P 内での削除フローが安定した段階で外部配信用に拡張する。
+7. **`add_relay`** — 現在の方針（2025年09月15日更新）では外部リレー接続を優先しないため低優先度。リレー連携を再開する際に、鍵管理ダイアログや設定画面の拡張と合わせて導線を設計する。
+8. **`get_nostr_pubkey`** — `authStore` が `npub`/`pubkey` を保持しているため当面は不要。プロフィール共有 UI を刷新するタイミングで、セキュアストレージから再取得する必要性を再評価する。
+9. **`clear_all_accounts_for_test`** — 開発者向けのリセット操作。フェイルセーフ導線と誤操作対策が整った段階で開発者ツール（Debug パネル）に組み込む。
+
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
 - 認証 E2E: `import_key`, `get_public_key`
 - リレー接続: `connect_relay`, `disconnect_relay`, `get_relay_status`
 - 投稿/トピック状態検証: `create_post`, `create_topic`, `list_posts`, `list_topics`
+
+- 2025年11月06日: `useOfflineStore.refreshCacheMetadata` と `useSyncManager` に `update_cache_metadata` / `update_sync_status` を組み込み、同期処理完了時に Tauri 側へ未同期件数・競合情報を反映するパイプラインを実装。`SyncStatusIndicator` の `lastSyncTime` はバックエンド更新に追従できるようになった。
 
 ## 4. 次のアクション候補
 1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。

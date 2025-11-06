@@ -50,4 +50,5 @@ pub struct CacheMetadataUpdate {
     pub cache_type: CacheType,
     pub metadata: Option<Value>,
     pub expiry: Option<DateTime<Utc>>,
+    pub is_stale: Option<bool>,
 }

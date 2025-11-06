@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { offlineApi } from '@/api/offline';
 import type { OfflineAction } from '@/types/offline';
+import { EntityType } from '@/types/offline';
 
 // モックの設定
 vi.mock('@/api/offline', () => ({
@@ -14,25 +15,34 @@ vi.mock('@/api/offline', () => ({
     saveOptimisticUpdate: vi.fn(),
     confirmOptimisticUpdate: vi.fn(),
     rollbackOptimisticUpdate: vi.fn(),
+    updateCacheMetadata: vi.fn(),
+    updateSyncStatus: vi.fn(),
   },
 }));
 
 describe('offlineStore', () => {
   beforeEach(() => {
     // ストアをリセット
-    useOfflineStore.setState({
-      isOnline: true,
-      lastSyncedAt: undefined,
-      pendingActions: [],
-      syncQueue: [],
-      optimisticUpdates: new Map(),
-      isSyncing: false,
-      syncErrors: new Map(),
-    });
+    const initialState = useOfflineStore.getState();
+    useOfflineStore.setState(
+      {
+        ...initialState,
+        isOnline: true,
+        lastSyncedAt: undefined,
+        pendingActions: [],
+        syncQueue: [],
+        optimisticUpdates: new Map(),
+        isSyncing: false,
+        syncErrors: new Map(),
+      },
+      true,
+    );
 
     // モックをリセット
     vi.clearAllMocks();
-  });
+    vi.mocked(offlineApi.updateCacheMetadata).mockResolvedValue(undefined);
+    vi.mocked(offlineApi.updateSyncStatus).mockResolvedValue(undefined);
+});
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -232,7 +242,7 @@ describe('offlineStore', () => {
           id: 1,
           userPubkey: 'test_user',
           actionType: 'create_post',
-          actionData: '{"content": "test"}',
+          actionData: '{"content": "test", "entityType": "post", "entityId": "post_123"}',
           localId: 'local_123',
           isSynced: false,
           createdAt: Date.now(),
@@ -245,15 +255,25 @@ describe('offlineStore', () => {
       await store.saveOfflineAction({
         userPubkey: 'test_user',
         actionType: 'create_post',
-        actionData: { content: 'test' },
+        entityType: EntityType.POST,
+        entityId: 'post_123',
+        data: JSON.stringify({ content: 'test' }),
       });
 
       expect(offlineApi.saveOfflineAction).toHaveBeenCalledWith({
         userPubkey: 'test_user',
         actionType: 'create_post',
-        actionData: { content: 'test' },
+        entityType: EntityType.POST,
+        entityId: 'post_123',
+        data: JSON.stringify({ content: 'test' }),
       });
       expect(useOfflineStore.getState().pendingActions).toHaveLength(1);
+      expect(offlineApi.updateSyncStatus).toHaveBeenCalledWith(
+        EntityType.POST,
+        'post_123',
+        'pending',
+        null,
+      );
     });
 
     it('オンライン時は自動的に同期を試みる', async () => {
@@ -278,13 +298,21 @@ describe('offlineStore', () => {
       await store.saveOfflineAction({
         userPubkey: 'test_user',
         actionType: 'create_post',
-        actionData: {},
+        entityType: EntityType.POST,
+        entityId: 'post_123',
+        data: JSON.stringify({}),
       });
 
       // saveOfflineActionが呼ばれたことを確認
       expect(offlineApi.saveOfflineAction).toHaveBeenCalled();
       // アクションが追加されたことを確認
       expect(useOfflineStore.getState().pendingActions).toHaveLength(1);
+      expect(offlineApi.updateSyncStatus).toHaveBeenCalledWith(
+        EntityType.POST,
+        'post_123',
+        'pending',
+        null,
+      );
     });
 
     it('保留中のアクションを同期できる', async () => {
@@ -320,6 +348,12 @@ describe('offlineStore', () => {
         userPubkey: 'test_user',
       });
       expect(useOfflineStore.getState().lastSyncedAt).toBeDefined();
+    });
+
+    it('refreshCacheMetadata が API を呼び出す', async () => {
+      const store = useOfflineStore.getState();
+      await store.refreshCacheMetadata();
+      expect(offlineApi.updateCacheMetadata).toHaveBeenCalled();
     });
 
     it('オフライン時は同期をスキップする', async () => {

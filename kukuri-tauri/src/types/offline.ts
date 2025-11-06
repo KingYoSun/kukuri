@@ -77,6 +77,7 @@ export interface UpdateCacheMetadataRequest {
   cacheType: string;
   metadata?: Record<string, any>;
   expirySeconds?: number;
+  isStale?: boolean;
 }
 
 export interface OptimisticUpdate {

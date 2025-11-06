@@ -13,6 +13,10 @@ import { EntityType } from '@/types/offline';
 import { withPersist } from './utils/persistHelpers';
 import { createOfflinePersistConfig } from './config/persist';
 
+const OFFLINE_CACHE_KEY = 'offline_actions';
+const OFFLINE_CACHE_TYPE = 'sync_queue';
+const CACHE_METADATA_TTL_SECONDS = 60 * 60; // 1 hour
+
 declare global {
   interface Window {
     __TAURI__?: unknown;
@@ -39,6 +43,7 @@ interface OfflineStore extends OfflineState {
   syncPendingActions: (userPubkey: string) => Promise<void>;
   loadPendingActions: (userPubkey?: string) => Promise<void>;
   cleanupExpiredCache: () => Promise<void>;
+  refreshCacheMetadata: () => Promise<void>;
 
   // 楽観的更新ヘルパー
   applyOptimisticUpdate: <T>(
@@ -53,12 +58,36 @@ interface OfflineStore extends OfflineState {
 
 export const useOfflineStore = create<OfflineStore>()(
   withPersist<OfflineStore>(
-    (set, get) => ({
-      // 初期状態
-      isOnline: navigator.onLine,
-      lastSyncedAt: undefined,
-      pendingActions: [],
-      syncQueue: [],
+    (set, get) => {
+      const refreshMetadata = async () => {
+        const state = get();
+        try {
+          await offlineApi.updateCacheMetadata({
+            cacheKey: OFFLINE_CACHE_KEY,
+            cacheType: OFFLINE_CACHE_TYPE,
+            metadata: {
+              pendingCount: state.pendingActions.length,
+              syncErrorCount: state.syncErrors.size,
+              isSyncing: state.isSyncing,
+              lastSyncedAt: state.lastSyncedAt ?? null,
+              updatedAt: Date.now(),
+            },
+            expirySeconds: CACHE_METADATA_TTL_SECONDS,
+            isStale: state.pendingActions.length > 0 || state.syncErrors.size > 0,
+          });
+        } catch (error) {
+          errorHandler.log('Failed to update cache metadata', error, {
+            context: 'offlineStore.refreshCacheMetadata',
+          });
+        }
+      };
+
+      return {
+        // 初期状態
+        isOnline: navigator.onLine,
+        lastSyncedAt: undefined,
+        pendingActions: [],
+        syncQueue: [],
       optimisticUpdates: new Map(),
       isSyncing: false,
       syncErrors: new Map(),
@@ -66,17 +95,24 @@ export const useOfflineStore = create<OfflineStore>()(
       // 同期アクション
       setOnlineStatus: (isOnline) => set({ isOnline }),
 
-      addPendingAction: (action) =>
+      addPendingAction: (action) => {
         set((state) => ({
           pendingActions: [...state.pendingActions, action],
-        })),
+        }));
+        void refreshMetadata();
+      },
 
-      removePendingAction: (localId) =>
+      removePendingAction: (localId) => {
         set((state) => ({
           pendingActions: state.pendingActions.filter((a) => a.localId !== localId),
-        })),
+        }));
+        void refreshMetadata();
+      },
 
-      clearPendingActions: () => set({ pendingActions: [] }),
+      clearPendingActions: () => {
+        set({ pendingActions: [] });
+        void refreshMetadata();
+      },
 
       addOptimisticUpdate: (update) =>
         set((state) => {
@@ -104,19 +140,23 @@ export const useOfflineStore = create<OfflineStore>()(
           return { optimisticUpdates: updates };
         }),
 
-      setSyncError: (actionId, error) =>
+      setSyncError: (actionId, error) => {
         set((state) => {
           const errors = new Map(state.syncErrors);
           errors.set(actionId, error);
           return { syncErrors: errors };
-        }),
+        });
+        void refreshMetadata();
+      },
 
-      clearSyncError: (actionId) =>
+      clearSyncError: (actionId) => {
         set((state) => {
           const errors = new Map(state.syncErrors);
           errors.delete(actionId);
           return { syncErrors: errors };
-        }),
+        });
+        void refreshMetadata();
+      },
 
       startSync: () => set({ isSyncing: true }),
       endSync: () => set({ isSyncing: false }),
@@ -127,6 +167,21 @@ export const useOfflineStore = create<OfflineStore>()(
         try {
           const response = await offlineApi.saveOfflineAction(request);
           get().addPendingAction(response.action);
+
+          try {
+            await offlineApi.updateSyncStatus(
+              request.entityType,
+              request.entityId,
+              'pending',
+              null,
+            );
+          } catch (error) {
+            errorHandler.log('Failed to update sync status (pending)', error, {
+              context: 'offlineStore.saveOfflineAction',
+            });
+          }
+
+          await refreshMetadata();
 
           // オンラインの場合は即座に同期を試みる
           if (get().isOnline && !get().isSyncing) {
@@ -165,16 +220,17 @@ export const useOfflineStore = create<OfflineStore>()(
 
           // エラーがあった場合は再試行をスケジュール
           if (response.failedCount > 0) {
-            setTimeout(() => {
-              get().syncPendingActions(userPubkey);
-            }, 30000); // 30秒後に再試行
-          }
+          setTimeout(() => {
+            get().syncPendingActions(userPubkey);
+          }, 30000); // 30秒後に再試行
+        }
         } catch (error) {
           errorHandler.log('Sync failed', error, {
             context: 'offlineStore.syncPendingActions',
           });
         } finally {
           set({ isSyncing: false });
+          await refreshMetadata();
         }
       },
 
@@ -185,6 +241,7 @@ export const useOfflineStore = create<OfflineStore>()(
             isSynced: false,
           });
           set({ pendingActions: actions });
+          await refreshMetadata();
         } catch (error) {
           errorHandler.log('Failed to load pending actions', error, {
             context: 'offlineStore.loadPendingActions',
@@ -205,6 +262,8 @@ export const useOfflineStore = create<OfflineStore>()(
           });
         }
       },
+
+      refreshCacheMetadata: refreshMetadata,
 
       // 楽観的更新ヘルパー
       applyOptimisticUpdate: async (entityType, entityId, originalData, updatedData) => {
@@ -255,7 +314,8 @@ export const useOfflineStore = create<OfflineStore>()(
         });
         return originalData;
       },
-    }),
+      };
+    },
     createOfflinePersistConfig<OfflineStore>(),
   ),
 );

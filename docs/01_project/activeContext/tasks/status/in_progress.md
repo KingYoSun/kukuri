@@ -75,6 +75,7 @@
   - 2025年11月03日: 2.5節を棚卸し結果サマリーへ差し替え、Relay/P2Pステータスカードとプロフィール編集導線の進捗メモを追記。
   - 2025年11月04日: 2.5節に `/profile/$userId` 導線の現状（フォロー/フォロワー表示）と残課題を反映し、ユーザー導線指標欄へ 1.4/1.7/5.6 更新（ユーザー検索・プロフィール導線・フォロー体験）を記録。
   - 2025年11月04日: Rust 側で `direct_message_service` / `messaging_gateway` / `direct_message_repository` を実装し、`send_direct_message` と `list_direct_messages` コマンドを配線。kind4 DM の暗号化送信・SQLite 永続化・カーソルページング・復号レスポンスまで通し、`cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri -q` / `kukuri-cli`）を実行して新規ユニットテストを含めて確認。
+  - 2025年11月06日: 指標欄に Inventory 5.7-5.10 / Summary 1.2・2・3 の追記事項と未使用 API・Nightly テスト更新を反映し、未接続コマンドの残課題を Phase 5 backlog と同期。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。
@@ -84,6 +85,9 @@
   - 2025年11月05日: `Sidebar` のカテゴリー状態管理とクエリプリフェッチを実装し、`phase5_user_flow_inventory.md`（5.7節）と `phase5_user_flow_summary.md` のトレンド/フォロー導線を更新。`npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx` を実行してカテゴリ同期とプリフェッチの回帰を確認。
   - 2025年11月06日: Kind4 IPC で DM 受信→永続化→通知まで一貫処理を追加し、`useDirectMessageEvents` / `useDirectMessageBadge` を導入。ヘッダーと Trending/Following Summary Panel に未読バッジを表示、`DirectMessageDialog` に送信失敗時の再送ボタンを実装。`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx` と `cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を実行し、導線ドキュメント（inventory/summary）を更新。
   - 2025年11月06日: ダイレクトメッセージ履歴導線の現状を `phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` に反映し、`list_direct_messages` を UI 接続済みとして整理。未使用コマンド表を更新し、Quick View/次アクションを DM 未読バッジ・送信再試行・IPC 連携のフォローアップへ書き換え。
+  - 2025年11月06日: `phase5_ci_path_audit.md` に test:unit 更新と関連資料リンクを追加し、`tauri_app_implementation_plan.md` の Phase 5 メモへ DM 未読バッジ・Summary Panel 反映の記録を追記。`refactoring_plan_2025-08-08_v3.md` の指標更新と整合を確認。
+  - 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata` / `update_sync_status` を自動呼び出し。`pnpm vitest run src/tests/unit/stores/offlineStore.test.ts` でメタデータ更新のユニットテストを追加し、`cargo test`（`kukuri-tauri/src-tauri`）は既知の `STATUS_ENTRYPOINT_NOT_FOUND` で停止することを確認（再実行は保留）。
+  - 2025年11月06日: Inventory 3.2/3.3 の未接続コマンドを再評価し、`update_cache_metadata` → `update_sync_status` → `get_cache_status` → `add_to_sync_queue` を最優先グループとする対応順を決定。続いて `join_topic_by_name` / `delete_events` / `add_relay` / `get_nostr_pubkey` / `clear_all_accounts_for_test` の順に Phase 5 backlog を進める方針を記録。
 
 ### プロフィールアバター UI 連携
 

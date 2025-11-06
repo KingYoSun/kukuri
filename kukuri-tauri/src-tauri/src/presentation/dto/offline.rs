@@ -148,6 +148,7 @@ pub struct UpdateCacheMetadataRequest {
     pub cache_type: String,
     pub metadata: Option<serde_json::Value>,
     pub expiry_seconds: Option<i64>,
+    pub is_stale: Option<bool>,
 }
 
 impl Validate for UpdateCacheMetadataRequest {

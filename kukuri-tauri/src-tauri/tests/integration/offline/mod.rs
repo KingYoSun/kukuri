@@ -128,6 +128,7 @@ async fn cache_metadata_upsert_and_cleanup() {
         cache_type: CacheType::new("topics".into()).expect("cache type"),
         metadata: Some(serde_json::json!({"version": 1})),
         expiry: Some(Utc::now() + Duration::seconds(1)),
+        is_stale: Some(false),
     };
 
     service
@@ -202,6 +203,7 @@ async fn cache_status_reports_per_type() {
             cache_type: CacheType::new("posts".into()).expect("cache type"),
             metadata: Some(serde_json::json!({"version": 1})),
             expiry: None,
+            is_stale: Some(false),
         })
         .await
         .expect("upsert posts");
@@ -212,6 +214,7 @@ async fn cache_status_reports_per_type() {
             cache_type: CacheType::new("topics".into()).expect("cache type"),
             metadata: None,
             expiry: Some(Utc::now() + Duration::seconds(60)),
+            is_stale: Some(false),
         })
         .await
         .expect("upsert topics");

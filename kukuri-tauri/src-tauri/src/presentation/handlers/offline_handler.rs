@@ -135,6 +135,7 @@ impl OfflineHandler {
             cache_type: CacheType::new(request.cache_type)
                 .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?,
             metadata: request.metadata,
+            is_stale: request.is_stale,
             expiry: request
                 .expiry_seconds
                 .map(|seconds| {

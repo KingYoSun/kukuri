@@ -349,18 +349,20 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             let seconds = expiry.signed_duration_since(Utc::now()).num_seconds();
             now + seconds.max(0)
         });
+        let is_stale = update.is_stale.unwrap_or(false);
 
         sqlx::query(
             r#"
             INSERT INTO cache_metadata (
                 cache_key, cache_type, last_synced_at, last_accessed_at,
                 data_version, is_stale, expiry_time, metadata
-            ) VALUES (?1, ?2, ?3, ?3, 1, 0, ?4, ?5)
+            ) VALUES (?1, ?2, ?3, ?3, 1, ?4, ?5, ?6)
             ON CONFLICT(cache_key) DO UPDATE SET
                 cache_type = excluded.cache_type,
                 last_synced_at = excluded.last_synced_at,
                 last_accessed_at = excluded.last_accessed_at,
                 data_version = data_version + 1,
+                is_stale = excluded.is_stale,
                 expiry_time = excluded.expiry_time,
                 metadata = excluded.metadata
             "#,
@@ -368,6 +370,7 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         .bind(update.cache_key.as_str())
         .bind(update.cache_type.as_str())
         .bind(now)
+        .bind(if is_stale { 1 } else { 0 })
         .bind(expiry_time)
         .bind(metadata)
         .execute(self.pool())
@@ -624,12 +627,16 @@ mod tests {
                 cache_type: CacheType::new("topic".to_string()).unwrap(),
                 metadata: Some(serde_json::json!({"last_id": "1"})),
                 expiry: Some(Utc::now()),
+                is_stale: Some(true),
             })
             .await
             .unwrap();
 
         let status = persistence.cache_status().await.unwrap();
         assert_eq!(status.total_items, 1);
+        assert_eq!(status.stale_items, 1);
+        assert_eq!(status.cache_types.len(), 1);
+        assert!(status.cache_types[0].is_stale);
     }
 
     #[tokio::test]
