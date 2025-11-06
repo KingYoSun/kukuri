@@ -217,17 +217,16 @@ export function DirectMessageDialog() {
     if (!activeConversationNpub) {
       return [] as DirectMessageModel[];
     }
-    const confirmed =
-      confirmedFromQuery ?? conversations[activeConversationNpub] ?? [];
+    const confirmed = confirmedFromQuery ?? conversations[activeConversationNpub] ?? [];
     const pending = optimisticMessages[activeConversationNpub] ?? [];
     return [...confirmed, ...pending].sort((a, b) => a.createdAt - b.createdAt);
   }, [activeConversationNpub, confirmedFromQuery, conversations, optimisticMessages]);
 
-  const hasLoadedAtLeastOnePage =
-    Boolean(directMessagePages && directMessagePages.pages.length > 0);
+  const hasLoadedAtLeastOnePage = Boolean(
+    directMessagePages && directMessagePages.pages.length > 0,
+  );
   const initialLoading = isHistoryLoading && messages.length === 0;
-  const showLoadMoreButton =
-    hasLoadedAtLeastOnePage && Boolean(hasNextPage) && !isFetchingNextPage;
+  const showLoadMoreButton = hasLoadedAtLeastOnePage && Boolean(hasNextPage) && !isFetchingNextPage;
   const showTopSpinner = hasLoadedAtLeastOnePage && isFetchingNextPage;
 
   const sendMessage = useCallback(
@@ -314,7 +313,10 @@ export function DirectMessageDialog() {
 
   const handleRetry = useCallback(
     async (target: DirectMessageModel) => {
-      await sendMessage(target.content, { retryingClientId: target.clientMessageId, preserveDraft: true });
+      await sendMessage(target.content, {
+        retryingClientId: target.clientMessageId,
+        preserveDraft: true,
+      });
     },
     [sendMessage],
   );
@@ -338,7 +340,7 @@ export function DirectMessageDialog() {
           <DialogTitle>ダイレクトメッセージ</DialogTitle>
           <p className="text-sm text-muted-foreground break-all">宛先: {activeConversationNpub}</p>
         </DialogHeader>
-                <div ref={scrollAreaWrapperRef}>
+        <div ref={scrollAreaWrapperRef}>
           <ScrollArea className="h-72 rounded-md border border-border">
             <div className="flex flex-col gap-3 p-3">
               <div ref={topSentinelRef} className="h-1 w-full" />
@@ -458,4 +460,3 @@ export function DirectMessageDialog() {
     </Dialog>
   );
 }
-

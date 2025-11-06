@@ -15,9 +15,7 @@ export function Header() {
   const navigate = useNavigate();
   const { unreadTotal, latestConversationNpub } = useDirectMessageBadge();
   const openDialog = useDirectMessageStore((state) => state.openDialog);
-  const activeConversationNpub = useDirectMessageStore(
-    (state) => state.activeConversationNpub,
-  );
+  const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
 
   return (
     <header

@@ -214,9 +214,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
       if (message.clientMessageId) {
         const queue = nextOptimistic[conversationNpub];
         if (queue) {
-          const filtered = queue.filter(
-            (item) => item.clientMessageId !== message.clientMessageId,
-          );
+          const filtered = queue.filter((item) => item.clientMessageId !== message.clientMessageId);
           if (filtered.length > 0) {
             nextOptimistic[conversationNpub] = filtered;
           } else {
@@ -249,9 +247,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
       if (!queue) {
         return state;
       }
-      const filtered = queue.filter(
-        (message) => message.clientMessageId !== clientMessageId,
-      );
+      const filtered = queue.filter((message) => message.clientMessageId !== clientMessageId);
       const nextOptimistic = { ...state.optimisticMessages };
       if (filtered.length > 0) {
         nextOptimistic[conversationNpub] = filtered;

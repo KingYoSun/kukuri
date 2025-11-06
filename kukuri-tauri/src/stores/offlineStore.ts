@@ -57,37 +57,36 @@ interface OfflineStore extends OfflineState {
 }
 
 export const useOfflineStore = create<OfflineStore>()(
-  withPersist<OfflineStore>(
-    (set, get) => {
-      const refreshMetadata = async () => {
-        const state = get();
-        try {
-          await offlineApi.updateCacheMetadata({
-            cacheKey: OFFLINE_CACHE_KEY,
-            cacheType: OFFLINE_CACHE_TYPE,
-            metadata: {
-              pendingCount: state.pendingActions.length,
-              syncErrorCount: state.syncErrors.size,
-              isSyncing: state.isSyncing,
-              lastSyncedAt: state.lastSyncedAt ?? null,
-              updatedAt: Date.now(),
-            },
-            expirySeconds: CACHE_METADATA_TTL_SECONDS,
-            isStale: state.pendingActions.length > 0 || state.syncErrors.size > 0,
-          });
-        } catch (error) {
-          errorHandler.log('Failed to update cache metadata', error, {
-            context: 'offlineStore.refreshCacheMetadata',
-          });
-        }
-      };
+  withPersist<OfflineStore>((set, get) => {
+    const refreshMetadata = async () => {
+      const state = get();
+      try {
+        await offlineApi.updateCacheMetadata({
+          cacheKey: OFFLINE_CACHE_KEY,
+          cacheType: OFFLINE_CACHE_TYPE,
+          metadata: {
+            pendingCount: state.pendingActions.length,
+            syncErrorCount: state.syncErrors.size,
+            isSyncing: state.isSyncing,
+            lastSyncedAt: state.lastSyncedAt ?? null,
+            updatedAt: Date.now(),
+          },
+          expirySeconds: CACHE_METADATA_TTL_SECONDS,
+          isStale: state.pendingActions.length > 0 || state.syncErrors.size > 0,
+        });
+      } catch (error) {
+        errorHandler.log('Failed to update cache metadata', error, {
+          context: 'offlineStore.refreshCacheMetadata',
+        });
+      }
+    };
 
-      return {
-        // 初期状態
-        isOnline: navigator.onLine,
-        lastSyncedAt: undefined,
-        pendingActions: [],
-        syncQueue: [],
+    return {
+      // 初期状態
+      isOnline: navigator.onLine,
+      lastSyncedAt: undefined,
+      pendingActions: [],
+      syncQueue: [],
       optimisticUpdates: new Map(),
       isSyncing: false,
       syncErrors: new Map(),
@@ -220,10 +219,10 @@ export const useOfflineStore = create<OfflineStore>()(
 
           // エラーがあった場合は再試行をスケジュール
           if (response.failedCount > 0) {
-          setTimeout(() => {
-            get().syncPendingActions(userPubkey);
-          }, 30000); // 30秒後に再試行
-        }
+            setTimeout(() => {
+              get().syncPendingActions(userPubkey);
+            }, 30000); // 30秒後に再試行
+          }
         } catch (error) {
           errorHandler.log('Sync failed', error, {
             context: 'offlineStore.syncPendingActions',
@@ -314,10 +313,8 @@ export const useOfflineStore = create<OfflineStore>()(
         });
         return originalData;
       },
-      };
-    },
-    createOfflinePersistConfig<OfflineStore>(),
-  ),
+    };
+  }, createOfflinePersistConfig<OfflineStore>()),
 );
 
 // オンライン/オフライン状態の監視を設定

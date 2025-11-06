@@ -42,7 +42,7 @@ describe('offlineStore', () => {
     vi.clearAllMocks();
     vi.mocked(offlineApi.updateCacheMetadata).mockResolvedValue(undefined);
     vi.mocked(offlineApi.updateSyncStatus).mockResolvedValue(undefined);
-});
+  });
 
   afterEach(() => {
     vi.clearAllMocks();

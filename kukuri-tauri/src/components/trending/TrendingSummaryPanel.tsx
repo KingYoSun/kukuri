@@ -32,8 +32,7 @@ export function TrendingSummaryPanel({
 }: TrendingSummaryPanelProps) {
   const { unreadTotal, latestMessage } = useDirectMessageBadge();
 
-  const topicsCount =
-    topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
+  const topicsCount = topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
 
   const previewPostsCount =
     posts?.topics != null

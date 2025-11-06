@@ -46,7 +46,9 @@ function inferEntityType(actionType: string): string | null {
   }
 }
 
-function extractEntityContext(action: OfflineAction): { entityType: string; entityId: string } | null {
+function extractEntityContext(
+  action: OfflineAction,
+): { entityType: string; entityId: string } | null {
   try {
     const rawData = action.actionData;
     const data =

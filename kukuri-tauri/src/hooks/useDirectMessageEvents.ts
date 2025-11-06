@@ -69,21 +69,19 @@ export function useDirectMessageEvents() {
               : 'pending'
             : 'sent';
 
-          useDirectMessageStore
-            .getState()
-            .receiveIncomingMessage(
-              payload.conversation_npub,
-              {
-                eventId: payload.message.event_id,
-                clientMessageId,
-                senderNpub: payload.message.sender_npub,
-                recipientNpub: payload.message.recipient_npub,
-                content: payload.message.content,
-                createdAt: payload.message.created_at,
-                status,
-              },
-              { incrementUnread: !isOwnMessage },
-            );
+          useDirectMessageStore.getState().receiveIncomingMessage(
+            payload.conversation_npub,
+            {
+              eventId: payload.message.event_id,
+              clientMessageId,
+              senderNpub: payload.message.sender_npub,
+              recipientNpub: payload.message.recipient_npub,
+              content: payload.message.content,
+              createdAt: payload.message.created_at,
+              status,
+            },
+            { incrementUnread: !isOwnMessage },
+          );
         } catch (error) {
           errorHandler.log('DirectMessageEvents.receive_failed', error, {
             context: 'useDirectMessageEvents',

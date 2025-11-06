@@ -34,8 +34,7 @@ export function FollowingSummaryPanel({
   const { unreadTotal, latestMessage } = useDirectMessageBadge();
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
-  const postsCount =
-    posts.length > 0 || data ? `${posts.length.toLocaleString()}件` : null;
+  const postsCount = posts.length > 0 || data ? `${posts.length.toLocaleString()}件` : null;
 
   const uniqueAuthors =
     posts.length > 0
@@ -45,15 +44,11 @@ export function FollowingSummaryPanel({
         : null;
 
   const latestServerTime = data
-    ? data.pages.reduce(
-        (latest, page) => Math.max(latest, page.serverTime ?? 0),
-        0,
-      ) || null
+    ? data.pages.reduce((latest, page) => Math.max(latest, page.serverTime ?? 0), 0) || null
     : null;
   const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTime(latestServerTime);
 
-  const remainingPages =
-    data || hasNextPage ? (hasNextPage ? 'あり' : 'なし') : null;
+  const remainingPages = data || hasNextPage ? (hasNextPage ? 'あり' : 'なし') : null;
 
   const showLoadingState = (condition: boolean) => (isLoading || isFetching) && condition;
 
