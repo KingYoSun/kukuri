@@ -18,6 +18,7 @@
   - 2025年11月07日: `npx vitest run` / `npx tsc --noEmit` / `npx eslint …` に加え、`cargo test`・`cargo clippy --all-features -- -D warnings`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を再実行してローカル環境での回帰を確認。
   - 2025年11月07日: `gh act push -j native-test-linux -W .github/workflows/test.yml` を実行し、`Test/Native Test (Linux)` ジョブが `Job succeeded` となることをログ (`act-native-ps.log`) で確認。
   - 2025年11月07日: `profile.$userId.tsx` の `useInfiniteQuery` キー型／`sqlite_repository/users.rs` の `format!` 誘発箇所／`trending_metrics_job.rs` の `or_insert_with` を修正し、`pnpm test`・`pnpm type-check`・`pnpm lint`・`cargo clippy --workspace --all-features`（`kukuri-tauri/src-tauri` / `kukuri-cli`）・`cargo test --workspace --all-features`（`kukuri-cli`）・`scripts/test-docker.ps1 rust -NoBuild`・`gh act push -j native-test-linux -W .github/workflows/test.yml`（ログ: `gh-act-native.log`）で完走を再確認。
+  - 2025年11月07日: `gh run view 19154875336 --job 54753280974 --log` で `kukuri-tauri/src-tauri/src/infrastructure/jobs/trending_metrics_job.rs` の `cargo fmt -- --check` 差分のみが残っていることを確認し、`cargo fmt` で再整形。`cargo test --workspace --all-features`（`kukuri-tauri/src-tauri`）/`cargo test --all-features`（`kukuri-cli`）/`pnpm format:check`/`python scripts/check_date_format.py` に加え、`gh act push -j format-check -W .github/workflows/test.yml`（ログ: `gh-act-format.log`）でフォーマットジョブ成功をローカル再現。
 
 ### Clippy 警告ゼロ体制の復帰
 
