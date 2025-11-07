@@ -1,6 +1,6 @@
 # リファクタリング計画（改善版）
 作成日: 2025年08月08日
-最終更新: 2025年11月06日
+最終更新: 2025年11月07日
 
 ## 現状分析結果（完全版）
 
@@ -419,15 +419,21 @@ tests/
   - 2025年11月04日: 同ドキュメント 1.4/1.7/5.6 にユーザー検索の実装状況、`/profile/$userId` 導線、フォロー体験の優先課題を追記。
   - 2025年11月06日: 同ドキュメント 5.7-5.10 と `phase5_user_flow_summary.md` の 1.2/2/3 にトレンド/フォロー導線、DM 未読バッジ、投稿削除後のキャッシュ整合性、Docker シナリオを追記し、CI 監査・実装計画とのリンクを同期。
   - 2025年11月06日: `useOfflineStore` / `useSyncManager` から `update_cache_metadata` と `update_sync_status` を呼び出す実装を追加し、バックエンドの同期メタデータと SyncStatusIndicator の表示が連動することを確認。`offlineStore.test.ts` にメタデータ更新ケースを追加。
+  - 2025年11月07日: Inventory 5.6.1/5.6.2 と Summary 2章に `/profile/$userId` の DM 起点導線・フォロー/フォロワー一覧のソート/検索/件数表示、`DirectMessageDialog` の Kind4 IPC・未読バッジ・再送ボタン実装状況を反映。`profile.$userId.test.tsx` を Nightly に追加し、Rust（`kukuri-cli`）と TypeScript のテスト結果を記録。
+  - 2025年11月07日: Inventory 5.11 と Summary Quick View に `SyncStatusIndicator` / `OfflineIndicator` の役割分担、`useSyncManager` + `offlineStore` + `offlineApi.update_cache_metadata/update_sync_status` の流れ、`get_cache_status` / `add_to_sync_queue` 連携、Vitest (`useSyncManager.test.tsx`, `SyncStatusIndicator.test.tsx`) を追記し、同期導線の不足を可視化。
 - [ ] 未使用APIエンドポイント0件
   - 2025年11月02日: 同ドキュメント 3.2/3.3 に未導線API（`delete_post` / `add_relay` など）とテスト専用 `invoke` コマンドを整理。UI導線追加または削除方針の判断待ち。
   - 2025年11月06日: Kind4 DM 系コマンド（`send_direct_message` / `list_direct_messages`）を UI 導線へ接続し、Inventory 3.2 と 5.6 の未使用一覧を更新。残る候補は `add_relay` / `join_topic_by_name` などに絞り、削除方針は Phase 5 backlog で継続検討。
+  - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` を `useSyncManager`・`SyncStatusIndicator` へ組み込み、Inventory 5.11 の未接続一覧から除外。未導線 API は `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` など最小グループに整理し、Phase 5 backlog と同期。
 - [ ] 孤立コンポーネント0件
   - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` / `DirectMessageDialog` の導線を Inventory 5.7・Summary 2 に反映し、Sidebar・Header からの呼び出し経路とテストケースを整理。未接続要素（鍵管理ダイアログ等）は Inventory 5.4 の backlog として明示。
+  - 2025年11月07日: `SyncStatusIndicator`・`OfflineIndicator` の UI 役割と `SyncStatusIndicator` → `useSyncManager` → `offlineStore` のバッジ/手動再送導線を Inventory 5.11 / Summary Quick View / Phase5 優先度リストへ反映し、孤立していた同期ステータス UI を主要導線に統合した。
 - [ ] dead_codeのうち80%以上が削除または使用開始
   - 2025年11月06日: Inventory 5.7-5.10 で各導線に紐づくストア/API 呼び出しを洗い出し、未参照だった削除/集計系のコードを対象外として明文化。dead_code 候補は `hybrid_distributor` / `event_sync` 等バックエンド側に集約した状態を Phase 5 backlog に記録。
+  - 2025年11月07日: Inventory 5.11 で `update_cache_metadata` / `update_sync_status` / `get_cache_status` / `add_to_sync_queue` の利用パスをテキスト化し、`offline_api.rs` の dead_code 候補（未呼び出しだった同期系コマンド）を全て使用中へ更新。`phase5_ci_path_audit.md` に新テスト ID を登録し、除外候補リストから同期 API 群を削除。
 - [ ] すべてのTauriコマンドがフロントエンドから呼び出し可能
   - 2025年11月06日: Inventory 3.2/3.3 に DM/トレンド関連コマンドの呼び出し箇所を追記し、`phase5_user_flow_summary.md` で導線ステータスを更新。未接続コマンドは Phase 5 backlog へ移管し、CI パス監査との整合を確認。
+  - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` / `update_cache_metadata` / `update_sync_status` の呼び出し経路を Inventory 5.11 に追記し、`phase5_user_flow_summary.md` でもグローバル要素「同期導線」を更新。`useSyncManager.test.tsx` / `SyncStatusIndicator.test.tsx` を追加し、CI ドキュメントとリンクした。
 
 ## リスク管理
 

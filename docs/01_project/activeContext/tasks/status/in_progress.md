@@ -73,6 +73,7 @@
   - 2025年11月07日: `/profile/$userId` のメッセージ導線が稼働していることを確認し、`phase5_user_flow_inventory.md` のサマリー表・ギャップ欄・5.6.1「残課題」を更新。`phase5_user_flow_summary.md` の最終更新日も同期。
   - 2025年11月07日: フォロワー/フォロー一覧にソート（最新/古い/名前）、検索、`totalCount` 表示を追加。Rust 側は `FollowListSort` と新カーソル形式を導入し、`pnpm vitest run src/tests/unit/routes/profile.$userId.test.tsx`・`cargo test`（`kukuri-tauri/src-tauri` は `STATUS_ENTRYPOINT_NOT_FOUND` で異常終了、`kukuri-cli` は成功）で検証。ドキュメント（Inventory 5.6.2 / Summary / in_progress）を更新。
   - 2025年11月07日: `/trending` `/following` 導線の手動 QA を実施し、`phase5_user_flow_inventory.md` 2章・5.7節、`phase5_user_flow_summary.md` Quick View、`phase5_ci_path_audit.md` のテスト項目を更新。Summary Panel 指標と Nightly テストコマンドの整合性を確認しつつ、Docker シナリオ `trending-feed` と `trending_metrics_job` を backlog として明記。
+  - 2025年11月07日: Inventory 3.2/3.3 を再編し、`get_cache_status` / `add_to_sync_queue` / `update_cache_metadata` / `update_sync_status` を「連携済み・監視対象」へ移行。未接続 API を `join_topic_by_name` / `delete_events` / `add_relay` / `get_nostr_pubkey` / `clear_all_accounts_for_test` に絞り、`phase5_user_flow_summary.md` Quick View 項目9 と Phase 5 backlog の優先度を同期。
   - 2025年11月07日: Docker シナリオ `trending-feed` の要件を整理し、`phase5_user_flow_inventory.md` 5.7節・`phase5_ci_path_audit.md`・`phase5_user_flow_summary.md`・`docs/03_implementation/docker_test_environment.md`・`windows_test_docker_runbook.md` へ反映。`scripts/test-docker.{sh,ps1}` の `--scenario/-Scenario` 追加と Nightly `Trending Feed (Docker)` ジョブの組み込み方針を明文化。
   - 2025年11月07日: `docs/03_implementation/trending_metrics_job.md` を起草し、集計ジョブの要件・アーキテクチャ・監視指針・テスト計画を整理。`phase5_dependency_inventory_template.md` に `TrendingMetricsJob` 行を追加し、実装と CI 連携の依存を記録。
   - 2025年11月07日: `scripts/test-docker.{sh,ps1}` に `--scenario/-Scenario trending-feed` 実装と成果物出力処理を追加し、Nightly `Trending Feed (Docker)` ジョブ（`nightly.yml`）を稼働化。`topic_metrics` 用 migration（`20251107094500_*`）と `sqlx prepare` を実行し、`TopicMetricsRepository`・`TrendingMetricsJob`（ステップ1〜3）を Rust 層へ追加。
@@ -91,6 +92,7 @@
   - 2025年11月04日: 2.5節に `/profile/$userId` 導線の現状（フォロー/フォロワー表示）と残課題を反映し、ユーザー導線指標欄へ 1.4/1.7/5.6 更新（ユーザー検索・プロフィール導線・フォロー体験）を記録。
   - 2025年11月04日: Rust 側で `direct_message_service` / `messaging_gateway` / `direct_message_repository` を実装し、`send_direct_message` と `list_direct_messages` コマンドを配線。kind4 DM の暗号化送信・SQLite 永続化・カーソルページング・復号レスポンスまで通し、`cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri -q` / `kukuri-cli`）を実行して新規ユニットテストを含めて確認。
   - 2025年11月06日: 指標欄に Inventory 5.7-5.10 / Summary 1.2・2・3 の追記事項と未使用 API・Nightly テスト更新を反映し、未接続コマンドの残課題を Phase 5 backlog と同期。
+  - 2025年11月07日: `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標を最新化し、Inventory 5.6.1/5.6.2 と 5.11、`phase5_user_flow_summary.md` Quick View、`phase5_ci_path_audit.md` のテスト行を引用して SyncStatusIndicator / プロフィール導線 / フォロー体験の進捗記録と Tauri コマンド使用状況を追記。最終更新日も 2025年11月07日へ更新。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。
@@ -105,6 +107,8 @@
   - 2025年11月06日: Inventory 3.2/3.3 の未接続コマンドを再評価し、`update_cache_metadata` → `update_sync_status` → `get_cache_status` → `add_to_sync_queue` を最優先グループとする対応順を決定。続いて `join_topic_by_name` / `delete_events` / `add_relay` / `get_nostr_pubkey` / `clear_all_accounts_for_test` の順に Phase 5 backlog を進める方針を記録。
   - 2025年11月07日: `phase5_user_flow_inventory.md` に 5.11「SyncStatusIndicator とオフライン同期導線」を追加し、`useSyncManager` / `offlineStore` / `offlineApi.update_cache_metadata` / `update_sync_status` の流れとギャップ・テスト計画を整理。あわせて `phase5_user_flow_summary.md` のグローバル要素/Quick View を同期導線の最新状態に更新し、`SyncStatusIndicator` と `OfflineIndicator` の役割分担＆API未連携課題を反映。
   - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` を `useSyncManager` / `SyncStatusIndicator` に組み込み、キャッシュ統計表示・再送キュー追加ボタン・手動更新ボタンを実装。`useSyncManager` に `cacheStatus` ステートと `enqueueSyncRequest` を追加し、`npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx` でキャッシュ周りのユニットテストを整備。ドキュメント（Inventory 5.11 / Summary Quick View）を最新化。
+  - 2025年11月07日: `phase5_ci_path_audit.md` に SyncStatusIndicator/useSyncManager テスト行と `phase5_user_flow_summary.md` 2025年11月07日版へのリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションへ Inventory 5.6.1/5.6.2・5.11 / Summary Quick View の参照と Nightly テスト更新ログを追記。両ファイルの最終更新日を 2025年11月07日へ揃え、導線タスクとの紐付けを明示。
+  - 2025年11月07日: GH Actions Run ID `19172338059`（Nightly Frontend Unit Tests）の `Frontend Unit Tests` ジョブログから `src/tests/unit/hooks/useSyncManager.test.tsx` / `src/tests/unit/components/SyncStatusIndicator.test.tsx` 実行を確認し、`phase5_ci_path_audit.md` の SyncStatus 行へ証跡を追記。Trending Feed (Docker) ジョブ失敗により artefact が得られなかった点は別タスクでフォローする。
 
 ### プロフィールアバター UI 連携
 

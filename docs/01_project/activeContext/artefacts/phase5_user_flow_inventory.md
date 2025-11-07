@@ -153,32 +153,34 @@
 | `connect_to_peer` | `p2pApi.connectToPeer` | `PeerConnectionPanel` | 設定>ピア接続 |
 | `get_bootstrap_config` / `set_bootstrap_nodes` / `clear_bootstrap_nodes` | `p2pApi.*` | `BootstrapConfigPanel` | 設定>Bootstrap 設定 |
 
-### 3.2 未使用・要確認コマンド
+### 3.2 未使用・要確認コマンド（2025年11月07日更新）
+
+#### 3.2.1 連携済み・監視対象
+| コマンド | ラッパー | 状態 | 参照箇所 |
+| --- | --- | --- | --- |
+| `get_cache_status` | `offlineApi.getCacheStatus` | `useSyncManager` が `SyncStatusIndicator` / `OfflineIndicator` へキャッシュ統計を反映。UI からの手動リフレッシュボタンを提供済み。 | Inventory 5.11, Summary Quick View, `phase5_ci_path_audit.md`（SyncStatus テスト） |
+| `add_to_sync_queue` | `offlineApi.addToSyncQueue` | `SyncStatusIndicator` の「再送をキューに追加」ボタンから呼び出し、未送信操作を再送キューへ登録。 | Inventory 5.11（UI フロー/テスト計画） |
+| `update_cache_metadata` | `offlineApi.updateCacheMetadata` | `useOfflineStore.refreshCacheMetadata` が同期完了時に呼び出し、`get_cache_status` が参照する統計を蓄積。 | Inventory 5.5 / 5.11、`phase5_ci_path_audit.md` |
+| `update_sync_status` | `offlineApi.updateSyncStatus` | `useSyncManager.persistSyncStatuses` で同期失敗・競合情報を Tauri 側へ記録し、次回ロード時に UI へ表示。 | Inventory 5.5 / 5.11、Summary グローバル要素 |
+
+#### 3.2.2 未接続コマンド
 | コマンド | ラッパー | 想定用途 | 備考 |
 | --- | --- | --- | --- |
 | `add_relay` | `nostrApi.addRelay` / `NostrAPI.addRelay` | リレー追加 | 現状テスト専用。UIからの追加導線なし。 |
 | `get_nostr_pubkey` | `nostrApi.getNostrPubkey` / `NostrAPI.getNostrPubkey` | 現在の公開鍵取得 | 呼び出し箇所なし。 |
-| `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。 |
-| `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。 |
+| `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。`delete_post` のバックエンド拡張フェーズで利用予定。 |
+| `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。Global Composer からのフォールバック用に待機。 |
 | `clear_all_accounts_for_test` | `SecureStorageApi.clearAllAccountsForTest` | テスト用リセット | デバッグ UI 未接続。 |
-| `get_cache_status` | `offlineApi.getCacheStatus` | キャッシュ診断 | 取得結果の表示先が未決定で、ストアからは未呼び出し。 |
-| `add_to_sync_queue` | `offlineApi.addToSyncQueue` | 手動キュー投入 | 既存フローから未使用。今後の再索引拡張候補。 |
-| `update_cache_metadata` | `offlineApi.updateCacheMetadata` | キャッシュ更新メタデータ反映 | 呼び出し先がなく、要否検討。 |
-| `update_sync_status` | `offlineApi.updateSyncStatus` | 同期状態トラッキング | 現状は同期エンジンが内製で管理。Tauri 連携は保留。 |
 
-### 3.3 未接続コマンドの対応優先度（2025年11月06日更新）
+### 3.3 未接続コマンドの対応優先度（2025年11月07日更新）
 
-`follow_user` / `unfollow_user` 経由で `subscribe_to_user` を利用開始したため未接続一覧から除外した。残るコマンドについて、Phase 5 backlog での対応順を下記のとおり整理する。
+`follow_user` / `unfollow_user` 経由で `subscribe_to_user` を利用開始済み。SyncStatus 系の 4 コマンドは 2025年11月07日に UI 配線とテストを完了し、監視対象へ移行した。残コマンドの Phase 5 backlog 優先度は以下のとおり。
 
-1. **`update_cache_metadata`** — オフライン同期テーブルのメタデータを正しく蓄積しないと `get_cache_status` が提供できる統計値が空になる。Inventory 5.5（SyncStatusIndicator）と 5.10（削除後キャッシュ整合性）で参照するデータ源となるため最優先で実装・配線する。
-2. **`update_sync_status`** — 同期失敗やコンフリクト情報を Tauri 側に記録し、`SyncStatusIndicator` や今後追加予定の再試行 UI から状態を追跡できるようにする。`update_cache_metadata` を先行させた上で、同一スプリント内で着手する。
-3. **`get_cache_status`** — 上記 2 コマンドで蓄積した情報を Surfacing する読み取り API。サイドバーのステータスカード（Inventory 5.5）や開発者向けダイアログに組み込むことで、未同期アクション数や最終同期時刻を可視化する。
-4. **`add_to_sync_queue`** — 手動再送の導線を実装するためのコマンド。`update_sync_status` で失敗状態が把握できるようになった後、`SyncStatusIndicator` からの「再送キューへ追加」アクションとして利用する。
-5. **`join_topic_by_name`** — トピック ID が未確定でも参加できるようにするための P2P コマンド。Inventory 5.9 の「Global Composer からトピック作成」シナリオで、名前入力のみで参加→投稿へ接続する際のフォールバックとして整備する。
-6. **`delete_events`** — `delete_post` 実装（Inventory 5.10）と組み合わせて Nostr 側のイベントを確実に削除するためのコマンド。P2P 内での削除フローが安定した段階で外部配信用に拡張する。
-7. **`add_relay`** — 現在の方針（2025年09月15日更新）では外部リレー接続を優先しないため低優先度。リレー連携を再開する際に、鍵管理ダイアログや設定画面の拡張と合わせて導線を設計する。
-8. **`get_nostr_pubkey`** — `authStore` が `npub`/`pubkey` を保持しているため当面は不要。プロフィール共有 UI を刷新するタイミングで、セキュアストレージから再取得する必要性を再評価する。
-9. **`clear_all_accounts_for_test`** — 開発者向けのリセット操作。フェイルセーフ導線と誤操作対策が整った段階で開発者ツール（Debug パネル）に組み込む。
+1. **`join_topic_by_name`** — Inventory 5.9 のトピック作成ショートカット／Global Composer 連携で ID 未確定の参加フローを扱うために最優先で整備。P2P 側の名前解決ロジックとセットで実装する。
+2. **`delete_events`** — Inventory 5.10 の投稿削除キャッシュ整合性と連動し、Nostr イベントを確実に削除するためのバックエンド API。`delete_post` の統合テスト拡張と同じマイルストーンで着手する。
+3. **`add_relay`** — 2025年09月15日の方針どおり外部リレー非接続だが、鍵管理モーダル（Phase 5 優先度 #9）と併せて再開可否を評価する。現状は開発者ツールの backlog。
+4. **`get_nostr_pubkey`** — `authStore` で pubkey を保持しているため優先度は低い。プロフィール共有 UI の刷新時に再評価し、`SecureStorage` からの再取得や multi-identity 表示に備える。
+5. **`clear_all_accounts_for_test`** — Debug パネルの「テスト用リセット」導線に組み込む計画。誤操作防止の確認ダイアログとログ記録を実装した後、開発者向け機能として公開する。
 
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
 - 認証 E2E: `import_key`, `get_public_key`

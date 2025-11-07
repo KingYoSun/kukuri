@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年11月06日  
+**最終更新**: 2025年11月07日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## Phase 1: 認証フローの修正 ✓ 完了
@@ -444,6 +444,8 @@ export function PeerConnectionPanel() {
 - 2025年11月06日: Inventory 5.10 に投稿削除後の React Query キャッシュ整合性（`useDeletePost` ミューテーション、トレンド/フォローキャッシュ更新、Docker シナリオ `post-delete-cache`、Rust 統合テスト）と `error_handling_guidelines.md` のトーストキー更新を追加。`phase5_ci_path_audit.md` のテスト ID と Nightly 実行計画を同期。
 - 2025年11月06日: Inventory 5.6 と `phase5_user_flow_summary.md` 2章に Kind4 DM 未読バッジ・再送導線・DirectMessageDialog 改修を反映し、`phase5_ci_path_audit.md` の `test:unit` 更新（DirectMessageDialog / Summary Panel / UserSearchResults）と整合を取った。
 - 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata`・`update_sync_status` を自動更新。`SyncStatusIndicator` の最終同期時刻がバックエンドのスナップショットに追従することを確認。
+- 2025年11月07日: Inventory 5.6.1/5.6.2 と `phase5_user_flow_summary.md` 2章/Quick View を更新し、`/profile/$userId` の DM 呼び出し導線・フォロー/フォロワー一覧（ソート/検索/件数表示）・`profile.$userId.test.tsx` の Nightly 追加、Rust (`kukuri-cli`) 検証ログを記録。フォロー導線 backlog を再整理し、優先タスク（プロフィール導線/DM 再送/フォロー一覧拡張）を Phase 5 リストに反映。
+- 2025年11月07日: Inventory 5.11 に `SyncStatusIndicator` / `OfflineIndicator` / `useSyncManager` / `offlineStore` / `offlineApi.update_cache_metadata` / `update_sync_status` / `get_cache_status` / `add_to_sync_queue` のフローとギャップ・テスト計画を追記し、`phase5_user_flow_summary.md` のグローバル要素および `phase5_ci_path_audit.md` のテーブル（SyncStatusIndicator/useSyncManager テスト行）へリンク。`pnpm vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx` を Nightly へ追加したログを保存。
 
 ### Phase 5 優先度更新（2025年11月03日）
 - 進捗ログ: グローバルコンポーザー導線と設定画面モーダル（Priority 1-3）を2025年11月02日にプロトタイプ実装。2025年11月03日はステータス監視カードとプロフィール編集モーダルの反映手順を整理し、未実装の画像アップロード・鍵管理・未接続コマンド対応をバックログに追加。2025年11月06日はトレンド/フォロー導線のデータ要件・テスト計画を Inventory/Summary/CI 計画に反映し、`generated_at` ミリ秒化・Summary Panel・`trending_metrics_job` をフォロータスクとして明示。2025年11月07日は Docker シナリオ `trending-feed` の実行要件と Nightly / スクリプト統合方針を整理し、`docs/03_implementation/trending_metrics_job.md` に集計ジョブの実装・監視ドラフトを作成。QA/バックエンド連携は引き続き課題。
