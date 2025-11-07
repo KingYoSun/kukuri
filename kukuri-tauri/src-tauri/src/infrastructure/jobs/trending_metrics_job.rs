@@ -103,7 +103,7 @@ fn merge_activity(
     for row in activity_24h {
         let entry = aggregated
             .entry(row.topic_id.clone())
-            .or_insert_with(AggregatedTopicMetrics::default);
+            .or_default();
         entry.posts_24h = row.posts_count;
         entry.unique_authors = row.unique_authors;
         entry.boosts = row.boosts;
@@ -115,7 +115,7 @@ fn merge_activity(
     for row in activity_6h {
         let entry = aggregated
             .entry(row.topic_id.clone())
-            .or_insert_with(AggregatedTopicMetrics::default);
+            .or_default();
         entry.posts_6h = row.posts_count;
 
         if entry.unique_authors == 0 {

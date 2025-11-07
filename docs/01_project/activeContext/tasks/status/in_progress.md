@@ -17,6 +17,7 @@
   - 2025年11月07日: `gh run view 19134966693 --log` で `native-test-linux` の TypeScript 型エラーと `format-check` の Rust フォーマッタ失敗を特定。`DirectMessageStore` 初期状態の Omit 漏れと `DirectMessageDialog` の `useInfiniteQuery` ジェネリクス設定ミスを修正し、`cargo fmt` で Rust 側の差分を整形。
   - 2025年11月07日: `npx vitest run` / `npx tsc --noEmit` / `npx eslint …` に加え、`cargo test`・`cargo clippy --all-features -- -D warnings`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を再実行してローカル環境での回帰を確認。
   - 2025年11月07日: `gh act push -j native-test-linux -W .github/workflows/test.yml` を実行し、`Test/Native Test (Linux)` ジョブが `Job succeeded` となることをログ (`act-native-ps.log`) で確認。
+  - 2025年11月07日: `profile.$userId.tsx` の `useInfiniteQuery` キー型／`sqlite_repository/users.rs` の `format!` 誘発箇所／`trending_metrics_job.rs` の `or_insert_with` を修正し、`pnpm test`・`pnpm type-check`・`pnpm lint`・`cargo clippy --workspace --all-features`（`kukuri-tauri/src-tauri` / `kukuri-cli`）・`cargo test --workspace --all-features`（`kukuri-cli`）・`scripts/test-docker.ps1 rust -NoBuild`・`gh act push -j native-test-linux -W .github/workflows/test.yml`（ログ: `gh-act-native.log`）で完走を再確認。
 
 ### Clippy 警告ゼロ体制の復帰
 

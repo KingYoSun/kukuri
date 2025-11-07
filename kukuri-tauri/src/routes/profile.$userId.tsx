@@ -119,7 +119,7 @@ function ProfilePage() {
     ProfileListPage,
     Error,
     InfiniteData<ProfileListPage>,
-    ['profile', string, 'followers'],
+    ['profile', string, 'followers', FollowListSort, string],
     string | null
   >({
     queryKey: [
@@ -158,7 +158,7 @@ function ProfilePage() {
     ProfileListPage,
     Error,
     InfiniteData<ProfileListPage>,
-    ['profile', string, 'following'],
+    ['profile', string, 'following', FollowListSort, string],
     string | null
   >({
     queryKey: [

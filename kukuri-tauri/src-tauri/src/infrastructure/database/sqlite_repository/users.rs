@@ -144,24 +144,23 @@ impl UserRepository for SqliteRepository {
         let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
             "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at, \
                     f.created_at AS relation_created_at, f.follower_pubkey AS relation_pubkey, \
-                    {sort_key_lower} AS sort_key_normalized \
+                    {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
                  FROM users u \
                  INNER JOIN follows f ON u.pubkey = f.follower_pubkey \
                  WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-            sort_key_lower = SORT_KEY_LOWER_EXPR
         ));
         builder.push_bind(npub);
 
-        let mut count_builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
+        let mut count_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
             "SELECT COUNT(*) as total_count \
                  FROM users u \
                  INNER JOIN follows f ON u.pubkey = f.follower_pubkey \
                  WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-        ));
+        );
         count_builder.push_bind(npub);
 
         if let Some(search_value) = normalized_search.as_ref() {
-            let pattern = format!("%{}%", search_value);
+            let pattern = format!("%{search_value}%");
             builder.push(" AND (");
             builder.push(SORT_KEY_LOWER_EXPR);
             builder.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
@@ -296,11 +295,10 @@ impl UserRepository for SqliteRepository {
         let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
             "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at, \
                     f.created_at AS relation_created_at, f.followed_pubkey AS relation_pubkey, \
-                    {sort_key_lower} AS sort_key_normalized \
+                    {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
                  FROM users u \
                  INNER JOIN follows f ON u.pubkey = f.followed_pubkey \
                  WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-            sort_key_lower = SORT_KEY_LOWER_EXPR
         ));
         builder.push_bind(npub);
 
@@ -313,7 +311,7 @@ impl UserRepository for SqliteRepository {
         count_builder.push_bind(npub);
 
         if let Some(search_value) = normalized_search.as_ref() {
-            let pattern = format!("%{}%", search_value);
+            let pattern = format!("%{search_value}%");
             builder.push(" AND (");
             builder.push(SORT_KEY_LOWER_EXPR);
             builder.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
