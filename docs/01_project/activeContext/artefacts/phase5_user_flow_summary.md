@@ -53,7 +53,7 @@
 
 ## 2. グローバル要素
 - **ステータスカード**: `RelayStatus` / `P2PStatus` が 30 秒間隔でステータス取得。フェイルオーバー時のバックオフと手動再試行を実装。
-- **同期系 UI**: `SyncStatusIndicator`／`OfflineIndicator` が `offlineStore` と `syncEngine` の状態を表示し、未同期アクションの再送を支援。
+- **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。TopicSelector へ「新しいトピックを作成」ショートカットを追加し、`TopicFormModal`（mode=`create-from-composer`）を介して `createAndJoinTopic` を実行する計画を Inventory 5.9 に記載。
 - **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済み。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、`totalCount` 表示を実装済みで、Inventory 5.6.2 に詳細を記録。既読同期の多端末共有とページング拡張は Inventory 5.6.1/5.6.2 で継続。
@@ -67,9 +67,10 @@
 5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
 6. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
 7. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
+8. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` を取り込み、キャッシュ統計と手動キュー登録を提供済み。残課題は OfflineIndicator との情報分散解消と `cache_types.metadata` の詳細表示・再送結果のフィードバック。
 
 ## 4. テストカバレッジ概要
-- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx`。
+- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx`。
 - Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で P2P ステータスおよびプロフィール同期を検証。
 - Docker: `./scripts/test-docker.sh p2p`・`./scripts/test-docker.ps1 rust` で Gossip/Mainline スモークを再現。`./scripts/test-docker.sh ts --scenario trending-feed` / `.\scripts\test-docker.ps1 ts -Scenario trending-feed` でトレンド/フォロー導線の Vitest を Docker 上で実行（フィクスチャは `tests/fixtures/trending/default.json`）。
 

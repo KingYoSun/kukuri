@@ -5,7 +5,7 @@ import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncE
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { offlineApi } from '@/api/offline';
-import type { OfflineAction } from '@/types/offline';
+import type { CacheStatusResponse, OfflineAction } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 
 export interface SyncStatus {
@@ -98,6 +98,51 @@ export function useSyncManager() {
   });
 
   const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatusResponse | null>(null);
+  const [cacheStatusError, setCacheStatusError] = useState<string | null>(null);
+  const [isCacheStatusLoading, setCacheStatusLoading] = useState(false);
+
+  const refreshCacheStatus = useCallback(async () => {
+    setCacheStatusLoading(true);
+    try {
+      const status = await offlineApi.getCacheStatus();
+      setCacheStatus(status);
+      setCacheStatusError(null);
+    } catch (error) {
+      errorHandler.log('Failed to fetch cache status', error, {
+        context: 'useSyncManager.refreshCacheStatus',
+      });
+      setCacheStatusError('キャッシュ状態の取得に失敗しました');
+    } finally {
+      setCacheStatusLoading(false);
+    }
+  }, []);
+
+  const enqueueSyncRequest = useCallback(
+    async (cacheType: string) => {
+      try {
+        await offlineApi.addToSyncQueue({
+          action_type: 'manual_sync_refresh',
+          payload: {
+            cacheType,
+            requestedAt: new Date().toISOString(),
+            source: 'sync_status_indicator',
+            userPubkey: currentUser?.npub ?? null,
+          },
+          priority: 5,
+        });
+        toast.success('再送キューに追加しました');
+        await refreshCacheStatus();
+      } catch (error) {
+        errorHandler.log('Failed to enqueue sync request', error, {
+          context: 'useSyncManager.enqueueSyncRequest',
+        });
+        toast.error('再送キューへの追加に失敗しました');
+        throw error;
+      }
+    },
+    [currentUser?.npub, refreshCacheStatus],
+  );
 
   const persistSyncStatuses = useCallback(
     async (result: SyncResult) => {
@@ -171,8 +216,9 @@ export function useSyncManager() {
       }
 
       await refreshCacheMetadata();
+      await refreshCacheStatus();
     },
-    [refreshCacheMetadata],
+    [refreshCacheMetadata, refreshCacheStatus],
   );
 
   /**
@@ -246,6 +292,7 @@ export function useSyncManager() {
       }));
       toast.error('同期に失敗しました');
       await refreshCacheMetadata();
+      await refreshCacheStatus();
     }
   }, [
     isOnline,
@@ -254,6 +301,7 @@ export function useSyncManager() {
     clearSyncError,
     persistSyncStatuses,
     refreshCacheMetadata,
+    refreshCacheStatus,
   ]);
 
   /**
@@ -375,6 +423,21 @@ export function useSyncManager() {
     return () => clearInterval(interval);
   }, [isOnline, pendingActions.length]); // triggerManualSyncとsyncStatus.isSyncingは依存配列に含めない
 
+  /**
+   * キャッシュステータスの自動更新
+   */
+  useEffect(() => {
+    void refreshCacheStatus();
+    const interval = setInterval(() => {
+      void refreshCacheStatus();
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [refreshCacheStatus]);
+
+  useEffect(() => {
+    void refreshCacheStatus();
+  }, [pendingActions.length, refreshCacheStatus]);
+
   return {
     syncStatus,
     triggerManualSync,
@@ -384,5 +447,10 @@ export function useSyncManager() {
     isOnline,
     showConflictDialog,
     setShowConflictDialog,
+    cacheStatus,
+    cacheStatusError,
+    isCacheStatusLoading,
+    refreshCacheStatus,
+    enqueueSyncRequest,
   };
 }

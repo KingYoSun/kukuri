@@ -4,6 +4,7 @@ import { useSyncManager } from '@/hooks/useSyncManager';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { offlineApi } from '@/api/offline';
 import type { OfflineAction } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 
@@ -11,6 +12,18 @@ import { OfflineActionType } from '@/types/offline';
 vi.mock('@/stores/offlineStore');
 vi.mock('@/stores/authStore');
 vi.mock('@/lib/sync/syncEngine');
+vi.mock('@/api/offline', () => ({
+  offlineApi: {
+    updateSyncStatus: vi.fn().mockResolvedValue(undefined),
+    updateCacheMetadata: vi.fn().mockResolvedValue(undefined),
+    getCacheStatus: vi.fn().mockResolvedValue({
+      total_items: 0,
+      stale_items: 0,
+      cache_types: [],
+    }),
+    addToSyncQueue: vi.fn().mockResolvedValue(1),
+  },
+}));
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -45,7 +58,7 @@ describe('useSyncManager', () => {
   };
 
   const defaultAuthState = {
-    currentAccount: {
+    currentUser: {
       npub: 'npub123',
       name: 'Test User',
     },
@@ -57,13 +70,24 @@ describe('useSyncManager', () => {
     vi.mocked(useAuthStore).mockReturnValue(defaultAuthState as any);
   });
 
+  const renderManagerHook = async (options?: { skipClear?: boolean }) => {
+    const utils = renderHook(() => useSyncManager());
+    await waitFor(() => {
+      expect(offlineApi.getCacheStatus).toHaveBeenCalled();
+    });
+    if (!options?.skipClear) {
+      vi.mocked(offlineApi.getCacheStatus).mockClear();
+    }
+    return utils;
+  };
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   describe('初期状態', () => {
-    it('正しい初期状態を持つ', () => {
-      const { result } = renderHook(() => useSyncManager());
+    it('正しい初期状態を持つ', async () => {
+      const { result } = await renderManagerHook();
 
       expect(result.current.syncStatus.isSyncing).toBe(false);
       expect(result.current.syncStatus.progress).toBe(0);
@@ -83,7 +107,7 @@ describe('useSyncManager', () => {
         isOnline: false,
       } as any);
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       await act(async () => {
         await result.current.triggerManualSync();
@@ -100,7 +124,7 @@ describe('useSyncManager', () => {
         pendingActions: [],
       } as any);
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       await act(async () => {
         await result.current.triggerManualSync();
@@ -121,7 +145,7 @@ describe('useSyncManager', () => {
 
       vi.mocked(syncEngine.performDifferentialSync).mockResolvedValue(mockSyncResult);
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       await act(async () => {
         await result.current.triggerManualSync();
@@ -150,7 +174,7 @@ describe('useSyncManager', () => {
 
       vi.mocked(syncEngine.performDifferentialSync).mockResolvedValue(mockSyncResult);
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       await act(async () => {
         await result.current.triggerManualSync();
@@ -165,7 +189,7 @@ describe('useSyncManager', () => {
       const errorMessage = 'Network error';
       vi.mocked(syncEngine.performDifferentialSync).mockRejectedValue(new Error(errorMessage));
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       await act(async () => {
         await result.current.triggerManualSync();
@@ -178,7 +202,7 @@ describe('useSyncManager', () => {
 
     it('同期中は重複実行を防ぐ', async () => {
       const { toast } = await import('sonner');
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       // 同期中の状態をシミュレート
       act(() => {
@@ -202,7 +226,7 @@ describe('useSyncManager', () => {
         conflictType: 'timestamp' as const,
       };
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       // 競合を追加
       act(() => {
@@ -228,7 +252,7 @@ describe('useSyncManager', () => {
         conflictType: 'timestamp' as const,
       };
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       // 競合を追加
       act(() => {
@@ -251,7 +275,7 @@ describe('useSyncManager', () => {
         mergedData: { content: 'Merged content' },
       };
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       // 競合を追加
       act(() => {
@@ -276,7 +300,7 @@ describe('useSyncManager', () => {
       // applyActionがエラーをスローするようにモック
       vi.spyOn(syncEngine as any, 'applyAction').mockRejectedValue(new Error('Apply failed'));
 
-      const { result } = renderHook(() => useSyncManager());
+      const { result } = await renderManagerHook();
 
       // 競合を追加
       act(() => {
@@ -294,8 +318,8 @@ describe('useSyncManager', () => {
   });
 
   describe('updateProgress', () => {
-    it('同期進捗を更新できる', () => {
-      const { result } = renderHook(() => useSyncManager());
+    it('同期進捗を更新できる', async () => {
+      const { result } = await renderManagerHook();
 
       act(() => {
         result.current.updateProgress(5, 10);
@@ -306,8 +330,8 @@ describe('useSyncManager', () => {
       expect(result.current.syncStatus.totalItems).toBe(10);
     });
 
-    it('0アイテムの場合は進捗0%', () => {
-      const { result } = renderHook(() => useSyncManager());
+    it('0アイテムの場合は進捗0%', async () => {
+      const { result } = await renderManagerHook();
 
       act(() => {
         result.current.updateProgress(0, 0);
@@ -343,7 +367,7 @@ describe('useSyncManager', () => {
         pendingActions: mockPendingActions,
       } as any);
 
-      const { rerender } = renderHook(() => useSyncManager());
+      const { rerender } = await renderManagerHook();
 
       // オンラインに変更（pendingActionsも保持）
       vi.mocked(useOfflineStore).mockReturnValue({
@@ -366,5 +390,34 @@ describe('useSyncManager', () => {
         { timeout: 5000 },
       );
     }, 15000);
+  });
+
+  describe('キャッシュステータス', () => {
+    it('マウント時にキャッシュ状態を取得する', async () => {
+      await renderManagerHook({ skipClear: true });
+      expect(offlineApi.getCacheStatus).toHaveBeenCalled();
+      vi.mocked(offlineApi.getCacheStatus).mockClear();
+    });
+
+    it('手動キュー追加で API を呼び出す', async () => {
+      const { result } = await renderManagerHook();
+
+      await act(async () => {
+        await result.current.enqueueSyncRequest('sync_queue');
+      });
+
+      expect(offlineApi.addToSyncQueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action_type: 'manual_sync_refresh',
+          payload: expect.objectContaining({
+            cacheType: 'sync_queue',
+            source: 'sync_status_indicator',
+          }),
+          priority: 5,
+        }),
+      );
+      // enqueue 後にキャッシュステータスを再取得
+      expect(offlineApi.getCacheStatus).toHaveBeenCalledTimes(1);
+    });
   });
 });

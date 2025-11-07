@@ -470,6 +470,33 @@
   - `phase5_ci_path_audit.md` に `useDeletePost` / `post_delete_flow` テスト ID を追加し、Nightly テストのカバレッジに含める。
   - `tauri_app_implementation_plan.md` Phase 5 の優先タスクへ「投稿削除キャッシュ整合性」を追加する。
 
+### 5.11 SyncStatusIndicator とオフライン同期導線（2025年11月07日追加）
+- **目的**: オフライン操作や差分同期の状態を一元的に可視化し、「いつ同期されるのか」「失敗/競合時にどう対処するのか」を UI 上で完結させる。Relay/P2P インジケーターとは別に、投稿/トピック/フォローなど全エンティティの再送を追跡できるようにする。
+- **UI 実装状況**
+  - `SyncStatusIndicator`（`src/components/SyncStatusIndicator.tsx`）はヘッダー右側のゴーストボタン＋ポップオーバーで構成。アイコンは `isOnline` / `isSyncing` / `pendingActionsCount` / `conflicts` / `error` を見て `WifiOff`・`RefreshCw`・`AlertTriangle`・`AlertCircle`・`CheckCircle` を切り替える。
+  - ポップオーバーには (1) 接続状態、(2) 同期進捗バー（同期中のみ）、(3) 未同期アクション件数、(4) 上位 3 件までの競合カード、(5) エラーメッセージ、(6) 最終同期からの経過時間を表示。`今すぐ同期` ボタンはオンラインかつ未同期アクションが存在する場合のみ有効化される。
+  - 競合カードをクリックすると `AlertDialog` で `resolveConflict('local'|'remote'|'merge')` を選択でき、`selectedConflict` をローカルステートで保持する。`SyncConflict` の `localAction.createdAt` を `toLocaleString('ja-JP')` で表示。
+  - `PendingActions` が 0 件でもアイコンとテキストで「同期済み」を表示し、バッジは描画しない。`pendingActionsCount > 0` の場合のみ `Badge` に件数を表示。
+  - 2025年11月07日: `get_cache_status` の結果を 60 秒間隔（＋ `pendingActions` 変化時）で取得し、キャッシュ合計/ステール件数と `cache_types` をカードで表示。ステールなタイプには「再送キュー」ボタンを表示し、押下時は `add_to_sync_queue` で `action_type='manual_sync_refresh'`・`payload={ cacheType, source: 'sync_status_indicator', requestedAt }` を登録する。`Refresh` ボタンで手動更新し、取得エラー (`cacheStatusError`) は赤字で表示する。
+- **同期エンジン / ストア連携**
+  - `useSyncManager`（`src/hooks/useSyncManager.ts`）が `syncEngine.performDifferentialSync` を呼び出し、`SyncResult` を解析して `setSyncError`・`clearSyncError`・`syncPendingActions`（`useOfflineStore`）を更新。オンライン復帰後 2 秒で自動同期、さらに 5 分間隔の定期同期を行う。
+  - `persistSyncStatuses` は同期結果ごとに `offlineApi.updateSyncStatus(entityType, entityId, status)` を実行し、`fully_synced` / `failed` / `conflict` を Tauri DB に記録。`extractEntityContext` は `OfflineActionType` から `entityType` / `entityId` を推定し、未定義の場合は JSON payload から拾う。
+  - `offlineStore.refreshCacheMetadata` が `offlineApi.updateCacheMetadata` を呼び出し、`pendingCount`・`syncErrorCount`・`isSyncing`・`lastSyncedAt` を 1 時間 TTL で記録。`addPendingAction` / `removePendingAction` / `setSyncError` / `clearSyncError` / `syncPendingActions` など全ての経路で `refreshMetadata()` を非同期実行する。
+  - `offlineStore` はブラウザの `online/offline` イベントを監視し、オンライン化時に `localStorage.currentUserPubkey` を元に `syncPendingActions` を即時起動。Tauri 側の `offline://reindex_complete` イベントも購読し、再索引完了後に `loadPendingActions` と `updateLastSyncedAt` を呼び出す。
+  - `useSyncManager.resolveConflict` は `syncEngine['applyAction']` を直接呼んでローカル/リモート/マージ結果を適用し、成功時は `toast` で通知。解決済みの競合は `setSyncStatus(...conflicts.filter(...))` で除外。
+- **バックエンド / コマンド**
+  - `offlineApi.saveOfflineAction` / `.syncOfflineActions` / `.getOfflineActions` / `.cleanupExpiredCache` / `.saveOptimisticUpdate` / `.confirmOptimisticUpdate` といった Tauri コマンドを `offlineStore` が直接利用。`saveOfflineAction` 成功時は `OfflineActionType` に応じて `OfflineAction` を `pendingActions` へ登録し、オンラインなら即座に `syncPendingActions` を再実行する。
+  - `update_cache_metadata` と `update_sync_status` は 2025年11月06日に導入済みで、`SyncStatusIndicator` のポップオーバー表示とバックエンド統計を一致させるための前提 API。2025年11月07日: `get_cache_status` を `useSyncManager.refreshCacheStatus` から 60 秒間隔＋手動同期後に呼び出し、`cacheStatus` state として UI へ供給。`add_to_sync_queue` は「再送キュー」ボタン経由で `manual_sync_refresh` アクションを生成し、バックエンドの `sync_queue` に JSON payload（`cacheType`/`requestedAt`/`source`/`userPubkey`）を保存する。
+  - 今後は `cache_types.metadata` の詳細（失敗理由・最終同期アカウント）を API 側で拡張し、UI へ付加情報を表示する。キュー投入後の進捗を `sync_queue` テーブルと連携し、`SyncStatusIndicator` でステータスをフィードバックする導線を backlog に残す。
+- **ギャップ / 今後の導線強化**
+  - `SyncStatusIndicator` と `OfflineIndicator` が別コンポーネントのため、画面右下バナーとの重複表示がある。Phase 5 では `OfflineIndicator` を簡易版（接続状態と件数のみ）に絞り、詳細は `SyncStatusIndicator` へ誘導する計画を追加（`tauri_app_implementation_plan.md` にフォローアップを記録予定）。
+  - 競合解決ダイアログは `merge` オプションこそ UI に出ているが、`syncEngine['applyAction']` へ渡す `mergedData` を UI 側で生成していないため、実際には `local` / `remote` の 2 択となっている。Conflict preview へ差分表示・マージ入力を追加する必要がある。
+  - `errorHandler` は `useSyncManager` / `offlineStore` から `log` / `info` / `warn` を呼び出しているが、UI 側でのユーザー向け文言は `SyncStatusIndicator` のポップオーバーに限定されている。`error_handling_guidelines.md` へ `SyncStatus.*` キーを追加し、トースト文言とメタデータを整理する。
+- **テスト計画**
+  - 既存: `src/tests/unit/components/SyncStatusIndicator.test.tsx` で `pendingActionsCount`・競合ボタン表示・手動同期ボタン活性・最終同期時刻フォーマットに加え、2025年11月07日からキャッシュステータス表示/更新ボタン/再送キュー操作をカバー。`src/tests/unit/hooks/useSyncManager.test.tsx` も `triggerManualSync` ガード・`persistSyncStatuses`・競合検出に加え、`get_cache_status` の取得タイミングと `enqueueSyncRequest` による `add_to_sync_queue` 呼び出しを検証。`src/tests/unit/stores/offlineStore.test.ts` は `refreshCacheMetadata` / `saveOfflineAction` / `syncPendingActions` の副作用をテスト。
+  - 追加予定: (1) `useSyncManager` の 5 分タイマー／オンライン復帰 2 秒同期のフェイクタイマー検証、(2) `offlineStore` の `offline://reindex_complete` リスナー E2E（Vitest の `vi.mock('@tauri-apps/api/event')` によるイベントエミュレーション）、(3) Docker シナリオ `offline-sync` を `docker-compose.test.yml` へ追加し、`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx` を Linux/Windows で反復実行。
+  - CI: `phase5_ci_path_audit.md` に `SyncStatusIndicator.ui` / `useSyncManager.logic` / `offlineStore.cache-metadata` のパスを追加し、Nightly でのカバレッジ可視化を行う。
+
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 
 ### 6.1 要件

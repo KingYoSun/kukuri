@@ -13,6 +13,8 @@ describe('SyncStatusIndicator', () => {
   const mockTriggerManualSync = vi.fn();
   const mockResolveConflict = vi.fn();
   const mockUpdateProgress = vi.fn();
+  const mockRefreshCacheStatus = vi.fn();
+  const mockEnqueueSyncRequest = vi.fn().mockResolvedValue(undefined);
 
   const defaultSyncStatus: SyncStatus = {
     isSyncing: false,
@@ -31,6 +33,11 @@ describe('SyncStatusIndicator', () => {
     updateProgress: mockUpdateProgress,
     pendingActionsCount: 0,
     isOnline: true,
+    cacheStatus: null,
+    cacheStatusError: null,
+    isCacheStatusLoading: false,
+    refreshCacheStatus: mockRefreshCacheStatus,
+    enqueueSyncRequest: mockEnqueueSyncRequest,
   };
 
   beforeEach(() => {
@@ -244,6 +251,65 @@ describe('SyncStatusIndicator', () => {
 
       await waitFor(() => {
         expect(screen.getByText('最終同期')).toBeInTheDocument();
+      });
+    });
+
+    it('キャッシュ状態と操作を表示', async () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        cacheStatus: {
+          total_items: 5,
+          stale_items: 2,
+          cache_types: [
+            {
+              cache_type: 'sync_queue',
+              item_count: 3,
+              last_synced_at: 1_700_000_000,
+              is_stale: true,
+            },
+          ],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(screen.getByText('キャッシュ状態')).toBeInTheDocument();
+        expect(screen.getByText('同期キュー')).toBeInTheDocument();
+      });
+
+      const refreshButton = screen.getByLabelText('キャッシュ情報を更新');
+      fireEvent.click(refreshButton);
+      expect(mockRefreshCacheStatus).toHaveBeenCalled();
+    });
+
+    it('再送キューを追加できる', async () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        cacheStatus: {
+          total_items: 1,
+          stale_items: 1,
+          cache_types: [
+            { cache_type: 'sync_queue', item_count: 1, last_synced_at: null, is_stale: true },
+          ],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        const queueButton = screen.getByText('再送キュー');
+        fireEvent.click(queueButton);
+      });
+
+      await waitFor(() => {
+        expect(mockEnqueueSyncRequest).toHaveBeenCalledWith('sync_queue');
       });
     });
   });

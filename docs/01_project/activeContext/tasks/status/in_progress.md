@@ -103,6 +103,8 @@
   - 2025年11月06日: `phase5_ci_path_audit.md` に test:unit 更新と関連資料リンクを追加し、`tauri_app_implementation_plan.md` の Phase 5 メモへ DM 未読バッジ・Summary Panel 反映の記録を追記。`refactoring_plan_2025-08-08_v3.md` の指標更新と整合を確認。
   - 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata` / `update_sync_status` を自動呼び出し。`pnpm vitest run src/tests/unit/stores/offlineStore.test.ts` でメタデータ更新のユニットテストを追加し、`cargo test`（`kukuri-tauri/src-tauri`）は既知の `STATUS_ENTRYPOINT_NOT_FOUND` で停止することを確認（再実行は保留）。
   - 2025年11月06日: Inventory 3.2/3.3 の未接続コマンドを再評価し、`update_cache_metadata` → `update_sync_status` → `get_cache_status` → `add_to_sync_queue` を最優先グループとする対応順を決定。続いて `join_topic_by_name` / `delete_events` / `add_relay` / `get_nostr_pubkey` / `clear_all_accounts_for_test` の順に Phase 5 backlog を進める方針を記録。
+  - 2025年11月07日: `phase5_user_flow_inventory.md` に 5.11「SyncStatusIndicator とオフライン同期導線」を追加し、`useSyncManager` / `offlineStore` / `offlineApi.update_cache_metadata` / `update_sync_status` の流れとギャップ・テスト計画を整理。あわせて `phase5_user_flow_summary.md` のグローバル要素/Quick View を同期導線の最新状態に更新し、`SyncStatusIndicator` と `OfflineIndicator` の役割分担＆API未連携課題を反映。
+  - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` を `useSyncManager` / `SyncStatusIndicator` に組み込み、キャッシュ統計表示・再送キュー追加ボタン・手動更新ボタンを実装。`useSyncManager` に `cacheStatus` ステートと `enqueueSyncRequest` を追加し、`npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx` でキャッシュ周りのユニットテストを整備。ドキュメント（Inventory 5.11 / Summary Quick View）を最新化。
 
 ### プロフィールアバター UI 連携
 

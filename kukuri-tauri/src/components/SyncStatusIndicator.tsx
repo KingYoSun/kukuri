@@ -22,23 +22,46 @@ import {
   Wifi,
   WifiOff,
   AlertTriangle,
+  Database,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 
 export function SyncStatusIndicator() {
-  const { syncStatus, triggerManualSync, resolveConflict, pendingActionsCount, isOnline } =
-    useSyncManager();
+  const {
+    syncStatus,
+    triggerManualSync,
+    resolveConflict,
+    pendingActionsCount,
+    isOnline,
+    cacheStatus,
+    cacheStatusError,
+    isCacheStatusLoading,
+    refreshCacheStatus,
+    enqueueSyncRequest,
+  } = useSyncManager();
 
   const [selectedConflict, setSelectedConflict] = React.useState<SyncConflict | null>(null);
   const [showConflictDialog, setShowConflictDialog] = React.useState(false);
+  const [queueingType, setQueueingType] = React.useState<string | null>(null);
 
   const handleConflictResolution = (resolution: 'local' | 'remote' | 'merge') => {
     if (selectedConflict) {
       resolveConflict(selectedConflict, resolution);
       setShowConflictDialog(false);
       setSelectedConflict(null);
+    }
+  };
+
+  const handleQueueRequest = async (cacheType: string) => {
+    setQueueingType(cacheType);
+    try {
+      await enqueueSyncRequest(cacheType);
+    } catch {
+      // エラーは useSyncManager 内で通知済み
+    } finally {
+      setQueueingType((current) => (current === cacheType ? null : current));
     }
   };
 
@@ -88,6 +111,27 @@ export function SyncStatusIndicator() {
     }
 
     return `未同期: ${pendingActionsCount}件`;
+  };
+
+  const formatCacheTypeLabel = (cacheType: string) => {
+    switch (cacheType) {
+      case 'sync_queue':
+        return '同期キュー';
+      case 'offline_actions':
+        return 'オフラインアクション';
+      default:
+        return cacheType;
+    }
+  };
+
+  const formatCacheLastSynced = (timestamp?: number | null) => {
+    if (!timestamp) {
+      return '記録なし';
+    }
+    return formatDistanceToNow(new Date(timestamp * 1000), {
+      addSuffix: true,
+      locale: ja,
+    });
   };
 
   return (
@@ -195,6 +239,75 @@ export function SyncStatusIndicator() {
                 </p>
               </div>
             )}
+
+            {/* キャッシュ状態 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Database className="h-4 w-4 text-primary" />
+                  キャッシュ状態
+                </h4>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="キャッシュ情報を更新"
+                  onClick={() => {
+                    void refreshCacheStatus();
+                  }}
+                  disabled={isCacheStatusLoading}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isCacheStatusLoading ? 'animate-spin text-muted-foreground' : ''}`}
+                  />
+                </Button>
+              </div>
+              {cacheStatusError && (
+                <p className="text-sm text-red-600 dark:text-red-400">{cacheStatusError}</p>
+              )}
+              {cacheStatus ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    合計 {cacheStatus.total_items}件 / ステール {cacheStatus.stale_items}件
+                  </p>
+                  <div className="space-y-2 mt-2">
+                    {cacheStatus.cache_types.map((type) => (
+                      <div
+                        key={type.cache_type}
+                        className="rounded border border-border/60 p-2 text-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium">{formatCacheTypeLabel(type.cache_type)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              最終同期 {formatCacheLastSynced(type.last_synced_at)}
+                            </p>
+                          </div>
+                          {type.is_stale && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => {
+                                void handleQueueRequest(type.cache_type);
+                              }}
+                              disabled={!isOnline || queueingType === type.cache_type}
+                            >
+                              {queueingType === type.cache_type ? '追加中…' : '再送キュー'}
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {type.item_count}件 / {type.is_stale ? 'ステール' : '最新'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {isCacheStatusLoading ? 'キャッシュ情報を取得しています…' : 'キャッシュ情報がまだありません'}
+                </p>
+              )}
+            </div>
 
             {/* 手動同期ボタン */}
             <Button
