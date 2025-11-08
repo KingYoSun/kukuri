@@ -2,7 +2,9 @@ use crate::{
     presentation::dto::{
         ApiResponse,
         direct_message_dto::{
-            DirectMessagePage, ListDirectMessagesRequest, SendDirectMessageRequest,
+            DirectMessageConversationListDto, DirectMessagePage,
+            ListDirectMessageConversationsRequest, ListDirectMessagesRequest,
+            MarkDirectMessageConversationReadRequest, SendDirectMessageRequest,
             SendDirectMessageResponse,
         },
     },
@@ -42,5 +44,32 @@ pub async fn list_direct_messages(
     let owner_npub = ensure_authenticated(&state).await?;
     let handler = DirectMessageHandler::new(state.direct_message_service.clone());
     let result = handler.list_direct_messages(&owner_npub, request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn list_direct_message_conversations(
+    state: State<'_, AppState>,
+    request: ListDirectMessageConversationsRequest,
+) -> Result<ApiResponse<DirectMessageConversationListDto>, AppError> {
+    let owner_npub = ensure_authenticated(&state).await?;
+    let handler = DirectMessageHandler::new(state.direct_message_service.clone());
+    let result = handler
+        .list_direct_message_conversations(&owner_npub, request)
+        .await;
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn mark_direct_message_conversation_read(
+    state: State<'_, AppState>,
+    request: MarkDirectMessageConversationReadRequest,
+) -> Result<ApiResponse<()>, AppError> {
+    let owner_npub = ensure_authenticated(&state).await?;
+    let handler = DirectMessageHandler::new(state.direct_message_service.clone());
+    let result = handler
+        .mark_conversation_as_read(&owner_npub, request)
+        .await
+        .map(|_| ());
     Ok(ApiResponse::from_result(result))
 }

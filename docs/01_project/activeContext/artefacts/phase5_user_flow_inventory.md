@@ -23,7 +23,7 @@
 | サイドバー | 共通 | 参加トピック一覧（P2P最終活動時刻でソート）、未読バッジ、`新規投稿`ボタンでグローバルコンポーザーを起動、カテゴリー（`トピック一覧`/`検索`/`トレンド`/`フォロー中`） | `join_topic`/`leave_topic`（`TopicCard` 経由、`subscribe_to_topic` と連動）、`useComposerStore.openComposer`、`useUIStore`（`activeSidebarCategory` でボタンをハイライト）、`prefetchTrendingCategory` / `prefetchFollowingCategory` でクエリを事前取得 |
 | トレンドフィード | `/trending` (`routes/trending.tsx`) | トレンドスコア上位トピックのランキングカード表示、最新投稿プレビュー、更新時刻表示、参加/ブックマーク導線 | `list_trending_topics`, `list_trending_posts`, `get_topic_stats`, `join_topic`, `bookmark_post` |
 | フォロー中フィード | `/following` (`routes/following.tsx`) | フォロー中ユーザーの最新投稿タイムライン、無限スクロール、再試行ボタン、プロフィール導線 | `list_following_feed`（`include_reactions` 対応）, `get_posts`, `follow_user`/`unfollow_user`, `subscribe_to_user`, `list_direct_messages` |
-| ヘッダー | 共通 | `RealtimeIndicator`, `SyncStatusIndicator`, 通知アイコン（ダミー）、`AccountSwitcher`（アカウント切替/追加/削除/ログアウト） | `switch_account`, `list_accounts`, `remove_account`, `logout`, `disconnect_nostr`, `secure_login`（自動ログイン時） |
+| ヘッダー | 共通 | `RealtimeIndicator`, `SyncStatusIndicator`, 通知アイコン（ダミー）、`AccountSwitcher`（アカウント切替/追加/削除/ログアウト）に加え、`MessageCircle`/`Plus` ボタンで未読バッジ付きの既存会話または `DirectMessageInbox` を開き、新規 DM を開始できる | `switch_account`, `list_accounts`, `remove_account`, `logout`, `disconnect_nostr`, `secure_login`（自動ログイン時）、`useDirectMessageStore`, `useDirectMessageBadge`, `send_direct_message`, `list_direct_messages` |
 | グローバル同期 | 共通 | `SyncStatusIndicator` でオフライン同期進捗/競合対応、`useSyncManager` によるローカル→Tauri リクエスト | `create_post`, `like_post`, `join_topic`, `leave_topic`（未同期操作の再送） |
 
 ### 1.3 トピック管理
@@ -505,10 +505,11 @@
   - `DirectMessageInbox` は会話一覧（`conversations` の末尾メッセージと未読件数をソート）と新規宛先入力（npub / ユーザーID）を提供し、入力バリデーション・最新会話ショートカットを備える。会話を選択すると `useDirectMessageStore.openDialog` を呼び出し、Inbox は自動的に閉じる。
   - Summary Panel の DM カードは `SummaryMetricCard` の `action` プロップを利用して CTA ボタン（`DM Inbox を開く`）を表示し、`useDirectMessageStore.openInbox` を共有導線として呼び出す。ヘッダー/Trending/Following が同じ `DirectMessageInbox` を開くため、どの画面からでも追加クリック無しで DM モーダルへ遷移できるようになった。
   - `useDirectMessageBadge` は `useDirectMessageStore` の `unreadCounts` と `conversations` を集計し、最新メッセージと合計未読をヘッダーおよび Summary Panel へ供給する。`useDirectMessageEvents`（kind4 IPC）による `receiveIncomingMessage` 更新で数値がリアルタイムに反映される。
+  - 2025年11月08日: `direct_message_service` に `list_direct_message_conversations` / `mark_conversation_as_read` を追加し、SQLite の `direct_message_conversations` テーブル（`last_message_id`・`last_message_created_at`・`last_read_at`）に会話メタデータを永続化。Tauri コマンド（`list_direct_message_conversations` / `mark_direct_message_conversation_read`）を実装し、ログイン直後に `useDirectMessageBootstrap` で Inbox をハイドレートする。`DirectMessageDialog` は会話を開いた時点で最新メッセージ時刻を Tauri 側へ通知し、未読数が再計算されるようになった。
 - **ギャップ / 課題**
-  - Inbox は一時的なストアのみで会話リストを保持しており、アプリ再起動や別端末では履歴が表示されない。`direct_message_service` 側に「既読未読／会話一覧」を供給するクエリが無く、SQLite 上の `list_conversations` API を追加する必要がある。
+  - 会話一覧 API は直近 50 件をタイムスタンプ順に返す実装で、カーソルや検索、プロフィール情報の同梱が無い。大量会話時のページング・フィルタリング・ユーザー情報の解決を次フェーズで検討する。
   - 宛先入力は npub/ID の手動入力のみで、ユーザー検索や候補補完が無い。`search_users` 連携や QR コード読み取りなどのフォローアップが必要。
-  - Inbox のリストは messages の最終メッセージを用いた簡易ソートのため、大量会話時の仮想スクロールやフィルタリングが未実装。未読カウンタの永続化（`list_direct_messages` で初期値を復元）も backlog。
+  - Inbox のリストは messages の最終メッセージを用いた簡易ソートのため、大量会話時の仮想スクロールやフィルタリングが未実装。未読カウンタは `mark_direct_message_conversation_read` で永続化できるようになったが、多端末間でのリアルタイム共有や未読 > 50 件時の補正ロジックは backlog。
 - **テスト / フォローアップ**
   - TypeScript: `Header.test.tsx` に Inbox CTA・未読バッジ・会話あり/なしの分岐を追加。`useDirectMessageBadge.test.tsx` を新設し、未読集計と最新メッセージ判定を検証。
   - TypeScript: `components/trending/TrendingSummaryPanel.test.tsx` / `components/following/FollowingSummaryPanel.test.tsx` を追加し、DM カードの Helper 表示と CTA で `openInbox` が呼ばれることを確認。`phase5_ci_path_audit.md` の test:unit 行へ追記し、Nightly Frontend Unit Tests で監視。

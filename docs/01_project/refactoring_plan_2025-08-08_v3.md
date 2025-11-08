@@ -1,6 +1,6 @@
 # リファクタリング計画（改善版）
 作成日: 2025年08月08日
-最終更新: 2025年11月07日
+最終更新: 2025年11月08日
 
 ## 現状分析結果（完全版）
 
@@ -90,7 +90,7 @@ connection.rs           - 3箇所
 
 - 参照ドキュメント: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（2025年11月08日更新）
 - 主要導線: サイドバーの `openComposer` 経由で任意画面から投稿モーダルを起動できるほか、`RelayStatus`/`P2PStatus` が 30 秒間隔で接続状況とメトリクスを通知。設定画面の `ProfileEditDialog` は `update_nostr_metadata` → `authStore.updateUser` で即時反映し、ユーザー検索→`/profile/$userId` の導線でフォロー/フォロー解除・フォロワー一覧を閲覧できるようになった。`DirectMessageDialog` は Kind4 IPC ベースの履歴ロードと再送 UI を備え、ヘッダー右上の `MessageCircle` ボタンと `/trending` `/following` の Summary Panel が `useDirectMessageBadge` を共有して未読件数と最新受信時刻をグローバル表示する。
-- 残るギャップ: `/trending` `/following` の体験は構築済みだが Docker シナリオと `trending_metrics_job` が未着手、`/profile/$userId` の既読同期・フォロワー一覧ページングは Inventory 5.6.1/5.6.2 のフォローアップ中。ヘッダーメニューから新規 DM を開始する手段や会話一覧が無く、Summary Panel の DM カードも情報表示のみで CTA とテストが不足。`delete_post` のキャッシュ整合性、鍵管理ボタン、プライバシートグルのバックエンド連携、ユーザー検索タブのページネーション/エラー UI、Global Composer からのトピック作成、未配線の `join_topic_by_name` / `delete_events` / `add_relay` などの API 棚卸しが引き続き課題。
+- 残るギャップ: `/trending` `/following` の体験は構築済みだが Docker シナリオと `trending_metrics_job` が未着手、`/profile/$userId` の既読同期・フォロワー一覧ページングは Inventory 5.6.1/5.6.2 のフォローアップ中。ヘッダーの `MessageCircle`/`Plus` ボタンと Summary Panel の CTA から `DirectMessageInbox` を開けるようになり、`Header.test.tsx` / `TrendingSummaryPanel.test.tsx` / `FollowingSummaryPanel.test.tsx` / `useDirectMessageBadge.test.tsx` で回帰も監視できるようになった。2025年11月08日版では `direct_message_conversations` テーブル＋ `list_direct_message_conversations` / `mark_direct_message_conversation_read` を導入し、Inbox の会話一覧と未読が永続化されたが、候補補完・大量会話時の仮想スクロール・検索/フィルタリング・多端末既読共有が未整備。`delete_post` のキャッシュ整合性、鍵管理ボタン、プライバシートグルのバックエンド連携、ユーザー検索タブのページネーション/エラー UI、Global Composer からのトピック作成、未配線の `join_topic_by_name` / `delete_events` / `add_relay` などの API 棚卸しが引き続き課題。
 
 #### 2.6 重複コードパターン
 

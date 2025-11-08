@@ -8,6 +8,7 @@ import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useDirectMessageStore } from '@/stores/directMessageStore';
 import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
 import { DirectMessageInbox } from '@/components/directMessages/DirectMessageInbox';
+import { useDirectMessageBootstrap } from '@/hooks/useDirectMessageBootstrap';
 
 export function Header() {
   const { toggleSidebar } = useUIStore();
@@ -17,6 +18,8 @@ export function Header() {
   const openDialog = useDirectMessageStore((state) => state.openDialog);
   const openInbox = useDirectMessageStore((state) => state.openInbox);
   const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
+
+  useDirectMessageBootstrap();
 
   return (
     <>

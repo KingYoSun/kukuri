@@ -173,6 +173,21 @@ export interface DirectMessagePage {
   hasMore: boolean;
 }
 
+export interface DirectMessageConversationSummary {
+  conversationNpub: string;
+  unreadCount: number;
+  lastReadAt: number;
+  lastMessage: DirectMessageItem | null;
+}
+
+export interface DirectMessageConversationList {
+  items: DirectMessageConversationSummary[];
+}
+
+export interface ListDirectMessageConversationsParams {
+  limit?: number;
+}
+
 export interface ListDirectMessagesParams {
   conversationNpub: string;
   cursor?: string | null;
@@ -511,6 +526,63 @@ export class TauriApi {
       nextCursor: response?.next_cursor ?? null,
       hasMore: response?.has_more ?? false,
     };
+  }
+
+  static async listDirectMessageConversations(
+    params: ListDirectMessageConversationsParams = {},
+  ): Promise<DirectMessageConversationList> {
+    const response = await invokeCommand<{
+      items: Array<{
+        conversation_npub: string;
+        unread_count: number;
+        last_read_at: number;
+        last_message: null | {
+          event_id: string | null;
+          client_message_id: string | null;
+          sender_npub: string;
+          recipient_npub: string;
+          content: string;
+          created_at: number;
+          delivered: boolean;
+        };
+      }>;
+    }>('list_direct_message_conversations', {
+      request: {
+        limit: params.limit,
+      },
+    });
+
+    return {
+      items:
+        response?.items?.map((item) => ({
+          conversationNpub: item.conversation_npub,
+          unreadCount: item.unread_count,
+          lastReadAt: item.last_read_at,
+          lastMessage: item.last_message
+            ? {
+                eventId: item.last_message.event_id,
+                clientMessageId: item.last_message.client_message_id,
+                senderNpub: item.last_message.sender_npub,
+                recipientNpub: item.last_message.recipient_npub,
+                content: item.last_message.content,
+                createdAt: item.last_message.created_at,
+                delivered: item.last_message.delivered,
+              }
+            : null,
+        })) ?? [],
+    };
+  }
+
+  static async markDirectMessageConversationRead(params: {
+    conversationNpub: string;
+    lastReadAt: number;
+  }): Promise<void> {
+    await invokeCommandVoid('mark_direct_message_conversation_read', {
+      request: {
+        conversation_npub: params.conversationNpub,
+        last_read_at: Math.max(0, Math.floor(params.lastReadAt)),
+      },
+    });
   }
 
   static async followUser(followerNpub: string, targetNpub: string): Promise<void> {

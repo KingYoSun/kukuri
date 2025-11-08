@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { errorHandler } from '@/lib/errorHandler';
+import type { DirectMessageItem } from '@/lib/api/tauri';
 
 export type DirectMessageDeliveryStatus = 'pending' | 'sent' | 'failed';
 
@@ -14,6 +15,17 @@ export interface DirectMessageModel {
   status: DirectMessageDeliveryStatus;
 }
 
+export const mapApiMessageToModel = (item: DirectMessageItem): DirectMessageModel => ({
+  eventId: item.eventId,
+  clientMessageId:
+    item.clientMessageId ?? item.eventId ?? `generated-${item.senderNpub}-${item.createdAt}`,
+  senderNpub: item.senderNpub,
+  recipientNpub: item.recipientNpub,
+  content: item.content,
+  createdAt: item.createdAt,
+  status: item.delivered ? 'sent' : 'pending',
+});
+
 interface SetMessagesOptions {
   replace?: boolean;
 }
@@ -21,6 +33,12 @@ interface SetMessagesOptions {
 interface ReceiveMessageOptions {
   incrementUnread?: boolean;
   incrementAmount?: number;
+}
+
+interface DirectMessageConversationHydration {
+  conversationNpub: string;
+  unreadCount: number;
+  lastMessage?: DirectMessageModel;
 }
 
 interface DirectMessageStoreState {
@@ -62,6 +80,7 @@ interface DirectMessageStoreState {
   removeOptimisticMessage: (conversationNpub: string, clientMessageId: string) => void;
   markConversationAsRead: (conversationNpub: string) => void;
   incrementUnreadCount: (conversationNpub: string, amount?: number) => void;
+  hydrateConversations: (summaries: DirectMessageConversationHydration[]) => void;
   reset: () => void;
 }
 
@@ -88,6 +107,7 @@ const createInitialState = (): Omit<
   | 'removeOptimisticMessage'
   | 'markConversationAsRead'
   | 'incrementUnreadCount'
+  | 'hydrateConversations'
   | 'reset'
 > => ({
   ...createDialogState(),
@@ -289,5 +309,32 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
         [conversationNpub]: (state.unreadCounts[conversationNpub] ?? 0) + amount,
       },
     })),
+  hydrateConversations: (summaries) =>
+    set((state) => {
+      if (!Array.isArray(summaries) || summaries.length === 0) {
+        return state;
+      }
+
+      const nextConversations = { ...state.conversations };
+      const nextUnreadCounts = { ...state.unreadCounts };
+
+      for (const summary of summaries) {
+        nextUnreadCounts[summary.conversationNpub] = summary.unreadCount;
+        if (summary.lastMessage) {
+          const existing = nextConversations[summary.conversationNpub] ?? [];
+          if (existing.length === 0) {
+            nextConversations[summary.conversationNpub] = dedupeMessages([
+              summary.lastMessage,
+            ]);
+          }
+        }
+      }
+
+      return {
+        ...state,
+        conversations: nextConversations,
+        unreadCounts: nextUnreadCounts,
+      };
+    }),
   reset: () => set(() => ({ ...createInitialState() })),
 }));

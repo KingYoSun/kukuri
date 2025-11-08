@@ -1,6 +1,7 @@
 use super::SqliteRepository;
 use crate::application::ports::repositories::{
-    DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw, DirectMessageRepository,
+    DirectMessageConversationRecord, DirectMessageCursor, DirectMessageListDirection,
+    DirectMessagePageRaw, DirectMessageRepository,
 };
 use crate::domain::entities::{DirectMessage, MessageDirection, NewDirectMessage};
 use crate::shared::error::AppError;
@@ -8,9 +9,12 @@ use async_trait::async_trait;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Acquire, FromRow, Row};
 use sqlx::{QueryBuilder, Sqlite};
+use std::str::FromStr;
 
 use super::queries::{
-    INSERT_DIRECT_MESSAGE, MARK_DIRECT_MESSAGE_DELIVERED_BY_CLIENT_ID, SELECT_DIRECT_MESSAGE_BY_ID,
+    INSERT_DIRECT_MESSAGE, INSERT_DM_CONVERSATION, MARK_DIRECT_MESSAGE_DELIVERED_BY_CLIENT_ID,
+    MARK_DM_CONVERSATION_READ, SELECT_DIRECT_MESSAGE_BY_ID, SELECT_DM_CONVERSATIONS_BY_OWNER,
+    UPDATE_DM_CONVERSATION_LAST_MESSAGE,
 };
 
 #[derive(Debug, Clone)]
@@ -63,6 +67,107 @@ impl From<DirectMessageRow> for DirectMessage {
             delivered,
             direction,
         )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DirectMessageConversationJoinedRow {
+    owner_npub: String,
+    conversation_npub: String,
+    last_message_id: Option<i64>,
+    last_message_created_at: Option<i64>,
+    last_read_at: i64,
+    unread_count: i64,
+    msg_id: Option<i64>,
+    msg_owner_npub: Option<String>,
+    msg_conversation_npub: Option<String>,
+    msg_sender_npub: Option<String>,
+    msg_recipient_npub: Option<String>,
+    msg_event_id: Option<String>,
+    msg_client_message_id: Option<String>,
+    msg_payload_cipher_base64: Option<String>,
+    msg_created_at: Option<i64>,
+    msg_delivered: Option<i64>,
+    msg_direction: Option<String>,
+}
+
+impl<'r> FromRow<'r, SqliteRow> for DirectMessageConversationJoinedRow {
+    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            owner_npub: row.try_get("owner_npub")?,
+            conversation_npub: row.try_get("conversation_npub")?,
+            last_message_id: row.try_get("last_message_id")?,
+            last_message_created_at: row.try_get("last_message_created_at")?,
+            last_read_at: row.try_get("last_read_at")?,
+            unread_count: row.try_get("unread_count")?,
+            msg_id: row.try_get("msg_id")?,
+            msg_owner_npub: row.try_get("msg_owner_npub")?,
+            msg_conversation_npub: row.try_get("msg_conversation_npub")?,
+            msg_sender_npub: row.try_get("msg_sender_npub")?,
+            msg_recipient_npub: row.try_get("msg_recipient_npub")?,
+            msg_event_id: row.try_get("msg_event_id")?,
+            msg_client_message_id: row.try_get("msg_client_message_id")?,
+            msg_payload_cipher_base64: row.try_get("msg_payload_cipher_base64")?,
+            msg_created_at: row.try_get("msg_created_at")?,
+            msg_delivered: row.try_get("msg_delivered")?,
+            msg_direction: row.try_get("msg_direction")?,
+        })
+    }
+}
+
+impl DirectMessageConversationJoinedRow {
+    fn into_record(self) -> DirectMessageConversationRecord {
+        let last_message = self.build_message();
+        DirectMessageConversationRecord {
+            owner_npub: self.owner_npub,
+            conversation_npub: self.conversation_npub,
+            last_message,
+            last_read_at: self.last_read_at,
+            unread_count: self.unread_count,
+        }
+    }
+
+    fn build_message(&self) -> Option<DirectMessage> {
+        let (
+            Some(id),
+            Some(owner_npub),
+            Some(conversation_npub),
+            Some(sender_npub),
+            Some(recipient_npub),
+            Some(payload),
+            Some(created_at),
+            Some(direction_str),
+        ) = (
+            self.msg_id,
+            self.msg_owner_npub.clone(),
+            self.msg_conversation_npub.clone(),
+            self.msg_sender_npub.clone(),
+            self.msg_recipient_npub.clone(),
+            self.msg_payload_cipher_base64.clone(),
+            self.msg_created_at,
+            self.msg_direction.clone(),
+        )
+        else {
+            return None;
+        };
+
+        let delivered = self.msg_delivered.unwrap_or(1) != 0;
+        let direction =
+            MessageDirection::from_str(&direction_str).unwrap_or(MessageDirection::Outbound);
+
+        Some(DirectMessage::new(
+            id,
+            owner_npub,
+            conversation_npub,
+            sender_npub,
+            recipient_npub,
+            self.msg_event_id.clone(),
+            self.msg_client_message_id.clone(),
+            payload,
+            created_at,
+            delivered,
+            direction,
+        ))
     }
 }
 
@@ -207,5 +312,80 @@ impl DirectMessageRepository for SqliteRepository {
             .execute(&mut *conn)
             .await?;
         Ok(())
+    }
+
+    async fn upsert_conversation_metadata(
+        &self,
+        owner_npub: &str,
+        conversation_npub: &str,
+        last_message_id: i64,
+        last_message_created_at: i64,
+    ) -> Result<(), AppError> {
+        let mut conn = self.pool.get_pool().acquire().await?;
+        let updated = sqlx::query(UPDATE_DM_CONVERSATION_LAST_MESSAGE)
+            .bind(owner_npub)
+            .bind(conversation_npub)
+            .bind(last_message_id)
+            .bind(last_message_created_at)
+            .execute(&mut *conn)
+            .await?;
+
+        if updated.rows_affected() == 0 {
+            sqlx::query(INSERT_DM_CONVERSATION)
+                .bind(owner_npub)
+                .bind(conversation_npub)
+                .bind(last_message_id)
+                .bind(last_message_created_at)
+                .bind(0_i64)
+                .execute(&mut *conn)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn mark_conversation_as_read(
+        &self,
+        owner_npub: &str,
+        conversation_npub: &str,
+        read_at: i64,
+    ) -> Result<(), AppError> {
+        let mut conn = self.pool.get_pool().acquire().await?;
+        let updated = sqlx::query(MARK_DM_CONVERSATION_READ)
+            .bind(owner_npub)
+            .bind(conversation_npub)
+            .bind(read_at)
+            .execute(&mut *conn)
+            .await?;
+
+        if updated.rows_affected() == 0 {
+            sqlx::query(INSERT_DM_CONVERSATION)
+                .bind(owner_npub)
+                .bind(conversation_npub)
+                .bind(None::<i64>)
+                .bind(None::<i64>)
+                .bind(read_at)
+                .execute(&mut *conn)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn list_direct_message_conversations(
+        &self,
+        owner_npub: &str,
+        limit: usize,
+    ) -> Result<Vec<DirectMessageConversationRecord>, AppError> {
+        let fetch_limit = limit.max(1);
+        let rows = sqlx::query_as::<_, DirectMessageConversationJoinedRow>(
+            SELECT_DM_CONVERSATIONS_BY_OWNER,
+        )
+        .bind(owner_npub)
+        .bind(fetch_limit as i64)
+        .fetch_all(self.pool.get_pool())
+        .await?;
+
+        Ok(rows.into_iter().map(|row| row.into_record()).collect())
     }
 }

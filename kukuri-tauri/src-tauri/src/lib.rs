@@ -91,6 +91,8 @@ pub fn run() {
             presentation::commands::get_following,
             presentation::commands::send_direct_message,
             presentation::commands::list_direct_messages,
+            presentation::commands::list_direct_message_conversations,
+            presentation::commands::mark_direct_message_conversation_read,
             presentation::commands::upload_profile_avatar,
             presentation::commands::fetch_profile_avatar,
             // トピック関連コマンド

@@ -36,6 +36,11 @@ pub struct ListDirectMessagesRequest {
     pub direction: Option<MessagePageDirection>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ListDirectMessageConversationsRequest {
+    pub limit: Option<u32>,
+}
+
 /// 取得方向。将来的な前方/後方スクロールを想定。
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Default)]
 #[serde(rename_all = "snake_case")]
@@ -51,4 +56,23 @@ pub struct DirectMessagePage {
     pub items: Vec<DirectMessageDto>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DirectMessageConversationSummaryDto {
+    pub conversation_npub: String,
+    pub unread_count: u64,
+    pub last_read_at: i64,
+    pub last_message: Option<DirectMessageDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DirectMessageConversationListDto {
+    pub items: Vec<DirectMessageConversationSummaryDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MarkDirectMessageConversationReadRequest {
+    pub conversation_npub: String,
+    pub last_read_at: i64,
 }

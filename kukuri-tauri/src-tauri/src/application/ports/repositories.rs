@@ -255,6 +255,15 @@ pub struct DirectMessagePageRaw {
     pub has_more: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct DirectMessageConversationRecord {
+    pub owner_npub: String,
+    pub conversation_npub: String,
+    pub last_message: Option<DirectMessage>,
+    pub last_read_at: i64,
+    pub unread_count: i64,
+}
+
 #[async_trait]
 pub trait DirectMessageRepository: Send + Sync {
     async fn insert_direct_message(
@@ -278,4 +287,25 @@ pub trait DirectMessageRepository: Send + Sync {
         event_id: Option<String>,
         delivered: bool,
     ) -> Result<(), AppError>;
+
+    async fn upsert_conversation_metadata(
+        &self,
+        owner_npub: &str,
+        conversation_npub: &str,
+        last_message_id: i64,
+        last_message_created_at: i64,
+    ) -> Result<(), AppError>;
+
+    async fn mark_conversation_as_read(
+        &self,
+        owner_npub: &str,
+        conversation_npub: &str,
+        read_at: i64,
+    ) -> Result<(), AppError>;
+
+    async fn list_direct_message_conversations(
+        &self,
+        owner_npub: &str,
+        limit: usize,
+    ) -> Result<Vec<DirectMessageConversationRecord>, AppError>;
 }

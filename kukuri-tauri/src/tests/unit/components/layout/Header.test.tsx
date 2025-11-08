@@ -6,10 +6,17 @@ import { useAuthStore, useUIStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
 import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/directMessageStore';
 import { act } from 'react-dom/test-utils';
+import { TauriApi } from '@/lib/api/tauri';
 
 // モック
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    listDirectMessageConversations: vi.fn(),
+  },
 }));
 
 vi.mock('@/components/ui/dialog', async () => {
@@ -80,6 +87,7 @@ describe('Header', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+    vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({ items: [] });
     useDirectMessageStore.setState(getDirectMessageInitialState());
     const originalOpenInbox = useDirectMessageStore.getState().openInbox;
     openInboxSpy = vi.fn(() => {

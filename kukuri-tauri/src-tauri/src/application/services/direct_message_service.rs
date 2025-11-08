@@ -1,7 +1,8 @@
 #[cfg(test)]
 use crate::application::ports::messaging_gateway::MessagingSendResult;
 use crate::application::ports::repositories::{
-    DirectMessageCursor, DirectMessageListDirection, DirectMessagePageRaw, DirectMessageRepository,
+    DirectMessageConversationRecord, DirectMessageCursor, DirectMessageListDirection,
+    DirectMessagePageRaw, DirectMessageRepository,
 };
 use crate::application::ports::{
     direct_message_notifier::DirectMessageNotifier, messaging_gateway::MessagingGateway,
@@ -30,6 +31,14 @@ pub struct DirectMessagePageResult {
     pub items: Vec<DirectMessage>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
+}
+
+#[derive(Debug)]
+pub struct DirectMessageConversationSummary {
+    pub conversation_npub: String,
+    pub unread_count: u64,
+    pub last_read_at: i64,
+    pub last_message: Option<DirectMessage>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -107,6 +116,8 @@ impl DirectMessageService {
             .await?
             .with_decrypted_content(trimmed.to_string());
 
+        self.persist_conversation_snapshot(owner_npub, &stored)
+            .await?;
         self.dispatch_notification(owner_npub, &stored).await;
 
         Ok(SendDirectMessageResult {
@@ -158,6 +169,64 @@ impl DirectMessageService {
         })
     }
 
+    pub async fn list_direct_message_conversations(
+        &self,
+        owner_npub: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<DirectMessageConversationSummary>, AppError> {
+        let limit = limit.unwrap_or(50).clamp(1, 200);
+        let records: Vec<DirectMessageConversationRecord> = self
+            .repository
+            .list_direct_message_conversations(owner_npub, limit)
+            .await?;
+
+        let mut summaries = Vec::with_capacity(records.len());
+        for record in records {
+            let DirectMessageConversationRecord {
+                conversation_npub,
+                last_message,
+                last_read_at,
+                unread_count,
+                ..
+            } = record;
+
+            let decrypted = if let Some(message) = last_message {
+                let plaintext = self
+                    .messaging_gateway
+                    .decrypt_with_counterparty(
+                        owner_npub,
+                        message.counterparty_npub(),
+                        &message.payload_cipher_base64,
+                    )
+                    .await?;
+                Some(message.with_decrypted_content(plaintext))
+            } else {
+                None
+            };
+
+            summaries.push(DirectMessageConversationSummary {
+                conversation_npub,
+                unread_count: unread_count.max(0) as u64,
+                last_read_at,
+                last_message: decrypted,
+            });
+        }
+
+        Ok(summaries)
+    }
+
+    pub async fn mark_conversation_as_read(
+        &self,
+        owner_npub: &str,
+        conversation_npub: &str,
+        read_at_millis: i64,
+    ) -> Result<(), AppError> {
+        let normalized = read_at_millis.max(0);
+        self.repository
+            .mark_conversation_as_read(owner_npub, conversation_npub, normalized)
+            .await
+    }
+
     pub async fn ingest_incoming_message(
         &self,
         owner_npub: &str,
@@ -189,6 +258,8 @@ impl DirectMessageService {
         match self.repository.insert_direct_message(&new_message).await {
             Ok(record) => {
                 let stored = record.with_decrypted_content(plaintext);
+                self.persist_conversation_snapshot(owner_npub, &stored)
+                    .await?;
                 self.dispatch_notification(owner_npub, &stored).await;
                 Ok(Some(stored))
             }
@@ -217,6 +288,21 @@ impl DirectMessageService {
                 );
             }
         }
+    }
+
+    async fn persist_conversation_snapshot(
+        &self,
+        owner_npub: &str,
+        message: &DirectMessage,
+    ) -> Result<(), AppError> {
+        self.repository
+            .upsert_conversation_metadata(
+                owner_npub,
+                &message.conversation_npub,
+                message.id,
+                message.created_at_millis(),
+            )
+            .await
     }
 }
 

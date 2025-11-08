@@ -50,6 +50,8 @@ vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     sendDirectMessage: vi.fn(),
     listDirectMessages: vi.fn(),
+    listDirectMessageConversations: vi.fn(),
+    markDirectMessageConversationRead: vi.fn(),
   },
 }));
 
@@ -102,11 +104,15 @@ describe('DirectMessageDialog', () => {
     toast.error.mockClear();
     vi.mocked(TauriApi.sendDirectMessage).mockReset();
     vi.mocked(TauriApi.listDirectMessages).mockReset();
+    vi.mocked(TauriApi.listDirectMessageConversations).mockReset();
+    vi.mocked(TauriApi.markDirectMessageConversationRead).mockReset();
     vi.mocked(TauriApi.listDirectMessages).mockResolvedValue({
       items: [],
       nextCursor: null,
       hasMore: false,
     });
+    vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({ items: [] });
+    vi.mocked(TauriApi.markDirectMessageConversationRead).mockResolvedValue();
     useDirectMessageStore.setState(getDirectMessageInitialState());
     if (typeof useDirectMessageStore.getState().setDraft !== 'function') {
       throw new Error('setDraft is not initialized');

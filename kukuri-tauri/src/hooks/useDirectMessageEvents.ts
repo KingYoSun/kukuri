@@ -19,6 +19,7 @@ interface DirectMessageEventPayload {
     created_at: number;
     delivered: boolean;
     direction: 'outbound' | 'inbound';
+    increment_amount?: number;
   };
 }
 
@@ -69,6 +70,7 @@ export function useDirectMessageEvents() {
               : 'pending'
             : 'sent';
 
+          const incrementAmount = Math.max(1, payload.message.increment_amount ?? 1);
           useDirectMessageStore.getState().receiveIncomingMessage(
             payload.conversation_npub,
             {
@@ -80,7 +82,10 @@ export function useDirectMessageEvents() {
               createdAt: payload.message.created_at,
               status,
             },
-            { incrementUnread: !isOwnMessage },
+            {
+              incrementUnread: !isOwnMessage,
+              incrementAmount: !isOwnMessage ? incrementAmount : 0,
+            },
           );
         } catch (error) {
           errorHandler.log('DirectMessageEvents.receive_failed', error, {

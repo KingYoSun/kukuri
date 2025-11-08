@@ -10,7 +10,11 @@ import { cn } from '@/lib/utils';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi, type DirectMessageItem, type DirectMessagePage } from '@/lib/api/tauri';
 import { useAuthStore } from '@/stores/authStore';
-import { useDirectMessageStore, type DirectMessageModel } from '@/stores/directMessageStore';
+import {
+  useDirectMessageStore,
+  type DirectMessageModel,
+  mapApiMessageToModel,
+} from '@/stores/directMessageStore';
 
 const fallbackMessageId = () => `dm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -24,17 +28,6 @@ const formatTimestamp = (timestamp: number) => {
     return '';
   }
 };
-
-const mapApiMessageToModel = (item: DirectMessageItem): DirectMessageModel => ({
-  eventId: item.eventId,
-  clientMessageId:
-    item.clientMessageId ?? item.eventId ?? `generated-${item.senderNpub}-${item.createdAt}`,
-  senderNpub: item.senderNpub,
-  recipientNpub: item.recipientNpub,
-  content: item.content,
-  createdAt: item.createdAt,
-  status: item.delivered ? 'sent' : 'pending',
-});
 
 export function DirectMessageDialog() {
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -76,6 +69,7 @@ export function DirectMessageDialog() {
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const autoLoadLockRef = useRef(false);
+  const lastSyncedRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (!isDialogOpen) {
@@ -199,9 +193,43 @@ export function DirectMessageDialog() {
     if (!activeConversationNpub || confirmedFromQuery === undefined) {
       return;
     }
-    setMessages(activeConversationNpub, confirmedFromQuery, { replace: true });
+      setMessages(activeConversationNpub, confirmedFromQuery, { replace: true });
+    }
+  }, [activeConversationNpub, confirmedFromQuery, setMessages]);
+
+  useEffect(() => {
+    if (!isDialogOpen || !activeConversationNpub) {
+      return;
+    }
+    const messages = conversations[activeConversationNpub] ?? [];
+    if (messages.length === 0) {
+      return;
+    }
+    const latest = messages[messages.length - 1]?.createdAt;
+    if (typeof latest !== 'number') {
+      return;
+    }
+
     markConversationAsRead(activeConversationNpub);
-  }, [activeConversationNpub, confirmedFromQuery, setMessages, markConversationAsRead]);
+    if (lastSyncedRef.current[activeConversationNpub] === latest) {
+      return;
+    }
+    lastSyncedRef.current[activeConversationNpub] = latest;
+
+    (async () => {
+      try {
+        await TauriApi.markDirectMessageConversationRead({
+          conversationNpub: activeConversationNpub,
+          lastReadAt: latest,
+        });
+      } catch (error) {
+        errorHandler.log('DirectMessageDialog.mark_read_failed', error, {
+          context: 'DirectMessageDialog.markConversationAsRead',
+          metadata: { conversationNpub: activeConversationNpub },
+        });
+      }
+    })();
+  }, [isDialogOpen, activeConversationNpub, conversations, markConversationAsRead]);
 
   useEffect(() => {
     if (!isHistoryError || !historyError || !activeConversationNpub) {

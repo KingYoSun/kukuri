@@ -28,6 +28,7 @@ struct DirectMessagePayload {
     created_at: i64,
     delivered: bool,
     direction: &'static str,
+    increment_amount: u32,
 }
 
 #[derive(Serialize, Clone)]
@@ -52,6 +53,13 @@ impl DirectMessageNotifier for IpcDirectMessageNotifier {
                 created_at: message.created_at_millis(),
                 delivered: message.delivered,
                 direction: message.direction.as_str(),
+                increment_amount: if message.direction
+                    == crate::domain::entities::MessageDirection::Inbound
+                {
+                    1
+                } else {
+                    0
+                },
             },
         };
 
