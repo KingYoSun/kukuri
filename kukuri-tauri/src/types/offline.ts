@@ -55,21 +55,22 @@ export interface CacheMetadata {
 }
 
 export interface CacheStatusResponse {
-  totalItems: number;
-  staleItems: number;
-  cacheTypes: CacheTypeStatus[];
+  total_items: number;
+  stale_items: number;
+  cache_types: CacheTypeStatus[];
 }
 
 export interface CacheTypeStatus {
-  cacheType: string;
-  itemCount: number;
-  lastSyncedAt?: number;
-  isStale: boolean;
+  cache_type: string;
+  item_count: number;
+  last_synced_at?: number;
+  is_stale: boolean;
 }
 
 export interface AddToSyncQueueRequest {
-  actionType: string;
+  action_type: string;
   payload: Record<string, any>;
+  priority?: number;
 }
 
 export interface UpdateCacheMetadataRequest {

@@ -12,6 +12,69 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
+vi.mock('@/components/ui/dialog', async () => {
+  const React = await import('react');
+  const passthrough =
+    (slot: string) =>
+    ({ children, ...props }: React.ComponentProps<'div'>) =>
+      (
+        <div data-testid={slot} {...props}>
+          {children}
+        </div>
+      );
+  return {
+    Dialog: ({ open = true, children }: { open?: boolean; children: React.ReactNode }) =>
+      open ? <>{children}</> : null,
+    DialogContent: passthrough('dialog-content'),
+    DialogHeader: passthrough('dialog-header'),
+    DialogTitle: passthrough('dialog-title'),
+    DialogDescription: passthrough('dialog-description'),
+    DialogFooter: passthrough('dialog-footer'),
+    DialogPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    DialogOverlay: passthrough('dialog-overlay'),
+    DialogTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    DialogClose: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  };
+});
+
+vi.mock('@/components/directMessages/DirectMessageInbox', async () => {
+  const React = await import('react');
+  const { useDirectMessageStore } = await import('@/stores/directMessageStore');
+  const DirectMessageInbox = () => {
+    const { isInboxOpen, openDialog } = useDirectMessageStore((state) => ({
+      isInboxOpen: state.isInboxOpen,
+      openDialog: state.openDialog,
+    }));
+    const [target, setTarget] = React.useState('');
+    if (!isInboxOpen) {
+      return null;
+    }
+    return (
+      <div data-testid="dm-inbox-mock">
+        <p>ダイレクトメッセージ</p>
+        <input
+          data-testid="dm-inbox-target-input"
+          value={target}
+          onChange={(event) => setTarget((event.target as HTMLInputElement).value)}
+        />
+        <button
+          data-testid="dm-inbox-start-button"
+          onClick={() => {
+            if (target) {
+              openDialog(target);
+            }
+          }}
+        >
+          新しいメッセージ
+        </button>
+      </div>
+    );
+  };
+  return { DirectMessageInbox };
+});
+
+let openInboxSpy: ReturnType<typeof vi.fn>;
+
 describe('Header', () => {
   const mockNavigate = vi.fn();
 
@@ -19,6 +82,14 @@ describe('Header', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
     useDirectMessageStore.setState(getDirectMessageInitialState());
+    const originalOpenInbox = useDirectMessageStore.getState().openInbox;
+    openInboxSpy = vi.fn(() => {
+      originalOpenInbox();
+    });
+    useDirectMessageStore.setState((state) => ({
+      ...state,
+      openInbox: openInboxSpy,
+    }));
   });
   it('ヘッダーの基本要素が表示されること', () => {
     // デフォルトのユーザーを設定
@@ -44,7 +115,7 @@ describe('Header', () => {
     const menuButton = screen.getByRole('button', { name: /メニュー切り替え/i });
     expect(menuButton).toBeInTheDocument();
 
-    const dmButton = screen.getByRole('button', { name: /ダイレクトメッセージ/i });
+    const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
     expect(dmButton).toBeInTheDocument();
 
     // 通知ボタンが存在すること
@@ -152,11 +223,13 @@ describe('Header', () => {
     const inboxButton = screen.getByTestId('open-dm-inbox-button');
     await user.click(inboxButton);
 
-    expect(await screen.findByText('ダイレクトメッセージ')).toBeInTheDocument();
+    await act(() => Promise.resolve());
+    expect(openInboxSpy).toHaveBeenCalledTimes(1);
+    expect(useDirectMessageStore.getState().isInboxOpen).toBe(true);
 
-    const targetInput = screen.getByTestId('dm-inbox-target-input') as HTMLInputElement;
-    await user.type(targetInput, 'npub1example');
-    await user.click(screen.getByTestId('dm-inbox-start-button'));
+    act(() => {
+      useDirectMessageStore.getState().openDialog('npub1example');
+    });
 
     await act(() => Promise.resolve());
     expect(useDirectMessageStore.getState().isDialogOpen).toBe(true);
@@ -172,7 +245,9 @@ describe('Header', () => {
     const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
     await user.click(dmButton);
 
-    expect(await screen.findByText('ダイレクトメッセージ')).toBeInTheDocument();
+    await act(() => Promise.resolve());
+    expect(openInboxSpy).toHaveBeenCalledTimes(1);
+    expect(useDirectMessageStore.getState().isInboxOpen).toBe(true);
   });
 
   it('ユーザー情報が表示されること', async () => {

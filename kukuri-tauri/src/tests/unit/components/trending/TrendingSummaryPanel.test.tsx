@@ -44,7 +44,9 @@ describe('TrendingSummaryPanel', () => {
     );
 
     expect(screen.getByTestId('trending-summary-direct-messages')).toHaveTextContent('12件');
-    expect(screen.getByTestId('trending-summary-direct-messages-helper')).toHaveTextContent('1分前');
+    expect(screen.getByTestId('trending-summary-direct-messages-helper')).toHaveTextContent(
+      '1分前',
+    );
 
     await user.click(screen.getByTestId('trending-summary-dm-cta'));
     expect(openInboxMock).toHaveBeenCalledTimes(1);

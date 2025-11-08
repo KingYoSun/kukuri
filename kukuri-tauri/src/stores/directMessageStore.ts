@@ -76,6 +76,8 @@ const createInitialState = (): Omit<
   DirectMessageStoreState,
   | 'openDialog'
   | 'closeDialog'
+  | 'openInbox'
+  | 'closeInbox'
   | 'setDraft'
   | 'setIsSending'
   | 'appendOptimisticMessage'

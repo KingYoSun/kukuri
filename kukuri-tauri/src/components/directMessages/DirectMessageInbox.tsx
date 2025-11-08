@@ -96,6 +96,11 @@ export function DirectMessageInbox() {
 
   return (
     <Dialog open={isInboxOpen} onOpenChange={(open) => (!open ? handleClose() : undefined)}>
+      {isInboxOpen ? (
+        <span className="sr-only" aria-live="polite">
+          ダイレクトメッセージ
+        </span>
+      ) : null}
       <DialogContent className="max-w-lg space-y-4">
         <DialogHeader>
           <DialogTitle>ダイレクトメッセージ</DialogTitle>
@@ -133,7 +138,9 @@ export function DirectMessageInbox() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => latestConversationNpub && handleOpenConversation(latestConversationNpub)}
+              onClick={() =>
+                latestConversationNpub && handleOpenConversation(latestConversationNpub)
+              }
               disabled={!latestConversationNpub}
               data-testid="dm-inbox-open-latest"
             >

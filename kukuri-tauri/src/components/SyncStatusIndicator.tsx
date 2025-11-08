@@ -284,8 +284,9 @@ export function SyncStatusIndicator() {
                           </div>
                           {type.is_stale && (
                             <Button
-                              size="xs"
+                              size="sm"
                               variant="outline"
+                              className="h-7 px-2 text-xs"
                               onClick={() => {
                                 void handleQueueRequest(type.cache_type);
                               }}
@@ -304,7 +305,9 @@ export function SyncStatusIndicator() {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {isCacheStatusLoading ? 'キャッシュ情報を取得しています…' : 'キャッシュ情報がまだありません'}
+                  {isCacheStatusLoading
+                    ? 'キャッシュ情報を取得しています…'
+                    : 'キャッシュ情報がまだありません'}
                 </p>
               )}
             </div>
