@@ -141,23 +141,38 @@ run_ts_trending_feed() {
 
   local timestamp
   timestamp="$(date '+%Y%m%d-%H%M%S')"
-  local report_rel_path="test-results/trending-feed/${timestamp}-vitest.json"
-  local report_container_path="/app/${report_rel_path}"
+  local vitest_targets=(
+    'src/tests/unit/routes/trending.test.tsx'
+    'src/tests/unit/routes/following.test.tsx'
+    'src/tests/unit/hooks/useTrendingFeeds.test.tsx'
+  )
 
   echo "Running TypeScript scenario 'trending-feed' (fixture: ${fixture_path})..."
-  compose_run '' run --rm \
-    -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
-    ts-test pnpm vitest run \
-    src/tests/unit/routes/trending.test.tsx \
-    src/tests/unit/routes/following.test.tsx \
-    src/tests/unit/hooks/useTrendingFeeds.test.tsx \
-    --runInBand --reporter=default --reporter=json --outputFile "$report_container_path"
+  for target in "${vitest_targets[@]}"; do
+    local slug="${target//\//_}"
+    slug="${slug//./_}"
+    local report_rel_path="test-results/trending-feed/${timestamp}-${slug}.json"
+    local report_container_path="/app/${report_rel_path}"
 
-  if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
-    echo "[OK] Scenario report saved to ${report_rel_path}"
-  else
-    echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
-  fi
+    echo "  → pnpm vitest run ${target}"
+    compose_run '' run --rm \
+      -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
+      ts-test bash -lc "
+        set -euo pipefail
+        cd /app/kukuri-tauri
+        if [ ! -f node_modules/.bin/vitest ]; then
+          echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+          pnpm install --frozen-lockfile --ignore-workspace
+        fi
+        pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '${report_container_path}'
+      "
+
+    if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+      echo "[OK] Scenario report saved to ${report_rel_path}"
+    else
+      echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+    fi
+  done
 }
 
 run_ts_tests() {

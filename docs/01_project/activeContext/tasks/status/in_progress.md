@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月07日
+最終更新日: 2025年11月08日
 
 ## 方針（2025年09月15日 更新）
 
@@ -19,6 +19,7 @@
   - 2025年11月07日: `gh act push -j native-test-linux -W .github/workflows/test.yml` を実行し、`Test/Native Test (Linux)` ジョブが `Job succeeded` となることをログ (`act-native-ps.log`) で確認。
   - 2025年11月07日: `profile.$userId.tsx` の `useInfiniteQuery` キー型／`sqlite_repository/users.rs` の `format!` 誘発箇所／`trending_metrics_job.rs` の `or_insert_with` を修正し、`pnpm test`・`pnpm type-check`・`pnpm lint`・`cargo clippy --workspace --all-features`（`kukuri-tauri/src-tauri` / `kukuri-cli`）・`cargo test --workspace --all-features`（`kukuri-cli`）・`scripts/test-docker.ps1 rust -NoBuild`・`gh act push -j native-test-linux -W .github/workflows/test.yml`（ログ: `gh-act-native.log`）で完走を再確認。
   - 2025年11月07日: `gh run view 19154875336 --job 54753280974 --log` で `kukuri-tauri/src-tauri/src/infrastructure/jobs/trending_metrics_job.rs` の `cargo fmt -- --check` 差分のみが残っていることを確認し、`cargo fmt` で再整形。`cargo test --workspace --all-features`（`kukuri-tauri/src-tauri`）/`cargo test --all-features`（`kukuri-cli`）/`pnpm format:check`/`python scripts/check_date_format.py` に加え、`gh act push -j format-check -W .github/workflows/test.yml`（ログ: `gh-act-format.log`）でフォーマットジョブ成功をローカル再現。
+  - 2025年11月08日: `gh run view 19172338059 --job 54807981752 --log` を `tmp/logs/nightly_trending_feed_19172338059.log` に保存し、`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL: Command "vitest" not found` で `Trending Feed (Docker)` が失敗していることを確認。`docker-compose.test.yml` の `ts-test`/`lint-check` からコードの bind mount を外し、`scripts/test-docker.sh` の `trending-feed` シナリオを `pnpm install --frozen-lockfile --ignore-workspace` のフォールバック＆`pnpm vitest run` 直呼びに変更（`--runInBand` は Vitest v3 では未サポートのため削除）。`./scripts/test-docker.sh ts --scenario trending-feed`・`--no-build`、および `gh act workflow_dispatch -W .github/workflows/nightly.yml -j trending-feed --bind` でローカル再現し、テスト実行は成功するが `act` 環境では `ACTIONS_RUNTIME_TOKEN` が無いためアーティファクトアップロードのみ失敗することを `tmp/logs/gh_act_nightly_trending_before_fix.log`／`tmp/logs/gh_act_nightly_trending_after_fix.log` に記録。さらに、Vitest の対象を `trending/following/routes` の 3 ファイルで常に走らせるため `scripts/test-docker.sh` 内でファイル単位に `pnpm vitest run` を分割し、抜け漏れがあった場合は即座に失敗するよう調整。`docker compose --project-name kukuri_tests build --no-cache ts-test` でローカルキャッシュを更新した上で `./scripts/test-docker.sh ts --scenario trending-feed (--no-build)` と `gh act workflow_dispatch -W .github/workflows/nightly.yml -j trending-feed --bind`（ログ: `tmp/logs/gh_act_nightly_trending_after_split.log`）を再実行し、3つの JSON レポートが毎回生成されることを確認（`act` では引き続きアーティファクトアップロードのみ権限不足）。
 
 ### Clippy 警告ゼロ体制の復帰
 

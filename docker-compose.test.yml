@@ -143,7 +143,6 @@ services:
     working_dir: /app/kukuri-tauri
     command: pnpm test
     volumes:
-      - ./kukuri-tauri:/app/kukuri-tauri:ro
       - ./test-results:/app/test-results
       # pnpmキャッシュの永続化
       - pnpm-store:/root/.local/share/pnpm/store
@@ -174,7 +173,6 @@ services:
         pnpm format:check
       "
     volumes:
-      - ./kukuri-tauri:/app/kukuri-tauri:ro
       # Cargoキャッシュの永続化（clippyのため）
       - cargo-registry:/usr/local/cargo/registry
       - cargo-git:/usr/local/cargo/git
