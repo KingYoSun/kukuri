@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -7,6 +8,7 @@ interface SummaryMetricCardProps {
   helperText?: string | null;
   isLoading?: boolean;
   testId?: string;
+  action?: ReactNode;
 }
 
 export function SummaryMetricCard({
@@ -15,6 +17,7 @@ export function SummaryMetricCard({
   helperText,
   isLoading = false,
   testId,
+  action,
 }: SummaryMetricCardProps) {
   return (
     <Card data-testid={testId}>
@@ -32,6 +35,7 @@ export function SummaryMetricCard({
             {helperText}
           </p>
         ) : null}
+        {action ? <div className="pt-2">{action}</div> : null}
       </CardContent>
     </Card>
   );

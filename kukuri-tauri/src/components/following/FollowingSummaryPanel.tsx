@@ -5,6 +5,8 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import type { FollowingFeedPageResult } from '@/hooks/useTrendingFeeds';
 import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
+import { Button } from '@/components/ui/button';
+import { useDirectMessageStore } from '@/stores/directMessageStore';
 
 interface FollowingSummaryPanelProps {
   data?: InfiniteData<FollowingFeedPageResult>;
@@ -32,6 +34,7 @@ export function FollowingSummaryPanel({
   hasNextPage = false,
 }: FollowingSummaryPanelProps) {
   const { unreadTotal, latestMessage } = useDirectMessageBadge();
+  const openInbox = useDirectMessageStore((state) => state.openInbox);
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
   const postsCount = posts.length > 0 || data ? `${posts.length.toLocaleString()}件` : null;
@@ -95,6 +98,17 @@ export function FollowingSummaryPanel({
         helperText={dmDisplay ?? dmHelper ?? '受信履歴なし'}
         isLoading={false}
         testId="following-summary-direct-messages"
+        action={
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openInbox}
+            className="w-full"
+            data-testid="following-summary-dm-cta"
+          >
+            DM Inbox を開く
+          </Button>
+        }
       />
     </section>
   );

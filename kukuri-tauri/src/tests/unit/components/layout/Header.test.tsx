@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { Header } from '@/components/layout/Header';
 import { useAuthStore, useUIStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
+import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/directMessageStore';
+import { act } from 'react-dom/test-utils';
 
 // モック
 vi.mock('@tanstack/react-router', () => ({
@@ -16,6 +18,7 @@ describe('Header', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+    useDirectMessageStore.setState(getDirectMessageInitialState());
   });
   it('ヘッダーの基本要素が表示されること', () => {
     // デフォルトのユーザーを設定
@@ -105,6 +108,71 @@ describe('Header', () => {
     await user.click(logo);
 
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+  });
+
+  it('DMボタンが未読バッジを表示し、会話を開くこと', async () => {
+    const user = userEvent.setup();
+    useDirectMessageStore.setState((state) => ({
+      ...state,
+      conversations: {
+        npub1target: [
+          {
+            eventId: 'evt-1',
+            clientMessageId: 'client-1',
+            senderNpub: 'npub1target',
+            recipientNpub: 'npub1current',
+            content: 'テストメッセージ',
+            createdAt: Date.now(),
+            status: 'sent',
+          },
+        ],
+      },
+      unreadCounts: {
+        npub1target: 3,
+      },
+    }));
+
+    render(<Header />);
+
+    const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
+    expect(dmButton).toHaveTextContent('3');
+
+    await user.click(dmButton);
+
+    await act(() => Promise.resolve());
+    expect(useDirectMessageStore.getState().isDialogOpen).toBe(true);
+    expect(useDirectMessageStore.getState().activeConversationNpub).toBe('npub1target');
+  });
+
+  it('Inbox CTA から新規DMダイアログを開けること', async () => {
+    const user = userEvent.setup();
+
+    render(<Header />);
+
+    const inboxButton = screen.getByTestId('open-dm-inbox-button');
+    await user.click(inboxButton);
+
+    expect(await screen.findByText('ダイレクトメッセージ')).toBeInTheDocument();
+
+    const targetInput = screen.getByTestId('dm-inbox-target-input') as HTMLInputElement;
+    await user.type(targetInput, 'npub1example');
+    await user.click(screen.getByTestId('dm-inbox-start-button'));
+
+    await act(() => Promise.resolve());
+    expect(useDirectMessageStore.getState().isDialogOpen).toBe(true);
+    expect(useDirectMessageStore.getState().activeConversationNpub).toBe('npub1example');
+  });
+
+  it('会話がない場合はDMボタンでInboxが開くこと', async () => {
+    const user = userEvent.setup();
+    useDirectMessageStore.setState(getDirectMessageInitialState());
+
+    render(<Header />);
+
+    const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
+    await user.click(dmButton);
+
+    expect(await screen.findByText('ダイレクトメッセージ')).toBeInTheDocument();
   });
 
   it('ユーザー情報が表示されること', async () => {

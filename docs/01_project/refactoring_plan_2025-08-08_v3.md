@@ -88,9 +88,9 @@ connection.rs           - 3箇所
 
 #### 2.5 ユーザー導線の現状（Phase 5 棚卸し結果）
 
-- 参照ドキュメント: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（2025年11月04日更新）
-- 主要導線: サイドバーの `openComposer` 経由で任意画面から投稿モーダルを起動できるほか、`RelayStatus`/`P2PStatus` が 30 秒間隔で接続状況とメトリクスを通知。設定画面の `ProfileEditDialog` は `update_nostr_metadata` → `authStore.updateUser` で即時反映し、ユーザー検索→`/profile/$userId` の導線でフォロー/フォロー解除・フォロワー一覧を閲覧できるようになった。
-- 残るギャップ: 「トレンド」「フォロー中」ルート未定義、`/profile/$userId` のメッセージ導線とフォロワー/フォロー中リストのソート・ページネーション未実装、`delete_post` / `add_relay` など未使用コマンドの棚卸し待ち、鍵管理ボタン未実装、プライバシートグルはローカル永続化のみ、プロフィール画像アップロード導線はリモート同期要件の実装フェーズ。
+- 参照ドキュメント: `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（2025年11月08日更新）
+- 主要導線: サイドバーの `openComposer` 経由で任意画面から投稿モーダルを起動できるほか、`RelayStatus`/`P2PStatus` が 30 秒間隔で接続状況とメトリクスを通知。設定画面の `ProfileEditDialog` は `update_nostr_metadata` → `authStore.updateUser` で即時反映し、ユーザー検索→`/profile/$userId` の導線でフォロー/フォロー解除・フォロワー一覧を閲覧できるようになった。`DirectMessageDialog` は Kind4 IPC ベースの履歴ロードと再送 UI を備え、ヘッダー右上の `MessageCircle` ボタンと `/trending` `/following` の Summary Panel が `useDirectMessageBadge` を共有して未読件数と最新受信時刻をグローバル表示する。
+- 残るギャップ: `/trending` `/following` の体験は構築済みだが Docker シナリオと `trending_metrics_job` が未着手、`/profile/$userId` の既読同期・フォロワー一覧ページングは Inventory 5.6.1/5.6.2 のフォローアップ中。ヘッダーメニューから新規 DM を開始する手段や会話一覧が無く、Summary Panel の DM カードも情報表示のみで CTA とテストが不足。`delete_post` のキャッシュ整合性、鍵管理ボタン、プライバシートグルのバックエンド連携、ユーザー検索タブのページネーション/エラー UI、Global Composer からのトピック作成、未配線の `join_topic_by_name` / `delete_events` / `add_relay` などの API 棚卸しが引き続き課題。
 
 #### 2.6 重複コードパターン
 

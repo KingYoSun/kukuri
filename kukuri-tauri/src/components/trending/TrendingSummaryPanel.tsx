@@ -4,6 +4,8 @@ import { ja } from 'date-fns/locale';
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import type { TrendingPostsResult, TrendingTopicsResult } from '@/hooks/useTrendingFeeds';
 import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
+import { Button } from '@/components/ui/button';
+import { useDirectMessageStore } from '@/stores/directMessageStore';
 
 interface TrendingSummaryPanelProps {
   topics?: TrendingTopicsResult;
@@ -31,6 +33,7 @@ export function TrendingSummaryPanel({
   isPostsFetching = false,
 }: TrendingSummaryPanelProps) {
   const { unreadTotal, latestMessage } = useDirectMessageBadge();
+  const openInbox = useDirectMessageStore((state) => state.openInbox);
 
   const topicsCount = topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
 
@@ -98,6 +101,17 @@ export function TrendingSummaryPanel({
         helperText={dmDisplay ?? dmHelper ?? '受信履歴なし'}
         isLoading={false}
         testId="trending-summary-direct-messages"
+        action={
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openInbox}
+            className="w-full"
+            data-testid="trending-summary-dm-cta"
+          >
+            DM Inbox を開く
+          </Button>
+        }
       />
     </section>
   );

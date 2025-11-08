@@ -94,6 +94,7 @@
   - 2025年11月04日: Rust 側で `direct_message_service` / `messaging_gateway` / `direct_message_repository` を実装し、`send_direct_message` と `list_direct_messages` コマンドを配線。kind4 DM の暗号化送信・SQLite 永続化・カーソルページング・復号レスポンスまで通し、`cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri -q` / `kukuri-cli`）を実行して新規ユニットテストを含めて確認。
   - 2025年11月06日: 指標欄に Inventory 5.7-5.10 / Summary 1.2・2・3 の追記事項と未使用 API・Nightly テスト更新を反映し、未接続コマンドの残課題を Phase 5 backlog と同期。
   - 2025年11月07日: `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標を最新化し、Inventory 5.6.1/5.6.2 と 5.11、`phase5_user_flow_summary.md` Quick View、`phase5_ci_path_audit.md` のテスト行を引用して SyncStatusIndicator / プロフィール導線 / フォロー体験の進捗記録と Tauri コマンド使用状況を追記。最終更新日も 2025年11月07日へ更新。
+  - 2025年11月08日: `phase5_user_flow_inventory.md` を 2025年11月08日付に更新し、5.12 節でヘッダー `MessageCircle` ボタン／`useDirectMessageBadge`／`TrendingSummaryPanel`・`FollowingSummaryPanel` の DM 連携と課題（新規会話不可・Summary Panel に CTA/テスト無し・未読カウンタ未永続化）を整理し、Hook/IPC/UI それぞれのフォローアップを追記。
 - [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。
@@ -110,6 +111,8 @@
   - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` を `useSyncManager` / `SyncStatusIndicator` に組み込み、キャッシュ統計表示・再送キュー追加ボタン・手動更新ボタンを実装。`useSyncManager` に `cacheStatus` ステートと `enqueueSyncRequest` を追加し、`npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx` でキャッシュ周りのユニットテストを整備。ドキュメント（Inventory 5.11 / Summary Quick View）を最新化。
   - 2025年11月07日: `phase5_ci_path_audit.md` に SyncStatusIndicator/useSyncManager テスト行と `phase5_user_flow_summary.md` 2025年11月07日版へのリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションへ Inventory 5.6.1/5.6.2・5.11 / Summary Quick View の参照と Nightly テスト更新ログを追記。両ファイルの最終更新日を 2025年11月07日へ揃え、導線タスクとの紐付けを明示。
   - 2025年11月07日: GH Actions Run ID `19172338059`（Nightly Frontend Unit Tests）の `Frontend Unit Tests` ジョブログから `src/tests/unit/hooks/useSyncManager.test.tsx` / `src/tests/unit/components/SyncStatusIndicator.test.tsx` 実行を確認し、`phase5_ci_path_audit.md` の SyncStatus 行へ証跡を追記。Trending Feed (Docker) ジョブ失敗により artefact が得られなかった点は別タスクでフォローする。
+  - 2025年11月08日: `phase5_user_flow_summary.md` を 2025年11月08日付に更新し、1.6「ダイレクトメッセージ」節とヘッダー/ Summary Panel のギャップ、Quick View 番号の見直し、グローバル要素の DM 表示仕様を追記。`refactoring_plan_2025-08-08_v3.md` 2.5節の参照日付とギャップ一覧を同内容で更新し、ヘッダー DM ボタン/CTA 不足/未接続 API を同期。
+  - 2025年11月08日: `phase5_ci_path_audit.md` の `test:unit` 行に `Header.test.tsx` / `useDirectMessageBadge.test.tsx` / `TrendingSummaryPanel.test.tsx` / `FollowingSummaryPanel.test.tsx` を追記し、Nightly Frontend Unit Tests で DM Inbox / Summary CTA 回帰を監視できるようにした。
 
 ### プロフィールアバター UI 連携
 

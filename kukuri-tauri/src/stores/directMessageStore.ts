@@ -25,6 +25,7 @@ interface ReceiveMessageOptions {
 
 interface DirectMessageStoreState {
   isDialogOpen: boolean;
+  isInboxOpen: boolean;
   activeConversationNpub: string | null;
   messageDraft: string;
   isSending: boolean;
@@ -33,6 +34,8 @@ interface DirectMessageStoreState {
   unreadCounts: Record<string, number>;
   openDialog: (conversationNpub: string) => void;
   closeDialog: () => void;
+  openInbox: () => void;
+  closeInbox: () => void;
   setDraft: (draft: string) => void;
   setIsSending: (isSending: boolean) => void;
   appendOptimisticMessage: (conversationNpub: string, message: DirectMessageModel) => void;
@@ -86,6 +89,7 @@ const createInitialState = (): Omit<
   | 'reset'
 > => ({
   ...createDialogState(),
+  isInboxOpen: false,
   conversations: {},
   optimisticMessages: {},
   unreadCounts: {},
@@ -116,6 +120,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
     set((state) => ({
       ...state,
       isDialogOpen: true,
+      isInboxOpen: false,
       activeConversationNpub: conversationNpub,
       unreadCounts: {
         ...state.unreadCounts,
@@ -123,6 +128,16 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
       },
     })),
   closeDialog: () => set((state) => ({ ...state, ...createDialogState() })),
+  openInbox: () =>
+    set((state) => ({
+      ...state,
+      isInboxOpen: true,
+    })),
+  closeInbox: () =>
+    set((state) => ({
+      ...state,
+      isInboxOpen: false,
+    })),
   setDraft: (draft) => set({ messageDraft: draft }),
   setIsSending: (isSending) => set({ isSending }),
   appendOptimisticMessage: (conversationNpub, message) =>

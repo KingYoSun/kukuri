@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月07日
+最終更新: 2025年11月08日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -51,24 +51,32 @@
 | Bootstrap 設定 | `/settings` | ブートストラップノード一覧の取得/登録/リセット | 稼働中 | `set_bootstrap_nodes` などと連携 |
 | 開発者ツール (DEV) | `/settings`（開発モード） | `NostrTestPanel`, `P2PDebugPanel` | 改善中 | UI は Dev 限定。計測ログとテスト誘導の整理が backlog |
 
+### 1.6 ダイレクトメッセージ
+| セクション | パス/配置 | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| プロフィール起点 | `/profile/$userId` | `メッセージ` ボタン→`DirectMessageDialog` モーダル、履歴ロード・送信・再送ボタン | 改善中 | Kind4 IPC 連携済み。既読同期/多端末未読共有は backlog（Inventory 5.6.1） |
+| グローバル導線 | ヘッダー右上 | `MessageCircle` ボタンで最新会話またはアクティブ会話を開き、隣の `Plus` アイコンから `DirectMessageInbox`（会話一覧 + 宛先入力）を起動 | 改善中 | `useDirectMessageBadge` が未読バッジを共有。Inbox はローカルストアの会話履歴のみを表示し、検索/候補は未実装 |
+| Summary Panel | `/trending`, `/following` | `TrendingSummaryPanel` / `FollowingSummaryPanel` の DM カードに未読件数・最終受信時刻・`DM Inbox を開く` CTA を表示 | 改善中 | ヘッダーと同じ `useDirectMessageBadge` を共有し、CTA で `useDirectMessageStore.openInbox` を呼び出せる。未読の永続化と会話一覧 API は backlog |
+
 ## 2. グローバル要素
 - **ステータスカード**: `RelayStatus` / `P2PStatus` が 30 秒間隔でステータス取得。フェイルオーバー時のバックオフと手動再試行を実装。
 - **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。TopicSelector へ「新しいトピックを作成」ショートカットを追加し、`TopicFormModal`（mode=`create-from-composer`）を介して `createAndJoinTopic` を実行する計画を Inventory 5.9 に記載。
-- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済み。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、`totalCount` 表示を実装済みで、Inventory 5.6.2 に詳細を記録。既読同期の多端末共有とページング拡張は Inventory 5.6.1/5.6.2 で継続。
+- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済み。ヘッダー右上の `MessageCircle` ボタンと `/trending` `/following` の Summary Panel は `useDirectMessageBadge` を共有し、未読件数と最終受信時刻を同期表示するが、会話が無い場合は `toast.info` でプロフィール遷移を促すのみ。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、`totalCount` 表示を実装済みで、既読同期の多端末共有とページング拡張は Inventory 5.6.1/5.6.2 で継続。
 - **ユーザー検索**: `UserSearchResults` の状態遷移（idle/typing/ready/loading/success/empty/rateLimited/error）と `SearchErrorState` ハンドリング、`query` バリデーション（2〜64文字、制御文字除去、連続スペース正規化）を Inventory 5.8 と `error_handling_guidelines.md` に記録。React Query のデバウンス・AbortController 方針もドキュメント化。
 
 ## 3. 導線ギャップ Quick View
 1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 参照）。2025年11月06日: Summary Panel と DM 未読カードを導入済み。2025年11月07日: 手動 QA で `formatDistanceToNow` のミリ秒入力、無限スクロール境界、未読バッジ連携を確認し、サマリー指標とテストリンクを更新。次ステップは (a) Docker シナリオ → (b) `trending_metrics_job` の順で進める。
-2. `/profile/$userId` はフォロー導線とフォロワー/フォロー一覧（ソート・検索・件数表示）を備え、DirectMessageDialog も Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。引き続き 既読同期の多端末共有とページング拡張を Inventory 5.6.1/5.6.2 に沿って進める。
-3. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。Inventory 5.10 で React Query キャッシュ無効化・Docker シナリオ・統合テストのフォローアップを整理済み。
-4. 設定 > 鍵管理ボタンがバックエンドと未接続。
-5. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
-6. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
-7. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
-8. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` を取り込み、キャッシュ統計と手動キュー登録を提供済み。残課題は OfflineIndicator との情報分散解消と `cache_types.metadata` の詳細表示・再送結果のフィードバック。
-9. 未接続 API は `join_topic_by_name`（Global Composer フォールバック）、`delete_events`（投稿削除 + Nostr 連携）、`add_relay`（鍵管理ダイアログと連動）、`get_nostr_pubkey`（プロフィール共有 UI 刷新時に再評価）、`clear_all_accounts_for_test`（Debug パネル）。Inventory 3.2/3.3 で優先度を整理し、Phase 5 backlog と同期した。
+2. `/profile/$userId` はフォロー導線とフォロワー/フォロー一覧（ソート・検索・件数表示）を備え、DirectMessageDialog も Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。引き続き既読同期の多端末共有とページング拡張を Inventory 5.6.1/5.6.2 に沿って進める。
+3. ヘッダーの `MessageCircle` + `Plus` ボタン、Summary Panel の CTA から `DirectMessageInbox` を開けるようになった。Inbox は会話一覧と npub 入力を提供するが、永続化された会話リスト/検索/候補補完が無く、大量会話時の仮想スクロールも未実装。
+4. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。Inventory 5.10 で React Query キャッシュ無効化・Docker シナリオ・統合テストのフォローアップを整理済み。
+5. 設定 > 鍵管理ボタンがバックエンドと未接続。
+6. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
+7. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
+8. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
+9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` を取り込み、キャッシュ統計と手動キュー登録を提供済み。残課題は OfflineIndicator との情報分散解消と `cache_types.metadata` の詳細表示・再送結果のフィードバック。
+10. 未接続 API は `join_topic_by_name`（Global Composer フォールバック）、`delete_events`（投稿削除 + Nostr 連携）、`add_relay`（鍵管理ダイアログと連動）、`get_nostr_pubkey`（プロフィール共有 UI 刷新時に再評価）、`clear_all_accounts_for_test`（Debug パネル）。Inventory 3.2/3.3 で優先度を整理し、Phase 5 backlog と同期した。
 
 ## 4. テストカバレッジ概要
 - フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx`。

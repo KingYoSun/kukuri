@@ -1,6 +1,6 @@
 # Phase 5 ユーザー導線棚卸し
 作成日: 2025年11月01日  
-最終更新: 2025年11月07日
+最終更新: 2025年11月08日
 
 ## 目的
 - Phase 5 で想定しているデスクトップアプリ体験のうち、現状 UI から到達できる機能と欠落導線を把握する。
@@ -498,6 +498,21 @@
   - 既存: `src/tests/unit/components/SyncStatusIndicator.test.tsx` で `pendingActionsCount`・競合ボタン表示・手動同期ボタン活性・最終同期時刻フォーマットに加え、2025年11月07日からキャッシュステータス表示/更新ボタン/再送キュー操作をカバー。`src/tests/unit/hooks/useSyncManager.test.tsx` も `triggerManualSync` ガード・`persistSyncStatuses`・競合検出に加え、`get_cache_status` の取得タイミングと `enqueueSyncRequest` による `add_to_sync_queue` 呼び出しを検証。`src/tests/unit/stores/offlineStore.test.ts` は `refreshCacheMetadata` / `saveOfflineAction` / `syncPendingActions` の副作用をテスト。
   - 追加予定: (1) `useSyncManager` の 5 分タイマー／オンライン復帰 2 秒同期のフェイクタイマー検証、(2) `offlineStore` の `offline://reindex_complete` リスナー E2E（Vitest の `vi.mock('@tauri-apps/api/event')` によるイベントエミュレーション）、(3) Docker シナリオ `offline-sync` を `docker-compose.test.yml` へ追加し、`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx` を Linux/Windows で反復実行。
   - CI: `phase5_ci_path_audit.md` に `SyncStatusIndicator.ui` / `useSyncManager.logic` / `offlineStore.cache-metadata` のパスを追加し、Nightly でのカバレッジ可視化を行う。
+
+### 5.12 ヘッダーDMボタンと Summary Panel 連携（2025年11月08日更新）
+- **現状**
+  - `src/components/layout/Header.tsx` に `DirectMessageInbox`（`src/components/directMessages/DirectMessageInbox.tsx`）を常時マウントし、メッセージアイコンは既存会話（`activeConversationNpub` → `latestConversationNpub`）を優先して開き、それ以外の場合は Inbox ダイアログを開く。隣に追加した `Plus` ボタン（`data-testid="open-dm-inbox-button"`）から常に Inbox を開けるため、ヘッダー単体で新規 DM を開始できる。
+  - `DirectMessageInbox` は会話一覧（`conversations` の末尾メッセージと未読件数をソート）と新規宛先入力（npub / ユーザーID）を提供し、入力バリデーション・最新会話ショートカットを備える。会話を選択すると `useDirectMessageStore.openDialog` を呼び出し、Inbox は自動的に閉じる。
+  - Summary Panel の DM カードは `SummaryMetricCard` の `action` プロップを利用して CTA ボタン（`DM Inbox を開く`）を表示し、`useDirectMessageStore.openInbox` を共有導線として呼び出す。ヘッダー/Trending/Following が同じ `DirectMessageInbox` を開くため、どの画面からでも追加クリック無しで DM モーダルへ遷移できるようになった。
+  - `useDirectMessageBadge` は `useDirectMessageStore` の `unreadCounts` と `conversations` を集計し、最新メッセージと合計未読をヘッダーおよび Summary Panel へ供給する。`useDirectMessageEvents`（kind4 IPC）による `receiveIncomingMessage` 更新で数値がリアルタイムに反映される。
+- **ギャップ / 課題**
+  - Inbox は一時的なストアのみで会話リストを保持しており、アプリ再起動や別端末では履歴が表示されない。`direct_message_service` 側に「既読未読／会話一覧」を供給するクエリが無く、SQLite 上の `list_conversations` API を追加する必要がある。
+  - 宛先入力は npub/ID の手動入力のみで、ユーザー検索や候補補完が無い。`search_users` 連携や QR コード読み取りなどのフォローアップが必要。
+  - Inbox のリストは messages の最終メッセージを用いた簡易ソートのため、大量会話時の仮想スクロールやフィルタリングが未実装。未読カウンタの永続化（`list_direct_messages` で初期値を復元）も backlog。
+- **テスト / フォローアップ**
+  - TypeScript: `Header.test.tsx` に Inbox CTA・未読バッジ・会話あり/なしの分岐を追加。`useDirectMessageBadge.test.tsx` を新設し、未読集計と最新メッセージ判定を検証。
+  - TypeScript: `components/trending/TrendingSummaryPanel.test.tsx` / `components/following/FollowingSummaryPanel.test.tsx` を追加し、DM カードの Helper 表示と CTA で `openInbox` が呼ばれることを確認。`phase5_ci_path_audit.md` の test:unit 行へ追記し、Nightly Frontend Unit Tests で監視。
+  - Rust / IPC: 既読カウンタ永続化と会話一覧 API（`list_direct_message_threads` 仮称）を `direct_message_service` に追加し、Inbox の初期表示に反映する。`direct-message:received` イベント payload へ `increment_amount` を含め、他端末での未読同期を検討する。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 
