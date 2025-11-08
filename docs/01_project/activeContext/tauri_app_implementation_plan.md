@@ -4,6 +4,16 @@
 **最終更新**: 2025年11月08日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
+## MVP残タスクサマリー（2025年11月08日更新）
+
+| 領域 | 目的 | 必須タスク | 状態/担当 | 参照 |
+| --- | --- | --- | --- | --- |
+| トレンド/フォロー導線 | `/trending` `/following` Summary Panel を安定化し、Docker/Nightly と整合 | `trending_metrics_job` の24h集計 + `list_trending_*` の `generated_at` ミリ秒保証、`scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の fixture 固定、`TrendingSummaryPanel` / `FollowingSummaryPanel` のテレメトリ表示更新 | ⏳ `phase5_user_flow_inventory.md` 5.7 / `tasks/status/in_progress.md` (GitHub Actions) で追跡中 | `phase5_user_flow_summary.md` 1.2 |
+| DM & 通知 | `DirectMessageInbox` の可搬性と未読表示を完成 | 会話リストの仮想スクロール、候補補完・検索、未読共有（`mark_direct_message_conversation_read` multi-device）、SR-only 告知のUIテストを追加 | ⏳ 2025-11-08 着手 (`Header.test.tsx` モック化済み) | `phase5_user_flow_inventory.md` 5.4 |
+| プロフィール/設定 | ProfileSetup/Settings モーダルを共通化しプライバシー設定をバックエンドへ伝播 | `ProfileForm` 抽出、プライバシーstore (`usePrivacySettingsStore`) 永続化、`update_nostr_metadata` の権限拡張、設定モーダルの保存フローとテスト | ⏳ Stage1完了 / Stage2でバックエンド連携待ち | `phase5_user_flow_inventory.md` 5.1 |
+| ユーザー検索 | レートリミット/ページネーション/状態遷移をUIで表現 | `search_users` API 拡張（cursor/sort/allow_incomplete）、`UserSearchResults` 状態マシン、レートリミットUI、`useUserSearchQuery` テスト | ⏳ 設計済 | `phase5_user_flow_inventory.md` 5.4 |
+| Offline sync_queue | オフライン操作の蓄積と競合解決UIを提供 | `sync_queue`/`offline_actions`/`cache_metadata` テーブル、`sync_offline_actions` Tauriコマンド、`useSyncManager` conflict banner/Retry、Service Worker のバックグラウンド同期 | 🚧 Phase4.1〜4.4 で未実装 | 本書 Phase4 |
+
 ## Phase 1: 認証フローの修正 ✓ 完了
 
 ### 1.1 ウェルカム画面の実装 ✓ 完了
@@ -336,6 +346,8 @@ export function PeerConnectionPanel() {
 
 ### 3.3 その他のリアクション機能
 
+> **メモ（2025年11月08日）**: ブースト/ブックマーク/カスタムリアクションは MVP 後に実装する方針。仕様とテスト計画は維持しつつ、Phase 5 完了までは優先度を下げる。
+
 #### タスク
 1. ブースト機能（リポスト）の実装
    - NostrのNIP-18準拠のリポストイベント
@@ -351,6 +363,8 @@ export function PeerConnectionPanel() {
    - リアクション一覧の表示
 
 ## Phase 4: オフラインファースト機能の実装
+
+> **ステータス（2025年11月08日）**: Phase4.1〜4.4 は MVP Exit Criteria に直結する未完タスク。各サブセクションにチェックリストを追加し、`phase5_user_flow_inventory.md` 5.5 / `refactoring_plan_2025-08-08_v3.md` の sync_queue 行に進捗を同期させる。
 
 ### 4.1 ローカルファーストデータ管理
 

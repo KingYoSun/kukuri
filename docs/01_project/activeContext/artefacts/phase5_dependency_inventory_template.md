@@ -9,6 +9,15 @@
 - `切り離し難易度`: Low / Medium / High 等級で評価
 - `課題・メモ`: 循環依存や責務分割上の懸念点を記載
 
+## MVP注視モジュール（2025年11月08日追加）
+| モジュール | 目的 | 未完タスク | 参照 |
+| --- | --- | --- | --- |
+| `application::ports::event_gateway` + 実装 | EventService から Legacy EventManager を隔離し、Mainline DHT/Gossip を抽象化 | `phase5_event_gateway_design.md` の Gateway ポート実装、`EventService` の依存置換、mapper の分離、テストの Gateway モック化 | `refactoring_plan_2025-08-08_v3.md` (MVPギャップ), `tasks/status/in_progress.md` |
+| `application::services::p2p_service` Stack | Mainline DHT + Gossip + Metrics を分割し、Runbook/KPI と連携 | Builder/Core/Metrics/Status の trait 化・DI 再構成、`kukuri-cli` ブートストラップ設定のダイナミック更新 | `docs/03_implementation/p2p_mainline_runbook.md`, `phase5_user_flow_inventory.md` 5.6 |
+| `application::services::offline_service` + `offline_store` | sync_queue/楽観更新を統合し、`useSyncManager` と連携 | `sync_queue`/`offline_actions` テーブル migration、`sync_offline_actions` API、`useSyncManager` 再送 UI、テスト補完 | `tauri_app_implementation_plan.md` Phase4, `phase5_user_flow_inventory.md` 5.5 |
+| `src/hooks/usePosts.ts` (`useDeletePost` 系) | 投稿削除時の React Query キャッシュと P2P を一貫させる | `invalidatePostCaches` ヘルパー整備、トレンド/フォロー/Topics キャッシュと `offlineStore` の整合性検証 | `phase5_user_flow_inventory.md` 5.10, `refactoring_plan_2025-08-08_v3.md` |
+| `scripts/test-docker.{sh,ps1}` (`trending-feed`) | Nightly の再現性確保 | `pnpm install --frozen-lockfile --ignore-workspace` fallback、`pnpm vitest run` のファイル分割、`generated_at` を fixture に追加 | `tasks/status/in_progress.md`（GitHub Actions）, `roadmap.md` KPI |
+
 ## 一覧表
 | モジュール/コンポーネント | 現行配置 | 主な依存先 | 想定レイヤ | 切り離し難易度 | 課題・メモ |
 | --- | --- | --- | --- | --- | --- |

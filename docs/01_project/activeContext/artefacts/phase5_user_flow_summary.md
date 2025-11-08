@@ -7,6 +7,13 @@
 - 詳細なフロー・API 連携・設計メモは `phase5_user_flow_inventory.md` を参照し、本書では意思決定に必要なサマリーのみを掲載。
 - 導線の状態は「稼働中」「改善中」「未実装」の 3 区分で整理し、次の対応タスクを明示する。
 
+## MVP残タスクハイライト（2025年11月08日更新）
+- **トレンド/フォロー**: Summary Panel に表示する `generated_at`・トレンド/フォロー件数・Vitest用 fixture を `trending_metrics_job`（24h集計）と同期させ、Docker/Nightly を緑化する。（Inventory 5.7, `tasks/status/in_progress.md`）
+- **Direct Message**: `DirectMessageInbox` の会話リスト仮想スクロール、候補補完/検索、`mark_direct_message_conversation_read` の多端末同期を完了し、`Header.test.tsx` / `FollowingSummaryPanel.test.tsx` のモックを最新APIに合わせる。（Inventory 5.4）
+- **プロフィール/設定**: `ProfileForm` の共通化とプライバシー設定（`usePrivacySettingsStore`）の永続化を終え、`update_nostr_metadata` / `authStore.updateUser` を設定モーダル経由で再利用する。（Inventory 5.1）
+- **ユーザー検索**: `search_users` API 拡張（cursor/sort/allow_incomplete）と UI のレートリミット・状態遷移を実装し、`UserSearchResults` / `useUserSearchQuery` テストでデバウンス + キャンセルをカバー。（Inventory 5.4）
+- **Offline sync**: `sync_queue` / `offline_actions` / `cache_metadata` の定義と `useSyncManager` の競合banner/再送UIを実装、`tauri_app_implementation_plan.md` Phase4 に沿ってテストとRunbookを整備。（Inventory 5.5）
+
 ## 1. 画面別導線サマリー
 
 ### 1.1 オンボーディング & 認証

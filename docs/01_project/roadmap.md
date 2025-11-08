@@ -1,193 +1,67 @@
 # kukuri プロジェクトロードマップ
 
-**作成日**: 2025年08月16日
-**最終更新**: 2025年08月16日
+**作成日**: 2025年08月16日  
+**最終更新**: 2025年11月08日
 
 ## プロジェクトビジョン
+kukuri は Nostr イベントをベースにしたトピック中心ソーシャルクライアントとして、BitTorrent Mainline DHT + iroh を土台に完全分散なP2P体験を提供する。MVP のゴールは、トレンド/フォロー/DM/プロフィール/検索といった日常の導線を Mainline DHT 上で安定提供し、Nightly + Runbook で再現できる状態まで引き上げることにある。
 
-kukuriは、Nostrプロトコルベースの完全分散型トピック中心ソーシャルアプリケーションとして、検閲耐性とユーザー主権を実現します。BitTorrent Mainline DHTを基盤とした分散型ピア発見により、中央サーバーへの依存を完全に排除します。
+## ロードマップ概要（2025年11月08日再編）
+- Phase 1〜2（認証/トピック/リアルタイム）は完了済み。現在は Phase 3.3〜5 の仕上げがMVPのクリティカルパス。
+- 残タスクは **UX/体験**, **P2P & Discovery**, **データ同期**, **Ops/テスト** の4トラックに整理し、Exit Criteriaを `docs/01_project/design_doc.md` と同期させる。
+- 2025年11月中にMVPトラックを完了 → 12月前半でリリース準備（Phase 7）→ 12月末にベータリリースを目指す。
 
-## 2025年8月-9月: DHT基盤実装フェーズ
+### MVPトラック別の残タスク
+| トラック | 目的 | 主なタスク | 所属ドキュメント | 状態 |
+| --- | --- | --- | --- | --- |
+| UX/体験 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` をブロッカー無しでつなぐ | `phase5_user_flow_inventory.md` 5.1〜5.7 の改善（設定モーダルのプライバシー反映、グローバルコンポーザーからのトピック作成、DM Inboxの仮想スクロール/候補補完、ユーザー検索のレートリミットUI、Summary Panelテレメトリ更新、トレンド/フォローの再実行性担保） | `phase5_user_flow_summary.md`, `tauri_app_implementation_plan.md` Phase3 | ⏳ 改善中（未完項目は各セクションにチェックボックス追加済み） |
+| P2P & Discovery | Mainline DHT + Gossip の運用 Runbook を整え、EventGateway 経由でアプリ層へ隠蔽 | `phase5_event_gateway_design.md` の Gateway 実装、`refactoring_plan_2025-08-08_v3.md` Phase5（P2PService Stack/KeyManager分離）、`docs/03_implementation/p2p_mainline_runbook.md` の Runbook 完成、`kukuri-cli` ブートストラップリストの動的更新 PoC | `phase5_dependency_inventory_template.md`, `docs/03_implementation/p2p_mainline_runbook.md` | ⏳ 設計済/実装中 |
+| データ/同期 | Offline ファースト（sync_queue/楽観更新）とトレンド指標自動集計 | `tauri_app_implementation_plan.md` Phase4（sync_queue/offline_actions/競合UI/Service Worker）、`trending_metrics_job` + `scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の自動化、`list_trending_*` の24h集計と `generated_at` ミリ秒保証 | `refactoring_plan_2025-08-08_v3.md` Phase2.5/5.7, `phase5_user_flow_summary.md` 1.2 | ⏳ 実装中（ジョブ/オフライン層が未完） |
+| Ops/テスト | Nightly/CIでMVP導線を再現しRunbookで復旧できる体制 | `tasks/status/in_progress.md` (GitHub Actions) のトレンドフィードDocker修正、`nightly.yml` `trending-feed` のアーティファクト権限問題切り分け、`docs/01_project/progressReports/` へのRunbookリンク、`scripts/test-docker.ps1 all` の安定化 | `docs/01_project/activeContext/tasks/status/in_progress.md`, `docs/01_project/design_doc.md` | ⏳ 継続調整 |
 
-### Phase 1: DHT統合基盤構築（8月16日-8月30日）✨ 最優先
+### 2025年11月: Phase 5（MVP仕上げ）
+- **Week 1（完了）**: グローバルコンポーザー導線統一、DMモーダルのモックテスト整備、`direct_message_conversations` 永続化。
+- **Week 2（進行中）**:
+  - トレンド/フォロー Summary Panel → `trending_metrics_job` の 24h 集計と Docker シナリオ固定。
+  - 設定モーダルのプライバシー設定をバックエンドへ伝播。
+  - `EventGateway` ポート実装と `EventService` の依存置換。
+- **Week 3（予定）**:
+  - Offline sync_queue + conflict UI。
+  - Mainline DHT Runbook / ブートストラップリスト自動更新 PoC。
+  - ユーザー検索のレートリミット UI + API 拡張（`search_users`）。
 
-#### 主要タスク
-- [x] irohネイティブDHT機能有効化（完了）
-- [x] P2Pモジュールbootstrap.rs実装（完了）
-- [ ] 共有シークレット管理システム構築
-- [x] iroh-gossipイベントハンドリング統合（完了）
-- [x] DHT失敗時フォールバック機構（完了）
+### 2025年12月: Phase 7（リリース準備）
+- Runbook整備（Mainline DHT 運用、`trending_metrics_job` / `nightly` パイプライン、`scripts/test-docker` 使用手順）
+- セキュリティと負荷テスト (`cargo audit`, `pnpm vitest --runInCI`, `docker-compose.test.yml up --build test-runner`)
+- リリースノート/ユーザー告知計画（`docs/01_project/activeContext/tasks/priority/critical.md` Phase 7項目）
+- CI/CD最終調整とビルド署名 (`pnpm tauri build`, `cargo build --release` 署名確認)
 
-#### 成果物
-- DHT基盤のピア発見システム
-- セキュアなシークレット管理
-- 基本的なE2Eテスト
-
-### Phase 2: テスト強化とパフォーマンス最適化（9月1日-9月10日）
-
-#### 主要タスク
-- [ ] DHT統合ユニットテスト作成
-- [ ] Docker ComposeベースE2Eテスト環境
-- [ ] パフォーマンスベンチマーク実施
-- [ ] レート制限とジッター最適化
-- [ ] 監視・ログシステム構築
-
-#### 成果物
-- テストカバレッジ70%以上
-- パフォーマンスレポート
-- 運用監視ダッシュボード
-
-### Phase 3: v2アーキテクチャ完全統合（9月11日-9月20日）
-
-#### 主要タスク
-- [ ] P2PService DHT完全統合
-- [ ] OfflineService Repository層実装
-- [ ] EventService最適化
-- [ ] UI/UXブラッシュアップ
-- [ ] コンパイル警告解消
-
-#### 成果物
-- 完全統合されたv2アーキテクチャ
-- クリーンなコードベース
-- 統合ドキュメント
-
-## 2025年10月-11月: 機能拡張フェーズ
-
-### Phase 4: Nostr互換性強化（10月1日-10月15日）
-
-#### 主要タスク
-- [ ] NIP-01完全準拠実装
-- [ ] NIP-04暗号化メッセージ
-- [ ] NIP-09イベント削除
-- [ ] NIP-11リレー情報
-- [ ] カスタムNIP提案（トピック拡張）
-
-#### 成果物
-- Nostr完全互換クライアント
-- NIP準拠テストスイート
-
-### Phase 5: マーケットプレイス基盤（10月16日-11月15日）
-
-#### 主要タスク
-- [ ] 検索ノード実装
-- [ ] サジェストノード実装
-- [ ] インセンティブ設計
-- [ ] 分散インデックス構築
-- [ ] レピュテーションシステム
-
-#### 成果物
-- 分散型検索システム
-- AI/MLベースサジェスト
-- インセンティブプロトタイプ
-
-### Phase 6: モバイル対応（11月16日-11月30日）
-
-#### 主要タスク
-- [ ] Tauri Mobile統合
-- [ ] バッテリー最適化
-- [ ] オフライン同期
-- [ ] プッシュ通知
-- [ ] モバイルUI最適化
-
-#### 成果物
-- iOS/Androidアプリ
-- モバイル最適化ドキュメント
-
-## 2025年12月: リリース準備フェーズ
-
-### Phase 7: プロダクション準備（12月1日-12月15日）
-
-#### 主要タスク
-- [ ] セキュリティ監査
-- [ ] パフォーマンステスト
-- [ ] ドキュメント完成
-- [ ] CI/CDパイプライン
-- [ ] デプロイメント自動化
-
-#### 成果物
-- セキュリティレポート
-- 本番環境構成
-- 運用マニュアル
-
-### Phase 8: ベータリリース（12月16日-12月31日）
-
-#### 主要タスク
-- [ ] ベータテスター募集
-- [ ] フィードバック収集
-- [ ] バグ修正
-- [ ] パフォーマンス調整
-- [ ] コミュニティ構築
-
-#### 成果物
-- ベータ版リリース
-- フィードバックレポート
-- コミュニティガイドライン
-
-## 2026年 Q1: 正式リリースとエコシステム構築
-
-### 主要目標
-- 正式版リリース
-- エコシステムパートナー獲得
-- 開発者向けSDK公開
-- プラグインシステム実装
-- グローバル展開
+### 2026年Q1: ベータ拡張
+- アプリ配布チャネル（ストア/Autoupdater）
+- マーケットプレイスノードのAPI公開（検索/推薦）
+- プラグインエコシステム、SDK、ガバナンスモデル
+- モバイル（Tauri Mobile）検証
 
 ## 技術的マイルストーン
+- **完了**: 認証フロー、リアルタイム同期、トピックCRUD、P2P初期統合、グローバルコンポーザー
+- **MVP残**:
+  1. EventGateway + P2PService Stack の抽象化
+  2. Offline sync_queue + conflict UI
+  3. トレンド/フォロー Summary Panel + `trending_metrics_job`
+  4. Mainline DHT Runbook / ブートストラップPoC
+- **Post-MVP**: インセンティブ設計、マーケットプレイスノード、Tauri Mobile
 
-### 短期（2025年8-9月）
-- ✅ DHT基盤ピア発見
-- ✅ セキュアな分散通信
-- ✅ 基本的なトピック機能
+## KPI（2025年11月版）
+| 指標 | 目標 | 現状 | 次アクション |
+| --- | --- | --- | --- |
+| DHT接続成功率 | >95% | 約87%（`p2p_mainline_runbook.md` 実測値） | Runbook整備と `kukuri-cli` 自動再接続 |
+| トレンド/フォロー応答時間 | <1.5s | 1.2〜1.6s（`list_trending_*` キャッシュ依存） | `trending_metrics_job` で24h集計 & サマリーパネルのプレフェッチ |
+| テストカバレッジ（TS/Rust） | 80% | TS 71% / Rust 68% | `pnpm vitest --coverage` と `cargo tarpaulin` のCI連携 |
+| Nightly 成功率 | 100%（連続5日） | 60%（Docker権限問題） | アーティファクトアップロード権限を `ACTIONS_RUNTIME_TOKEN` 不要なモードに切替 |
 
-### 中期（2025年10-12月）
-- [ ] 完全なNostr互換
-- [ ] 分散型検索
-- [ ] モバイル対応
-
-### 長期（2026年以降）
-- [ ] プラグインエコシステム
-- [ ] 分散型ガバナンス
-- [ ] クロスプラットフォーム統合
-
-## KPIs（重要業績評価指標）
-
-### 技術指標
-- DHT接続成功率: >95%
-- メッセージ配信レイテンシ: <200ms
-- テストカバレッジ: >80%
-- コード品質: 警告0件
-
-### ユーザー指標
-- ベータユーザー: 1,000人
-- アクティブトピック: 100+
-- 日次メッセージ: 10,000+
-- ユーザー満足度: >4.5/5
-
-### エコシステム指標
-- ノード数: 500+
-- 開発者: 50+
-- プラグイン: 20+
-- パートナー: 10+
-
-## リスクと対策
-
-### 技術的リスク
-| リスク | 影響 | 対策 |
-|--------|------|------|
-| DHT遅延 | 高 | フォールバック機構、キャッシュ最適化 |
-| スケーラビリティ | 中 | 段階的スケーリング、負荷分散 |
-| セキュリティ脆弱性 | 高 | 定期監査、バグバウンティ |
-
-### ビジネスリスク
-| リスク | 影響 | 対策 |
-|--------|------|------|
-| ユーザー獲得 | 高 | コミュニティ構築、インフルエンサー連携 |
-| 競合他社 | 中 | 差別化機能、UX向上 |
-| 規制対応 | 低 | 法務相談、コンプライアンス体制 |
-
-## 関連ドキュメント
-
-- [DHT実装計画](./activeContext/iroh-native-dht-plan.md)
-- [アーキテクチャ設計](../02_architecture/dht_discovery_architecture.md)
-- [実装ガイド](../03_implementation/dht_integration_guide.md)
-- [タスク管理](./activeContext/tasks/README.md)
+## 参照ドキュメント
+- `docs/01_project/design_doc.md`（MVP Exit Criteria）
+- `docs/01_project/refactoring_plan_2025-08-08_v3.md`（技術的負債・Phase5計画）
+- `docs/01_project/activeContext/tauri_app_implementation_plan.md`（UI/UXタスク）
+- `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（導線棚卸し）
+- `docs/03_implementation/p2p_mainline_runbook.md`（DHT運用方針）

@@ -104,6 +104,17 @@ connection.rs           - 3箇所
 2. **dead_code許可** - 97箇所での同じアノテーション
 3. **エラーハンドリング** - println!/eprintln!の多用
 
+## MVPクリティカルギャップ（2025年11月08日更新）
+
+Phase 5 で残っているタスクを MVP 観点で再優先付けした。詳細タスクは以降のフェーズ記述にぶら下げ、進捗とテスト計画を同期させる。
+
+| 領域 | 目的 | 現状 | 次アクション | 参照 |
+| --- | --- | --- | --- | --- |
+| ユーザーフロー / UX | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` の導線を「稼働中」に統一 | Summary Panel・DM Inbox・設定モーダルなど 6 項目が「改善中」。`phase5_user_flow_summary.md` 1.2/1.3/1.4 に未完チェックボックスあり。 | `tauri_app_implementation_plan.md` Phase3.2/3.3 を MVP/非MVP に再分類し、グローバルコンポーザーからのトピック作成、プロフィール編集モーダルのプライバシー反映、DM Inbox の仮想スクロール・候補補完、ユーザー検索のレートリミット UI を11月内に完了。 | `phase5_user_flow_inventory.md` |
+| sync_queue / Offline | 楽観更新＋競合解決で多端末利用時のデータ整合性を確保 | テーブル設計と `useSyncManager` の TODO が残置。`OfflineService` まわりで Stage3 が未着手。 | Phase4.1〜4.4 を MVPタスクに昇格（`tauri_app_implementation_plan.md` 参照）。`sync_queue`/`offline_actions` テーブルの migration と `sync_offline_actions` API、UI の conflict banner/Retry を実装し、`pnpm vitest src/stores/offlineStore.test.ts` を拡張。 | `tauri_app_implementation_plan.md` Phase4 |
+| P2P / EventGateway | Application 層から Legacy EventManager を切り離し、Mainline DHT Runbook を整備 | `phase5_event_gateway_design.md` でポート定義済みだが未実装。`P2PService Stack` の再配置も途中。 | EventGateway 実装＋`EventService`の依存置換、`P2PService` の trait 化、`docs/03_implementation/p2p_mainline_runbook.md` の Chapter9 Runbook を更新。`phase5_dependency_inventory_template.md` の High 領域を順にクローズ。 | `phase5_event_gateway_design.md` |
+| テレメトリ/CI | Nightly + Docker でトレンド/フォロー体験を再現し、失敗時にRunbookで復旧 | `trending_feed (Docker)` の`pnpm vitest` 呼び出しとアーティファクト権限調整が継続課題。 | `scripts/test-docker.sh ts --scenario trending-feed` の fixture 分割、`nightly.yml` の権限エラー通知、`docs/01_project/roadmap.md` KPI を更新し、CI 成果物の保存先をS3互換に切替。 | `tasks/status/in_progress.md`, `docs/01_project/roadmap.md` |
+
 ## 改善計画
 
 ### Phase 0: 緊急対応（1日）

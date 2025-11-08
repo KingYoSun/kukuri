@@ -55,6 +55,16 @@
 - DI (`state/application_container.rs`) では `Arc<dyn EventGateway>` を生成し `EventService` に注入。
 - 旧 `set_event_manager` / `set_subscription_invoker` は廃止し、SubscriptionInvoker は別ポートに切り出す（後続タスク）。
 
+## MVPタスクと進捗（2025年11月08日更新）
+
+| 項目 | 状態 | メモ / フォローアップ |
+| --- | --- | --- |
+| EventGateway ポート + Domain 値オブジェクト | ✅ ポート定義案と `DomainEvent/TopicId/ProfileMetadata` の不足要素を洗い出し済み（本書1章〜2章）。 | `refactoring_plan_2025-08-08_v3.md` の MVPギャップ表に反映。 |
+| Mapper 抽出 (`application/shared/mappers/event/*`) | ⏳ TODO。`NostrMetadataDto` → Domain/DTO 変換を `EventService` から切り離す必要あり。 | 依存: `phase5_dependency_inventory_template.md` の EventService 行。 |
+| Infrastructure 実装 (`event_manager_gateway.rs`) | 未着手。`EventManager` 呼び出し・`nostr_sdk` 型変換・`AppState` への登録が必要。 | MVPタスク: `EventService` が Legacy モジュールへ直接依存しない状態にする。 |
+| SubscriptionInvoker / `handle_incoming_event` 連携 | 未着手。`EventGateway` から Application Event Bus へイベントを流す経路を設計する。 | `p2p_service` リファクタと同時に行う。 |
+| テスト整備 | 未着手。`tests/unit/application/event_service` を Gateway モックで差し替え、`tests/integration/test_event_service_gateway.rs` を追加。 | 完了後に `docs/01_project/roadmap.md` KPI (テストカバレッジ) を更新。 |
+
 ## 依存方向
 - Application 層は `application::ports::EventGateway` に依存。
 - Infrastructure 層が `EventGateway` を実装し、Legacy `EventManager` への依存を閉じ込める。

@@ -8,6 +8,7 @@
 - GitHub Actions ワークフロー失敗調査を `tasks/status/in_progress.md` に移動（2025年10月16日着手）
 - Iroh DHT/Discovery 残タスクは `tasks/status/in_progress.md` に移動（2025年09月15日）
 - v2 アプリ Phase 7 - Mainline DHT 統合タスク群を `tasks/status/in_progress.md` に移動（2025年10月17日）
+- MVP 残タスク棚卸しとドキュメント刷新を `tasks/status/in_progress.md` に移動（2025年11月08日着手）
 
 方針更新（2025年09月15日）
 - 当面は Nostr リレーとは接続しない。まず P2P（iroh + iroh-gossip + DHT）で完結した体験の実現を優先。

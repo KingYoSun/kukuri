@@ -11,6 +11,13 @@
 
 ## 現在のタスク
 
+### MVP残タスク棚卸し / ドキュメント刷新
+
+- [ ] MVP達成に必要な残タスクを横断的に整理し、指定ドキュメント群（critical/in_progress, design_doc, roadmap, refactoring_plan, tauri_app_implementation_plan, phase5_* artefacts）へ反映する
+  - 2025年11月08日: `priority/critical.md` に移動履歴を追記し、本項目を `in_progress` でトラッキング開始。既存ドキュメントの最終更新日・ギャップを確認し、MVPゴールに直結する3カテゴリ（①ユーザーフロー/UXギャップ、②基盤アーキ/依存整理、③テスト・オペレーション & CI）で整理する方針を決定。
+  - 2025年11月08日: `phase5_user_flow_inventory.md` / `phase5_dependency_inventory_template.md` / `phase5_event_gateway_design.md` から MLP（Minimum Lovable Product）候補とブロッカーを抽出し、`refactoring_plan_2025-08-08_v3.md` に反映すべき優先順を下書き。`tauri_app_implementation_plan.md` の Phase3/4 セクションを MVP観点で「完了済み」「残」「MVP後」に三分割する草案を作成。
+  - 2025年11月08日: 主要ドキュメントに追加する `MVP Exit Criteria` セクション案（機能/ネットワーク/テスト/運用の4指標）をドラフト化し、`roadmap.md`・`design_doc.md` のタイムライン/マイルストーン更新内容を決定。更新後は `phase5_user_flow_summary.md` にも短縮版チェックリストを掲載する計画。
+
 ### GitHub Actions ワークフロー失敗調査
 
 - [ ] `Test` ワークフローの失敗要因を切り分け、ローカルで再現・修正・再検証する

@@ -579,4 +579,16 @@
 - Blob の End-to-end 暗号化には `iroh_blobs::crypto::StreamEncryptor` を採用し、アップロード前にクライアント側で暗号化→Blob 登録を行う。鍵管理は Doc 内のメタデータに暗号化された形で保持し、共有先は Capability から復号キーを取得する。
 - 既存の外部 URL フォールバックは廃止し、リモート同期が失敗した場合は Tauri アプリ内に同梱したデフォルトアバター（`assets/profile/default_avatar.png`）を表示する。Doc/Blob 未取得時はこのローカル画像を使用し、同期完了後に差し替える。
 
+## 7. MVP Exit Checklist（2025年11月08日追加）
+
+| 項目 | 対象セクション | 完了条件 | 検証方法 | 備考 |
+| --- | --- | --- | --- | --- |
+| トレンド/フォロー Summary Panel | 1.2, 5.7 | `trending_metrics_job` が 24h 集計を行い、`generated_at`・トレンド/フォロー件数が Summary Panel / Docker シナリオで一致。`prefetchTrendingCategory` / `prefetchFollowingCategory` の query key がドキュメント化。 | `scripts/test-docker.sh ts --scenario trending-feed --no-build`, `routes/trending.test.tsx`, `routes/following.test.tsx`, `gh act workflow_dispatch nightly.yml -j trending-feed` | `tasks/status/in_progress.md` (GitHub Actions) に紐づけ。 |
+| DirectMessageInbox 可搬性 | 1.2 (ヘッダー/サマリ), 5.4 | 会話リストの仮想スクロール・候補補完・検索 UI ・多端末既読共有が実装され、`Header.test.tsx` / `DirectMessageInbox.test.tsx` / `useDirectMessageBadge.test.tsx` でカバレッジ。 | `pnpm vitest src/tests/unit/components/header/Header.test.tsx`, `pnpm vitest ...DirectMessageInbox.test.tsx`, `pnpm vitest ...useDirectMessageBadge.test.tsx` | `direct_message_conversations` テーブル導入済。 |
+| プロフィール/設定モーダル統合 | 1.1, 5.1, 6 | `ProfileForm` を Welcome/Settings で共通化し、プライバシー設定が `usePrivacySettingsStore` + `update_nostr_metadata` で永続化。設定モーダルからの保存が `authStore.updateUser` に即時反映。 | `pnpm vitest src/tests/unit/routes/settings.test.tsx`, `pnpm vitest src/tests/unit/components/profile/ProfileForm.test.tsx` | Stage1完了/Stage2実装中。 |
+| ユーザー検索UI/API | 1.4, 5.4 | `search_users` API が cursor/sort/allow_incomplete/429 を返し、UI が idle→typing→ready→loading→success/rateLimited/error の状態を持つ。 | `pnpm vitest src/tests/unit/components/search/UserSearchResults.test.tsx`, 新規 `pnpm vitest src/tests/unit/hooks/useUserSearchQuery.test.ts`, `cargo test user_search_service` | `errorHandler` に `UserSearch.*` キー追加。 |
+| Offline sync_queue | 1.2 (SyncStatusIndicator), 5.5 | `sync_queue`/`offline_actions`/`cache_metadata` migration、`sync_offline_actions` API、`useSyncManager` conflict banner、Service Worker 背景同期が実装。 | `cargo test` (`OfflineService`), `pnpm vitest src/tests/unit/stores/offlineStore.test.ts`, `pnpm vitest src/tests/unit/components/system/SyncStatusIndicator.test.tsx` | `tauri_app_implementation_plan.md` Phase4 と同期。 |
+| Mainline DHT Runbook | 1.2 (Relay/P2P Status), 5.6 | `docs/03_implementation/p2p_mainline_runbook.md` Chapter9 完成、UI の Relay/P2P カードに Runbook へのリンクを表示、`kukuri-cli` ブートストラップリストの動的更新 PoC 完了。 | `cargo test --package kukuri-cli -- test_bootstrap_runbook`（新規）, `pnpm vitest src/tests/unit/components/sidebar/RelayStatusCard.test.tsx` | `phase5_dependency_inventory_template.md` P2PService 行と連携。 |
+
+
 
