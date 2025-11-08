@@ -16,12 +16,11 @@ vi.mock('@/components/ui/dialog', async () => {
   const React = await import('react');
   const passthrough =
     (slot: string) =>
-    ({ children, ...props }: React.ComponentProps<'div'>) =>
-      (
-        <div data-testid={slot} {...props}>
-          {children}
-        </div>
-      );
+    ({ children, ...props }: React.ComponentProps<'div'>) => (
+      <div data-testid={slot} {...props}>
+        {children}
+      </div>
+    );
   return {
     Dialog: ({ open = true, children }: { open?: boolean; children: React.ReactNode }) =>
       open ? <>{children}</> : null,
