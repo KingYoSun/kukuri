@@ -78,3 +78,17 @@ impl From<ProfileAvatarFetchResult> for FetchProfileAvatarResponse {
         }
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ProfileAvatarSyncRequest {
+    pub npub: String,
+    pub known_doc_version: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProfileAvatarSyncResponse {
+    pub npub: String,
+    pub current_version: Option<u64>,
+    pub updated: bool,
+    pub avatar: Option<FetchProfileAvatarResponse>,
+}

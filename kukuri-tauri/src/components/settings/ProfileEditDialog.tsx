@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
 import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
+import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
 
 interface ProfileEditDialogProps {
   open: boolean;
@@ -29,6 +30,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
   const { currentUser, updateUser } = useAuthStore();
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { syncNow: syncAvatar } = useProfileAvatarSync({ autoStart: false });
 
   const initialValues: ProfileFormValues = useMemo(
     () => ({
@@ -79,6 +81,14 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         nostrPicture = updatedAvatar.nostrUri;
       }
 
+      if (currentUser?.npub) {
+        await TauriApi.updatePrivacySettings({
+          npub: currentUser.npub,
+          publicProfile,
+          showOnlineStatus,
+        });
+      }
+
       await updateNostrMetadata({
         name: profile.name,
         display_name: profile.displayName || profile.name,
@@ -103,6 +113,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       });
 
       toast.success('プロフィールを更新しました');
+      await syncAvatar({ force: true });
       handleClose();
     } catch (error) {
       toast.error('プロフィールの更新に失敗しました');

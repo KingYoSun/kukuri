@@ -266,6 +266,18 @@ export interface FetchProfileAvatarResult {
   data_base64: string;
 }
 
+export interface ProfileAvatarSyncParams {
+  npub: string;
+  knownDocVersion?: number | null;
+}
+
+export interface ProfileAvatarSyncResult {
+  npub: string;
+  currentVersion: number | null;
+  updated: boolean;
+  avatar?: FetchProfileAvatarResult;
+}
+
 // Tauri API クラス
 export class TauriApi {
   // 認証関連
@@ -426,6 +438,29 @@ export class TauriApi {
     return await invokeCommand<FetchProfileAvatarResult>('fetch_profile_avatar', {
       request: { npub },
     });
+  }
+
+  static async profileAvatarSync(
+    params: ProfileAvatarSyncParams,
+  ): Promise<ProfileAvatarSyncResult> {
+    const response = await invokeCommand<{
+      npub: string;
+      current_version: number | null;
+      updated: boolean;
+      avatar: FetchProfileAvatarResult | null;
+    }>('profile_avatar_sync', {
+      request: {
+        npub: params.npub,
+        known_doc_version: params.knownDocVersion ?? null,
+      },
+    });
+
+    return {
+      npub: response.npub,
+      currentVersion: response.current_version ?? null,
+      updated: response.updated,
+      avatar: response.avatar ?? undefined,
+    };
   }
 
   // ユーザー関連

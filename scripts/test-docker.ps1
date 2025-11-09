@@ -83,7 +83,7 @@ Commands:
 Options:
   -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
   -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
-  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed）
+  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync）
   -Fixture <path>  - シナリオ用フィクスチャパスを上書き（既定: tests/fixtures/trending/default.json）
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
@@ -99,6 +99,7 @@ Examples:
   .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
   .\test-docker.ps1 rust -NoBuild  # ビルドをスキップしてRustテストを実行
   .\test-docker.ps1 ts -Scenario trending-feed
+  .\test-docker.ps1 ts -Scenario profile-avatar-sync
   .\test-docker.ps1 performance    # パフォーマンス計測用テストバイナリを実行
   .\test-docker.ps1 cache-clean    # キャッシュを含めて完全クリーンアップ
   .\test-docker.ps1 -Help          # ヘルプを表示
@@ -352,7 +353,6 @@ function Invoke-TypeScriptTrendingFeedScenario {
         "src/tests/unit/routes/trending.test.tsx",
         "src/tests/unit/routes/following.test.tsx",
         "src/tests/unit/hooks/useTrendingFeeds.test.tsx",
-        "--runInBand",
         "--reporter=default",
         "--reporter=json",
         "--outputFile=$reportContainerPath"
@@ -365,6 +365,38 @@ function Invoke-TypeScriptTrendingFeedScenario {
         Write-Success "Scenario report saved to $reportRelPath"
     } else {
         Write-Warning "Scenario report not found at $reportRelPath"
+    }
+}
+
+function Invoke-TypeScriptProfileAvatarScenario {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $logRelPath = "tmp/logs/profile_avatar_sync_$timestamp.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $logDir = Split-Path $logHostPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    Write-Host "Running TypeScript scenario 'profile-avatar-sync'..."
+    $command = @"
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run \
+  'src/tests/unit/components/settings/ProfileEditDialog.test.tsx' \
+  'src/tests/unit/components/auth/ProfileSetup.test.tsx' \
+  'src/tests/unit/hooks/useProfileAvatarSync.test.tsx' \
+  | tee '/app/$logRelPath'
+"@
+
+    Invoke-DockerCompose @("run", "--rm", "ts-test", "bash", "-lc", $command) | Out-Null
+    if (Test-Path $logHostPath) {
+        Write-Success "Scenario log saved to $logRelPath"
+    } else {
+        Write-Warning "Scenario log was not generated at $logRelPath"
     }
 }
 
@@ -381,6 +413,9 @@ function Invoke-TypeScriptTests {
         switch ($Scenario.ToLower()) {
             "trending-feed" {
                 Invoke-TypeScriptTrendingFeedScenario
+            }
+            "profile-avatar-sync" {
+                Invoke-TypeScriptProfileAvatarScenario
             }
             default {
                 Write-ErrorMessage "Unknown TypeScript scenario: $Scenario"

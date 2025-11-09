@@ -16,6 +16,8 @@ vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     uploadProfileAvatar: vi.fn(),
     fetchProfileAvatar: vi.fn(),
+    updatePrivacySettings: vi.fn(),
+    profileAvatarSync: vi.fn(),
   },
 }));
 
@@ -44,6 +46,8 @@ let mockOpen: ReturnType<typeof vi.fn>;
 let mockReadFile: ReturnType<typeof vi.fn>;
 let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
+let mockUpdatePrivacySettings: ReturnType<typeof vi.fn>;
+let mockProfileAvatarSync: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
   const dialogModule = await import('@tauri-apps/plugin-dialog');
@@ -55,6 +59,14 @@ beforeAll(async () => {
     typeof vi.fn
   >;
   mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  tauriModule.TauriApi.updatePrivacySettings = vi.fn();
+  tauriModule.TauriApi.profileAvatarSync = vi.fn();
+  mockUpdatePrivacySettings = tauriModule.TauriApi.updatePrivacySettings as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  mockProfileAvatarSync = tauriModule.TauriApi.profileAvatarSync as unknown as ReturnType<
     typeof vi.fn
   >;
 });
@@ -138,6 +150,13 @@ describe('ProfileEditDialog', () => {
       content_sha256: 'cafebabe',
       data_base64: 'AQIDBA==',
     });
+    mockUpdatePrivacySettings.mockResolvedValue(undefined);
+    mockProfileAvatarSync.mockResolvedValue({
+      npub: mockCurrentUser.npub,
+      currentVersion: 8,
+      updated: false,
+      avatar: undefined,
+    });
     mockOpen.mockResolvedValue(null);
     mockReadFile.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
   });
@@ -183,6 +202,17 @@ describe('ProfileEditDialog', () => {
           }),
         }),
       );
+    });
+    await waitFor(() => {
+      expect(mockUpdatePrivacySettings).toHaveBeenCalledWith({
+        npub: mockCurrentUser.npub,
+        publicProfile: true,
+        showOnlineStatus: false,
+      });
+    });
+    expect(mockProfileAvatarSync).toHaveBeenCalledWith({
+      npub: mockCurrentUser.npub,
+      knownDocVersion: null,
     });
 
     expect(mockUpdateUser).toHaveBeenCalledWith(

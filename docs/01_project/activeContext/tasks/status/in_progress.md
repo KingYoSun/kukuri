@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月09日
+最終更新日: 2025年11月10日
 
 ## 方針（2025年09月15日 更新）
 
@@ -22,7 +22,11 @@
   - 2025年11月09日: MVP Exit Checklist #4（Mainline DHT Runbook/CLI/UIリンク）を更新。Runbook に Chapter10（`kukuri-cli` ブートストラップ手順と Settings/RelayStatus 連携）を追加し、Sidebar `RelayStatus` カードへ Runbook リンクを実装。`RelayStatus.test.tsx` と `cargo test --package kukuri-cli -- test_bootstrap_runbook` を検証手順に追加し、`phase5_user_flow_inventory.md` の Mainline DHT 行と `phase5_ci_path_audit.md` を更新。
   - 2025年11月09日: MVP Exit Checklist #3（Offline sync_queue Stage3）を完了。`list_sync_queue_items` コマンド／`offlineApi.listSyncQueueItems` を追加し、`useSyncManager` が Queue ID フィルタ付きの再送履歴を 60 秒間隔＋手動更新で取得。`SyncStatusIndicator` には履歴セクション（最新 ID ハイライト、ステータス別バッジ、要求者/要求時刻/発行元/再試行回数、失敗時のメッセージ）を実装し、`OfflineIndicator` からの CTA と整合させた。`npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx` を実行。`cargo test`（`kukuri-tauri/src-tauri`）は Windows 既知のタイムアウトのため、`./scripts/test-docker.ps1 rust -NoBuild` で Rust テストを完走し、`cargo test`（`kukuri-cli`）も成功を確認。`phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` / `phase5_ci_path_audit.md` の該当行を更新。
   - 2025年11月09日: `phase5_user_flow_inventory.md` 5.1 に Stage2 完了（`update_privacy_settings` コマンド / `20251109093000` マイグレーション / TS & Rust テストログ）を追記し、Stage3（Doc/Blob）タスクを整理。さらに `tauri_app_implementation_plan.md` Phase3/4 を「完了済み / MVP残 / MVP後」に再編、`refactoring_plan_2025-08-08_v3.md` のユーザーフロー行を更新して残タスク（Inventory 5.9/5.10/6）へ集約した。
+  - 2025年11月10日: プロフィール Stage3（Doc/Blob + privacy）完了内容を `tauri_app_implementation_plan.md` / `roadmap.md` / `design_doc.md` / `refactoring_plan_2025-08-08_v3.md` / `phase5_user_flow_inventory.md` / `phase5_ci_path_audit.md` に反映し、MVP Exit 表記を「完了済み」に更新。`pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx` を実行してログを記録し、`scripts/test-docker.sh` に `profile-avatar-sync` シナリオ（`tmp/logs/profile_avatar_sync_<timestamp>.log` 出力）を追加。PowerShell 版でも `--runInBand` を廃止し、同ログを生成。Nightly Workflow（`nightly.yml`）へ `profile-avatar-sync` ジョブを追加し、Docker で TS シナリオを再現・アーティファクト化できるようにした。
   - 2025年11月10日: Inventory 5.9（TopicSelector ショートカット + Sidebar/GlobalComposer 統合）と 5.10（`useDeletePost` + キャッシュ整合性）を実装し、関連ドキュメント/テストを更新。`pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx …` を実行しようとしたが、ホスト環境に `pnpm` / `corepack pnpm` が存在せず起動に失敗（`pnpm.cjs` / `corepack` の shebang 差異で `bad interpreter`）。CI 側の Nightly でカバレッジを確認しつつ、ローカル実行環境を別途整備する必要あり。
+  - 2025年11月09日: `phase5_user_flow_summary.md` に「MVP Exit Checklist（UX/P2P/データ/CI）」を追加し、`phase5_user_flow_inventory.md` Sec.0 へクロスウォーク表を起票。`tauri_app_implementation_plan.md` / `roadmap.md` / `design_doc.md` / `refactoring_plan_2025-08-08_v3.md` / `phase5_dependency_inventory_template.md` / `phase5_event_gateway_design.md` / `phase5_ci_path_audit.md` を同期し、各カテゴリの参照先とテスト手順（`corepack pnpm` / `tmp/logs/gh_act_*`）を明示した。
+  - 2025年11月09日: `corepack enable pnpm` をローカルで実行し、`pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/postStore.test.ts src/tests/unit/stores/uiStore.test.ts` を `kukuri-tauri` 配下で再実行して Offline/Post 導線の回帰を確認。あわせて 5.1節に Stage3（Doc/Blob + privacy）詳細要件とテスト計画を追記し、`phase5_ci_path_audit.md` に `ProfileEditDialog/ProfileForm/ProfileSetup` 用 `pnpm vitest` と `cargo test --package kukuri-tauri --test profile_avatar_sync` の行を追加して検証コマンドを明文化。
+  - 2025年11月10日: Stage3（Doc/Blob + privacy 同期）を実装。`profile_avatar_sync` コマンドと `useProfileAvatarSync` フックを追加し、`ProfileEditDialog` / `ProfileSetup` が `upload_profile_avatar` + `update_privacy_settings` を直列実行して `authStore` を更新。`pnpm vitest run ...ProfileEditDialog/ProfileSetup/useProfileAvatarSync` と `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` を完了し、Runbook・CI パス監査・dependency テンプレートに反映。`scripts/test-docker.ps1 ts -Scenario profile-avatar-sync` / `docs/03_implementation/p2p_mainline_runbook.md` Chapter4 を追加し、Nightly での再現フローを記述。
 
 ### GitHub Actions ワークフロー失敗調査
 
@@ -105,7 +109,7 @@
   - 2025年11月01日: `TauriApi`・`SecureStorageApi`・`p2pApi`・`nostr`ユーティリティの `invoke` 使用箇所を洗い出し、未使用コマンド候補（例: `add_relay`, `subscribe_to_user`, `join_topic_by_name` など）を整理中。
   - 2025年11月01日: `offlineApi` 系コマンドと `syncEngine` の直接 `invoke`（`get_post_metadata` など）を棚卸しし、`phase5_user_flow_inventory.md` の 3.1/3.2 に追記。
   - 2025年11月02日: `invokeCommand` / `invoke` 呼び出しをスクリプトで抽出し、統合テスト専用コマンド群（`import_key` ほか）と未使用 API を `phase5_user_flow_inventory.md` 3.2/3.3 に反映、併せて 1.6/3.1 の補足内容を更新。
-- [ ] `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標チェックボックスを更新し、未達項目のフォロータスクを連携
+- [x] `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標チェックボックスを更新し、未達項目のフォロータスクを連携
   - 2025年11月01日: 「UIから到達可能な全機能の文書化完了」を達成済みに更新し、参照ドキュメントと更新日を記録。
   - 2025年11月02日: 指標欄に最新ドキュメント更新（統合テスト専用コマンド整理）と未導線APIの整理状況を追記、Phase2.5セクションへ `TopicPage` 最終更新バグの改善候補を登録。
   - 2025年11月03日: 2.5節を棚卸し結果サマリーへ差し替え、Relay/P2Pステータスカードとプロフィール編集導線の進捗メモを追記。
@@ -114,7 +118,8 @@
   - 2025年11月06日: 指標欄に Inventory 5.7-5.10 / Summary 1.2・2・3 の追記事項と未使用 API・Nightly テスト更新を反映し、未接続コマンドの残課題を Phase 5 backlog と同期。
   - 2025年11月07日: `refactoring_plan_2025-08-08_v3.md` のユーザー導線指標を最新化し、Inventory 5.6.1/5.6.2 と 5.11、`phase5_user_flow_summary.md` Quick View、`phase5_ci_path_audit.md` のテスト行を引用して SyncStatusIndicator / プロフィール導線 / フォロー体験の進捗記録と Tauri コマンド使用状況を追記。最終更新日も 2025年11月07日へ更新。
   - 2025年11月08日: `phase5_user_flow_inventory.md` を 2025年11月08日付に更新し、5.12 節でヘッダー `MessageCircle` ボタン／`useDirectMessageBadge`／`TrendingSummaryPanel`・`FollowingSummaryPanel` の DM 連携と課題（新規会話不可・Summary Panel に CTA/テスト無し・未読カウンタ未永続化）を整理し、Hook/IPC/UI それぞれのフォローアップを追記。
-- [ ] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
+  - 2025年11月09日: `phase5_user_flow_summary.md` に MVP Exit Checklist、Inventory に Sec.0 クロスウォークを追加し、`refactoring_plan_2025-08-08_v3.md` ユーザー導線指標に同内容を反映。4カテゴリ（UX/P2P/データ/CI）のリンクと `tmp/logs/*.log` の参照先を記録。
+- [x] 作成した資料を `phase5_ci_path_audit.md` / `tauri_app_implementation_plan.md` へリンクし、タスク完了後に in_progress.md を更新予定
   - 2025年11月01日: `phase5_ci_path_audit.md` に関連ドキュメントリンクを追加し、`tauri_app_implementation_plan.md` Phase 5 セクションから参照を追記。
   - 2025年11月02日: 上記 2 ドキュメントを最新内容に合わせて再更新し、最終更新日と追記内容にユーザー導線棚卸しの差分を反映。
   - 2025年11月02日: Phase 5 backlog の優先順位を再定義（投稿導線統一→プロフィール編集→プライバシー設定→トレンド/フォロー中→テスト整備）し、`tauri_app_implementation_plan.md` に反映。
@@ -122,6 +127,7 @@
   - 2025年11月04日: `phase5_ci_path_audit.md` の最終更新日と関連ドキュメント欄を更新し、ユーザー検索/プロフィール導線の差分反映と整合性を確認。追加で「追加予定のテスト」節を起票し、ProfilePage フォロー導線・DirectMessageDialog・フォロワー無限スクロールのテスト計画を記録。
   - 2025年11月05日: `Sidebar` のカテゴリー状態管理とクエリプリフェッチを実装し、`phase5_user_flow_inventory.md`（5.7節）と `phase5_user_flow_summary.md` のトレンド/フォロー導線を更新。`npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx` を実行してカテゴリ同期とプリフェッチの回帰を確認。
   - 2025年11月06日: Kind4 IPC で DM 受信→永続化→通知まで一貫処理を追加し、`useDirectMessageEvents` / `useDirectMessageBadge` を導入。ヘッダーと Trending/Following Summary Panel に未読バッジを表示、`DirectMessageDialog` に送信失敗時の再送ボタンを実装。`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx` と `cargo test`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を実行し、導線ドキュメント（inventory/summary）を更新。
+  - 2025年11月09日: `tauri_app_implementation_plan.md` の MVP 残タスク表に Ops/CI ブロッカー（`corepack pnpm` 未整備、Docker `trending-feed` 権限問題）を追記。`phase5_ci_path_audit.md` へ `corepack pnpm` 構築コマンド・`pnpm vitest TopicSelector/PostCard` の実行計画・`tmp/logs/gh_act_*` の保存先を追加し、in_progress.md に同期完了を記録。
   - 2025年11月06日: ダイレクトメッセージ履歴導線の現状を `phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` に反映し、`list_direct_messages` を UI 接続済みとして整理。未使用コマンド表を更新し、Quick View/次アクションを DM 未読バッジ・送信再試行・IPC 連携のフォローアップへ書き換え。
   - 2025年11月06日: `phase5_ci_path_audit.md` に test:unit 更新と関連資料リンクを追加し、`tauri_app_implementation_plan.md` の Phase 5 メモへ DM 未読バッジ・Summary Panel 反映の記録を追記。`refactoring_plan_2025-08-08_v3.md` の指標更新と整合を確認。
   - 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata` / `update_sync_status` を自動呼び出し。`pnpm vitest run src/tests/unit/stores/offlineStore.test.ts` でメタデータ更新のユニットテストを追加し、`cargo test`（`kukuri-tauri/src-tauri`）は既知の `STATUS_ENTRYPOINT_NOT_FOUND` で停止することを確認（再実行は保留）。

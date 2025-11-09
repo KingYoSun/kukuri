@@ -62,3 +62,22 @@ jobs:
           name: trending-feed-reports
           path: test-results/trending-feed
           if-no-files-found: error
+
+  profile-avatar-sync:
+    name: Profile Avatar Sync (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run profile avatar sync scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario profile-avatar-sync
+
+      - name: Upload profile avatar sync logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-avatar-sync-logs
+          path: tmp/logs/profile_avatar_sync_*.log
+          if-no-files-found: error

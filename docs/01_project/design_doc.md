@@ -3,11 +3,12 @@
 ## ドキュメント情報
 - **プロジェクト名**: kukuri
 - **バージョン**: 1.3 (更新: MVP残タスク整理とMainline DHT方針反映)
-- **最終更新日**: 2025年11月08日
+- **最終更新日**: 2025年11月10日
 - **作成者**: Grok AI (xAI)
 - **目的**: 本ドキュメントは、Nostrプロトコルをデータプロトコルとして採用し、提案されたハイブリッドネットワーク手法（Cloudflare Workersを活用した準分散型ピア発見とマーケットプレイスによる機能分散）を用いて構築するP2Pベースのトピック中心ソーシャルアプリケーションの設計を記述する。Nostr互換性を確保しつつ、従来のNostrの弱点を補完するアーキテクチャを目指す。更新点として、フロントエンドにReact/TypeScript/Vite/shadcn/Zustand/Tanstack Query/Tanstack Routerを採用、P2Pネットワーク層にirohを選択、発見層をコンテナ運用可能に調整。
 
 ### 更新履歴
+- **2025年11月10日 (v1.3.1)**: プロフィール Stage3（Doc/Blob + privacy）完了内容を反映し、`profile_avatar_sync` / `useProfileAvatarSync` のテストコマンドと Nightly/Docker シナリオ登録状況を追記。`roadmap.md`・`tauri_app_implementation_plan.md`・`phase5_user_flow_inventory.md` とのクロスリファレンスを更新。
 - **2025年11月08日 (v1.3)**: MVP Exit Criteriaと残タスク一覧を追加し、BitTorrent Mainline DHTへの移行方針と Phase 5 の依存タスク（`refactoring_plan_2025-08-08_v3.md` / `phase5_user_flow_inventory.md`）を反映。
 - **2025年07月25日 (v1.2)**: プロジェクト名の変更に伴い全体を再構成。
 
@@ -29,16 +30,18 @@ kukuriは、分散型ソーシャルネットワークアプリケーション�
   - 開発容易性: OSS WorkersとTauriで低コスト実装、コンテナ運用で柔軟性向上。
 - **制約**: Cloudflare依存を最小限に（OSS化とコンテナ対応で緩和）。Nostr NIP準拠で互換性確保。
 
-## MVPスコープとExit Criteria（2025年11月08日更新）
+## MVPスコープとExit Criteria（2025年11月10日更新）
 
 Phase 5 で定義している MVP は「トピック/フォロー/DM を横断した最低限の体験を、Mainline DHT ベースのP2Pネットワークとオフライン同期を伴って提供し、Nightly CIとRunbookで再現可能な状態」を指す。Exit Criteriaは以下の通り。
 
-| カテゴリ | 目的 | 達成条件 | 残タスク（2025年11月08日時点） |
+| カテゴリ | 目的 | 達成条件 | 残タスク（2025年11月10日時点） |
 | --- | --- | --- | --- |
-| 体験/UX | `/trending` `/following` `/profile/$userId` `/direct-messages` の主要フローをブロッカーなしで提供 | Summary Panel/DM未読/プロフィール編集/検索/Topic作成導線が全て接続され、`phase5_user_flow_summary.md` の 3状態（稼働/改善/未実装）で「未実装」が0件になる | `phase5_user_flow_inventory.md` 5.1〜5.7 の改善項目（設定モーダルのプライバシー反映、グローバルコンポーザーからのトピック作成、DM Inbox の仮想スクロール・候補補完、ユーザー検索のレートリミットUI、トレンド/フォロー Summary Panelのテレメトリ更新） |
+| 体験/UX | `/trending` `/following` `/profile/$userId` `/direct-messages` の主要フローをブロッカーなしで提供 | Summary Panel/DM未読/プロフィール編集/検索/Topic作成導線が全て接続され、`phase5_user_flow_summary.md` の 3状態（稼働/改善/未実装）で「未実装」が0件になる | Stage3（Doc/Blob + privacy）は `profile_avatar_sync` + `useProfileAvatarSync` 導入で完了。残タスクは `TopicSelector` / `PostCard` の Vitest 再実行、Summary Panel から `trending_metrics_job` への自動実行、DM Inbox の仮想スクロール/候補補完、検索 UI のレートリミット表示。 |
 | P2P & Discovery | Mainline DHT と Gossip 経由で恒常的に接続し、イベント配送とRunbookを提供 | `docs/03_implementation/p2p_mainline_runbook.md` のRunbook完成、`bootstrap` CLI/Workersの動的更新、EventGateway抽象化の完了 | `refactoring_plan_2025-08-08_v3.md` Phase5（EventGateway/KeyManager分離）と `phase5_event_gateway_design.md` のタスク化、`kukuri-cli`のRunbook検証、`phase5_dependency_inventory_template.md` の High 優先モジュール移行 |
 | データ/同期 | Offlineファースト（sync_queue/楽観更新）とトレンド指標の自動計測を統合 | `tauri_app_implementation_plan.md` Phase4 の sync_queue / offline_actions / conflict UI 完了、`trending_metrics_job` + Docker `trending-feed` シナリオが green | `OfflineService`/`useSyncManager` の競合UI、`list_trending_*` の24h集計・アーティファクト確認、`phase5_user_flow_summary.md` セクション1.2/1.3の「改善中」解消 |
 | オペレーション/テスト | CI/CD・NightlyでMVP体験を再現し、失敗時にRunbookで復旧可能 | `github/test.yml` の `native-test-linux` / `format-check` / `nightly trending-feed` が安定し、`scripts/test-docker.{sh,ps1}` でts/lint/rustシナリオをローカル再現可能 | `tasks/status/in_progress.md` (GitHub Actions) に記載のDocker Vitest分離とアーティファクトアップロード課題の解消、`docs/01_project/roadmap.md` にも反映するNightly KPIの定義 |
+
+> **参照**: `phase5_user_flow_summary.md` に「MVP Exit Checklist（2025年11月09日版）」を新設し、上表4カテゴリ（UX/体験導線・P2P & Discovery・データ/同期・Ops/CI）の進捗とテスト手順を横断管理している。`phase5_user_flow_inventory.md` では同カテゴリのクロスウォークを Sec.0 に追加し、関連セクション（5.1/5.4/5.5/5.7/5.9/5.10/5.11）の執筆責任を明示した。
 ## システムアーキテクチャ
 ### 高レベル概要
 - **クライアント層**: Tauri v2アプリ（Rustバックエンド + Webフロントエンド）。ユーザーがNostrイベントを作成/署名し、P2Pで共有。
@@ -87,13 +90,13 @@ Phase 5 で定義している MVP は「トピック/フォロー/DM を横断�
 - **ボトルネック対策**: 無料ティア超過時はコミュニティコンテナ追加。
 - **パフォーマンス**: Viteの高速ビルド、Tanstack Queryの最適化フェッチ、irohの低遅延P2P、Nostrの軽量イベントで実現。2025年のNostrスケーラビリティ更新（多リレー対応）を活用。
 
-## 実装計画（2025年11月08日更新）
+## 実装計画（2025年11月10日更新）
 
 | フェーズ | 範囲 | 状態 | MVP観点の残タスク |
 | --- | --- | --- | --- |
 | Phase 1: 認証/オンボーディング | Welcome/Login/Profile Setup/セキュアストレージ | ✅ 完了（2025-08） | - |
 | Phase 2: データ連携 | タイムライン/トピックCRUD/P2Pイベント/リアルタイム | ✅ 完了 | - |
-| Phase 3: 主要機能拡張 | グローバルコンポーザー、リッチ投稿、DM、トピックメッシュ | ⏳ 3.3のブースト/ブックマーク/カスタムリアクションがMVP後。DM Inboxの仮想スクロール・候補補完、プロフィール編集モーダルのバックエンド反映、`DirectMessageDialog` の多端末既読共有がMVP残。 |
+| Phase 3: 主要機能拡張 | グローバルコンポーザー、リッチ投稿、DM、トピックメッシュ | ⏳ 3.1/3.2 は完了、プロフィール編集モーダル Stage3（Doc/Blob + privacy）は 2025年11月10日にクローズ。残るMVPタスクは `TopicSelector` / `PostCard` の再テスト、DM Inbox の仮想スクロール/候補補完、`DirectMessageDialog` の多端末既読共有。3.3（ブースト/ブックマーク/カスタムリアクション）は Post-MVP。 |
 | Phase 4: オフラインファースト | sync_queue/offline_actions/競合解決/Service Worker | ⏳ sync_queue・offline_actions テーブルと `useSyncManager` UI が未完。`tauri_app_implementation_plan.md` の Phase4.1〜4.3/4.4 がMVP Exit Criteria。 |
 | Phase 5: アーキ/依存再構成 + Ops | EventGateway抽象化、P2PService Stack分割、トレンド指標自動集計、Mainline DHT Runbook | ⏳ `phase5_event_gateway_design.md` の Gateway 実装、`trending_metrics_job` の24h集計、`docs/03_implementation/p2p_mainline_runbook.md` のRunbook完成、`roadmap.md` KPI更新が残。 |
 

@@ -1,6 +1,6 @@
 import { createRootRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useTopics, useP2P } from '@/hooks';
+import { useTopics, useP2P, useProfileAvatarSync } from '@/hooks';
 import { useNostrEvents } from '@/hooks/useNostrEvents';
 import { useP2PEventListener } from '@/hooks/useP2PEventListener';
 import { useDataSync } from '@/hooks/useDataSync';
@@ -16,6 +16,7 @@ function RootComponent() {
   const { data: topics, isLoading } = useTopics();
   const { initialized: p2pInitialized } = useP2P();
   const [isInitializing, setIsInitializing] = useState(true);
+  useProfileAvatarSync();
 
   // グローバルイベントリスナーの設定
   useNostrEvents();

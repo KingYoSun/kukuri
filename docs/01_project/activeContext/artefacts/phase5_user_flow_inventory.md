@@ -7,6 +7,17 @@
 - フロントエンドから発行している Tauri コマンド (`invoke`) を棚卸しし、未使用 API と連携している画面を明確化する。
 - 今後の改善タスク（導線不足／未接続 API）を `refactoring_plan_2025-08-08_v3.md` へ反映するためのインプットを提供する。
 
+## 0. MVP Exit クロスウォーク（2025年11月09日）
+
+| カテゴリ | カバレッジ対象セクション | 現状サマリー | 次アクション |
+| --- | --- | --- | --- |
+| UX/体験導線 | Sec.1.2（グローバル要素）、Sec.2（検索）、Sec.5.1（プロフィール/設定）、5.4（DM/プロフィール導線）、5.7（トレンド/フォロー）、5.9（TopicSelectorショートカット）、5.10（投稿削除） | Stage3（Doc/Blob + privacy）まで完了し、`profile_avatar_sync` + `useProfileAvatarSync` を Nightly/Docker シナリオへ登録済み。5.9/5.10 は実装済みだが `TopicSelector.test.tsx` / `PostCard.test.tsx` の Vitest 再実行と Summary Panel -> `trending_metrics_job` の自動再実行チェーン、DM 既読共有/検索 UI の最終整理が継続課題。 | `corepack enable pnpm` 手順を 5.9/5.10 に追記し、`scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync` / `rust -Test profile_avatar_sync` を 5.1 のテスト欄へ記録。 |
+| P2P & Discovery | Sec.1.6（ステータスカード）、5.6（Mainline DHT/RelayStatus）、5.12（ヘッダーメッセージ/Runbookリンク） | Sidebar `RelayStatus` から Runbook Chapter10 へ遷移できるが、`phase5_event_gateway_design.md` で定義した Gateway mapper/DI の反映状況を記録していない。`RelayStatus.test.tsx` のフェイクタイマー更新のみ記載。 | 5.6 に `kukuri-cli` ブートストラップリスト自動更新 PoC と EventGateway 依存解消タスクを追記し、`phase5_dependency_inventory_template.md` の P2P 行と整合させる。 |
+| データ/同期 & メトリクス | Sec.5.5（SyncStatusIndicator & offline）、5.11（SyncStatusIndicator詳細） | `list_sync_queue_items` で取得した履歴表示と 60 秒ポーリング/手動更新は実装済み。Doc/Blob 対応の `cache_metadata` 拡張、`trending_metrics_job` の AppState フック、Docker `trending-feed` フィクスチャの固定が未ドキュメント。 | 5.5/5.11 に Stage3/4 のマイグレーション一覧と Runbook 参照を追加し、`phase5_ci_path_audit.md` のテストIDをリンク。 |
+| Ops / CI | Sec.1.6（ステータスカードテスト）、Sec.5.5/5.7（Nightlyテスト項目）、付録（テスト計画） | `pnpm` 未インストールにより `TopicSelector` / `useDeletePost` のユニットテストをローカル再現できない問題が発生（2025-11-10 ログ）。Rust テストは `./scripts/test-docker.ps1 rust -NoBuild` で迂回。 | 付録に `corepack` 環境構築手順と `tmp/logs/*.log` の参照先を追記し、Nightly での代替実行（`gh act push -j format-check` 等）を明記。 |
+
+> **メモ**: 上表のカテゴリは `phase5_user_flow_summary.md` の「MVP Exit Checklist」と同一構成。各行の詳細は該当セクションに「MVP Exit」サブセクションを追加していく予定（5.1 / 5.4 / 5.5 / 5.7 / 5.9 / 5.10 / 5.11 が対象）。
+
 ## 1. 画面別導線サマリー
 
 ### 1.1 オンボーディング & 認証
@@ -205,15 +216,20 @@
 - **実装ステージ**
   - **Stage1（2025年11月02日完了）**: `ProfileForm` を `ProfileSetup` / `ProfileEditDialog` / `SettingsPage` で共通化し、`usePrivacySettingsStore` を `withPersist + createMapAwareStorage` で永続化。UI 側の `Switch`・バリデーション・ドラフト復元までをフロントのみで成立させた。
   - **Stage2（2025年11月09日完了）**: `update_privacy_settings` Tauri コマンドを追加し、`user_service.update_privacy_settings` → `UserRepository` の write パスを拡張。DB には `20251109093000_add_privacy_flags_to_users` マイグレーションで `is_profile_public` / `show_online_status` カラムを追加し、`authStore.updateUser` / `usePrivacySettingsStore.hydrateFromUser` で即時反映させる。`ProfileSetup` / `ProfileEditDialog` / `SettingsPage` それぞれのテストを更新して `kukuri_privacy` 永続キー経由の動作を検証。
-  - **Stage3（MVP残タスク）**: プロフィール画像 Doc/Blob 連携（Sec.6）と Runbook 記載、および設定モーダルから privacy + avatar を同一保存するワークフローを整備する。Stage2 で導入した `update_privacy_settings` は `tauri_app_implementation_plan.md` Phase4.4 / `refactoring_plan_2025-08-08_v3.md` の「プロフィール/設定モーダル統合」行と連動しており、Stage3 では Blob ticket の保存 + Service Worker 連携を追加予定。
+  - **Stage3（Doc/Blob + privacy 同期 / 2025年11月10日完了）**:
+    - Doc/Blob 連携: `upload_profile_avatar` が `ProfileAvatarService`→`profile_avatar_store`→`iroh_blobs`→`profile_avatars` Doc を一直線で更新し、Doc entry に `share_ticket` / `encrypted_key` / `doc_version` を保存。`profile_avatar_sync` Tauri コマンドは `npub` + `known_doc_version` を受け取り、Doc バージョン差分がある場合のみ payload（プライバシーフラグ/Blob base64）を返す。
+    - UI/UX: `ProfileEditDialog` は `update_privacy_settings` → `upload_profile_avatar` → `authStore.updateUser` をシリアル実行し、成功時に `useProfileAvatarSync.syncNow({ force: true })` を呼んで `__root.tsx` 常駐の同期フックへ通知。`ProfileSetup` も同ルートを利用し、`OfflineIndicator` とヘッダーのプロフィール画像が Doc 更新後即座に差し替わる。
+    - Ops/Runbook: `docs/03_implementation/p2p_mainline_runbook.md` Chapter4 に Profile Avatar Sync 手順（ローカルDB/Blob フォルダのクリーンアップ、`tmp/logs/profile_avatar_sync_<timestamp>.log` の採取）を追加し、CI パス監査 (`phase5_ci_path_audit.md`) に `pnpm vitest` + Docker テスト（`scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync`、`scripts/test-docker.ps1 rust -Test profile_avatar_sync`）を登録。
 - **バックエンド連携（Stage2）**
   - `presentation::commands::update_privacy_settings` で `public_profile` / `show_online_status` を受け取り、`UserService::update_privacy_settings` で存在確認後に `Utc::now()` で `updated_at` を更新して永続化。`UserRepository::update_user` / `.sqlx` モデルへ新フィールドを追加した。
   - 既存の `update_nostr_metadata` とは別にドメイン値を保持するため、`UserMetadata` に依存しない軽量更新 API として整理。`phase5_ci_path_audit.md` / `tasks/completed/2025-11-09.md` へも証跡を記録済み。
 - **テスト / 検証ログ**
-  - TypeScript: `pnpm vitest src/tests/unit/components/auth/ProfileForm.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/routes/settings.test.tsx`（`scripts/test-docker.ps1 ts -Tests ...` 経由でも実行可能）で Stage2 をカバー。
-  - Rust: `cargo test user_service::tests::update_privacy_settings_*` → Windows 既知の `STATUS_ENTRYPOINT_NOT_FOUND` により `./scripts/test-docker.ps1 rust -NoBuild` で再実行してパス。`.sqlx` データは `DATABASE_URL="sqlite:data/kukuri.db" cargo sqlx prepare` を再生成済み。
+  - (Stage2) TypeScript: `pnpm vitest src/tests/unit/components/auth/ProfileForm.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/routes/settings.test.tsx`（`scripts/test-docker.ps1 ts -Tests ...` 経由でも実行可能）で Privacy Flag 永続化をカバー。
+  - (Stage2) Rust: `cargo test user_service::tests::update_privacy_settings_*` → Windows 既知の `STATUS_ENTRYPOINT_NOT_FOUND` により `./scripts/test-docker.ps1 rust -NoBuild` で再実行してパス。`.sqlx` データは `DATABASE_URL="sqlite:data/kukuri.db" cargo sqlx prepare` を再生成済み。
+  - (Stage3) TypeScript: `pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx` を `2025年11月10日` に実行。Docker では `scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync` を追加し、ログを `tmp/logs/profile_avatar_sync_<timestamp>.log` に保存。
+  - (Stage3) Rust: `./scripts/test-docker.ps1 rust -Test profile_avatar_sync -NoBuild`（Windows 既知の issue 迂回）で Upload→Export→Import→Fetch の同期シナリオを検証。Linux/macOS では `cargo test --package kukuri-tauri --test profile_avatar_sync`。結果は `phase5_ci_path_audit.md` に記録。
 - **次のアクション**
-  - Stage3 で扱う Blob/Doc 同期は Sec.6（プロフィール画像リモート同期）および `tauri_app_implementation_plan.md` Phase4.4 にタスク化済み。設定モーダル保存時に `upload_profile_avatar` + `update_privacy_settings` をまとめて呼ぶための UI フロー案を追記し、Runbook（`docs/03_implementation/p2p_mainline_runbook.md`）へも同期手順を追加する。
+  - Stage4（Service Worker + オフライン通知）に向けて、`useProfileAvatarSync` のリトライポリシーと `profile_avatar_sync` コマンドのバックオフ/ロギング粒度を拡張。Sec.6 / Runbook へクリーンアップおよび Nightly ログ採取手順を継続追記し、`phase5_ci_path_audit.md` のテストIDを Stage4 完了後に更新する。
 
 ### 5.2 サイドバー「新規投稿」ボタンと未導線機能
 - **目的**: タイムライン以外の画面からも投稿を開始できるようにし、未結線の UI 要素（トレンド/フォロー中）を段階的に解消する。

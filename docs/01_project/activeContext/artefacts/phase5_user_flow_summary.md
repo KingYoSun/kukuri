@@ -10,10 +10,24 @@
 ## MVP残タスクハイライト（2025年11月08日更新）
 - **トレンド/フォロー**: ✅ Summary Panel / `trending_metrics_job` / Docker `trending-feed` を 24h 集計結果と同期済み（Inventory 5.7）。以降は CI ログ監視と `prefetchTrendingCategory` ドキュメント維持のみ。
 - **Direct Message**: `DirectMessageInbox` の会話リスト仮想スクロール、候補補完/検索、`mark_direct_message_conversation_read` の多端末同期を完了し、`Header.test.tsx` / `FollowingSummaryPanel.test.tsx` のモックを最新APIに合わせる。（Inventory 5.4）
-- **プロフィール/設定**: `ProfileForm` の共通化とプライバシー設定（`usePrivacySettingsStore`）の永続化を終え、`update_nostr_metadata` / `authStore.updateUser` を設定モーダル経由で再利用する。（Inventory 5.1）
+- **プロフィール/設定**: `ProfileForm` の共通化とプライバシー設定（`usePrivacySettingsStore`）の永続化に加え、Stage3 で `ProfileEditDialog` / `ProfileSetup` が `upload_profile_avatar` + `update_privacy_settings` を直列実行し、`useProfileAvatarSync` による Doc/Blob 同期を `__root.tsx` から常駐させた。（Inventory 5.1, Sec.6）
 - **ユーザー検索**: `search_users` API 拡張（cursor/sort/allow_incomplete）と UI のレートリミット・状態遷移を実装し、`UserSearchResults` / `useUserSearchQuery` テストでデバウンス + キャンセルをカバー。（Inventory 5.4）
 - **Offline sync**: `sync_queue` / `offline_actions` / `cache_metadata` に加え、2025年11月09日現在は `list_sync_queue_items` 経由で取得した再送キュー履歴（Queue ID フィルタ、最新 ID ハイライト、ステータス別バッジ、要求者/要求時刻/発行元/再試行回数）を `SyncStatusIndicator` のポップオーバーに表示し、`OfflineIndicator` からヘッダーの同期ボタンへ誘導できる。`tauri_app_implementation_plan.md` Phase4 に沿って Runbook/テストを整備中。（Inventory 5.5）
 - **Mainline DHT Runbook**: `docs/03_implementation/p2p_mainline_runbook.md` に Chapter10（`kukuri-cli` ブートストラップ運用と Settings/RelayStatus 連携）を追加し、Sidebar の RelayStatus カードへ Runbook リンクを実装。`cargo test --package kukuri-cli -- test_bootstrap_runbook` / `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を検証パスへ組み込んだ。（Inventory 5.6）
+
+## MVP Exit Checklist（2025年11月09日版）
+
+| カテゴリ | ゴール | 2025年11月09日時点のブロッカー | 次アクション | 参照 |
+| --- | --- | --- | --- | --- |
+| UX/体験導線 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` をまとめて完走し、サイドバー/グローバルコンポーザーから同一導線に流し込める状態 | `DirectMessageInbox` の既読共有 UI、ユーザー検索のレートリミット表示、`TopicFormModal (create-from-composer)` / `useDeletePost` の追加Vitest と Summary Panel → `trending_metrics_job` の再実行チェーン。プロフィール導線は Stage3（Doc/Blob + privacy）を実装済み。 | 新規 Vitest（`TopicSelector`/`PostCard`）と `trending_metrics_job` の自動再実行を `phase5_user_flow_inventory.md` 5.7 と同期し、Summary Panel CTA を更新。 | `phase5_user_flow_inventory.md` Sec.5.1/5.4/5.7/5.9/5.10, `tauri_app_implementation_plan.md` Phase3 |
+| P2P & Discovery | EventGateway と P2PService Stack を抽象化し、Mainline DHT Runbook / `kukuri-cli` ブートストラップを UI から辿れる | `phase5_event_gateway_design.md`（最終更新10/23）の mapper / Gateway 実装が未反映、`phase5_dependency_inventory_template.md` の P2P 行で Trait 化ステータスが空欄、`docs/03_implementation/p2p_mainline_runbook.md` Chapter10 への UI リンク追加に伴う CLI 動的更新 PoC が未完 | EventGateway ポート定義を `refactoring_plan_2025-08-08_v3.md` Phase5 ギャップと同期し、P2PService trait + CLI Runbook を `roadmap.md` KPI と結合。`tasks/status/in_progress.md` P2P 項目へ今日の進捗を追記 | `phase5_event_gateway_design.md`, `phase5_dependency_inventory_template.md`, `docs/03_implementation/p2p_mainline_runbook.md` |
+| データ/同期 & メトリクス | sync_queue Stage3/4 と `trending_metrics_job` を本番運用できる Runbook/CI を揃える | `sync_queue` / `offline_actions` / `cache_metadata` の最終マイグレーション（Doc/Blob対応）が未適用、`list_sync_queue_items` の Runbook 手順が `phase5_ci_path_audit.md` に未反映、`trending_metrics_job` の AppState フックと Docker `trending-feed` フィクスチャ固定が途中 | `tauri_app_implementation_plan.md` Phase4.2/4.3 のタスクリストを棚卸しし、`phase5_ci_path_audit.md` に `useSyncManager` / `SyncStatusIndicator` の 60 秒ポーリングと手動更新コマンドを登録。`scripts/test-docker.ps1 --scenario trending-feed` のログ取得手順をまとめる | `phase5_user_flow_inventory.md` Sec.5.5, `tauri_app_implementation_plan.md` Phase4, `phase5_ci_path_audit.md` |
+| Ops / CI | `test.yml` + Nightly + Docker シナリオで MVP 導線と Runbook を再現し、ブロッカーを 24h 以内に可視化 | `pnpm` 実行可能なホストがなく `TopicSelector` / `PostCard` のユニットテストがローカル再現できない、Windows では `docker compose -f docker-compose.test.yml run --rm rust-test` の権限不足が残る、`gh act push -j docker-test` の `Run Rust tests in Docker (multi-node P2P)` が停止する | `corepack enable pnpm` や `scripts/test-docker.ps1 rust -NoBuild` を README/Runbook に追記し、`tmp/logs/` に記録済みログの共有場所を `phase5_ci_path_audit.md` へ記載。Nightly 成功率を `roadmap.md` KPI とリンク | `tasks/status/in_progress.md`（GitHub Actions節）, `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md`, `roadmap.md` KPI |
+
+共通の検証手順
+- `pnpm vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`（同期導線）
+- `pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/stores/postStore.test.ts`（グローバルコンポーザー/投稿削除）
+- `cargo test --package kukuri-cli -- test_bootstrap_runbook` / `./scripts/test-docker.ps1 rust -NoBuild`（Rust 側）
 
 ## 1. 画面別導線サマリー
 

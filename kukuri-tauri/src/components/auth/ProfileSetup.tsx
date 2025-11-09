@@ -9,12 +9,14 @@ import { errorHandler } from '@/lib/errorHandler';
 import { ProfileForm, type ProfileFormSubmitPayload, type ProfileFormValues } from './ProfileForm';
 import { TauriApi } from '@/lib/api/tauri';
 import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
+import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
 
 export function ProfileSetup() {
   const navigate = useNavigate();
   const { currentUser, updateUser } = useAuthStore();
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
+  const { syncNow: syncAvatar } = useProfileAvatarSync({ autoStart: false });
 
   const initialProfile: ProfileFormValues = {
     name: currentUser?.name || '',
@@ -54,6 +56,16 @@ export function ProfileSetup() {
         nostrPicture = updatedAvatar.nostrUri;
       }
 
+      if (!currentUser?.npub) {
+        throw new Error('Missing npub for profile setup');
+      }
+
+      await TauriApi.updatePrivacySettings({
+        npub: currentUser.npub,
+        publicProfile,
+        showOnlineStatus,
+      });
+
       // Nostrプロフィールメタデータを更新
       await updateNostrMetadata({
         name: profile.name,
@@ -80,6 +92,7 @@ export function ProfileSetup() {
       });
 
       toast.success('プロフィールを設定しました');
+      await syncAvatar({ force: true });
       await navigate({ to: '/' });
     } catch (error) {
       toast.error('プロフィールの設定に失敗しました');

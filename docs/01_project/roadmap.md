@@ -1,12 +1,12 @@
 # kukuri プロジェクトロードマップ
 
 **作成日**: 2025年08月16日  
-**最終更新**: 2025年11月08日
+**最終更新**: 2025年11月10日
 
 ## プロジェクトビジョン
 kukuri は Nostr イベントをベースにしたトピック中心ソーシャルクライアントとして、BitTorrent Mainline DHT + iroh を土台に完全分散なP2P体験を提供する。MVP のゴールは、トレンド/フォロー/DM/プロフィール/検索といった日常の導線を Mainline DHT 上で安定提供し、Nightly + Runbook で再現できる状態まで引き上げることにある。
 
-## ロードマップ概要（2025年11月08日再編）
+## ロードマップ概要（2025年11月10日再編）
 - Phase 1〜2（認証/トピック/リアルタイム）は完了済み。現在は Phase 3.3〜5 の仕上げがMVPのクリティカルパス。
 - 残タスクは **UX/体験**, **P2P & Discovery**, **データ同期**, **Ops/テスト** の4トラックに整理し、Exit Criteriaを `docs/01_project/design_doc.md` と同期させる。
 - 2025年11月中にMVPトラックを完了 → 12月前半でリリース準備（Phase 7）→ 12月末にベータリリースを目指す。
@@ -14,16 +14,22 @@ kukuri は Nostr イベントをベースにしたトピック中心ソーシャ
 ### MVPトラック別の残タスク
 | トラック | 目的 | 主なタスク | 所属ドキュメント | 状態 |
 | --- | --- | --- | --- | --- |
-| UX/体験 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` をブロッカー無しでつなぐ | `phase5_user_flow_inventory.md` 5.1〜5.7 の改善（設定モーダルのプライバシー反映、グローバルコンポーザーからのトピック作成、DM Inboxの仮想スクロール/候補補完、ユーザー検索のレートリミットUI、Summary Panelテレメトリ更新、トレンド/フォローの再実行性担保） | `phase5_user_flow_summary.md`, `tauri_app_implementation_plan.md` Phase3 | ⏳ 改善中（未完項目は各セクションにチェックボックス追加済み） |
+| UX/体験 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` をブロッカー無しでつなぐ | `phase5_user_flow_inventory.md` 5.1〜5.7 の改善（設定モーダルのプライバシー反映、グローバルコンポーザーからのトピック作成、DM Inboxの仮想スクロール/候補補完、ユーザー検索のレートリミットUI、Summary Panelテレメトリ更新、トレンド/フォローの再実行性担保） | `phase5_user_flow_summary.md`, `tauri_app_implementation_plan.md` Phase3 | ⏳ Stage3（Doc/Blob + privacy）は 2025年11月10日に完了。`TopicSelector` / `PostCard` の Vitest 再実行、Summary Panel→`trending_metrics_job` の自動連携、DM/検索 UI の最終調整が残る。 |
 | P2P & Discovery | Mainline DHT + Gossip の運用 Runbook を整え、EventGateway 経由でアプリ層へ隠蔽 | `phase5_event_gateway_design.md` の Gateway 実装、`refactoring_plan_2025-08-08_v3.md` Phase5（P2PService Stack/KeyManager分離）、`docs/03_implementation/p2p_mainline_runbook.md` の Runbook 完成、`kukuri-cli` ブートストラップリストの動的更新 PoC | `phase5_dependency_inventory_template.md`, `docs/03_implementation/p2p_mainline_runbook.md` | ⏳ 設計済/実装中 |
 | データ/同期 | Offline ファースト（sync_queue/楽観更新）とトレンド指標自動集計 | `tauri_app_implementation_plan.md` Phase4（sync_queue/offline_actions/競合UI/Service Worker）、`trending_metrics_job` + `scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の自動化、`list_trending_*` の24h集計と `generated_at` ミリ秒保証 | `refactoring_plan_2025-08-08_v3.md` Phase2.5/5.7, `phase5_user_flow_summary.md` 1.2 | ⏳ 実装中（ジョブ/オフライン層が未完） |
 | Ops/テスト | Nightly/CIでMVP導線を再現しRunbookで復旧できる体制 | `tasks/status/in_progress.md` (GitHub Actions) のトレンドフィードDocker修正、`nightly.yml` `trending-feed` のアーティファクト権限問題切り分け、`docs/01_project/progressReports/` へのRunbookリンク、`scripts/test-docker.ps1 all` の安定化 | `docs/01_project/activeContext/tasks/status/in_progress.md`, `docs/01_project/design_doc.md` | ⏳ 継続調整 |
+
+#### MVP Exit Checklist 連動状況（2025年11月10日）
+- **UX/体験導線**: Stage2 プライバシー + Stage3 Doc/Blob（`profile_avatar_sync` + `useProfileAvatarSync`）は完了し、Nightly/Docker へ `profile-avatar-sync` シナリオを登録。`TopicSelector`/`PostCard` の Vitest 再実行（`corepack pnpm` 展開）と Summary Panel → `trending_metrics_job` の自動実行が残る。→ `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` のクロスウォークを参照。
+- **P2P & Discovery**: Chapter10 まで Runbook を拡張し RelayStatus からリンク済み。EventGateway mapper / P2P trait 化・`kukuri-cli` 動的ブートストラップ PoC が未反映。→ `phase5_event_gateway_design.md` 更新が必要。
+- **データ/同期**: `list_sync_queue_items` UI と 60 秒ポーリングは完了。Doc/Blob 対応の `cache_metadata` 拡張と `trending_metrics_job` の AppState フックは進行中。→ `tauri_app_implementation_plan.md` Phase4 / `phase5_ci_path_audit.md`.
+- **Ops/CI**: `pnpm` 実行環境の欠如で `TopicSelector`/`PostCard` テストがホストでは未再現。Rust テストは `./scripts/test-docker.ps1 rust -NoBuild` で迂回。→ `tasks/status/in_progress.md` GitHub Actions 節、`phase5_ci_path_audit.md` にログリンクを追記予定。
 
 ### 2025年11月: Phase 5（MVP仕上げ）
 - **Week 1（完了）**: グローバルコンポーザー導線統一、DMモーダルのモックテスト整備、`direct_message_conversations` 永続化。
 - **Week 2（進行中）**:
   - トレンド/フォロー Summary Panel → `trending_metrics_job` の 24h 集計と Docker シナリオ固定。
-  - 設定モーダルのプライバシー設定をバックエンドへ伝播。
+  - 設定モーダルのプライバシー設定をバックエンドへ伝播（Stage3 Doc/Blob + privacy を 2025年11月10日に完了、Runbook Chapter4/CIログへ登録済み）。
   - `EventGateway` ポート実装と `EventService` の依存置換。
 - **Week 3（予定）**:
   - Offline sync_queue + conflict UI。

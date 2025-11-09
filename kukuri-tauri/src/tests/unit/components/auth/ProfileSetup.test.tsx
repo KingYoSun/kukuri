@@ -42,6 +42,8 @@ vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     uploadProfileAvatar: vi.fn(),
     fetchProfileAvatar: vi.fn(),
+    updatePrivacySettings: vi.fn(),
+    profileAvatarSync: vi.fn(),
   },
 }));
 
@@ -65,6 +67,8 @@ let mockOpen: ReturnType<typeof vi.fn>;
 let mockReadFile: ReturnType<typeof vi.fn>;
 let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
+let mockUpdatePrivacySettings: ReturnType<typeof vi.fn>;
+let mockProfileAvatarSync: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
   const dialogModule = await import('@tauri-apps/plugin-dialog');
@@ -76,6 +80,14 @@ beforeAll(async () => {
     typeof vi.fn
   >;
   mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  tauriModule.TauriApi.updatePrivacySettings = vi.fn();
+  tauriModule.TauriApi.profileAvatarSync = vi.fn();
+  mockUpdatePrivacySettings = tauriModule.TauriApi.updatePrivacySettings as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  mockProfileAvatarSync = tauriModule.TauriApi.profileAvatarSync as unknown as ReturnType<
     typeof vi.fn
   >;
 });
@@ -110,6 +122,15 @@ describe('ProfileSetup', () => {
     mockReadFile.mockReset();
     mockUploadProfileAvatar.mockReset();
     mockFetchProfileAvatar.mockReset();
+    mockUpdatePrivacySettings.mockResolvedValue(undefined);
+    mockProfileAvatarSync.mockResolvedValue({
+      npub: mockCurrentUser.npub,
+      currentVersion: null,
+      updated: false,
+      avatar: undefined,
+    });
+    mockUpdatePrivacySettings.mockReset();
+    mockProfileAvatarSync.mockReset();
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       currentUser: mockCurrentUser,
       updateUser: mockUpdateUser,
@@ -208,6 +229,15 @@ describe('ProfileSetup', () => {
     const submitButton = screen.getByRole('button', { name: '設定を完了' });
     await user.click(submitButton);
 
+    await waitFor(() => {
+      expect(mockUpdatePrivacySettings).toHaveBeenCalledWith({
+        npub: mockCurrentUser.npub,
+        publicProfile: true,
+        showOnlineStatus: false,
+      });
+    });
+
+    expect(mockProfileAvatarSync).toHaveBeenCalled();
     // Nostrメタデータ更新が呼ばれる
     await waitFor(() => {
       expect(updateNostrMetadata).toHaveBeenCalledWith(
@@ -242,6 +272,11 @@ describe('ProfileSetup', () => {
     // 成功メッセージ
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('プロフィールを設定しました');
+    });
+
+    expect(mockProfileAvatarSync).toHaveBeenCalledWith({
+      npub: mockCurrentUser.npub,
+      knownDocVersion: null,
     });
 
     // ホーム画面への遷移

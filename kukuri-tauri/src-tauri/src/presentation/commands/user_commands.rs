@@ -10,8 +10,8 @@ use crate::domain::entities::UserMetadata;
 use crate::presentation::dto::{
     ApiResponse, Validate,
     profile_avatar_dto::{
-        FetchProfileAvatarRequest, FetchProfileAvatarResponse, UploadProfileAvatarRequest,
-        UploadProfileAvatarResponse,
+        FetchProfileAvatarRequest, FetchProfileAvatarResponse, ProfileAvatarSyncRequest,
+        ProfileAvatarSyncResponse, UploadProfileAvatarRequest, UploadProfileAvatarResponse,
     },
     user_dto::{
         GetFollowersRequest, GetFollowingRequest, PaginatedUserProfiles, SearchUsersRequest,
@@ -257,4 +257,52 @@ pub async fn fetch_profile_avatar(
         .await
         .map(FetchProfileAvatarResponse::from);
     Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn profile_avatar_sync(
+    request: ProfileAvatarSyncRequest,
+    avatar_service: State<'_, Arc<ProfileAvatarService>>,
+) -> Result<ApiResponse<ProfileAvatarSyncResponse>, AppError> {
+    let npub = request.npub.clone();
+    let response = match avatar_service.fetch_avatar(&request.npub).await {
+        Ok(result) => {
+            let current_version = result.metadata.version;
+            let fetch_response = FetchProfileAvatarResponse::from(result);
+
+            if let Some(known) = request.known_doc_version {
+                if known >= current_version {
+                    ProfileAvatarSyncResponse {
+                        npub,
+                        current_version: Some(current_version),
+                        updated: false,
+                        avatar: None,
+                    }
+                } else {
+                    ProfileAvatarSyncResponse {
+                        npub,
+                        current_version: Some(current_version),
+                        updated: true,
+                        avatar: Some(fetch_response),
+                    }
+                }
+            } else {
+                ProfileAvatarSyncResponse {
+                    npub,
+                    current_version: Some(current_version),
+                    updated: true,
+                    avatar: Some(fetch_response),
+                }
+            }
+        }
+        Err(AppError::NotFound(_)) => ProfileAvatarSyncResponse {
+            npub,
+            current_version: None,
+            updated: false,
+            avatar: None,
+        },
+        Err(err) => return Err(err),
+    };
+
+    Ok(ApiResponse::success(response))
 }

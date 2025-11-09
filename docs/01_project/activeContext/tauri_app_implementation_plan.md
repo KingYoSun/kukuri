@@ -1,18 +1,20 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年11月08日  
+**最終更新**: 2025年11月10日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
-## MVP残タスクサマリー（2025年11月08日更新）
+## MVP残タスクサマリー（2025年11月10日更新）
 
 | 領域 | 目的 | 必須タスク | 状態/担当 | 参照 |
 | --- | --- | --- | --- | --- |
-| トレンド/フォロー導線 | `/trending` `/following` Summary Panel を安定化し、Docker/Nightly と整合 | `trending_metrics_job` の24h集計 + `list_trending_*` の `generated_at` ミリ秒保証、`scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の fixture 固定、`TrendingSummaryPanel` / `FollowingSummaryPanel` のテレメトリ表示更新 | ⏳ `phase5_user_flow_inventory.md` 5.7 / `tasks/status/in_progress.md` (GitHub Actions) で追跡中 | `phase5_user_flow_summary.md` 1.2 |
-| DM & 通知 | `DirectMessageInbox` の可搬性と未読表示を完成 | 会話リストの仮想スクロール、候補補完・検索、未読共有（`mark_direct_message_conversation_read` multi-device）、SR-only 告知のUIテストを追加 | ⏳ 2025-11-08 着手 (`Header.test.tsx` モック化済み) | `phase5_user_flow_inventory.md` 5.4 |
-| プロフィール/設定 | ProfileSetup/Settings モーダルを共通化しプライバシー設定をバックエンドへ伝播 | `ProfileForm` 抽出、プライバシーstore (`usePrivacySettingsStore`) 永続化、`update_nostr_metadata` の権限拡張、設定モーダルの保存フローとテスト | ⏳ Stage1完了 / Stage2でバックエンド連携待ち | `phase5_user_flow_inventory.md` 5.1 |
-| ユーザー検索 | レートリミット/ページネーション/状態遷移をUIで表現 | `search_users` API 拡張（cursor/sort/allow_incomplete）、`UserSearchResults` 状態マシン、レートリミットUI、`useUserSearchQuery` テスト | ⏳ 設計済 | `phase5_user_flow_inventory.md` 5.4 |
-| Offline sync_queue | オフライン操作の蓄積と競合解決UIを提供 | `sync_queue`/`offline_actions`/`cache_metadata` テーブル、`sync_offline_actions` Tauriコマンド、`useSyncManager` conflict banner/Retry、Service Worker のバックグラウンド同期 | 🚧 Phase4.1〜4.4 で未実装 | 本書 Phase4 |
+| トレンド/フォロー導線 | `/trending` `/following` Summary Panel を安定化し、Docker/Nightly と整合 | `trending_metrics_job` の24h集計 + `list_trending_*` の `generated_at` ミリ秒保証、`scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の fixture 固定、`TrendingSummaryPanel` / `FollowingSummaryPanel` のテレメトリ表示更新 | ⏳ Summary Panel UI のみ完了。`corepack pnpm` 未設定で `TrendingSummaryPanel.test.tsx` を再実行できず、Docker `trending-feed` もホスト権限不足のまま（`tmp/logs/docker_rust_test_20251109.log` 参照）。 | `phase5_user_flow_summary.md` (MVP Exit UX行), `phase5_user_flow_inventory.md` 5.7 |
+| DM & 通知 | `DirectMessageInbox` の可搬性と未読表示を完成 | 会話リストの仮想スクロール、候補補完・検索、未読共有（`mark_direct_message_conversation_read` multi-device）、SR-only 告知のUIテストを追加 | ⏳ UI/IPC は実装済。既読共有と `Header.test.tsx` / `DirectMessageDialog.test.tsx` を `pnpm vitest` で再確認できていない。`phase5_user_flow_inventory.md` 5.4 に多端末要件を追記予定。 | `phase5_user_flow_inventory.md` 5.4, `phase5_user_flow_summary.md` |
+| プロフィール/設定 | ProfileSetup/Settings モーダルを共通化しプライバシー設定をバックエンドへ伝播 | `ProfileForm` 抽出、プライバシーstore (`usePrivacySettingsStore`) 永続化、`update_nostr_metadata` の権限拡張、設定モーダルの保存フローとテスト | ✅ Stage3（2025年11月10日）: `ProfileEditDialog` / `ProfileSetup` が avatar + privacy を直列保存し、`profile_avatar_sync` + `useProfileAvatarSync` を `__root.tsx` 常駐で起動。`pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx` と `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync`, `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` を実行して Runbook / CI パス監査へ登録済み。 | `phase5_user_flow_inventory.md` 5.1 |
+| ユーザー検索 | レートリミット/ページネーション/状態遷移をUIで表現 | `search_users` API 拡張（cursor/sort/allow_incomplete）、`UserSearchResults` 状態マシン、レートリミットUI、`useUserSearchQuery` テスト | ⏳ 状態マシンはモック済。API 拡張と Vitest (`UserSearchResults.test.tsx`) のリファクタを `phase5_user_flow_inventory.md` 5.4 で再整理中。 | `phase5_user_flow_inventory.md` 5.4 |
+| Offline sync_queue | オフライン操作の蓄積と競合解決UIを提供 | `sync_queue`/`offline_actions`/`cache_metadata` テーブル、`sync_offline_actions` Tauriコマンド、`useSyncManager` conflict banner/Retry、Service Worker のバックグラウンド同期 | 🚧 Phase4.1〜4.3: `list_sync_queue_items` UI と 60 秒ポーリングは完成。Stage3 Doc/Blob & conflict banner、Stage4 Service Worker は未着手。`phase5_ci_path_audit.md` に Runbook 手順が未登録。 | 本書 Phase4, `phase5_user_flow_inventory.md` 5.5/5.11 |
+
+> **クロスウォーク**: 上表は `phase5_user_flow_summary.md` の「MVP Exit Checklist（UX/体験行）」と連動。CI / Docker / Rust テストの実行計画は `phase5_ci_path_audit.md` に記録し、テストが未実行の場合はログファイル（`tmp/logs/*.log`）へのリンクを本書に記載する。
 
 ## Phase 1: 認証フローの修正 ✓ 完了
 
@@ -351,7 +353,7 @@ export function PeerConnectionPanel() {
 ### 🟡 MVP残タスク（Phase3）
 - **トピック作成ショートカット**（Inventory 5.9）: ✅ 2025年11月10日 — `TopicFormModal` に `create-from-composer` モードを追加し、`PostComposer` / `Sidebar` / `TopicSelector` が新規トピックの作成 → 自動参加 → コンポーザー再開を一貫導線で実装。単体テストは `TopicSelector.test.tsx` / `PostComposer.test.tsx` / `Sidebar.test.tsx` を追加。残課題: オフライン作成キューと Runbook 整備。
 - **投稿削除後のキャッシュ整合性**（Inventory 5.10）: ✅ 2025年11月10日 — `useDeletePost` + `cacheUtils.invalidatePostCaches` でタイムライン/トレンド/フォロー中の React Query キャッシュと `topicStore.updateTopicPostCount` を即時更新。`PostCard` は新フックへ移行し、`postStore.deletePostRemote` もトピック件数を更新する。Rust `post_delete_flow` は次スプリントで追加予定。
-- **プロフィール/設定 Stage3**（Inventory 5.1 + Sec.6）: `upload_profile_avatar` + `update_privacy_settings` を同一モーダルで保存するフローと Doc/Blob 同期（`profile_avatars`）を仕上げ、Runbook/CI に複製手順を追加。`pnpm vitest src/tests/unit/components/settings/ProfileEditDialog.test.tsx` と `cargo test --package kukuri-tauri -- profile_avatar_sync`（新規）をカバーターゲットに設定。
+- **プロフィール/設定 Stage3**（Inventory 5.1 + Sec.6）: ✅ 2025年11月10日 — `ProfileEditDialog` / `ProfileSetup` が `update_privacy_settings` → `upload_profile_avatar` をシリアライズし、成功後に `authStore.updateUser` と `useProfileAvatarSync.syncNow({ force: true })` で Doc バージョンを即時反映。`profile_avatar_sync` コマンドは `known_doc_version` で差分転送し、`__root.tsx` の常駐フックが 5 分間隔で同期。`pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx`、`./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync`、`./scripts/test-docker.ps1 rust -Test profile_avatar_sync` を実行し、`docs/03_implementation/p2p_mainline_runbook.md` Chapter4 と `phase5_ci_path_audit.md` にログ/手順 (`tmp/logs/profile_avatar_sync_*.log`) を追加した。
 
 ### ⏭️ MVP後に回す項目（Phase3）
 
@@ -537,7 +539,7 @@ export function PeerConnectionPanel() {
 ### 工数見積もり
 - Phase 1: ✓ 完了（2日）
 - Phase 2: ✓ 完了（3日）
-- Phase 3: 3.1〜3.2 完了。残タスク（Inventory 5.9/5.10/6）を 2 日以内に消化し、3.3（リアクション強化）は Post-MVP へ移送。
+- Phase 3: 3.1〜3.2 完了。Inventory 5.9（トピック作成ショートカット）/5.10（投稿削除キャッシュ）/5.1 Stage3（Doc/Blob + privacy）は 2025年11月10日にクローズ。3.3（リアクション強化）は Post-MVP へ移送。
 - Phase 4: Stage1〜3 完了。4.4（Offline UI/UX + Runbook）仕上げと `sync_engine` 追加ログで 1.5 日想定。
   - 4.1 ローカルファーストデータ管理: ✓
   - 4.2 楽観的UI更新: ✓
@@ -564,7 +566,7 @@ export function PeerConnectionPanel() {
 
 ### 優先順位による調整
 - Phase 1-2: 完了 ✓
-- Phase 3: 3.1/3.2 完了。残タスク（トピック作成ショートカット / 投稿削除キャッシュ / プロフィール Stage3）を MVP ブロッカーとして処理し、3.3（リアクション）は Post-MVP に回す。
+- Phase 3: 3.1/3.2 完了。トピック作成ショートカット / 投稿削除キャッシュ / プロフィール Stage3（Doc/Blob + privacy）は 2025年11月10日にクローズ。3.3（リアクション）は Post-MVP に回す。
 - Phase 4: Stage1〜3 完了。4.4（Offline UI/UX + Service Worker 導線）を MVP の最終ゲートとして対応中。
 - オフラインファースト機能は現状の SQLite + Tanstack Query + P2P 同期基盤を活用し、Docker `rust` テスト・`scripts/test-docker` 経由での検証を継続。
 - MVP完成後は、ユーザーフィードバックを基にリアクション拡張・Service Worker 拡張・自動再送分析を実装。

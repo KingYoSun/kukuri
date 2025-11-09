@@ -96,6 +96,7 @@ pub fn run() {
             presentation::commands::mark_direct_message_conversation_read,
             presentation::commands::upload_profile_avatar,
             presentation::commands::fetch_profile_avatar,
+            presentation::commands::profile_avatar_sync,
             // トピック関連コマンド
             presentation::commands::create_topic,
             presentation::commands::get_topic,

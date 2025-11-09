@@ -137,6 +137,15 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - `ValidationFailureKind` に応じた `receive_failures_by_reason` を監視し、異常があれば WARN ログの `reason` と Offline レポートの `SyncStatus::Invalid` 記録を突合して原因を特定する。レポートは `offline://reindex_complete` イベントで取得できる。
 - 各テストの配置と責務は `docs/03_implementation/nostr_event_validation.md` 5.1節のマッピング表を参照。Runbook 更新時は対応するテスト名も必ず記録する。
 
+## 4. Profile Avatar Sync（2025年11月09日追加）
+- `profile_avatar_sync` コマンド（引数: `npub`, `known_doc_version`）を実装し、Doc バージョンに変化があった場合のみ `fetch_profile_avatar` 相当の payload（メタデータ + base64 本体）を返却する。`known_doc_version` 以上であれば `updated=false` を返すため、クライアントは無駄な Blob 取得を避けられる。
+- フロントエンドは `useProfileAvatarSync` フックを `__root.tsx` から常駐させ、ログイン中は 5 分間隔で `profile_avatar_sync` を呼び出す。`ProfileEditDialog`/`ProfileSetup` では保存時に `TauriApi.updatePrivacySettings` → `uploadProfileAvatar` → `updateNostrMetadata` の順で更新し、完了後に `syncNow({ force: true })` を実行して `authStore` に Doc バージョン/画像を反映させる。
+- 自動・手動検証フロー
+  1. `pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx`
+  2. `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync`（Nightly で同シナリオを実行し、`tmp/logs/profile_avatar_sync_<timestamp>.log` を保存）
+  3. `./scripts/test-docker.ps1 rust -Test profile_avatar_sync`（Windows では `-NoBuild` 併用可）または `cargo test --package kukuri-tauri --test profile_avatar_sync`
+- 失敗時は `kukuri-tauri/src-tauri/target/profile_avatars/doc.json`（Docker: `/app/kukuri-tauri/src-tauri/target/profile_avatars/doc.json`）と `blobs/` 配下を比較し、Doc バージョンと Blob が同期しているかを確認する。異常があれば `rm -rf profile_avatars` → `cargo test --package kukuri-tauri --test profile_avatar_sync` を再実行し、`AppError::Storage` が消えるかを確認する。
+
 ## 9. get_p2p_status API 拡張実装（2025年11月03日）
 - `application::services::p2p_service::P2PStatus` に `connection_status: ConnectionStatus`（`connected` / `connecting` / `disconnected` / `error`）と `peers: Vec<PeerStatus>` を追加し、`presentation::handlers::p2p_handler::get_p2p_status` → `presentation::dto::p2p::P2PStatusResponse` 経由でフロントへ返却する。`PeerStatus` は Node ID・endpoint アドレス・最終観測時刻を含む。
 - `p2pApi.getStatus` / `useP2PStore.refreshStatus` / `useP2P` を更新し、`connectionStatus`・`peers`・バックオフ関連フィールド（`statusBackoffMs` / `lastStatusFetchedAt` / `statusError` / `isRefreshingStatus`）をストアと `P2PStatus` コンポーネントへ反映する。UI はヘッダーに最終更新時刻と次回再取得目安、手動 `再取得` ボタン、エラーバナーを表示。
