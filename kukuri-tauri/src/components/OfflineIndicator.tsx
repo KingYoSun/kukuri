@@ -70,15 +70,15 @@ export function OfflineIndicator() {
       {(pendingCount > 0 || !isOnline || isSyncing) && (
         <div className="fixed bottom-4 right-4 left-4 mx-auto max-w-sm z-40">
           <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      'w-full rounded-full px-4 py-2 shadow-lg border transition-colors text-sm',
-                      isOnline
-                        ? 'bg-white text-gray-700 border-gray-200'
-                        : 'bg-orange-100 text-orange-800 border-orange-200',
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'w-full rounded-full px-4 py-2 shadow-lg border transition-colors text-sm',
+                    isOnline
+                      ? 'bg-white text-gray-700 border-gray-200'
+                      : 'bg-orange-100 text-orange-800 border-orange-200',
                   )}
                 >
                   {isOnline ? (

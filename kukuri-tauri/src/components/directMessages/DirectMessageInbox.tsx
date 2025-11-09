@@ -198,10 +198,7 @@ export function DirectMessageInbox() {
     openDialog(npub);
   };
 
-  const handleConversationKeyDown = (
-    event: KeyboardEvent<HTMLDivElement>,
-    npub: string,
-  ) => {
+  const handleConversationKeyDown = (event: KeyboardEvent<HTMLDivElement>, npub: string) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       handleOpenConversation(npub);
@@ -274,9 +271,7 @@ export function DirectMessageInbox() {
                       >
                         <Avatar className="h-8 w-8">
                           <AvatarImage src={profile.picture || undefined} />
-                          <AvatarFallback>
-                            {(displayName[0] ?? 'U').toUpperCase()}
-                          </AvatarFallback>
+                          <AvatarFallback>{(displayName[0] ?? 'U').toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div className="overflow-hidden">
                           <p className="text-sm font-medium truncate">{displayName}</p>
@@ -360,7 +355,10 @@ export function DirectMessageInbox() {
                                 className="h-7 px-2 text-xs"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  handleMarkConversationRead(entry.npub, entry.lastMessage?.createdAt ?? null);
+                                  handleMarkConversationRead(
+                                    entry.npub,
+                                    entry.lastMessage?.createdAt ?? null,
+                                  );
                                 }}
                                 data-testid={`dm-inbox-mark-read-${entry.npub}`}
                               >

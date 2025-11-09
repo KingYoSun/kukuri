@@ -235,7 +235,11 @@ describe('Header', () => {
     expect(useDirectMessageStore.getState().isInboxOpen).toBe(true);
 
     act(() => {
-      useDirectMessageStore.getState().openDialog('npub1example');
+      useDirectMessageStore.setState((state) => ({
+        ...state,
+        isDialogOpen: true,
+        activeConversationNpub: 'npub1example',
+      }));
     });
 
     await act(() => Promise.resolve());

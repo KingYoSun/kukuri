@@ -451,13 +451,9 @@ export const useAuthStore = create<AuthStore>()(
             nip05: '',
             avatar: null,
             publicProfile:
-              typeof account.public_profile === 'boolean'
-                ? account.public_profile
-                : true,
+              typeof account.public_profile === 'boolean' ? account.public_profile : true,
             showOnlineStatus:
-              typeof account.show_online_status === 'boolean'
-                ? account.show_online_status
-                : false,
+              typeof account.show_online_status === 'boolean' ? account.show_online_status : false,
           };
 
           set({

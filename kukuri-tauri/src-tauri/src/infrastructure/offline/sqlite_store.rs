@@ -4,8 +4,8 @@ use crate::domain::entities::offline::{
     OfflineActionRecord, OptimisticUpdateDraft, OptimisticUpdateRecord, SyncQueueItem,
     SyncQueueItemDraft, SyncResult, SyncStatusRecord, SyncStatusUpdate,
 };
-use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::CacheType;
+use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::offline::{OfflinePayload, OptimisticUpdateId, SyncQueueId};
 use crate::infrastructure::offline::mappers::{
     cache_metadata_from_row, offline_action_from_row, optimistic_update_from_row,
@@ -15,7 +15,7 @@ use crate::infrastructure::offline::mappers::{
 use crate::infrastructure::offline::rows::{
     CacheMetadataRow, OfflineActionRow, OptimisticUpdateRow, SyncQueueItemRow, SyncStatusRow,
 };
-use crate::shared::{error::AppError, ValidationFailureKind};
+use crate::shared::{ValidationFailureKind, error::AppError};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -353,10 +353,8 @@ impl OfflinePersistence for SqliteOfflinePersistence {
 
         let mut cache_types = Vec::with_capacity(groups.len());
         for (cache_type_name, summary) in groups {
-            let cache_type =
-                CacheType::new(cache_type_name).map_err(AppError::validation_mapper(
-                    ValidationFailureKind::Generic,
-                ))?;
+            let cache_type = CacheType::new(cache_type_name)
+                .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
             let metadata = summary
                 .latest_metadata
                 .as_ref()
@@ -372,7 +370,11 @@ impl OfflinePersistence for SqliteOfflinePersistence {
 
         cache_types.sort_by(|a, b| a.cache_type.as_str().cmp(b.cache_type.as_str()));
 
-        Ok(CacheStatusSnapshot::new(total_items, stale_items, cache_types))
+        Ok(CacheStatusSnapshot::new(
+            total_items,
+            stale_items,
+            cache_types,
+        ))
     }
 
     async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError> {

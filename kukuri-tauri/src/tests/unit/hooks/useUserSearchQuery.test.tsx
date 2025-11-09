@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { vi, describe, it, expect } from 'vitest';
 
 import { useUserSearchQuery } from '@/hooks/useUserSearchQuery';
 import { TauriApi } from '@/lib/api/tauri';
@@ -14,6 +14,10 @@ vi.mock('@/lib/api/tauri', () => ({
 }));
 
 const searchUsersMock = TauriApi.searchUsers as ReturnType<typeof vi.fn>;
+const waitForDebounce = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -31,12 +35,7 @@ const createWrapper = () => {
 
 describe('useUserSearchQuery', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('fetches users when query length meets minimum', async () => {
@@ -62,17 +61,12 @@ describe('useUserSearchQuery', () => {
       tookMs: 5,
     });
 
-    const { result } = renderHook(
-      ({ value }) => useUserSearchQuery(value),
-      {
-        initialProps: { value: 'alice' },
-        wrapper: createWrapper(),
-      },
-    );
-
-    await act(async () => {
-      vi.advanceTimersByTime(350);
+    const { result } = renderHook(({ value }) => useUserSearchQuery(value), {
+      initialProps: { value: 'alice' },
+      wrapper: createWrapper(),
     });
+
+    await waitForDebounce();
 
     await waitFor(() => {
       expect(result.current.results).toHaveLength(1);
@@ -88,17 +82,12 @@ describe('useUserSearchQuery', () => {
   });
 
   it('does not search when query length is below minimum', async () => {
-    const { result } = renderHook(
-      ({ value }) => useUserSearchQuery(value),
-      {
-        initialProps: { value: 'a' },
-        wrapper: createWrapper(),
-      },
-    );
-
-    await act(async () => {
-      vi.advanceTimersByTime(350);
+    const { result } = renderHook(({ value }) => useUserSearchQuery(value), {
+      initialProps: { value: 'a' },
+      wrapper: createWrapper(),
     });
+
+    await waitForDebounce();
 
     expect(result.current.status).toBe('typing');
     expect(searchUsersMock).not.toHaveBeenCalled();
@@ -109,17 +98,12 @@ describe('useUserSearchQuery', () => {
       new TauriCommandError('rate limited', 'RATE_LIMITED', { retry_after_seconds: 2 }),
     );
 
-    const { result } = renderHook(
-      ({ value }) => useUserSearchQuery(value),
-      {
-        initialProps: { value: 'alice' },
-        wrapper: createWrapper(),
-      },
-    );
-
-    await act(async () => {
-      vi.advanceTimersByTime(350);
+    const { result } = renderHook(({ value }) => useUserSearchQuery(value), {
+      initialProps: { value: 'alice' },
+      wrapper: createWrapper(),
     });
+
+    await waitForDebounce();
 
     await waitFor(() => {
       expect(result.current.status).toBe('rateLimited');
@@ -172,17 +156,12 @@ describe('useUserSearchQuery', () => {
         tookMs: 5,
       });
 
-    const { result } = renderHook(
-      ({ value }) => useUserSearchQuery(value),
-      {
-        initialProps: { value: 'alice' },
-        wrapper: createWrapper(),
-      },
-    );
-
-    await act(async () => {
-      vi.advanceTimersByTime(350);
+    const { result } = renderHook(({ value }) => useUserSearchQuery(value), {
+      initialProps: { value: 'alice' },
+      wrapper: createWrapper(),
     });
+
+    await waitForDebounce();
 
     await waitFor(() => expect(result.current.results).toHaveLength(1));
 

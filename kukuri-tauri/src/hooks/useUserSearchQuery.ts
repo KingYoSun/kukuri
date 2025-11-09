@@ -71,8 +71,10 @@ export function useUserSearchQuery(
 
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
   const [errorKey, setErrorKey] = useState<UserSearchErrorKey | null>(null);
-  const [staleData, setStaleData] =
-    useState<InfiniteData<SearchUsersResponseDto, string | null> | null>(null);
+  const [staleData, setStaleData] = useState<InfiniteData<
+    SearchUsersResponseDto,
+    string | null
+  > | null>(null);
 
   const queryEnabled = debouncedQuery.length >= minLength && cooldownSeconds === null;
 
@@ -156,8 +158,7 @@ export function useUserSearchQuery(
   }, [cooldownSeconds, queryResult]);
 
   const activeData: InfiniteData<SearchUsersResponseDto, string | null> | null =
-    queryResult.data ??
-    (clampedQuery.length < minLength ? staleData : null);
+    queryResult.data ?? (clampedQuery.length < minLength ? staleData : null);
 
   const flattenedResults = useMemo(() => {
     if (!activeData) {
@@ -253,10 +254,7 @@ function deriveStatus({
   cooldownSeconds: number | null;
   debouncedQuery: string;
   dataAvailable: boolean;
-  queryResult: UseInfiniteQueryResult<
-    InfiniteData<SearchUsersResponseDto, string | null>,
-    Error
-  >;
+  queryResult: UseInfiniteQueryResult<InfiniteData<SearchUsersResponseDto, string | null>, Error>;
 }): UserSearchStatus {
   if (!clampedQuery.length) {
     return 'idle';

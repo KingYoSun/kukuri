@@ -10,8 +10,8 @@ use crate::{
     },
     shared::error::AppError,
 };
-use std::sync::Arc;
 use chrono::Utc;
+use std::sync::Arc;
 
 pub struct TopicHandler {
     topic_service: Arc<TopicService>,

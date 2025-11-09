@@ -175,6 +175,8 @@ describe('authStore - Multiple Account Management', () => {
         picture: 'https://example.com/avatar.png',
         nip05: '',
         avatar: null,
+        publicProfile: true,
+        showOnlineStatus: false,
       });
       expect(state.privateKey).toBe('nsec1current');
       expect(state.accounts).toEqual(mockAccounts);
@@ -361,6 +363,8 @@ describe('authStore - Multiple Account Management', () => {
         picture: 'https://example.com/alice.png',
         nip05: '',
         avatar: null,
+        publicProfile: true,
+        showOnlineStatus: false,
       });
       expect(state.privateKey).toBeNull();
       expect(mockNostrApi.initializeNostr).toHaveBeenCalled();

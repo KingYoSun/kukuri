@@ -1,4 +1,4 @@
-﻿use crate::application::ports::repositories::UserRepository;
+use crate::application::ports::repositories::UserRepository;
 use crate::domain::entities::User;
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::Utc;
@@ -336,7 +336,8 @@ mod tests {
     use super::*;
     use crate::application::ports::repositories::UserRepository;
     use crate::infrastructure::database::{
-        connection_pool::ConnectionPool, repository::Repository, sqlite_repository::SqliteRepository,
+        connection_pool::ConnectionPool, repository::Repository,
+        sqlite_repository::SqliteRepository,
     };
     use chrono::{Duration as ChronoDuration, Utc};
 

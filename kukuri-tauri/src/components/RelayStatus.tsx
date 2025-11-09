@@ -87,12 +87,7 @@ export function RelayStatus() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CardTitle className="text-sm">リレー接続状態</CardTitle>
-            <Button
-              variant="link"
-              size="sm"
-              className="-ml-1 h-auto px-0 text-xs"
-              asChild
-            >
+            <Button variant="link" size="sm" className="-ml-1 h-auto px-0 text-xs" asChild>
               <a
                 href={MAINLINE_RUNBOOK_URL}
                 target="_blank"

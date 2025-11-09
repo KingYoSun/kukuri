@@ -11,7 +11,9 @@ import { TauriApi } from '@/lib/api/tauri';
 vi.mock('@/hooks/useUserSearchQuery');
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
-    getFollowing: vi.fn().mockResolvedValue({ items: [], next_cursor: null, has_more: false, total_count: 0 }),
+    getFollowing: vi
+      .fn()
+      .mockResolvedValue({ items: [], next_cursor: null, has_more: false, total_count: 0 }),
     followUser: vi.fn(),
     unfollowUser: vi.fn(),
   },

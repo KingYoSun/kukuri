@@ -71,8 +71,7 @@ export function SearchErrorState({
     return `再試行 (${remainingSeconds}s)`;
   }, [errorKey, remainingSeconds]);
 
-  const isRetryDisabled =
-    errorKey === 'UserSearch.rate_limited' && (remainingSeconds ?? 0) > 0;
+  const isRetryDisabled = errorKey === 'UserSearch.rate_limited' && (remainingSeconds ?? 0) > 0;
 
   return (
     <Card className="border-dashed">

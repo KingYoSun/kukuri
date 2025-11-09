@@ -323,9 +323,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
         if (summary.lastMessage) {
           const existing = nextConversations[summary.conversationNpub] ?? [];
           if (existing.length === 0) {
-            nextConversations[summary.conversationNpub] = dedupeMessages([
-              summary.lastMessage,
-            ]);
+            nextConversations[summary.conversationNpub] = dedupeMessages([summary.lastMessage]);
           }
         }
       }

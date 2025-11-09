@@ -206,7 +206,11 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
 
           {hasNextPage && (
             <div className="flex justify-center pt-2">
-              <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
                 {isFetchingNextPage ? '読み込み中...' : 'さらに表示'}
               </Button>
             </div>

@@ -1,10 +1,10 @@
 use crate::application::ports::repositories::FollowListSort;
+use crate::application::services::user_search_service::{
+    DEFAULT_LIMIT as SEARCH_DEFAULT_LIMIT, MAX_LIMIT as SEARCH_MAX_LIMIT, SearchSort,
+    SearchUsersParams,
+};
 use crate::application::services::{
     ProfileAvatarService, UploadProfileAvatarInput, UserSearchService, UserService,
-};
-use crate::application::services::user_search_service::{
-    SearchSort, SearchUsersParams, DEFAULT_LIMIT as SEARCH_DEFAULT_LIMIT,
-    MAX_LIMIT as SEARCH_MAX_LIMIT,
 };
 use crate::domain::entities::UserMetadata;
 use crate::presentation::dto::{

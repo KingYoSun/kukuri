@@ -486,7 +486,10 @@ mod tests {
             Ok(follows.remove(&(follower_pubkey.to_string(), followed_pubkey.to_string())))
         }
 
-        async fn list_following_pubkeys(&self, follower_pubkey: &str) -> Result<Vec<String>, AppError> {
+        async fn list_following_pubkeys(
+            &self,
+            follower_pubkey: &str,
+        ) -> Result<Vec<String>, AppError> {
             let follows = self.follows.read().await;
             Ok(follows
                 .iter()
@@ -495,7 +498,10 @@ mod tests {
                 .collect())
         }
 
-        async fn list_follower_pubkeys(&self, followed_pubkey: &str) -> Result<Vec<String>, AppError> {
+        async fn list_follower_pubkeys(
+            &self,
+            followed_pubkey: &str,
+        ) -> Result<Vec<String>, AppError> {
             let follows = self.follows.read().await;
             Ok(follows
                 .iter()

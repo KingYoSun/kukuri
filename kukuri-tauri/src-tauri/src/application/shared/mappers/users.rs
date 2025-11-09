@@ -1,6 +1,6 @@
 use crate::domain::entities::{User, UserProfile};
 use crate::shared::error::AppError;
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use sqlx::{Row, sqlite::SqliteRow};
 
 pub(crate) fn map_user_row(row: &SqliteRow) -> Result<User, AppError> {
@@ -16,13 +16,13 @@ pub(crate) fn map_user_row(row: &SqliteRow) -> Result<User, AppError> {
     user.show_online_status = row.try_get::<i64, _>("show_online_status").unwrap_or(0) != 0;
 
     if let Ok(created_at_ms) = row.try_get::<i64, _>("created_at") {
-        if let Some(naive) = NaiveDateTime::from_timestamp_millis(created_at_ms) {
-            user.created_at = chrono::DateTime::<Utc>::from_utc(naive, Utc);
+        if let Some(timestamp) = DateTime::<Utc>::from_timestamp_millis(created_at_ms) {
+            user.created_at = timestamp;
         }
     }
     if let Ok(updated_at_ms) = row.try_get::<i64, _>("updated_at") {
-        if let Some(naive) = NaiveDateTime::from_timestamp_millis(updated_at_ms) {
-            user.updated_at = chrono::DateTime::<Utc>::from_utc(naive, Utc);
+        if let Some(timestamp) = DateTime::<Utc>::from_timestamp_millis(updated_at_ms) {
+            user.updated_at = timestamp;
         }
     }
 

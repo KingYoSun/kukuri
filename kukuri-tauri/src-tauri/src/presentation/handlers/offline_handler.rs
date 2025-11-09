@@ -432,10 +432,7 @@ mod tests {
             priority: Some(5),
         };
 
-        let queue_id = handler
-            .add_to_sync_queue(request)
-            .await
-            .expect("queue id");
+        let queue_id = handler.add_to_sync_queue(request).await.expect("queue id");
 
         let (cache_key, cache_type, metadata): (String, String, Option<String>) = sqlx::query_as(
             r#"
