@@ -124,6 +124,39 @@ pub struct CacheStatusResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListSyncQueueItemsRequest {
+    pub limit: Option<i32>,
+}
+
+impl Validate for ListSyncQueueItemsRequest {
+    fn validate(&self) -> Result<(), String> {
+        if let Some(limit) = self.limit {
+            if !(1..=200).contains(&limit) {
+                return Err("Limit must be between 1 and 200".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncQueueItemResponse {
+    pub id: i64,
+    pub action_type: String,
+    pub status: String,
+    pub retry_count: i32,
+    pub max_retries: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub synced_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddToSyncQueueRequest {
     pub action_type: String,
     pub payload: serde_json::Value,

@@ -3,6 +3,7 @@ import { useSyncManager } from '@/hooks/useSyncManager';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +24,7 @@ import {
   WifiOff,
   AlertTriangle,
   Database,
+  History,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -40,6 +42,11 @@ type MetadataRow = {
   key: string;
   label: string;
   value: React.ReactNode;
+};
+
+type QueueStatusPresentation = {
+  label: string;
+  className: string;
 };
 
 function parseCacheMetadata(
@@ -140,6 +147,54 @@ function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
   return rows;
 }
 
+function getPayloadString(
+  payload: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  if (!payload) {
+    return undefined;
+  }
+  const value = payload[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function formatRequester(value: string) {
+  if (value.length <= 16) {
+    return value;
+  }
+  return `${value.slice(0, 10)}…${value.slice(-4)}`;
+}
+
+function getQueueStatusPresentation(status: string): QueueStatusPresentation {
+  switch (status) {
+    case 'pending':
+      return {
+        label: '待機中',
+        className: 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200',
+      };
+    case 'processing':
+      return {
+        label: '処理中',
+        className: 'bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200',
+      };
+    case 'completed':
+      return {
+        label: '完了',
+        className: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200',
+      };
+    case 'failed':
+      return {
+        label: '失敗',
+        className: 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200',
+      };
+    default:
+      return {
+        label: status,
+        className: 'bg-muted text-foreground',
+      };
+  }
+}
+
 export function SyncStatusIndicator() {
   const {
     syncStatus,
@@ -151,12 +206,18 @@ export function SyncStatusIndicator() {
     cacheStatusError,
     isCacheStatusLoading,
     refreshCacheStatus,
+    queueItems,
+    queueItemsError,
+    isQueueItemsLoading,
+    refreshQueueItems,
+    lastQueuedItemId,
+    queueingType,
     enqueueSyncRequest,
   } = useSyncManager();
 
   const [selectedConflict, setSelectedConflict] = React.useState<SyncConflict | null>(null);
   const [showConflictDialog, setShowConflictDialog] = React.useState(false);
-  const [queueingType, setQueueingType] = React.useState<string | null>(null);
+  const [queueFilter, setQueueFilter] = React.useState('');
 
   const handleConflictResolution = (resolution: 'local' | 'remote' | 'merge') => {
     if (selectedConflict) {
@@ -167,15 +228,33 @@ export function SyncStatusIndicator() {
   };
 
   const handleQueueRequest = async (cacheType: string) => {
-    setQueueingType(cacheType);
     try {
       await enqueueSyncRequest(cacheType);
     } catch {
       // エラーは useSyncManager 内で通知済み
-    } finally {
-      setQueueingType((current) => (current === cacheType ? null : current));
     }
   };
+
+  const normalizedQueueFilter = queueFilter.trim().toLowerCase();
+  const filteredQueueItems = React.useMemo(() => {
+    if (!normalizedQueueFilter) {
+      return queueItems;
+    }
+
+    return queueItems.filter((item) => {
+      const cacheType =
+        getPayloadString(item.payload, 'cacheType')?.toLowerCase() ?? '';
+      const idMatch = item.id.toString().includes(normalizedQueueFilter);
+      const actionMatch =
+        item.action_type?.toLowerCase().includes(normalizedQueueFilter) ?? false;
+      return idMatch || actionMatch || cacheType.includes(normalizedQueueFilter);
+    });
+  }, [queueItems, normalizedQueueFilter]);
+
+  const queueItemsToRender = React.useMemo(
+    () => filteredQueueItems.slice(0, 20),
+    [filteredQueueItems],
+  );
 
   const getSyncStatusIcon = () => {
     if (!isOnline) {
@@ -449,6 +528,128 @@ export function SyncStatusIndicator() {
                     ? 'キャッシュ情報を取得しています…'
                     : 'キャッシュ情報がまだありません'}
                 </p>
+              )}
+            </div>
+
+            {/* 再送キュー履歴 */}
+            <div>
+              <div className="mb-2 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <History className="h-4 w-4 text-primary" />
+                    再送キュー履歴
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    {lastQueuedItemId && (
+                      <span className="text-[11px] text-muted-foreground">
+                        最新 #
+                        <code className="font-mono text-xs">{lastQueuedItemId}</code>
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="再送キューを更新"
+                      onClick={() => {
+                        void refreshQueueItems();
+                      }}
+                      disabled={isQueueItemsLoading}
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 ${
+                          isQueueItemsLoading ? 'animate-spin text-muted-foreground' : ''
+                        }`}
+                      />
+                    </Button>
+                  </div>
+                </div>
+                <Input
+                  value={queueFilter}
+                  onChange={(event) => setQueueFilter(event.target.value)}
+                  placeholder="Queue ID / cacheType を検索"
+                  className="h-8 text-xs"
+                  aria-label="再送キューをフィルタ"
+                />
+              </div>
+              {queueItemsError && (
+                <p className="text-sm text-red-600 dark:text-red-400">{queueItemsError}</p>
+              )}
+              {queueItemsToRender.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {isQueueItemsLoading
+                    ? '再送キューを取得しています…'
+                    : '再送キューはまだ登録されていません'}
+                </p>
+              ) : (
+                <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                  {queueItemsToRender.map((item) => {
+                    const cacheType = getPayloadString(item.payload, 'cacheType');
+                    const requestedBy = getPayloadString(item.payload, 'requestedBy');
+                    const requestedAt = getPayloadString(item.payload, 'requestedAt');
+                    const source = getPayloadString(item.payload, 'source');
+                    const statusPresentation = getQueueStatusPresentation(item.status);
+                    const updatedLabel = formatCacheLastSynced(item.updated_at);
+                    const isHighlighted =
+                      Boolean(lastQueuedItemId) &&
+                      lastQueuedItemId === item.id &&
+                      !normalizedQueueFilter;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`rounded border p-2 text-xs transition ${
+                          isHighlighted ? 'border-primary bg-primary/5 shadow-sm' : 'border-border/60'
+                        }`}
+                        data-testid={`queue-item-${item.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="flex items-center gap-2 text-sm font-medium">
+                              <span>#{item.id}</span>
+                              {cacheType && (
+                                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                                  {cacheType}
+                                </code>
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.action_type}・更新 {updatedLabel}
+                            </p>
+                          </div>
+                          <Badge
+                            className={`text-[10px] font-normal ${statusPresentation.className}`}
+                          >
+                            {statusPresentation.label}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                          <span>
+                            再試行 {item.retry_count}/{item.max_retries}
+                          </span>
+                          {requestedBy && (
+                            <span>
+                              要求者{' '}
+                              <code className="font-mono text-[11px]">
+                                {formatRequester(requestedBy)}
+                              </code>
+                            </span>
+                          )}
+                          {source && <span>発行元 {source}</span>}
+                          {requestedAt && (
+                            <span title={requestedAt}>
+                              要求 {formatMetadataTimestamp(requestedAt) ?? requestedAt}
+                            </span>
+                          )}
+                        </div>
+                        {item.error_message && (
+                          <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+                            {item.error_message}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 

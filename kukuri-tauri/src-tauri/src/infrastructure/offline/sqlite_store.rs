@@ -81,6 +81,21 @@ impl SqliteOfflinePersistence {
         rows.into_iter().map(sync_queue_item_from_row).collect()
     }
 
+    pub async fn list_recent_sync_queue(&self, limit: u32) -> Result<Vec<SyncQueueItem>, AppError> {
+        let rows = sqlx::query_as::<_, SyncQueueItemRow>(
+            r#"
+            SELECT * FROM sync_queue
+            ORDER BY updated_at DESC
+            LIMIT ?1
+            "#,
+        )
+        .bind(i64::from(limit))
+        .fetch_all(self.pool())
+        .await?;
+
+        rows.into_iter().map(sync_queue_item_from_row).collect()
+    }
+
     pub async fn list_stale_cache_entries(&self) -> Result<Vec<CacheMetadataRecord>, AppError> {
         let now = Utc::now().timestamp();
         let rows = sqlx::query_as::<_, CacheMetadataRow>(
@@ -568,6 +583,14 @@ impl OfflinePersistence for SqliteOfflinePersistence {
 
     async fn enqueue_if_missing(&self, action: &OfflineActionRecord) -> Result<bool, AppError> {
         SqliteOfflinePersistence::enqueue_if_missing(self, action).await
+    }
+
+    async fn recent_sync_queue_items(
+        &self,
+        limit: Option<u32>,
+    ) -> Result<Vec<SyncQueueItem>, AppError> {
+        let limit = limit.unwrap_or(25).clamp(1, 200);
+        SqliteOfflinePersistence::list_recent_sync_queue(self, limit).await
     }
 
     async fn pending_sync_items(&self) -> Result<Vec<SyncQueueItem>, AppError> {

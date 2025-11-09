@@ -5,7 +5,7 @@ import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncE
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { offlineApi } from '@/api/offline';
-import type { CacheStatusResponse, OfflineAction } from '@/types/offline';
+import type { CacheStatusResponse, OfflineAction, SyncQueueItem } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 
 export interface SyncStatus {
@@ -17,6 +17,8 @@ export interface SyncStatus {
   lastSyncTime?: Date;
   error?: string;
 }
+
+const SYNC_QUEUE_HISTORY_LIMIT = 30;
 
 function inferEntityType(actionType: string): string | null {
   switch (actionType) {
@@ -101,6 +103,11 @@ export function useSyncManager() {
   const [cacheStatus, setCacheStatus] = useState<CacheStatusResponse | null>(null);
   const [cacheStatusError, setCacheStatusError] = useState<string | null>(null);
   const [isCacheStatusLoading, setCacheStatusLoading] = useState(false);
+  const [queueItems, setQueueItems] = useState<SyncQueueItem[]>([]);
+  const [queueItemsError, setQueueItemsError] = useState<string | null>(null);
+  const [isQueueItemsLoading, setQueueItemsLoading] = useState(false);
+  const [lastQueuedItemId, setLastQueuedItemId] = useState<number | null>(null);
+  const [queueingType, setQueueingType] = useState<string | null>(null);
 
   const refreshCacheStatus = useCallback(async () => {
     setCacheStatusLoading(true);
@@ -118,30 +125,54 @@ export function useSyncManager() {
     }
   }, []);
 
+  const refreshQueueItems = useCallback(async () => {
+    setQueueItemsLoading(true);
+    try {
+      const items = await offlineApi.listSyncQueueItems({
+        limit: SYNC_QUEUE_HISTORY_LIMIT,
+      });
+      setQueueItems(items);
+      setQueueItemsError(null);
+    } catch (error) {
+      errorHandler.log('Failed to fetch sync queue items', error, {
+        context: 'useSyncManager.refreshQueueItems',
+      });
+      setQueueItemsError('再送キューの取得に失敗しました');
+    } finally {
+      setQueueItemsLoading(false);
+    }
+  }, []);
+
   const enqueueSyncRequest = useCallback(
     async (cacheType: string) => {
+      setQueueingType(cacheType);
       try {
-        await offlineApi.addToSyncQueue({
+        const queueId = await offlineApi.addToSyncQueue({
           action_type: 'manual_sync_refresh',
           payload: {
             cacheType,
             requestedAt: new Date().toISOString(),
             source: 'sync_status_indicator',
-            userPubkey: currentUser?.npub ?? null,
+            userPubkey: currentUser?.npub ?? 'unknown',
           },
           priority: 5,
         });
-        toast.success('再送キューに追加しました');
+        toast.success(`再送キューに追加しました (#${queueId})`);
+        setLastQueuedItemId(queueId);
         await refreshCacheStatus();
+        await refreshQueueItems();
+        return queueId;
       } catch (error) {
         errorHandler.log('Failed to enqueue sync request', error, {
           context: 'useSyncManager.enqueueSyncRequest',
         });
         toast.error('再送キューへの追加に失敗しました');
         throw error;
+      } finally {
+        setQueueingType((current) => (current === cacheType ? null : current));
       }
     },
-    [currentUser?.npub, refreshCacheStatus],
+    [currentUser?.npub, refreshCacheStatus, refreshQueueItems],
   );
 
   const persistSyncStatuses = useCallback(
@@ -438,6 +469,18 @@ export function useSyncManager() {
     void refreshCacheStatus();
   }, [pendingActions.length, refreshCacheStatus]);
 
+  useEffect(() => {
+    void refreshQueueItems();
+    const interval = setInterval(() => {
+      void refreshQueueItems();
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [refreshQueueItems]);
+
+  useEffect(() => {
+    void refreshQueueItems();
+  }, [pendingActions.length, refreshQueueItems]);
+
   return {
     syncStatus,
     triggerManualSync,
@@ -451,6 +494,12 @@ export function useSyncManager() {
     cacheStatusError,
     isCacheStatusLoading,
     refreshCacheStatus,
+    queueItems,
+    queueItemsError,
+    isQueueItemsLoading,
+    refreshQueueItems,
+    lastQueuedItemId,
+    queueingType,
     enqueueSyncRequest,
   };
 }

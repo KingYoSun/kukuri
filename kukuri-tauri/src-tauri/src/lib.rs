@@ -149,6 +149,7 @@ pub fn run() {
             presentation::commands::get_offline_actions,
             presentation::commands::sync_offline_actions,
             presentation::commands::get_cache_status,
+            presentation::commands::list_sync_queue_items,
             presentation::commands::add_to_sync_queue,
             presentation::commands::update_cache_metadata,
             presentation::commands::save_optimistic_update,

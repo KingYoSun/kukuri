@@ -74,6 +74,23 @@ export interface AddToSyncQueueRequest {
   priority?: number;
 }
 
+export interface ListSyncQueueItemsRequest {
+  limit?: number;
+}
+
+export interface SyncQueueItem {
+  id: number;
+  action_type: string;
+  status: string;
+  retry_count: number;
+  max_retries: number;
+  created_at: number;
+  updated_at: number;
+  synced_at?: number;
+  error_message?: string;
+  payload: Record<string, unknown>;
+}
+
 export interface UpdateCacheMetadataRequest {
   cacheKey: string;
   cacheType: string;

@@ -47,6 +47,11 @@ pub trait OfflinePersistence: Send + Sync {
 
     async fn enqueue_if_missing(&self, action: &OfflineActionRecord) -> Result<bool, AppError>;
 
+    async fn recent_sync_queue_items(
+        &self,
+        limit: Option<u32>,
+    ) -> Result<Vec<SyncQueueItem>, AppError>;
+
     async fn pending_sync_items(&self) -> Result<Vec<SyncQueueItem>, AppError>;
 
     async fn stale_cache_entries(&self) -> Result<Vec<CacheMetadataRecord>, AppError>;

@@ -12,7 +12,7 @@
 - **Direct Message**: `DirectMessageInbox` の会話リスト仮想スクロール、候補補完/検索、`mark_direct_message_conversation_read` の多端末同期を完了し、`Header.test.tsx` / `FollowingSummaryPanel.test.tsx` のモックを最新APIに合わせる。（Inventory 5.4）
 - **プロフィール/設定**: `ProfileForm` の共通化とプライバシー設定（`usePrivacySettingsStore`）の永続化を終え、`update_nostr_metadata` / `authStore.updateUser` を設定モーダル経由で再利用する。（Inventory 5.1）
 - **ユーザー検索**: `search_users` API 拡張（cursor/sort/allow_incomplete）と UI のレートリミット・状態遷移を実装し、`UserSearchResults` / `useUserSearchQuery` テストでデバウンス + キャンセルをカバー。（Inventory 5.4）
-- **Offline sync**: `sync_queue` / `offline_actions` / `cache_metadata` に加え、2025年11月09日現在は `SyncStatusIndicator` の `cache_types.metadata` で要求者/要求時刻/Queue ID/発行元を表示し、`OfflineIndicator` からヘッダーの同期ボタンへ誘導できる。`tauri_app_implementation_plan.md` Phase4 に沿って Runbook/テストを整備中。（Inventory 5.5）
+- **Offline sync**: `sync_queue` / `offline_actions` / `cache_metadata` に加え、2025年11月09日現在は `list_sync_queue_items` 経由で取得した再送キュー履歴（Queue ID フィルタ、最新 ID ハイライト、ステータス別バッジ、要求者/要求時刻/発行元/再試行回数）を `SyncStatusIndicator` のポップオーバーに表示し、`OfflineIndicator` からヘッダーの同期ボタンへ誘導できる。`tauri_app_implementation_plan.md` Phase4 に沿って Runbook/テストを整備中。（Inventory 5.5）
 - **Mainline DHT Runbook**: `docs/03_implementation/p2p_mainline_runbook.md` に Chapter10（`kukuri-cli` ブートストラップ運用と Settings/RelayStatus 連携）を追加し、Sidebar の RelayStatus カードへ Runbook リンクを実装。`cargo test --package kukuri-cli -- test_bootstrap_runbook` / `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を検証パスへ組み込んだ。（Inventory 5.6）
 
 ## 1. 画面別導線サマリー
@@ -68,7 +68,7 @@
 
 ## 2. グローバル要素
 - **ステータスカード**: `RelayStatus` / `P2PStatus` が 30 秒間隔でステータス取得。フェイルオーバー時のバックオフと手動再試行を実装。
-- **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。2025年11月09日: `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）を UI で整形し、OfflineIndicator のバナー/ツールチップからヘッダーの SyncStatusIndicator へ誘導するコピーを追加。
+- **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。2025年11月09日: `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）整形と OfflineIndicator の誘導コピーに加え、`list_sync_queue_items` を介した再送履歴（Queue ID フィルタ、最新 ID ハイライト、ステータス別バッジ、要求者/要求時刻/発行元/再試行回数、エラーメッセージ）をポップオーバーに追加。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。TopicSelector へ「新しいトピックを作成」ショートカットを追加し、`TopicFormModal`（mode=`create-from-composer`）を介して `createAndJoinTopic` を実行する計画を Inventory 5.9 に記載。
 - **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済み。ヘッダー右上の `MessageCircle` ボタン／`Plus` ボタン、および `/trending` `/following` の Summary Panel CTA は `useDirectMessageBadge` と `useDirectMessageStore` を共有し、既存会話なら即座にモーダルを開き、未読が無い場合でも `DirectMessageInbox` から宛先入力＆会話一覧で新規 DM を開始できる。2025年11月08日以降は `list_direct_message_conversations` / `mark_direct_message_conversation_read` を通じて会話一覧と未読が SQLite に永続化され、ログイン直後の Inbox ハイドレートと Dialog からの既読更新が双方向に同期する。残課題は会話検索/補完・大量会話時の仮想スクロール・多端末既読共有で、Inventory 5.6.x/5.12 でフォロー。
@@ -83,7 +83,7 @@
 6. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
 7. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
 8. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
-9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` を取り込み、キャッシュ統計と手動キュー登録を提供済み。2025年11月09日時点で `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）の表示と OfflineIndicator からヘッダーボタンへの誘導は完了したが、再送キュー処理結果・失敗理由・Queue ID からの逆引きを UI へ戻す導線が残課題。
+9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` / `list_sync_queue_items` を取り込み、キャッシュ統計・手動キュー登録・再送履歴可視化を提供済み。今後は `sync_engine` 側で処理完了イベントと Docker ログの参照先を `cache_metadata` に記録し、履歴カードから Runbook ／ログへ遷移できる導線を追加する。
 10. 未接続 API は `join_topic_by_name`（Global Composer フォールバック）、`delete_events`（投稿削除 + Nostr 連携）、`add_relay`（鍵管理ダイアログと連動）、`get_nostr_pubkey`（プロフィール共有 UI 刷新時に再評価）、`clear_all_accounts_for_test`（Debug パネル）。Inventory 3.2/3.3 で優先度を整理し、Phase 5 backlog と同期した。
 
 ## 4. テストカバレッジ概要

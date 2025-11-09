@@ -37,6 +37,12 @@ describe('SyncStatusIndicator', () => {
     cacheStatusError: null,
     isCacheStatusLoading: false,
     refreshCacheStatus: mockRefreshCacheStatus,
+    queueItems: [],
+    queueItemsError: null,
+    isQueueItemsLoading: false,
+    refreshQueueItems: vi.fn(),
+    lastQueuedItemId: null,
+    queueingType: null,
     enqueueSyncRequest: mockEnqueueSyncRequest,
   };
 
@@ -351,6 +357,111 @@ describe('SyncStatusIndicator', () => {
       expect(within(metadataSection).getByText('#42')).toBeInTheDocument();
       expect(within(metadataSection).getByText('発行元')).toBeInTheDocument();
       expect(within(metadataSection).getByTitle('2025-11-09T00:00:00Z')).toBeInTheDocument();
+    });
+  });
+
+  describe('再送キュー履歴', () => {
+    it('履歴を表示し、最新IDをハイライトする', async () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        queueItems: [
+          {
+            id: 1,
+            action_type: 'manual_sync_refresh',
+            status: 'pending',
+            retry_count: 0,
+            max_retries: 3,
+            created_at: 1_700_000_000,
+            updated_at: 1_700_000_100,
+            payload: {
+              cacheType: 'offline_actions',
+              requestedBy: 'npub1exampleexampleexample',
+              source: 'sync_status_indicator',
+              requestedAt: '2025-11-09T00:00:00Z',
+            },
+          },
+          {
+            id: 2,
+            action_type: 'manual_sync_refresh',
+            status: 'failed',
+            retry_count: 1,
+            max_retries: 3,
+            created_at: 1_700_000_010,
+            updated_at: 1_700_000_200,
+            payload: { cacheType: 'cache_metadata' },
+            error_message: 'timeout',
+          },
+        ],
+        lastQueuedItemId: 1,
+      });
+
+      render(<SyncStatusIndicator />);
+      fireEvent.click(screen.getByRole('button'));
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Queue ID / cacheType を検索')).toBeInTheDocument();
+      });
+
+      const highlighted = screen.getByTestId('queue-item-1');
+      expect(highlighted.className).toContain('border-primary');
+      expect(within(highlighted).getByText('#1')).toBeInTheDocument();
+      expect(screen.getByText(/最新 #/)).toBeInTheDocument();
+      expect(screen.getByText('timeout')).toBeInTheDocument();
+      expect(screen.getByText('再送キュー履歴')).toBeInTheDocument();
+    });
+
+    it('フィルタ入力で履歴を絞り込む', async () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        queueItems: [
+          {
+            id: 1,
+            action_type: 'manual_sync_refresh',
+            status: 'pending',
+            retry_count: 0,
+            max_retries: 3,
+            created_at: 0,
+            updated_at: 0,
+            payload: { cacheType: 'offline_actions' },
+          },
+          {
+            id: 2,
+            action_type: 'manual_sync_refresh',
+            status: 'pending',
+            retry_count: 0,
+            max_retries: 3,
+            created_at: 0,
+            updated_at: 0,
+            payload: { cacheType: 'cache_metadata' },
+          },
+        ],
+      });
+
+      render(<SyncStatusIndicator />);
+      fireEvent.click(screen.getByRole('button'));
+
+      const input = await screen.findByPlaceholderText('Queue ID / cacheType を検索');
+      fireEvent.change(input, { target: { value: 'metadata' } });
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('queue-item-1')).not.toBeInTheDocument();
+        expect(screen.getByTestId('queue-item-2')).toBeInTheDocument();
+      });
+    });
+
+    it('更新ボタンで再送キューを再取得する', async () => {
+      const refreshQueueItems = vi.fn();
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        refreshQueueItems,
+      });
+
+      render(<SyncStatusIndicator />);
+      fireEvent.click(screen.getByRole('button'));
+
+      const refreshButton = await screen.findByLabelText('再送キューを更新');
+      fireEvent.click(refreshButton);
+      expect(refreshQueueItems).toHaveBeenCalled();
     });
   });
 

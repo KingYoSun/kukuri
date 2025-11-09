@@ -22,6 +22,7 @@ vi.mock('@/api/offline', () => ({
       cache_types: [],
     }),
     addToSyncQueue: vi.fn().mockResolvedValue(1),
+    listSyncQueueItems: vi.fn().mockResolvedValue([]),
   },
 }));
 vi.mock('sonner', () => ({
@@ -74,15 +75,17 @@ describe('useSyncManager', () => {
     const utils = renderHook(() => useSyncManager());
     await waitFor(() => {
       expect(offlineApi.getCacheStatus).toHaveBeenCalled();
+      expect(offlineApi.listSyncQueueItems).toHaveBeenCalled();
     });
     if (!options?.skipClear) {
       vi.mocked(offlineApi.getCacheStatus).mockClear();
+      vi.mocked(offlineApi.listSyncQueueItems).mockClear();
     }
     return utils;
   };
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('初期状態', () => {
@@ -390,6 +393,40 @@ describe('useSyncManager', () => {
         { timeout: 5000 },
       );
     }, 15000);
+  });
+
+  describe('再送キュー', () => {
+    it('マウント時に再送キューを取得する', async () => {
+      vi.mocked(offlineApi.listSyncQueueItems).mockResolvedValue([
+        {
+          id: 42,
+          action_type: 'manual_sync_refresh',
+          status: 'pending',
+          retry_count: 0,
+          max_retries: 3,
+          created_at: 1_700_000_000,
+          updated_at: 1_700_000_100,
+          payload: { cacheType: 'offline_actions' },
+        },
+      ] as any);
+
+      const { result } = await renderManagerHook();
+      expect(result.current.queueItems).toHaveLength(1);
+      expect(result.current.queueItems[0].id).toBe(42);
+      vi.mocked(offlineApi.listSyncQueueItems).mockResolvedValue([]);
+    });
+
+    it('再送キュー追加後に履歴を更新し、IDを記録する', async () => {
+      const { result } = await renderManagerHook();
+
+      await act(async () => {
+        const queuedId = await result.current.enqueueSyncRequest('sync_queue');
+        expect(queuedId).toBe(1);
+      });
+
+      expect(offlineApi.listSyncQueueItems).toHaveBeenCalledTimes(1);
+      expect(result.current.lastQueuedItemId).toBe(1);
+    });
   });
 
   describe('キャッシュステータス', () => {

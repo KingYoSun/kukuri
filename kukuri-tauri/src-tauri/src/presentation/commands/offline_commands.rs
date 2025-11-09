@@ -1,9 +1,9 @@
 use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::offline::{
-    AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest, OfflineAction,
-    OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
-    SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
-    UpdateSyncStatusRequest,
+    AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest,
+    ListSyncQueueItemsRequest, OfflineAction, OptimisticUpdateRequest, SaveOfflineActionRequest,
+    SaveOfflineActionResponse, SyncOfflineActionsRequest, SyncOfflineActionsResponse,
+    SyncQueueItemResponse, UpdateCacheMetadataRequest, UpdateSyncStatusRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -46,6 +46,16 @@ pub async fn get_cache_status(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<CacheStatusResponse>, AppError> {
     let result = state.offline_handler.get_cache_status().await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// 同期キューの状態を取得
+#[tauri::command]
+pub async fn list_sync_queue_items(
+    state: State<'_, AppState>,
+    request: ListSyncQueueItemsRequest,
+) -> Result<ApiResponse<Vec<SyncQueueItemResponse>>, AppError> {
+    let result = state.offline_handler.list_sync_queue_items(request).await;
     Ok(ApiResponse::from_result(result))
 }
 

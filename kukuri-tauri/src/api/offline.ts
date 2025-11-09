@@ -9,6 +9,8 @@ import type {
   CacheStatusResponse,
   AddToSyncQueueRequest,
   UpdateCacheMetadataRequest,
+  ListSyncQueueItemsRequest,
+  SyncQueueItem,
 } from '@/types/offline';
 
 /**
@@ -43,6 +45,15 @@ export const offlineApi = {
    */
   async getCacheStatus(): Promise<CacheStatusResponse> {
     return invokeCommand('get_cache_status');
+  },
+
+  /**
+   * 同期キューの状態を取得
+   */
+  async listSyncQueueItems(
+    request: ListSyncQueueItemsRequest = {},
+  ): Promise<SyncQueueItem[]> {
+    return invokeCommand('list_sync_queue_items', { request });
   },
 
   /**

@@ -3,7 +3,7 @@ use crate::application::services::offline_service::{
 };
 use crate::domain::entities::offline::{
     CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionRecord, OptimisticUpdateDraft,
-    SyncQueueItemDraft, SyncStatusUpdate,
+    SyncQueueItem, SyncQueueItemDraft, SyncStatusUpdate,
 };
 use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::offline::{
@@ -13,9 +13,9 @@ use crate::domain::value_objects::offline::{
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::offline::{
     AddToSyncQueueRequest, CacheStatusResponse, CacheTypeStatus, GetOfflineActionsRequest,
-    OfflineAction, OptimisticUpdateRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
-    SyncOfflineActionsRequest, SyncOfflineActionsResponse, UpdateCacheMetadataRequest,
-    UpdateSyncStatusRequest,
+    ListSyncQueueItemsRequest, OfflineAction, OptimisticUpdateRequest, SaveOfflineActionRequest,
+    SaveOfflineActionResponse, SyncOfflineActionsRequest, SyncOfflineActionsResponse,
+    SyncQueueItemResponse, UpdateCacheMetadataRequest, UpdateSyncStatusRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{Duration, Utc};
@@ -138,6 +138,31 @@ impl OfflineHandler {
             }
         }
         Ok(queue_id.value())
+    }
+
+    pub async fn list_sync_queue_items(
+        &self,
+        request: ListSyncQueueItemsRequest,
+    ) -> Result<Vec<SyncQueueItemResponse>, AppError> {
+        request.validate()?;
+        let limit = request
+            .limit
+            .map(|value| {
+                u32::try_from(value).map_err(|_| {
+                    AppError::validation(
+                        ValidationFailureKind::Generic,
+                        "Limit must fit in u32".to_string(),
+                    )
+                })
+            })
+            .transpose()?;
+
+        let items = self.offline_service.recent_sync_queue_items(limit).await?;
+
+        items
+            .iter()
+            .map(map_sync_queue_item)
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn update_cache_metadata(
@@ -350,6 +375,23 @@ fn map_action_record(record: &OfflineActionRecord) -> Result<OfflineAction, AppE
     })
 }
 
+fn map_sync_queue_item(item: &SyncQueueItem) -> Result<SyncQueueItemResponse, AppError> {
+    Ok(SyncQueueItemResponse {
+        id: item.id.value(),
+        action_type: item.action_type.as_str().to_string(),
+        status: item.status.as_str().to_string(),
+        retry_count: i32::try_from(item.retry_count)
+            .map_err(|_| AppError::Internal("retry_count overflowed i32".to_string()))?,
+        max_retries: i32::try_from(item.max_retries)
+            .map_err(|_| AppError::Internal("max_retries overflowed i32".to_string()))?,
+        created_at: item.created_at.timestamp(),
+        updated_at: item.updated_at.timestamp(),
+        synced_at: item.synced_at.map(|ts| ts.timestamp()),
+        error_message: item.error_message.clone(),
+        payload: item.payload.as_json().clone(),
+    })
+}
+
 fn map_cache_status(snapshot: CacheStatusSnapshot) -> Result<CacheStatusResponse, AppError> {
     let cache_types = snapshot
         .cache_types
@@ -461,6 +503,72 @@ mod tests {
         assert_eq!(
             parsed.get("source").and_then(|value| value.as_str()),
             Some("sync_status_indicator")
+        );
+    }
+
+    #[tokio::test]
+    async fn list_sync_queue_items_returns_recent_rows() {
+        let (handler, pool) = setup_handler().await;
+
+        let first_id = handler
+            .add_to_sync_queue(AddToSyncQueueRequest {
+                action_type: "manual_sync_refresh".to_string(),
+                payload: serde_json::json!({
+                    "cacheType": "offline_actions",
+                    "source": "sync_status_indicator"
+                }),
+                priority: Some(3),
+            })
+            .await
+            .expect("first queue id");
+
+        let second_id = handler
+            .add_to_sync_queue(AddToSyncQueueRequest {
+                action_type: "manual_sync_refresh".to_string(),
+                payload: serde_json::json!({
+                    "cacheType": "cache_metadata",
+                    "source": "sync_status_indicator"
+                }),
+                priority: Some(2),
+            })
+            .await
+            .expect("second queue id");
+
+        sqlx::query(
+            r#"
+            UPDATE sync_queue
+            SET status = 'failed',
+                error_message = 'timeout',
+                updated_at = strftime('%s','now')
+            WHERE id = ?1
+            "#,
+        )
+        .bind(first_id)
+        .execute(&pool)
+        .await
+        .expect("update queue row");
+
+        let items = handler
+            .list_sync_queue_items(ListSyncQueueItemsRequest { limit: Some(10) })
+            .await
+            .expect("queue items");
+
+        assert!(
+            items.len() >= 2,
+            "expected at least two queue items, got {}",
+            items.len()
+        );
+
+        let failed = items
+            .iter()
+            .find(|item| item.id == first_id)
+            .expect("failed queue item present");
+        assert_eq!(failed.status, "failed");
+        assert_eq!(failed.error_message.as_deref(), Some("timeout"));
+
+        assert!(
+            items.iter().any(|item| item.id == second_id),
+            "second queue id should be present"
         );
     }
 }

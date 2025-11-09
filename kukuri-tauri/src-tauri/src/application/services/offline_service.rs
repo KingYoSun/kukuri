@@ -1,8 +1,8 @@
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::domain::entities::offline::{
     CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionDraft, OfflineActionFilter,
-    OfflineActionRecord, OptimisticUpdateDraft, SavedOfflineAction, SyncQueueItemDraft, SyncResult,
-    SyncStatusUpdate,
+    OfflineActionRecord, OptimisticUpdateDraft, SavedOfflineAction, SyncQueueItem,
+    SyncQueueItemDraft, SyncResult, SyncStatusUpdate,
 };
 use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::offline::{
@@ -42,6 +42,10 @@ pub trait OfflineServiceTrait: Send + Sync {
     async fn sync_actions(&self, user_pubkey: PublicKey) -> Result<SyncResult, AppError>;
     async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError>;
     async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError>;
+    async fn recent_sync_queue_items(
+        &self,
+        limit: Option<u32>,
+    ) -> Result<Vec<SyncQueueItem>, AppError>;
     async fn upsert_cache_metadata(&self, update: CacheMetadataUpdate) -> Result<(), AppError>;
     async fn save_optimistic_update(
         &self,
@@ -135,6 +139,13 @@ impl OfflineServiceTrait for OfflineService {
 
     async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError> {
         self.persistence.enqueue_sync(draft).await
+    }
+
+    async fn recent_sync_queue_items(
+        &self,
+        limit: Option<u32>,
+    ) -> Result<Vec<SyncQueueItem>, AppError> {
+        self.persistence.recent_sync_queue_items(limit).await
     }
 
     async fn upsert_cache_metadata(&self, update: CacheMetadataUpdate) -> Result<(), AppError> {
