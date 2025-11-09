@@ -27,6 +27,7 @@
 ### GitHub Actions ワークフロー失敗調査
 
 - [ ] `Test` ワークフローの失敗要因を切り分け、ローカルで再現・修正・再検証する
+  - 2025年11月09日: `composerStore` の初期状態に `applyTopicAndResume` が含まれておらず `pnpm type-check` が `Native Test (Linux)` と `Build Test (Windows)` を同時に失敗させていたため、Omit 対象へ追加して `PostComposer.test.tsx` の `TopicSelector` モックは `_onCreateTopicRequest` へリネームして ESLint を解消。`pnpm format` で `src/api/offline.ts` ほか6ファイルの Prettier 差分を揃え、`pnpm type-check` / `pnpm lint` / `pnpm test` / `pnpm format:check` を完走させた。`gh act push -j native-test-linux -W .github/workflows/test.yml`（ログ: `tmp/logs/gh_act_native_20251109_postlint.log`）と `gh act push -j format-check -W .github/workflows/test.yml`（ログ: `tmp/logs/gh_act_format_20251109.log`）で失敗ジョブの成功を再現。`gh act push --bind -j docker-test` は Windows 環境特有のファイルマウント制限で `Run Rust tests in Docker (multi-node P2P)` が停止するため、代替としてホスト側で `docker compose -f docker-compose.test.yml run --rm rust-test`（ログ: `tmp/logs/docker_rust_test_20251109.log`）を実行し Rust テスト完走を確認。
   - 2025年11月07日: `gh run view 19134966693 --log` で `native-test-linux` の TypeScript 型エラーと `format-check` の Rust フォーマッタ失敗を特定。`DirectMessageStore` 初期状態の Omit 漏れと `DirectMessageDialog` の `useInfiniteQuery` ジェネリクス設定ミスを修正し、`cargo fmt` で Rust 側の差分を整形。
   - 2025年11月07日: `npx vitest run` / `npx tsc --noEmit` / `npx eslint …` に加え、`cargo test`・`cargo clippy --all-features -- -D warnings`（`kukuri-tauri/src-tauri`・`kukuri-cli`）を再実行してローカル環境での回帰を確認。
   - 2025年11月07日: `gh act push -j native-test-linux -W .github/workflows/test.yml` を実行し、`Test/Native Test (Linux)` ジョブが `Job succeeded` となることをログ (`act-native-ps.log`) で確認。

@@ -50,9 +50,7 @@ export const offlineApi = {
   /**
    * 同期キューの状態を取得
    */
-  async listSyncQueueItems(
-    request: ListSyncQueueItemsRequest = {},
-  ): Promise<SyncQueueItem[]> {
+  async listSyncQueueItems(request: ListSyncQueueItemsRequest = {}): Promise<SyncQueueItem[]> {
     return invokeCommand('list_sync_queue_items', { request });
   },
 

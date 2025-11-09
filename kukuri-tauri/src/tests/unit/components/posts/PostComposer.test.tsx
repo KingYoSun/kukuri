@@ -72,7 +72,7 @@ vi.mock('@/components/topics/TopicSelector', () => ({
     onValueChange,
     disabled,
     placeholder,
-    onCreateTopicRequest,
+    onCreateTopicRequest: _onCreateTopicRequest,
   }: {
     value?: string;
     onValueChange: (value: string) => void;

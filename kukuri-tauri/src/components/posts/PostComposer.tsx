@@ -281,9 +281,7 @@ export function PostComposer({
               onValueChange={setSelectedTopicId}
               disabled={!!topicId || isSubmitting}
               placeholder="トピックを選択"
-              onCreateTopicRequest={
-                topicId ? undefined : () => setShowTopicCreationDialog(true)
-              }
+              onCreateTopicRequest={topicId ? undefined : () => setShowTopicCreationDialog(true)}
             />
 
             {/* Content editor */}

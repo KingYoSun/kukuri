@@ -1,9 +1,6 @@
 import { InfiniteData, QueryClient } from '@tanstack/react-query';
 import type { Post } from '@/stores';
-import type {
-  FollowingFeedPageResult,
-  TrendingPostsResult,
-} from '@/hooks/useTrendingFeeds';
+import type { FollowingFeedPageResult, TrendingPostsResult } from '@/hooks/useTrendingFeeds';
 
 const TRENDING_POSTS_QUERY_PREFIX = ['trending', 'posts'] as const;
 const FOLLOWING_FEED_QUERY_PREFIX = ['followingFeed'] as const;
@@ -41,9 +38,7 @@ export function removePostFromTrendingCache(queryClient: QueryClient, postId: st
 }
 
 export function removePostFromFollowingCache(queryClient: QueryClient, postId: string) {
-  const queries = queryClient.getQueriesData<
-    InfiniteData<FollowingFeedPageResult>
-  >({
+  const queries = queryClient.getQueriesData<InfiniteData<FollowingFeedPageResult>>({
     queryKey: FOLLOWING_FEED_QUERY_PREFIX,
   });
 

@@ -24,7 +24,7 @@ interface ComposerState {
 
 const createInitialState = (): Omit<
   ComposerState,
-  'openComposer' | 'closeComposer' | 'complete' | 'reset'
+  'openComposer' | 'closeComposer' | 'complete' | 'reset' | 'applyTopicAndResume'
 > => ({
   isOpen: false,
   topicId: null,

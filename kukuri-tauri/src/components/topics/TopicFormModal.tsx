@@ -134,7 +134,7 @@ export function TopicFormModal({
               ? 'トピックの名前と説明を入力してください'
               : mode === 'create-from-composer'
                 ? '投稿を続けるためのトピックを作成します。作成後すぐに参加します。'
-              : 'トピックの情報を更新します'}
+                : 'トピックの情報を更新します'}
           </DialogDescription>
         </DialogHeader>
 

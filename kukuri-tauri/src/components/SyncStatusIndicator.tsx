@@ -242,11 +242,9 @@ export function SyncStatusIndicator() {
     }
 
     return queueItems.filter((item) => {
-      const cacheType =
-        getPayloadString(item.payload, 'cacheType')?.toLowerCase() ?? '';
+      const cacheType = getPayloadString(item.payload, 'cacheType')?.toLowerCase() ?? '';
       const idMatch = item.id.toString().includes(normalizedQueueFilter);
-      const actionMatch =
-        item.action_type?.toLowerCase().includes(normalizedQueueFilter) ?? false;
+      const actionMatch = item.action_type?.toLowerCase().includes(normalizedQueueFilter) ?? false;
       return idMatch || actionMatch || cacheType.includes(normalizedQueueFilter);
     });
   }, [queueItems, normalizedQueueFilter]);
@@ -542,8 +540,7 @@ export function SyncStatusIndicator() {
                   <div className="flex items-center gap-2">
                     {lastQueuedItemId && (
                       <span className="text-[11px] text-muted-foreground">
-                        最新 #
-                        <code className="font-mono text-xs">{lastQueuedItemId}</code>
+                        最新 #<code className="font-mono text-xs">{lastQueuedItemId}</code>
                       </span>
                     )}
                     <Button
@@ -598,7 +595,9 @@ export function SyncStatusIndicator() {
                       <div
                         key={item.id}
                         className={`rounded border p-2 text-xs transition ${
-                          isHighlighted ? 'border-primary bg-primary/5 shadow-sm' : 'border-border/60'
+                          isHighlighted
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'border-border/60'
                         }`}
                         data-testid={`queue-item-${item.id}`}
                       >

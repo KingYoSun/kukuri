@@ -706,10 +706,10 @@ describe('PostCard', () => {
       fireEvent.click(screen.getByText('削除する'));
 
       await waitFor(() => {
-          expect(deletePostMutationMock.mutate).toHaveBeenCalledWith(
-            ownPost,
-            expect.objectContaining({ onSettled: expect.any(Function) }),
-          );
+        expect(deletePostMutationMock.mutate).toHaveBeenCalledWith(
+          ownPost,
+          expect.objectContaining({ onSettled: expect.any(Function) }),
+        );
       });
 
       await waitFor(() => {
