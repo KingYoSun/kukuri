@@ -268,8 +268,14 @@ impl PostHandler {
             }
         }
 
+        let generated_at = self
+            .topic_service
+            .latest_metrics_generated_at()
+            .await?
+            .unwrap_or_else(|| Utc::now().timestamp_millis());
+
         Ok(ListTrendingPostsResponse {
-            generated_at: Utc::now().timestamp_millis(),
+            generated_at,
             topics,
         })
     }

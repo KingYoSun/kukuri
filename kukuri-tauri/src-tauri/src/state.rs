@@ -1,4 +1,5 @@
 use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore};
+use crate::domain::entities::ScoreWeights;
 use crate::domain::p2p::P2PEvent;
 
 // アプリケーションサービスのインポート
@@ -8,8 +9,8 @@ use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::ports::messaging_gateway::MessagingGateway;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::repositories::{
-    BookmarkRepository, DirectMessageRepository, EventRepository, PostRepository, TopicRepository,
-    UserRepository,
+    BookmarkRepository, DirectMessageRepository, EventRepository, PostRepository,
+    TopicMetricsRepository, TopicRepository, UserRepository,
 };
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
@@ -18,7 +19,8 @@ use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
     AuthService, DirectMessageService, EventService, OfflineService, P2PService, PostService,
-    ProfileAvatarService, SubscriptionStateMachine, SyncService, TopicService, UserService,
+    ProfileAvatarService, SubscriptionStateMachine, SyncService, TopicService, UserSearchService,
+    UserService,
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
@@ -36,6 +38,7 @@ use crate::infrastructure::{
         EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
         LegacyEventManagerHandle, RepositoryEventTopicStore,
     },
+    jobs::trending_metrics_job::TrendingMetricsJob,
     messaging::NostrMessagingGateway,
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
@@ -57,6 +60,7 @@ use std::sync::Arc;
 use tauri::{Emitter, async_runtime};
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
+use tokio::time::{Duration, sleep};
 
 const P2P_DEDUP_MAX: usize = 8192;
 
@@ -91,6 +95,7 @@ pub struct AppState {
     pub post_service: Arc<PostService>,
     pub topic_service: Arc<TopicService>,
     pub user_service: Arc<UserService>,
+    pub user_search_service: Arc<UserSearchService>,
     pub event_service: Arc<EventService>,
     pub direct_message_service: Arc<DirectMessageService>,
     pub sync_service: Arc<dyn SyncServiceTrait>,
@@ -109,6 +114,7 @@ pub struct AppState {
 impl AppState {
     pub async fn new(app_handle: &tauri::AppHandle) -> anyhow::Result<Self> {
         let bootstrapper = P2PBootstrapper::new(app_handle).await?;
+        let metrics_config = bootstrapper.config().metrics.clone();
         let app_data_dir = bootstrapper.app_data_dir().to_path_buf();
         let profile_avatar_dir = app_data_dir.join("profile_avatars");
 
@@ -138,6 +144,8 @@ impl AppState {
         // 新アーキテクチャのリポジトリとサービスを初期化
         let connection_pool = ConnectionPool::new(&db_url).await?;
         let repository = Arc::new(SqliteRepository::new(connection_pool.clone()));
+        let topic_metrics_repository: Arc<dyn TopicMetricsRepository> =
+            Arc::clone(&repository) as Arc<dyn TopicMetricsRepository>;
         let event_topic_store: Arc<dyn EventTopicStore> = Arc::new(RepositoryEventTopicStore::new(
             Arc::clone(&repository) as Arc<dyn EventRepository>,
         ));
@@ -202,10 +210,15 @@ impl AppState {
         let user_service = Arc::new(UserService::new(
             Arc::clone(&repository) as Arc<dyn UserRepository>
         ));
+        let user_search_service = Arc::new(UserSearchService::new(
+            Arc::clone(&repository) as Arc<dyn UserRepository>
+        ));
 
         // TopicServiceを初期化（AuthServiceの依存）
         let topic_service = Arc::new(TopicService::new(
             Arc::clone(&repository) as Arc<dyn TopicRepository>,
+            Arc::clone(&topic_metrics_repository),
+            metrics_config.enabled,
             Arc::clone(&p2p_service) as Arc<dyn P2PServiceTrait>,
         ));
         // 既定トピック（public）を保証し、EventManagerの既定配信先に設定
@@ -218,6 +231,23 @@ impl AppState {
         default_event_distributor
             .set_default_topics(distributor_default_topics)
             .await;
+
+        if metrics_config.enabled {
+            let score_weights = ScoreWeights {
+                posts: metrics_config.score_weights.posts,
+                unique_authors: metrics_config.score_weights.unique_authors,
+                boosts: metrics_config.score_weights.boosts,
+            };
+            let job = Arc::new(TrendingMetricsJob::new(
+                Arc::clone(&topic_metrics_repository),
+                Some(score_weights),
+                metrics_config.ttl_hours,
+            ));
+            spawn_trending_metrics_job(
+                job,
+                Duration::from_secs(metrics_config.interval_minutes.max(1) * 60),
+            );
+        }
 
         // AuthServiceの初期化（UserServiceとTopicServiceが必要）
         let lifecycle_port: Arc<dyn AuthLifecyclePort> = Arc::new(DefaultAuthLifecycle::new(
@@ -452,6 +482,7 @@ impl AppState {
             post_service,
             topic_service,
             user_service,
+            user_search_service,
             event_service,
             direct_message_service,
             sync_service,
@@ -636,4 +667,24 @@ impl AppState {
         subs.remove(topic_id);
         Ok(())
     }
+}
+
+fn spawn_trending_metrics_job(job: Arc<TrendingMetricsJob>, interval: Duration) {
+    tracing::info!(
+        target: "metrics::trending",
+        interval_seconds = interval.as_secs(),
+        "starting trending metrics job loop"
+    );
+    async_runtime::spawn(async move {
+        loop {
+            if let Err(err) = job.run_once().await {
+                tracing::error!(
+                    target: "metrics::trending",
+                    error = %err,
+                    "trending metrics job run failed"
+                );
+            }
+            sleep(interval).await;
+        }
+    });
 }

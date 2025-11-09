@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月08日
+最終更新日: 2025年11月09日
 
 ## 方針（2025年09月15日 更新）
 
@@ -17,6 +17,9 @@
   - 2025年11月08日: `priority/critical.md` に移動履歴を追記し、本項目を `in_progress` でトラッキング開始。既存ドキュメントの最終更新日・ギャップを確認し、MVPゴールに直結する3カテゴリ（①ユーザーフロー/UXギャップ、②基盤アーキ/依存整理、③テスト・オペレーション & CI）で整理する方針を決定。
   - 2025年11月08日: `phase5_user_flow_inventory.md` / `phase5_dependency_inventory_template.md` / `phase5_event_gateway_design.md` から MLP（Minimum Lovable Product）候補とブロッカーを抽出し、`refactoring_plan_2025-08-08_v3.md` に反映すべき優先順を下書き。`tauri_app_implementation_plan.md` の Phase3/4 セクションを MVP観点で「完了済み」「残」「MVP後」に三分割する草案を作成。
   - 2025年11月08日: 主要ドキュメントに追加する `MVP Exit Criteria` セクション案（機能/ネットワーク/テスト/運用の4指標）をドラフト化し、`roadmap.md`・`design_doc.md` のタイムライン/マイルストーン更新内容を決定。更新後は `phase5_user_flow_summary.md` にも短縮版チェックリストを掲載する計画。
+  - 2025年11月08日: MVP Exit Checklist #1（トレンド/フォロー Summary Panel）に着手。`trending_metrics_job` を AppState 起動時に定期実行させる設計をまとめ、`TopicService` と API/フロントの `generated_at` 整合、Docker `trending-feed` シナリオのログ要件を整理した上で実装方針を確定。
+  - 2025年11月09日: MVP Exit Checklist #3（Offline sync_queue/SyncStatusIndicator）の差分を実装。`SyncStatusIndicator` で `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）を表示し、`OfflineIndicator` のバナー/ツールチップをヘッダー側 SyncStatus CTA に更新。Rust 側では `offline_handler::record_sync_queue_metadata` を `add_to_sync_queue` 内で呼び、`cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry` を追加。`phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` / `phase5_ci_path_audit.md` へメタデータ表示とテスト手順を反映。
+  - 2025年11月09日: MVP Exit Checklist #4（Mainline DHT Runbook/CLI/UIリンク）を更新。Runbook に Chapter10（`kukuri-cli` ブートストラップ手順と Settings/RelayStatus 連携）を追加し、Sidebar `RelayStatus` カードへ Runbook リンクを実装。`RelayStatus.test.tsx` と `cargo test --package kukuri-cli -- test_bootstrap_runbook` を検証手順に追加し、`phase5_user_flow_inventory.md` の Mainline DHT 行と `phase5_ci_path_audit.md` を更新。
 
 ### GitHub Actions ワークフロー失敗調査
 
@@ -124,6 +127,7 @@
   - 2025年11月08日: `phase5_ci_path_audit.md` の `test:unit` 行に `Header.test.tsx` / `useDirectMessageBadge.test.tsx` / `TrendingSummaryPanel.test.tsx` / `FollowingSummaryPanel.test.tsx` を追記し、Nightly Frontend Unit Tests で DM Inbox / Summary CTA 回帰を監視できるようにした。
   - 2025年11月08日: `direct_message_conversations` テーブルを追加し、`direct_message_service` に会話一覧 (`list_direct_message_conversations`) と既読更新 (`mark_conversation_as_read`) を実装。Tauri 側に `list_direct_message_conversations` / `mark_direct_message_conversation_read` コマンドを追加し、`DirectMessageDialog`・`useDirectMessageEvents`・`useDirectMessageBootstrap`・`directMessageStore` を連携して Inbox の初期表示と未読永続化を実現。`pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/components/layout/Header.test.tsx`、`cargo test`（`kukuri-tauri/src-tauri` は既知の `STATUS_ENTRYPOINT_NOT_FOUND` で停止）、`./scripts/test-docker.ps1 rust`、`cargo test`（`kukuri-cli`）を実行し、Docker 経由では Rust テストが完走することを確認。
   - 2025年11月08日: Inventory 1.2 のヘッダー行を `MessageCircle`/`Plus` ボタン + `DirectMessageInbox` の導線に差し替え、Summary 2章の「プロフィール導線」を Inbox/CTA 対応へ更新。`refactoring_plan_2025-08-08_v3.md` と `tauri_app_implementation_plan.md` に 11月8日分の記録を追加し、会話リスト永続化・宛先検索/補完・未読共有 API を Phase 5 backlog に追記。
+  - 2025年11月09日: `useUserSearchQuery`／`user_search_service.rs` のカーソル復元と `AccountMetadata`／`authStore`／`ProfileSetup`／`ProfileEditDialog`／`SettingsPage` のプライバシー永続化を実装し、MVP Exit Checklist（Inventory 5.x / Summary / Runbook）を ✅ へ更新。`pnpm test` / `pnpm lint` / `pnpm type-check` / `cargo test`（`kukuri-tauri/src-tauri` は `STATUS_ENTRYPOINT_NOT_FOUND` で停止）→ `./scripts/test-docker.ps1 rust -NoBuild` / `cargo test`（`kukuri-cli`）を再実行し、Docker 側のログを `test-results/rust-docker.log` に保存。
 
 ### プロフィールアバター UI 連携
 

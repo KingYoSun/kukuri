@@ -1,6 +1,6 @@
 use crate::domain::entities::{
     Bookmark, DirectMessage, Event, MetricsWindow, NewDirectMessage, Post, Topic, TopicActivityRow,
-    TopicMetricsUpsert, User,
+    TopicMetricsSnapshot, TopicMetricsUpsert, User,
 };
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
@@ -132,6 +132,11 @@ pub trait TopicMetricsRepository: Send + Sync {
         &self,
         window: MetricsWindow,
     ) -> Result<Vec<TopicActivityRow>, AppError>;
+    async fn latest_window_end(&self) -> Result<Option<i64>, AppError>;
+    async fn list_recent_metrics(
+        &self,
+        limit: usize,
+    ) -> Result<Option<TopicMetricsSnapshot>, AppError>;
 }
 
 #[async_trait]
@@ -168,6 +173,8 @@ pub trait UserRepository: Send + Sync {
         follower_pubkey: &str,
         followed_pubkey: &str,
     ) -> Result<bool, AppError>;
+    async fn list_following_pubkeys(&self, follower_pubkey: &str) -> Result<Vec<String>, AppError>;
+    async fn list_follower_pubkeys(&self, followed_pubkey: &str) -> Result<Vec<String>, AppError>;
 }
 
 #[async_trait]

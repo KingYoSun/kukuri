@@ -5,16 +5,21 @@ export interface CommandResponse<T> {
   data: T | null;
   error?: string | null;
   error_code?: string | null;
+  error_details?: Record<string, unknown> | null;
 }
 
 export class TauriCommandError extends Error {
   code?: string;
+  details?: Record<string, unknown> | null;
 
-  constructor(message: string, code?: string | null) {
+  constructor(message: string, code?: string | null, details?: Record<string, unknown> | null) {
     super(message);
     this.name = 'TauriCommandError';
     if (code) {
       this.code = code;
+    }
+    if (details) {
+      this.details = details;
     }
   }
 }
@@ -45,6 +50,7 @@ export async function invokeCommand<T>(
       throw new TauriCommandError(
         response.error ?? `Command ${command} failed`,
         response.error_code,
+        response.error_details ?? null,
       );
     }
     return response.data as T;
@@ -67,6 +73,10 @@ export async function invokeCommandVoid(
     return;
   }
   if (!response.success) {
-    throw new TauriCommandError(response.error ?? `Command ${command} failed`, response.error_code);
+    throw new TauriCommandError(
+      response.error ?? `Command ${command} failed`,
+      response.error_code,
+      response.error_details ?? null,
+    );
   }
 }

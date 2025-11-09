@@ -80,3 +80,27 @@ pub struct TopicMetricsUpsert {
     pub score_6h: f64,
     pub updated_at: i64,
 }
+
+#[derive(Debug, Clone)]
+pub struct TopicMetricsRecord {
+    pub topic_id: String,
+    pub window_start: i64,
+    pub window_end: i64,
+    pub posts_24h: i64,
+    pub posts_6h: i64,
+    pub unique_authors: i64,
+    pub boosts: i64,
+    pub replies: i64,
+    pub bookmarks: i64,
+    pub participant_delta: i64,
+    pub score_24h: f64,
+    pub score_6h: f64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TopicMetricsSnapshot {
+    pub window_start: i64,
+    pub window_end: i64,
+    pub metrics: Vec<TopicMetricsRecord>,
+}

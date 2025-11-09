@@ -1,6 +1,6 @@
 use crate::domain::entities::offline::{
-    CacheMetadataRecord, CacheStatusSnapshot, OfflineActionRecord, OptimisticUpdateRecord,
-    SyncQueueItem, SyncResult, SyncStatusRecord,
+    CacheMetadataRecord, OfflineActionRecord, OptimisticUpdateRecord, SyncQueueItem, SyncResult,
+    SyncStatusRecord,
 };
 use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::offline::{
@@ -9,20 +9,10 @@ use crate::domain::value_objects::offline::{
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
-use sqlx::FromRow;
 
 use super::rows::{
     CacheMetadataRow, OfflineActionRow, OptimisticUpdateRow, SyncQueueItemRow, SyncStatusRow,
 };
-
-#[derive(Debug, Deserialize, FromRow)]
-pub struct CacheTypeAggregate {
-    pub cache_type: String,
-    pub item_count: i64,
-    pub last_synced_at: Option<i64>,
-    pub is_stale: bool,
-}
 
 pub fn offline_action_from_row(row: OfflineActionRow) -> Result<OfflineActionRecord, AppError> {
     let action_id = OfflineActionId::parse(&row.local_id)
@@ -67,32 +57,6 @@ pub fn offline_action_from_row(row: OfflineActionRow) -> Result<OfflineActionRec
         created_at,
         synced_at,
         remote_id,
-    ))
-}
-
-pub fn cache_status_from_aggregates(
-    total_items: i64,
-    stale_items: i64,
-    aggregates: Vec<CacheTypeAggregate>,
-) -> Result<CacheStatusSnapshot, AppError> {
-    let cache_types = aggregates
-        .into_iter()
-        .map(|aggregate| {
-            let cache_type = CacheType::new(aggregate.cache_type)
-                .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
-            Ok(crate::domain::entities::offline::CacheTypeStatus::new(
-                cache_type,
-                try_i64_to_u64(aggregate.item_count, "item_count")?,
-                aggregate.last_synced_at.map(timestamp_to_datetime),
-                aggregate.is_stale,
-            ))
-        })
-        .collect::<Result<Vec<_>, AppError>>()?;
-
-    Ok(CacheStatusSnapshot::new(
-        try_i64_to_u64(total_items, "total_items")?,
-        try_i64_to_u64(stale_items, "stale_items")?,
-        cache_types,
     ))
 }
 
@@ -251,15 +215,6 @@ pub fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
 }
 
 pub fn try_i32_to_u32(value: i32, label: &str) -> Result<u32, AppError> {
-    value.try_into().map_err(|_| {
-        AppError::validation(
-            ValidationFailureKind::Generic,
-            format!("{label} cannot be negative"),
-        )
-    })
-}
-
-pub fn try_i64_to_u64(value: i64, label: &str) -> Result<u64, AppError> {
     value.try_into().map_err(|_| {
         AppError::validation(
             ValidationFailureKind::Generic,

@@ -18,6 +18,7 @@ pub struct AppConfig {
     pub network: NetworkConfig,
     pub sync: SyncConfig,
     pub storage: StorageConfig,
+    pub metrics: MetricsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +57,21 @@ pub struct StorageConfig {
     pub cache_ttl: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfig {
+    pub enabled: bool,
+    pub interval_minutes: u64,
+    pub ttl_hours: u64,
+    pub score_weights: MetricsScoreWeightsConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsScoreWeightsConfig {
+    pub posts: f64,
+    pub unique_authors: f64,
+    pub boosts: f64,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -85,6 +101,28 @@ impl Default for AppConfig {
                 cache_size: 100 * 1024 * 1024, // 100MB
                 cache_ttl: 3600,               // 1 hour
             },
+            metrics: MetricsConfig::default(),
+        }
+    }
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_minutes: 5,
+            ttl_hours: 48,
+            score_weights: MetricsScoreWeightsConfig::default(),
+        }
+    }
+}
+
+impl Default for MetricsScoreWeightsConfig {
+    fn default() -> Self {
+        Self {
+            posts: 0.6,
+            unique_authors: 0.3,
+            boosts: 0.1,
         }
     }
 }
@@ -120,6 +158,35 @@ impl AppConfig {
 
         cfg.network.bootstrap_source = bootstrap_source;
 
+        if let Ok(v) = std::env::var("KUKURI_METRICS_ENABLED") {
+            cfg.metrics.enabled = parse_bool(&v, cfg.metrics.enabled);
+        }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_INTERVAL_MINUTES") {
+            if let Some(value) = parse_u64(&v) {
+                cfg.metrics.interval_minutes = value.max(1);
+            }
+        }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_TTL_HOURS") {
+            if let Some(value) = parse_u64(&v) {
+                cfg.metrics.ttl_hours = value.max(1);
+            }
+        }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_POSTS") {
+            if let Some(value) = parse_f64(&v) {
+                cfg.metrics.score_weights.posts = value.max(0.0);
+            }
+        }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_UNIQUE_AUTHORS") {
+            if let Some(value) = parse_f64(&v) {
+                cfg.metrics.score_weights.unique_authors = value.max(0.0);
+            }
+        }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_BOOSTS") {
+            if let Some(value) = parse_f64(&v) {
+                cfg.metrics.score_weights.boosts = value.max(0.0);
+            }
+        }
+
         cfg
     }
 
@@ -129,6 +196,14 @@ impl AppConfig {
         }
         if self.network.max_peers == 0 {
             return Err("Network max_peers must be greater than 0".to_string());
+        }
+        if self.metrics.enabled {
+            if self.metrics.interval_minutes == 0 {
+                return Err("Metrics interval_minutes must be greater than 0".to_string());
+            }
+            if self.metrics.ttl_hours == 0 {
+                return Err("Metrics ttl_hours must be greater than 0".to_string());
+            }
         }
         Ok(())
     }
@@ -140,4 +215,12 @@ fn parse_bool(s: &str, default: bool) -> bool {
         "0" | "false" | "no" | "off" => false,
         _ => default,
     }
+}
+
+fn parse_u64(value: &str) -> Option<u64> {
+    value.trim().parse::<u64>().ok()
+}
+
+fn parse_f64(value: &str) -> Option<f64> {
+    value.trim().parse::<f64>().ok()
 }

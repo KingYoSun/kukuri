@@ -1,24 +1,26 @@
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::domain::entities::offline::{
-    CacheMetadataRecord, CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionRecord,
-    OptimisticUpdateDraft, OptimisticUpdateRecord, SyncQueueItem, SyncQueueItemDraft, SyncResult,
-    SyncStatusRecord, SyncStatusUpdate,
+    CacheMetadataRecord, CacheMetadataUpdate, CacheStatusSnapshot, CacheTypeStatus,
+    OfflineActionRecord, OptimisticUpdateDraft, OptimisticUpdateRecord, SyncQueueItem,
+    SyncQueueItemDraft, SyncResult, SyncStatusRecord, SyncStatusUpdate,
 };
 use crate::domain::value_objects::event_gateway::PublicKey;
+use crate::domain::value_objects::CacheType;
 use crate::domain::value_objects::offline::{OfflinePayload, OptimisticUpdateId, SyncQueueId};
 use crate::infrastructure::offline::mappers::{
-    CacheTypeAggregate, cache_metadata_from_row, cache_status_from_aggregates,
-    offline_action_from_row, optimistic_update_from_row, optimistic_update_id_from_string,
-    payload_from_optional_json_str, payload_to_string, sync_queue_id_from_i64,
-    sync_queue_item_from_row, sync_status_from_row,
+    cache_metadata_from_row, offline_action_from_row, optimistic_update_from_row,
+    optimistic_update_id_from_string, payload_from_optional_json_str, payload_to_string,
+    sync_queue_id_from_i64, sync_queue_item_from_row, sync_status_from_row,
 };
 use crate::infrastructure::offline::rows::{
     CacheMetadataRow, OfflineActionRow, OptimisticUpdateRow, SyncQueueItemRow, SyncStatusRow,
 };
-use crate::shared::error::AppError;
+use crate::shared::{error::AppError, ValidationFailureKind};
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use serde_json::Value;
 use sqlx::{Pool, QueryBuilder, Row, Sqlite};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use uuid::Uuid;
 
@@ -291,32 +293,86 @@ impl OfflinePersistence for SqliteOfflinePersistence {
     }
 
     async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError> {
-        let total_result = sqlx::query(r#"SELECT COUNT(*) as count FROM cache_metadata"#)
-            .fetch_one(self.pool())
-            .await?;
-        let total_items: i64 = total_result.try_get("count").unwrap_or(0);
-
-        let stale_result =
-            sqlx::query(r#"SELECT COUNT(*) as count FROM cache_metadata WHERE is_stale = 1"#)
-                .fetch_one(self.pool())
-                .await?;
-        let stale_items: i64 = stale_result.try_get("count").unwrap_or(0);
-
-        let cache_types = sqlx::query_as::<_, CacheTypeAggregate>(
+        let rows = sqlx::query_as::<_, CacheMetadataRow>(
             r#"
-            SELECT
-                cache_type,
-                COUNT(*) as item_count,
-                MAX(last_synced_at) as last_synced_at,
-                MAX(is_stale) as is_stale
-            FROM cache_metadata
-            GROUP BY cache_type
+            SELECT * FROM cache_metadata
             "#,
         )
         .fetch_all(self.pool())
         .await?;
 
-        cache_status_from_aggregates(total_items, stale_items, cache_types)
+        let records = rows
+            .into_iter()
+            .map(cache_metadata_from_row)
+            .collect::<Result<Vec<_>, AppError>>()?;
+
+        let total_items = records.len() as u64;
+        let stale_items = records.iter().filter(|record| record.is_stale).count() as u64;
+
+        #[derive(Default)]
+        struct CacheTypeGroup {
+            item_count: u64,
+            is_stale: bool,
+            last_synced_at: Option<DateTime<Utc>>,
+            latest_metadata: Option<(DateTime<Utc>, Value)>,
+        }
+
+        let mut groups: HashMap<String, CacheTypeGroup> = HashMap::new();
+
+        for record in records {
+            let cache_type_key = record.cache_type.to_string();
+            let entry = groups.entry(cache_type_key).or_default();
+            entry.item_count = entry.item_count.saturating_add(1);
+            if record.is_stale {
+                entry.is_stale = true;
+            }
+            if let Some(last_synced_at) = record.last_synced_at {
+                let should_replace = entry
+                    .last_synced_at
+                    .map(|current| last_synced_at > current)
+                    .unwrap_or(true);
+                if should_replace {
+                    entry.last_synced_at = Some(last_synced_at);
+                }
+            }
+            if let Some(metadata) = record.metadata.clone() {
+                let timestamp = record
+                    .last_accessed_at
+                    .or(record.last_synced_at)
+                    .unwrap_or_else(Utc::now);
+                let should_replace = entry
+                    .latest_metadata
+                    .as_ref()
+                    .map(|(current_ts, _)| timestamp >= *current_ts)
+                    .unwrap_or(true);
+                if should_replace {
+                    entry.latest_metadata = Some((timestamp, metadata));
+                }
+            }
+        }
+
+        let mut cache_types = Vec::with_capacity(groups.len());
+        for (cache_type_name, summary) in groups {
+            let cache_type =
+                CacheType::new(cache_type_name).map_err(AppError::validation_mapper(
+                    ValidationFailureKind::Generic,
+                ))?;
+            let metadata = summary
+                .latest_metadata
+                .as_ref()
+                .map(|(_, value)| value.clone());
+            cache_types.push(CacheTypeStatus::new(
+                cache_type,
+                summary.item_count,
+                summary.last_synced_at,
+                summary.is_stale,
+                metadata,
+            ));
+        }
+
+        cache_types.sort_by(|a, b| a.cache_type.as_str().cmp(b.cache_type.as_str()));
+
+        Ok(CacheStatusSnapshot::new(total_items, stale_items, cache_types))
     }
 
     async fn enqueue_sync(&self, draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError> {

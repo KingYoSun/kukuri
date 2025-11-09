@@ -21,6 +21,8 @@ export interface User {
   picture: string;
   about: string;
   nip05: string;
+  publicProfile: boolean;
+  showOnlineStatus: boolean;
   avatar?: UserAvatarMetadata | null;
 }
 

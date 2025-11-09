@@ -85,6 +85,7 @@ pub fn run() {
             presentation::commands::get_user_by_pubkey,
             presentation::commands::search_users,
             presentation::commands::update_profile,
+            presentation::commands::update_privacy_settings,
             presentation::commands::follow_user,
             presentation::commands::unfollow_user,
             presentation::commands::get_followers,
@@ -173,6 +174,7 @@ pub fn run() {
                     .expect("Failed to initialize app state");
                 let offline_reindex_job = Arc::clone(&app_state.offline_reindex_job);
                 let user_service = Arc::clone(&app_state.user_service);
+                let user_search_service = Arc::clone(&app_state.user_search_service);
                 let event_service = Arc::clone(&app_state.event_service);
                 let p2p_service = Arc::clone(&app_state.p2p_service);
                 let offline_service = Arc::clone(&app_state.offline_service);
@@ -190,6 +192,7 @@ pub fn run() {
                 app_handle.manage(app_state.clone());
                 app_handle.manage(offline_reindex_job);
                 app_handle.manage(user_service);
+                app_handle.manage(user_search_service);
                 app_handle.manage(event_service);
                 app_handle.manage(p2p_service);
                 app_handle.manage(offline_service);

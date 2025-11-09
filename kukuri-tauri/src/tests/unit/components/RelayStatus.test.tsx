@@ -1,7 +1,7 @@
 import { render, screen, cleanup, act, fireEvent } from '@testing-library/react';
 import type { Mock } from 'vitest';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { RelayStatus } from '@/components/RelayStatus';
+import { RelayStatus, MAINLINE_RUNBOOK_URL } from '@/components/RelayStatus';
 import { useAuthStore } from '@/stores/authStore';
 
 vi.mock('@/stores/authStore', () => ({
@@ -112,5 +112,14 @@ describe('RelayStatus', () => {
     fireEvent.click(retryButton);
 
     expect(state.updateRelayStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders runbook link with external target', () => {
+    renderRelayStatus();
+
+    const runbookLink = screen.getByRole('link', { name: 'Runbook' });
+    expect(runbookLink).toHaveAttribute('href', MAINLINE_RUNBOOK_URL);
+    expect(runbookLink).toHaveAttribute('target', '_blank');
+    expect(runbookLink).toHaveAttribute('rel', 'noreferrer');
   });
 });

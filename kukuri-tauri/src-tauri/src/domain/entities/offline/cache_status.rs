@@ -9,6 +9,7 @@ pub struct CacheTypeStatus {
     pub item_count: u64,
     pub last_synced_at: Option<DateTime<Utc>>,
     pub is_stale: bool,
+    pub metadata: Option<Value>,
 }
 
 impl CacheTypeStatus {
@@ -17,12 +18,14 @@ impl CacheTypeStatus {
         item_count: u64,
         last_synced_at: Option<DateTime<Utc>>,
         is_stale: bool,
+        metadata: Option<Value>,
     ) -> Self {
         Self {
             cache_type,
             item_count,
             last_synced_at,
             is_stale,
+            metadata,
         }
     }
 }

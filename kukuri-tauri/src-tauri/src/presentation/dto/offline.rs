@@ -1,6 +1,7 @@
 use crate::domain::value_objects::offline::SyncStatus;
 use crate::presentation::dto::Validate;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +110,8 @@ pub struct CacheTypeStatus {
     pub item_count: i64,
     pub last_synced_at: Option<i64>,
     pub is_stale: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

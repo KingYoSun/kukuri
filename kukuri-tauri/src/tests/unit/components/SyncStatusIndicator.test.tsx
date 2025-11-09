@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import type { SyncStatus } from '@/hooks/useSyncManager';
@@ -311,6 +311,46 @@ describe('SyncStatusIndicator', () => {
       await waitFor(() => {
         expect(mockEnqueueSyncRequest).toHaveBeenCalledWith('sync_queue');
       });
+    });
+
+    it('キャッシュメタデータを整形して表示する', () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        cacheStatus: {
+          total_items: 1,
+          stale_items: 1,
+          cache_types: [
+            {
+              cache_type: 'sync_queue',
+              item_count: 2,
+              last_synced_at: 1_730_000_000,
+              is_stale: true,
+              metadata: {
+                cacheType: 'offline_actions',
+                requestedBy: 'npub1exampleexampleexample',
+                requestedAt: '2025-11-09T00:00:00Z',
+                queueItemId: 42,
+                source: 'sync_status_indicator',
+              },
+            },
+          ],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+
+      const trigger = screen.getByRole('button');
+      fireEvent.click(trigger);
+
+      expect(screen.getByText('2件 / 要再同期')).toBeInTheDocument();
+      const metadataSection = screen.getByTestId('cache-metadata-sync_queue');
+      expect(within(metadataSection).getByText('対象キャッシュ')).toBeInTheDocument();
+      expect(within(metadataSection).getByText('offline_actions')).toBeInTheDocument();
+      expect(within(metadataSection).getByText('最終要求者')).toBeInTheDocument();
+      expect(within(metadataSection).getByText('キュー ID')).toBeInTheDocument();
+      expect(within(metadataSection).getByText('#42')).toBeInTheDocument();
+      expect(within(metadataSection).getByText('発行元')).toBeInTheDocument();
+      expect(within(metadataSection).getByTitle('2025-11-09T00:00:00Z')).toBeInTheDocument();
     });
   });
 

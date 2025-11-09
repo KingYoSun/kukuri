@@ -124,6 +124,8 @@ export interface UserProfile {
   banner?: string | null;
   website?: string | null;
   nip05?: string | null;
+  is_profile_public?: boolean | null;
+  show_online_status?: boolean | null;
 }
 
 export interface UserListPage {
@@ -131,6 +133,23 @@ export interface UserListPage {
   nextCursor: string | null;
   hasMore: boolean;
   totalCount: number;
+}
+
+export interface SearchUsersRequest {
+  query: string;
+  cursor?: string | null;
+  limit?: number;
+  sort?: 'relevance' | 'recency';
+  allowIncomplete?: boolean;
+  viewerNpub?: string | null;
+}
+
+export interface SearchUsersResponse {
+  items: UserProfile[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+  tookMs: number;
 }
 
 export interface GetFollowersParams {
@@ -410,8 +429,31 @@ export class TauriApi {
   }
 
   // ユーザー関連
-  static async searchUsers(query: string, limit = 20): Promise<UserProfile[]> {
-    return await invokeCommand<UserProfile[]>('search_users', { query, limit });
+  static async searchUsers(params: SearchUsersRequest): Promise<SearchUsersResponse> {
+    const response = await invokeCommand<{
+      items: UserProfile[];
+      next_cursor: string | null;
+      has_more: boolean;
+      total_count: number;
+      took_ms: number;
+    }>('search_users', {
+      request: {
+        query: params.query,
+        cursor: params.cursor ?? null,
+        limit: params.limit,
+        sort: params.sort,
+        allow_incomplete: params.allowIncomplete ?? false,
+        viewer_npub: params.viewerNpub ?? null,
+      },
+    });
+
+    return {
+      items: response.items ?? [],
+      nextCursor: response.next_cursor ?? null,
+      hasMore: response.has_more ?? false,
+      totalCount: response.total_count ?? 0,
+      tookMs: response.took_ms ?? 0,
+    };
   }
 
   static async getUserProfile(npub: string): Promise<UserProfile | null> {
@@ -598,6 +640,20 @@ export class TauriApi {
       target_npub: targetNpub,
     });
   }
+
+  static async updatePrivacySettings(params: {
+    npub: string;
+    publicProfile: boolean;
+    showOnlineStatus: boolean;
+  }): Promise<void> {
+    await invokeCommandVoid('update_privacy_settings', {
+      request: {
+        npub: params.npub,
+        public_profile: params.publicProfile,
+        show_online_status: params.showOnlineStatus,
+      },
+    });
+  }
 }
 
 // Nostr関連の型定義
@@ -610,6 +666,10 @@ export interface NostrMetadata {
   nip05?: string;
   lud16?: string;
   website?: string;
+  kukuri_privacy?: {
+    public_profile: boolean;
+    show_online_status: boolean;
+  };
 }
 
 export interface RelayInfo {

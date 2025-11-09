@@ -12,6 +12,8 @@ export function mapUserProfileToUser(profile: UserProfile): User {
     about: profile.about ?? '',
     picture: profile.picture ?? '',
     nip05: profile.nip05 ?? '',
+    publicProfile: profile.is_profile_public ?? true,
+    showOnlineStatus: profile.show_online_status ?? false,
     avatar: null,
   };
 

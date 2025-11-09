@@ -1,15 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { useUIStore, usePrivacySettingsStore } from '@/stores';
+import { useAuthStore } from '@/stores/authStore';
 import { NostrTestPanel } from '@/components/NostrTestPanel';
 import { P2PDebugPanel } from '@/components/P2PDebugPanel';
 import { PeerConnectionPanel } from '@/components/p2p/PeerConnectionPanel';
 import { BootstrapConfigPanel } from '@/components/p2p/BootstrapConfigPanel';
 import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
+import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
+import { TauriApi } from '@/lib/api/tauri';
+import { updateNostrMetadata } from '@/lib/api/nostr';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -17,9 +22,76 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsPage() {
   const { theme, setTheme } = useUIStore();
-  const { publicProfile, showOnlineStatus, setPublicProfile, setShowOnlineStatus } =
-    usePrivacySettingsStore();
+  const {
+    publicProfile,
+    showOnlineStatus,
+    setPublicProfile,
+    setShowOnlineStatus,
+    hydrateFromUser: storeHydrateFromUser,
+  } = usePrivacySettingsStore();
+  const hydrateFromUser = storeHydrateFromUser ?? (() => {});
+  const { currentUser, updateUser } = useAuthStore();
   const [isProfileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [savingField, setSavingField] = useState<'public' | 'online' | null>(null);
+
+  useEffect(() => {
+    hydrateFromUser(currentUser ?? null);
+  }, [currentUser, hydrateFromUser]);
+
+  const persistPrivacy = async (field: 'public' | 'online', value: boolean) => {
+    if (!currentUser) {
+      toast.error('プライバシー設定を変更するにはログインが必要です');
+      return;
+    }
+    const payload = {
+      publicProfile: field === 'public' ? value : publicProfile,
+      showOnlineStatus: field === 'online' ? value : showOnlineStatus,
+    };
+    setSavingField(field);
+    try {
+      await TauriApi.updatePrivacySettings({
+        npub: currentUser.npub,
+        publicProfile: payload.publicProfile,
+        showOnlineStatus: payload.showOnlineStatus,
+      });
+      await updateNostrMetadata({
+        kukuri_privacy: {
+          public_profile: payload.publicProfile,
+          show_online_status: payload.showOnlineStatus,
+        },
+      });
+      updateUser(payload);
+      toast.success('プライバシー設定を更新しました');
+    } catch (error) {
+      errorHandler.log('SettingsPage.updatePrivacyFailed', error, {
+        context: 'SettingsPage.persistPrivacy',
+        metadata: { field },
+      });
+      toast.error('プライバシー設定の更新に失敗しました');
+      if (field === 'public') {
+        setPublicProfile(!value);
+      } else {
+        setShowOnlineStatus(!value);
+      }
+    } finally {
+      setSavingField(null);
+    }
+  };
+
+  const handlePrivacyToggle =
+    (field: 'public' | 'online') =>
+    (checked: boolean): void => {
+      if (!currentUser) {
+        toast.error('プライバシー設定を変更するにはログインが必要です');
+        return;
+      }
+      if (field === 'public') {
+        setPublicProfile(checked);
+      } else {
+        setShowOnlineStatus(checked);
+      }
+      void persistPrivacy(field, checked);
+    };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -78,7 +150,8 @@ function SettingsPage() {
             <Switch
               id="public-profile"
               checked={publicProfile}
-              onCheckedChange={(checked) => setPublicProfile(checked)}
+              disabled={!currentUser || savingField === 'public'}
+              onCheckedChange={handlePrivacyToggle('public')}
             />
           </div>
           <div className="flex items-center justify-between">
@@ -86,9 +159,18 @@ function SettingsPage() {
             <Switch
               id="show-online"
               checked={showOnlineStatus}
-              onCheckedChange={(checked) => setShowOnlineStatus(checked)}
+              disabled={!currentUser || savingField === 'online'}
+              onCheckedChange={handlePrivacyToggle('online')}
             />
           </div>
+          {!currentUser && (
+            <p className="text-xs text-muted-foreground">
+              ログインするとプライバシー設定を変更できます
+            </p>
+          )}
+          {savingField && (
+            <p className="text-xs text-muted-foreground">プライバシー設定を保存しています…</p>
+          )}
         </CardContent>
       </Card>
 

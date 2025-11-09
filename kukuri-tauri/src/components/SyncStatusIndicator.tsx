@@ -28,6 +28,118 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 
+type CacheMetadataSummary = {
+  cacheType?: string;
+  requestedAt?: string;
+  requestedBy?: string;
+  queueItemId?: number;
+  source?: string;
+};
+
+type MetadataRow = {
+  key: string;
+  label: string;
+  value: React.ReactNode;
+};
+
+function parseCacheMetadata(
+  metadata?: Record<string, unknown> | null,
+): CacheMetadataSummary | null {
+  if (!metadata) {
+    return null;
+  }
+  const requestedAt =
+    typeof metadata.requestedAt === 'string' ? (metadata.requestedAt as string) : undefined;
+  const requestedBy =
+    typeof metadata.requestedBy === 'string' ? (metadata.requestedBy as string) : undefined;
+  const queueItemId =
+    typeof metadata.queueItemId === 'number' ? (metadata.queueItemId as number) : undefined;
+  const source = typeof metadata.source === 'string' ? (metadata.source as string) : undefined;
+  const cacheType =
+    typeof metadata.cacheType === 'string' ? (metadata.cacheType as string) : undefined;
+
+  if (!requestedAt && !requestedBy && !queueItemId && !source && !cacheType) {
+    return null;
+  }
+
+  return {
+    cacheType,
+    requestedAt,
+    requestedBy,
+    queueItemId,
+    source,
+  };
+}
+
+function formatMetadataTimestamp(value?: string) {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return formatDistanceToNow(date, { addSuffix: true, locale: ja });
+}
+
+function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
+  const rows: MetadataRow[] = [];
+
+  if (summary.cacheType) {
+    rows.push({
+      key: 'cacheType',
+      label: '対象キャッシュ',
+      value: summary.cacheType,
+    });
+  }
+
+  if (summary.requestedBy) {
+    rows.push({
+      key: 'requestedBy',
+      label: '最終要求者',
+      value: (
+        <code className="rounded bg-muted/50 px-1 py-0.5 font-mono text-[11px]">
+          {summary.requestedBy}
+        </code>
+      ),
+    });
+  }
+
+  if (summary.requestedAt) {
+    const formatted = formatMetadataTimestamp(summary.requestedAt) ?? summary.requestedAt;
+    rows.push({
+      key: 'requestedAt',
+      label: '要求時刻',
+      value: (
+        <span title={summary.requestedAt}>
+          {formatted}
+          {formatted !== summary.requestedAt && (
+            <span className="ml-1 text-muted-foreground/70">{summary.requestedAt}</span>
+          )}
+        </span>
+      ),
+    });
+  }
+
+  if (typeof summary.queueItemId === 'number') {
+    rows.push({
+      key: 'queueItemId',
+      label: 'キュー ID',
+      value: `#${summary.queueItemId}`,
+    });
+  }
+
+  if (summary.source) {
+    rows.push({
+      key: 'source',
+      label: '発行元',
+      value: summary.source,
+    });
+  }
+
+  return rows;
+}
+
 export function SyncStatusIndicator() {
   const {
     syncStatus,
@@ -270,37 +382,65 @@ export function SyncStatusIndicator() {
                     合計 {cacheStatus.total_items}件 / ステール {cacheStatus.stale_items}件
                   </p>
                   <div className="space-y-2 mt-2">
-                    {cacheStatus.cache_types.map((type) => (
-                      <div
-                        key={type.cache_type}
-                        className="rounded border border-border/60 p-2 text-sm"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="font-medium">{formatCacheTypeLabel(type.cache_type)}</p>
-                            <p className="text-xs text-muted-foreground">
-                              最終同期 {formatCacheLastSynced(type.last_synced_at)}
-                            </p>
+                    {cacheStatus.cache_types.map((type) => {
+                      const metadataSummary = parseCacheMetadata(type.metadata ?? null);
+                      return (
+                        <div
+                          key={type.cache_type}
+                          className="rounded border border-border/60 p-2 text-sm"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-medium">{formatCacheTypeLabel(type.cache_type)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                最終同期 {formatCacheLastSynced(type.last_synced_at)}
+                              </p>
+                            </div>
+                            {type.is_stale && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  void handleQueueRequest(type.cache_type);
+                                }}
+                                disabled={!isOnline || queueingType === type.cache_type}
+                              >
+                                {queueingType === type.cache_type ? '追加中…' : '再送キュー'}
+                              </Button>
+                            )}
                           </div>
-                          {type.is_stale && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => {
-                                void handleQueueRequest(type.cache_type);
-                              }}
-                              disabled={!isOnline || queueingType === type.cache_type}
-                            >
-                              {queueingType === type.cache_type ? '追加中…' : '再送キュー'}
-                            </Button>
-                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {type.item_count}件 / {type.is_stale ? '要再同期' : '最新'}
+                          </p>
+                          {metadataSummary &&
+                            (() => {
+                              const rows = metadataRowsFromSummary(metadataSummary);
+                              if (rows.length === 0) {
+                                return null;
+                              }
+                              return (
+                                <dl
+                                  className="mt-2 space-y-1 rounded-md bg-muted/40 p-2 text-xs text-muted-foreground"
+                                  data-testid={`cache-metadata-${type.cache_type}`}
+                                >
+                                  {rows.map((row) => (
+                                    <div
+                                      className="flex items-start gap-2"
+                                      key={`${type.cache_type}-${row.key}`}
+                                    >
+                                      <dt className="w-24 shrink-0 text-muted-foreground/80">
+                                        {row.label}
+                                      </dt>
+                                      <dd className="flex-1 text-foreground">{row.value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              );
+                            })()}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {type.item_count}件 / {type.is_stale ? 'ステール' : '最新'}
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               ) : (

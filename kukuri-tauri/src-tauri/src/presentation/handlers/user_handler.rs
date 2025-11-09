@@ -24,6 +24,8 @@ impl UserHandler {
             banner: None,
             website: None,
             nip05: user.nip05,
+            is_profile_public: Some(user.public_profile),
+            show_online_status: Some(user.show_online_status),
         }
     }
 
@@ -44,6 +46,8 @@ impl UserHandler {
             banner: None,
             website: None,
             nip05: user.nip05.clone(),
+            is_profile_public: Some(user.public_profile),
+            show_online_status: Some(user.show_online_status),
         })
     }
 
@@ -75,6 +79,8 @@ impl UserHandler {
             name: profile.name,
             nip05: profile.nip05,
             lud16: None,
+            public_profile: profile.is_profile_public.unwrap_or(true),
+            show_online_status: profile.show_online_status.unwrap_or(false),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

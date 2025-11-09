@@ -1,6 +1,6 @@
-# Trending Metrics Job 実装ドラフト
+# Trending Metrics Job 実装ガイド
 作成日: 2025年11月07日  
-最終更新: 2025年11月07日
+最終更新: 2025年11月08日
 
 ## 背景
 - Phase 5 で `/trending` `/following` フィードを実装したが、現状のトレンドスコアはリクエスト時に `topics` / `posts` テーブルから生計算しており、ピーク時にクエリ負荷が高い。
@@ -11,6 +11,13 @@
 - 直近 24 時間 / 6 時間の投稿数・参加者数・エンゲージメントをバッチで集計し、`list_trending_topics` / `list_trending_posts` が高速にレスポンスできる状態にする。
 - 集計ジョブ失敗時の検知・復旧手順を確立し、Nightly / Docker シナリオからも同値検証できるようにする。
 - 将来的なリアルタイム更新（WebSocket 等）へ拡張しやすい設計を採用する。
+
+## 現状サマリー（2025年11月08日）
+- `app.conf`（`AppConfig.metrics`）に `enabled` / `interval_minutes` / `ttl_hours` / `score_weights.posts|unique_authors|boosts` を追加し、`KUKURI_METRICS_*` 環境変数で上書き可能にした。既定値は「有効」「5 分間隔」「TTL 48h」「0.6/0.3/0.1」。
+- `AppState::new` で `TrendingMetricsJob` を `Arc` 付き 5 分ループとして `tauri::async_runtime::spawn` し、起動直後から `run_once` → `sleep(interval)` を繰り返す。失敗は `metrics::trending` 名前空間で ERROR ログに出力。
+- `TopicMetricsRepository` に `latest_window_end` / `list_recent_metrics(limit)` を追加し、`topic_metrics` から直近ウィンドウを一括取得できるようにした。`TopicService::list_trending_topics` はメトリクスが有効かつ最新レコードが存在する場合に `TrendingDataSource::Metrics` を返却し、フォールバックとして従来のリアルタイム集計を保持する。
+- `topic_handler::list_trending_topics` / `post_handler::list_trending_posts` はどちらも `generated_at = topic_metrics.window_end` を返却するため、Summary Panel と Docker `trending-feed` シナリオの比較が 1:1 で行える。
+- CI: `pnpm vitest run routes/trending.test.tsx routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` と `scripts/test-docker.sh ts --scenario trending-feed --no-build` を Nightly で実行。`trending_metrics_job` のローカル実行は `cargo test trending_metrics_job::*` / `cargo fmt` / `cargo test --package kukuri-tauri` に含まれる。
 
 ## 要件
 
@@ -61,6 +68,8 @@
    - Docker: `trending-feed` シナリオでジョブを有効にし、Summary Panel が集計値と一致するかを確認。
 7. **ドキュメント更新**
    - 本ドキュメントを v1.0 として確定し、`phase5_ci_path_audit.md` / `p2p_mainline_runbook.md` にリンク。
+
+→ 2025年11月08日: 上記 1〜7 を `shared/config.rs` / `application::services::topic_service.rs` / `presentation/handlers/topic_handler.rs` / `state.rs` / `scripts/test-docker.*` で実装・反映済み。
 
 ## 監視・運用
 - ダッシュボード:

@@ -170,23 +170,31 @@ describe('ProfileEditDialog', () => {
     await user.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
-      expect(mockUpdateNostrMetadata).toHaveBeenCalledWith({
+      expect(mockUpdateNostrMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: '更新後ユーザー',
+          display_name: '@updated',
+          about: '更新後の自己紹介',
+          picture: 'https://example.com/new.png',
+          nip05: 'updated@example.com',
+          kukuri_privacy: expect.objectContaining({
+            public_profile: true,
+            show_online_status: false,
+          }),
+        }),
+      );
+    });
+
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      expect.objectContaining({
         name: '更新後ユーザー',
-        display_name: '@updated',
+        displayName: '@updated',
         about: '更新後の自己紹介',
         picture: 'https://example.com/new.png',
         nip05: 'updated@example.com',
-      });
-    });
-
-    expect(mockUpdateUser).toHaveBeenCalledWith({
-      name: '更新後ユーザー',
-      displayName: '@updated',
-      about: '更新後の自己紹介',
-      picture: 'https://example.com/new.png',
-      nip05: 'updated@example.com',
-      avatar: mockCurrentUser.avatar,
-    });
+        avatar: mockCurrentUser.avatar,
+      }),
+    );
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('プロフィールを更新しました');
     });
@@ -225,6 +233,10 @@ describe('ProfileEditDialog', () => {
       expect(mockUpdateNostrMetadata).toHaveBeenCalledWith(
         expect.objectContaining({
           picture: expectedUri,
+          kukuri_privacy: expect.objectContaining({
+            public_profile: true,
+            show_online_status: false,
+          }),
         }),
       );
     });

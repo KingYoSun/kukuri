@@ -10,8 +10,8 @@ use crate::{
     },
     shared::error::AppError,
 };
-use chrono::Utc;
 use std::sync::Arc;
+use chrono::Utc;
 
 pub struct TopicHandler {
     topic_service: Arc<TopicService>,
@@ -212,9 +212,10 @@ impl TopicHandler {
         request.validate().map_err(AppError::InvalidInput)?;
 
         let limit = request.limit.unwrap_or(10).clamp(1, 100) as usize;
-        let entries = self.topic_service.list_trending_topics(limit).await?;
+        let result = self.topic_service.list_trending_topics(limit).await?;
 
-        let topics: Vec<TrendingTopicDto> = entries
+        let topics: Vec<TrendingTopicDto> = result
+            .entries
             .into_iter()
             .enumerate()
             .map(|(index, entry)| TrendingTopicDto {
@@ -230,7 +231,7 @@ impl TopicHandler {
             .collect();
 
         Ok(ListTrendingTopicsResponse {
-            generated_at: Utc::now().timestamp_millis(),
+            generated_at: result.generated_at,
             topics,
         })
     }

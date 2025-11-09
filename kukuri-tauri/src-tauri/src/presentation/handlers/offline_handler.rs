@@ -120,6 +120,23 @@ impl OfflineHandler {
                 .transpose()?,
         );
         let queue_id = self.offline_service.enqueue_sync(draft).await?;
+
+        if let Some(cache_type) = request
+            .payload
+            .get("cacheType")
+            .and_then(|value| value.as_str())
+        {
+            if let Err(err) = self
+                .record_sync_queue_metadata(cache_type, &request.payload, queue_id)
+                .await
+            {
+                tracing::warn!(
+                    target: "offline::handler",
+                    error = %err,
+                    "failed to update sync_queue metadata for {cache_type}"
+                );
+            }
+        }
         Ok(queue_id.value())
     }
 
@@ -276,6 +293,46 @@ fn parse_optional_payload(data: Option<String>) -> Result<Option<OfflinePayload>
     }
 }
 
+impl OfflineHandler {
+    async fn record_sync_queue_metadata(
+        &self,
+        cache_type_str: &str,
+        payload: &Value,
+        queue_id: SyncQueueId,
+    ) -> Result<(), AppError> {
+        let cache_key = CacheKey::new(format!("sync_queue::{cache_type_str}"))
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
+        let cache_type = CacheType::new("sync_queue".to_string())
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
+        // NOTE: 現状は sync_queue を仮想的なキャッシュ種別としてまとめている。
+        // 将来的にキャッシュ種類ごとのキュー状況を分離する場合はここで cache_type を切り替える。
+
+        let requested_at = payload
+            .get("requestedAt")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+        let metadata = json!({
+            "cacheType": cache_type_str,
+            "requestedAt": requested_at,
+            "requestedBy": payload.get("userPubkey").and_then(|value| value.as_str()),
+            "source": payload.get("source").and_then(|value| value.as_str()).unwrap_or("unknown"),
+            "queueItemId": queue_id.value(),
+        });
+
+        let update = CacheMetadataUpdate {
+            cache_key,
+            cache_type,
+            metadata: Some(metadata),
+            expiry: Some(Utc::now() + Duration::minutes(30)),
+            is_stale: Some(true),
+        };
+
+        self.offline_service.upsert_cache_metadata(update).await
+    }
+}
+
 fn map_action_record(record: &OfflineActionRecord) -> Result<OfflineAction, AppError> {
     Ok(OfflineAction {
         id: record.record_id.unwrap_or_default(),
@@ -305,6 +362,7 @@ fn map_cache_status(snapshot: CacheStatusSnapshot) -> Result<CacheStatusResponse
                 })?,
                 last_synced_at: status.last_synced_at.map(|dt| dt.timestamp()),
                 is_stale: status.is_stale,
+                metadata: status.metadata,
             })
         })
         .collect::<Result<Vec<_>, AppError>>()?;
@@ -330,5 +388,82 @@ fn map_sync_status(value: &str) -> SyncStatus {
         "failed" => SyncStatus::Failed,
         "conflict" => SyncStatus::Conflict,
         other => SyncStatus::from(other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::application::ports::offline_store::OfflinePersistence;
+    use crate::application::services::offline_service::OfflineService;
+    use crate::infrastructure::offline::sqlite_store::SqliteOfflinePersistence;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::{Pool, Sqlite};
+    use std::sync::Arc;
+
+    async fn setup_handler() -> (OfflineHandler, Pool<Sqlite>) {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:?cache=shared")
+            .await
+            .expect("in-memory sqlite");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
+
+        let persistence: Arc<dyn OfflinePersistence> =
+            Arc::new(SqliteOfflinePersistence::new(pool.clone()));
+        let service = OfflineService::new(persistence);
+        (OfflineHandler::new(Arc::new(service)), pool)
+    }
+
+    #[tokio::test]
+    async fn add_to_sync_queue_records_metadata_entry() {
+        let (handler, pool) = setup_handler().await;
+        let request = AddToSyncQueueRequest {
+            action_type: "manual_sync_refresh".to_string(),
+            payload: serde_json::json!({
+                "cacheType": "offline_actions",
+                "requestedAt": "2025-11-09T00:00:00Z",
+                "source": "sync_status_indicator",
+                "userPubkey": "npub1testexample"
+            }),
+            priority: Some(5),
+        };
+
+        let queue_id = handler
+            .add_to_sync_queue(request)
+            .await
+            .expect("queue id");
+
+        let (cache_key, cache_type, metadata): (String, String, Option<String>) = sqlx::query_as(
+            r#"
+            SELECT cache_key, cache_type, metadata
+            FROM cache_metadata
+            WHERE cache_key = 'sync_queue::offline_actions'
+            "#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("metadata row");
+
+        assert_eq!(cache_key, "sync_queue::offline_actions");
+        assert_eq!(cache_type, "sync_queue");
+
+        let json = metadata.expect("metadata json");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("parse metadata");
+        assert_eq!(
+            parsed.get("queueItemId").and_then(|value| value.as_i64()),
+            Some(queue_id)
+        );
+        assert_eq!(
+            parsed.get("requestedBy").and_then(|value| value.as_str()),
+            Some("npub1testexample")
+        );
+        assert_eq!(
+            parsed.get("source").and_then(|value| value.as_str()),
+            Some("sync_status_indicator")
+        );
     }
 }

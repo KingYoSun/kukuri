@@ -56,6 +56,8 @@ export function useP2PEventListener() {
           picture: '',
           nip05: '',
           avatar: null,
+          publicProfile: true,
+          showOnlineStatus: false,
         });
 
         const post: Post = {

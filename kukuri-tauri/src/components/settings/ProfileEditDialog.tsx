@@ -13,6 +13,7 @@ import {
   type ProfileFormValues,
 } from '@/components/auth/ProfileForm';
 import { useAuthStore } from '@/stores/authStore';
+import { usePrivacySettingsStore } from '@/stores/privacySettingsStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
@@ -26,6 +27,7 @@ interface ProfileEditDialogProps {
 
 export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps) {
   const { currentUser, updateUser } = useAuthStore();
+  const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const initialValues: ProfileFormValues = useMemo(
@@ -83,6 +85,10 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         about: profile.about,
         picture: nostrPicture,
         nip05: profile.nip05,
+        kukuri_privacy: {
+          public_profile: publicProfile,
+          show_online_status: showOnlineStatus,
+        },
       });
 
       updateUser({
@@ -92,6 +98,8 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         picture: updatedPicture,
         nip05: profile.nip05,
         avatar: updatedAvatar,
+        publicProfile,
+        showOnlineStatus,
       });
 
       toast.success('プロフィールを更新しました');

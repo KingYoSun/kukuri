@@ -65,6 +65,7 @@ export interface CacheTypeStatus {
   item_count: number;
   last_synced_at?: number;
   is_stale: boolean;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface AddToSyncQueueRequest {

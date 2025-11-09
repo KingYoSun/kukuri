@@ -7,6 +7,8 @@ export interface AccountMetadata {
   display_name: string;
   picture?: string;
   last_used: string;
+  public_profile?: boolean;
+  show_online_status?: boolean;
 }
 
 export interface AddAccountRequest {

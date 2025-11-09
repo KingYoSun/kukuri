@@ -129,6 +129,16 @@ describe('DirectMessageDialog', () => {
     expect(screen.queryByText('ダイレクトメッセージ')).not.toBeInTheDocument();
   });
 
+  it('ダイアログ表示時に入力へフォーカスする', async () => {
+    openDialog();
+    renderWithQueryClient(<DirectMessageDialog />);
+
+    await waitFor(() => expect(TauriApi.listDirectMessages).toHaveBeenCalled());
+
+    const input = await screen.findByTestId('direct-message-input');
+    await waitFor(() => expect(input).toHaveFocus());
+  });
+
   it('既存メッセージが表示される', async () => {
     vi.mocked(TauriApi.listDirectMessages).mockResolvedValue({
       items: [

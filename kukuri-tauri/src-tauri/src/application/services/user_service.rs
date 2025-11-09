@@ -1,6 +1,7 @@
 use crate::application::ports::repositories::{FollowListSort, UserCursorPage, UserRepository};
 use crate::domain::entities::{User, UserMetadata};
 use crate::shared::{AppError, ValidationFailureKind};
+use chrono::Utc;
 use std::sync::Arc;
 
 pub struct UserService {
@@ -39,6 +40,25 @@ impl UserService {
             self.repository.update_user(&user).await?;
         }
         Ok(())
+    }
+
+    pub async fn update_privacy_settings(
+        &self,
+        npub: &str,
+        public_profile: bool,
+        show_online_status: bool,
+    ) -> Result<(), AppError> {
+        let mut user = self
+            .repository
+            .get_user(npub)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("User not found: {npub}")))?;
+
+        user.public_profile = public_profile;
+        user.show_online_status = show_online_status;
+        user.updated_at = Utc::now();
+
+        self.repository.update_user(&user).await
     }
 
     pub async fn update_user(&self, user: User) -> Result<(), AppError> {
@@ -465,6 +485,24 @@ mod tests {
             let mut follows = self.follows.write().await;
             Ok(follows.remove(&(follower_pubkey.to_string(), followed_pubkey.to_string())))
         }
+
+        async fn list_following_pubkeys(&self, follower_pubkey: &str) -> Result<Vec<String>, AppError> {
+            let follows = self.follows.read().await;
+            Ok(follows
+                .iter()
+                .filter(|(follower, _)| follower == follower_pubkey)
+                .map(|(_, followed)| followed.clone())
+                .collect())
+        }
+
+        async fn list_follower_pubkeys(&self, followed_pubkey: &str) -> Result<Vec<String>, AppError> {
+            let follows = self.follows.read().await;
+            Ok(follows
+                .iter()
+                .filter(|(_, target)| target == followed_pubkey)
+                .map(|(follower, _)| follower.clone())
+                .collect())
+        }
     }
 
     async fn setup_service() -> UserService {
@@ -566,6 +604,8 @@ mod tests {
                     banner: None,
                     nip05: None,
                     lud16: None,
+                    public_profile: None,
+                    show_online_status: None,
                 },
             )
             .await
@@ -582,6 +622,8 @@ mod tests {
                     banner: None,
                     nip05: None,
                     lud16: None,
+                    public_profile: None,
+                    show_online_status: None,
                 },
             )
             .await
@@ -606,5 +648,37 @@ mod tests {
             .await
             .expect("empty search");
         assert!(none.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_privacy_settings_persists_flags() {
+        let service = setup_service().await;
+        seed_user(&service, ALICE_NPUB, ALICE_PUB).await;
+
+        service
+            .update_privacy_settings(ALICE_NPUB, false, true)
+            .await
+            .expect("update privacy settings");
+
+        let updated = service
+            .get_user(ALICE_NPUB)
+            .await
+            .expect("fetch user")
+            .expect("user exists");
+
+        assert!(!updated.public_profile);
+        assert!(updated.show_online_status);
+    }
+
+    #[tokio::test]
+    async fn update_privacy_settings_missing_user_returns_error() {
+        let service = setup_service().await;
+
+        let err = service
+            .update_privacy_settings("npub1missing", true, false)
+            .await
+            .expect_err("missing user should error");
+
+        assert!(matches!(err, AppError::NotFound(_)));
     }
 }

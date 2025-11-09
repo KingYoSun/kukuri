@@ -17,6 +17,8 @@ pub struct User {
     pub name: Option<String>,
     pub nip05: Option<String>,
     pub lud16: Option<String>,
+    pub public_profile: bool,
+    pub show_online_status: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -35,6 +37,8 @@ impl User {
             name: None,
             nip05: None,
             lud16: None,
+            public_profile: true,
+            show_online_status: false,
             created_at: now,
             updated_at: now,
         }
@@ -71,6 +75,12 @@ impl User {
         }
         if let Some(lud16) = metadata.lud16 {
             self.lud16 = Some(lud16);
+        }
+        if let Some(public_profile) = metadata.public_profile {
+            self.public_profile = public_profile;
+        }
+        if let Some(show_online_status) = metadata.show_online_status {
+            self.show_online_status = show_online_status;
         }
         self.updated_at = chrono::Utc::now();
     }
@@ -110,4 +120,6 @@ pub struct UserMetadata {
     pub banner: Option<String>,
     pub nip05: Option<String>,
     pub lud16: Option<String>,
+    pub public_profile: Option<bool>,
+    pub show_online_status: Option<bool>,
 }

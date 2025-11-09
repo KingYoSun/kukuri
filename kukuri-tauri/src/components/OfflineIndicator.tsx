@@ -66,46 +66,39 @@ export function OfflineIndicator() {
         </div>
       )}
 
-      {/* 常設インジケーター */}
+      {/* 常設インジケーター（詳細は SyncStatusIndicator 側で表示） */}
       {(pendingCount > 0 || !isOnline || isSyncing) && (
-        <div className="fixed bottom-4 right-4 z-40">
+        <div className="fixed bottom-4 right-4 left-4 mx-auto max-w-sm z-40">
           <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className={cn(
-                    'relative flex items-center justify-center h-12 w-12 rounded-full shadow-lg transition-all',
-                    isOnline
-                      ? 'bg-white border-2 border-gray-200'
-                      : 'bg-orange-100 border-2 border-orange-300',
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      'w-full rounded-full px-4 py-2 shadow-lg border transition-colors text-sm',
+                      isOnline
+                        ? 'bg-white text-gray-700 border-gray-200'
+                        : 'bg-orange-100 text-orange-800 border-orange-200',
                   )}
                 >
                   {isOnline ? (
-                    <Wifi className="h-5 w-5 text-gray-600" />
+                    <>
+                      <Wifi className="h-4 w-4 inline mr-2" />
+                      最終同期: {getLastSyncText()}
+                    </>
                   ) : (
-                    <WifiOff className="h-5 w-5 text-orange-600" />
-                  )}
-                  {pendingCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
-                      {pendingCount}
-                    </span>
-                  )}
-                  {isSyncing && (
-                    <span className="absolute -bottom-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                    </span>
+                    <>
+                      <WifiOff className="h-4 w-4 inline mr-2" />
+                      オフラインです（ヘッダー右上の SyncStatusIndicator で詳細を確認できます）
+                    </>
                   )}
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">{isOnline ? 'オンライン' : 'オフライン'}</p>
-                  {isSyncing && <p className="text-xs text-gray-500">（同期中...）</p>}
-                  <p className="text-xs text-gray-500">最終同期: {getLastSyncText()}</p>
-                  {pendingCount > 0 && (
-                    <p className="text-xs text-gray-500">未同期: {pendingCount}件</p>
-                  )}
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  {isSyncing && <p>同期中です…</p>}
+                  {pendingCount > 0 && <p>未同期アクション: {pendingCount}件</p>}
+                  <p>詳細なステータスはヘッダー右上の SyncStatusIndicator から確認できます。</p>
                 </div>
               </TooltipContent>
             </Tooltip>

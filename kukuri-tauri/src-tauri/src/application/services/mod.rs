@@ -9,6 +9,7 @@ pub mod profile_avatar_service;
 mod subscription_state;
 pub mod sync_service;
 pub mod topic_service;
+pub mod user_search_service;
 pub mod user_service;
 
 pub use crate::domain::value_objects::subscription::{
@@ -30,4 +31,5 @@ pub use profile_avatar_service::{
 pub use subscription_state::{SubscriptionStateMachine, SubscriptionStateStore};
 pub use sync_service::{SyncService, SyncServiceTrait};
 pub use topic_service::TopicService;
+pub use user_search_service::UserSearchService;
 pub use user_service::UserService;

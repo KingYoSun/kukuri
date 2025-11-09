@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { errorHandler } from '@/lib/errorHandler';
-import { TauriApi, type DirectMessageItem, type DirectMessagePage } from '@/lib/api/tauri';
+import { TauriApi, type DirectMessagePage } from '@/lib/api/tauri';
 import { useAuthStore } from '@/stores/authStore';
 import {
   useDirectMessageStore,
@@ -70,6 +70,7 @@ export function DirectMessageDialog() {
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const autoLoadLockRef = useRef(false);
   const lastSyncedRef = useRef<Record<string, number>>({});
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!isDialogOpen) {
@@ -193,9 +194,21 @@ export function DirectMessageDialog() {
     if (!activeConversationNpub || confirmedFromQuery === undefined) {
       return;
     }
-      setMessages(activeConversationNpub, confirmedFromQuery, { replace: true });
-    }
+    setMessages(activeConversationNpub, confirmedFromQuery, { replace: true });
   }, [activeConversationNpub, confirmedFromQuery, setMessages]);
+
+  useEffect(() => {
+    if (!isDialogOpen) {
+      return;
+    }
+    const input = textareaRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    const length = input.value.length;
+    input.setSelectionRange(length, length);
+  }, [isDialogOpen, activeConversationNpub]);
 
   useEffect(() => {
     if (!isDialogOpen || !activeConversationNpub) {
@@ -463,6 +476,7 @@ export function DirectMessageDialog() {
         </div>
         <div className="space-y-3">
           <Textarea
+            ref={textareaRef}
             value={messageDraft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="メッセージを入力してください…"

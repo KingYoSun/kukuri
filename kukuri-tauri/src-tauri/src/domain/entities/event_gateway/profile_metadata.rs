@@ -44,6 +44,13 @@ pub struct ProfileMetadata {
     pub lud16: Option<String>,
     pub website: Option<String>,
     pub relays: Option<Vec<RelayEndpoint>>,
+    pub privacy: Option<PrivacyPreferences>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PrivacyPreferences {
+    pub public_profile: bool,
+    pub show_online_status: bool,
 }
 
 impl ProfileMetadata {
@@ -64,6 +71,7 @@ impl ProfileMetadata {
         lud16: Option<String>,
         website: Option<String>,
         relays: Option<Vec<RelayEndpoint>>,
+        privacy: Option<PrivacyPreferences>,
     ) -> Result<Self, String> {
         let metadata = Self {
             name,
@@ -75,6 +83,7 @@ impl ProfileMetadata {
             lud16,
             website,
             relays,
+            privacy,
         };
         metadata.validate()?;
         Ok(metadata)
@@ -156,5 +165,6 @@ impl ProfileMetadata {
             && self.lud16.is_none()
             && self.website.is_none()
             && self.relays.as_ref().is_none_or(|relays| relays.is_empty())
+            && self.privacy.is_none()
     }
 }

@@ -25,6 +25,11 @@ pub enum AppError {
         kind: ValidationFailureKind,
         message: String,
     },
+    #[error("Rate limited: {message}")]
+    RateLimited {
+        message: String,
+        retry_after_seconds: u64,
+    },
     #[error("Nostr error: {0}")]
     NostrError(String),
     #[error("P2P error: {0}")]
@@ -67,6 +72,13 @@ impl AppError {
         move |message| AppError::validation(kind, message)
     }
 
+    pub fn rate_limited(message: impl Into<String>, retry_after_seconds: u64) -> Self {
+        AppError::RateLimited {
+            message: message.into(),
+            retry_after_seconds,
+        }
+    }
+
     pub fn code(&self) -> &'static str {
         match self {
             AppError::Database(_) => "DATABASE_ERROR",
@@ -78,6 +90,7 @@ impl AppError {
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::InvalidInput(_) => "INVALID_INPUT",
             AppError::ValidationError { .. } => "VALIDATION_ERROR",
+            AppError::RateLimited { .. } => "RATE_LIMITED",
             AppError::NostrError(_) => "NOSTR_ERROR",
             AppError::P2PError(_) => "P2P_ERROR",
             AppError::ConfigurationError(_) => "CONFIGURATION_ERROR",
@@ -103,6 +116,7 @@ impl AppError {
             AppError::ValidationError { message, .. } => {
                 format!("Validation failed: {message}")
             }
+            AppError::RateLimited { message, .. } => message.clone(),
             AppError::NostrError(_) => "Nostr operation failed".to_string(),
             AppError::P2PError(_) => "Peer-to-peer operation failed".to_string(),
             AppError::ConfigurationError(_) => "Configuration error detected".to_string(),

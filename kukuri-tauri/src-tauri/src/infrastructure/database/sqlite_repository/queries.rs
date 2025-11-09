@@ -311,25 +311,88 @@ pub(super) const COLLECT_TOPIC_ACTIVITY: &str = r#"
     GROUP BY et.topic_id
 "#;
 
+pub(super) const SELECT_LATEST_METRICS_WINDOW_END: &str = r#"
+    SELECT MAX(window_end) as window_end
+    FROM topic_metrics
+"#;
+
+pub(super) const SELECT_METRICS_BY_WINDOW: &str = r#"
+    SELECT
+        topic_id,
+        window_start,
+        window_end,
+        posts_24h,
+        posts_6h,
+        unique_authors,
+        boosts,
+        replies,
+        bookmarks,
+        participant_delta,
+        score_24h,
+        score_6h,
+        updated_at
+    FROM topic_metrics
+    WHERE window_end = ?1
+    ORDER BY score_24h DESC, score_6h DESC, posts_24h DESC, topic_id ASC
+    LIMIT ?2
+"#;
+
 pub(super) const INSERT_USER: &str = r#"
-    INSERT INTO users (npub, pubkey, display_name, bio, avatar_url, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (
+        npub,
+        pubkey,
+        display_name,
+        bio,
+        avatar_url,
+        is_profile_public,
+        show_online_status,
+        created_at,
+        updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#;
 
 pub(super) const SELECT_USER_BY_NPUB: &str = r#"
-    SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
+    SELECT
+        npub,
+        pubkey,
+        display_name,
+        bio,
+        avatar_url,
+        is_profile_public,
+        show_online_status,
+        created_at,
+        updated_at
     FROM users
     WHERE npub = ?
 "#;
 
 pub(super) const SELECT_USER_BY_PUBKEY: &str = r#"
-    SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
+    SELECT
+        npub,
+        pubkey,
+        display_name,
+        bio,
+        avatar_url,
+        is_profile_public,
+        show_online_status,
+        created_at,
+        updated_at
     FROM users
     WHERE pubkey = ?
 "#;
 
 pub(super) const SEARCH_USERS: &str = r#"
-    SELECT npub, pubkey, display_name, bio, avatar_url, created_at, updated_at
+    SELECT
+        npub,
+        pubkey,
+        display_name,
+        bio,
+        avatar_url,
+        is_profile_public,
+        show_online_status,
+        created_at,
+        updated_at
     FROM users
     WHERE display_name LIKE '%' || ?1 || '%' COLLATE NOCASE
        OR npub LIKE '%' || ?1 || '%' COLLATE NOCASE
@@ -341,7 +404,13 @@ pub(super) const SEARCH_USERS: &str = r#"
 
 pub(super) const UPDATE_USER: &str = r#"
     UPDATE users
-    SET display_name = ?, bio = ?, avatar_url = ?, updated_at = ?
+    SET
+        display_name = ?,
+        bio = ?,
+        avatar_url = ?,
+        is_profile_public = ?,
+        show_online_status = ?,
+        updated_at = ?
     WHERE npub = ?
 "#;
 
@@ -351,17 +420,47 @@ pub(super) const DELETE_USER: &str = r#"
 "#;
 
 pub(super) const SELECT_FOLLOWERS: &str = r#"
-    SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at
+    SELECT
+        u.npub,
+        u.pubkey,
+        u.display_name,
+        u.bio,
+        u.avatar_url,
+        u.is_profile_public,
+        u.show_online_status,
+        u.created_at,
+        u.updated_at
     FROM users u
     INNER JOIN follows f ON u.pubkey = f.follower_pubkey
     WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
 "#;
 
 pub(super) const SELECT_FOLLOWING: &str = r#"
-    SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at
+    SELECT
+        u.npub,
+        u.pubkey,
+        u.display_name,
+        u.bio,
+        u.avatar_url,
+        u.is_profile_public,
+        u.show_online_status,
+        u.created_at,
+        u.updated_at
     FROM users u
     INNER JOIN follows f ON u.pubkey = f.followed_pubkey
     WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
+"#;
+
+pub(super) const SELECT_FOLLOWING_PUBKEYS: &str = r#"
+    SELECT followed_pubkey
+    FROM follows
+    WHERE follower_pubkey = ?1
+"#;
+
+pub(super) const SELECT_FOLLOWER_PUBKEYS: &str = r#"
+    SELECT follower_pubkey
+    FROM follows
+    WHERE followed_pubkey = ?1
 "#;
 
 pub(super) const UPSERT_FOLLOW_RELATION: &str = r#"

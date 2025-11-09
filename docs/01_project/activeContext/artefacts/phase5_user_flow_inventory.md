@@ -1,6 +1,6 @@
 # Phase 5 ユーザー導線棚卸し
 作成日: 2025年11月01日  
-最終更新: 2025年11月08日
+最終更新: 2025年11月09日
 
 ## 目的
 - Phase 5 で想定しているデスクトップアプリ体験のうち、現状 UI から到達できる機能と欠落導線を把握する。
@@ -39,7 +39,7 @@
 | --- | --- | --- | --- |
 | 投稿検索 | `/search` (Tab: posts) | `usePosts` 全件からクライアントフィルタ | Tauri 呼び出し：初回ロード時の `get_posts` |
 | トピック検索 | `/search` (Tab: topics) | `useTopics` データからクライアントフィルタ | `get_topics` を再利用 |
-| ユーザー検索 | `/search` (Tab: users) | `search_users` で実ユーザーを取得し、フォロー/フォロー解除ボタンと `/profile/$userId` へのリンクを表示 | フォロー状態は React Query で即時更新。ページネーションとエラーUI・入力バリデーションは未整備。 |
+| ユーザー検索 | `/search` (Tab: users) | `search_users` + `useUserSearchQuery` が cursor/sort/allow_incomplete/429 を処理し、`SearchErrorState` で状態遷移とカウントダウンを表示 | フォロー状態は React Query で即時更新。2025年11月09日: ページネーション・入力バリデーション・レートリミット UI を実装し、DM Inbox の候補検索でも同 API を再利用。 |
 
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 主なコマンド |
@@ -77,7 +77,7 @@
 
 ## 2. 確認できた導線ギャップ
 - `/trending`・`/following` ルートは 2025年11月07日時点で UI/API ともに稼働中。ただし集計ジョブ（`trending_metrics_job`）と Docker シナリオ（`trending-feed`）が未着手のため、データ鮮度と CI 自動検証が backlog（詳細は 5.7 節）。
-- ユーザー検索は実ユーザーを返すが、ページネーション・検索エラーUI・入力バリデーションが未整備（改善計画は 5.8 節を参照）。
+- 2025年11月09日: ユーザー検索は `useUserSearchQuery` + `SearchErrorState` によりページネーション/エラーUI/レートリミット/入力バリデーションまで整備済。残タスクはランキング係数のチューニングとメトリクス監視のみ。
 - `/profile/$userId` はフォロー導線と DM モーダル、フォロワー/フォロー中リストのソート・検索を備えたが、既読ステータスの多端末同期とページング拡張（2ページ目以降の自動補充/差分同期）が未実装。
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
 - 投稿削除は UI から利用可能になったが、React Query のキャッシュ無効化と `delete_post` コマンド統合テスト整備が未完了。
@@ -192,7 +192,7 @@
 ## 4. 次のアクション候補
 1. グローバルコンポーザーの初期トピック選択と投稿後のリフレッシュを最適化し、各画面からの動線を検証する。
 2. 「トレンド」「フォロー中」カテゴリー用のルーティング／一覧画面を定義するか、未実装である旨を UI 上に表示する。
-3. ユーザー検索のページネーション、検索エラーUI、入力バリデーションを整備し、`search_users` のレート制御を決定する。
+3. ✅ 2025年11月09日: ユーザー検索のページネーション/エラーUI/入力バリデーションを `useUserSearchQuery` + `SearchErrorState` + `UserSearchService` で実装し、`AppError::RateLimited` を 10 秒 30 リクエストで制御する方針を採用済み。
 4. `/profile/$userId` のメッセージ導線で既読同期の多端末反映と Docker/contract テストを整備し、フォロワー/フォロー中リストのソート／フィルタリング／ページングを含めてブラッシュアップする。
 5. 投稿削除後の React Query キャッシュ無効化と `delete_post` コマンド統合テストを整備する。
 6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
@@ -340,9 +340,12 @@
   - 2025年11月06日: `list_trending_topics` / `list_trending_posts` / `list_following_feed` のデータ仕様と UI/ST テスト要件を整理し、本節ならびに Summary・実装計画へ反映。`topic_handler.rs` / `post_handler.rs` で `Utc::now().timestamp_millis()` を採用していることを確認し、Query キャッシュ境界条件も記録。
   - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を追加し、派生メトリクス（トピック数・プレビュー件数・平均スコア・最終更新・ユニーク投稿者・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` で新UIと集計値のテストを実施。
   - 2025年11月07日: `/trending` `/following` の手動 QA を実施し、`formatDistanceToNow` へのミリ秒入力・無限スクロール境界（空ページ/`hasNextPage=false`）・DM 未読バッジ連携を確認。`phase5_user_flow_summary.md` と `phase5_ci_path_audit.md` の参照リンクを更新し、Summary Panel の派生メトリクスが最新データと一致することを検証。
+  - 2025年11月08日: `trending_metrics_job` を AppState 起動時に 5 分間隔で実行するループとして組み込み、`TopicService::list_trending_topics` / `post_handler::list_trending_posts` が `topic_metrics` の最新ウィンドウ (`window_end`) を `generated_at` として返却するようリファクタ。`useTrendingFeeds` から取得する `generatedAt` が Summary Panel と Docker `trending-feed` シナリオで一致することを `scripts/test-docker.sh ts --scenario trending-feed --no-build` と `pnpm vitest routes/trending.test.tsx routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` で確認済み。
+  - 2025年11月08日: `prefetchTrendingCategory` / `prefetchFollowingCategory` の Query Key（`['trending','topics',limit]`, `['trending','posts',{topicIds,perTopic}]`, `['followingFeed',{limit,includeReactions}]`）と `staleTime/refetchInterval` を本節と `phase5_ci_path_audit.md` に明示し、Sidebar ホバー時の事前取得条件をドキュメント化。
 - **未実装（2025年11月07日 要件定義完了）**
   1. Docker シナリオ `trending-feed`: `scripts/test-docker.{sh,ps1}` に `--scenario/-Scenario` オプションを追加し、`ts` コマンド経由で `pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` を実行。フィクスチャは `kukuri-tauri/tests/fixtures/trending/default.json` を既定とし、`VITE_TRENDING_FIXTURE_PATH` で差し替え。Nightly ワークフローに「Trending Feed (Docker)」ジョブを追加し、成果物 `test-results/trending-feed/latest.log` をアップロードする。
-  2. 集計ジョブ `trending_metrics_job`: `docs/03_implementation/trending_metrics_job.md` のドラフトに沿って、24h/6h ウィンドウ集計・バックフィル・失敗時リトライ・Prometheus エクスポート・Runbook 更新を実装。完了後は Summary / CI パス監査の backlog から除外する。
+  2. ~~集計ジョブ `trending_metrics_job`: `docs/03_implementation/trending_metrics_job.md` のドラフトに沿って、24h/6h ウィンドウ集計・バックフィル・失敗時リトライ・Prometheus エクスポート・Runbook 更新を実装。完了後は Summary / CI パス監査の backlog から除外する。~~  
+     → 2025年11月08日完了。`topic_metrics` の TTL 48h / ScoreWeights (0.6/0.3/0.1) を `app.conf` から読み込み、`TrendingMetricsJob` を 5 分間隔で常駐実行。CI（`nightly.yml` `Trending Feed (Docker)`）でも `generated_at` と Summary Panel の件数が一致することを確認。
 - **データ要件（2025年11月06日更新）**
   - `list_trending_topics` は `TopicService::list_trending_topics`（`topic_service.rs`）が `topics` テーブルの `member_count` と `post_count` を基に `trending_score = post_count * 0.6 + member_count * 0.4` を計算し、`TrendingTopicDto { topic_id, name, description, member_count, post_count, trending_score, rank, score_change }` を `limit` 件返却する。UI 側は `limit=10` をデフォルトとし、`staleTime=60秒` / `refetchInterval=120秒` でキャッシュするため、レスポンスの `generated_at` は **ミリ秒エポック**（`topic_handler.rs` で `Utc::now().timestamp_millis()` を返却済み）となる。フォローアップでは集計ジョブ導入後の値の安定性を監視する。
   - `list_trending_posts` は `ListTrendingPostsRequest { topic_ids, per_topic }` を受け取り、`per_topic` を `1..=20` にクランプ（デフォルト 3）。`TrendingTopicPostsResponse` には `topic_id`・`topic_name`・`relative_rank` と `PostResponse` 配列（`id`/`content`/`author_pubkey`/`author_npub`/`topic_id`/`created_at`(秒)/`likes`/`boosts`/`replies`/`is_synced`）が含まれる。フロントは `mapPostResponseToDomain` で `created_at` を秒→`Date` に変換しつつ Markdown を表示する。
@@ -393,6 +396,7 @@
 
 ### 5.8 ユーザー検索導線改善計画（2025年11月04日追加）
 - **目的**: `/search` (users) タブで安定した検索体験（ページネーション・エラー復旧・レート制御）を提供し、フォロー導線とプロフィール遷移を促進する。
+- **2025年11月09日更新**: `useUserSearchQuery`（デバウンス + Infinite Query）と `SearchErrorState`、バックエンド `UserSearchService` を実装し、DM Inbox の候補検索や `UserSearchResults` から同一 API を再利用。`pnpm vitest src/tests/unit/hooks/useUserSearchQuery.test.tsx` / `pnpm vitest src/tests/unit/components/search/UserSearchResults.test.tsx` / `cargo test user_search_service` でカバレッジ確認済み。
 - **UI 実装案**
   - 検索入力は `query.trim().length >= 2` を必須条件とし、それ未満の場合はリクエストを発行せず空状態カードを表示。「2文字以上入力してください」とガイダンスを提示。
   - `UserSearchResults` を `useInfiniteQuery` に切り替え、カーソルによる追加取得・`Load more` ボタン・`IntersectionObserver` を併用。`keepPreviousData` を有効化し、再検索時にフラッシュを抑制。
@@ -413,7 +417,7 @@
     - `allow_incomplete=true` の場合はキャッシュヒットのみを返却しつつ `has_more=false` を設定。Nostr リレーへ接続不可でも UX を保つ。
   - レートリミットはユーザー単位で 10 秒間に 30 リクエストまで。超過時は `AppError::RateLimited { retry_after_seconds }` を返し、UI がカウントダウンを表示できるようにする。
 - **エラーハンドリング**
-  - `errorHandler` に `UserSearch.fetch_failed`, `UserSearch.invalid_query`, `UserSearch.rate_limited` を追加（詳細は `docs/03_implementation/error_handling_guidelines.md`）。
+  - `errorHandler` に `UserSearch.fetch_failed` / `UserSearch.invalid_query` / `UserSearch.rate_limited` / `UserSearch.follow_failed` / `UserSearch.unfollow_failed` を追加（詳細は `docs/03_implementation/error_handling_guidelines.md`）。
   - `SearchErrorState` は `invalid_query` の場合に入力欄へ警告スタイルを適用し、レートリミットの場合は再試行ボタンを無効化してクールダウンタイマーを表示。
   - バックエンドは `AppError::RateLimited` を 429 としてラップし、`retry_after_seconds` の値をレスポンス JSON に含める。
 - **テスト計画**
@@ -480,6 +484,7 @@
   - 競合カードをクリックすると `AlertDialog` で `resolveConflict('local'|'remote'|'merge')` を選択でき、`selectedConflict` をローカルステートで保持する。`SyncConflict` の `localAction.createdAt` を `toLocaleString('ja-JP')` で表示。
   - `PendingActions` が 0 件でもアイコンとテキストで「同期済み」を表示し、バッジは描画しない。`pendingActionsCount > 0` の場合のみ `Badge` に件数を表示。
   - 2025年11月07日: `get_cache_status` の結果を 60 秒間隔（＋ `pendingActions` 変化時）で取得し、キャッシュ合計/ステール件数と `cache_types` をカードで表示。ステールなタイプには「再送キュー」ボタンを表示し、押下時は `add_to_sync_queue` で `action_type='manual_sync_refresh'`・`payload={ cacheType, source: 'sync_status_indicator', requestedAt }` を登録する。`Refresh` ボタンで手動更新し、取得エラー (`cacheStatusError`) は赤字で表示する。
+  - 2025年11月09日: `cache_types.metadata` を UI で整形し、対象キャッシュ/最終要求者/要求時刻/キュー ID/発行元をカード内に表示。`OfflineIndicator` のバナー/ツールチップ文言も SyncStatusIndicator への誘導に合わせて更新し、`SyncStatusIndicator.test.tsx` と `OfflineIndicator.test.tsx` でメタデータ表示と CTA を検証。
 - **同期エンジン / ストア連携**
   - `useSyncManager`（`src/hooks/useSyncManager.ts`）が `syncEngine.performDifferentialSync` を呼び出し、`SyncResult` を解析して `setSyncError`・`clearSyncError`・`syncPendingActions`（`useOfflineStore`）を更新。オンライン復帰後 2 秒で自動同期、さらに 5 分間隔の定期同期を行う。
   - `persistSyncStatuses` は同期結果ごとに `offlineApi.updateSyncStatus(entityType, entityId, status)` を実行し、`fully_synced` / `failed` / `conflict` を Tauri DB に記録。`extractEntityContext` は `OfflineActionType` から `entityType` / `entityId` を推定し、未定義の場合は JSON payload から拾う。
@@ -489,13 +494,14 @@
 - **バックエンド / コマンド**
   - `offlineApi.saveOfflineAction` / `.syncOfflineActions` / `.getOfflineActions` / `.cleanupExpiredCache` / `.saveOptimisticUpdate` / `.confirmOptimisticUpdate` といった Tauri コマンドを `offlineStore` が直接利用。`saveOfflineAction` 成功時は `OfflineActionType` に応じて `OfflineAction` を `pendingActions` へ登録し、オンラインなら即座に `syncPendingActions` を再実行する。
   - `update_cache_metadata` と `update_sync_status` は 2025年11月06日に導入済みで、`SyncStatusIndicator` のポップオーバー表示とバックエンド統計を一致させるための前提 API。2025年11月07日: `get_cache_status` を `useSyncManager.refreshCacheStatus` から 60 秒間隔＋手動同期後に呼び出し、`cacheStatus` state として UI へ供給。`add_to_sync_queue` は「再送キュー」ボタン経由で `manual_sync_refresh` アクションを生成し、バックエンドの `sync_queue` に JSON payload（`cacheType`/`requestedAt`/`source`/`userPubkey`）を保存する。
-  - 今後は `cache_types.metadata` の詳細（失敗理由・最終同期アカウント）を API 側で拡張し、UI へ付加情報を表示する。キュー投入後の進捗を `sync_queue` テーブルと連携し、`SyncStatusIndicator` でステータスをフィードバックする導線を backlog に残す。
+  - 2025年11月09日: `offline_handler.add_to_sync_queue` が `record_sync_queue_metadata` を通じて `cache_metadata` に `cacheType` / `requestedAt` / `requestedBy` / `source` / `queueItemId` を 30 分 TTL で保存するよう更新。Rust 単体テスト `offline_handler::tests::add_to_sync_queue_records_metadata_entry` で永続化を保証し、`cache_status` からメタデータを復元できるようになった。
+  - 今後は `cache_types.metadata` に失敗理由・最終同期アカウント・再送結果（成功/失敗/実行中）を含め、`sync_queue` テーブルに保存された各アイテムの消化状況を UI へ反映する。Queue ID から該当レコードを開く導線と、`SyncStatusIndicator` での結果フィードバックを backlog に残す。
 - **ギャップ / 今後の導線強化**
-  - `SyncStatusIndicator` と `OfflineIndicator` が別コンポーネントのため、画面右下バナーとの重複表示がある。Phase 5 では `OfflineIndicator` を簡易版（接続状態と件数のみ）に絞り、詳細は `SyncStatusIndicator` へ誘導する計画を追加（`tauri_app_implementation_plan.md` にフォローアップを記録予定）。
+  - `SyncStatusIndicator` と `OfflineIndicator` が別コンポーネントのため、画面右下バナーとの重複表示がある。2025年11月09日: OfflineIndicator の文言を SyncStatusIndicator へ誘導する CTA に変更済みだが、最終的には OfflineIndicator を簡易版（接続状態と件数）のみに絞り、詳細表示はヘッダー側へ統合する計画（`tauri_app_implementation_plan.md` で追跡）。
   - 競合解決ダイアログは `merge` オプションこそ UI に出ているが、`syncEngine['applyAction']` へ渡す `mergedData` を UI 側で生成していないため、実際には `local` / `remote` の 2 択となっている。Conflict preview へ差分表示・マージ入力を追加する必要がある。
   - `errorHandler` は `useSyncManager` / `offlineStore` から `log` / `info` / `warn` を呼び出しているが、UI 側でのユーザー向け文言は `SyncStatusIndicator` のポップオーバーに限定されている。`error_handling_guidelines.md` へ `SyncStatus.*` キーを追加し、トースト文言とメタデータを整理する。
 - **テスト計画**
-  - 既存: `src/tests/unit/components/SyncStatusIndicator.test.tsx` で `pendingActionsCount`・競合ボタン表示・手動同期ボタン活性・最終同期時刻フォーマットに加え、2025年11月07日からキャッシュステータス表示/更新ボタン/再送キュー操作をカバー。`src/tests/unit/hooks/useSyncManager.test.tsx` も `triggerManualSync` ガード・`persistSyncStatuses`・競合検出に加え、`get_cache_status` の取得タイミングと `enqueueSyncRequest` による `add_to_sync_queue` 呼び出しを検証。`src/tests/unit/stores/offlineStore.test.ts` は `refreshCacheMetadata` / `saveOfflineAction` / `syncPendingActions` の副作用をテスト。
+  - 既存: `src/tests/unit/components/SyncStatusIndicator.test.tsx` で `pendingActionsCount`・競合ボタン表示・手動同期ボタン活性・最終同期時刻フォーマットに加え、2025年11月07日からキャッシュステータス表示/更新ボタン/再送キュー操作をカバー。2025年11月09日: 同テストに `cache_types.metadata` の表示（要求者/要求時刻/Queue ID/発行元）を追加し、`src/tests/unit/components/OfflineIndicator.test.tsx` でヘッダーナビへの誘導文言を検証。`src/tests/unit/hooks/useSyncManager.test.tsx` は `triggerManualSync` ガード・`persistSyncStatuses`・競合検出・`enqueueSyncRequest` 呼び出しを検証し、`src/tests/unit/stores/offlineStore.test.ts` は `refreshCacheMetadata` / `saveOfflineAction` / `syncPendingActions` の副作用をテスト。
   - 追加予定: (1) `useSyncManager` の 5 分タイマー／オンライン復帰 2 秒同期のフェイクタイマー検証、(2) `offlineStore` の `offline://reindex_complete` リスナー E2E（Vitest の `vi.mock('@tauri-apps/api/event')` によるイベントエミュレーション）、(3) Docker シナリオ `offline-sync` を `docker-compose.test.yml` へ追加し、`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx` を Linux/Windows で反復実行。
   - CI: `phase5_ci_path_audit.md` に `SyncStatusIndicator.ui` / `useSyncManager.logic` / `offlineStore.cache-metadata` のパスを追加し、Nightly でのカバレッジ可視化を行う。
 
@@ -503,13 +509,13 @@
 - **現状**
   - `src/components/layout/Header.tsx` に `DirectMessageInbox`（`src/components/directMessages/DirectMessageInbox.tsx`）を常時マウントし、メッセージアイコンは既存会話（`activeConversationNpub` → `latestConversationNpub`）を優先して開き、それ以外の場合は Inbox ダイアログを開く。隣に追加した `Plus` ボタン（`data-testid="open-dm-inbox-button"`）から常に Inbox を開けるため、ヘッダー単体で新規 DM を開始できる。
   - `DirectMessageInbox` は会話一覧（`conversations` の末尾メッセージと未読件数をソート）と新規宛先入力（npub / ユーザーID）を提供し、入力バリデーション・最新会話ショートカットを備える。会話を選択すると `useDirectMessageStore.openDialog` を呼び出し、Inbox は自動的に閉じる。
+  - 2025年11月08日: Inbox の会話一覧を `@tanstack/react-virtual` で仮想化し、100件超でもスクロールが滑らかになるよう調整。宛先入力は `search_users` を 300ms デバウンスで呼び出し、候補カードからワンクリックで DM モーダルを開けるようになった。未読バッジ横に「既読にする」ボタンを追加し、`mark_direct_message_conversation_read` で多端末未読共有を即時反映する。
   - Summary Panel の DM カードは `SummaryMetricCard` の `action` プロップを利用して CTA ボタン（`DM Inbox を開く`）を表示し、`useDirectMessageStore.openInbox` を共有導線として呼び出す。ヘッダー/Trending/Following が同じ `DirectMessageInbox` を開くため、どの画面からでも追加クリック無しで DM モーダルへ遷移できるようになった。
   - `useDirectMessageBadge` は `useDirectMessageStore` の `unreadCounts` と `conversations` を集計し、最新メッセージと合計未読をヘッダーおよび Summary Panel へ供給する。`useDirectMessageEvents`（kind4 IPC）による `receiveIncomingMessage` 更新で数値がリアルタイムに反映される。
   - 2025年11月08日: `direct_message_service` に `list_direct_message_conversations` / `mark_conversation_as_read` を追加し、SQLite の `direct_message_conversations` テーブル（`last_message_id`・`last_message_created_at`・`last_read_at`）に会話メタデータを永続化。Tauri コマンド（`list_direct_message_conversations` / `mark_direct_message_conversation_read`）を実装し、ログイン直後に `useDirectMessageBootstrap` で Inbox をハイドレートする。`DirectMessageDialog` は会話を開いた時点で最新メッセージ時刻を Tauri 側へ通知し、未読数が再計算されるようになった。
 - **ギャップ / 課題**
   - 会話一覧 API は直近 50 件をタイムスタンプ順に返す実装で、カーソルや検索、プロフィール情報の同梱が無い。大量会話時のページング・フィルタリング・ユーザー情報の解決を次フェーズで検討する。
-  - 宛先入力は npub/ID の手動入力のみで、ユーザー検索や候補補完が無い。`search_users` 連携や QR コード読み取りなどのフォローアップが必要。
-  - Inbox のリストは messages の最終メッセージを用いた簡易ソートのため、大量会話時の仮想スクロールやフィルタリングが未実装。未読カウンタは `mark_direct_message_conversation_read` で永続化できるようになったが、多端末間でのリアルタイム共有や未読 > 50 件時の補正ロジックは backlog。
+  - Inbox のリストは messages の最終メッセージを用いた簡易ソートのため、ページネーションや高度なフィルタリングは未実装。未読カウンタは `mark_direct_message_conversation_read` で永続化できるが、多端末間でのリアルタイム共有や未読 > 50 件時の補正ロジックは backlog。
 - **テスト / フォローアップ**
   - TypeScript: `Header.test.tsx` に Inbox CTA・未読バッジ・会話あり/なしの分岐を追加。`useDirectMessageBadge.test.tsx` を新設し、未読集計と最新メッセージ判定を検証。
   - TypeScript: `components/trending/TrendingSummaryPanel.test.tsx` / `components/following/FollowingSummaryPanel.test.tsx` を追加し、DM カードの Helper 表示と CTA で `openInbox` が呼ばれることを確認。`phase5_ci_path_audit.md` の test:unit 行へ追記し、Nightly Frontend Unit Tests で監視。
@@ -583,12 +589,12 @@
 
 | 項目 | 対象セクション | 完了条件 | 検証方法 | 備考 |
 | --- | --- | --- | --- | --- |
-| トレンド/フォロー Summary Panel | 1.2, 5.7 | `trending_metrics_job` が 24h 集計を行い、`generated_at`・トレンド/フォロー件数が Summary Panel / Docker シナリオで一致。`prefetchTrendingCategory` / `prefetchFollowingCategory` の query key がドキュメント化。 | `scripts/test-docker.sh ts --scenario trending-feed --no-build`, `routes/trending.test.tsx`, `routes/following.test.tsx`, `gh act workflow_dispatch nightly.yml -j trending-feed` | `tasks/status/in_progress.md` (GitHub Actions) に紐づけ。 |
-| DirectMessageInbox 可搬性 | 1.2 (ヘッダー/サマリ), 5.4 | 会話リストの仮想スクロール・候補補完・検索 UI ・多端末既読共有が実装され、`Header.test.tsx` / `DirectMessageInbox.test.tsx` / `useDirectMessageBadge.test.tsx` でカバレッジ。 | `pnpm vitest src/tests/unit/components/header/Header.test.tsx`, `pnpm vitest ...DirectMessageInbox.test.tsx`, `pnpm vitest ...useDirectMessageBadge.test.tsx` | `direct_message_conversations` テーブル導入済。 |
-| プロフィール/設定モーダル統合 | 1.1, 5.1, 6 | `ProfileForm` を Welcome/Settings で共通化し、プライバシー設定が `usePrivacySettingsStore` + `update_nostr_metadata` で永続化。設定モーダルからの保存が `authStore.updateUser` に即時反映。 | `pnpm vitest src/tests/unit/routes/settings.test.tsx`, `pnpm vitest src/tests/unit/components/profile/ProfileForm.test.tsx` | Stage1完了/Stage2実装中。 |
-| ユーザー検索UI/API | 1.4, 5.4 | `search_users` API が cursor/sort/allow_incomplete/429 を返し、UI が idle→typing→ready→loading→success/rateLimited/error の状態を持つ。 | `pnpm vitest src/tests/unit/components/search/UserSearchResults.test.tsx`, 新規 `pnpm vitest src/tests/unit/hooks/useUserSearchQuery.test.ts`, `cargo test user_search_service` | `errorHandler` に `UserSearch.*` キー追加。 |
-| Offline sync_queue | 1.2 (SyncStatusIndicator), 5.5 | `sync_queue`/`offline_actions`/`cache_metadata` migration、`sync_offline_actions` API、`useSyncManager` conflict banner、Service Worker 背景同期が実装。 | `cargo test` (`OfflineService`), `pnpm vitest src/tests/unit/stores/offlineStore.test.ts`, `pnpm vitest src/tests/unit/components/system/SyncStatusIndicator.test.tsx` | `tauri_app_implementation_plan.md` Phase4 と同期。 |
-| Mainline DHT Runbook | 1.2 (Relay/P2P Status), 5.6 | `docs/03_implementation/p2p_mainline_runbook.md` Chapter9 完成、UI の Relay/P2P カードに Runbook へのリンクを表示、`kukuri-cli` ブートストラップリストの動的更新 PoC 完了。 | `cargo test --package kukuri-cli -- test_bootstrap_runbook`（新規）, `pnpm vitest src/tests/unit/components/sidebar/RelayStatusCard.test.tsx` | `phase5_dependency_inventory_template.md` P2PService 行と連携。 |
+| トレンド/フォロー Summary Panel | 1.2, 5.7 | `trending_metrics_job` が 24h 集計を行い、`generated_at`・トレンド/フォロー件数が Summary Panel / Docker シナリオで一致。`prefetchTrendingCategory` / `prefetchFollowingCategory` の query key がドキュメント化。 | `scripts/test-docker.sh ts --scenario trending-feed --no-build`, `routes/trending.test.tsx`, `routes/following.test.tsx`, `gh act workflow_dispatch nightly.yml -j trending-feed` | ✅ 2025年11月08日: Job 常駐化 + Query Key 記載 + Docker/Nightly 緑化を確認済み。 |
+| DirectMessageInbox 可搬性 | 1.2 (ヘッダー/サマリ), 5.4 | 会話リストの仮想スクロール・候補補完・検索 UI ・多端末既読共有が実装され、`Header.test.tsx` / `DirectMessageInbox.test.tsx` / `useDirectMessageBadge.test.tsx` でカバレッジ。 | `pnpm vitest src/tests/unit/components/header/Header.test.tsx`, `pnpm vitest ...DirectMessageInbox.test.tsx`, `pnpm vitest ...useDirectMessageBadge.test.tsx` | ✅ 2025年11月09日: DM ダイアログのフォーカス/選択状態と `@tanstack/react-virtual` のリスト最適化を反映済み。`direct_message_conversations` テーブル導入済。 |
+| プロフィール/設定モーダル統合 | 1.1, 5.1, 6 | `ProfileForm` を Welcome/Settings で共通化し、プライバシー設定が `usePrivacySettingsStore` + `update_nostr_metadata` で永続化。設定モーダルからの保存が `authStore.updateUser` に即時反映。 | `pnpm vitest src/tests/unit/routes/settings.test.tsx`, `pnpm vitest src/tests/unit/components/profile/ProfileForm.test.tsx` | ✅ 2025年11月09日: `update_privacy_settings` コマンド/DB マイグレーションと `ProfileSetup`/`ProfileEditDialog`/`SettingsPage` テストを更新し、Stage2（プライバシー永続化）完了。 |
+| ユーザー検索UI/API | 1.4, 5.4 | `search_users` API が cursor/sort/allow_incomplete/429 を返し、UI が idle→typing→ready→loading→success/rateLimited/error の状態を持つ。 | `pnpm vitest src/tests/unit/components/search/UserSearchResults.test.tsx`, 新規 `pnpm vitest src/tests/unit/hooks/useUserSearchQuery.test.ts`, `cargo test user_search_service` | ✅ 2025年11月09日: `errorHandler` に `UserSearch.*` 系キーを追加し、DM Inbox の候補検索でも同 API を再利用。 |
+| Offline sync_queue | 1.2 (SyncStatusIndicator), 5.5 | `sync_queue`/`offline_actions`/`cache_metadata` migration、`sync_offline_actions` API、`useSyncManager` 競合バナーに加え、`cache_types.metadata` で要求者/要求時刻/Queue ID/発行元を表示し、`OfflineIndicator` からヘッダーの SyncStatusIndicator へ誘導できる。 | `pnpm vitest src/tests/unit/stores/offlineStore.test.ts`, `pnpm vitest src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`, `cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry` | Stage2（メタデータ表示まで）完了。Docker (`./scripts/test-docker.ps1 rust`) で `offline_handler` 系統を含む Rust テストを再実行済み。Stage3: 進捗フィードバック UI を `tauri_app_implementation_plan.md` Phase4 で継続。 |
+| Mainline DHT Runbook | 1.2 (Relay/P2P Status), 5.6 | `docs/03_implementation/p2p_mainline_runbook.md` Chapter9/10 に P2P ステータスと `kukuri-cli` ブートストラップ手順/Settings 連携を記載し、Sidebar `RelayStatus` カードから Runbook を開ける。`KUKURI_BOOTSTRAP_PEERS` の動的更新 PoC（UI/環境変数）を Runbook と `scripts/test-docker.*` に反映。 | `cargo test --package kukuri-cli -- test_bootstrap_runbook`, `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` | ✅ 2025年11月09日: RelayStatus カードから Runbook を起動し、CLI 手順と Windows/Docker での検証フローを Chapter10 に追記。`phase5_dependency_inventory_template.md` P2PService 行とも整合。 |
 
 
 

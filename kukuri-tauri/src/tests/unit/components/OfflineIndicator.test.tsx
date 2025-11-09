@@ -101,15 +101,22 @@ describe('OfflineIndicator', () => {
     });
 
     render(<OfflineIndicator />);
-    expect(screen.getAllByText('3')[0]).toBeInTheDocument();
+
+    const trigger = screen.getByRole('button');
+    act(() => {
+      trigger.focus();
+    });
+
+    const messages = screen.getAllByText('未同期アクション: 3件');
+    expect(messages.length).toBeGreaterThan(0);
   });
 
   it('最終同期時刻が表示される', () => {
     const lastSyncedAt = Date.now() - 300000; // 5分前
     mockUseOfflineStore.mockReturnValue({
-      isOnline: false,
+      isOnline: true,
       lastSyncedAt,
-      pendingActions: [],
+      pendingActions: [{ localId: '1', action: {}, createdAt: lastSyncedAt }],
       isSyncing: false,
     });
 
@@ -145,7 +152,32 @@ describe('OfflineIndicator', () => {
     });
   });
 
-  it('オフライン時に未同期アクション数がバッジで表示される', () => {
+  it('SyncStatusIndicator への導線メッセージを表示する', async () => {
+    mockUseOfflineStore.mockReturnValue({
+      isOnline: false,
+      lastSyncedAt: Date.now(),
+      pendingActions: [{ localId: '1', action: {}, createdAt: Date.now() }],
+      isSyncing: false,
+    });
+
+    await act(async () => {
+      render(<OfflineIndicator />);
+    });
+
+    const trigger = screen.getByRole('button');
+    await act(async () => {
+      trigger.focus();
+    });
+
+    await waitFor(() => {
+      const guidance = screen.getAllByText(
+        '詳細なステータスはヘッダー右上の SyncStatusIndicator から確認できます。',
+      );
+      expect(guidance.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('オフライン時に未同期アクション数が案内される', async () => {
     mockUseOfflineStore.mockReturnValue({
       isOnline: false,
       lastSyncedAt: Date.now(),
@@ -157,7 +189,13 @@ describe('OfflineIndicator', () => {
     });
 
     render(<OfflineIndicator />);
-    expect(screen.getAllByText('2')[0]).toBeInTheDocument();
+
+    const trigger = screen.getByRole('button');
+    await act(async () => {
+      trigger.focus();
+    });
+
+    expect(screen.getAllByText('未同期アクション: 2件').length).toBeGreaterThan(0);
   });
 
   it.skip('オンライン復帰後5秒でバナーが自動的に非表示になる', async () => {

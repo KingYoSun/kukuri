@@ -6,6 +6,7 @@ import { initializeNostr, disconnectNostr, getRelayStatus, type RelayInfo } from
 import { SecureStorageApi, type AccountMetadata } from '@/lib/api/secureStorage';
 import { errorHandler } from '@/lib/errorHandler';
 import { useTopicStore } from './topicStore';
+import { usePrivacySettingsStore } from './privacySettingsStore';
 import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
@@ -20,6 +21,10 @@ const nextRelayStatusBackoff = (current: number) => {
     }
   }
   return RELAY_STATUS_BACKOFF_SEQUENCE[RELAY_STATUS_BACKOFF_SEQUENCE.length - 1];
+};
+
+const hydratePrivacyFromUser = (user: User | null) => {
+  usePrivacySettingsStore.getState().hydrateFromUser(user);
 };
 
 interface AuthStore extends AuthState {
@@ -98,6 +103,7 @@ export const useAuthStore = create<AuthStore>()(
           currentUser: user,
           privateKey,
         });
+        hydratePrivacyFromUser(user);
         try {
           await initializeNostr();
           await fetchAndApplyAvatar(user.npub);
@@ -120,6 +126,8 @@ export const useAuthStore = create<AuthStore>()(
             about: '',
             picture: '',
             nip05: '',
+            publicProfile: true,
+            showOnlineStatus: false,
             avatar: null,
           };
 
@@ -138,6 +146,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: nsec,
           });
+          hydratePrivacyFromUser(user);
 
           // Nostrクライアントを初期化
           await initializeNostr();
@@ -186,6 +195,8 @@ export const useAuthStore = create<AuthStore>()(
             about: '',
             picture: '',
             nip05: '',
+            publicProfile: true,
+            showOnlineStatus: false,
             avatar: null,
           };
 
@@ -209,6 +220,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: response.nsec,
           });
+          hydratePrivacyFromUser(user);
 
           // Nostrクライアントを初期化
           await initializeNostr();
@@ -275,14 +287,17 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       updateUser: (userUpdate: Partial<User>) =>
-        set((state) => ({
-          currentUser: state.currentUser
-            ? {
-                ...state.currentUser,
-                ...userUpdate,
-              }
-            : null,
-        })),
+        set((state) => {
+          if (!state.currentUser) {
+            return { currentUser: null };
+          }
+          const updatedUser = {
+            ...state.currentUser,
+            ...userUpdate,
+          };
+          hydratePrivacyFromUser(updatedUser);
+          return { currentUser: updatedUser };
+        }),
 
       updateRelayStatus: async () => {
         if (get().isFetchingRelayStatus) {
@@ -340,6 +355,14 @@ export const useAuthStore = create<AuthStore>()(
               'AuthStore.initialize',
             );
             // 自動ログイン
+            const publicProfile =
+              typeof currentAccount.metadata?.public_profile === 'boolean'
+                ? currentAccount.metadata.public_profile
+                : true;
+            const showOnlineStatus =
+              typeof currentAccount.metadata?.show_online_status === 'boolean'
+                ? currentAccount.metadata.show_online_status
+                : false;
             const user: User = {
               id: currentAccount.pubkey,
               pubkey: currentAccount.pubkey,
@@ -350,6 +373,8 @@ export const useAuthStore = create<AuthStore>()(
               picture: currentAccount.metadata.picture || '',
               nip05: '',
               avatar: null,
+              publicProfile,
+              showOnlineStatus,
             };
 
             set({
@@ -425,6 +450,14 @@ export const useAuthStore = create<AuthStore>()(
             picture: account.picture || '',
             nip05: '',
             avatar: null,
+            publicProfile:
+              typeof account.public_profile === 'boolean'
+                ? account.public_profile
+                : true,
+            showOnlineStatus:
+              typeof account.show_online_status === 'boolean'
+                ? account.show_online_status
+                : false,
           };
 
           set({

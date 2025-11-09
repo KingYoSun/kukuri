@@ -29,6 +29,15 @@ pub struct NostrMetadataDto {
     pub lud16: Option<String>,
     pub website: Option<String>,
     pub relays: Option<Vec<Nip65RelayDto>>,
+    #[serde(rename = "kukuri_privacy")]
+    pub privacy: Option<PrivacyPreferencesDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PrivacyPreferencesDto {
+    pub public_profile: Option<bool>,
+    pub show_online_status: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

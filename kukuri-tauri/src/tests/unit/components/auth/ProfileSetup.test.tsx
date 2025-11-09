@@ -210,25 +210,33 @@ describe('ProfileSetup', () => {
 
     // Nostrメタデータ更新が呼ばれる
     await waitFor(() => {
-      expect(updateNostrMetadata).toHaveBeenCalledWith({
-        name: 'テストユーザー',
-        display_name: '@testuser',
-        about: 'テストユーザーです',
-        picture: 'https://example.com/test.jpg',
-        nip05: 'test@example.com',
-      });
+      expect(updateNostrMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'テストユーザー',
+          display_name: '@testuser',
+          about: 'テストユーザーです',
+          picture: 'https://example.com/test.jpg',
+          nip05: 'test@example.com',
+          kukuri_privacy: expect.objectContaining({
+            public_profile: true,
+            show_online_status: false,
+          }),
+        }),
+      );
     });
 
     // ローカルストア更新が呼ばれる
     await waitFor(() => {
-      expect(mockUpdateUser).toHaveBeenCalledWith({
-        name: 'テストユーザー',
-        displayName: '@testuser',
-        about: 'テストユーザーです',
-        picture: 'https://example.com/test.jpg',
-        nip05: 'test@example.com',
-        avatar: null,
-      });
+      expect(mockUpdateUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'テストユーザー',
+          displayName: '@testuser',
+          about: 'テストユーザーです',
+          picture: 'https://example.com/test.jpg',
+          nip05: 'test@example.com',
+          avatar: null,
+        }),
+      );
     });
 
     // 成功メッセージ
@@ -300,6 +308,10 @@ describe('ProfileSetup', () => {
       expect(updateNostrMetadata).toHaveBeenCalledWith(
         expect.objectContaining({
           picture: expectedNostrUri,
+          kukuri_privacy: expect.objectContaining({
+            public_profile: true,
+            show_online_status: false,
+          }),
         }),
       );
     });
@@ -336,6 +348,10 @@ describe('ProfileSetup', () => {
         expect.objectContaining({
           name: 'テストユーザー',
           display_name: 'テストユーザー', // 名前と同じ
+          kukuri_privacy: expect.objectContaining({
+            public_profile: true,
+            show_online_status: false,
+          }),
         }),
       );
     });

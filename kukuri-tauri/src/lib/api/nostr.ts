@@ -10,6 +10,10 @@ export interface NostrMetadata {
   nip05?: string;
   lud16?: string;
   website?: string;
+  kukuri_privacy?: {
+    public_profile: boolean;
+    show_online_status: boolean;
+  };
 }
 
 export interface RelayInfo {

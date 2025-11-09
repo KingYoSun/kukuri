@@ -102,6 +102,7 @@ impl EventHandler {
             lud16: request.metadata.lud16,
             website: request.metadata.website,
             relays: request.metadata.relays,
+            privacy: request.metadata.privacy,
         };
 
         let event_id = self.event_service.update_metadata(metadata).await?;

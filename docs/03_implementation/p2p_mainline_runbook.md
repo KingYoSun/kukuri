@@ -1,5 +1,5 @@
 ﻿# P2P Mainline Runbook
-?????: 2025?10?30?
+最終更新: 2025年11月09日
 
 ## 1. 目的
 - Mainline DHT を有効にした P2P ネットワークの運用手順と統合テスト実行フローを共有する。
@@ -145,3 +145,26 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   2. `cargo test --package kukuri-tauri --lib application::services::p2p_service::tests`（または `cargo test`）— `connection_status` / `peers` 拡張後のフォールバックシナリオ（メトリクス欠落 → peers 参照）を確認。
   3. 手動動作確認: `pnpm tauri dev` で起動し、サイドバー `P2P ネットワーク` カードの `再取得` ボタンが `isRefreshingStatus` 中に `更新中…` へ変化し、最終更新/次回再取得表示が更新されることを確認。
 - 本 Runbook 内の監視手順（メトリクスダッシュボード、手動 `connect_to_peer`）を実施する際は、`connection_status` が `disconnected`→`connected` に遷移するタイミング、`peers` セクションに Node ID が表示されることを確認する。UI の詳細は `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` 5.5 節を参照。
+
+## 10. ブートストラップ CLI / UI 連携（2025年11月09日追加）
+
+### 10.1 `kukuri-cli` ブートストラップノード手順
+1. ビルド: `cd kukuri-cli && cargo build --release`。Docker を使う場合は `docker compose up -d bootstrap-node-1 bootstrap-node-2` もしくは `./scripts/start-bootstrap-nodes.ps1 -Mode bootstrap` を実行する。
+2. 単体ノード起動サンプル:
+   ```bash
+   RUST_LOG=info ./target/release/kukuri-cli bootstrap \
+     --bind 0.0.0.0:11223 \
+     --peers k51qzi5uqu5dl@127.0.0.1:44001,k51qzi5uqu5dn@127.0.0.1:44002
+   ```
+   - `--bind` で待受ポートを指定。`--peers` は既存ブートストラップノードの `node_id@host:port` 形式。
+   - 環境変数 `BIND_ADDRESS` / `LOG_LEVEL` / `JSON_LOGS` でも同値を指定できる。
+3. 起動ログには `Node ID:` が出力される。接続先クライアントは `KUKURI_BOOTSTRAP_PEERS="node_id@host:port,...`"` に追加し、`pnpm tauri dev` などアプリ起動前に環境変数を読み込む。Docker テスト (`./scripts/test-docker.sh --bootstrap <peers>`) でも同じ書式を利用する。
+4. ブートストラップノードのヘルスチェック:
+   - Bash: `./scripts/test-docker.sh p2p --bootstrap <node_id@host:port>` → 自動で `p2p-bootstrap` コンテナを起動し、正常終了後に停止。
+   - PowerShell: `./scripts/test-docker.ps1 rust -Bootstrap "<node_id@host:port>"`。
+5. CLI 実装の回帰テストは `cargo test --package kukuri-cli -- test_bootstrap_runbook` を新設。Runbook に従った設定値（bind/peers/env優先順位）が崩れていないかを CI で検証する。
+
+### 10.2 Settings / RelayStatus との連携
+- サイドバーの `RelayStatus` カードに `Runbook` リンクを追加し、本ドキュメント（GitHub: `docs/03_implementation/p2p_mainline_runbook.md`）を即座に開けるようにした。`再試行` ボタンはこれまで通り `useAuthStore.updateRelayStatus` を呼び出す。テスト: `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx`。
+- 設定画面 > ネットワーク > ブートストラップでは、現在の `KUKURI_BOOTSTRAP_PEERS` とソース（環境変数/アプリ設定/バンドルデフォルト）を表示。環境変数でロックされている場合は UI から編集できない旨を Runbook に追記。
+- ブートストラップリストを UI から更新した場合は `app.conf` に追記し、次回起動時に `ENABLE_P2P_INTEGRATION=1` で自動的に読み込む。CI では `scripts/test-docker.{sh,ps1}` が Runbook 記載の値を設定しているため、Runbook 更新後は必ずスクリプトに同じパラメータを反映する。

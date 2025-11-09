@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
+import { usePrivacySettingsStore } from '@/stores/privacySettingsStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
@@ -12,6 +13,7 @@ import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avata
 export function ProfileSetup() {
   const navigate = useNavigate();
   const { currentUser, updateUser } = useAuthStore();
+  const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
 
   const initialProfile: ProfileFormValues = {
@@ -59,6 +61,10 @@ export function ProfileSetup() {
         about: profile.about,
         picture: nostrPicture,
         nip05: profile.nip05,
+        kukuri_privacy: {
+          public_profile: publicProfile,
+          show_online_status: showOnlineStatus,
+        },
       });
 
       // ローカルストアを更新
@@ -69,6 +75,8 @@ export function ProfileSetup() {
         picture: updatedPicture,
         nip05: profile.nip05,
         avatar: updatedAvatar,
+        publicProfile,
+        showOnlineStatus,
       });
 
       toast.success('プロフィールを設定しました');

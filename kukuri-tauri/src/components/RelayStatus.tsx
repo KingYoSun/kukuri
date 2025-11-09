@@ -7,6 +7,9 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
+export const MAINLINE_RUNBOOK_URL =
+  'https://github.com/KingYoSun/kukuri/blob/main/docs/03_implementation/p2p_mainline_runbook.md';
+
 export function RelayStatus() {
   const {
     relayStatus,
@@ -81,8 +84,25 @@ export function RelayStatus() {
   return (
     <Card className="mb-4">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm">リレー接続状態</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm">リレー接続状態</CardTitle>
+            <Button
+              variant="link"
+              size="sm"
+              className="-ml-1 h-auto px-0 text-xs"
+              asChild
+            >
+              <a
+                href={MAINLINE_RUNBOOK_URL}
+                target="_blank"
+                rel="noreferrer"
+                data-testid="relay-runbook-link"
+              >
+                Runbook
+              </a>
+            </Button>
+          </div>
           <Button
             variant="outline"
             size="sm"

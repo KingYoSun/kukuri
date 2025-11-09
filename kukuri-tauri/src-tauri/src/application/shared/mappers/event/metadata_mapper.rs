@@ -1,4 +1,4 @@
-use crate::domain::entities::event_gateway::{ProfileMetadata, RelayEndpoint};
+use crate::domain::entities::event_gateway::{PrivacyPreferences, ProfileMetadata, RelayEndpoint};
 use crate::presentation::dto::event::{Nip65RelayDto, NostrMetadataDto};
 use crate::shared::{AppError, ValidationFailureKind};
 use nostr_sdk::JsonUtil;
@@ -7,6 +7,10 @@ use serde_json::{Map, Value};
 
 pub(crate) fn dto_to_profile_metadata(dto: NostrMetadataDto) -> Result<ProfileMetadata, AppError> {
     let relays = dto.relays.map(convert_relays).transpose()?;
+    let privacy = dto.privacy.map(|prefs| PrivacyPreferences {
+        public_profile: prefs.public_profile.unwrap_or(true),
+        show_online_status: prefs.show_online_status.unwrap_or(false),
+    });
 
     ProfileMetadata::new(
         dto.name,
@@ -18,6 +22,7 @@ pub(crate) fn dto_to_profile_metadata(dto: NostrMetadataDto) -> Result<ProfileMe
         dto.lud16,
         dto.website,
         relays,
+        privacy,
     )
     .map_err(|err| {
         AppError::validation(
@@ -75,6 +80,18 @@ pub(crate) fn profile_metadata_to_nostr(metadata: &ProfileMetadata) -> Result<Me
             .collect();
         map.insert("relays".to_string(), Value::Array(relay_values));
     }
+    if let Some(privacy) = metadata.privacy.as_ref() {
+        let mut prefs = Map::new();
+        prefs.insert(
+            "public_profile".to_string(),
+            Value::Bool(privacy.public_profile),
+        );
+        prefs.insert(
+            "show_online_status".to_string(),
+            Value::Bool(privacy.show_online_status),
+        );
+        map.insert("kukuri_privacy".to_string(), Value::Object(prefs));
+    }
 
     Metadata::from_json(Value::Object(map).to_string())
         .map_err(|err| AppError::NostrError(err.to_string()))
@@ -111,6 +128,7 @@ mod tests {
                 read: true,
                 write: false,
             }]),
+            privacy: None,
         };
 
         let metadata = dto_to_profile_metadata(dto).expect("metadata conversion");
@@ -136,6 +154,7 @@ mod tests {
             None,
             None,
             Some(vec![relay]),
+            None,
         )
         .expect("valid metadata");
 
@@ -151,5 +170,35 @@ mod tests {
         assert_eq!(entry.get("url").unwrap(), &json!("wss://relay.example"));
         assert_eq!(entry.get("read").unwrap(), &json!(true));
         assert_eq!(entry.get("write").unwrap(), &json!(false));
+    }
+
+    #[test]
+    fn profile_metadata_includes_privacy_settings_in_json() {
+        let metadata = ProfileMetadata::new(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(PrivacyPreferences {
+                public_profile: false,
+                show_online_status: true,
+            }),
+        )
+        .expect("valid metadata");
+
+        let nostr = profile_metadata_to_nostr(&metadata).expect("nostr metadata");
+        let json_value: serde_json::Value =
+            serde_json::from_str(&nostr.as_json()).expect("valid json");
+        let privacy = json_value
+            .get("kukuri_privacy")
+            .and_then(|value| value.as_object())
+            .expect("privacy object");
+        assert_eq!(privacy.get("public_profile").unwrap(), &json!(false));
+        assert_eq!(privacy.get("show_online_status").unwrap(), &json!(true));
     }
 }

@@ -26,6 +26,14 @@ describe('privacySettingsStore', () => {
     expect(usePrivacySettingsStore.getState().showOnlineStatus).toBe(true);
   });
 
+  it('hydrateFromUserでユーザー設定を反映できること', () => {
+    const { hydrateFromUser } = usePrivacySettingsStore.getState();
+    hydrateFromUser({ publicProfile: false, showOnlineStatus: true });
+    const state = usePrivacySettingsStore.getState();
+    expect(state.publicProfile).toBe(false);
+    expect(state.showOnlineStatus).toBe(true);
+  });
+
   it('resetで初期状態に戻せること', () => {
     const { setPublicProfile, setShowOnlineStatus, reset } = usePrivacySettingsStore.getState();
     setPublicProfile(false);

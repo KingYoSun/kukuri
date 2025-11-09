@@ -1,10 +1,12 @@
-import { useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import { Loader2, UserCheck, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
+
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserPlus, UserCheck } from 'lucide-react';
-import { Link } from '@tanstack/react-router';
 import type { Profile } from '@/stores';
 import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 import { TauriApi } from '@/lib/api/tauri';
@@ -12,7 +14,8 @@ import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
 import { useAuthStore } from '@/stores';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
-import { toast } from 'sonner';
+import { SearchErrorState } from '@/components/search/SearchErrorState';
+import { useUserSearchQuery } from '@/hooks/useUserSearchQuery';
 
 interface UserSearchResultsProps {
   query: string;
@@ -21,25 +24,23 @@ interface UserSearchResultsProps {
 export function UserSearchResults({ query }: UserSearchResultsProps) {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
-  const sanitizedQuery = query.trim();
 
-  const searchResults = useQuery<Profile[], Error, Profile[], readonly ['search-users', string]>({
-    queryKey: ['search-users', sanitizedQuery] as const,
-    enabled: sanitizedQuery.length > 0,
-    retry: false,
-    queryFn: async () => {
-      try {
-        const profiles = await TauriApi.searchUsers(sanitizedQuery, 24);
-        return profiles.map(mapUserProfileToUser);
-      } catch (error) {
-        errorHandler.log('UserSearchResults.searchFailed', error, {
-          context: 'UserSearchResults.searchResults',
-          metadata: { query: sanitizedQuery },
-        });
-        toast.error('ユーザー検索に失敗しました');
-        throw error;
-      }
-    },
+  const {
+    status,
+    sanitizedQuery,
+    results,
+    totalCount,
+    tookMs,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+    errorKey,
+    retryAfterSeconds,
+    onRetry,
+  } = useUserSearchQuery(query, {
+    viewerNpub: currentUser?.npub ?? null,
+    pageSize: 24,
   });
 
   const followingQuery = useQuery<
@@ -52,28 +53,25 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
     enabled: Boolean(currentUser),
     retry: false,
     queryFn: async () => {
-      try {
-        if (!currentUser) {
-          return [] as Profile[];
-        }
-        const page = await TauriApi.getFollowing({
-          npub: currentUser.npub,
-        });
-        return page.items.map(mapUserProfileToUser);
-      } catch (error) {
-        errorHandler.log('UserSearchResults.followingFetchFailed', error, {
-          context: 'UserSearchResults.followingQuery',
-        });
-        toast.error('フォロー中ユーザーの取得に失敗しました');
-        throw error;
+      if (!currentUser) {
+        return [];
       }
+      const page = await TauriApi.getFollowing({
+        npub: currentUser.npub,
+      });
+      return page.items.map(mapUserProfileToUser);
     },
   });
 
+  const followingSet = useMemo(
+    () => new Set(followingQuery.data?.map((profile) => profile.npub)),
+    [followingQuery.data],
+  );
+
   const followMutation = useMutation<void, unknown, Profile>({
-    mutationFn: async (target: Profile) => {
+    mutationFn: async (target) => {
       if (!currentUser) {
-        throw new Error('ログインが必要です');
+        throw new Error('ログインしてから操作してください');
       }
       await TauriApi.followUser(currentUser.npub, target.npub);
       if (target.pubkey) {
@@ -93,22 +91,22 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
       toast.success(`${target.displayName || target.npub} をフォローしました`);
     },
     onError: (error, target) => {
-      if (error instanceof Error && error.message === 'ログインが必要です') {
-        toast.error('フォローするにはログインが必要です');
-        return;
-      }
-      errorHandler.log('UserSearchResults.followFailed', error, {
+      const message =
+        error instanceof Error && error.message === 'ログインしてから操作してください'
+          ? 'ログインが必要です'
+          : 'フォローに失敗しました';
+      toast.error(message);
+      errorHandler.log('UserSearch.follow_failed', error, {
         context: 'UserSearchResults.followMutation',
         metadata: { targetNpub: target.npub },
       });
-      toast.error('フォローに失敗しました');
     },
   });
 
   const unfollowMutation = useMutation<void, unknown, Profile>({
-    mutationFn: async (target: Profile) => {
+    mutationFn: async (target) => {
       if (!currentUser) {
-        throw new Error('ログインが必要です');
+        throw new Error('ログインしてから操作してください');
       }
       await TauriApi.unfollowUser(currentUser.npub, target.npub);
     },
@@ -120,94 +118,108 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
       toast.success(`${target.displayName || target.npub} のフォローを解除しました`);
     },
     onError: (error, target) => {
-      if (error instanceof Error && error.message === 'ログインが必要です') {
-        toast.error('フォロー解除するにはログインが必要です');
-        return;
-      }
-      errorHandler.log('UserSearchResults.unfollowFailed', error, {
+      const message =
+        error instanceof Error && error.message === 'ログインしてから操作してください'
+          ? 'ログインが必要です'
+          : 'フォロー解除に失敗しました';
+      toast.error(message);
+      errorHandler.log('UserSearch.unfollow_failed', error, {
         context: 'UserSearchResults.unfollowMutation',
         metadata: { targetNpub: target.npub },
       });
-      toast.error('フォロー解除に失敗しました');
     },
   });
 
-  const followingSet = useMemo(() => {
-    const list = followingQuery.data ?? [];
-    return new Set(list.map((user) => user.npub));
-  }, [followingQuery.data]);
+  const handleFollow = (target: Profile) => {
+    followMutation.mutate(target);
+  };
 
-  const handleFollow = useCallback(
-    (user: Profile) => {
-      followMutation.mutate(user);
-    },
-    [followMutation],
-  );
+  const handleUnfollow = (target: Profile) => {
+    unfollowMutation.mutate(target);
+  };
 
-  const handleUnfollow = useCallback(
-    (user: Profile) => {
-      unfollowMutation.mutate(user);
-    },
-    [unfollowMutation],
-  );
-
-  if (!sanitizedQuery) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        検索キーワードを入力してください
-      </div>
-    );
-  }
-
-  if (searchResults.isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (searchResults.isError) {
-    return (
-      <div className="text-center py-12 text-sm text-muted-foreground">
-        ユーザー検索でエラーが発生しました。時間をおいて再度お試しください。
-      </div>
-    );
-  }
-
-  const results = searchResults.data ?? [];
-
-  if (results.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-lg font-medium">検索結果が見つかりませんでした</p>
-        <p className="text-muted-foreground mt-2">
-          「{sanitizedQuery}」に一致するユーザーはいません
-        </p>
-      </div>
-    );
-  }
+  const showIdle = status === 'idle';
+  const showReady = status === 'ready';
+  const showEmpty = status === 'empty';
+  const showInitialLoading = status === 'loading' && results.length === 0;
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{results.length}人のユーザーが見つかりました</p>
-      <div className="space-y-4">
-        {results.map((user) => (
-          <UserCard
-            key={user.npub || user.id}
-            user={user}
-            isFollowing={followingSet.has(user.npub)}
-            isSelf={currentUser?.npub === user.npub}
-            isProcessing={
-              (followMutation.isPending && followMutation.variables?.npub === user.npub) ||
-              (unfollowMutation.isPending && unfollowMutation.variables?.npub === user.npub)
-            }
-            canFollow={Boolean(currentUser)}
-            onFollow={() => handleFollow(user)}
-            onUnfollow={() => handleUnfollow(user)}
-          />
-        ))}
-      </div>
+      {showIdle && (
+        <p className="text-sm text-muted-foreground">検索キーワードを入力してください。</p>
+      )}
+
+      {showReady && (
+        <p className="text-sm text-muted-foreground">入力を確定すると検索が始まります。</p>
+      )}
+
+      {errorKey && (
+        <SearchErrorState
+          errorKey={errorKey}
+          retryAfterSeconds={retryAfterSeconds ?? undefined}
+          onRetry={onRetry}
+        />
+      )}
+
+      {showInitialLoading && (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>検索しています...</span>
+        </div>
+      )}
+
+      {showEmpty && (
+        <div className="text-center py-12">
+          <p className="text-lg font-medium">該当するユーザーが見つかりませんでした</p>
+          {sanitizedQuery && (
+            <p className="text-muted-foreground mt-2">
+              「{sanitizedQuery}」に一致するユーザーはいません。
+            </p>
+          )}
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <>
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{totalCount.toLocaleString()} 件ヒット</span>
+            {tookMs > 0 && <span>{tookMs} ms</span>}
+          </div>
+
+          <div className="space-y-4">
+            {results.map((user) => (
+              <UserCard
+                key={user.npub || user.id}
+                user={user}
+                isFollowing={followingSet.has(user.npub)}
+                isSelf={currentUser?.npub === user.npub}
+                isProcessing={
+                  (followMutation.isPending && followMutation.variables?.npub === user.npub) ||
+                  (unfollowMutation.isPending && unfollowMutation.variables?.npub === user.npub)
+                }
+                canFollow={Boolean(currentUser)}
+                onFollow={() => handleFollow(user)}
+                onUnfollow={() => handleUnfollow(user)}
+              />
+            ))}
+          </div>
+
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+                {isFetchingNextPage ? '読み込み中...' : 'さらに表示'}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+
+      {isFetching && results.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>更新中...</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -234,12 +246,12 @@ function UserCard({
   const avatarSrc = resolveUserAvatarSrc(user);
   const initials = getInitials(user.displayName || user.name || 'U');
   const followLabel = isSelf
-    ? 'あなた'
+    ? '自分です'
     : isFollowing
       ? 'フォロー中'
       : canFollow
         ? 'フォロー'
-        : 'ログインが必要';
+        : 'ログインが必要です';
 
   const handleClick = () => {
     if (isProcessing || isSelf || !canFollow) {

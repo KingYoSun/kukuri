@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月08日
+最終更新: 2025年11月09日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -8,11 +8,12 @@
 - 導線の状態は「稼働中」「改善中」「未実装」の 3 区分で整理し、次の対応タスクを明示する。
 
 ## MVP残タスクハイライト（2025年11月08日更新）
-- **トレンド/フォロー**: Summary Panel に表示する `generated_at`・トレンド/フォロー件数・Vitest用 fixture を `trending_metrics_job`（24h集計）と同期させ、Docker/Nightly を緑化する。（Inventory 5.7, `tasks/status/in_progress.md`）
+- **トレンド/フォロー**: ✅ Summary Panel / `trending_metrics_job` / Docker `trending-feed` を 24h 集計結果と同期済み（Inventory 5.7）。以降は CI ログ監視と `prefetchTrendingCategory` ドキュメント維持のみ。
 - **Direct Message**: `DirectMessageInbox` の会話リスト仮想スクロール、候補補完/検索、`mark_direct_message_conversation_read` の多端末同期を完了し、`Header.test.tsx` / `FollowingSummaryPanel.test.tsx` のモックを最新APIに合わせる。（Inventory 5.4）
 - **プロフィール/設定**: `ProfileForm` の共通化とプライバシー設定（`usePrivacySettingsStore`）の永続化を終え、`update_nostr_metadata` / `authStore.updateUser` を設定モーダル経由で再利用する。（Inventory 5.1）
 - **ユーザー検索**: `search_users` API 拡張（cursor/sort/allow_incomplete）と UI のレートリミット・状態遷移を実装し、`UserSearchResults` / `useUserSearchQuery` テストでデバウンス + キャンセルをカバー。（Inventory 5.4）
-- **Offline sync**: `sync_queue` / `offline_actions` / `cache_metadata` の定義と `useSyncManager` の競合banner/再送UIを実装、`tauri_app_implementation_plan.md` Phase4 に沿ってテストとRunbookを整備。（Inventory 5.5）
+- **Offline sync**: `sync_queue` / `offline_actions` / `cache_metadata` に加え、2025年11月09日現在は `SyncStatusIndicator` の `cache_types.metadata` で要求者/要求時刻/Queue ID/発行元を表示し、`OfflineIndicator` からヘッダーの同期ボタンへ誘導できる。`tauri_app_implementation_plan.md` Phase4 に沿って Runbook/テストを整備中。（Inventory 5.5）
+- **Mainline DHT Runbook**: `docs/03_implementation/p2p_mainline_runbook.md` に Chapter10（`kukuri-cli` ブートストラップ運用と Settings/RelayStatus 連携）を追加し、Sidebar の RelayStatus カードへ Runbook リンクを実装。`cargo test --package kukuri-cli -- test_bootstrap_runbook` / `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を検証パスへ組み込んだ。（Inventory 5.6）
 
 ## 1. 画面別導線サマリー
 
@@ -30,7 +31,7 @@
 | サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。`prefetchTrendingCategory`/`prefetchFollowingCategory` によりトレンド/フォロー導線のレスポンスを改善。追加要素（サマリーパネル）を継続検討しつつ、TopicSelector と連携した「新しいトピックを作成」ショートカットを導入予定（Inventory 5.9）。 |
 | ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher`、DM 未読バッジ | 稼働中 | アカウント切替/追加/削除、同期状態表示、未読メッセージのバッジ表示と DM モーダル呼び出しを提供 |
 | Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。TopicSelector に新規作成ショートカットと `createAndJoinTopic` 連携を追加予定（Inventory 5.9）。 |
-| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）。`generated_at` は `topic_handler.rs` / `post_handler.rs` でミリ秒エポックを返却済み。Summary Panel でトレンド件数・プレビュー件数・平均スコア・最終更新を表示。Docker シナリオと `trending_metrics_job` は未実装。 |
+| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）。`generated_at` は `topic_metrics` の最新 `window_end`（`trending_metrics_job` が 5 分間隔で更新）を共有し、Summary Panel / Docker `trending-feed` シナリオでも同値となる。 |
 | フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Summary Panel に DM 未読カードを追加し、Prefetch + Retry 導線と `routes/following.test.tsx` のカバレッジあり。 |
 | プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、件数表示を追加済み。既読同期の多端末共有とページング拡張が backlog。 |
 
@@ -67,7 +68,7 @@
 
 ## 2. グローバル要素
 - **ステータスカード**: `RelayStatus` / `P2PStatus` が 30 秒間隔でステータス取得。フェイルオーバー時のバックオフと手動再試行を実装。
-- **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。
+- **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。2025年11月09日: `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）を UI で整形し、OfflineIndicator のバナー/ツールチップからヘッダーの SyncStatusIndicator へ誘導するコピーを追加。
 - **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
 - **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。TopicSelector へ「新しいトピックを作成」ショートカットを追加し、`TopicFormModal`（mode=`create-from-composer`）を介して `createAndJoinTopic` を実行する計画を Inventory 5.9 に記載。
 - **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールまで接続済み。ヘッダー右上の `MessageCircle` ボタン／`Plus` ボタン、および `/trending` `/following` の Summary Panel CTA は `useDirectMessageBadge` と `useDirectMessageStore` を共有し、既存会話なら即座にモーダルを開き、未読が無い場合でも `DirectMessageInbox` から宛先入力＆会話一覧で新規 DM を開始できる。2025年11月08日以降は `list_direct_message_conversations` / `mark_direct_message_conversation_read` を通じて会話一覧と未読が SQLite に永続化され、ログイン直後の Inbox ハイドレートと Dialog からの既読更新が双方向に同期する。残課題は会話検索/補完・大量会話時の仮想スクロール・多端末既読共有で、Inventory 5.6.x/5.12 でフォロー。
@@ -82,11 +83,11 @@
 6. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
 7. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
 8. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
-9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` を取り込み、キャッシュ統計と手動キュー登録を提供済み。残課題は OfflineIndicator との情報分散解消と `cache_types.metadata` の詳細表示・再送結果のフィードバック。
+9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` を取り込み、キャッシュ統計と手動キュー登録を提供済み。2025年11月09日時点で `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）の表示と OfflineIndicator からヘッダーボタンへの誘導は完了したが、再送キュー処理結果・失敗理由・Queue ID からの逆引きを UI へ戻す導線が残課題。
 10. 未接続 API は `join_topic_by_name`（Global Composer フォールバック）、`delete_events`（投稿削除 + Nostr 連携）、`add_relay`（鍵管理ダイアログと連動）、`get_nostr_pubkey`（プロフィール共有 UI 刷新時に再評価）、`clear_all_accounts_for_test`（Debug パネル）。Inventory 3.2/3.3 で優先度を整理し、Phase 5 backlog と同期した。
 
 ## 4. テストカバレッジ概要
-- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx`。
+- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`。
 - Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で P2P ステータスおよびプロフィール同期を検証。
 - Docker: `./scripts/test-docker.sh p2p`・`./scripts/test-docker.ps1 rust` で Gossip/Mainline スモークを再現。`./scripts/test-docker.sh ts --scenario trending-feed` / `.\scripts\test-docker.ps1 ts -Scenario trending-feed` でトレンド/フォロー導線の Vitest を Docker 上で実行（フィクスチャは `tests/fixtures/trending/default.json`）。
 

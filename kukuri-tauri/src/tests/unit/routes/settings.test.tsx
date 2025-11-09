@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsPage } from '@/routes/settings';
 import { useUIStore } from '@/stores/uiStore';
-import { usePrivacySettingsStore } from '@/stores/privacySettingsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { TauriApi } from '@/lib/api/tauri';
+import { updateNostrMetadata } from '@/lib/api/nostr';
 
 vi.mock('@/components/NostrTestPanel', () => ({
   NostrTestPanel: () => <div>Nostr Panel</div>,
@@ -23,6 +24,26 @@ vi.mock('@/components/p2p/BootstrapConfigPanel', () => ({
 }));
 
 vi.mock('@/stores/authStore');
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    updatePrivacySettings: vi.fn(),
+  },
+}));
+vi.mock('@/lib/api/nostr', () => ({
+  updateNostrMetadata: vi.fn(),
+}));
+
+const mockPrivacyStore = {
+  publicProfile: true,
+  showOnlineStatus: false,
+  setPublicProfile: vi.fn(),
+  setShowOnlineStatus: vi.fn(),
+  hydrateFromUser: vi.fn(),
+};
+
+vi.mock('@/stores/privacySettingsStore', () => ({
+  usePrivacySettingsStore: vi.fn(() => mockPrivacyStore),
+}));
 
 const renderSettingsPage = () => {
   return render(<SettingsPage />);
@@ -30,7 +51,16 @@ const renderSettingsPage = () => {
 
 describe('SettingsPage', () => {
   beforeEach(() => {
-    usePrivacySettingsStore.getState().reset();
+    localStorage.clear();
+    mockPrivacyStore.publicProfile = true;
+    mockPrivacyStore.showOnlineStatus = false;
+    mockPrivacyStore.setPublicProfile.mockImplementation((value: boolean) => {
+      mockPrivacyStore.publicProfile = value;
+    });
+    mockPrivacyStore.setShowOnlineStatus.mockImplementation((value: boolean) => {
+      mockPrivacyStore.showOnlineStatus = value;
+    });
+    mockPrivacyStore.hydrateFromUser.mockImplementation(() => {});
     useUIStore.setState({
       sidebarOpen: true,
       theme: 'light',
@@ -54,9 +84,14 @@ describe('SettingsPage', () => {
         about: '自己紹介',
         picture: '',
         nip05: '',
+        publicProfile: true,
+        showOnlineStatus: false,
       },
       updateUser: vi.fn(),
     });
+
+    vi.mocked(TauriApi.updatePrivacySettings).mockResolvedValue(undefined);
+    vi.mocked(updateNostrMetadata).mockResolvedValue('');
   });
 
   it('プライバシートグルが初期状態を反映する', () => {
@@ -79,9 +114,19 @@ describe('SettingsPage', () => {
     await user.click(publicSwitch);
     await user.click(onlineSwitch);
 
-    const state = usePrivacySettingsStore.getState();
-    expect(state.publicProfile).toBe(false);
-    expect(state.showOnlineStatus).toBe(true);
+    await waitFor(() => expect(TauriApi.updatePrivacySettings).toHaveBeenCalledTimes(2));
+    expect(TauriApi.updatePrivacySettings).toHaveBeenNthCalledWith(1, {
+      npub: 'npub',
+      publicProfile: false,
+      showOnlineStatus: false,
+    });
+    expect(TauriApi.updatePrivacySettings).toHaveBeenNthCalledWith(2, {
+      npub: 'npub',
+      publicProfile: false,
+      showOnlineStatus: true,
+    });
+    expect(mockPrivacyStore.publicProfile).toBe(false);
+    expect(mockPrivacyStore.showOnlineStatus).toBe(true);
   });
 
   it('プロフィール編集ボタンでダイアログが開く', async () => {

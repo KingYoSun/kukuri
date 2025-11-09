@@ -1,8 +1,9 @@
 use super::SqliteRepository;
 use super::mapper::map_user_row;
 use super::queries::{
-    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SEARCH_USERS, SELECT_USER_BY_NPUB,
-    SELECT_USER_BY_PUBKEY, UPDATE_USER, UPSERT_FOLLOW_RELATION,
+    DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SEARCH_USERS, SELECT_FOLLOWER_PUBKEYS,
+    SELECT_FOLLOWING_PUBKEYS, SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER,
+    UPSERT_FOLLOW_RELATION,
 };
 use crate::application::ports::repositories::{FollowListSort, UserCursorPage, UserRepository};
 use crate::domain::entities::User;
@@ -56,6 +57,8 @@ impl UserRepository for SqliteRepository {
             .bind(&user.profile.display_name)
             .bind(&user.profile.bio)
             .bind(&user.profile.avatar_url)
+            .bind(if user.public_profile { 1 } else { 0 })
+            .bind(if user.show_online_status { 1 } else { 0 })
             .bind(user.created_at.timestamp_millis())
             .bind(user.updated_at.timestamp_millis())
             .execute(self.pool.get_pool())
@@ -112,6 +115,8 @@ impl UserRepository for SqliteRepository {
             .bind(&user.profile.display_name)
             .bind(&user.profile.bio)
             .bind(&user.profile.avatar_url)
+            .bind(if user.public_profile { 1 } else { 0 })
+            .bind(if user.show_online_status { 1 } else { 0 })
             .bind(user.updated_at.timestamp_millis())
             .bind(user.npub())
             .execute(self.pool.get_pool())
@@ -142,7 +147,7 @@ impl UserRepository for SqliteRepository {
         let normalized_search = search.map(|s| s.to_lowercase());
 
         let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
-            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at, \
+            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
                     f.created_at AS relation_created_at, f.follower_pubkey AS relation_pubkey, \
                     {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
                  FROM users u \
@@ -293,7 +298,7 @@ impl UserRepository for SqliteRepository {
         let normalized_search = search.map(|s| s.to_lowercase());
 
         let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
-            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.created_at, u.updated_at, \
+            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
                     f.created_at AS relation_created_at, f.followed_pubkey AS relation_pubkey, \
                     {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
                  FROM users u \
@@ -457,5 +462,31 @@ impl UserRepository for SqliteRepository {
             .await?;
 
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn list_following_pubkeys(&self, follower_pubkey: &str) -> Result<Vec<String>, AppError> {
+        let rows = sqlx::query(SELECT_FOLLOWING_PUBKEYS)
+            .bind(follower_pubkey)
+            .fetch_all(self.pool.get_pool())
+            .await?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            result.push(row.try_get::<String, _>("followed_pubkey")?);
+        }
+        Ok(result)
+    }
+
+    async fn list_follower_pubkeys(&self, followed_pubkey: &str) -> Result<Vec<String>, AppError> {
+        let rows = sqlx::query(SELECT_FOLLOWER_PUBKEYS)
+            .bind(followed_pubkey)
+            .fetch_all(self.pool.get_pool())
+            .await?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            result.push(row.try_get::<String, _>("follower_pubkey")?);
+        }
+        Ok(result)
     }
 }

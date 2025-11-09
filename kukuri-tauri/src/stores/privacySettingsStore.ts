@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { withPersist } from './utils/persistHelpers';
 import { persistKeys } from './config/persist';
+import type { User } from './types';
 
 interface PrivacySettingsState {
   publicProfile: boolean;
@@ -11,6 +12,7 @@ interface PrivacySettingsState {
 interface PrivacySettingsStore extends PrivacySettingsState {
   setPublicProfile: (value: boolean) => void;
   setShowOnlineStatus: (value: boolean) => void;
+  hydrateFromUser: (user: Pick<User, 'publicProfile' | 'showOnlineStatus'> | null) => void;
   reset: () => void;
 }
 
@@ -27,7 +29,28 @@ export const usePrivacySettingsStore = create<PrivacySettingsStore>()(
       ...createInitialState(),
       setPublicProfile: (value) => set({ publicProfile: value }),
       setShowOnlineStatus: (value) => set({ showOnlineStatus: value }),
-      reset: () => set(createInitialState()),
+      hydrateFromUser: (user) =>
+        set((state) => {
+          if (!user) {
+            return {
+              publicProfile: state.publicProfile,
+              showOnlineStatus: state.showOnlineStatus,
+            };
+          }
+          return {
+            publicProfile:
+              typeof user.publicProfile === 'boolean' ? user.publicProfile : state.publicProfile,
+            showOnlineStatus:
+              typeof user.showOnlineStatus === 'boolean'
+                ? user.showOnlineStatus
+                : state.showOnlineStatus,
+          };
+        }),
+      reset: () =>
+        set((state) => ({
+          ...state,
+          ...createInitialState(),
+        })),
     }),
     {
       name: persistKeys.privacy,

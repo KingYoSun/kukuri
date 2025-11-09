@@ -149,6 +149,65 @@ async fn cache_metadata_upsert_and_cleanup() {
 }
 
 #[tokio::test]
+async fn cache_status_returns_metadata_summary() {
+    let OfflineTestContext { service, .. } = setup_offline_service().await;
+
+    let first_update = CacheMetadataUpdate {
+        cache_key: CacheKey::new("sync_queue::offline_actions".into()).expect("cache key"),
+        cache_type: CacheType::new("sync_queue".into()).expect("cache type"),
+        metadata: Some(serde_json::json!({
+            "cacheType": "offline_actions",
+            "requestedAt": "2025-11-09T00:00:00Z",
+            "requestedBy": "npub1first"
+        })),
+        expiry: None,
+        is_stale: Some(true),
+    };
+    service
+        .upsert_cache_metadata(first_update)
+        .await
+        .expect("upsert first metadata");
+
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+    let second_update = CacheMetadataUpdate {
+        cache_key: CacheKey::new("sync_queue::trending".into()).expect("cache key"),
+        cache_type: CacheType::new("sync_queue".into()).expect("cache type"),
+        metadata: Some(serde_json::json!({
+            "cacheType": "trending",
+            "requestedAt": "2025-11-09T00:00:01Z",
+            "requestedBy": "npub1latest",
+            "queueItemId": 42
+        })),
+        expiry: None,
+        is_stale: Some(true),
+    };
+    service
+        .upsert_cache_metadata(second_update)
+        .await
+        .expect("upsert second metadata");
+
+    let snapshot = service.cache_status().await.expect("cache status");
+    let queue_summary = snapshot
+        .cache_types
+        .into_iter()
+        .find(|status| status.cache_type.as_str() == "sync_queue")
+        .expect("sync_queue summary");
+
+    assert_eq!(queue_summary.item_count, 2);
+    assert!(queue_summary.is_stale);
+    let metadata = queue_summary.metadata.expect("metadata present");
+    assert_eq!(
+        metadata.get("requestedBy").and_then(|value| value.as_str()),
+        Some("npub1latest")
+    );
+    assert_eq!(
+        metadata.get("queueItemId").and_then(|value| value.as_i64()),
+        Some(42)
+    );
+}
+
+#[tokio::test]
 async fn update_sync_status_performs_upsert() {
     let OfflineTestContext { service, pool } = setup_offline_service().await;
 

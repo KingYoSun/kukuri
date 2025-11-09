@@ -204,6 +204,8 @@ mod tests {
             name: Some("Test User".to_string()),
             nip05: None,
             lud16: None,
+            public_profile: true,
+            show_online_status: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

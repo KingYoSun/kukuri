@@ -1,15 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { Loader2, Search as SearchIcon } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useDirectMessageStore } from '@/stores/directMessageStore';
+import type { Profile } from '@/stores';
 import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
+import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
+import { TauriApi } from '@/lib/api/tauri';
 
 const formatRelativeTime = (timestamp: number | null | undefined) => {
   if (!timestamp) {
@@ -31,6 +38,7 @@ export function DirectMessageInbox() {
     conversations,
     unreadCounts,
     activeConversationNpub,
+    markConversationAsRead,
   } = useDirectMessageStore((state) => ({
     isInboxOpen: state.isInboxOpen,
     closeInbox: state.closeInbox,
@@ -38,9 +46,14 @@ export function DirectMessageInbox() {
     conversations: state.conversations,
     unreadCounts: state.unreadCounts,
     activeConversationNpub: state.activeConversationNpub,
+    markConversationAsRead: state.markConversationAsRead,
   }));
   const [targetNpub, setTargetNpub] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const debouncedRecipientQuery = useDebounce(targetNpub.trim(), 300);
 
   const conversationEntries = useMemo(() => {
     return Object.entries(conversations)
@@ -58,10 +71,64 @@ export function DirectMessageInbox() {
         return bTime - aTime;
       });
   }, [conversations, unreadCounts]);
+  const hasConversations = conversationEntries.length > 0;
+  const conversationListRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: conversationEntries.length,
+    getScrollElement: () => conversationListRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = debouncedRecipientQuery;
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearchError(null);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    (async () => {
+      try {
+        const response = await TauriApi.searchUsers({
+          query,
+          limit: 8,
+          allowIncomplete: true,
+        });
+        if (cancelled) {
+          return;
+        }
+        setSearchResults(response.items.map(mapUserProfileToUser));
+        setSearchError(null);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        errorHandler.log('DirectMessageInbox.search_failed', error, {
+          context: 'DirectMessageInbox.recipientSearch',
+          metadata: { query },
+        });
+        setSearchError('ユーザー検索に失敗しました');
+      } finally {
+        if (!cancelled) {
+          setIsSearching(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedRecipientQuery]);
 
   const handleClose = () => {
     closeInbox();
     setValidationError(null);
+    setSearchResults([]);
+    setSearchError(null);
+    setIsSearching(false);
   };
 
   const handleStartConversation = () => {
@@ -87,9 +154,58 @@ export function DirectMessageInbox() {
     }
   };
 
+  const handleSuggestionClick = (profile: Profile) => {
+    const candidate = profile.npub || profile.id;
+    if (!candidate || currentUser?.npub === candidate) {
+      return;
+    }
+    setValidationError(null);
+    closeInbox();
+    setTargetNpub('');
+    setSearchResults([]);
+    try {
+      openDialog(candidate);
+    } catch (error) {
+      errorHandler.log('DirectMessageInbox.open_failed', error, {
+        context: 'DirectMessageInbox.handleSuggestionClick',
+        metadata: { npub: candidate },
+      });
+    }
+  };
+
+  const handleMarkConversationRead = (npub: string, lastMessageAt: number | null) => {
+    markConversationAsRead(npub);
+    if (!lastMessageAt) {
+      return;
+    }
+    void (async () => {
+      try {
+        await TauriApi.markDirectMessageConversationRead({
+          conversationNpub: npub,
+          lastReadAt: lastMessageAt,
+        });
+      } catch (error) {
+        errorHandler.log('DirectMessageInbox.mark_read_failed', error, {
+          context: 'DirectMessageInbox.handleMarkConversationRead',
+          metadata: { npub },
+        });
+      }
+    })();
+  };
+
   const handleOpenConversation = (npub: string) => {
     closeInbox();
     openDialog(npub);
+  };
+
+  const handleConversationKeyDown = (
+    event: KeyboardEvent<HTMLDivElement>,
+    npub: string,
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleOpenConversation(npub);
+    }
   };
 
   const latestConversationNpub = conversationEntries[0]?.npub ?? null;
@@ -132,6 +248,51 @@ export function DirectMessageInbox() {
           )}
         </div>
 
+        {debouncedRecipientQuery.length >= 2 && (
+          <div className="rounded-md border border-dashed border-border/70 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <SearchIcon className="h-3.5 w-3.5" />
+              候補
+              {isSearching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </div>
+            {searchError ? (
+              <p className="text-xs text-destructive">{searchError}</p>
+            ) : searchResults.length === 0 ? (
+              <p className="text-xs text-muted-foreground">一致する候補が見つかりません</p>
+            ) : (
+              <ul className="space-y-1" data-testid="dm-inbox-suggestions">
+                {searchResults.slice(0, 5).map((profile) => {
+                  const key = profile.npub || profile.id || profile.displayName || 'candidate';
+                  const displayName = profile.displayName || profile.name || key;
+                  return (
+                    <li key={key}>
+                      <button
+                        type="button"
+                        className="w-full rounded-md border border-border/70 px-3 py-2 text-left hover:bg-muted transition-colors flex items-center gap-3"
+                        onClick={() => handleSuggestionClick(profile)}
+                        data-testid={`dm-inbox-suggestion-${key}`}
+                      >
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={profile.picture || undefined} />
+                          <AvatarFallback>
+                            {(displayName[0] ?? 'U').toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-medium truncate">{displayName}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {profile.nip05 || profile.npub || profile.id}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted-foreground">最近の会話</h2>
@@ -147,44 +308,81 @@ export function DirectMessageInbox() {
               最新の会話を開く
             </Button>
           </div>
-          <ScrollArea className="h-60 rounded-md border border-border">
-            {conversationEntries.length === 0 ? (
+          <div
+            ref={conversationListRef}
+            className="h-60 rounded-md border border-border overflow-y-auto"
+            data-testid="dm-inbox-list"
+          >
+            {!hasConversations ? (
               <div className="p-4 text-sm text-muted-foreground">
                 まだ会話がありません。プロフィールから、または上の宛先入力から開始できます。
               </div>
             ) : (
-              <div className="divide-y">
-                {conversationEntries.map(({ npub, lastMessage, unread }) => {
-                  const { display } = formatRelativeTime(lastMessage?.createdAt);
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  position: 'relative',
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const entry = conversationEntries[virtualRow.index];
+                  const { display } = formatRelativeTime(entry.lastMessage?.createdAt);
                   return (
-                    <button
-                      key={npub}
-                      type="button"
-                      className="w-full px-4 py-3 text-left hover:bg-muted transition-colors"
-                      onClick={() => handleOpenConversation(npub)}
-                      data-testid={`dm-inbox-conversation-${npub}`}
+                    <div
+                      key={entry.npub}
+                      className="w-full px-4 py-3 text-left hover:bg-muted transition-colors absolute left-0 right-0 border-b border-border/40 last:border-b-0"
+                      style={{
+                        transform: `translateY(${virtualRow.start}px)`,
+                        height: `${virtualRow.size}px`,
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-current={activeConversationNpub === entry.npub ? 'true' : undefined}
+                      onClick={() => handleOpenConversation(entry.npub)}
+                      onKeyDown={(event) => handleConversationKeyDown(event, entry.npub)}
+                      data-testid={`dm-inbox-conversation-${entry.npub}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium break-all">{npub}</p>
-                        {unread > 0 ? (
-                          <Badge variant="destructive" data-testid={`dm-inbox-unread-${npub}`}>
-                            {unread > 99 ? '99+' : unread}
-                          </Badge>
-                        ) : null}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium break-all">{entry.npub}</p>
+                        <div className="flex items-center gap-2">
+                          {entry.unread > 0 ? (
+                            <>
+                              <Badge
+                                variant="destructive"
+                                data-testid={`dm-inbox-unread-${entry.npub}`}
+                              >
+                                {entry.unread > 99 ? '99+' : entry.unread}
+                              </Badge>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMarkConversationRead(entry.npub, entry.lastMessage?.createdAt ?? null);
+                                }}
+                                data-testid={`dm-inbox-mark-read-${entry.npub}`}
+                              >
+                                既読にする
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {lastMessage?.content ?? 'メッセージはまだありません'}
+                        {entry.lastMessage?.content ?? 'メッセージはまだありません'}
                       </p>
                       <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
                         <span>{display ?? '未受信'}</span>
-                        {activeConversationNpub === npub ? <span>開いています</span> : null}
+                        {activeConversationNpub === entry.npub ? <span>開いています</span> : null}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

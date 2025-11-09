@@ -24,5 +24,8 @@ pub use offline::{
 pub use post::Post;
 pub use profile_avatar::{ProfileAvatarAccessLevel, ProfileAvatarDocEntry};
 pub use topic::Topic;
-pub use topic_metrics::{MetricsWindow, ScoreWeights, TopicActivityRow, TopicMetricsUpsert};
+pub use topic_metrics::{
+    MetricsWindow, ScoreWeights, TopicActivityRow, TopicMetricsRecord, TopicMetricsSnapshot,
+    TopicMetricsUpsert,
+};
 pub use user::{User, UserMetadata, UserProfile};

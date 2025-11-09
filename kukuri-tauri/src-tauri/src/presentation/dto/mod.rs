@@ -12,6 +12,7 @@ pub mod user_dto;
 // 共通のレスポンス型
 use crate::shared::AppError;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -19,6 +20,7 @@ pub struct ApiResponse<T> {
     pub data: Option<T>,
     pub error: Option<String>,
     pub error_code: Option<String>,
+    pub error_details: Option<serde_json::Value>,
 }
 
 impl<T> ApiResponse<T> {
@@ -28,6 +30,7 @@ impl<T> ApiResponse<T> {
             data: Some(data),
             error: None,
             error_code: None,
+            error_details: None,
         }
     }
 
@@ -37,15 +40,25 @@ impl<T> ApiResponse<T> {
             data: None,
             error: Some(error),
             error_code: None,
+            error_details: None,
         }
     }
 
     pub fn from_app_error(error: AppError) -> Self {
+        let error_details = match error {
+            AppError::RateLimited {
+                retry_after_seconds,
+                ..
+            } => Some(json!({ "retry_after_seconds": retry_after_seconds })),
+            _ => None,
+        };
+
         Self {
             success: false,
             data: None,
             error: Some(error.user_message()),
             error_code: Some(error.code().to_string()),
+            error_details,
         }
     }
 

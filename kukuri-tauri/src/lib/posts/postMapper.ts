@@ -19,6 +19,8 @@ export async function mapPostResponseToDomain(apiPost: ApiPost): Promise<Post> {
     picture: '',
     nip05: '',
     avatar: null,
+    publicProfile: true,
+    showOnlineStatus: false,
   };
 
   const author = applyKnownUserMetadata(baseAuthor);

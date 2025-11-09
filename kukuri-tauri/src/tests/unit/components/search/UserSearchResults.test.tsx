@@ -1,30 +1,36 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
-import { vi, type SpyInstance } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { vi, describe, beforeEach, afterEach, it, type Mock } from 'vitest';
 
 import { UserSearchResults } from '@/components/search/UserSearchResults';
-import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
-import { TauriApi } from '@/lib/api/tauri';
 import { useAuthStore } from '@/stores/authStore';
+import { useUserSearchQuery } from '@/hooks/useUserSearchQuery';
+import { TauriApi } from '@/lib/api/tauri';
+
+vi.mock('@/hooks/useUserSearchQuery');
+vi.mock('@/lib/api/tauri', () => ({
+  TauriApi: {
+    getFollowing: vi.fn().mockResolvedValue({ items: [], next_cursor: null, has_more: false, total_count: 0 }),
+    followUser: vi.fn(),
+    unfollowUser: vi.fn(),
+  },
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
     to,
-    ...rest
   }: {
     children: React.ReactNode;
     to: string;
     params?: Record<string, unknown>;
   }) => (
-    <a href={typeof to === 'string' ? to : '#'} {...rest}>
+    <a href={typeof to === 'string' ? to : '#'} data-testid="router-link">
       {children}
     </a>
   ),
 }));
-
-const avatarImageSources: string[] = [];
 
 vi.mock('@/components/ui/avatar', () => ({
   Avatar: ({
@@ -38,11 +44,9 @@ vi.mock('@/components/ui/avatar', () => ({
   AvatarImage: ({
     src,
     ...props
-  }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string | undefined }) => {
-    const resolved = typeof src === 'string' ? src : '';
-    avatarImageSources.push(resolved);
-    return <img data-slot="avatar-image" src={resolved} {...props} />;
-  },
+  }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string | undefined }) => (
+    <img data-slot="avatar-image" src={src || ''} {...props} />
+  ),
   AvatarFallback: ({
     children,
     ...props
@@ -54,80 +58,121 @@ vi.mock('@/components/ui/avatar', () => ({
 }));
 
 describe('UserSearchResults', () => {
-  const originalAuthState = useAuthStore.getState();
-  let searchUsersSpy: SpyInstance;
-  let getFollowingSpy: SpyInstance;
+  const useSearchQueryMock = useUserSearchQuery as unknown as Mock;
+  const getFollowingMock = TauriApi.getFollowing as Mock;
 
   beforeEach(() => {
-    avatarImageSources.length = 0;
-    searchUsersSpy = vi.spyOn(TauriApi, 'searchUsers').mockResolvedValue([
-      {
-        npub: 'npub1alice',
-        pubkey: 'pubkey1alice',
-        name: 'alice',
-        display_name: 'Alice',
-        about: 'Nostr開発者',
-        picture: '',
-        banner: null,
-        website: null,
-        nip05: 'alice@example.com',
-      },
-    ]);
-    getFollowingSpy = vi.spyOn(TauriApi, 'getFollowing').mockResolvedValue([]);
+    vi.clearAllMocks();
     useAuthStore.setState({
-      ...originalAuthState,
-      isAuthenticated: false,
-      currentUser: null,
+      currentUser: {
+        npub: 'viewer',
+        pubkey: 'viewer',
+        id: 'viewer',
+        displayName: 'Viewer',
+        name: 'Viewer',
+        about: '',
+        picture: '',
+        nip05: '',
+        publicProfile: true,
+        showOnlineStatus: false,
+      } as any,
+    });
+    useSearchQueryMock.mockReturnValue({
+      status: 'success',
+      sanitizedQuery: 'alice',
+      results: [
+        {
+          id: 'pubkey1',
+          pubkey: 'pubkey1',
+          npub: 'npub1',
+          name: 'Alice',
+          displayName: 'Alice',
+          picture: '',
+          about: '',
+          nip05: '',
+          publicProfile: true,
+          showOnlineStatus: false,
+        },
+      ],
+      totalCount: 1,
+      tookMs: 10,
+      hasNextPage: false,
+      isFetching: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      errorKey: null,
+      retryAfterSeconds: null,
+      onRetry: vi.fn(),
+    });
+
+    getFollowingMock.mockResolvedValue({
+      items: [],
+      next_cursor: null,
+      has_more: false,
+      total_count: 0,
     });
   });
 
   afterEach(() => {
-    searchUsersSpy.mockRestore();
-    getFollowingSpy.mockRestore();
-    useAuthStore.setState(originalAuthState);
+    useAuthStore.setState({ currentUser: null } as any);
   });
 
-  const renderWithQueryClient = (query: string) => {
+  const renderWithClient = (ui: React.ReactElement) => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: {
           retry: false,
-          cacheTime: 0,
-          staleTime: 0,
         },
       },
     });
 
-    const utils = render(
-      <QueryClientProvider client={queryClient}>
-        <UserSearchResults query={query} />
-      </QueryClientProvider>,
-    );
-
-    return {
-      ...utils,
-      queryClient,
-    };
+    return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
   };
 
-  it('検索結果のアバターがフォールバック画像を使用する', async () => {
-    const { container, queryClient } = renderWithQueryClient('alice');
-
-    await waitFor(() => {
-      expect(searchUsersSpy).toHaveBeenCalledWith('alice', 24);
+  it('renders idle state when query is empty', () => {
+    useSearchQueryMock.mockReturnValueOnce({
+      status: 'idle',
+      sanitizedQuery: '',
+      results: [],
+      totalCount: 0,
+      tookMs: 0,
+      hasNextPage: false,
+      isFetching: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      errorKey: null,
+      retryAfterSeconds: null,
+      onRetry: vi.fn(),
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Alice')).toBeInTheDocument();
+    renderWithClient(<UserSearchResults query="" />);
+
+    expect(screen.getByText('検索キーワードを入力してください。')).toBeInTheDocument();
+  });
+
+  it('renders search results when hook returns data', () => {
+    renderWithClient(<UserSearchResults query="alice" />);
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('1 件ヒット')).toBeInTheDocument();
+  });
+
+  it('renders empty state when no users are found', () => {
+    useSearchQueryMock.mockReturnValueOnce({
+      status: 'empty',
+      sanitizedQuery: 'zzz',
+      results: [],
+      totalCount: 0,
+      tookMs: 5,
+      hasNextPage: false,
+      isFetching: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      errorKey: null,
+      retryAfterSeconds: null,
+      onRetry: vi.fn(),
     });
 
-    await waitFor(() => {
-      expect(
-        container.querySelector('[data-slot="avatar-image"]') as HTMLImageElement | null,
-      ).not.toBeNull();
-    });
-    expect(avatarImageSources[0]).toBe(resolveUserAvatarSrc({ picture: '' }));
-
-    queryClient.clear();
+    renderWithClient(<UserSearchResults query="zzz" />);
+    expect(screen.getByText('該当するユーザーが見つかりませんでした')).toBeInTheDocument();
   });
 });
