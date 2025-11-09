@@ -141,7 +141,8 @@ services:
       dockerfile: Dockerfile.test
     container_name: kukuri-ts-test
     working_dir: /app/kukuri-tauri
-    command: pnpm test
+    entrypoint: ["/app/scripts/docker/ts-test-entrypoint.sh"]
+    command: ["pnpm", "test"]
     volumes:
       - ./test-results:/app/test-results
       # pnpmキャッシュの永続化

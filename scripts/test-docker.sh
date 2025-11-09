@@ -72,7 +72,7 @@ compose_run() {
 
 build_image() {
   echo 'Building Docker test image (with cache optimization)...'
-  DOCKER_BUILDKIT=1 compose_run '' build test-runner
+  DOCKER_BUILDKIT=1 compose_run '' build test-runner ts-test
   echo '[OK] Docker image built successfully'
 }
 
@@ -204,6 +204,24 @@ run_ts_profile_avatar_sync() {
   fi
 }
 
+run_ts_post_delete_cache() {
+  local timestamp
+  timestamp="$(date '+%Y%m%d-%H%M%S')"
+  local log_rel_path="tmp/logs/post-delete-cache_docker_${timestamp}.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  mkdir -p "$(dirname "$log_host_path")"
+
+  echo "Running TypeScript scenario 'post-delete-cache'..."
+  if compose_run '' run --rm ts-test pnpm vitest run \
+    src/tests/unit/hooks/useDeletePost.test.ts \
+    src/tests/unit/components/posts/PostCard.test.tsx >"$log_host_path" 2>&1; then
+    echo "[OK] Scenario log saved to ${log_rel_path}"
+  else
+    echo "[ERROR] Scenario 'post-delete-cache' failed. See ${log_rel_path} for details." >&2
+    return 1
+  fi
+}
+
 run_ts_tests() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   if [[ -z "$TS_SCENARIO" ]]; then
@@ -217,6 +235,9 @@ run_ts_tests() {
         ;;
       profile-avatar-sync)
         run_ts_profile_avatar_sync
+        ;;
+      post-delete-cache)
+        run_ts_post_delete_cache
         ;;
       *)
         echo "Unknown TypeScript scenario: $TS_SCENARIO" >&2

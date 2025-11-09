@@ -4,6 +4,12 @@ import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  enqueueProfileAvatarSyncJob,
+  PROFILE_AVATAR_SYNC_CHANNEL,
+  registerProfileAvatarSyncWorker,
+  type ProfileAvatarSyncJobPayload,
+} from '@/serviceWorker/profileAvatarSyncBridge';
 
 interface UseProfileAvatarSyncOptions {
   autoStart?: boolean;
@@ -23,6 +29,21 @@ interface ProfileAvatarSyncResult {
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+type ProfileAvatarSyncWorkerMessage =
+  | {
+      type: 'profile-avatar-sync:process';
+      payload: {
+        jobId: string;
+        npub: string;
+        knownDocVersion: number | null;
+        force?: boolean;
+      };
+    }
+  | {
+      type: 'profile-avatar-sync:complete';
+      payload: { jobId: string; success: boolean };
+    };
+
 export function useProfileAvatarSync(
   options: UseProfileAvatarSyncOptions = {},
 ): ProfileAvatarSyncResult {
@@ -31,6 +52,7 @@ export function useProfileAvatarSync(
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const lastSyncRequest = useRef<Promise<void> | null>(null);
+  const workerChannelRef = useRef<BroadcastChannel | null>(null);
 
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const npub = currentUser?.npub;
@@ -88,6 +110,59 @@ export function useProfileAvatarSync(
   const autoStart = options.autoStart ?? true;
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    void registerProfileAvatarSyncWorker();
+  }, []);
+
+  useEffect(() => {
+    if (!npub || typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
+      return;
+    }
+
+    const channel = new BroadcastChannel(PROFILE_AVATAR_SYNC_CHANNEL);
+    workerChannelRef.current = channel;
+
+    const handleMessage = (event: MessageEvent<ProfileAvatarSyncWorkerMessage>) => {
+      const message = event.data;
+      if (!message || message.type !== 'profile-avatar-sync:process') {
+        return;
+      }
+
+      const job = message.payload;
+      if (job.npub && job.npub !== npub) {
+        return;
+      }
+
+      const run = async () => {
+        try {
+          await syncNow({ force: job.force ?? job.knownDocVersion === null });
+          channel.postMessage({
+            type: 'profile-avatar-sync:complete',
+            payload: { jobId: job.jobId, success: true },
+          } satisfies ProfileAvatarSyncWorkerMessage);
+        } catch {
+          channel.postMessage({
+            type: 'profile-avatar-sync:complete',
+            payload: { jobId: job.jobId, success: false },
+          } satisfies ProfileAvatarSyncWorkerMessage);
+        }
+      };
+
+      void run();
+    };
+
+    channel.addEventListener('message', handleMessage);
+
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+      channel.close();
+      workerChannelRef.current = null;
+    };
+  }, [npub, syncNow]);
+
+  useEffect(() => {
     if (!autoStart || !npub) {
       return;
     }
@@ -95,13 +170,26 @@ export function useProfileAvatarSync(
     let disposed = false;
     let intervalId: number | null = null;
 
+    const scheduleJob = async (force: boolean) => {
+      const payload: ProfileAvatarSyncJobPayload = {
+        npub,
+        knownDocVersion: force ? null : currentDocVersion,
+        source: force ? 'useProfileAvatarSync:bootstrap' : 'useProfileAvatarSync:interval',
+        force,
+      };
+      const jobId = await enqueueProfileAvatarSyncJob(payload);
+      if (!jobId) {
+        await syncNow({ force });
+      }
+    };
+
     const start = async () => {
-      await syncNow({ force: true });
+      await scheduleJob(true);
       if (disposed) {
         return;
       }
       intervalId = window.setInterval(() => {
-        void syncNow();
+        void scheduleJob(false);
       }, intervalMs);
     };
 

@@ -8,6 +8,7 @@ import { useDirectMessageEvents } from '@/hooks/useDirectMessageEvents';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
+import { registerProfileAvatarSyncWorker } from '@/serviceWorker/profileAvatarSyncBridge';
 
 function RootComponent() {
   const navigate = useNavigate();
@@ -25,6 +26,13 @@ function RootComponent() {
 
   // データ同期の設定
   useDataSync();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    void registerProfileAvatarSyncWorker();
+  }, []);
 
   useEffect(() => {
     // アプリ起動時の初期化

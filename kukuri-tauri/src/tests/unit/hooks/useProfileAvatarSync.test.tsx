@@ -4,6 +4,7 @@ import { vi, describe, beforeEach, it, expect } from 'vitest';
 import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
 import { useAuthStore } from '@/stores/authStore';
 import { TauriApi } from '@/lib/api/tauri';
+import { vi, describe, beforeEach, it, expect, beforeAll } from 'vitest';
 
 vi.mock('@/stores/authStore');
 
@@ -13,11 +14,34 @@ vi.mock('@/lib/api/tauri', () => ({
   },
 }));
 
+vi.mock('@/serviceWorker/profileAvatarSyncBridge', () => ({
+  enqueueProfileAvatarSyncJob: vi.fn().mockResolvedValue(null),
+  registerProfileAvatarSyncWorker: vi.fn().mockResolvedValue(null),
+  PROFILE_AVATAR_SYNC_CHANNEL: 'profile-avatar-sync',
+}));
+
 const mockUseAuthStore = useAuthStore as unknown as vi.Mock;
 const mockProfileAvatarSync = TauriApi.profileAvatarSync as unknown as vi.Mock;
 
 describe('useProfileAvatarSync', () => {
   const updateUser = vi.fn();
+
+  beforeAll(() => {
+    class StubBroadcastChannel {
+      name: string;
+      constructor(name: string) {
+        this.name = name;
+      }
+      postMessage = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      close = vi.fn();
+    }
+    Object.defineProperty(global, 'BroadcastChannel', {
+      value: StubBroadcastChannel,
+      configurable: true,
+    });
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
