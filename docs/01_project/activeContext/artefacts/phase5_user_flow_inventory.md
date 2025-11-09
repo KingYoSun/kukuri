@@ -202,17 +202,18 @@
 
 ### 5.1 設定画面のプライバシー設定・プロフィール編集導線
 - **目的**: 設定画面から即時にユーザー情報と公開状態を更新できるようにし、オンボーディング後も同一フォームでプロフィールを保守できるようにする。
-- **UI 実装案**
-  - `settings.tsx` の「プロフィール編集」ボタン押下でモーダルを開き、`ProfileSetup` フォームを再利用する。入力部分を共通コンポーネント `ProfileForm` に切り出し、起動モードに応じて `navigate` の代わりにコールバックを受け取れるようにする。
-  - プライバシーセクションは `Switch` から `usePrivacySettingsStore`（新規）を更新するようにし、状態を UI にバインドする。永続化には既存の `withPersist` + `createMapAwareStorage` を使用し、キー名は `privacyPreferences` を想定。
-  - 保存ボタンをモーダルに追加し、`updateNostrMetadata` / `authStore.updateUser` を呼び出す。結果はトーストで通知し、`errorHandler` を利用する。
-- 実装状況: 2025年11月02日に `ProfileForm` 抽出と設定画面モーダル導線のプロトタイプを実装済み（Stage1 完了、Stage2 はバックエンド連携待ち）。
-- **バックエンド連携**
-  - プライバシー設定（例: プロフィール公開/オンライン表示）は現状 API が無いため、Stage1 ではローカルストアの値をフロントで参照するのみとする。Stage2 で `nostr` / `p2p` へ伝播するコマンドを追加予定として `tauri_app_implementation_plan.md` にフォローアップタスクを記録する。
-- **テスト計画**
-  - `SettingsPage` の単体テストでモーダルの開閉とストア更新を検証。
-  - `usePrivacySettingsStore` のストアテストで初期値・永続化を確認。
-  - 既存 `ProfileSetup` のテストは共通化後も成功することを確認し、モーダルモード用のケースを追加。
+- **実装ステージ**
+  - **Stage1（2025年11月02日完了）**: `ProfileForm` を `ProfileSetup` / `ProfileEditDialog` / `SettingsPage` で共通化し、`usePrivacySettingsStore` を `withPersist + createMapAwareStorage` で永続化。UI 側の `Switch`・バリデーション・ドラフト復元までをフロントのみで成立させた。
+  - **Stage2（2025年11月09日完了）**: `update_privacy_settings` Tauri コマンドを追加し、`user_service.update_privacy_settings` → `UserRepository` の write パスを拡張。DB には `20251109093000_add_privacy_flags_to_users` マイグレーションで `is_profile_public` / `show_online_status` カラムを追加し、`authStore.updateUser` / `usePrivacySettingsStore.hydrateFromUser` で即時反映させる。`ProfileSetup` / `ProfileEditDialog` / `SettingsPage` それぞれのテストを更新して `kukuri_privacy` 永続キー経由の動作を検証。
+  - **Stage3（MVP残タスク）**: プロフィール画像 Doc/Blob 連携（Sec.6）と Runbook 記載、および設定モーダルから privacy + avatar を同一保存するワークフローを整備する。Stage2 で導入した `update_privacy_settings` は `tauri_app_implementation_plan.md` Phase4.4 / `refactoring_plan_2025-08-08_v3.md` の「プロフィール/設定モーダル統合」行と連動しており、Stage3 では Blob ticket の保存 + Service Worker 連携を追加予定。
+- **バックエンド連携（Stage2）**
+  - `presentation::commands::update_privacy_settings` で `public_profile` / `show_online_status` を受け取り、`UserService::update_privacy_settings` で存在確認後に `Utc::now()` で `updated_at` を更新して永続化。`UserRepository::update_user` / `.sqlx` モデルへ新フィールドを追加した。
+  - 既存の `update_nostr_metadata` とは別にドメイン値を保持するため、`UserMetadata` に依存しない軽量更新 API として整理。`phase5_ci_path_audit.md` / `tasks/completed/2025-11-09.md` へも証跡を記録済み。
+- **テスト / 検証ログ**
+  - TypeScript: `pnpm vitest src/tests/unit/components/auth/ProfileForm.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/routes/settings.test.tsx`（`scripts/test-docker.ps1 ts -Tests ...` 経由でも実行可能）で Stage2 をカバー。
+  - Rust: `cargo test user_service::tests::update_privacy_settings_*` → Windows 既知の `STATUS_ENTRYPOINT_NOT_FOUND` により `./scripts/test-docker.ps1 rust -NoBuild` で再実行してパス。`.sqlx` データは `DATABASE_URL="sqlite:data/kukuri.db" cargo sqlx prepare` を再生成済み。
+- **次のアクション**
+  - Stage3 で扱う Blob/Doc 同期は Sec.6（プロフィール画像リモート同期）および `tauri_app_implementation_plan.md` Phase4.4 にタスク化済み。設定モーダル保存時に `upload_profile_avatar` + `update_privacy_settings` をまとめて呼ぶための UI フロー案を追記し、Runbook（`docs/03_implementation/p2p_mainline_runbook.md`）へも同期手順を追加する。
 
 ### 5.2 サイドバー「新規投稿」ボタンと未導線機能
 - **目的**: タイムライン以外の画面からも投稿を開始できるようにし、未結線の UI 要素（トレンド/フォロー中）を段階的に解消する。
@@ -453,6 +454,10 @@
   - `phase5_user_flow_summary.md` の 1.2 / 1.3 節と Quick View に新規導線を追記。
   - `tauri_app_implementation_plan.md` Phase 5 優先度へ「Global Composer からのトピック作成」タスクを追加。
   - `phase5_ci_path_audit.md` に `GlobalComposer.topic-create` / `TopicSelector.create-shortcut` テスト ID を登録し、Nightly Frontend Unit Tests の対象に含める。
+- **実装メモ（2025年11月10日）**
+  - `TopicFormModal` に `mode="create-from-composer"` / `onCreated` / `autoJoin` を追加し、作成完了後に `useTopicStore.joinTopic` を自動呼び出しできるようにした。`TopicSelector` へ「新しいトピックを作成」コマンドを追加し、`Sidebar` の「新規投稿」ボタンは参加トピックがゼロの場合に先に作成モーダルを開く。
+  - `PostComposer` が `TopicFormModal` を内包し、`useComposerStore.applyTopicAndResume` で新規トピックを選択状態に保ったまま入力を継続できるようにした。`Sidebar` から作成した場合は完了後に `openComposer({ topicId })` へ遷移する。
+  - テスト: `pnpm vitest src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostComposer.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx`（ローカル環境では pnpm 実行環境が見つからず未実施。詳細は in_progress.md を参照）。該当テストケースを追加してショートカット導線とモーダル連携を検証可能にした。
 
 ### 5.10 投稿削除後の React Query キャッシュ整合性（2025年11月06日追加）
 - **目的**: 投稿削除操作後に全てのフィードで即時に結果を反映し、Zustand ストアと React Query キャッシュの不整合を解消する。
@@ -475,6 +480,10 @@
   - `phase5_user_flow_summary.md` のタイムライン行および優先度表へキャッシュ整合性改善計画を追記する。
   - `phase5_ci_path_audit.md` に `useDeletePost` / `post_delete_flow` テスト ID を追加し、Nightly テストのカバレッジに含める。
   - `tauri_app_implementation_plan.md` Phase 5 の優先タスクへ「投稿削除キャッシュ整合性」を追加する。
+- **実装メモ（2025年11月10日）**
+  - `usePosts.ts` に `useDeletePost` を追加し、`useTopicStore.updateTopicPostCount` と `invalidatePostCaches`（新規 `cacheUtils.ts`）でタイムライン / トピック / トレンド / フォロー中のキャッシュを即時更新。`PostCard` はこのフックへ移行し、AlertDialog の状態も `isPending` で制御する。
+  - `postStore.deletePostRemote` が `useTopicStore` を参照して `postCount` を減算するように調整。バックエンドでは既存の `PostService::delete_post` が `PostCache::remove` しているため追加変更なし。
+  - `phase5_ci_path_audit.md` に `PostCard.deleteMenu` / `useDeletePost` のテスト ID を追記。TypeScript テスト: `pnpm vitest src/tests/unit/components/posts/PostCard.test.tsx`（pnpm 実行環境の欠如でローカル実行は未完了）。
 
 ### 5.11 SyncStatusIndicator とオフライン同期導線（2025年11月07日追加）
 - **目的**: オフライン操作や差分同期の状態を一元的に可視化し、「いつ同期されるのか」「失敗/競合時にどう対処するのか」を UI 上で完結させる。Relay/P2P インジケーターとは別に、投稿/トピック/フォローなど全エンティティの再送を追跡できるようにする。

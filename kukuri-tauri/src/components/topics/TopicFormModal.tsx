@@ -37,16 +37,27 @@ const topicFormSchema = z.object({
 
 type TopicFormValues = z.infer<typeof topicFormSchema>;
 
+type TopicFormMode = 'create' | 'edit' | 'create-from-composer';
+
 interface TopicFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   topic?: Topic;
-  mode: 'create' | 'edit';
+  mode?: TopicFormMode;
+  onCreated?: (topic: Topic) => void;
+  autoJoin?: boolean;
 }
 
-export function TopicFormModal({ open, onOpenChange, topic, mode }: TopicFormModalProps) {
+export function TopicFormModal({
+  open,
+  onOpenChange,
+  topic,
+  mode = 'create',
+  onCreated,
+  autoJoin = false,
+}: TopicFormModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { createTopic, updateTopicRemote } = useTopicStore();
+  const { createTopic, updateTopicRemote, joinTopic } = useTopicStore();
   const { toast } = useToast();
 
   const form = useForm<TopicFormValues>({
@@ -70,12 +81,27 @@ export function TopicFormModal({ open, onOpenChange, topic, mode }: TopicFormMod
   const onSubmit = async (values: TopicFormValues) => {
     setIsSubmitting(true);
     try {
-      if (mode === 'create') {
-        await createTopic(values.name, values.description || '');
+      if (mode === 'create' || mode === 'create-from-composer') {
+        const createdTopic = await createTopic(values.name, values.description || '');
+
+        if (mode === 'create-from-composer' || autoJoin) {
+          try {
+            await joinTopic(createdTopic.id);
+          } catch (error) {
+            toast({
+              title: '注意',
+              description: 'トピックの参加に失敗しました。再試行してください。',
+              variant: 'destructive',
+            });
+            throw error;
+          }
+        }
+
         toast({
           title: '成功',
           description: 'トピックを作成しました',
         });
+        onCreated?.(createdTopic);
       } else if (mode === 'edit' && topic) {
         await updateTopicRemote(topic.id, values.name, values.description || '');
         toast({
@@ -96,10 +122,18 @@ export function TopicFormModal({ open, onOpenChange, topic, mode }: TopicFormMod
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{mode === 'create' ? '新しいトピックを作成' : 'トピックを編集'}</DialogTitle>
+          <DialogTitle>
+            {mode === 'edit'
+              ? 'トピックを編集'
+              : mode === 'create-from-composer'
+                ? '投稿用の新しいトピック'
+                : '新しいトピックを作成'}
+          </DialogTitle>
           <DialogDescription>
             {mode === 'create'
               ? 'トピックの名前と説明を入力してください'
+              : mode === 'create-from-composer'
+                ? '投稿を続けるためのトピックを作成します。作成後すぐに参加します。'
               : 'トピックの情報を更新します'}
           </DialogDescription>
         </DialogHeader>

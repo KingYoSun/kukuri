@@ -4,6 +4,11 @@ import type { Post } from '@/stores';
 import { TauriApi } from '@/lib/api/tauri';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import { useAuthStore } from '@/stores';
+import { useTopicStore } from '@/stores/topicStore';
+import { useOfflineStore } from '@/stores/offlineStore';
+import { errorHandler } from '@/lib/errorHandler';
+import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
+import { toast } from 'sonner';
 
 // すべての投稿を取得
 export const usePosts = () => {
@@ -88,6 +93,42 @@ export const useCreatePost = () => {
     onSuccess: (newPost) => {
       addPost(newPost);
       queryClient.invalidateQueries({ queryKey: ['posts', newPost.topicId] });
+    },
+  });
+};
+
+export const useDeletePost = () => {
+  const queryClient = useQueryClient();
+  const deletePostRemote = usePostStore((state) => state.deletePostRemote);
+  const updateTopicPostCount = useTopicStore((state) => state.updateTopicPostCount);
+  const isOnline = useOfflineStore((state) => state.isOnline);
+
+  return useMutation({
+    mutationFn: async (post: Post) => {
+      await deletePostRemote(post.id);
+      return post;
+    },
+    onSuccess: (post) => {
+      updateTopicPostCount(post.topicId, -1);
+      invalidatePostCaches(queryClient, post);
+      if (isOnline) {
+        toast.success('投稿を削除しました');
+      } else {
+        toast.success('削除は接続後に自動で反映されます');
+        errorHandler.info('Post.delete_offline_enqueued', 'useDeletePost');
+      }
+    },
+    onError: (error, post) => {
+      errorHandler.log('Post.delete_failed', error, {
+        context: 'useDeletePost',
+        metadata: post
+          ? {
+              postId: post.id,
+              topicId: post.topicId,
+            }
+          : undefined,
+      });
+      toast.error('投稿の削除に失敗しました');
     },
   });
 };

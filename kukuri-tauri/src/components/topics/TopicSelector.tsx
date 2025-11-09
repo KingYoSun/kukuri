@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+import { Check, ChevronsUpDown, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +17,7 @@ interface TopicSelectorProps {
   onValueChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  onCreateTopicRequest?: () => void;
 }
 
 export function TopicSelector({
@@ -24,16 +25,26 @@ export function TopicSelector({
   onValueChange,
   disabled = false,
   placeholder = 'トピックを選択',
+  onCreateTopicRequest,
 }: TopicSelectorProps) {
   const [open, setOpen] = useState(false);
   const { topics, joinedTopics } = useTopicStore();
 
   // 参加しているトピックのみフィルタリング
-  const availableTopics = Array.from(topics.values()).filter((topic) =>
-    joinedTopics.includes(topic.id),
+  const availableTopics = useMemo(
+    () => Array.from(topics.values()).filter((topic) => joinedTopics.includes(topic.id)),
+    [topics, joinedTopics],
   );
 
   const selectedTopic = value ? topics.get(value) : null;
+
+  const handleCreateTopic = useCallback(() => {
+    if (!onCreateTopicRequest) {
+      return;
+    }
+    onCreateTopicRequest();
+    setOpen(false);
+  }, [onCreateTopicRequest]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -52,7 +63,22 @@ export function TopicSelector({
       <PopoverContent className="w-full p-0">
         <Command>
           <CommandInput placeholder="トピックを検索..." />
-          <CommandEmpty>トピックが見つかりません</CommandEmpty>
+          <CommandEmpty>
+            <div className="text-center text-sm space-y-2 p-4">
+              <p>トピックが見つかりません</p>
+              {onCreateTopicRequest && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCreateTopic}
+                  data-testid="topic-selector-create-empty"
+                >
+                  <PlusCircle className="h-4 w-4 mr-1" />
+                  新しいトピックを作成
+                </Button>
+              )}
+            </div>
+          </CommandEmpty>
           <CommandGroup>
             {availableTopics.length === 0 ? (
               <div className="p-2 text-sm text-muted-foreground text-center">
@@ -79,6 +105,17 @@ export function TopicSelector({
                   </div>
                 </CommandItem>
               ))
+            )}
+            {onCreateTopicRequest && (
+              <CommandItem
+                value="__create_topic__"
+                onSelect={handleCreateTopic}
+                className="text-primary focus:text-primary"
+                data-testid="topic-selector-create"
+              >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                新しいトピックを作成
+              </CommandItem>
             )}
           </CommandGroup>
         </Command>

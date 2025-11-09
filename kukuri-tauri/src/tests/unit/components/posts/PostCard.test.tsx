@@ -10,10 +10,10 @@ const {
   likePostMock,
   boostPostMock,
   createPostMock,
-  deletePostMock,
+  deletePostMutationMock,
   toastMock,
-  usePostStoreMock,
   useAuthStoreMock,
+  useDeletePostMock,
 } = vi.hoisted(() => {
   const bookmarkStore = {
     fetchBookmarks: vi.fn(),
@@ -26,16 +26,10 @@ const {
     pendingActions: [] as Array<{ actionType: string; localId?: string }>,
   };
 
-  const deletePost = vi.fn<[string], Promise<void>>();
-
-  const usePostStore = vi.fn(
-    (selector?: (state: { deletePostRemote: typeof deletePost }) => unknown) => {
-      const state = {
-        deletePostRemote: deletePost,
-      };
-      return typeof selector === 'function' ? selector(state) : state;
-    },
-  );
+  const deletePostMutation = {
+    mutate: vi.fn(),
+    isPending: false,
+  };
 
   const authState = {
     currentUser: {
@@ -57,13 +51,13 @@ const {
     likePostMock: vi.fn(),
     boostPostMock: vi.fn(),
     createPostMock: vi.fn(),
-    deletePostMock: deletePost,
+    deletePostMutationMock: deletePostMutation,
     toastMock: {
       error: vi.fn(),
       success: vi.fn(),
     },
-    usePostStoreMock: usePostStore,
     useAuthStoreMock: useAuthStore,
+    useDeletePostMock: vi.fn(() => deletePostMutation),
   };
 });
 
@@ -77,6 +71,10 @@ vi.mock('@/lib/api/tauri', () => ({
 
 vi.mock('sonner', () => ({
   toast: toastMock,
+}));
+
+vi.mock('@/hooks/usePosts', () => ({
+  useDeletePost: useDeletePostMock,
 }));
 
 vi.mock('@/components/ui/collapsible', () => ({
@@ -148,7 +146,6 @@ vi.mock('@/components/ui/alert-dialog', () => ({
 vi.mock('@/stores', () => ({
   useAuthStore: useAuthStoreMock,
   useBookmarkStore: vi.fn(() => bookmarkStoreMock),
-  usePostStore: usePostStoreMock,
 }));
 
 vi.mock('@/stores/offlineStore', () => ({
@@ -200,18 +197,12 @@ const getBookmarkButton = () => {
 
 describe('PostCard', () => {
   beforeEach(() => {
-    usePostStoreMock.mockImplementation(
-      (selector?: (state: { deletePostRemote: typeof deletePostMock }) => unknown) => {
-        const state = {
-          deletePostRemote: deletePostMock,
-        };
-        return typeof selector === 'function' ? selector(state) : state;
-      },
-    );
-    usePostStoreMock.mockClear();
     useAuthStoreMock.mockClear();
-    deletePostMock.mockReset();
-    deletePostMock.mockImplementation(async () => undefined);
+    deletePostMutationMock.mutate.mockReset();
+    deletePostMutationMock.isPending = false;
+    deletePostMutationMock.mutate.mockImplementation((_, options) => {
+      options?.onSettled?.();
+    });
     likePostMock.mockReset();
     boostPostMock.mockReset();
     createPostMock.mockReset();
@@ -699,9 +690,14 @@ describe('PostCard', () => {
       expect(screen.queryByRole('button', { name: /削除/ })).not.toBeInTheDocument();
     });
 
-    it('削除を確定すると deletePostRemote が呼び出される', async () => {
+    it('削除を確定すると useDeletePost の変異が呼び出される', async () => {
       const ownPost = createOwnPost();
       const { toast } = await import('sonner');
+      deletePostMutationMock.mutate.mockImplementationOnce((_, options) => {
+        toast.success('投稿を削除しました');
+        options?.onSettled?.();
+      });
+
       renderWithQueryClient(<PostCard post={ownPost} />);
 
       fireEvent.click(screen.getByRole('button', { name: /削除/ }));
@@ -710,7 +706,10 @@ describe('PostCard', () => {
       fireEvent.click(screen.getByText('削除する'));
 
       await waitFor(() => {
-        expect(deletePostMock).toHaveBeenCalledWith(ownPost.id);
+          expect(deletePostMutationMock.mutate).toHaveBeenCalledWith(
+            ownPost,
+            expect.objectContaining({ onSettled: expect.any(Function) }),
+          );
       });
 
       await waitFor(() => {
@@ -725,7 +724,10 @@ describe('PostCard', () => {
     it('削除に失敗した場合はエラートーストを表示する', async () => {
       const ownPost = createOwnPost();
       const { toast } = await import('sonner');
-      deletePostMock.mockRejectedValueOnce(new Error('failed'));
+      deletePostMutationMock.mutate.mockImplementationOnce((_, options) => {
+        toast.error('投稿の削除に失敗しました');
+        options?.onSettled?.();
+      });
 
       renderWithQueryClient(<PostCard post={ownPost} />);
 

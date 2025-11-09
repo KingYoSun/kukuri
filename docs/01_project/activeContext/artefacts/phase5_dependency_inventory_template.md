@@ -17,6 +17,8 @@
 | `application::services::offline_service` + `offline_store` | sync_queue/楽観更新を統合し、`useSyncManager` と連携 | `sync_queue`/`offline_actions` テーブル migration、`sync_offline_actions` API、`useSyncManager` 再送 UI、テスト補完 | `tauri_app_implementation_plan.md` Phase4, `phase5_user_flow_inventory.md` 5.5 |
 | `src/hooks/usePosts.ts` (`useDeletePost` 系) | 投稿削除時の React Query キャッシュと P2P を一貫させる | `invalidatePostCaches` ヘルパー整備、トレンド/フォロー/Topics キャッシュと `offlineStore` の整合性検証 | `phase5_user_flow_inventory.md` 5.10, `refactoring_plan_2025-08-08_v3.md` |
 | `scripts/test-docker.{sh,ps1}` (`trending-feed`) | Nightly の再現性確保 | `pnpm install --frozen-lockfile --ignore-workspace` fallback、`pnpm vitest run` のファイル分割、`generated_at` を fixture に追加 | `tasks/status/in_progress.md`（GitHub Actions）, `roadmap.md` KPI |
+| Post-MVP: リアクション拡張 | `src/components/posts/PostCard.tsx`, `usePostStore`, `TauriApi.sendReaction/boost_post` | `EventService` / `TopicService` / `useBookmarkStore` | Presentation/Application | Medium | Phase3.3 のブースト/ブックマーク/カスタムリアクションを Post-MVP に延伸。UI/ストア/バックエンドの責務分離とテスト（`PostCard.reactionMenu`）を定義し、MVP では既存 like/boost の安定化を優先。 |
+| Post-MVP: Service Worker / Offline Sync Stage4.4 | `src/serviceWorker`（未作成）, `useOfflineStore`, `syncEngine` | `navigator.serviceWorker`, `CacheStorage`, `offline_handler` コマンド群 | Infrastructure | High | OfflineIndicator Runbook と再送ログは MVP で整備済。Post-MVP では Service Worker によるバックグラウンド同期/リソースキャッシュを設計し、`docs/03_implementation/pwa_offline_runbook.md`（新規）に配置する。 |
 
 ## 一覧表
 | モジュール/コンポーネント | 現行配置 | 主な依存先 | 想定レイヤ | 切り離し難易度 | 課題・メモ |

@@ -8,12 +8,50 @@ import { useTopicStore } from '@/stores/topicStore';
 import { useDraftStore } from '@/stores/draftStore';
 import { useToast } from '@/hooks/use-toast';
 import type { Topic } from '@/stores/types';
+import { useComposerStore } from '@/stores/composerStore';
 
 // Mocks
 vi.mock('@/stores/postStore');
 vi.mock('@/stores/topicStore');
 vi.mock('@/stores/draftStore');
 vi.mock('@/hooks/use-toast');
+vi.mock('@/stores/composerStore');
+vi.mock('@/components/topics/TopicFormModal', () => ({
+  TopicFormModal: ({
+    open,
+    onOpenChange,
+    onCreated,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated?: (topic: Topic) => void;
+  }) =>
+    open ? (
+      <div data-testid="topic-form-modal">
+        <button
+          data-testid="topic-form-create"
+          onClick={() =>
+            onCreated?.({
+              id: 'topic-new',
+              name: 'New Topic',
+              description: 'desc',
+              memberCount: 0,
+              postCount: 0,
+              isActive: true,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              tags: [],
+            } as Topic)
+          }
+        >
+          Create Topic
+        </button>
+        <button data-testid="topic-form-close" onClick={() => onOpenChange(false)}>
+          Close
+        </button>
+      </div>
+    ) : null,
+}));
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
     log: vi.fn(),
@@ -34,11 +72,13 @@ vi.mock('@/components/topics/TopicSelector', () => ({
     onValueChange,
     disabled,
     placeholder,
+    onCreateTopicRequest,
   }: {
     value?: string;
     onValueChange: (value: string) => void;
     disabled?: boolean;
     placeholder?: string;
+    onCreateTopicRequest?: () => void;
   }) => (
     <select
       data-testid="topic-selector"
@@ -119,10 +159,12 @@ const mockTopics = new Map<string, Topic>([
       id: 'topic1',
       name: 'Technology',
       description: 'Tech topics',
+      memberCount: 10,
       postCount: 10,
       isActive: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      tags: [],
     },
   ],
   [
@@ -131,10 +173,12 @@ const mockTopics = new Map<string, Topic>([
       id: 'topic2',
       name: 'Life',
       description: 'Life topics',
+      memberCount: 5,
       postCount: 5,
       isActive: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      tags: [],
     },
   ],
 ]);
@@ -148,6 +192,7 @@ describe('PostComposer', () => {
   const mockUpdateDraft = vi.fn();
   const mockDeleteDraft = vi.fn();
   const mockAutosaveDraft = vi.fn();
+  const mockApplyTopicAndResume = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -202,6 +247,10 @@ describe('PostComposer', () => {
         clearAllDrafts: vi.fn(),
       }),
     );
+
+    vi.mocked(useComposerStore).mockReturnValue({
+      applyTopicAndResume: mockApplyTopicAndResume,
+    } as unknown as ReturnType<typeof useComposerStore>);
 
     vi.mocked(useToast).mockReturnValue({ toast: mockToast });
   });

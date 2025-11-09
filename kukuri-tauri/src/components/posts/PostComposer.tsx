@@ -14,6 +14,9 @@ import DraftManager from './DraftManager';
 import type { PostDraft } from '@/types/draft';
 import { debounce } from 'lodash';
 import { errorHandler } from '@/lib/errorHandler';
+import { TopicFormModal } from '@/components/topics/TopicFormModal';
+import type { Topic } from '@/stores';
+import { useComposerStore } from '@/stores/composerStore';
 
 interface PostComposerProps {
   topicId?: string;
@@ -36,11 +39,19 @@ export function PostComposer({
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [showDrafts, setShowDrafts] = useState(false);
   const [editorMode, setEditorMode] = useState<'simple' | 'markdown'>('simple');
+  const [showTopicCreationDialog, setShowTopicCreationDialog] = useState(false);
 
   const { createPost } = usePostStore();
   const { topics } = useTopicStore();
   const { createDraft, deleteDraft, autosaveDraft } = useDraftStore();
   const { toast } = useToast();
+  const applyTopicAndResume = useComposerStore((state) => state.applyTopicAndResume);
+
+  useEffect(() => {
+    if (topicId) {
+      setSelectedTopicId(topicId);
+    }
+  }, [topicId]);
 
   // Get topic name for draft
   const getTopicName = useCallback(() => {
@@ -270,6 +281,9 @@ export function PostComposer({
               onValueChange={setSelectedTopicId}
               disabled={!!topicId || isSubmitting}
               placeholder="トピックを選択"
+              onCreateTopicRequest={
+                topicId ? undefined : () => setShowTopicCreationDialog(true)
+              }
             />
 
             {/* Content editor */}
@@ -347,6 +361,19 @@ export function PostComposer({
           </Button>
         </div>
       </CardFooter>
+      {!topicId && (
+        <TopicFormModal
+          open={showTopicCreationDialog}
+          onOpenChange={setShowTopicCreationDialog}
+          mode="create-from-composer"
+          autoJoin
+          onCreated={(newTopic: Topic) => {
+            setSelectedTopicId(newTopic.id);
+            applyTopicAndResume(newTopic.id);
+            setShowTopicCreationDialog(false);
+          }}
+        />
+      )}
     </Card>
   );
 }

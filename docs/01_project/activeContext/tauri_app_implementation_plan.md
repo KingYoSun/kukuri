@@ -299,7 +299,11 @@ export function PeerConnectionPanel() {
 
 ## Phase 3: 主要機能の実装
 
-### 3.1 トピック参加・離脱機能の改善 ✓ 完了
+> **ステータス（2025年11月09日更新）**: Phase 3.1〜3.2 は UI/ストア/テストまで完了し、残タスクは Phase5 artefacts（Inventory 5.9〜5.10 / Sec.6）に沿って絞り込んだ。以下では「完了済み」「MVP残」「MVP後」の3分類で管理する。
+
+### ✅ 完了済み（2025年11月09日時点）
+
+#### 3.1 トピック参加・離脱機能の改善 ✓ 完了
 
 #### 完了したタスク
 1. P2P接続の自動化 ✓
@@ -317,7 +321,7 @@ export function PeerConnectionPanel() {
    - Sidebar.test.tsx（7テストケース）
    - TopicCard.test.tsxの更新（5テストケース追加）
 
-### 3.2 新規投稿機能の拡張 ✓ 部分完了
+#### 3.2 新規投稿機能の拡張 ✓ 部分完了
 
 #### 完了したタスク
 1. リッチテキストエディタの実装 ✓
@@ -344,7 +348,14 @@ export function PeerConnectionPanel() {
   - 予約投稿の実行スケジューラー
   - Tauriコマンドの実装
 
-### 3.3 その他のリアクション機能
+### 🟡 MVP残タスク（Phase3）
+- **トピック作成ショートカット**（Inventory 5.9）: ✅ 2025年11月10日 — `TopicFormModal` に `create-from-composer` モードを追加し、`PostComposer` / `Sidebar` / `TopicSelector` が新規トピックの作成 → 自動参加 → コンポーザー再開を一貫導線で実装。単体テストは `TopicSelector.test.tsx` / `PostComposer.test.tsx` / `Sidebar.test.tsx` を追加。残課題: オフライン作成キューと Runbook 整備。
+- **投稿削除後のキャッシュ整合性**（Inventory 5.10）: ✅ 2025年11月10日 — `useDeletePost` + `cacheUtils.invalidatePostCaches` でタイムライン/トレンド/フォロー中の React Query キャッシュと `topicStore.updateTopicPostCount` を即時更新。`PostCard` は新フックへ移行し、`postStore.deletePostRemote` もトピック件数を更新する。Rust `post_delete_flow` は次スプリントで追加予定。
+- **プロフィール/設定 Stage3**（Inventory 5.1 + Sec.6）: `upload_profile_avatar` + `update_privacy_settings` を同一モーダルで保存するフローと Doc/Blob 同期（`profile_avatars`）を仕上げ、Runbook/CI に複製手順を追加。`pnpm vitest src/tests/unit/components/settings/ProfileEditDialog.test.tsx` と `cargo test --package kukuri-tauri -- profile_avatar_sync`（新規）をカバーターゲットに設定。
+
+### ⏭️ MVP後に回す項目（Phase3）
+
+#### 3.3 その他のリアクション機能
 
 > **メモ（2025年11月08日）**: ブースト/ブックマーク/カスタムリアクションは MVP 後に実装する方針。仕様とテスト計画は維持しつつ、Phase 5 完了までは優先度を下げる。
 
@@ -364,9 +375,13 @@ export function PeerConnectionPanel() {
 
 ## Phase 4: オフラインファースト機能の実装
 
-> **ステータス（2025年11月09日）**: Phase4.1〜4.3 は `list_sync_queue_items` / Queue 履歴 UI の実装により Stage3 まで完了。残タスクは Phase4.4（Offline UI/UX の簡素化と Runbook 連携）と、`sync_engine` 側での再送結果ログ／Runbook リンク整備。各サブセクションにチェックリストを追加し、`phase5_user_flow_inventory.md` 5.5 / `refactoring_plan_2025-08-08_v3.md` の sync_queue 行に進捗を同期させる。
+> **ステータス（2025年11月09日）**: Stage1〜3（DB/OfflineStore/Syncエンジン/キュー履歴 UI）は完了し、Runbook・UI 仕上げが残課題。Phase4 も Phase3 と同様に「完了済み」「MVP残」「MVP後」に整理する。
 
-### 4.1 ローカルファーストデータ管理
+### ✅ 完了済み（Stage1〜3 + 永続化テンプレート）
+
+#### 4.1 ローカルファーストデータ管理
+
+> **ステータス**: ✅ `sync_queue` / `offline_actions` / `cache_metadata` マイグレーション（20250915〜20251107）と `offline_store` 実装が完了。`offline_handler::list_sync_queue_items` 追加に伴い `.sqlx` データを再生成し、`./scripts/test-docker.ps1 rust -NoBuild` で `cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry` を完走。
 
 #### タスク
 1. ローカルDBスキーマの拡張
@@ -383,7 +398,9 @@ export function PeerConnectionPanel() {
    - 接続状態監視（navigator.onLine）
    - オフラインキュー管理
 
-### 4.2 楽観的UI更新の実装
+#### 4.2 楽観的UI更新の実装
+
+> **ステータス**: ✅ `useSyncManager` / `offlineStore` が `add_to_sync_queue`・`update_sync_status`・`update_cache_metadata` を呼び出すフローまで導線化。`pnpm vitest src/tests/unit/stores/offlineStore.test.ts src/tests/unit/hooks/useSyncManager.test.tsx` を `scripts/test-docker.{sh,ps1} ts` 経由で監視し、`useDeletePost` 実装前の共通ロールバックを維持。
 
 #### タスク
 1. 操作のローカル実行
@@ -398,7 +415,9 @@ export function PeerConnectionPanel() {
    - キャッシュ無効化戦略
    - 背景再フェッチの制御
 
-### 4.3 同期と競合解決
+#### 4.3 同期と競合解決
+
+> **ステータス**: ✅ Stage3 で `list_sync_queue_items` / Queue 履歴 UI を提供し、`SyncStatusIndicator` / `OfflineIndicator` のヒストリー表示を `pnpm vitest src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx` で回帰テスト。`phase5_ci_path_audit.md` にテスト ID を登録済み。
 
 #### タスク
 1. 同期エンジンの実装
@@ -414,7 +433,25 @@ export function PeerConnectionPanel() {
    - 同期エラーのハンドリング
    - 手動同期トリガー
 
-### 4.4 オフラインUI/UX
+#### 4.5 Zustand 永続化テンプレート整備 ✓ 完了
+
+##### 実装概要（2025年10月20日更新）
+- `src/stores/utils/persistHelpers.ts` に `withPersist` / `createPersistConfig` / `createMapAwareStorage` を実装し、すべてのストアで同一テンプレートを利用できるようにした。
+- `src/stores/config/persist.ts` でキー名 (`persistKeys`)・partialize 設定・Map 対応ストレージを集中管理。新しいストアを追加する際はここで設定を定義し、ストア側では `withPersist(initializer, createXxxPersistConfig())` を呼び出すだけで済む。
+- Map フィールドを扱うストア（`offlineStore`, `p2pStore`, `topicStore` など）は `createMapAwareStorage` を使用することで、従来の手動シリアライズ処理を排除。
+- テストでは `src/stores/utils/testHelpers.ts` に追加した `setupPersistMock` を利用し、`localStorage`/`sessionStorage` の差し替えとリセットを共通化。
+
+##### 移行手順と注意点
+1. 既存ストアをテンプレートへ移行する際は、旧 `persist` 設定の `name`（ローカルストレージキー）を維持し、過去データが失われないことを確認する。  
+2. キー名を変更する場合はマイグレーションロジック（旧キーからの読み込み → 新フォーマットへの変換）をストア初期化時に追加し、リリースノートへ追記する。  
+3. `setupPersistMock` をテストの `beforeEach` で呼び出し、永続化データの汚染を回避する。ストア単体テストでは新テンプレートが正しく partialize を反映しているかを検証する。
+4. Phase 4 のリファクタリングに伴い、`.sqlx` 再生成や DefaultTopicsRegistry の更新などバックエンド側で大きな変更を行う場合は、本テンプレートのキー互換性チェックを合わせて実施する。
+
+### 🟡 MVP残タスク（Phase4）
+
+#### 4.4 オフラインUI/UX
+
+> **優先度**: Stage4（MVP Exit Checklist #3）で、ヘッダー/サマリ導線を統一し Runbook に再送手順を反映する段階。`sync_engine` の再送ログ整備と Service Worker ベースのバックグラウンド同期は本節で扱う。
 
 #### タスク
 1. オフラインインジケーター
@@ -430,19 +467,9 @@ export function PeerConnectionPanel() {
    - キャッシュ管理
    - オフラインリソースの事前ロード
 
-### 4.5 Zustand 永続化テンプレート整備 ✓ 完了
-
-#### 実装概要（2025年10月20日更新）
-- `src/stores/utils/persistHelpers.ts` に `withPersist` / `createPersistConfig` / `createMapAwareStorage` を実装し、すべてのストアで同一テンプレートを利用できるようにした。
-- `src/stores/config/persist.ts` でキー名 (`persistKeys`)・partialize 設定・Map 対応ストレージを集中管理。新しいストアを追加する際はここで設定を定義し、ストア側では `withPersist(initializer, createXxxPersistConfig())` を呼び出すだけで済む。
-- Map フィールドを扱うストア（`offlineStore`, `p2pStore`, `topicStore` など）は `createMapAwareStorage` を使用することで、従来の手動シリアライズ処理を排除。
-- テストでは `src/stores/utils/testHelpers.ts` に追加した `setupPersistMock` を利用し、`localStorage`/`sessionStorage` の差し替えとリセットを共通化。
-
-#### 移行手順と注意点
-1. 既存ストアをテンプレートへ移行する際は、旧 `persist` 設定の `name`（ローカルストレージキー）を維持し、過去データが失われないことを確認する。  
-2. キー名を変更する場合はマイグレーションロジック（旧キーからの読み込み → 新フォーマットへの変換）をストア初期化時に追加し、リリースノートへ追記する。  
-3. `setupPersistMock` をテストの `beforeEach` で呼び出し、永続化データの汚染を回避する。ストア単体テストでは新テンプレートが正しく partialize を反映しているかを検証する。
-4. Phase 4 のリファクタリングに伴い、`.sqlx` 再生成や DefaultTopicsRegistry の更新などバックエンド側で大きな変更を行う場合は、本テンプレートのキー互換性チェックを合わせて実施する。
+### ⏭️ MVP後プラン（Phase4）
+- **Service Worker 拡張**: 4.4 の「バックグラウンド同期/キャッシュ管理/リソース事前ロード」は MVP 後に段階導入し、`docs/03_implementation/pwa_offline_runbook.md`（新規予定）で配布する。第一段階ではヘッダーUIと Runbook 整備を優先し、Push/バックグラウンドフェッチはベータ後に実験する。
+- **オフライン添付ファイル & Queue 圧縮**: `OfflineActionType::CREATE_TOPIC` 等へ大型ペイロードを積むシナリオは Post-MVP backlog に移動。`refactoring_plan_2025-08-08_v3.md` Phase5（OfflineService 行）でスコープ管理する。
 
 ## Phase 5: アーキテクチャ再構成（準備中）
 
@@ -510,12 +537,12 @@ export function PeerConnectionPanel() {
 ### 工数見積もり
 - Phase 1: ✓ 完了（2日）
 - Phase 2: ✓ 完了（3日）
-- Phase 3: 一部完了（3.1-3.2完了、3.3残り1-2日）
-- Phase 4: オフラインファースト機能 3-4日
-  - 4.1 ローカルファーストデータ管理: 1日
-  - 4.2 楽観的UI更新: 1日
-  - 4.3 同期と競合解決: 1日
-  - 4.4 オフラインUI/UX: 1日
+- Phase 3: 3.1〜3.2 完了。残タスク（Inventory 5.9/5.10/6）を 2 日以内に消化し、3.3（リアクション強化）は Post-MVP へ移送。
+- Phase 4: Stage1〜3 完了。4.4（Offline UI/UX + Runbook）仕上げと `sync_engine` 追加ログで 1.5 日想定。
+  - 4.1 ローカルファーストデータ管理: ✓
+  - 4.2 楽観的UI更新: ✓
+  - 4.3 同期と競合解決: ✓
+  - 4.4 オフラインUI/UX: 進行中（1.5日）
 - Phase 5: アーキテクチャ再構成 2週間（依存関係棚卸し→モジュール再配線→テスト再編の順に実施）
 - MVP完成後の改善: 2-3日
 
@@ -536,12 +563,11 @@ export function PeerConnectionPanel() {
 - 手動接続機能により、発見層完成前でもP2P機能をテスト可能
 
 ### 優先順位による調整
-- Phase 1-2は完了 ✓
-- Phase 3.1-3.2は完了 ✓（予約投稿のバックエンドは保留）
-- Phase 3.3（その他のリアクション機能）を次に実装
-- Phase 4（オフラインファースト機能）はPhase 3.3完了後に実施
-- オフラインファースト機能は、現在の実装基盤（SQLite、Tanstack Query、P2P同期）を活用
-- MVP完成後の改善は、ユーザーフィードバックに基づいて実装
+- Phase 1-2: 完了 ✓
+- Phase 3: 3.1/3.2 完了。残タスク（トピック作成ショートカット / 投稿削除キャッシュ / プロフィール Stage3）を MVP ブロッカーとして処理し、3.3（リアクション）は Post-MVP に回す。
+- Phase 4: Stage1〜3 完了。4.4（Offline UI/UX + Service Worker 導線）を MVP の最終ゲートとして対応中。
+- オフラインファースト機能は現状の SQLite + Tanstack Query + P2P 同期基盤を活用し、Docker `rust` テスト・`scripts/test-docker` 経由での検証を継続。
+- MVP完成後は、ユーザーフィードバックを基にリアクション拡張・Service Worker 拡張・自動再送分析を実装。
 - 発見層実装と並行して進行可能
 
 ## テスト計画

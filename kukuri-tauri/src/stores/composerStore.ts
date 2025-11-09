@@ -19,6 +19,7 @@ interface ComposerState {
   closeComposer: () => void;
   complete: () => void;
   reset: () => void;
+  applyTopicAndResume: (topicId: string) => void;
 }
 
 const createInitialState = (): Omit<
@@ -59,4 +60,10 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
     set(createInitialState());
   },
   reset: () => set(createInitialState()),
+  applyTopicAndResume: (topicId: string) =>
+    set((state) => ({
+      ...state,
+      topicId,
+      isOpen: true,
+    })),
 }));

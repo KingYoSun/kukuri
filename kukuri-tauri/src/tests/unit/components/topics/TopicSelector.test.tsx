@@ -44,6 +44,7 @@ const mockTopics: Topic[] = [
 
 describe('TopicSelector', () => {
   const mockOnValueChange = vi.fn();
+  const mockOnCreateTopicRequest = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,6 +137,24 @@ describe('TopicSelector', () => {
     await user.click(button);
 
     expect(await screen.findByText('参加しているトピックがありません')).toBeInTheDocument();
+  });
+
+  it('トピック作成ショートカットをクリックするとコールバックが呼ばれる', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopicSelector
+        onValueChange={mockOnValueChange}
+        onCreateTopicRequest={mockOnCreateTopicRequest}
+      />,
+    );
+
+    const button = screen.getByRole('combobox');
+    await user.click(button);
+
+    const createItem = await screen.findByTestId('topic-selector-create');
+    await user.click(createItem);
+
+    expect(mockOnCreateTopicRequest).toHaveBeenCalledTimes(1);
   });
 
   it('トピックを選択するとonValueChangeが呼ばれる', async () => {

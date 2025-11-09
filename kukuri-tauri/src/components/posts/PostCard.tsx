@@ -17,7 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Post } from '@/stores';
-import { useBookmarkStore, usePostStore, useAuthStore } from '@/stores';
+import { useBookmarkStore, useAuthStore } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -44,6 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useDeletePost } from '@/hooks/usePosts';
 
 interface PostCardProps {
   post: Post;
@@ -55,12 +56,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const queryClient = useQueryClient();
   const { isBookmarked, toggleBookmark, fetchBookmarks } = useBookmarkStore();
-  const deletePost = usePostStore((state) => state.deletePostRemote);
   const currentUser = useAuthStore((state) => state.currentUser);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const isPostBookmarked = isBookmarked(post.id);
   const { isOnline, pendingActions } = useOfflineStore();
   const canDelete = currentUser?.pubkey === post.author.pubkey;
+  const deletePostMutation = useDeletePost();
 
   // この投稿が未同期かどうかを確認
   const isPostPending = pendingActions.some(
@@ -139,26 +140,10 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     bookmarkMutation.mutate();
   };
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      await deletePost(post.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['timeline'] });
-      queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
-      queryClient.invalidateQueries({ queryKey: ['userPosts', post.author.pubkey] });
-      toast.success('投稿を削除しました');
-    },
-    onError: () => {
-      toast.error('投稿の削除に失敗しました');
-    },
-    onSettled: () => {
-      setShowDeleteDialog(false);
-    },
-  });
-
   const handleConfirmDelete = () => {
-    deleteMutation.mutate();
+    deletePostMutation.mutate(post, {
+      onSettled: () => setShowDeleteDialog(false),
+    });
   };
 
   // 時間表示のフォーマット
@@ -327,13 +312,15 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletePostMutation.isPending}>
+              キャンセル
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleConfirmDelete}
-              disabled={deleteMutation.isPending}
+              disabled={deletePostMutation.isPending}
             >
-              {deleteMutation.isPending ? (
+              {deletePostMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Trash2 className="mr-2 h-4 w-4" />

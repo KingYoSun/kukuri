@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { mapPostResponseToDomain, enrichPostAuthorMetadata } from '@/lib/posts/postMapper';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { useAuthStore } from './authStore';
+import { useTopicStore } from './topicStore';
 
 interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
@@ -279,9 +280,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           entityId: id,
           data: JSON.stringify({ postId: id }),
         });
+        let removedTopicId: string | null = null;
         set((state) => {
           const post = state.posts.get(id);
           if (!post) return state;
+          removedTopicId = post.topicId;
 
           const newPosts = new Map(state.posts);
           newPosts.delete(id);
@@ -298,13 +301,19 @@ export const usePostStore = create<PostStore>()((set, get) => ({
             postsByTopic: newPostsByTopic,
           };
         });
+        if (removedTopicId) {
+          const topicStore = useTopicStore.getState();
+          topicStore.updateTopicPostCount?.(removedTopicId, -1);
+        }
         return;
       }
 
       await TauriApi.deletePost(id);
+      let removedTopicId: string | null = null;
       set((state) => {
         const post = state.posts.get(id);
         if (!post) return state;
+        removedTopicId = post.topicId;
 
         const newPosts = new Map(state.posts);
         newPosts.delete(id);
@@ -321,6 +330,10 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           postsByTopic: newPostsByTopic,
         };
       });
+      if (removedTopicId) {
+        const topicStore = useTopicStore.getState();
+        topicStore.updateTopicPostCount?.(removedTopicId, -1);
+      }
     } catch (error) {
       errorHandler.log('Failed to delete post', error, {
         context: 'PostStore.deletePostRemote',

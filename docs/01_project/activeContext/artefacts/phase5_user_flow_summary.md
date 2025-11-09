@@ -27,10 +27,10 @@
 ### 1.2 認証後の主要導線
 | セクション | パス/配置 | 主な機能 | 導線状態 | 備考 |
 | --- | --- | --- | --- | --- |
-| Home タイムライン | `/` | 投稿閲覧、いいね・ブースト・ブックマーク、グローバルコンポーザー | 稼働中 | `PostComposer` 下書き保存、`PostCard` アクション完備。投稿削除後の React Query キャッシュ整合性（Inventory 5.10）をフォローアップ中。 |
-| サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。`prefetchTrendingCategory`/`prefetchFollowingCategory` によりトレンド/フォロー導線のレスポンスを改善。追加要素（サマリーパネル）を継続検討しつつ、TopicSelector と連携した「新しいトピックを作成」ショートカットを導入予定（Inventory 5.9）。 |
+| Home タイムライン | `/` | 投稿閲覧、いいね・ブースト・ブックマーク、グローバルコンポーザー | 稼働中 | `PostComposer` 下書き保存、`PostCard` アクション完備。投稿削除時は `useDeletePost` が React Query（`timeline`/`posts/*`/トレンド/フォロー中）と `topicStore.updateTopicPostCount` を即時更新（Inventory 5.10 完了）。 |
+| サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。参加トピックがゼロの場合は `TopicFormModal` (`mode=create-from-composer`) を先に開き、作成完了後に `openComposer({ topicId })` へ遷移する。`prefetchTrendingCategory`/`prefetchFollowingCategory` でレスポンスも最適化済み。 |
 | ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher`、DM 未読バッジ | 稼働中 | アカウント切替/追加/削除、同期状態表示、未読メッセージのバッジ表示と DM モーダル呼び出しを提供 |
-| Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 改善中 | 基本導線は実装済み。TopicSelector に新規作成ショートカットと `createAndJoinTopic` 連携を追加予定（Inventory 5.9）。 |
+| Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 稼働中 | `TopicSelector` に「新しいトピックを作成」ショートカットを追加。`TopicFormModal` (`create-from-composer`) + `useComposerStore.applyTopicAndResume` で作成直後に選択した状態のまま投稿を続行できる。 |
 | トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）。`generated_at` は `topic_metrics` の最新 `window_end`（`trending_metrics_job` が 5 分間隔で更新）を共有し、Summary Panel / Docker `trending-feed` シナリオでも同値となる。 |
 | フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Summary Panel に DM 未読カードを追加し、Prefetch + Retry 導線と `routes/following.test.tsx` のカバレッジあり。 |
 | プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、件数表示を追加済み。既読同期の多端末共有とページング拡張が backlog。 |
@@ -38,7 +38,7 @@
 ### 1.3 トピック関連
 | 画面 | パス | 主な機能 | 導線状態 | 備考 |
 | --- | --- | --- | --- | --- |
-| Topics 一覧 | `/topics` | トピック検索、参加切替、新規作成 | 稼働中 | `TopicFormModal` で作成/編集。`create-from-composer` モードと `OfflineActionType::CREATE_TOPIC` を追加予定（Inventory 5.9）。統計は `get_topic_stats` を使用 |
+| Topics 一覧 | `/topics` | トピック検索、参加切替、新規作成 | 稼働中 | `TopicFormModal` の共通化完了。`mode='create-from-composer'` はグローバル導線から利用し、通常一覧では `mode='create'` を維持。統計は `get_topic_stats` を使用。 |
 | トピック詳細 | `/topics/$topicId` | 投稿一覧、P2P メッシュ表示、参加/離脱 | 改善中 | 最終更新表示は修正済み。トピック削除・編集はモーダル導線あり |
 | P2P Mesh | `/topics/$topicId` 内 | `TopicMeshVisualization` で Gossip/Mainline 状態を表示 | 改善中 | ステータス更新のリトライは今後の改善項目 |
 

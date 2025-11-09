@@ -25,6 +25,42 @@ vi.mock('@/components/P2PStatus', () => ({
   P2PStatus: () => <div>P2P Status</div>,
 }));
 
+vi.mock('@/components/topics/TopicFormModal', () => ({
+  TopicFormModal: ({
+    open,
+    onOpenChange,
+    onCreated,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated?: (topic: Topic) => void;
+  }) =>
+    open ? (
+      <div data-testid="sidebar-topic-form">
+        <button
+          data-testid="sidebar-topic-form-create"
+          onClick={() =>
+            onCreated?.({
+              id: 'topic-generated',
+              name: 'Generated Topic',
+              description: 'desc',
+              createdAt: new Date(),
+              memberCount: 0,
+              postCount: 0,
+              isActive: true,
+              tags: [],
+            })
+          }
+        >
+          Create Topic
+        </button>
+        <button data-testid="sidebar-topic-form-close" onClick={() => onOpenChange(false)}>
+          Close
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('@/hooks/useP2P', () => ({
   useP2P: vi.fn(() => ({
     getTopicMessages: vi.fn(() => []),
@@ -141,6 +177,45 @@ describe('Sidebar', () => {
     const composerState = useComposerStore.getState();
     expect(composerState.isOpen).toBe(true);
     expect(composerState.topicId).toBe('topic-a');
+  });
+
+  it('参加トピックがない場合はトピック作成モーダルを表示する', async () => {
+    const user = userEvent.setup();
+    useTopicStore.setState({
+      topics: new Map(),
+      joinedTopics: [],
+      currentTopic: null,
+      topicUnreadCounts: new Map(),
+      topicLastReadAt: new Map(),
+    });
+
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: '新規投稿' }));
+
+    expect(screen.getByTestId('sidebar-topic-form')).toBeInTheDocument();
+    const composerState = useComposerStore.getState();
+    expect(composerState.isOpen).toBe(false);
+  });
+
+  it('モーダルでトピック作成後にコンポーザーが新トピックで開く', async () => {
+    const user = userEvent.setup();
+    useTopicStore.setState({
+      topics: new Map(),
+      joinedTopics: [],
+      currentTopic: null,
+      topicUnreadCounts: new Map(),
+      topicLastReadAt: new Map(),
+    });
+
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: '新規投稿' }));
+    await user.click(await screen.findByTestId('sidebar-topic-form-create'));
+
+    const composerState = useComposerStore.getState();
+    expect(composerState.isOpen).toBe(true);
+    expect(composerState.topicId).toBe('topic-generated');
   });
 
   it('最終活動時刻を考慮してトピックが降順で表示される', () => {

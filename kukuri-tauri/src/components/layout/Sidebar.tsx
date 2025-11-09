@@ -11,9 +11,11 @@ import { RelayStatus } from '@/components/RelayStatus';
 import { P2PStatus } from '@/components/P2PStatus';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchTrendingCategory, prefetchFollowingCategory } from '@/hooks/useTrendingFeeds';
+import { TopicFormModal } from '@/components/topics/TopicFormModal';
+import type { Topic } from '@/stores';
 
 interface SidebarCategoryItem {
   key: SidebarCategory;
@@ -48,6 +50,7 @@ const deriveCategoryFromPath = (pathname: string): SidebarCategory | null => {
 export function Sidebar() {
   const { topics, joinedTopics, currentTopic, setCurrentTopic, topicUnreadCounts } =
     useTopicStore();
+  const [showTopicCreationDialog, setShowTopicCreationDialog] = useState(false);
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const activeSidebarCategory = useUIStore((state) => state.activeSidebarCategory);
   const setActiveSidebarCategory = useUIStore((state) => state.setActiveSidebarCategory);
@@ -108,10 +111,20 @@ export function Sidebar() {
   };
 
   const handleCreatePost = () => {
+    if (joinedTopicsList.length === 0) {
+      setShowTopicCreationDialog(true);
+      return;
+    }
+
     const fallbackTopicId = currentTopic?.id ?? joinedTopics[0] ?? undefined;
     openComposer({
       topicId: fallbackTopicId,
     });
+  };
+
+  const handleSidebarTopicCreated = (topic: Topic) => {
+    setShowTopicCreationDialog(false);
+    openComposer({ topicId: topic.id });
   };
 
   const handleCategoryClick = useCallback(
@@ -230,6 +243,13 @@ export function Sidebar() {
           <P2PStatus />
         </div>
       </div>
+      <TopicFormModal
+        open={showTopicCreationDialog}
+        onOpenChange={setShowTopicCreationDialog}
+        mode="create-from-composer"
+        autoJoin
+        onCreated={handleSidebarTopicCreated}
+      />
     </aside>
   );
 }
