@@ -187,12 +187,31 @@ async fn initialize_schema(pool: &Pool<Sqlite>) {
             data_version INTEGER DEFAULT 1,
             is_stale INTEGER DEFAULT 0,
             expiry_time INTEGER,
-            metadata TEXT
+            metadata TEXT,
+            doc_version INTEGER,
+            blob_hash TEXT,
+            payload_bytes INTEGER
         )
         "#,
     )
     .await
     .expect("cache_metadata table");
+
+    pool.execute(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_cache_metadata_doc_version ON cache_metadata(doc_version);
+        "#,
+    )
+    .await
+    .expect("cache_metadata doc_version index");
+
+    pool.execute(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_cache_metadata_blob_hash ON cache_metadata(blob_hash);
+        "#,
+    )
+    .await
+    .expect("cache_metadata blob_hash index");
 
     pool.execute(
         r#"

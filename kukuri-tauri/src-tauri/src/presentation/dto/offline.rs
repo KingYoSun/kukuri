@@ -260,16 +260,6 @@ impl Validate for UpdateSyncStatusRequest {
         if matches!(parsed, SyncStatus::Unknown(_)) && !legacy_allowed {
             return Err("Invalid sync status. Supported values include pending, sent_to_nostr, sent_to_p2p, fully_synced, failed, conflict, invalid:<reason>".to_string());
         }
-        if let Some(version) = self.doc_version {
-            if version < 0 {
-                return Err("doc_version must be non-negative".to_string());
-            }
-        }
-        if let Some(bytes) = self.payload_bytes {
-            if bytes < 0 {
-                return Err("payload_bytes must be non-negative".to_string());
-            }
-        }
         Ok(())
     }
 }

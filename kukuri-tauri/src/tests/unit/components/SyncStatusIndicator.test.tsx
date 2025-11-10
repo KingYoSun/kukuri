@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import type { SyncStatus } from '@/hooks/useSyncManager';
@@ -675,6 +676,7 @@ describe('SyncStatusIndicator', () => {
     });
 
     it('Doc/Blob 情報をタブで比較表示', async () => {
+      const user = userEvent.setup();
       const docConflict: SyncConflict = {
         localAction: {
           id: 1,
@@ -730,7 +732,7 @@ describe('SyncStatusIndicator', () => {
         expect(screen.getByText('Doc/Blob')).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Doc/Blob' }));
+      await user.click(screen.getByRole('tab', { name: 'Doc/Blob' }));
 
       await waitFor(() => {
         expect(screen.getByRole('tab', { name: 'Doc/Blob' })).toHaveAttribute('data-state', 'active');

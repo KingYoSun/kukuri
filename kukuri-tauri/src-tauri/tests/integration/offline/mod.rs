@@ -139,7 +139,17 @@ async fn cache_metadata_upsert_and_cleanup() {
         .await
         .expect("upsert cache");
 
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    sqlx::query(
+        r#"
+        UPDATE cache_metadata
+        SET expiry_time = expiry_time - 10
+        WHERE cache_key = ?1
+        "#,
+    )
+    .bind("cache:topics")
+    .execute(&pool)
+    .await
+    .expect("force expiry for cleanup test");
 
     let removed = service.cleanup_expired_cache().await.expect("cleanup");
     assert_eq!(removed, 1);
