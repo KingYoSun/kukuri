@@ -441,15 +441,16 @@
 
 #### MVP Exit（2025年11月10日更新）
 - **ゴール**: Summary Panel ⇔ `/trending` `/following` の数値と `generated_at` を常に一致させ、`trending_metrics_job` + Docker `trending-feed` シナリオで 24h/6h 集計を再検証できるようにする。
-  - **現状**: UI 実装と `TrendingMetricsJob` の AppState 常駐化は完了。2025年11月10日に `pnpm vitest` / Docker `trending-feed` シナリオを再実行し、`tmp/logs/vitest_trending_topics_20251110020449.log` と `tmp/logs/trending-feed_20251110020528.log` を採取済み。Prometheus Export・AppState 常駐監視の仕上げと Nightly 連携が残タスク。
-- **ブロッカー**: `corepack enable pnpm` の適用、`VITE_TRENDING_FIXTURE_PATH` の固定化、`topic_metrics` ウィンドウ更新ログを Runbook/CI に連携する仕組み。Prometheus Export と Nightly `trending-feed` 成果物の保存先（`test-results/trending-feed/*.json`）も未整理。
-- **テスト/Runbook**: `pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx`、`scripts/test-docker.{sh,ps1} ts -Scenario trending-feed --fixture tests/fixtures/trending/default.json`、`./scripts/test-docker.ps1 rust -Test trending_metrics_job`（追加予定）。Runbook Chapter7 にトレンド系テレメトリとログ採取手順を追記する。
+  - **現状**: UI 実装と `TrendingMetricsJob` の AppState 常駐化は完了。Prometheus エクスポーター（`KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM`）を追加し、`curl http://localhost:<port>/metrics` で `runs_total` / `failures_total` / `topics_upserted` / `expired_records` / `duration_seconds_bucket` を取得できる。2025年11月10日に `pnpm vitest` / Docker `trending-feed` シナリオを再実行し、`tmp/logs/vitest_trending_topics_20251110020449.log` と `tmp/logs/trending-feed_20251110020528.log` を採取済み。
+- **ブロッカー**: `corepack enable pnpm` の適用、`VITE_TRENDING_FIXTURE_PATH` の固定化、`scripts/metrics/export-p2p --job trending` と Prometheus スクレイプ用 Docker サービスの追加、`topic_metrics` ウィンドウ更新ログの Runbook/CI 連携。Nightly `trending-feed` 成果物の保存先（`test-results/trending-feed/*.json`）も未整理。
+- **テスト/Runbook**: `pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx`、`scripts/test-docker.{sh,ps1} ts -Scenario trending-feed --fixture tests/fixtures/trending/default.json`、`curl http://localhost:<port>/metrics | tee tmp/logs/trending_metrics_job_<timestamp>.prom`。Runbook Chapter7 にトレンド系テレメトリとログ採取手順を追記する。
 - **参照**: `phase5_user_flow_summary.md` MVP Exit（トレンド/フォロー）、`tauri_app_implementation_plan.md` Phase3、`phase5_ci_path_audit.md` trending-feed / corepack 行、`docs/03_implementation/trending_metrics_job.md`。
 - **Stage4 TODO（trending_metrics_job 監視/自動実行）**
   1. `kukuri-tauri/src-tauri/src/state.rs` の `metrics_config` に `prometheus_port` / `emit_histogram` を追加し、`TrendingMetricsJob` 実行時に `prometheus::Registry` へ `topics_upserted` / `expired_records` / `run_duration_ms` をエクスポート。
   2. `scripts/metrics/export-p2p.{sh,ps1}` に `--job trending` オプションを追加し、`docs/03_implementation/trending_metrics_job.md` で定義した JSON レポート（最新ウィンドウ/score/lag）を `test-results/trending-feed/metrics/*.json` へ保存。
   3. `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` に Prometheus スクレイプ用の `docker-compose` サービス（例: `prometheus-trending`) を追加し、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を生成。
   4. `phase5_ci_path_audit.md` と Runbook Chapter7 に監視手順（`curl http://localhost:<port>/metrics`、`scripts/metrics/export-p2p --job trending --pretty`）と復旧基準（`topics_upserted > 0` / `lag_ms < 300000`）を追加し、本節のステータス完了条件を定義する。
+  - 2025年11月10日: (1) を実装済み。`MetricsConfig` に `prometheus_port`・`emit_histogram` を追加し、`TrendingMetricsJob` は `kukuri_trending_metrics_job_runs_total` / `failures_total` / `topics_upserted` / `expired_records` / `last_success_timestamp` / `duration_seconds_bucket` を Prometheus 形式で公開できるようになった。残り (2)〜(4) は Nightly/Docker 連携として backlog を継続。
 
 ### 5.8 ユーザー検索導線改善計画（2025年11月04日追加）
 - **目的**: `/search` (users) タブで安定した検索体験（ページネーション・エラー復旧・レート制御）を提供し、フォロー導線とプロフィール遷移を促進する。

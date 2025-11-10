@@ -1,3 +1,4 @@
+use super::trending_metrics_metrics::TrendingMetricsRecorder;
 use crate::application::ports::repositories::TopicMetricsRepository;
 use crate::domain::entities::{MetricsWindow, ScoreWeights, TopicActivityRow, TopicMetricsUpsert};
 use crate::shared::error::AppError;
@@ -5,6 +6,7 @@ use chrono::Duration;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Default, Clone)]
 struct AggregatedTopicMetrics {
@@ -21,6 +23,14 @@ pub struct TrendingMetricsJob {
     metrics_repository: Arc<dyn TopicMetricsRepository>,
     score_weights: ScoreWeights,
     ttl_hours: u64,
+    metrics_recorder: Option<Arc<TrendingMetricsRecorder>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TrendingMetricsRunStats {
+    pub topics_upserted: u64,
+    pub expired_records: u64,
+    pub cutoff_millis: i64,
 }
 
 impl TrendingMetricsJob {
@@ -28,11 +38,13 @@ impl TrendingMetricsJob {
         metrics_repository: Arc<dyn TopicMetricsRepository>,
         score_weights: Option<ScoreWeights>,
         ttl_hours: u64,
+        metrics_recorder: Option<Arc<TrendingMetricsRecorder>>,
     ) -> Self {
         Self {
             metrics_repository,
             score_weights: score_weights.unwrap_or_default(),
             ttl_hours,
+            metrics_recorder,
         }
     }
 
@@ -41,6 +53,33 @@ impl TrendingMetricsJob {
     }
 
     pub async fn run_once(&self) -> Result<(), AppError> {
+        let started = Instant::now();
+        let result = self.execute_once().await;
+        let duration = started.elapsed();
+        let duration_ms = duration.as_millis().min(u128::from(u64::MAX)) as u64;
+
+        if let Some(recorder) = &self.metrics_recorder {
+            match &result {
+                Ok(stats) => recorder.record_success(duration, stats),
+                Err(_) => recorder.record_failure(duration),
+            }
+        }
+
+        if let Ok(stats) = &result {
+            tracing::info!(
+                target: "metrics::trending",
+                topics_upserted = stats.topics_upserted,
+                cutoff_millis = stats.cutoff_millis,
+                removed_records = stats.expired_records,
+                duration_ms,
+                "trending metrics job completed"
+            );
+        }
+
+        result.map(|_| ())
+    }
+
+    async fn execute_once(&self) -> Result<TrendingMetricsRunStats, AppError> {
         let now = Utc::now().timestamp_millis();
         let window_24h = MetricsWindow::new(now - Duration::hours(24).num_milliseconds(), now);
         let window_6h = MetricsWindow::new(now - Duration::hours(6).num_milliseconds(), now);
@@ -82,15 +121,11 @@ impl TrendingMetricsJob {
         let cutoff = now - (self.ttl_hours as i64 * Duration::hours(1).num_milliseconds());
         let removed = self.metrics_repository.cleanup_expired(cutoff).await?;
 
-        tracing::info!(
-            target: "metrics::trending",
-            topics_upserted = upserted,
-            cutoff_millis = cutoff,
-            removed_records = removed,
-            "trending metrics job completed"
-        );
-
-        Ok(())
+        Ok(TrendingMetricsRunStats {
+            topics_upserted: upserted as u64,
+            expired_records: removed,
+            cutoff_millis: cutoff,
+        })
     }
 }
 

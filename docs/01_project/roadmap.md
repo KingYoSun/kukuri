@@ -20,9 +20,9 @@ kukuri は Nostr イベントをベースにしたトピック中心ソーシャ
 | Ops/テスト | Nightly/CIでMVP導線を再現しRunbookで復旧できる体制 | `tasks/status/in_progress.md` (GitHub Actions) のトレンドフィードDocker修正、`nightly.yml` `trending-feed` のアーティファクト権限問題切り分け、`docs/01_project/progressReports/` へのRunbookリンク、`scripts/test-docker.ps1 all` の安定化 | `docs/01_project/activeContext/tasks/status/in_progress.md`, `docs/01_project/design_doc.md` | ⏳ 継続調整 |
 
 #### MVP Exit Checklist 連動状況（2025年11月10日）
-- **UX/体験導線**: Stage2 プライバシー + Stage3 Doc/Blob（`profile_avatar_sync` + `useProfileAvatarSync`）は完了し、Nightly/Docker へ `profile-avatar-sync` シナリオを登録。`TopicSelector`/`PostCard` の Vitest 再実行（`corepack pnpm` 展開）と Summary Panel → `trending_metrics_job` の自動実行が残る。→ `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` のクロスウォークを参照。
+- **UX/体験導線**: Stage2 プライバシー + Stage3 Doc/Blob（`profile_avatar_sync` + `useProfileAvatarSync`）は完了し、Nightly/Docker へ `profile-avatar-sync` シナリオを登録。2025年11月10日に `KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM` を追加して Summary Panel ⇔ `trending_metrics_job` の監視を整備済み。残りは `TopicSelector`/`PostCard` の Vitest 再実行（`corepack pnpm` 展開）と Nightly での自動メトリクス収集。→ `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` を参照。
 - **P2P & Discovery**: Chapter10 まで Runbook を拡張し RelayStatus からリンク済み。EventGateway mapper / P2P trait 化・`kukuri-cli` 動的ブートストラップ PoC が未反映。→ `phase5_event_gateway_design.md` 更新が必要。
-- **データ/同期**: `list_sync_queue_items` UI と 60 秒ポーリングは完了。Doc/Blob 対応の `cache_metadata` 拡張と `trending_metrics_job` の AppState フックは進行中。→ `tauri_app_implementation_plan.md` Phase4 / `phase5_ci_path_audit.md`.
+- **データ/同期**: `list_sync_queue_items` UI と 60 秒ポーリングは完了。Doc/Blob 対応の `cache_metadata` 拡張と Service Worker（Phase4）が残るが、`trending_metrics_job` の AppState フック + Prometheus エクスポートは 2025年11月10日に完了し `curl http://localhost:<port>/metrics` で収集可能。→ `tauri_app_implementation_plan.md` Phase4 / `phase5_ci_path_audit.md`.
 - **Ops/CI**: `pnpm` 実行環境の欠如で `TopicSelector`/`PostCard` テストがホストでは未再現。Rust テストは `./scripts/test-docker.ps1 rust -NoBuild` で迂回。→ `tasks/status/in_progress.md` GitHub Actions 節、`phase5_ci_path_audit.md` にログリンクを追記予定。
 
 ### 2025年11月: Phase 5（MVP仕上げ）

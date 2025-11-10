@@ -68,6 +68,8 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 keyring = { version = "3.6.3", features = ["windows-native"] }
 dirs = "5.0"
 bech32 = "0.9"
+prometheus = "0.14.0"
+tiny_http = "0.12"
 
 [dev-dependencies]
 tempfile = "3.17"

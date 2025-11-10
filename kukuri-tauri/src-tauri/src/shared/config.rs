@@ -63,6 +63,10 @@ pub struct MetricsConfig {
     pub interval_minutes: u64,
     pub ttl_hours: u64,
     pub score_weights: MetricsScoreWeightsConfig,
+    #[serde(default)]
+    pub prometheus_port: Option<u16>,
+    #[serde(default)]
+    pub emit_histogram: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +117,8 @@ impl Default for MetricsConfig {
             interval_minutes: 5,
             ttl_hours: 48,
             score_weights: MetricsScoreWeightsConfig::default(),
+            prometheus_port: None,
+            emit_histogram: false,
         }
     }
 }
@@ -186,6 +192,14 @@ impl AppConfig {
                 cfg.metrics.score_weights.boosts = value.max(0.0);
             }
         }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_PROMETHEUS_PORT") {
+            if let Some(value) = parse_u16(&v) {
+                cfg.metrics.prometheus_port = if value == 0 { None } else { Some(value) };
+            }
+        }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_EMIT_HISTOGRAM") {
+            cfg.metrics.emit_histogram = parse_bool(&v, cfg.metrics.emit_histogram);
+        }
 
         cfg
     }
@@ -203,6 +217,11 @@ impl AppConfig {
             }
             if self.metrics.ttl_hours == 0 {
                 return Err("Metrics ttl_hours must be greater than 0".to_string());
+            }
+        }
+        if let Some(port) = self.metrics.prometheus_port {
+            if port == 0 {
+                return Err("Metrics prometheus_port must be greater than 0".to_string());
             }
         }
         Ok(())
@@ -223,4 +242,8 @@ fn parse_u64(value: &str) -> Option<u64> {
 
 fn parse_f64(value: &str) -> Option<f64> {
     value.trim().parse::<f64>().ok()
+}
+
+fn parse_u16(value: &str) -> Option<u16> {
+    value.trim().parse::<u16>().ok()
 }

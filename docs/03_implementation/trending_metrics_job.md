@@ -1,6 +1,6 @@
 # Trending Metrics Job 実装ガイド
 作成日: 2025年11月07日  
-最終更新: 2025年11月08日
+最終更新: 2025年11月10日
 
 ## 背景
 - Phase 5 で `/trending` `/following` フィードを実装したが、現状のトレンドスコアはリクエスト時に `topics` / `posts` テーブルから生計算しており、ピーク時にクエリ負荷が高い。
@@ -12,9 +12,10 @@
 - 集計ジョブ失敗時の検知・復旧手順を確立し、Nightly / Docker シナリオからも同値検証できるようにする。
 - 将来的なリアルタイム更新（WebSocket 等）へ拡張しやすい設計を採用する。
 
-## 現状サマリー（2025年11月08日）
-- `app.conf`（`AppConfig.metrics`）に `enabled` / `interval_minutes` / `ttl_hours` / `score_weights.posts|unique_authors|boosts` を追加し、`KUKURI_METRICS_*` 環境変数で上書き可能にした。既定値は「有効」「5 分間隔」「TTL 48h」「0.6/0.3/0.1」。
+## 現状サマリー（2025年11月10日更新）
+- `app.conf`（`AppConfig.metrics`）に `enabled` / `interval_minutes` / `ttl_hours` / `score_weights.posts|unique_authors|boosts` / `prometheus_port` / `emit_histogram` を追加し、`KUKURI_METRICS_*` 環境変数で上書き可能にした。既定値は「有効」「5 分間隔」「TTL 48h」「0.6/0.3/0.1」「prometheus_port: 未設定」「histogram: false」。
 - `AppState::new` で `TrendingMetricsJob` を `Arc` 付き 5 分ループとして `tauri::async_runtime::spawn` し、起動直後から `run_once` → `sleep(interval)` を繰り返す。失敗は `metrics::trending` 名前空間で ERROR ログに出力。
+- 2025年11月10日: `infrastructure/jobs/trending_metrics_metrics.rs` に Prometheus レジストリ（`runs_total` `failures_total` `topics_upserted` `expired_records` `last_success_timestamp` `last_failure_timestamp` `duration_seconds`）を実装し、`TrendingMetricsJob` が成功/失敗ごとに更新。`KUKURI_METRICS_PROMETHEUS_PORT` を設定すると 127.0.0.1 バインドの `tiny_http` サーバーが `/metrics` エンドポイントを公開する。
 - `TopicMetricsRepository` に `latest_window_end` / `list_recent_metrics(limit)` を追加し、`topic_metrics` から直近ウィンドウを一括取得できるようにした。`TopicService::list_trending_topics` はメトリクスが有効かつ最新レコードが存在する場合に `TrendingDataSource::Metrics` を返却し、フォールバックとして従来のリアルタイム集計を保持する。
 - `topic_handler::list_trending_topics` / `post_handler::list_trending_posts` はどちらも `generated_at = topic_metrics.window_end` を返却するため、Summary Panel と Docker `trending-feed` シナリオの比較が 1:1 で行える。
 - CI: `pnpm vitest run routes/trending.test.tsx routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` と `scripts/test-docker.sh ts --scenario trending-feed --no-build` を Nightly で実行。`trending_metrics_job` のローカル実行は `cargo test trending_metrics_job::*` / `cargo fmt` / `cargo test --package kukuri-tauri` に含まれる。
@@ -32,9 +33,25 @@
 ### 非機能要件
 - 実行頻度: 5 分間隔（Cron 形式 `0 */5 * * * *` 相当）でキューイング。バックオフ: 3 回連続失敗時に 15 分スキップ。
 - 実行時間: 1 回 2 秒以内（対象トピック 5,000 件を上限）。
-- 可観測性: Prometheus へ `trending_metrics_job_duration_seconds`・`trending_metrics_job_last_success_timestamp` をエクスポート。ログは `metrics::trending` 名前空間で JSON 出力。
-- コンフィグ: `app.toml` の `metrics` セクションに `enabled`, `interval_minutes`, `score_weights` を追記。
+- 可観測性: Prometheus へ `trending_metrics_job_duration_seconds`・`trending_metrics_job_last_success_timestamp`・`trending_metrics_job_topics_upserted`・`trending_metrics_job_expired_records` をエクスポート。ログは `metrics::trending` 名前空間で JSON 出力。
+- コンフィグ: `app.toml` の `metrics` セクションに `enabled`, `interval_minutes`, `score_weights`, `prometheus_port`, `emit_histogram` を追記。
 - リソース制限: ジョブ実行時は read-only で `posts` テーブルへアクセスし、不要なロックを避ける。必要に応じて `READ UNCOMMITTED` レベルで統計を取得。
+
+## Prometheus エクスポート手順（2025年11月10日追加）
+
+1. `KUKURI_METRICS_ENABLED=true` のまま、任意のポートを `KUKURI_METRICS_PROMETHEUS_PORT=9898`（例）として設定する。ヒストグラムが必要な場合は `KUKURI_METRICS_EMIT_HISTOGRAM=true` を併用。
+2. アプリ起動後に `curl http://localhost:9898/metrics` を実行すると以下のようなメトリクスが返る。`runs_total`／`failures_total`／`topics_upserted`／`expired_records`／`last_success_timestamp`／`duration_seconds_bucket` を監視対象とする。
+
+```text
+# HELP kukuri_trending_metrics_job_runs_total Total number of successful trending metrics job executions
+# TYPE kukuri_trending_metrics_job_runs_total counter
+kukuri_trending_metrics_job_runs_total 3
+kukuri_trending_metrics_job_topics_upserted 42
+kukuri_trending_metrics_job_last_success_timestamp 1731229205123
+```
+
+3. `tiny_http` サーバーは 127.0.0.1 のみにバインドされる。外部公開が必要な場合はリバースプロキシか SSH トンネルを利用する。
+4. 生成されたメトリクスは Runbook Chapter7 と `phase5_ci_path_audit.md` で `curl` / `scripts/metrics/export-p2p --job trending`（今後追加予定）から収集する。
 
 ## アーキテクチャ案
 - モジュール構成

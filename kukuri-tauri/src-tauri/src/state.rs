@@ -38,7 +38,11 @@ use crate::infrastructure::{
         EventManagerHandle, EventManagerSubscriptionInvoker, LegacyEventManagerGateway,
         LegacyEventManagerHandle, RepositoryEventTopicStore,
     },
-    jobs::trending_metrics_job::TrendingMetricsJob,
+    jobs::{
+        trending_metrics_job::TrendingMetricsJob,
+        trending_metrics_metrics::TrendingMetricsRecorder,
+        trending_metrics_server::spawn_prometheus_exporter,
+    },
     messaging::NostrMessagingGateway,
     offline::{OfflineReindexJob, SqliteOfflinePersistence},
     p2p::{
@@ -238,10 +242,20 @@ impl AppState {
                 unique_authors: metrics_config.score_weights.unique_authors,
                 boosts: metrics_config.score_weights.boosts,
             };
+
+            let metrics_recorder = TrendingMetricsRecorder::new(metrics_config.emit_histogram)
+                .map(Arc::new)
+                .map_err(|err| anyhow::anyhow!("Failed to initialize metrics recorder: {err}"))?;
+
+            if let Some(port) = metrics_config.prometheus_port {
+                spawn_prometheus_exporter(port, Arc::clone(&metrics_recorder));
+            }
+
             let job = Arc::new(TrendingMetricsJob::new(
                 Arc::clone(&topic_metrics_repository),
                 Some(score_weights),
                 metrics_config.ttl_hours,
+                Some(Arc::clone(&metrics_recorder)),
             ));
             spawn_trending_metrics_job(
                 job,
