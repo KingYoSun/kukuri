@@ -90,6 +90,8 @@ export interface BootstrapConfig {
   effective_nodes: string[];
   source: 'env' | 'user' | 'bundle' | 'fallback' | 'none';
   env_locked: boolean;
+  cli_nodes?: string[];
+  cli_updated_at_ms?: number | null;
 }
 
 export const p2pApi = {
@@ -139,6 +141,7 @@ export const p2pApi = {
   getBootstrapConfig: () => invokeCommand<BootstrapConfig>('get_bootstrap_config'),
   setBootstrapNodes: (nodes: string[]) => invokeCommandVoid('set_bootstrap_nodes', { nodes }),
   clearBootstrapNodes: () => invokeCommandVoid('clear_bootstrap_nodes'),
+  applyCliBootstrapNodes: () => invokeCommand<BootstrapConfig>('apply_cli_bootstrap_nodes'),
 
   /**
    * Gossip繝｡繝医Μ繧ｯ繧ｹ繧貞叙蠕・   */

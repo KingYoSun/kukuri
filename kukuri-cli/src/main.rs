@@ -8,11 +8,16 @@ use iroh_gossip::net::Gossip;
 use serde_json::Value;
 use std::fs;
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
+
+mod bootstrap_cache;
+
+use bootstrap_cache::{CliBootstrapCache, resolve_export_path, write_cache};
 
 #[derive(Parser)]
 #[command(name = "kukuri-cli")]
@@ -45,6 +50,9 @@ enum Commands {
         /// Additional bootstrap peers (format: node_id@host:port)
         #[arg(long)]
         peers: Vec<String>,
+        /// Optional export path for writing discovered bootstrap list
+        #[arg(long)]
+        export_path: Option<String>,
     },
     /// Run as relay node
     Relay {
@@ -79,7 +87,10 @@ async fn main() -> Result<()> {
     info!("Starting Kukuri CLI node v{}", env!("CARGO_PKG_VERSION"));
 
     match cli.command {
-        Commands::Bootstrap { ref peers } => run_bootstrap_node(&cli, peers.clone()).await?,
+        Commands::Bootstrap {
+            ref peers,
+            ref export_path,
+        } => run_bootstrap_node(&cli, peers.clone(), export_path.clone()).await?,
         Commands::Relay { ref topics } => run_relay_node(&cli, topics).await?,
         Commands::Connect {
             ref peer,
@@ -118,7 +129,11 @@ fn apply_bind_address(builder: EndpointBuilder, bind_addr: SocketAddr) -> Endpoi
     }
 }
 
-async fn run_bootstrap_node(cli: &Cli, bootstrap_peers: Vec<String>) -> Result<()> {
+async fn run_bootstrap_node(
+    cli: &Cli,
+    bootstrap_peers: Vec<String>,
+    export_path: Option<String>,
+) -> Result<()> {
     info!("Starting DHT bootstrap node on {}", cli.bind);
 
     let bind_addr = SocketAddr::from_str(&cli.bind)?;
@@ -147,7 +162,7 @@ async fn run_bootstrap_node(cli: &Cli, bootstrap_peers: Vec<String>) -> Result<(
     }
 
     // Parse and connect to bootstrap peers
-    for peer_str in peers {
+    for peer_str in peers.iter() {
         match parse_node_addr(&peer_str) {
             Ok(node_addr) => {
                 info!("Connecting to bootstrap peer: {}", node_addr.node_id);
@@ -168,11 +183,40 @@ async fn run_bootstrap_node(cli: &Cli, bootstrap_peers: Vec<String>) -> Result<(
 
     info!("DHT bootstrap node is running. Press Ctrl+C to stop.");
 
+    if let Some(path) = resolve_export_path(export_path) {
+        if let Err(err) = export_bootstrap_list(&path, &node_id, &bind_addr, &peers) {
+            warn!(
+                "Failed to export bootstrap list to {}: {}",
+                path.display(),
+                err
+            );
+        } else {
+            info!("Exported bootstrap list to {}", path.display());
+        }
+    }
+
     // Keep the node running
     tokio::signal::ctrl_c().await?;
     info!("Shutting down bootstrap node...");
 
     Ok(())
+}
+
+fn export_bootstrap_list(
+    path: &Path,
+    node_id: &NodeId,
+    bind_addr: &SocketAddr,
+    peers: &[String],
+) -> Result<()> {
+    let mut entries = Vec::new();
+    entries.push(format!("{}@{}", node_id, bind_addr));
+    for peer in peers {
+        if !entries.iter().any(|existing| existing == peer) {
+            entries.push(peer.clone());
+        }
+    }
+    let cache = CliBootstrapCache::new(entries);
+    write_cache(cache, path)
 }
 
 async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {

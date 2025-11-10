@@ -165,6 +165,8 @@ pub fn run() {
             presentation::commands::get_bootstrap_config,
             presentation::commands::set_bootstrap_nodes,
             presentation::commands::clear_bootstrap_nodes,
+            presentation::commands::apply_cli_bootstrap_nodes,
+            presentation::commands::get_relay_status,
         ])
         .setup(|app| {
             // アプリケーション初期化処理

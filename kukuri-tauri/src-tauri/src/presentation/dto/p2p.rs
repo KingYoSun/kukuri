@@ -125,6 +125,16 @@ pub struct BootstrapConfigResponse {
     pub effective_nodes: Vec<String>,
     pub source: String,
     pub env_locked: bool,
+    #[serde(default)]
+    pub cli_nodes: Vec<String>,
+    #[serde(default)]
+    pub cli_updated_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelayStatusResponse {
+    pub url: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

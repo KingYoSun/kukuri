@@ -29,6 +29,19 @@ pub struct BootstrapSelection {
     pub nodes: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CliBootstrapInfo {
+    pub nodes: Vec<String>,
+    pub updated_at_ms: Option<u64>,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliBootstrapCacheFile {
+    nodes: Vec<String>,
+    updated_at_ms: Option<u64>,
+}
+
 impl BootstrapConfig {
     /// 設定ファイルから読み込み
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, AppError> {
@@ -387,4 +400,101 @@ pub fn load_user_bootstrap_node_addrs() -> Vec<NodeAddr> {
         }
     }
     out
+}
+
+fn cli_bootstrap_path() -> PathBuf {
+    if let Ok(custom) = std::env::var("KUKURI_CLI_BOOTSTRAP_PATH") {
+        return PathBuf::from(custom);
+    }
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("kukuri")
+        .join("cli_bootstrap_nodes.json")
+}
+
+pub fn load_cli_bootstrap_nodes() -> Option<CliBootstrapInfo> {
+    let path = cli_bootstrap_path();
+    if !path.exists() {
+        return None;
+    }
+
+    let content = fs::read_to_string(&path).ok()?;
+    let cache: CliBootstrapCacheFile = serde_json::from_str(&content).ok()?;
+
+    let mut nodes: Vec<String> = cache
+        .nodes
+        .into_iter()
+        .map(|entry| entry.trim().to_string())
+        .filter(|entry| !entry.is_empty())
+        .collect();
+    nodes.dedup();
+
+    if nodes.is_empty() {
+        return None;
+    }
+
+    Some(CliBootstrapInfo {
+        nodes,
+        updated_at_ms: cache.updated_at_ms,
+        path,
+    })
+}
+
+pub fn apply_cli_bootstrap_nodes() -> Result<Vec<String>, AppError> {
+    let info = load_cli_bootstrap_nodes().ok_or_else(|| {
+        AppError::ConfigurationError(
+            "CLI bootstrap list is not available. Run kukuri-cli to export nodes.".to_string(),
+        )
+    })?;
+    save_user_bootstrap_nodes(&info.nodes)?;
+    Ok(info.nodes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_cli_path(suffix: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "kukuri_cli_bootstrap_test_{}_{}.json",
+            std::process::id(),
+            suffix
+        ));
+        if path.exists() {
+            let _ = fs::remove_file(&path);
+        }
+        path
+    }
+
+    #[test]
+    fn load_cli_bootstrap_nodes_returns_data_when_file_exists() {
+        let path = temp_cli_path("load");
+        unsafe {
+            std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
+        }
+        let payload = r#"{"nodes":["node1@example:1234","node1@example:1234","node2@example:5678"],"updated_at_ms":12345}"#;
+        fs::write(&path, payload).expect("write cli bootstrap cache");
+
+        let info = load_cli_bootstrap_nodes().expect("cli bootstrap info");
+        assert_eq!(info.nodes.len(), 2);
+        assert_eq!(info.updated_at_ms, Some(12345));
+        assert_eq!(info.path, path);
+
+        unsafe {
+            std::env::remove_var("KUKURI_CLI_BOOTSTRAP_PATH");
+        }
+        let _ = fs::remove_file(&info.path);
+    }
+
+    #[test]
+    fn load_cli_bootstrap_nodes_returns_none_when_missing() {
+        let path = temp_cli_path("missing");
+        unsafe {
+            std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
+        }
+        assert!(load_cli_bootstrap_nodes().is_none());
+        unsafe {
+            std::env::remove_var("KUKURI_CLI_BOOTSTRAP_PATH");
+        }
+    }
 }

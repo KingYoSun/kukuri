@@ -1,17 +1,18 @@
 use crate::{
-    infrastructure::p2p::metrics::GossipMetricDetails,
+    infrastructure::p2p::{bootstrap_config, metrics::GossipMetricDetails},
     presentation::dto::{
         ApiResponse,
         p2p::{
             BootstrapConfigResponse, BootstrapMetricsResponse, BroadcastRequest,
             GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicByNameRequest,
             JoinTopicByNameResponse, JoinTopicRequest, LeaveTopicRequest, MainlineMetricsResponse,
-            NodeAddressResponse, P2PMetricsResponse, P2PStatusResponse,
+            NodeAddressResponse, P2PMetricsResponse, P2PStatusResponse, RelayStatusResponse,
         },
     },
     shared::AppError,
     state::AppState,
 };
+use std::collections::HashSet;
 use tauri::State;
 
 /// P2P機能を初期化
@@ -128,10 +129,15 @@ pub async fn join_topic_by_name(
 
 #[tauri::command]
 pub async fn get_bootstrap_config() -> Result<ApiResponse<BootstrapConfigResponse>, AppError> {
-    use crate::infrastructure::p2p::bootstrap_config;
     let user_nodes = bootstrap_config::load_user_bootstrap_nodes();
     let selection = bootstrap_config::load_effective_bootstrap_nodes();
     let env_locked = bootstrap_config::load_env_bootstrap_nodes().is_some();
+    let cli_info = bootstrap_config::load_cli_bootstrap_nodes();
+    let cli_nodes = cli_info
+        .as_ref()
+        .map(|info| info.nodes.clone())
+        .unwrap_or_default();
+    let cli_updated_at_ms = cli_info.and_then(|info| info.updated_at_ms);
     let mode = if env_locked {
         "custom".to_string()
     } else if user_nodes.is_empty() {
@@ -154,6 +160,8 @@ pub async fn get_bootstrap_config() -> Result<ApiResponse<BootstrapConfigRespons
         effective_nodes: selection.nodes,
         source,
         env_locked,
+        cli_nodes,
+        cli_updated_at_ms,
     }))
 }
 
@@ -193,6 +201,69 @@ pub async fn clear_bootstrap_nodes() -> Result<ApiResponse<()>, AppError> {
     bootstrap_config::clear_user_bootstrap_nodes()
         .map_err(|e| AppError::ConfigurationError(e.to_string()))?;
     Ok(ApiResponse::success(()))
+}
+
+#[tauri::command]
+pub async fn apply_cli_bootstrap_nodes() -> Result<ApiResponse<BootstrapConfigResponse>, AppError> {
+    bootstrap_config::apply_cli_bootstrap_nodes()?;
+    get_bootstrap_config().await
+}
+
+#[tauri::command]
+pub async fn get_relay_status(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<RelayStatusResponse>>, AppError> {
+    let p2p_status = state.p2p_handler.get_p2p_status().await?;
+    let selection = bootstrap_config::load_effective_bootstrap_nodes();
+    let default_status = match p2p_status.connection_status {
+        crate::presentation::dto::p2p::ConnectionStatusResponse::Connected
+        | crate::presentation::dto::p2p::ConnectionStatusResponse::Disconnected => "disconnected",
+        crate::presentation::dto::p2p::ConnectionStatusResponse::Connecting => "connecting",
+        crate::presentation::dto::p2p::ConnectionStatusResponse::Error => "error",
+    };
+
+    let mut statuses = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for node in selection.nodes.iter() {
+        if seen.insert(node.clone()) {
+            statuses.push(RelayStatusResponse {
+                url: node.clone(),
+                status: default_status.to_string(),
+            });
+        }
+    }
+
+    for peer in p2p_status.peers {
+        let mut matched = None;
+        for candidate in selection.nodes.iter() {
+            if let Some((node_id, _)) = candidate.split_once('@') {
+                if node_id == peer.node_id {
+                    matched = Some(candidate.clone());
+                    break;
+                }
+            } else if candidate == &peer.address || candidate == &peer.node_id {
+                matched = Some(candidate.clone());
+                break;
+            }
+        }
+
+        if let Some(url) = matched {
+            if let Some(index) = statuses.iter().position(|entry| entry.url == url) {
+                statuses[index].status = "connected".to_string();
+                continue;
+            }
+        }
+
+        if seen.insert(peer.address.clone()) {
+            statuses.push(RelayStatusResponse {
+                url: peer.address,
+                status: "connected".to_string(),
+            });
+        }
+    }
+
+    Ok(ApiResponse::success(statuses))
 }
 
 /// Gossipメトリクスを取得
