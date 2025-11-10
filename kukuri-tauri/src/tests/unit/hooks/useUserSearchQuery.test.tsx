@@ -171,4 +171,74 @@ describe('useUserSearchQuery', () => {
 
     await waitFor(() => expect(result.current.results).toHaveLength(2));
   });
+
+  it('respects custom sort option changes', async () => {
+    searchUsersMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            npub: 'npub1alice',
+            pubkey: 'pubkey1',
+            name: 'Alice',
+            display_name: 'Alice',
+            about: '',
+            picture: '',
+            banner: null,
+            website: null,
+            nip05: null,
+            is_profile_public: true,
+            show_online_status: false,
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+        totalCount: 1,
+        tookMs: 5,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            npub: 'npub1bob',
+            pubkey: 'pubkey2',
+            name: 'Bob',
+            display_name: 'Bob',
+            about: '',
+            picture: '',
+            banner: null,
+            website: null,
+            nip05: null,
+            is_profile_public: true,
+            show_online_status: false,
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+        totalCount: 1,
+        tookMs: 4,
+      });
+
+    const { rerender } = renderHook(
+      ({ value, sort }) => useUserSearchQuery(value, { sort }),
+      {
+        initialProps: { value: 'alice', sort: 'relevance' as const },
+        wrapper: createWrapper(),
+      },
+    );
+
+    await waitForDebounce();
+    await waitFor(() => {
+      expect(searchUsersMock).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'relevance' }),
+      );
+    });
+
+    rerender({ value: 'alice', sort: 'recency' });
+    await waitForDebounce();
+
+    await waitFor(() => {
+      expect(searchUsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'recency' }),
+      );
+    });
+  });
 });

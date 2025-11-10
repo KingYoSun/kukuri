@@ -16,7 +16,9 @@ import { useDebounce } from './useDebounce';
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
 const MAX_QUERY_LENGTH = 64;
 
-type UserSearchQueryKey = ['user-search', string, string | null];
+export type UserSearchSort = 'relevance' | 'recency';
+
+type UserSearchQueryKey = ['user-search', string, string | null, UserSearchSort];
 
 export type UserSearchStatus =
   | 'idle'
@@ -37,6 +39,7 @@ interface UseUserSearchQueryOptions {
   minLength?: number;
   pageSize?: number;
   viewerNpub?: string | null;
+  sort?: UserSearchSort;
 }
 
 interface UseUserSearchQueryResult {
@@ -61,6 +64,7 @@ export function useUserSearchQuery(
   const minLength = options?.minLength ?? 2;
   const pageSize = options?.pageSize ?? 24;
   const viewerNpub = options?.viewerNpub ?? null;
+  const sort: UserSearchSort = options?.sort ?? 'relevance';
 
   const sanitizedQuery = useMemo(() => sanitizeQuery(query), [query]);
   const clampedQuery =
@@ -85,13 +89,14 @@ export function useUserSearchQuery(
     UserSearchQueryKey,
     string | null
   >({
-    queryKey: ['user-search', debouncedQuery, viewerNpub],
+    queryKey: ['user-search', debouncedQuery, viewerNpub, sort],
     queryFn: ({ pageParam }) =>
       fetchSearchPage({
         query: debouncedQuery,
         cursor: pageParam ?? null,
         pageSize,
         viewerNpub,
+        sort,
       }),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -222,17 +227,19 @@ async function fetchSearchPage({
   cursor,
   pageSize,
   viewerNpub,
+  sort,
 }: {
   query: string;
   cursor: string | null;
   pageSize: number;
   viewerNpub: string | null;
+  sort: UserSearchSort;
 }): Promise<SearchUsersResponseDto> {
   return await TauriApi.searchUsers({
     query,
     cursor,
     limit: pageSize,
-    sort: 'relevance',
+    sort,
     viewerNpub,
   });
 }

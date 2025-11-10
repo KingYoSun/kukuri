@@ -486,6 +486,7 @@
   - `phase5_user_flow_summary.md` と `tauri_app_implementation_plan.md` Phase 5 優先度表へ本節をリンク。
   - `docs/03_implementation/error_handling_guidelines.md` に新しいキーとユーザー向けトースト文言を追記。
 - CI では Nightly Frontend Unit Tests に `UserSearchResults` / `useUserSearchQuery` テストの実行ログを追加し、`phase5_ci_path_audit.md` にテスト ID を記録。
+- 2025年11月10日: `useUserSearchQuery` に `sort` オプションを導入し、キャッシュキーと `TauriApi.searchUsers` が `relevance` / `recency` を判別できるようにした。`UserSearchResults` へ関連度/最新順トグルを追加し、選択状態に応じて Infinite Query を再取得。`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx` を実行し、ソート変更が API 引数に伝播するユニットテストを追加済み（ホスト環境に corepack が無いため `npx pnpm` で代替）。
 
 ### 5.9 ホーム/サイドバーからのトピック作成導線（2025年11月06日追加）
 - **目的**: タイムラインやサイドバーから離脱せずに新しいトピックを作成し、そのまま投稿作成へ移行できる導線を提供する。

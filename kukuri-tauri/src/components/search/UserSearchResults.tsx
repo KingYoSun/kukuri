@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Loader2, UserCheck, UserPlus } from 'lucide-react';
@@ -15,7 +15,7 @@ import { useAuthStore } from '@/stores';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { SearchErrorState } from '@/components/search/SearchErrorState';
-import { useUserSearchQuery } from '@/hooks/useUserSearchQuery';
+import { useUserSearchQuery, type UserSearchSort } from '@/hooks/useUserSearchQuery';
 
 interface UserSearchResultsProps {
   query: string;
@@ -24,6 +24,7 @@ interface UserSearchResultsProps {
 export function UserSearchResults({ query }: UserSearchResultsProps) {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
+  const [sort, setSort] = useState<UserSearchSort>('relevance');
 
   const {
     status,
@@ -41,6 +42,7 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
   } = useUserSearchQuery(query, {
     viewerNpub: currentUser?.npub ?? null,
     pageSize: 24,
+    sort,
   });
 
   const followingQuery = useQuery<
@@ -142,6 +144,12 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
   const showReady = status === 'ready';
   const showEmpty = status === 'empty';
   const showInitialLoading = status === 'loading' && results.length === 0;
+  const showSortControls = sanitizedQuery.length > 0;
+  const isSortDisabled = sanitizedQuery.length < 2;
+  const sortOptions: Array<{ value: UserSearchSort; label: string }> = [
+    { value: 'relevance', label: '関連度順' },
+    { value: 'recency', label: '最新順' },
+  ];
 
   return (
     <div className="space-y-4">
@@ -159,6 +167,37 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
           retryAfterSeconds={retryAfterSeconds ?? undefined}
           onRetry={onRetry}
         />
+      )}
+
+      {showSortControls && (
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <p className="text-xs text-muted-foreground">
+            検索対象: {sanitizedQuery ? `「${sanitizedQuery}」` : 'キーワード未入力'}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            並び順
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label="ユーザー検索の並び順"
+            >
+              {sortOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  type="button"
+                  size="sm"
+                  variant={sort === option.value ? 'default' : 'outline'}
+                  onClick={() => setSort(option.value)}
+                  disabled={isSortDisabled && sort !== option.value}
+                  data-testid={`user-search-sort-${option.value}`}
+                  className="h-8"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {showInitialLoading && (
@@ -181,9 +220,31 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
 
       {results.length > 0 && (
         <>
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>{totalCount.toLocaleString()} 件ヒット</span>
-            {tookMs > 0 && <span>{tookMs} ms</span>}
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between text-sm text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <span>{totalCount.toLocaleString()} 件ヒット</span>
+              {tookMs > 0 && <span>{tookMs} ms</span>}
+            </div>
+            {!showSortControls && (
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
+                並び順
+                <div className="flex items-center gap-1" role="group" aria-label="ユーザー検索の並び順">
+                  {sortOptions.map((option) => (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      size="sm"
+                      variant={sort === option.value ? 'default' : 'outline'}
+                      onClick={() => setSort(option.value)}
+                      disabled={isSortDisabled && sort !== option.value}
+                      className="h-8"
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, beforeEach, afterEach, it, type Mock } from 'vitest';
 
 import { UserSearchResults } from '@/components/search/UserSearchResults';
@@ -176,5 +176,13 @@ describe('UserSearchResults', () => {
 
     renderWithClient(<UserSearchResults query="zzz" />);
     expect(screen.getByText('該当するユーザーが見つかりませんでした')).toBeInTheDocument();
+  });
+
+  it('allows switching sort order', () => {
+    renderWithClient(<UserSearchResults query="alice" />);
+    const recencyButton = screen.getByTestId('user-search-sort-recency');
+    fireEvent.click(recencyButton);
+    const lastCall = useSearchQueryMock.mock.calls.at(-1);
+    expect(lastCall?.[1]?.sort).toBe('recency');
   });
 });
