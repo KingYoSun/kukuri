@@ -1,7 +1,7 @@
 # Docker環境でのテスト実行ガイド
 
 **作成日**: 2025年08月05日
-**最終更新**: 2025年11月07日
+**最終更新**: 2025年11月10日
 
 ## 概要
 
@@ -52,6 +52,7 @@ Windows では DLL 依存の問題を避けるため `scripts/test-docker.ps1` �
 .\scripts\test-docker.ps1 integration # P2P 統合テスト
 .\scripts\test-docker.ps1 ts          # TypeScript テスト
 .\scripts\test-docker.ps1 ts -Scenario trending-feed # トレンド/フォロー導線の Vitest シナリオ（Docker）
+.\scripts\test-docker.ps1 ts -Scenario user-search-pagination # ユーザー検索 (cursor/sort/allow_incomplete) シナリオ
 .\scripts\test-docker.ps1 lint        # Lint / format チェック
 .\scripts\test-docker.ps1 build       # テスト用イメージの再ビルド
 .\scripts\test-docker.ps1 clean       # コンテナとネットワークの削除
@@ -80,6 +81,9 @@ docker compose -f docker-compose.test.yml run --rm test-runner /app/run-tests.sh
 
 # トレンド/フォロー導線（trending-feed シナリオ）のみ実行
 ./scripts/test-docker.sh ts --scenario trending-feed
+
+# ユーザー検索（user-search-pagination シナリオ）のみ実行
+./scripts/test-docker.sh ts --scenario user-search-pagination
 
 # 個別のサービスを実行
 docker compose -f docker-compose.test.yml run --rm rust-test
@@ -110,6 +114,15 @@ P2P統合テスト用に追加された `p2p` サブコマンドでは次のオ�
 - **フィクスチャ**: 既定値は `kukuri-tauri/tests/fixtures/trending/default.json`。`VITE_TRENDING_FIXTURE_PATH` を環境変数として渡すことでシナリオごとのデータセットを切り替え可能。
 - **成果物**: 実行結果とログを `test-results/trending-feed/latest.log` に出力し、Nightly ワークフローでは artefact としてアップロードする。
 - **注意点**: Docker イメージを更新した直後は `--no-build` オプションを付けずに実行し、依存パッケージを最新化してからキャッシュ運用に切り替える。Vitest 実行時は `CI=true` を付与してスナップショット差分を強制的に fail させる。
+
+### シナリオ: user-search-pagination
+- **概要**: `/search` (users) タブの `useUserSearchQuery` / `UserSearchResults` を Docker 内で実行し、cursor/sort/allow_incomplete/429 レート制御や補助検索ラベルの挙動を Nightly と同条件で再検証する。
+- **対象テスト**: `src/tests/unit/hooks/useUserSearchQuery.test.tsx`, `src/tests/unit/components/search/UserSearchResults.test.tsx`
+- **実行コマンド**
+  - Linux/macOS: `./scripts/test-docker.sh ts --scenario user-search-pagination [--no-build]`
+  - Windows: `.\scripts\test-docker.ps1 ts -Scenario user-search-pagination [-NoBuild]`
+- **成果物**: 標準出力を `tmp/logs/user_search_pagination_<timestamp>.log` に保存。将来的に `test-results/user-search-pagination/*.json` へ分割し、Nightly で artefact 化する計画。
+- **注意点**: `ts-test` イメージ内で `pnpm install --frozen-lockfile --ignore-workspace` を自動実行するため、初回は依存解決に時間がかかる。`--no-build`（PowerShell では `-NoBuild`）を付けると image rebuild をスキップできるが、依存更新後は一度ビルド済みキャッシュを更新してから利用する。
 
 ### docker-composeコマンドでの直接実行
 

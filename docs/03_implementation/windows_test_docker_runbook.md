@@ -1,7 +1,7 @@
 # Windows向け Docker テスト運用ガイド
 
 作成日: 2025年10月20日
-最終更新日: 2025年11月07日
+最終更新日: 2025年11月10日
 
 ## 位置づけ
 Windows では DLL 依存の問題によりネイティブ実行が不安定なため、`.\scripts\test-docker.ps1` を **標準テスト経路** とする。  
@@ -30,6 +30,7 @@ Windows では DLL 依存の問題によりネイティブ実行が不安定な�
 | `.\scripts\run-rust-tests.ps1` | Rust 向けラッパー。`-Integration` / `-NoBuild` オプションをサポート | PowerShell スクリプトから Rust テストを呼び出す場合 |
 | `.\scripts\test-docker.ps1 ts` | TypeScript テスト | UI 改修の単体テスト確認 |
 | `.\scripts\test-docker.ps1 ts -Scenario trending-feed` | `/trending` `/following` ルートの Vitest（`routes/trending.test.tsx` / `routes/following.test.tsx` / `hooks/useTrendingFeeds.test.tsx`）を Docker 上で実行。フィクスチャは `VITE_TRENDING_FIXTURE_PATH` で切替可能。 | トレンドメトリクス関連変更時のスモーク、Nightly Frontend Unit Tests と同一条件の再現 |
+| `.\scripts\test-docker.ps1 ts -Scenario user-search-pagination` | `useUserSearchQuery` / `UserSearchResults` のカーソル・ソート・`allow_incomplete`・429レート制限 UI を Docker で再現し、`tmp/logs/user_search_pagination_<timestamp>.log` を保存。 | `/search` (users) タブの UX 回帰、Nightly との同一条件チェック |
 | `.\scripts\test-docker.ps1 lint` | ESLint / rustfmt / pnpm format:check を一括実行 | Lint 修復後の再確認 |
 | `.\scripts\test-docker.ps1 metrics` | メトリクス抽出向けショートテスト | `scripts/metrics/collect-metrics.ps1` 実行前のスモーク |
 | `.\scripts\test-docker.ps1 build` | イメージのみビルド | 依存更新時のキャッシュ再生成 |

@@ -34,7 +34,7 @@ Commands:
   p2p          Run P2P integration tests inside Docker
 
 Options for ts:
-  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync)
+  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination)
   --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
   --no-build             Skip Docker image build (use existing image)
 
@@ -204,6 +204,32 @@ run_ts_profile_avatar_sync() {
   fi
 }
 
+run_ts_user_search_pagination() {
+  local timestamp
+  timestamp="$(date '+%Y%m%d-%H%M%S')"
+  local log_rel_path="tmp/logs/user_search_pagination_${timestamp}.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  mkdir -p "$(dirname "$log_host_path")"
+
+  echo "Running TypeScript scenario 'user-search-pagination'..."
+  if compose_run '' run --rm ts-test bash -lc "
+    set -euo pipefail
+    cd /app/kukuri-tauri
+    if [ ! -f node_modules/.bin/vitest ]; then
+      echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+      pnpm install --frozen-lockfile --ignore-workspace
+    fi
+    pnpm vitest run \
+      'src/tests/unit/hooks/useUserSearchQuery.test.tsx' \
+      'src/tests/unit/components/search/UserSearchResults.test.tsx'
+  " | tee "$log_host_path"; then
+    echo "[OK] Scenario log saved to ${log_rel_path}"
+  else
+    echo "[ERROR] Scenario 'user-search-pagination' failed. See ${log_rel_path} for details." >&2
+    return 1
+  fi
+}
+
 run_ts_post_delete_cache() {
   local timestamp
   timestamp="$(date '+%Y%m%d-%H%M%S')"
@@ -235,6 +261,9 @@ run_ts_tests() {
         ;;
       profile-avatar-sync)
         run_ts_profile_avatar_sync
+        ;;
+      user-search-pagination)
+        run_ts_user_search_pagination
         ;;
       post-delete-cache)
         run_ts_post_delete_cache

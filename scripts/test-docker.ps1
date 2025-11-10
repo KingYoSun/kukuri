@@ -83,7 +83,7 @@ Commands:
 Options:
   -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
   -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
-  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync）
+  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync, user-search-pagination）
   -Fixture <path>  - シナリオ用フィクスチャパスを上書き（既定: tests/fixtures/trending/default.json）
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
@@ -100,6 +100,7 @@ Examples:
   .\test-docker.ps1 rust -NoBuild  # ビルドをスキップしてRustテストを実行
   .\test-docker.ps1 ts -Scenario trending-feed
   .\test-docker.ps1 ts -Scenario profile-avatar-sync
+  .\test-docker.ps1 ts -Scenario user-search-pagination
   .\test-docker.ps1 performance    # パフォーマンス計測用テストバイナリを実行
   .\test-docker.ps1 cache-clean    # キャッシュを含めて完全クリーンアップ
   .\test-docker.ps1 -Help          # ヘルプを表示
@@ -400,6 +401,44 @@ pnpm vitest run \
     }
 }
 
+function Invoke-TypeScriptUserSearchScenario {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $logRelPath = "tmp/logs/user_search_pagination_$timestamp.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $logDir = Split-Path $logHostPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    Write-Host "Running TypeScript scenario 'user-search-pagination'..."
+    $command = @"
+set -euo pipefail
+cd /app/kukuri-tauri
+mkdir -p '/app/tmp/logs'
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run \
+  'src/tests/unit/hooks/useUserSearchQuery.test.tsx' \
+  'src/tests/unit/components/search/UserSearchResults.test.tsx'
+"@
+
+    $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+    $process = Start-Process -FilePath "docker" -ArgumentList $dockerArgs -RedirectStandardOutput $logHostPath -RedirectStandardError $logHostPath -WorkingDirectory $repositoryRoot -NoNewWindow -PassThru
+    $process.WaitForExit()
+
+    if (Test-Path $logHostPath) {
+        Get-Content $logHostPath
+    }
+
+    if ($process.ExitCode -eq 0 -and (Test-Path $logHostPath)) {
+        Write-Success "Scenario log saved to $logRelPath"
+    } else {
+        Write-ErrorMessage "Scenario 'user-search-pagination' failed. See $logRelPath for details."
+    }
+}
+
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -416,6 +455,9 @@ function Invoke-TypeScriptTests {
             }
             "profile-avatar-sync" {
                 Invoke-TypeScriptProfileAvatarScenario
+            }
+            "user-search-pagination" {
+                Invoke-TypeScriptUserSearchScenario
             }
             default {
                 Write-ErrorMessage "Unknown TypeScript scenario: $Scenario"
