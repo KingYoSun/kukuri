@@ -1,10 +1,9 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { vi, describe, beforeEach, it, expect } from 'vitest';
+import { vi, describe, beforeEach, it, expect, beforeAll } from 'vitest';
 
 import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
 import { useAuthStore } from '@/stores/authStore';
 import { TauriApi } from '@/lib/api/tauri';
-import { vi, describe, beforeEach, it, expect, beforeAll } from 'vitest';
 
 vi.mock('@/stores/authStore');
 
