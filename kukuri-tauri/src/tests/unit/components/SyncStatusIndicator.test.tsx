@@ -735,7 +735,10 @@ describe('SyncStatusIndicator', () => {
       await user.click(screen.getByRole('tab', { name: 'Doc/Blob' }));
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Doc/Blob' })).toHaveAttribute('data-state', 'active');
+        expect(screen.getByRole('tab', { name: 'Doc/Blob' })).toHaveAttribute(
+          'data-state',
+          'active',
+        );
       });
 
       expect(screen.getAllByText('ローカル').length).toBeGreaterThan(0);

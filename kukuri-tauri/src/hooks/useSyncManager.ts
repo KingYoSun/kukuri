@@ -519,7 +519,9 @@ export function useSyncManager() {
     const channel = new BroadcastChannel(OFFLINE_SYNC_CHANNEL);
     workerChannelRef.current = channel;
 
-    const handleMessage = (event: MessageEvent<{ type?: string; payload?: OfflineSyncWorkerJob }>) => {
+    const handleMessage = (
+      event: MessageEvent<{ type?: string; payload?: OfflineSyncWorkerJob }>,
+    ) => {
       const message = event.data;
       if (!message || message.type !== 'offline-sync:process' || !message.payload) {
         return;
@@ -535,11 +537,11 @@ export function useSyncManager() {
       }
 
       if (!isOnlineRef.current) {
-          channel.postMessage({
-            type: 'offline-sync:complete',
-            payload: { jobId: job.jobId, success: false },
-          });
-          return;
+        channel.postMessage({
+          type: 'offline-sync:complete',
+          payload: { jobId: job.jobId, success: false },
+        });
+        return;
       }
 
       if (pendingActionsRef.current === 0) {

@@ -63,13 +63,16 @@ function clearTimer(jobId: string) {
 
 function scheduleJob(job: OfflineSyncJob, delayMs: number) {
   clearTimer(job.jobId);
-  const handle = self.setTimeout(() => {
-    timers.delete(job.jobId);
-    channel.postMessage({
-      type: 'offline-sync:process',
-      payload: job,
-    } satisfies ChannelMessage);
-  }, Math.max(0, delayMs));
+  const handle = self.setTimeout(
+    () => {
+      timers.delete(job.jobId);
+      channel.postMessage({
+        type: 'offline-sync:process',
+        payload: job,
+      } satisfies ChannelMessage);
+    },
+    Math.max(0, delayMs),
+  );
   timers.set(job.jobId, handle as unknown as number);
 }
 
@@ -91,8 +94,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
     case 'offline-sync:enqueue': {
       const job = ensureJob(data.payload);
       jobs.set(job.jobId, job);
-      const delay =
-        (data.payload?.delayMs ?? 0) > 0 ? data.payload?.delayMs ?? 0 : 0;
+      const delay = (data.payload?.delayMs ?? 0) > 0 ? (data.payload?.delayMs ?? 0) : 0;
       scheduleJob(job, delay);
       break;
     }

@@ -254,8 +254,7 @@ function extractDocConflictDetails(action?: OfflineAction): DocConflictDetails |
 
   const blobHash = typeof blobHashCandidate === 'string' ? blobHashCandidate : undefined;
   const format = typeof formatCandidate === 'string' ? formatCandidate : undefined;
-  const shareTicket =
-    typeof shareTicketCandidate === 'string' ? shareTicketCandidate : undefined;
+  const shareTicket = typeof shareTicketCandidate === 'string' ? shareTicketCandidate : undefined;
 
   if (
     typeof docVersion === 'undefined' &&
@@ -353,9 +352,7 @@ export function SyncStatusIndicator() {
         key: 'blobHash',
         label: 'Blob Hash',
         local: localDocDetails?.blobHash ? truncateMiddle(localDocDetails.blobHash) : undefined,
-        remote: remoteDocDetails?.blobHash
-          ? truncateMiddle(remoteDocDetails.blobHash)
-          : undefined,
+        remote: remoteDocDetails?.blobHash ? truncateMiddle(remoteDocDetails.blobHash) : undefined,
       },
       {
         key: 'payloadBytes',
@@ -846,11 +843,7 @@ export function SyncStatusIndicator() {
               className="my-4 space-y-3"
             >
               <TabsList
-                className={cn(
-                  'grid gap-2',
-                  showDocTab ? 'grid-cols-2' : 'grid-cols-1',
-                  'w-full',
-                )}
+                className={cn('grid gap-2', showDocTab ? 'grid-cols-2' : 'grid-cols-1', 'w-full')}
               >
                 <TabsTrigger value="summary">概要</TabsTrigger>
                 {showDocTab && <TabsTrigger value="doc">Doc/Blob</TabsTrigger>}
@@ -862,9 +855,7 @@ export function SyncStatusIndicator() {
                     作成日時:{' '}
                     {new Date(selectedConflict.localAction.createdAt).toLocaleString('ja-JP')}
                   </p>
-                  <p className="text-sm mt-1">
-                    タイプ: {selectedConflict.localAction.actionType}
-                  </p>
+                  <p className="text-sm mt-1">タイプ: {selectedConflict.localAction.actionType}</p>
                 </div>
                 {selectedConflict.remoteAction && (
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded">
@@ -898,13 +889,23 @@ export function SyncStatusIndicator() {
                             <div className="grid grid-cols-2 gap-3 text-xs">
                               <div>
                                 <p className="text-muted-foreground mb-0.5">ローカル</p>
-                                <p className={cn('font-medium break-all', differ && 'text-amber-600')}>
+                                <p
+                                  className={cn(
+                                    'font-medium break-all',
+                                    differ && 'text-amber-600',
+                                  )}
+                                >
                                   {row.local ?? '—'}
                                 </p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground mb-0.5">リモート</p>
-                                <p className={cn('font-medium break-all', differ && 'text-amber-600')}>
+                                <p
+                                  className={cn(
+                                    'font-medium break-all',
+                                    differ && 'text-amber-600',
+                                  )}
+                                >
                                   {row.remote ?? '—'}
                                 </p>
                               </div>
