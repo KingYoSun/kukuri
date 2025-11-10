@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Loader2, UserCheck, UserPlus } from 'lucide-react';
@@ -15,13 +15,28 @@ import { useAuthStore } from '@/stores';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { SearchErrorState } from '@/components/search/SearchErrorState';
-import { useUserSearchQuery, type UserSearchSort } from '@/hooks/useUserSearchQuery';
+import {
+  useUserSearchQuery,
+  type UserSearchSort,
+  type HelperSearchDescriptor,
+  type UserSearchErrorKey,
+  type UserSearchStatus,
+} from '@/hooks/useUserSearchQuery';
+
+interface UserSearchInputMeta {
+  sanitizedQuery: string;
+  status: UserSearchStatus;
+  errorKey: UserSearchErrorKey | null;
+  helperSearch: HelperSearchDescriptor | null;
+  allowIncompleteActive: boolean;
+}
 
 interface UserSearchResultsProps {
   query: string;
+  onInputMetaChange?: (meta: UserSearchInputMeta) => void;
 }
 
-export function UserSearchResults({ query }: UserSearchResultsProps) {
+export function UserSearchResults({ query, onInputMetaChange }: UserSearchResultsProps) {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
   const [sort, setSort] = useState<UserSearchSort>('relevance');
@@ -39,11 +54,33 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
     errorKey,
     retryAfterSeconds,
     onRetry,
+    helperSearch,
+    allowIncompleteActive,
   } = useUserSearchQuery(query, {
     viewerNpub: currentUser?.npub ?? null,
     pageSize: 24,
     sort,
   });
+
+  useEffect(() => {
+    if (!onInputMetaChange) {
+      return;
+    }
+    onInputMetaChange({
+      sanitizedQuery,
+      status,
+      errorKey,
+      helperSearch,
+      allowIncompleteActive,
+    });
+  }, [
+    allowIncompleteActive,
+    errorKey,
+    helperSearch,
+    onInputMetaChange,
+    sanitizedQuery,
+    status,
+  ]);
 
   const followingQuery = useQuery<
     Profile[],

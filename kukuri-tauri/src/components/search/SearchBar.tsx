@@ -14,6 +14,9 @@ interface SearchBarProps {
   className?: string;
   autoFocus?: boolean;
   showButton?: boolean;
+  validationState?: 'default' | 'warning' | 'error';
+  validationMessage?: string;
+  helperLabel?: string;
 }
 
 export function SearchBar({
@@ -25,6 +28,9 @@ export function SearchBar({
   className,
   autoFocus = false,
   showButton = true,
+  validationState = 'default',
+  validationMessage,
+  helperLabel,
 }: SearchBarProps) {
   const [internalValue, setInternalValue] = useState('');
   const value = controlledValue !== undefined ? controlledValue : internalValue;
@@ -76,30 +82,54 @@ export function SearchBar({
     [value, handleClear],
   );
 
+  const inputValidationClass =
+    validationState === 'error'
+      ? 'border-destructive focus-visible:ring-destructive/70'
+      : validationState === 'warning'
+        ? 'border-amber-400 text-foreground focus-visible:ring-amber-400/70'
+        : '';
+  const messageClass =
+    validationState === 'error'
+      ? 'text-destructive'
+      : validationState === 'warning'
+        ? 'text-amber-600'
+        : 'text-muted-foreground';
+
   return (
     <form onSubmit={handleSubmit} className={cn('flex gap-2', className)}>
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className="pl-9 pr-9"
-          autoFocus={autoFocus}
-        />
-        {value && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
-            onClick={handleClear}
-          >
-            <X className="h-3 w-3" />
-            <span className="sr-only">クリア</span>
-          </Button>
+      <div className="flex-1">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className={cn('pl-9 pr-9', inputValidationClass)}
+            autoFocus={autoFocus}
+            aria-invalid={validationState === 'error'}
+          />
+          {value && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+              onClick={handleClear}
+            >
+              <X className="h-3 w-3" />
+              <span className="sr-only">クリア</span>
+            </Button>
+          )}
+        </div>
+        {(helperLabel || validationMessage) && (
+          <div className="mt-1 space-y-0.5">
+            {helperLabel && <p className="text-xs text-muted-foreground">{helperLabel}</p>}
+            {validationMessage && (
+              <p className={cn('text-xs', messageClass)}>{validationMessage}</p>
+            )}
+          </div>
         )}
       </div>
       {showButton && (

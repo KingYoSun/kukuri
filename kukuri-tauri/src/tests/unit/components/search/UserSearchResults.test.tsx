@@ -105,6 +105,8 @@ describe('UserSearchResults', () => {
       errorKey: null,
       retryAfterSeconds: null,
       onRetry: vi.fn(),
+      helperSearch: null,
+      allowIncompleteActive: false,
     });
 
     getFollowingMock.mockResolvedValue({
@@ -145,6 +147,8 @@ describe('UserSearchResults', () => {
       errorKey: null,
       retryAfterSeconds: null,
       onRetry: vi.fn(),
+      helperSearch: null,
+      allowIncompleteActive: false,
     });
 
     renderWithClient(<UserSearchResults query="" />);
@@ -172,6 +176,8 @@ describe('UserSearchResults', () => {
       errorKey: null,
       retryAfterSeconds: null,
       onRetry: vi.fn(),
+      helperSearch: null,
+      allowIncompleteActive: false,
     });
 
     renderWithClient(<UserSearchResults query="zzz" />);
@@ -184,5 +190,17 @@ describe('UserSearchResults', () => {
     fireEvent.click(recencyButton);
     const lastCall = useSearchQueryMock.mock.calls.at(-1);
     expect(lastCall?.[1]?.sort).toBe('recency');
+  });
+
+  it('notifies parent about input meta changes', () => {
+    const handler = vi.fn();
+    renderWithClient(<UserSearchResults query="alice" onInputMetaChange={handler} />);
+    expect(handler).toHaveBeenCalledWith({
+      sanitizedQuery: 'alice',
+      status: 'success',
+      errorKey: null,
+      helperSearch: null,
+      allowIncompleteActive: false,
+    });
   });
 });

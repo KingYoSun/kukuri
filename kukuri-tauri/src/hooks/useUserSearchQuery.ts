@@ -14,7 +14,10 @@ import { useDebounce } from './useDebounce';
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
-const MAX_QUERY_LENGTH = 64;
+export const MIN_USER_SEARCH_QUERY_LENGTH = 2;
+export const MAX_USER_SEARCH_QUERY_LENGTH = 64;
+
+const MAX_QUERY_LENGTH = MAX_USER_SEARCH_QUERY_LENGTH;
 
 export type UserSearchSort = 'relevance' | 'recency';
 
@@ -34,6 +37,14 @@ export type UserSearchErrorKey =
   | 'UserSearch.invalid_query'
   | 'UserSearch.fetch_failed'
   | 'UserSearch.rate_limited';
+
+export type HelperSearchKind = 'mention' | 'hashtag';
+
+export interface HelperSearchDescriptor {
+  kind: HelperSearchKind;
+  term: string;
+  rawQuery: string;
+}
 
 interface UseUserSearchQueryOptions {
   minLength?: number;
@@ -55,13 +66,15 @@ interface UseUserSearchQueryResult {
   isFetchingNextPage: boolean;
   fetchNextPage: () => Promise<void>;
   onRetry: () => Promise<void>;
+  helperSearch: HelperSearchDescriptor | null;
+  allowIncompleteActive: boolean;
 }
 
 export function useUserSearchQuery(
   query: string,
   options?: UseUserSearchQueryOptions,
 ): UseUserSearchQueryResult {
-  const minLength = options?.minLength ?? 2;
+  const minLength = options?.minLength ?? MIN_USER_SEARCH_QUERY_LENGTH;
   const pageSize = options?.pageSize ?? 24;
   const viewerNpub = options?.viewerNpub ?? null;
   const sort: UserSearchSort = options?.sort ?? 'relevance';
@@ -80,7 +93,15 @@ export function useUserSearchQuery(
     string | null
   > | null>(null);
 
-  const queryEnabled = debouncedQuery.length >= minLength && cooldownSeconds === null;
+  const helperSearch = useMemo(() => detectHelperSearch(clampedQuery), [clampedQuery]);
+  const helperTermLength = helperSearch?.term.length ?? 0;
+  const effectiveQueryLength = helperSearch ? helperTermLength : clampedQuery.length;
+  const allowIncompleteActive = Boolean(
+    helperSearch && helperTermLength > 0 && helperTermLength < minLength,
+  );
+
+  const meetsMinLength = effectiveQueryLength >= minLength;
+  const queryEnabled = (meetsMinLength || allowIncompleteActive) && cooldownSeconds === null;
 
   const queryResult = useInfiniteQuery<
     SearchUsersResponseDto,
@@ -97,6 +118,7 @@ export function useUserSearchQuery(
         pageSize,
         viewerNpub,
         sort,
+        allowIncomplete: allowIncompleteActive,
       }),
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -106,22 +128,22 @@ export function useUserSearchQuery(
   });
 
   useEffect(() => {
-    if (queryResult.isSuccess && debouncedQuery.length >= minLength) {
+    if (queryResult.isSuccess && (meetsMinLength || allowIncompleteActive)) {
       setStaleData(queryResult.data ?? null);
     }
-  }, [debouncedQuery, minLength, queryResult.data, queryResult.isSuccess]);
+  }, [allowIncompleteActive, meetsMinLength, queryResult.data, queryResult.isSuccess]);
 
   useEffect(() => {
     if (clampedQuery.length === 0) {
       setErrorKey(null);
       return;
     }
-    if (clampedQuery.length < minLength) {
+    if (!meetsMinLength && !allowIncompleteActive) {
       setErrorKey('UserSearch.invalid_query');
     } else if (errorKey === 'UserSearch.invalid_query') {
       setErrorKey(null);
     }
-  }, [clampedQuery, minLength]);
+  }, [allowIncompleteActive, clampedQuery, errorKey, meetsMinLength]);
 
   useEffect(() => {
     const error = queryResult.error;
@@ -162,8 +184,12 @@ export function useUserSearchQuery(
     return () => clearTimeout(timer);
   }, [cooldownSeconds, queryResult]);
 
+  const shouldUseStaleData =
+    !meetsMinLength &&
+    (!allowIncompleteActive || queryResult.isLoading || queryResult.isFetching);
+
   const activeData: InfiniteData<SearchUsersResponseDto, string | null> | null =
-    queryResult.data ?? (clampedQuery.length < minLength ? staleData : null);
+    queryResult.data ?? (shouldUseStaleData ? staleData : null);
 
   const flattenedResults = useMemo(() => {
     if (!activeData) {
@@ -199,11 +225,12 @@ export function useUserSearchQuery(
 
   const status = deriveStatus({
     clampedQuery,
-    minLength,
+    meetsMinLength,
     cooldownSeconds,
     debouncedQuery,
     dataAvailable: flattenedResults.length > 0,
     queryResult,
+    allowIncomplete: allowIncompleteActive,
   });
 
   return {
@@ -219,6 +246,8 @@ export function useUserSearchQuery(
     isFetchingNextPage,
     fetchNextPage,
     onRetry: handleRetry,
+    helperSearch,
+    allowIncompleteActive,
   };
 }
 
@@ -228,12 +257,14 @@ async function fetchSearchPage({
   pageSize,
   viewerNpub,
   sort,
+  allowIncomplete,
 }: {
   query: string;
   cursor: string | null;
   pageSize: number;
   viewerNpub: string | null;
   sort: UserSearchSort;
+  allowIncomplete: boolean;
 }): Promise<SearchUsersResponseDto> {
   return await TauriApi.searchUsers({
     query,
@@ -241,6 +272,7 @@ async function fetchSearchPage({
     limit: pageSize,
     sort,
     viewerNpub,
+    allowIncomplete,
   });
 }
 
@@ -250,23 +282,25 @@ function sanitizeQuery(raw: string): string {
 
 function deriveStatus({
   clampedQuery,
-  minLength,
+  meetsMinLength,
   cooldownSeconds,
   debouncedQuery,
   dataAvailable,
   queryResult,
+  allowIncomplete,
 }: {
   clampedQuery: string;
-  minLength: number;
+  meetsMinLength: boolean;
   cooldownSeconds: number | null;
   debouncedQuery: string;
   dataAvailable: boolean;
   queryResult: UseInfiniteQueryResult<InfiniteData<SearchUsersResponseDto, string | null>, Error>;
+  allowIncomplete: boolean;
 }): UserSearchStatus {
   if (!clampedQuery.length) {
     return 'idle';
   }
-  if (clampedQuery.length < minLength) {
+  if (!meetsMinLength && !allowIncomplete) {
     return 'typing';
   }
   if (cooldownSeconds !== null) {
@@ -285,4 +319,35 @@ function deriveStatus({
     return 'empty';
   }
   return 'success';
+}
+
+function detectHelperSearch(query: string): HelperSearchDescriptor | null {
+  const trimmed = query.trim();
+  if (trimmed.length <= 1) {
+    return null;
+  }
+
+  const startsWithMention = trimmed.startsWith('@');
+  const endsWithMention = trimmed.endsWith('@');
+  if (startsWithMention || endsWithMention) {
+    const term = startsWithMention ? trimmed.slice(1) : trimmed.slice(0, -1);
+    const normalized = term.trim();
+    if (!normalized.length) {
+      return null;
+    }
+    return { kind: 'mention', term: normalized, rawQuery: trimmed };
+  }
+
+  const startsWithTag = trimmed.startsWith('#');
+  const endsWithTag = trimmed.endsWith('#');
+  if (startsWithTag || endsWithTag) {
+    const term = startsWithTag ? trimmed.slice(1) : trimmed.slice(0, -1);
+    const normalized = term.trim();
+    if (!normalized.length) {
+      return null;
+    }
+    return { kind: 'hashtag', term: normalized, rawQuery: trimmed };
+  }
+
+  return null;
 }

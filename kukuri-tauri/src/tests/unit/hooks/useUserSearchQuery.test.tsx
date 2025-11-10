@@ -78,6 +78,7 @@ describe('useUserSearchQuery', () => {
       limit: 24,
       sort: 'relevance',
       viewerNpub: null,
+      allowIncomplete: false,
     });
   });
 
@@ -91,6 +92,33 @@ describe('useUserSearchQuery', () => {
 
     expect(result.current.status).toBe('typing');
     expect(searchUsersMock).not.toHaveBeenCalled();
+  });
+
+  it('enables allow_incomplete fallback for helper queries', async () => {
+    searchUsersMock.mockResolvedValueOnce({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      totalCount: 0,
+      tookMs: 1,
+    });
+
+    const { result } = renderHook(({ value }) => useUserSearchQuery(value), {
+      initialProps: { value: '@a' },
+      wrapper: createWrapper(),
+    });
+
+    await waitForDebounce();
+
+    await waitFor(() => {
+      expect(searchUsersMock).toHaveBeenCalledWith(
+        expect.objectContaining({ allowIncomplete: true }),
+      );
+    });
+    expect(result.current.allowIncompleteActive).toBe(true);
+    expect(result.current.helperSearch).toEqual(
+      expect.objectContaining({ kind: 'mention', term: 'a' }),
+    );
   });
 
   it('exposes rate limit state when API returns RATE_LIMITED', async () => {
@@ -224,7 +252,9 @@ describe('useUserSearchQuery', () => {
 
     await waitForDebounce();
     await waitFor(() => {
-      expect(searchUsersMock).toHaveBeenCalledWith(expect.objectContaining({ sort: 'relevance' }));
+      expect(searchUsersMock).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'relevance', allowIncomplete: false }),
+      );
     });
 
     rerender({ value: 'alice', sort: 'recency' });
@@ -232,7 +262,7 @@ describe('useUserSearchQuery', () => {
 
     await waitFor(() => {
       expect(searchUsersMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ sort: 'recency' }),
+        expect.objectContaining({ sort: 'recency', allowIncomplete: false }),
       );
     });
   });
