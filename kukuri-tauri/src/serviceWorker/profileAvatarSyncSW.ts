@@ -33,8 +33,8 @@ function dispatchJob(job: ProfileAvatarSyncJob) {
 function ensureJob(payload: Partial<ProfileAvatarSyncJob>): ProfileAvatarSyncJob {
   const jobId =
     payload.jobId ??
-    (self.crypto?.randomUUID?.() ??
-      `profile-avatar-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    self.crypto?.randomUUID?.() ??
+    `profile-avatar-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const job: ProfileAvatarSyncJob = {
     jobId,
     npub: payload.npub ?? '',

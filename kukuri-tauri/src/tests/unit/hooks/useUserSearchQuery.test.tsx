@@ -217,19 +217,14 @@ describe('useUserSearchQuery', () => {
         tookMs: 4,
       });
 
-    const { rerender } = renderHook(
-      ({ value, sort }) => useUserSearchQuery(value, { sort }),
-      {
-        initialProps: { value: 'alice', sort: 'relevance' as const },
-        wrapper: createWrapper(),
-      },
-    );
+    const { rerender } = renderHook(({ value, sort }) => useUserSearchQuery(value, { sort }), {
+      initialProps: { value: 'alice', sort: 'relevance' as const },
+      wrapper: createWrapper(),
+    });
 
     await waitForDebounce();
     await waitFor(() => {
-      expect(searchUsersMock).toHaveBeenCalledWith(
-        expect.objectContaining({ sort: 'relevance' }),
-      );
+      expect(searchUsersMock).toHaveBeenCalledWith(expect.objectContaining({ sort: 'relevance' }));
     });
 
     rerender({ value: 'alice', sort: 'recency' });

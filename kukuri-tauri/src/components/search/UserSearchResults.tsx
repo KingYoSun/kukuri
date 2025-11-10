@@ -176,11 +176,7 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
           </p>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             並び順
-            <div
-              className="flex items-center gap-1"
-              role="group"
-              aria-label="ユーザー検索の並び順"
-            >
+            <div className="flex items-center gap-1" role="group" aria-label="ユーザー検索の並び順">
               {sortOptions.map((option) => (
                 <Button
                   key={option.value}
@@ -228,7 +224,11 @@ export function UserSearchResults({ query }: UserSearchResultsProps) {
             {!showSortControls && (
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
                 並び順
-                <div className="flex items-center gap-1" role="group" aria-label="ユーザー検索の並び順">
+                <div
+                  className="flex items-center gap-1"
+                  role="group"
+                  aria-label="ユーザー検索の並び順"
+                >
                   {sortOptions.map((option) => (
                     <Button
                       key={option.value}
