@@ -73,14 +73,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
       helperSearch,
       allowIncompleteActive,
     });
-  }, [
-    allowIncompleteActive,
-    errorKey,
-    helperSearch,
-    onInputMetaChange,
-    sanitizedQuery,
-    status,
-  ]);
+  }, [allowIncompleteActive, errorKey, helperSearch, onInputMetaChange, sanitizedQuery, status]);
 
   const followingQuery = useQuery<
     Profile[],

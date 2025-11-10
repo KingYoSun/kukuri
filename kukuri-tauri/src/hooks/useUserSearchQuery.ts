@@ -185,8 +185,7 @@ export function useUserSearchQuery(
   }, [cooldownSeconds, queryResult]);
 
   const shouldUseStaleData =
-    !meetsMinLength &&
-    (!allowIncompleteActive || queryResult.isLoading || queryResult.isFetching);
+    !meetsMinLength && (!allowIncompleteActive || queryResult.isLoading || queryResult.isFetching);
 
   const activeData: InfiniteData<SearchUsersResponseDto, string | null> | null =
     queryResult.data ?? (shouldUseStaleData ? staleData : null);

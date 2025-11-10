@@ -37,7 +37,11 @@ function SearchPage() {
 
   const userValidation = useMemo(() => {
     if (!userSearchMeta) {
-      return { validationState: 'default' as const, validationMessage: undefined, helperLabel: undefined };
+      return {
+        validationState: 'default' as const,
+        validationMessage: undefined,
+        helperLabel: undefined,
+      };
     }
 
     const { sanitizedQuery, status, errorKey, helperSearch, allowIncompleteActive } =
@@ -65,7 +69,8 @@ function SearchPage() {
     return { validationState, validationMessage, helperLabel };
   }, [userSearchMeta]);
 
-  const searchBarValidationState = activeTab === 'users' ? userValidation.validationState : 'default';
+  const searchBarValidationState =
+    activeTab === 'users' ? userValidation.validationState : 'default';
   const searchBarValidationMessage =
     activeTab === 'users' ? userValidation.validationMessage : undefined;
   const searchBarHelperLabel = activeTab === 'users' ? userValidation.helperLabel : undefined;
