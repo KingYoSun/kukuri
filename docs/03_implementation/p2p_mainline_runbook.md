@@ -93,12 +93,13 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - Tarpaulin は ptrace を利用するため `rust-coverage` サービスに `SYS_PTRACE` 権限と `seccomp=unconfined` を付与済み。CI で同設定を反映する場合は GitHub Actions の `docker run` 手順で `--cap-add=SYS_PTRACE --security-opt seccomp=unconfined` を指定する。
 
 ### 6.2 P2Pメトリクス採取
-- Phase 5 で `p2p_metrics_export` バイナリとラッパースクリプト `scripts/metrics/export-p2p.{sh,ps1}` を追加した。CI ではテスト後に下記コマンドで `docs/01_project/activeContext/artefacts/metrics/<timestamp>-p2p-metrics.json` を生成し、成果物として保存すること。
+- Phase 5 で `p2p_metrics_export` バイナリとラッパースクリプト `scripts/metrics/export-p2p.{sh,ps1}` を追加した。`--job p2p`（既定）は Gossip/Mainline スナップショットを `docs/01_project/activeContext/artefacts/metrics/<timestamp>-p2p-metrics.json` へ保存し、`--job trending` は `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` に `window_*` / `lag_ms` / `score_weights` / `topics[].score_24h` を含むレポートを出力する。
   ```bash
-  ./scripts/metrics/export-p2p.sh --pretty
+  ./scripts/metrics/export-p2p.sh --job trending --pretty --limit 50
+  ./scripts/metrics/export-p2p.sh --job p2p --pretty
   ```
-- PowerShell 版は `./scripts/metrics/export-p2p.ps1 -Pretty` で同じ JSON を出力する。`--output` / `-Output` オプションで保存先を上書き可能。
-- エクスポートされた JSON には Gossip/Mainline 双方のカウンタ・直近タイムスタンプが含まれるため、CI で期待件数との差分を検証したり、進捗レポートに添付する。
+- PowerShell 版は `./scripts/metrics/export-p2p.ps1 -Job trending -Pretty` / `-Job p2p -Pretty` で同じ情報を取得できる。`--database-url` / `-DatabaseUrl` で SQLite の場所を指定し、`--output` / `-Output` で保存先を上書き可能。
+- エクスポートされた JSON を `phase5_ci_path_audit.md` と紐づけ、`lag_ms` が 5 分未満・`metrics_count` > 0 であることを Nightly で確認する。P2P 側の JSON はこれまで同様 CI 進捗レポートへ添付する。
 
 ### 6.3 iroh バイナリキャッシュ
 - GitHub Actions では `actions/cache@v4` を利用し、`~/.cache/kukuri/iroh`（PowerShell 版は `%LocalAppData%\kukuri\iroh`）をキャッシュする。キーは `iroh-${{ runner.os }}-${{ hashFiles("scripts/install-iroh.ps1") }}` を推奨し、`scripts/install-iroh.{sh,ps1}` でキャッシュヒット時はダウンロードをスキップする。

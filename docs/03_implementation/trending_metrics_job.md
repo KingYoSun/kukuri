@@ -19,6 +19,7 @@
 - `TopicMetricsRepository` に `latest_window_end` / `list_recent_metrics(limit)` を追加し、`topic_metrics` から直近ウィンドウを一括取得できるようにした。`TopicService::list_trending_topics` はメトリクスが有効かつ最新レコードが存在する場合に `TrendingDataSource::Metrics` を返却し、フォールバックとして従来のリアルタイム集計を保持する。
 - `topic_handler::list_trending_topics` / `post_handler::list_trending_posts` はどちらも `generated_at = topic_metrics.window_end` を返却するため、Summary Panel と Docker `trending-feed` シナリオの比較が 1:1 で行える。
 - CI: `pnpm vitest run routes/trending.test.tsx routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` と `scripts/test-docker.sh ts --scenario trending-feed --no-build` を Nightly で実行。`trending_metrics_job` のローカル実行は `cargo test trending_metrics_job::*` / `cargo fmt` / `cargo test --package kukuri-tauri` に含まれる。
+- `p2p_metrics_export` バイナリに `--job trending` / `--limit` / `--database-url` を追加（2025年11月10日）。`./scripts/metrics/export-p2p.sh --job trending --pretty`（PowerShell: `.\scripts\metrics\export-p2p.ps1 -Job trending -Pretty`）を実行すると `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` が生成され、`window_start_ms` / `window_end_ms` / `window_duration_ms` / `lag_ms` / `score_weights` / `topics[].score_24h` など exit criteria に必要な情報を一括取得できる。
 
 ## 要件
 
@@ -51,7 +52,7 @@ kukuri_trending_metrics_job_last_success_timestamp 1731229205123
 ```
 
 3. `tiny_http` サーバーは 127.0.0.1 のみにバインドされる。外部公開が必要な場合はリバースプロキシか SSH トンネルを利用する。
-4. 生成されたメトリクスは Runbook Chapter7 と `phase5_ci_path_audit.md` で `curl` / `scripts/metrics/export-p2p --job trending`（今後追加予定）から収集する。
+4. 生成されたメトリクスは Runbook Chapter7 と `phase5_ci_path_audit.md` で `curl` / `scripts/metrics/export-p2p --job trending --pretty --limit 50` から収集する。デフォルトでは `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` に保存され、`lag_ms` が 5 分未満、`metrics_count` > 0 を確認できる。
 
 ## アーキテクチャ案
 - モジュール構成

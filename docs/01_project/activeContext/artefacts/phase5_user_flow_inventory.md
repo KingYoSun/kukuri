@@ -447,10 +447,11 @@
 - **参照**: `phase5_user_flow_summary.md` MVP Exit（トレンド/フォロー）、`tauri_app_implementation_plan.md` Phase3、`phase5_ci_path_audit.md` trending-feed / corepack 行、`docs/03_implementation/trending_metrics_job.md`。
 - **Stage4 TODO（trending_metrics_job 監視/自動実行）**
   1. `kukuri-tauri/src-tauri/src/state.rs` の `metrics_config` に `prometheus_port` / `emit_histogram` を追加し、`TrendingMetricsJob` 実行時に `prometheus::Registry` へ `topics_upserted` / `expired_records` / `run_duration_ms` をエクスポート。
-  2. `scripts/metrics/export-p2p.{sh,ps1}` に `--job trending` オプションを追加し、`docs/03_implementation/trending_metrics_job.md` で定義した JSON レポート（最新ウィンドウ/score/lag）を `test-results/trending-feed/metrics/*.json` へ保存。
+  2. `scripts/metrics/export-p2p.{sh,ps1}` に `--job trending` / `--limit` / `--database-url` オプションを追加し、`docs/03_implementation/trending_metrics_job.md` で定義した JSON レポート（最新ウィンドウ/score/lag）を `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` へ保存。
   3. `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` に Prometheus スクレイプ用の `docker-compose` サービス（例: `prometheus-trending`) を追加し、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を生成。
   4. `phase5_ci_path_audit.md` と Runbook Chapter7 に監視手順（`curl http://localhost:<port>/metrics`、`scripts/metrics/export-p2p --job trending --pretty`）と復旧基準（`topics_upserted > 0` / `lag_ms < 300000`）を追加し、本節のステータス完了条件を定義する。
   - 2025年11月10日: (1) を実装済み。`MetricsConfig` に `prometheus_port`・`emit_histogram` を追加し、`TrendingMetricsJob` は `kukuri_trending_metrics_job_runs_total` / `failures_total` / `topics_upserted` / `expired_records` / `last_success_timestamp` / `duration_seconds_bucket` を Prometheus 形式で公開できるようになった。残り (2)〜(4) は Nightly/Docker 連携として backlog を継続。
+  - 2025年11月10日: (2) を実装し、`p2p_metrics_export --job trending` から `window_start_ms` / `window_end_ms` / `lag_ms` / `score_weights` / `topics[].score_24h` を含む JSON を `test-results/trending-feed/metrics/<timestamp>.json` にエクスポートできるようになった。`phase5_ci_path_audit.md` / `trending_metrics_job.md` / `p2p_mainline_runbook.md` に手順と保存先を追記済み。残りは (3) Prometheus 付き Docker シナリオと (4) Nightly artefact ログ固定。
 
 ### 5.8 ユーザー検索導線改善計画（2025年11月04日追加）
 - **目的**: `/search` (users) タブで安定した検索体験（ページネーション・エラー復旧・レート制御）を提供し、フォロー導線とプロフィール遷移を促進する。

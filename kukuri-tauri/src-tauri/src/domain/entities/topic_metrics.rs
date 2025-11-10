@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct MetricsWindow {
     pub start: i64,
     pub end: i64,
@@ -14,7 +16,7 @@ impl MetricsWindow {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct ScoreWeights {
     pub posts: f64,
     pub unique_authors: f64,
@@ -39,7 +41,7 @@ impl ScoreWeights {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TopicActivityRow {
     pub topic_id: String,
     pub posts_count: i64,
@@ -64,7 +66,7 @@ impl TopicActivityRow {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TopicMetricsUpsert {
     pub topic_id: String,
     pub window_start: i64,
@@ -81,7 +83,7 @@ pub struct TopicMetricsUpsert {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TopicMetricsRecord {
     pub topic_id: String,
     pub window_start: i64,
@@ -98,7 +100,7 @@ pub struct TopicMetricsRecord {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TopicMetricsSnapshot {
     pub window_start: i64,
     pub window_end: i64,
