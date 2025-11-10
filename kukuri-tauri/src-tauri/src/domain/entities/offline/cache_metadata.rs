@@ -14,4 +14,7 @@ pub struct CacheMetadataRecord {
     pub is_stale: bool,
     pub expiry_time: Option<DateTime<Utc>>,
     pub metadata: Option<Value>,
+    pub doc_version: Option<i64>,
+    pub blob_hash: Option<String>,
+    pub payload_bytes: Option<i64>,
 }

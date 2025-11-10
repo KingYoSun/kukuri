@@ -673,5 +673,74 @@ describe('SyncStatusIndicator', () => {
 
       expect(mockResolveConflict).toHaveBeenCalledWith(mockConflict, 'remote');
     });
+
+    it('Doc/Blob 情報をタブで比較表示', async () => {
+      const docConflict: SyncConflict = {
+        localAction: {
+          id: 1,
+          localId: 'local_doc',
+          userPubkey: 'user123',
+          actionType: OfflineActionType.PROFILE_UPDATE,
+          actionData: JSON.stringify({
+            docVersion: 2,
+            blobHash: 'bao1abcdefghijklmno1234567890',
+            payloadBytes: 2048,
+            format: 'image/png',
+          }),
+          createdAt: '2024-01-01T00:00:00Z',
+          isSynced: false,
+        },
+        remoteAction: {
+          id: 2,
+          localId: 'remote_doc',
+          userPubkey: 'user999',
+          actionType: OfflineActionType.PROFILE_UPDATE,
+          actionData: JSON.stringify({
+            docVersion: 3,
+            blobHash: 'bao1zyxwvutsrqponm9876543210',
+            payloadBytes: 4096,
+            format: 'image/png',
+          }),
+          createdAt: '2024-01-01T00:00:10Z',
+          isSynced: true,
+        },
+        conflictType: 'version',
+      };
+
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        syncStatus: {
+          ...defaultSyncStatus,
+          conflicts: [docConflict],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+
+      const indicatorButton = screen.getByRole('button');
+      fireEvent.click(indicatorButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('profile_update')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('profile_update'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Doc/Blob')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Doc/Blob' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Doc/Blob' })).toHaveAttribute('data-state', 'active');
+      });
+
+      expect(screen.getAllByText('ローカル').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('リモート').length).toBeGreaterThan(0);
+      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText(/Payload Size/i)).toBeInTheDocument();
+    });
   });
 });

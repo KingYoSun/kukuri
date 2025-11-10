@@ -40,6 +40,9 @@ pub struct CacheMetadataRow {
     pub is_stale: bool,
     pub expiry_time: Option<i64>,
     pub metadata: Option<String>,
+    pub doc_version: Option<i64>,
+    pub blob_hash: Option<String>,
+    pub payload_bytes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncEngine';
@@ -7,6 +7,11 @@ import { errorHandler } from '@/lib/errorHandler';
 import { offlineApi } from '@/api/offline';
 import type { CacheStatusResponse, OfflineAction, SyncQueueItem } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
+import {
+  enqueueOfflineSyncJob,
+  OFFLINE_SYNC_CHANNEL,
+  registerOfflineSyncWorker,
+} from '@/serviceWorker/offlineSyncBridge';
 
 export interface SyncStatus {
   isSyncing: boolean;
@@ -19,6 +24,13 @@ export interface SyncStatus {
 }
 
 const SYNC_QUEUE_HISTORY_LIMIT = 30;
+const WORKER_SCHEDULE_COOLDOWN_MS = 30 * 1000;
+
+type OfflineSyncWorkerJob = {
+  jobId: string;
+  userPubkey?: string;
+  reason?: string;
+};
 
 function inferEntityType(actionType: string): string | null {
   switch (actionType) {
@@ -108,6 +120,18 @@ export function useSyncManager() {
   const [isQueueItemsLoading, setQueueItemsLoading] = useState(false);
   const [lastQueuedItemId, setLastQueuedItemId] = useState<number | null>(null);
   const [queueingType, setQueueingType] = useState<string | null>(null);
+  const workerChannelRef = useRef<BroadcastChannel | null>(null);
+  const workerScheduleRef = useRef(0);
+  const pendingActionsRef = useRef(pendingActions.length);
+  const isOnlineRef = useRef(isOnline);
+
+  useEffect(() => {
+    pendingActionsRef.current = pendingActions.length;
+  }, [pendingActions.length]);
+
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   const refreshCacheStatus = useCallback(async () => {
     setCacheStatusLoading(true);
@@ -480,6 +504,109 @@ export function useSyncManager() {
   useEffect(() => {
     void refreshQueueItems();
   }, [pendingActions.length, refreshQueueItems]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    void registerOfflineSyncWorker();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
+      return;
+    }
+    const channel = new BroadcastChannel(OFFLINE_SYNC_CHANNEL);
+    workerChannelRef.current = channel;
+
+    const handleMessage = (event: MessageEvent<{ type?: string; payload?: OfflineSyncWorkerJob }>) => {
+      const message = event.data;
+      if (!message || message.type !== 'offline-sync:process' || !message.payload) {
+        return;
+      }
+      const job = message.payload;
+
+      if (job.userPubkey && currentUser?.npub && job.userPubkey !== currentUser.npub) {
+        channel.postMessage({
+          type: 'offline-sync:complete',
+          payload: { jobId: job.jobId, success: true },
+        });
+        return;
+      }
+
+      if (!isOnlineRef.current) {
+          channel.postMessage({
+            type: 'offline-sync:complete',
+            payload: { jobId: job.jobId, success: false },
+          });
+          return;
+      }
+
+      if (pendingActionsRef.current === 0) {
+        channel.postMessage({
+          type: 'offline-sync:complete',
+          payload: { jobId: job.jobId, success: true },
+        });
+        return;
+      }
+
+      const run = async () => {
+        try {
+          await triggerManualSync();
+          channel.postMessage({
+            type: 'offline-sync:complete',
+            payload: { jobId: job.jobId, success: true },
+          });
+        } catch {
+          channel.postMessage({
+            type: 'offline-sync:complete',
+            payload: { jobId: job.jobId, success: false },
+          });
+        }
+      };
+
+      void run();
+    };
+
+    channel.addEventListener('message', handleMessage);
+
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+      channel.close();
+      workerChannelRef.current = null;
+    };
+  }, [currentUser?.npub, triggerManualSync]);
+
+  useEffect(() => {
+    if (!currentUser?.npub) {
+      return;
+    }
+    if (!isOnline) {
+      return;
+    }
+    if (pendingActions.length === 0) {
+      return;
+    }
+    const now = Date.now();
+    if (now - workerScheduleRef.current < WORKER_SCHEDULE_COOLDOWN_MS) {
+      return;
+    }
+    workerScheduleRef.current = now;
+
+    const schedule = async () => {
+      const jobId = await enqueueOfflineSyncJob({
+        userPubkey: currentUser.npub,
+        reason: 'pending-actions',
+      });
+      if (!jobId) {
+        errorHandler.log('OfflineSync.enqueueFailed', null, {
+          context: 'useSyncManager.scheduleWorkerJob',
+        });
+      }
+    };
+
+    void schedule();
+  }, [currentUser?.npub, isOnline, pendingActions.length, triggerManualSync]);
 
   return {
     syncStatus,

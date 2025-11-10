@@ -34,7 +34,7 @@ Commands:
   p2p          Run P2P integration tests inside Docker
 
 Options for ts:
-  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination)
+  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination, offline-sync)
   --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
   --no-build             Skip Docker image build (use existing image)
 
@@ -248,6 +248,35 @@ run_ts_post_delete_cache() {
   fi
 }
 
+run_ts_offline_sync() {
+  local timestamp
+  timestamp="$(date '+%Y%m%d-%H%M%S')"
+  local log_rel_path="tmp/logs/sync_status_indicator_stage4_${timestamp}.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  mkdir -p "$(dirname "$log_host_path")"
+
+  echo "Running TypeScript scenario 'offline-sync'..."
+  compose_run '' run --rm ts-test bash -lc "
+    set -euo pipefail
+    cd /app/kukuri-tauri
+    if [ ! -f node_modules/.bin/vitest ]; then
+      echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+      pnpm install --frozen-lockfile --ignore-workspace
+    fi
+    pnpm vitest run \
+      'src/tests/unit/hooks/useSyncManager.test.tsx' \
+      'src/tests/unit/components/SyncStatusIndicator.test.tsx' \
+      'src/tests/unit/components/OfflineIndicator.test.tsx' \
+      | tee '/app/${log_rel_path}'
+  "
+
+  if [[ -f "$log_host_path" ]]; then
+    echo "[OK] Scenario log saved to ${log_rel_path}"
+  else
+    echo "[WARN] Scenario log was not generated at ${log_rel_path}" >&2
+  fi
+}
+
 run_ts_tests() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   if [[ -z "$TS_SCENARIO" ]]; then
@@ -267,6 +296,9 @@ run_ts_tests() {
         ;;
       post-delete-cache)
         run_ts_post_delete_cache
+        ;;
+      offline-sync)
+        run_ts_offline_sync
         ;;
       *)
         echo "Unknown TypeScript scenario: $TS_SCENARIO" >&2

@@ -129,6 +129,9 @@ async fn cache_metadata_upsert_and_cleanup() {
         metadata: Some(serde_json::json!({"version": 1})),
         expiry: Some(Utc::now() + Duration::seconds(1)),
         is_stale: Some(false),
+        doc_version: None,
+        blob_hash: None,
+        payload_bytes: None,
     };
 
     service
@@ -162,6 +165,9 @@ async fn cache_status_returns_metadata_summary() {
         })),
         expiry: None,
         is_stale: Some(true),
+        doc_version: None,
+        blob_hash: None,
+        payload_bytes: None,
     };
     service
         .upsert_cache_metadata(first_update)
@@ -181,6 +187,9 @@ async fn cache_status_returns_metadata_summary() {
         })),
         expiry: None,
         is_stale: Some(true),
+        doc_version: None,
+        blob_hash: None,
+        payload_bytes: None,
     };
     service
         .upsert_cache_metadata(second_update)
@@ -263,6 +272,9 @@ async fn cache_status_reports_per_type() {
             metadata: Some(serde_json::json!({"version": 1})),
             expiry: None,
             is_stale: Some(false),
+            doc_version: None,
+            blob_hash: None,
+            payload_bytes: None,
         })
         .await
         .expect("upsert posts");
@@ -274,6 +286,9 @@ async fn cache_status_reports_per_type() {
             metadata: None,
             expiry: Some(Utc::now() + Duration::seconds(60)),
             is_stale: Some(false),
+            doc_version: None,
+            blob_hash: None,
+            payload_bytes: None,
         })
         .await
         .expect("upsert topics");

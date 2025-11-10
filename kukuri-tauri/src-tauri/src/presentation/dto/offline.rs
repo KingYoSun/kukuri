@@ -185,6 +185,12 @@ pub struct UpdateCacheMetadataRequest {
     pub metadata: Option<serde_json::Value>,
     pub expiry_seconds: Option<i64>,
     pub is_stale: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_version: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blob_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_bytes: Option<i64>,
 }
 
 impl Validate for UpdateCacheMetadataRequest {
@@ -253,6 +259,16 @@ impl Validate for UpdateSyncStatusRequest {
         let legacy_allowed = matches!(status, "syncing" | "synced");
         if matches!(parsed, SyncStatus::Unknown(_)) && !legacy_allowed {
             return Err("Invalid sync status. Supported values include pending, sent_to_nostr, sent_to_p2p, fully_synced, failed, conflict, invalid:<reason>".to_string());
+        }
+        if let Some(version) = self.doc_version {
+            if version < 0 {
+                return Err("doc_version must be non-negative".to_string());
+            }
+        }
+        if let Some(bytes) = self.payload_bytes {
+            if bytes < 0 {
+                return Err("payload_bytes must be non-negative".to_string());
+            }
         }
         Ok(())
     }

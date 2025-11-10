@@ -83,7 +83,7 @@ Commands:
 Options:
   -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
   -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
-  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync, user-search-pagination）
+  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync, user-search-pagination, offline-sync）
   -Fixture <path>  - シナリオ用フィクスチャパスを上書き（既定: tests/fixtures/trending/default.json）
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
@@ -439,6 +439,38 @@ pnpm vitest run \
     }
 }
 
+function Invoke-TypeScriptOfflineSyncScenario {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $logRelPath = "tmp/logs/sync_status_indicator_stage4_$timestamp.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $logDir = Split-Path $logHostPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    Write-Host "Running TypeScript scenario 'offline-sync'..."
+    $command = @"
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run \
+  'src/tests/unit/hooks/useSyncManager.test.tsx' \
+  'src/tests/unit/components/SyncStatusIndicator.test.tsx' \
+  'src/tests/unit/components/OfflineIndicator.test.tsx' \
+  | tee '/app/$logRelPath'
+"@
+
+    Invoke-DockerCompose @("run", "--rm", "ts-test", "bash", "-lc", $command) | Out-Null
+    if (Test-Path $logHostPath) {
+        Write-Success "Scenario log saved to $logRelPath"
+    } else {
+        Write-Warning "Scenario log was not generated at $logRelPath"
+    }
+}
+
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -458,6 +490,9 @@ function Invoke-TypeScriptTests {
             }
             "user-search-pagination" {
                 Invoke-TypeScriptUserSearchScenario
+            }
+            "offline-sync" {
+                Invoke-TypeScriptOfflineSyncScenario
             }
             default {
                 Write-ErrorMessage "Unknown TypeScript scenario: $Scenario"

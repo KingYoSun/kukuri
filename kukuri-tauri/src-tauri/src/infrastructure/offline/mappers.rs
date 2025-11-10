@@ -124,6 +124,9 @@ pub fn cache_metadata_from_row(row: CacheMetadataRow) -> Result<CacheMetadataRec
         is_stale: row.is_stale,
         expiry_time,
         metadata,
+        doc_version: row.doc_version,
+        blob_hash: row.blob_hash,
+        payload_bytes: row.payload_bytes,
     })
 }
 

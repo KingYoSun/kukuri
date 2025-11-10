@@ -190,6 +190,9 @@ impl OfflineHandler {
                     Ok(Utc::now() + Duration::seconds(seconds))
                 })
                 .transpose()?,
+            doc_version: request.doc_version,
+            blob_hash: request.blob_hash,
+            payload_bytes: request.payload_bytes,
         };
 
         self.offline_service.upsert_cache_metadata(update).await?;
@@ -346,12 +349,30 @@ impl OfflineHandler {
             "queueItemId": queue_id.value(),
         });
 
+        let doc_version = payload
+            .get("docVersion")
+            .or_else(|| payload.get("doc_version"))
+            .and_then(|value| value.as_i64());
+        let blob_hash = payload
+            .get("blobHash")
+            .or_else(|| payload.get("blob_hash"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+        let payload_bytes = payload
+            .get("payloadBytes")
+            .or_else(|| payload.get("payload_bytes"))
+            .or_else(|| payload.get("sizeBytes"))
+            .and_then(|value| value.as_i64());
+
         let update = CacheMetadataUpdate {
             cache_key,
             cache_type,
             metadata: Some(metadata),
             expiry: Some(Utc::now() + Duration::minutes(30)),
             is_stale: Some(true),
+            doc_version,
+            blob_hash,
+            payload_bytes,
         };
 
         self.offline_service.upsert_cache_metadata(update).await

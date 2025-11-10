@@ -89,6 +89,9 @@ pub async fn seed_cache_metadata(service: &OfflineService, count: usize) -> Resu
             metadata: Some(json!({ "version": i })),
             expiry: Some(Utc::now() + Duration::seconds((i as i64 % 3) + 1)),
             is_stale: Some(false),
+            doc_version: None,
+            blob_hash: None,
+            payload_bytes: None,
         };
         service
             .upsert_cache_metadata(update)

@@ -54,4 +54,7 @@ pub struct CacheMetadataUpdate {
     pub metadata: Option<Value>,
     pub expiry: Option<DateTime<Utc>>,
     pub is_stale: Option<bool>,
+    pub doc_version: Option<i64>,
+    pub blob_hash: Option<String>,
+    pub payload_bytes: Option<i64>,
 }

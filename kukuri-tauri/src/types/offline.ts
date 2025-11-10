@@ -97,6 +97,9 @@ export interface UpdateCacheMetadataRequest {
   metadata?: Record<string, any>;
   expirySeconds?: number;
   isStale?: boolean;
+  docVersion?: number;
+  blobHash?: string;
+  payloadBytes?: number;
 }
 
 export interface OptimisticUpdate {

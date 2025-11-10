@@ -428,8 +428,8 @@ impl OfflinePersistence for SqliteOfflinePersistence {
             r#"
             INSERT INTO cache_metadata (
                 cache_key, cache_type, last_synced_at, last_accessed_at,
-                data_version, is_stale, expiry_time, metadata
-            ) VALUES (?1, ?2, ?3, ?3, 1, ?4, ?5, ?6)
+                data_version, is_stale, expiry_time, metadata, doc_version, blob_hash, payload_bytes
+            ) VALUES (?1, ?2, ?3, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(cache_key) DO UPDATE SET
                 cache_type = excluded.cache_type,
                 last_synced_at = excluded.last_synced_at,
@@ -437,7 +437,10 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                 data_version = data_version + 1,
                 is_stale = excluded.is_stale,
                 expiry_time = excluded.expiry_time,
-                metadata = excluded.metadata
+                metadata = excluded.metadata,
+                doc_version = excluded.doc_version,
+                blob_hash = excluded.blob_hash,
+                payload_bytes = excluded.payload_bytes
             "#,
         )
         .bind(update.cache_key.as_str())
@@ -446,6 +449,9 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         .bind(if is_stale { 1 } else { 0 })
         .bind(expiry_time)
         .bind(metadata)
+        .bind(update.doc_version)
+        .bind(update.blob_hash.as_deref())
+        .bind(update.payload_bytes)
         .execute(self.pool())
         .await?;
 
@@ -709,6 +715,9 @@ mod tests {
                 metadata: Some(serde_json::json!({"last_id": "1"})),
                 expiry: Some(Utc::now()),
                 is_stale: Some(true),
+                doc_version: None,
+                blob_hash: None,
+                payload_bytes: None,
             })
             .await
             .unwrap();

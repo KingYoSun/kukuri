@@ -52,6 +52,9 @@ services:
       KUKURI_BOOTSTRAP_HOST: "${KUKURI_BOOTSTRAP_HOST:-127.0.0.1}"
       KUKURI_BOOTSTRAP_PORT: "${KUKURI_BOOTSTRAP_PORT:-11233}"
       KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
+      KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
+      KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
+      KUKURI_METRICS_EMIT_HISTOGRAM: "${KUKURI_METRICS_EMIT_HISTOGRAM:-true}"
       # Node.js環境変数
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
@@ -186,6 +189,15 @@ services:
       RUSTFLAGS: "-C strip=debuginfo"
     networks:
       - test-network
+
+  prometheus-trending:
+    image: prom/prometheus:v2.53.0
+    container_name: kukuri-prometheus-trending
+    network_mode: host
+    volumes:
+      - ./docker/prometheus/trending/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
 
 # 名前付きボリューム（キャッシュの永続化）
 volumes:

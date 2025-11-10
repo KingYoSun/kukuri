@@ -33,6 +33,11 @@ vi.mock('sonner', () => ({
     info: vi.fn(),
   },
 }));
+vi.mock('@/serviceWorker/offlineSyncBridge', () => ({
+  registerOfflineSyncWorker: vi.fn().mockResolvedValue(null),
+  enqueueOfflineSyncJob: vi.fn().mockResolvedValue('job-1'),
+  OFFLINE_SYNC_CHANNEL: 'offline-sync',
+}));
 
 describe('useSyncManager', () => {
   const mockPendingActions: OfflineAction[] = [
