@@ -22,6 +22,7 @@ $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repositoryRoot = Split-Path $scriptDirectory -Parent
 $NewBinMainlineTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_MAINLINE_TEST_TARGET)) { $env:P2P_MAINLINE_TEST_TARGET } else { "p2p_mainline_smoke" }
 $NewBinGossipTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_GOSSIP_TEST_TARGET)) { $env:P2P_GOSSIP_TEST_TARGET } else { "p2p_gossip_smoke" }
+$PrometheusMetricsUrl = if (![string]::IsNullOrWhiteSpace($env:PROMETHEUS_METRICS_URL)) { $env:PROMETHEUS_METRICS_URL } else { "http://127.0.0.1:9898/metrics" }
 
 # カラー関数
 function Write-Success {
@@ -327,6 +328,71 @@ function Invoke-IntegrationTests {
 }
 
 # TypeScriptテストのみ実行
+function Start-PrometheusTrending {
+    Write-Host "Starting prometheus-trending service (host network)..."
+    $code = Invoke-DockerCompose -Arguments @("up", "-d", "prometheus-trending") -IgnoreFailure
+    if ($code -ne 0) {
+        Write-Warning "Failed to start prometheus-trending. Metrics scraping will be skipped."
+        return $false
+    }
+    Start-Sleep -Seconds 2
+    return $true
+}
+
+function Stop-PrometheusTrending {
+    Write-Host "Stopping prometheus-trending service..."
+    Invoke-DockerCompose -Arguments @("rm", "-sf", "prometheus-trending") -IgnoreFailure | Out-Null
+}
+
+function Collect-TrendingMetricsSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Timestamp
+    )
+
+    $logRelPath = "tmp/logs/trending_metrics_job_stage4_$Timestamp.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $logDir = Split-Path $logHostPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    $header = @(
+        "=== trending_metrics_job Prometheus snapshot ===",
+        "timestamp: $(Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")",
+        "endpoint: $PrometheusMetricsUrl",
+        ""
+    )
+    Set-Content -Path $logHostPath -Value $header -Encoding UTF8
+
+    try {
+        $response = Invoke-WebRequest -Uri $PrometheusMetricsUrl -TimeoutSec 10 -UseBasicParsing
+        Add-Content -Path $logHostPath -Value $response.Content -Encoding UTF8
+    }
+    catch {
+        Add-Content -Path $logHostPath -Value "[WARN] Failed to fetch metrics: $_" -Encoding UTF8
+    }
+
+    Add-Content -Path $logHostPath -Value "" -Encoding UTF8
+    Add-Content -Path $logHostPath -Value "--- prometheus-trending logs (tail -n 200) ---" -Encoding UTF8
+
+    Push-Location $repositoryRoot
+    try {
+        $logOutput = & docker compose -f docker-compose.test.yml logs --tail 200 prometheus-trending 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Add-Content -Path $logHostPath -Value $logOutput -Encoding UTF8
+        }
+        else {
+            Add-Content -Path $logHostPath -Value "[WARN] Failed to collect prometheus-trending logs: $logOutput" -Encoding UTF8
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    Write-Success "Prometheus metrics log saved to $logRelPath"
+}
+
 function Invoke-TypeScriptTrendingFeedScenario {
     $fixturePath = if ($Fixture) {
         $Fixture
@@ -345,6 +411,8 @@ function Invoke-TypeScriptTrendingFeedScenario {
     $reportRelPath = "test-results/trending-feed/$timestamp-vitest.json"
     $reportContainerPath = "/app/$reportRelPath"
 
+    $promStarted = Start-PrometheusTrending
+
     Write-Host "Running TypeScript scenario 'trending-feed' (fixture: $fixturePath)..."
     $args = @(
         "run", "--rm",
@@ -359,7 +427,15 @@ function Invoke-TypeScriptTrendingFeedScenario {
         "--outputFile=$reportContainerPath"
     )
 
-    Invoke-DockerCompose $args | Out-Null
+    try {
+        Invoke-DockerCompose $args | Out-Null
+    }
+    finally {
+        if ($promStarted) {
+            Collect-TrendingMetricsSnapshot -Timestamp $timestamp
+            Stop-PrometheusTrending
+        }
+    }
 
     $reportHostPath = Join-Path $repositoryRoot $reportRelPath
     if (Test-Path $reportHostPath) {

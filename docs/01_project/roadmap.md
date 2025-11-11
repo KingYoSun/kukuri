@@ -14,13 +14,13 @@ kukuri は Nostr イベントをベースにしたトピック中心ソーシャ
 ### MVPトラック別の残タスク
 | トラック | 目的 | 主なタスク | 所属ドキュメント | 状態 |
 | --- | --- | --- | --- | --- |
-| UX/体験 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` をブロッカー無しでつなぐ | `phase5_user_flow_inventory.md` 5.1〜5.7 の改善（設定モーダルのプライバシー反映、グローバルコンポーザーからのトピック作成、DM Inboxの仮想スクロール/候補補完、ユーザー検索のレートリミットUI、Summary Panelテレメトリ更新、トレンド/フォローの再実行性担保） | `phase5_user_flow_summary.md`, `tauri_app_implementation_plan.md` Phase3 | ⏳ Stage3（Doc/Blob + privacy）は 2025年11月10日に完了。`TopicSelector` / `PostCard` の Vitest 再実行、Summary Panel→`trending_metrics_job` の自動連携、DM/検索 UI の最終調整が残る。 |
+| UX/体験 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` をブロッカー無しでつなぐ | `phase5_user_flow_inventory.md` 5.1〜5.7 の改善（設定モーダルのプライバシー反映、グローバルコンポーザーからのトピック作成、DM Inboxの仮想スクロール/候補補完、ユーザー検索のレートリミットUI、Summary Panelテレメトリ更新、トレンド/フォローの再実行性担保） | `phase5_user_flow_summary.md`, `tauri_app_implementation_plan.md` Phase3 | ⏳ Stage3（Doc/Blob + privacy）は 2025年11月10日に完了。2025年11月11日に Summary Panel→`trending_metrics_job` 監視（`prometheus-trending` + `tmp/logs/trending_metrics_job_stage4_<timestamp>.log`）を自動化済み。残りは `TopicSelector` / `PostCard` の Vitest 再実行と DM/検索 UI の最終調整。 |
 | P2P & Discovery | Mainline DHT + Gossip の運用 Runbook を整え、EventGateway 経由でアプリ層へ隠蔽 | `phase5_event_gateway_design.md` の Gateway 実装、`refactoring_plan_2025-08-08_v3.md` Phase5（P2PService Stack/KeyManager分離）、`docs/03_implementation/p2p_mainline_runbook.md` の Runbook 完成、`kukuri-cli` ブートストラップリストの動的更新 PoC | `phase5_dependency_inventory_template.md`, `docs/03_implementation/p2p_mainline_runbook.md` | ⏳ 設計済/実装中 |
 | データ/同期 | Offline ファースト（sync_queue/楽観更新）とトレンド指標自動集計 | `tauri_app_implementation_plan.md` Phase4（sync_queue/offline_actions/競合UI/Service Worker）、`trending_metrics_job` + `scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の自動化、`list_trending_*` の24h集計と `generated_at` ミリ秒保証 | `refactoring_plan_2025-08-08_v3.md` Phase2.5/5.7, `phase5_user_flow_summary.md` 1.2 | ⏳ 実装中（ジョブ/オフライン層が未完） |
 | Ops/テスト | Nightly/CIでMVP導線を再現しRunbookで復旧できる体制 | `tasks/status/in_progress.md` (GitHub Actions) のトレンドフィードDocker修正、`nightly.yml` `trending-feed` のアーティファクト権限問題切り分け、`docs/01_project/progressReports/` へのRunbookリンク、`scripts/test-docker.ps1 all` の安定化 | `docs/01_project/activeContext/tasks/status/in_progress.md`, `docs/01_project/design_doc.md` | ⏳ 継続調整 |
 
 #### MVP Exit Checklist 連動状況（2025年11月10日）
-- **UX/体験導線**: Stage2 プライバシー + Stage3 Doc/Blob（`profile_avatar_sync` + `useProfileAvatarSync`）は完了し、Nightly/Docker へ `profile-avatar-sync` シナリオを登録。2025年11月10日に `KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM` を追加して Summary Panel ⇔ `trending_metrics_job` の監視を整備済み。残りは `TopicSelector`/`PostCard` の Vitest 再実行（`corepack pnpm` 展開）と Nightly での自動メトリクス収集。→ `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` を参照。
+- **UX/体験導線**: Stage2 プライバシー + Stage3 Doc/Blob（`profile_avatar_sync` + `useProfileAvatarSync`）は完了し、Nightly/Docker へ `profile-avatar-sync` シナリオを登録。2025年11月10日に `KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM` を追加し、11日には `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` で `prometheus-trending` サービスを自動起動して `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を採取するフローを整備。残りは `TopicSelector`/`PostCard` の Vitest 再実行（`corepack pnpm` 展開）と DM/検索 UI の最終調整。→ `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` を参照。
 - **P2P & Discovery**: Chapter10 まで Runbook を拡張し RelayStatus からリンク済み。EventGateway mapper / P2P trait 化・`kukuri-cli` 動的ブートストラップ PoC が未反映。→ `phase5_event_gateway_design.md` 更新が必要。
 - **データ/同期**: `list_sync_queue_items` UI と 60 秒ポーリングは完了。Doc/Blob 対応の `cache_metadata` 拡張と Service Worker（Phase4）が残るが、`trending_metrics_job` の AppState フック + Prometheus エクスポートは 2025年11月10日に完了し `curl http://localhost:<port>/metrics` で収集可能。→ `tauri_app_implementation_plan.md` Phase4 / `phase5_ci_path_audit.md`.
 - **Ops/CI**: `pnpm` 実行環境の欠如で `TopicSelector`/`PostCard` テストがホストでは未再現。Rust テストは `./scripts/test-docker.ps1 rust -NoBuild` で迂回。→ `tasks/status/in_progress.md` GitHub Actions 節、`phase5_ci_path_audit.md` にログリンクを追記予定。
@@ -28,7 +28,7 @@ kukuri は Nostr イベントをベースにしたトピック中心ソーシャ
 ### 2025年11月: Phase 5（MVP仕上げ）
 - **Week 1（完了）**: グローバルコンポーザー導線統一、DMモーダルのモックテスト整備、`direct_message_conversations` 永続化。
 - **Week 2（進行中）**:
-  - トレンド/フォロー Summary Panel → `trending_metrics_job` の 24h 集計と Docker シナリオ固定。
+  - トレンド/フォロー Summary Panel → `trending_metrics_job` の 24h 集計と Docker シナリオ固定（2025年11月11日に `prometheus-trending` 自動起動＋`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` で完了）。
   - 設定モーダルのプライバシー設定をバックエンドへ伝播（Stage3 Doc/Blob + privacy を 2025年11月10日に完了、Runbook Chapter4/CIログへ登録済み）。
   - `EventGateway` ポート実装と `EventService` の依存置換。
 - **Week 3（予定）**:
@@ -49,12 +49,11 @@ kukuri は Nostr イベントをベースにしたトピック中心ソーシャ
 - モバイル（Tauri Mobile）検証
 
 ## 技術的マイルストーン
-- **完了**: 認証フロー、リアルタイム同期、トピックCRUD、P2P初期統合、グローバルコンポーザー
+- **完了**: 認証フロー、リアルタイム同期、トピックCRUD、P2P初期統合、グローバルコンポーザー、トレンド/フォロー Summary Panel + `trending_metrics_job`（2025年11月11日: `prometheus-trending` 監視と artefact 固定まで完了）
 - **MVP残**:
   1. EventGateway + P2PService Stack の抽象化
   2. Offline sync_queue + conflict UI
-  3. トレンド/フォロー Summary Panel + `trending_metrics_job`
-  4. Mainline DHT Runbook / ブートストラップPoC
+  3. Mainline DHT Runbook / ブートストラップPoC
 - **Post-MVP**: インセンティブ設計、マーケットプレイスノード、Tauri Mobile
 
 ## KPI（2025年11月版）

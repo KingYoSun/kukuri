@@ -13,6 +13,8 @@ COVERAGE_TMP_DIR="${RESULTS_DIR}/tarpaulin"
 COVERAGE_ARTEFACT_DIR="${REPO_ROOT}/docs/01_project/activeContext/artefacts/metrics"
 BOOTSTRAP_DEFAULT_PEER="03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
+PROMETHEUS_SERVICE="prometheus-trending"
+PROMETHEUS_METRICS_URL="${PROMETHEUS_METRICS_URL:-http://127.0.0.1:9898/metrics}"
 
 P2P_MAINLINE_TEST="${P2P_MAINLINE_TEST_TARGET:-p2p_mainline_smoke}"
 P2P_GOSSIP_TEST="${P2P_GOSSIP_TEST_TARGET:-p2p_gossip_smoke}"
@@ -130,6 +132,62 @@ run_rust_tests() {
   echo '[OK] Rust tests passed'
 }
 
+start_prometheus_trending() {
+  echo "Starting ${PROMETHEUS_SERVICE} service (host network)..."
+  if compose_run '' up -d "${PROMETHEUS_SERVICE}"; then
+    return 0
+  fi
+  echo "[WARN] Failed to start ${PROMETHEUS_SERVICE}. Metrics scraping will be skipped." >&2
+  return 1
+}
+
+stop_prometheus_trending() {
+  echo "Stopping ${PROMETHEUS_SERVICE} service..."
+  compose_run '' rm -sf "${PROMETHEUS_SERVICE}" >/dev/null 2>&1 || true
+}
+
+collect_trending_metrics_snapshot() {
+  local timestamp="$1"
+  local log_rel_path="tmp/logs/trending_metrics_job_stage4_${timestamp}.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  mkdir -p "$(dirname "$log_host_path")"
+
+  {
+    echo "=== trending_metrics_job Prometheus snapshot ==="
+    echo "timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "endpoint: ${PROMETHEUS_METRICS_URL}"
+    echo
+  } >"$log_host_path"
+
+  if command -v curl >/dev/null 2>&1; then
+    if curl --silent --show-error --max-time 10 "${PROMETHEUS_METRICS_URL}" >>"$log_host_path" 2>&1; then
+      echo >>"$log_host_path"
+    else
+      local curl_status=$?
+      {
+        echo
+        echo "[WARN] curl failed with exit code ${curl_status}. Captured output: "
+      } >>"$log_host_path"
+      curl --silent "${PROMETHEUS_METRICS_URL}" >>"$log_host_path" 2>&1 || true
+      echo >>"$log_host_path"
+    fi
+  else
+    {
+      echo "[WARN] curl command not found. Skipping live metrics capture."
+      echo
+    } >>"$log_host_path"
+  fi
+
+  {
+    echo "--- ${PROMETHEUS_SERVICE} logs (tail -n 200) ---"
+  } >>"$log_host_path"
+  compose_run '' logs --tail 200 "${PROMETHEUS_SERVICE}" >>"$log_host_path" 2>&1 || {
+    echo "[WARN] Failed to read ${PROMETHEUS_SERVICE} logs." >>"$log_host_path"
+  }
+
+  echo "[OK] Prometheus metrics log saved to ${log_rel_path}"
+}
+
 run_ts_trending_feed() {
   local fixture_path="${TS_FIXTURE}"
   if [[ -z "$fixture_path" ]]; then
@@ -147,6 +205,14 @@ run_ts_trending_feed() {
     'src/tests/unit/hooks/useTrendingFeeds.test.tsx'
   )
 
+  local prom_started=0
+  if start_prometheus_trending; then
+    prom_started=1
+    # Give Prometheus a brief moment to boot
+    sleep 2
+  fi
+
+  local vitest_status=0
   echo "Running TypeScript scenario 'trending-feed' (fixture: ${fixture_path})..."
   for target in "${vitest_targets[@]}"; do
     local slug="${target//\//_}"
@@ -155,7 +221,7 @@ run_ts_trending_feed() {
     local report_container_path="/app/${report_rel_path}"
 
     echo "  → pnpm vitest run ${target}"
-    compose_run '' run --rm \
+    if ! compose_run '' run --rm \
       -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
       ts-test bash -lc "
         set -euo pipefail
@@ -165,7 +231,11 @@ run_ts_trending_feed() {
           pnpm install --frozen-lockfile --ignore-workspace
         fi
         pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '${report_container_path}'
-      "
+      "; then
+      vitest_status=$?
+      echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
+      break
+    fi
 
     if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
       echo "[OK] Scenario report saved to ${report_rel_path}"
@@ -173,6 +243,13 @@ run_ts_trending_feed() {
       echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
     fi
   done
+
+  if [[ $prom_started -eq 1 ]]; then
+    collect_trending_metrics_snapshot "${timestamp}"
+    stop_prometheus_trending
+  fi
+
+  return $vitest_status
 }
 
 run_ts_profile_avatar_sync() {
