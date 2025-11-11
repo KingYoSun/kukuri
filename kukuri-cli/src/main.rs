@@ -426,3 +426,135 @@ fn load_bootstrap_peers_from_json() -> Vec<String> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bootstrap_cache::CliBootstrapCache;
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::{Mutex, OnceLock},
+    };
+
+    const SAMPLE_NODE_ID: &str = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8";
+    const SECOND_NODE_ID: &str = "02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    fn temp_file(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        path.push(format!("kukuri_cli_{unique}_{name}"));
+        path
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn set_env_var(key: &str, value: &str) {
+        unsafe { std::env::set_var(key, value) };
+    }
+
+    fn remove_env_var(key: &str) {
+        unsafe { std::env::remove_var(key) };
+    }
+
+    #[test]
+    fn export_bootstrap_list_writes_unique_nodes() {
+        let path = temp_file("bootstrap.json");
+        let node_id = NodeId::from_str(SAMPLE_NODE_ID).unwrap();
+        let bind_addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
+        let peers = vec![
+            format!("{SECOND_NODE_ID}@10.0.0.2:7000"),
+            format!("{SECOND_NODE_ID}@10.0.0.2:7000"),
+            String::new(),
+        ];
+
+        export_bootstrap_list(&path, &node_id, &bind_addr, &peers).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        let cache: CliBootstrapCache = serde_json::from_str(&contents).unwrap();
+        assert_eq!(cache.nodes[0], format!("{node_id}@{bind_addr}"));
+        assert_eq!(cache.nodes.len(), 2, "duplicates and blanks are removed");
+        assert!(
+            cache
+                .nodes
+                .contains(&format!("{SECOND_NODE_ID}@10.0.0.2:7000"))
+        );
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn parse_node_addr_supports_ip_and_hostnames() {
+        let ip_input = format!("{SAMPLE_NODE_ID}@127.0.0.1:32145");
+        let ip_addr = parse_node_addr(&ip_input).expect("ip parse succeeds");
+        assert_eq!(ip_addr.node_id, NodeId::from_str(SAMPLE_NODE_ID).unwrap());
+
+        let host_input = format!("{SAMPLE_NODE_ID}@localhost:32145");
+        let host_addr = parse_node_addr(&host_input).expect("hostname parse succeeds");
+        assert_eq!(host_addr.node_id, NodeId::from_str(SAMPLE_NODE_ID).unwrap());
+    }
+
+    #[test]
+    fn parse_node_addr_rejects_invalid_format() {
+        let err = parse_node_addr("invalid-format").unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid format"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn load_bootstrap_peers_reads_env_path() {
+        let _guard = env_lock().lock().unwrap();
+        let path = temp_file("bootstrap_nodes.json");
+        fs::write(
+            &path,
+            r#"{"nodes": ["node-a@127.0.0.1:9000", "node-b@127.0.0.1:9001"]}"#,
+        )
+        .unwrap();
+        set_env_var("KUKURI_BOOTSTRAP_CONFIG", path.to_str().unwrap());
+
+        let peers = load_bootstrap_peers_from_json();
+        assert_eq!(
+            peers,
+            vec![
+                "node-a@127.0.0.1:9000".to_string(),
+                "node-b@127.0.0.1:9001".to_string()
+            ]
+        );
+
+        remove_env_var("KUKURI_BOOTSTRAP_CONFIG");
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn resolve_export_path_prefers_explicit_values() {
+        let _guard = env_lock().lock().unwrap();
+        set_env_var(
+            "KUKURI_CLI_BOOTSTRAP_PATH",
+            "ignored_env_bootstrap_nodes.json",
+        );
+
+        let explicit = PathBuf::from("manual_bootstrap_nodes.json");
+        let resolved = resolve_export_path(Some(explicit.to_string_lossy().into()))
+            .expect("explicit path available");
+        assert_eq!(resolved, explicit);
+
+        remove_env_var("KUKURI_CLI_BOOTSTRAP_PATH");
+    }
+
+    #[test]
+    fn resolve_export_path_uses_env_when_missing_explicit() {
+        let _guard = env_lock().lock().unwrap();
+        set_env_var("KUKURI_CLI_BOOTSTRAP_PATH", "env_bootstrap_nodes.json");
+        let resolved = resolve_export_path(None).expect("env path available");
+        assert!(resolved.ends_with("env_bootstrap_nodes.json"));
+        remove_env_var("KUKURI_CLI_BOOTSTRAP_PATH");
+    }
+}
