@@ -122,8 +122,7 @@ export function RelayStatus() {
   const cliAvailable = cliNodes.length > 0;
   const envLocked = bootstrapInfo?.envLocked ?? false;
   const normalized = (values: string[]) => [...values].sort().join('|');
-  const cliMatchesEffective =
-    cliAvailable && normalized(cliNodes) === normalized(effectiveNodes);
+  const cliMatchesEffective = cliAvailable && normalized(cliNodes) === normalized(effectiveNodes);
   const canApplyCli =
     cliAvailable && !envLocked && !cliMatchesEffective && !applyingCli && !bootstrapLoading;
 
@@ -270,12 +269,13 @@ export function RelayStatus() {
             </Button>
           </div>
           <div className="text-muted-foreground">
-            CLI 提供: {cliAvailable ? `${cliNodes.length}件 / 更新: ${cliLastUpdatedLabel}` : '未取得'}
+            CLI 提供:{' '}
+            {cliAvailable ? `${cliNodes.length}件 / 更新: ${cliLastUpdatedLabel}` : '未取得'}
           </div>
           {envLocked && (
             <p className="text-[11px] text-muted-foreground">
-              <code className="font-mono text-[11px]">KUKURI_BOOTSTRAP_PEERS</code> が設定されているため
-              CLIリストを適用できません。
+              <code className="font-mono text-[11px]">KUKURI_BOOTSTRAP_PEERS</code>{' '}
+              が設定されているため CLIリストを適用できません。
             </p>
           )}
         </div>

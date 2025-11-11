@@ -43,7 +43,7 @@ pub fn resolve_export_path(explicit: Option<String>) -> Option<PathBuf> {
 pub fn write_cache(cache: CliBootstrapCache, path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create CLI bootstrap directory at {:?}", parent))?;
+            .with_context(|| format!("failed to create CLI bootstrap directory at {parent:?}"))?;
     }
 
     let mut nodes = cache.nodes;

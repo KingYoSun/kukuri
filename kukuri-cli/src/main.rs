@@ -163,7 +163,7 @@ async fn run_bootstrap_node(
 
     // Parse and connect to bootstrap peers
     for peer_str in peers.iter() {
-        match parse_node_addr(&peer_str) {
+        match parse_node_addr(peer_str) {
             Ok(node_addr) => {
                 info!("Connecting to bootstrap peer: {}", node_addr.node_id);
                 if let Err(e) = endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
@@ -209,7 +209,7 @@ fn export_bootstrap_list(
     peers: &[String],
 ) -> Result<()> {
     let mut entries = Vec::new();
-    entries.push(format!("{}@{}", node_id, bind_addr));
+    entries.push(format!("{node_id}@{bind_addr}"));
     for peer in peers {
         if !entries.iter().any(|existing| existing == peer) {
             entries.push(peer.clone());
