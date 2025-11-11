@@ -112,6 +112,12 @@ pub struct CacheTypeStatus {
     pub is_stale: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_version: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blob_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_bytes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

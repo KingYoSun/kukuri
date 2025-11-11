@@ -30,7 +30,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { OfflineAction } from '@/types/offline';
+import type { CacheTypeStatus, OfflineAction } from '@/types/offline';
 import { cn } from '@/lib/utils';
 
 type CacheMetadataSummary = {
@@ -59,6 +59,23 @@ type DocConflictDetails = {
   format?: string;
   shareTicket?: string;
 };
+
+type CacheDocSummary = {
+  docVersion?: number;
+  blobHash?: string;
+  payloadBytes?: number;
+};
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? undefined : value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
 
 function parseCacheMetadata(
   metadata?: Record<string, unknown> | null,
@@ -229,20 +246,8 @@ function extractDocConflictDetails(action?: OfflineAction): DocConflictDetails |
   if (!payload) {
     return null;
   }
-
-  const readNumber = (value: unknown): number | undefined => {
-    if (typeof value === 'number') {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const parsed = Number(value);
-      return Number.isNaN(parsed) ? undefined : parsed;
-    }
-    return undefined;
-  };
-
-  const docVersion = readNumber(payload['docVersion'] ?? payload['doc_version']);
-  const payloadBytes = readNumber(
+  const docVersion = toNumber(payload['docVersion'] ?? payload['doc_version']);
+  const payloadBytes = toNumber(
     payload['payloadBytes'] ??
       payload['payload_bytes'] ??
       payload['sizeBytes'] ??
@@ -272,6 +277,27 @@ function extractDocConflictDetails(action?: OfflineAction): DocConflictDetails |
     payloadBytes,
     format,
     shareTicket,
+  };
+}
+
+function getCacheDocSummary(type: CacheTypeStatus): CacheDocSummary | null {
+  const docVersion = toNumber(type.doc_version ?? type.docVersion);
+  const payloadBytes = toNumber(type.payload_bytes ?? type.payloadBytes);
+  const blobHashCandidate = type.blob_hash ?? type.blobHash;
+  const blobHash = typeof blobHashCandidate === 'string' ? blobHashCandidate : undefined;
+
+  if (
+    typeof docVersion === 'undefined' &&
+    typeof payloadBytes === 'undefined' &&
+    !blobHash
+  ) {
+    return null;
+  }
+
+  return {
+    docVersion,
+    payloadBytes,
+    blobHash,
   };
 }
 
@@ -484,6 +510,17 @@ export function SyncStatusIndicator() {
     });
   };
 
+  const docConflictCount = React.useMemo(
+    () =>
+      syncStatus.conflicts.filter(
+        (conflict) =>
+          extractDocConflictDetails(conflict.localAction) ||
+          extractDocConflictDetails(conflict.remoteAction),
+      ).length,
+    [syncStatus.conflicts],
+  );
+  const firstConflict = syncStatus.conflicts[0] ?? null;
+
   return (
     <>
       <Popover>
@@ -500,6 +537,42 @@ export function SyncStatusIndicator() {
         </PopoverTrigger>
         <PopoverContent className="w-80">
           <div className="space-y-4">
+            {syncStatus.conflicts.length > 0 && (
+              <div
+                className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/60 dark:bg-amber-900/20 dark:text-amber-100"
+                data-testid="sync-conflict-banner"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>
+                      {docConflictCount > 0
+                        ? `Doc/Blobの競合 ${docConflictCount}件`
+                        : `競合 ${syncStatus.conflicts.length}件`}
+                    </span>
+                  </div>
+                  {firstConflict && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        setSelectedConflict(firstConflict);
+                        setShowConflictDialog(true);
+                      }}
+                    >
+                      詳細を確認
+                    </Button>
+                  )}
+                </div>
+                {docConflictCount > 0 && (
+                  <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">
+                    Doc/Blob の差分は競合ダイアログの「Doc/Blob」タブで比較できます。
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* 同期状態 */}
             <div>
               <h4 className="font-medium mb-2 flex items-center gap-2">
@@ -622,6 +695,7 @@ export function SyncStatusIndicator() {
                   <div className="space-y-2 mt-2">
                     {cacheStatus.cache_types.map((type) => {
                       const metadataSummary = parseCacheMetadata(type.metadata ?? null);
+                      const docSummary = getCacheDocSummary(type);
                       return (
                         <div
                           key={type.cache_type}
@@ -676,6 +750,41 @@ export function SyncStatusIndicator() {
                                 </dl>
                               );
                             })()}
+                          {docSummary && (
+                            <div
+                              className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-900/10 dark:text-amber-100"
+                              data-testid={`cache-doc-${type.cache_type}`}
+                            >
+                              <p className="font-medium text-foreground">Doc/Blob キャッシュ</p>
+                              <div className="mt-1 space-y-1 text-amber-900 dark:text-amber-50">
+                                {typeof docSummary.docVersion !== 'undefined' && (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>Doc Version</span>
+                                    <code className="font-mono text-[11px]">
+                                      {docSummary.docVersion}
+                                    </code>
+                                  </div>
+                                )}
+                                {docSummary.blobHash && (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>Blob Hash</span>
+                                    <code
+                                      className="font-mono text-[11px]"
+                                      title={docSummary.blobHash}
+                                    >
+                                      {truncateMiddle(docSummary.blobHash, 22)}
+                                    </code>
+                                  </div>
+                                )}
+                                {typeof docSummary.payloadBytes !== 'undefined' && (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>Payload</span>
+                                    <span>{formatBytesValue(docSummary.payloadBytes)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

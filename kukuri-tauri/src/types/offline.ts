@@ -66,6 +66,12 @@ export interface CacheTypeStatus {
   last_synced_at?: number;
   is_stale: boolean;
   metadata?: Record<string, unknown> | null;
+  doc_version?: number;
+  docVersion?: number;
+  blob_hash?: string;
+  blobHash?: string;
+  payload_bytes?: number;
+  payloadBytes?: number;
 }
 
 export interface AddToSyncQueueRequest {

@@ -263,6 +263,7 @@ run_ts_offline_sync() {
       echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
       pnpm install --frozen-lockfile --ignore-workspace
     fi
+    mkdir -p /app/tmp/logs
     pnpm vitest run \
       'src/tests/unit/hooks/useSyncManager.test.tsx' \
       'src/tests/unit/components/SyncStatusIndicator.test.tsx' \

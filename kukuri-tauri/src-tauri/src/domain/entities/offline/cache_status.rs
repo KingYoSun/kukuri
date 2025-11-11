@@ -10,6 +10,9 @@ pub struct CacheTypeStatus {
     pub last_synced_at: Option<DateTime<Utc>>,
     pub is_stale: bool,
     pub metadata: Option<Value>,
+    pub doc_version: Option<i64>,
+    pub blob_hash: Option<String>,
+    pub payload_bytes: Option<i64>,
 }
 
 impl CacheTypeStatus {
@@ -19,6 +22,9 @@ impl CacheTypeStatus {
         last_synced_at: Option<DateTime<Utc>>,
         is_stale: bool,
         metadata: Option<Value>,
+        doc_version: Option<i64>,
+        blob_hash: Option<String>,
+        payload_bytes: Option<i64>,
     ) -> Self {
         Self {
             cache_type,
@@ -26,6 +32,9 @@ impl CacheTypeStatus {
             last_synced_at,
             is_stale,
             metadata,
+            doc_version,
+            blob_hash,
+            payload_bytes,
         }
     }
 }

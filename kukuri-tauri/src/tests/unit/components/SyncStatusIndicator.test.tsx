@@ -359,6 +359,81 @@ describe('SyncStatusIndicator', () => {
       expect(within(metadataSection).getByText('発行元')).toBeInTheDocument();
       expect(within(metadataSection).getByTitle('2025-11-09T00:00:00Z')).toBeInTheDocument();
     });
+
+    it('Doc/Blob 競合バナーからダイアログを開く', async () => {
+      const docConflict: SyncConflict = {
+        localAction: {
+          id: 1,
+          localId: 'local_doc',
+          userPubkey: 'npub1',
+          actionType: OfflineActionType.PROFILE_UPDATE,
+          actionData: JSON.stringify({
+            docVersion: 2,
+            blobHash: 'bafy-test-hash',
+          }),
+          createdAt: '2024-01-01T00:00:00Z',
+          isSynced: false,
+        },
+        conflictType: 'version',
+      };
+
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        syncStatus: {
+          ...defaultSyncStatus,
+          conflicts: [docConflict],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+      fireEvent.click(screen.getByRole('button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sync-conflict-banner')).toBeInTheDocument();
+        expect(screen.getByText('Doc/Blobの競合 1件')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: '詳細を確認' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('競合の解決')).toBeInTheDocument();
+      });
+    });
+
+    it('Doc/Blob メタデータを表示', async () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        cacheStatus: {
+          total_items: 1,
+          stale_items: 1,
+          cache_types: [
+            {
+              cache_type: 'profile_avatar',
+              item_count: 1,
+              last_synced_at: 1_700_000_000,
+              is_stale: true,
+              metadata: {
+                cacheType: 'profile_avatar',
+              },
+              doc_version: 4,
+              blob_hash: 'bafy-avatar-hash',
+              payload_bytes: 2048,
+            },
+          ],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+      fireEvent.click(screen.getByRole('button'));
+
+      await waitFor(() => {
+        const docSection = screen.getByTestId('cache-doc-profile_avatar');
+        expect(docSection).toBeInTheDocument();
+        expect(within(docSection).getByText('Doc/Blob キャッシュ')).toBeInTheDocument();
+        expect(within(docSection).getByText('4')).toBeInTheDocument();
+        expect(within(docSection).getByText('2.0 KB')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('再送キュー履歴', () => {

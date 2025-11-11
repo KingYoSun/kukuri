@@ -426,6 +426,9 @@ fn map_cache_status(snapshot: CacheStatusSnapshot) -> Result<CacheStatusResponse
                 last_synced_at: status.last_synced_at.map(|dt| dt.timestamp()),
                 is_stale: status.is_stale,
                 metadata: status.metadata,
+                doc_version: status.doc_version,
+                blob_hash: status.blob_hash.clone(),
+                payload_bytes: status.payload_bytes,
             })
         })
         .collect::<Result<Vec<_>, AppError>>()?;
@@ -490,19 +493,29 @@ mod tests {
                 "cacheType": "offline_actions",
                 "requestedAt": "2025-11-09T00:00:00Z",
                 "source": "sync_status_indicator",
-                "userPubkey": "npub1testexample"
+                "userPubkey": "npub1testexample",
+                "docVersion": 7,
+                "blobHash": "bafy-doc-test",
+                "payloadBytes": 5120
             }),
             priority: Some(5),
         };
 
         let queue_id = handler.add_to_sync_queue(request).await.expect("queue id");
 
-        let (cache_key, cache_type, metadata): (String, String, Option<String>) = sqlx::query_as(
+        let (cache_key, cache_type, metadata, doc_version, blob_hash, payload_bytes): (
+            String,
+            String,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+        ) = sqlx::query_as(
             r#"
-            SELECT cache_key, cache_type, metadata
-            FROM cache_metadata
-            WHERE cache_key = 'sync_queue::offline_actions'
-            "#,
+                SELECT cache_key, cache_type, metadata, doc_version, blob_hash, payload_bytes
+                FROM cache_metadata
+                WHERE cache_key = 'sync_queue::offline_actions'
+                "#,
         )
         .fetch_one(&pool)
         .await
@@ -525,6 +538,38 @@ mod tests {
             parsed.get("source").and_then(|value| value.as_str()),
             Some("sync_status_indicator")
         );
+        assert_eq!(doc_version, Some(7));
+        assert_eq!(blob_hash.as_deref(), Some("bafy-doc-test"));
+        assert_eq!(payload_bytes, Some(5120));
+    }
+
+    #[tokio::test]
+    async fn cache_status_includes_doc_fields() {
+        let (handler, _) = setup_handler().await;
+        handler
+            .update_cache_metadata(UpdateCacheMetadataRequest {
+                cache_key: "doc::profile_avatar::npub1".to_string(),
+                cache_type: "profile_avatar".to_string(),
+                metadata: Some(json!({ "cacheType": "profile_avatar" })),
+                expiry_seconds: Some(1800),
+                is_stale: Some(true),
+                doc_version: Some(12),
+                blob_hash: Some("bafy-test-hash".to_string()),
+                payload_bytes: Some(10_240),
+            })
+            .await
+            .expect("metadata write");
+
+        let snapshot = handler.get_cache_status().await.expect("cache status");
+        let entry = snapshot
+            .cache_types
+            .into_iter()
+            .find(|value| value.cache_type == "profile_avatar")
+            .expect("profile avatar cache");
+
+        assert_eq!(entry.doc_version, Some(12));
+        assert_eq!(entry.blob_hash.as_deref(), Some("bafy-test-hash"));
+        assert_eq!(entry.payload_bytes, Some(10_240));
     }
 
     #[tokio::test]

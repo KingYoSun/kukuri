@@ -232,7 +232,7 @@
 - **次のアクション**
   - Stage4（Service Worker + オフライン通知）に向けて、`useProfileAvatarSync` のリトライポリシーと `profile_avatar_sync` コマンドのバックオフ/ロギング粒度を拡張。Sec.6 / Runbook へクリーンアップおよび Nightly ログ採取手順を継続追記し、`phase5_ci_path_audit.md` のテストIDを Stage4 完了後に更新する。
 
-#### MVP Exit（2025年11月10日更新）
+#### MVP Exit（2025年11月11日更新）
 - **ゴール**: Welcome / Settings / Doc 同期を単一の `ProfileForm` に集約し、プライバシー設定と `profile_avatar_sync` の結果が Runbook・Nightly 両方で再現できる状態を保つ。
 - **現状**: Stage3 までの Doc/Blob + privacy 連携と `useProfileAvatarSync` 常駐フックは完了し、`ProfileEditDialog` / `ProfileSetup` / `SettingsPage` テストを 2025年11月10日に更新済み。Stage4（Service Worker + オフライン通知）は着手前。
 - **ブロッカー**: `useProfileAvatarSync` のバックオフ/再試行設計と `profile_avatar_sync` コマンドのロギング粒度が未確定。Runbook Chapter4 と `phase5_ci_path_audit.md` に登録した `corepack enable pnpm` + `scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync` 手順を、本番運用でも追従できるようにする必要がある。
@@ -600,17 +600,17 @@
   - 既存: `src/tests/unit/components/SyncStatusIndicator.test.tsx` で `pendingActionsCount`・競合ボタン表示・手動同期ボタン活性・最終同期時刻フォーマットに加え、2025年11月07日からキャッシュステータス表示/更新ボタン/再送キュー操作をカバー。2025年11月09日: 同テストに `cache_types.metadata` の表示（要求者/要求時刻/Queue ID/発行元）と再送キューログ（ハイライト/フィルタ/エラー表示）を追加し、`src/tests/unit/components/OfflineIndicator.test.tsx` でヘッダーナビへの誘導文言を検証。`src/tests/unit/hooks/useSyncManager.test.tsx` は `triggerManualSync` ガード・`persistSyncStatuses`・競合検出・`enqueueSyncRequest`・再送履歴取得を検証し、`src/tests/unit/stores/offlineStore.test.ts` は `refreshCacheMetadata` / `saveOfflineAction` / `syncPendingActions` の副作用をテスト。
   - 追加予定: (1) `useSyncManager` の 5 分タイマー／オンライン復帰 2 秒同期のフェイクタイマー検証、(2) `offlineStore` の `offline://reindex_complete` リスナー E2E（Vitest の `vi.mock('@tauri-apps/api/event')` によるイベントエミュレーション）、(3) Docker シナリオ `offline-sync` を `docker-compose.test.yml` へ追加し、`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx` を Linux/Windows で反復実行。
   - CI: `phase5_ci_path_audit.md` に `SyncStatusIndicator.ui` / `useSyncManager.logic` / `offlineStore.cache-metadata` のパスを追加し、Nightly でのカバレッジ可視化を行う。
-- **Stage4 TODO（Service Worker + Doc/Blob cache_metadata）**
-  1. `cache_metadata` に Doc/Blob 用カラム（`doc_version` / `blob_hash` / `payload_bytes`）を追加するマイグレーション `20251110120000_add_doc_blob_metadata.sql` を作成し、`offline_handler::record_sync_queue_metadata` から書き込む。
-  2. `SyncStatusIndicator` の「競合」カードに Doc/Blob 専用の差分ビュー（`diff` タブ + プレビュー）を追加し、`resolveConflict('merge')` で Service Worker から受け取った merged payload を `syncEngine.applyAction` に連携。
-  3. `serviceWorker/offlineSyncWorker.ts`（新規）を追加し、`navigator.serviceWorker` 経由で `sync_pending_actions` をバックグラウンド実行。オンライン復帰を `BroadcastChannel('offline-sync')` で UI へ伝搬し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` を生成。
-  4. Docker シナリオ `offline-sync`（`scripts/test-docker.{sh,ps1}`）を追加し、Service Worker 版の同期→競合解決→Doc/Blob 更新までを自動検証。Runbook Chapter5 に Service Worker 版の再送手順を追記し、ステータスを Stage4 完了に更新する。
+- **Stage4 実装完了（2025年11月11日）**
+  1. `cache_metadata` へ Doc/Blob 用カラム（`doc_version` / `blob_hash` / `payload_bytes`）を追加するマイグレーション `20251110120000_add_doc_blob_metadata.sql` を適用し、`offline_handler::record_sync_queue_metadata` / `update_cache_metadata` の両方から書き込むよう更新。`offline_handler::tests::add_to_sync_queue_records_metadata_entry` と `cache_status_includes_doc_fields` を追加し、Rust 側で永続化と API 返却を検証。
+  2. `SyncStatusIndicator` に Doc/Blob 競合バナーと Doc/Blob サマリーセクションを追加し、`components/SyncStatusIndicator.test.tsx` へ Doc/Blob 比較タブ・競合バナー・`cache-doc-*` セクションのテストを追加。`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx` をローカルで実行し、UI 回帰を確認。
+  3. `serviceWorker/offlineSyncWorker.ts` と `useSyncManager` の BroadcastChannel 連携を Stage4 仕様に沿って整理し、オンライン復帰時・未同期アクション検出時にジョブをスケジュール。Service Worker 実行ログを `tmp/logs/sync_status_indicator_stage4_<timestamp>.log` に保存。
+  4. Docker シナリオ `offline-sync`（`./scripts/test-docker.sh ts --scenario offline-sync --no-build` / `./scripts/test-docker.ps1 ts -Scenario offline-sync -NoBuild`）を確立し、Doc/Blob メタデータ表示・競合バナー・Service Worker 経路を一括検証。Runbook Chapter5 と `phase5_ci_path_audit.md` にコマンド／ログパスを追記。
 
 #### MVP Exit（2025年11月10日更新）
 - **ゴール**: オフライン操作の再送状況と競合解決を UI/Runbook/CI で一貫して可視化し、Doc/Blob 対応 `cache_metadata` マイグレーションと Service Worker ベースのバックグラウンド同期を完了させる。
-- **現状**: `list_sync_queue_items` / `cache_types.metadata` の表示は完了し、`OfflineIndicator` からの誘導も統一済み。Doc/Blob エントリ用の metadata 移行、`offline-sync` Docker シナリオ、Service Worker (Stage4) は未着手。
-  - **ブロッカー**: `cache_metadata` の Doc/Blob 拡張、`syncEngine` → `cache_metadata` への完了/失敗ログの書き込み、Vitest (`SyncStatusIndicator` / `useSyncManager`) の Stage4 ケースをローカル再現して `tmp/logs/sync_status_indicator_<timestamp>.log` を Runbook Chapter5 に紐づけること。
-- **テスト/Runbook**: `npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`、`./scripts/test-docker.{sh,ps1} ts -Scenario offline-sync`（計画中）、`cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry` を `phase5_ci_path_audit.md` に記録。
+- **現状**: Doc/Blob 対応マイグレーション・競合バナー・Service Worker・Docker シナリオを 2025年11月11日に実装完了。`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` と `test-results/offline-sync/*.json` を生成し、Runbook Chapter5 に手順を反映。OfflineIndicator→SyncStatus CTA も Stage4 仕様で統一済み。
+  - **ブロッカー**: Doc/Blob 以外の OfflineAction（Topic/Post など）の Docker シナリオ自動化、`errorHandler` の `SyncStatus.*` 系統整備は Post-MVP backlog に移行。
+- **テスト/Runbook**: `npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`、`./scripts/test-docker.{sh,ps1} ts -Scenario offline-sync --no-build`、`cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry cache_status_includes_doc_fields` を `phase5_ci_path_audit.md` に記録。
 - **参照**: `phase5_user_flow_summary.md` MVP Exit（Offline sync 行）、`tauri_app_implementation_plan.md` Phase4、`phase5_ci_path_audit.md` SyncStatus 行。
 
 ### 5.12 ヘッダーDMボタンと Summary Panel 連携（2025年11月08日更新）

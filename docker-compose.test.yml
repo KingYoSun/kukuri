@@ -148,6 +148,7 @@ services:
     command: ["pnpm", "test"]
     volumes:
       - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
       # pnpmキャッシュの永続化
       - pnpm-store:/root/.local/share/pnpm/store
     environment:

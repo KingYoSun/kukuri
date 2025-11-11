@@ -324,12 +324,20 @@ impl OfflinePersistence for SqliteOfflinePersistence {
         let total_items = records.len() as u64;
         let stale_items = records.iter().filter(|record| record.is_stale).count() as u64;
 
+        #[derive(Clone, Default)]
+        struct DocFieldSnapshot {
+            doc_version: Option<i64>,
+            blob_hash: Option<String>,
+            payload_bytes: Option<i64>,
+        }
+
         #[derive(Default)]
         struct CacheTypeGroup {
             item_count: u64,
             is_stale: bool,
             last_synced_at: Option<DateTime<Utc>>,
             latest_metadata: Option<(DateTime<Utc>, Value)>,
+            latest_doc_fields: Option<(DateTime<Utc>, DocFieldSnapshot)>,
         }
 
         let mut groups: HashMap<String, CacheTypeGroup> = HashMap::new();
@@ -364,6 +372,30 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                     entry.latest_metadata = Some((timestamp, metadata));
                 }
             }
+            if record.doc_version.is_some()
+                || record.blob_hash.is_some()
+                || record.payload_bytes.is_some()
+            {
+                let timestamp = record
+                    .last_accessed_at
+                    .or(record.last_synced_at)
+                    .unwrap_or_else(Utc::now);
+                let should_replace = entry
+                    .latest_doc_fields
+                    .as_ref()
+                    .map(|(current_ts, _)| timestamp >= *current_ts)
+                    .unwrap_or(true);
+                if should_replace {
+                    entry.latest_doc_fields = Some((
+                        timestamp,
+                        DocFieldSnapshot {
+                            doc_version: record.doc_version,
+                            blob_hash: record.blob_hash.clone(),
+                            payload_bytes: record.payload_bytes,
+                        },
+                    ));
+                }
+            }
         }
 
         let mut cache_types = Vec::with_capacity(groups.len());
@@ -374,12 +406,27 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                 .latest_metadata
                 .as_ref()
                 .map(|(_, value)| value.clone());
+            let doc_version = summary
+                .latest_doc_fields
+                .as_ref()
+                .and_then(|(_, snapshot)| snapshot.doc_version);
+            let blob_hash = summary
+                .latest_doc_fields
+                .as_ref()
+                .and_then(|(_, snapshot)| snapshot.blob_hash.clone());
+            let payload_bytes = summary
+                .latest_doc_fields
+                .as_ref()
+                .and_then(|(_, snapshot)| snapshot.payload_bytes);
             cache_types.push(CacheTypeStatus::new(
                 cache_type,
                 summary.item_count,
                 summary.last_synced_at,
                 summary.is_stale,
                 metadata,
+                doc_version,
+                blob_hash,
+                payload_bytes,
             ));
         }
 
