@@ -418,16 +418,16 @@ impl OfflinePersistence for SqliteOfflinePersistence {
                 .latest_doc_fields
                 .as_ref()
                 .and_then(|(_, snapshot)| snapshot.payload_bytes);
-            cache_types.push(CacheTypeStatus::new(
+            cache_types.push(CacheTypeStatus {
                 cache_type,
-                summary.item_count,
-                summary.last_synced_at,
-                summary.is_stale,
+                item_count: summary.item_count,
+                last_synced_at: summary.last_synced_at,
+                is_stale: summary.is_stale,
                 metadata,
                 doc_version,
                 blob_hash,
                 payload_bytes,
-            ));
+            });
         }
 
         cache_types.sort_by(|a, b| a.cache_type.as_str().cmp(b.cache_type.as_str()));

@@ -15,30 +15,6 @@ pub struct CacheTypeStatus {
     pub payload_bytes: Option<i64>,
 }
 
-impl CacheTypeStatus {
-    pub fn new(
-        cache_type: CacheType,
-        item_count: u64,
-        last_synced_at: Option<DateTime<Utc>>,
-        is_stale: bool,
-        metadata: Option<Value>,
-        doc_version: Option<i64>,
-        blob_hash: Option<String>,
-        payload_bytes: Option<i64>,
-    ) -> Self {
-        Self {
-            cache_type,
-            item_count,
-            last_synced_at,
-            is_stale,
-            metadata,
-            doc_version,
-            blob_hash,
-            payload_bytes,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CacheStatusSnapshot {
     pub total_items: u64,
