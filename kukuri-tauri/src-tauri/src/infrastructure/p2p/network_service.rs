@@ -1,4 +1,4 @@
-use crate::shared::error::AppError;
+use crate::shared::{AppError, config::BootstrapSource};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +43,14 @@ pub trait NetworkService: Send + Sync {
     }
 
     async fn broadcast_dht(&self, _topic: &str, _message: Vec<u8>) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn apply_bootstrap_nodes(
+        &self,
+        _nodes: Vec<String>,
+        _source: BootstrapSource,
+    ) -> Result<(), AppError> {
         Ok(())
     }
 }

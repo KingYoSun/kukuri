@@ -10,6 +10,7 @@ use crate::{
         },
     },
     shared::AppError,
+    shared::config::BootstrapSource,
     state::AppState,
 };
 use std::collections::HashSet;
@@ -204,8 +205,21 @@ pub async fn clear_bootstrap_nodes() -> Result<ApiResponse<()>, AppError> {
 }
 
 #[tauri::command]
-pub async fn apply_cli_bootstrap_nodes() -> Result<ApiResponse<BootstrapConfigResponse>, AppError> {
-    bootstrap_config::apply_cli_bootstrap_nodes()?;
+pub async fn apply_cli_bootstrap_nodes(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<BootstrapConfigResponse>, AppError> {
+    if bootstrap_config::load_env_bootstrap_nodes().is_some() {
+        return Err(AppError::ConfigurationError(
+            "Environment override is enabled; CLI bootstrap list cannot be applied".to_string(),
+        ));
+    }
+
+    let nodes = bootstrap_config::apply_cli_bootstrap_nodes()?;
+    state
+        .p2p_handler
+        .apply_bootstrap_nodes(nodes, BootstrapSource::User)
+        .await?;
+
     get_bootstrap_config().await
 }
 

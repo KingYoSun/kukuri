@@ -2,7 +2,7 @@ use super::bootstrap::P2PServiceBuilder;
 use super::metrics::GossipMetricsSummary;
 use super::status::{ConnectionStatus, P2PStatus, PeerStatus, TopicInfo};
 use crate::infrastructure::p2p::{DiscoveryOptions, GossipService, NetworkService, metrics};
-use crate::shared::config::NetworkConfig as AppNetworkConfig;
+use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use iroh::SecretKey;
@@ -24,6 +24,11 @@ pub trait P2PServiceTrait: Send + Sync {
     async fn get_status(&self) -> Result<P2PStatus, AppError>;
     async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
     fn generate_topic_id(&self, topic_name: &str) -> String;
+    async fn apply_bootstrap_nodes(
+        &self,
+        nodes: Vec<String>,
+        source: BootstrapSource,
+    ) -> Result<(), AppError>;
 }
 
 impl P2PService {
@@ -226,5 +231,15 @@ impl P2PServiceTrait for P2PService {
         let mut hasher = Sha256::new();
         hasher.update(topic_name.as_bytes());
         format!("{:x}", hasher.finalize())
+    }
+
+    async fn apply_bootstrap_nodes(
+        &self,
+        nodes: Vec<String>,
+        source: BootstrapSource,
+    ) -> Result<(), AppError> {
+        self.network_service
+            .apply_bootstrap_nodes(nodes, source)
+            .await
     }
 }

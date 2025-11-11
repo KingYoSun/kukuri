@@ -3,7 +3,7 @@ use crate::application::services::p2p_service::status::ConnectionStatus;
 use crate::domain::p2p::TopicStats;
 use crate::infrastructure::p2p::network_service::Peer;
 use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
-use crate::shared::error::AppError;
+use crate::shared::{AppError, config::BootstrapSource};
 use async_trait::async_trait;
 use chrono::Utc;
 use mockall::{mock, predicate::*};
@@ -17,6 +17,8 @@ pub struct MockNetworkServ {
     broadcast_dht: Mutex<Vec<(String, Vec<u8>)>>,
     connected: Mutex<bool>,
     peers: Mutex<Vec<Peer>>,
+    applied_bootstrap_nodes: Mutex<Vec<String>>,
+    applied_bootstrap_source: Mutex<Option<BootstrapSource>>,
 }
 
 impl MockNetworkServ {
@@ -29,6 +31,8 @@ impl MockNetworkServ {
             broadcast_dht: Mutex::new(Vec::new()),
             connected: Mutex::new(true),
             peers: Mutex::new(Vec::new()),
+            applied_bootstrap_nodes: Mutex::new(Vec::new()),
+            applied_bootstrap_source: Mutex::new(None),
         }
     }
 
@@ -78,6 +82,14 @@ impl MockNetworkServ {
 
     pub fn set_peers(&self, peers: Vec<Peer>) {
         *self.peers.lock().unwrap() = peers;
+    }
+
+    pub fn applied_bootstrap_nodes(&self) -> Vec<String> {
+        self.applied_bootstrap_nodes.lock().unwrap().clone()
+    }
+
+    pub fn applied_bootstrap_source(&self) -> Option<BootstrapSource> {
+        *self.applied_bootstrap_source.lock().unwrap()
     }
 }
 
@@ -154,6 +166,16 @@ impl NetworkService for MockNetworkServ {
             .push((topic.to_string(), message));
         Ok(())
     }
+
+    async fn apply_bootstrap_nodes(
+        &self,
+        nodes: Vec<String>,
+        source: BootstrapSource,
+    ) -> Result<(), AppError> {
+        *self.applied_bootstrap_nodes.lock().unwrap() = nodes;
+        *self.applied_bootstrap_source.lock().unwrap() = Some(source);
+        Ok(())
+    }
 }
 
 mock! {
@@ -182,6 +204,32 @@ async fn test_initialize() {
 
     let result = service.initialize().await;
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_apply_bootstrap_nodes_forwards_to_network() {
+    let network = Arc::new(MockNetworkServ::new());
+    let gossip = Arc::new(MockGossipServ::new());
+    let service = P2PService::new(
+        Arc::clone(&network) as Arc<dyn NetworkService>,
+        gossip as Arc<dyn GossipService>,
+    );
+
+    let nodes = vec![
+        "node1@127.0.0.1:44001".to_string(),
+        "node2@127.0.0.1:44002".to_string(),
+    ];
+
+    service
+        .apply_bootstrap_nodes(nodes.clone(), BootstrapSource::User)
+        .await
+        .expect("apply bootstrap nodes");
+
+    assert_eq!(network.applied_bootstrap_nodes(), nodes);
+    assert_eq!(
+        network.applied_bootstrap_source(),
+        Some(BootstrapSource::User)
+    );
 }
 
 #[tokio::test]

@@ -3,7 +3,7 @@ use super::{
     dht_bootstrap::{DhtGossip, secret},
 };
 use crate::domain::p2p::P2PEvent;
-use crate::shared::config::NetworkConfig as AppNetworkConfig;
+use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use iroh::{Endpoint, protocol::Router};
@@ -19,7 +19,9 @@ pub struct IrohNetworkService {
     stats: Arc<RwLock<NetworkStats>>,
     dht_gossip: Option<Arc<DhtGossip>>,
     discovery_options: Arc<RwLock<DiscoveryOptions>>,
-    network_config: AppNetworkConfig,
+    network_config: Arc<RwLock<AppNetworkConfig>>,
+    bootstrap_peers: Arc<RwLock<Vec<String>>>,
+    bootstrap_source: Arc<RwLock<BootstrapSource>>,
     p2p_event_tx: Option<broadcast::Sender<P2PEvent>>,
 }
 
@@ -55,6 +57,7 @@ impl IrohNetworkService {
             }
         };
 
+        let network_config = Arc::new(RwLock::new(net_cfg.clone()));
         let service = Self {
             endpoint: Arc::new(endpoint),
             router: Arc::new(router),
@@ -69,7 +72,9 @@ impl IrohNetworkService {
             })),
             dht_gossip,
             discovery_options: Arc::new(RwLock::new(discovery_options)),
-            network_config: net_cfg,
+            network_config: Arc::clone(&network_config),
+            bootstrap_peers: Arc::new(RwLock::new(net_cfg.bootstrap_peers.clone())),
+            bootstrap_source: Arc::new(RwLock::new(net_cfg.bootstrap_source)),
             p2p_event_tx: event_tx,
         };
 
@@ -93,8 +98,20 @@ impl IrohNetworkService {
     }
 
     async fn apply_bootstrap_peers_from_config(&self) {
+        let peers = { self.bootstrap_peers.read().await.clone() };
+        if peers.is_empty() {
+            return;
+        }
+        let source = *self.bootstrap_source.read().await;
+        let success_count = self.connect_bootstrap_nodes(&peers).await;
+        if success_count > 0 {
+            super::metrics::record_bootstrap_source(source);
+        }
+    }
+
+    async fn connect_bootstrap_nodes(&self, nodes: &[String]) -> usize {
         let mut success_count = 0usize;
-        for peer in &self.network_config.bootstrap_peers {
+        for peer in nodes {
             let trimmed = peer.trim();
             if trimmed.is_empty() {
                 continue;
@@ -106,14 +123,11 @@ impl IrohNetworkService {
                     tracing::info!("Connected to bootstrap peer from config: {}", trimmed);
                 }
                 Err(err) => {
-                    tracing::warn!("Failed to connect to bootstrap peer '{}': {}", trimmed, err)
+                    tracing::warn!("Failed to connect to bootstrap peer '{}': {}", trimmed, err);
                 }
             }
         }
-
-        if success_count > 0 {
-            super::metrics::record_bootstrap_source(self.network_config.bootstrap_source);
-        }
+        success_count
     }
 
     pub fn node_id(&self) -> String {
@@ -367,5 +381,44 @@ impl NetworkService for IrohNetworkService {
 
     async fn broadcast_dht(&self, topic: &str, message: Vec<u8>) -> Result<(), AppError> {
         IrohNetworkService::broadcast_dht(self, topic, message).await
+    }
+
+    async fn apply_bootstrap_nodes(
+        &self,
+        nodes: Vec<String>,
+        source: BootstrapSource,
+    ) -> Result<(), AppError> {
+        let mut normalized: Vec<String> = nodes
+            .into_iter()
+            .map(|entry| entry.trim().to_string())
+            .filter(|entry| !entry.is_empty())
+            .collect();
+        normalized.sort();
+        normalized.dedup();
+
+        {
+            let mut cfg = self.network_config.write().await;
+            cfg.bootstrap_peers = normalized.clone();
+            cfg.bootstrap_source = source;
+        }
+        {
+            let mut peers = self.bootstrap_peers.write().await;
+            *peers = normalized.clone();
+        }
+        {
+            let mut stored_source = self.bootstrap_source.write().await;
+            *stored_source = source;
+        }
+
+        if normalized.is_empty() {
+            tracing::warn!("Bootstrap nodes list is empty; skipping connections");
+            return Ok(());
+        }
+
+        let success = self.connect_bootstrap_nodes(&normalized).await;
+        if success > 0 {
+            super::metrics::record_bootstrap_source(source);
+        }
+        Ok(())
     }
 }

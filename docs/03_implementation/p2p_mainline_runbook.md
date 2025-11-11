@@ -182,8 +182,8 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 ### 10.3 `kukuri-cli` ブートストラップリスト動的更新 PoC（2025年11月11日追加）
 1. `kukuri-cli bootstrap --export-path <path>` でノードを起動すると、`node_id@bind_addr` と指定済み `--peers` が JSON (`{"nodes":[...],"updated_at_ms":...}`) に書き出される。`--export-path` を省略した場合は `KUKURI_CLI_BOOTSTRAP_PATH` 環境変数、未設定時は既定の `%LocalAppData%\kukuri\cli_bootstrap_nodes.json`（macOS/Linux: `$XDG_DATA_HOME/kukuri/cli_bootstrap_nodes.json`）へ保存される。
 2. Tauri アプリ起動時に `bootstrap_config::load_cli_bootstrap_nodes` が同ファイルを検出すると、`RelayStatus` カード下部に「CLI 提供: n件 / 更新: ○分前」「最新リストを適用」ボタンが表示される。`KUKURI_BOOTSTRAP_PEERS` でロックされている場合はボタンが無効化され、環境変数を解除しない限り適用できない仕様。
-3. `最新リストを適用` を押下すると `apply_cli_bootstrap_nodes` コマンドが `user_bootstrap_nodes.json` に CLI リストをコピーし、同時に `get_relay_status` コマンドで接続状況を再取得する。UI は現在のソース（env/user/bundle/fallback/none）と CLI リストの更新時刻を並列表記するため、Runbookの Chapter2/Chapter6 で参照するブートストラップログと整合が取れる。
+3. `最新リストを適用` を押下すると `apply_cli_bootstrap_nodes` コマンドが `user_bootstrap_nodes.json` に CLI リストをコピーし、続けて `NetworkService::apply_bootstrap_nodes` を呼び出して Mainline DHT へ即時接続する。UI は現在のソース（env/user/bundle/fallback/none）と CLI リストの更新時刻を並列表記するため、Runbook の Chapter2/Chapter6 で参照するブートストラップログと整合が取れる。アプリの再起動は不要。
 4. PoC 検証手順:
    - `kukuri-cli bootstrap --export-path "%LocalAppData%\kukuri\cli_bootstrap_nodes.json" --peers node_id@host:port` を実行して JSON が作成されることを確認。
-   - `pnpm tauri dev` → サイドバー下部の `RelayStatus` で CLI リストが検知され、手動で適用できることを確認。
+   - `pnpm tauri dev` → サイドバー下部の `RelayStatus` で CLI リストが検知され、「最新リストを適用」押下後に `kukuri-tauri` ログへ `Connected to bootstrap peer from config:` が即座に出力されることを確認（`NetworkService::apply_bootstrap_nodes` が走った証跡）。`get_relay_status` の再取得でステータスが `connected` へ遷移するかを合わせて確認する。
    - `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` / `cargo test --package kukuri-cli -- test_bootstrap_runbook` / `cargo test --package kukuri-tauri --test test_event_service_gateway` を実行し、UI・CLI・Gateway の回帰テストが通ることを Runbook に記録する。

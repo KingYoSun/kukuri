@@ -219,6 +219,7 @@ mod tests {
     use crate::domain::entities::{
         MetricsWindow, TopicActivityRow, TopicMetricsSnapshot, TopicMetricsUpsert,
     };
+    use crate::shared::config::BootstrapSource;
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
 
@@ -256,6 +257,11 @@ mod tests {
             async fn get_status(&self) -> Result<P2PStatus, AppError>;
             async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
             fn generate_topic_id(&self, topic_name: &str) -> String;
+            async fn apply_bootstrap_nodes(
+                &self,
+                nodes: Vec<String>,
+                source: BootstrapSource,
+            ) -> Result<(), AppError>;
         }
     }
 

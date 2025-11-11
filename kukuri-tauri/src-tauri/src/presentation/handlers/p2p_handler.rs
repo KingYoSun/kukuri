@@ -5,7 +5,7 @@ use crate::presentation::dto::p2p::{
     JoinTopicByNameResponse, JoinTopicRequest, LeaveTopicRequest, NodeAddressResponse,
     P2PStatusResponse, TopicStatus,
 };
-use crate::shared::error::AppError;
+use crate::shared::{AppError, config::BootstrapSource};
 use std::sync::Arc;
 
 pub struct P2PHandler {
@@ -108,5 +108,13 @@ impl P2PHandler {
             .await?;
 
         Ok(JoinTopicByNameResponse { topic_id })
+    }
+
+    pub async fn apply_bootstrap_nodes(
+        &self,
+        nodes: Vec<String>,
+        source: BootstrapSource,
+    ) -> Result<(), AppError> {
+        self.p2p_service.apply_bootstrap_nodes(nodes, source).await
     }
 }
