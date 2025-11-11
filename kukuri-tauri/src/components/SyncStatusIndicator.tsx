@@ -286,11 +286,7 @@ function getCacheDocSummary(type: CacheTypeStatus): CacheDocSummary | null {
   const blobHashCandidate = type.blob_hash ?? type.blobHash;
   const blobHash = typeof blobHashCandidate === 'string' ? blobHashCandidate : undefined;
 
-  if (
-    typeof docVersion === 'undefined' &&
-    typeof payloadBytes === 'undefined' &&
-    !blobHash
-  ) {
+  if (typeof docVersion === 'undefined' && typeof payloadBytes === 'undefined' && !blobHash) {
     return null;
   }
 
