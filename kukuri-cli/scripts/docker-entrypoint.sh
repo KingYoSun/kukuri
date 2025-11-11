@@ -32,6 +32,12 @@ case "$COMMAND" in
             echo "Error: CONNECT_PEER or NODE_A_ADDR must be set" >&2
             exit 1
         fi
+        if [ -n "${CONNECT_ARGS:-}" ]; then
+            set -f
+            # shellcheck disable=SC2086
+            set -- ${CONNECT_ARGS} "$@"
+            set +f
+        fi
         exec_cli connect --peer "$PEER" "$@"
         ;;
     *)

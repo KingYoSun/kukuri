@@ -15,7 +15,7 @@ services:
       - node_a
     env_file:
       - .env.node_b
-    command: ["connect", "--no-dht", "--timeout", "30"]
+    command: ["connect"]
     networks:
       - kukuri-cli-test
 
