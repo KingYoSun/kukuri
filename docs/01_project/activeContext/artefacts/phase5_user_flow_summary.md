@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月10日
+最終更新: 2025年11月11日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -14,7 +14,7 @@
 - **ユーザー検索**: `useUserSearchQuery` と `UserSearchResults` に cursor/sort／レートリミット UI／無限スクロールを実装し、2025年11月10日に `allow_incomplete` フォールバックと SearchBar 警告スタイル・補助検索ラベルを追加。同日に `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build`（PowerShell 版: `.\scripts\test-docker.ps1 ts -Scenario user-search-pagination -NoBuild`）を実装・実行し、`tmp/logs/user_search_pagination_20251110-142854.log` を採取。残課題は Nightly Frontend Unit Tests へのシナリオ組み込みと `test-results/user-search-pagination/*.json` の固定化。
 - **Offline sync**: `SyncStatusIndicator` は `list_sync_queue_items` の履歴表示と `cache_types.metadata` 整形まで完了したが、Doc/Blob 対応の `cache_metadata` マイグレーションと conflict バナー / Service Worker (Phase4) の Runbook/CI 連携が未着手（Inventory 5.5 / 5.11）。
 - **Mainline DHT / EventGateway**: Runbook Chapter10 / RelayStatus リンクに加え、2025年11月11日に `apply_cli_bootstrap_nodes` から `NetworkService::apply_bootstrap_nodes` を呼び出してランタイムでブートストラップリストを差し替える実装を追加。`kukuri-cli --export-path` → `RelayStatus` → 「最新リストを適用」でアプリ再起動なしに Mainline DHT 接続先を更新でき、`phase5_dependency_inventory_template.md` / `phase5_event_gateway_design.md` とも整合を取った。
-- **Ops / CI**: `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を完走し、`tmp/logs/vitest_topic_create_20251110020423.log` / `post_delete_cache_20251110020439.log` を取得。残課題は `post-delete-cache` Docker シナリオの整備、Stage4 Service Worker 追加時のログ（`sync_status_indicator_stage4_<timestamp>.log`）採取と Runbook 反映。
+- **Ops / CI**: `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を完走し、`tmp/logs/vitest_topic_create_20251110020423.log` / `post_delete_cache_20251110020439.log` を取得。2025年11月11日に GitHub Actions `test.yml` の `native-test-linux` / `format-check` / `build-test-windows` へ `kukuri-cli` の `cargo test` / `cargo fmt -- --check` / `cargo check` を追加し、CLI の品質ゲートをフロント/Rust本体と同列にした。残課題は `post-delete-cache` Docker シナリオの整備、Stage4 Service Worker 追加時のログ（`sync_status_indicator_stage4_<timestamp>.log`）採取と Runbook 反映。
 
 ## MVP Exit Checklist（2025年11月10日版）
 

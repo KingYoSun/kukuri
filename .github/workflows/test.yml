@@ -105,6 +105,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             kukuri-tauri/src-tauri/target/
+            kukuri-cli/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
@@ -133,6 +134,11 @@ jobs:
         run: |
           cd kukuri-tauri/src-tauri
           cargo clippy --workspace --all-features -- -D warnings -A dead_code -A unused_variables
+
+      - name: Run CLI tests
+        run: |
+          cd kukuri-cli
+          cargo test --workspace --all-features
 
       - name: Run CLI clippy
         run: |
@@ -190,6 +196,11 @@ jobs:
           cd kukuri-tauri/src-tauri
           cargo fmt -- --check
 
+      - name: Check CLI formatting
+        run: |
+          cd kukuri-cli
+          cargo fmt -- --check
+
       - name: Check TypeScript formatting
         run: |
           cd kukuri-tauri
@@ -228,6 +239,11 @@ jobs:
       - name: Build check (Rust)
         run: |
           cd kukuri-tauri/src-tauri
+          cargo check --workspace --all-features
+
+      - name: Build check (CLI)
+        run: |
+          cd kukuri-cli
           cargo check --workspace --all-features
 
       - name: Build check (TypeScript)
