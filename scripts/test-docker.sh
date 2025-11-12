@@ -36,7 +36,7 @@ Commands:
   p2p          Run P2P integration tests inside Docker
 
 Options for ts:
-  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination, offline-sync)
+  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-sync)
   --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
   --no-build             Skip Docker image build (use existing image)
 
@@ -148,6 +148,7 @@ stop_prometheus_trending() {
 
 collect_trending_metrics_snapshot() {
   local timestamp="$1"
+  local run_state="${2:-active}"
   local log_rel_path="tmp/logs/trending_metrics_job_stage4_${timestamp}.log"
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
   mkdir -p "$(dirname "$log_host_path")"
@@ -156,6 +157,7 @@ collect_trending_metrics_snapshot() {
     echo "=== trending_metrics_job Prometheus snapshot ==="
     echo "timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     echo "endpoint: ${PROMETHEUS_METRICS_URL}"
+    echo "run_state: ${run_state}"
     echo
   } >"$log_host_path"
 
@@ -245,8 +247,10 @@ run_ts_trending_feed() {
   done
 
   if [[ $prom_started -eq 1 ]]; then
-    collect_trending_metrics_snapshot "${timestamp}"
+    collect_trending_metrics_snapshot "${timestamp}" "active"
     stop_prometheus_trending
+  else
+    collect_trending_metrics_snapshot "${timestamp}" "skipped"
   fi
 
   return $vitest_status
@@ -283,46 +287,156 @@ run_ts_profile_avatar_sync() {
 
 run_ts_user_search_pagination() {
   local timestamp
-  timestamp="$(date '+%Y%m%d-%H%M%S')"
+  timestamp="$(date +%Y%m%d-%H%M%S)"
   local log_rel_path="tmp/logs/user_search_pagination_${timestamp}.log"
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
-  mkdir -p "$(dirname "$log_host_path")"
+  local results_dir="${RESULTS_DIR}/user-search-pagination"
+  mkdir -p "$(dirname "$log_host_path")" "$results_dir"
+  : >"$log_host_path"
 
   echo "Running TypeScript scenario 'user-search-pagination'..."
-  if compose_run '' run --rm ts-test bash -lc "
-    set -euo pipefail
-    cd /app/kukuri-tauri
-    if [ ! -f node_modules/.bin/vitest ]; then
-      echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-      pnpm install --frozen-lockfile --ignore-workspace
+  local vitest_targets=(
+    'src/tests/unit/hooks/useUserSearchQuery.test.tsx'
+    'src/tests/unit/components/search/UserSearchResults.test.tsx'
+  )
+
+  local vitest_status=0
+  for target in "${vitest_targets[@]}"; do
+    local slug="${target//\//_}"
+    slug="${slug//./_}"
+    local report_rel_path="test-results/user-search-pagination/${timestamp}-${slug}.json"
+    local command="
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
+"
+    if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
+      vitest_status=${PIPESTATUS[0]}
+      echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
+      break
     fi
-    pnpm vitest run \
-      'src/tests/unit/hooks/useUserSearchQuery.test.tsx' \
-      'src/tests/unit/components/search/UserSearchResults.test.tsx'
-  " | tee "$log_host_path"; then
-    echo "[OK] Scenario log saved to ${log_rel_path}"
-  else
+
+    if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+      echo "[OK] Scenario report saved to ${report_rel_path}"
+    else
+      echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+    fi
+  done
+
+  if [[ $vitest_status -ne 0 ]]; then
     echo "[ERROR] Scenario 'user-search-pagination' failed. See ${log_rel_path} for details." >&2
-    return 1
+    return $vitest_status
   fi
+
+  echo "[OK] Scenario log saved to ${log_rel_path}"
+  return 0
 }
 
 run_ts_post_delete_cache() {
   local timestamp
-  timestamp="$(date '+%Y%m%d-%H%M%S')"
-  local log_rel_path="tmp/logs/post-delete-cache_docker_${timestamp}.log"
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  local log_rel_path="tmp/logs/post_delete_cache_${timestamp}.log"
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
-  mkdir -p "$(dirname "$log_host_path")"
+  local results_dir="${RESULTS_DIR}/post-delete-cache"
+  mkdir -p "$(dirname "$log_host_path")" "$results_dir"
+  : >"$log_host_path"
 
   echo "Running TypeScript scenario 'post-delete-cache'..."
-  if compose_run '' run --rm ts-test pnpm vitest run \
-    src/tests/unit/hooks/useDeletePost.test.ts \
-    src/tests/unit/components/posts/PostCard.test.tsx >"$log_host_path" 2>&1; then
-    echo "[OK] Scenario log saved to ${log_rel_path}"
-  else
+  local vitest_targets=(
+    'src/tests/unit/hooks/useDeletePost.test.tsx'
+    'src/tests/unit/components/posts/PostCard.test.tsx'
+  )
+
+  local vitest_status=0
+  for target in "${vitest_targets[@]}"; do
+    local slug="${target//\//_}"
+    slug="${slug//./_}"
+    local report_rel_path="test-results/post-delete-cache/${timestamp}-${slug}.json"
+    local command="
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
+"
+    if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
+      vitest_status=${PIPESTATUS[0]}
+      echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
+      break
+    fi
+
+    if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+      echo "[OK] Scenario report saved to ${report_rel_path}"
+    else
+      echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+    fi
+  done
+
+  if [[ $vitest_status -ne 0 ]]; then
     echo "[ERROR] Scenario 'post-delete-cache' failed. See ${log_rel_path} for details." >&2
-    return 1
+    return $vitest_status
   fi
+
+  echo "[OK] Scenario log saved to ${log_rel_path}"
+  return 0
+}
+
+run_ts_topic_create() {
+  local timestamp
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  local log_rel_path="tmp/logs/topic_create_${timestamp}.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  local results_dir="${RESULTS_DIR}/topic-create"
+  mkdir -p "$(dirname "$log_host_path")" "$results_dir"
+  : >"$log_host_path"
+
+  echo "Running TypeScript scenario 'topic-create'..."
+  local vitest_targets=(
+    'src/tests/unit/components/topics/TopicSelector.test.tsx'
+    'src/tests/unit/components/posts/PostComposer.test.tsx'
+    'src/tests/unit/components/layout/Sidebar.test.tsx'
+  )
+
+  local vitest_status=0
+  for target in "${vitest_targets[@]}"; do
+    local slug="${target//\//_}"
+    slug="${slug//./_}"
+    local report_rel_path="test-results/topic-create/${timestamp}-${slug}.json"
+    local command="
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
+"
+    if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
+      vitest_status=${PIPESTATUS[0]}
+      echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
+      break
+    fi
+
+    if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+      echo "[OK] Scenario report saved to ${report_rel_path}"
+    else
+      echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+    fi
+  done
+
+  if [[ $vitest_status -ne 0 ]]; then
+    echo "[ERROR] Scenario 'topic-create' failed. See ${log_rel_path} for details." >&2
+    return $vitest_status
+  fi
+
+  echo "[OK] Scenario log saved to ${log_rel_path}"
+  return 0
 }
 
 run_ts_offline_sync() {
@@ -374,6 +488,9 @@ run_ts_tests() {
         ;;
       post-delete-cache)
         run_ts_post_delete_cache
+        ;;
+      topic-create)
+        run_ts_topic_create
         ;;
       offline-sync)
         run_ts_offline_sync

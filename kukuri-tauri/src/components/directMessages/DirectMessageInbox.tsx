@@ -100,8 +100,13 @@ export function DirectMessageInbox() {
         if (cancelled) {
           return;
         }
-        setSearchResults(response.items.map(mapUserProfileToUser));
+        const mapped = response.items.map(mapUserProfileToUser);
+        setSearchResults(mapped);
         setSearchError(null);
+        errorHandler.info('DirectMessageInbox.search_completed', 'DirectMessageInbox.recipientSearch', {
+          queryLength: query.length,
+          resultCount: mapped.length,
+        });
       } catch (error) {
         if (cancelled) {
           return;

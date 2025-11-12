@@ -84,7 +84,7 @@ Commands:
 Options:
   -Integration  - Rustコマンドと併せて P2P 統合テストのみ実行
   -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
-  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync, user-search-pagination, offline-sync）
+  -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-sync）
   -Fixture <path>  - シナリオ用フィクスチャパスを上書き（既定: tests/fixtures/trending/default.json）
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
@@ -347,7 +347,8 @@ function Stop-PrometheusTrending {
 function Collect-TrendingMetricsSnapshot {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Timestamp
+        [string]$Timestamp,
+        [string]$RunState = "active"
     )
 
     $logRelPath = "tmp/logs/trending_metrics_job_stage4_$Timestamp.log"
@@ -361,6 +362,7 @@ function Collect-TrendingMetricsSnapshot {
         "=== trending_metrics_job Prometheus snapshot ===",
         "timestamp: $(Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")",
         "endpoint: $PrometheusMetricsUrl",
+        "run_state: $RunState",
         ""
     )
     Set-Content -Path $logHostPath -Value $header -Encoding UTF8
@@ -432,8 +434,10 @@ function Invoke-TypeScriptTrendingFeedScenario {
     }
     finally {
         if ($promStarted) {
-            Collect-TrendingMetricsSnapshot -Timestamp $timestamp
+            Collect-TrendingMetricsSnapshot -Timestamp $timestamp -RunState "active"
             Stop-PrometheusTrending
+        } else {
+            Collect-TrendingMetricsSnapshot -Timestamp $timestamp -RunState "skipped"
         }
     }
 
@@ -485,33 +489,179 @@ function Invoke-TypeScriptUserSearchScenario {
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir | Out-Null
     }
+    Set-Content -Path $logHostPath -Value @()
+
+    $resultsDir = Join-Path $repositoryRoot "test-results/user-search-pagination"
+    if (-not (Test-Path $resultsDir)) {
+        New-Item -ItemType Directory -Path $resultsDir | Out-Null
+    }
 
     Write-Host "Running TypeScript scenario 'user-search-pagination'..."
-    $command = @"
+    $vitestTargets = @(
+        "src/tests/unit/hooks/useUserSearchQuery.test.tsx",
+        "src/tests/unit/components/search/UserSearchResults.test.tsx"
+    )
+
+    $vitestStatus = 0
+    foreach ($target in $vitestTargets) {
+        $slug = $target.Replace("/", "_").Replace(".", "_")
+        $reportRelPath = "test-results/user-search-pagination/${timestamp}-${slug}.json"
+
+        $command = @"
 set -euo pipefail
 cd /app/kukuri-tauri
-mkdir -p '/app/tmp/logs'
 if [ ! -f node_modules/.bin/vitest ]; then
   echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
   pnpm install --frozen-lockfile --ignore-workspace
 fi
-pnpm vitest run \
-  'src/tests/unit/hooks/useUserSearchQuery.test.tsx' \
-  'src/tests/unit/components/search/UserSearchResults.test.tsx'
+pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'
 "@
 
-    $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
-    $process = Start-Process -FilePath "docker" -ArgumentList $dockerArgs -RedirectStandardOutput $logHostPath -RedirectStandardError $logHostPath -WorkingDirectory $repositoryRoot -NoNewWindow -PassThru
-    $process.WaitForExit()
+        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
+        $exitCode = $LASTEXITCODE
 
-    if (Test-Path $logHostPath) {
-        Get-Content $logHostPath
+        if ($exitCode -ne 0) {
+            $vitestStatus = $exitCode
+            Write-Warning "Vitest target $target failed with exit code $exitCode"
+            break
+        }
+
+        $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+        if (Test-Path $reportHostPath) {
+            Write-Success "Scenario report saved to $reportRelPath"
+        } else {
+            Write-Warning "Scenario report not found at $reportRelPath"
+        }
     }
 
-    if ($process.ExitCode -eq 0 -and (Test-Path $logHostPath)) {
-        Write-Success "Scenario log saved to $logRelPath"
-    } else {
+    if ($vitestStatus -ne 0) {
         Write-ErrorMessage "Scenario 'user-search-pagination' failed. See $logRelPath for details."
+    } else {
+        Write-Success "Scenario log saved to $logRelPath"
+    }
+}
+
+function Invoke-TypeScriptPostDeleteCacheScenario {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $logRelPath = "tmp/logs/post_delete_cache_$timestamp.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $logDir = Split-Path $logHostPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    Set-Content -Path $logHostPath -Value @()
+
+    $resultsDir = Join-Path $repositoryRoot "test-results/post-delete-cache"
+    if (-not (Test-Path $resultsDir)) {
+        New-Item -ItemType Directory -Path $resultsDir | Out-Null
+    }
+
+    Write-Host "Running TypeScript scenario 'post-delete-cache'..."
+    $vitestTargets = @(
+        "src/tests/unit/hooks/useDeletePost.test.tsx",
+        "src/tests/unit/components/posts/PostCard.test.tsx"
+    )
+
+    $vitestStatus = 0
+    foreach ($target in $vitestTargets) {
+        $slug = $target.Replace("/", "_").Replace(".", "_")
+        $reportRelPath = "test-results/post-delete-cache/${timestamp}-${slug}.json"
+
+        $command = @"
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'
+"@
+
+        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0) {
+            $vitestStatus = $exitCode
+            Write-Warning "Vitest target $target failed with exit code $exitCode"
+            break
+        }
+
+        $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+        if (Test-Path $reportHostPath) {
+            Write-Success "Scenario report saved to $reportRelPath"
+        } else {
+            Write-Warning "Scenario report not found at $reportRelPath"
+        }
+    }
+
+    if ($vitestStatus -ne 0) {
+        Write-ErrorMessage "Scenario 'post-delete-cache' failed. See $logRelPath for details."
+    } else {
+        Write-Success "Scenario log saved to $logRelPath"
+    }
+}
+
+function Invoke-TypeScriptTopicCreateScenario {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $logRelPath = "tmp/logs/topic_create_$timestamp.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $logDir = Split-Path $logHostPath -Parent
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    Set-Content -Path $logHostPath -Value @()
+
+    $resultsDir = Join-Path $repositoryRoot "test-results/topic-create"
+    if (-not (Test-Path $resultsDir)) {
+        New-Item -ItemType Directory -Path $resultsDir | Out-Null
+    }
+
+    Write-Host "Running TypeScript scenario 'topic-create'..."
+    $vitestTargets = @(
+        "src/tests/unit/components/topics/TopicSelector.test.tsx",
+        "src/tests/unit/components/posts/PostComposer.test.tsx",
+        "src/tests/unit/components/layout/Sidebar.test.tsx"
+    )
+
+    $vitestStatus = 0
+    foreach ($target in $vitestTargets) {
+        $slug = $target.Replace("/", "_").Replace(".", "_")
+        $reportRelPath = "test-results/topic-create/${timestamp}-${slug}.json"
+
+        $command = @"
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'
+"@
+
+        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0) {
+            $vitestStatus = $exitCode
+            Write-Warning "Vitest target $target failed with exit code $exitCode"
+            break
+        }
+
+        $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+        if (Test-Path $reportHostPath) {
+            Write-Success "Scenario report saved to $reportRelPath"
+        } else {
+            Write-Warning "Scenario report not found at $reportRelPath"
+        }
+    }
+
+    if ($vitestStatus -ne 0) {
+        Write-ErrorMessage "Scenario 'topic-create' failed. See $logRelPath for details."
+    } else {
+        Write-Success "Scenario log saved to $logRelPath"
     }
 }
 
@@ -566,6 +716,12 @@ function Invoke-TypeScriptTests {
             }
             "user-search-pagination" {
                 Invoke-TypeScriptUserSearchScenario
+            }
+            "post-delete-cache" {
+                Invoke-TypeScriptPostDeleteCacheScenario
+            }
+            "topic-create" {
+                Invoke-TypeScriptTopicCreateScenario
             }
             "offline-sync" {
                 Invoke-TypeScriptOfflineSyncScenario

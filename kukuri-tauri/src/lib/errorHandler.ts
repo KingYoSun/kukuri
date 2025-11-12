@@ -69,13 +69,17 @@ class ErrorHandler {
     }
   }
 
-  info(message: string, context?: string): void {
+  info(message: string, context?: string, metadata?: Record<string, unknown>): void {
     if (this.isTest) {
       return;
     }
 
     if (this.isDevelopment) {
-      console.info(`[INFO] ${context || 'App'}: ${message}`);
+      if (metadata) {
+        console.info(`[INFO] ${context || 'App'}: ${message}`, metadata);
+      } else {
+        console.info(`[INFO] ${context || 'App'}: ${message}`);
+      }
     }
   }
 }

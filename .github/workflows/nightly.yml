@@ -63,6 +63,13 @@ jobs:
           path: test-results/trending-feed
           if-no-files-found: error
 
+      - name: Upload trending metrics logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: trending-metrics-logs
+          path: tmp/logs/trending_metrics_job_stage4_*.log
+          if-no-files-found: error
+
   profile-avatar-sync:
     name: Profile Avatar Sync (Docker)
     runs-on: ubuntu-latest
@@ -80,4 +87,82 @@ jobs:
         with:
           name: profile-avatar-sync-logs
           path: tmp/logs/profile_avatar_sync_*.log
+          if-no-files-found: error
+
+  user-search-pagination:
+    name: User Search (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run user-search-pagination scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario user-search-pagination
+
+      - name: Upload user search logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-search-pagination-logs
+          path: tmp/logs/user_search_pagination_*.log
+          if-no-files-found: error
+
+      - name: Upload user search reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-search-pagination-reports
+          path: test-results/user-search-pagination
+          if-no-files-found: error
+
+  topic-create:
+    name: Topic Create (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run topic-create scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario topic-create
+
+      - name: Upload topic-create logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: topic-create-logs
+          path: tmp/logs/topic_create_*.log
+          if-no-files-found: error
+
+      - name: Upload topic-create reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: topic-create-reports
+          path: test-results/topic-create
+          if-no-files-found: error
+
+  post-delete-cache:
+    name: Post Delete Cache (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run post-delete-cache scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario post-delete-cache
+
+      - name: Upload post-delete-cache logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-delete-cache-logs
+          path: tmp/logs/post_delete_cache_*.log
+          if-no-files-found: error
+
+      - name: Upload post-delete-cache reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-delete-cache-reports
+          path: test-results/post-delete-cache
           if-no-files-found: error
