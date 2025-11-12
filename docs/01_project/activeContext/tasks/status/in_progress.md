@@ -14,6 +14,15 @@
 ### MVP残タスク棚卸し / ドキュメント刷新
 
 - [ ] MVP達成に必要な残タスクを横断的に整理し、指定ドキュメント群（critical/in_progress, design_doc, roadmap, refactoring_plan, tauri_app_implementation_plan, phase5_* artefacts）へ反映する
+  - [ ] Stage4: プロフィール avatar 同期の Service Worker 連携と `profile_avatar_sync` ロギング/`cache_metadata` 更新/Runbook & `phase5_ci_path_audit` 反映を完了させる（`phase5_user_flow_inventory.md:241-246`）。
+  - [ ] Stage4: `OfflineActionType::CREATE_TOPIC` の再送処理・pendingTopics UI・Rust/Vitest/Docker/Runbook 一式を実装し、トピック作成導線をオフラインでも再現できる状態にする（`phase5_user_flow_inventory.md:527-531`）。
+  - [ ] Stage4: 投稿削除フローの Rust 統合テスト・`post-delete-cache` Docker エントリポイント・SyncStatus 再送 UI・Runbook 更新を仕上げ、`tmp/logs/post_delete_cache_<ts>.log` を取得できるようにする（`phase5_user_flow_inventory.md:566-570`）。
+  - [ ] DirectMessageInbox backlog（会話検索/補完、仮想スクロール最適化、多端末既読共有と contract テスト）を片付け、Inventory 5.6.x / Summary 2章の「改善中」項目を解消する（`phase5_user_flow_summary.md:82-92`、`phase5_user_flow_inventory.md` セクション5.6）。
+  - [ ] EventGateway ポート実装と P2PService Stack の trait 化・DI 再構成を完了し、Runbook/Dependency テンプレに反映（`phase5_dependency_inventory_template.md:15-16`, `roadmap.md:17-20`）。
+  - [ ] ユーザー検索の `user-search-pagination` シナリオを Nightly / artefact 化し、`test-results/user-search-pagination/*.json` を保存する運用を `phase5_ci_path_audit.md` へ追加（`phase5_user_flow_summary.md:67`, `phase5_ci_path_audit.md:52`）。
+  - [ ] 追加予定テスト（ProfilePage follow/unfollow、DirectMessageDialog 送受信/再送、フォロー一覧ページング）を実装し、Rust/TS 双方のケースを `phase5_ci_path_audit.md` から「実装済み」へ移行（`phase5_ci_path_audit.md:47-49`）。
+  - [ ] `scripts/test-docker.{sh,ps1} --scenario trending-feed` の corepack 未導入ホスト対策（pnpm fallback・fixture `generated_at` 固定・`tmp/logs/trending-feed/latest.log` artefact 化）を行い、Dependency テンプレの未完タスクをクローズ（`phase5_dependency_inventory_template.md:21`）。
+  - [ ] 対象ドキュメント群（`roadmap.md:14-20`, `design_doc.md:33-42`, `tauri_app_implementation_plan.md:9-15`, `phase5_user_flow_summary.md`, `phase5_user_flow_inventory.md`, `phase5_ci_path_audit.md`, `phase5_dependency_inventory_template.md`, `refactoring_plan_2025-08-08_v3.md`）を Stage4 実装後の最新ログ・完了条件と日付で同期し、critical → in_progress → completed の反映ルールを満たす。
   - 2025年11月08日: `priority/critical.md` に移動履歴を追記し、本項目を `in_progress` でトラッキング開始。既存ドキュメントの最終更新日・ギャップを確認し、MVPゴールに直結する3カテゴリ（①ユーザーフロー/UXギャップ、②基盤アーキ/依存整理、③テスト・オペレーション & CI）で整理する方針を決定。
   - 2025年11月08日: `phase5_user_flow_inventory.md` / `phase5_dependency_inventory_template.md` / `phase5_event_gateway_design.md` から MLP（Minimum Lovable Product）候補とブロッカーを抽出し、`refactoring_plan_2025-08-08_v3.md` に反映すべき優先順を下書き。`tauri_app_implementation_plan.md` の Phase3/4 セクションを MVP観点で「完了済み」「残」「MVP後」に三分割する草案を作成。
   - 2025年11月08日: 主要ドキュメントに追加する `MVP Exit Criteria` セクション案（機能/ネットワーク/テスト/運用の4指標）をドラフト化し、`roadmap.md`・`design_doc.md` のタイムライン/マイルストーン更新内容を決定。更新後は `phase5_user_flow_summary.md` にも短縮版チェックリストを掲載する計画。
