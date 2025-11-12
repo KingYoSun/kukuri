@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { TauriApi, type ProfileAvatarSyncResult as ProfileAvatarSyncApiResult } from '@/lib/api/tauri';
+import {
+  TauriApi,
+  type ProfileAvatarSyncResult as ProfileAvatarSyncApiResult,
+} from '@/lib/api/tauri';
 import { offlineApi } from '@/api/offline';
 import { errorHandler } from '@/lib/errorHandler';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
@@ -40,12 +43,7 @@ const MANUAL_SOURCE = 'useProfileAvatarSync:manual';
 type ProfileAvatarSyncWorkerMessage =
   | {
       type: 'profile-avatar-sync:process';
-      payload: {
-        jobId: string;
-        npub: string;
-        knownDocVersion: number | null;
-        force?: boolean;
-      };
+      payload: ProfileAvatarSyncJobPayload;
     }
   | {
       type: 'profile-avatar-sync:complete';
@@ -110,7 +108,7 @@ export function useProfileAvatarSync(
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const lastSyncRequest = useRef<Promise<void> | null>(null);
+  const lastSyncRequest = useRef<Promise<ProfileAvatarSyncApiResult | undefined> | null>(null);
   const workerChannelRef = useRef<BroadcastChannel | null>(null);
 
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
@@ -140,7 +138,7 @@ export function useProfileAvatarSync(
           const knownDocVersion =
             syncOptions?.force === true
               ? null
-              : syncOptions?.knownDocVersion ?? (syncOptions?.force ? null : currentDocVersion);
+              : (syncOptions?.knownDocVersion ?? (syncOptions?.force ? null : currentDocVersion));
           const response = await TauriApi.profileAvatarSync({
             npub,
             knownDocVersion,
@@ -206,11 +204,19 @@ export function useProfileAvatarSync(
       if (job.npub && job.npub !== npub) {
         return;
       }
+      if (!job.jobId) {
+        errorHandler.log('ProfileAvatarSync.missingJobId', new Error('jobId missing'), {
+          context: 'useProfileAvatarSync.handleMessage',
+          metadata: { npub, payload: job },
+        });
+        return;
+      }
+      const jobId = job.jobId;
 
       const run = async () => {
         const syncPayload: SyncOptions = {
           force: job.force ?? job.knownDocVersion === null,
-          jobId: job.jobId,
+          jobId,
           source: job.source,
           requestedAt: job.requestedAt,
           retryCount: job.retryCount,
@@ -221,13 +227,13 @@ export function useProfileAvatarSync(
           await logWorkerSyncQueueEntry(job, true, result);
           channel.postMessage({
             type: 'profile-avatar-sync:complete',
-            payload: { jobId: job.jobId, success: true },
+            payload: { jobId, success: true },
           } satisfies ProfileAvatarSyncWorkerMessage);
         } catch (err) {
           await logWorkerSyncQueueEntry(job, false, undefined, err);
           channel.postMessage({
             type: 'profile-avatar-sync:complete',
-            payload: { jobId: job.jobId, success: false },
+            payload: { jobId, success: false },
           } satisfies ProfileAvatarSyncWorkerMessage);
         }
       };
@@ -256,9 +262,7 @@ export function useProfileAvatarSync(
       const payload: ProfileAvatarSyncJobPayload = {
         npub,
         knownDocVersion: force ? null : currentDocVersion,
-        source: force
-          ? `${WORKER_SOURCE_PREFIX}:bootstrap`
-          : `${WORKER_SOURCE_PREFIX}:interval`,
+        source: force ? `${WORKER_SOURCE_PREFIX}:bootstrap` : `${WORKER_SOURCE_PREFIX}:interval`,
         force,
       };
       const jobId = await enqueueProfileAvatarSyncJob(payload);

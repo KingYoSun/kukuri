@@ -24,7 +24,9 @@ vi.mock('@/stores/offlineStore', () => ({
 }));
 
 vi.mock('@/stores/composerStore', () => ({
-  useComposerStore: (selector: (state: { watchPendingTopic: typeof mockWatchPendingTopic }) => unknown) =>
+  useComposerStore: (
+    selector: (state: { watchPendingTopic: typeof mockWatchPendingTopic }) => unknown,
+  ) =>
     selector({
       watchPendingTopic: mockWatchPendingTopic,
     }),

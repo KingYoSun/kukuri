@@ -352,10 +352,7 @@ export class TauriApi {
     return await invokeCommand<PendingTopic[]>('list_pending_topics');
   }
 
-  static async markPendingTopicSynced(
-    pendingId: string,
-    topicId: string,
-  ): Promise<PendingTopic> {
+  static async markPendingTopicSynced(pendingId: string, topicId: string): Promise<PendingTopic> {
     return await invokeCommand<PendingTopic>('mark_pending_topic_synced', {
       request: { pending_id: pendingId, topic_id: topicId },
     });

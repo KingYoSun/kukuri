@@ -20,7 +20,7 @@ impl PendingTopicStatus {
         }
     }
 
-    pub fn from_str(value: &str) -> Self {
+    pub fn from_value(value: &str) -> Self {
         match value {
             "synced" => PendingTopicStatus::Synced,
             "failed" => PendingTopicStatus::Failed,

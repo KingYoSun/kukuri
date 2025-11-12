@@ -92,7 +92,13 @@ export function ProfileSetup() {
       });
 
       toast.success('プロフィールを設定しました');
-      await syncAvatar({ force: true });
+      try {
+        await syncAvatar({ force: true });
+      } catch (syncError) {
+        errorHandler.log('ProfileSetup.avatarSyncFailed', syncError, {
+          context: 'ProfileSetup.handleSubmit',
+        });
+      }
       await navigate({ to: '/' });
     } catch (error) {
       toast.error('プロフィールの設定に失敗しました');

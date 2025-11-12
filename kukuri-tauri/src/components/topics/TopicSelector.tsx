@@ -39,9 +39,7 @@ export function TopicSelector({
   );
   const pendingTopicEntries = useMemo(
     () =>
-      Array.from(pendingTopics.values()).sort(
-        (a, b) => (b.created_at ?? 0) - (a.created_at ?? 0),
-      ),
+      Array.from(pendingTopics.values()).sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0)),
     [pendingTopics],
   );
 

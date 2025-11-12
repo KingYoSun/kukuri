@@ -11,6 +11,9 @@ export const useTopics = () => {
   const refreshPendingTopics = useTopicStore((state) => state.refreshPendingTopics);
 
   useEffect(() => {
+    if (typeof refreshPendingTopics !== 'function') {
+      return;
+    }
     void refreshPendingTopics();
   }, [refreshPendingTopics]);
 

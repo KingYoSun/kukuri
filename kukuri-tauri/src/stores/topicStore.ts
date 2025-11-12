@@ -34,30 +34,29 @@ interface TopicStore extends TopicState {
 }
 
 export const useTopicStore = create<TopicStore>()(
-  withPersist<TopicStore>(
-    (set, get) => {
-      const handlePendingTransition = (previous: PendingTopic | undefined, next: PendingTopic) => {
-        if (next.status === 'synced' && next.synced_topic_id && previous?.status !== 'synced') {
-          useComposerStore
-            .getState()
-            .resolvePendingTopic(next.pending_id, next.synced_topic_id);
-          void get().fetchTopics().catch((error) => {
+  withPersist<TopicStore>((set, get) => {
+    const handlePendingTransition = (previous: PendingTopic | undefined, next: PendingTopic) => {
+      if (next.status === 'synced' && next.synced_topic_id && previous?.status !== 'synced') {
+        useComposerStore.getState().resolvePendingTopic(next.pending_id, next.synced_topic_id);
+        void get()
+          .fetchTopics()
+          .catch((error) => {
             errorHandler.log('Failed to refresh topics after pending sync', error, {
               context: 'TopicStore.handlePendingTransition',
             });
           });
-        } else if (next.status === 'failed' && previous?.status !== 'failed') {
-          useComposerStore.getState().clearPendingTopicBinding(next.pending_id);
-        }
-      };
+      } else if (next.status === 'failed' && previous?.status !== 'failed') {
+        useComposerStore.getState().clearPendingTopicBinding(next.pending_id);
+      }
+    };
 
-      return {
-        topics: new Map(),
-        currentTopic: null,
-        joinedTopics: [],
-        topicUnreadCounts: new Map(),
-        topicLastReadAt: new Map(),
-        pendingTopics: new Map(),
+    return {
+      topics: new Map(),
+      currentTopic: null,
+      joinedTopics: [],
+      topicUnreadCounts: new Map(),
+      topicLastReadAt: new Map(),
+      pendingTopics: new Map(),
 
       setTopics: (topics: Topic[]) =>
         set((state) => {
@@ -151,7 +150,10 @@ export const useTopicStore = create<TopicStore>()(
               topicLastReadAt: lastRead,
             };
           });
-          await get().refreshPendingTopics();
+          const refreshPendingTopics = get().refreshPendingTopics;
+          if (typeof refreshPendingTopics === 'function') {
+            await refreshPendingTopics();
+          }
         } catch (error) {
           errorHandler.log('Failed to fetch topics', error, {
             context: 'TopicStore.fetchTopics',
@@ -528,9 +530,7 @@ export const useTopicStore = create<TopicStore>()(
             topicLastReadAt: lastRead,
           };
         }),
-        // ... rest of store methods
-      };
-    },
-    createTopicPersistConfig<TopicStore>(),
-  ),
+      // ... rest of store methods
+    };
+  }, createTopicPersistConfig<TopicStore>()),
 );

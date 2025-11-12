@@ -37,7 +37,7 @@ describe('profileAvatarSync Service Worker', () => {
 
       constructor(name: string) {
         this.name = name;
-        broadcastInstance = this;
+        broadcastInstance = { postMessage: this.postMessage };
       }
 
       addEventListener(type: string, handler: MessageHandler) {
@@ -100,8 +100,7 @@ describe('profileAvatarSync Service Worker', () => {
     vi.advanceTimersByTime(15_000);
 
     expect(broadcastInstance?.postMessage).toHaveBeenCalledTimes(2);
-    const retryPayload = (broadcastInstance?.postMessage as vi.Mock).mock.calls[1][0]
-      .payload;
+    const retryPayload = (broadcastInstance?.postMessage as vi.Mock).mock.calls[1][0].payload;
     expect(retryPayload.retryCount).toBe(1);
   });
 

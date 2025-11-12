@@ -274,10 +274,12 @@ describe('ProfileSetup', () => {
       expect(toast.success).toHaveBeenCalledWith('プロフィールを設定しました');
     });
 
-    expect(mockProfileAvatarSync).toHaveBeenCalledWith({
-      npub: mockCurrentUser.npub,
-      knownDocVersion: null,
-    });
+    expect(mockProfileAvatarSync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        npub: mockCurrentUser.npub,
+        knownDocVersion: null,
+      }),
+    );
 
     // ホーム画面への遷移
     await waitFor(() => {

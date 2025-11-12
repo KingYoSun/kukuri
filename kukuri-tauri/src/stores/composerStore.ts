@@ -28,7 +28,14 @@ interface ComposerState {
 
 const createInitialState = (): Omit<
   ComposerState,
-  'openComposer' | 'closeComposer' | 'complete' | 'reset' | 'applyTopicAndResume'
+  | 'openComposer'
+  | 'closeComposer'
+  | 'complete'
+  | 'reset'
+  | 'applyTopicAndResume'
+  | 'watchPendingTopic'
+  | 'resolvePendingTopic'
+  | 'clearPendingTopicBinding'
 > => ({
   isOpen: false,
   topicId: null,

@@ -210,10 +210,12 @@ describe('ProfileEditDialog', () => {
         showOnlineStatus: false,
       });
     });
-    expect(mockProfileAvatarSync).toHaveBeenCalledWith({
-      npub: mockCurrentUser.npub,
-      knownDocVersion: null,
-    });
+    expect(mockProfileAvatarSync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        npub: mockCurrentUser.npub,
+        knownDocVersion: null,
+      }),
+    );
 
     expect(mockUpdateUser).toHaveBeenCalledWith(
       expect.objectContaining({

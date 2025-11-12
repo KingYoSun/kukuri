@@ -65,10 +65,12 @@ const createWrapper = () => {
 describe('useTopics hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useTopicStore.setState({
-      topics: new Map(),
-      currentTopic: null,
-      joinedTopics: [],
+    useTopicStore.setState((state) => {
+      state.topics = new Map();
+      state.currentTopic = null;
+      state.joinedTopics = [];
+      state.refreshPendingTopics = vi.fn().mockResolvedValue(undefined);
+      return state;
     });
   });
 

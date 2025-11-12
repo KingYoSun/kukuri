@@ -22,7 +22,7 @@ fn map_pending_topic(row: &sqlx::sqlite::SqliteRow) -> Result<PendingTopic, AppE
         row.try_get("user_pubkey")?,
         row.try_get("name")?,
         row.try_get::<Option<String>, _>("description")?,
-        PendingTopicStatus::from_str(status_value.as_str()),
+        PendingTopicStatus::from_value(status_value.as_str()),
         row.try_get("offline_action_id")?,
         row.try_get::<Option<String>, _>("synced_topic_id")?,
         row.try_get::<Option<String>, _>("error_message")?,

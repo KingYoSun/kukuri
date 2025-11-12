@@ -41,6 +41,7 @@ vi.mock('@/stores', async (importOriginal) => {
         fetchTopics: vi.fn().mockResolvedValue(undefined),
         joinTopic: vi.fn().mockResolvedValue(undefined),
         setCurrentTopic: vi.fn(),
+        refreshPendingTopics: vi.fn().mockResolvedValue(undefined),
       }),
     },
   };
