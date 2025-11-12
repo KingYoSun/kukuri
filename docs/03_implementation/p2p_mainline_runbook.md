@@ -78,6 +78,36 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   - `services joined topic` / `broadcasting` / `received` の流れが確認できれば通信経路が成立。
 - 失敗時は `RUST_LOG=trace,iroh=info` に上げることで iroh 側の詳細ログを取得できる。
 
+### 5.1 Topic Create Offline 再送ログ（Stage4, 2025年11月12日追加）
+- 目的: `OfflineActionType::CREATE_TOPIC` が `topics_pending` テーブルに蓄積され、オンライン復帰後に `TopicService::mark_pending_topic_synced|failed` → `P2PService::join_topic` が実行されることを証跡化する。
+- 手順:
+  1. フロントエンドユニットテストで UI を再現  
+     ```powershell
+     cd $RepoRoot/kukuri-tauri
+     $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+     $log = \"../tmp/logs/topic_create_host_$ts.log\"
+     npx pnpm vitest run `
+       src/tests/unit/components/topics/TopicSelector.test.tsx `
+       src/tests/unit/components/posts/PostComposer.test.tsx `
+       src/tests/unit/components/layout/Sidebar.test.tsx `
+       src/tests/unit/scenarios/topicCreateOffline.test.tsx `
+       2>&1 | Tee-Object -FilePath $log
+     ```
+     - `TopicSelector` の「保留中のトピック」グループと、Scenario テストの `watchPendingTopic` 呼び出しを確認する。`Input` は `forwardRef` 化済みのため Radix の ref 警告は出力されない。
+  2. Docker で Nightly シナリオを再現  
+     ```powershell
+     cd $RepoRoot
+     ./scripts/test-docker.ps1 ts -Scenario topic-create [-NoBuild]
+     ```
+     - 結果は `tmp/logs/topic_create_<timestamp>.log` と `test-results/topic-create/<timestamp>-*.json`（TopicSelector/PostComposer/Sidebar/topicCreateOffline の 4 ファイル）に保存する。Nightly artefact 名は `topic-create-logs` / `topic-create-reports` を使用。
+  3. `topics_pending` の状態を確認  
+     ```powershell
+     cd $RepoRoot/kukuri-tauri/src-tauri
+     sqlite3 data/kukuri.db \"SELECT pending_id,status,synced_topic_id,error_message FROM topics_pending;\"
+     ```
+     - オフライン作成直後は `status='queued'`、同期済みは `status='synced'` と `synced_topic_id` が埋まる。再送失敗時は `status='failed'` と `error_message` を必ず確認する。
+- 期待成果物: `../tmp/logs/topic_create_host_<timestamp>.log`, `tmp/logs/topic_create_<timestamp>.log`, `test-results/topic-create/<timestamp>-*.json`。Runbook 5章に記載された各ログを `phase5_ci_path_audit.md`（`nightly.topic-create.*` 行）と突き合わせる。
+
 ## 6. CI 統合ポイント
 - GitHub Actions（`ci/rust-tests.yml`）では統合テスト専用ステップを追加し、以下を設定する:
   - `ENABLE_P2P_INTEGRATION=1`
@@ -216,4 +246,3 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - Nightly Frontend Unit Tests には `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を常時含め、`cargo test --package kukuri-cli -- test_bootstrap_runbook` を `nightly.yml` の `native-test-linux` ジョブへ追記する。Runbook 更新時は両テストのログ ID を `tasks/status/in_progress.md` と `docs/01_project/roadmap.md` Ops 行に必ず転記する。
 - Ops チームは Runbook の Chapter2（前提変数）と Chapter10（CLI PoC）をセットで参照し、`KUKURI_BOOTSTRAP_PEERS` によるロックが掛かっていないかを `RelayStatus` UI の `ブートストラップソース` 表示で確認してから適用する。適用後は `p2p_metrics_export --job p2p` で Mainline 接続数の増加を確認し、失敗時は Chapter7 のトラブルシューティング手順に従って再取得する。
    - `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` / `cargo test --package kukuri-cli -- test_bootstrap_runbook` / `cargo test --package kukuri-tauri --test test_event_service_gateway` を実行し、UI・CLI・Gateway の回帰テストが通ることを Runbook に記録する。
-

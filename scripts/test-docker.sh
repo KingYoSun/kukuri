@@ -417,6 +417,7 @@ run_ts_topic_create() {
     'src/tests/unit/components/topics/TopicSelector.test.tsx'
     'src/tests/unit/components/posts/PostComposer.test.tsx'
     'src/tests/unit/components/layout/Sidebar.test.tsx'
+    'src/tests/unit/scenarios/topicCreateOffline.test.tsx'
   )
 
   local vitest_status=0

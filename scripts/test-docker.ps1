@@ -651,7 +651,8 @@ function Invoke-TypeScriptTopicCreateScenario {
     $vitestTargets = @(
         "src/tests/unit/components/topics/TopicSelector.test.tsx",
         "src/tests/unit/components/posts/PostComposer.test.tsx",
-        "src/tests/unit/components/layout/Sidebar.test.tsx"
+        "src/tests/unit/components/layout/Sidebar.test.tsx",
+        "src/tests/unit/scenarios/topicCreateOffline.test.tsx"
     )
 
     $vitestStatus = 0

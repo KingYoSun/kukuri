@@ -519,15 +519,17 @@
 
 #### MVP Exit（2025年11月12日更新）
 - **ゴール**: サイドバー/グローバルコンポーザー/TopicSelector から新規トピックを作成→即投稿に戻れる導線と、オフライン時の `OfflineActionType::CREATE_TOPIC` 再送を保証すること。
-- **現状**: UI 実装は完了済み。2025年11月12日に `npx pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostComposer.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx | tee tmp/logs/topic_create_20251112-125226.log` を実行し、主要テストを再取得。`nightly.yml` に `topic-create` Docker ジョブを追加し、`test-results/topic-create/*.json` とログ artefact を収集できる状態にした。`OfflineActionType::CREATE_TOPIC` の同期ログ登録と `tests/integration/topic_create_join.rs` は継続課題。
-- **ブロッカー**: `OfflineActionType::CREATE_TOPIC` の再送処理と contract テスト実装、`topic_create_offline` シナリオの Rust 側補完。
-- **テスト/Runbook**: `npx pnpm vitest run … | tee tmp/logs/topic_create_20251112-125226.log`、`./scripts/test-docker.{sh,ps1} ts --scenario topic-create`（`test-results/topic-create/<timestamp>-*.json` を生成）を `phase5_ci_path_audit.md` に登録。
+- **現状**: オフライン再送を含む導線実装と QA を完了。`TopicService::enqueue_topic_creation` が `topics_pending` テーブルへ書き込み、`list_pending_topics` / `mark_pending_topic_synced|failed` を通じて `sync_engine` が `create_topic`→`join_topic` を再送できる。Tauri には `enqueueTopicCreation` / `listPendingTopics` コマンドを追加し、`topicStore.queueTopicCreation` / `refreshPendingTopics` が `pendingTopics`（Map）を維持。`TopicFormModal` のオフライン経路は pending ID を `useComposerStore.watchPendingTopic` へ渡し、同期完了時に `resolvePendingTopic` → `applyTopicAndResume` が呼ばれる。`TopicSelector` には「保留中のトピック」グループとバッジを追加し、サイドバーが 0 件のときはモーダルを先に開く導線を維持している。
+  - 2025年11月12日: `npx pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostComposer.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/scenarios/topicCreateOffline.test.tsx 2>&1 | Tee-Object -FilePath ../tmp/logs/topic_create_host_20251112-231141.log` を実行し、Radix の ref 警告（`Input` を `forwardRef` 化）を解消した上で TopicSelector/PostComposer/Sidebar/Scenario の 47 ケースを再取得。
+  - 2025年11月12日: `./scripts/test-docker.ps1 ts -Scenario topic-create` を実行し、`tmp/logs/topic_create_20251112-231334.log` と `test-results/topic-create/20251112-231334-*.json`（4 ファイル）を生成。Nightly では同シナリオを `topic-create` ジョブとして artefact 化する。
+- **ブロッカー**: なし。`topics_pending` のメトリクス連携と Nightly 監視は Runbook 5章と CI パス監査へ転記済み。
+- **テスト/Runbook**: `npx pnpm vitest run … | Tee-Object -FilePath ../tmp/logs/topic_create_host_<ts>.log`、`./scripts/test-docker.{sh,ps1} ts --scenario topic-create [-NoBuild]`、`tests/integration/topic_create_join.rs` を `phase5_ci_path_audit.md` に登録済み。
 - **参照**: `phase5_user_flow_summary.md` Quick View（トピック作成導線）、`tauri_app_implementation_plan.md` Phase3、`phase5_ci_path_audit.md` topic-create 行。
-- **Stage4 TODO（Offline CREATE_TOPIC + QA シナリオ）**
-  1. `kukuri-tauri/src-tauri/src/application/services/topic_service.rs` に `enqueue_topic_creation`（`OfflineActionType::CREATE_TOPIC`）を追加し、オフライン時は `topics_pending` テーブルへ保存→オンライン復帰時に `sync_engine` が `create_topic` → `join_topic` を連続実行できるようにする。
-  2. `src/stores/topicStore.ts` / `src/hooks/useComposerStore.ts` に `pendingTopics` セクションを追加し、オフラインで作成したトピックのステータス（`queued` / `synced` / `failed`）を UI で表示。`SyncStatusIndicator` の履歴と連動させる。
-  3. `tests/integration/topic_create_join.rs`（Rust）と `src/tests/unit/scenarios/topicCreateOffline.test.tsx`（Vitest）を追加し、オフライン→同期→コンポーザー復帰の Happy/Failure パスを自動化。
-  4. `scripts/test-docker.{sh,ps1} ts -Scenario topic-create` を新設し、`tmp/logs/topic_create_<timestamp>.log` / `test-results/topic-create/*.json` を生成済み。Runbook Chapter5 に再送手順（`pnpm vitest run topicCreateOffline`、`./scripts/test-docker.sh ts --scenario topic-create --no-build`）を追記する。
+- **Stage4 完了（2025年11月12日）**
+  1. `kukuri-tauri/src-tauri/src/application/services/topic_service.rs` に `enqueue_topic_creation` / `list_pending_topics` / `mark_pending_topic_synced|failed` を追加し、`OfflineActionType::CREATE_TOPIC` を `topics_pending` テーブルへ永続化。`tests/integration/topic_create_join.rs` で pending→synced→failed の一連フローと `P2PService::join_topic` 呼び出しを検証。
+  2. `src/stores/topicStore.ts` に `pendingTopics` Map を持たせ、`queueTopicCreation` が Tauri の `enqueueTopicCreation` API → `useOfflineStore.addPendingAction` を連動。`TopicSelector` に pending 表示とステータスバッジ（同期済み/再送待ち/待機中）を追加し、`Sidebar` / `PostComposer` からのショートカットとドラフト復元を維持。`Input` を `forwardRef` 化して Radix の ref 警告を解消。
+  3. `TopicFormModal` のオフライン経路で pending ID を `useComposerStore.watchPendingTopic` に登録し、`useTopicStore` が `pendingTopics` 更新時に `resolvePendingTopic` / `clearPendingTopicBinding` を呼び出すことでコンポーザーへ自動復帰できるようにした。
+  4. `src/tests/unit/scenarios/topicCreateOffline.test.tsx` を追加し、オフライン送信時に `queueTopicCreation` / `watchPendingTopic` / `toast('作成を予約しました')` が呼ばれることを検証。Docker シナリオ `ts --scenario topic-create` を Nightly に追加し、`tmp/logs/topic_create_YYYYMMDD-HHMMSS.log` と `test-results/topic-create/<timestamp>-*.json` を artefact 化する Runbook 第5章を更新した。
 
 ### 5.10 投稿削除後の React Query キャッシュ整合性（2025年11月06日追加）
 - **目的**: 投稿削除操作後に全てのフィードで即時に結果を反映し、Zustand ストアと React Query キャッシュの不整合を解消する。

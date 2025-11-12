@@ -7,6 +7,7 @@ mod bookmarks;
 mod direct_messages;
 mod events;
 mod mapper;
+mod pending_topics;
 mod posts;
 mod queries;
 mod topic_metrics;

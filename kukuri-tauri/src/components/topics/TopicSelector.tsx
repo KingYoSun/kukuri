@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useTopicStore } from '@/stores';
+import { Badge } from '@/components/ui/badge';
+import type { PendingTopic } from '@/lib/api/tauri';
 
 interface TopicSelectorProps {
   value?: string;
@@ -28,12 +30,19 @@ export function TopicSelector({
   onCreateTopicRequest,
 }: TopicSelectorProps) {
   const [open, setOpen] = useState(false);
-  const { topics, joinedTopics } = useTopicStore();
+  const { topics, joinedTopics, pendingTopics } = useTopicStore();
 
   // 参加しているトピックのみフィルタリング
   const availableTopics = useMemo(
     () => Array.from(topics.values()).filter((topic) => joinedTopics.includes(topic.id)),
     [topics, joinedTopics],
+  );
+  const pendingTopicEntries = useMemo(
+    () =>
+      Array.from(pendingTopics.values()).sort(
+        (a, b) => (b.created_at ?? 0) - (a.created_at ?? 0),
+      ),
+    [pendingTopics],
   );
 
   const selectedTopic = value ? topics.get(value) : null;
@@ -45,6 +54,17 @@ export function TopicSelector({
     onCreateTopicRequest();
     setOpen(false);
   }, [onCreateTopicRequest]);
+
+  const renderPendingStatus = (status: PendingTopic['status']) => {
+    switch (status) {
+      case 'synced':
+        return '同期済み';
+      case 'failed':
+        return '再送待ち';
+      default:
+        return '待機中';
+    }
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -79,6 +99,35 @@ export function TopicSelector({
               )}
             </div>
           </CommandEmpty>
+          {pendingTopicEntries.length > 0 && (
+            <CommandGroup heading="保留中のトピック">
+              {pendingTopicEntries.map((pending) => (
+                <CommandItem key={pending.pending_id} value={pending.name} disabled>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="font-medium">{pending.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {pending.status === 'failed'
+                        ? pending.error_message || '再送待ちです'
+                        : pending.status === 'synced'
+                          ? '同期済みです。投稿作成に戻れます。'
+                          : 'オフラインのため同期待ちです'}
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      pending.status === 'failed'
+                        ? 'destructive'
+                        : pending.status === 'synced'
+                          ? 'secondary'
+                          : 'outline'
+                    }
+                  >
+                    {renderPendingStatus(pending.status)}
+                  </Badge>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           <CommandGroup>
             {availableTopics.length === 0 ? (
               <div className="p-2 text-sm text-muted-foreground text-center">

@@ -23,6 +23,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useTopicStore } from '@/stores/topicStore';
+import { useOfflineStore } from '@/stores/offlineStore';
+import { useComposerStore } from '@/stores/composerStore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import type { Topic } from '@/stores';
@@ -57,7 +59,9 @@ export function TopicFormModal({
   autoJoin = false,
 }: TopicFormModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { createTopic, updateTopicRemote, joinTopic } = useTopicStore();
+  const { createTopic, updateTopicRemote, joinTopic, queueTopicCreation } = useTopicStore();
+  const isOnline = useOfflineStore((state) => state.isOnline);
+  const watchPendingTopic = useComposerStore((state) => state.watchPendingTopic);
   const { toast } = useToast();
 
   const form = useForm<TopicFormValues>({
@@ -81,6 +85,24 @@ export function TopicFormModal({
   const onSubmit = async (values: TopicFormValues) => {
     setIsSubmitting(true);
     try {
+      if (!isOnline && (mode === 'create' || mode === 'create-from-composer')) {
+        try {
+          const pending = await queueTopicCreation(values.name, values.description || '');
+          if (mode === 'create-from-composer' || autoJoin) {
+            watchPendingTopic(pending.pending_id);
+          }
+          toast({
+            title: '作成を予約しました',
+            description: 'オフラインのため接続復帰後に自動で同期されます。',
+          });
+          onOpenChange(false);
+          form.reset();
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
       if (mode === 'create' || mode === 'create-from-composer') {
         const createdTopic = await createTopic(values.name, values.description || '');
 
@@ -185,7 +207,7 @@ export function TopicFormModal({
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {mode === 'create' ? '作成' : '更新'}
+                {mode === 'create' || mode === 'create-from-composer' ? '作成' : '更新'}
               </Button>
             </DialogFooter>
           </form>

@@ -3,9 +3,11 @@ use crate::{
         dto::{
             ApiResponse,
             topic_dto::{
-                CreateTopicRequest, DeleteTopicRequest, GetTopicStatsRequest, JoinTopicRequest,
-                ListTrendingTopicsRequest, ListTrendingTopicsResponse, TopicResponse,
-                TopicStatsResponse, UpdateTopicRequest,
+                CreateTopicRequest, DeleteTopicRequest, EnqueueTopicCreationRequest,
+                EnqueueTopicCreationResponse, GetTopicStatsRequest, JoinTopicRequest,
+                ListTrendingTopicsRequest, ListTrendingTopicsResponse,
+                MarkPendingTopicFailedRequest, MarkPendingTopicSyncedRequest, PendingTopicResponse,
+                TopicResponse, TopicStatsResponse, UpdateTopicRequest,
             },
         },
         handlers::TopicHandler,
@@ -30,9 +32,60 @@ pub async fn create_topic(
     state: State<'_, AppState>,
     request: CreateTopicRequest,
 ) -> Result<ApiResponse<TopicResponse>, AppError> {
-    ensure_authenticated(&state).await?;
+    let user_pubkey = ensure_authenticated(&state).await?;
     let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.create_topic(request).await;
+    let result = handler.create_topic(request, &user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// オフライン用のトピック作成をキューに登録する
+#[tauri::command]
+pub async fn enqueue_topic_creation(
+    state: State<'_, AppState>,
+    request: EnqueueTopicCreationRequest,
+) -> Result<ApiResponse<EnqueueTopicCreationResponse>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let result = handler.enqueue_topic_creation(request, &user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// 保留中のトピック作成を取得する
+#[tauri::command]
+pub async fn list_pending_topics(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<PendingTopicResponse>>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let result = handler.list_pending_topics(&user_pubkey).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// 保留中のトピックを同期済みに更新する
+#[tauri::command]
+pub async fn mark_pending_topic_synced(
+    state: State<'_, AppState>,
+    request: MarkPendingTopicSyncedRequest,
+) -> Result<ApiResponse<PendingTopicResponse>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let result = handler
+        .mark_pending_topic_synced(request, &user_pubkey)
+        .await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// 保留中のトピックを失敗としてマークする
+#[tauri::command]
+pub async fn mark_pending_topic_failed(
+    state: State<'_, AppState>,
+    request: MarkPendingTopicFailedRequest,
+) -> Result<ApiResponse<PendingTopicResponse>, AppError> {
+    let user_pubkey = ensure_authenticated(&state).await?;
+    let handler = TopicHandler::new(state.topic_service.clone());
+    let result = handler
+        .mark_pending_topic_failed(request, &user_pubkey)
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 

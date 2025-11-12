@@ -8,7 +8,7 @@ import { useTopicStore } from '@/stores/topicStore';
 import { useDraftStore } from '@/stores/draftStore';
 import { useToast } from '@/hooks/use-toast';
 import type { Topic } from '@/stores/types';
-import { useComposerStore } from '@/stores/composerStore';
+import { useComposerStore, getComposerInitialState } from '@/stores/composerStore';
 
 // Mocks
 vi.mock('@/stores/postStore');
@@ -221,6 +221,7 @@ describe('PostComposer', () => {
         topics: Array.from(mockTopics.entries()),
         joinedTopics: ['topic1', 'topic2'],
         activeTopics: [],
+        pendingTopics: new Map(),
         addTopic: vi.fn(),
         updateTopic: vi.fn(),
         removeTopic: vi.fn(),
@@ -229,6 +230,8 @@ describe('PostComposer', () => {
         leaveTopic: vi.fn(),
         isJoinedTopic: vi.fn(),
         getTopicById: vi.fn(),
+        refreshPendingTopics: vi.fn(),
+        queueTopicCreation: vi.fn(),
       }),
     );
 
@@ -249,7 +252,11 @@ describe('PostComposer', () => {
     );
 
     vi.mocked(useComposerStore).mockReturnValue({
+      ...getComposerInitialState(),
       applyTopicAndResume: mockApplyTopicAndResume,
+      watchPendingTopic: vi.fn(),
+      resolvePendingTopic: vi.fn(),
+      clearPendingTopicBinding: vi.fn(),
     } as unknown as ReturnType<typeof useComposerStore>);
 
     vi.mocked(useToast).mockReturnValue({ toast: mockToast });

@@ -1,4 +1,5 @@
 import { invokeCommand, invokeCommandVoid } from './tauriClient';
+import type { OfflineAction } from '@/types/offline';
 
 // 認証関連の型定義
 export interface GenerateKeypairResponse {
@@ -60,6 +61,28 @@ export interface UpdateTopicRequest {
   id: string;
   name: string;
   description: string;
+}
+
+export interface EnqueueTopicCreationRequest {
+  name: string;
+  description?: string;
+}
+
+export interface PendingTopic {
+  pending_id: string;
+  name: string;
+  description?: string | null;
+  status: 'queued' | 'synced' | 'failed';
+  offline_action_id: string;
+  synced_topic_id?: string | null;
+  error_message?: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface EnqueueTopicCreationResponse {
+  pending_topic: PendingTopic;
+  offline_action: OfflineAction;
 }
 
 // ポスト関連の型定義
@@ -315,6 +338,36 @@ export class TauriApi {
 
   static async createTopic(request: CreateTopicRequest): Promise<Topic> {
     return await invokeCommand<Topic>('create_topic', { request });
+  }
+
+  static async enqueueTopicCreation(
+    request: EnqueueTopicCreationRequest,
+  ): Promise<EnqueueTopicCreationResponse> {
+    return await invokeCommand<EnqueueTopicCreationResponse>('enqueue_topic_creation', {
+      request,
+    });
+  }
+
+  static async listPendingTopics(): Promise<PendingTopic[]> {
+    return await invokeCommand<PendingTopic[]>('list_pending_topics');
+  }
+
+  static async markPendingTopicSynced(
+    pendingId: string,
+    topicId: string,
+  ): Promise<PendingTopic> {
+    return await invokeCommand<PendingTopic>('mark_pending_topic_synced', {
+      request: { pending_id: pendingId, topic_id: topicId },
+    });
+  }
+
+  static async markPendingTopicFailed(
+    pendingId: string,
+    errorMessage?: string,
+  ): Promise<PendingTopic> {
+    return await invokeCommand<PendingTopic>('mark_pending_topic_failed', {
+      request: { pending_id: pendingId, error_message: errorMessage },
+    });
   }
 
   static async updateTopic(request: UpdateTopicRequest): Promise<Topic> {

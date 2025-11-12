@@ -53,6 +53,7 @@ describe('TopicSelector', () => {
     vi.mocked(useTopicStore).mockReturnValue({
       topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: ['topic1', 'topic2'], // topic1とtopic2に参加している
+      pendingTopics: new Map(),
     } as Partial<ReturnType<typeof useTopicStore>>);
   });
 
@@ -128,6 +129,7 @@ describe('TopicSelector', () => {
     vi.mocked(useTopicStore).mockReturnValue({
       topics: new Map(mockTopics.map((t) => [t.id, t])),
       joinedTopics: [], // どのトピックにも参加していない
+      pendingTopics: new Map(),
     } as Partial<ReturnType<typeof useTopicStore>>);
 
     const user = userEvent.setup();
@@ -137,6 +139,34 @@ describe('TopicSelector', () => {
     await user.click(button);
 
     expect(await screen.findByText('参加しているトピックがありません')).toBeInTheDocument();
+  });
+
+  it('保留中のトピックが表示される', async () => {
+    const pendingTopic = {
+      pending_id: 'pending-1',
+      name: 'オフライン作成',
+      description: 'desc',
+      status: 'queued',
+      offline_action_id: 'action-1',
+      created_at: Date.now() / 1000,
+      updated_at: Date.now() / 1000,
+    };
+
+    vi.mocked(useTopicStore).mockReturnValue({
+      topics: new Map(mockTopics.map((t) => [t.id, t])),
+      joinedTopics: ['topic1'],
+      pendingTopics: new Map([[pendingTopic.pending_id, pendingTopic]]),
+    } as Partial<ReturnType<typeof useTopicStore>>);
+
+    const user = userEvent.setup();
+    render(<TopicSelector onValueChange={mockOnValueChange} />);
+
+    const button = screen.getByRole('combobox');
+    await user.click(button);
+
+    expect(await screen.findByText('保留中のトピック')).toBeInTheDocument();
+    expect(await screen.findByText('オフライン作成')).toBeInTheDocument();
+    expect(await screen.findByText('待機中')).toBeInTheDocument();
   });
 
   it('トピック作成ショートカットをクリックするとコールバックが呼ばれる', async () => {

@@ -4,6 +4,7 @@ pub mod direct_message;
 pub mod event;
 pub mod event_gateway;
 pub mod offline;
+pub mod pending_topic;
 pub mod post;
 pub mod profile_avatar;
 pub mod topic;
@@ -21,6 +22,7 @@ pub use offline::{
     SavedOfflineAction, SyncQueueItem, SyncQueueItemDraft, SyncResult, SyncStatusRecord,
     SyncStatusUpdate,
 };
+pub use pending_topic::{PendingTopic, PendingTopicStatus};
 pub use post::Post;
 pub use profile_avatar::{ProfileAvatarAccessLevel, ProfileAvatarDocEntry};
 pub use topic::Topic;

@@ -1,6 +1,7 @@
 use crate::domain::entities::{
-    Bookmark, DirectMessage, Event, MetricsWindow, NewDirectMessage, Post, Topic, TopicActivityRow,
-    TopicMetricsSnapshot, TopicMetricsUpsert, User,
+    Bookmark, DirectMessage, Event, MetricsWindow, NewDirectMessage, PendingTopic,
+    PendingTopicStatus, Post, Topic, TopicActivityRow, TopicMetricsSnapshot, TopicMetricsUpsert,
+    User,
 };
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
@@ -122,6 +123,21 @@ pub trait TopicRepository: Send + Sync {
         member_count: u32,
         post_count: u32,
     ) -> Result<(), AppError>;
+}
+
+#[async_trait]
+pub trait PendingTopicRepository: Send + Sync {
+    async fn insert_pending_topic(&self, topic: &PendingTopic) -> Result<(), AppError>;
+    async fn list_pending_topics(&self, user_pubkey: &str) -> Result<Vec<PendingTopic>, AppError>;
+    async fn get_pending_topic(&self, pending_id: &str) -> Result<Option<PendingTopic>, AppError>;
+    async fn update_pending_topic_status(
+        &self,
+        pending_id: &str,
+        status: PendingTopicStatus,
+        synced_topic_id: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<(), AppError>;
+    async fn delete_pending_topic(&self, pending_id: &str) -> Result<(), AppError>;
 }
 
 #[async_trait]

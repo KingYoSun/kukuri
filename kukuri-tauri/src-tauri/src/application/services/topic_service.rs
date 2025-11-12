@@ -1,9 +1,19 @@
+use super::offline_service::{OfflineServiceTrait, SaveOfflineActionParams};
 use super::p2p_service::P2PServiceTrait;
-use crate::application::ports::repositories::{TopicMetricsRepository, TopicRepository};
-use crate::domain::entities::{Topic, TopicMetricsRecord};
-use crate::shared::error::AppError;
+use crate::application::ports::repositories::{
+    PendingTopicRepository, TopicMetricsRepository, TopicRepository,
+};
+use crate::domain::entities::offline::OfflineActionRecord;
+use crate::domain::entities::{PendingTopic, PendingTopicStatus, Topic, TopicMetricsRecord};
+use crate::domain::value_objects::event_gateway::PublicKey;
+use crate::domain::value_objects::offline::{
+    EntityId, EntityType, OfflineActionType, OfflinePayload,
+};
+use crate::shared::{ValidationFailureKind, error::AppError};
 use chrono::Utc;
+use serde_json::json;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct TopicTrendingEntry {
@@ -23,25 +33,36 @@ pub struct TrendingTopicsResult {
     pub data_source: TrendingDataSource,
 }
 
+pub struct EnqueuedTopicCreation {
+    pub pending_topic: PendingTopic,
+    pub offline_action: OfflineActionRecord,
+}
+
 pub struct TopicService {
     repository: Arc<dyn TopicRepository>,
+    pending_repository: Arc<dyn PendingTopicRepository>,
     metrics_repository: Arc<dyn TopicMetricsRepository>,
     metrics_enabled: bool,
     p2p: Arc<dyn P2PServiceTrait>,
+    offline_service: Arc<dyn OfflineServiceTrait>,
 }
 
 impl TopicService {
     pub fn new(
         repository: Arc<dyn TopicRepository>,
+        pending_repository: Arc<dyn PendingTopicRepository>,
         metrics_repository: Arc<dyn TopicMetricsRepository>,
         metrics_enabled: bool,
         p2p: Arc<dyn P2PServiceTrait>,
+        offline_service: Arc<dyn OfflineServiceTrait>,
     ) -> Self {
         Self {
             repository,
+            pending_repository,
             metrics_repository,
             metrics_enabled,
             p2p,
+            offline_service,
         }
     }
 
@@ -49,13 +70,11 @@ impl TopicService {
         &self,
         name: String,
         description: Option<String>,
+        creator_pubkey: &str,
     ) -> Result<Topic, AppError> {
         let topic = Topic::new(name, description);
         self.repository.create_topic(&topic).await?;
-
-        // Join gossip topic
-        self.p2p.join_topic(&topic.id, vec![]).await?;
-
+        self.join_topic(&topic.id, creator_pubkey).await?;
         Ok(topic)
     }
 
@@ -112,6 +131,114 @@ impl TopicService {
             self.p2p.join_topic("public", Vec::new()).await?;
         }
         Ok(())
+    }
+
+    pub async fn enqueue_topic_creation(
+        &self,
+        user_pubkey: &str,
+        name: String,
+        description: Option<String>,
+    ) -> Result<EnqueuedTopicCreation, AppError> {
+        let public_key = PublicKey::from_hex_str(user_pubkey).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid pubkey: {err}"),
+            )
+        })?;
+
+        let pending_id = Uuid::new_v4().to_string();
+        let payload = OfflinePayload::new(json!({
+            "pendingId": pending_id,
+            "name": name,
+            "description": description,
+        }))
+        .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
+        let action_type = OfflineActionType::new("topic_create".to_string())
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
+        let entity_type = EntityType::new("topic".to_string())
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
+        let entity_id = EntityId::new(pending_id.clone())
+            .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
+
+        let saved = self
+            .offline_service
+            .save_action(SaveOfflineActionParams {
+                user_pubkey: public_key.clone(),
+                action_type,
+                entity_type,
+                entity_id,
+                payload,
+            })
+            .await?;
+
+        let now = Utc::now();
+        let pending_topic = PendingTopic::new(
+            pending_id,
+            public_key.as_hex().to_string(),
+            name,
+            description,
+            PendingTopicStatus::Queued,
+            saved.local_id.to_string(),
+            None,
+            None,
+            now,
+            now,
+        );
+
+        self.pending_repository
+            .insert_pending_topic(&pending_topic)
+            .await?;
+
+        Ok(EnqueuedTopicCreation {
+            pending_topic,
+            offline_action: saved.action,
+        })
+    }
+
+    pub async fn list_pending_topics(
+        &self,
+        user_pubkey: &str,
+    ) -> Result<Vec<PendingTopic>, AppError> {
+        self.pending_repository
+            .list_pending_topics(user_pubkey)
+            .await
+    }
+
+    pub async fn get_pending_topic(
+        &self,
+        pending_id: &str,
+    ) -> Result<Option<PendingTopic>, AppError> {
+        self.pending_repository.get_pending_topic(pending_id).await
+    }
+
+    pub async fn mark_pending_topic_synced(
+        &self,
+        pending_id: &str,
+        topic_id: &str,
+    ) -> Result<(), AppError> {
+        self.pending_repository
+            .update_pending_topic_status(
+                pending_id,
+                PendingTopicStatus::Synced,
+                Some(topic_id),
+                None,
+            )
+            .await
+    }
+
+    pub async fn mark_pending_topic_failed(
+        &self,
+        pending_id: &str,
+        error_message: Option<String>,
+    ) -> Result<(), AppError> {
+        self.pending_repository
+            .update_pending_topic_status(
+                pending_id,
+                PendingTopicStatus::Failed,
+                None,
+                error_message.as_deref(),
+            )
+            .await
     }
 
     pub async fn list_trending_topics(
@@ -212,13 +339,23 @@ impl TopicService {
 mod tests {
     use super::*;
     use crate::application::ports::repositories::{
+        PendingTopicRepository as PortPendingTopicRepository,
         TopicMetricsRepository as PortTopicMetricsRepository,
         TopicRepository as PortTopicRepository,
     };
-    use crate::application::services::p2p_service::{P2PServiceTrait, P2PStatus};
-    use crate::domain::entities::{
-        MetricsWindow, TopicActivityRow, TopicMetricsSnapshot, TopicMetricsUpsert,
+    use crate::application::services::offline_service::{
+        OfflineActionsQuery, OfflineServiceTrait, SaveOfflineActionParams,
     };
+    use crate::application::services::p2p_service::{P2PServiceTrait, P2PStatus};
+    use crate::domain::entities::offline::{
+        CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionRecord, OptimisticUpdateDraft,
+        SavedOfflineAction, SyncQueueItem, SyncQueueItemDraft, SyncResult, SyncStatusUpdate,
+    };
+    use crate::domain::entities::{
+        MetricsWindow, PendingTopic, TopicActivityRow, TopicMetricsSnapshot, TopicMetricsUpsert,
+    };
+    use crate::domain::value_objects::event_gateway::PublicKey;
+    use crate::domain::value_objects::offline::{OfflinePayload, OptimisticUpdateId, SyncQueueId};
     use crate::shared::config::BootstrapSource;
     use async_trait::async_trait;
     use mockall::{mock, predicate::*};
@@ -284,6 +421,137 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct NoopPendingRepo;
+
+    #[async_trait]
+    impl PortPendingTopicRepository for NoopPendingRepo {
+        async fn insert_pending_topic(&self, _topic: &PendingTopic) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn list_pending_topics(
+            &self,
+            _user_pubkey: &str,
+        ) -> Result<Vec<PendingTopic>, AppError> {
+            Ok(vec![])
+        }
+
+        async fn get_pending_topic(
+            &self,
+            _pending_id: &str,
+        ) -> Result<Option<PendingTopic>, AppError> {
+            Ok(None)
+        }
+
+        async fn update_pending_topic_status(
+            &self,
+            _pending_id: &str,
+            _status: PendingTopicStatus,
+            _synced_topic_id: Option<&str>,
+            _error_message: Option<&str>,
+        ) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn delete_pending_topic(&self, _pending_id: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubOfflineService;
+
+    #[async_trait]
+    impl OfflineServiceTrait for StubOfflineService {
+        async fn save_action(
+            &self,
+            _params: SaveOfflineActionParams,
+        ) -> Result<SavedOfflineAction, AppError> {
+            Err(AppError::NotImplemented("stub offline service".to_string()))
+        }
+
+        async fn list_actions(
+            &self,
+            _query: OfflineActionsQuery,
+        ) -> Result<Vec<OfflineActionRecord>, AppError> {
+            Ok(vec![])
+        }
+
+        async fn sync_actions(&self, _user_pubkey: PublicKey) -> Result<SyncResult, AppError> {
+            Err(AppError::NotImplemented("stub offline service".to_string()))
+        }
+
+        async fn cache_status(&self) -> Result<CacheStatusSnapshot, AppError> {
+            Err(AppError::NotImplemented("stub offline service".to_string()))
+        }
+
+        async fn enqueue_sync(&self, _draft: SyncQueueItemDraft) -> Result<SyncQueueId, AppError> {
+            Err(AppError::NotImplemented("stub offline service".to_string()))
+        }
+
+        async fn recent_sync_queue_items(
+            &self,
+            _limit: Option<u32>,
+        ) -> Result<Vec<SyncQueueItem>, AppError> {
+            Ok(vec![])
+        }
+
+        async fn upsert_cache_metadata(
+            &self,
+            _update: CacheMetadataUpdate,
+        ) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn save_optimistic_update(
+            &self,
+            _draft: OptimisticUpdateDraft,
+        ) -> Result<OptimisticUpdateId, AppError> {
+            Err(AppError::NotImplemented("stub offline service".to_string()))
+        }
+
+        async fn confirm_optimistic_update(
+            &self,
+            _update_id: OptimisticUpdateId,
+        ) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn rollback_optimistic_update(
+            &self,
+            _update_id: OptimisticUpdateId,
+        ) -> Result<Option<OfflinePayload>, AppError> {
+            Ok(None)
+        }
+
+        async fn cleanup_expired_cache(&self) -> Result<u32, AppError> {
+            Ok(0)
+        }
+
+        async fn update_sync_status(&self, _update: SyncStatusUpdate) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    fn build_topic_service(
+        repo: Arc<dyn PortTopicRepository>,
+        metrics_repo: Arc<dyn PortTopicMetricsRepository>,
+        p2p: Arc<dyn P2PServiceTrait>,
+        metrics_enabled: bool,
+    ) -> TopicService {
+        let pending_repo: Arc<dyn PortPendingTopicRepository> = Arc::new(NoopPendingRepo);
+        let offline_service: Arc<dyn OfflineServiceTrait> = Arc::new(StubOfflineService);
+        TopicService::new(
+            repo,
+            pending_repo,
+            metrics_repo,
+            metrics_enabled,
+            p2p,
+            offline_service,
+        )
+    }
+
     fn topic_with_counts(id: &str, name: &str, members: u32, posts: u32) -> Topic {
         let mut topic = Topic::new(name.to_string(), Some(format!("{name} desc")));
         topic.id = id.to_string();
@@ -309,7 +577,7 @@ mod tests {
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
             Arc::new(MockTopicMetricsRepo::new());
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
-        let service = TopicService::new(repo_arc, metrics_arc, false, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
 
         let result = service.join_topic("tech", "pubkey1").await;
         assert!(result.is_ok());
@@ -332,7 +600,7 @@ mod tests {
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
             Arc::new(MockTopicMetricsRepo::new());
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
-        let service = TopicService::new(repo_arc, metrics_arc, false, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
 
         let result = service.leave_topic("tech", "pubkey1").await;
         assert!(result.is_ok());
@@ -357,7 +625,7 @@ mod tests {
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
             Arc::new(MockTopicMetricsRepo::new());
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
-        let service = TopicService::new(repo_arc, metrics_arc, false, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
 
         let result = service
             .list_trending_topics(3)
@@ -431,7 +699,7 @@ mod tests {
 
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> = Arc::new(metrics_repo);
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
-        let service = TopicService::new(repo_arc, metrics_arc, true, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, true);
 
         let result = service
             .list_trending_topics(2)
@@ -456,7 +724,7 @@ mod tests {
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
             Arc::new(MockTopicMetricsRepo::new());
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
-        let service = TopicService::new(repo_arc, metrics_arc, false, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
         let result = service.get_joined_topics("pubkey1").await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -468,7 +736,7 @@ mod tests {
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
             Arc::new(MockTopicMetricsRepo::new());
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
-        let service = TopicService::new(repo_arc, metrics_arc, false, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
 
         assert!(
             service
@@ -488,7 +756,7 @@ mod tests {
             .return_once(|| Ok(Some(999)));
         let metrics_arc: Arc<dyn PortTopicMetricsRepository> = Arc::new(metrics_repo);
         let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
-        let service = TopicService::new(repo_arc, metrics_arc, true, p2p_arc);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, true);
 
         assert_eq!(
             service.latest_metrics_generated_at().await.unwrap(),

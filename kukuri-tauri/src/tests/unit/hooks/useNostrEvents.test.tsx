@@ -64,6 +64,8 @@ describe('useNostrEvents', () => {
 
     vi.mocked(useTopicStore).mockReturnValue({
       updateTopicPostCount: mockUpdateTopicPostCount,
+      pendingTopics: new Map(),
+      refreshPendingTopics: vi.fn(),
     } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
   });
 

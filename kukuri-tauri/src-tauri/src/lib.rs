@@ -99,6 +99,10 @@ pub fn run() {
             presentation::commands::profile_avatar_sync,
             // トピック関連コマンド
             presentation::commands::create_topic,
+            presentation::commands::enqueue_topic_creation,
+            presentation::commands::list_pending_topics,
+            presentation::commands::mark_pending_topic_synced,
+            presentation::commands::mark_pending_topic_failed,
             presentation::commands::get_topic,
             presentation::commands::get_topics,
             presentation::commands::get_joined_topics,

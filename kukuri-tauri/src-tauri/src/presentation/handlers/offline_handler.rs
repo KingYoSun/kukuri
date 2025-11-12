@@ -379,7 +379,7 @@ impl OfflineHandler {
     }
 }
 
-fn map_action_record(record: &OfflineActionRecord) -> Result<OfflineAction, AppError> {
+pub(crate) fn map_action_record(record: &OfflineActionRecord) -> Result<OfflineAction, AppError> {
     Ok(OfflineAction {
         id: record.record_id.unwrap_or_default(),
         user_pubkey: record.user_pubkey.as_hex().to_string(),

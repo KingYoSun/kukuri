@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年11月10日  
+**最終更新**: 2025年11月12日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## MVP残タスクサマリー（2025年11月10日更新）
@@ -486,6 +486,7 @@ export function PeerConnectionPanel() {
 - 2025年11月06日: `phase5_user_flow_inventory.md` 5.7 節を更新し、`list_trending_topics`/`list_trending_posts`/`list_following_feed` のデータ要件（limit/per_topic/cursor/キャッシュポリシー）とテスト計画を明記。`generated_at` をミリ秒エポックで返す必要性、Summary Panel・`trending_metrics_job`・Docker シナリオを backlog として追記し、Summary/CI 計画と同期。
 - 2025年11月06日: ユーザー検索導線のページネーション/状態遷移/エラー UI/入力バリデーション方針を `phase5_user_flow_inventory.md` 5.8 節と `phase5_user_flow_summary.md`、`docs/03_implementation/error_handling_guidelines.md` に追記し、`SearchErrorState` コンポーネントと React Query デバウンス/AbortController 戦略を整理。`tauri_app_implementation_plan.md` の優先度項目を同方針と同期。
 - 2025年11月06日: Inventory 5.9 にホーム/サイドバーからのトピック作成導線を追加。TopicSelector ショートカット／`TopicFormModal` mode=`create-from-composer`／`createAndJoinTopic` ヘルパー／`OfflineActionType::CREATE_TOPIC` を定義し、Summary・CI・依存関係ドキュメントへ反映。
+- 2025年11月12日: Stage4（`OfflineActionType::CREATE_TOPIC`）を実装し、`TopicService::enqueue_topic_creation` / `topics_pending` / `PendingTopicRepository` を追加。Tauri には `enqueueTopicCreation` / `listPendingTopics` コマンドを、フロントには `topicStore.pendingTopics`・`TopicSelector` の「保留中」グループ・`TopicFormModal` のオフライン経路（`watchPendingTopic` → `resolvePendingTopic`）を導入。`Input` を `forwardRef` 化して Radix ref 警告を解消し、`topicCreateOffline` シナリオを含む `npx pnpm vitest run ... | Tee-Object -FilePath ../tmp/logs/topic_create_host_20251112-231141.log` と `./scripts/test-docker.ps1 ts -Scenario topic-create`（`tmp/logs/topic_create_20251112-231334.log`, `test-results/topic-create/20251112-231334-*.json`）で QA を実施。Runbook Chapter5 / `phase5_ci_path_audit.md` にも採取パスを反映済み。
 - 2025年11月06日: Inventory 5.10 に投稿削除後の React Query キャッシュ整合性（`useDeletePost` ミューテーション、トレンド/フォローキャッシュ更新、Docker シナリオ `post-delete-cache`、Rust 統合テスト）と `error_handling_guidelines.md` のトーストキー更新を追加。`phase5_ci_path_audit.md` のテスト ID と Nightly 実行計画を同期。
 - 2025年11月06日: Inventory 5.6 と `phase5_user_flow_summary.md` 2章に Kind4 DM 未読バッジ・再送導線・DirectMessageDialog 改修を反映し、`phase5_ci_path_audit.md` の `test:unit` 更新（DirectMessageDialog / Summary Panel / UserSearchResults）と整合を取った。
 - 2025年11月06日: `useOfflineStore.refreshCacheMetadata` / `useSyncManager.persistSyncStatuses` を実装し、同期完了時に `update_cache_metadata`・`update_sync_status` を自動更新。`SyncStatusIndicator` の最終同期時刻がバックエンドのスナップショットに追従することを確認。

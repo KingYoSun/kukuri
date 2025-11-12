@@ -2,9 +2,11 @@ import { create } from 'zustand';
 
 import type { TopicState, Topic } from './types';
 import { TauriApi } from '@/lib/api/tauri';
+import type { PendingTopic } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { useOfflineStore } from './offlineStore';
+import { useComposerStore } from './composerStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
 import { withPersist } from './utils/persistHelpers';
 import { createTopicPersistConfig } from './config/persist';
@@ -14,6 +16,7 @@ interface TopicStore extends TopicState {
   fetchTopics: () => Promise<void>;
   addTopic: (topic: Topic) => void;
   createTopic: (name: string, description: string) => Promise<Topic>;
+  queueTopicCreation: (name: string, description: string) => Promise<PendingTopic>;
   updateTopic: (id: string, update: Partial<Topic>) => void;
   updateTopicRemote: (id: string, name: string, description: string) => Promise<void>;
   removeTopic: (id: string) => void;
@@ -24,16 +27,37 @@ interface TopicStore extends TopicState {
   updateTopicPostCount: (topicId: string, delta: number) => void;
   markTopicRead: (topicId: string) => void;
   handleIncomingTopicMessage: (topicId: string, timestamp: number) => void;
+  setPendingTopics: (pending: PendingTopic[]) => void;
+  upsertPendingTopic: (pending: PendingTopic) => void;
+  removePendingTopic: (pendingId: string) => void;
+  refreshPendingTopics: () => Promise<void>;
 }
 
 export const useTopicStore = create<TopicStore>()(
   withPersist<TopicStore>(
-    (set) => ({
-      topics: new Map(),
-      currentTopic: null,
-      joinedTopics: [],
-      topicUnreadCounts: new Map(),
-      topicLastReadAt: new Map(),
+    (set, get) => {
+      const handlePendingTransition = (previous: PendingTopic | undefined, next: PendingTopic) => {
+        if (next.status === 'synced' && next.synced_topic_id && previous?.status !== 'synced') {
+          useComposerStore
+            .getState()
+            .resolvePendingTopic(next.pending_id, next.synced_topic_id);
+          void get().fetchTopics().catch((error) => {
+            errorHandler.log('Failed to refresh topics after pending sync', error, {
+              context: 'TopicStore.handlePendingTransition',
+            });
+          });
+        } else if (next.status === 'failed' && previous?.status !== 'failed') {
+          useComposerStore.getState().clearPendingTopicBinding(next.pending_id);
+        }
+      };
+
+      return {
+        topics: new Map(),
+        currentTopic: null,
+        joinedTopics: [],
+        topicUnreadCounts: new Map(),
+        topicLastReadAt: new Map(),
+        pendingTopics: new Map(),
 
       setTopics: (topics: Topic[]) =>
         set((state) => {
@@ -52,6 +76,41 @@ export const useTopicStore = create<TopicStore>()(
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
+        }),
+      setPendingTopics: (pendingList: PendingTopic[]) =>
+        set((state) => {
+          const next = new Map(state.pendingTopics);
+          const incoming = new Set(pendingList.map((p) => p.pending_id));
+          pendingList.forEach((pending) => {
+            const previous = next.get(pending.pending_id);
+            next.set(pending.pending_id, pending);
+            handlePendingTransition(previous, pending);
+          });
+          next.forEach((_, key) => {
+            if (!incoming.has(key)) {
+              next.delete(key);
+              useComposerStore.getState().clearPendingTopicBinding(key);
+            }
+          });
+          return { pendingTopics: next };
+        }),
+      upsertPendingTopic: (pending: PendingTopic) =>
+        set((state) => {
+          const next = new Map(state.pendingTopics);
+          const previous = next.get(pending.pending_id);
+          next.set(pending.pending_id, pending);
+          handlePendingTransition(previous, pending);
+          return { pendingTopics: next };
+        }),
+      removePendingTopic: (pendingId: string) =>
+        set((state) => {
+          if (!state.pendingTopics.has(pendingId)) {
+            return state;
+          }
+          const next = new Map(state.pendingTopics);
+          next.delete(pendingId);
+          useComposerStore.getState().clearPendingTopicBinding(pendingId);
+          return { pendingTopics: next };
         }),
 
       fetchTopics: async () => {
@@ -92,6 +151,7 @@ export const useTopicStore = create<TopicStore>()(
               topicLastReadAt: lastRead,
             };
           });
+          await get().refreshPendingTopics();
         } catch (error) {
           errorHandler.log('Failed to fetch topics', error, {
             context: 'TopicStore.fetchTopics',
@@ -99,6 +159,16 @@ export const useTopicStore = create<TopicStore>()(
             toastTitle: 'トピックの取得に失敗しました',
           });
           throw error;
+        }
+      },
+      refreshPendingTopics: async () => {
+        try {
+          const pending = await TauriApi.listPendingTopics();
+          get().setPendingTopics(pending);
+        } catch (error) {
+          errorHandler.log('Failed to load pending topics', error, {
+            context: 'TopicStore.refreshPendingTopics',
+          });
         }
       },
 
@@ -109,6 +179,31 @@ export const useTopicStore = create<TopicStore>()(
           return { topics: newTopics };
         }),
 
+      queueTopicCreation: async (name: string, description: string) => {
+        try {
+          const response = await TauriApi.enqueueTopicCreation({
+            name,
+            description,
+          });
+          set((state) => {
+            const next = new Map(state.pendingTopics);
+            const pending = response.pending_topic;
+            const previous = next.get(pending.pending_id);
+            next.set(pending.pending_id, pending);
+            handlePendingTransition(previous, pending);
+            return { pendingTopics: next };
+          });
+          useOfflineStore.getState().addPendingAction(response.offline_action);
+          return response.pending_topic;
+        } catch (error) {
+          errorHandler.log('Failed to queue topic creation', error, {
+            context: 'TopicStore.queueTopicCreation',
+            showToast: true,
+            toastTitle: 'トピックの作成予約に失敗しました',
+          });
+          throw error;
+        }
+      },
       createTopic: async (name: string, description: string) => {
         try {
           const apiTopic = await TauriApi.createTopic({ name, description });
@@ -433,7 +528,9 @@ export const useTopicStore = create<TopicStore>()(
             topicLastReadAt: lastRead,
           };
         }),
-    }),
+        // ... rest of store methods
+      };
+    },
     createTopicPersistConfig<TopicStore>(),
   ),
 );

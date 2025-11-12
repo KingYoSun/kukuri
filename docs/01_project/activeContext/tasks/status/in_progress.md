@@ -15,7 +15,6 @@
 
 - [ ] MVP達成に必要な残タスクを横断的に整理し、指定ドキュメント群（critical/in_progress, design_doc, roadmap, refactoring_plan, tauri_app_implementation_plan, phase5_* artefacts）へ反映する
   - [x] Stage4: プロフィール avatar 同期の Service Worker 連携と `profile_avatar_sync` ロギング/`cache_metadata` 更新/Runbook & `phase5_ci_path_audit` 反映を完了させる（`phase5_user_flow_inventory.md:241-246`）。→ 2025年11月12日 `profile_avatar_sync` Stage4 ログ（`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log`）／`--service-worker` フラグ／Runbook & CI 監査更新まで完了。
-  - [ ] Stage4: `OfflineActionType::CREATE_TOPIC` の再送処理・pendingTopics UI・Rust/Vitest/Docker/Runbook 一式を実装し、トピック作成導線をオフラインでも再現できる状態にする（`phase5_user_flow_inventory.md:527-531`）。
   - [ ] Stage4: 投稿削除フローの Rust 統合テスト・`post-delete-cache` Docker エントリポイント・SyncStatus 再送 UI・Runbook 更新を仕上げ、`tmp/logs/post_delete_cache_<ts>.log` を取得できるようにする（`phase5_user_flow_inventory.md:566-570`）。
   - [ ] DirectMessageInbox backlog（会話検索/補完、仮想スクロール最適化、多端末既読共有と contract テスト）を片付け、Inventory 5.6.x / Summary 2章の「改善中」項目を解消する（`phase5_user_flow_summary.md:82-92`、`phase5_user_flow_inventory.md` セクション5.6）。
   - [ ] EventGateway ポート実装と P2PService Stack の trait 化・DI 再構成を完了し、Runbook/Dependency テンプレに反映（`phase5_dependency_inventory_template.md:15-16`, `roadmap.md:17-20`）。

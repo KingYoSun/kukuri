@@ -1,13 +1,18 @@
 use crate::{
     application::services::TopicService,
+    domain::entities::PendingTopic,
     presentation::dto::{
         Validate,
+        offline::OfflineAction,
         topic_dto::{
-            CreateTopicRequest, DeleteTopicRequest, GetTopicStatsRequest, JoinTopicRequest,
-            ListTrendingTopicsRequest, ListTrendingTopicsResponse, TopicResponse,
-            TopicStatsResponse, TrendingTopicDto, UpdateTopicRequest,
+            CreateTopicRequest, DeleteTopicRequest, EnqueueTopicCreationRequest,
+            EnqueueTopicCreationResponse, GetTopicStatsRequest, JoinTopicRequest,
+            ListTrendingTopicsRequest, ListTrendingTopicsResponse, MarkPendingTopicFailedRequest,
+            MarkPendingTopicSyncedRequest, PendingTopicResponse, TopicResponse, TopicStatsResponse,
+            TrendingTopicDto, UpdateTopicRequest,
         },
     },
+    presentation::handlers::offline_handler::map_action_record,
     shared::error::AppError,
 };
 use chrono::Utc;
@@ -25,12 +30,13 @@ impl TopicHandler {
     pub async fn create_topic(
         &self,
         request: CreateTopicRequest,
+        user_pubkey: &str,
     ) -> Result<TopicResponse, AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
 
         let topic = self
             .topic_service
-            .create_topic(request.name, Some(request.description))
+            .create_topic(request.name, Some(request.description), user_pubkey)
             .await?;
 
         Ok(TopicResponse {
@@ -44,6 +50,96 @@ impl TopicHandler {
             created_at: topic.created_at.timestamp(),
             updated_at: topic.updated_at.timestamp(),
         })
+    }
+
+    pub async fn enqueue_topic_creation(
+        &self,
+        request: EnqueueTopicCreationRequest,
+        user_pubkey: &str,
+    ) -> Result<EnqueueTopicCreationResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let result = self
+            .topic_service
+            .enqueue_topic_creation(user_pubkey, request.name, request.description)
+            .await?;
+
+        Ok(EnqueueTopicCreationResponse {
+            pending_topic: map_pending_topic(result.pending_topic),
+            offline_action: map_action_record(&result.offline_action)?,
+        })
+    }
+
+    pub async fn list_pending_topics(
+        &self,
+        user_pubkey: &str,
+    ) -> Result<Vec<PendingTopicResponse>, AppError> {
+        let topics = self.topic_service.list_pending_topics(user_pubkey).await?;
+        Ok(topics.into_iter().map(map_pending_topic).collect())
+    }
+
+    pub async fn mark_pending_topic_synced(
+        &self,
+        request: MarkPendingTopicSyncedRequest,
+        user_pubkey: &str,
+    ) -> Result<PendingTopicResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let pending = self
+            .topic_service
+            .get_pending_topic(&request.pending_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Pending topic not found".to_string()))?;
+
+        if pending.user_pubkey != user_pubkey {
+            return Err(AppError::Unauthorized(
+                "You cannot modify this pending topic".to_string(),
+            ));
+        }
+
+        self.topic_service
+            .mark_pending_topic_synced(&request.pending_id, &request.topic_id)
+            .await?;
+
+        let updated = self
+            .topic_service
+            .get_pending_topic(&request.pending_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Pending topic not found".to_string()))?;
+
+        Ok(map_pending_topic(updated))
+    }
+
+    pub async fn mark_pending_topic_failed(
+        &self,
+        request: MarkPendingTopicFailedRequest,
+        user_pubkey: &str,
+    ) -> Result<PendingTopicResponse, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let pending = self
+            .topic_service
+            .get_pending_topic(&request.pending_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Pending topic not found".to_string()))?;
+
+        if pending.user_pubkey != user_pubkey {
+            return Err(AppError::Unauthorized(
+                "You cannot modify this pending topic".to_string(),
+            ));
+        }
+
+        self.topic_service
+            .mark_pending_topic_failed(&request.pending_id, request.error_message.clone())
+            .await?;
+
+        let updated = self
+            .topic_service
+            .get_pending_topic(&request.pending_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Pending topic not found".to_string()))?;
+
+        Ok(map_pending_topic(updated))
     }
 
     pub async fn get_topic(&self, id: &str) -> Result<Option<TopicResponse>, AppError> {
@@ -234,5 +330,19 @@ impl TopicHandler {
             generated_at: result.generated_at,
             topics,
         })
+    }
+}
+
+fn map_pending_topic(topic: PendingTopic) -> PendingTopicResponse {
+    PendingTopicResponse {
+        pending_id: topic.pending_id,
+        name: topic.name,
+        description: topic.description,
+        status: topic.status.as_str().to_string(),
+        offline_action_id: topic.offline_action_id,
+        synced_topic_id: topic.synced_topic_id,
+        error_message: topic.error_message,
+        created_at: topic.created_at.timestamp(),
+        updated_at: topic.updated_at.timestamp(),
     }
 }

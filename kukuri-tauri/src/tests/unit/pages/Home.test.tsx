@@ -70,6 +70,8 @@ describe('Home', () => {
     // デフォルトのトピック状態
     mockUseTopicStore.mockReturnValue({
       joinedTopics: [],
+      pendingTopics: new Map(),
+      refreshPendingTopics: vi.fn(),
     } as Partial<ReturnType<typeof useTopicStore>> as ReturnType<typeof useTopicStore>);
   });
 

@@ -1,4 +1,4 @@
-import type { ProfileAvatarAccessLevel } from '@/lib/api/tauri';
+import type { ProfileAvatarAccessLevel, PendingTopic } from '@/lib/api/tauri';
 
 export interface UserAvatarMetadata {
   blobHash: string;
@@ -69,6 +69,7 @@ export interface TopicState {
   joinedTopics: string[];
   topicUnreadCounts: Map<string, number>;
   topicLastReadAt: Map<string, number>;
+  pendingTopics: Map<string, PendingTopic>;
 }
 
 export interface PostState {

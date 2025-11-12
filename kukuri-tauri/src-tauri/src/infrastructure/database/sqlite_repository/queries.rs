@@ -187,6 +187,21 @@ pub(super) const INSERT_TOPIC: &str = r#"
     VALUES (?, ?, ?, ?, ?)
 "#;
 
+pub(super) const INSERT_PENDING_TOPIC: &str = r#"
+    INSERT INTO topics_pending (
+        pending_id,
+        user_pubkey,
+        name,
+        description,
+        status,
+        offline_action_id,
+        synced_topic_id,
+        error_message,
+        created_at,
+        updated_at
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+"#;
+
 pub(super) const SELECT_TOPIC_BY_ID: &str = r#"
     SELECT topic_id, name, description, created_at, updated_at, member_count, post_count
     FROM topics
@@ -197,6 +212,51 @@ pub(super) const SELECT_ALL_TOPICS: &str = r#"
     SELECT topic_id, name, description, created_at, updated_at, member_count, post_count
     FROM topics
     ORDER BY created_at ASC
+"#;
+
+pub(super) const SELECT_PENDING_TOPIC_BY_ID: &str = r#"
+    SELECT pending_id,
+           user_pubkey,
+           name,
+           description,
+           status,
+           offline_action_id,
+           synced_topic_id,
+           error_message,
+           created_at,
+           updated_at
+    FROM topics_pending
+    WHERE pending_id = ?1
+"#;
+
+pub(super) const SELECT_PENDING_TOPICS_BY_USER: &str = r#"
+    SELECT pending_id,
+           user_pubkey,
+           name,
+           description,
+           status,
+           offline_action_id,
+           synced_topic_id,
+           error_message,
+           created_at,
+           updated_at
+    FROM topics_pending
+    WHERE user_pubkey = ?1
+    ORDER BY created_at DESC
+"#;
+
+pub(super) const UPDATE_PENDING_TOPIC_STATUS: &str = r#"
+    UPDATE topics_pending
+    SET status = ?2,
+        synced_topic_id = ?3,
+        error_message = ?4,
+        updated_at = ?5
+    WHERE pending_id = ?1
+"#;
+
+pub(super) const DELETE_PENDING_TOPIC: &str = r#"
+    DELETE FROM topics_pending
+    WHERE pending_id = ?1
 "#;
 
 pub(super) const SELECT_JOINED_TOPICS: &str = r#"

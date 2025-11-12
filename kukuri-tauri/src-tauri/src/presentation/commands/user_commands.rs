@@ -22,9 +22,9 @@ use crate::presentation::dto::{
     },
 };
 use crate::shared::AppError;
-use nostr_sdk::prelude::{FromBech32, PublicKey};
-use serde_json::{json, Value};
 use chrono::{Duration, Utc};
+use nostr_sdk::prelude::{FromBech32, PublicKey};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tauri::State;
 
@@ -357,7 +357,10 @@ async fn record_profile_avatar_sync_metadata(
         expiry: Some(Utc::now() + Duration::minutes(30)),
         is_stale: Some(false),
         doc_version: response.current_version.map(|version| version as i64),
-        blob_hash: response.avatar.as_ref().map(|avatar| avatar.blob_hash.clone()),
+        blob_hash: response
+            .avatar
+            .as_ref()
+            .map(|avatar| avatar.blob_hash.clone()),
         payload_bytes,
     };
 
@@ -379,7 +382,10 @@ mod tests {
             .connect("sqlite::memory:")
             .await
             .expect("sqlite memory pool");
-        sqlx::migrate!("./migrations").run(&pool).await.expect("migrations");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
 
         let persistence = Arc::new(SqliteOfflinePersistence::new(pool.clone()));
         let offline_service = OfflineService::new(persistence);

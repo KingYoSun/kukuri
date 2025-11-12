@@ -1,4 +1,4 @@
-use super::Validate;
+use super::{Validate, offline::OfflineAction};
 use serde::{Deserialize, Serialize};
 
 // レスポンスDTO
@@ -13,6 +13,48 @@ pub struct TopicResponse {
     pub is_joined: bool,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PendingTopicResponse {
+    pub pending_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub offline_action_id: String,
+    pub synced_topic_id: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnqueueTopicCreationRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+impl Validate for EnqueueTopicCreationRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.name.trim().is_empty() {
+            return Err("トピック名が必要です".to_string());
+        }
+        if self.name.len() > 100 {
+            return Err("トピック名は100文字以内で入力してください".to_string());
+        }
+        if let Some(description) = &self.description {
+            if description.len() > 500 {
+                return Err("説明は500文字以内で入力してください".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnqueueTopicCreationResponse {
+    pub pending_topic: PendingTopicResponse,
+    pub offline_action: OfflineAction,
 }
 
 // リクエストDTO
@@ -113,6 +155,39 @@ impl Validate for DeleteTopicRequest {
     fn validate(&self) -> Result<(), String> {
         if self.id.trim().is_empty() {
             return Err("トピックIDが必要です".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarkPendingTopicSyncedRequest {
+    pub pending_id: String,
+    pub topic_id: String,
+}
+
+impl Validate for MarkPendingTopicSyncedRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.pending_id.trim().is_empty() {
+            return Err("pending_id is required".to_string());
+        }
+        if self.topic_id.trim().is_empty() {
+            return Err("topic_id is required".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarkPendingTopicFailedRequest {
+    pub pending_id: String,
+    pub error_message: Option<String>,
+}
+
+impl Validate for MarkPendingTopicFailedRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.pending_id.trim().is_empty() {
+            return Err("pending_id is required".to_string());
         }
         Ok(())
     }

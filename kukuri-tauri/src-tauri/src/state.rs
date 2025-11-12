@@ -9,12 +9,13 @@ use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::ports::messaging_gateway::MessagingGateway;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::repositories::{
-    BookmarkRepository, DirectMessageRepository, EventRepository, PostRepository,
-    TopicMetricsRepository, TopicRepository, UserRepository,
+    BookmarkRepository, DirectMessageRepository, EventRepository, PendingTopicRepository,
+    PostRepository, TopicMetricsRepository, TopicRepository, UserRepository,
 };
 use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::ports::subscription_state_repository::SubscriptionStateRepository;
 use crate::application::services::event_service::EventServiceTrait;
+use crate::application::services::offline_service::OfflineServiceTrait;
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
@@ -173,6 +174,7 @@ impl AppState {
         let offline_reindex_job =
             OfflineReindexJob::create(Some(app_handle.clone()), Arc::clone(&offline_persistence));
         offline_reindex_job.trigger();
+        let offline_service = Arc::new(OfflineService::new(Arc::clone(&offline_persistence)));
 
         // インフラストラクチャサービスの初期化
         let secure_storage_impl = Arc::new(DefaultSecureStorage::new());
@@ -221,9 +223,11 @@ impl AppState {
         // TopicServiceを初期化（AuthServiceの依存）
         let topic_service = Arc::new(TopicService::new(
             Arc::clone(&repository) as Arc<dyn TopicRepository>,
+            Arc::clone(&repository) as Arc<dyn PendingTopicRepository>,
             Arc::clone(&topic_metrics_repository),
             metrics_config.enabled,
             Arc::clone(&p2p_service) as Arc<dyn P2PServiceTrait>,
+            Arc::clone(&offline_service) as Arc<dyn OfflineServiceTrait>,
         ));
         // 既定トピック（public）を保証し、EventManagerの既定配信先に設定
         topic_service
@@ -408,9 +412,6 @@ impl AppState {
             post_sync_participant,
             event_sync_participant,
         ));
-
-        // OfflineServiceの初期化
-        let offline_service = Arc::new(OfflineService::new(offline_persistence));
 
         let profile_avatar_service = Arc::new(
             ProfileAvatarService::new(profile_avatar_dir.clone())

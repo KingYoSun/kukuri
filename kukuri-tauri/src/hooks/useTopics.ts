@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTopicStore } from '@/stores';
 import type { Topic } from '@/stores';
@@ -7,6 +8,11 @@ import { errorHandler } from '@/lib/errorHandler';
 // トピック一覧を取得するフック
 export const useTopics = () => {
   const { setTopics } = useTopicStore();
+  const refreshPendingTopics = useTopicStore((state) => state.refreshPendingTopics);
+
+  useEffect(() => {
+    void refreshPendingTopics();
+  }, [refreshPendingTopics]);
 
   return useQuery({
     queryKey: ['topics'],
