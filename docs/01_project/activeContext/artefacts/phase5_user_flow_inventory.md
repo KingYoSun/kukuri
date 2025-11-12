@@ -66,7 +66,7 @@
 - サイドバー参加中トピックリスト: `topicStore` の `topicUnreadCounts` と `handleIncomingTopicMessage` で未読数と最終活動時刻を更新し、P2Pメッセージのタイムスタンプを秒換算して降順表示。
 - `PostComposer` / `DraftManager`: シンプル/Markdown 切替と 2 秒デバウンスの自動保存で下書きを保持し、一覧から再開・削除が可能。
 - `RelayStatus`（サイドバー下部）: `get_relay_status` を 30 秒ごとにポーリングし接続状態を表示。
-- 2025年11月11日: `kukuri-cli bootstrap --export-path "%LocalAppData%\\kukuri\\cli_bootstrap_nodes.json"` で出力される CLI リストを検知し、RelayStatus 下部に「CLI 提供: n件 / 更新: ○分前」と「最新リストを適用」ボタンを追加。適用時は `apply_cli_bootstrap_nodes` → `updateRelayStatus` → `get_bootstrap_config` を連続実行する。`env_locked`（`KUKURI_BOOTSTRAP_PEERS` 設定時）はボタンを無効化。
+- 2025年11月11日: `kukuri-cli bootstrap --export-path "%LocalAppData%\\kukuri\\cli_bootstrap_nodes.json"` で出力される CLI リストを検知し、RelayStatus 下部に「CLI 提供: n件 / 更新: ○分前」と「最新リストを適用」ボタンを追加。適用時は `apply_cli_bootstrap_nodes` → `updateRelayStatus` → `get_bootstrap_config` を連続実行する。`env_locked`（`KUKURI_BOOTSTRAP_PEERS` 設定時）はボタンを無効化。2025年11月12日: PoC 実行ログ `tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を取得し、Runbook Chapter10/`phase5_ci_path_audit.md` とリンクした。
 - `P2PStatus`（サイドバー下部）: `useP2P` からの接続状態・メトリクス要約を表示し、接続時のみ 30 秒間隔で `refreshStatus` を実行。手動更新ボタンで `get_p2p_metrics` を再取得し、参加トピックとピア数を可視化。
 - `SyncStatusIndicator`: `useSyncManager` の `syncStatus`/`pendingActionsCount` を参照し、Popover 内で同期進捗・競合・手動同期ボタンを表示。手動同期は `triggerManualSync` を通じて `syncEngine` の再実行を要求する。
 - `RealtimeIndicator`: ブラウザの `online`/`offline` イベントと `realtime-update` カスタムイベント（`useP2PEventListener` が投稿受信時に発火）を監視し、最後の更新からの経過時間をバッジ表示する。

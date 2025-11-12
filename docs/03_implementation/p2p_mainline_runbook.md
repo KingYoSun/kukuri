@@ -161,6 +161,13 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 
 ### 10.1 `kukuri-cli` ブートストラップノード手順
 1. ビルド: `cd kukuri-cli && cargo build --release`。Docker を使う場合は `docker compose up -d bootstrap-node-1 bootstrap-node-2` もしくは `./scripts/start-bootstrap-nodes.ps1 -Mode bootstrap` を実行する。
+   - PoC では CLI が書き出す JSON の保管場所を明示する。`--export-path` 未指定時は下表の既定パスへ保存されるため、Tauri アプリと CLI は同じ OS アカウントで実行すること。
+
+     | OS | 既定パス (`dirs::data_dir()/kukuri/cli_bootstrap_nodes.json`) | 備考 |
+     | --- | --- | --- |
+     | Windows | `%LocalAppData%\kukuri\cli_bootstrap_nodes.json` | 例: `C:\Users\<User>\AppData\Local\kukuri\cli_bootstrap_nodes.json`。PowerShell では `$env:LOCALAPPDATA\\kukuri\\cli_bootstrap_nodes.json`。 |
+     | macOS | `$HOME/Library/Application Support/kukuri/cli_bootstrap_nodes.json` | `KUKURI_CLI_BOOTSTRAP_PATH` で上書き可。 |
+     | Linux | `$XDG_DATA_HOME/kukuri/cli_bootstrap_nodes.json`（未定義時 `$HOME/.local/share/kukuri/cli_bootstrap_nodes.json`） | CI/Nightly は `KUKURI_CLI_BOOTSTRAP_PATH` を明示し、成果物パスを `phase5_ci_path_audit.md` に記録する。 |
 2. 単体ノード起動サンプル:
    ```bash
    RUST_LOG=info ./target/release/kukuri-cli bootstrap \
@@ -185,6 +192,12 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 2. Tauri アプリ起動時に `bootstrap_config::load_cli_bootstrap_nodes` が同ファイルを検出すると、`RelayStatus` カード下部に「CLI 提供: n件 / 更新: ○分前」「最新リストを適用」ボタンが表示される。`KUKURI_BOOTSTRAP_PEERS` でロックされている場合はボタンが無効化され、環境変数を解除しない限り適用できない仕様。
 3. `最新リストを適用` を押下すると `apply_cli_bootstrap_nodes` コマンドが `user_bootstrap_nodes.json` に CLI リストをコピーし、続けて `NetworkService::apply_bootstrap_nodes` を呼び出して Mainline DHT へ即時接続する。UI は現在のソース（env/user/bundle/fallback/none）と CLI リストの更新時刻を並列表記するため、Runbook の Chapter2/Chapter6 で参照するブートストラップログと整合が取れる。アプリの再起動は不要。
 4. PoC 検証手順:
-   - `kukuri-cli bootstrap --export-path "%LocalAppData%\kukuri\cli_bootstrap_nodes.json" --peers node_id@host:port` を実行して JSON が作成されることを確認。
-   - `pnpm tauri dev` → サイドバー下部の `RelayStatus` で CLI リストが検知され、「最新リストを適用」押下後に `kukuri-tauri` ログへ `Connected to bootstrap peer from config:` が即座に出力されることを確認（`NetworkService::apply_bootstrap_nodes` が走った証跡）。`get_relay_status` の再取得でステータスが `connected` へ遷移するかを合わせて確認する。
+    - `kukuri-cli bootstrap --export-path "%LocalAppData%\kukuri\cli_bootstrap_nodes.json" --peers node_id@host:port` を実行して JSON が作成されることを確認。
+    - `pnpm tauri dev` → サイドバー下部の `RelayStatus` で CLI リストが検知され、「最新リストを適用」押下後に `kukuri-tauri` ログへ `Connected to bootstrap peer from config:` が即座に出力されることを確認（`NetworkService::apply_bootstrap_nodes` が走った証跡）。`get_relay_status` の再取得でステータスが `connected` へ遷移するかを合わせて確認する。
+    - 取得ログとスクリーンショットは `tmp/logs/relay_status_cli_bootstrap_<timestamp>.log`（例: PowerShell で `Start-Transcript -Path tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` 実行後に `pnpm tauri dev` を起動）へ保存し、`phase5_ci_path_audit.md` の Nightly セクションにパスを追記する。ログには `cli_nodes_detected`, `apply_cli_bootstrap_nodes`, `Connected to bootstrap peer` を含める。
+
+### 10.4 Ops / Nightly 連携
+- `phase5_ci_path_audit.md` に CLI ブートストラップ PoC 向けの行を追加し、PowerShell/Bash いずれでも `Start-Transcript` または `script` で `tmp/logs/relay_status_cli_bootstrap_<timestamp>.log` を保存する。サンプルログは `tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を参照。
+- Nightly Frontend Unit Tests には `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を常時含め、`cargo test --package kukuri-cli -- test_bootstrap_runbook` を `nightly.yml` の `native-test-linux` ジョブへ追記する。Runbook 更新時は両テストのログ ID を `tasks/status/in_progress.md` と `docs/01_project/roadmap.md` Ops 行に必ず転記する。
+- Ops チームは Runbook の Chapter2（前提変数）と Chapter10（CLI PoC）をセットで参照し、`KUKURI_BOOTSTRAP_PEERS` によるロックが掛かっていないかを `RelayStatus` UI の `ブートストラップソース` 表示で確認してから適用する。適用後は `p2p_metrics_export --job p2p` で Mainline 接続数の増加を確認し、失敗時は Chapter7 のトラブルシューティング手順に従って再取得する。
    - `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` / `cargo test --package kukuri-cli -- test_bootstrap_runbook` / `cargo test --package kukuri-tauri --test test_event_service_gateway` を実行し、UI・CLI・Gateway の回帰テストが通ることを Runbook に記録する。
