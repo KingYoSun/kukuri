@@ -392,6 +392,14 @@ function Collect-TrendingMetricsSnapshot {
         Pop-Location
     }
 
+    $promResultsDir = Join-Path $repositoryRoot "test-results/trending-feed/prometheus"
+    if (-not (Test-Path $promResultsDir)) {
+        New-Item -ItemType Directory -Path $promResultsDir | Out-Null
+    }
+    $promArchivePath = Join-Path $promResultsDir "trending_metrics_job_stage4_$Timestamp.log"
+    Copy-Item -Path $logHostPath -Destination $promArchivePath -Force
+    Write-Info "Prometheus metrics log copied to test-results/trending-feed/prometheus/trending_metrics_job_stage4_$Timestamp.log"
+
     Write-Success "Prometheus metrics log saved to $logRelPath"
 }
 

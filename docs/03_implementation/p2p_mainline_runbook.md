@@ -100,7 +100,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   ```
 - PowerShell 版は `./scripts/metrics/export-p2p.ps1 -Job trending -Pretty` / `-Job p2p -Pretty` で同じ情報を取得できる。`--database-url` / `-DatabaseUrl` で SQLite の場所を指定し、`--output` / `-Output` で保存先を上書き可能。
 - エクスポートされた JSON を `phase5_ci_path_audit.md` と紐づけ、`lag_ms` が 5 分未満・`metrics_count` > 0 であることを Nightly で確認する。P2P 側の JSON はこれまで同様 CI 進捗レポートへ添付する。
-- 2025年11月11日以降、`./scripts/test-docker.sh ts --scenario trending-feed`（PowerShell 版は `.\scripts\test-docker.ps1 ts -Scenario trending-feed`）が `prometheus-trending` サービスを自動起動し、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` へ `curl http://127.0.0.1:9898/metrics` の内容と Prometheus ログを保存する。Summary Panel の Vitest と監視ログ採取を同一ジョブで確認できるため、Nightly では当該ログを Runbook と `phase5_ci_path_audit.md` に添付する。
+- 2025年11月11日以降、`./scripts/test-docker.sh ts --scenario trending-feed`（PowerShell 版は `.\scripts\test-docker.ps1 ts -Scenario trending-feed`）が `prometheus-trending` サービスを自動起動し、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` へ `curl http://127.0.0.1:9898/metrics` の内容と Prometheus ログを保存する。Summary Panel の Vitest と監視ログ採取を同一ジョブで確認できるため、Nightly では当該ログを Runbook と `phase5_ci_path_audit.md` に添付する。2025年11月12日更新では同ログを `test-results/trending-feed/prometheus/` 以下にも複製し、`nightly.yml` の `trending-metrics-prometheus` artefact としてダウンロードできるようにした。
 
 ### 6.3 iroh バイナリキャッシュ
 - GitHub Actions では `actions/cache@v4` を利用し、`~/.cache/kukuri/iroh`（PowerShell 版は `%LocalAppData%\kukuri\iroh`）をキャッシュする。キーは `iroh-${{ runner.os }}-${{ hashFiles("scripts/install-iroh.ps1") }}` を推奨し、`scripts/install-iroh.{sh,ps1}` でキャッシュヒット時はダウンロードをスキップする。

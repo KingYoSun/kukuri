@@ -184,7 +184,6 @@
   - 2025年11月12日: `nightly.yml` に `user-search-pagination` / `topic-create` / `post-delete-cache` ジョブを追加し、`scripts/test-docker.{sh,ps1}` 各シナリオで `test-results/<scenario>/*.json` と `tmp/logs/<scenario>_<timestamp>.log`（`user_search_pagination_20251112-125208.log` / `topic_create_20251112-125226.log` / `post_delete_cache_20251112-125301.log`）を生成。
   - 2025年11月12日: `scripts/test-docker.sh ts --scenario trending-feed` の `prometheus-trending` 起動結果に依らず `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を書き出し、Nightly artefact `trending-metrics-logs` を追加。
 - [x] P2P & Discovery: `phase5_event_gateway_design.md` の Gateway/mapper 実装と `kukuri-cli` ブートストラップリスト動的更新 PoC をコード・Runbook・`phase5_dependency_inventory_template.md` に反映し、RelayStatus からの一貫した更新フローを確立する（`phase5_user_flow_summary.md` 16行）。
-- [ ] データ/同期 & メトリクス: Offline sync_queue Stage4 は 2025年11月11日に完了。残タスクは `KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM` を用いた `trending_metrics_job_*` 監視手順の Runbook/CI 化と、Docker `prometheus-trending` / Nightly artefact 固定（`phase5_user_flow_summary.md` 11行・15行）。
 - [ ] Ops / CI: Onboarding へ `corepack enable pnpm` を組み込み、`phase5_ci_path_audit.md` に `profile-avatar-sync` / `trending-feed` / `SyncStatusIndicator` / `user-search-pagination` / `post-delete-cache` テストIDと `tmp/logs/*.log` パスを登録、Nightly 成果物リンクを `nightly.yml` + Runbook に同期する（`phase5_user_flow_summary.md` 17行、MVP Exit Checklist Ops/CI 行）。
 
 ### プロフィールアバター UI 連携

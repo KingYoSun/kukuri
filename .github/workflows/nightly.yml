@@ -70,6 +70,13 @@ jobs:
           path: tmp/logs/trending_metrics_job_stage4_*.log
           if-no-files-found: error
 
+      - name: Upload Prometheus snapshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: trending-metrics-prometheus
+          path: test-results/trending-feed/prometheus
+          if-no-files-found: warn
+
   profile-avatar-sync:
     name: Profile Avatar Sync (Docker)
     runs-on: ubuntu-latest

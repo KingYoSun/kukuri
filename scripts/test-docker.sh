@@ -187,6 +187,13 @@ collect_trending_metrics_snapshot() {
     echo "[WARN] Failed to read ${PROMETHEUS_SERVICE} logs." >>"$log_host_path"
   }
 
+  local prom_results_dir="${RESULTS_DIR}/trending-feed/prometheus"
+  mkdir -p "$prom_results_dir"
+  local prom_rel_path="test-results/trending-feed/prometheus/trending_metrics_job_stage4_${timestamp}.log"
+  local prom_host_path="${REPO_ROOT}/${prom_rel_path}"
+  cp "$log_host_path" "$prom_host_path"
+  echo "[OK] Prometheus metrics log copied to ${prom_rel_path}"
+
   echo "[OK] Prometheus metrics log saved to ${log_rel_path}"
 }
 
