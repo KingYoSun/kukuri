@@ -38,6 +38,7 @@ Commands:
 Options for ts:
   --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-sync)
   --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
+  --service-worker       Extend profile-avatar-sync scenario with Service Worker worker tests and Stage4 logs
   --no-build             Skip Docker image build (use existing image)
 
 Options for p2p:
@@ -267,8 +268,15 @@ run_ts_profile_avatar_sync() {
   local timestamp
   timestamp="$(date '+%Y%m%d-%H%M%S')"
   local log_rel_path="tmp/logs/profile_avatar_sync_${timestamp}.log"
+  if [[ $PROFILE_AVATAR_SW -eq 1 ]]; then
+    log_rel_path="tmp/logs/profile_avatar_sync_stage4_${timestamp}.log"
+  fi
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
   mkdir -p "$(dirname "$log_host_path")"
+  local worker_tests=""
+  if [[ $PROFILE_AVATAR_SW -eq 1 ]]; then
+    worker_tests=" 'src/tests/unit/workers/profileAvatarSyncWorker.test.ts'"
+  fi
 
   echo "Running TypeScript scenario 'profile-avatar-sync'..."
   compose_run '' run --rm ts-test bash -lc "
@@ -282,6 +290,7 @@ run_ts_profile_avatar_sync() {
       'src/tests/unit/components/settings/ProfileEditDialog.test.tsx' \
       'src/tests/unit/components/auth/ProfileSetup.test.tsx' \
       'src/tests/unit/hooks/useProfileAvatarSync.test.tsx' \
+      ${worker_tests} \
       | tee '/app/${log_rel_path}'
   "
 
@@ -701,6 +710,7 @@ RUST_LOG="debug"
 RUST_BACKTRACE="full"
 TS_SCENARIO=""
 TS_FIXTURE=""
+PROFILE_AVATAR_SW=0
 
 case "$COMMAND" in
   -h|--help)
@@ -719,6 +729,10 @@ case "$COMMAND" in
         --fixture)
           TS_FIXTURE="$2"
           shift 2
+          ;;
+        --service-worker)
+          PROFILE_AVATAR_SW=1
+          shift
           ;;
         --no-build)
           NO_BUILD=1

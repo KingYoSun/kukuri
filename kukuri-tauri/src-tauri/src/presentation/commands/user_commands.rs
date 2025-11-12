@@ -1,12 +1,15 @@
 use crate::application::ports::repositories::FollowListSort;
+use crate::application::services::offline_service::OfflineServiceTrait;
 use crate::application::services::user_search_service::{
     DEFAULT_LIMIT as SEARCH_DEFAULT_LIMIT, MAX_LIMIT as SEARCH_MAX_LIMIT, SearchSort,
     SearchUsersParams,
 };
 use crate::application::services::{
-    ProfileAvatarService, UploadProfileAvatarInput, UserSearchService, UserService,
+    OfflineService, ProfileAvatarService, UploadProfileAvatarInput, UserSearchService, UserService,
 };
 use crate::domain::entities::UserMetadata;
+use crate::domain::entities::offline::CacheMetadataUpdate;
+use crate::domain::value_objects::offline::{CacheKey, CacheType};
 use crate::presentation::dto::{
     ApiResponse, Validate,
     profile_avatar_dto::{
@@ -20,7 +23,8 @@ use crate::presentation::dto::{
 };
 use crate::shared::AppError;
 use nostr_sdk::prelude::{FromBech32, PublicKey};
-use serde_json::Value;
+use serde_json::{json, Value};
+use chrono::{Duration, Utc};
 use std::sync::Arc;
 use tauri::State;
 
@@ -263,6 +267,7 @@ pub async fn fetch_profile_avatar(
 pub async fn profile_avatar_sync(
     request: ProfileAvatarSyncRequest,
     avatar_service: State<'_, Arc<ProfileAvatarService>>,
+    offline_service: State<'_, Arc<OfflineService>>,
 ) -> Result<ApiResponse<ProfileAvatarSyncResponse>, AppError> {
     let npub = request.npub.clone();
     let response = match avatar_service.fetch_avatar(&request.npub).await {
@@ -304,5 +309,123 @@ pub async fn profile_avatar_sync(
         Err(err) => return Err(err),
     };
 
+    record_profile_avatar_sync_metadata(offline_service.as_ref(), &request, &response).await?;
+
     Ok(ApiResponse::success(response))
+}
+
+async fn record_profile_avatar_sync_metadata(
+    offline_service: &OfflineService,
+    request: &ProfileAvatarSyncRequest,
+    response: &ProfileAvatarSyncResponse,
+) -> Result<(), AppError> {
+    let cache_key = CacheKey::new(format!("doc::profile_avatar::{}", request.npub))
+        .map_err(AppError::InvalidInput)?;
+    let cache_type =
+        CacheType::new("profile_avatar".to_string()).map_err(AppError::InvalidInput)?;
+
+    let payload_bytes = response
+        .avatar
+        .as_ref()
+        .and_then(|avatar| i64::try_from(avatar.size_bytes).ok());
+
+    let metadata = json!({
+        "npub": request.npub,
+        "source": request.source,
+        "requestedAt": request.requested_at,
+        "retryCount": request.retry_count,
+        "jobId": request.job_id,
+        "knownDocVersion": request.known_doc_version,
+        "result": {
+            "updated": response.updated,
+            "currentVersion": response.current_version,
+            "avatar": response.avatar.as_ref().map(|avatar| {
+                json!({
+                    "blobHash": avatar.blob_hash,
+                    "docVersion": avatar.doc_version,
+                    "sizeBytes": avatar.size_bytes,
+                })
+            }),
+        },
+        "loggedAt": Utc::now().to_rfc3339(),
+    });
+
+    let update = CacheMetadataUpdate {
+        cache_key,
+        cache_type,
+        metadata: Some(metadata),
+        expiry: Some(Utc::now() + Duration::minutes(30)),
+        is_stale: Some(false),
+        doc_version: response.current_version.map(|version| version as i64),
+        blob_hash: response.avatar.as_ref().map(|avatar| avatar.blob_hash.clone()),
+        payload_bytes,
+    };
+
+    offline_service.upsert_cache_metadata(update).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::application::services::OfflineService;
+    use crate::domain::entities::ProfileAvatarAccessLevel;
+    use crate::infrastructure::offline::sqlite_store::SqliteOfflinePersistence;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn record_profile_avatar_sync_metadata_persists_cache_entry() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("sqlite memory pool");
+        sqlx::migrate!("./migrations").run(&pool).await.expect("migrations");
+
+        let persistence = Arc::new(SqliteOfflinePersistence::new(pool.clone()));
+        let offline_service = OfflineService::new(persistence);
+
+        let request = ProfileAvatarSyncRequest {
+            npub: "npub1test".to_string(),
+            known_doc_version: Some(2),
+            source: Some("profile-avatar-sync-worker:interval".to_string()),
+            requested_at: Some("2025-11-12T00:00:00Z".to_string()),
+            retry_count: Some(1),
+            job_id: Some("job-42".to_string()),
+        };
+
+        let response = ProfileAvatarSyncResponse {
+            npub: "npub1test".to_string(),
+            current_version: Some(4),
+            updated: true,
+            avatar: Some(FetchProfileAvatarResponse {
+                npub: "npub1test".to_string(),
+                blob_hash: "bafy-avatar".to_string(),
+                format: "image/png".to_string(),
+                size_bytes: 1_024,
+                access_level: ProfileAvatarAccessLevel::ContactsOnly,
+                share_ticket: "ticket".to_string(),
+                doc_version: 4,
+                updated_at: "2025-11-12T00:00:00Z".to_string(),
+                content_sha256: "abcd".to_string(),
+                data_base64: "AAECAw==".to_string(),
+            }),
+        };
+
+        record_profile_avatar_sync_metadata(&offline_service, &request, &response)
+            .await
+            .expect("metadata recorded");
+
+        let row: (String, Option<i64>, Option<String>, Option<i64>) = sqlx::query_as(
+            "SELECT cache_key, doc_version, blob_hash, payload_bytes FROM cache_metadata WHERE cache_key = ?1",
+        )
+        .bind("doc::profile_avatar::npub1test")
+        .fetch_one(&pool)
+        .await
+        .expect("metadata row");
+
+        assert_eq!(row.0, "doc::profile_avatar::npub1test");
+        assert_eq!(row.1, Some(4));
+        assert_eq!(row.2.as_deref(), Some("bafy-avatar"));
+        assert_eq!(row.3, Some(1_024));
+    }
 }

@@ -238,12 +238,11 @@
 - **ブロッカー**: `useProfileAvatarSync` のバックオフ/再試行設計と `profile_avatar_sync` コマンドのロギング粒度が未確定。Runbook Chapter4 と `phase5_ci_path_audit.md` に登録した `corepack enable pnpm` + `scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync` 手順を、本番運用でも追従できるようにする必要がある。
 - **テスト/Runbook**: `pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx`、`./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync`、`./scripts/test-docker.ps1 rust -Test profile_avatar_sync -NoBuild` を実施し、`tmp/logs/profile_avatar_sync_<timestamp>.log` を Runbook へ添付する。
 - **参照**: `phase5_user_flow_summary.md` MVP Exit（プロフィール/設定）、`tauri_app_implementation_plan.md` Phase3/4、`phase5_ci_path_audit.md`（corepack / profile-avatar-sync 行）。
-- **Stage4 TODO（Service Worker / Offline 通知）**
-  1. `kukuri-tauri/src/serviceWorker/profileAvatarSyncWorker.ts`（新規）を追加し、`navigator.serviceWorker` 経由で Doc/Blob 同期要求をキューイング。`BroadcastChannel('profile-avatar-sync')` を使って `useProfileAvatarSync` と連動させる。
-  2. `src/routes/__root.tsx` で `registerProfileAvatarSyncWorker()` を呼び出し、オンライン復帰時に Service Worker から `profile_avatar_sync` コマンドを起動できるよう `tauri.invoke` ブリッジを追加。
-  3. `profile_avatar_sync` コマンドへ `source` / `requested_at` / `retry_count` を追加し、Service Worker 発火分を `sync_queue` にも記録。メタデータは `cache_metadata`（Doc/Blob セクション）に TTL 30 分で保存。
-  4. Nightly 用に `scripts/test-docker.{sh,ps1} ts -Scenario profile-avatar-sync` に `--service-worker` フラグを追加し、`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` を保存。Vitest では `src/tests/unit/workers/profileAvatarSyncWorker.test.ts` を追加して `BroadcastChannel`／再試行ロジックを検証。
-  5. Runbook Chapter4 と `phase5_ci_path_audit.md` に Service Worker 版の手順・ログ採取ポイントを追記し、Stage4 完了後は本節のステータスを更新。
+  - **Stage4（Service Worker / Offline 通知）完了**
+    - `profileAvatarSyncSW.ts` にリトライ（最大 3 回・指数バックオフ）を実装し、BroadcastChannel からの `success=false` 通知で自動再投入。`profile_avatar_sync` コマンドは `source` / `requested_at` / `retry_count` / `job_id` を受け取り、`cache_metadata`（`doc::profile_avatar::<npub>`）へ TTL 30 分でログを残す。
+    - `useProfileAvatarSync` は Service Worker job を処理した結果を `offlineApi.addToSyncQueue`（action_type=`profile_avatar_sync`）へ記録し、Ops UI から Stage4 ログ（`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log`）と再送状況を確認できるようにした。Nightly では `scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker` を実行し、Vitest で `src/tests/unit/workers/profileAvatarSyncWorker.test.ts` を追加。
+    - Runbook Chapter4・`phase5_ci_path_audit.md`・`phase5_dependency_inventory_template.md` に Service Worker 版の手順を反映済み。`profile_avatar_sync` Rust テストと Docker シナリオの両方で Stage4 ログの採取と `cache_metadata` 反映を確認する。
+  - 2025年11月12日: Stage4 決着。`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log`／`profile-avatar-sync-logs` artefact を Nightly へ移行し、`phase5_user_flow_summary.md` / Runbook / CI 監査のリンクを更新。
   - 2025年11月10日: `src/serviceWorker/profileAvatarSyncSW.ts` / `profileAvatarSyncBridge.ts` を追加し、`registerProfileAvatarSyncWorker` を `__root.tsx` で呼び出すフローを実装。`useProfileAvatarSync` は `BroadcastChannel('profile-avatar-sync')` を介して Service Worker からの処理要求を受け取り、完了通知を返す構成へ更新。オートポーリングは `enqueueProfileAvatarSyncJob` に切り替え、Service Worker が起動できない場合のみ従来の `syncNow` にフォールバックする。
 
 ### 5.2 サイドバー「新規投稿」ボタンと未導線機能

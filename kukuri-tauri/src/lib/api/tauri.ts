@@ -269,6 +269,10 @@ export interface FetchProfileAvatarResult {
 export interface ProfileAvatarSyncParams {
   npub: string;
   knownDocVersion?: number | null;
+  source?: string;
+  requestedAt?: string;
+  retryCount?: number;
+  jobId?: string;
 }
 
 export interface ProfileAvatarSyncResult {
@@ -452,6 +456,10 @@ export class TauriApi {
       request: {
         npub: params.npub,
         known_doc_version: params.knownDocVersion ?? null,
+        source: params.source ?? null,
+        requested_at: params.requestedAt ?? null,
+        retry_count: params.retryCount ?? null,
+        job_id: params.jobId ?? null,
       },
     });
 

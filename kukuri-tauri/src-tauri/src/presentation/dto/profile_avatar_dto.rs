@@ -83,6 +83,14 @@ impl From<ProfileAvatarFetchResult> for FetchProfileAvatarResponse {
 pub struct ProfileAvatarSyncRequest {
     pub npub: String,
     pub known_doc_version: Option<u64>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub requested_at: Option<String>,
+    #[serde(default)]
+    pub retry_count: Option<u32>,
+    #[serde(default)]
+    pub job_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

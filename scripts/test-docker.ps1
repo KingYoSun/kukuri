@@ -10,6 +10,7 @@ param(
     [string]$TestTarget,             # Rustテスト時に特定バイナリのみ実行
     [string]$Scenario,               # TypeScriptテスト用のシナリオ指定
     [string]$Fixture,                # シナリオ用フィクスチャパス
+    [switch]$ServiceWorker,          # profile-avatar-sync シナリオで Service Worker 拡張を実行
     [string]$BootstrapPeers,         # 統合テスト用のブートストラップピア指定
     [string]$IrohBin,                # iroh バイナリのパス
     [string]$IntegrationLog = "info,iroh_tests=debug", # 統合テスト用のRUST_LOG
@@ -62,6 +63,10 @@ if ($Fixture -and $Command -ne "ts") {
     Write-ErrorMessage "-Fixture は ts コマンドでのみ使用できます。"
 }
 
+if ($ServiceWorker -and $Command -ne "ts") {
+    Write-ErrorMessage "-ServiceWorker は ts コマンドでのみ使用できます。"
+}
+
 # ヘルプ表示
 function Show-Help {
     Write-Host @"
@@ -86,6 +91,7 @@ Options:
   -Test <target> - Rustコマンド時に指定テストバイナリのみ実行（例: event_manager_integration）
   -Scenario <name> - TypeScriptテスト時にシナリオを指定（例: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-sync）
   -Fixture <path>  - シナリオ用フィクスチャパスを上書き（既定: tests/fixtures/trending/default.json）
+  -ServiceWorker   - `ts -Scenario profile-avatar-sync` 実行時に Service Worker 拡張テストと Stage4 ログを有効化
   -BootstrapPeers <node@host:port,...> - 統合テストで使用するブートストラップピアを指定
   -IrohBin <path> - iroh バイナリの明示パスを指定（Windows で DLL 解決が必要な場合など）
   -IntegrationLog <level> - 統合テスト時の RUST_LOG 設定（既定: info,iroh_tests=debug）
@@ -458,15 +464,29 @@ function Invoke-TypeScriptTrendingFeedScenario {
 }
 
 function Invoke-TypeScriptProfileAvatarScenario {
+    param(
+        [switch]$IncludeServiceWorker
+    )
+
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $logRelPath = "tmp/logs/profile_avatar_sync_$timestamp.log"
+    if ($IncludeServiceWorker) {
+        $logRelPath = "tmp/logs/profile_avatar_sync_stage4_$timestamp.log"
+    } else {
+        $logRelPath = "tmp/logs/profile_avatar_sync_$timestamp.log"
+    }
     $logHostPath = Join-Path $repositoryRoot $logRelPath
     $logDir = Split-Path $logHostPath -Parent
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir | Out-Null
     }
 
-    Write-Host "Running TypeScript scenario 'profile-avatar-sync'..."
+    $workerTestBlock = if ($IncludeServiceWorker) {
+        "  'src/tests/unit/workers/profileAvatarSyncWorker.test.ts' \"
+    } else {
+        ""
+    }
+
+    Write-Host ("Running TypeScript scenario 'profile-avatar-sync'{0}..." -f ($(if ($IncludeServiceWorker) { " (Service Worker)" } else { "" })))
     $command = @"
 set -euo pipefail
 cd /app/kukuri-tauri
@@ -478,6 +498,7 @@ pnpm vitest run \
   'src/tests/unit/components/settings/ProfileEditDialog.test.tsx' \
   'src/tests/unit/components/auth/ProfileSetup.test.tsx' \
   'src/tests/unit/hooks/useProfileAvatarSync.test.tsx' \
+${workerTestBlock}
   | tee '/app/$logRelPath'
 "@
 
@@ -719,9 +740,9 @@ function Invoke-TypeScriptTests {
             "trending-feed" {
                 Invoke-TypeScriptTrendingFeedScenario
             }
-            "profile-avatar-sync" {
-                Invoke-TypeScriptProfileAvatarScenario
-            }
+        "profile-avatar-sync" {
+            Invoke-TypeScriptProfileAvatarScenario -IncludeServiceWorker:$ServiceWorker
+        }
             "user-search-pagination" {
                 Invoke-TypeScriptUserSearchScenario
             }

@@ -152,14 +152,15 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - `ValidationFailureKind` に応じた `receive_failures_by_reason` を監視し、異常があれば WARN ログの `reason` と Offline レポートの `SyncStatus::Invalid` 記録を突合して原因を特定する。レポートは `offline://reindex_complete` イベントで取得できる。
 - 各テストの配置と責務は `docs/03_implementation/nostr_event_validation.md` 5.1節のマッピング表を参照。Runbook 更新時は対応するテスト名も必ず記録する。
 
-## 4. Profile Avatar Sync（2025年11月09日追加）
-- `profile_avatar_sync` コマンド（引数: `npub`, `known_doc_version`）を実装し、Doc バージョンに変化があった場合のみ `fetch_profile_avatar` 相当の payload（メタデータ + base64 本体）を返却する。`known_doc_version` 以上であれば `updated=false` を返すため、クライアントは無駄な Blob 取得を避けられる。
-- フロントエンドは `useProfileAvatarSync` フックを `__root.tsx` から常駐させ、ログイン中は 5 分間隔で `profile_avatar_sync` を呼び出す。`ProfileEditDialog`/`ProfileSetup` では保存時に `TauriApi.updatePrivacySettings` → `uploadProfileAvatar` → `updateNostrMetadata` の順で更新し、完了後に `syncNow({ force: true })` を実行して `authStore` に Doc バージョン/画像を反映させる。
+## 4. Profile Avatar Sync（2025年11月12日更新）
+- `profile_avatar_sync` コマンドは `npub` / `known_doc_version` に加えて `source` / `requested_at` / `retry_count` / `job_id` を受け取り、同期結果を `cache_metadata`（`cache_key=doc::profile_avatar::<npub>`）へ TTL 30 分で保存する。`metadata.result` には `updated`・`currentVersion`・Blob 概要が入るため、Runbook から Doc/Blob のドリフトと Service Worker リトライ状況を追跡できる。
+- フロントエンドは `useProfileAvatarSync` フックを常駐させ、Service Worker (`profileAvatarSyncSW.ts`) から受信したジョブを BroadcastChannel で処理する。失敗時は `retry_count` に応じて指数バックオフで再投入し、完了結果を `offlineApi.addToSyncQueue`（action_type=`profile_avatar_sync`）に記録して Ops UI/Runbook から参照できるようにした。`ProfileEditDialog` / `ProfileSetup` では保存後に `syncNow({ force: true, source: 'useProfileAvatarSync:manual' })` を呼び、Doc バージョンと `authStore` を即時更新する。
 - 自動・手動検証フロー
-  1. `pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx`
-  2. `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync`（Nightly で同シナリオを実行し、`tmp/logs/profile_avatar_sync_<timestamp>.log` を保存）
+  1. `pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx src/tests/unit/workers/profileAvatarSyncWorker.test.ts`
+  2. `./scripts/test-docker.sh ts --scenario profile-avatar-sync --service-worker`（PowerShell: `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync -ServiceWorker -NoBuild`）で Stage4 ログ `tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` と worker テスト結果を Nightly artefact `profile-avatar-sync-logs` に保存する。
   3. `./scripts/test-docker.ps1 rust -Test profile_avatar_sync`（Windows では `-NoBuild` 併用可）または `cargo test --package kukuri-tauri --test profile_avatar_sync`
-- 失敗時は `kukuri-tauri/src-tauri/target/profile_avatars/doc.json`（Docker: `/app/kukuri-tauri/src-tauri/target/profile_avatars/doc.json`）と `blobs/` 配下を比較し、Doc バージョンと Blob が同期しているかを確認する。異常があれば `rm -rf profile_avatars` → `cargo test --package kukuri-tauri --test profile_avatar_sync` を再実行し、`AppError::Storage` が消えるかを確認する。
+- 失敗時は `kukuri-tauri/src-tauri/target/profile_avatars/doc.json`（Docker: `/app/kukuri-tauri/src-tauri/target/profile_avatars/doc.json`）と `blobs/` 配下のハッシュ、`cache_metadata` の `metadata.result`、`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` を突き合わせ、Service Worker の再送ログと Doc/Blob 差分を確認する。必要に応じて `rm -rf profile_avatars` → `cargo test --package kukuri-tauri --test profile_avatar_sync` を再実行し、`AppError::Storage` が消えるかを確認する。
+
 
 ## 9. get_p2p_status API 拡張実装（2025年11月03日）
 - `application::services::p2p_service::P2PStatus` に `connection_status: ConnectionStatus`（`connected` / `connecting` / `disconnected` / `error`）と `peers: Vec<PeerStatus>` を追加し、`presentation::handlers::p2p_handler::get_p2p_status` → `presentation::dto::p2p::P2PStatusResponse` 経由でフロントへ返却する。`PeerStatus` は Node ID・endpoint アドレス・最終観測時刻を含む。
