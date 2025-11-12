@@ -10,9 +10,7 @@ const MIN_SYNC_INTERVAL_MS = 5_000;
 
 export function useDirectMessageBootstrap() {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const isDmSurfaceOpen = useDirectMessageStore(
-    (state) => state.isInboxOpen || state.isDialogOpen,
-  );
+  const isDmSurfaceOpen = useDirectMessageStore((state) => state.isInboxOpen || state.isDialogOpen);
   const hasFetchedRef = useRef(false);
   const lastNpubRef = useRef<string | null>(null);
   const syncLockRef = useRef(false);

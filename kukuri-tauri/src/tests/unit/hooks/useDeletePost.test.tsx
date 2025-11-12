@@ -30,20 +30,19 @@ const useTopicStoreMock = vi.fn(
   },
 );
 
-const useOfflineStoreMock = vi.fn(
-  (selector?: (state: { isOnline: boolean }) => unknown) => {
-    const state = {
-      isOnline: offlineState.isOnline,
-    };
-    return selector ? selector(state) : state;
-  },
-);
+const useOfflineStoreMock = vi.fn((selector?: (state: { isOnline: boolean }) => unknown) => {
+  const state = {
+    isOnline: offlineState.isOnline,
+  };
+  return selector ? selector(state) : state;
+});
 
 const invalidatePostCachesMock = vi.fn();
 
 vi.mock('@/stores', () => ({
-  usePostStore: (selector?: (state: { deletePostRemote: typeof mockDeletePostRemote }) => unknown) =>
-    usePostStoreMock(selector),
+  usePostStore: (
+    selector?: (state: { deletePostRemote: typeof mockDeletePostRemote }) => unknown,
+  ) => usePostStoreMock(selector),
 }));
 
 vi.mock('@/stores/topicStore', () => ({

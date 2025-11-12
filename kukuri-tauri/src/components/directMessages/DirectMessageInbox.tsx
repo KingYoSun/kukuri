@@ -103,10 +103,14 @@ export function DirectMessageInbox() {
         const mapped = response.items.map(mapUserProfileToUser);
         setSearchResults(mapped);
         setSearchError(null);
-        errorHandler.info('DirectMessageInbox.search_completed', 'DirectMessageInbox.recipientSearch', {
-          queryLength: query.length,
-          resultCount: mapped.length,
-        });
+        errorHandler.info(
+          'DirectMessageInbox.search_completed',
+          'DirectMessageInbox.recipientSearch',
+          {
+            queryLength: query.length,
+            resultCount: mapped.length,
+          },
+        );
       } catch (error) {
         if (cancelled) {
           return;
