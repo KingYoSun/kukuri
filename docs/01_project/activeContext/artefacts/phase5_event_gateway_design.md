@@ -1,5 +1,5 @@
 # Phase 5 EventGateway 設計メモ
-最終更新日: 2025年11月09日
+最終更新日: 2025年11月12日
 
 ## 背景
 - EventService は `modules::event::manager::EventManager` に直接依存しており、Presentation 層の DTO（`presentation::dto::event::NostrMetadataDto`）や `nostr_sdk` の型を介して操作している。
@@ -66,6 +66,11 @@
 > 2025年11月09日: `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` の「MVP Exit」クロスウォークを参照し、本設計メモは「P2P & Discovery」行の根拠ドキュメントとして指定。Gateway 実装ステータスは `refactoring_plan_2025-08-08_v3.md` ユーザー導線指標（未使用 API 行）からリンク。
 | SubscriptionInvoker / `handle_incoming_event` 連携 | ✅ `application::ports::subscription_invoker.rs` と `EventManagerSubscriptionInvoker` で購読実行を抽象化し、Gateway 経由の受信パスを `AppState` で初期化。 | 受信イベントは `handle_incoming_event` から UI emit → `tests/integration/event/test_event_gateway.rs` で回帰。 |
 | テスト整備 | ✅ `tests/integration/test_event_service_gateway.rs` / `tests/integration/event/test_event_gateway.rs` に Gateway 回帰を追加し、`application/shared/tests/event/manager_tests.rs` で Legacy 依存を統合。 | `cargo test --package kukuri-tauri --test test_event_service_gateway` で CI カバレッジを監視。 |
+
+## 2025年11月12日: RelayStatus / CLI PoC 反映
+- `RelayStatus` コンポーネント（`kukuri-tauri/src/components/RelayStatus.tsx`）に `refreshRelaySnapshot` を追加し、30 秒〜10 分のバックオフ更新・再試行ボタン・CLI 適用後の再取得が全て `updateRelayStatus` + `p2pApi.getBootstrapConfig` を同時実行する仕組みに統一。CLI が `cli_bootstrap_nodes.json` を上書きした直後でも UI が自動検知する。
+- `p2pApi.applyCliBootstrapNodes` → `presentation::commands::p2p_commands.rs::apply_cli_bootstrap_nodes` → `infrastructure::p2p::bootstrap_config::apply_cli_bootstrap_nodes` → `NetworkService::apply_bootstrap_nodes` の経路を整理し、Gateway/Mapper 層が Mainline DHT への再接続と RelayStatus 表示を一貫して制御できるようにした。`EventService` から見た P2P Stack との接点は DomainEvent の送受信へ集約。
+- Runbook Chapter10（`docs/03_implementation/p2p_mainline_runbook.md`）と `phase5_dependency_inventory_template.md` の P2P 行へ同フローを追記し、Ops/CI/UX いずれからでも RelayStatus を唯一の更新ポイントとして参照できるようドキュメント連携を更新。動作は `pnpm vitest run src/tests/unit/components/RelayStatus.test.tsx` と両 Rust crate の `cargo test` で検証する。
 
 ## 依存方向
 - Application 層は `application::ports::EventGateway` に依存。

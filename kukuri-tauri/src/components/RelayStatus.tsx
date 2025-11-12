@@ -42,23 +42,6 @@ export function RelayStatus() {
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [applyingCli, setApplyingCli] = useState(false);
 
-  useEffect(() => {
-    if (lastRelayStatusFetchedAt === null && !isFetchingRelayStatus) {
-      void updateRelayStatus();
-    }
-  }, [lastRelayStatusFetchedAt, isFetchingRelayStatus, updateRelayStatus]);
-
-  useEffect(() => {
-    if (lastRelayStatusFetchedAt === null) {
-      return;
-    }
-    const timeout = setTimeout(() => {
-      void updateRelayStatus();
-    }, relayStatusBackoffMs);
-
-    return () => clearTimeout(timeout);
-  }, [relayStatusBackoffMs, lastRelayStatusFetchedAt, updateRelayStatus]);
-
   const refreshBootstrapInfo = useCallback(async () => {
     try {
       setBootstrapLoading(true);
@@ -77,9 +60,30 @@ export function RelayStatus() {
     }
   }, []);
 
+  const refreshRelaySnapshot = useCallback(async () => {
+    await Promise.all([updateRelayStatus(), refreshBootstrapInfo()]);
+  }, [refreshBootstrapInfo, updateRelayStatus]);
+
   useEffect(() => {
     void refreshBootstrapInfo();
   }, [refreshBootstrapInfo]);
+
+  useEffect(() => {
+    if (lastRelayStatusFetchedAt === null && !isFetchingRelayStatus) {
+      void refreshRelaySnapshot();
+    }
+  }, [lastRelayStatusFetchedAt, isFetchingRelayStatus, refreshRelaySnapshot]);
+
+  useEffect(() => {
+    if (lastRelayStatusFetchedAt === null) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      void refreshRelaySnapshot();
+    }, relayStatusBackoffMs);
+
+    return () => clearTimeout(timeout);
+  }, [relayStatusBackoffMs, lastRelayStatusFetchedAt, refreshRelaySnapshot]);
 
   const lastUpdatedLabel = useMemo(() => {
     if (!lastRelayStatusFetchedAt) {
@@ -130,7 +134,7 @@ export function RelayStatus() {
     if (isFetchingRelayStatus) {
       return;
     }
-    await updateRelayStatus();
+    await refreshRelaySnapshot();
   };
 
   const handleApplyCliBootstrap = async () => {
@@ -140,7 +144,7 @@ export function RelayStatus() {
     try {
       setApplyingCli(true);
       await p2pApi.applyCliBootstrapNodes();
-      await Promise.all([updateRelayStatus(), refreshBootstrapInfo()]);
+      await refreshRelaySnapshot();
       errorHandler.log('CLIブートストラップリストを適用しました', undefined, {
         showToast: true,
         toastTitle: '最新リストを適用',

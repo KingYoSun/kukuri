@@ -1,5 +1,5 @@
-﻿# P2P Mainline Runbook
-最終更新: 2025年11月09日
+# P2P Mainline Runbook
+最終更新: 2025年11月12日
 
 ## 1. 目的
 - Mainline DHT を有効にした P2P ネットワークの運用手順と統合テスト実行フローを共有する。
@@ -183,7 +183,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 5. CLI 実装の回帰テストは `cargo test --package kukuri-cli -- test_bootstrap_runbook` を新設。Runbook に従った設定値（bind/peers/env優先順位）が崩れていないかを CI で検証する。
 
 ### 10.2 Settings / RelayStatus との連携
-- サイドバーの `RelayStatus` カードに `Runbook` リンクを追加し、本ドキュメント（GitHub: `docs/03_implementation/p2p_mainline_runbook.md`）を即座に開けるようにした。`再試行` ボタンはこれまで通り `useAuthStore.updateRelayStatus` を呼び出す。テスト: `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx`。
+- サイドバーの `RelayStatus` カードに `Runbook` リンクを追加し、本ドキュメント（GitHub: `docs/03_implementation/p2p_mainline_runbook.md`）を即座に開けるようにした。`再試行` ボタンと自動バックオフ更新は `refreshRelaySnapshot`（`src/components/RelayStatus.tsx`）で `useAuthStore.updateRelayStatus` と `p2pApi.getBootstrapConfig` を同時実行するため、CLI が `cli_bootstrap_nodes.json` を更新した直後でも UI が再取得できる。テスト: `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx`。
 - 設定画面 > ネットワーク > ブートストラップでは、現在の `KUKURI_BOOTSTRAP_PEERS` とソース（環境変数/アプリ設定/バンドルデフォルト）を表示。環境変数でロックされている場合は UI から編集できない旨を Runbook に追記。
 - ブートストラップリストを UI から更新した場合は `app.conf` に追記し、次回起動時に `ENABLE_P2P_INTEGRATION=1` で自動的に読み込む。CI では `scripts/test-docker.{sh,ps1}` が Runbook 記載の値を設定しているため、Runbook 更新後は必ずスクリプトに同じパラメータを反映する。
 
@@ -195,9 +195,11 @@ $env:RUST_LOG = "info,iroh_tests=debug"
     - `kukuri-cli bootstrap --export-path "%LocalAppData%\kukuri\cli_bootstrap_nodes.json" --peers node_id@host:port` を実行して JSON が作成されることを確認。
     - `pnpm tauri dev` → サイドバー下部の `RelayStatus` で CLI リストが検知され、「最新リストを適用」押下後に `kukuri-tauri` ログへ `Connected to bootstrap peer from config:` が即座に出力されることを確認（`NetworkService::apply_bootstrap_nodes` が走った証跡）。`get_relay_status` の再取得でステータスが `connected` へ遷移するかを合わせて確認する。
     - 取得ログとスクリーンショットは `tmp/logs/relay_status_cli_bootstrap_<timestamp>.log`（例: PowerShell で `Start-Transcript -Path tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` 実行後に `pnpm tauri dev` を起動）へ保存し、`phase5_ci_path_audit.md` の Nightly セクションにパスを追記する。ログには `cli_nodes_detected`, `apply_cli_bootstrap_nodes`, `Connected to bootstrap peer` を含める。
+5. RelayStatus の `refreshRelaySnapshot` により、手動 `再試行`・自動バックオフ・CLI 適用後の再取得がすべて同じコードパスを通り、`p2pApi.getBootstrapConfig` が毎回呼び出される。別端末で `cli_bootstrap_nodes.json` が更新された場合も、次のバックオフ周期で UI が「CLI 提供」件数と更新時刻を再描画する。
 
 ### 10.4 Ops / Nightly 連携
 - `phase5_ci_path_audit.md` に CLI ブートストラップ PoC 向けの行を追加し、PowerShell/Bash いずれでも `Start-Transcript` または `script` で `tmp/logs/relay_status_cli_bootstrap_<timestamp>.log` を保存する。サンプルログは `tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を参照。
 - Nightly Frontend Unit Tests には `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を常時含め、`cargo test --package kukuri-cli -- test_bootstrap_runbook` を `nightly.yml` の `native-test-linux` ジョブへ追記する。Runbook 更新時は両テストのログ ID を `tasks/status/in_progress.md` と `docs/01_project/roadmap.md` Ops 行に必ず転記する。
 - Ops チームは Runbook の Chapter2（前提変数）と Chapter10（CLI PoC）をセットで参照し、`KUKURI_BOOTSTRAP_PEERS` によるロックが掛かっていないかを `RelayStatus` UI の `ブートストラップソース` 表示で確認してから適用する。適用後は `p2p_metrics_export --job p2p` で Mainline 接続数の増加を確認し、失敗時は Chapter7 のトラブルシューティング手順に従って再取得する。
    - `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` / `cargo test --package kukuri-cli -- test_bootstrap_runbook` / `cargo test --package kukuri-tauri --test test_event_service_gateway` を実行し、UI・CLI・Gateway の回帰テストが通ることを Runbook に記録する。
+

@@ -70,9 +70,12 @@ const flushAsync = async () => {
 const renderRelayStatus = async (overrides: Partial<MockStoreState> = {}) => {
   const state = { ...defaultState(), ...overrides };
   mockedUseAuthStore.mockReturnValue(state);
-  const utils = render(<RelayStatus />);
+  let utils: ReturnType<typeof render>;
+  await act(async () => {
+    utils = render(<RelayStatus />);
+  });
   await flushAsync();
-  return { ...utils, state };
+  return { ...utils!, state };
 };
 
 describe('RelayStatus', () => {
@@ -129,9 +132,10 @@ describe('RelayStatus', () => {
 
     expect(state.updateRelayStatus).not.toHaveBeenCalled();
 
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(60_000);
     });
+    await flushAsync();
 
     expect(state.updateRelayStatus).toHaveBeenCalledTimes(1);
   });
@@ -147,9 +151,36 @@ describe('RelayStatus', () => {
     const { state } = await renderRelayStatus();
 
     const retryButton = screen.getByRole('button', { name: '再試行' });
-    fireEvent.click(retryButton);
+    await act(async () => {
+      fireEvent.click(retryButton);
+    });
 
     expect(state.updateRelayStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes bootstrap config when manual retry is triggered', async () => {
+    await renderRelayStatus();
+    mockGetBootstrapConfig.mockClear();
+
+    const retryButton = screen.getByRole('button', { name: '再試行' });
+    await act(async () => {
+      fireEvent.click(retryButton);
+    });
+    await flushAsync();
+
+    expect(mockGetBootstrapConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('automatic refresh also refetches bootstrap config', async () => {
+    await renderRelayStatus({ relayStatusBackoffMs: 60_000 });
+    mockGetBootstrapConfig.mockClear();
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    await flushAsync();
+
+    expect(mockGetBootstrapConfig).toHaveBeenCalledTimes(1);
   });
 
   it('renders runbook link with external target', async () => {
@@ -171,7 +202,9 @@ describe('RelayStatus', () => {
     const { state } = await renderRelayStatus();
     const applyButton = screen.getByRole('button', { name: '最新リストを適用' });
     expect(applyButton).not.toBeDisabled();
-    fireEvent.click(applyButton);
+    await act(async () => {
+      fireEvent.click(applyButton);
+    });
     await flushAsync();
     expect(mockApplyCliBootstrapNodes).toHaveBeenCalledTimes(1);
     expect(state.updateRelayStatus).toHaveBeenCalledTimes(1);
