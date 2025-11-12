@@ -105,6 +105,19 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 ### 6.3 iroh バイナリキャッシュ
 - GitHub Actions では `actions/cache@v4` を利用し、`~/.cache/kukuri/iroh`（PowerShell 版は `%LocalAppData%\kukuri\iroh`）をキャッシュする。キーは `iroh-${{ runner.os }}-${{ hashFiles("scripts/install-iroh.ps1") }}` を推奨し、`scripts/install-iroh.{sh,ps1}` でキャッシュヒット時はダウンロードをスキップする。
 - ローカル環境でも `./scripts/install-iroh.ps1 -UseCache`（PowerShell）または `./scripts/install-iroh.sh --use-cache` を使用することで同ディレクトリを再利用し、`docker` テスト前のセットアップ時間を短縮できる。
+
+### 6.4 Nightly シナリオと artefact パス
+`nightly.yml` の各ジョブは `phase5_ci_path_audit.md` / `phase5_user_flow_summary.md` から参照できるテスト ID とログパスを共有している。ログはすべて `tmp/logs/<scenario>_<timestamp>.log` 形式で保存し、該当 artefact 名を GitHub Actions からダウンロードする。
+
+| Test ID (`nightly.yml` job) | シナリオ/コマンド | 主要 artefact | `tmp/logs` パス |
+| --- | --- | --- | --- |
+| `trending-feed` | `./scripts/test-docker.sh ts --scenario trending-feed --no-build`（PowerShell 版あり） | `trending-feed-reports`（`test-results/trending-feed/*.json`）<br>`trending-metrics-logs`（Prometheus `curl` スナップショット）<br>`trending-metrics-prometheus`（`test-results/trending-feed/prometheus/*`） | `tmp/logs/trending-feed_<timestamp>.log`<br>`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` |
+| `profile-avatar-sync` | `./scripts/test-docker.sh ts --scenario profile-avatar-sync` | `profile-avatar-sync-logs` | `tmp/logs/profile_avatar_sync_<timestamp>.log` |
+| `sync-status-indicator` | `./scripts/test-docker.sh ts --scenario offline-sync` | `sync-status-indicator-logs` | `tmp/logs/sync_status_indicator_stage4_<timestamp>.log` |
+| `user-search-pagination` | `./scripts/test-docker.sh ts --scenario user-search-pagination` | `user-search-pagination-logs`（Vitest stdout）<br>`user-search-pagination-reports`（`test-results/user-search-pagination/*.json`） | `tmp/logs/user_search_pagination_<timestamp>.log` |
+| `post-delete-cache` | `./scripts/test-docker.sh ts --scenario post-delete-cache` | `post-delete-cache-logs`<br>`post-delete-cache-reports`（`test-results/post-delete-cache/*.json`） | `tmp/logs/post_delete_cache_<timestamp>.log` |
+
+各ログのダウンロード先は Nightly artefact 一覧に表示されるため、Runbook 上で該当 ID を指定すれば再現経路・リカバリー手順を即時に辿れる。`phase5_ci_path_audit.md` にも同じ Test ID／パスを記載し、Ops/CI Onboarding での証跡共有を容易にする。
 ## 7. トラブルシューティング
 - **`STATUS_ENTRYPOINT_NOT_FOUND`**: Windows で iroh バイナリの依存 DLL が見つからない場合に発生。`KUKURI_IROH_BIN` を明示し、`PATH` に `libssl` 等が含まれているか確認。Docker 実行で迂回可能。
 - **ブートストラップ接続失敗**: `KUKURI_BOOTSTRAP_PEERS` の NodeId/ポートを再確認し、ファイアウォールで該当ポートを開放する。

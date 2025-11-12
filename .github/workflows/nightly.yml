@@ -21,8 +21,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install pnpm
-        run: npm install -g pnpm@9
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable pnpm
+          pnpm --version
 
       - name: Cache pnpm dependencies
         uses: actions/cache@v4
@@ -94,6 +96,25 @@ jobs:
         with:
           name: profile-avatar-sync-logs
           path: tmp/logs/profile_avatar_sync_*.log
+          if-no-files-found: error
+
+  sync-status-indicator:
+    name: Sync Status Indicator (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run offline-sync scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario offline-sync
+
+      - name: Upload sync status logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-status-indicator-logs
+          path: tmp/logs/sync_status_indicator_stage4_*.log
           if-no-files-found: error
 
   user-search-pagination:

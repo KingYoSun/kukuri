@@ -2,7 +2,7 @@
 
 ## ドキュメント情報
 - **作成日**: 2025年07月25日
-- **最終更新**: 2025年07月25日
+- **最終更新**: 2025年11月12日
 - **目的**: kukuriプロジェクトの開発環境構築手順
 
 ## 目次
@@ -55,6 +55,21 @@ curl -fsSL https://get.pnpm.io/install.sh | sh -
 # または npm経由
 npm install -g pnpm
 ```
+
+##### Ops / CI Onboarding: corepack + pnpm 初期化
+Node.js 20 以降は Corepack が同梱されているため、pnpm 実行前に Corepack 側で shim を有効化する。`cmd.exe` から実行することで Windows 環境でも確実に反映され、GitHub Actions/Nightly と同じバージョンが保証される。
+
+```powershell
+# Windows (PowerShell 経由で cmd を呼び出す)
+cmd.exe /c "corepack enable pnpm"
+cmd.exe /c "corepack pnpm --version"
+
+# macOS / Linux
+corepack enable pnpm
+corepack pnpm --version
+```
+
+上記を実行したら、pnpm コマンドも Corepack 経由で呼び出す（例: `corepack pnpm install --frozen-lockfile`, `corepack pnpm vitest run …`）。Ops / CI Onboarding のチェックリストでは、`tmp/logs/*.log` に残す各種テストログと併せて本手順を完了済みであることを記録する。
 
 #### 3. Rust & Cargo
 ```bash
