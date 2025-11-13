@@ -7,6 +7,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/directMessageStore';
 import { act } from 'react-dom/test-utils';
 import { TauriApi } from '@/lib/api/tauri';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // モック
 vi.mock('@tanstack/react-router', () => ({
@@ -81,6 +82,21 @@ vi.mock('@/components/directMessages/DirectMessageInbox', async () => {
 
 let openInboxSpy: ReturnType<typeof vi.fn>;
 
+const renderHeader = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Header />
+    </QueryClientProvider>,
+  );
+};
+
 describe('Header', () => {
   const mockNavigate = vi.fn();
 
@@ -113,7 +129,7 @@ describe('Header', () => {
       },
     });
 
-    render(<Header />);
+    renderHeader();
 
     // ロゴが表示されること
     expect(screen.getByText('kukuri')).toBeInTheDocument();
@@ -150,7 +166,7 @@ describe('Header', () => {
       },
     });
 
-    render(<Header />);
+    renderHeader();
 
     // 初期状態ではメニューが非表示
     expect(screen.queryByText('マイアカウント')).not.toBeInTheDocument();
@@ -170,7 +186,7 @@ describe('Header', () => {
     const toggleSidebar = vi.fn();
     useUIStore.setState({ toggleSidebar });
 
-    render(<Header />);
+    renderHeader();
 
     const menuButton = screen.getByLabelText('メニュー切り替え');
     await user.click(menuButton);
@@ -180,7 +196,7 @@ describe('Header', () => {
 
   it('ロゴクリックでホームに遷移すること', async () => {
     const user = userEvent.setup();
-    render(<Header />);
+    renderHeader();
 
     const logo = screen.getByText('kukuri');
     await user.click(logo);
@@ -210,7 +226,7 @@ describe('Header', () => {
       },
     }));
 
-    render(<Header />);
+    renderHeader();
 
     const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
     expect(dmButton).toHaveTextContent('3');
@@ -225,7 +241,7 @@ describe('Header', () => {
   it('Inbox CTA から新規DMダイアログを開けること', async () => {
     const user = userEvent.setup();
 
-    render(<Header />);
+    renderHeader();
 
     const inboxButton = screen.getByTestId('open-dm-inbox-button');
     await user.click(inboxButton);
@@ -251,7 +267,7 @@ describe('Header', () => {
     const user = userEvent.setup();
     useDirectMessageStore.setState(getDirectMessageInitialState());
 
-    render(<Header />);
+    renderHeader();
 
     const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
     await user.click(dmButton);
@@ -286,7 +302,7 @@ describe('Header', () => {
       ],
     });
 
-    render(<Header />);
+    renderHeader();
 
     // アバターのフォールバックには名前の最初の文字が表示される（getInitialsの実装により）
     expect(screen.getByText('テ')).toBeInTheDocument();
@@ -326,7 +342,7 @@ describe('Header', () => {
       ],
     });
 
-    render(<Header />);
+    renderHeader();
 
     const avatarButton = screen.getByRole('button', { name: /U/i });
     await user.click(avatarButton);
@@ -365,7 +381,7 @@ describe('Header', () => {
       logout,
     });
 
-    render(<Header />);
+    renderHeader();
 
     // アバターボタンをクリック（getInitialsは最初の文字「テ」を返す）
     const avatarButton = screen.getByRole('button', { name: /テ/i });
@@ -378,7 +394,7 @@ describe('Header', () => {
   });
 
   it('適切なスタイリングが適用されていること', () => {
-    const { container } = render(<Header />);
+    const { container } = renderHeader();
 
     const header = container.querySelector('header');
     expect(header).toHaveClass('h-16', 'border-b', 'bg-background');

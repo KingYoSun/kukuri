@@ -122,10 +122,10 @@ export const useDeletePost = () => {
       return target;
     },
     onSuccess: (target) => {
-      const topicId = isFullPost(target) ? target.topicId : target.topicId ?? undefined;
+      const topicId = isFullPost(target) ? target.topicId : (target.topicId ?? undefined);
       const authorPubkey = isFullPost(target)
         ? target.author.pubkey
-        : target.authorPubkey ?? undefined;
+        : (target.authorPubkey ?? undefined);
 
       if (isFullPost(target)) {
         updateTopicPostCount(target.topicId, -1);
@@ -148,7 +148,7 @@ export const useDeletePost = () => {
         metadata: post
           ? {
               postId: post.id,
-              topicId: isFullPost(post) ? post.topicId : post.topicId ?? undefined,
+              topicId: isFullPost(post) ? post.topicId : (post.topicId ?? undefined),
             }
           : undefined,
       });

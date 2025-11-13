@@ -27,9 +27,8 @@ const {
     posts: new Map<string, Post>(),
   };
 
-  const usePostStoreMock = vi.fn(
-    (selector?: (state: typeof postStoreState) => unknown) =>
-      selector ? selector(postStoreState) : postStoreState,
+  const usePostStoreMock = vi.fn((selector?: (state: typeof postStoreState) => unknown) =>
+    selector ? selector(postStoreState) : postStoreState,
   ) as unknown as ((selector?: (state: typeof postStoreState) => unknown) => unknown) & {
     getState: () => typeof postStoreState;
   };

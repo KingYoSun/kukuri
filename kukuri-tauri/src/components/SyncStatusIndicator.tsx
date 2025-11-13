@@ -427,15 +427,15 @@ export function SyncStatusIndicator() {
   const handleDeleteRetry = React.useCallback(
     async (item: SyncQueueItem) => {
       const postId =
-        getPayloadString(item.payload, "postId") || getPayloadString(item.payload, "entityId");
+        getPayloadString(item.payload, 'postId') || getPayloadString(item.payload, 'entityId');
       if (!postId) {
-        toast.error("削除対象の投稿IDを取得できませんでした");
+        toast.error('削除対象の投稿IDを取得できませんでした');
         return;
       }
-      const topicId = getPayloadString(item.payload, "topicId");
+      const topicId = getPayloadString(item.payload, 'topicId');
       const authorPubkey =
-        getPayloadString(item.payload, "authorPubkey") ||
-        getPayloadString(item.payload, "userPubkey");
+        getPayloadString(item.payload, 'authorPubkey') ||
+        getPayloadString(item.payload, 'userPubkey');
 
       try {
         setRetryingItemId(item.id);
@@ -444,17 +444,17 @@ export function SyncStatusIndicator() {
           topicId,
           authorPubkey,
         });
-        toast.success("削除の再送を開始しました");
+        toast.success('削除の再送を開始しました');
         await refreshQueueItems();
       } catch (error) {
-        errorHandler.log("SyncQueue.post_delete_retry_failed", error, {
-          context: "SyncStatusIndicator.manualRetryDelete",
+        errorHandler.log('SyncQueue.post_delete_retry_failed', error, {
+          context: 'SyncStatusIndicator.manualRetryDelete',
           metadata: {
             queueItemId: item.id,
             postId,
           },
         });
-        toast.error("削除の再送に失敗しました");
+        toast.error('削除の再送に失敗しました');
       } finally {
         setRetryingItemId(null);
       }
@@ -971,7 +971,8 @@ export function SyncStatusIndicator() {
                               <RefreshCw
                                 className={cn(
                                   'mr-2 h-3.5 w-3.5',
-                                  (isRetryingDelete || deletePostMutation.isPending) && 'animate-spin',
+                                  (isRetryingDelete || deletePostMutation.isPending) &&
+                                    'animate-spin',
                                 )}
                               />
                               削除を再送

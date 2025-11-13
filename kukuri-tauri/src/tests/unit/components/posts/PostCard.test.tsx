@@ -12,7 +12,6 @@ import {
   deletePostMutationMock,
   toastMock,
   useAuthStoreMock,
-  useDeletePostMock,
   mockPost,
   renderWithQueryClient,
 } from './__utils__/postCardTestUtils';

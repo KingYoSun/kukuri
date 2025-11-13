@@ -398,7 +398,11 @@ describe('postStore', () => {
       actionType: OfflineActionType.DELETE_POST,
       entityType: EntityType.POST,
       entityId: mockPost1.id,
-      data: JSON.stringify({ postId: mockPost1.id }),
+      data: JSON.stringify({
+        postId: mockPost1.id,
+        topicId: mockPost1.topicId,
+        authorPubkey: mockPost1.author.pubkey,
+      }),
     });
     expect(TauriApi.deletePost).not.toHaveBeenCalled();
     expect(usePostStore.getState().posts.has(mockPost1.id)).toBe(false);

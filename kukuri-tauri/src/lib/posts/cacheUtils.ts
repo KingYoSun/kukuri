@@ -74,7 +74,10 @@ export function removePostFromFollowingCache(queryClient: QueryClient, postId: s
   });
 }
 
-export function invalidatePostCaches(queryClient: QueryClient, target: PostCacheInvalidationTarget) {
+export function invalidatePostCaches(
+  queryClient: QueryClient,
+  target: PostCacheInvalidationTarget,
+) {
   queryClient.invalidateQueries({ queryKey: ['timeline'] });
   queryClient.invalidateQueries({ queryKey: ['posts', 'all'] });
   if (target.topicId) {

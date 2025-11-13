@@ -7,11 +7,15 @@ import type { SyncStatus } from '@/hooks/useSyncManager';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { OfflineActionType } from '@/types/offline';
 
-const mockManualRetryDelete = vi.fn().mockResolvedValue(undefined);
-const toastMock = {
-  success: vi.fn(),
-  error: vi.fn(),
-};
+const { mockManualRetryDelete, toastMock } = vi.hoisted(() => {
+  return {
+    mockManualRetryDelete: vi.fn().mockResolvedValue(undefined),
+    toastMock: {
+      success: vi.fn(),
+      error: vi.fn(),
+    },
+  };
+});
 
 vi.mock('@/hooks/useSyncManager');
 vi.mock('@/hooks/usePosts', () => ({
@@ -847,7 +851,7 @@ describe('SyncStatusIndicator', () => {
       expect(screen.getByText(/Payload Size/i)).toBeInTheDocument();
     });
   });
-});
+
   it('削除アクションには再送ボタンが表示され manualRetryDelete を呼び出す', async () => {
     const refreshQueueItems = vi.fn();
     vi.mocked(useSyncManager).mockReturnValue({
@@ -872,7 +876,9 @@ describe('SyncStatusIndicator', () => {
     });
 
     render(<SyncStatusIndicator />);
-    const retryButton = screen.getByRole('button', { name: '削除を再送' });
+    const indicatorButton = screen.getByTestId('sync-indicator');
+    fireEvent.click(indicatorButton);
+    const retryButton = await screen.findByRole('button', { name: '削除を再送' });
     fireEvent.click(retryButton);
 
     await waitFor(() => {
@@ -885,3 +891,4 @@ describe('SyncStatusIndicator', () => {
       expect(toastMock.success).toHaveBeenCalled();
     });
   });
+});
