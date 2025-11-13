@@ -65,7 +65,7 @@
 | --- | --- | --- | --- | --- |
 | 投稿 | `/search` (posts) | フロント側フィルタで投稿検索 | 稼働中 | 初回ロードで `get_posts` 呼び出し |
 | トピック | `/search` (topics) | トピック名/説明で検索 | 稼働中 | `get_topics` 再利用 |
-| ユーザー | `/search` (users) | `search_users` で実ユーザー検索、フォロー/解除ボタン | 改善中 | フォロー結果と Infinite Query は稼働中。2025年11月10日に関連度/最新順トグル・`allow_incomplete` フォールバック・SearchBar 警告スタイルを実装し、`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx`（`tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log`）と Docker `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build`（`tmp/logs/user_search_pagination_20251110-142854.log`）で回帰を取得済み。残タスクは Nightly へのシナリオ組み込み。 |
+| ユーザー | `/search` (users) | `search_users` で実ユーザー検索、フォロー/解除ボタン | 稼働中 | フォロー結果と Infinite Query は稼働中。2025年11月10日に関連度/最新順トグル・`allow_incomplete` フォールバック・SearchBar 警告スタイルを実装し、`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx`（`tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log`）と Docker `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build`（`tmp/logs/user_search_pagination_20251110-142854.log`）で回帰を取得済み。2025年11月12日に `nightly.yml` へ `nightly.user-search-pagination` ジョブを追加し、`tmp/logs/user_search_pagination_<timestamp>.log` を `user-search-pagination-logs`、`test-results/user-search-pagination/*.json` を `user-search-pagination-reports` artefact として保存する運用を確立（`phase5_ci_path_audit.md` / Runbook 6.4 に登録）。 |
 
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 導線状態 | 備考 |

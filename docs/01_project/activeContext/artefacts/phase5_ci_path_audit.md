@@ -1,5 +1,5 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年11月12日
+最終更新日: 2025年11月13日
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
@@ -49,7 +49,7 @@
 - フォロワー/フォロー中リストの無限スクロールとソート切り替えを `useInfiniteQuery` のテストで再現し、カーソル・ソート条件が API パラメーターへ正しく引き継がれること、`total_count` を利用した進捗表示が更新されることを確認する。Rust 側はカーソル境界（先頭/末尾）とプライベートアカウント時の 403 応答を含む結合テストを追加する。
 - 2025年11月07日: `TrendingRoute` / `FollowingRoute` のユニットテスト（ランキング表示・エラー再試行・未読境界）を Nightly Frontend Unit Tests へ追加。2025年11月08日: `list_trending_topics` / `list_trending_posts` が `topic_metrics` の最新ウィンドウを反映することを Docker `trending-feed` で検証し、Nightly に合流。
 - Docker シナリオ `trending-feed` を `scripts/test-docker.{sh,ps1}` に実装し、`docker-compose.test.yml` の `test-runner` エントリポイントを `pnpm vitest run ...` のシナリオ引数対応へ拡張済み。Nightly 用の `nightly.yml` へ「Trending Feed (Docker)」ジョブを追加し、`needs: unit-tests` で連結。失敗時には `test-results/trending-feed/latest.log` を artefact として保存し、Runbook のトリアージ手順へリンクする。
-- `UserSearchResults` / `useUserSearchQuery` の新テストで 2 文字未満クエリ・レート制限・カーソルページネーションを検証し、Docker シナリオ `user-search-pagination` と連携済み。次は Nightly Frontend Unit Tests（`nightly.yml`）へシナリオジョブを追加し、`test-results/user-search-pagination/*.json` を成果物化する。
+- `UserSearchResults` / `useUserSearchQuery` の新テストで 2 文字未満クエリ・レート制限・カーソルページネーションを検証し、Docker シナリオ `user-search-pagination` と連携済み。2025年11月12日に `nightly.yml` へ `nightly.user-search-pagination` ジョブを追加し、`tmp/logs/user_search_pagination_<timestamp>.log`（`user-search-pagination-logs`）と `test-results/user-search-pagination/*.json`（`user-search-pagination-reports`）を artefact 化する運用を確立。Runbook 6.4 / phase5_user_flow_summary.md に同ログパスを紐づけ、Nightly 失敗時は本表を参照して artefact から JSON/ログを取得する。
 
 ## 関連資料（ユーザー導線）
 -  - `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` — 2025年11月07日更新。導線別の API/テスト計画と CI 連携ポイントを整理。
