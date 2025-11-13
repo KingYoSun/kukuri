@@ -251,9 +251,9 @@ describe('DirectMessageDialog', () => {
     await waitFor(() =>
       expect(useDirectMessageStore.getState().optimisticMessages[targetNpub]).toHaveLength(1),
     );
-    expect(
-      useDirectMessageStore.getState().optimisticMessages[targetNpub]?.[0]?.status,
-    ).toBe('failed');
+    expect(useDirectMessageStore.getState().optimisticMessages[targetNpub]?.[0]?.status).toBe(
+      'failed',
+    );
   });
 
   it('失敗メッセージの再送操作で API を再び呼び出す', async () => {
@@ -326,9 +326,9 @@ describe('DirectMessageDialog', () => {
       }),
     );
     await waitFor(() =>
-      expect(
-        useDirectMessageStore.getState().conversationReadTimestamps[targetNpub],
-      ).toBe(existingMessage.createdAt),
+      expect(useDirectMessageStore.getState().conversationReadTimestamps[targetNpub]).toBe(
+        existingMessage.createdAt,
+      ),
     );
   });
 });

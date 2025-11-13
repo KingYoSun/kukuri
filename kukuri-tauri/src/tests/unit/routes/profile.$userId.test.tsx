@@ -398,7 +398,9 @@ describe('ProfilePage route', () => {
       expect(
         queryClient.getQueryData<InfiniteData<{ items: UserProfileDto[] }>>(followersKey)?.pages[0]
           .items,
-      ).toEqual(expect.arrayContaining([expect.objectContaining({ npub: currentUserProfile.npub })])),
+      ).toEqual(
+        expect.arrayContaining([expect.objectContaining({ npub: currentUserProfile.npub })]),
+      ),
     );
 
     await waitFor(() =>

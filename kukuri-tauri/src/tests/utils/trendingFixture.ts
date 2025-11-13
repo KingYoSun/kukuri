@@ -5,6 +5,7 @@ import type {
   ListTrendingTopicsResult,
   FollowingFeedPage,
 } from '@/lib/api/tauri';
+import { errorHandler } from '@/lib/errorHandler';
 
 export interface TrendingScenarioFixture {
   trendingTopics: ListTrendingTopicsResult;
@@ -43,7 +44,12 @@ export const getTrendingScenarioFixture = (): TrendingScenarioFixture | null => 
       followingFeed: parsed.following_feed,
     };
   } catch (error) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    errorHandler.log('Trending fixture load failed', error, {
+      context: 'getTrendingScenarioFixture',
+      metadata: {
+        fixturePath: rawPath,
+      },
+    });
     cachedFixture = null;
   }
 
