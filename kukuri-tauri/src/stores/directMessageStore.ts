@@ -38,6 +38,7 @@ interface ReceiveMessageOptions {
 interface DirectMessageConversationHydration {
   conversationNpub: string;
   unreadCount: number;
+  lastReadAt: number;
   lastMessage?: DirectMessageModel;
 }
 
@@ -50,6 +51,7 @@ interface DirectMessageStoreState {
   conversations: Record<string, DirectMessageModel[]>;
   optimisticMessages: Record<string, DirectMessageModel[]>;
   unreadCounts: Record<string, number>;
+  conversationReadTimestamps: Record<string, number>;
   openDialog: (conversationNpub: string) => void;
   closeDialog: () => void;
   openInbox: () => void;
@@ -78,7 +80,7 @@ interface DirectMessageStoreState {
     options?: ReceiveMessageOptions,
   ) => void;
   removeOptimisticMessage: (conversationNpub: string, clientMessageId: string) => void;
-  markConversationAsRead: (conversationNpub: string) => void;
+  markConversationAsRead: (conversationNpub: string, lastReadAt?: number | null) => void;
   incrementUnreadCount: (conversationNpub: string, amount?: number) => void;
   hydrateConversations: (summaries: DirectMessageConversationHydration[]) => void;
   reset: () => void;
@@ -115,6 +117,7 @@ const createInitialState = (): Omit<
   conversations: {},
   optimisticMessages: {},
   unreadCounts: {},
+  conversationReadTimestamps: {},
 });
 
 const dedupeMessages = (messages: DirectMessageModel[]) => {
@@ -261,11 +264,18 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
       }
 
       const nextUnread = { ...state.unreadCounts };
+      const nextReadTimestamps = { ...state.conversationReadTimestamps };
       const shouldMarkAsRead =
         state.isDialogOpen && state.activeConversationNpub === conversationNpub;
 
       if (shouldMarkAsRead) {
         nextUnread[conversationNpub] = 0;
+        if (typeof message.createdAt === 'number') {
+          const current = nextReadTimestamps[conversationNpub] ?? 0;
+          if (message.createdAt > current) {
+            nextReadTimestamps[conversationNpub] = message.createdAt;
+          }
+        }
       } else if (options.incrementUnread !== false) {
         nextUnread[conversationNpub] =
           (nextUnread[conversationNpub] ?? 0) + (options.incrementAmount ?? 1);
@@ -276,6 +286,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
         conversations: nextConversations,
         optimisticMessages: nextOptimistic,
         unreadCounts: nextUnread,
+        conversationReadTimestamps: nextReadTimestamps,
       };
     }),
   removeOptimisticMessage: (conversationNpub, clientMessageId) =>
@@ -296,11 +307,25 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
         optimisticMessages: nextOptimistic,
       };
     }),
-  markConversationAsRead: (conversationNpub) =>
-    set((state) => ({
-      ...state,
-      unreadCounts: { ...state.unreadCounts, [conversationNpub]: 0 },
-    })),
+  markConversationAsRead: (conversationNpub, lastReadAt) =>
+    set((state) => {
+      const nextState: typeof state = {
+        ...state,
+        unreadCounts: { ...state.unreadCounts, [conversationNpub]: 0 },
+      };
+
+      if (typeof lastReadAt === 'number') {
+        const current = state.conversationReadTimestamps[conversationNpub] ?? 0;
+        if (lastReadAt > current) {
+          nextState.conversationReadTimestamps = {
+            ...state.conversationReadTimestamps,
+            [conversationNpub]: lastReadAt,
+          };
+        }
+      }
+
+      return nextState;
+    }),
   incrementUnreadCount: (conversationNpub, amount = 1) =>
     set((state) => ({
       ...state,
@@ -317,9 +342,16 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
 
       const nextConversations = { ...state.conversations };
       const nextUnreadCounts = { ...state.unreadCounts };
+      const nextReadTimestamps = { ...state.conversationReadTimestamps };
 
       for (const summary of summaries) {
         nextUnreadCounts[summary.conversationNpub] = summary.unreadCount;
+        if (summary.lastReadAt >= 0) {
+          const current = nextReadTimestamps[summary.conversationNpub] ?? 0;
+          if (summary.lastReadAt > current) {
+            nextReadTimestamps[summary.conversationNpub] = summary.lastReadAt;
+          }
+        }
         if (summary.lastMessage) {
           const existing = nextConversations[summary.conversationNpub] ?? [];
           if (existing.length === 0) {
@@ -332,6 +364,7 @@ export const useDirectMessageStore = create<DirectMessageStoreState>((set, _get)
         ...state,
         conversations: nextConversations,
         unreadCounts: nextUnreadCounts,
+        conversationReadTimestamps: nextReadTimestamps,
       };
     }),
   reset: () => set(() => ({ ...createInitialState() })),

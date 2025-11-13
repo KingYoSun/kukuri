@@ -223,7 +223,7 @@ export function DirectMessageDialog() {
       return;
     }
 
-    markConversationAsRead(activeConversationNpub);
+    markConversationAsRead(activeConversationNpub, latest);
     if (lastSyncedRef.current[activeConversationNpub] === latest) {
       return;
     }

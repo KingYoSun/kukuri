@@ -45,6 +45,7 @@ export function useDirectMessageBootstrap() {
         const summaries = response.items.map((item) => ({
           conversationNpub: item.conversationNpub,
           unreadCount: item.unreadCount,
+          lastReadAt: item.lastReadAt,
           lastMessage: item.lastMessage ? mapApiMessageToModel(item.lastMessage) : undefined,
         }));
 

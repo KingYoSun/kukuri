@@ -339,8 +339,8 @@
   - フォロワー/フォロー中リストに検索・ソートが無く、件数が多い場合の利用性が下がる。
   - 送信失敗後の自動バックオフやレート制御は未整備。現状は手動の「再送」ボタンのみのため、再送間隔と失敗履歴のコントロールを追加する。
   - Tauri 経由のエラーハンドリングはトースト表示に偏っているため、`errorHandler` のメタデータ拡充とリトライ導線を検討。
-- **対応計画（2025年11月06日更新）**
-  - Direct Message は 5.6.1 の実装状況を参照。Kind4 IPC 実装済みのため、既読同期・Docker シナリオ・contract テストを追加しつつレート制御/バックオフの設計を進める。
+- **対応計画（2025年11月13日更新）**
+  - Direct Message は 5.6.1 の実装状況を参照。Kind4 IPC + 多端末既読同期・会話検索/補完・仮想スクロール最適化を完了し、`tests/contract/direct_messages.rs` を Docker で常時実行できるようになった。今後は送信レート制御/バックオフと会話一覧 API の limit 超過時ページングを計画。
   - フォロワー一覧のソート/ページネーションは 5.6.2 に実装計画を記載。API 拡張・フロント実装・テストカバレッジを網羅。
 
 #### 5.6.1 DirectMessage Tauri 実装状況（2025年11月05日更新）
@@ -353,13 +353,15 @@
   - `DirectMessageDialog` は `useInfiniteQuery(['direct-messages', npub])` で `list_direct_messages` を呼び出し、IntersectionObserver と `Load more` ボタンで無限スクロール・再取得を制御。取得したページは `dedupeMessages` でストアの会話履歴に統合し、読み込み成功時に `markConversationAsRead` で未読カウントをリセットする。
   - `DirectMessageDialog` からの送信は従来どおり楽観更新を行い、`resolveOptimisticMessage` / `failOptimisticMessage` で状態同期。sonner toast で成功/失敗を通知し、`queued` フラグは `status: 'pending'` 表示に対応。
   - `useDirectMessageStore` が既読カウントと会話ログを保持し、`dedupeMessages` で `eventId` / `clientMessageId` をキーに重複排除。
+  - `DirectMessageInbox` は TanStack Virtualizer の測定付き仮想スクロール・npub/本文検索・Enter 補完・多端末既読バッジを備え、`markConversationAsRead(conversationNpub, lastReadAt?)` の第二引数で `lastReadAt` をストアに取り込みつつ `TauriApi.markDirectMessageConversationRead` を呼び出す。`useDirectMessageBootstrap` は `list_direct_message_conversations` から取得した `lastReadAt` をハイドレートし、ヘッダー/Summary CTA から同じ Inbox を再利用する。
 - **テスト / 検証**
   - Rust: `cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で Direct Message サービスとリポジトリのユニットテストを実行済み。
   - 2025年11月05日: `pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を実行し、履歴ロード・送信フローが回帰しないことを確認。
   - TypeScript: `DirectMessageDialog.test.tsx` で Optimistic Update・エラーハンドリング・トースト表示・初期履歴の描画を検証し、Vitest 結果を記録。
+  - 2025年11月13日: Windows ネイティブの `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` で停止するため、`./scripts/test-docker.ps1 rust` を再実行し、`tmp/logs/rust_docker_20251113-141846.log` に `tests/contract/direct_messages.rs` を含む Docker Rust テスト結果を保存。
+  - 2025年11月13日: `corepack pnpm vitest run src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を `tmp/logs/direct_message_inbox_20251113-140827.log` に記録し、会話検索・既読バッジ・モーダル連携の回帰を確認。
 - **残課題**
-  - 既読ステータスの多端末同期（`markConversationAsRead` → IPC → SQLite 反映）と Docker / contract テストの追加が必要。
-  - 会話リスト（サイドバー想定）に履歴の最新メッセージを反映する仕組みは未整備。React Query のキャッシュ共有も含めた一覧更新方式を検討する。
+  - 会話リストのページング（50件超の limit / cursor）と React Query キャッシュ整合性を検討し、Sidebar 想定の最新メッセージ反映と `list_direct_message_conversations` API の limit 拡張を行う。
   - 送信レート制御・暗号化鍵キャッシュ・失敗時のバックオフは運用シナリオでの検証が必要。
 #### 5.6.2 フォロワー一覧ソート/検索実装状況（2025年11月07日更新）
   - **実装内容**
