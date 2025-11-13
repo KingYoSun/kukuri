@@ -1,4 +1,4 @@
-use super::core::P2PService;
+use super::core::{P2PService, P2PServiceTrait};
 use crate::domain::p2p::events::P2PEvent;
 use crate::infrastructure::p2p::{
     DiscoveryOptions, GossipService, NetworkService, iroh_gossip_service::IrohGossipService,
@@ -13,7 +13,7 @@ use tokio::sync::broadcast;
 pub struct P2PStack {
     pub network_service: Arc<dyn NetworkService>,
     pub gossip_service: Arc<dyn GossipService>,
-    pub p2p_service: Arc<P2PService>,
+    pub p2p_service: Arc<dyn P2PServiceTrait>,
 }
 
 pub struct P2PServiceBuilder {
@@ -87,7 +87,7 @@ impl P2PServiceBuilder {
 
         let network_service_dyn: Arc<dyn NetworkService> = iroh_network.clone();
         let gossip_service_dyn: Arc<dyn GossipService> = iroh_gossip.clone();
-        let p2p_service = Arc::new(P2PService::with_discovery(
+        let p2p_service: Arc<dyn P2PServiceTrait> = Arc::new(P2PService::with_discovery(
             Arc::clone(&network_service_dyn),
             Arc::clone(&gossip_service_dyn),
             discovery_options,

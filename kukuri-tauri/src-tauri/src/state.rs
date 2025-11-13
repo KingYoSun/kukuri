@@ -19,7 +19,7 @@ use crate::application::services::offline_service::OfflineServiceTrait;
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
-    AuthService, DirectMessageService, EventService, OfflineService, P2PService, PostService,
+    AuthService, DirectMessageService, EventService, OfflineService, PostService,
     ProfileAvatarService, SubscriptionStateMachine, SyncService, TopicService, UserSearchService,
     UserService,
 };
@@ -104,7 +104,7 @@ pub struct AppState {
     pub event_service: Arc<EventService>,
     pub direct_message_service: Arc<DirectMessageService>,
     pub sync_service: Arc<dyn SyncServiceTrait>,
-    pub p2p_service: Arc<P2PService>,
+    pub p2p_service: Arc<dyn P2PServiceTrait>,
     pub offline_service: Arc<OfflineService>,
     pub profile_avatar_service: Arc<ProfileAvatarService>,
 
@@ -226,7 +226,7 @@ impl AppState {
             Arc::clone(&repository) as Arc<dyn PendingTopicRepository>,
             Arc::clone(&topic_metrics_repository),
             metrics_config.enabled,
-            Arc::clone(&p2p_service) as Arc<dyn P2PServiceTrait>,
+            Arc::clone(&p2p_service),
             Arc::clone(&offline_service) as Arc<dyn OfflineServiceTrait>,
         ));
         // 既定トピック（public）を保証し、EventManagerの既定配信先に設定
@@ -427,8 +427,7 @@ impl AppState {
         ));
         let event_handler = Arc::new(EventHandler::new(Arc::clone(&event_service)
             as Arc<dyn crate::application::services::event_service::EventServiceTrait>));
-        let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service)
-            as Arc<dyn crate::application::services::p2p_service::P2PServiceTrait>));
+        let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service)));
         let offline_handler = Arc::new(OfflineHandler::new(Arc::clone(&offline_service)
             as Arc<dyn crate::application::services::offline_service::OfflineServiceTrait>));
 

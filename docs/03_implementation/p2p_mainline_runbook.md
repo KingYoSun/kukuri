@@ -36,6 +36,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 ### 3.2 EventGateway メトリクスと結合テスト（2025年10月25日追加）
 - `infrastructure::event::metrics` で Gateway API（受信／Publish／Reaction／Metadata／削除／Disconnect）の成功・失敗回数と直近タイムスタンプを記録する仕組みを導入。`LegacyEventManagerGateway` すべてのパスが `metrics::record_outcome` を経由する。
 - メトリクスの動作と Gateway の DI を確認するには `cargo test --package kukuri-tauri --test test_event_service_gateway -- --nocapture` を実行し、`tests/integration/test_event_service_gateway.rs` を通過させる。失敗時は `metrics::snapshot()`（`presentation/commands` 追加予定）で現在値を取得し、`incoming.failures` 等のカウンタから再現手順を追跡する。
+- 2025年11月13日: `state.rs` で `Arc<dyn EventGateway>` と `Arc<dyn P2PServiceTrait>` を注入し、`presentation/handlers/{event_handler,p2p_handler}.rs` を Legacy 実装から切り離した。`cargo test --package kukuri-tauri --all-features` と `cargo test --package kukuri-tauri --test p2p_mainline_smoke -- --nocapture --test-threads=1` の結果を `tmp/logs/cargo-test-kukuri-tauri_di_20251113.log` に保存し、`tests/integration/topic_create_join.rs` の trait モックで join/create が Gateway → Gossip/Mainline に流れることを再確認する。
 
 ### 3.3 パフォーマンスハーネス（2025年10月31日追加）
 - Phase 5 で `tests/performance/cache.rs`（OfflineService の save/list・キャッシュクリーニング）と `tests/performance/sync.rs`（OfflineReindexJob・sync_actions）の計測ケースを分割。`tests/common/performance/recorder.rs` に計測結果を JSON 化するユーティリティを追加した。

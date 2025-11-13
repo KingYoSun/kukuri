@@ -1,6 +1,6 @@
 use chrono::Utc;
 use iroh::SecretKey;
-use kukuri_lib::test_support::application::services::p2p_service::{P2PService, P2PServiceTrait};
+use kukuri_lib::test_support::application::services::p2p_service::P2PService;
 use kukuri_lib::test_support::infrastructure::p2p::{
     DiscoveryOptions, NetworkService, gossip_service::GossipService,
 };
