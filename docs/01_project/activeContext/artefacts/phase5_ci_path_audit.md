@@ -1,5 +1,5 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年11月13日
+最終更新日: 2025年11月14日
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
@@ -38,15 +38,16 @@
 - `phase5_user_flow_summary.md` — 2025年11月07日更新。Quick View に同期導線・プロフィール導線の優先度とステータス、Summary Panel/Docker シナリオの注記を追加。
 - 新導線テスト: `src/tests/unit/stores/composerStore.test.ts` / `src/tests/unit/stores/privacySettingsStore.test.ts` / `src/tests/unit/pages/Home.test.tsx` — グローバルコンポーザーとプライバシー設定のユニットテストを2025年11月02日に追加。Relay/P2P ステータスカードのテスト計画は下記参照。
 
+## テスト更新ログ（2025年11月14日）
+- フロントエンド: `pnpm vitest run src/tests/unit/routes/profile.$userId.test.tsx src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を実行し、`ProfilePage` のフォロー/フォロー解除（楽観更新・エラーロールバック・未ログイン時の無効化・フォロワー無限スクロール）と `DirectMessageDialog` の送受信/再送/既読同期（未読バッジ更新と offline queue）を検証。CI ログ: `tmp/logs/vitest_profile_dm_20251114.log`。
+- Rust: `cargo test`（`kukuri-tauri/src-tauri` / `kukuri-cli`）を完走し、`application::services::user_service::tests` にフォロー一覧カーソル境界テストとプライベートプロフィール時の Unauthorized (403 相当) を追加。`application::services::direct_message_service::tests` へ `send_direct_message` の暗号化失敗/配信 Pending（queued）ケースを追加し、暗号化／署名／配信エラーのハンドリングを網羅。
+
 ## テスト更新ログ（2025年11月03日）
 - `npx vitest run src/tests/unit/components/RelayStatus.test.tsx src/tests/unit/components/P2PStatus.test.tsx src/tests/unit/stores/authStore.test.ts src/tests/unit/stores/p2pStore.test.ts src/tests/unit/hooks/useP2P.test.tsx src/tests/unit/lib/api/p2p.test.ts` を実行し、バックオフ実装・手動リトライ・新フィールド反映を検証済み。
 - Rust 側では `cargo test`（`kukuri-tauri/src-tauri` / `kukuri-cli`）を実行し、`application::services::p2p_service::tests` の `connection_status` / `peers` 追加に伴うフォールバック挙動を確認。
 - `src/tests/integration/profileAvatarSync.test.ts`（2025年11月02日実装）: `upload_profile_avatar` / `fetch_profile_avatar` をモックし、Doc レプリケーションと Blob 復号フローを検証。Vitest 統合テストに組み込み済みで、Rust 側の `tests/profile_avatar_sync.rs` ではマルチノード同期と `StreamEncryptor` 復号パスをカバー。
 
 ## 追加予定のテスト
-- `ProfilePage` 向けにフォロー/フォロー解除ハンドリングのユニットテストを追加し、`follow_user` / `unfollow_user` 成功・失敗・未ログイン時の各パスで React Query キャッシュとボタン状態、トースト通知が期待どおりに遷移することを検証する（楽観更新→ロールバックを含む）。
-- `DirectMessageDialog`（新規）で kind 4 DM の送受信フローをモックし、未読バッジ更新・オフライン再送キュー登録・`send_direct_message` 失敗時のリトライ UI をテストする。Rust 側では `send_direct_message` コマンドの暗号化/署名/配信エラーをユニットテストでカバーする。
-- フォロワー/フォロー中リストの無限スクロールとソート切り替えを `useInfiniteQuery` のテストで再現し、カーソル・ソート条件が API パラメーターへ正しく引き継がれること、`total_count` を利用した進捗表示が更新されることを確認する。Rust 側はカーソル境界（先頭/末尾）とプライベートアカウント時の 403 応答を含む結合テストを追加する。
 - 2025年11月07日: `TrendingRoute` / `FollowingRoute` のユニットテスト（ランキング表示・エラー再試行・未読境界）を Nightly Frontend Unit Tests へ追加。2025年11月08日: `list_trending_topics` / `list_trending_posts` が `topic_metrics` の最新ウィンドウを反映することを Docker `trending-feed` で検証し、Nightly に合流。
 - Docker シナリオ `trending-feed` を `scripts/test-docker.{sh,ps1}` に実装し、`docker-compose.test.yml` の `test-runner` エントリポイントを `pnpm vitest run ...` のシナリオ引数対応へ拡張済み。Nightly 用の `nightly.yml` へ「Trending Feed (Docker)」ジョブを追加し、`needs: unit-tests` で連結。失敗時には `test-results/trending-feed/latest.log` を artefact として保存し、Runbook のトリアージ手順へリンクする。
 - `UserSearchResults` / `useUserSearchQuery` の新テストで 2 文字未満クエリ・レート制限・カーソルページネーションを検証し、Docker シナリオ `user-search-pagination` と連携済み。2025年11月12日に `nightly.yml` へ `nightly.user-search-pagination` ジョブを追加し、`tmp/logs/user_search_pagination_<timestamp>.log`（`user-search-pagination-logs`）と `test-results/user-search-pagination/*.json`（`user-search-pagination-reports`）を artefact 化する運用を確立。Runbook 6.4 / phase5_user_flow_summary.md に同ログパスを紐づけ、Nightly 失敗時は本表を参照して artefact から JSON/ログを取得する。

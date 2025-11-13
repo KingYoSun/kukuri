@@ -165,6 +165,78 @@ async fn send_direct_message_success() {
 }
 
 #[tokio::test]
+async fn send_direct_message_propagates_gateway_errors() {
+    let mut repo = MockRepo::new();
+    repo.expect_insert_direct_message().never();
+    repo.expect_upsert_conversation_metadata().never();
+
+    let mut gateway = MockGateway::new();
+    gateway
+        .expect_encrypt_and_send()
+        .times(1)
+        .return_once(|_, _, _| Err(AppError::Crypto("failed to encrypt".into())));
+
+    let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
+    let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
+    let service = DirectMessageService::new(repo, gateway, None);
+
+    let err = service
+        .send_direct_message("npub_sender", "npub_recipient", "hello", None)
+        .await
+        .expect_err("gateway error should bubble");
+    assert!(matches!(err, AppError::Crypto(_)));
+}
+
+#[tokio::test]
+async fn send_direct_message_marks_queued_when_delivery_pending() {
+    let mut repo = MockRepo::new();
+    repo.expect_insert_direct_message()
+        .times(1)
+        .returning(|message| {
+            Ok(DirectMessage::new(
+                1,
+                message.owner_npub.clone(),
+                message.conversation_npub.clone(),
+                message.sender_npub.clone(),
+                message.recipient_npub.clone(),
+                message.event_id.clone(),
+                message.client_message_id.clone(),
+                message.payload_cipher_base64.clone(),
+                message.created_at.timestamp_millis(),
+                message.delivered,
+                message.direction,
+            ))
+        });
+    repo.expect_upsert_conversation_metadata()
+        .times(1)
+        .return_once(|_, _, _, _| Ok(()));
+
+    let mut gateway = MockGateway::new();
+    gateway
+        .expect_encrypt_and_send()
+        .times(1)
+        .returning(|_, _, _| {
+            Ok(MessagingSendResult {
+                event_id: None,
+                ciphertext: "cipher".to_string(),
+                created_at_millis: 2000,
+                delivered: false,
+            })
+        });
+
+    let repo: Arc<dyn DirectMessageRepository> = Arc::new(repo);
+    let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
+    let service = DirectMessageService::new(repo, gateway, None);
+
+    let result = service
+        .send_direct_message("npub_sender", "npub_recipient", "hi", None)
+        .await
+        .expect("queued ok");
+    assert!(result.queued);
+    assert_eq!(result.message.decrypted_content.as_deref(), Some("hi"));
+}
+
+#[tokio::test]
 async fn list_direct_messages_decrypts_payloads() {
     let mut repo = MockRepo::new();
     let page_raw = DirectMessagePageRaw {

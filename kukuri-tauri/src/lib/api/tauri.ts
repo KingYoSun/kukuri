@@ -181,6 +181,7 @@ export interface GetFollowersParams {
   limit?: number;
   sort?: FollowListSort;
   search?: string;
+  viewerNpub?: string | null;
 }
 
 export interface GetFollowingParams {
@@ -189,6 +190,7 @@ export interface GetFollowingParams {
   limit?: number;
   sort?: FollowListSort;
   search?: string;
+  viewerNpub?: string | null;
 }
 
 export type FollowListSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
@@ -570,6 +572,7 @@ export class TauriApi {
         limit: params.limit,
         sort: params.sort,
         search: params.search && params.search.trim().length > 0 ? params.search.trim() : null,
+        viewer_npub: params.viewerNpub ?? null,
       },
     });
 
@@ -594,6 +597,7 @@ export class TauriApi {
         limit: params.limit,
         sort: params.sort,
         search: params.search && params.search.trim().length > 0 ? params.search.trim() : null,
+        viewer_npub: params.viewerNpub ?? null,
       },
     });
 

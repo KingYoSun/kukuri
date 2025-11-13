@@ -188,6 +188,7 @@ pub async fn get_followers(
             limit,
             sort,
             search,
+            request.viewer_npub.as_deref(),
         )
         .await
         .map(|page| PaginatedUserProfiles {
@@ -222,6 +223,7 @@ pub async fn get_following(
             limit,
             sort,
             search,
+            request.viewer_npub.as_deref(),
         )
         .await
         .map(|page| PaginatedUserProfiles {

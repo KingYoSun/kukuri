@@ -116,7 +116,9 @@ impl UserService {
         limit: usize,
         sort: FollowListSort,
         search: Option<&str>,
+        viewer_npub: Option<&str>,
     ) -> Result<UserCursorPage, AppError> {
+        self.ensure_profile_visibility(npub, viewer_npub).await?;
         self.repository
             .get_followers_paginated(npub, cursor, limit, sort, search)
             .await
@@ -129,7 +131,9 @@ impl UserService {
         limit: usize,
         sort: FollowListSort,
         search: Option<&str>,
+        viewer_npub: Option<&str>,
     ) -> Result<UserCursorPage, AppError> {
+        self.ensure_profile_visibility(npub, viewer_npub).await?;
         self.repository
             .get_following_paginated(npub, cursor, limit, sort, search)
             .await
@@ -146,7 +150,14 @@ impl UserService {
                 has_more,
                 total_count: _,
             } = self
-                .get_followers_paginated(npub, cursor.as_deref(), 100, FollowListSort::Recent, None)
+                .get_followers_paginated(
+                    npub,
+                    cursor.as_deref(),
+                    100,
+                    FollowListSort::Recent,
+                    None,
+                    Some(npub),
+                )
                 .await?;
 
             all_users.extend(users.into_iter());
@@ -172,7 +183,14 @@ impl UserService {
                 has_more,
                 total_count: _,
             } = self
-                .get_following_paginated(npub, cursor.as_deref(), 100, FollowListSort::Recent, None)
+                .get_following_paginated(
+                    npub,
+                    cursor.as_deref(),
+                    100,
+                    FollowListSort::Recent,
+                    None,
+                    Some(npub),
+                )
                 .await?;
 
             all_users.extend(users.into_iter());
@@ -196,6 +214,29 @@ impl UserService {
             .get_user(npub)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("User not found: {npub}")))
+    }
+
+    async fn ensure_profile_visibility(
+        &self,
+        npub: &str,
+        viewer_npub: Option<&str>,
+    ) -> Result<(), AppError> {
+        let user = self
+            .repository
+            .get_user(npub)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("User not found: {npub}")))?;
+
+        if !user.public_profile {
+            let viewer_matches = viewer_npub
+                .map(|viewer| viewer == user.npub)
+                .unwrap_or(false);
+            if !viewer_matches {
+                return Err(AppError::Unauthorized(format!("Profile {npub} is private")));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -591,6 +632,103 @@ mod tests {
             .await
             .expect_err("missing target");
         assert!(matches!(err, AppError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn followers_paginated_respects_cursor_boundaries() {
+        let service = setup_service().await;
+        seed_user(&service, ALICE_NPUB, ALICE_PUB).await;
+        seed_user(&service, BOB_NPUB, BOB_PUB).await;
+        seed_user(&service, "npub1carol", "carol_pub").await;
+        seed_user(&service, "npub1dave", "dave_pub").await;
+
+        service
+            .follow_user(BOB_NPUB, ALICE_NPUB)
+            .await
+            .expect("bob follows");
+        service
+            .follow_user("npub1carol", ALICE_NPUB)
+            .await
+            .expect("carol follows");
+        service
+            .follow_user("npub1dave", ALICE_NPUB)
+            .await
+            .expect("dave follows");
+
+        let page1 = service
+            .get_followers_paginated(
+                ALICE_NPUB,
+                None,
+                2,
+                FollowListSort::NameAsc,
+                None,
+                Some(ALICE_NPUB),
+            )
+            .await
+            .expect("page1");
+        assert_eq!(page1.users.len(), 2);
+        assert_eq!(page1.total_count, 3);
+        assert!(page1.has_more);
+        let cursor = page1.next_cursor.as_deref().expect("cursor present");
+
+        let page2 = service
+            .get_followers_paginated(
+                ALICE_NPUB,
+                Some(cursor),
+                2,
+                FollowListSort::NameAsc,
+                None,
+                Some(ALICE_NPUB),
+            )
+            .await
+            .expect("page2");
+        assert_eq!(page2.users.len(), 1);
+        assert_eq!(page2.total_count, 3);
+        assert!(!page2.has_more);
+        assert!(page2.next_cursor.is_none());
+    }
+
+    #[tokio::test]
+    async fn followers_paginated_private_profile_requires_matching_viewer() {
+        let service = setup_service().await;
+        seed_user(&service, ALICE_NPUB, ALICE_PUB).await;
+        seed_user(&service, BOB_NPUB, BOB_PUB).await;
+
+        service
+            .follow_user(BOB_NPUB, ALICE_NPUB)
+            .await
+            .expect("bob follows");
+
+        service
+            .update_privacy_settings(ALICE_NPUB, false, true)
+            .await
+            .expect("set private");
+
+        let err = service
+            .get_followers_paginated(
+                ALICE_NPUB,
+                None,
+                10,
+                FollowListSort::Recent,
+                None,
+                Some(BOB_NPUB),
+            )
+            .await
+            .expect_err("private profile should reject viewer");
+        assert!(matches!(err, AppError::Unauthorized(_)));
+
+        let owner_view = service
+            .get_followers_paginated(
+                ALICE_NPUB,
+                None,
+                10,
+                FollowListSort::Recent,
+                None,
+                Some(ALICE_NPUB),
+            )
+            .await
+            .expect("owner can view");
+        assert_eq!(owner_view.total_count, 1);
     }
 
     #[tokio::test]

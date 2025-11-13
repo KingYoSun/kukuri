@@ -7,6 +7,13 @@ import { DirectMessageDialog } from '@/components/directMessages/DirectMessageDi
 import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/directMessageStore';
 import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
+
+vi.mock('@/lib/errorHandler', () => ({
+  errorHandler: {
+    log: vi.fn(),
+  },
+}));
 
 type AuthStoreState = {
   currentUser: {
@@ -102,6 +109,7 @@ describe('DirectMessageDialog', () => {
     }
     toast.success.mockClear();
     toast.error.mockClear();
+    errorHandler.log.mockClear();
     vi.mocked(TauriApi.sendDirectMessage).mockReset();
     vi.mocked(TauriApi.listDirectMessages).mockReset();
     vi.mocked(TauriApi.listDirectMessageConversations).mockReset();
@@ -213,5 +221,114 @@ describe('DirectMessageDialog', () => {
     expect(toast.success).toHaveBeenCalledWith('メッセージを送信しました。');
     expect(toast.error).not.toHaveBeenCalled();
     expect(screen.getByText('test message')).toBeInTheDocument();
+  });
+
+  it('送信失敗時に失敗状態とエラーを記録する', async () => {
+    openDialog('failure case');
+    const sendError = new Error('offline');
+    vi.mocked(TauriApi.sendDirectMessage).mockRejectedValueOnce(sendError);
+
+    const user = userEvent.setup();
+    renderWithQueryClient(<DirectMessageDialog />);
+
+    await waitFor(() => expect(TauriApi.listDirectMessages).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: '送信' }));
+
+    await waitFor(() =>
+      expect(errorHandler.log).toHaveBeenCalledWith(
+        'DirectMessageDialog.sendFailed',
+        sendError,
+        expect.objectContaining({
+          context: 'DirectMessageDialog.handleSend',
+          metadata: expect.objectContaining({
+            recipient: targetNpub,
+          }),
+        }),
+      ),
+    );
+    expect(toast.error).toHaveBeenCalledWith('メッセージの送信に失敗しました。');
+    await waitFor(() =>
+      expect(useDirectMessageStore.getState().optimisticMessages[targetNpub]).toHaveLength(1),
+    );
+    expect(
+      useDirectMessageStore.getState().optimisticMessages[targetNpub]?.[0]?.status,
+    ).toBe('failed');
+  });
+
+  it('失敗メッセージの再送操作で API を再び呼び出す', async () => {
+    const user = userEvent.setup();
+    const failedMessage = {
+      eventId: null,
+      clientMessageId: 'client-failed',
+      senderNpub: defaultCurrentUser.npub,
+      recipientNpub: targetNpub,
+      content: 'retry me',
+      createdAt: 1_730_000_000_100,
+      status: 'failed' as const,
+    };
+    useDirectMessageStore.setState((state) => ({
+      ...state,
+      isDialogOpen: true,
+      activeConversationNpub: targetNpub,
+      optimisticMessages: {
+        ...state.optimisticMessages,
+        [targetNpub]: [failedMessage],
+      },
+    }));
+
+    renderWithQueryClient(<DirectMessageDialog />);
+
+    const retryButton = await screen.findByTestId('direct-message-retry-button');
+    vi.mocked(TauriApi.sendDirectMessage).mockResolvedValueOnce({
+      eventId: 'evt-retry',
+      queued: false,
+    });
+
+    await user.click(retryButton);
+
+    await waitFor(() =>
+      expect(TauriApi.sendDirectMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          recipientNpub: targetNpub,
+          content: 'retry me',
+        }),
+      ),
+    );
+    expect(toast.success).toHaveBeenCalledWith('メッセージを送信しました。');
+  });
+
+  it('既存メッセージがある場合は既読同期を行う', async () => {
+    const existingMessage = {
+      eventId: 'evt-1',
+      clientMessageId: 'client-1',
+      senderNpub: targetNpub,
+      recipientNpub: mockAuthState.currentUser!.npub,
+      content: 'hello there',
+      createdAt: 1_730_000_000_500,
+      status: 'sent' as const,
+    };
+    openDialog();
+    useDirectMessageStore.setState((state) => ({
+      ...state,
+      conversations: {
+        ...state.conversations,
+        [targetNpub]: [existingMessage],
+      },
+    }));
+
+    renderWithQueryClient(<DirectMessageDialog />);
+
+    await waitFor(() =>
+      expect(TauriApi.markDirectMessageConversationRead).toHaveBeenCalledWith({
+        conversationNpub: targetNpub,
+        lastReadAt: existingMessage.createdAt,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        useDirectMessageStore.getState().conversationReadTimestamps[targetNpub],
+      ).toBe(existingMessage.createdAt),
+    );
   });
 });

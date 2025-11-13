@@ -68,6 +68,7 @@ pub struct GetFollowersRequest {
     pub limit: Option<u32>,
     pub sort: Option<String>,
     pub search: Option<String>,
+    pub viewer_npub: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -77,6 +78,7 @@ pub struct GetFollowingRequest {
     pub limit: Option<u32>,
     pub sort: Option<String>,
     pub search: Option<String>,
+    pub viewer_npub: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

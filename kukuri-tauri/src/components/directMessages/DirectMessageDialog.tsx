@@ -460,6 +460,7 @@ export function DirectMessageDialog() {
                           size="sm"
                           variant="link"
                           className="h-auto px-0 text-xs"
+                          data-testid="direct-message-retry-button"
                           onClick={() => {
                             void handleRetry(message);
                           }}

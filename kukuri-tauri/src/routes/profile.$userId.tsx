@@ -71,6 +71,7 @@ function ProfilePage() {
   const { userId } = Route.useParams();
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
+  const viewerNpub = currentUser?.npub ?? null;
 
   const profileQuery = useQuery({
     queryKey: ['userProfile', userId],
@@ -119,7 +120,7 @@ function ProfilePage() {
     ProfileListPage,
     Error,
     InfiniteData<ProfileListPage>,
-    ['profile', string, 'followers', FollowListSort, string],
+    ['profile', string, 'followers', FollowListSort, string, string | null],
     string | null
   >({
     queryKey: [
@@ -128,6 +129,7 @@ function ProfilePage() {
       'followers',
       followersSort,
       followerSearchQuery ?? '',
+      viewerNpub,
     ],
     enabled: Boolean(profile),
     retry: false,
@@ -142,6 +144,7 @@ function ProfilePage() {
         limit: FOLLOW_PAGE_SIZE,
         sort: followersSort,
         search: followerSearchQuery,
+        viewerNpub,
       });
       return {
         items: response.items.map(mapUserProfileToUser),
@@ -158,7 +161,7 @@ function ProfilePage() {
     ProfileListPage,
     Error,
     InfiniteData<ProfileListPage>,
-    ['profile', string, 'following', FollowListSort, string],
+    ['profile', string, 'following', FollowListSort, string, string | null],
     string | null
   >({
     queryKey: [
@@ -167,6 +170,7 @@ function ProfilePage() {
       'following',
       followingSort,
       followingSearchQuery ?? '',
+      viewerNpub,
     ],
     enabled: Boolean(profile),
     retry: false,
@@ -181,6 +185,7 @@ function ProfilePage() {
         limit: FOLLOW_PAGE_SIZE,
         sort: followingSort,
         search: followingSearchQuery,
+        viewerNpub,
       });
       return {
         items: response.items.map(mapUserProfileToUser),
@@ -285,6 +290,7 @@ function ProfilePage() {
           'followers',
           followersSort,
           followerSearchQuery ?? '',
+          viewerNpub,
         ] as const;
         const matchesFilter = matchesProfileSearch(followerProfile, followerSearchQuery);
         queryClient.setQueryData<InfiniteData<ProfileListPage> | undefined>(
@@ -378,6 +384,7 @@ function ProfilePage() {
           'followers',
           followersSort,
           followerSearchQuery ?? '',
+          viewerNpub,
         ] as const;
         queryClient.setQueryData<InfiniteData<ProfileListPage> | undefined>(
           followersKey,
