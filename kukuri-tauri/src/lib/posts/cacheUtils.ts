@@ -5,6 +5,11 @@ import type { FollowingFeedPageResult, TrendingPostsResult } from '@/hooks/useTr
 const TRENDING_POSTS_QUERY_PREFIX = ['trending', 'posts'] as const;
 const FOLLOWING_FEED_QUERY_PREFIX = ['followingFeed'] as const;
 
+export type PostCacheInvalidationTarget = Pick<Post, 'id'> & {
+  topicId?: string | null;
+  authorPubkey?: string | null;
+};
+
 export function removePostFromTrendingCache(queryClient: QueryClient, postId: string) {
   const queries = queryClient.getQueriesData<TrendingPostsResult>({
     queryKey: TRENDING_POSTS_QUERY_PREFIX,
@@ -69,11 +74,15 @@ export function removePostFromFollowingCache(queryClient: QueryClient, postId: s
   });
 }
 
-export function invalidatePostCaches(queryClient: QueryClient, post: Post) {
+export function invalidatePostCaches(queryClient: QueryClient, target: PostCacheInvalidationTarget) {
   queryClient.invalidateQueries({ queryKey: ['timeline'] });
   queryClient.invalidateQueries({ queryKey: ['posts', 'all'] });
-  queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
-  queryClient.invalidateQueries({ queryKey: ['userPosts', post.author.pubkey] });
-  removePostFromTrendingCache(queryClient, post.id);
-  removePostFromFollowingCache(queryClient, post.id);
+  if (target.topicId) {
+    queryClient.invalidateQueries({ queryKey: ['posts', target.topicId] });
+  }
+  if (target.authorPubkey) {
+    queryClient.invalidateQueries({ queryKey: ['userPosts', target.authorPubkey] });
+  }
+  removePostFromTrendingCache(queryClient, target.id);
+  removePostFromFollowingCache(queryClient, target.id);
 }

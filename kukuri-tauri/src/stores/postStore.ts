@@ -271,14 +271,20 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       if (!currentUser) {
         throw new Error('Not authenticated');
       }
+      const existingPost = get().posts.get(id);
 
       if (!isOnline) {
+        const payload: Record<string, unknown> = { postId: id };
+        if (existingPost) {
+          payload.topicId = existingPost.topicId;
+          payload.authorPubkey = existingPost.author.pubkey;
+        }
         await offlineStore.saveOfflineAction({
           userPubkey: currentUser.pubkey,
           actionType: OfflineActionType.DELETE_POST,
           entityType: EntityType.POST,
           entityId: id,
-          data: JSON.stringify({ postId: id }),
+          data: JSON.stringify(payload),
         });
         let removedTopicId: string | null = null;
         set((state) => {

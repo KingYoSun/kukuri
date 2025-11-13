@@ -30,8 +30,12 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { CacheTypeStatus, OfflineAction } from '@/types/offline';
+import type { CacheTypeStatus, OfflineAction, SyncQueueItem } from '@/types/offline';
+import { OfflineActionType } from '@/types/offline';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
+import { useDeletePost } from '@/hooks/usePosts';
 
 type CacheMetadataSummary = {
   cacheType?: string;
@@ -346,6 +350,8 @@ export function SyncStatusIndicator() {
   const [showConflictDialog, setShowConflictDialog] = React.useState(false);
   const [queueFilter, setQueueFilter] = React.useState('');
   const [conflictTab, setConflictTab] = React.useState<'summary' | 'doc'>('summary');
+  const [retryingItemId, setRetryingItemId] = React.useState<number | null>(null);
+  const deletePostMutation = useDeletePost();
 
   React.useEffect(() => {
     if (!showConflictDialog) {
@@ -417,6 +423,44 @@ export function SyncStatusIndicator() {
       // エラーは useSyncManager 内で通知済み
     }
   };
+
+  const handleDeleteRetry = React.useCallback(
+    async (item: SyncQueueItem) => {
+      const postId =
+        getPayloadString(item.payload, "postId") || getPayloadString(item.payload, "entityId");
+      if (!postId) {
+        toast.error("削除対象の投稿IDを取得できませんでした");
+        return;
+      }
+      const topicId = getPayloadString(item.payload, "topicId");
+      const authorPubkey =
+        getPayloadString(item.payload, "authorPubkey") ||
+        getPayloadString(item.payload, "userPubkey");
+
+      try {
+        setRetryingItemId(item.id);
+        await deletePostMutation.manualRetryDelete({
+          postId,
+          topicId,
+          authorPubkey,
+        });
+        toast.success("削除の再送を開始しました");
+        await refreshQueueItems();
+      } catch (error) {
+        errorHandler.log("SyncQueue.post_delete_retry_failed", error, {
+          context: "SyncStatusIndicator.manualRetryDelete",
+          metadata: {
+            queueItemId: item.id,
+            postId,
+          },
+        });
+        toast.error("削除の再送に失敗しました");
+      } finally {
+        setRetryingItemId(null);
+      }
+    },
+    [deletePostMutation, refreshQueueItems],
+  );
 
   const normalizedQueueFilter = queueFilter.trim().toLowerCase();
   const filteredQueueItems = React.useMemo(() => {
@@ -856,6 +900,8 @@ export function SyncStatusIndicator() {
                       Boolean(lastQueuedItemId) &&
                       lastQueuedItemId === item.id &&
                       !normalizedQueueFilter;
+                    const isDeleteAction = item.action_type === OfflineActionType.DELETE_POST;
+                    const isRetryingDelete = retryingItemId === item.id;
 
                     return (
                       <div
@@ -910,6 +956,27 @@ export function SyncStatusIndicator() {
                           <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">
                             {item.error_message}
                           </p>
+                        )}
+                        {isDeleteAction && (
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={isRetryingDelete || deletePostMutation.isPending}
+                              onClick={() => {
+                                void handleDeleteRetry(item);
+                              }}
+                            >
+                              <RefreshCw
+                                className={cn(
+                                  'mr-2 h-3.5 w-3.5',
+                                  (isRetryingDelete || deletePostMutation.isPending) && 'animate-spin',
+                                )}
+                              />
+                              削除を再送
+                            </Button>
+                          </div>
                         )}
                       </div>
                     );

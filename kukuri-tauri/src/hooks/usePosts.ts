@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { usePostStore } from '@/stores';
 import type { Post } from '@/stores';
 import { TauriApi } from '@/lib/api/tauri';
@@ -97,24 +98,47 @@ export const useCreatePost = () => {
   });
 };
 
+type DeletePostMutationInput =
+  | Post
+  | {
+      id: string;
+      topicId?: string | null;
+      authorPubkey?: string | null;
+    };
+
+const isFullPost = (target: DeletePostMutationInput): target is Post => {
+  return (target as Post).author !== undefined;
+};
+
 export const useDeletePost = () => {
   const queryClient = useQueryClient();
   const deletePostRemote = usePostStore((state) => state.deletePostRemote);
   const updateTopicPostCount = useTopicStore((state) => state.updateTopicPostCount);
   const isOnline = useOfflineStore((state) => state.isOnline);
 
-  return useMutation({
-    mutationFn: async (post: Post) => {
-      await deletePostRemote(post.id);
-      return post;
+  const deletePostMutation = useMutation({
+    mutationFn: async (target: DeletePostMutationInput) => {
+      await deletePostRemote(target.id);
+      return target;
     },
-    onSuccess: (post) => {
-      updateTopicPostCount(post.topicId, -1);
-      invalidatePostCaches(queryClient, post);
+    onSuccess: (target) => {
+      const topicId = isFullPost(target) ? target.topicId : target.topicId ?? undefined;
+      const authorPubkey = isFullPost(target)
+        ? target.author.pubkey
+        : target.authorPubkey ?? undefined;
+
+      if (isFullPost(target)) {
+        updateTopicPostCount(target.topicId, -1);
+      }
+      invalidatePostCaches(queryClient, {
+        id: target.id,
+        topicId,
+        authorPubkey,
+      });
       if (isOnline) {
         toast.success('投稿を削除しました');
       } else {
-        toast.success('削除は接続後に自動で反映されます');
+        toast.success('削除は接続復旧後に反映されます');
         errorHandler.info('Post.delete_offline_enqueued', 'useDeletePost');
       }
     },
@@ -124,11 +148,32 @@ export const useDeletePost = () => {
         metadata: post
           ? {
               postId: post.id,
-              topicId: post.topicId,
+              topicId: isFullPost(post) ? post.topicId : post.topicId ?? undefined,
             }
           : undefined,
       });
       toast.error('投稿の削除に失敗しました');
     },
   });
+
+  const manualRetryDelete = useCallback(
+    async (input: { postId: string; topicId?: string | null; authorPubkey?: string | null }) => {
+      const existingPost = usePostStore.getState().posts.get(input.postId);
+      if (existingPost) {
+        await deletePostMutation.mutateAsync(existingPost);
+        return;
+      }
+      await deletePostMutation.mutateAsync({
+        id: input.postId,
+        topicId: input.topicId,
+        authorPubkey: input.authorPubkey,
+      });
+    },
+    [deletePostMutation],
+  );
+
+  return {
+    ...deletePostMutation,
+    manualRetryDelete,
+  };
 };

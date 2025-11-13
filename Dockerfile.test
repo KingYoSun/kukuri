@@ -72,6 +72,7 @@ ENV DOCKER_ENV=1
 # テスト実行用のスクリプトを作成
 RUN install -Dm755 scripts/docker/run-tests.sh /app/run-tests.sh
 RUN install -Dm755 scripts/docker/run-smoke-tests.sh /app/run-smoke-tests.sh
+RUN install -Dm755 scripts/docker/run-post-delete-cache.sh /app/run-post-delete-cache.sh
 
 # デフォルトコマンド
 CMD ["/app/run-smoke-tests.sh"]

@@ -558,17 +558,11 @@
   - `phase5_ci_path_audit.md` に `PostCard.deleteMenu` / `useDeletePost` のテスト ID を追記。TypeScript テスト: `pnpm vitest src/tests/unit/components/posts/PostCard.test.tsx`（pnpm 実行環境の欠如でローカル実行は未完了）。
   - 2025年11月10日: `scripts/docker/ts-test-entrypoint.sh` を追加し、`ts-test` コンテナから `pnpm vitest run …` を直接実行できるようにした。`./scripts/test-docker.sh ts --scenario post-delete-cache --no-build` を完走し、`tmp/logs/post-delete-cache_docker_20251110-021922.log` を採取。Nightly でも同ログを保存する計画に更新。
 
-#### MVP Exit（2025年11月10日更新）
+#### MVP Exit（2025年11月13日更新）
 - **ゴール**: 投稿削除後に Timeline/Topic/Trending/Following/Offline queue が即時整合し、Docker `post-delete-cache` シナリオで再現できること。
-  - **現状**: `useDeletePost` / `invalidatePostCaches` の実装は完了。2025年11月10日に `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.ts src/tests/unit/components/posts/PostCard.test.tsx` を再実行し、`tmp/logs/post_delete_cache_20251110020439.log` を採取。Docker `post-delete-cache` シナリオは `pnpm vitest ... --runInBand` が未対応のため失敗（`tmp/logs/post-delete-cache_docker_20251110020734.log`）。Rust 統合テスト `tests/integration/post_delete_flow.rs` の着手と Docker コマンド定義が残る。
-- **ブロッカー**: ローカルで `pnpm` を再構築し Nightly と同じユニットテストを実行すること、`tmp/logs/post_delete_cache_<timestamp>.log` の採取手順、`OfflineActionType::DELETE_POST` の再送ログを `phase5_ci_path_audit.md` に追記すること。
-- **テスト/Runbook**: `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.ts src/tests/unit/components/posts/PostCard.test.tsx`、`scripts/test-docker.{sh,ps1} ts -Scenario post-delete-cache`、`docker compose -f docker-compose.test.yml run --rm test-runner pnpm vitest --run src/tests/unit/hooks/useDeletePost.test.ts` をセットで記録。
-- **参照**: `phase5_user_flow_summary.md`（UX/体験導線行）、`tauri_app_implementation_plan.md` Phase5、`phase5_ci_path_audit.md` post-delete-cache 行。
-- **Stage4 TODO（post_delete_flow / Docker シナリオ）**
-  1. `kukuri-tauri/src-tauri/src/application/services/post_service.rs` に `post_delete_flow.rs` 統合テストを追加し、`delete_post` → `sync_queue` → `list_following_feed` / `list_trending_posts` の一貫性を Rust 側で担保。
-  2. `docker-compose.test.yml` の `test-runner` へ `SCENARIO=post-delete-cache` を渡すエントリポイントを追加し、`pnpm vitest run --config tests/scenarios/post-delete-cache.vitest.ts` を実行して JSON レポートと `tmp/logs/post-delete-cache_docker_<timestamp>.log` を生成。
-  3. `SyncStatusIndicator` の履歴カードに「削除リトライ」ボタンを追加し、`OfflineActionType::DELETE_POST` の `manual_retry` を `useDeletePost` と共有。Vitest に `src/tests/unit/components/posts/PostCard.deleteOffline.test.tsx` を追加。
-  4. Runbook Chapter5 に手動復旧手順（`pnpm vitest run src/tests/unit/hooks/useDeletePost.test.ts`、`docker compose ... post-delete-cache`）と `tmp/logs/post_delete_cache_<timestamp>.log` の参照先を追記し、Stage4 完了時に本節を更新。
+  - **2025年11月13日**: Rust 統合テスト `src-tauri/tests/integration/post_delete_flow.rs` を追加し、`delete_post` → `sync_queue` → `list_following_feed` / `get_posts_by_topic` の整合性と `EventService::delete_events` 呼び出しを担保。フロント側は `useDeletePost.manualRetryDelete` と `SyncStatusIndicator` の削除再送ボタンでメタデータだけのリトライを許可し、`PostCard.deleteOffline.test.tsx` / `useDeletePost.test.tsx` を拡張してキュー登録・重複防止を検証。ローカルでは `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.tsx src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/components/posts/PostCard.deleteOffline.test.tsx` を実行し、`tmp/logs/post_delete_cache_20251113-085756.log` に採取した。
+- **Docker/CI 証跡**: `SCENARIO=post-delete-cache docker compose -f docker-compose.test.yml run --rm test-runner` で `/app/run-post-delete-cache.sh` を経由して Vitest シナリオを実行し、`tmp/logs/post-delete-cache_docker_20251113-002140.log` と `test-results/post-delete-cache/20251113-002140.json` を生成。`scripts/docker/run-smoke-tests.sh` / `scripts/test-docker.{sh,ps1}` にシナリオ分岐を追加し、`phase5_ci_path_audit.md` の `nightly.post-delete-cache` 行へログパスと JSON を記録。
+- **Runbook/参照**: `docs/03_implementation/windows_test_docker_runbook.md` Chapter5 にホストログ (`tmp/logs/post_delete_cache_<timestamp>.log`) と Docker ログ (`tmp/logs/post-delete-cache_docker_<timestamp>.log`) の採取手順、`SCENARIO=post-delete-cache docker compose run --rm test-runner` 実行例を追記。関連ドキュメント: `phase5_user_flow_summary.md`（UX導線ステータス）、`tauri_app_implementation_plan.md` Phase5、`phase5_ci_path_audit.md` post-delete-cache 行。
 
 ### 5.11 SyncStatusIndicator とオフライン同期導線（2025年11月07日追加）
 - **目的**: オフライン操作や差分同期の状態を一元的に可視化し、「いつ同期されるのか」「失敗/競合時にどう対処するのか」を UI 上で完結させる。Relay/P2P インジケーターとは別に、投稿/トピック/フォローなど全エンティティの再送を追跡できるようにする。

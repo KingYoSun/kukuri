@@ -31,6 +31,7 @@ services:
     volumes:
       # テスト結果の出力用
       - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
       # Cargoキャッシュの永続化
       - cargo-registry:/usr/local/cargo/registry
       - cargo-git:/usr/local/cargo/git
@@ -59,6 +60,7 @@ services:
       NODE_ENV: test
       # CI環境を示す（一部のテストで必要）
       CI: "true"
+      SCENARIO: "${SCENARIO:-}"
     # host network used for UDP reachability between endpoints
 
   # 個別のRustテスト実行

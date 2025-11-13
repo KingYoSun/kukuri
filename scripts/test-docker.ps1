@@ -589,7 +589,8 @@ function Invoke-TypeScriptPostDeleteCacheScenario {
     Write-Host "Running TypeScript scenario 'post-delete-cache'..."
     $vitestTargets = @(
         "src/tests/unit/hooks/useDeletePost.test.tsx",
-        "src/tests/unit/components/posts/PostCard.test.tsx"
+        "src/tests/unit/components/posts/PostCard.test.tsx",
+        "src/tests/unit/components/posts/PostCard.deleteOffline.test.tsx"
     )
 
     $vitestStatus = 0

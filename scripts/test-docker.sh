@@ -365,6 +365,7 @@ run_ts_post_delete_cache() {
   local vitest_targets=(
     'src/tests/unit/hooks/useDeletePost.test.tsx'
     'src/tests/unit/components/posts/PostCard.test.tsx'
+    'src/tests/unit/components/posts/PostCard.deleteOffline.test.tsx'
   )
 
   local vitest_status=0

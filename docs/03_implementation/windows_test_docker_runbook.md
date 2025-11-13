@@ -99,3 +99,18 @@ Windows では DLL 依存の問題によりネイティブ実行が不安定な�
 - `docs/03_implementation/docker_test_environment.md`: Docker 共通設定と Linux/macOS 手順。
 - `.github/workflows/test.yml`: CI ジョブ構成と Artefact 収集の詳細。
 - `scripts/test-docker.ps1` / `scripts/run-rust-tests.ps1`: 本ドキュメントで参照するスクリプト定義。
+## Chapter5: post-delete-cache シナリオ (Stage4)
+
+Stage4 で追加した投稿削除キャッシュ検証はローカルと Docker の両方で再現できるようにしている。
+
+### 5.1 ローカル Vitest 実行
+1. `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.tsx src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/components/posts/PostCard.deleteOffline.test.tsx`
+2. PowerShell から `Tee-Object -FilePath ..\tmp\logs\post_delete_cache_<timestamp>.log` で標準出力を保存し、失敗時の一次証跡にする（例: `tmp/logs/post_delete_cache_20251113-085756.log`）。
+3. 成功ログは Runbook Chapter5 と `phase5_ci_path_audit.md` の `nightly.post-delete-cache` 行にリンクする。`test-results/post-delete-cache/` 配下の JSON（`pnpm vitest` の `--reporter=json --outputFile`）も同じタイムスタンプで保持する。
+
+### 5.2 Docker post-delete-cache シナリオ
+1. `SCENARIO=post-delete-cache docker compose -f docker-compose.test.yml run --rm test-runner` を実行すると `/app/run-post-delete-cache.sh` が呼び出され、コンテナ内で `pnpm vitest run --config tests/scenarios/post-delete-cache.vitest.ts` が実行される。
+2. スクリプトは JSON レポートを `test-results/post-delete-cache/<timestamp>.json` に書き出し、標準出力を `tmp/logs/post-delete-cache_docker_<timestamp>.log` へ追記する（例: `tmp/logs/post-delete-cache_docker_20251113-002140.log` / `test-results/post-delete-cache/20251113-002140.json`）。
+3. ログ/レポートは Nightly artefact `post-delete-cache-logs` / `post-delete-cache-reports` に追加し、`phase5_ci_path_audit.md` と本 Runbook から辿れるようにする。
+
+> メモ: SCENARIO なしで docker compose run test-runner を実行すると従来の /app/run-smoke-tests.sh が起動する。post-delete-cache 専用パスを利用する際は必ず環境変数を渡すこと。

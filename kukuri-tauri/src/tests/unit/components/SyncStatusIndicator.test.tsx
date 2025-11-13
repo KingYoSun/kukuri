@@ -7,8 +7,29 @@ import type { SyncStatus } from '@/hooks/useSyncManager';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { OfflineActionType } from '@/types/offline';
 
-// モックの設定
+const mockManualRetryDelete = vi.fn().mockResolvedValue(undefined);
+const toastMock = {
+  success: vi.fn(),
+  error: vi.fn(),
+};
+
 vi.mock('@/hooks/useSyncManager');
+vi.mock('@/hooks/usePosts', () => ({
+  useDeletePost: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+    manualRetryDelete: mockManualRetryDelete,
+  }),
+}));
+vi.mock('sonner', () => ({
+  toast: toastMock,
+}));
+vi.mock('@/lib/errorHandler', () => ({
+  errorHandler: {
+    log: vi.fn(),
+  },
+}));
 
 describe('SyncStatusIndicator', () => {
   const mockTriggerManualSync = vi.fn();
@@ -50,6 +71,9 @@ describe('SyncStatusIndicator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useSyncManager).mockReturnValue(defaultManagerState);
+    mockManualRetryDelete.mockReset();
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
   });
 
   describe('状態表示', () => {
@@ -824,3 +848,40 @@ describe('SyncStatusIndicator', () => {
     });
   });
 });
+  it('削除アクションには再送ボタンが表示され manualRetryDelete を呼び出す', async () => {
+    const refreshQueueItems = vi.fn();
+    vi.mocked(useSyncManager).mockReturnValue({
+      ...defaultManagerState,
+      queueItems: [
+        {
+          id: 1,
+          action_type: OfflineActionType.DELETE_POST,
+          status: 'failed',
+          retry_count: 1,
+          max_retries: 3,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+          payload: {
+            postId: 'post-1',
+            topicId: 'topic-1',
+            authorPubkey: 'author-1',
+          },
+        },
+      ],
+      refreshQueueItems,
+    });
+
+    render(<SyncStatusIndicator />);
+    const retryButton = screen.getByRole('button', { name: '削除を再送' });
+    fireEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(mockManualRetryDelete).toHaveBeenCalledWith({
+        postId: 'post-1',
+        topicId: 'topic-1',
+        authorPubkey: 'author-1',
+      });
+      expect(refreshQueueItems).toHaveBeenCalled();
+      expect(toastMock.success).toHaveBeenCalled();
+    });
+  });

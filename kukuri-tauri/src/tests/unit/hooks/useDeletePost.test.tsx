@@ -8,41 +8,65 @@ import type { Post } from '@/stores';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 
-const mockDeletePostRemote = vi.fn();
-const mockUpdateTopicPostCount = vi.fn();
-const offlineState = { isOnline: true };
+const {
+  mockDeletePostRemote,
+  mockUpdateTopicPostCount,
+  offlineState,
+  postStoreState,
+  usePostStoreMock,
+  useTopicStoreMock,
+  useOfflineStoreMock,
+  invalidatePostCachesMock,
+} = vi.hoisted(() => {
+  const mockDeletePostRemote = vi.fn();
+  const mockUpdateTopicPostCount = vi.fn();
+  const offlineState = { isOnline: true };
 
-const usePostStoreMock = vi.fn(
-  (selector?: (state: { deletePostRemote: typeof mockDeletePostRemote }) => unknown) => {
-    const state = {
-      deletePostRemote: mockDeletePostRemote,
-    };
-    return selector ? selector(state) : state;
-  },
-);
-
-const useTopicStoreMock = vi.fn(
-  (selector?: (state: { updateTopicPostCount: typeof mockUpdateTopicPostCount }) => unknown) => {
-    const state = {
-      updateTopicPostCount: mockUpdateTopicPostCount,
-    };
-    return selector ? selector(state) : state;
-  },
-);
-
-const useOfflineStoreMock = vi.fn((selector?: (state: { isOnline: boolean }) => unknown) => {
-  const state = {
-    isOnline: offlineState.isOnline,
+  const postStoreState = {
+    deletePostRemote: mockDeletePostRemote,
+    posts: new Map<string, Post>(),
   };
-  return selector ? selector(state) : state;
+
+  const usePostStoreMock = vi.fn(
+    (selector?: (state: typeof postStoreState) => unknown) =>
+      selector ? selector(postStoreState) : postStoreState,
+  ) as unknown as ((selector?: (state: typeof postStoreState) => unknown) => unknown) & {
+    getState: () => typeof postStoreState;
+  };
+  usePostStoreMock.getState = () => postStoreState;
+
+  const useTopicStoreMock = vi.fn(
+    (selector?: (state: { updateTopicPostCount: typeof mockUpdateTopicPostCount }) => unknown) => {
+      const state = {
+        updateTopicPostCount: mockUpdateTopicPostCount,
+      };
+      return selector ? selector(state) : state;
+    },
+  );
+
+  const useOfflineStoreMock = vi.fn((selector?: (state: { isOnline: boolean }) => unknown) => {
+    const state = {
+      isOnline: offlineState.isOnline,
+    };
+    return selector ? selector(state) : state;
+  });
+
+  const invalidatePostCachesMock = vi.fn();
+
+  return {
+    mockDeletePostRemote,
+    mockUpdateTopicPostCount,
+    offlineState,
+    postStoreState,
+    usePostStoreMock,
+    useTopicStoreMock,
+    useOfflineStoreMock,
+    invalidatePostCachesMock,
+  };
 });
 
-const invalidatePostCachesMock = vi.fn();
-
 vi.mock('@/stores', () => ({
-  usePostStore: (
-    selector?: (state: { deletePostRemote: typeof mockDeletePostRemote }) => unknown,
-  ) => usePostStoreMock(selector),
+  usePostStore: usePostStoreMock,
 }));
 
 vi.mock('@/stores/topicStore', () => ({
@@ -114,6 +138,7 @@ describe('useDeletePost', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     offlineState.isOnline = true;
+    postStoreState.posts = new Map([[samplePost.id, samplePost]]);
   });
 
   it('オンライン時に投稿削除とキャッシュ更新を行う', async () => {
@@ -127,7 +152,14 @@ describe('useDeletePost', () => {
 
     expect(mockDeletePostRemote).toHaveBeenCalledWith(samplePost.id);
     expect(mockUpdateTopicPostCount).toHaveBeenCalledWith(samplePost.topicId, -1);
-    expect(invalidatePostCachesMock).toHaveBeenCalled();
+    expect(invalidatePostCachesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        id: samplePost.id,
+        topicId: samplePost.topicId,
+        authorPubkey: samplePost.author.pubkey,
+      }),
+    );
     expect(toast.success).toHaveBeenCalledWith('投稿を削除しました');
   });
 
@@ -142,7 +174,7 @@ describe('useDeletePost', () => {
       await result.current.mutateAsync(samplePost);
     });
 
-    expect(toast.success).toHaveBeenCalledWith('削除は接続後に自動で反映されます');
+    expect(toast.success).toHaveBeenCalledWith('削除は接続復旧後に反映されます');
     expect(errorHandler.info).toHaveBeenCalledWith('Post.delete_offline_enqueued', 'useDeletePost');
   });
 
@@ -166,5 +198,41 @@ describe('useDeletePost', () => {
       }),
     );
     expect(toast.error).toHaveBeenCalledWith('投稿の削除に失敗しました');
+  });
+  it('manualRetryDelete はキャッシュ内の投稿を再利用する', async () => {
+    const wrapper = createWrapper();
+    mockDeletePostRemote.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useDeletePost(), { wrapper });
+
+    await act(async () => {
+      await result.current.manualRetryDelete({ postId: samplePost.id });
+    });
+
+    expect(mockDeletePostRemote).toHaveBeenCalledWith(samplePost.id);
+  });
+
+  it('manualRetryDelete はメタデータのみでも再送できる', async () => {
+    const wrapper = createWrapper();
+    postStoreState.posts.clear();
+    mockDeletePostRemote.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useDeletePost(), { wrapper });
+
+    await act(async () => {
+      await result.current.manualRetryDelete({
+        postId: samplePost.id,
+        topicId: 'fallback-topic',
+        authorPubkey: 'author-fallback',
+      });
+    });
+
+    expect(mockDeletePostRemote).toHaveBeenCalledWith(samplePost.id);
+    expect(invalidatePostCachesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        id: samplePost.id,
+        topicId: 'fallback-topic',
+        authorPubkey: 'author-fallback',
+      }),
+    );
   });
 });
