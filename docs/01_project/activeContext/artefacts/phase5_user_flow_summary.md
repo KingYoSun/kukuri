@@ -1,6 +1,6 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月12日
+最終更新: 2025年11月13日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
@@ -72,7 +72,7 @@
 | --- | --- | --- | --- | --- |
 | 外観 | `/settings` | テーマ切替（ライト/ダーク） | 稼働中 | `useUIStore` 経由で永続化 |
 | アカウント | `/settings` | プロフィール編集モーダル、鍵管理プレースホルダー | 改善中 | プロフィール編集は稼働中。鍵管理ボタンは未配線 |
-| プライバシー | `/settings` | 公開設定／オンライン表示トグル | 稼働中 | Stage3（Doc/Blob + privacy）完了。`ProfileEditDialog` / `ProfileSetup` が `update_privacy_settings` → `upload_profile_avatar` → `useProfileAvatarSync` を直列実行し、`scripts/test-docker.{sh,ps1} ts -Scenario profile-avatar-sync` / `rust -Test profile_avatar_sync` で検証。Stage4（Service Worker + バックオフ）は backlog。 |
+| プライバシー | `/settings` | 公開設定／オンライン表示トグル | 稼働中 | Stage4（2025年11月12日）で Service Worker / BroadcastChannel / `cache_metadata` TTL 30 分 / `offlineApi.addToSyncQueue` ログを実装し、`scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker` / `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` / `pnpm vitest run ...ProfileAvatarSyncWorker.test.ts` を再実行。`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` は `nightly.profile-avatar-sync` artefact として Runbook Chapter4 / `phase5_ci_path_audit.md` に連携済み。 |
 | P2P 接続 | `/settings` | `PeerConnectionPanel` で手動接続/履歴管理 | 稼働中 | `connect_to_peer` コマンドに紐づく |
 | Bootstrap 設定 | `/settings` | ブートストラップノード一覧の取得/登録/リセット | 稼働中 | `set_bootstrap_nodes` などと連携 |
 | 開発者ツール (DEV) | `/settings`（開発モード） | `NostrTestPanel`, `P2PDebugPanel` | 改善中 | UI は Dev 限定。計測ログとテスト誘導の整理が backlog |

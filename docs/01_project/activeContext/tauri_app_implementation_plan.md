@@ -1,7 +1,7 @@
 # Tauriアプリケーション実装計画
 
 **作成日**: 2025年07月28日  
-**最終更新**: 2025年11月12日  
+**最終更新**: 2025年11月13日  
 **目的**: 体験設計に基づいた具体的な実装タスクとスケジュール（オフラインファースト対応）
 
 ## MVP残タスクサマリー（2025年11月10日更新）
@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- |
 | トレンド/フォロー導線 | `/trending` `/following` Summary Panel を安定化し、Docker/Nightly と整合 | `trending_metrics_job` の24h集計 + `list_trending_*` の `generated_at` ミリ秒保証、`scripts/test-docker.{sh,ps1}` `--scenario trending-feed` の fixture 固定、`TrendingSummaryPanel` / `FollowingSummaryPanel` のテレメトリ表示更新 | ⏳ UI/集計は完了し、2025年11月10日に `KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM` を追加して `curl http://localhost:<port>/metrics` で `trending_metrics_job_*` を監視できるようになった。残課題は `corepack pnpm` 再設定、`scripts/metrics/export-p2p --job trending` / Docker `prometheus-trending` サービスの追加、Nightly ログ保存先の固定。 | `phase5_user_flow_summary.md` (MVP Exit UX行), `phase5_user_flow_inventory.md` 5.7 |
 | DM & 通知 | `DirectMessageInbox` の可搬性と未読表示を完成 | 会話リストの仮想スクロール、候補補完・検索、未読共有（`mark_direct_message_conversation_read` multi-device）、SR-only 告知のUIテストを追加 | ⏳ UI/IPC は実装済。既読共有と `Header.test.tsx` / `DirectMessageDialog.test.tsx` を `pnpm vitest` で再確認できていない。`phase5_user_flow_inventory.md` 5.4 に多端末要件を追記予定。 | `phase5_user_flow_inventory.md` 5.4, `phase5_user_flow_summary.md` |
-| プロフィール/設定 | ProfileSetup/Settings モーダルを共通化しプライバシー設定をバックエンドへ伝播 | `ProfileForm` 抽出、プライバシーstore (`usePrivacySettingsStore`) 永続化、`update_nostr_metadata` の権限拡張、設定モーダルの保存フローとテスト | ✅ Stage3（2025年11月10日）: `ProfileEditDialog` / `ProfileSetup` が avatar + privacy を直列保存し、`profile_avatar_sync` + `useProfileAvatarSync` を `__root.tsx` 常駐で起動。`pnpm vitest run src/tests/unit/components/settings/ProfileEditDialog.test.tsx src/tests/unit/components/auth/ProfileSetup.test.tsx src/tests/unit/hooks/useProfileAvatarSync.test.tsx` と `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync`, `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` を実行して Runbook / CI パス監査へ登録済み。Service Worker (`profileAvatarSyncSW.ts`) と BroadcastChannel を追加し、Stage4（バックグラウンド同期）の実装を開始。 | `phase5_user_flow_inventory.md` 5.1 |
+| プロフィール/設定 | ProfileSetup/Settings モーダルを共通化しプライバシー設定をバックエンドへ伝播 | `ProfileForm` 抽出、プライバシーstore (`usePrivacySettingsStore`) 永続化、`update_nostr_metadata` の権限拡張、設定モーダルの保存フローとテスト | ✅ Stage4（2025年11月12日）: Stage3 での Doc/Blob + privacy 連携に続き、Service Worker (`profileAvatarSyncSW.ts`) / BroadcastChannel / `cache_metadata` TTL 30 分 / `offlineApi.addToSyncQueue` ログを実装し、`scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker` / `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` / `pnpm vitest run ...useProfileAvatarSync.test.tsx workers/profileAvatarSyncWorker.test.ts` を再実行。`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` を `nightly.profile-avatar-sync` artefact へ保存し、Runbook Chapter4 / `phase5_ci_path_audit.md` / `phase5_dependency_inventory_template.md` に Service Worker 手順を反映。 | `phase5_user_flow_inventory.md` 5.1 |
 | ユーザー検索 | レートリミット/ページネーション/状態遷移をUIで表現 | `search_users` API 拡張（cursor/sort/allow_incomplete）、`UserSearchResults` 状態マシン、レートリミットUI、`useUserSearchQuery` テスト | ⏳ 2025年11月10日に `allow_incomplete` フォールバック・補助検索検知・SearchBar 警告スタイルを実装し、`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx`（`tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log`）と Docker `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build`（`tmp/logs/user_search_pagination_20251110-142854.log`）で回帰を取得。残タスクは Nightly ジョブへのシナリオ組み込みと `test-results/user-search-pagination/*.json` の成果物化。 | `phase5_user_flow_inventory.md` 5.4 |
 | Offline sync_queue | オフライン操作の蓄積と競合解決UIを提供 | `sync_queue`/`offline_actions`/`cache_metadata` テーブル、`sync_offline_actions` Tauriコマンド、`useSyncManager` conflict banner/Retry、Service Worker のバックグラウンド同期 | ✅ Stage4（2025年11月11日）: `cache_metadata` に Doc/Blob 情報（`doc_version`/`blob_hash`/`payload_bytes`）を永続化し、`SyncStatusIndicator` に Doc/Blob 競合バナーとサマリーを追加。`serviceWorker/offlineSyncWorker.ts` + BroadcastChannel で自動再送ジョブを整備し、`./scripts/test-docker.{sh,ps1} ts --scenario offline-sync --no-build` と `npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx` を Runbook/CI に登録。 | 本書 Phase4, `phase5_user_flow_inventory.md` 5.5/5.11 |
 
@@ -453,7 +453,7 @@ export function PeerConnectionPanel() {
 
 #### 4.4 オフラインUI/UX
 
-> **優先度**: Stage4（MVP Exit Checklist #3）で、ヘッダー/サマリ導線を統一し Runbook に再送手順を反映する段階。`sync_engine` の再送ログ整備と Service Worker ベースのバックグラウンド同期は本節で扱う。
+> **優先度**: Stage4（MVP Exit Checklist #3）は 2025年11月11日にクローズ済み。以降はヘッダー/サマリ導線と Runbook/artefact の突合、および `sync_engine` 再送ログ・Service Worker ジョブの監視強化を本節で扱う。
 
 2025年11月11日: Stage4 初期要件（Doc/Blob `cache_metadata` 拡張、競合バナー、Service Worker、Docker `offline-sync` シナリオ）を完了。`cache_types` から `doc_version` / `blob_hash` / `payload_bytes` を提供し、`SyncStatusIndicator` に Doc/Blob サマリーと競合バナーを実装。`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx` と `./scripts/test-docker.{sh,ps1} ts --scenario offline-sync --no-build` を Runbook/CI に登録し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` を採取して Chapter5 へリンクした。
 
