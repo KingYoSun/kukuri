@@ -1,0 +1,60 @@
+{
+  "trending_topics": {
+    "generated_at": 1700000000000,
+    "topics": [
+      {
+        "topic_id": "topic-1",
+        "name": "Topic One",
+        "description": "desc",
+        "member_count": 120,
+        "post_count": 30,
+        "trending_score": 24.0,
+        "rank": 1,
+        "score_change": 2.1
+      }
+    ]
+  },
+  "trending_posts": {
+    "generated_at": 1700000000500,
+    "topics": [
+      {
+        "topic_id": "topic-1",
+        "topic_name": "Topic One",
+        "relative_rank": 1,
+        "posts": [
+          {
+            "id": "post-1",
+            "content": "hello",
+            "author_pubkey": "author-1",
+            "author_npub": "npub1author",
+            "topic_id": "topic-1",
+            "created_at": 1700000000,
+            "likes": 10,
+            "boosts": 2,
+            "replies": 1,
+            "is_synced": true
+          }
+        ]
+      }
+    ]
+  },
+  "following_feed": {
+    "items": [
+      {
+        "id": "post-1",
+        "content": "following feed post",
+        "author_pubkey": "follow-author-1",
+        "author_npub": "npub1follow",
+        "topic_id": "topic-1",
+        "created_at": 1700000200,
+        "likes": 1,
+        "boosts": 0,
+        "replies": 0,
+        "is_synced": true
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "server_time": 1700000300
+  }
+}

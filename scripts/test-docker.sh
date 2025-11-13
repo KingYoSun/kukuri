@@ -209,6 +209,20 @@ run_ts_trending_feed() {
 
   local timestamp
   timestamp="$(date '+%Y%m%d-%H%M%S')"
+  local log_dir="tmp/logs/trending-feed"
+  local log_rel_path="${log_dir}/${timestamp}.log"
+  local latest_rel_path="${log_dir}/latest.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  local latest_host_path="${REPO_ROOT}/${latest_rel_path}"
+  mkdir -p "$(dirname "$log_host_path")"
+  : >"$log_host_path"
+  {
+    echo "=== trending-feed scenario ==="
+    echo "timestamp: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "fixture: ${fixture_path}"
+    echo
+  } >>"$log_host_path"
+
   local vitest_targets=(
     'src/tests/unit/routes/trending.test.tsx'
     'src/tests/unit/routes/following.test.tsx'
@@ -229,20 +243,34 @@ run_ts_trending_feed() {
     slug="${slug//./_}"
     local report_rel_path="test-results/trending-feed/${timestamp}-${slug}.json"
     local report_container_path="/app/${report_rel_path}"
+    {
+      echo "--- Running target: ${target} ---"
+      echo "report: ${report_rel_path}"
+    } >>"$log_host_path"
 
-    echo "  → pnpm vitest run ${target}"
+    echo "  › pnpm vitest run ${target}"
     if ! compose_run '' run --rm \
       -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
       ts-test bash -lc "
         set -euo pipefail
         cd /app/kukuri-tauri
-        if [ ! -f node_modules/.bin/vitest ]; then
-          echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-          pnpm install --frozen-lockfile --ignore-workspace
+        declare -a PNPM_BIN
+        if command -v pnpm >/dev/null 2>&1; then
+          PNPM_BIN=(pnpm)
+        elif command -v corepack >/dev/null 2>&1; then
+          PNPM_BIN=(corepack pnpm)
+        else
+          echo '[ERROR] Neither pnpm nor corepack is available inside container.' >&2
+          exit 1
         fi
-        pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '${report_container_path}'
-      "; then
-      vitest_status=$?
+        echo "[INFO] Using \\${PNPM_BIN[*]} for pnpm commands"
+        if [ ! -f node_modules/.bin/vitest ]; then
+          echo "[INFO] Installing frontend dependencies inside container (\\${PNPM_BIN[*]} install --frozen-lockfile)..."
+          "\\${PNPM_BIN[@]}" install --frozen-lockfile --ignore-workspace
+        fi
+        "\\${PNPM_BIN[@]}" vitest run '${target}' --reporter=default --reporter=json --outputFile "${report_container_path}"
+      " | tee -a "$log_host_path"; then
+      vitest_status=${PIPESTATUS[0]}
       echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
       break
     fi
@@ -259,6 +287,14 @@ run_ts_trending_feed() {
     stop_prometheus_trending
   else
     collect_trending_metrics_snapshot "${timestamp}" "skipped"
+  fi
+
+  if [[ -f "$log_host_path" ]]; then
+    cp "$log_host_path" "$latest_host_path"
+    echo "[OK] Scenario log saved to ${log_rel_path}"
+    echo "[OK] Latest scenario log updated at ${latest_rel_path}"
+  else
+    echo "[WARN] Scenario log was not generated at ${log_rel_path}" >&2
   fi
 
   return $vitest_status

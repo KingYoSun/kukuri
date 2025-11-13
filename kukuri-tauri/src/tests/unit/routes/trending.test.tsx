@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TrendingPage } from '@/routes/trending';
 import type { TrendingPostsResult, TrendingTopicsResult } from '@/hooks/useTrendingFeeds';
+import { getTrendingScenarioFixture } from '@/tests/utils/trendingFixture';
 
 const trendingMocks = vi.hoisted(() => ({
   useTrendingTopicsQueryMock: vi.fn(),
@@ -15,8 +16,12 @@ vi.mock('@/hooks/useTrendingFeeds', () => ({
   useTrendingPostsQuery: trendingMocks.useTrendingPostsQueryMock,
 }));
 
+const trendingFixture = getTrendingScenarioFixture();
+const topicsGeneratedAt = trendingFixture?.trendingTopics.generated_at ?? Date.now();
+const postsGeneratedAt = trendingFixture?.trendingPosts.generated_at ?? Date.now();
+
 const buildTopicsResult = (overrides?: Partial<TrendingTopicsResult>): TrendingTopicsResult => ({
-  generatedAt: Date.now(),
+  generatedAt: topicsGeneratedAt,
   topics: [
     {
       topicId: 'topic-1',
@@ -33,7 +38,7 @@ const buildTopicsResult = (overrides?: Partial<TrendingTopicsResult>): TrendingT
 });
 
 const buildPostsResult = (overrides?: Partial<TrendingPostsResult>): TrendingPostsResult => ({
-  generatedAt: Date.now(),
+  generatedAt: postsGeneratedAt,
   topics: [
     {
       topicId: 'topic-1',

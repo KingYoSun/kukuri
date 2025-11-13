@@ -429,7 +429,7 @@
      - Vitest（Dialog/Trending/Following/Header）と `cargo test` で動作を検証。  
   3. **Docker シナリオ `trending-feed` 整備**  
      - 目的: CI / ローカル検証でトレンド・フォロー導線の UI テストを Docker 内で再現し、バックエンド API 仕様変更時のリグレッションを早期検知する。  
-     - 具体: `docker-compose.test.yml` の `test-runner` に `pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` を呼ぶシナリオを追加。フィクスチャは `tests/fixtures/trending/default.json`（`VITE_TRENDING_FIXTURE_PATH`）で差替可能とし、結果ログを `test-results/trending-feed/latest.log` として保存。  
+    - 具体: `docker-compose.test.yml` の `test-runner` に `pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` を呼ぶシナリオを追加。フィクスチャは `tests/fixtures/trending/default.json`（`VITE_TRENDING_FIXTURE_PATH`）で差替可能とし、結果ログを `tmp/logs/trending-feed/latest.log` として保存。  
      - 付随: Windows 向け `./scripts/test-docker.ps1 ts -Scenario trending-feed` / Linux 向け `./scripts/test-docker.sh ts --scenario trending-feed` を追加し、`docs/03_implementation/docker_test_environment.md` と README のテスト手順に追記。Nightly ワークフローへ「Trending Feed (Docker)」ジョブを追加し、失敗時はアーティファクトと `phase5_ci_path_audit.md` を参照する運用とする。  
   4. **`trending_metrics_job` 導入**  
      - 目的: Summary Panel とトレンド表示の精度を高めるため、24h 集計ジョブで `topic_metrics` を更新し、トレンドスコアや参加者数の時間ベース推移を取得可能にする。  

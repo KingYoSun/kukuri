@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FollowingPage } from '@/routes/following';
 import type { Post } from '@/stores';
+import { getTrendingScenarioFixture } from '@/tests/utils/trendingFixture';
 
 const followingMocks = vi.hoisted(() => ({
   useFollowingFeedQueryMock: vi.fn(),
@@ -12,6 +13,9 @@ const followingMocks = vi.hoisted(() => ({
 vi.mock('@/hooks/useTrendingFeeds', () => ({
   useFollowingFeedQuery: followingMocks.useFollowingFeedQueryMock,
 }));
+
+const trendingFixture = getTrendingScenarioFixture();
+const defaultServerTime = trendingFixture?.followingFeed.server_time ?? Date.now();
 
 const buildPost = (overrides?: Partial<Post>): Post => ({
   id: 'post-1',
@@ -59,7 +63,7 @@ const mockFollowingQuery = (options: FollowingQueryOverride = {}) => {
     isFetchingNextPage = false,
     fetchNextPage = vi.fn(),
     refetch = vi.fn(),
-    serverTime = Date.now(),
+    serverTime = defaultServerTime,
     isFetching = false,
   } = options;
 

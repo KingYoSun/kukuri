@@ -14,6 +14,12 @@ import {
   followingFeedQueryKey,
   type FollowingFeedPageResult,
 } from '@/hooks/useTrendingFeeds';
+import type {
+  FollowingFeedPage,
+  ListTrendingPostsResult,
+  ListTrendingTopicsResult,
+} from '@/lib/api/tauri';
+import { getTrendingScenarioFixture, cloneFixture } from '@/tests/utils/trendingFixture';
 
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
@@ -54,6 +60,79 @@ vi.mock('@/lib/errorHandler', () => ({
   },
 }));
 
+const trendingFixture = getTrendingScenarioFixture();
+
+const baseTopicsApi: ListTrendingTopicsResult = trendingFixture
+  ? cloneFixture(trendingFixture.trendingTopics)
+  : {
+      generated_at: 1_700_000_000_000,
+      topics: [
+        {
+          topic_id: 'topic-1',
+          name: 'Topic One',
+          description: 'desc',
+          member_count: 12,
+          post_count: 30,
+          trending_score: 24,
+          rank: 1,
+          score_change: null,
+        },
+      ],
+    };
+
+const basePostsApi: ListTrendingPostsResult = trendingFixture
+  ? cloneFixture(trendingFixture.trendingPosts)
+  : {
+      generated_at: 1_700_000_100_000,
+      topics: [
+        {
+          topic_id: 'topic-1',
+          topic_name: 'Topic One',
+          relative_rank: 1,
+          posts: [
+            {
+              id: 'post-1',
+              content: 'hello',
+              author_pubkey: 'author-1',
+              author_npub: 'npub1author',
+              topic_id: 'topic-1',
+              created_at: 1_700_000_000,
+              likes: 10,
+              boosts: 0,
+              replies: 0,
+              is_synced: true,
+            },
+          ],
+        },
+      ],
+    };
+
+const baseFollowingApi: FollowingFeedPage = trendingFixture
+  ? cloneFixture(trendingFixture.followingFeed)
+  : {
+      items: [
+        {
+          id: 'post-1',
+          content: 'hello',
+          author_pubkey: 'author-1',
+          author_npub: 'npub1author',
+          topic_id: 'topic-1',
+          created_at: 1_700_000_000,
+          likes: 2,
+          boosts: 0,
+          replies: 0,
+          is_synced: true,
+        },
+      ],
+      next_cursor: null,
+      has_more: false,
+      server_time: 1_700_000_000,
+    };
+
+const buildTopicsApiResponse = (): ListTrendingTopicsResult => cloneFixture(baseTopicsApi);
+const buildPostsApiResponse = (): ListTrendingPostsResult => cloneFixture(basePostsApi);
+const buildFollowingApiResponse = (): FollowingFeedPage => cloneFixture(baseFollowingApi);
+
 describe('useTrendingFeeds hooks', () => {
   const createQueryClient = () =>
     new QueryClient({
@@ -81,21 +160,7 @@ describe('useTrendingFeeds hooks', () => {
 
   it('fetches trending topics successfully', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
-    vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue({
-      generated_at: 1_700_000_000_000,
-      topics: [
-        {
-          topic_id: 'topic-1',
-          name: 'Topic One',
-          description: 'desc',
-          member_count: 12,
-          post_count: 30,
-          trending_score: 24.0,
-          rank: 1,
-          score_change: null,
-        },
-      ],
-    });
+    vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue(buildTopicsApiResponse());
 
     const wrapper = createWrapper();
     const { result } = renderHook(() => useTrendingTopicsQuery(5), { wrapper });
@@ -111,30 +176,7 @@ describe('useTrendingFeeds hooks', () => {
 
   it('fetches trending posts for topics', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
-    vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue({
-      generated_at: 1_700_000_100_000,
-      topics: [
-        {
-          topic_id: 'topic-1',
-          topic_name: 'Topic One',
-          relative_rank: 1,
-          posts: [
-            {
-              id: 'post-1',
-              content: 'hello',
-              author_pubkey: 'author-1',
-              author_npub: 'npub1author',
-              topic_id: 'topic-1',
-              created_at: 1_700_000_000,
-              likes: 10,
-              boosts: 0,
-              replies: 0,
-              is_synced: true,
-            },
-          ],
-        },
-      ],
-    });
+    vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue(buildPostsApiResponse());
 
     const wrapper = createWrapper();
     const { result } = renderHook(() => useTrendingPostsQuery(['topic-1'], 3), { wrapper });
@@ -152,45 +194,31 @@ describe('useTrendingFeeds hooks', () => {
 
   it('paginates following feed', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
+    const firstPage = buildFollowingApiResponse();
+    firstPage.next_cursor = 'cursor-1';
+    firstPage.has_more = true;
+    const secondPage = buildFollowingApiResponse();
+    secondPage.items = [
+      {
+        id: 'post-2',
+        content: 'second',
+        author_pubkey: 'author-2',
+        author_npub: 'npub1author2',
+        topic_id: 'topic-2',
+        created_at: 1_700_000_500,
+        likes: 5,
+        boosts: 0,
+        replies: 0,
+        is_synced: true,
+      },
+    ];
+    secondPage.next_cursor = null;
+    secondPage.has_more = false;
+    secondPage.server_time = 1_700_000_500;
+
     vi.mocked(TauriApi.listFollowingFeed)
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'post-1',
-            content: 'hello',
-            author_pubkey: 'author-1',
-            author_npub: 'npub1author',
-            topic_id: 'topic-1',
-            created_at: 1_700_000_000,
-            likes: 2,
-            boosts: 0,
-            replies: 0,
-            is_synced: true,
-          },
-        ],
-        next_cursor: 'cursor-1',
-        has_more: true,
-        server_time: 1_700_000_000,
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'post-2',
-            content: 'second',
-            author_pubkey: 'author-2',
-            author_npub: 'npub1author2',
-            topic_id: 'topic-2',
-            created_at: 1_700_000_500,
-            likes: 5,
-            boosts: 0,
-            replies: 0,
-            is_synced: true,
-          },
-        ],
-        next_cursor: null,
-        has_more: false,
-        server_time: 1_700_000_500,
-      });
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage);
 
     const wrapper = createWrapper();
     const { result } = renderHook(() => useFollowingFeedQuery({ limit: 1 }), {
@@ -228,45 +256,8 @@ describe('useTrendingFeeds hooks', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     const queryClient = createQueryClient();
 
-    vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue({
-      generated_at: 1_700_000_000_000,
-      topics: [
-        {
-          topic_id: 'topic-1',
-          name: 'Topic One',
-          description: 'desc',
-          member_count: 12,
-          post_count: 30,
-          trending_score: 24.0,
-          rank: 1,
-          score_change: null,
-        },
-      ],
-    });
-    vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue({
-      generated_at: 1_700_000_100_000,
-      topics: [
-        {
-          topic_id: 'topic-1',
-          topic_name: 'Topic One',
-          relative_rank: 1,
-          posts: [
-            {
-              id: 'post-1',
-              content: 'prefetch',
-              author_pubkey: 'author-1',
-              author_npub: 'npub1author',
-              topic_id: 'topic-1',
-              created_at: 1_700_000_050,
-              likes: 3,
-              boosts: 0,
-              replies: 0,
-              is_synced: true,
-            },
-          ],
-        },
-      ],
-    });
+    vi.mocked(TauriApi.listTrendingTopics).mockResolvedValue(buildTopicsApiResponse());
+    vi.mocked(TauriApi.listTrendingPosts).mockResolvedValue(buildPostsApiResponse());
 
     await prefetchTrendingCategory(queryClient, { topicsLimit: 2, postsPerTopic: 2 });
 
@@ -282,25 +273,7 @@ describe('useTrendingFeeds hooks', () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     const queryClient = createQueryClient();
 
-    vi.mocked(TauriApi.listFollowingFeed).mockResolvedValue({
-      items: [
-        {
-          id: 'post-1',
-          content: 'hello',
-          author_pubkey: 'author-1',
-          author_npub: 'npub1author',
-          topic_id: 'topic-1',
-          created_at: 1_700_000_000,
-          likes: 2,
-          boosts: 0,
-          replies: 0,
-          is_synced: true,
-        },
-      ],
-      next_cursor: null,
-      has_more: false,
-      server_time: 1_700_000_000,
-    });
+    vi.mocked(TauriApi.listFollowingFeed).mockResolvedValue(buildFollowingApiResponse());
 
     await prefetchFollowingCategory(queryClient, { limit: 5, includeReactions: false });
 

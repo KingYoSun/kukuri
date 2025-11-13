@@ -142,7 +142,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 
 | Test ID (`nightly.yml` job) | シナリオ/コマンド | 主要 artefact | `tmp/logs` パス |
 | --- | --- | --- | --- |
-| `trending-feed` | `./scripts/test-docker.sh ts --scenario trending-feed --no-build`（PowerShell 版あり） | `trending-feed-reports`（`test-results/trending-feed/*.json`）<br>`trending-metrics-logs`（Prometheus `curl` スナップショット）<br>`trending-metrics-prometheus`（`test-results/trending-feed/prometheus/*`） | `tmp/logs/trending-feed_<timestamp>.log`<br>`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` |
+| `trending-feed` | `./scripts/test-docker.sh ts --scenario trending-feed --no-build`（PowerShell 版あり） | `trending-feed-reports`（`test-results/trending-feed/*.json`）<br>`trending-metrics-logs`（Prometheus `curl` スナップショット）<br>`trending-metrics-prometheus`（`test-results/trending-feed/prometheus/*`） | `tmp/logs/trending-feed/<timestamp>.log` と `tmp/logs/trending-feed/latest.log`<br>`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` |
 | `profile-avatar-sync` | `./scripts/test-docker.sh ts --scenario profile-avatar-sync` | `profile-avatar-sync-logs` | `tmp/logs/profile_avatar_sync_<timestamp>.log` |
 | `sync-status-indicator` | `./scripts/test-docker.sh ts --scenario offline-sync` | `sync-status-indicator-logs` | `tmp/logs/sync_status_indicator_stage4_<timestamp>.log` |
 | `user-search-pagination` | `./scripts/test-docker.sh ts --scenario user-search-pagination` | `user-search-pagination-logs`（Vitest stdout）<br>`user-search-pagination-reports`（`test-results/user-search-pagination/*.json`） | `tmp/logs/user_search_pagination_<timestamp>.log` |

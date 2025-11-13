@@ -1,21 +1,21 @@
-ï»¿# Dockerç’°å¢ƒã§ã®ãƒ†ã‚¹ãƒˆå®Ÿè¡Œã‚¹ã‚¯ãƒªãƒ—ãƒˆ (PowerShellç‰ˆ)
+# DockerŠÂ‹«‚Å‚ÌƒeƒXƒgÀsƒXƒNƒŠƒvƒg (PowerShell”Å)
 
 param(
     [Parameter(Position = 0)]
     [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts")]
     [string]$Command = "all",
 
-    [switch]$Integration,            # Rustãƒ†ã‚¹ãƒˆæ™‚ã«P2Pçµ±åˆãƒ†ã‚¹ãƒˆã®ã¿ã‚’å®Ÿè¡Œ
+    [switch]$Integration,            # RustƒeƒXƒg‚ÉP2P“‡ƒeƒXƒg‚Ì‚İ‚ğÀs
     [Alias("Test", "tests")]
-    [string]$TestTarget,             # Rustãƒ†ã‚¹ãƒˆæ™‚ã«ç‰¹å®šãƒã‚¤ãƒŠãƒªã®ã¿å®Ÿè¡Œ
-    [string]$Scenario,               # TypeScriptãƒ†ã‚¹ãƒˆç”¨ã®ã‚·ãƒŠãƒªã‚ªæŒ‡å®š
-    [string]$Fixture,                # ã‚·ãƒŠãƒªã‚ªç”¨ãƒ•ã‚£ã‚¯ã‚¹ãƒãƒ£ãƒ‘ã‚¹
-    [switch]$ServiceWorker,          # profile-avatar-sync ã‚·ãƒŠãƒªã‚ªã§ Service Worker æ‹¡å¼µã‚’å®Ÿè¡Œ
-    [string]$BootstrapPeers,         # çµ±åˆãƒ†ã‚¹ãƒˆç”¨ã®ãƒ–ãƒ¼ãƒˆã‚¹ãƒˆãƒ©ãƒƒãƒ—ãƒ”ã‚¢æŒ‡å®š
-    [string]$IrohBin,                # iroh ãƒã‚¤ãƒŠãƒªã®ãƒ‘ã‚¹
-    [string]$IntegrationLog = "info,iroh_tests=debug", # çµ±åˆãƒ†ã‚¹ãƒˆç”¨ã®RUST_LOG
+    [string]$TestTarget,             # RustƒeƒXƒg‚É“Á’èƒoƒCƒiƒŠ‚Ì‚İÀs
+    [string]$Scenario,               # TypeScriptƒeƒXƒg—p‚ÌƒVƒiƒŠƒIw’è
+    [string]$Fixture,                # ƒVƒiƒŠƒI—pƒtƒBƒNƒXƒ`ƒƒƒpƒX
+    [switch]$ServiceWorker,          # profile-avatar-sync ƒVƒiƒŠƒI‚Å Service Worker Šg’£‚ğÀs
+    [string]$BootstrapPeers,         # “‡ƒeƒXƒg—p‚Ìƒu[ƒgƒXƒgƒ‰ƒbƒvƒsƒAw’è
+    [string]$IrohBin,                # iroh ƒoƒCƒiƒŠ‚ÌƒpƒX
+    [string]$IntegrationLog = "info,iroh_tests=debug", # “‡ƒeƒXƒg—p‚ÌRUST_LOG
 
-    [switch]$NoBuild,  # ãƒ“ãƒ«ãƒ‰ã‚’ã‚¹ã‚­ãƒƒãƒ—ã™ã‚‹ã‚ªãƒ—ã‚·ãƒ§ãƒ³
+    [switch]$NoBuild,  # ƒrƒ‹ƒh‚ğƒXƒLƒbƒv‚·‚éƒIƒvƒVƒ‡ƒ“
     [switch]$Help
 )
 
@@ -25,10 +25,10 @@ $NewBinMainlineTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_MAINLINE_TEST
 $NewBinGossipTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_GOSSIP_TEST_TARGET)) { $env:P2P_GOSSIP_TEST_TARGET } else { "p2p_gossip_smoke" }
 $PrometheusMetricsUrl = if (![string]::IsNullOrWhiteSpace($env:PROMETHEUS_METRICS_URL)) { $env:PROMETHEUS_METRICS_URL } else { "http://127.0.0.1:9898/metrics" }
 
-# ã‚«ãƒ©ãƒ¼é–¢æ•°
+# ƒJƒ‰[ŠÖ”
 function Write-Success {
     param([string]$Message)
-    Write-Host "âœ“ $Message" -ForegroundColor Green
+    Write-Host "? $Message" -ForegroundColor Green
 }
 
 function Write-ErrorMessage {
@@ -39,95 +39,95 @@ function Write-ErrorMessage {
 
 function Write-Warning {
     param([string]$Message)
-    Write-Host "âš  $Message" -ForegroundColor Yellow
+    Write-Host "? $Message" -ForegroundColor Yellow
 }
 
 function Write-Info {
     param([string]$Message)
-    Write-Host "â„¹ $Message" -ForegroundColor Cyan
+    Write-Host "? $Message" -ForegroundColor Cyan
 }
 
 if ($Integration -and $TestTarget) {
-    Write-ErrorMessage "-Integration ã¨ -Test ã¯åŒæ™‚ã«ã¯æŒ‡å®šã§ãã¾ã›ã‚“ã€‚"
+    Write-ErrorMessage "-Integration ‚Æ -Test ‚Í“¯‚É‚Íw’è‚Å‚«‚Ü‚¹‚ñB"
 }
 
 if ($TestTarget -and $Command -ne "rust") {
-    Write-ErrorMessage "-Test ã¯ rust ã‚³ãƒãƒ³ãƒ‰ã®ã¿ã«æŒ‡å®šã§ãã¾ã™ã€‚"
+    Write-ErrorMessage "-Test ‚Í rust ƒRƒ}ƒ“ƒh‚Ì‚İ‚Éw’è‚Å‚«‚Ü‚·B"
 }
 
 if ($Scenario -and $Command -ne "ts") {
-    Write-ErrorMessage "-Scenario ã¯ ts ã‚³ãƒãƒ³ãƒ‰ã§ã®ã¿ä½¿ç”¨ã§ãã¾ã™ã€‚"
+    Write-ErrorMessage "-Scenario ‚Í ts ƒRƒ}ƒ“ƒh‚Å‚Ì‚İg—p‚Å‚«‚Ü‚·B"
 }
 
 if ($Fixture -and $Command -ne "ts") {
-    Write-ErrorMessage "-Fixture ã¯ ts ã‚³ãƒãƒ³ãƒ‰ã§ã®ã¿ä½¿ç”¨ã§ãã¾ã™ã€‚"
+    Write-ErrorMessage "-Fixture ‚Í ts ƒRƒ}ƒ“ƒh‚Å‚Ì‚İg—p‚Å‚«‚Ü‚·B"
 }
 
 if ($ServiceWorker -and $Command -ne "ts") {
-    Write-ErrorMessage "-ServiceWorker ã¯ ts ã‚³ãƒãƒ³ãƒ‰ã§ã®ã¿ä½¿ç”¨ã§ãã¾ã™ã€‚"
+    Write-ErrorMessage "-ServiceWorker ‚Í ts ƒRƒ}ƒ“ƒh‚Å‚Ì‚İg—p‚Å‚«‚Ü‚·B"
 }
 
-# ãƒ˜ãƒ«ãƒ—è¡¨ç¤º
+# ƒwƒ‹ƒv•\¦
 function Show-Help {
     Write-Host @"
 Usage: .\test-docker.ps1 [Command] [Options]
 
 Commands:
-  all          - ã™ã¹ã¦ã®ãƒ†ã‚¹ãƒˆã‚’å®Ÿè¡Œï¼ˆãƒ‡ãƒ•ã‚©ãƒ«ãƒˆï¼‰
-  rust         - Rustã®ãƒ†ã‚¹ãƒˆã®ã¿å®Ÿè¡Œ
-  integration  - P2Pçµ±åˆãƒ†ã‚¹ãƒˆï¼ˆRustï¼‰ã‚’å®Ÿè¡Œ
-  ts           - TypeScriptã®ãƒ†ã‚¹ãƒˆã®ã¿å®Ÿè¡Œï¼ˆ-Scenario ã§ã‚·ãƒŠãƒªã‚ªæŒ‡å®šå¯ï¼‰
-  lint         - ãƒªãƒ³ãƒˆã¨ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãƒã‚§ãƒƒã‚¯ã®ã¿å®Ÿè¡Œ
-  coverage     - Rustã‚«ãƒãƒ¬ãƒƒã‚¸ï¼ˆcargo tarpaulinï¼‰ã‚’å®Ÿè¡Œã—æˆæœç‰©ã‚’ä¿å­˜
-  metrics      - ãƒ¡ãƒˆãƒªã‚¯ã‚¹é–¢é€£ã®ã‚·ãƒ§ãƒ¼ãƒˆãƒ†ã‚¹ãƒˆï¼ˆRust test_get_status / TS P2P UIï¼‰
-  performance  - ãƒ‘ãƒ•ã‚©ãƒ¼ãƒãƒ³ã‚¹ãƒãƒ¼ãƒã‚¹ï¼ˆRust ignored ãƒ†ã‚¹ãƒˆï¼‰ã‚’å®Ÿè¡Œã—æˆæœç‰©ã‚’ç”Ÿæˆ
-  contracts    - å¥‘ç´„ãƒ†ã‚¹ãƒˆï¼ˆNIP-10å¢ƒç•Œã‚±ãƒ¼ã‚¹ï¼‰ã‚’å®Ÿè¡Œ
-  build        - Dockerã‚¤ãƒ¡ãƒ¼ã‚¸ã®ãƒ“ãƒ«ãƒ‰ã®ã¿å®Ÿè¡Œ
-  clean        - Dockerã‚³ãƒ³ãƒ†ãƒŠã¨ã‚¤ãƒ¡ãƒ¼ã‚¸ã‚’ã‚¯ãƒªãƒ¼ãƒ³ã‚¢ãƒƒãƒ—
-  cache-clean  - ã‚­ãƒ£ãƒƒã‚·ãƒ¥ãƒœãƒªãƒ¥ãƒ¼ãƒ ã‚‚å«ã‚ã¦å®Œå…¨ã‚¯ãƒªãƒ¼ãƒ³ã‚¢ãƒƒãƒ—
+  all          - ‚·‚×‚Ä‚ÌƒeƒXƒg‚ğÀsiƒfƒtƒHƒ‹ƒgj
+  rust         - Rust‚ÌƒeƒXƒg‚Ì‚İÀs
+  integration  - P2P“‡ƒeƒXƒgiRustj‚ğÀs
+  ts           - TypeScript‚ÌƒeƒXƒg‚Ì‚İÀsi-Scenario ‚ÅƒVƒiƒŠƒIw’è‰Âj
+  lint         - ƒŠƒ“ƒg‚ÆƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN‚Ì‚İÀs
+  coverage     - RustƒJƒoƒŒƒbƒWicargo tarpaulinj‚ğÀs‚µ¬‰Ê•¨‚ğ•Û‘¶
+  metrics      - ƒƒgƒŠƒNƒXŠÖ˜A‚ÌƒVƒ‡[ƒgƒeƒXƒgiRust test_get_status / TS P2P UIj
+  performance  - ƒpƒtƒH[ƒ}ƒ“ƒXƒn[ƒlƒXiRust ignored ƒeƒXƒgj‚ğÀs‚µ¬‰Ê•¨‚ğ¶¬
+  contracts    - Œ_–ñƒeƒXƒgiNIP-10‹«ŠEƒP[ƒXj‚ğÀs
+  build        - DockerƒCƒ[ƒW‚Ìƒrƒ‹ƒh‚Ì‚İÀs
+  clean        - DockerƒRƒ“ƒeƒi‚ÆƒCƒ[ƒW‚ğƒNƒŠ[ƒ“ƒAƒbƒv
+  cache-clean  - ƒLƒƒƒbƒVƒ…ƒ{ƒŠƒ…[ƒ€‚àŠÜ‚ß‚ÄŠ®‘SƒNƒŠ[ƒ“ƒAƒbƒv
 
 Options:
-  -Integration  - Rustã‚³ãƒãƒ³ãƒ‰ã¨ä½µã›ã¦ P2P çµ±åˆãƒ†ã‚¹ãƒˆã®ã¿å®Ÿè¡Œ
-  -Test <target> - Rustã‚³ãƒãƒ³ãƒ‰æ™‚ã«æŒ‡å®šãƒ†ã‚¹ãƒˆãƒã‚¤ãƒŠãƒªã®ã¿å®Ÿè¡Œï¼ˆä¾‹: event_manager_integrationï¼‰
-  -Scenario <name> - TypeScriptãƒ†ã‚¹ãƒˆæ™‚ã«ã‚·ãƒŠãƒªã‚ªã‚’æŒ‡å®šï¼ˆä¾‹: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-syncï¼‰
-  -Fixture <path>  - ã‚·ãƒŠãƒªã‚ªç”¨ãƒ•ã‚£ã‚¯ã‚¹ãƒãƒ£ãƒ‘ã‚¹ã‚’ä¸Šæ›¸ãï¼ˆæ—¢å®š: tests/fixtures/trending/default.jsonï¼‰
-  -ServiceWorker   - `ts -Scenario profile-avatar-sync` å®Ÿè¡Œæ™‚ã« Service Worker æ‹¡å¼µãƒ†ã‚¹ãƒˆã¨ Stage4 ãƒ­ã‚°ã‚’æœ‰åŠ¹åŒ–
-  -BootstrapPeers <node@host:port,...> - çµ±åˆãƒ†ã‚¹ãƒˆã§ä½¿ç”¨ã™ã‚‹ãƒ–ãƒ¼ãƒˆã‚¹ãƒˆãƒ©ãƒƒãƒ—ãƒ”ã‚¢ã‚’æŒ‡å®š
-  -IrohBin <path> - iroh ãƒã‚¤ãƒŠãƒªã®æ˜ç¤ºãƒ‘ã‚¹ã‚’æŒ‡å®šï¼ˆWindows ã§ DLL è§£æ±ºãŒå¿…è¦ãªå ´åˆãªã©ï¼‰
-  -IntegrationLog <level> - çµ±åˆãƒ†ã‚¹ãƒˆæ™‚ã® RUST_LOG è¨­å®šï¼ˆæ—¢å®š: info,iroh_tests=debugï¼‰
-  -NoBuild     - Dockerã‚¤ãƒ¡ãƒ¼ã‚¸ã®ãƒ“ãƒ«ãƒ‰ã‚’ã‚¹ã‚­ãƒƒãƒ—
-  -Help        - ã“ã®ãƒ˜ãƒ«ãƒ—ã‚’è¡¨ç¤º
-  â€» P2Pçµ±åˆãƒ†ã‚¹ãƒˆã¯ `p2p_gossip_smoke` / `p2p_mainline_smoke` ã‚’é †æ¬¡å®Ÿè¡Œã—ã¾ã™ã€‚`P2P_GOSSIP_TEST_TARGET` ã‚„ `P2P_MAINLINE_TEST_TARGET` ã§ä»»æ„ã®ã‚¿ãƒ¼ã‚²ãƒƒãƒˆã«ä¸Šæ›¸ãå¯èƒ½ã§ã™ã€‚
+  -Integration  - RustƒRƒ}ƒ“ƒh‚Æ•¹‚¹‚Ä P2P “‡ƒeƒXƒg‚Ì‚İÀs
+  -Test <target> - RustƒRƒ}ƒ“ƒh‚Éw’èƒeƒXƒgƒoƒCƒiƒŠ‚Ì‚İÀsi—á: event_manager_integrationj
+  -Scenario <name> - TypeScriptƒeƒXƒg‚ÉƒVƒiƒŠƒI‚ğw’èi—á: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-syncj
+  -Fixture <path>  - ƒVƒiƒŠƒI—pƒtƒBƒNƒXƒ`ƒƒƒpƒX‚ğã‘‚«iŠù’è: tests/fixtures/trending/default.jsonj
+  -ServiceWorker   - `ts -Scenario profile-avatar-sync` Às‚É Service Worker Šg’£ƒeƒXƒg‚Æ Stage4 ƒƒO‚ğ—LŒø‰»
+  -BootstrapPeers <node@host:port,...> - “‡ƒeƒXƒg‚Åg—p‚·‚éƒu[ƒgƒXƒgƒ‰ƒbƒvƒsƒA‚ğw’è
+  -IrohBin <path> - iroh ƒoƒCƒiƒŠ‚Ì–¾¦ƒpƒX‚ğw’èiWindows ‚Å DLL ‰ğŒˆ‚ª•K—v‚Èê‡‚È‚Çj
+  -IntegrationLog <level> - “‡ƒeƒXƒg‚Ì RUST_LOG İ’èiŠù’è: info,iroh_tests=debugj
+  -NoBuild     - DockerƒCƒ[ƒW‚Ìƒrƒ‹ƒh‚ğƒXƒLƒbƒv
+  -Help        - ‚±‚Ìƒwƒ‹ƒv‚ğ•\¦
+  ¦ P2P“‡ƒeƒXƒg‚Í `p2p_gossip_smoke` / `p2p_mainline_smoke` ‚ğ‡ŸÀs‚µ‚Ü‚·B`P2P_GOSSIP_TEST_TARGET` ‚â `P2P_MAINLINE_TEST_TARGET` ‚Å”CˆÓ‚Ìƒ^[ƒQƒbƒg‚Éã‘‚«‰Â”\‚Å‚·B
 
 Examples:
-  .\test-docker.ps1                # ã™ã¹ã¦ã®ãƒ†ã‚¹ãƒˆã‚’å®Ÿè¡Œ
-  .\test-docker.ps1 rust           # Rustãƒ†ã‚¹ãƒˆã®ã¿å®Ÿè¡Œ
+  .\test-docker.ps1                # ‚·‚×‚Ä‚ÌƒeƒXƒg‚ğÀs
+  .\test-docker.ps1 rust           # RustƒeƒXƒg‚Ì‚İÀs
   .\test-docker.ps1 rust -Test event_manager_integration
   .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
-  .\test-docker.ps1 rust -NoBuild  # ãƒ“ãƒ«ãƒ‰ã‚’ã‚¹ã‚­ãƒƒãƒ—ã—ã¦Rustãƒ†ã‚¹ãƒˆã‚’å®Ÿè¡Œ
+  .\test-docker.ps1 rust -NoBuild  # ƒrƒ‹ƒh‚ğƒXƒLƒbƒv‚µ‚ÄRustƒeƒXƒg‚ğÀs
   .\test-docker.ps1 ts -Scenario trending-feed
   .\test-docker.ps1 ts -Scenario profile-avatar-sync
   .\test-docker.ps1 ts -Scenario user-search-pagination
-  .\test-docker.ps1 performance    # ãƒ‘ãƒ•ã‚©ãƒ¼ãƒãƒ³ã‚¹è¨ˆæ¸¬ç”¨ãƒ†ã‚¹ãƒˆãƒã‚¤ãƒŠãƒªã‚’å®Ÿè¡Œ
-  .\test-docker.ps1 cache-clean    # ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚’å«ã‚ã¦å®Œå…¨ã‚¯ãƒªãƒ¼ãƒ³ã‚¢ãƒƒãƒ—
-  .\test-docker.ps1 -Help          # ãƒ˜ãƒ«ãƒ—ã‚’è¡¨ç¤º
+  .\test-docker.ps1 performance    # ƒpƒtƒH[ƒ}ƒ“ƒXŒv‘ª—pƒeƒXƒgƒoƒCƒiƒŠ‚ğÀs
+  .\test-docker.ps1 cache-clean    # ƒLƒƒƒbƒVƒ…‚ğŠÜ‚ß‚ÄŠ®‘SƒNƒŠ[ƒ“ƒAƒbƒv
+  .\test-docker.ps1 -Help          # ƒwƒ‹ƒv‚ğ•\¦
 
 Performance Tips:
-  - åˆå›å®Ÿè¡Œæ™‚ã¯ä¾å­˜é–¢ä¿‚ã®ãƒ€ã‚¦ãƒ³ãƒ­ãƒ¼ãƒ‰ã®ãŸã‚æ™‚é–“ãŒã‹ã‹ã‚Šã¾ã™
-  - 2å›ç›®ä»¥é™ã¯Dockerãƒœãƒªãƒ¥ãƒ¼ãƒ ã«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã•ã‚Œã‚‹ãŸã‚é«˜é€Ÿã«ãªã‚Šã¾ã™
-  - ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚’ã‚¯ãƒªã‚¢ã—ãŸã„å ´åˆã¯ 'cache-clean' ã‚³ãƒãƒ³ãƒ‰ã‚’ä½¿ç”¨ã—ã¦ãã ã•ã„
+  - ‰‰ñÀs‚ÍˆË‘¶ŠÖŒW‚Ìƒ_ƒEƒ“ƒ[ƒh‚Ì‚½‚ßŠÔ‚ª‚©‚©‚è‚Ü‚·
+  - 2‰ñ–ÚˆÈ~‚ÍDockerƒ{ƒŠƒ…[ƒ€‚ÉƒLƒƒƒbƒVƒ…‚³‚ê‚é‚½‚ß‚‘¬‚É‚È‚è‚Ü‚·
+  - ƒLƒƒƒbƒVƒ…‚ğƒNƒŠƒA‚µ‚½‚¢ê‡‚Í 'cache-clean' ƒRƒ}ƒ“ƒh‚ğg—p‚µ‚Ä‚­‚¾‚³‚¢
 "@
     exit 0
 }
 
-# Docker Buildkit ã‚’æœ‰åŠ¹åŒ–
+# Docker Buildkit ‚ğ—LŒø‰»
 $env:DOCKER_BUILDKIT = "1"
 $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 
 $BootstrapDefaultPeer = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 $BootstrapContainerName = "kukuri-p2p-bootstrap"
 
-# Docker Composeã‚³ãƒãƒ³ãƒ‰ã®å®Ÿè¡Œ
+# Docker ComposeƒRƒ}ƒ“ƒh‚ÌÀs
 function Invoke-DockerCompose {
     param(
         [string[]]$Arguments,
@@ -142,13 +142,14 @@ function Invoke-DockerCompose {
     return [int]$code
 }
 
-# Dockerã‚¤ãƒ¡ãƒ¼ã‚¸ã®å­˜åœ¨ç¢ºèª
+# DockerƒCƒ[ƒW‚Ì‘¶İŠm”F
 function Test-DockerImageExists {
-    $image = docker images -q "kukuri_test-runner" 2>$null
-    return ![string]::IsNullOrEmpty($image)
+    $runnerImage = docker images -q "kukuri_test-runner" 2>$null
+    $tsImage = docker images -q "kukuri_ts-test" 2>$null
+    return (![string]::IsNullOrEmpty($runnerImage) -and -not [string]::IsNullOrEmpty($tsImage))
 }
 
-# Dockerã‚¤ãƒ¡ãƒ¼ã‚¸ã®ãƒ“ãƒ«ãƒ‰
+# DockerƒCƒ[ƒW‚Ìƒrƒ‹ƒh
 function Build-TestImage {
     param([switch]$Force)
     
@@ -158,11 +159,11 @@ function Build-TestImage {
     }
     
     Write-Host "Building Docker test image (with cache optimization)..."
-    Invoke-DockerCompose @("build", "--build-arg", "DOCKER_BUILDKIT=1", "test-runner")
+    Invoke-DockerCompose @("build", "--build-arg", "DOCKER_BUILDKIT=1", "test-runner", "ts-test")
     Write-Success "Docker image built successfully"
 }
 
-# ã™ã¹ã¦ã®ãƒ†ã‚¹ãƒˆã‚’å®Ÿè¡Œ
+# ‚·‚×‚Ä‚ÌƒeƒXƒg‚ğÀs
 function Invoke-AllTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -172,7 +173,7 @@ function Invoke-AllTests {
     Write-Success "All tests passed!"
 }
 
-# Rustãƒ†ã‚¹ãƒˆã®ã¿å®Ÿè¡Œ
+# RustƒeƒXƒg‚Ì‚İÀs
 function Invoke-RustTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -333,7 +334,7 @@ function Invoke-IntegrationTests {
     }
 }
 
-# TypeScriptãƒ†ã‚¹ãƒˆã®ã¿å®Ÿè¡Œ
+# TypeScriptƒeƒXƒg‚Ì‚İÀs
 function Start-PrometheusTrending {
     Write-Host "Starting prometheus-trending service (host network)..."
     $code = Invoke-DockerCompose -Arguments @("up", "-d", "prometheus-trending") -IgnoreFailure
@@ -424,27 +425,67 @@ function Invoke-TypeScriptTrendingFeedScenario {
     }
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $reportRelPath = "test-results/trending-feed/$timestamp-vitest.json"
-    $reportContainerPath = "/app/$reportRelPath"
+    $logDir = Join-Path $repositoryRoot "tmp/logs/trending-feed"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    $logRelPath = "tmp/logs/trending-feed/$timestamp.log"
+    $latestRelPath = "tmp/logs/trending-feed/latest.log"
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+    $latestHostPath = Join-Path $repositoryRoot $latestRelPath
+    $header = @(
+        "=== trending-feed scenario ===",
+        "timestamp: $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))",
+        "fixture: $fixturePath",
+        ""
+    )
+    Set-Content -Path $logHostPath -Value $header -Encoding UTF8
 
-    $promStarted = Start-PrometheusTrending
-
-    Write-Host "Running TypeScript scenario 'trending-feed' (fixture: $fixturePath)..."
-    $args = @(
-        "run", "--rm",
-        "-e", "VITE_TRENDING_FIXTURE_PATH=$fixturePath",
-        "ts-test",
-        "pnpm", "vitest", "run",
-        "src/tests/unit/routes/trending.test.tsx",
-        "src/tests/unit/routes/following.test.tsx",
-        "src/tests/unit/hooks/useTrendingFeeds.test.tsx",
-        "--reporter=default",
-        "--reporter=json",
-        "--outputFile=$reportContainerPath"
+    $vitestTargets = @(
+        'src/tests/unit/routes/trending.test.tsx',
+        'src/tests/unit/routes/following.test.tsx',
+        'src/tests/unit/hooks/useTrendingFeeds.test.tsx'
     )
 
+    $promStarted = Start-PrometheusTrending
+    $vitestStatus = 0
+
     try {
-        Invoke-DockerCompose $args | Out-Null
+        foreach ($target in $vitestTargets) {
+            $slug = $target.Replace('/', '_').Replace('.', '_')
+            $reportRelPath = "test-results/trending-feed/$timestamp-$slug.json"
+            $reportContainerPath = "/app/$reportRelPath"
+            Add-Content -Path $logHostPath -Value @("`n--- Running target: $target ---", "report: $reportRelPath") -Encoding UTF8
+
+            $dockerArgs = @(
+                "compose", "-f", "docker-compose.test.yml",
+                "run", "--rm",
+                "-e", "VITE_TRENDING_FIXTURE_PATH=$fixturePath",
+                "ts-test", "bash", "/app/scripts/docker/run-vitest-target.sh", $target, $reportContainerPath
+            )
+
+            $dockerOutput = & docker $dockerArgs 2>&1
+            $exitCode = $LASTEXITCODE
+            if ($dockerOutput) {
+                foreach ($line in $dockerOutput) {
+                    Write-Host $line
+                }
+                Add-Content -Path $logHostPath -Value ($dockerOutput -join [Environment]::NewLine) -Encoding UTF8
+                Add-Content -Path $logHostPath -Value "" -Encoding UTF8
+            }
+            if ($exitCode -ne 0) {
+                Write-Warning "Vitest target $target failed with exit code $exitCode"
+                $vitestStatus = $exitCode
+                break
+            }
+
+            $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+            if (Test-Path $reportHostPath) {
+                Write-Info "Scenario report saved to $reportRelPath"
+            } else {
+                Write-Warning "Scenario report not found at $reportRelPath"
+            }
+        }
     }
     finally {
         if ($promStarted) {
@@ -455,12 +496,19 @@ function Invoke-TypeScriptTrendingFeedScenario {
         }
     }
 
-    $reportHostPath = Join-Path $repositoryRoot $reportRelPath
-    if (Test-Path $reportHostPath) {
-        Write-Success "Scenario report saved to $reportRelPath"
+    if (Test-Path $logHostPath) {
+        Copy-Item -Path $logHostPath -Destination $latestHostPath -Force
+        Write-Success "Scenario log saved to $logRelPath"
+        Write-Info "Latest scenario log updated at $latestRelPath"
     } else {
-        Write-Warning "Scenario report not found at $reportRelPath"
+        Write-Warning "Scenario log was not generated at $logRelPath"
     }
+
+    if ($vitestStatus -ne 0) {
+        throw "Scenario 'trending-feed' failed. See $logRelPath for details."
+    }
+
+    Write-Success "Scenario reports stored under test-results/trending-feed/ (prefix $timestamp)"
 }
 
 function Invoke-TypeScriptProfileAvatarScenario {
@@ -764,7 +812,7 @@ function Invoke-TypeScriptTests {
     }
 }
 
-# ãƒªãƒ³ãƒˆã¨ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãƒã‚§ãƒƒã‚¯
+# ƒŠƒ“ƒg‚ÆƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN
 function Invoke-LintCheck {
     if (-not $NoBuild) {
         Build-TestImage
@@ -895,21 +943,21 @@ function Invoke-ContractTests {
     Write-Success "Contract tests passed!"
 }
 
-# ã‚¯ãƒªãƒ¼ãƒ³ã‚¢ãƒƒãƒ—
+# ƒNƒŠ[ƒ“ƒAƒbƒv
 function Invoke-Cleanup {
     Write-Host "Cleaning up Docker containers and images..."
     Invoke-DockerCompose @("down", "--rmi", "local", "--remove-orphans")
     Write-Success "Cleanup completed"
 }
 
-# å®Œå…¨ã‚¯ãƒªãƒ¼ãƒ³ã‚¢ãƒƒãƒ—ï¼ˆã‚­ãƒ£ãƒƒã‚·ãƒ¥ãƒœãƒªãƒ¥ãƒ¼ãƒ ã‚‚å‰Šé™¤ï¼‰
+# Š®‘SƒNƒŠ[ƒ“ƒAƒbƒviƒLƒƒƒbƒVƒ…ƒ{ƒŠƒ…[ƒ€‚àíœj
 function Invoke-CacheCleanup {
     Write-Host "Performing complete cleanup including cache volumes..."
     
-    # ã‚³ãƒ³ãƒ†ãƒŠã¨ã‚¤ãƒ¡ãƒ¼ã‚¸ã®å‰Šé™¤
+    # ƒRƒ“ƒeƒi‚ÆƒCƒ[ƒW‚Ìíœ
     Invoke-DockerCompose @("down", "--rmi", "local", "--volumes", "--remove-orphans")
     
-    # åå‰ä»˜ããƒœãƒªãƒ¥ãƒ¼ãƒ ã®å‰Šé™¤
+    # –¼‘O•t‚«ƒ{ƒŠƒ…[ƒ€‚Ìíœ
     Write-Host "Removing cache volumes..."
     docker volume rm kukuri-cargo-registry kukuri-cargo-git kukuri-cargo-target kukuri-pnpm-store 2>$null
     
@@ -917,7 +965,7 @@ function Invoke-CacheCleanup {
     Write-Info "Next build will take longer as all caches have been cleared"
 }
 
-# ã‚­ãƒ£ãƒƒã‚·ãƒ¥çŠ¶æ³ã®è¡¨ç¤º
+# ƒLƒƒƒbƒVƒ…ó‹µ‚Ì•\¦
 function Show-CacheStatus {
     Write-Host "`nCache Volume Status:" -ForegroundColor Yellow
     Write-Host "-------------------"
@@ -972,17 +1020,17 @@ function Stop-P2PBootstrap {
     Invoke-DockerCompose @("down", "--remove-orphans") -IgnoreFailure | Out-Null
 }
 
-# ãƒ¡ã‚¤ãƒ³å‡¦ç†
+# ƒƒCƒ“ˆ—
 if ($Help) {
     Show-Help
 }
 
-# ãƒ†ã‚¹ãƒˆçµæœãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã®ä½œæˆ
+# ƒeƒXƒgŒ‹‰ÊƒfƒBƒŒƒNƒgƒŠ‚Ìì¬
 if (-not (Test-Path "test-results")) {
     New-Item -ItemType Directory -Path "test-results" | Out-Null
 }
 
-# ã‚³ãƒãƒ³ãƒ‰ã®å®Ÿè¡Œ
+# ƒRƒ}ƒ“ƒh‚ÌÀs
 switch ($Command) {
     "all" {
         Invoke-AllTests
