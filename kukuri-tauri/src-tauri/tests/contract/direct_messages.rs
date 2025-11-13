@@ -56,7 +56,10 @@ async fn direct_message_read_receipts_sync_across_devices() {
         .await
         .expect("list conversations");
     assert_eq!(initial.len(), 1);
-    assert_eq!(initial[0].unread_count, 3, "all inbound messages start unread");
+    assert_eq!(
+        initial[0].unread_count, 3,
+        "all inbound messages start unread"
+    );
     assert_eq!(
         initial[0].last_read_at, 0,
         "last_read_at defaults to zero before any device reads"
@@ -72,8 +75,7 @@ async fn direct_message_read_receipts_sync_across_devices() {
         .await
         .expect("list after read");
     assert_eq!(
-        after_second[0].last_read_at,
-        second_message_timestamp,
+        after_second[0].last_read_at, second_message_timestamp,
         "read receipt should store the latest acknowledged timestamp"
     );
     assert_eq!(
@@ -90,8 +92,7 @@ async fn direct_message_read_receipts_sync_across_devices() {
         .await
         .expect("list after stale mark");
     assert_eq!(
-        after_stale[0].last_read_at,
-        second_message_timestamp,
+        after_stale[0].last_read_at, second_message_timestamp,
         "stale timestamps must not overwrite newer read positions"
     );
     assert_eq!(after_stale[0].unread_count, 1);

@@ -94,16 +94,12 @@ const setupStore = (options: SetupOptions = {}) => {
     closeInbox,
     openDialog,
     markConversationAsRead,
-    conversations:
-      options.conversations ??
-      {
-        npub1alice: [baseMessage],
-      },
-    unreadCounts:
-      options.unreadCounts ??
-      {
-        npub1alice: 2,
-      },
+    conversations: options.conversations ?? {
+      npub1alice: [baseMessage],
+    },
+    unreadCounts: options.unreadCounts ?? {
+      npub1alice: 2,
+    },
     conversationReadTimestamps: {
       ...state.conversationReadTimestamps,
       ...(options.readTimestamps ?? {}),
