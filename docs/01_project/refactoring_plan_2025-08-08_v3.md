@@ -222,7 +222,7 @@ grep -r "関数名" kukuri-tauri/src --include="*.rs" --include="*.ts"
 **作成状況（2025年11月14日更新）**
 - [x] アクティブな機能: `docs/01_project/activeContext/artefacts/phase5_feature_usage_map.md` に UI 導線／フロント実装／Tauri コマンドを一覧化。
 - [x] 未使用の機能（削除候補）: 未接続 API と dead_code の棚卸しを追記する。
-- [ ] 部分的に使用されている機能: 一部導線のみで使われる UI/コマンドの使用/未使用文脈を書き分ける。
+- [x] 部分的に使用されている機能: `phase5_feature_usage_map.md` 3章で部分利用の使用/未使用文脈とアクションを整理（2025年11月14日）。
 
 #### 2.5.3 削除・統合計画
 
