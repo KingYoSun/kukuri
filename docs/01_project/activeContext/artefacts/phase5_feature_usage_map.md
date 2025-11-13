@@ -68,3 +68,24 @@
 | プロフィール表示 / 投稿一覧 | `ProfilePage`（`/profile/$userId`, Inv 1.7） | `kukuri-tauri/src/routes/profile.$userId.tsx`<br>`kukuri-tauri/src/components/posts/PostCard.tsx` | `kukuri-tauri/src-tauri/src/presentation/commands/user_commands.rs::{get_user,get_user_by_pubkey}`<br>`kukuri-tauri/src-tauri/src/presentation/commands/post_commands.rs::get_posts` |
 | フォロー / フォロワー・フォロー中リスト | `ProfilePage` の `Follow` ボタンと `UserList`、`UserSearchResults`（Inv 1.7, Sum 5.7） | `kukuri-tauri/src/routes/profile.$userId.tsx`（`UserList`）<br>`kukuri-tauri/src/components/search/UserSearchResults.tsx` | `kukuri-tauri/src-tauri/src/presentation/commands/user_commands.rs::{follow_user,unfollow_user,get_followers,get_following}`<br>`kukuri-tauri/src-tauri/src/presentation/commands/event_commands.rs::subscribe_to_user` |
 | ダイレクトメッセージ（プロフィール/ヘッダー導線） | `MessageCircle`（`/profile/$userId`）とヘッダー `DirectMessageInbox`（Inv 1.7, Sum 5.4） | `kukuri-tauri/src/components/directMessages/DirectMessageDialog.tsx`<br>`kukuri-tauri/src/components/directMessages/DirectMessageInbox.tsx`<br>`kukuri-tauri/src/stores/directMessageStore.ts`<br>`kukuri-tauri/src/hooks/useDirectMessageBootstrap.ts` | `kukuri-tauri/src-tauri/src/presentation/commands/direct_message_commands.rs::{send_direct_message,list_direct_messages}`<br>`kukuri-tauri/src-tauri/src/presentation/commands/user_commands.rs::search_users`（宛先候補） |
+
+## 2. 未使用機能（削除候補）
+
+`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md:168-196` で backlog 管理している未導線 API／dead code をコードベースと突合した結果を記録する。各項目について削除 or 保留の判断と次アクションを明記した。
+
+### 2.1 UI/コマンド未導線
+
+| 種別 | 機能 / コマンド | 実装箇所 | 未使用理由 | 判断 | 次アクション |
+| --- | --- | --- | --- | --- | --- |
+| Tauriコマンド | `add_relay` | `kukuri-tauri/src/lib/api/nostr.ts:54`<br>`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md:181` | `rg "nostrApi.addRelay"` がユニットテストにしかヒットせず、UI からの導線が皆無。さらに `kukuri-tauri/src-tauri/src/lib.rs:123-148` にコマンド登録が存在せず、呼び出すとエラーになる。 | 削除（Phase7まで無効化） | ラッパー/モック/ドキュメントから `add_relay` を除去し、外部リレー運用を再開するタイミングで仕様ごと再設計する。 |
+| Tauriコマンド | `get_nostr_pubkey` | `kukuri-tauri/src/lib/api/nostr.ts:123`<br>`kukuri-tauri/src-tauri/src/presentation/commands/event_commands.rs:109` | `useAuthStore` がログイン時点で `currentUser.pubkey/npub` を保持しており（例: `kukuri-tauri/src/stores/authStore.ts:34-121`）、`rg "getNostrPubkey"` の利用箇所はテストのみ。 | 保留（multi-account設計待ち） | 複数アイデンティティ/バックアップ導線の仕様確定までは封印。要件が固まらない場合は API ごと削除、必要ならフロント導線＋テストを追加する。 |
+| Tauriコマンド | `delete_events` | `kukuri-tauri/src/lib/api/nostr.ts:128`<br>`kukuri-tauri/src-tauri/src/presentation/commands/event_commands.rs:118` | `useDeletePost` は `delete_post` のみを呼び、`rg "deleteEvents"` もラッパーとテストのみ。`phase5_user_flow_inventory.md:183` でも未接続扱い。 | 保留（`delete_post`拡張待ち） | 投稿削除 UI から Nostr 側の `delete_events` まで連結し、キャッシュ無効化と一緒に E2E で検証する。 |
+| Tauriコマンド | `join_topic_by_name` | `kukuri-tauri/src/lib/api/p2p.ts:112`<br>`kukuri-tauri/src-tauri/src/presentation/commands/p2p_commands.rs:103-126` | 名前ベース参加を行う UI が無く、`phase5_user_flow_inventory.md:184-192` でも優先度1の未接続コマンドとして列挙されている。 | 保留（最優先で導線追加） | `/topics` やグローバルコンポーザーからトピック名入力→参加できる fallback を設計し、`topicStore.joinTopic` から呼び出す。 |
+| Tauriコマンド | `clear_all_accounts_for_test` | `kukuri-tauri/src/lib/api/secureStorage.ts:93`<br>`kukuri-tauri/src-tauri/src/presentation/commands/secure_storage_commands.rs:80-99` | デバッグ目的だが UI から呼べず、`rg "clearAllAccountsForTest"` の利用箇所も API 内のみ。`phase5_user_flow_inventory.md:185,195` で backlog 管理されている。 | 保留（DEVパネル組み込み前提） | Settings > DEV パネルに「Secure Storage リセット」ボタン＋確認ダイアログを追加し、`errorHandler` ログと合わせて安全に実行できるようにする。 |
+
+### 2.2 バックエンド dead_code
+
+| 種別 | 機能 | 実装箇所 | 未使用理由 | 判断 | 次アクション |
+| --- | --- | --- | --- | --- | --- |
+| Rust helper | `TopicMesh::get_peers` / `get_recent_messages` / `clear_cache` | `kukuri-tauri/src-tauri/src/domain/p2p/topic_mesh.rs:101-122` | 3 関数とも `#[allow(dead_code)]` 指定で、利用箇所は `domain/p2p/tests/topic_mesh_tests.rs` などテストのみ（本番コードからの `rg` ヒットなし）。メトリクスは `get_p2p_metrics` へ集約されたため UI から参照されない。 | 削除 | TopicMesh の内部構造を DEV 用に保持する必要が無いので削除し、必要なら将来のデバッグ用に独立した util を用意する。 |
+| Rustサービス | `AppState.encryption_service` / `DefaultEncryptionService` | `kukuri-tauri/src-tauri/src/state.rs:92`<br>`kukuri-tauri/src-tauri/src/infrastructure/crypto/default_encryption_service.rs:12-112` | `AppState` が `Arc<dyn EncryptionService>` を保持しているが、`rg ".encrypt_symmetric"` で実サービスからの呼び出しはゼロ。DM 暗号化ロードマップの途中で停止している。 | 保留（暗号化方針待ち） | Phase6 で DM 暗号化を導入する場合は `DirectMessageService` 等へ配線し、見送りならフィールドごと削除する判断を行う。 |
