@@ -6,7 +6,10 @@
 - `refactoring_plan_2025-08-08_v3.md:436-446` と `tasks/status/in_progress.md` へ棚卸し完了を反映し、今後は新コマンド追加時に同 artefact 群へ即ログを残すルールを明示。  
 - `corepack pnpm vitest run src/tests/unit/lib/api/nostr.test.ts src/tests/unit/lib/api/p2p.test.ts` でラッパー更新を検証。Rust 側は `cargo test`（kukuri-tauri: `STATUS_ENTRYPOINT_NOT_FOUND` のため Docker ルートで補完、kukuri-cli: 成功）を実施。
 
-
+## 2025年11月14日: Windows テスト実行ルール再定義
+- PowerShell セッションで `pnpm test` / `cargo test` を直接叩くケースが散見されたため、Windows では **必ず** `./scripts/test-docker.ps1 <suite>` を介して Docker 内でテストを実行するルールを明文化した。  
+- `./scripts/test-docker.ps1 all|rust|ts|lint|integration -Scenario <name>` の実行ログを `tmp/logs/*` に保存し、`STATUS_ENTRYPOINT_NOT_FOUND` / DLL ロードエラーを再発させない。  
+- Linux/macOS、WSL2、または Docker コンテナ内部では従来どおり `pnpm test` / `cargo test` を利用できるが、Windows ホストでの直叩きは禁止。明示的なユーザー指示が無い限り例外を設けない。
 
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |

@@ -15,7 +15,7 @@
 - Rust(kukuri-tauri): `cd kukuri-tauri/src-tauri && cargo test && cargo clippy -D warnings`
 - Rust(kukuri-cli): `cd kukuri-cli && cargo test && cargo build --release`
 - Dockerテスト: `docker compose -f docker-compose.test.yml up --build test-runner`
-- Windows推奨: `./scripts/test-docker.ps1 all|rust|ts|lint`
+- Windows必須: `./scripts/test-docker.ps1 all|rust|ts|lint|integration`（PowerShell から Docker 内で実行する。ホスト上で `cargo test` / `pnpm test` を直接叩くのは厳禁）
 
 ## コーディング規約
 - EditorConfig: LF、TS/JS 2スペース、Rust/TOML 4スペース
@@ -30,6 +30,7 @@
 - 統合: `kukuri-tauri/src/test/integration` は `pnpm test:integration`
 - Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）
 - 変更時は必ずテスト追加/更新とカバレッジ確認
+- Windows 環境は `./scripts/test-docker.ps1 <suite>` を必ず使用する。`STATUS_ENTRYPOINT_NOT_FOUND` / DLL ロードエラー回避のため、`pnpm test` や `cargo test` をホストで直接実行することは禁止（Docker 経由のみ許可）。
 
 ## コミット/PR
 - Conventional Commits推奨: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`
@@ -45,7 +46,7 @@
 - DRY原則: 新規クラス/メソッド/型の実装前に既存の重複機能がないか調査。
 - 依存追加: 追加時は最新安定版を確認して採用。
 - フロントのエラー処理: `console.error` は禁止。`docs/03_implementation/error_handling_guidelines.md` の `errorHandler` を使用。
-- Windowsテスト: DLL等の理由で不安定な場合は `./scripts/test-docker.ps1` を用いて Docker 経由で実行。
+- Windowsテスト: DLL 等の理由でホスト実行が必ず失敗するため、PowerShell では常に `./scripts/test-docker.ps1 <suite>` を用いて Docker 経由で実行（例: `./scripts/test-docker.ps1 rust`, `./scripts/test-docker.ps1 ts`, `./scripts/test-docker.ps1 all -Scenario trending-feed`）。ユーザーからの明示がない限りホストで `pnpm test` / `cargo test` を呼ばない。
 - ファイル編集時は既存ファイルのエンコーディング（UTF-8/LF）を必ず維持し、スクリプトでのバイト列操作でも UTF-8 を明示して読み書きすること（Shift_JIS など別エンコーディングでの保存禁止）。
 - 検証必須: テスト・型・リント修正タスクは、実際にコマンドを実行しエラーが出ないことを確認してから完了とする。
 - Rustテスト実行方針: Rust（`kukuri-tauri/src-tauri` と `kukuri-cli`）の `cargo test` は所要時間が長くても必ず実行し、完了まで待つ。必要に応じてタイムアウトを延長してでもテスト結果を確認する。

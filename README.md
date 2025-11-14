@@ -70,7 +70,15 @@ pnpm format
 # テスト
 pnpm test
 cargo test
+
+# Windows（PowerShell）でのテスト実行
+./scripts/test-docker.ps1 all               # すべてのスイート
+./scripts/test-docker.ps1 rust              # Rust（kukuri-tauri/kukuri-cli）
+./scripts/test-docker.ps1 ts                # TypeScript（Vitest/TanStack）
+./scripts/test-docker.ps1 lint              # ESLint + フォーマット確認
+./scripts/test-docker.ps1 all -Scenario trending-feed   # シナリオ指定の統合テスト
 ```
+> **Windows 注意**: `pnpm test` や `cargo test` をホスト（PowerShell）で直接実行すると `STATUS_ENTRYPOINT_NOT_FOUND` や DLL ロードエラーでほぼ確実に失敗します。Windows では必ず `./scripts/test-docker.ps1 <suite>` を使い、Docker 内でテストを実行してください。Linux/macOS または Docker / WSL2 内では従来どおり `pnpm test` や `cargo test` を利用できます。
 
 ### プロジェクト構造
 `
