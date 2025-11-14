@@ -47,5 +47,4 @@ impl DistributorState {
     pub(crate) fn restore_failures(&mut self, still_failed: Vec<(Event, DistributionStrategy)>) {
         self.failed_events = still_failed;
     }
-
 }

@@ -4,9 +4,7 @@ use kukuri_lib::test_support::application::services::offline_service::{
     OfflineService, OfflineServiceTrait,
 };
 use kukuri_lib::test_support::domain::entities::offline::CacheMetadataUpdate;
-use kukuri_lib::test_support::domain::value_objects::offline::{
-    CacheKey, CacheType,
-};
+use kukuri_lib::test_support::domain::value_objects::offline::{CacheKey, CacheType};
 use serde_json::json;
 
 use super::offline_support::build_params_for_index;
