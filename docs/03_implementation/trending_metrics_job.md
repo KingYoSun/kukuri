@@ -1,6 +1,6 @@
 # Trending Metrics Job 実装ガイド
 作成日: 2025年11月07日  
-最終更新: 2025年11月11日
+最終更新: 2025年11月15日
 
 ## 背景
 - Phase 5 で `/trending` `/following` フィードを実装したが、現状のトレンドスコアはリクエスト時に `topics` / `posts` テーブルから生計算しており、ピーク時にクエリ負荷が高い。
@@ -12,15 +12,15 @@
 - 集計ジョブ失敗時の検知・復旧手順を確立し、Nightly / Docker シナリオからも同値検証できるようにする。
 - 将来的なリアルタイム更新（WebSocket 等）へ拡張しやすい設計を採用する。
 
-## 現状サマリー（2025年11月11日更新）
+## 現状サマリー（2025年11月15日更新）
 - `app.conf`（`AppConfig.metrics`）に `enabled` / `interval_minutes` / `ttl_hours` / `score_weights.posts|unique_authors|boosts` / `prometheus_port` / `emit_histogram` を追加し、`KUKURI_METRICS_*` 環境変数で上書き可能にした。既定値は「有効」「5 分間隔」「TTL 48h」「0.6/0.3/0.1」「prometheus_port: 未設定」「histogram: false」。
 - `AppState::new` で `TrendingMetricsJob` を `Arc` 付き 5 分ループとして `tauri::async_runtime::spawn` し、起動直後から `run_once` → `sleep(interval)` を繰り返す。失敗は `metrics::trending` 名前空間で ERROR ログに出力。
-- 2025年11月10日: `infrastructure/jobs/trending_metrics_metrics.rs` に Prometheus レジストリ（`runs_total` `failures_total` `topics_upserted` `expired_records` `last_success_timestamp` `last_failure_timestamp` `duration_seconds`）を実装し、`TrendingMetricsJob` が成功/失敗ごとに更新。`KUKURI_METRICS_PROMETHEUS_PORT` を設定すると 127.0.0.1 バインドの `tiny_http` サーバーが `/metrics` エンドポイントを公開する。
+- 2025年11月10日: `infrastructure/jobs/trending_metrics_metrics.rs` に Prometheus レジストリ（`runs_total` `failures_total` `topics_upserted` `expired_records` `last_success_timestamp` `last_failure_timestamp` `duration_seconds`）を実装し、`TrendingMetricsJob` が成功/失敗ごとに更新。`KUKURI_METRICS_PROMETHEUS_PORT` を設定すると 127.0.0.1 バインドの `tiny_http` サーバーが `/metrics` エンドポイントを公開する。2025年11月15日版では `window_start_ms` / `window_end_ms` / `lag_ms` とスコア係数（`score_weight_*`）を同時にエクスポートし、成功ログにも同じパラメータを出力するため、Summary Panel のラグ表示と 1:1 に照合できる。
 - `TopicMetricsRepository` に `latest_window_end` / `list_recent_metrics(limit)` を追加し、`topic_metrics` から直近ウィンドウを一括取得できるようにした。`TopicService::list_trending_topics` はメトリクスが有効かつ最新レコードが存在する場合に `TrendingDataSource::Metrics` を返却し、フォールバックとして従来のリアルタイム集計を保持する。
 - `topic_handler::list_trending_topics` / `post_handler::list_trending_posts` はどちらも `generated_at = topic_metrics.window_end` を返却するため、Summary Panel と Docker `trending-feed` シナリオの比較が 1:1 で行える。
 - CI: `pnpm vitest run routes/trending.test.tsx routes/following.test.tsx src/tests/unit/hooks/useTrendingFeeds.test.tsx` と `scripts/test-docker.sh ts --scenario trending-feed --no-build` を Nightly で実行。`trending_metrics_job` のローカル実行は `cargo test trending_metrics_job::*` / `cargo fmt` / `cargo test --package kukuri-tauri` に含まれる。
-- `p2p_metrics_export` バイナリに `--job trending` / `--limit` / `--database-url` を追加（2025年11月10日）。`./scripts/metrics/export-p2p.sh --job trending --pretty`（PowerShell: `.\scripts\metrics\export-p2p.ps1 -Job trending -Pretty`）を実行すると `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` が生成され、`window_start_ms` / `window_end_ms` / `window_duration_ms` / `lag_ms` / `score_weights` / `topics[].score_24h` など exit criteria に必要な情報を一括取得できる。
-- 2025年11月11日: `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` が `prometheus-trending` サービスを自動起動し、`curl http://127.0.0.1:9898/metrics` と `docker compose logs prometheus-trending` をまとめた `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を生成するよう更新。Summary Panel のテストとメトリクス監視を 1 つのシナリオで同時に再現できる。
+- `p2p_metrics_export` バイナリに `--job trending` / `--limit` / `--database-url` を追加（2025年11月10日）。`./scripts/metrics/export-p2p.sh --job trending --pretty`（PowerShell: `.\scripts\metrics\export-p2p.ps1 -Job trending -Pretty`）を実行すると `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` が生成され、`window_start_ms` / `window_end_ms` / `window_duration_ms` / `lag_ms` / `score_weights` / `topics[].score_24h` など exit criteria に必要な情報を一括取得できる。ローカルで実行する場合は `DATABASE_URL` または `--database-url` で SQLite DB（例: `sqlite:data/kukuri.db`）を指定し、Docker シナリオからはホストのデータディレクトリを共有して実行する。
+- 2025年11月11日: `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` が `prometheus-trending` サービスを自動起動し、`curl http://127.0.0.1:9898/metrics` と `docker compose logs prometheus-trending` をまとめた `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を生成するよう更新。2025年11月15日: シナリオ終了時に `scripts/metrics/export-p2p --job trending --pretty` を自動実行し、Prometheus ログに加えて JSON レポートを `test-results/trending-feed/metrics/` へ保存することで、Summary Panel / API / SQL の整合性チェックを 1 ステップで実施できるようになった。
 
 ## 要件
 
@@ -53,18 +53,18 @@ kukuri_trending_metrics_job_last_success_timestamp 1731229205123
 ```
 
 3. `tiny_http` サーバーは 127.0.0.1 のみにバインドされる。外部公開が必要な場合はリバースプロキシか SSH トンネルを利用する。
-4. 生成されたメトリクスは Runbook Chapter7 と `phase5_ci_path_audit.md` で `curl` / `scripts/metrics/export-p2p --job trending --pretty --limit 50` から収集する。デフォルトでは `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` に保存され、`lag_ms` が 5 分未満、`metrics_count` > 0 を確認できる。
-5. Docker `trending-feed` シナリオ（PowerShell 版含む）を実行すると `prometheus-trending` コンテナが自動起動し、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` に `curl` 出力と Prometheus ログが記録される。これにより Summary Panel の Vitest と監視手順を同じ CI ステップで再実行できる。
-   さらに 2025年11月12日版では同ログを `test-results/trending-feed/prometheus/trending_metrics_job_stage4_<timestamp>.log` に複製し、Nightly artefact から直接ダウンロードできるようにした。
+4. 生成されたメトリクスは Runbook Chapter7 と `phase5_ci_path_audit.md` で `curl` / `scripts/metrics/export-p2p --job trending --pretty --limit 50` から収集する。デフォルトでは `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` に保存され、`lag_ms` が 5 分未満、`metrics_count` > 0 を確認できる。ローカルで DB にアクセスできない場合は `--database-url sqlite:<path>` を必ず指定すること。
+5. Docker `trending-feed` シナリオ（PowerShell 版含む）を実行すると `prometheus-trending` コンテナが自動起動し、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` に `curl` 出力と Prometheus ログが記録される。あわせて `scripts/metrics/export-p2p.{sh,ps1} --job trending --pretty` を呼び出し、`test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` を生成するため、Summary Panel の Vitest・Prometheus ログ・JSON レポートを同じ CI ステップで再現できる。
+   2025年11月12日版ではログを `test-results/trending-feed/prometheus/trending_metrics_job_stage4_<timestamp>.log` に複製、同15日版では JSON を `trending-metrics-json` artefact として Nightly へ公開した。
 
 ### CI / Runbook 連携（2025年11月12日更新）
 
 - `docker-compose.test.yml` の `test-runner` / `rust-test` / `rust-coverage` / `lint-check` サービスへ `KUKURI_METRICS_PROMETHEUS_PORT`（既定9898）と `KUKURI_METRICS_EMIT_HISTOGRAM`（既定true）を伝播し、Rust テストや `p2p_metrics_export` を Docker 経由で実行した際も同じ設定でメトリクスを公開できるようにした。
-- `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` は `prometheus-trending` を起動後、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を採取すると同時に `test-results/trending-feed/prometheus/` にスナップショットをコピーする。CI では `nightly.yml` がこのディレクトリを artefact（`trending-metrics-prometheus`）として収集するため、Runbook から直接参照できる。
+- `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` は `prometheus-trending` を起動後、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` を採取すると同時に `test-results/trending-feed/prometheus/` にスナップショットをコピーし、さらに `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` を生成する。CI では `nightly.yml` が `trending-feed-reports` / `trending-metrics-logs` / `trending-metrics-prometheus` / `trending-metrics-json` をまとめて artefact として公開する。
 - Runbook で再現する場合は以下の順で実行する:
   1. `./scripts/test-docker.sh ts --scenario trending-feed --no-build`（PowerShell 版は `.\scripts\test-docker.ps1 ts -Scenario trending-feed -NoBuild`）。
-  2. 成功/失敗に関わらず `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` と `test-results/trending-feed/prometheus/trending_metrics_job_stage4_<timestamp>.log` が生成されることを確認。
-  3. 必要に応じて `docker compose -f docker-compose.test.yml logs prometheus-trending` で scrape 状態を確認し、`p2p_metrics_export --job trending --output test-results/trending-feed/metrics/<timestamp>.json` を取得する。
+  2. 成功/失敗に関わらず `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` / `test-results/trending-feed/prometheus/trending_metrics_job_stage4_<timestamp>.log` / `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` が生成されることを確認。
+  3. 必要に応じて `docker compose -f docker-compose.test.yml logs prometheus-trending` で scrape 状態を確認し、`DATABASE_URL=<path>` を指定した `scripts/metrics/export-p2p.{sh,ps1}` で追加のスナップショットを採取する。
 
 ## アーキテクチャ案
 - モジュール構成

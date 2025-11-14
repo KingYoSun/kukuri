@@ -45,6 +45,7 @@ struct ScoreWeightsSummary {
 struct TrendingJobReport {
     job: &'static str,
     generated_at_ms: i64,
+    collected_at_ms: i64,
     limit: usize,
     metrics_count: usize,
     score_weights: ScoreWeightsSummary,
@@ -248,7 +249,8 @@ fn build_report(
         let metrics = snapshot.metrics;
         TrendingJobReport {
             job: "trending_metrics",
-            generated_at_ms: now_ms,
+            generated_at_ms: snapshot.window_end,
+            collected_at_ms: now_ms,
             limit,
             metrics_count: metrics.len(),
             score_weights: weights,
@@ -262,6 +264,7 @@ fn build_report(
         TrendingJobReport {
             job: "trending_metrics",
             generated_at_ms: now_ms,
+            collected_at_ms: now_ms,
             limit,
             metrics_count: 0,
             score_weights: weights,
@@ -325,5 +328,27 @@ mod tests {
     fn reject_zero_limit() {
         let err = parse_args(vec!["--limit".into(), "0".into()].into_iter()).unwrap_err();
         assert!(format!("{err}").contains("greater than 0"));
+    }
+
+    #[test]
+    fn trending_report_uses_snapshot_window_end() {
+        let snapshot = TopicMetricsSnapshot {
+            window_start: 1_000,
+            window_end: 2_000,
+            metrics: Vec::new(),
+        };
+        let weights = ScoreWeightsSummary {
+            posts: 0.6,
+            unique_authors: 0.3,
+            boosts: 0.1,
+        };
+
+        let report = build_report(Some(snapshot), 25, weights);
+
+        assert_eq!(report.generated_at_ms, 2_000);
+        assert_eq!(report.window_start_ms, Some(1_000));
+        assert_eq!(report.window_end_ms, Some(2_000));
+        assert!(report.collected_at_ms >= report.generated_at_ms);
+        assert_eq!(report.score_weights.posts, 0.6);
     }
 }

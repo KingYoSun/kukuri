@@ -419,7 +419,7 @@ function Invoke-TypeScriptTrendingFeedScenario {
         "tests/fixtures/trending/default.json"
     }
 
-    $scenarioDir = Join-Path $repositoryRoot "test-results/trending-feed"
+    $scenarioDir = Join-Path $repositoryRoot "test-results/trending-feed/reports"
     if (-not (Test-Path $scenarioDir)) {
         New-Item -ItemType Directory -Path $scenarioDir | Out-Null
     }
@@ -453,7 +453,7 @@ function Invoke-TypeScriptTrendingFeedScenario {
     try {
         foreach ($target in $vitestTargets) {
             $slug = $target.Replace('/', '_').Replace('.', '_')
-            $reportRelPath = "test-results/trending-feed/$timestamp-$slug.json"
+            $reportRelPath = "test-results/trending-feed/reports/$timestamp-$slug.json"
             $reportContainerPath = "/app/$reportRelPath"
             Add-Content -Path $logHostPath -Value @("`n--- Running target: $target ---", "report: $reportRelPath") -Encoding UTF8
 
@@ -504,11 +504,24 @@ function Invoke-TypeScriptTrendingFeedScenario {
         Write-Warning "Scenario log was not generated at $logRelPath"
     }
 
+    Add-Content -Path $logHostPath -Value @('', '--- Exporting trending metrics snapshot (scripts/metrics/export-p2p.ps1 -Job trending -Pretty) ---') -Encoding UTF8
+    $metricsScript = Join-Path $scriptDirectory 'metrics/export-p2p.ps1'
+    try {
+        $exportOutput = & $metricsScript -Job trending -Pretty
+        if ($exportOutput) {
+            Add-Content -Path $logHostPath -Value $exportOutput -Encoding UTF8
+        }
+        Write-Success "Trending metrics JSON exported to test-results/trending-feed/metrics"
+    }
+    catch {
+        Write-Warning "Trending metrics export failed: $_"
+        Add-Content -Path $logHostPath -Value "[WARN] Trending metrics export failed: $_" -Encoding UTF8
+    }
     if ($vitestStatus -ne 0) {
         throw "Scenario 'trending-feed' failed. See $logRelPath for details."
     }
 
-    Write-Success "Scenario reports stored under test-results/trending-feed/ (prefix $timestamp)"
+    Write-Success "Scenario reports stored under test-results/trending-feed/reports/ (prefix $timestamp)"
 }
 
 function Invoke-TypeScriptProfileAvatarScenario {

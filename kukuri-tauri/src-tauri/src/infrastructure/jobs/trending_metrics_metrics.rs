@@ -1,7 +1,7 @@
 use super::trending_metrics_job::TrendingMetricsRunStats;
 use crate::shared::error::AppError;
 use prometheus::{
-    Encoder, Histogram, HistogramOpts, IntCounter, IntGauge, Opts, Registry, TextEncoder,
+    Encoder, Gauge, Histogram, HistogramOpts, IntCounter, IntGauge, Opts, Registry, TextEncoder,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,6 +23,12 @@ pub struct TrendingMetricsRecorder {
     expired_records: IntGauge,
     last_success_ms: IntGauge,
     last_failure_ms: IntGauge,
+    window_start_ms: IntGauge,
+    window_end_ms: IntGauge,
+    lag_ms: IntGauge,
+    weight_posts: Gauge,
+    weight_unique_authors: Gauge,
+    weight_boosts: Gauge,
     duration_seconds: Option<Histogram>,
 }
 
@@ -84,6 +90,60 @@ impl TrendingMetricsRecorder {
             .register(Box::new(last_failure_ms.clone()))
             .map_err(prometheus_err)?;
 
+        let window_start_ms = IntGauge::with_opts(Opts::new(
+            "trending_metrics_job_window_start_ms",
+            "Window start timestamp (milliseconds) for the last successful execution",
+        ))
+        .map_err(prometheus_err)?;
+        registry
+            .register(Box::new(window_start_ms.clone()))
+            .map_err(prometheus_err)?;
+
+        let window_end_ms = IntGauge::with_opts(Opts::new(
+            "trending_metrics_job_window_end_ms",
+            "Window end timestamp (milliseconds) for the last successful execution",
+        ))
+        .map_err(prometheus_err)?;
+        registry
+            .register(Box::new(window_end_ms.clone()))
+            .map_err(prometheus_err)?;
+
+        let lag_ms = IntGauge::with_opts(Opts::new(
+            "trending_metrics_job_lag_ms",
+            "Lag in milliseconds between now and the emitted window end",
+        ))
+        .map_err(prometheus_err)?;
+        registry
+            .register(Box::new(lag_ms.clone()))
+            .map_err(prometheus_err)?;
+
+        let weight_posts = Gauge::with_opts(Opts::new(
+            "trending_metrics_score_weight_posts",
+            "Configured score weight applied to posts",
+        ))
+        .map_err(prometheus_err)?;
+        registry
+            .register(Box::new(weight_posts.clone()))
+            .map_err(prometheus_err)?;
+
+        let weight_unique_authors = Gauge::with_opts(Opts::new(
+            "trending_metrics_score_weight_unique_authors",
+            "Configured score weight applied to unique authors",
+        ))
+        .map_err(prometheus_err)?;
+        registry
+            .register(Box::new(weight_unique_authors.clone()))
+            .map_err(prometheus_err)?;
+
+        let weight_boosts = Gauge::with_opts(Opts::new(
+            "trending_metrics_score_weight_boosts",
+            "Configured score weight applied to boosts",
+        ))
+        .map_err(prometheus_err)?;
+        registry
+            .register(Box::new(weight_boosts.clone()))
+            .map_err(prometheus_err)?;
+
         let duration_seconds = if emit_histogram {
             let histogram = Histogram::with_opts(
                 HistogramOpts::new(
@@ -110,6 +170,12 @@ impl TrendingMetricsRecorder {
             expired_records,
             last_success_ms,
             last_failure_ms,
+            window_start_ms,
+            window_end_ms,
+            lag_ms,
+            weight_posts,
+            weight_unique_authors,
+            weight_boosts,
             duration_seconds,
         })
     }
@@ -119,6 +185,13 @@ impl TrendingMetricsRecorder {
         self.topics_upserted.set(stats.topics_upserted as i64);
         self.expired_records.set(stats.expired_records as i64);
         self.last_success_ms.set(now_millis());
+        self.window_start_ms.set(stats.window_start_millis);
+        self.window_end_ms.set(stats.window_end_millis);
+        self.lag_ms.set(stats.lag_millis);
+        self.weight_posts.set(stats.score_weights.posts);
+        self.weight_unique_authors
+            .set(stats.score_weights.unique_authors);
+        self.weight_boosts.set(stats.score_weights.boosts);
         if let Some(histogram) = &self.duration_seconds {
             histogram.observe(duration.as_secs_f64());
         }
@@ -145,6 +218,7 @@ impl TrendingMetricsRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::entities::ScoreWeights;
     use std::str;
 
     fn contains_metric(haystack: &str, key: &str, value: &str) -> bool {
@@ -160,6 +234,10 @@ mod tests {
             topics_upserted: 3,
             expired_records: 1,
             cutoff_millis: 0,
+            window_start_millis: 0,
+            window_end_millis: 0,
+            lag_millis: 0,
+            score_weights: ScoreWeights::default(),
         };
 
         recorder.record_success(Duration::from_millis(1200), &stats);

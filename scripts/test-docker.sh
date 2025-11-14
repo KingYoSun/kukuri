@@ -204,8 +204,8 @@ run_ts_trending_feed() {
     fixture_path="${VITE_TRENDING_FIXTURE_PATH:-tests/fixtures/trending/default.json}"
   fi
 
-  local scenario_dir="${RESULTS_DIR}/trending-feed"
-  mkdir -p "$scenario_dir"
+  local reports_dir="${RESULTS_DIR}/trending-feed/reports"
+  mkdir -p "$reports_dir"
 
   local timestamp
   timestamp="$(date '+%Y%m%d-%H%M%S')"
@@ -241,7 +241,7 @@ run_ts_trending_feed() {
   for target in "${vitest_targets[@]}"; do
     local slug="${target//\//_}"
     slug="${slug//./_}"
-    local report_rel_path="test-results/trending-feed/${timestamp}-${slug}.json"
+    local report_rel_path="test-results/trending-feed/reports/${timestamp}-${slug}.json"
     local report_container_path="/app/${report_rel_path}"
     {
       echo "--- Running target: ${target} ---"
@@ -295,6 +295,26 @@ run_ts_trending_feed() {
     echo "[OK] Latest scenario log updated at ${latest_rel_path}"
   else
     echo "[WARN] Scenario log was not generated at ${log_rel_path}" >&2
+  fi
+
+  {
+    echo
+    echo "--- Exporting trending metrics snapshot (scripts/metrics/export-p2p.sh --job trending --pretty) ---"
+  } >>"$log_host_path"
+
+  local default_db="${REPO_ROOT}/kukuri-tauri/src-tauri/data/kukuri.db"
+  if [[ -f "$default_db" ]]; then
+    if DATABASE_URL="sqlite:${default_db}" "${SCRIPT_DIR}/metrics/export-p2p.sh" --job trending --pretty >>"$log_host_path" 2>&1; then
+      echo "[OK] Trending metrics JSON saved to test-results/trending-feed/metrics" | tee -a "$log_host_path"
+    else
+      local export_status=$?
+      echo "[WARN] Trending metrics export failed with exit code ${export_status}" | tee -a "$log_host_path" >&2
+    fi
+  else
+    {
+      echo "[WARN] Trending metrics export skipped (database not found at ${default_db})."
+      echo "[WARN] Run sqlite migrations or set DATABASE_URL before executing this scenario to generate metrics JSON."
+    } | tee -a "$log_host_path" >&2
   fi
 
   return $vitest_status

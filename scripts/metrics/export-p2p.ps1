@@ -1,5 +1,3 @@
-$ErrorActionPreference = "Stop"
-
 param(
     [string]$Output,
     [switch]$Pretty,
@@ -8,6 +6,8 @@ param(
     [string]$DatabaseUrl,
     [int]$Limit
 )
+$ErrorActionPreference = "Stop"
+
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")

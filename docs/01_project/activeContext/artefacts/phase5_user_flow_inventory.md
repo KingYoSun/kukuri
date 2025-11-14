@@ -383,12 +383,13 @@
 
 ### 5.7 トレンド/フォロー中導線実装計画（2025年11月04日追加）
 - **目的**: サイドバーカテゴリー「トレンド」「フォロー中」からアクセスできる発見導線とマイフィード導線を整備し、Home タイムラインとの差別化と優先度の可視化を実現する。
-- **進捗（2025年11月07日更新）**
+- **進捗（2025年11月15日更新）**
   - `Sidebar` のカテゴリーは `useUIStore.activeSidebarCategory` でハイライトを同期し、`prefetchTrendingCategory` / `prefetchFollowingCategory` によりクリック時に関連クエリを事前取得できるようにした。
   - `useTrendingFeeds.ts` をリファクタリングし、`trendingTopicsQueryKey` などの共有ロジックとプリフェッチ API を整備。`routes/trending.tsx` / `routes/following.tsx` は新ヘルパーを利用してロード/エラー/空状態をハンドリング済み。
   - テスト実行: `npx vitest run src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/stores/uiStore.test.ts src/tests/unit/hooks/useTrendingFeeds.test.tsx`（2025年11月05日）。カテゴリ状態の同期・プリフェッチ分岐・クエリマッピングをユニットテストで検証。
   - 2025年11月06日: `list_trending_topics` / `list_trending_posts` / `list_following_feed` のデータ仕様と UI/ST テスト要件を整理し、本節ならびに Summary・実装計画へ反映。`topic_handler.rs` / `post_handler.rs` で `Utc::now().timestamp_millis()` を採用していることを確認し、Query キャッシュ境界条件も記録。
   - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` を追加し、派生メトリクス（トピック数・プレビュー件数・平均スコア・最終更新・ユニーク投稿者・残ページ）を表示。`pnpm vitest run src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx` で新UIと集計値のテストを実施。
+  - 2025年11月15日: `generated_at` 由来のラグ表示・プレビュー更新カード・DM 会話ラベルを Summary Panel に追加し、`useDirectMessageBadge` が `latestConversationNpub` を返すように変更。Docker `trending-feed` シナリオで `test-results/trending-feed/reports/*.json`・`prometheus/*.log`・`metrics/<timestamp>-trending-metrics.json` を採取し、Nightly artefact `trending-metrics-json` を追加。
   - 2025年11月07日: `/trending` `/following` の手動 QA を実施し、`formatDistanceToNow` へのミリ秒入力・無限スクロール境界（空ページ/`hasNextPage=false`）・DM 未読バッジ連携を確認。`phase5_user_flow_summary.md` と `phase5_ci_path_audit.md` の参照リンクを更新し、Summary Panel の派生メトリクスが最新データと一致することを検証。
   - 2025年11月08日: `trending_metrics_job` を AppState 起動時に 5 分間隔で実行するループとして組み込み、`TopicService::list_trending_topics` / `post_handler::list_trending_posts` が `topic_metrics` の最新ウィンドウ (`window_end`) を `generated_at` として返却するようリファクタ。
   - 2025年11月10日: `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を通し、`pnpm vitest run …` と `./scripts/test-docker.sh ts --scenario trending-feed --no-build` をローカルで完走。ログ（`tmp/logs/vitest_trending_topics_20251110020449.log` / `tmp/logs/trending-feed_20251110020528.log`）を取得し、Summary Panel と `/trending` `/following` ルートの数値突合を実施。

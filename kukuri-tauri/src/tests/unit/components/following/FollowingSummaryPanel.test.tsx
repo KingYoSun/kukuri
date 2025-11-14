@@ -17,6 +17,7 @@ vi.mock('date-fns', async () => {
 const badgeMock = vi.hoisted(() => ({
   unreadTotal: 5,
   latestMessage: { createdAt: Date.now() },
+  latestConversationNpub: 'npub1following',
 }));
 
 vi.mock('@/hooks/useDirectMessageBadge', () => ({
@@ -53,7 +54,7 @@ describe('FollowingSummaryPanel', () => {
 
     expect(screen.getByTestId('following-summary-direct-messages')).toHaveTextContent('5件');
     expect(screen.getByTestId('following-summary-direct-messages-helper')).toHaveTextContent(
-      '1分前',
+      '1分前 / 会話: npub1following',
     );
 
     await user.click(screen.getByTestId('following-summary-dm-cta'));

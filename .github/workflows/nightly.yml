@@ -62,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: trending-feed-reports
-          path: test-results/trending-feed
+          path: test-results/trending-feed/reports
           if-no-files-found: error
 
       - name: Upload trending metrics logs
@@ -77,6 +77,13 @@ jobs:
         with:
           name: trending-metrics-prometheus
           path: test-results/trending-feed/prometheus
+          if-no-files-found: warn
+
+      - name: Upload trending metrics json
+        uses: actions/upload-artifact@v4
+        with:
+          name: trending-metrics-json
+          path: test-results/trending-feed/metrics
           if-no-files-found: warn
 
   profile-avatar-sync:

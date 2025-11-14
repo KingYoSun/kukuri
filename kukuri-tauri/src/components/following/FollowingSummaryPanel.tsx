@@ -27,13 +27,21 @@ const formatRelativeTime = (timestamp: number | null | undefined) => {
   };
 };
 
+const formatLagLabel = (timestamp: number | null | undefined) => {
+  if (!timestamp) {
+    return null;
+  }
+  const lagSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  return `ラグ ${lagSeconds.toLocaleString()}秒`;
+};
+
 export function FollowingSummaryPanel({
   data,
   isLoading = false,
   isFetching = false,
   hasNextPage = false,
 }: FollowingSummaryPanelProps) {
-  const { unreadTotal, latestMessage } = useDirectMessageBadge();
+  const { unreadTotal, latestMessage, latestConversationNpub } = useDirectMessageBadge();
   const openInbox = useDirectMessageStore((state) => state.openInbox);
 
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
@@ -50,6 +58,7 @@ export function FollowingSummaryPanel({
     ? data.pages.reduce((latest, page) => Math.max(latest, page.serverTime ?? 0), 0) || null
     : null;
   const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTime(latestServerTime);
+  const updatedLagLabel = formatLagLabel(latestServerTime);
 
   const remainingPages = data || hasNextPage ? (hasNextPage ? 'あり' : 'なし') : null;
 
@@ -58,6 +67,11 @@ export function FollowingSummaryPanel({
   const { display: dmDisplay, helper: dmHelper } = formatRelativeTime(
     latestMessage ? latestMessage.createdAt : null,
   );
+  const dmHelperText = latestMessage
+    ? [dmDisplay ?? dmHelper, latestConversationNpub ? `会話: ${latestConversationNpub}` : null]
+        .filter(Boolean)
+        .join(' / ') || '受信履歴なし'
+    : '受信履歴なし';
 
   return (
     <section
@@ -81,7 +95,7 @@ export function FollowingSummaryPanel({
       <SummaryMetricCard
         label="最終更新"
         value={updatedDisplay}
-        helperText={updatedHelper}
+        helperText={[updatedHelper, updatedLagLabel].filter(Boolean).join(' / ') || null}
         isLoading={showLoadingState(!updatedDisplay)}
         testId="following-summary-updated"
       />
@@ -95,7 +109,7 @@ export function FollowingSummaryPanel({
       <SummaryMetricCard
         label="DM未読"
         value={`${unreadTotal.toLocaleString()}件`}
-        helperText={dmDisplay ?? dmHelper ?? '受信履歴なし'}
+        helperText={dmHelperText}
         isLoading={false}
         testId="following-summary-direct-messages"
         action={

@@ -31,6 +31,10 @@ pub struct TrendingMetricsRunStats {
     pub topics_upserted: u64,
     pub expired_records: u64,
     pub cutoff_millis: i64,
+    pub window_start_millis: i64,
+    pub window_end_millis: i64,
+    pub lag_millis: i64,
+    pub score_weights: ScoreWeights,
 }
 
 impl TrendingMetricsJob {
@@ -71,6 +75,12 @@ impl TrendingMetricsJob {
                 topics_upserted = stats.topics_upserted,
                 cutoff_millis = stats.cutoff_millis,
                 removed_records = stats.expired_records,
+                window_start_millis = stats.window_start_millis,
+                window_end_millis = stats.window_end_millis,
+                lag_millis = stats.lag_millis,
+                score_weight_posts = stats.score_weights.posts,
+                score_weight_unique_authors = stats.score_weights.unique_authors,
+                score_weight_boosts = stats.score_weights.boosts,
                 duration_ms,
                 "trending metrics job completed"
             );
@@ -120,11 +130,16 @@ impl TrendingMetricsJob {
 
         let cutoff = now - (self.ttl_hours as i64 * Duration::hours(1).num_milliseconds());
         let removed = self.metrics_repository.cleanup_expired(cutoff).await?;
+        let lag_millis = now.saturating_sub(window_24h.end).max(0);
 
         Ok(TrendingMetricsRunStats {
             topics_upserted: upserted as u64,
             expired_records: removed,
             cutoff_millis: cutoff,
+            window_start_millis: window_24h.start,
+            window_end_millis: window_24h.end,
+            lag_millis,
+            score_weights: self.score_weights,
         })
     }
 }

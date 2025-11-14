@@ -26,13 +26,22 @@ const formatRelativeTime = (timestamp: number | null | undefined) => {
   };
 };
 
+const formatLagLabel = (timestamp: number | null | undefined) => {
+  if (!timestamp) {
+    return null;
+  }
+
+  const lagSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  return `ラグ ${lagSeconds.toLocaleString()}秒`;
+};
+
 export function TrendingSummaryPanel({
   topics,
   posts,
   isTopicsFetching = false,
   isPostsFetching = false,
 }: TrendingSummaryPanelProps) {
-  const { unreadTotal, latestMessage } = useDirectMessageBadge();
+  const { unreadTotal, latestMessage, latestConversationNpub } = useDirectMessageBadge();
   const openInbox = useDirectMessageStore((state) => state.openInbox);
 
   const topicsCount = topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
@@ -57,10 +66,21 @@ export function TrendingSummaryPanel({
   const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTime(
     topics?.generatedAt ?? null,
   );
+  const topicsLagLabel = formatLagLabel(topics?.generatedAt ?? null);
+
+  const { display: previewUpdatedDisplay, helper: previewUpdatedHelper } = formatRelativeTime(
+    posts?.generatedAt ?? null,
+  );
+  const previewLagLabel = formatLagLabel(posts?.generatedAt ?? null);
 
   const { display: dmDisplay, helper: dmHelper } = formatRelativeTime(
     latestMessage ? latestMessage.createdAt : null,
   );
+  const dmHelperText = latestMessage
+    ? [dmDisplay ?? dmHelper, latestConversationNpub ? `会話: ${latestConversationNpub}` : null]
+        .filter(Boolean)
+        .join(' / ') || '受信履歴なし'
+    : '受信履歴なし';
 
   return (
     <section
@@ -91,14 +111,21 @@ export function TrendingSummaryPanel({
       <SummaryMetricCard
         label="最終更新"
         value={updatedDisplay}
-        helperText={updatedHelper}
+        helperText={[updatedHelper, topicsLagLabel].filter(Boolean).join(' / ') || null}
         isLoading={isTopicsFetching && !topics}
         testId="trending-summary-updated"
       />
       <SummaryMetricCard
+        label="プレビュー更新"
+        value={previewUpdatedDisplay}
+        helperText={[previewUpdatedHelper, previewLagLabel].filter(Boolean).join(' / ') || null}
+        isLoading={isPostsFetching && !posts}
+        testId="trending-summary-preview-updated"
+      />
+      <SummaryMetricCard
         label="DM未読"
         value={`${unreadTotal.toLocaleString()}件`}
-        helperText={dmDisplay ?? dmHelper ?? '受信履歴なし'}
+        helperText={dmHelperText}
         isLoading={false}
         testId="trending-summary-direct-messages"
         action={

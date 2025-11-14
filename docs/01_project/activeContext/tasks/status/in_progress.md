@@ -13,11 +13,6 @@
 
 ### MVP Exit タスク
 
-10. **トレンド/フォロー導線: メトリクスとテレメトリの仕上げ**  
-    - 背景: `docs/01_project/roadmap.md:14-20` と `docs/01_project/activeContext/tauri_app_implementation_plan.md:13` で、`trending_metrics_job` の 24h 集計・`list_trending_*` の `generated_at` ミリ秒保証・`scripts/test-docker.{sh,ps1} ts --scenario trending-feed` / `scripts/metrics/export-p2p --job trending` の artefact 固定が未完了と明記されている。  
-    - やること: (1) `trending_metrics_job` の 24h スライディングウィンドウと `score_weights` を確定し、`list_trending_topics/posts` がミリ秒精度の `generated_at` を返すよう Rust 側を更新。(2) `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` に `prometheus-trending` サービス起動・`curl http://127.0.0.1:9898/metrics` 採取・`scripts/metrics/export-p2p --job trending` 実行を組み込み、`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` と `test-results/trending-feed/{reports,prometheus}` を Nightly artefact 化。(3) `TrendingSummaryPanel` / `FollowingSummaryPanel` のテレメトリ（DM 未読カード含む）を更新し、Runbook・`phase5_ci_path_audit.md` に手順とログパスを追記。  
-    - 完了条件: `nightly.trending-feed` が安定して緑化し、Prometheus/JSON artefact と UI テレメトリが同期している状態を `roadmap.md` / Runbook 双方で確認できる。
-
 11. **Direct Message Inbox: 多端末既読共有と contract テストの完了**  
     - 背景: `docs/01_project/activeContext/tauri_app_implementation_plan.md:12` と `docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:124` で、DM Inbox の仮想スクロール・宛先補完・`mark_direct_message_conversation_read` の多端末同期・ユニット/contract テストが残課題とされている。  
     - やること: (1) SQLite `direct_message_conversations` と `mark_direct_message_conversation_read` を拡張し、マルチデバイスの既読伝搬と `useDirectMessageBootstrap` の 30 秒再同期を契約テストで保証。(2) `DirectMessageInbox` / `DirectMessageDialog` / `Header` の仮想スクロール・宛先検索テレメトリを整理し、`pnpm vitest ...Header.test.tsx DirectMessageDialog.test.tsx` と Docker `direct-message` シナリオを再取得。(3) `phase5_user_flow_inventory.md` 5.4・`phase5_ci_path_audit.md` にテスト ID / `tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json` を追記。  

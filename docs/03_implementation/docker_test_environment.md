@@ -112,7 +112,7 @@ P2P統合テスト用に追加された `p2p` サブコマンドでは次のオ�
   - Linux/macOS: `./scripts/test-docker.sh ts --scenario trending-feed`
   - Windows: `.\scripts\test-docker.ps1 ts -Scenario trending-feed`
 - **フィクスチャ**: 既定値は `kukuri-tauri/tests/fixtures/trending/default.json`。`VITE_TRENDING_FIXTURE_PATH` を環境変数として渡すことでシナリオごとのデータセットを切り替え可能。
-- **成果物**: 実行結果ログを `tmp/logs/trending-feed/latest.log` に出力し、Nightly ワークフローでは artefact としてアップロードする。
+- **成果物**: 実行結果ログを `tmp/logs/trending-feed/<timestamp>.log` / `tmp/logs/trending-feed/latest.log` に保存し、Vitest JSON を `test-results/trending-feed/reports/*.json`、Prometheus スナップショットを `tmp/logs/trending_metrics_job_stage4_<timestamp>.log` と `test-results/trending-feed/prometheus/`、`p2p_metrics_export --job trending --pretty` の出力を `test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` へ出力する。Nightly ではこれらを `trending-feed-reports` / `trending-metrics-logs` / `trending-metrics-prometheus` / `trending-metrics-json` として artefact 化する。
 - **注意点**: Docker イメージを更新した直後は `--no-build` オプションを付けずに実行し、依存パッケージを最新化してからキャッシュ運用に切り替える。Vitest 実行時は `CI=true` を付与してスナップショット差分を強制的に fail させる。
 
 ### シナリオ: user-search-pagination
