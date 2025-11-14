@@ -191,7 +191,9 @@ export function ConflictResolutionDialog({
             onValueChange={(value) => setActiveTab(value as 'summary' | 'doc')}
             className="space-y-4"
           >
-            <TabsList className={cn('grid w-full gap-2', showDocTab ? 'grid-cols-2' : 'grid-cols-1')}>
+            <TabsList
+              className={cn('grid w-full gap-2', showDocTab ? 'grid-cols-2' : 'grid-cols-1')}
+            >
               <TabsTrigger value="summary">概要</TabsTrigger>
               {showDocTab && <TabsTrigger value="doc">Doc/Blob</TabsTrigger>}
             </TabsList>
@@ -203,9 +205,7 @@ export function ConflictResolutionDialog({
                       <Monitor className="h-4 w-4" />
                       ローカルの変更
                     </CardTitle>
-                    <CardDescription className="text-xs">
-                      あなたのデバイスでの変更
-                    </CardDescription>
+                    <CardDescription className="text-xs">あなたのデバイスでの変更</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-xs text-muted-foreground mb-2 space-y-1">
@@ -213,7 +213,12 @@ export function ConflictResolutionDialog({
                         作成日時:{' '}
                         {new Date(currentConflict.localAction.createdAt).toLocaleString('ja-JP')}
                       </p>
-                      <p>タイプ: {currentConflict.localAction.actionType}</p>
+                      <p>
+                        タイプ:{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                          {currentConflict.localAction.actionType}
+                        </code>
+                      </p>
                     </div>
                     <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
                       {JSON.stringify(currentConflict.localAction, null, 2)}
@@ -237,18 +242,25 @@ export function ConflictResolutionDialog({
                         <div className="text-xs text-muted-foreground mb-2 space-y-1">
                           <p>
                             作成日時:{' '}
-                            {new Date(
-                              currentConflict.remoteAction.createdAt,
-                            ).toLocaleString('ja-JP')}
+                            {new Date(currentConflict.remoteAction.createdAt).toLocaleString(
+                              'ja-JP',
+                            )}
                           </p>
-                          <p>タイプ: {currentConflict.remoteAction.actionType}</p>
+                          <p>
+                            タイプ:{' '}
+                            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                              {currentConflict.remoteAction.actionType}
+                            </code>
+                          </p>
                         </div>
                         <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
                           {JSON.stringify(currentConflict.remoteAction, null, 2)}
                         </pre>
                       </>
                     ) : (
-                      <p className="text-xs text-muted-foreground">リモート側の変更はありません。</p>
+                      <p className="text-xs text-muted-foreground">
+                        リモート側の変更はありません。
+                      </p>
                     )}
                   </CardContent>
                 </Card>
@@ -333,17 +345,23 @@ export function ConflictResolutionDialog({
                         row.local !== row.remote;
                       return (
                         <div key={row.key} className="text-sm rounded border p-2">
-                          <p className="text-xs uppercase text-muted-foreground mb-1">{row.label}</p>
+                          <p className="text-xs uppercase text-muted-foreground mb-1">
+                            {row.label}
+                          </p>
                           <div className="grid grid-cols-2 gap-3 text-xs">
                             <div>
                               <p className="text-muted-foreground mb-0.5">ローカル</p>
-                              <p className={cn('font-medium break-all', differ && 'text-amber-600')}>
+                              <p
+                                className={cn('font-medium break-all', differ && 'text-amber-600')}
+                              >
                                 {row.local ?? '—'}
                               </p>
                             </div>
                             <div>
                               <p className="text-muted-foreground mb-0.5">リモート</p>
-                              <p className={cn('font-medium break-all', differ && 'text-amber-600')}>
+                              <p
+                                className={cn('font-medium break-all', differ && 'text-amber-600')}
+                              >
                                 {row.remote ?? '—'}
                               </p>
                             </div>

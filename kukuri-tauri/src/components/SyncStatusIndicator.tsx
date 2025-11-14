@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import type { CacheTypeStatus, OfflineAction, SyncQueueItem } from '@/types/offline';
+import type { CacheTypeStatus, SyncQueueItem } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
