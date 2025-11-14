@@ -163,29 +163,6 @@ impl Validate for SubscribeRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeleteEventsRequest {
-    pub event_ids: Vec<String>,
-    pub reason: Option<String>,
-}
-
-impl Validate for DeleteEventsRequest {
-    fn validate(&self) -> Result<(), String> {
-        if self.event_ids.is_empty() {
-            return Err("At least one event ID is required".to_string());
-        }
-        if self.event_ids.len() > 100 {
-            return Err("Too many events to delete (max 100)".to_string());
-        }
-        if let Some(reason) = &self.reason {
-            if reason.len() > 500 {
-                return Err("Reason is too long (max 500 characters)".to_string());
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventResponse {
     pub event_id: String,
     pub success: bool,

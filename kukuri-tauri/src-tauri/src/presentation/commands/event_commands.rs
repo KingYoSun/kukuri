@@ -1,8 +1,7 @@
 use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::event::{
-    DeleteEventsRequest, EventResponse, NostrMetadataDto, PublishTextNoteRequest,
-    PublishTopicPostRequest, SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest,
-    UpdateMetadataRequest,
+    EventResponse, NostrMetadataDto, PublishTextNoteRequest, PublishTopicPostRequest,
+    SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest, UpdateMetadataRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -101,28 +100,6 @@ pub async fn list_nostr_subscriptions(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<serde_json::Value>, AppError> {
     let result = state.event_handler.list_subscriptions().await;
-    Ok(ApiResponse::from_result(result))
-}
-
-/// Nostr公開鍵を取得
-#[tauri::command]
-pub async fn get_nostr_pubkey(
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<serde_json::Value>, AppError> {
-    let result = state.event_handler.get_nostr_pubkey().await;
-    Ok(ApiResponse::from_result(result))
-}
-
-/// イベントを削除
-#[tauri::command]
-pub async fn delete_events(
-    event_ids: Vec<String>,
-    reason: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<EventResponse>, AppError> {
-    let request = DeleteEventsRequest { event_ids, reason };
-
-    let result = state.event_handler.delete_events(request).await;
     Ok(ApiResponse::from_result(result))
 }
 

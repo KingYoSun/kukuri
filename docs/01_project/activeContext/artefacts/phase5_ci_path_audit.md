@@ -1,6 +1,13 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
 最終更新日: 2025年11月13日
 
+## 2025年11月14日: Tauri API 棚卸しログ
+- `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri 側の `invoke_handler` とフロントエンド API から撤去し、`phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` / `phase5_feature_usage_map.md` で未導線リストを 0 件に更新。  
+- `refactoring_plan_2025-08-08_v3.md:436-446` と `tasks/status/in_progress.md` へ棚卸し完了を反映し、今後は新コマンド追加時に同 artefact 群へ即ログを残すルールを明示。  
+- `corepack pnpm vitest run src/tests/unit/lib/api/nostr.test.ts src/tests/unit/lib/api/p2p.test.ts` でラッパー更新を検証。Rust 側は `cargo test`（kukuri-tauri: `STATUS_ENTRYPOINT_NOT_FOUND` のため Docker ルートで補完、kukuri-cli: 成功）を実施。
+
+
+
 | 対象 | 現状参照パス／コマンド | 影響範囲 | 修正案 |
 | --- | --- | --- | --- |
 | `scripts/docker/run-smoke-tests.sh` | `cargo test --package kukuri-tauri --test p2p_gossip_smoke -- --nocapture --test-threads=1`<br>`cargo test --package kukuri-tauri --test p2p_mainline_smoke -- --nocapture --test-threads=1` | Docker スモークテストで新テストバイナリを並列実行。 | 2025年10月22日: フォールバックロジックを撤廃し、新バイナリを常に実行する構成へ更新済み。 |

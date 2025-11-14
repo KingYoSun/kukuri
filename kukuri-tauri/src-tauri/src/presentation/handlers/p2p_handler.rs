@@ -1,9 +1,8 @@
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::p2p::{
-    BroadcastRequest, GossipMetricsSummaryResponse, JoinTopicByNameRequest,
-    JoinTopicByNameResponse, JoinTopicRequest, LeaveTopicRequest, NodeAddressResponse,
-    P2PStatusResponse, TopicStatus,
+    BroadcastRequest, GossipMetricsSummaryResponse, JoinTopicRequest, LeaveTopicRequest,
+    NodeAddressResponse, P2PStatusResponse, TopicStatus,
 };
 use crate::shared::{AppError, config::BootstrapSource};
 use std::sync::Arc;
@@ -92,22 +91,6 @@ impl P2PHandler {
         let addresses = self.p2p_service.get_node_addresses().await?;
 
         Ok(NodeAddressResponse { addresses })
-    }
-
-    /// トピック名で参加
-    pub async fn join_topic_by_name(
-        &self,
-        request: JoinTopicByNameRequest,
-    ) -> Result<JoinTopicByNameResponse, AppError> {
-        request.validate()?;
-
-        let topic_id = self.p2p_service.generate_topic_id(&request.topic_name);
-
-        self.p2p_service
-            .join_topic(&topic_id, request.initial_peers)
-            .await?;
-
-        Ok(JoinTopicByNameResponse { topic_id })
     }
 
     pub async fn apply_bootstrap_nodes(

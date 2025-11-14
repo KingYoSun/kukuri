@@ -51,10 +51,6 @@ export async function initializeNostr(): Promise<void> {
   await invokeCommandVoid('initialize_nostr');
 }
 
-export async function addRelay(url: string): Promise<void> {
-  await invokeCommandVoid('add_relay', { url });
-}
-
 export async function publishTextNote(content: string): Promise<string> {
   const response = await invokeCommand<EventCommandResponse>('publish_text_note', { content });
   return response.event_id;
@@ -118,19 +114,6 @@ export async function listNostrSubscriptions(): Promise<NostrSubscriptionState[]
     failureCount: item.failure_count,
     errorMessage: item.error_message,
   }));
-}
-
-export async function getNostrPubkey(): Promise<string | null> {
-  const response = await invokeCommand<{ pubkey: string | null }>('get_nostr_pubkey');
-  return response.pubkey ?? null;
-}
-
-export async function deleteEvents(eventIds: string[], reason?: string): Promise<string> {
-  const response = await invokeCommand<EventCommandResponse>('delete_events', {
-    eventIds,
-    reason,
-  });
-  return response.event_id;
 }
 
 export async function disconnectNostr(): Promise<void> {

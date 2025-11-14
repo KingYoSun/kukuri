@@ -39,17 +39,6 @@ describe('Nostr API', () => {
     });
   });
 
-  describe('addRelay', () => {
-    it('calls invoke with relay URL', async () => {
-      mockInvoke.mockResolvedValueOnce(successResponse(null));
-      const url = 'wss://relay.test';
-
-      await nostrApi.addRelay(url);
-
-      expect(invoke).toHaveBeenCalledWith('add_relay', { url });
-    });
-  });
-
   describe('publishTextNote', () => {
     it('returns event ID on success', async () => {
       const mockEventId = 'test-event-id-123';
@@ -160,61 +149,6 @@ describe('Nostr API', () => {
       await nostrApi.subscribeToUser(pubkey);
 
       expect(invoke).toHaveBeenCalledWith('subscribe_to_user', { pubkey });
-    });
-  });
-
-  describe('getNostrPubkey', () => {
-    it('returns public key when available', async () => {
-      const mockPubkey = 'public-key-hex';
-      mockInvoke.mockResolvedValueOnce(successResponse({ pubkey: mockPubkey }));
-
-      const result = await nostrApi.getNostrPubkey();
-
-      expect(invoke).toHaveBeenCalledWith('get_nostr_pubkey');
-      expect(result).toBe(mockPubkey);
-    });
-
-    it('returns null when no public key', async () => {
-      mockInvoke.mockResolvedValueOnce(successResponse({ pubkey: null }));
-
-      const result = await nostrApi.getNostrPubkey();
-
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('deleteEvents', () => {
-    it('deletes events with reason', async () => {
-      const mockDeletionId = 'deletion-event-id';
-      const eventIds = ['event1', 'event2'];
-      const reason = 'Spam';
-      mockInvoke.mockResolvedValueOnce(
-        successResponse({ event_id: mockDeletionId, success: true, message: null }),
-      );
-
-      const result = await nostrApi.deleteEvents(eventIds, reason);
-
-      expect(invoke).toHaveBeenCalledWith('delete_events', {
-        eventIds,
-        reason,
-      });
-      expect(result).toBe(mockDeletionId);
-    });
-
-    it('deletes events without reason', async () => {
-      const mockDeletionId = 'deletion-event-id';
-      const eventIds = ['event1'];
-      mockInvoke.mockResolvedValueOnce(
-        successResponse({ event_id: mockDeletionId, success: true, message: null }),
-      );
-
-      const result = await nostrApi.deleteEvents(eventIds);
-
-      expect(invoke).toHaveBeenCalledWith('delete_events', {
-        eventIds,
-        reason: undefined,
-      });
-      expect(result).toBe(mockDeletionId);
     });
   });
 

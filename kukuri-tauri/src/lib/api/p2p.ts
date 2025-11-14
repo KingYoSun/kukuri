@@ -109,12 +109,6 @@ export const p2pApi = {
   /**
    * 繝医ヴ繝・け蜷阪〒蜿ょ刈
    */
-  joinTopicByName: (topicName: string, initialPeers: string[] = []) =>
-    invokeCommandVoid('join_topic_by_name', { topicName, initialPeers }),
-
-  /**
-   * 繝医ヴ繝・け縺九ｉ髮｢閼ｱ
-   */
   leaveTopic: (topicId: string) => invokeCommandVoid('leave_p2p_topic', { topicId }),
 
   /**

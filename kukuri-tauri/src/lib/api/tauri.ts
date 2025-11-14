@@ -795,10 +795,6 @@ export class NostrAPI {
     await invokeCommandVoid('initialize_nostr');
   }
 
-  static async addRelay(url: string): Promise<void> {
-    await invokeCommandVoid('add_relay', { url });
-  }
-
   static async publishTextNote(content: string): Promise<string> {
     const response = await invokeCommand<EventCommandResponse>('publish_text_note', { content });
     return response.event_id;
@@ -840,11 +836,6 @@ export class NostrAPI {
     await invokeCommandVoid('subscribe_to_user', { pubkey });
   }
 
-  static async getNostrPubkey(): Promise<string | null> {
-    const response = await invokeCommand<{ pubkey: string | null }>('get_nostr_pubkey');
-    return response.pubkey ?? null;
-  }
-
   static async listSubscriptions(): Promise<{
     subscriptions: Array<{
       target: string;
@@ -857,14 +848,6 @@ export class NostrAPI {
     }>;
   }> {
     return await invokeCommand('list_nostr_subscriptions');
-  }
-
-  static async deleteEvents(eventIds: string[], reason?: string): Promise<string> {
-    const response = await invokeCommand<EventCommandResponse>('delete_events', {
-      eventIds,
-      reason,
-    });
-    return response.event_id;
   }
 
   static async disconnect(): Promise<void> {

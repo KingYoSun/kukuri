@@ -13,25 +13,20 @@
 
 ### リファクタリング計画 2025-08-08 v3 未完了タスク
 
-1. **未使用APIエンドポイントをゼロにする**  
-   - 背景: 成功指標（`refactoring_plan_2025-08-08_v3.md:436`）未達。残タスクは `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` 等（同:437-440）。  
-   - やること: 各コマンドを UI に接続するか、不要であれば削除案＋テスト更新を提示。  
-   - 完了条件: 未使用 API が 0 件であることをドキュメント化し、チェックを完了。
-
-2. **孤立コンポーネントをゼロにする**  
+1. **孤立コンポーネントをゼロにする**  
    - 背景: 成功指標（`refactoring_plan_2025-08-08_v3.md:441-443`）未達。鍵管理ダイアログ等が導線未接続のまま。  
    - やること: Sidebar/Header など既存導線に統合するか、不要な UI は廃止。テストケースも更新。  
    - 完了条件: 全コンポーネントの導線が明示され、孤立要素が解消されている。
 
-3. **dead_code の 80%以上を削除または活用**  
+2. **dead_code の 80%以上を削除または活用**  
    - 背景: `refactoring_plan_2025-08-08_v3.md:444-446` による残タスク。`hybrid_distributor` / `event_sync` / `offline_api` 周辺に候補が集中。  
    - やること: dead_code 一覧を精査し、使用開始 or 削除のいずれかに分類。削除時は SQLx / Rust テストで回帰確認。  
    - 完了条件: dead_code 削減率が 80% 以上になり、成果を artefact として記録。
 
-4. **すべての Tauri コマンドをフロントエンド導線へ接続**  
-   - 背景: 成功指標（`refactoring_plan_2025-08-08_v3.md:447-449`）が未完。`add_relay` `join_topic_by_name` 等が UI から未呼び出し。  
-   - やること: コマンド単位で呼び出し経路を追加し、`phase5_user_flow_summary.md` / `phase5_ci_path_audit.md` のリンク更新。  
-   - 完了条件: すべてのコマンドに UI からの呼び出しパスが存在し、成功指標チェックを閉じられる。
+3. **すべての Tauri コマンドをフロントエンド導線へ接続**  
+   - 背景: 成功指標（`refactoring_plan_2025-08-08_v3.md:447-449`）が未完。2025年11月14日時点で `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` は API ごと撤去し未使用リストを解消したが、今後追加されるコマンドを確実に UI/テレメトリへ接続するルール整備が未完。  
+   - やること: コマンド追加時のチェックリストを `phase5_user_flow_summary.md` / `phase5_ci_path_audit.md` に反映し、残存するデバッグ専用コマンド（例: `clear_all_accounts_for_test`）の運用境界を定義。  
+   - 完了条件: すべてのユーザー向けコマンドに UI からの呼び出しパスが存在し、メンテナンスガイドで検証手順が明文化されている。
 
 ### MVP Exit タスク
 

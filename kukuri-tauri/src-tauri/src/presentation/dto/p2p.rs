@@ -202,26 +202,3 @@ pub struct GossipMetricsSummaryResponse {
     pub broadcasts_sent: u64,
     pub messages_received: u64,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JoinTopicByNameRequest {
-    pub topic_name: String,
-    pub initial_peers: Vec<String>,
-}
-
-impl Validate for JoinTopicByNameRequest {
-    fn validate(&self) -> Result<(), String> {
-        if self.topic_name.is_empty() {
-            return Err("Topic name is required".to_string());
-        }
-        if self.topic_name.len() > 100 {
-            return Err("Topic name is too long (max 100 characters)".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JoinTopicByNameResponse {
-    pub topic_id: String,
-}

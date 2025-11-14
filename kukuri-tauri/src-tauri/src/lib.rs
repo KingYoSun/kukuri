@@ -135,8 +135,6 @@ pub fn run() {
             presentation::commands::update_nostr_metadata,
             presentation::commands::subscribe_to_topic,
             presentation::commands::subscribe_to_user,
-            presentation::commands::get_nostr_pubkey,
-            presentation::commands::delete_events,
             presentation::commands::disconnect_nostr,
             presentation::commands::set_default_p2p_topic,
             presentation::commands::list_nostr_subscriptions,
@@ -147,7 +145,6 @@ pub fn run() {
             presentation::commands::broadcast_to_topic,
             presentation::commands::get_p2p_status,
             presentation::commands::get_node_address,
-            presentation::commands::join_topic_by_name,
             presentation::commands::get_p2p_metrics,
             // オフライン関連コマンド
             presentation::commands::save_offline_action,

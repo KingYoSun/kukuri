@@ -63,19 +63,6 @@ describe('p2pApi', () => {
     });
   });
 
-  describe('joinTopicByName', () => {
-    it('should join topic by name', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
-
-      await p2pApi.joinTopicByName('Bitcoin', ['peer1']);
-
-      expect(invoke).toHaveBeenCalledWith('join_topic_by_name', {
-        topicName: 'Bitcoin',
-        initialPeers: ['peer1'],
-      });
-    });
-  });
-
   describe('leaveTopic', () => {
     it('should leave topic', async () => {
       vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));

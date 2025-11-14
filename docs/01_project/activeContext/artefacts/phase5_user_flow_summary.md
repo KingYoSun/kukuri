@@ -102,7 +102,7 @@
 7. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
 8. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
 9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` / `list_sync_queue_items` を取り込み、キャッシュ統計・手動キュー登録・再送履歴可視化を提供済み。今後は `sync_engine` 側で処理完了イベントと Docker ログの参照先を `cache_metadata` に記録し、履歴カードから Runbook ／ログへ遷移できる導線を追加する。
-10. 未接続 API は `join_topic_by_name`（Global Composer フォールバック）、`delete_events`（投稿削除 + Nostr 連携）、`add_relay`（鍵管理ダイアログと連動）、`get_nostr_pubkey`（プロフィール共有 UI 刷新時に再評価）、`clear_all_accounts_for_test`（Debug パネル）。Inventory 3.2/3.3 で優先度を整理し、Phase 5 backlog と同期した。
+10. 2025年11月14日: `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri + フロントエンド双方から撤去し、未接続 API リストを 0 件に更新。以降はデバッグ専用の `clear_all_accounts_for_test` のみ残存し、通常フローに属さないため除外扱いとする（Inventory 3.2/3.3 へ記録済み）。
 
 ## 4. テストカバレッジ概要
 - フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`。

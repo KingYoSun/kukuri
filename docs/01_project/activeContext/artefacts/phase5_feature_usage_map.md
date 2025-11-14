@@ -77,10 +77,10 @@
 
 | 種別 | 機能 / コマンド | 実装箇所 | 未使用理由 | 判断 | 次アクション |
 | --- | --- | --- | --- | --- | --- |
-| Tauriコマンド | `add_relay` | `kukuri-tauri/src/lib/api/nostr.ts:54`<br>`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md:181` | `rg "nostrApi.addRelay"` がユニットテストにしかヒットせず、UI からの導線が皆無。さらに `kukuri-tauri/src-tauri/src/lib.rs:123-148` にコマンド登録が存在せず、呼び出すとエラーになる。 | 削除（Phase7まで無効化） | ラッパー/モック/ドキュメントから `add_relay` を除去し、外部リレー運用を再開するタイミングで仕様ごと再設計する。 |
-| Tauriコマンド | `get_nostr_pubkey` | `kukuri-tauri/src/lib/api/nostr.ts:123`<br>`kukuri-tauri/src-tauri/src/presentation/commands/event_commands.rs:109` | `useAuthStore` がログイン時点で `currentUser.pubkey/npub` を保持しており（例: `kukuri-tauri/src/stores/authStore.ts:34-121`）、`rg "getNostrPubkey"` の利用箇所はテストのみ。 | 保留（multi-account設計待ち） | 複数アイデンティティ/バックアップ導線の仕様確定までは封印。要件が固まらない場合は API ごと削除、必要ならフロント導線＋テストを追加する。 |
-| Tauriコマンド | `delete_events` | `kukuri-tauri/src/lib/api/nostr.ts:128`<br>`kukuri-tauri/src-tauri/src/presentation/commands/event_commands.rs:118` | `useDeletePost` は `delete_post` のみを呼び、`rg "deleteEvents"` もラッパーとテストのみ。`phase5_user_flow_inventory.md:183` でも未接続扱い。 | 保留（`delete_post`拡張待ち） | 投稿削除 UI から Nostr 側の `delete_events` まで連結し、キャッシュ無効化と一緒に E2E で検証する。 |
-| Tauriコマンド | `join_topic_by_name` | `kukuri-tauri/src/lib/api/p2p.ts:112`<br>`kukuri-tauri/src-tauri/src/presentation/commands/p2p_commands.rs:103-126` | 名前ベース参加を行う UI が無く、`phase5_user_flow_inventory.md:184-192` でも優先度1の未接続コマンドとして列挙されている。 | 保留（最優先で導線追加） | `/topics` やグローバルコンポーザーからトピック名入力→参加できる fallback を設計し、`topicStore.joinTopic` から呼び出す。 |
+| Tauriコマンド | `add_relay` | （2025年11月14日撤去） | 外部リレーを無効化した Phase 5 方針に合わせ API ごと削除済み。 | 完了 | Phase 7 で外部リレーを再開する際に新仕様として再設計する。 |
+| Tauriコマンド | `get_nostr_pubkey` | （2025年11月14日撤去） | `authStore` が pubkey/npub を保持しているため API を廃止。 | 完了 | multi-identity 再開時に SecureStorage からの再取得方式を再検討する。 |
+| Tauriコマンド | `delete_events` | （2025年11月14日撤去） | 投稿削除フロー内で EventService が処理するため直接コマンドを廃止。 | 完了 | `delete_post` の統合テストで削除伝搬とキャッシュ整合性を保証する。 |
+| Tauriコマンド | `join_topic_by_name` | （2025年11月14日撤去） | Global Composer fallback を再設計するまで API を廃止。 | 完了 | 次期仕様で名称解決ロジックと UI 導線をまとめて復活させる。 |
 | Tauriコマンド | `clear_all_accounts_for_test` | `kukuri-tauri/src/lib/api/secureStorage.ts:93`<br>`kukuri-tauri/src-tauri/src/presentation/commands/secure_storage_commands.rs:80-99` | デバッグ目的だが UI から呼べず、`rg "clearAllAccountsForTest"` の利用箇所も API 内のみ。`phase5_user_flow_inventory.md:185,195` で backlog 管理されている。 | 保留（DEVパネル組み込み前提） | Settings > DEV パネルに「Secure Storage リセット」ボタン＋確認ダイアログを追加し、`errorHandler` ログと合わせて安全に実行できるようにする。 |
 
 ### 2.2 バックエンド dead_code

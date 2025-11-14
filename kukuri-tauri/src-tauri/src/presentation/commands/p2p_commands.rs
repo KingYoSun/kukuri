@@ -4,8 +4,8 @@ use crate::{
         ApiResponse,
         p2p::{
             BootstrapConfigResponse, BootstrapMetricsResponse, BroadcastRequest,
-            GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicByNameRequest,
-            JoinTopicByNameResponse, JoinTopicRequest, LeaveTopicRequest, MainlineMetricsResponse,
+            GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicRequest, LeaveTopicRequest,
+            MainlineMetricsResponse,
             NodeAddressResponse, P2PMetricsResponse, P2PStatusResponse, RelayStatusResponse,
         },
     },
@@ -98,32 +98,6 @@ pub async fn get_node_address(
 ) -> Result<ApiResponse<NodeAddressResponse>, AppError> {
     let result = state.p2p_handler.get_node_address().await;
     Ok(ApiResponse::from_result(result))
-}
-
-/// トピック名で参加
-#[tauri::command]
-pub async fn join_topic_by_name(
-    state: State<'_, AppState>,
-    #[allow(non_snake_case)] topicName: String,
-    #[allow(non_snake_case)] initialPeers: Vec<String>,
-) -> Result<ApiResponse<JoinTopicByNameResponse>, AppError> {
-    let request = JoinTopicByNameRequest {
-        topic_name: topicName,
-        initial_peers: initialPeers,
-    };
-    match state.p2p_handler.join_topic_by_name(request).await {
-        Ok(response) => {
-            if let Err(e) = state.ensure_ui_subscription(&response.topic_id).await {
-                tracing::warn!(
-                    "Failed to ensure UI subscription for {}: {}",
-                    response.topic_id,
-                    e
-                );
-            }
-            Ok(ApiResponse::success(response))
-        }
-        Err(err) => Ok(ApiResponse::from_app_error(err)),
-    }
 }
 
 // ================= Bootstrap UI コマンド =================

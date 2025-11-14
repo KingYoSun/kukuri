@@ -178,20 +178,22 @@
 #### 3.2.2 未接続コマンド
 | コマンド | ラッパー | 想定用途 | 備考 |
 | --- | --- | --- | --- |
-| `add_relay` | `nostrApi.addRelay` / `NostrAPI.addRelay` | リレー追加 | 現状テスト専用。UIからの追加導線なし。 |
-| `get_nostr_pubkey` | `nostrApi.getNostrPubkey` / `NostrAPI.getNostrPubkey` | 現在の公開鍵取得 | 呼び出し箇所なし。 |
-| `delete_events` | `nostrApi.deleteEvents` / `NostrAPI.deleteEvents` | Nostrイベント削除 | UI/ストア未接続。`delete_post` のバックエンド拡張フェーズで利用予定。 |
-| `join_topic_by_name` | `p2pApi.joinTopicByName` | 名前ベース参加 | テストのみで、UI導線なし。Global Composer からのフォールバック用に待機。 |
+| `add_relay` | （2025年11月14日撤去） | リレー追加 | 外部リレー再接続フェーズまで API ごと削除済み。 |
+| `get_nostr_pubkey` | （2025年11月14日撤去） | 現在の公開鍵取得 | `authStore` が pubkey/npub を保持しているため API を無効化。 |
+| `delete_events` | （2025年11月14日撤去） | Nostrイベント削除 | 投稿削除フローの EventService 呼び出しに統合済みのため直接コマンドを廃止。 |
+| `join_topic_by_name` | （2025年11月14日撤去） | 名前ベース参加 | Global Composer fallback 仕様は backlog で再設計。 |
+
+2025年11月14日時点でユーザー向け未導線 API は 0 件。`clear_all_accounts_for_test` などデバッグ専用コマンドのみ backlog 管理とする。
 | `clear_all_accounts_for_test` | `SecureStorageApi.clearAllAccountsForTest` | テスト用リセット | デバッグ UI 未接続。 |
 
 ### 3.3 未接続コマンドの対応優先度（2025年11月07日更新）
 
 `follow_user` / `unfollow_user` 経由で `subscribe_to_user` を利用開始済み。SyncStatus 系の 4 コマンドは 2025年11月07日に UI 配線とテストを完了し、監視対象へ移行した。残コマンドの Phase 5 backlog 優先度は以下のとおり。
 
-1. **`join_topic_by_name`** — Inventory 5.9 のトピック作成ショートカット／Global Composer 連携で ID 未確定の参加フローを扱うために最優先で整備。P2P 側の名前解決ロジックとセットで実装する。
-2. **`delete_events`** — Inventory 5.10 の投稿削除キャッシュ整合性と連動し、Nostr イベントを確実に削除するためのバックエンド API。`delete_post` の統合テスト拡張と同じマイルストーンで着手する。
-3. **`add_relay`** — 2025年09月15日の方針どおり外部リレー非接続だが、鍵管理モーダル（Phase 5 優先度 #9）と併せて再開可否を評価する。現状は開発者ツールの backlog。
-4. **`get_nostr_pubkey`** — `authStore` で pubkey を保持しているため優先度は低い。プロフィール共有 UI の刷新時に再評価し、`SecureStorage` からの再取得や multi-identity 表示に備える。
+1. **`join_topic_by_name`** — 2025年11月14日に API を撤去。Global Composer fallback の要件は Inventory 5.9 backlog へ移し、次期仕様で名称解決ロジックごと再検討する。
+2. **`delete_events`** — 投稿削除フローから EventService 経由で呼び出されるため、フロントから直接叩く API は 2025年11月14日に廃止。`delete_post` 統合テストで整合性を担保する。
+3. **`add_relay`** — 2025年11月14日に API を撤去。外部リレーを再開する場合は Phase 7 backlog で鍵管理モーダルと併せて再設計する。
+4. **`get_nostr_pubkey`** — `authStore` に pubkey/npub が常駐しているため 2025年11月14日に API を撤去。multi-identity 再設計が始まるまで backlog で監視する。
 5. **`clear_all_accounts_for_test`** — Debug パネルの「テスト用リセット」導線に組み込む計画。誤操作防止の確認ダイアログとログ記録を実装した後、開発者向け機能として公開する。
 
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。

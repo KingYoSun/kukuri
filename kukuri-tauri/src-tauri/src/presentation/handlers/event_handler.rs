@@ -1,9 +1,9 @@
 use crate::application::services::event_service::EventServiceTrait;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::event::{
-    DeleteEventsRequest, EventResponse, NostrMetadataDto, NostrSubscriptionStateDto,
-    PublishTextNoteRequest, PublishTopicPostRequest, SendReactionRequest,
-    SetDefaultP2PTopicRequest, SubscribeRequest, UpdateMetadataRequest,
+    EventResponse, NostrMetadataDto, NostrSubscriptionStateDto, PublishTextNoteRequest,
+    PublishTopicPostRequest, SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest,
+    UpdateMetadataRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use serde_json::json;
@@ -140,34 +140,6 @@ impl EventHandler {
         self.event_service.subscribe_to_user(&pubkey).await?;
 
         Ok(json!({ "success": true }))
-    }
-
-    /// Nostr公開鍵を取得
-    pub async fn get_nostr_pubkey(&self) -> Result<serde_json::Value, AppError> {
-        let pubkey = self.event_service.get_public_key().await?;
-
-        Ok(json!({
-            "pubkey": pubkey
-        }))
-    }
-
-    /// イベントを削除
-    pub async fn delete_events(
-        &self,
-        request: DeleteEventsRequest,
-    ) -> Result<EventResponse, AppError> {
-        request.validate()?;
-
-        let event_id = self
-            .event_service
-            .delete_events(request.event_ids, request.reason)
-            .await?;
-
-        Ok(EventResponse {
-            event_id: event_id.to_string(),
-            success: true,
-            message: Some("Events deleted successfully".to_string()),
-        })
     }
 
     /// Nostrクライアントを切断
