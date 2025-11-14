@@ -4,9 +4,9 @@ use crate::{
         ApiResponse,
         p2p::{
             BootstrapConfigResponse, BootstrapMetricsResponse, BroadcastRequest,
-            GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicRequest, LeaveTopicRequest,
-            MainlineMetricsResponse,
-            NodeAddressResponse, P2PMetricsResponse, P2PStatusResponse, RelayStatusResponse,
+            GossipMetricDetailsResponse, GossipMetricsResponse, JoinTopicRequest,
+            LeaveTopicRequest, MainlineMetricsResponse, NodeAddressResponse, P2PMetricsResponse,
+            P2PStatusResponse, RelayStatusResponse,
         },
     },
     shared::AppError,
