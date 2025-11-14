@@ -131,6 +131,7 @@ println!("SecureStorage: Private key saved successfully for npub={npub}");
 #### 0.2 Rustテストエラーの修正
 - Docker環境のSQLiteファイルパーミッション修正
 - テスト用データベースの適切な初期化
+- 2025年11月14日: Windowsネイティブの `STATUS_ENTRYPOINT_NOT_FOUND` を回避するため `./scripts/test-docker.ps1 rust` を実行し、`kukuri-tauri/src-tauri` 配下の 195 件（lib + integration + contract + performance）を Docker 上で完走（ログ: `tmp/logs/rust_docker_20251114.log`）。同日にネイティブで `cd kukuri-cli && cargo test` を実行し CLI 側 8 件も成功し、両プロジェクトの Rust テストが全てグリーンであることを確認。
 
 ### Phase 1: Dead Code削除（2-3日）
 
@@ -426,7 +427,7 @@ tests/
 - [x] #[allow(dead_code)]を50%削減（97件→50件以下）
 - [x] 700行超のファイル0件（現在0件を維持） — 2025年11月01日: `infrastructure/p2p/event_distributor` を責務別モジュールへ分割し、`application/services/p2p_service` を `core` / `bootstrap` / `metrics` 構成に再編。
 - [x] manager_old.rsの削除
-- [ ] すべてのRustテスト成功
+- [x] すべてのRustテスト成功（2025年11月14日: `./scripts/test-docker.ps1 rust` / `cd kukuri-cli && cargo test` 成功）
 - [ ] コード重複率30%削減
 
 ### ユーザー導線指標【新規追加】
