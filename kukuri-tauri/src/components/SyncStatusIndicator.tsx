@@ -4,16 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { ConflictResolutionDialog } from '@/components/sync/ConflictResolutionDialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  extractDocConflictDetails,
+  formatBytesValue,
+  toNumber,
+  truncateMiddle,
+} from '@/components/sync/conflictUtils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   RefreshCw,
@@ -28,8 +25,6 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import type { SyncConflict } from '@/lib/sync/syncEngine';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CacheTypeStatus, OfflineAction, SyncQueueItem } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 import { cn } from '@/lib/utils';
@@ -56,30 +51,11 @@ type QueueStatusPresentation = {
   className: string;
 };
 
-type DocConflictDetails = {
-  docVersion?: number;
-  blobHash?: string;
-  payloadBytes?: number;
-  format?: string;
-  shareTicket?: string;
-};
-
 type CacheDocSummary = {
   docVersion?: number;
   blobHash?: string;
   payloadBytes?: number;
 };
-
-function toNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return Number.isNaN(value) ? undefined : value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? undefined : parsed;
-  }
-  return undefined;
-}
 
 function parseCacheMetadata(
   metadata?: Record<string, unknown> | null,
@@ -227,63 +203,6 @@ function getQueueStatusPresentation(status: string): QueueStatusPresentation {
   }
 }
 
-function parseActionPayload(action?: OfflineAction): Record<string, unknown> | null {
-  if (!action) {
-    return null;
-  }
-  const raw = action.actionData;
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  }
-  if (raw && typeof raw === 'object') {
-    return raw as Record<string, unknown>;
-  }
-  return null;
-}
-
-function extractDocConflictDetails(action?: OfflineAction): DocConflictDetails | null {
-  const payload = parseActionPayload(action);
-  if (!payload) {
-    return null;
-  }
-  const docVersion = toNumber(payload['docVersion'] ?? payload['doc_version']);
-  const payloadBytes = toNumber(
-    payload['payloadBytes'] ??
-      payload['payload_bytes'] ??
-      payload['sizeBytes'] ??
-      payload['size_bytes'],
-  );
-  const blobHashCandidate = payload['blobHash'] ?? payload['blob_hash'];
-  const formatCandidate = payload['format'] ?? payload['mimeType'];
-  const shareTicketCandidate = payload['shareTicket'] ?? payload['share_ticket'];
-
-  const blobHash = typeof blobHashCandidate === 'string' ? blobHashCandidate : undefined;
-  const format = typeof formatCandidate === 'string' ? formatCandidate : undefined;
-  const shareTicket = typeof shareTicketCandidate === 'string' ? shareTicketCandidate : undefined;
-
-  if (
-    typeof docVersion === 'undefined' &&
-    !blobHash &&
-    typeof payloadBytes === 'undefined' &&
-    !format &&
-    !shareTicket
-  ) {
-    return null;
-  }
-
-  return {
-    docVersion,
-    blobHash,
-    payloadBytes,
-    format,
-    shareTicket,
-  };
-}
-
 function getCacheDocSummary(type: CacheTypeStatus): CacheDocSummary | null {
   const docVersion = toNumber(type.doc_version ?? type.docVersion);
   const payloadBytes = toNumber(type.payload_bytes ?? type.payloadBytes);
@@ -299,31 +218,6 @@ function getCacheDocSummary(type: CacheTypeStatus): CacheDocSummary | null {
     payloadBytes,
     blobHash,
   };
-}
-
-function truncateMiddle(value: string, maxLength = 32) {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  const keep = Math.max(4, Math.floor((maxLength - 3) / 2));
-  return `${value.slice(0, keep)}...${value.slice(-keep)}`;
-}
-
-function formatBytesValue(bytes?: number) {
-  if (bytes === undefined || Number.isNaN(bytes)) {
-    return undefined;
-  }
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unitIndex = -1;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toFixed(1)} ${units[Math.max(unitIndex, 0)]}`;
 }
 
 export function SyncStatusIndicator() {
@@ -344,77 +238,36 @@ export function SyncStatusIndicator() {
     lastQueuedItemId,
     queueingType,
     enqueueSyncRequest,
+    showConflictDialog,
+    setShowConflictDialog,
   } = useSyncManager();
 
-  const [selectedConflict, setSelectedConflict] = React.useState<SyncConflict | null>(null);
-  const [showConflictDialog, setShowConflictDialog] = React.useState(false);
+  const [focusedConflictIndex, setFocusedConflictIndex] = React.useState(0);
   const [queueFilter, setQueueFilter] = React.useState('');
-  const [conflictTab, setConflictTab] = React.useState<'summary' | 'doc'>('summary');
   const [retryingItemId, setRetryingItemId] = React.useState<number | null>(null);
   const deletePostMutation = useDeletePost();
 
   React.useEffect(() => {
-    if (!showConflictDialog) {
-      setConflictTab('summary');
+    if (focusedConflictIndex >= syncStatus.conflicts.length) {
+      setFocusedConflictIndex(
+        syncStatus.conflicts.length > 0 ? syncStatus.conflicts.length - 1 : 0,
+      );
     }
-  }, [showConflictDialog]);
+  }, [focusedConflictIndex, syncStatus.conflicts.length]);
 
-  const localDocDetails = React.useMemo(
-    () => extractDocConflictDetails(selectedConflict?.localAction),
-    [selectedConflict],
-  );
-  const remoteDocDetails = React.useMemo(
-    () => extractDocConflictDetails(selectedConflict?.remoteAction),
-    [selectedConflict],
-  );
-  const showDocTab = Boolean(localDocDetails || remoteDocDetails);
-  const docComparisonRows = React.useMemo(
-    () => [
-      {
-        key: 'docVersion',
-        label: 'Doc Version',
-        local: localDocDetails?.docVersion?.toString(),
-        remote: remoteDocDetails?.docVersion?.toString(),
-      },
-      {
-        key: 'blobHash',
-        label: 'Blob Hash',
-        local: localDocDetails?.blobHash ? truncateMiddle(localDocDetails.blobHash) : undefined,
-        remote: remoteDocDetails?.blobHash ? truncateMiddle(remoteDocDetails.blobHash) : undefined,
-      },
-      {
-        key: 'payloadBytes',
-        label: 'Payload Size',
-        local: formatBytesValue(localDocDetails?.payloadBytes),
-        remote: formatBytesValue(remoteDocDetails?.payloadBytes),
-      },
-      {
-        key: 'format',
-        label: 'Format',
-        local: localDocDetails?.format,
-        remote: remoteDocDetails?.format,
-      },
-      {
-        key: 'shareTicket',
-        label: 'Share Ticket',
-        local: localDocDetails?.shareTicket
-          ? truncateMiddle(localDocDetails.shareTicket)
-          : undefined,
-        remote: remoteDocDetails?.shareTicket
-          ? truncateMiddle(remoteDocDetails.shareTicket)
-          : undefined,
-      },
-    ],
-    [localDocDetails, remoteDocDetails],
-  );
-
-  const handleConflictResolution = (resolution: 'local' | 'remote' | 'merge') => {
-    if (selectedConflict) {
-      resolveConflict(selectedConflict, resolution);
+  React.useEffect(() => {
+    if (showConflictDialog && syncStatus.conflicts.length === 0) {
       setShowConflictDialog(false);
-      setSelectedConflict(null);
     }
-  };
+  }, [showConflictDialog, syncStatus.conflicts.length, setShowConflictDialog]);
+
+  const handleOpenConflictDialog = React.useCallback(
+    (index = 0) => {
+      setFocusedConflictIndex(index);
+      setShowConflictDialog(true);
+    },
+    [setShowConflictDialog],
+  );
 
   const handleQueueRequest = async (cacheType: string) => {
     try {
@@ -596,10 +449,7 @@ export function SyncStatusIndicator() {
                       size="sm"
                       variant="outline"
                       className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        setSelectedConflict(firstConflict);
-                        setShowConflictDialog(true);
-                      }}
+                      onClick={() => handleOpenConflictDialog(0)}
                     >
                       詳細を確認
                     </Button>
@@ -661,10 +511,7 @@ export function SyncStatusIndicator() {
                     <div
                       key={index}
                       className="text-sm p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
-                      onClick={() => {
-                        setSelectedConflict(conflict);
-                        setShowConflictDialog(true);
-                      }}
+                      onClick={() => handleOpenConflictDialog(index)}
                     >
                       <p className="font-medium">{conflict.localAction.actionType}</p>
                       <p className="text-xs text-muted-foreground">クリックして解決</p>
@@ -1000,114 +847,18 @@ export function SyncStatusIndicator() {
         </PopoverContent>
       </Popover>
 
-      {/* 競合解決ダイアログ */}
-      <AlertDialog open={showConflictDialog} onOpenChange={setShowConflictDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>競合の解決</AlertDialogTitle>
-            <AlertDialogDescription>
-              データの競合が検出されました。どちらの変更を適用しますか？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {selectedConflict && (
-            <Tabs
-              value={conflictTab}
-              onValueChange={(value) => setConflictTab(value as 'summary' | 'doc')}
-              className="my-4 space-y-3"
-            >
-              <TabsList
-                className={cn('grid gap-2', showDocTab ? 'grid-cols-2' : 'grid-cols-1', 'w-full')}
-              >
-                <TabsTrigger value="summary">概要</TabsTrigger>
-                {showDocTab && <TabsTrigger value="doc">Doc/Blob</TabsTrigger>}
-              </TabsList>
-              <TabsContent value="summary" className="space-y-4">
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                  <h5 className="font-medium mb-1">ローカルの変更</h5>
-                  <p className="text-sm text-muted-foreground">
-                    作成日時:{' '}
-                    {new Date(selectedConflict.localAction.createdAt).toLocaleString('ja-JP')}
-                  </p>
-                  <p className="text-sm mt-1">タイプ: {selectedConflict.localAction.actionType}</p>
-                </div>
-                {selectedConflict.remoteAction && (
-                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded">
-                    <h5 className="font-medium mb-1">リモートの変更</h5>
-                    <p className="text-sm text-muted-foreground">
-                      作成日時:{' '}
-                      {new Date(selectedConflict.remoteAction.createdAt).toLocaleString('ja-JP')}
-                    </p>
-                    <p className="text-sm mt-1">
-                      タイプ: {selectedConflict.remoteAction.actionType}
-                    </p>
-                  </div>
-                )}
-              </TabsContent>
-              {showDocTab && (
-                <TabsContent value="doc">
-                  {docComparisonRows.every((row) => !row.local && !row.remote) ? (
-                    <p className="text-sm text-muted-foreground">Doc/Blob 情報がありません。</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {docComparisonRows.map((row) => {
-                        const differ =
-                          row.local !== undefined &&
-                          row.remote !== undefined &&
-                          row.local !== row.remote;
-                        return (
-                          <div key={row.key} className="text-sm rounded border p-2">
-                            <p className="text-xs uppercase text-muted-foreground mb-1">
-                              {row.label}
-                            </p>
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                              <div>
-                                <p className="text-muted-foreground mb-0.5">ローカル</p>
-                                <p
-                                  className={cn(
-                                    'font-medium break-all',
-                                    differ && 'text-amber-600',
-                                  )}
-                                >
-                                  {row.local ?? '—'}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-muted-foreground mb-0.5">リモート</p>
-                                <p
-                                  className={cn(
-                                    'font-medium break-all',
-                                    differ && 'text-amber-600',
-                                  )}
-                                >
-                                  {row.remote ?? '—'}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </TabsContent>
-              )}
-            </Tabs>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleConflictResolution('local')}>
-              ローカルを適用
-            </AlertDialogAction>
-            {selectedConflict?.remoteAction && (
-              <AlertDialogAction
-                onClick={() => handleConflictResolution('remote')}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                リモートを適用
-              </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {showConflictDialog && syncStatus.conflicts.length > 0 && (
+        <ConflictResolutionDialog
+          conflicts={syncStatus.conflicts}
+          isOpen
+          initialIndex={focusedConflictIndex}
+          onClose={() => {
+            setFocusedConflictIndex(0);
+            setShowConflictDialog(false);
+          }}
+          onResolve={resolveConflict}
+        />
+      )}
     </>
   );
 }

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import type { SyncStatus } from '@/hooks/useSyncManager';
@@ -16,6 +15,7 @@ const { mockManualRetryDelete, toastMock } = vi.hoisted(() => {
     },
   };
 });
+const mockSetShowConflictDialog = vi.fn();
 
 vi.mock('@/hooks/useSyncManager');
 vi.mock('@/hooks/usePosts', () => ({
@@ -34,7 +34,6 @@ vi.mock('@/lib/errorHandler', () => ({
     log: vi.fn(),
   },
 }));
-
 describe('SyncStatusIndicator', () => {
   const mockTriggerManualSync = vi.fn();
   const mockResolveConflict = vi.fn();
@@ -70,14 +69,19 @@ describe('SyncStatusIndicator', () => {
     lastQueuedItemId: null,
     queueingType: null,
     enqueueSyncRequest: mockEnqueueSyncRequest,
+    showConflictDialog: false,
+    setShowConflictDialog: mockSetShowConflictDialog,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useSyncManager).mockReturnValue(defaultManagerState);
     mockManualRetryDelete.mockReset();
+    mockResolveConflict.mockReset();
+    mockResolveConflict.mockResolvedValue(undefined);
     toastMock.success.mockReset();
     toastMock.error.mockReset();
+    mockSetShowConflictDialog.mockReset();
   });
 
   describe('状態表示', () => {
@@ -150,7 +154,7 @@ describe('SyncStatusIndicator', () => {
 
       render(<SyncStatusIndicator />);
 
-      expect(screen.getByText('競合: 1件')).toBeInTheDocument();
+      expect(screen.getByText(/競合[:：]\s*1件/)).toBeInTheDocument();
     });
 
     it('同期エラーの表示', () => {
@@ -413,7 +417,7 @@ describe('SyncStatusIndicator', () => {
         },
       });
 
-      render(<SyncStatusIndicator />);
+      const { rerender } = render(<SyncStatusIndicator />);
       fireEvent.click(screen.getByRole('button'));
 
       await waitFor(() => {
@@ -424,7 +428,21 @@ describe('SyncStatusIndicator', () => {
       fireEvent.click(screen.getByRole('button', { name: '詳細を確認' }));
 
       await waitFor(() => {
-        expect(screen.getByText('競合の解決')).toBeInTheDocument();
+        expect(mockSetShowConflictDialog).toHaveBeenCalledWith(true);
+      });
+
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        syncStatus: {
+          ...defaultSyncStatus,
+          conflicts: [docConflict],
+        },
+        showConflictDialog: true,
+      });
+      rerender(<SyncStatusIndicator />);
+
+      await waitFor(() => {
+        expect(screen.getByText('同期の競合を解決')).toBeInTheDocument();
       });
     });
 
@@ -638,217 +656,6 @@ describe('SyncStatusIndicator', () => {
         const syncButton = screen.getByText('今すぐ同期');
         expect(syncButton).toBeDisabled();
       });
-    });
-  });
-
-  describe('競合解決ダイアログ', () => {
-    it('競合をクリックでダイアログを開く', async () => {
-      const mockConflict: SyncConflict = {
-        localAction: {
-          id: 1,
-          localId: 'local_1',
-          userPubkey: 'user123',
-          actionType: OfflineActionType.CREATE_POST,
-          actionData: {},
-          createdAt: '2024-01-01T00:00:00Z',
-          isSynced: false,
-        },
-        conflictType: 'timestamp',
-      };
-
-      vi.mocked(useSyncManager).mockReturnValue({
-        ...defaultManagerState,
-        syncStatus: {
-          ...defaultSyncStatus,
-          conflicts: [mockConflict],
-        },
-      });
-
-      render(<SyncStatusIndicator />);
-
-      // ポップオーバーを開く
-      const button = screen.getByRole('button');
-      fireEvent.click(button);
-
-      // 競合をクリック
-      await waitFor(() => {
-        const conflictItem = screen.getByText('create_post');
-        fireEvent.click(conflictItem);
-      });
-
-      // ダイアログが表示される
-      await waitFor(() => {
-        expect(screen.getByText('競合の解決')).toBeInTheDocument();
-        expect(screen.getByText('ローカルの変更')).toBeInTheDocument();
-      });
-    });
-
-    it('ローカルの変更を適用', async () => {
-      const mockConflict: SyncConflict = {
-        localAction: {
-          id: 1,
-          localId: 'local_1',
-          userPubkey: 'user123',
-          actionType: OfflineActionType.CREATE_POST,
-          actionData: {},
-          createdAt: '2024-01-01T00:00:00Z',
-          isSynced: false,
-        },
-        conflictType: 'timestamp',
-      };
-
-      vi.mocked(useSyncManager).mockReturnValue({
-        ...defaultManagerState,
-        syncStatus: {
-          ...defaultSyncStatus,
-          conflicts: [mockConflict],
-        },
-      });
-
-      render(<SyncStatusIndicator />);
-
-      // ポップオーバーを開く
-      const button = screen.getByRole('button');
-      fireEvent.click(button);
-
-      // 競合をクリック
-      await waitFor(() => {
-        const conflictItem = screen.getByText('create_post');
-        fireEvent.click(conflictItem);
-      });
-
-      // ローカルを適用ボタンをクリック
-      await waitFor(() => {
-        const applyLocalButton = screen.getByText('ローカルを適用');
-        fireEvent.click(applyLocalButton);
-      });
-
-      expect(mockResolveConflict).toHaveBeenCalledWith(mockConflict, 'local');
-    });
-
-    it('リモートの変更を適用', async () => {
-      const mockConflict: SyncConflict = {
-        localAction: {
-          id: 1,
-          localId: 'local_1',
-          userPubkey: 'user123',
-          actionType: OfflineActionType.CREATE_POST,
-          actionData: {},
-          createdAt: '2024-01-01T00:00:00Z',
-          isSynced: false,
-        },
-        remoteAction: {
-          id: 2,
-          localId: 'remote_1',
-          userPubkey: 'user123',
-          actionType: OfflineActionType.CREATE_POST,
-          actionData: {},
-          createdAt: '2024-01-02T00:00:00Z',
-          isSynced: true,
-        },
-        conflictType: 'timestamp',
-      };
-
-      vi.mocked(useSyncManager).mockReturnValue({
-        ...defaultManagerState,
-        syncStatus: {
-          ...defaultSyncStatus,
-          conflicts: [mockConflict],
-        },
-      });
-
-      render(<SyncStatusIndicator />);
-
-      // ポップオーバーを開く
-      const button = screen.getByRole('button');
-      fireEvent.click(button);
-
-      // 競合をクリック
-      await waitFor(() => {
-        const conflictItem = screen.getByText('create_post');
-        fireEvent.click(conflictItem);
-      });
-
-      // リモートを適用ボタンをクリック
-      await waitFor(() => {
-        const applyRemoteButton = screen.getByText('リモートを適用');
-        fireEvent.click(applyRemoteButton);
-      });
-
-      expect(mockResolveConflict).toHaveBeenCalledWith(mockConflict, 'remote');
-    });
-
-    it('Doc/Blob 情報をタブで比較表示', async () => {
-      const user = userEvent.setup();
-      const docConflict: SyncConflict = {
-        localAction: {
-          id: 1,
-          localId: 'local_doc',
-          userPubkey: 'user123',
-          actionType: OfflineActionType.PROFILE_UPDATE,
-          actionData: JSON.stringify({
-            docVersion: 2,
-            blobHash: 'bao1abcdefghijklmno1234567890',
-            payloadBytes: 2048,
-            format: 'image/png',
-          }),
-          createdAt: '2024-01-01T00:00:00Z',
-          isSynced: false,
-        },
-        remoteAction: {
-          id: 2,
-          localId: 'remote_doc',
-          userPubkey: 'user999',
-          actionType: OfflineActionType.PROFILE_UPDATE,
-          actionData: JSON.stringify({
-            docVersion: 3,
-            blobHash: 'bao1zyxwvutsrqponm9876543210',
-            payloadBytes: 4096,
-            format: 'image/png',
-          }),
-          createdAt: '2024-01-01T00:00:10Z',
-          isSynced: true,
-        },
-        conflictType: 'version',
-      };
-
-      vi.mocked(useSyncManager).mockReturnValue({
-        ...defaultManagerState,
-        syncStatus: {
-          ...defaultSyncStatus,
-          conflicts: [docConflict],
-        },
-      });
-
-      render(<SyncStatusIndicator />);
-
-      const indicatorButton = screen.getByRole('button');
-      fireEvent.click(indicatorButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('profile_update')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('profile_update'));
-
-      await waitFor(() => {
-        expect(screen.getByText('Doc/Blob')).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole('tab', { name: 'Doc/Blob' }));
-
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Doc/Blob' })).toHaveAttribute(
-          'data-state',
-          'active',
-        );
-      });
-
-      expect(screen.getAllByText('ローカル').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('リモート').length).toBeGreaterThan(0);
-      expect(screen.getByText('2')).toBeInTheDocument();
-      expect(screen.getByText('3')).toBeInTheDocument();
-      expect(screen.getByText(/Payload Size/i)).toBeInTheDocument();
     });
   });
 
