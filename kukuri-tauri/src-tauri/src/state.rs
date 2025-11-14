@@ -516,9 +516,7 @@ impl AppState {
         {
             let sync_service = Arc::clone(&this.sync_service);
             tauri::async_runtime::spawn(async move {
-                sync_service
-                    .schedule_sync(DEFAULT_SYNC_INTERVAL_SECS)
-                    .await;
+                sync_service.schedule_sync(DEFAULT_SYNC_INTERVAL_SECS).await;
             });
         }
 

@@ -43,6 +43,7 @@
     - やること: (1) GitHub Actions `trending-feed` ジョブで発生している Docker 権限問題と artefact 不足を切り分け、`nightly.yml` の `*-logs` / `*-reports` 命名を固定。(2) `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を `docs/01_project/setup_guide.md` / Runbook に追記し、`scripts/test-docker.ps1 all` で同前提を明文化。(3) `docs/01_project/progressReports/` へ Nightly テスト ID（`nightly.profile-avatar-sync`, `nightly.trending-feed`, `nightly.user-search-pagination`, ほか）と対応するログ/artefact リンクを整理。  
     - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。
     - メモ (2025年11月14日): `Format Check` 失敗は `kukuri-tauri/src-tauri/src/infrastructure/p2p/event_distributor/state.rs` と `tests/common/performance/{mod.rs,offline_seed.rs}` の整形漏れが原因だったため `cargo fmt` で修正済み。`gh act --workflows .github/workflows/test.yml --job format-check --container-options "--user root"` によりローカル再現・緑化を確認。`docker-test` / `native-test-linux` の artefact への影響は無く、GitHub Actions 本番では `Test` ワークフローの再実行で回復予定。
+    - メモ (2025年11月15日): `gh run view 19377708787 --job format-check --log` で再発を確認。`kukuri-tauri/src-tauri/src/state.rs:516` の `sync_service.schedule_sync(DEFAULT_SYNC_INTERVAL_SECS).await` が rustfmt 規約（引数ごとの改行）に反しており CI が再度失敗しているため、該当ブロックの整形をやり直し `gh act --workflows .github/workflows/test.yml --job format-check` でローカル再検証予定。
 
 ### リファクタリングプラン完了タスク
 
