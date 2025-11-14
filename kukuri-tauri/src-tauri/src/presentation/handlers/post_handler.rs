@@ -4,7 +4,6 @@ use crate::{
     presentation::dto::{
         Validate,
         post_dto::{
-            BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest, BookmarkAction,
             BookmarkPostRequest, CreatePostRequest, DeletePostRequest, FollowingFeedPageResponse,
             GetPostsRequest, ListFollowingFeedRequest, ListTrendingPostsRequest,
             ListTrendingPostsResponse, PostResponse, ReactToPostRequest,
@@ -163,84 +162,6 @@ impl PostHandler {
             .get_bookmarked_post_ids(user_pubkey)
             .await?;
         Ok(post_ids)
-    }
-
-    // バッチ処理メソッド
-    pub async fn batch_get_posts(
-        &self,
-        request: BatchGetPostsRequest,
-    ) -> Result<Vec<PostResponse>, AppError> {
-        request.validate().map_err(AppError::InvalidInput)?;
-
-        // 並行して複数の投稿を取得
-        let futures = request.post_ids.iter().map(|post_id| {
-            let service = self.post_service.clone();
-            let id = post_id.clone();
-            async move { service.get_post(&id).await }
-        });
-
-        let results = join_all(futures).await;
-
-        let posts: Vec<Post> = results
-            .into_iter()
-            .filter_map(|result| result.ok().flatten())
-            .collect();
-
-        Ok(Self::map_posts(posts).await)
-    }
-
-    pub async fn batch_react(
-        &self,
-        request: BatchReactRequest,
-    ) -> Result<Vec<Result<(), String>>, AppError> {
-        request.validate().map_err(AppError::InvalidInput)?;
-
-        // 並行して複数のリアクションを処理
-        let futures = request.reactions.iter().map(|reaction| {
-            let service = self.post_service.clone();
-            let req = reaction.clone();
-            async move {
-                service
-                    .react_to_post(&req.post_id, &req.reaction)
-                    .await
-                    .map_err(|e| e.to_string())
-            }
-        });
-
-        let results = join_all(futures).await;
-        Ok(results)
-    }
-
-    pub async fn batch_bookmark(
-        &self,
-        request: BatchBookmarkRequest,
-        user_pubkey: &str,
-    ) -> Result<Vec<Result<(), String>>, AppError> {
-        request.validate().map_err(AppError::InvalidInput)?;
-
-        // 並行して複数のブックマークを処理
-        let futures = request.post_ids.iter().map(|post_id| {
-            let service = self.post_service.clone();
-            let id = post_id.clone();
-            let pubkey = user_pubkey.to_string();
-            let action = request.action.clone();
-
-            async move {
-                match action {
-                    BookmarkAction::Add => service
-                        .bookmark_post(&id, &pubkey)
-                        .await
-                        .map_err(|e| e.to_string()),
-                    BookmarkAction::Remove => service
-                        .unbookmark_post(&id, &pubkey)
-                        .await
-                        .map_err(|e| e.to_string()),
-                }
-            }
-        });
-
-        let results = join_all(futures).await;
-        Ok(results)
     }
 
     pub async fn list_trending_posts(

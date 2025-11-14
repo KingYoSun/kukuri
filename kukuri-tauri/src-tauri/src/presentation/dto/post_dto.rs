@@ -93,69 +93,6 @@ impl Validate for BookmarkPostRequest {
     }
 }
 
-// バッチ処理用リクエストDTO
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BatchGetPostsRequest {
-    pub post_ids: Vec<String>,
-}
-
-impl Validate for BatchGetPostsRequest {
-    fn validate(&self) -> Result<(), String> {
-        if self.post_ids.is_empty() {
-            return Err("投稿IDが必要です".to_string());
-        }
-        if self.post_ids.len() > 100 {
-            return Err("一度に取得できる投稿は100件までです".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BatchReactRequest {
-    pub reactions: Vec<ReactToPostRequest>,
-}
-
-impl Validate for BatchReactRequest {
-    fn validate(&self) -> Result<(), String> {
-        if self.reactions.is_empty() {
-            return Err("リアクションが必要です".to_string());
-        }
-        if self.reactions.len() > 50 {
-            return Err("一度に処理できるリアクションは50件までです".to_string());
-        }
-        // 各リアクションの検証
-        for reaction in &self.reactions {
-            reaction.validate()?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BatchBookmarkRequest {
-    pub post_ids: Vec<String>,
-    pub action: BookmarkAction,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum BookmarkAction {
-    Add,
-    Remove,
-}
-
-impl Validate for BatchBookmarkRequest {
-    fn validate(&self) -> Result<(), String> {
-        if self.post_ids.is_empty() {
-            return Err("投稿IDが必要です".to_string());
-        }
-        if self.post_ids.len() > 100 {
-            return Err("一度に処理できるブックマークは100件までです".to_string());
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListTrendingPostsRequest {
     pub topic_ids: Vec<String>,

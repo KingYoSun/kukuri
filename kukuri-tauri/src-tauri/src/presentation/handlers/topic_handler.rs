@@ -142,22 +142,6 @@ impl TopicHandler {
         Ok(map_pending_topic(updated))
     }
 
-    pub async fn get_topic(&self, id: &str) -> Result<Option<TopicResponse>, AppError> {
-        let topic = self.topic_service.get_topic(id).await?;
-
-        Ok(topic.map(|t| TopicResponse {
-            id: t.id.to_string(),
-            name: t.name,
-            description: t.description.unwrap_or_default(),
-            image_url: t.image_url,
-            member_count: t.member_count,
-            post_count: t.post_count,
-            is_joined: t.is_joined,
-            created_at: t.created_at.timestamp(),
-            updated_at: t.updated_at.timestamp(),
-        }))
-    }
-
     pub async fn update_topic(
         &self,
         request: UpdateTopicRequest,
@@ -220,28 +204,6 @@ impl TopicHandler {
                 member_count: t.member_count,
                 post_count: t.post_count,
                 is_joined: t.is_joined,
-                created_at: t.created_at.timestamp(),
-                updated_at: t.updated_at.timestamp(),
-            })
-            .collect())
-    }
-
-    pub async fn get_joined_topics(
-        &self,
-        user_pubkey: &str,
-    ) -> Result<Vec<TopicResponse>, AppError> {
-        let topics = self.topic_service.get_joined_topics(user_pubkey).await?;
-
-        Ok(topics
-            .into_iter()
-            .map(|t| TopicResponse {
-                id: t.id.to_string(),
-                name: t.name,
-                description: t.description.unwrap_or_default(),
-                image_url: t.image_url,
-                member_count: t.member_count,
-                post_count: t.post_count,
-                is_joined: true,
                 created_at: t.created_at.timestamp(),
                 updated_at: t.updated_at.timestamp(),
             })

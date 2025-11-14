@@ -89,17 +89,6 @@ pub async fn mark_pending_topic_failed(
     Ok(ApiResponse::from_result(result))
 }
 
-/// 単一のトピックを取得する
-#[tauri::command]
-pub async fn get_topic(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<ApiResponse<Option<TopicResponse>>, AppError> {
-    let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.get_topic(&id).await;
-    Ok(ApiResponse::from_result(result))
-}
-
 /// すべてのトピックを取得する
 #[tauri::command]
 pub async fn get_topics(
@@ -107,17 +96,6 @@ pub async fn get_topics(
 ) -> Result<ApiResponse<Vec<TopicResponse>>, AppError> {
     let handler = TopicHandler::new(state.topic_service.clone());
     let result = handler.get_all_topics().await;
-    Ok(ApiResponse::from_result(result))
-}
-
-/// 参加中のトピックを取得する
-#[tauri::command]
-pub async fn get_joined_topics(
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<Vec<TopicResponse>>, AppError> {
-    let user_pubkey = ensure_authenticated(&state).await?;
-    let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.get_joined_topics(&user_pubkey).await;
     Ok(ApiResponse::from_result(result))
 }
 

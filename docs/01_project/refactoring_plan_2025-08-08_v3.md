@@ -451,9 +451,10 @@ tests/
 - [ ] dead_codeのうち80%以上が削除または使用開始
   - 2025年11月06日: Inventory 5.7-5.10 で各導線に紐づくストア/API 呼び出しを洗い出し、未参照だった削除/集計系のコードを対象外として明文化。dead_code 候補は `hybrid_distributor` / `event_sync` 等バックエンド側に集約した状態を Phase 5 backlog に記録。
   - 2025年11月07日: Inventory 5.11 で `update_cache_metadata` / `update_sync_status` / `get_cache_status` / `add_to_sync_queue` の利用パスをテキスト化し、`offline_api.rs` の dead_code 候補（未呼び出しだった同期系コマンド）を全て使用中へ更新。`phase5_ci_path_audit.md` に新テスト ID を登録し、除外候補リストから同期 API 群を削除。
-- [ ] すべてのTauriコマンドがフロントエンドから呼び出し可能
+- [x] すべてのTauriコマンドがフロントエンドから呼び出し可能
   - 2025年11月06日: Inventory 3.2/3.3 に DM/トレンド関連コマンドの呼び出し箇所を追記し、`phase5_user_flow_summary.md` で導線ステータスを更新。未接続コマンドは Phase 5 backlog へ移管し、CI パス監査との整合を確認。
   - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` / `update_cache_metadata` / `update_sync_status` の呼び出し経路を Inventory 5.11 に追記し、`phase5_user_flow_summary.md` でもグローバル要素「同期導線」を更新。`useSyncManager.test.tsx` / `SyncStatusIndicator.test.tsx` を追加し、CI ドキュメントとリンクした。
+  - 2025年11月14日: 旧 `create_account` / `get_topic` / `batch_*` / `set_default_p2p_topic` など UI 未接続コマンドを Rust から撤去し、`scripts/check-tauri-commands.mjs` + `pnpm run check:tauri-commands` で 82 件すべての導線を自動検証できるようにした。  
 
 ## リスク管理
 

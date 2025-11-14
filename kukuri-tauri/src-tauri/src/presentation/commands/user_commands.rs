@@ -7,7 +7,6 @@ use crate::application::services::user_search_service::{
 use crate::application::services::{
     OfflineService, ProfileAvatarService, UploadProfileAvatarInput, UserSearchService, UserService,
 };
-use crate::domain::entities::UserMetadata;
 use crate::domain::entities::offline::CacheMetadataUpdate;
 use crate::domain::value_objects::offline::{CacheKey, CacheType};
 use crate::presentation::dto::{
@@ -114,16 +113,6 @@ pub async fn search_users(
     };
 
     Ok(ApiResponse::success(response))
-}
-
-#[tauri::command]
-pub async fn update_profile(
-    npub: String,
-    metadata: UserMetadata,
-    user_service: State<'_, Arc<UserService>>,
-) -> Result<ApiResponse<()>, AppError> {
-    let result = user_service.update_profile(&npub, metadata).await;
-    Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]

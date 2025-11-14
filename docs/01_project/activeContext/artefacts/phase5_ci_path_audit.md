@@ -5,6 +5,7 @@
 - `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri 側の `invoke_handler` とフロントエンド API から撤去し、`phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` / `phase5_feature_usage_map.md` で未導線リストを 0 件に更新。  
 - `refactoring_plan_2025-08-08_v3.md:436-446` と `tasks/status/in_progress.md` へ棚卸し完了を反映し、今後は新コマンド追加時に同 artefact 群へ即ログを残すルールを明示。  
 - `corepack pnpm vitest run src/tests/unit/lib/api/nostr.test.ts src/tests/unit/lib/api/p2p.test.ts` でラッパー更新を検証。Rust 側は `cargo test`（kukuri-tauri: `STATUS_ENTRYPOINT_NOT_FOUND` のため Docker ルートで補完、kukuri-cli: 成功）を実施。
+- `scripts/check-tauri-commands.mjs` を追加し、`pnpm run check:tauri-commands | tee tmp/logs/check_tauri_commands_20251114-173522.log` で `#[tauri::command]` と UI 呼び出しの差異を自動検出できるようにした。2025年11月14日時点で 82/82 件が一致し、Add/Remove いずれの UI 作業でも本スクリプトを再実行してログを貼り付けることを義務付けた。  
 
 ## 2025年11月14日: Windows テスト実行ルール再定義
 - PowerShell セッションで `pnpm test` / `cargo test` を直接叩くケースが散見されたため、Windows では **必ず** `./scripts/test-docker.ps1 <suite>` を介して Docker 内でテストを実行するルールを明文化した。  

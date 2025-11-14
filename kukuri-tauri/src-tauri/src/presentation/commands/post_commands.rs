@@ -3,10 +3,10 @@ use crate::{
         dto::{
             ApiResponse,
             post_dto::{
-                BatchBookmarkRequest, BatchGetPostsRequest, BatchReactRequest, BookmarkPostRequest,
-                CreatePostRequest, DeletePostRequest, FollowingFeedPageResponse, GetPostsRequest,
-                ListFollowingFeedRequest, ListTrendingPostsRequest, ListTrendingPostsResponse,
-                PostResponse, ReactToPostRequest,
+                BookmarkPostRequest, CreatePostRequest, DeletePostRequest,
+                FollowingFeedPageResponse, GetPostsRequest, ListFollowingFeedRequest,
+                ListTrendingPostsRequest, ListTrendingPostsResponse, PostResponse,
+                ReactToPostRequest,
             },
         },
         handlers::PostHandler,
@@ -85,13 +85,12 @@ pub async fn delete_post(
     Ok(ApiResponse::from_result(result))
 }
 
-/// 投稿にリアクションする
-#[tauri::command]
-pub async fn react_to_post(
-    state: State<'_, AppState>,
+/// 投稿にリアクションする（内部ヘルパー）
+async fn react_to_post(
+    state: &State<'_, AppState>,
     request: ReactToPostRequest,
 ) -> Result<ApiResponse<()>, AppError> {
-    ensure_authenticated(&state).await?;
+    ensure_authenticated(state).await?;
     let handler = PostHandler::new(
         state.post_service.clone(),
         state.auth_service.clone(),
@@ -144,7 +143,7 @@ pub async fn like_post(
         reaction: "+".to_string(),
     };
 
-    react_to_post(state, request).await
+    react_to_post(&state, request).await
 }
 
 /// ブックマーク済み投稿IDを取得する
@@ -178,55 +177,6 @@ pub async fn list_following_feed(
     Ok(ApiResponse::from_result(result))
 }
 
-// バッチ処理コマンド
-
-/// 複数の投稿を一括取得する
-#[tauri::command]
-pub async fn batch_get_posts(
-    state: State<'_, AppState>,
-    request: BatchGetPostsRequest,
-) -> Result<ApiResponse<Vec<PostResponse>>, AppError> {
-    let handler = PostHandler::new(
-        state.post_service.clone(),
-        state.auth_service.clone(),
-        state.topic_service.clone(),
-    );
-    let result = handler.batch_get_posts(request).await;
-    Ok(ApiResponse::from_result(result))
-}
-
-/// 複数のリアクションを一括処理する
-#[tauri::command]
-pub async fn batch_react(
-    state: State<'_, AppState>,
-    request: BatchReactRequest,
-) -> Result<ApiResponse<Vec<Result<(), String>>>, AppError> {
-    ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(
-        state.post_service.clone(),
-        state.auth_service.clone(),
-        state.topic_service.clone(),
-    );
-    let result = handler.batch_react(request).await;
-    Ok(ApiResponse::from_result(result))
-}
-
-/// 複数のブックマークを一括処理する
-#[tauri::command]
-pub async fn batch_bookmark(
-    state: State<'_, AppState>,
-    request: BatchBookmarkRequest,
-) -> Result<ApiResponse<Vec<Result<(), String>>>, AppError> {
-    let user_pubkey = ensure_authenticated(&state).await?;
-    let handler = PostHandler::new(
-        state.post_service.clone(),
-        state.auth_service.clone(),
-        state.topic_service.clone(),
-    );
-    let result = handler.batch_bookmark(request, &user_pubkey).await;
-    Ok(ApiResponse::from_result(result))
-}
-
 /// 投稿をブーストする（旧APIとの互換性のため）
 #[tauri::command]
 pub async fn boost_post(
@@ -238,43 +188,5 @@ pub async fn boost_post(
         reaction: "boost".to_string(),
     };
 
-    react_to_post(state, request).await
-}
-
-/// 単一の投稿を取得する（旧APIとの互換性のため）
-#[tauri::command]
-pub async fn get_post(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<Option<serde_json::Value>, AppError> {
-    state
-        .post_service
-        .get_post(&id)
-        .await?
-        .map(|p| serde_json::to_value(p).map_err(AppError::from))
-        .transpose()
-}
-
-/// トピック別の投稿を取得する（旧APIとの互換性のため）
-#[tauri::command]
-pub async fn get_posts_by_topic(
-    state: State<'_, AppState>,
-    topic_id: String,
-    limit: Option<usize>,
-) -> Result<Vec<serde_json::Value>, AppError> {
-    let posts = state
-        .post_service
-        .get_posts_by_topic(&topic_id, limit.unwrap_or(50))
-        .await?;
-
-    posts
-        .into_iter()
-        .map(|p| serde_json::to_value(p).map_err(AppError::from))
-        .collect()
-}
-
-/// 保留中の投稿を同期する
-#[tauri::command]
-pub async fn sync_posts(state: State<'_, AppState>) -> Result<u32, AppError> {
-    state.post_service.sync_pending_posts().await
+    react_to_post(&state, request).await
 }

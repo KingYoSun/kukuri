@@ -1,7 +1,7 @@
 use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::event::{
     EventResponse, NostrMetadataDto, PublishTextNoteRequest, PublishTopicPostRequest,
-    SendReactionRequest, SetDefaultP2PTopicRequest, SubscribeRequest, UpdateMetadataRequest,
+    SendReactionRequest, SubscribeRequest, UpdateMetadataRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -109,16 +109,5 @@ pub async fn disconnect_nostr(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<serde_json::Value>, AppError> {
     let result = state.event_handler.disconnect_nostr().await;
-    Ok(ApiResponse::from_result(result))
-}
-
-/// 既定のP2P配信トピックを設定
-#[tauri::command]
-pub async fn set_default_p2p_topic(
-    topic_id: String,
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<serde_json::Value>, AppError> {
-    let request = SetDefaultP2PTopicRequest { topic_id };
-    let result = state.event_handler.set_default_p2p_topic(request).await;
     Ok(ApiResponse::from_result(result))
 }
