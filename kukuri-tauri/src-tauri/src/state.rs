@@ -65,6 +65,7 @@ use tokio::sync::broadcast;
 use tokio::time::{Duration, sleep};
 
 const P2P_DEDUP_MAX: usize = 8192;
+const DEFAULT_SYNC_INTERVAL_SECS: u64 = 30;
 
 /// P2P関連の状態
 pub struct P2PState {
@@ -501,6 +502,53 @@ impl AppState {
             p2p_handler,
             offline_handler,
         };
+
+        // SyncService の定期実行と P2P 接続状態フックをセットアップ
+        {
+            let sync_service = Arc::clone(&this.sync_service);
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = sync_service.start_sync().await {
+                    tracing::warn!(error = %err, "initial sync run failed");
+                }
+            });
+        }
+
+        {
+            let sync_service = Arc::clone(&this.sync_service);
+            tauri::async_runtime::spawn(async move {
+                sync_service
+                    .schedule_sync(DEFAULT_SYNC_INTERVAL_SECS)
+                    .await;
+            });
+        }
+
+        {
+            let mut event_rx = p2p_event_tx.subscribe();
+            let sync_service = Arc::clone(&this.sync_service);
+            tauri::async_runtime::spawn(async move {
+                while let Ok(event) = event_rx.recv().await {
+                    match event {
+                        P2PEvent::NetworkConnected { .. } => {
+                            if let Err(err) = sync_service.start_sync().await {
+                                tracing::warn!(
+                                    error = %err,
+                                    "failed to trigger sync after network connect"
+                                );
+                            }
+                        }
+                        P2PEvent::NetworkDisconnected { .. } => {
+                            if let Err(err) = sync_service.stop_sync().await {
+                                tracing::warn!(
+                                    error = %err,
+                                    "failed to stop sync after network disconnect"
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            });
+        }
 
         // 起動時に既定＋ユーザー固有トピックの購読を確立
         {

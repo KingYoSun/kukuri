@@ -15,7 +15,7 @@
 
 11. **Direct Message Inbox: 多端末既読共有と contract テストの完了**  
     - 背景: `docs/01_project/activeContext/tauri_app_implementation_plan.md:12` と `docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:124` で、DM Inbox の仮想スクロール・宛先補完・`mark_direct_message_conversation_read` の多端末同期・ユニット/contract テストが残課題とされている。  
-    - やること: (1) SQLite `direct_message_conversations` と `mark_direct_message_conversation_read` を拡張し、マルチデバイスの既読伝搬と `useDirectMessageBootstrap` の 30 秒再同期を契約テストで保証。(2) `DirectMessageInbox` / `DirectMessageDialog` / `Header` の仮想スクロール・宛先検索テレメトリを整理し、`pnpm vitest ...Header.test.tsx DirectMessageDialog.test.tsx` と Docker `direct-message` シナリオを再取得。(3) `phase5_user_flow_inventory.md` 5.4・`phase5_ci_path_audit.md` にテスト ID / `tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json` を追記。  
+    - やること: (1) SQLite `direct_message_conversations` と `mark_direct_message_conversation_read` を拡張し、マルチデバイスの既読伝搬と `useDirectMessageBootstrap` の 30 秒再同期を契約テストで保証。(2) `DirectMessageInbox` / `DirectMessageDialog` / `Header` の仮想スクロール・宛先検索テレメトリを整理し、`pnpm vitest ...Header.test.tsx DirectMessageDialog.test.tsx` と Docker `direct-message` シナリオを再取得。(3) `phase5_user_flow_inventory.md` 5.4・`phase5_ci_path_audit.md` にテスト ID / `tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json` を追記。(4) AppState 初期化時に SyncService の起動が漏れていたため、CI で `sync_service` フィールドが dead_code 判定されていた。`DEFAULT_SYNC_INTERVAL_SECS` を導入し、起動時・P2P 接続と連動して再送ジョブを回すための SyncService スケジューリングを追加。  
     - 完了条件: DM Inbox が全端末で同じ未読数を表示し、Nightly artefact で contract テストとログが参照できる。
 
 12. **ユーザー検索導線: レートリミット UI と Nightly artefact の整備**  
@@ -25,7 +25,7 @@
 
 13. **Offline sync_engine: 再送メトリクスと Runbook/CI 連携**  
     - 背景: `docs/01_project/roadmap.md:19` および `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md:17` で、Stage4 完了後も `sync_engine` の再送ログ・メトリクス・`nightly.sync-status-indicator` 連動が未整備とされている。  
-    - やること: (1) `sync_engine` / `offline_actions` / Service Worker に再送メトリクス（成功/失敗・retry_count・backoff）を追加し、`metrics::record_outcome` と `SyncStatusIndicator` に露出。(2) `scripts/test-docker.{sh,ps1} ts --scenario offline-sync` と `nightly.sync-status-indicator` artefact を更新し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` / `test-results/offline-sync/*.json` に再送情報を保存。(3) Runbook Chapter5 と `phase5_ci_path_audit.md` に新しいメトリクス項目・ログパス・トリアージ手順を追記。  
+    - やること: (1) `sync_engine` / `offline_actions` / Service Worker に再送メトリクス（成功/失敗・retry_count・backoff）を追加し、`metrics::record_outcome` と `SyncStatusIndicator` に露出。(2) `scripts/test-docker.{sh,ps1} ts --scenario offline-sync` と `nightly.sync-status-indicator` artefact を更新し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` / `test-results/offline-sync/*.json` に再送情報を保存。(3) Runbook Chapter5 と `phase5_ci_path_audit.md` に新しいメトリクス項目・ログパス・トリアージ手順を追記。(4) SyncService を AppState 初期化時に確実に起動＆30 秒間隔でスケジュールし、P2P 接続イベントで再実行する実装を追加済み（CI での dead_code を解消）。  
     - 完了条件: Offline 操作の再送状況が UI / Nightly artefact / Runbook で一貫して観測できる。
 
 14. **グローバルコンポーザー & 投稿削除: キャッシュ整合とテスト更新**  
