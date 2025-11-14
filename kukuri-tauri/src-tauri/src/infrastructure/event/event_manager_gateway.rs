@@ -324,12 +324,6 @@ impl LegacyEventManagerGateway {
         *guard = Some(handle);
     }
 
-    #[allow(dead_code)]
-    pub async fn clear_app_handle(&self) {
-        let mut guard = self.app_handle.write().await;
-        *guard = None;
-    }
-
     async fn emit_frontend_event(&self, event: &NostrEvent) {
         let handle = self.app_handle.read().await.clone();
         if let Some(handle) = handle {

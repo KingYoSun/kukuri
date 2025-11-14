@@ -1,9 +1,9 @@
 use std::time::Instant;
 
 use super::performance_common::{
-    offline::{
-        OfflineTestContext, TEST_PUBKEY_HEX, build_params_for_index, seed_cache_metadata,
-        setup_offline_service,
+    offline_seed::seed_cache_metadata,
+    offline_support::{
+        OfflineTestContext, TEST_PUBKEY_HEX, build_params_for_index, setup_offline_service,
     },
     recorder::{PerformanceRecorder, duration_secs},
 };

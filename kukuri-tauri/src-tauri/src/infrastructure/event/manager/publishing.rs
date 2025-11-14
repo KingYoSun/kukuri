@@ -211,7 +211,6 @@ impl EventManager {
 
     /// リポスト（ブースト）を送信
     /// 任意のイベントを発行
-    #[allow(dead_code)]
     pub async fn publish_event(&self, event: Event) -> Result<EventId> {
         self.ensure_initialized().await?;
 

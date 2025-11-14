@@ -1,7 +1,5 @@
-use crate::domain::p2p::{
-    error::Result as P2PResult,
-    message::{GossipMessage, MessageId},
-};
+use crate::domain::p2p::message::{GossipMessage, MessageId};
+use anyhow::Result;
 use lru::LruCache;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
@@ -14,8 +12,6 @@ const DEFAULT_REPLAY_LIMIT: usize = 64;
 
 #[derive(Clone)]
 pub struct TopicMesh {
-    #[allow(dead_code)]
-    topic_id: Arc<String>,
     peers: Arc<RwLock<HashSet<Vec<u8>>>>, // PublicKeyのバイト表現
     message_cache: Arc<RwLock<LruCache<MessageId, GossipMessage>>>,
     subscribers: Arc<RwLock<HashMap<u64, mpsc::Sender<GossipMessage>>>>,
@@ -31,11 +27,10 @@ pub struct TopicStats {
 
 impl TopicMesh {
     /// 新しいTopicMeshを作成
-    pub fn new(topic_id: String) -> Self {
+    pub fn new(_topic_id: String) -> Self {
         let cache_size = NonZeroUsize::new(1000).unwrap(); // 最大1000メッセージをキャッシュ
 
         Self {
-            topic_id: Arc::new(topic_id),
             peers: Arc::new(RwLock::new(HashSet::new())),
             message_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
             subscribers: Arc::new(RwLock::new(HashMap::new())),
@@ -44,7 +39,7 @@ impl TopicMesh {
     }
 
     /// メッセージの受信処理
-    pub async fn handle_message(&self, message: GossipMessage) -> P2PResult<()> {
+    pub async fn handle_message(&self, message: GossipMessage) -> Result<()> {
         // 重複チェック
         if self.is_duplicate(&message.id).await {
             return Ok(()); // 重複メッセージは無視
@@ -96,30 +91,6 @@ impl TopicMesh {
             message_count: cache.len(),
             last_activity,
         }
-    }
-
-    /// 接続中のピアのリストを取得
-    #[allow(dead_code)]
-    pub async fn get_peers(&self) -> Vec<Vec<u8>> {
-        let peers = self.peers.read().await;
-        peers.iter().cloned().collect()
-    }
-
-    /// キャッシュされたメッセージを取得（最新順）
-    #[allow(dead_code)]
-    pub async fn get_recent_messages(&self, limit: usize) -> Vec<GossipMessage> {
-        let cache = self.message_cache.read().await;
-        let mut messages: Vec<_> = cache.iter().map(|(_, msg)| msg.clone()).collect();
-
-        messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        messages.into_iter().take(limit).collect()
-    }
-
-    /// キャッシュをクリア
-    #[allow(dead_code)]
-    pub async fn clear_cache(&self) {
-        let mut cache = self.message_cache.write().await;
-        cache.clear();
     }
 
     /// Gossipメッセージ購読用のチャネルを生成
@@ -234,6 +205,30 @@ impl TopicMesh {
     pub async fn subscriber_count(&self) -> usize {
         let subscribers = self.subscribers.read().await;
         subscribers.len()
+    }
+}
+
+#[cfg(test)]
+impl TopicMesh {
+    /// 接続中のピアのリストを取得（テスト/診断用）
+    pub async fn get_peers(&self) -> Vec<Vec<u8>> {
+        let peers = self.peers.read().await;
+        peers.iter().cloned().collect()
+    }
+
+    /// キャッシュされたメッセージを取得（テスト/診断用）
+    pub async fn get_recent_messages(&self, limit: usize) -> Vec<GossipMessage> {
+        let cache = self.message_cache.read().await;
+        let mut messages: Vec<_> = cache.iter().map(|(_, msg)| msg.clone()).collect();
+
+        messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        messages.into_iter().take(limit).collect()
+    }
+
+    /// キャッシュをクリア（テスト/診断用）
+    pub async fn clear_cache(&self) {
+        let mut cache = self.message_cache.write().await;
+        cache.clear();
     }
 }
 

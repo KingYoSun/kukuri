@@ -27,7 +27,6 @@ pub struct EventManager {
 
 impl EventManager {
     /// 新しいEventManagerインスタンスを作成
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
@@ -162,7 +161,13 @@ impl EventManager {
     /// 公開鍵を取得
     pub async fn get_public_key(&self) -> Option<PublicKey> {
         let publisher = self.event_publisher.read().await;
-        publisher.get_public_key()
+        if let Some(pk) = publisher.get_public_key() {
+            return Some(pk);
+        }
+        drop(publisher);
+
+        let client_manager = self.client_manager.read().await;
+        client_manager.get_public_key()
     }
 
     /// 切断

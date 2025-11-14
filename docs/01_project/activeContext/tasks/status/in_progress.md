@@ -13,11 +13,6 @@
 
 ### リファクタリング計画 2025-08-08 v3 未完了タスク
 
-1. **dead_code の 80%以上を削除または活用**  
-   - 背景: `refactoring_plan_2025-08-08_v3.md:444-446` による残タスク。`hybrid_distributor` / `event_sync` / `offline_api` 周辺に候補が集中。  
-   - やること: dead_code 一覧を精査し、使用開始 or 削除のいずれかに分類。削除時は SQLx / Rust テストで回帰確認。  
-   - 完了条件: dead_code 削減率が 80% 以上になり、成果を artefact として記録。
-
 2. **すべての Tauri コマンドをフロントエンド導線へ接続**  
    - 背景: 成功指標（`refactoring_plan_2025-08-08_v3.md:447-449`）が未完。2025年11月14日時点で `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` は API ごと撤去し未使用リストを解消したが、今後追加されるコマンドを確実に UI/テレメトリへ接続するルール整備が未完。  
    - やること: コマンド追加時のチェックリストを `phase5_user_flow_summary.md` / `phase5_ci_path_audit.md` に反映し、残存するデバッグ専用コマンド（例: `clear_all_accounts_for_test`）の運用境界を定義。  

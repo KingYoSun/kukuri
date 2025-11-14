@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use kukuri_lib::test_support::application::ports::offline_store::OfflinePersistence;
 use kukuri_lib::test_support::application::services::offline_service::{
-    OfflineService, OfflineServiceTrait, SaveOfflineActionParams,
+    OfflineService, SaveOfflineActionParams,
 };
-use kukuri_lib::test_support::domain::entities::offline::{CacheMetadataUpdate, SyncStatusUpdate};
 use kukuri_lib::test_support::domain::value_objects::event_gateway::PublicKey;
 use kukuri_lib::test_support::domain::value_objects::offline::{
-    CacheKey, CacheType, EntityId, EntityType, OfflineActionType, OfflinePayload, SyncStatus,
+    EntityId, EntityType, OfflineActionType, OfflinePayload,
 };
 use kukuri_lib::test_support::infrastructure::offline::SqliteOfflinePersistence;
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::{Executor, Pool, Sqlite, sqlite::SqlitePoolOptions};
 
 pub const TEST_PUBKEY_HEX: &str =
@@ -41,7 +39,6 @@ pub async fn setup_offline_service() -> OfflineTestContext {
     }
 }
 
-#[allow(dead_code)]
 pub fn sample_save_params() -> SaveOfflineActionParams {
     SaveOfflineActionParams {
         user_pubkey: PublicKey::from_hex_str(TEST_PUBKEY_HEX).expect("pubkey"),
@@ -52,7 +49,6 @@ pub fn sample_save_params() -> SaveOfflineActionParams {
     }
 }
 
-#[allow(dead_code)]
 pub fn build_params_for_index(index: usize) -> SaveOfflineActionParams {
     let payload = json!({
         "content": format!("Post {index}"),
@@ -67,74 +63,6 @@ pub fn build_params_for_index(index: usize) -> SaveOfflineActionParams {
         entity_id: EntityId::new(format!("post_{index:04}").into()).expect("entity id"),
         payload: OfflinePayload::from_json_str(&payload.to_string()).expect("payload"),
     }
-}
-
-#[allow(dead_code)]
-pub async fn seed_offline_actions(service: &OfflineService, count: usize) -> Result<()> {
-    for i in 0..count {
-        service
-            .save_action(build_params_for_index(i))
-            .await
-            .map_err(|err| anyhow!(err))?;
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub async fn seed_cache_metadata(service: &OfflineService, count: usize) -> Result<()> {
-    for i in 0..count {
-        let update = CacheMetadataUpdate {
-            cache_key: CacheKey::new(format!("cache:test:{i}").into()).expect("cache key"),
-            cache_type: CacheType::new("posts".into()).expect("cache type"),
-            metadata: Some(json!({ "version": i })),
-            expiry: Some(Utc::now() + Duration::seconds((i as i64 % 3) + 1)),
-            is_stale: Some(false),
-            doc_version: None,
-            blob_hash: None,
-            payload_bytes: None,
-        };
-        service
-            .upsert_cache_metadata(update)
-            .await
-            .map_err(|err| anyhow!(err))?;
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub async fn mark_actions_synced(pool: &Pool<Sqlite>, ids: &[i64]) {
-    for id in ids {
-        sqlx::query("UPDATE offline_actions SET is_synced = 1 WHERE id = ?")
-            .bind(id)
-            .execute(pool)
-            .await
-            .expect("mark offline action synced");
-    }
-}
-
-#[allow(dead_code)]
-pub async fn insert_sync_status(
-    service: &OfflineService,
-    entity: (&str, &str),
-    status: SyncStatus,
-    conflict: Option<Value>,
-) -> Result<()> {
-    let payload = conflict
-        .map(|value| OfflinePayload::from_json_str(&value.to_string()).map_err(|err| anyhow!(err)))
-        .transpose()?;
-
-    let update = SyncStatusUpdate::new(
-        EntityType::new(entity.0.into()).map_err(|err| anyhow!(err))?,
-        EntityId::new(entity.1.into()).map_err(|err| anyhow!(err))?,
-        status,
-        payload,
-        Utc::now(),
-    );
-    service
-        .update_sync_status(update)
-        .await
-        .map_err(|err| anyhow!(err))?;
-    Ok(())
 }
 
 async fn initialize_schema(pool: &Pool<Sqlite>) {

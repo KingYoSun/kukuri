@@ -88,7 +88,7 @@
 | 種別 | 機能 | 実装箇所 | 未使用理由 | 判断 | 次アクション |
 | --- | --- | --- | --- | --- | --- |
 | Rust helper | `TopicMesh::get_peers` / `get_recent_messages` / `clear_cache` | `kukuri-tauri/src-tauri/src/domain/p2p/topic_mesh.rs:101-122` | 3 関数とも `#[allow(dead_code)]` 指定で、利用箇所は `domain/p2p/tests/topic_mesh_tests.rs` などテストのみ（本番コードからの `rg` ヒットなし）。メトリクスは `get_p2p_metrics` へ集約されたため UI から参照されない。 | 削除 | TopicMesh の内部構造を DEV 用に保持する必要が無いので削除し、必要なら将来のデバッグ用に独立した util を用意する。 |
-| Rustサービス | `AppState.encryption_service` / `DefaultEncryptionService` | `kukuri-tauri/src-tauri/src/state.rs:92`<br>`kukuri-tauri/src-tauri/src/infrastructure/crypto/default_encryption_service.rs:12-112` | `AppState` が `Arc<dyn EncryptionService>` を保持しているが、`rg ".encrypt_symmetric"` で実サービスからの呼び出しはゼロ。DM 暗号化ロードマップの途中で停止している。 | 保留（暗号化方針待ち） | Phase6 で DM 暗号化を導入する場合は `DirectMessageService` 等へ配線し、見送りならフィールドごと削除する判断を行う。 |
+| Rustサービス | ~~`AppState.encryption_service` / `DefaultEncryptionService`~~ | `kukuri-tauri/src-tauri/src/state.rs`（2025年11月14日時点で削除済） | DM 暗号化導線が未整備のまま放置されていたため、`AppState` から暗号サービス依存を撤去。暗号化ロジックを再導入する場合は `infrastructure::crypto` を再配線して利用する。 | 完了（2025年11月14日） | Phase6 以降で暗号導線を追加する際は、新ポート／サービス経由で必要な箇所に注入する。 |
 
 ## 3. 部分的に使用されている機能
 

@@ -116,7 +116,7 @@ fn lock_guard() -> MetricsGuard {
 }
 
 #[cfg(test)]
-pub fn test_guard() -> MetricsGuard {
+pub(crate) fn test_guard() -> MetricsGuard {
     lock_guard()
 }
 
@@ -216,7 +216,7 @@ pub fn snapshot() -> EventGatewayMetrics {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn reset() {
     let _guard = lock_guard();
     INCOMING_EVENTS.reset();

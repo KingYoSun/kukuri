@@ -238,7 +238,6 @@ pub fn record_bootstrap_source(source: BootstrapSource) {
     BOOTSTRAP_LAST_MS.store(current_unix_ms(), Ordering::Relaxed);
 }
 
-#[allow(dead_code)]
 pub fn reset_all() {
     JOIN_METRIC.reset();
     LEAVE_METRIC.reset();

@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
 use super::performance_common::{
-    offline::{OfflineTestContext, TEST_PUBKEY_HEX, seed_offline_actions, setup_offline_service},
+    offline_seed::seed_offline_actions,
+    offline_support::{OfflineTestContext, TEST_PUBKEY_HEX, setup_offline_service},
     recorder::{PerformanceRecorder, duration_secs},
 };
 use anyhow::{Result, anyhow};

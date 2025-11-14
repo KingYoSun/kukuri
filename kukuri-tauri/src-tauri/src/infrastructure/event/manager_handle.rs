@@ -45,7 +45,6 @@ pub struct LegacyEventManagerHandle {
 }
 
 impl LegacyEventManagerHandle {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             inner: Arc::new(EventManager::new()),
@@ -58,17 +57,6 @@ impl LegacyEventManagerHandle {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn from_arc(inner: Arc<EventManager>) -> Self {
-        Self { inner }
-    }
-
-    #[allow(dead_code)]
-    pub fn into_trait_arc(self) -> Arc<dyn EventManagerHandle> {
-        Arc::new(self)
-    }
-
-    #[allow(dead_code)]
     pub fn as_event_manager(&self) -> Arc<EventManager> {
         Arc::clone(&self.inner)
     }

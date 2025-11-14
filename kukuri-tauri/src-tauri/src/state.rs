@@ -27,10 +27,7 @@ use crate::application::services::{
 use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
 use crate::infrastructure::{
     cache::PostCacheService,
-    crypto::{
-        DefaultEncryptionService, DefaultKeyManager, DefaultSignatureService, EncryptionService,
-        SignatureService,
-    },
+    crypto::{DefaultKeyManager, DefaultSignatureService, SignatureService},
     database::{
         Repository, SqliteSubscriptionStateRepository, connection_pool::ConnectionPool,
         sqlite_repository::SqliteRepository,
@@ -89,8 +86,6 @@ pub struct AppState {
     pub app_handle: tauri::AppHandle,
     // 既存のマネージャー（Phase5でArc<dyn KeyManager>へ移行済み）
     pub key_manager: Arc<dyn KeyManager>,
-    #[allow(dead_code)]
-    pub encryption_service: Arc<dyn EncryptionService>,
     pub event_manager: Arc<dyn EventManagerHandle>,
     pub p2p_state: Arc<RwLock<P2PState>>,
     pub offline_reindex_job: Arc<OfflineReindexJob>,
@@ -163,8 +158,6 @@ impl AppState {
 
         let sqlite_pool = connection_pool.get_pool().clone();
 
-        let encryption_service: Arc<dyn EncryptionService> =
-            Arc::new(DefaultEncryptionService::new());
         let event_manager: Arc<dyn EventManagerHandle> = Arc::new(
             LegacyEventManagerHandle::new_with_connection_pool(connection_pool.clone()),
         );
@@ -488,7 +481,6 @@ impl AppState {
         let this = Self {
             app_handle: this_handle,
             key_manager,
-            encryption_service,
             event_manager,
             p2p_state,
             offline_reindex_job,

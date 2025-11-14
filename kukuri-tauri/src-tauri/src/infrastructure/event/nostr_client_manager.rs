@@ -72,7 +72,6 @@ impl NostrClientManager {
     }
 
     /// 公開鍵を取得
-    #[allow(dead_code)]
     pub fn get_public_key(&self) -> Option<PublicKey> {
         self.keys.as_ref().map(|k| k.public_key())
     }

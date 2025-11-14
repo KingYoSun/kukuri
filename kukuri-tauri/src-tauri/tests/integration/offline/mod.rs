@@ -1,4 +1,4 @@
-#[path = "../../common/performance/offline.rs"]
+#[path = "../../common/offline_support.rs"]
 mod offline_support;
 
 use chrono::{Duration, Utc};

@@ -1,5 +1,4 @@
 pub mod distribution;
-pub mod error;
 pub mod events;
 pub mod message;
 pub mod topic_mesh;
@@ -8,7 +7,6 @@ pub mod topic_mesh;
 mod tests;
 
 pub use distribution::{DistributionMetrics, DistributionStrategy};
-pub use error::{P2PError, Result};
 pub use events::P2PEvent;
 pub use message::{
     GLOBAL_TOPIC, GossipMessage, MessageId, MessageType, generate_topic_id, user_topic_id,

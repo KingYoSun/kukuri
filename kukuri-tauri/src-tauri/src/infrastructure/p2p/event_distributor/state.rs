@@ -48,8 +48,4 @@ impl DistributorState {
         self.failed_events = still_failed;
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn max_retries(&self) -> u32 {
-        self.max_retries
-    }
 }

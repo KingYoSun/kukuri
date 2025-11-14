@@ -60,17 +60,6 @@ impl GossipMessage {
         }
     }
 
-    /// メッセージIDを生成
-    #[allow(dead_code)]
-    fn generate_message_id() -> MessageId {
-        let uuid = Uuid::new_v4();
-        let mut id = [0u8; 32];
-        let uuid_bytes = uuid.as_bytes();
-        id[..16].copy_from_slice(uuid_bytes);
-        id[16..].copy_from_slice(uuid_bytes);
-        id
-    }
-
     /// メッセージを署名用のバイト列に変換
     pub fn to_signing_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
