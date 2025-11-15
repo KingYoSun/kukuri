@@ -209,11 +209,29 @@ pub fn run() {
 fn init_logging() {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+    const DEFAULT_DIRECTIVES: &str = "info,kukuri=debug";
+    const MAINLINE_SUPPRESS_DIRECTIVE: &str = "mainline::rpc::socket=error";
+
+    let mut env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| DEFAULT_DIRECTIVES.into());
+
+    let suppress_mainline = std::env::var("RUST_LOG")
+        .map(|value| !value.contains("mainline::rpc::socket"))
+        .unwrap_or(true);
+
+    if suppress_mainline {
+        if let Ok(directive) = MAINLINE_SUPPRESS_DIRECTIVE.parse() {
+            env_filter = env_filter.add_directive(directive);
+        } else {
+            tracing::warn!(
+                "Failed to parse mainline log suppression directive: {}",
+                MAINLINE_SUPPRESS_DIRECTIVE
+            );
+        }
+    }
+
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "kukuri=debug,info".into()),
-        )
+        .with(env_filter)
         .with(tracing_subscriber::fmt::layer())
         .init();
 }

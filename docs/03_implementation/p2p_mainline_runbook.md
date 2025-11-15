@@ -1,4 +1,4 @@
-# P2P Mainline Runbook
+﻿# P2P Mainline Runbook
 最終更新: 2025年11月12日
 
 ## 1. 目的
@@ -18,6 +18,7 @@ $env:ENABLE_P2P_INTEGRATION = "1"
 $env:KUKURI_BOOTSTRAP_PEERS = "k51qzi5uqu5dl@127.0.0.1:44001,k51qzi5uqu5dn@127.0.0.1:44002"
 $env:RUST_LOG = "info,iroh_tests=debug"
 ```
+- メモ: `RUST_LOG` を設定しない（または `mainline::rpc::socket` を含まない）状態で `pnpm tauri dev` を起動した場合、`mainline::rpc::socket` には既定で `=error` ディレクティブが付与され WARN が抑制される。必要に応じて `$env:RUST_LOG = "info,mainline::rpc::socket=debug,..."` のように明示指定すると従来通り mainline WARN を確認できる。
 
 ## 3. テスト構成概要
 - Phase 5 で Rust 統合テストを `kukuri-tauri/src-tauri/tests` 配下のテストバイナリへ完全移行済み。
