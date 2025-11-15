@@ -23,12 +23,13 @@ import {
   type UserSearchStatus,
 } from '@/hooks/useUserSearchQuery';
 
-interface UserSearchInputMeta {
+export interface UserSearchInputMeta {
   sanitizedQuery: string;
   status: UserSearchStatus;
   errorKey: UserSearchErrorKey | null;
   helperSearch: HelperSearchDescriptor | null;
   allowIncompleteActive: boolean;
+  retryAfterSeconds: number | null;
 }
 
 interface UserSearchResultsProps {
@@ -72,8 +73,17 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
       errorKey,
       helperSearch,
       allowIncompleteActive,
+      retryAfterSeconds,
     });
-  }, [allowIncompleteActive, errorKey, helperSearch, onInputMetaChange, sanitizedQuery, status]);
+  }, [
+    allowIncompleteActive,
+    errorKey,
+    helperSearch,
+    onInputMetaChange,
+    retryAfterSeconds,
+    sanitizedQuery,
+    status,
+  ]);
 
   const followingQuery = useQuery<
     Profile[],

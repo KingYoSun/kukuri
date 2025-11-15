@@ -201,6 +201,31 @@ describe('UserSearchResults', () => {
       errorKey: null,
       helperSearch: null,
       allowIncompleteActive: false,
+      retryAfterSeconds: null,
     });
+  });
+
+  it('renders rate limit error state with countdown', () => {
+    useSearchQueryMock.mockReturnValueOnce({
+      status: 'rateLimited',
+      sanitizedQuery: 'alice',
+      results: [],
+      totalCount: 0,
+      tookMs: 0,
+      hasNextPage: false,
+      isFetching: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      errorKey: 'UserSearch.rate_limited',
+      retryAfterSeconds: 3,
+      onRetry: vi.fn(),
+      helperSearch: null,
+      allowIncompleteActive: false,
+    });
+
+    renderWithClient(<UserSearchResults query="alice" />);
+
+    expect(screen.getByText('リクエストが多すぎます')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /再試行/ })).toBeInTheDocument();
   });
 });

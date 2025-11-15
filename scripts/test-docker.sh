@@ -363,7 +363,11 @@ run_ts_user_search_pagination() {
   local log_rel_path="tmp/logs/user_search_pagination_${timestamp}.log"
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
   local results_dir="${RESULTS_DIR}/user-search-pagination"
-  mkdir -p "$(dirname "$log_host_path")" "$results_dir"
+  local reports_dir="${results_dir}/reports"
+  local logs_dir="${results_dir}/logs"
+  local log_archive_rel_path="test-results/user-search-pagination/logs/${timestamp}.log"
+  local log_archive_host_path="${REPO_ROOT}/${log_archive_rel_path}"
+  mkdir -p "$(dirname "$log_host_path")" "$reports_dir" "$logs_dir"
   : >"$log_host_path"
 
   echo "Running TypeScript scenario 'user-search-pagination'..."
@@ -376,7 +380,7 @@ run_ts_user_search_pagination() {
   for target in "${vitest_targets[@]}"; do
     local slug="${target//\//_}"
     slug="${slug//./_}"
-    local report_rel_path="test-results/user-search-pagination/${timestamp}-${slug}.json"
+    local report_rel_path="test-results/user-search-pagination/reports/${timestamp}-${slug}.json"
     local command="
 set -euo pipefail
 cd /app/kukuri-tauri
@@ -399,12 +403,19 @@ pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/ap
     fi
   done
 
+  if [[ -f "$log_host_path" ]]; then
+    cp "$log_host_path" "$log_archive_host_path"
+    echo "[OK] Scenario log saved to ${log_rel_path}"
+    echo "[OK] Archived scenario log saved to ${log_archive_rel_path}"
+  else
+    echo "[WARN] Scenario log was not generated at ${log_rel_path}" >&2
+  fi
+
   if [[ $vitest_status -ne 0 ]]; then
     echo "[ERROR] Scenario 'user-search-pagination' failed. See ${log_rel_path} for details." >&2
     return $vitest_status
   fi
 
-  echo "[OK] Scenario log saved to ${log_rel_path}"
   return 0
 }
 

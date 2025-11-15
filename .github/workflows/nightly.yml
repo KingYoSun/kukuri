@@ -134,7 +134,7 @@ jobs:
       - name: Run user-search-pagination scenario (Docker)
         run: |
           chmod +x scripts/test-docker.sh
-          ./scripts/test-docker.sh ts --scenario user-search-pagination
+          ./scripts/test-docker.sh ts --scenario user-search-pagination --no-build
 
       - name: Upload user search logs
         uses: actions/upload-artifact@v4
@@ -143,11 +143,18 @@ jobs:
           path: tmp/logs/user_search_pagination_*.log
           if-no-files-found: error
 
+      - name: Upload user search archived logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-search-pagination-log-archive
+          path: test-results/user-search-pagination/logs
+          if-no-files-found: warn
+
       - name: Upload user search reports
         uses: actions/upload-artifact@v4
         with:
           name: user-search-pagination-reports
-          path: test-results/user-search-pagination
+          path: test-results/user-search-pagination/reports
           if-no-files-found: error
 
   topic-create:

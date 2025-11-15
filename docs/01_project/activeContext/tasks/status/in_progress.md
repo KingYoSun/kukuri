@@ -13,11 +13,6 @@
 
 ### MVP Exit タスク
 
-12. **ユーザー検索導線: レートリミット UI と Nightly artefact の整備**  
-    - 背景: `docs/01_project/activeContext/tauri_app_implementation_plan.md:14` と `docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:127` で、`user-search-pagination` シナリオの Nightly 組み込みと成果物固定、レートリミット UI の検証が未完と整理されている。  
-    - やること: (1) `nightly.yml` に `nightly.user-search-pagination` を追加し、`./scripts/test-docker.sh ts --scenario user-search-pagination --no-build`（PowerShell 版含む）を呼び出して `tmp/logs/user_search_pagination_<timestamp>.log` / `test-results/user-search-pagination/{logs,reports}` を artefact 化。(2) SearchBar のレートリミット / `allow_incomplete` フォールバック / エラー状態を `errorHandler` とテレメトリに接続し、`useUserSearchQuery` / `UserSearchResults` テストで UI 遷移を再検証。(3) `phase5_user_flow_inventory.md` 5.8 と Runbook 6.4 に Nightly 手順とログ参照先を追記。  
-    - 完了条件: `/search` 導線が Nightly で自動再現され、レートリミット UI と成果物が Runbook から参照できる。
-
 13. **Offline sync_engine: 再送メトリクスと Runbook/CI 連携**  
     - 背景: `docs/01_project/roadmap.md:19` および `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md:17` で、Stage4 完了後も `sync_engine` の再送ログ・メトリクス・`nightly.sync-status-indicator` 連動が未整備とされている。  
     - やること: (1) `sync_engine` / `offline_actions` / Service Worker に再送メトリクス（成功/失敗・retry_count・backoff）を追加し、`metrics::record_outcome` と `SyncStatusIndicator` に露出。(2) `scripts/test-docker.{sh,ps1} ts --scenario offline-sync` と `nightly.sync-status-indicator` artefact を更新し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` / `test-results/offline-sync/*.json` に再送情報を保存。(3) Runbook Chapter5 と `phase5_ci_path_audit.md` に新しいメトリクス項目・ログパス・トリアージ手順を追記。(4) SyncService を AppState 初期化時に確実に起動＆30 秒間隔でスケジュールし、P2P 接続イベントで再実行する実装を追加済み（CI での dead_code を解消）。  

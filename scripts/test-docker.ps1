@@ -582,8 +582,12 @@ function Invoke-TypeScriptUserSearchScenario {
     Set-Content -Path $logHostPath -Value @()
 
     $resultsDir = Join-Path $repositoryRoot "test-results/user-search-pagination"
-    if (-not (Test-Path $resultsDir)) {
-        New-Item -ItemType Directory -Path $resultsDir | Out-Null
+    $reportsDir = Join-Path $resultsDir "reports"
+    $logsDir = Join-Path $resultsDir "logs"
+    foreach ($dir in @($resultsDir, $reportsDir, $logsDir)) {
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Path $dir | Out-Null
+        }
     }
 
     Write-Host "Running TypeScript scenario 'user-search-pagination'..."
@@ -595,7 +599,7 @@ function Invoke-TypeScriptUserSearchScenario {
     $vitestStatus = 0
     foreach ($target in $vitestTargets) {
         $slug = $target.Replace("/", "_").Replace(".", "_")
-        $reportRelPath = "test-results/user-search-pagination/${timestamp}-${slug}.json"
+        $reportRelPath = "test-results/user-search-pagination/reports/${timestamp}-${slug}.json"
 
         $commandLines = @(
             "set -euo pipefail",
@@ -629,10 +633,18 @@ function Invoke-TypeScriptUserSearchScenario {
         }
     }
 
+    if (Test-Path $logHostPath) {
+        Write-Success "Scenario log saved to $logRelPath"
+        $logArchiveRelPath = "test-results/user-search-pagination/logs/${timestamp}.log"
+        $logArchiveHostPath = Join-Path $repositoryRoot $logArchiveRelPath
+        Copy-Item -Path $logHostPath -Destination $logArchiveHostPath -Force
+        Write-Success "Scenario log archived to $logArchiveRelPath"
+    } else {
+        Write-Warning "Scenario log was not generated at $logRelPath"
+    }
+
     if ($vitestStatus -ne 0) {
         Write-ErrorMessage "Scenario 'user-search-pagination' failed. See $logRelPath for details."
-    } else {
-        Write-Success "Scenario log saved to $logRelPath"
     }
 }
 

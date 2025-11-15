@@ -1,16 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SearchBar } from '@/components/search/SearchBar';
 import { PostSearchResults } from '@/components/search/PostSearchResults';
 import { TopicSearchResults } from '@/components/search/TopicSearchResults';
-import { UserSearchResults } from '@/components/search/UserSearchResults';
+import { UserSearchResults, type UserSearchInputMeta } from '@/components/search/UserSearchResults';
 import {
   MIN_USER_SEARCH_QUERY_LENGTH,
   type HelperSearchDescriptor,
   type UserSearchErrorKey,
   type UserSearchStatus,
 } from '@/hooks/useUserSearchQuery';
+import { errorHandler } from '@/lib/errorHandler';
 
 export const Route = createFileRoute('/search')({
   component: SearchPage,
@@ -18,22 +19,58 @@ export const Route = createFileRoute('/search')({
 
 type SearchTab = 'posts' | 'topics' | 'users';
 
-interface UserSearchInputMeta {
-  sanitizedQuery: string;
-  status: UserSearchStatus;
-  errorKey: UserSearchErrorKey | null;
-  helperSearch: HelperSearchDescriptor | null;
-  allowIncompleteActive: boolean;
-}
-
 function SearchPage() {
   const [activeTab, setActiveTab] = useState<SearchTab>('posts');
   const [searchQuery, setSearchQuery] = useState('');
   const [userSearchMeta, setUserSearchMeta] = useState<UserSearchInputMeta | null>(null);
+  const rateLimitLoggedRef = useRef(false);
+  const allowIncompleteLoggedRef = useRef(false);
 
   const handleUserSearchMetaChange = useCallback((meta: UserSearchInputMeta) => {
     setUserSearchMeta(meta);
   }, []);
+
+  useEffect(() => {
+    if (!userSearchMeta) {
+      rateLimitLoggedRef.current = false;
+      allowIncompleteLoggedRef.current = false;
+      return;
+    }
+    const {
+      errorKey,
+      sanitizedQuery,
+      helperSearch,
+      retryAfterSeconds,
+      allowIncompleteActive,
+    } = userSearchMeta;
+
+    if (errorKey === 'UserSearch.rate_limited') {
+      if (!rateLimitLoggedRef.current) {
+        rateLimitLoggedRef.current = true;
+        errorHandler.info('UserSearch.rate_limited', 'SearchPage.userSearch', {
+          query: sanitizedQuery,
+          helperKind: helperSearch?.kind ?? null,
+          retryAfterSeconds: retryAfterSeconds ?? null,
+        });
+      }
+    } else {
+      rateLimitLoggedRef.current = false;
+    }
+
+    const allowActive = Boolean(allowIncompleteActive);
+    if (allowActive !== allowIncompleteLoggedRef.current) {
+      allowIncompleteLoggedRef.current = allowActive;
+      const metadata = {
+        query: helperSearch?.rawQuery ?? sanitizedQuery,
+        helperKind: helperSearch?.kind ?? null,
+      };
+      errorHandler.info(
+        allowActive ? 'UserSearch.allow_incomplete_enabled' : 'UserSearch.allow_incomplete_cleared',
+        'SearchPage.userSearch',
+        metadata,
+      );
+    }
+  }, [userSearchMeta]);
 
   const userValidation = useMemo(() => {
     if (!userSearchMeta) {
@@ -44,12 +81,27 @@ function SearchPage() {
       };
     }
 
-    const { sanitizedQuery, status, errorKey, helperSearch, allowIncompleteActive } =
-      userSearchMeta;
+    const {
+      sanitizedQuery,
+      status,
+      errorKey,
+      helperSearch,
+      allowIncompleteActive,
+      retryAfterSeconds,
+    } = userSearchMeta;
     let validationState: 'default' | 'warning' | 'error' = 'default';
     let validationMessage: string | undefined;
 
-    if (allowIncompleteActive && helperSearch) {
+    if (errorKey === 'UserSearch.rate_limited') {
+      validationState = 'error';
+      validationMessage =
+        retryAfterSeconds && retryAfterSeconds > 0
+          ? `レート制限中です (${retryAfterSeconds}秒後に再試行できます)`
+          : 'レート制限中です。しばらく待ってから再検索してください';
+    } else if (errorKey === 'UserSearch.fetch_failed') {
+      validationState = 'error';
+      validationMessage = '検索に失敗しました。ネットワークを確認して再試行してください';
+    } else if (allowIncompleteActive && helperSearch) {
       validationState = 'warning';
       validationMessage = '補助検索モード: キャッシュ優先で部分一致を表示しています';
     } else if (
