@@ -5,12 +5,7 @@ import { SearchBar } from '@/components/search/SearchBar';
 import { PostSearchResults } from '@/components/search/PostSearchResults';
 import { TopicSearchResults } from '@/components/search/TopicSearchResults';
 import { UserSearchResults, type UserSearchInputMeta } from '@/components/search/UserSearchResults';
-import {
-  MIN_USER_SEARCH_QUERY_LENGTH,
-  type HelperSearchDescriptor,
-  type UserSearchErrorKey,
-  type UserSearchStatus,
-} from '@/hooks/useUserSearchQuery';
+import { MIN_USER_SEARCH_QUERY_LENGTH } from '@/hooks/useUserSearchQuery';
 import { errorHandler } from '@/lib/errorHandler';
 
 export const Route = createFileRoute('/search')({
@@ -36,13 +31,8 @@ function SearchPage() {
       allowIncompleteLoggedRef.current = false;
       return;
     }
-    const {
-      errorKey,
-      sanitizedQuery,
-      helperSearch,
-      retryAfterSeconds,
-      allowIncompleteActive,
-    } = userSearchMeta;
+    const { errorKey, sanitizedQuery, helperSearch, retryAfterSeconds, allowIncompleteActive } =
+      userSearchMeta;
 
     if (errorKey === 'UserSearch.rate_limited') {
       if (!rateLimitLoggedRef.current) {

@@ -34,6 +34,7 @@
     - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。
     - メモ (2025年11月14日): `Format Check` 失敗は `kukuri-tauri/src-tauri/src/infrastructure/p2p/event_distributor/state.rs` と `tests/common/performance/{mod.rs,offline_seed.rs}` の整形漏れが原因だったため `cargo fmt` で修正済み。`gh act --workflows .github/workflows/test.yml --job format-check --container-options "--user root"` によりローカル再現・緑化を確認。`docker-test` / `native-test-linux` の artefact への影響は無く、GitHub Actions 本番では `Test` ワークフローの再実行で回復予定。
     - メモ (2025年11月15日): `gh run view 19377708787 --job format-check --log` で再発を確認。`kukuri-tauri/src-tauri/src/state.rs:516` の `sync_service.schedule_sync(DEFAULT_SYNC_INTERVAL_SECS).await` が rustfmt 規約（引数ごとの改行）に反しており CI が再度失敗しているため、該当ブロックの整形をやり直し `gh act --workflows .github/workflows/test.yml --job format-check` でローカル再検証予定。
+    - メモ (2025年11月15日): `gh run view 19384995086` で `format-check`/`native-test-linux` が `src/routes/search.tsx` の未使用型インポートと Prettier 警告で落ちていたため修正。`scripts/test-docker.ps1 ts` で TypeScript テスト/型チェック/ESLint を Docker 経由で再実行し、`gh act -j format-check --container-options "--user 0"` でフォーマット専用ジョブがローカルでも完走することを確認。
 
 ### リファクタリングプラン完了タスク
 
