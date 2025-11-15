@@ -21,12 +21,6 @@
       "csp": null
     }
   },
-  "tauri": {
-    "allowlist": {
-      "all": true,
-      "automation": true
-    }
-  },
   "bundle": {
     "active": true,
     "targets": "all",
