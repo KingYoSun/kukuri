@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use kukuri_lib::application::ports::key_manager::KeyPair;
 use kukuri_lib::application::services::event_service::EventService;
 use kukuri_lib::application::services::subscription_state::SubscriptionStateStore;
 use kukuri_lib::domain::value_objects::subscription::{
@@ -335,6 +336,10 @@ impl EventManagerHandle for RecordingEventManager {
         _pubkey: PublicKey,
         _since: Option<Timestamp>,
     ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn initialize_with_keypair(&self, _keypair: KeyPair) -> anyhow::Result<()> {
         Ok(())
     }
 }

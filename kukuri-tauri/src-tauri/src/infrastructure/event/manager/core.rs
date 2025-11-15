@@ -1,4 +1,7 @@
-use crate::application::ports::{event_topic_store::EventTopicStore, key_manager::KeyManager};
+use crate::application::ports::{
+    event_topic_store::EventTopicStore,
+    key_manager::{KeyManager, KeyPair},
+};
 use crate::application::shared::default_topics::DefaultTopicsRegistry;
 use crate::application::shared::nostr::EventPublisher;
 use crate::infrastructure::database::connection_pool::ConnectionPool;
@@ -95,6 +98,11 @@ impl EventManager {
             .current_keypair()
             .await
             .map_err(|e| anyhow!("Failed to load current keypair: {e}"))?;
+        self.initialize_with_keypair(&keypair).await
+    }
+
+    /// KeyPair を直接用いて EventManager を初期化
+    pub async fn initialize_with_keypair(&self, keypair: &KeyPair) -> Result<()> {
         let secret_key = SecretKey::from_bech32(&keypair.nsec)
             .map_err(|e| anyhow!("Invalid secret key: {e}"))?;
         let keys = Keys::new(secret_key);

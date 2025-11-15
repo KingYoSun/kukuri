@@ -1,4 +1,6 @@
+use crate::application::ports::key_manager::KeyManager;
 use crate::application::services::event_service::EventServiceTrait;
+use crate::infrastructure::event::EventManagerHandle;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::event::{
     EventResponse, NostrMetadataDto, NostrSubscriptionStateDto, PublishTextNoteRequest,
@@ -10,15 +12,41 @@ use std::sync::Arc;
 
 pub struct EventHandler {
     event_service: Arc<dyn EventServiceTrait>,
+    key_manager: Arc<dyn KeyManager>,
+    event_manager: Arc<dyn EventManagerHandle>,
 }
 
 impl EventHandler {
-    pub fn new(event_service: Arc<dyn EventServiceTrait>) -> Self {
-        Self { event_service }
+    pub fn new(
+        event_service: Arc<dyn EventServiceTrait>,
+        key_manager: Arc<dyn KeyManager>,
+        event_manager: Arc<dyn EventManagerHandle>,
+    ) -> Self {
+        Self {
+            event_service,
+            key_manager,
+            event_manager,
+        }
     }
 
     /// Nostrクライアントを初期化
     pub async fn initialize_nostr(&self) -> Result<serde_json::Value, AppError> {
+        let keypair = self
+            .key_manager
+            .current_keypair()
+            .await
+            .map_err(|err| match err {
+                AppError::NotFound(_) | AppError::Unauthorized(_) => {
+                    AppError::Unauthorized(format!("No active account: {err}"))
+                }
+                other => other,
+            })?;
+
+        self.event_manager
+            .initialize_with_keypair(keypair)
+            .await
+            .map_err(|err| AppError::NostrError(err.to_string()))?;
+
         self.event_service.initialize().await?;
         Ok(json!({ "success": true }))
     }

@@ -24,6 +24,23 @@ async fn event_manager_initializes_with_key_manager() {
 }
 
 #[tokio::test]
+async fn event_manager_initializes_with_keypair_directly() {
+    let manager = EventManager::new();
+    let key_manager = DefaultKeyManager::new();
+
+    let keypair = key_manager
+        .generate_keypair()
+        .await
+        .expect("keypair generation");
+
+    manager
+        .initialize_with_keypair(&keypair)
+        .await
+        .expect("initialization with keypair");
+    assert!(manager.get_public_key().await.is_some());
+}
+
+#[tokio::test]
 async fn operations_fail_before_initialization() {
     let manager = EventManager::new();
 

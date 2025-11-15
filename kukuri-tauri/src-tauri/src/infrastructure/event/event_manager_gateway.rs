@@ -1,4 +1,6 @@
 use crate::application::ports::event_gateway::EventGateway;
+#[cfg(test)]
+use crate::application::ports::key_manager::KeyPair;
 use crate::application::shared::mappers::{domain_event_to_nostr_event, profile_metadata_to_nostr};
 use crate::domain::entities::event_gateway::{DomainEvent, ProfileMetadata};
 use crate::domain::value_objects::event_gateway::{PublicKey, ReactionValue, TopicContent};
@@ -178,6 +180,10 @@ mod tests {
         }
 
         async fn register_event_callback(&self, _: Arc<dyn Fn(NostrEvent) + Send + Sync>) {}
+
+        async fn initialize_with_keypair(&self, _: KeyPair) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     fn sample_nostr_event_id(ch: char) -> NostrEventId {

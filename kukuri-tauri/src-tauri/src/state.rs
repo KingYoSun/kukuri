@@ -419,8 +419,12 @@ impl AppState {
             Arc::clone(&auth_service),
             Arc::clone(&secure_account_store),
         ));
-        let event_handler = Arc::new(EventHandler::new(Arc::clone(&event_service)
-            as Arc<dyn crate::application::services::event_service::EventServiceTrait>));
+        let event_handler = Arc::new(EventHandler::new(
+            Arc::clone(&event_service)
+                as Arc<dyn crate::application::services::event_service::EventServiceTrait>,
+            Arc::clone(&key_manager),
+            Arc::clone(&event_manager),
+        ));
         let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service)));
         let offline_handler = Arc::new(OfflineHandler::new(Arc::clone(&offline_service)
             as Arc<dyn crate::application::services::offline_service::OfflineServiceTrait>));

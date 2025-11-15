@@ -1,4 +1,4 @@
-use crate::application::ports::event_topic_store::EventTopicStore;
+use crate::application::ports::{event_topic_store::EventTopicStore, key_manager::KeyPair};
 use crate::infrastructure::database::connection_pool::ConnectionPool;
 use crate::infrastructure::event::EventManager;
 use crate::infrastructure::p2p::GossipService;
@@ -37,6 +37,7 @@ pub trait EventManagerHandle: Send + Sync {
     async fn subscribe_to_topic(&self, topic_id: &str, since: Option<Timestamp>) -> Result<()>;
     async fn subscribe_to_user(&self, pubkey: PublicKey, since: Option<Timestamp>) -> Result<()>;
     async fn register_event_callback(&self, callback: Arc<dyn Fn(NostrEvent) + Send + Sync>);
+    async fn initialize_with_keypair(&self, keypair: KeyPair) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -151,5 +152,9 @@ impl EventManagerHandle for LegacyEventManagerHandle {
 
     async fn register_event_callback(&self, callback: Arc<dyn Fn(NostrEvent) + Send + Sync>) {
         self.inner.register_event_callback(callback).await;
+    }
+
+    async fn initialize_with_keypair(&self, keypair: KeyPair) -> Result<()> {
+        self.inner.initialize_with_keypair(&keypair).await
     }
 }
