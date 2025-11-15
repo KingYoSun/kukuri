@@ -269,3 +269,62 @@ impl Validate for UpdateSyncStatusRequest {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfflineRetryMetricsResponse {
+    pub total_success: u64,
+    pub total_failure: u64,
+    pub consecutive_failure: u64,
+    pub last_success_ms: Option<u64>,
+    pub last_failure_ms: Option<u64>,
+    pub last_outcome: Option<String>,
+    pub last_job_id: Option<String>,
+    pub last_job_reason: Option<String>,
+    pub last_trigger: Option<String>,
+    pub last_user_pubkey: Option<String>,
+    pub last_retry_count: Option<i32>,
+    pub last_max_retries: Option<i32>,
+    pub last_backoff_ms: Option<u64>,
+    pub last_duration_ms: Option<u64>,
+    pub last_success_count: Option<i32>,
+    pub last_failure_count: Option<i32>,
+    pub last_timestamp_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordOfflineRetryOutcomeRequest {
+    pub job_id: Option<String>,
+    pub status: String,
+    pub job_reason: Option<String>,
+    pub trigger: Option<String>,
+    pub user_pubkey: Option<String>,
+    pub retry_count: Option<i32>,
+    pub max_retries: Option<i32>,
+    pub backoff_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub success_count: Option<i32>,
+    pub failure_count: Option<i32>,
+    pub timestamp_ms: Option<u64>,
+}
+
+impl Validate for RecordOfflineRetryOutcomeRequest {
+    fn validate(&self) -> Result<(), String> {
+        match self.status.as_str() {
+            "success" | "failure" => {}
+            other => return Err(format!("Unsupported status: {other}")),
+        }
+        if let Some(value) = self.retry_count {
+            if value < 0 {
+                return Err("retry_count must be >= 0".to_string());
+            }
+        }
+        if let Some(value) = self.max_retries {
+            if value <= 0 {
+                return Err("max_retries must be > 0".to_string());
+            }
+        }
+        Ok(())
+    }
+}

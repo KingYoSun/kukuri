@@ -40,6 +40,7 @@ describe('SyncStatusIndicator', () => {
   const mockUpdateProgress = vi.fn();
   const mockRefreshCacheStatus = vi.fn();
   const mockEnqueueSyncRequest = vi.fn().mockResolvedValue(undefined);
+  const mockRefreshRetryMetrics = vi.fn();
 
   const defaultSyncStatus: SyncStatus = {
     isSyncing: false,
@@ -69,6 +70,29 @@ describe('SyncStatusIndicator', () => {
     lastQueuedItemId: null,
     queueingType: null,
     enqueueSyncRequest: mockEnqueueSyncRequest,
+    retryMetrics: {
+      totalSuccess: 0,
+      totalFailure: 0,
+      consecutiveFailure: 0,
+      lastSuccessMs: null,
+      lastFailureMs: null,
+      lastOutcome: null,
+      lastJobId: null,
+      lastJobReason: null,
+      lastTrigger: null,
+      lastUserPubkey: null,
+      lastRetryCount: null,
+      lastMaxRetries: null,
+      lastBackoffMs: null,
+      lastDurationMs: null,
+      lastSuccessCount: null,
+      lastFailureCount: null,
+      lastTimestampMs: null,
+    },
+    retryMetricsError: null,
+    isRetryMetricsLoading: false,
+    refreshRetryMetrics: mockRefreshRetryMetrics,
+    scheduledRetry: null,
     showConflictDialog: false,
     setShowConflictDialog: mockSetShowConflictDialog,
   };
@@ -128,6 +152,45 @@ describe('SyncStatusIndicator', () => {
       render(<SyncStatusIndicator />);
 
       expect(screen.getByText('同期中... (3/10)')).toBeInTheDocument();
+    });
+
+    it('再送メトリクスを表示', () => {
+      const nextRun = new Date().toISOString();
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        retryMetrics: {
+          totalSuccess: 2,
+          totalFailure: 1,
+          consecutiveFailure: 0,
+          lastSuccessMs: Date.now(),
+          lastFailureMs: null,
+          lastOutcome: 'success',
+          lastJobId: 'job-xyz',
+          lastJobReason: 'pending-actions',
+          lastTrigger: 'worker',
+          lastUserPubkey: 'npub123',
+          lastRetryCount: 1,
+          lastMaxRetries: 3,
+          lastBackoffMs: 5000,
+          lastDurationMs: 800,
+          lastSuccessCount: 1,
+          lastFailureCount: 0,
+          lastTimestampMs: Date.now(),
+        },
+        scheduledRetry: {
+          jobId: 'job-xyz',
+          retryCount: 1,
+          maxRetries: 3,
+          retryDelayMs: 5000,
+          nextRunAt: nextRun,
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+
+      expect(screen.getByText('再送メトリクス')).toBeInTheDocument();
+      expect(screen.getByText('成功 / 失敗')).toBeInTheDocument();
+      expect(screen.getByText('直近の再送')).toBeInTheDocument();
     });
 
     it('競合がある場合の表示', () => {

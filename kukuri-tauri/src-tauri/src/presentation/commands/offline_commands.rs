@@ -1,9 +1,13 @@
 use crate::presentation::dto::ApiResponse;
+use crate::infrastructure::offline::metrics::{
+    self, OfflineRetryMetricsSnapshot, RetryOutcomeMetadata, RetryOutcomeStatus,
+};
 use crate::presentation::dto::offline::{
     AddToSyncQueueRequest, CacheStatusResponse, GetOfflineActionsRequest,
-    ListSyncQueueItemsRequest, OfflineAction, OptimisticUpdateRequest, SaveOfflineActionRequest,
-    SaveOfflineActionResponse, SyncOfflineActionsRequest, SyncOfflineActionsResponse,
-    SyncQueueItemResponse, UpdateCacheMetadataRequest, UpdateSyncStatusRequest,
+    ListSyncQueueItemsRequest, OfflineAction, OfflineRetryMetricsResponse, OptimisticUpdateRequest,
+    RecordOfflineRetryOutcomeRequest, SaveOfflineActionRequest, SaveOfflineActionResponse,
+    SyncOfflineActionsRequest, SyncOfflineActionsResponse, SyncQueueItemResponse,
+    UpdateCacheMetadataRequest, UpdateSyncStatusRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -152,4 +156,68 @@ pub async fn update_sync_status(
 
     let result = state.offline_handler.update_sync_status(request).await;
     Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn record_offline_retry_outcome(
+    request: RecordOfflineRetryOutcomeRequest,
+) -> Result<ApiResponse<OfflineRetryMetricsResponse>, AppError> {
+    request.validate()?;
+    let status = match request.status.as_str() {
+        "success" => RetryOutcomeStatus::Success,
+        _ => RetryOutcomeStatus::Failure,
+    };
+
+    let metadata = RetryOutcomeMetadata {
+        job_id: request.job_id.clone(),
+        job_reason: request.job_reason.clone(),
+        trigger: request.trigger.clone(),
+        user_pubkey: request.user_pubkey.clone(),
+        retry_count: request.retry_count.map(|value| value as u32),
+        max_retries: request.max_retries.map(|value| value as u32),
+        backoff_ms: request.backoff_ms,
+        duration_ms: request.duration_ms,
+        success_count: request.success_count.map(|value| value as u32),
+        failure_count: request.failure_count.map(|value| value as u32),
+        timestamp_ms: request.timestamp_ms,
+    };
+
+    let snapshot = metrics::record_outcome(status, &metadata);
+    Ok(ApiResponse::success(snapshot.into()))
+}
+
+#[tauri::command]
+pub async fn get_offline_retry_metrics(
+) -> Result<ApiResponse<OfflineRetryMetricsResponse>, AppError> {
+    let snapshot = metrics::snapshot();
+    Ok(ApiResponse::success(snapshot.into()))
+}
+
+impl From<OfflineRetryMetricsSnapshot> for OfflineRetryMetricsResponse {
+    fn from(value: OfflineRetryMetricsSnapshot) -> Self {
+        Self {
+            total_success: value.total_success,
+            total_failure: value.total_failure,
+            consecutive_failure: value.consecutive_failure,
+            last_success_ms: value.last_success_ms,
+            last_failure_ms: value.last_failure_ms,
+            last_outcome: value
+                .last_outcome
+                .map(|status| match status {
+                    RetryOutcomeStatus::Success => "success".to_string(),
+                    RetryOutcomeStatus::Failure => "failure".to_string(),
+                }),
+            last_job_id: value.last_job_id,
+            last_job_reason: value.last_job_reason,
+            last_trigger: value.last_trigger,
+            last_user_pubkey: value.last_user_pubkey,
+            last_retry_count: value.last_retry_count.map(|v| v as i32),
+            last_max_retries: value.last_max_retries.map(|v| v as i32),
+            last_backoff_ms: value.last_backoff_ms,
+            last_duration_ms: value.last_duration_ms,
+            last_success_count: value.last_success_count.map(|v| v as i32),
+            last_failure_count: value.last_failure_count.map(|v| v as i32),
+            last_timestamp_ms: value.last_timestamp_ms,
+        }
+    }
 }

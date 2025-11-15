@@ -189,3 +189,38 @@ export enum EntityType {
   USER = 'user',
   TOPIC = 'topic',
 }
+
+export interface OfflineRetryMetrics {
+  totalSuccess: number;
+  totalFailure: number;
+  consecutiveFailure: number;
+  lastSuccessMs?: number | null;
+  lastFailureMs?: number | null;
+  lastOutcome?: 'success' | 'failure';
+  lastJobId?: string | null;
+  lastJobReason?: string | null;
+  lastTrigger?: string | null;
+  lastUserPubkey?: string | null;
+  lastRetryCount?: number | null;
+  lastMaxRetries?: number | null;
+  lastBackoffMs?: number | null;
+  lastDurationMs?: number | null;
+  lastSuccessCount?: number | null;
+  lastFailureCount?: number | null;
+  lastTimestampMs?: number | null;
+}
+
+export interface RecordOfflineRetryOutcomeRequest {
+  jobId?: string;
+  status: 'success' | 'failure';
+  jobReason?: string;
+  trigger?: string;
+  userPubkey?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  backoffMs?: number;
+  durationMs?: number;
+  successCount?: number;
+  failureCount?: number;
+  timestampMs?: number;
+}

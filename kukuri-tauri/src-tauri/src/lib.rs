@@ -151,6 +151,8 @@ pub fn run() {
             presentation::commands::rollback_optimistic_update,
             presentation::commands::cleanup_expired_cache,
             presentation::commands::update_sync_status,
+            presentation::commands::record_offline_retry_outcome,
+            presentation::commands::get_offline_retry_metrics,
             // ユーティリティコマンド
             presentation::commands::pubkey_to_npub,
             presentation::commands::npub_to_pubkey,

@@ -220,6 +220,34 @@ function getCacheDocSummary(type: CacheTypeStatus): CacheDocSummary | null {
   };
 }
 
+function formatRetryTimestamp(value?: number | null) {
+  if (!value) {
+    return '記録なし';
+  }
+  const date = new Date(value);
+  return formatDistanceToNow(date, { addSuffix: true, locale: ja });
+}
+
+function formatDuration(ms?: number | null) {
+  if (!ms) {
+    return '未計測';
+  }
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatBackoff(ms?: number | null) {
+  if (!ms) {
+    return '未設定';
+  }
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  return `${Math.round(ms / 1000)}s`;
+}
+
 export function SyncStatusIndicator() {
   const {
     syncStatus,
@@ -238,6 +266,11 @@ export function SyncStatusIndicator() {
     lastQueuedItemId,
     queueingType,
     enqueueSyncRequest,
+    retryMetrics,
+    retryMetricsError,
+    isRetryMetricsLoading,
+    refreshRetryMetrics,
+    scheduledRetry,
     showConflictDialog,
     setShowConflictDialog,
   } = useSyncManager();
@@ -476,6 +509,115 @@ export function SyncStatusIndicator() {
               <p className="text-sm text-muted-foreground">
                 {isOnline ? 'オンライン' : 'オフライン'}
               </p>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="font-medium flex items-center gap-2">
+                  <History className="h-4 w-4 text-primary" />
+                  再送メトリクス
+                </h4>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="再送メトリクスを更新"
+                  onClick={() => {
+                    void refreshRetryMetrics();
+                  }}
+                  disabled={isRetryMetricsLoading}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${
+                      isRetryMetricsLoading ? 'animate-spin text-muted-foreground' : ''
+                    }`}
+                  />
+                </Button>
+              </div>
+              {retryMetricsError && (
+                <p className="text-sm text-red-600 dark:text-red-400">{retryMetricsError}</p>
+              )}
+              {retryMetrics ? (
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>成功 / 失敗</span>
+                    <span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-300">
+                        {retryMetrics.totalSuccess}
+                      </span>
+                      <span className="mx-1 text-muted-foreground">/</span>
+                      <span className="font-semibold text-rose-600 dark:text-rose-300">
+                        {retryMetrics.totalFailure}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>連続失敗</span>
+                    <span>{retryMetrics.consecutiveFailure}</span>
+                  </div>
+                  {retryMetrics.lastOutcome && (
+                    <div className="rounded border border-border/60 p-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">直近の再送</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-[10px]',
+                            retryMetrics.lastOutcome === 'success'
+                              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-300'
+                              : 'border-rose-500 text-rose-600 dark:text-rose-300',
+                          )}
+                        >
+                          {retryMetrics.lastOutcome === 'success' ? '成功' : '失敗'}
+                        </Badge>
+                      </div>
+                      <dl className="mt-1 space-y-1 text-muted-foreground">
+                        <div className="flex items-center justify-between">
+                          <dt>ID</dt>
+                          <dd>{retryMetrics.lastJobId ?? '記録なし'}</dd>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <dt>理由</dt>
+                          <dd>{retryMetrics.lastJobReason ?? '未設定'}</dd>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <dt>試行 / 上限</dt>
+                          <dd>
+                            {typeof retryMetrics.lastRetryCount === 'number' &&
+                            typeof retryMetrics.lastMaxRetries === 'number'
+                              ? `${retryMetrics.lastRetryCount}/${retryMetrics.lastMaxRetries}`
+                              : '記録なし'}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <dt>Backoff</dt>
+                          <dd>{formatBackoff(retryMetrics.lastBackoffMs)}</dd>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <dt>実行時間</dt>
+                          <dd>{formatDuration(retryMetrics.lastDurationMs)}</dd>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <dt>計測</dt>
+                          <dd>{formatRetryTimestamp(retryMetrics.lastTimestampMs)}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {isRetryMetricsLoading
+                    ? '再送メトリクスを取得しています…'
+                    : '再送メトリクスはまだ記録されていません'}
+                </p>
+              )}
+              {scheduledRetry && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  次回 #{scheduledRetry.jobId} を{' '}
+                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}に再送
+                  （{scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
+                </p>
+              )}
             </div>
 
             {/* 同期進捗 */}

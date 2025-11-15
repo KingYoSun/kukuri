@@ -23,6 +23,44 @@ vi.mock('@/api/offline', () => ({
     }),
     addToSyncQueue: vi.fn().mockResolvedValue(1),
     listSyncQueueItems: vi.fn().mockResolvedValue([]),
+    getOfflineRetryMetrics: vi.fn().mockResolvedValue({
+      totalSuccess: 0,
+      totalFailure: 0,
+      consecutiveFailure: 0,
+      lastSuccessMs: null,
+      lastFailureMs: null,
+      lastOutcome: null,
+      lastJobId: null,
+      lastJobReason: null,
+      lastTrigger: null,
+      lastUserPubkey: null,
+      lastRetryCount: null,
+      lastMaxRetries: null,
+      lastBackoffMs: null,
+      lastDurationMs: null,
+      lastSuccessCount: null,
+      lastFailureCount: null,
+      lastTimestampMs: null,
+    }),
+    recordOfflineRetryOutcome: vi.fn().mockResolvedValue({
+      totalSuccess: 1,
+      totalFailure: 0,
+      consecutiveFailure: 0,
+      lastSuccessMs: Date.now(),
+      lastFailureMs: null,
+      lastOutcome: 'success',
+      lastJobId: 'manual-sync',
+      lastJobReason: 'manual_sync',
+      lastTrigger: 'manual',
+      lastUserPubkey: 'npub123',
+      lastRetryCount: 0,
+      lastMaxRetries: 1,
+      lastBackoffMs: 0,
+      lastDurationMs: 1200,
+      lastSuccessCount: 1,
+      lastFailureCount: 0,
+      lastTimestampMs: Date.now(),
+    }),
   },
 }));
 vi.mock('sonner', () => ({
@@ -81,10 +119,12 @@ describe('useSyncManager', () => {
     await waitFor(() => {
       expect(offlineApi.getCacheStatus).toHaveBeenCalled();
       expect(offlineApi.listSyncQueueItems).toHaveBeenCalled();
+      expect(offlineApi.getOfflineRetryMetrics).toHaveBeenCalled();
     });
     if (!options?.skipClear) {
       vi.mocked(offlineApi.getCacheStatus).mockClear();
       vi.mocked(offlineApi.listSyncQueueItems).mockClear();
+      vi.mocked(offlineApi.getOfflineRetryMetrics).mockClear();
     }
     return utils;
   };
@@ -163,6 +203,13 @@ describe('useSyncManager', () => {
       expect(toast.success).toHaveBeenCalledWith('1件のアクションを同期しました');
       expect(result.current.syncStatus.syncedItems).toBe(1);
       expect(result.current.syncStatus.progress).toBe(100);
+      expect(offlineApi.recordOfflineRetryOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'success',
+          successCount: 1,
+          failureCount: 0,
+        }),
+      );
     });
 
     it('競合がある場合は警告を表示', async () => {
@@ -206,6 +253,12 @@ describe('useSyncManager', () => {
       expect(toast.error).toHaveBeenCalledWith('同期に失敗しました');
       expect(result.current.syncStatus.error).toBe(errorMessage);
       expect(result.current.syncStatus.isSyncing).toBe(false);
+      expect(offlineApi.recordOfflineRetryOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failure',
+          failureCount: mockPendingActions.length,
+        }),
+      );
     });
 
     it('同期中は重複実行を防ぐ', async () => {

@@ -11,6 +11,8 @@ import type {
   UpdateCacheMetadataRequest,
   ListSyncQueueItemsRequest,
   SyncQueueItem,
+  OfflineRetryMetrics,
+  RecordOfflineRetryOutcomeRequest,
 } from '@/types/offline';
 
 /**
@@ -121,5 +123,37 @@ export const offlineApi = {
       syncStatus,
       conflictData,
     });
+  },
+
+  /**
+   * 再送メトリクスを記録
+   */
+  async recordOfflineRetryOutcome(
+    request: RecordOfflineRetryOutcomeRequest,
+  ): Promise<OfflineRetryMetrics> {
+    const response = await invokeCommand<OfflineRetryMetrics>('record_offline_retry_outcome', {
+      request: {
+        job_id: request.jobId,
+        status: request.status,
+        job_reason: request.jobReason,
+        trigger: request.trigger,
+        user_pubkey: request.userPubkey,
+        retry_count: request.retryCount,
+        max_retries: request.maxRetries,
+        backoff_ms: request.backoffMs,
+        duration_ms: request.durationMs,
+        success_count: request.successCount,
+        failure_count: request.failureCount,
+        timestamp_ms: request.timestampMs,
+      },
+    });
+    return response;
+  },
+
+  /**
+   * 再送メトリクスを取得
+   */
+  async getOfflineRetryMetrics(): Promise<OfflineRetryMetrics> {
+    return invokeCommand('get_offline_retry_metrics');
   },
 };

@@ -21,6 +21,7 @@ param(
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repositoryRoot = Split-Path $scriptDirectory -Parent
+$ResultsDir = Join-Path $repositoryRoot "test-results"
 $NewBinMainlineTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_MAINLINE_TEST_TARGET)) { $env:P2P_MAINLINE_TEST_TARGET } else { "p2p_mainline_smoke" }
 $NewBinGossipTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_GOSSIP_TEST_TARGET)) { $env:P2P_GOSSIP_TEST_TARGET } else { "p2p_gossip_smoke" }
 $PrometheusMetricsUrl = if (![string]::IsNullOrWhiteSpace($env:PROMETHEUS_METRICS_URL)) { $env:PROMETHEUS_METRICS_URL } else { "http://127.0.0.1:9898/metrics" }
@@ -902,30 +903,59 @@ function Invoke-TypeScriptOfflineSyncScenario {
     $logRelPath = "tmp/logs/sync_status_indicator_stage4_$timestamp.log"
     $logHostPath = Join-Path $repositoryRoot $logRelPath
     $logDir = Split-Path $logHostPath -Parent
+    $reportsDir = Join-Path $ResultsDir "offline-sync"
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir | Out-Null
     }
+    if (-not (Test-Path $reportsDir)) {
+        New-Item -ItemType Directory -Path $reportsDir | Out-Null
+    }
+    Set-Content -Path $logHostPath -Value @()
 
     Write-Host "Running TypeScript scenario 'offline-sync'..."
-    $command = @"
-set -euo pipefail
-cd /app/kukuri-tauri
-if [ ! -f node_modules/.bin/vitest ]; then
-  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-  pnpm install --frozen-lockfile --ignore-workspace
-fi
-pnpm vitest run \
-  'src/tests/unit/hooks/useSyncManager.test.tsx' \
-  'src/tests/unit/components/SyncStatusIndicator.test.tsx' \
-  'src/tests/unit/components/OfflineIndicator.test.tsx' \
-  | tee '/app/$logRelPath'
-"@
+    $targets = @(
+        "src/tests/unit/hooks/useSyncManager.test.tsx",
+        "src/tests/unit/components/SyncStatusIndicator.test.tsx",
+        "src/tests/unit/components/OfflineIndicator.test.tsx"
+    )
+    $vitestStatus = 0
+    foreach ($target in $targets) {
+        $slug = $target.Replace("/", "_").Replace(".", "_")
+        $reportRelPath = "test-results/offline-sync/${timestamp}-${slug}.json"
 
-    Invoke-DockerCompose @("run", "--rm", "ts-test", "bash", "-lc", $command) | Out-Null
-    if (Test-Path $logHostPath) {
-        Write-Success "Scenario log saved to $logRelPath"
+        $commandLines = @(
+            "set -euo pipefail",
+            "cd /app/kukuri-tauri",
+            "if [ ! -f node_modules/.bin/vitest ]; then",
+            "  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'",
+            "  pnpm install --frozen-lockfile --ignore-workspace",
+            "fi",
+            "pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
+        )
+        $command = [string]::Join("`n", $commandLines)
+
+        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0) {
+            $vitestStatus = $exitCode
+            Write-Warning "Vitest target $target failed with exit code $exitCode"
+            break
+        }
+
+        $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+        if (Test-Path $reportHostPath) {
+            Write-Success "Scenario report saved to $reportRelPath"
+        } else {
+            Write-Warning "Scenario report not found at $reportRelPath"
+        }
+    }
+
+    if ($vitestStatus -ne 0) {
+        Write-ErrorMessage "Scenario 'offline-sync' failed. See $logRelPath for details."
     } else {
-        Write-Warning "Scenario log was not generated at $logRelPath"
+        Write-Success "Scenario log saved to $logRelPath"
     }
 }
 

@@ -13,11 +13,6 @@
 
 ### MVP Exit タスク
 
-13. **Offline sync_engine: 再送メトリクスと Runbook/CI 連携**  
-    - 背景: `docs/01_project/roadmap.md:19` および `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md:17` で、Stage4 完了後も `sync_engine` の再送ログ・メトリクス・`nightly.sync-status-indicator` 連動が未整備とされている。  
-    - やること: (1) `sync_engine` / `offline_actions` / Service Worker に再送メトリクス（成功/失敗・retry_count・backoff）を追加し、`metrics::record_outcome` と `SyncStatusIndicator` に露出。(2) `scripts/test-docker.{sh,ps1} ts --scenario offline-sync` と `nightly.sync-status-indicator` artefact を更新し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` / `test-results/offline-sync/*.json` に再送情報を保存。(3) Runbook Chapter5 と `phase5_ci_path_audit.md` に新しいメトリクス項目・ログパス・トリアージ手順を追記。(4) SyncService を AppState 初期化時に確実に起動＆30 秒間隔でスケジュールし、P2P 接続イベントで再実行する実装を追加済み（CI での dead_code を解消）。  
-    - 完了条件: Offline 操作の再送状況が UI / Nightly artefact / Runbook で一貫して観測できる。
-
 14. **グローバルコンポーザー & 投稿削除: キャッシュ整合とテスト更新**  
     - 背景: `docs/01_project/activeContext/artefacts/phase5_dependency_inventory_template.md:19` と `docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:123,128` で、`TopicSelector` の create-from-composer モードと `useDeletePost` の React Query 無効化テスト、`post-delete-cache` Docker シナリオの整備が未完と整理されている。  
     - やること: (1) `corepack enable pnpm` 前提で `pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/routes/{trending,following}.test.tsx` を再実行し、グローバルコンポーザー導線と Summary Panel を検証。(2) `useDeletePost` / `postStore` に `invalidatePostCaches` を実装し、トレンド/フォロー/トピック/プロフィール各キャッシュと `offlineStore` の整合を確認、Docker `./scripts/test-docker.{sh,ps1} ts --scenario post-delete-cache` の artefact を更新。(3) 結果を `phase5_user_flow_inventory.md` 5.7/5.9/5.10 と Runbook に反映。  

@@ -5,7 +5,12 @@ import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncE
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { offlineApi } from '@/api/offline';
-import type { CacheStatusResponse, OfflineAction, SyncQueueItem } from '@/types/offline';
+import type {
+  CacheStatusResponse,
+  OfflineAction,
+  OfflineRetryMetrics,
+  SyncQueueItem,
+} from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 import {
   enqueueOfflineSyncJob,
@@ -30,7 +35,32 @@ type OfflineSyncWorkerJob = {
   jobId: string;
   userPubkey?: string;
   reason?: string;
+  requestedAt?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
 };
+
+type RetryJobContext = {
+  jobId: string;
+  reason?: string;
+  userPubkey?: string;
+  retryCount: number;
+  maxRetries: number;
+  retryDelayMs?: number;
+  requestedAt?: string;
+  trigger: 'manual' | 'worker';
+};
+
+type ScheduledRetryPayload = {
+  jobId: string;
+  retryCount: number;
+  maxRetries: number;
+  retryDelayMs: number;
+  nextRunAt: string;
+};
+
+type ScheduledRetryInfo = ScheduledRetryPayload | null;
 
 function inferEntityType(actionType: string): string | null {
   switch (actionType) {
@@ -120,10 +150,16 @@ export function useSyncManager() {
   const [isQueueItemsLoading, setQueueItemsLoading] = useState(false);
   const [lastQueuedItemId, setLastQueuedItemId] = useState<number | null>(null);
   const [queueingType, setQueueingType] = useState<string | null>(null);
+  const [retryMetrics, setRetryMetrics] = useState<OfflineRetryMetrics | null>(null);
+  const [retryMetricsError, setRetryMetricsError] = useState<string | null>(null);
+  const [isRetryMetricsLoading, setRetryMetricsLoading] = useState(false);
+  const [scheduledRetry, setScheduledRetry] = useState<ScheduledRetryInfo>(null);
   const workerChannelRef = useRef<BroadcastChannel | null>(null);
   const workerScheduleRef = useRef(0);
   const pendingActionsRef = useRef(pendingActions.length);
   const isOnlineRef = useRef(isOnline);
+  const currentJobContextRef = useRef<RetryJobContext | null>(null);
+  const jobStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     pendingActionsRef.current = pendingActions.length;
@@ -164,6 +200,22 @@ export function useSyncManager() {
       setQueueItemsError('再送キューの取得に失敗しました');
     } finally {
       setQueueItemsLoading(false);
+    }
+  }, []);
+
+  const refreshRetryMetrics = useCallback(async () => {
+    setRetryMetricsLoading(true);
+    try {
+      const metrics = await offlineApi.getOfflineRetryMetrics();
+      setRetryMetrics(metrics);
+      setRetryMetricsError(null);
+    } catch (error) {
+      errorHandler.log('Failed to fetch retry metrics', error, {
+        context: 'useSyncManager.refreshRetryMetrics',
+      });
+      setRetryMetricsError('再送メトリクスの取得に失敗しました');
+    } finally {
+      setRetryMetricsLoading(false);
     }
   }, []);
 
@@ -276,170 +328,163 @@ export function useSyncManager() {
     [refreshCacheMetadata, refreshCacheStatus],
   );
 
-  /**
-   * 手動同期トリガー
-   */
-  const triggerManualSync = useCallback(async () => {
-    if (!isOnline) {
-      toast.error('オフラインのため同期できません');
-      return;
-    }
+  const beginRetryContext = useCallback(
+    (options?: { job?: OfflineSyncWorkerJob; trigger?: 'manual' | 'worker'; reason?: string }) => {
+      const job = options?.job;
+      const trigger = options?.trigger ?? (job ? 'worker' : 'manual');
+      const context: RetryJobContext = {
+        jobId: job?.jobId ?? `manual-sync-${Date.now()}`,
+        reason: job?.reason ?? options?.reason ?? 'manual_sync',
+        userPubkey: job?.userPubkey ?? currentUser?.npub,
+        retryCount: job?.retryCount ?? 0,
+        maxRetries: job?.maxRetries ?? (job ? job.maxRetries : 1),
+        retryDelayMs: job?.retryDelayMs,
+        requestedAt: job?.requestedAt,
+        trigger,
+      };
+      currentJobContextRef.current = context;
+      jobStartRef.current = Date.now();
+      return context;
+    },
+    [currentUser?.npub],
+  );
 
-    if (syncStatus.isSyncing) {
-      toast.warning('同期処理が既に実行中です');
-      return;
-    }
-
-    if (pendingActions.length === 0) {
-      toast.info('同期するアクションがありません');
-      return;
-    }
-
-    setSyncStatus((prev) => ({
-      ...prev,
-      isSyncing: true,
-      progress: 0,
-      totalItems: pendingActions.length,
-      syncedItems: 0,
-      conflicts: [],
-      error: undefined,
-    }));
-
-    try {
-      // 差分同期を実行
-      const result = await syncEngine.performDifferentialSync(pendingActions);
-
-      // 同期結果を処理
-      await processSyncResult(result);
-
-      // 成功したアクションをクリア
-      if (result.syncedActions.length > 0) {
-        for (const action of result.syncedActions) {
-          clearSyncError(action.localId);
-        }
+  const submitRetryOutcome = useCallback(
+    async (status: 'success' | 'failure', counts: { success: number; failure: number }) => {
+      const context = currentJobContextRef.current;
+      const durationMs = jobStartRef.current ? Date.now() - jobStartRef.current : undefined;
+      currentJobContextRef.current = null;
+      jobStartRef.current = null;
+      if (!context) {
+        return;
       }
-
-      setSyncStatus((prev) => ({
-        ...prev,
-        isSyncing: false,
-        progress: 100,
-        syncedItems: result.syncedActions.length,
-        conflicts: result.conflicts,
-        lastSyncTime: new Date(),
-      }));
-
-      // 競合がある場合は通知
-      if (result.conflicts.length > 0) {
-        toast.warning(`${result.conflicts.length}件の競合が検出されました`);
-      } else {
-        toast.success(`${result.syncedActions.length}件のアクションを同期しました`);
-      }
-
-      await persistSyncStatuses(result);
-    } catch (error) {
-      errorHandler.log('同期エラー', error, {
-        context: 'useSyncManager.triggerManualSync',
-      });
-      setSyncStatus((prev) => ({
-        ...prev,
-        isSyncing: false,
-        error: error instanceof Error ? error.message : '同期に失敗しました',
-      }));
-      toast.error('同期に失敗しました');
-      await refreshCacheMetadata();
-      await refreshCacheStatus();
-    }
-  }, [
-    isOnline,
-    syncStatus.isSyncing,
-    pendingActions,
-    clearSyncError,
-    persistSyncStatuses,
-    refreshCacheMetadata,
-    refreshCacheStatus,
-  ]);
-
-  /**
-   * 同期結果を処理
-   */
-  const processSyncResult = async (result: SyncResult) => {
-    // 失敗したアクションにエラーをマーク
-    for (const failedAction of result.failedActions) {
-      setSyncError(failedAction.localId, '同期に失敗しました');
-    }
-
-    // 競合の手動解決が必要な場合
-    const manualConflicts = result.conflicts.filter((c) => c.resolution === 'manual');
-    if (manualConflicts.length > 0) {
-      // 競合解決UIのためにステートを更新
-      setSyncStatus((prev) => ({
-        ...prev,
-        conflicts: manualConflicts,
-      }));
-      setShowConflictDialog(true);
-    }
-
-    // Zustandストアの同期処理を呼び出し
-    if (currentUser?.npub) {
-      await syncPendingActions(currentUser.npub);
-    }
-  };
-
-  /**
-   * 競合を手動で解決
-   */
-  const resolveConflict = useCallback(
-    async (conflict: SyncConflict, resolution: 'local' | 'remote' | 'merge') => {
-      conflict.resolution = resolution;
-
       try {
-        if (resolution === 'local') {
-          // ローカルのアクションを適用
-          await syncEngine['applyAction'](conflict.localAction);
-          toast.success('ローカルの変更を適用しました');
-        } else if (resolution === 'remote' && conflict.remoteAction) {
-          // リモートのアクションを適用
-          await syncEngine['applyAction'](conflict.remoteAction);
-          toast.success('リモートの変更を適用しました');
-        } else if (resolution === 'merge' && conflict.mergedData) {
-          // マージしたデータを適用
-          const mergedAction = {
-            ...conflict.localAction,
-            data: conflict.mergedData,
-            timestamp: Date.now(),
-          };
-          await syncEngine['applyAction'](mergedAction);
-          toast.success('変更をマージしました');
-        }
-
-        // 競合リストから削除
-        setSyncStatus((prev) => ({
-          ...prev,
-          conflicts: prev.conflicts.filter((c) => c !== conflict),
-        }));
-      } catch (error) {
-        errorHandler.log('競合解決エラー', error, {
-          context: 'useSyncManager.resolveConflict',
+        const metrics = await offlineApi.recordOfflineRetryOutcome({
+          jobId: context.jobId,
+          status,
+          jobReason: context.reason,
+          trigger: context.trigger,
+          userPubkey: context.userPubkey,
+          retryCount: context.retryCount,
+          maxRetries: context.maxRetries,
+          backoffMs: context.retryDelayMs,
+          durationMs,
+          successCount: counts.success,
+          failureCount: counts.failure,
+          timestampMs: context.requestedAt ? Date.parse(context.requestedAt) : undefined,
         });
-        toast.error('競合の解決に失敗しました');
+        setRetryMetrics(metrics);
+        setRetryMetricsError(null);
+      } catch (error) {
+        errorHandler.log('Failed to record retry metrics', error, {
+          context: 'useSyncManager.recordRetryOutcome',
+          metadata: { jobId: context.jobId },
+        });
+        setRetryMetricsError('再送メトリクスの記録に失敗しました');
+      } finally {
+        setScheduledRetry(null);
       }
     },
     [],
   );
 
   /**
-   * 同期進捗の更新
+   * 手動同期トリガー
    */
-  const updateProgress = useCallback((syncedItems: number, totalItems: number) => {
-    const progress = totalItems > 0 ? (syncedItems / totalItems) * 100 : 0;
+  const triggerManualSync = useCallback(
+    async (options?: { job?: OfflineSyncWorkerJob; trigger?: 'manual' | 'worker' }) => {
+      if (!isOnline) {
+        toast.error('オフラインのため同期できません');
+        return;
+      }
 
-    setSyncStatus((prev) => ({
-      ...prev,
-      progress,
-      syncedItems,
-      totalItems,
-    }));
-  }, []);
+      if (syncStatus.isSyncing) {
+        toast.warning('同期処理が既に実行中です');
+        return;
+      }
+
+      if (pendingActions.length === 0) {
+        toast.info('同期するアクションがありません');
+        return;
+      }
+
+      beginRetryContext(options);
+
+      setSyncStatus((prev) => ({
+        ...prev,
+        isSyncing: true,
+        progress: 0,
+        totalItems: pendingActions.length,
+        syncedItems: 0,
+        conflicts: [],
+        error: undefined,
+      }));
+
+      try {
+        const result = await syncEngine.performDifferentialSync(pendingActions);
+        await processSyncResult(result);
+
+        if (result.syncedActions.length > 0) {
+          for (const action of result.syncedActions) {
+            clearSyncError(action.localId);
+          }
+        }
+
+        setSyncStatus((prev) => ({
+          ...prev,
+          isSyncing: false,
+          progress: 100,
+          syncedItems: result.syncedActions.length,
+          conflicts: result.conflicts,
+          lastSyncTime: new Date(),
+        }));
+
+        if (result.conflicts.length > 0) {
+          toast.warning(`${result.conflicts.length}件の競合が検出されました`);
+        } else {
+          toast.success(`${result.syncedActions.length}件のアクションを同期しました`);
+        }
+
+        await persistSyncStatuses(result);
+        await submitRetryOutcome(
+          result.failedActions.length > 0 ? 'failure' : 'success',
+          {
+            success: result.syncedActions.length,
+            failure: result.failedActions.length,
+          },
+        );
+      } catch (error) {
+        errorHandler.log('同期エラー', error, {
+          context: 'useSyncManager.triggerManualSync',
+        });
+        setSyncStatus((prev) => ({
+          ...prev,
+          isSyncing: false,
+          error: error instanceof Error ? error.message : '同期に失敗しました',
+        }));
+        toast.error('同期に失敗しました');
+        await submitRetryOutcome('failure', {
+          success: 0,
+          failure: pendingActions.length,
+        });
+        await refreshCacheMetadata();
+        await refreshCacheStatus();
+      }
+    },
+    [
+      beginRetryContext,
+      clearSyncError,
+      isOnline,
+      pendingActions,
+      persistSyncStatuses,
+      processSyncResult,
+      refreshCacheMetadata,
+      refreshCacheStatus,
+      submitRetryOutcome,
+      syncStatus.isSyncing,
+    ],
+  );
+
 
   /**
    * 自動同期の設定
@@ -506,6 +551,10 @@ export function useSyncManager() {
   }, [pendingActions.length, refreshQueueItems]);
 
   useEffect(() => {
+    void refreshRetryMetrics();
+  }, [refreshRetryMetrics]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -520,18 +569,34 @@ export function useSyncManager() {
     workerChannelRef.current = channel;
 
     const handleMessage = (
-      event: MessageEvent<{ type?: string; payload?: OfflineSyncWorkerJob }>,
+      event: MessageEvent<{ type?: string; payload?: OfflineSyncWorkerJob | ScheduledRetryPayload }>,
     ) => {
       const message = event.data;
-      if (!message || message.type !== 'offline-sync:process' || !message.payload) {
+      if (!message) {
         return;
       }
-      const job = message.payload;
+      if (message.type === 'offline-sync:scheduled' && message.payload) {
+        const payload = message.payload as ScheduledRetryInfo;
+        setScheduledRetry(payload);
+        return;
+      }
+      if (message.type !== 'offline-sync:process' || !message.payload) {
+        return;
+      }
+      const job = message.payload as OfflineSyncWorkerJob;
+
+      const buildCompletionPayload = (success: boolean) => ({
+        jobId: job.jobId,
+        success,
+        retryCount: job.retryCount ?? 0,
+        maxRetries: job.maxRetries ?? 3,
+        retryDelayMs: job.retryDelayMs ?? 0,
+      });
 
       if (job.userPubkey && currentUser?.npub && job.userPubkey !== currentUser.npub) {
         channel.postMessage({
           type: 'offline-sync:complete',
-          payload: { jobId: job.jobId, success: true },
+          payload: buildCompletionPayload(true),
         });
         return;
       }
@@ -539,7 +604,7 @@ export function useSyncManager() {
       if (!isOnlineRef.current) {
         channel.postMessage({
           type: 'offline-sync:complete',
-          payload: { jobId: job.jobId, success: false },
+          payload: buildCompletionPayload(false),
         });
         return;
       }
@@ -547,22 +612,24 @@ export function useSyncManager() {
       if (pendingActionsRef.current === 0) {
         channel.postMessage({
           type: 'offline-sync:complete',
-          payload: { jobId: job.jobId, success: true },
+          payload: buildCompletionPayload(true),
         });
         return;
       }
 
+      setScheduledRetry(null);
+
       const run = async () => {
         try {
-          await triggerManualSync();
+          await triggerManualSync({ job });
           channel.postMessage({
             type: 'offline-sync:complete',
-            payload: { jobId: job.jobId, success: true },
+            payload: buildCompletionPayload(true),
           });
         } catch {
           channel.postMessage({
             type: 'offline-sync:complete',
-            payload: { jobId: job.jobId, success: false },
+            payload: buildCompletionPayload(false),
           });
         }
       };
@@ -630,5 +697,10 @@ export function useSyncManager() {
     lastQueuedItemId,
     queueingType,
     enqueueSyncRequest,
+    retryMetrics,
+    retryMetricsError,
+    isRetryMetricsLoading,
+    refreshRetryMetrics,
+    scheduledRetry,
   };
 }

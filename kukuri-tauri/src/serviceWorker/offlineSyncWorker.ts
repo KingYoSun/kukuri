@@ -29,7 +29,26 @@ type WorkerMessage =
 
 type ChannelMessage =
   | { type: 'offline-sync:process'; payload: OfflineSyncJob }
-  | { type: 'offline-sync:complete'; payload: { jobId: string; success: boolean } };
+  | {
+      type: 'offline-sync:complete';
+      payload: {
+        jobId: string;
+        success: boolean;
+        retryCount: number;
+        maxRetries: number;
+        retryDelayMs: number;
+      };
+    }
+  | {
+      type: 'offline-sync:scheduled';
+      payload: {
+        jobId: string;
+        retryCount: number;
+        maxRetries: number;
+        retryDelayMs: number;
+        nextRunAt: string;
+      };
+    };
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -63,6 +82,7 @@ function clearTimer(jobId: string) {
 
 function scheduleJob(job: OfflineSyncJob, delayMs: number) {
   clearTimer(job.jobId);
+  const safeDelay = Math.max(0, delayMs);
   const handle = self.setTimeout(
     () => {
       timers.delete(job.jobId);
@@ -71,9 +91,20 @@ function scheduleJob(job: OfflineSyncJob, delayMs: number) {
         payload: job,
       } satisfies ChannelMessage);
     },
-    Math.max(0, delayMs),
+    safeDelay,
   );
   timers.set(job.jobId, handle as unknown as number);
+
+  channel.postMessage({
+    type: 'offline-sync:scheduled',
+    payload: {
+      jobId: job.jobId,
+      retryCount: job.retryCount,
+      maxRetries: job.maxRetries,
+      retryDelayMs: job.retryDelayMs,
+      nextRunAt: new Date(Date.now() + safeDelay).toISOString(),
+    },
+  } satisfies ChannelMessage);
 }
 
 self.addEventListener('install', (event) => {

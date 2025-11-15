@@ -1,4 +1,5 @@
 mod mappers;
+pub mod metrics;
 pub mod reindex_job;
 mod rows;
 pub mod sqlite_store;

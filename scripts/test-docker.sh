@@ -582,23 +582,46 @@ run_ts_offline_sync() {
   timestamp="$(date '+%Y%m%d-%H%M%S')"
   local log_rel_path="tmp/logs/sync_status_indicator_stage4_${timestamp}.log"
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
-  mkdir -p "$(dirname "$log_host_path")"
+  local reports_dir="${RESULTS_DIR}/offline-sync"
+  mkdir -p "$(dirname "$log_host_path")" "$reports_dir"
 
   echo "Running TypeScript scenario 'offline-sync'..."
-  compose_run '' run --rm ts-test bash -lc "
-    set -euo pipefail
-    cd /app/kukuri-tauri
-    if [ ! -f node_modules/.bin/vitest ]; then
-      echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-      pnpm install --frozen-lockfile --ignore-workspace
+  local vitest_targets=(
+    'src/tests/unit/hooks/useSyncManager.test.tsx'
+    'src/tests/unit/components/SyncStatusIndicator.test.tsx'
+    'src/tests/unit/components/OfflineIndicator.test.tsx'
+  )
+  local vitest_status=0
+  for target in "${vitest_targets[@]}"; do
+    local slug="${target//\//_}"
+    slug="${slug//./_}"
+    local report_rel_path="test-results/offline-sync/${timestamp}-${slug}.json"
+    local command="
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
+"
+    if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
+      vitest_status=${PIPESTATUS[0]}
+      echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
+      break
     fi
-    mkdir -p /app/tmp/logs
-    pnpm vitest run \
-      'src/tests/unit/hooks/useSyncManager.test.tsx' \
-      'src/tests/unit/components/SyncStatusIndicator.test.tsx' \
-      'src/tests/unit/components/OfflineIndicator.test.tsx' \
-      | tee '/app/${log_rel_path}'
-  "
+
+    if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+      echo "[OK] Scenario report saved to ${report_rel_path}"
+    else
+      echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+    fi
+  done
+
+  if [[ $vitest_status -ne 0 ]]; then
+    echo "[ERROR] Scenario 'offline-sync' failed. See ${log_rel_path} for details." >&2
+    return $vitest_status
+  fi
 
   if [[ -f "$log_host_path" ]]; then
     echo "[OK] Scenario log saved to ${log_rel_path}"
