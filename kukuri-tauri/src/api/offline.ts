@@ -60,7 +60,14 @@ export const offlineApi = {
    * 同期キューに追加
    */
   async addToSyncQueue(request: AddToSyncQueueRequest): Promise<number> {
-    return invokeCommand('add_to_sync_queue', { request });
+    const { action_type, payload, priority } = request;
+    return invokeCommand('add_to_sync_queue', {
+      request: {
+        actionType: action_type,
+        payload,
+        priority,
+      },
+    });
   },
 
   /**

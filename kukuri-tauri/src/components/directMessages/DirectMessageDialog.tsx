@@ -31,39 +31,27 @@ const formatTimestamp = (timestamp: number) => {
 
 export function DirectMessageDialog() {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const {
-    isDialogOpen,
-    activeConversationNpub,
-    messageDraft,
-    isSending,
-    conversations,
-    optimisticMessages,
-    closeDialog,
-    setDraft,
-    setIsSending,
-    appendOptimisticMessage,
-    resolveOptimisticMessage,
-    failOptimisticMessage,
-    setMessages,
-    markConversationAsRead,
-    removeOptimisticMessage,
-  } = useDirectMessageStore((state) => ({
-    isDialogOpen: state.isDialogOpen,
-    activeConversationNpub: state.activeConversationNpub,
-    messageDraft: state.messageDraft,
-    isSending: state.isSending,
-    conversations: state.conversations,
-    optimisticMessages: state.optimisticMessages,
-    closeDialog: state.closeDialog,
-    setDraft: state.setDraft,
-    setIsSending: state.setIsSending,
-    appendOptimisticMessage: state.appendOptimisticMessage,
-    resolveOptimisticMessage: state.resolveOptimisticMessage,
-    failOptimisticMessage: state.failOptimisticMessage,
-    setMessages: state.setMessages,
-    markConversationAsRead: state.markConversationAsRead,
-    removeOptimisticMessage: state.removeOptimisticMessage,
-  }));
+  const isDialogOpen = useDirectMessageStore((state) => state.isDialogOpen);
+  const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
+  const messageDraft = useDirectMessageStore((state) => state.messageDraft);
+  const isSending = useDirectMessageStore((state) => state.isSending);
+  const conversations = useDirectMessageStore((state) => state.conversations);
+  const optimisticMessages = useDirectMessageStore((state) => state.optimisticMessages);
+  const closeDialog = useDirectMessageStore((state) => state.closeDialog);
+  const setDraft = useDirectMessageStore((state) => state.setDraft);
+  const setIsSending = useDirectMessageStore((state) => state.setIsSending);
+  const appendOptimisticMessage = useDirectMessageStore(
+    (state) => state.appendOptimisticMessage,
+  );
+  const resolveOptimisticMessage = useDirectMessageStore(
+    (state) => state.resolveOptimisticMessage,
+  );
+  const failOptimisticMessage = useDirectMessageStore((state) => state.failOptimisticMessage);
+  const setMessages = useDirectMessageStore((state) => state.setMessages);
+  const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
+  const removeOptimisticMessage = useDirectMessageStore(
+    (state) => state.removeOptimisticMessage,
+  );
 
   const scrollAreaWrapperRef = useRef<HTMLDivElement | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);

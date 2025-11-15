@@ -722,7 +722,7 @@ export function SyncStatusIndicator() {
                     合計 {cacheStatus.total_items}件 / ステール {cacheStatus.stale_items}件
                   </p>
                   <div className="space-y-2 mt-2">
-                    {cacheStatus.cache_types.map((type) => {
+                    {(cacheStatus.cache_types ?? []).map((type) => {
                       const metadataSummary = parseCacheMetadata(type.metadata ?? null);
                       const docSummary = getCacheDocSummary(type);
                       return (

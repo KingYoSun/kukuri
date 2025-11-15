@@ -39,25 +39,16 @@ const formatNpub = (npub: string) => {
 
 export function DirectMessageInbox() {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const {
-    isInboxOpen,
-    closeInbox,
-    openDialog,
-    conversations,
-    unreadCounts,
-    activeConversationNpub,
-    conversationReadTimestamps,
-    markConversationAsRead,
-  } = useDirectMessageStore((state) => ({
-    isInboxOpen: state.isInboxOpen,
-    closeInbox: state.closeInbox,
-    openDialog: state.openDialog,
-    conversations: state.conversations,
-    unreadCounts: state.unreadCounts,
-    activeConversationNpub: state.activeConversationNpub,
-    conversationReadTimestamps: state.conversationReadTimestamps,
-    markConversationAsRead: state.markConversationAsRead,
-  }));
+  const isInboxOpen = useDirectMessageStore((state) => state.isInboxOpen);
+  const closeInbox = useDirectMessageStore((state) => state.closeInbox);
+  const openDialog = useDirectMessageStore((state) => state.openDialog);
+  const conversations = useDirectMessageStore((state) => state.conversations);
+  const unreadCounts = useDirectMessageStore((state) => state.unreadCounts);
+  const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
+  const conversationReadTimestamps = useDirectMessageStore(
+    (state) => state.conversationReadTimestamps,
+  );
+  const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
   const [targetNpub, setTargetNpub] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<Profile[]>([]);

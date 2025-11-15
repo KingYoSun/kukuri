@@ -3,6 +3,7 @@ import { errorHandler } from '@/lib/errorHandler';
 export const PROFILE_AVATAR_SYNC_CHANNEL = 'profile-avatar-sync';
 
 const workerUrl = new URL('./profileAvatarSyncSW.ts', import.meta.url);
+const workerScope = new URL('./', workerUrl).pathname;
 
 let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 
@@ -19,7 +20,7 @@ export async function registerProfileAvatarSyncWorker(): Promise<ServiceWorkerRe
     registrationPromise = (async () => {
       try {
         const registration = await navigator.serviceWorker.register(workerUrl, {
-          scope: './',
+          scope: workerScope,
           type: 'module',
         });
         return registration;
