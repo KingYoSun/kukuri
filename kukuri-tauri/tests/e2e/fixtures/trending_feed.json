@@ -1,0 +1,30 @@
+{
+  "topics": [
+    {
+      "topicId": "nostr-protocol",
+      "title": "Nostr Protocol",
+      "rank": 1,
+      "score": 98,
+      "posts": [
+        {
+          "id": "trend-001",
+          "title": "Relay hardening guide",
+          "author": "kukuri-team"
+        }
+      ]
+    },
+    {
+      "topicId": "kukuri-app",
+      "title": "Kukuri App Releases",
+      "rank": 2,
+      "score": 87,
+      "posts": [
+        {
+          "id": "trend-002",
+          "title": "Desktop E2E rollout",
+          "author": "release-bot"
+        }
+      ]
+    }
+  ]
+}

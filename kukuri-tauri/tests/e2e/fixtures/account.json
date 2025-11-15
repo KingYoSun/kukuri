@@ -1,0 +1,8 @@
+{
+  "npub": "npub1example7uvye5ny8zgww0ye4lg0frzk2kstxhzl0vg9d2xe36ufqsg53m",
+  "nsec": "nsec1examplek3algucszsu22r8us623eewefmmscvgcfx7xw8ws9whknht7mc6",
+  "relays": [
+    "wss://relay.damus.io",
+    "wss://nostr.wine"
+  ]
+}

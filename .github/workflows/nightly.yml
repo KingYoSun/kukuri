@@ -46,6 +46,32 @@ jobs:
           cd kukuri-tauri
           pnpm test:unit
 
+  desktop-e2e:
+    name: Desktop E2E (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run desktop E2E scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh e2e
+
+      - name: Upload desktop E2E logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.desktop-e2e-logs
+          path: tmp/logs/desktop-e2e
+          if-no-files-found: warn
+
+      - name: Upload desktop E2E artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.desktop-e2e-reports
+          path: test-results/desktop-e2e
+          if-no-files-found: warn
+
   trending-feed:
     name: Trending Feed (Docker)
     runs-on: ubuntu-latest

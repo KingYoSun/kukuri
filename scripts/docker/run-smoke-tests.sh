@@ -1,10 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ "${SCENARIO:-}" == "post-delete-cache" ]]; then
-  /app/run-post-delete-cache.sh
-  exit $?
-fi
+case "${SCENARIO:-}" in
+  "desktop-e2e")
+    /app/run-desktop-e2e.sh
+    exit $?
+    ;;
+  "post-delete-cache")
+    /app/run-post-delete-cache.sh
+    exit $?
+    ;;
+esac
 
 DEFAULT_BOOTSTRAP="03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 export ENABLE_P2P_INTEGRATION="${ENABLE_P2P_INTEGRATION:-1}"

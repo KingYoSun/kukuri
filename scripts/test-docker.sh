@@ -29,6 +29,7 @@ Commands:
   ts           Run TypeScript tests only (or specific scenarios with --scenario)
   lint         Run lint/format checks only
   coverage     Run cargo tarpaulin and export coverage artifacts
+  e2e          Run desktop E2E tests (Tauri + WebDriverIO)
   build        Build the Docker image only
   clean        Clean containers and images
   cache-clean  Clean including cache volumes
@@ -667,6 +668,30 @@ run_ts_tests() {
   fi
 }
 
+run_desktop_e2e() {
+  [[ $NO_BUILD -eq 1 ]] || build_image
+  echo 'Running desktop E2E tests via Docker...'
+  local previous="${SCENARIO-}"
+  export SCENARIO="desktop-e2e"
+  if ! compose_run '' run --rm test-runner; then
+    local status=$?
+    if [[ -n "${previous-}" ]]; then
+      export SCENARIO="$previous"
+    else
+      unset SCENARIO
+    fi
+    return $status
+  fi
+
+  if [[ -n "${previous-}" ]]; then
+    export SCENARIO="$previous"
+  else
+    unset SCENARIO
+  fi
+
+  echo '[OK] Desktop E2E scenario finished. Artefacts stored in tmp/logs/desktop-e2e/ and test-results/desktop-e2e/.'
+}
+
 run_lint_check() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   echo 'Running lint and format checks in Docker...'
@@ -965,6 +990,10 @@ case "$COMMAND" in
     ;;
   performance)
     run_performance_tests
+    show_cache_status
+    ;;
+  e2e)
+    run_desktop_e2e
     show_cache_status
     ;;
   build)

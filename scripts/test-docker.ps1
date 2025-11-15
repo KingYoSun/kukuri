@@ -1,21 +1,21 @@
-# DockerŠÂ‹«‚Å‚ÌƒeƒXƒgÀsƒXƒNƒŠƒvƒg (PowerShell”Å)
+ï»¿# Dockerï¿½Â‹ï¿½ï¿½Å‚Ìƒeï¿½Xï¿½gï¿½ï¿½ï¿½sï¿½Xï¿½Nï¿½ï¿½ï¿½vï¿½g (PowerShellï¿½ï¿½)
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e")]
     [string]$Command = "all",
 
-    [switch]$Integration,            # RustƒeƒXƒg‚ÉP2P“‡ƒeƒXƒg‚Ì‚İ‚ğÀs
+    [switch]$Integration,            # Rustï¿½eï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½P2Pï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½Ì‚İ‚ï¿½ï¿½ï¿½s
     [Alias("Test", "tests")]
-    [string]$TestTarget,             # RustƒeƒXƒg‚É“Á’èƒoƒCƒiƒŠ‚Ì‚İÀs
-    [string]$Scenario,               # TypeScriptƒeƒXƒg—p‚ÌƒVƒiƒŠƒIw’è
-    [string]$Fixture,                # ƒVƒiƒŠƒI—pƒtƒBƒNƒXƒ`ƒƒƒpƒX
-    [switch]$ServiceWorker,          # profile-avatar-sync ƒVƒiƒŠƒI‚Å Service Worker Šg’£‚ğÀs
-    [string]$BootstrapPeers,         # “‡ƒeƒXƒg—p‚Ìƒu[ƒgƒXƒgƒ‰ƒbƒvƒsƒAw’è
-    [string]$IrohBin,                # iroh ƒoƒCƒiƒŠ‚ÌƒpƒX
-    [string]$IntegrationLog = "info,iroh_tests=debug", # “‡ƒeƒXƒg—p‚ÌRUST_LOG
+    [string]$TestTarget,             # Rustï¿½eï¿½Xï¿½gï¿½ï¿½ï¿½É“ï¿½ï¿½ï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½Ì‚İï¿½ï¿½s
+    [string]$Scenario,               # TypeScriptï¿½eï¿½Xï¿½gï¿½pï¿½ÌƒVï¿½iï¿½ï¿½ï¿½Iï¿½wï¿½ï¿½
+    [string]$Fixture,                # ï¿½Vï¿½iï¿½ï¿½ï¿½Iï¿½pï¿½tï¿½Bï¿½Nï¿½Xï¿½`ï¿½ï¿½ï¿½pï¿½X
+    [switch]$ServiceWorker,          # profile-avatar-sync ï¿½Vï¿½iï¿½ï¿½ï¿½Iï¿½ï¿½ Service Worker ï¿½gï¿½ï¿½ï¿½ï¿½ï¿½ï¿½s
+    [string]$BootstrapPeers,         # ï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½pï¿½Ìƒuï¿½[ï¿½gï¿½Xï¿½gï¿½ï¿½ï¿½bï¿½vï¿½sï¿½Aï¿½wï¿½ï¿½
+    [string]$IrohBin,                # iroh ï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½Ìƒpï¿½X
+    [string]$IntegrationLog = "info,iroh_tests=debug", # ï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½pï¿½ï¿½RUST_LOG
 
-    [switch]$NoBuild,  # ƒrƒ‹ƒh‚ğƒXƒLƒbƒv‚·‚éƒIƒvƒVƒ‡ƒ“
+    [switch]$NoBuild,  # ï¿½rï¿½ï¿½ï¿½hï¿½ï¿½Xï¿½Lï¿½bï¿½vï¿½ï¿½ï¿½ï¿½Iï¿½vï¿½Vï¿½ï¿½ï¿½ï¿½
     [switch]$Help
 )
 
@@ -26,7 +26,7 @@ $NewBinMainlineTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_MAINLINE_TEST
 $NewBinGossipTarget = if (![string]::IsNullOrWhiteSpace($env:P2P_GOSSIP_TEST_TARGET)) { $env:P2P_GOSSIP_TEST_TARGET } else { "p2p_gossip_smoke" }
 $PrometheusMetricsUrl = if (![string]::IsNullOrWhiteSpace($env:PROMETHEUS_METRICS_URL)) { $env:PROMETHEUS_METRICS_URL } else { "http://127.0.0.1:9898/metrics" }
 
-# ƒJƒ‰[ŠÖ”
+# ï¿½Jï¿½ï¿½ï¿½[ï¿½Öï¿½
 function Write-Success {
     param([string]$Message)
     Write-Host "? $Message" -ForegroundColor Green
@@ -49,86 +49,86 @@ function Write-Info {
 }
 
 if ($Integration -and $TestTarget) {
-    Write-ErrorMessage "-Integration ‚Æ -Test ‚Í“¯‚É‚Íw’è‚Å‚«‚Ü‚¹‚ñB"
+    Write-ErrorMessage "-Integration ï¿½ï¿½ -Test ï¿½Í“ï¿½ï¿½ï¿½ï¿½É‚Íwï¿½ï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½B"
 }
 
 if ($TestTarget -and $Command -ne "rust") {
-    Write-ErrorMessage "-Test ‚Í rust ƒRƒ}ƒ“ƒh‚Ì‚İ‚Éw’è‚Å‚«‚Ü‚·B"
+    Write-ErrorMessage "-Test ï¿½ï¿½ rust ï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Ì‚İ‚Éwï¿½ï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½B"
 }
 
 if ($Scenario -and $Command -ne "ts") {
-    Write-ErrorMessage "-Scenario ‚Í ts ƒRƒ}ƒ“ƒh‚Å‚Ì‚İg—p‚Å‚«‚Ü‚·B"
+    Write-ErrorMessage "-Scenario ï¿½ï¿½ ts ï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Å‚Ì‚İgï¿½pï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½B"
 }
 
 if ($Fixture -and $Command -ne "ts") {
-    Write-ErrorMessage "-Fixture ‚Í ts ƒRƒ}ƒ“ƒh‚Å‚Ì‚İg—p‚Å‚«‚Ü‚·B"
+    Write-ErrorMessage "-Fixture ï¿½ï¿½ ts ï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Å‚Ì‚İgï¿½pï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½B"
 }
 
 if ($ServiceWorker -and $Command -ne "ts") {
-    Write-ErrorMessage "-ServiceWorker ‚Í ts ƒRƒ}ƒ“ƒh‚Å‚Ì‚İg—p‚Å‚«‚Ü‚·B"
+    Write-ErrorMessage "-ServiceWorker ï¿½ï¿½ ts ï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Å‚Ì‚İgï¿½pï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½B"
 }
 
-# ƒwƒ‹ƒv•\¦
+# ï¿½wï¿½ï¿½ï¿½vï¿½\ï¿½ï¿½
 function Show-Help {
     Write-Host @"
 Usage: .\test-docker.ps1 [Command] [Options]
 
 Commands:
-  all          - ‚·‚×‚Ä‚ÌƒeƒXƒg‚ğÀsiƒfƒtƒHƒ‹ƒgj
-  rust         - Rust‚ÌƒeƒXƒg‚Ì‚İÀs
-  integration  - P2P“‡ƒeƒXƒgiRustj‚ğÀs
-  ts           - TypeScript‚ÌƒeƒXƒg‚Ì‚İÀsi-Scenario ‚ÅƒVƒiƒŠƒIw’è‰Âj
-  lint         - ƒŠƒ“ƒg‚ÆƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN‚Ì‚İÀs
-  coverage     - RustƒJƒoƒŒƒbƒWicargo tarpaulinj‚ğÀs‚µ¬‰Ê•¨‚ğ•Û‘¶
-  metrics      - ƒƒgƒŠƒNƒXŠÖ˜A‚ÌƒVƒ‡[ƒgƒeƒXƒgiRust test_get_status / TS P2P UIj
-  performance  - ƒpƒtƒH[ƒ}ƒ“ƒXƒn[ƒlƒXiRust ignored ƒeƒXƒgj‚ğÀs‚µ¬‰Ê•¨‚ğ¶¬
-  contracts    - Œ_–ñƒeƒXƒgiNIP-10‹«ŠEƒP[ƒXj‚ğÀs
-  build        - DockerƒCƒ[ƒW‚Ìƒrƒ‹ƒh‚Ì‚İÀs
-  clean        - DockerƒRƒ“ƒeƒi‚ÆƒCƒ[ƒW‚ğƒNƒŠ[ƒ“ƒAƒbƒv
-  cache-clean  - ƒLƒƒƒbƒVƒ…ƒ{ƒŠƒ…[ƒ€‚àŠÜ‚ß‚ÄŠ®‘SƒNƒŠ[ƒ“ƒAƒbƒv
+  all          - ï¿½ï¿½ï¿½×‚Ä‚Ìƒeï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½sï¿½iï¿½fï¿½tï¿½Hï¿½ï¿½ï¿½gï¿½j
+  rust         - Rustï¿½Ìƒeï¿½Xï¿½gï¿½Ì‚İï¿½ï¿½s
+  integration  - P2Pï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½iRustï¿½jï¿½ï¿½ï¿½ï¿½s
+  ts           - TypeScriptï¿½Ìƒeï¿½Xï¿½gï¿½Ì‚İï¿½ï¿½sï¿½i-Scenario ï¿½ÅƒVï¿½iï¿½ï¿½ï¿½Iï¿½wï¿½ï¿½Âj
+  lint         - ï¿½ï¿½ï¿½ï¿½ï¿½gï¿½Æƒtï¿½Hï¿½[ï¿½}ï¿½bï¿½gï¿½`ï¿½Fï¿½bï¿½Nï¿½Ì‚İï¿½ï¿½s
+  coverage     - Rustï¿½Jï¿½oï¿½ï¿½ï¿½bï¿½Wï¿½icargo tarpaulinï¿½jï¿½ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½ï¿½ï¿½Ê•ï¿½ï¿½ï¿½Û‘ï¿½
+  metrics      - ï¿½ï¿½ï¿½gï¿½ï¿½ï¿½Nï¿½Xï¿½Ö˜Aï¿½ÌƒVï¿½ï¿½ï¿½[ï¿½gï¿½eï¿½Xï¿½gï¿½iRust test_get_status / TS P2P UIï¿½j
+  performance  - ï¿½pï¿½tï¿½Hï¿½[ï¿½}ï¿½ï¿½ï¿½Xï¿½nï¿½[ï¿½lï¿½Xï¿½iRust ignored ï¿½eï¿½Xï¿½gï¿½jï¿½ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½ï¿½ï¿½Ê•ï¿½ï¿½ğ¶ï¿½
+  contracts    - ï¿½_ï¿½ï¿½eï¿½Xï¿½gï¿½iNIP-10ï¿½ï¿½ï¿½Eï¿½Pï¿½[ï¿½Xï¿½jï¿½ï¿½ï¿½ï¿½s
+  e2e          - Desktop E2E ãƒ†ã‚¹ãƒˆï¼ˆtauri-driver + WebDriverIOï¼‰ã‚’å®Ÿè¡Œ`n  build        - Dockerï¿½Cï¿½ï¿½ï¿½[ï¿½Wï¿½Ìƒrï¿½ï¿½ï¿½hï¿½Ì‚İï¿½ï¿½s
+  clean        - Dockerï¿½Rï¿½ï¿½ï¿½eï¿½iï¿½ÆƒCï¿½ï¿½ï¿½[ï¿½Wï¿½ï¿½Nï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Aï¿½bï¿½v
+  cache-clean  - ï¿½Lï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½{ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ï¿½Ü‚ß‚ÄŠï¿½ï¿½Sï¿½Nï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Aï¿½bï¿½v
 
 Options:
-  -Integration  - RustƒRƒ}ƒ“ƒh‚Æ•¹‚¹‚Ä P2P “‡ƒeƒXƒg‚Ì‚İÀs
-  -Test <target> - RustƒRƒ}ƒ“ƒh‚Éw’èƒeƒXƒgƒoƒCƒiƒŠ‚Ì‚İÀsi—á: event_manager_integrationj
-  -Scenario <name> - TypeScriptƒeƒXƒg‚ÉƒVƒiƒŠƒI‚ğw’èi—á: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-syncj
-  -Fixture <path>  - ƒVƒiƒŠƒI—pƒtƒBƒNƒXƒ`ƒƒƒpƒX‚ğã‘‚«iŠù’è: tests/fixtures/trending/default.jsonj
-  -ServiceWorker   - `ts -Scenario profile-avatar-sync` Às‚É Service Worker Šg’£ƒeƒXƒg‚Æ Stage4 ƒƒO‚ğ—LŒø‰»
-  -BootstrapPeers <node@host:port,...> - “‡ƒeƒXƒg‚Åg—p‚·‚éƒu[ƒgƒXƒgƒ‰ƒbƒvƒsƒA‚ğw’è
-  -IrohBin <path> - iroh ƒoƒCƒiƒŠ‚Ì–¾¦ƒpƒX‚ğw’èiWindows ‚Å DLL ‰ğŒˆ‚ª•K—v‚Èê‡‚È‚Çj
-  -IntegrationLog <level> - “‡ƒeƒXƒg‚Ì RUST_LOG İ’èiŠù’è: info,iroh_tests=debugj
-  -NoBuild     - DockerƒCƒ[ƒW‚Ìƒrƒ‹ƒh‚ğƒXƒLƒbƒv
-  -Help        - ‚±‚Ìƒwƒ‹ƒv‚ğ•\¦
-  ¦ P2P“‡ƒeƒXƒg‚Í `p2p_gossip_smoke` / `p2p_mainline_smoke` ‚ğ‡ŸÀs‚µ‚Ü‚·B`P2P_GOSSIP_TEST_TARGET` ‚â `P2P_MAINLINE_TEST_TARGET` ‚Å”CˆÓ‚Ìƒ^[ƒQƒbƒg‚Éã‘‚«‰Â”\‚Å‚·B
+  -Integration  - Rustï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Æ•ï¿½ï¿½ï¿½ï¿½ï¿½ P2P ï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½Ì‚İï¿½ï¿½s
+  -Test <target> - Rustï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½ï¿½ï¿½Éwï¿½ï¿½eï¿½Xï¿½gï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½Ì‚İï¿½ï¿½sï¿½iï¿½ï¿½: event_manager_integrationï¿½j
+  -Scenario <name> - TypeScriptï¿½eï¿½Xï¿½gï¿½ï¿½ï¿½ÉƒVï¿½iï¿½ï¿½ï¿½Iï¿½ï¿½wï¿½ï¿½iï¿½ï¿½: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-syncï¿½j
+  -Fixture <path>  - ï¿½Vï¿½iï¿½ï¿½ï¿½Iï¿½pï¿½tï¿½Bï¿½Nï¿½Xï¿½`ï¿½ï¿½ï¿½pï¿½Xï¿½ï¿½ã‘ï¿½ï¿½ï¿½iï¿½ï¿½ï¿½ï¿½: tests/fixtures/trending/default.jsonï¿½j
+  -ServiceWorker   - `ts -Scenario profile-avatar-sync` ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½ï¿½ Service Worker ï¿½gï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½ï¿½ Stage4 ï¿½ï¿½ï¿½Oï¿½ï¿½Lï¿½ï¿½ï¿½ï¿½
+  -BootstrapPeers <node@host:port,...> - ï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½Ågï¿½pï¿½ï¿½ï¿½ï¿½uï¿½[ï¿½gï¿½Xï¿½gï¿½ï¿½ï¿½bï¿½vï¿½sï¿½Aï¿½ï¿½wï¿½ï¿½
+  -IrohBin <path> - iroh ï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½Ì–ï¿½ï¿½ï¿½ï¿½pï¿½Xï¿½ï¿½wï¿½ï¿½iWindows ï¿½ï¿½ DLL ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Kï¿½vï¿½Èê‡ï¿½È‚Çj
+  -IntegrationLog <level> - ï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½ RUST_LOG ï¿½İ’ï¿½iï¿½ï¿½ï¿½ï¿½: info,iroh_tests=debugï¿½j
+  -NoBuild     - Dockerï¿½Cï¿½ï¿½ï¿½[ï¿½Wï¿½Ìƒrï¿½ï¿½ï¿½hï¿½ï¿½Xï¿½Lï¿½bï¿½v
+  -Help        - ï¿½ï¿½ï¿½Ìƒwï¿½ï¿½ï¿½vï¿½ï¿½\ï¿½ï¿½
+  ï¿½ï¿½ P2Pï¿½ï¿½ï¿½ï¿½ï¿½eï¿½Xï¿½gï¿½ï¿½ `p2p_gossip_smoke` / `p2p_mainline_smoke` ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½Ü‚ï¿½ï¿½B`P2P_GOSSIP_TEST_TARGET` ï¿½ï¿½ `P2P_MAINLINE_TEST_TARGET` ï¿½Å”Cï¿½Ó‚Ìƒ^ï¿½[ï¿½Qï¿½bï¿½gï¿½Éã‘ï¿½ï¿½ï¿½Â”\ï¿½Å‚ï¿½ï¿½B
 
 Examples:
-  .\test-docker.ps1                # ‚·‚×‚Ä‚ÌƒeƒXƒg‚ğÀs
-  .\test-docker.ps1 rust           # RustƒeƒXƒg‚Ì‚İÀs
+  .\test-docker.ps1                # ï¿½ï¿½ï¿½×‚Ä‚Ìƒeï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½s
+  .\test-docker.ps1 rust           # Rustï¿½eï¿½Xï¿½gï¿½Ì‚İï¿½ï¿½s
   .\test-docker.ps1 rust -Test event_manager_integration
   .\test-docker.ps1 rust -Integration -BootstrapPeers "node@127.0.0.1:11233"
-  .\test-docker.ps1 rust -NoBuild  # ƒrƒ‹ƒh‚ğƒXƒLƒbƒv‚µ‚ÄRustƒeƒXƒg‚ğÀs
+  .\test-docker.ps1 rust -NoBuild  # ï¿½rï¿½ï¿½ï¿½hï¿½ï¿½Xï¿½Lï¿½bï¿½vï¿½ï¿½ï¿½ï¿½Rustï¿½eï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½s
   .\test-docker.ps1 ts -Scenario trending-feed
   .\test-docker.ps1 ts -Scenario profile-avatar-sync
   .\test-docker.ps1 ts -Scenario user-search-pagination
-  .\test-docker.ps1 performance    # ƒpƒtƒH[ƒ}ƒ“ƒXŒv‘ª—pƒeƒXƒgƒoƒCƒiƒŠ‚ğÀs
-  .\test-docker.ps1 cache-clean    # ƒLƒƒƒbƒVƒ…‚ğŠÜ‚ß‚ÄŠ®‘SƒNƒŠ[ƒ“ƒAƒbƒv
-  .\test-docker.ps1 -Help          # ƒwƒ‹ƒv‚ğ•\¦
+  .\test-docker.ps1 performance    # ï¿½pï¿½tï¿½Hï¿½[ï¿½}ï¿½ï¿½ï¿½Xï¿½vï¿½ï¿½ï¿½pï¿½eï¿½Xï¿½gï¿½oï¿½Cï¿½iï¿½ï¿½ï¿½ï¿½ï¿½ï¿½s
+  .\test-docker.ps1 cache-clean    # ï¿½Lï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½ï¿½Ü‚ß‚ÄŠï¿½ï¿½Sï¿½Nï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Aï¿½bï¿½v
+  .\test-docker.ps1 -Help          # ï¿½wï¿½ï¿½ï¿½vï¿½ï¿½\ï¿½ï¿½
 
 Performance Tips:
-  - ‰‰ñÀs‚ÍˆË‘¶ŠÖŒW‚Ìƒ_ƒEƒ“ƒ[ƒh‚Ì‚½‚ßŠÔ‚ª‚©‚©‚è‚Ü‚·
-  - 2‰ñ–ÚˆÈ~‚ÍDockerƒ{ƒŠƒ…[ƒ€‚ÉƒLƒƒƒbƒVƒ…‚³‚ê‚é‚½‚ß‚‘¬‚É‚È‚è‚Ü‚·
-  - ƒLƒƒƒbƒVƒ…‚ğƒNƒŠƒA‚µ‚½‚¢ê‡‚Í 'cache-clean' ƒRƒ}ƒ“ƒh‚ğg—p‚µ‚Ä‚­‚¾‚³‚¢
+  - ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½ÍˆË‘ï¿½ï¿½ÖŒWï¿½Ìƒ_ï¿½Eï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½hï¿½Ì‚ï¿½ï¿½ßï¿½ï¿½Ô‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½
+  - 2ï¿½ï¿½ÚˆÈ~ï¿½ï¿½Dockerï¿½{ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ÉƒLï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ßï¿½ï¿½ï¿½ï¿½É‚È‚ï¿½Ü‚ï¿½
+  - ï¿½Lï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½ï¿½Nï¿½ï¿½ï¿½Aï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ê‡ï¿½ï¿½ 'cache-clean' ï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½ï¿½gï¿½pï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 "@
     exit 0
 }
 
-# Docker Buildkit ‚ğ—LŒø‰»
+# Docker Buildkit ï¿½ï¿½Lï¿½ï¿½ï¿½ï¿½
 $env:DOCKER_BUILDKIT = "1"
 $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 
 $BootstrapDefaultPeer = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 $BootstrapContainerName = "kukuri-p2p-bootstrap"
 
-# Docker ComposeƒRƒ}ƒ“ƒh‚ÌÀs
+# Docker Composeï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Ìï¿½ï¿½s
 function Invoke-DockerCompose {
     param(
         [string[]]$Arguments,
@@ -143,14 +143,14 @@ function Invoke-DockerCompose {
     return [int]$code
 }
 
-# DockerƒCƒ[ƒW‚Ì‘¶İŠm”F
+# Dockerï¿½Cï¿½ï¿½ï¿½[ï¿½Wï¿½Ì‘ï¿½ï¿½İŠmï¿½F
 function Test-DockerImageExists {
     $runnerImage = docker images -q "kukuri_test-runner" 2>$null
     $tsImage = docker images -q "kukuri_ts-test" 2>$null
     return (![string]::IsNullOrEmpty($runnerImage) -and -not [string]::IsNullOrEmpty($tsImage))
 }
 
-# DockerƒCƒ[ƒW‚Ìƒrƒ‹ƒh
+# Dockerï¿½Cï¿½ï¿½ï¿½[ï¿½Wï¿½Ìƒrï¿½ï¿½ï¿½h
 function Build-TestImage {
     param([switch]$Force)
     
@@ -164,7 +164,7 @@ function Build-TestImage {
     Write-Success "Docker image built successfully"
 }
 
-# ‚·‚×‚Ä‚ÌƒeƒXƒg‚ğÀs
+# ï¿½ï¿½ï¿½×‚Ä‚Ìƒeï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½s
 function Invoke-AllTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -174,7 +174,7 @@ function Invoke-AllTests {
     Write-Success "All tests passed!"
 }
 
-# RustƒeƒXƒg‚Ì‚İÀs
+# Rustï¿½eï¿½Xï¿½gï¿½Ì‚İï¿½ï¿½s
 function Invoke-RustTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -335,7 +335,7 @@ function Invoke-IntegrationTests {
     }
 }
 
-# TypeScriptƒeƒXƒg‚Ì‚İÀs
+# TypeScriptï¿½eï¿½Xï¿½gï¿½Ì‚İï¿½ï¿½s
 function Start-PrometheusTrending {
     Write-Host "Starting prometheus-trending service (host network)..."
     $code = Invoke-DockerCompose -Arguments @("up", "-d", "prometheus-trending") -IgnoreFailure
@@ -952,6 +952,33 @@ function Invoke-TypeScriptOfflineSyncScenario {
     }
 }
 
+function Invoke-DesktopE2EScenario {
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+
+    $logDir = Join-Path $repositoryRoot "tmp/logs/desktop-e2e"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    Write-Host "Running desktop E2E scenario via Docker..."
+    $previousScenario = $env:SCENARIO
+    $env:SCENARIO = "desktop-e2e"
+    try {
+        Invoke-DockerCompose @("run", "--rm", "test-runner")
+    }
+    finally {
+        if ($null -ne $previousScenario) {
+            $env:SCENARIO = $previousScenario
+        } else {
+            Remove-Item Env:SCENARIO -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-Success "Desktop E2E scenario finished. Check tmp/logs/desktop-e2e/ and test-results/desktop-e2e/ for artefacts."
+}
+
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -994,7 +1021,7 @@ function Invoke-TypeScriptTests {
     }
 }
 
-# ƒŠƒ“ƒg‚ÆƒtƒH[ƒ}ƒbƒgƒ`ƒFƒbƒN
+# ï¿½ï¿½ï¿½ï¿½ï¿½gï¿½Æƒtï¿½Hï¿½[ï¿½}ï¿½bï¿½gï¿½`ï¿½Fï¿½bï¿½N
 function Invoke-LintCheck {
     if (-not $NoBuild) {
         Build-TestImage
@@ -1125,21 +1152,21 @@ function Invoke-ContractTests {
     Write-Success "Contract tests passed!"
 }
 
-# ƒNƒŠ[ƒ“ƒAƒbƒv
+# ï¿½Nï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Aï¿½bï¿½v
 function Invoke-Cleanup {
     Write-Host "Cleaning up Docker containers and images..."
     Invoke-DockerCompose @("down", "--rmi", "local", "--remove-orphans")
     Write-Success "Cleanup completed"
 }
 
-# Š®‘SƒNƒŠ[ƒ“ƒAƒbƒviƒLƒƒƒbƒVƒ…ƒ{ƒŠƒ…[ƒ€‚àíœj
+# ï¿½ï¿½ï¿½Sï¿½Nï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Aï¿½bï¿½vï¿½iï¿½Lï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½{ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½ï¿½íœï¿½j
 function Invoke-CacheCleanup {
     Write-Host "Performing complete cleanup including cache volumes..."
     
-    # ƒRƒ“ƒeƒi‚ÆƒCƒ[ƒW‚Ìíœ
+    # ï¿½Rï¿½ï¿½ï¿½eï¿½iï¿½ÆƒCï¿½ï¿½ï¿½[ï¿½Wï¿½Ìíœ
     Invoke-DockerCompose @("down", "--rmi", "local", "--volumes", "--remove-orphans")
     
-    # –¼‘O•t‚«ƒ{ƒŠƒ…[ƒ€‚Ìíœ
+    # ï¿½ï¿½ï¿½Oï¿½tï¿½ï¿½ï¿½{ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Ìíœ
     Write-Host "Removing cache volumes..."
     docker volume rm kukuri-cargo-registry kukuri-cargo-git kukuri-cargo-target kukuri-pnpm-store 2>$null
     
@@ -1147,7 +1174,7 @@ function Invoke-CacheCleanup {
     Write-Info "Next build will take longer as all caches have been cleared"
 }
 
-# ƒLƒƒƒbƒVƒ…ó‹µ‚Ì•\¦
+# ï¿½Lï¿½ï¿½ï¿½bï¿½Vï¿½ï¿½ï¿½ó‹µ‚Ì•\ï¿½ï¿½
 function Show-CacheStatus {
     Write-Host "`nCache Volume Status:" -ForegroundColor Yellow
     Write-Host "-------------------"
@@ -1202,17 +1229,17 @@ function Stop-P2PBootstrap {
     Invoke-DockerCompose @("down", "--remove-orphans") -IgnoreFailure | Out-Null
 }
 
-# ƒƒCƒ“ˆ—
+# ï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 if ($Help) {
     Show-Help
 }
 
-# ƒeƒXƒgŒ‹‰ÊƒfƒBƒŒƒNƒgƒŠ‚Ìì¬
+# ï¿½eï¿½Xï¿½gï¿½ï¿½ï¿½Êƒfï¿½Bï¿½ï¿½ï¿½Nï¿½gï¿½ï¿½ï¿½Ìì¬
 if (-not (Test-Path "test-results")) {
     New-Item -ItemType Directory -Path "test-results" | Out-Null
 }
 
-# ƒRƒ}ƒ“ƒh‚ÌÀs
+# ï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½Ìï¿½ï¿½s
 switch ($Command) {
     "all" {
         Invoke-AllTests
@@ -1254,6 +1281,10 @@ switch ($Command) {
     }
     "contracts" {
         Invoke-ContractTests
+        Show-CacheStatus
+    }
+    "e2e" {
+        Invoke-DesktopE2EScenario
         Show-CacheStatus
     }
     "build" {

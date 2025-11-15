@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-dev \
     libayatana-appindicator3-dev \
     librsvg2-dev \
+    xvfb \
     curl \
     wget \
     file \
@@ -31,6 +32,7 @@ RUN rustup component add rustfmt clippy
 
 # cargo-tarpaulin を導入（Rustカバレッジ計測用）
 RUN cargo install cargo-tarpaulin --locked --version 0.33.0
+RUN cargo install tauri-driver --locked
 
 # 作業ディレクトリの設定
 WORKDIR /app
@@ -73,6 +75,7 @@ ENV DOCKER_ENV=1
 RUN install -Dm755 scripts/docker/run-tests.sh /app/run-tests.sh
 RUN install -Dm755 scripts/docker/run-smoke-tests.sh /app/run-smoke-tests.sh
 RUN install -Dm755 scripts/docker/run-post-delete-cache.sh /app/run-post-delete-cache.sh
+RUN install -Dm755 scripts/docker/run-desktop-e2e.sh /app/run-desktop-e2e.sh
 
 # デフォルトコマンド
 CMD ["/app/run-smoke-tests.sh"]
