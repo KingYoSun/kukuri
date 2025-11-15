@@ -149,7 +149,11 @@ describe('useDeletePost', () => {
       await result.current.mutateAsync(samplePost);
     });
 
-    expect(mockDeletePostRemote).toHaveBeenCalledWith(samplePost.id);
+    expect(mockDeletePostRemote).toHaveBeenCalledWith({
+      id: samplePost.id,
+      topicId: samplePost.topicId,
+      authorPubkey: samplePost.author.pubkey,
+    });
     expect(mockUpdateTopicPostCount).toHaveBeenCalledWith(samplePost.topicId, -1);
     expect(invalidatePostCachesMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -207,7 +211,11 @@ describe('useDeletePost', () => {
       await result.current.manualRetryDelete({ postId: samplePost.id });
     });
 
-    expect(mockDeletePostRemote).toHaveBeenCalledWith(samplePost.id);
+    expect(mockDeletePostRemote).toHaveBeenCalledWith({
+      id: samplePost.id,
+      topicId: samplePost.topicId,
+      authorPubkey: samplePost.author.pubkey,
+    });
   });
 
   it('manualRetryDelete はメタデータのみでも再送できる', async () => {
@@ -224,7 +232,11 @@ describe('useDeletePost', () => {
       });
     });
 
-    expect(mockDeletePostRemote).toHaveBeenCalledWith(samplePost.id);
+    expect(mockDeletePostRemote).toHaveBeenCalledWith({
+      id: samplePost.id,
+      topicId: 'fallback-topic',
+      authorPubkey: 'author-fallback',
+    });
     expect(invalidatePostCachesMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

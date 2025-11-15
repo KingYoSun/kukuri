@@ -791,6 +791,7 @@ function Invoke-TypeScriptPostDeleteCacheScenario {
     Write-Host "Running TypeScript scenario 'post-delete-cache'..."
     $vitestTargets = @(
         "src/tests/unit/hooks/useDeletePost.test.tsx",
+        "src/tests/unit/stores/postStore.test.ts",
         "src/tests/unit/components/posts/PostCard.test.tsx",
         "src/tests/unit/components/posts/PostCard.deleteOffline.test.tsx"
     )
@@ -800,17 +801,13 @@ function Invoke-TypeScriptPostDeleteCacheScenario {
         $slug = $target.Replace("/", "_").Replace(".", "_")
         $reportRelPath = "test-results/post-delete-cache/${timestamp}-${slug}.json"
 
-        $command = @"
-set -euo pipefail
-cd /app/kukuri-tauri
-if [ ! -f node_modules/.bin/vitest ]; then
-  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-  pnpm install --frozen-lockfile --ignore-workspace
-fi
-pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'
-"@
+        $reportContainerPath = "/app/$reportRelPath"
 
-        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        $dockerArgs = @(
+            "compose", "-f", "docker-compose.test.yml",
+            "run", "--rm",
+            "ts-test", "bash", "/app/scripts/docker/run-vitest-target.sh", $target, $reportContainerPath
+        )
         & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
         $exitCode = $LASTEXITCODE
 
@@ -863,17 +860,13 @@ function Invoke-TypeScriptTopicCreateScenario {
         $slug = $target.Replace("/", "_").Replace(".", "_")
         $reportRelPath = "test-results/topic-create/${timestamp}-${slug}.json"
 
-        $command = @"
-set -euo pipefail
-cd /app/kukuri-tauri
-if [ ! -f node_modules/.bin/vitest ]; then
-  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-  pnpm install --frozen-lockfile --ignore-workspace
-fi
-pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'
-"@
+        $reportContainerPath = "/app/$reportRelPath"
 
-        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        $dockerArgs = @(
+            "compose", "-f", "docker-compose.test.yml",
+            "run", "--rm",
+            "ts-test", "bash", "/app/scripts/docker/run-vitest-target.sh", $target, $reportContainerPath
+        )
         & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
         $exitCode = $LASTEXITCODE
 

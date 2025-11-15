@@ -9,6 +9,14 @@ import { mapPostResponseToDomain, enrichPostAuthorMetadata } from '@/lib/posts/p
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { useAuthStore } from './authStore';
 import { useTopicStore } from './topicStore';
+import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
+import { queryClient } from '@/lib/queryClient';
+
+type DeletePostRemoteInput = {
+  id: string;
+  topicId?: string | null;
+  authorPubkey?: string | null;
+};
 
 interface PostStore extends PostState {
   setPosts: (posts: Post[]) => void;
@@ -24,7 +32,7 @@ interface PostStore extends PostState {
   ) => Promise<Post>;
   updatePost: (id: string, update: Partial<Post>) => void;
   removePost: (id: string) => void;
-  deletePostRemote: (id: string) => Promise<void>;
+  deletePostRemote: (input: DeletePostRemoteInput) => Promise<void>;
   likePost: (postId: string) => Promise<void>;
   addReply: (parentId: string, reply: Post) => void;
   getPostsByTopic: (topicId: string) => Post[];
@@ -260,7 +268,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       };
     }),
 
-  deletePostRemote: async (id: string) => {
+  deletePostRemote: async ({ id, topicId: fallbackTopicId, authorPubkey: fallbackAuthorPubkey }: DeletePostRemoteInput) => {
     try {
       const offlineStore = useOfflineStore.getState();
       const isOnline = offlineStore.isOnline;
@@ -272,12 +280,24 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         throw new Error('Not authenticated');
       }
       const existingPost = get().posts.get(id);
+      const resolvedTopicId = existingPost?.topicId ?? fallbackTopicId ?? null;
+      const resolvedAuthorPubkey = existingPost?.author.pubkey ?? fallbackAuthorPubkey ?? null;
+
+      const invalidateCaches = () => {
+        invalidatePostCaches(queryClient, {
+          id,
+          topicId: resolvedTopicId ?? undefined,
+          authorPubkey: resolvedAuthorPubkey ?? undefined,
+        });
+      };
 
       if (!isOnline) {
         const payload: Record<string, unknown> = { postId: id };
-        if (existingPost) {
-          payload.topicId = existingPost.topicId;
-          payload.authorPubkey = existingPost.author.pubkey;
+        if (resolvedTopicId) {
+          payload.topicId = resolvedTopicId;
+        }
+        if (resolvedAuthorPubkey) {
+          payload.authorPubkey = resolvedAuthorPubkey;
         }
         await offlineStore.saveOfflineAction({
           userPubkey: currentUser.pubkey,
@@ -311,6 +331,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           const topicStore = useTopicStore.getState();
           topicStore.updateTopicPostCount?.(removedTopicId, -1);
         }
+        invalidateCaches();
         return;
       }
 
@@ -340,6 +361,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         const topicStore = useTopicStore.getState();
         topicStore.updateTopicPostCount?.(removedTopicId, -1);
       }
+      invalidateCaches();
     } catch (error) {
       errorHandler.log('Failed to delete post', error, {
         context: 'PostStore.deletePostRemote',

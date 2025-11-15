@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { mockCreatePost, mockGetPosts } = vi.hoisted(() => ({
+const { mockCreatePost, mockGetPosts, invalidatePostCachesMock } = vi.hoisted(() => ({
   mockCreatePost: vi.fn(),
   mockGetPosts: vi.fn(),
+  invalidatePostCachesMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tauri', () => ({
@@ -12,6 +13,10 @@ vi.mock('@/lib/api/tauri', () => ({
     deletePost: vi.fn(),
     likePost: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/posts/cacheUtils', () => ({
+  invalidatePostCaches: (...args: unknown[]) => invalidatePostCachesMock(...args),
 }));
 
 import { usePostStore } from '@/stores/postStore';
@@ -93,6 +98,7 @@ describe('postStore', () => {
   beforeEach(async () => {
     mockCreatePost.mockReset();
     mockGetPosts.mockReset();
+    invalidatePostCachesMock.mockReset();
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.deletePost).mockReset();
     vi.mocked(TauriApi.likePost).mockReset();
@@ -360,7 +366,7 @@ describe('postStore', () => {
       postsByTopic: new Map([['topic1', [mockPost1.id]]]),
     });
 
-    await usePostStore.getState().deletePostRemote(mockPost1.id);
+    await usePostStore.getState().deletePostRemote({ id: mockPost1.id });
 
     expect(TauriApi.deletePost).toHaveBeenCalledWith(mockPost1.id);
     expect(usePostStore.getState().posts.has(mockPost1.id)).toBe(false);
@@ -391,7 +397,7 @@ describe('postStore', () => {
       postsByTopic: new Map([['topic1', [mockPost1.id]]]),
     });
 
-    await usePostStore.getState().deletePostRemote(mockPost1.id);
+    await usePostStore.getState().deletePostRemote({ id: mockPost1.id });
 
     expect(saveOfflineActionMock).toHaveBeenCalledWith({
       userPubkey: mockUser1.pubkey,
@@ -409,5 +415,51 @@ describe('postStore', () => {
 
     getStateSpy.mockRestore();
     useOfflineStore.setState(originalOfflineState, true);
+  });
+
+  it('deletePostRemote 繧剃ｽ懈・縺励°繧ｭ繝｣繝・す繝･繧剃ｺ育ｴ・＠縺ｦ繧ｭ繝｣繝・す繝･繧定阪螟ｮ縺悟￣蜉・', async () => {
+    const { TauriApi } = await import('@/lib/api/tauri');
+    vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
+
+    usePostStore.setState({
+      posts: new Map([[mockPost1.id, { ...mockPost1 }]]),
+      postsByTopic: new Map([['topic1', [mockPost1.id]]]),
+    });
+
+    await usePostStore.getState().deletePostRemote({ id: mockPost1.id });
+
+    expect(invalidatePostCachesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        id: mockPost1.id,
+        topicId: mockPost1.topicId,
+        authorPubkey: mockPost1.author.pubkey,
+      }),
+    );
+  });
+
+  it('deletePostRemote 縺ｯ繧ｿ繧､繝・・繧ｭ繝｣繝・す繝･繧定ｭ門ｮ壹＠縺ｾ縺ｧ陦ｨ遉ｺ蜀・峩螟悶↓繧ｭ繝｣繝・す繝･繧定阪螟ｮ縺悟￣蜉・', async () => {
+    const { TauriApi } = await import('@/lib/api/tauri');
+    vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
+
+    usePostStore.setState({
+      posts: new Map(),
+      postsByTopic: new Map(),
+    });
+
+    await usePostStore.getState().deletePostRemote({
+      id: 'missing-post',
+      topicId: 'fallback-topic',
+      authorPubkey: 'fallback-author',
+    });
+
+    expect(invalidatePostCachesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        id: 'missing-post',
+        topicId: 'fallback-topic',
+        authorPubkey: 'fallback-author',
+      }),
+    );
   });
 });

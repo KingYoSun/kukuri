@@ -393,6 +393,7 @@
   - 2025年11月07日: `/trending` `/following` の手動 QA を実施し、`formatDistanceToNow` へのミリ秒入力・無限スクロール境界（空ページ/`hasNextPage=false`）・DM 未読バッジ連携を確認。`phase5_user_flow_summary.md` と `phase5_ci_path_audit.md` の参照リンクを更新し、Summary Panel の派生メトリクスが最新データと一致することを検証。
   - 2025年11月08日: `trending_metrics_job` を AppState 起動時に 5 分間隔で実行するループとして組み込み、`TopicService::list_trending_topics` / `post_handler::list_trending_posts` が `topic_metrics` の最新ウィンドウ (`window_end`) を `generated_at` として返却するようリファクタ。
   - 2025年11月10日: `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を通し、`pnpm vitest run …` と `./scripts/test-docker.sh ts --scenario trending-feed --no-build` をローカルで完走。ログ（`tmp/logs/vitest_trending_topics_20251110020449.log` / `tmp/logs/trending-feed_20251110020528.log`）を取得し、Summary Panel と `/trending` `/following` ルートの数値突合を実施。
+  - 2025年11月16日: PowerShell で `corepack enable pnpm` を実行後、`./scripts/test-docker.ps1 ts -Scenario trending-feed` を再取得。`tmp/logs/trending-feed/20251116-014637.log`・`tmp/logs/trending_metrics_job_stage4_20251116-014637.log` に加え、`test-results/trending-feed/{reports,prometheus,metrics}/20251116-014637-*` を Nightly artefact（`trending-feed-reports` / `trending-metrics-logs` / `trending-metrics-prometheus` / `trending-metrics-json`）へ反映し、Runbook 6.4 にも同タイムスタンプを追記。Summary Panel の `generated_at` ラグ表示と DM バッジ連動、および `p2p_metrics_export --job trending` の JSON を Docker シナリオで再検証した。
   - 2025年11月08日: `prefetchTrendingCategory` / `prefetchFollowingCategory` の Query Key（`['trending','topics',limit]`, `['trending','posts',{topicIds,perTopic}]`, `['followingFeed',{limit,includeReactions}]`）と `staleTime/refetchInterval` を本節と `phase5_ci_path_audit.md` に明示し、Sidebar ホバー時の事前取得条件をドキュメント化。
 - **未実装（2025年11月10日更新）**
   1. Docker シナリオ `trending-feed`: `scripts/test-docker.{sh,ps1}` に `--scenario/-Scenario` を追加済み。2025年11月10日に `--no-build` でローカル再実行し、`tmp/logs/trending-feed_20251110020528.log` / `test-results/trending-feed/20251110-*.json` を更新済み。
@@ -529,6 +530,7 @@
 - **現状**: オフライン再送を含む導線実装と QA を完了。`TopicService::enqueue_topic_creation` が `topics_pending` テーブルへ書き込み、`list_pending_topics` / `mark_pending_topic_synced|failed` を通じて `sync_engine` が `create_topic`→`join_topic` を再送できる。Tauri には `enqueueTopicCreation` / `listPendingTopics` コマンドを追加し、`topicStore.queueTopicCreation` / `refreshPendingTopics` が `pendingTopics`（Map）を維持。`TopicFormModal` のオフライン経路は pending ID を `useComposerStore.watchPendingTopic` へ渡し、同期完了時に `resolvePendingTopic` → `applyTopicAndResume` が呼ばれる。`TopicSelector` には「保留中のトピック」グループとバッジを追加し、サイドバーが 0 件のときはモーダルを先に開く導線を維持している。
   - 2025年11月12日: `npx pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostComposer.test.tsx src/tests/unit/components/layout/Sidebar.test.tsx src/tests/unit/scenarios/topicCreateOffline.test.tsx 2>&1 | Tee-Object -FilePath ../tmp/logs/topic_create_host_20251112-231141.log` を実行し、Radix の ref 警告（`Input` を `forwardRef` 化）を解消した上で TopicSelector/PostComposer/Sidebar/Scenario の 47 ケースを再取得。
   - 2025年11月12日: `./scripts/test-docker.ps1 ts -Scenario topic-create` を実行し、`tmp/logs/topic_create_20251112-231334.log` と `test-results/topic-create/20251112-231334-*.json`（4 ファイル）を生成。Nightly では同シナリオを `topic-create` ジョブとして artefact 化する。
+  - 2025年11月16日: PowerShell で `corepack enable pnpm` を実行した上で `./scripts/test-docker.ps1 ts -Scenario topic-create` を再取得。`tmp/logs/topic_create_20251116-014614.log` および `test-results/topic-create/20251116-014614-*.json` を Nightly artefact `topic-create` へ差し替え、`TopicSelector.test.tsx` / `PostComposer.test.tsx` / `Sidebar.test.tsx` / `topicCreateOffline.test.tsx` が `postStore` キャッシュ整合性の変更後も緑であることを確認。Runbook と `phase5_ci_path_audit.md` の該当 ID へ同タイムスタンプを追記した。
 - **ブロッカー**: なし。`topics_pending` のメトリクス連携と Nightly 監視は Runbook 5章と CI パス監査へ転記済み。
 - **テスト/Runbook**: `npx pnpm vitest run … | Tee-Object -FilePath ../tmp/logs/topic_create_host_<ts>.log`、`./scripts/test-docker.{sh,ps1} ts --scenario topic-create [-NoBuild]`、`tests/integration/topic_create_join.rs` を `phase5_ci_path_audit.md` に登録済み。
 - **参照**: `phase5_user_flow_summary.md` Quick View（トピック作成導線）、`tauri_app_implementation_plan.md` Phase3、`phase5_ci_path_audit.md` topic-create 行。
@@ -540,11 +542,10 @@
 
 ### 5.10 投稿削除後の React Query キャッシュ整合性（2025年11月06日追加）
 - **目的**: 投稿削除操作後に全てのフィードで即時に結果を反映し、Zustand ストアと React Query キャッシュの不整合を解消する。
-- **現状**: `postStore.deletePostRemote` は `posts` / `postsByTopic` を更新するが、`useTimelinePosts` / `usePostsByTopic` / `useTrendingPostsQuery` / `useFollowingFeedQuery` のキャッシュを無効化しておらず、削除済み投稿が再表示される。オフライン削除キュー登録時も React Query へ通知されない。2025年11月12日に `src/tests/unit/hooks/useDeletePost.test.tsx` を追加し、`npx pnpm vitest run … | tee tmp/logs/post_delete_cache_20251112-125301.log` を取得。`nightly.yml` に `post-delete-cache` ジョブを追加し、Docker シナリオから `test-results/post-delete-cache/*.json` とログを収集できる。
+- **現状**: `useDeletePost` と `postStore.deletePostRemote` が `DeletePostRemoteInput { id, topicId?, authorPubkey? }` を共有し、Zustand ストア更新後に `cacheUtils.invalidatePostCaches`（`QueryClient` へ直接アクセス）でタイムライン / トピック / プロフィール / トレンド / フォロー中のキャッシュを同時に無効化する実装へ更新済み。オフライン削除キューへ保存する際は必ず `topicId` と `authorPubkey` を含め、再送時でも `manualRetryDelete` が Query 情報を維持できるようにした。2025年11月16日に PowerShell で `corepack enable pnpm` → `./scripts/test-docker.ps1 ts -Scenario post-delete-cache`（ログ: `tmp/logs/post_delete_cache_20251116-014422.log`）を実行し、`test-results/post-delete-cache/20251116-014422-*.json` を Nightly artefact `post-delete-cache-{logs,reports}` と Runbook 第5章へ反映済み。
 - **改善案**
-  - `usePosts.ts` に `useDeletePost` ミューテーションを追加し、成功時に `invalidateQueries`（`['timeline']`, `['posts', 'all']`, `['posts', topicId]`）とトピックメトリクスの再取得をトリガーする。`prefetchTrendingCategory` / `prefetchFollowingCategory` が用いるキーもまとめて無効化する。
-  - `useTrendingFeeds.ts` へ `removePostFromTrendingCache` / `removePostFromFollowingCache` ヘルパーを実装し、`QueryClient.setQueryData` で `InfiniteData` から対象投稿を除去する。`PostCard` から呼び出すユーティリティ `invalidatePostCaches(queryClient, post)` を作成する。
-  - オフライン時に `OfflineActionType::DELETE_POST` を保存した直後、`queryClient.invalidateQueries` を呼び出してローカルキャッシュを stale とマークし、同期完了後に `syncEngine` が再度無効化する。`useTopicStore.updateTopicPostCount(post.topicId, -1)` を即時反映してサイドバー統計とトレンドスコアを更新する。
+  - Rust 側 `tests/integration/post_delete_flow.rs` / `post_service_delete.rs` の整備を継続し、`delete_post` → `EventService::delete_events` 経由でメトリクスが更新されることを Runbook/CI へリンクする。
+  - Nightly では `post-delete-cache` artefact に Query JSON / React Query ログを含め、クラッシュ時の再現手順を `phase5_ci_path_audit.md` へ明記する。
 - **バックエンド / コマンド**
   - `PostService::delete_post` で `PostCache::remove` を呼び出し、フロントからの再フェッチが削除済み投稿を返さないようにする。
   - `tests/integration/post_delete_flow.rs`（新規）で `create_post` → `delete_post` → `list_following_feed` / `list_trending_posts` が削除済み投稿を含まないことを検証する。Docker シナリオ `post-delete-cache` を追加し、CI で `pnpm vitest run src/tests/unit/hooks/useDeletePost.test.ts` と連動させる。
@@ -553,15 +554,16 @@
   - `PostCard` の削除メニュー内で再試行ボタンとバックオフ状態を表示し、エラー詳細は `metadata`（`postId`, `topicId`）に記録する。
 - **テスト計画**
   - TypeScript: `useDeletePost.test.ts`（新規）でミューテーション成功時の `invalidateQueries` / `setQueryData` 呼び出しとオフライン経路を検証する。
+  - TypeScript: `postStore.test.ts` を追加し、`postStore.deletePostRemote` が Fallback metadata（`topicId` / `authorPubkey`）付きで `invalidatePostCaches` に伝播すること、オフライン payload に同情報が含まれることを `test-results/post-delete-cache/<timestamp>-src_tests_unit_stores_postStore_test_ts.json` で監視する。
   - TypeScript: `PostCard.test.tsx` に `useDeletePost` フローとオフラインキュー UI を追加し、`topicStore.updateTopicPostCount` 呼び出しを確認する。
   - Rust: `tests/integration/post_delete_flow.rs` と `application/tests/post_service_delete.rs` でキャッシュ削除とイベント発行をユニット/統合テストする。
 - **フォローアップ**
   - `phase5_user_flow_summary.md` のタイムライン行および優先度表へキャッシュ整合性改善計画を追記する。
   - `phase5_ci_path_audit.md` に `useDeletePost` / `post_delete_flow` テスト ID を追加し、Nightly テストのカバレッジに含める。
   - `tauri_app_implementation_plan.md` Phase 5 の優先タスクへ「投稿削除キャッシュ整合性」を追加する。
-- **実装メモ（2025年11月10日）**
-  - `usePosts.ts` に `useDeletePost` を追加し、`useTopicStore.updateTopicPostCount` と `invalidatePostCaches`（新規 `cacheUtils.ts`）でタイムライン / トピック / トレンド / フォロー中のキャッシュを即時更新。`PostCard` はこのフックへ移行し、AlertDialog の状態も `isPending` で制御する。
-  - `postStore.deletePostRemote` が `useTopicStore` を参照して `postCount` を減算するように調整。バックエンドでは既存の `PostService::delete_post` が `PostCache::remove` しているため追加変更なし。
+- **実装メモ（2025年11月16日更新）**
+  - `usePosts.ts` の `useDeletePost` が `DeletePostMutationInput` から `topicId` / `authorPubkey` を抽出し、`postStore.deletePostRemote({ id, topicId, authorPubkey })` へ引き渡すように変更。`postStore` は `QueryClient`（`lib/queryClient.ts`）を直接 import して `invalidatePostCaches` を呼び出し、`removePostFromTrendingCache` / `removePostFromFollowingCache` ヘルパー経由で React Query の `InfiniteData` を更新する。
+  - `postStore.deletePostRemote` 内ではオンライン・オフラインの双方で `resolvedTopicId` / `resolvedAuthorPubkey` を決定し、オフライン登録時も payload に付与。`useTopicStore.updateTopicPostCount` は既存の投稿がストアに残っている場合のみ減算しつつ、削除後に `invalidatePostCaches(queryClient, { id, topicId?, authorPubkey? })` を必ず実行する。
   - `phase5_ci_path_audit.md` に `PostCard.deleteMenu` / `useDeletePost` のテスト ID を追記。TypeScript テスト: `pnpm vitest src/tests/unit/components/posts/PostCard.test.tsx`（pnpm 実行環境の欠如でローカル実行は未完了）。
   - 2025年11月10日: `scripts/docker/ts-test-entrypoint.sh` を追加し、`ts-test` コンテナから `pnpm vitest run …` を直接実行できるようにした。`./scripts/test-docker.sh ts --scenario post-delete-cache --no-build` を完走し、`tmp/logs/post-delete-cache_docker_20251110-021922.log` を採取。Nightly でも同ログを保存する計画に更新。
 

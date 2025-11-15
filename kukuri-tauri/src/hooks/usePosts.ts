@@ -118,7 +118,15 @@ export const useDeletePost = () => {
 
   const deletePostMutation = useMutation({
     mutationFn: async (target: DeletePostMutationInput) => {
-      await deletePostRemote(target.id);
+      const topicId = isFullPost(target) ? target.topicId : target.topicId ?? null;
+      const authorPubkey = isFullPost(target)
+        ? target.author.pubkey
+        : target.authorPubkey ?? null;
+      await deletePostRemote({
+        id: target.id,
+        topicId,
+        authorPubkey,
+      });
       return target;
     },
     onSuccess: (target) => {
