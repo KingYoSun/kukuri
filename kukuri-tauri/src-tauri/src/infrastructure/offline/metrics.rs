@@ -198,7 +198,7 @@ pub fn snapshot() -> OfflineRetryMetricsSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::{RetryOutcomeMetadata, RetryOutcomeStatus, snapshot};
+    use super::{RetryOutcomeMetadata, RetryOutcomeStatus};
 
     #[test]
     fn record_success_and_failure() {
@@ -218,7 +218,7 @@ mod tests {
 
         super::record_outcome(RetryOutcomeStatus::Success, &meta);
 
-        let snapshot = snapshot();
+        let snapshot = super::snapshot();
         assert_eq!(snapshot.total_success, 1);
         assert_eq!(snapshot.total_failure, 0);
         assert_eq!(snapshot.last_outcome, Some(RetryOutcomeStatus::Success));
@@ -232,7 +232,7 @@ mod tests {
         };
 
         super::record_outcome(RetryOutcomeStatus::Failure, &failure_meta);
-        let snapshot = snapshot();
+        let snapshot = super::snapshot();
         assert_eq!(snapshot.total_success, 1);
         assert_eq!(snapshot.total_failure, 1);
         assert_eq!(snapshot.last_outcome, Some(RetryOutcomeStatus::Failure));
