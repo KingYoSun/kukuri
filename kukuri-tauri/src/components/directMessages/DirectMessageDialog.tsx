@@ -40,18 +40,12 @@ export function DirectMessageDialog() {
   const closeDialog = useDirectMessageStore((state) => state.closeDialog);
   const setDraft = useDirectMessageStore((state) => state.setDraft);
   const setIsSending = useDirectMessageStore((state) => state.setIsSending);
-  const appendOptimisticMessage = useDirectMessageStore(
-    (state) => state.appendOptimisticMessage,
-  );
-  const resolveOptimisticMessage = useDirectMessageStore(
-    (state) => state.resolveOptimisticMessage,
-  );
+  const appendOptimisticMessage = useDirectMessageStore((state) => state.appendOptimisticMessage);
+  const resolveOptimisticMessage = useDirectMessageStore((state) => state.resolveOptimisticMessage);
   const failOptimisticMessage = useDirectMessageStore((state) => state.failOptimisticMessage);
   const setMessages = useDirectMessageStore((state) => state.setMessages);
   const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
-  const removeOptimisticMessage = useDirectMessageStore(
-    (state) => state.removeOptimisticMessage,
-  );
+  const removeOptimisticMessage = useDirectMessageStore((state) => state.removeOptimisticMessage);
 
   const scrollAreaWrapperRef = useRef<HTMLDivElement | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
