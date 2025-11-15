@@ -1,3 +1,40 @@
-version: '3.9'
-services: {}
+services:
+  # DHTブートストラップノード（kukuri-tauriが最初に接続するピア）
+  kukuri-bootstrap:
+    build:
+      context: ./kukuri-cli
+      dockerfile: Dockerfile
+    container_name: kukuri-bootstrap-dev
+    environment:
+      LOG_LEVEL: info
+      BIND_ADDRESS: 0.0.0.0:11223
+    ports:
+      - '11223:11223'
+    volumes:
+      - bootstrap-data:/home/kukuri/data
+    restart: unless-stopped
+    command: ['bootstrap']
+
+  # Nostr互換リレー。デフォルトでpublicトピックを購読する
+  kukuri-relay:
+    build:
+      context: ./kukuri-cli
+      dockerfile: Dockerfile
+    container_name: kukuri-relay-dev
+    depends_on:
+      - kukuri-bootstrap
+    environment:
+      LOG_LEVEL: info
+      BIND_ADDRESS: 0.0.0.0:11225
+      RELAY_TOPICS: public
+    ports:
+      - '11225:11225'
+    volumes:
+      - relay-data:/home/kukuri/data
+    restart: unless-stopped
+    command: ['relay']
+
+volumes:
+  bootstrap-data:
+  relay-data:
 
