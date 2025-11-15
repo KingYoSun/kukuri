@@ -96,9 +96,11 @@ describe('useSyncManager', () => {
     lastSyncedAt: undefined,
     syncPendingActions: vi.fn().mockResolvedValue(undefined),
     clearPendingActions: vi.fn(),
+    removePendingAction: vi.fn(),
     setSyncError: vi.fn(),
     clearSyncError: vi.fn(),
     refreshCacheMetadata: vi.fn().mockResolvedValue(undefined),
+    updateLastSyncedAt: vi.fn(),
   };
 
   const defaultAuthState = {

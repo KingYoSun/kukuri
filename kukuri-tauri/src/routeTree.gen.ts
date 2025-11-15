@@ -10,20 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileSetupRouteImport } from './routes/profile-setup'
-import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as FollowingRouteImport } from './routes/following'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TopicsTopicIdRouteImport } from './routes/topics.$topicId'
-import { Route as TrendingRouteImport } from './routes/trending'
-import { Route as FollowingRouteImport } from './routes/following'
+import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrendingRoute = TrendingRouteImport.update({
+  id: '/trending',
+  path: '/trending',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TopicsRoute = TopicsRouteImport.update({
@@ -46,19 +51,9 @@ const ProfileSetupRoute = ProfileSetupRouteImport.update({
   path: '/profile-setup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
-  id: '/profile/$userId',
-  path: '/profile/$userId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TrendingRoute = TrendingRouteImport.update({
-  id: '/trending',
-  path: '/trending',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FollowingRoute = FollowingRouteImport.update({
@@ -76,18 +71,23 @@ const TopicsTopicIdRoute = TopicsTopicIdRouteImport.update({
   path: '/$topicId',
   getParentRoute: () => TopicsRoute,
 } as any)
+const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
+  id: '/profile/$userId',
+  path: '/profile/$userId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/following': typeof FollowingRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
-  '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
   '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
 export interface FileRoutesByTo {
@@ -95,12 +95,12 @@ export interface FileRoutesByTo {
   '/following': typeof FollowingRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
-  '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
   '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
 export interface FileRoutesById {
@@ -109,12 +109,12 @@ export interface FileRoutesById {
   '/following': typeof FollowingRoute
   '/login': typeof LoginRoute
   '/profile-setup': typeof ProfileSetupRoute
-  '/profile/$userId': typeof ProfileUserIdRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/topics': typeof TopicsRouteWithChildren
   '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
 }
 export interface FileRouteTypes {
@@ -124,12 +124,12 @@ export interface FileRouteTypes {
     | '/following'
     | '/login'
     | '/profile-setup'
-    | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
     | '/trending'
     | '/welcome'
+    | '/profile/$userId'
     | '/topics/$topicId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -137,12 +137,12 @@ export interface FileRouteTypes {
     | '/following'
     | '/login'
     | '/profile-setup'
-    | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
     | '/trending'
     | '/welcome'
+    | '/profile/$userId'
     | '/topics/$topicId'
   id:
     | '__root__'
@@ -150,26 +150,26 @@ export interface FileRouteTypes {
     | '/following'
     | '/login'
     | '/profile-setup'
-    | '/profile/$userId'
     | '/search'
     | '/settings'
     | '/topics'
     | '/trending'
     | '/welcome'
+    | '/profile/$userId'
     | '/topics/$topicId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FollowingRoute: typeof FollowingRoute
   LoginRoute: typeof LoginRoute
   ProfileSetupRoute: typeof ProfileSetupRoute
-  ProfileUserIdRoute: typeof ProfileUserIdRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
-  FollowingRoute: typeof FollowingRoute
-  TrendingRoute: typeof TrendingRoute
   TopicsRoute: typeof TopicsRouteWithChildren
+  TrendingRoute: typeof TrendingRoute
   WelcomeRoute: typeof WelcomeRoute
+  ProfileUserIdRoute: typeof ProfileUserIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -179,6 +179,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trending': {
+      id: '/trending'
+      path: '/trending'
+      fullPath: '/trending'
+      preLoaderRoute: typeof TrendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/topics': {
@@ -209,25 +216,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/profile/$userId': {
-      id: '/profile/$userId'
-      path: '/profile/$userId'
-      fullPath: '/profile/$userId'
-      preLoaderRoute: typeof ProfileUserIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/trending': {
-      id: '/trending'
-      path: '/trending'
-      fullPath: '/trending'
-      preLoaderRoute: typeof TrendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/following': {
@@ -251,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopicsTopicIdRouteImport
       parentRoute: typeof TopicsRoute
     }
+    '/profile/$userId': {
+      id: '/profile/$userId'
+      path: '/profile/$userId'
+      fullPath: '/profile/$userId'
+      preLoaderRoute: typeof ProfileUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -267,13 +267,15 @@ const TopicsRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FollowingRoute: FollowingRoute,
   LoginRoute: LoginRoute,
   ProfileSetupRoute: ProfileSetupRoute,
-  ProfileUserIdRoute: ProfileUserIdRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   TopicsRoute: TopicsRouteWithChildren,
+  TrendingRoute: TrendingRoute,
   WelcomeRoute: WelcomeRoute,
+  ProfileUserIdRoute: ProfileUserIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

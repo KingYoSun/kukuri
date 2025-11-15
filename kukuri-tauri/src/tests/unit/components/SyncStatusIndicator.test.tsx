@@ -154,7 +154,7 @@ describe('SyncStatusIndicator', () => {
       expect(screen.getByText('同期中... (3/10)')).toBeInTheDocument();
     });
 
-    it('再送メトリクスを表示', () => {
+    it('再送メトリクスを表示', async () => {
       const nextRun = new Date().toISOString();
       vi.mocked(useSyncManager).mockReturnValue({
         ...defaultManagerState,
@@ -188,7 +188,12 @@ describe('SyncStatusIndicator', () => {
 
       render(<SyncStatusIndicator />);
 
-      expect(screen.getByText('再送メトリクス')).toBeInTheDocument();
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(screen.getByText('再送メトリクス')).toBeInTheDocument();
+      });
       expect(screen.getByText('成功 / 失敗')).toBeInTheDocument();
       expect(screen.getByText('直近の再送')).toBeInTheDocument();
     });

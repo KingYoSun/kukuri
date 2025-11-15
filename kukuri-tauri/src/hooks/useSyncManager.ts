@@ -342,13 +342,13 @@ export function useSyncManager() {
 
       if (result.failedActions.length > 0) {
         for (const action of result.failedActions) {
-          setSyncError(action.localId, '蜷梧悄縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+          setSyncError(action.localId, '同期処理に失敗しました');
         }
       }
 
       if (result.conflicts.length > 0) {
         for (const conflict of result.conflicts) {
-          setSyncError(conflict.localAction.localId, '遶ｶ蜷医′蜿門ｾ励＠縺ｾ縺励◆');
+          setSyncError(conflict.localAction.localId, '競合が発生しています');
         }
       }
 
@@ -522,7 +522,7 @@ export function useSyncManager() {
         errorHandler.log('SyncEngine.applyActionUnavailable', null, {
           context: 'useSyncManager.resolveConflict',
         });
-        toast.error('遶ｶ蜷医・隗｣豎ｺ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+        toast.error('競合の解決に失敗しました');
         return;
       }
 
@@ -553,7 +553,7 @@ export function useSyncManager() {
       }
 
       if (!actionToApply) {
-        toast.error('遶ｶ蜷医・隗｣豎ｺ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+        toast.error('競合の解決に失敗しました');
         return;
       }
 
@@ -582,17 +582,17 @@ export function useSyncManager() {
 
         const successMessage =
           resolution === 'remote'
-            ? '繝ｪ繝｢繝ｼ繝医・螟画峩繧帝←逕ｨ縺励∪縺励◆'
+            ? 'リモートの変更を適用しました'
             : resolution === 'merge'
-              ? '螟画峩繧偵・繝ｼ繧ｸ縺励∪縺励◆'
-              : '繝ｭ繝ｼ繧ｫ繝ｫ縺ｮ螟画峩繧帝←逕ｨ縺励∪縺励◆';
+              ? '変更をマージしました'
+              : 'ローカルの変更を適用しました';
         toast.success(successMessage);
       } catch (error) {
         errorHandler.log('Failed to resolve sync conflict', error, {
           context: 'useSyncManager.resolveConflict',
           metadata: { conflictType: conflict.conflictType },
         });
-        toast.error('遶ｶ蜷医・隗｣豎ｺ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+        toast.error('競合の解決に失敗しました');
       }
     },
     [clearSyncError, persistSyncStatuses, removePendingAction, updateLastSyncedAt],
