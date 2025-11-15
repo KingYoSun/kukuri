@@ -83,16 +83,13 @@ function clearTimer(jobId: string) {
 function scheduleJob(job: OfflineSyncJob, delayMs: number) {
   clearTimer(job.jobId);
   const safeDelay = Math.max(0, delayMs);
-  const handle = self.setTimeout(
-    () => {
-      timers.delete(job.jobId);
-      channel.postMessage({
-        type: 'offline-sync:process',
-        payload: job,
-      } satisfies ChannelMessage);
-    },
-    safeDelay,
-  );
+  const handle = self.setTimeout(() => {
+    timers.delete(job.jobId);
+    channel.postMessage({
+      type: 'offline-sync:process',
+      payload: job,
+    } satisfies ChannelMessage);
+  }, safeDelay);
   timers.set(job.jobId, handle as unknown as number);
 
   channel.postMessage({

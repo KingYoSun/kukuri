@@ -124,10 +124,11 @@ export function useSyncManager() {
     pendingActions,
     isOnline,
     lastSyncedAt,
-    syncPendingActions,
+    removePendingAction,
     setSyncError,
     clearSyncError,
     refreshCacheMetadata,
+    updateLastSyncedAt,
   } = useOfflineStore();
 
   const { currentUser } = useAuthStore();
@@ -328,6 +329,36 @@ export function useSyncManager() {
     [refreshCacheMetadata, refreshCacheStatus],
   );
 
+  const processSyncResult = useCallback(
+    async (result: SyncResult) => {
+      let hasSynced = false;
+
+      if (result.syncedActions.length > 0) {
+        for (const action of result.syncedActions) {
+          removePendingAction(action.localId);
+        }
+        hasSynced = true;
+      }
+
+      if (result.failedActions.length > 0) {
+        for (const action of result.failedActions) {
+          setSyncError(action.localId, '蜷梧悄縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+        }
+      }
+
+      if (result.conflicts.length > 0) {
+        for (const conflict of result.conflicts) {
+          setSyncError(conflict.localAction.localId, '遶ｶ蜷医′蜿門ｾ励＠縺ｾ縺励◆');
+        }
+      }
+
+      if (hasSynced) {
+        updateLastSyncedAt();
+      }
+    },
+    [removePendingAction, setSyncError, updateLastSyncedAt],
+  );
+
   const beginRetryContext = useCallback(
     (options?: { job?: OfflineSyncWorkerJob; trigger?: 'manual' | 'worker'; reason?: string }) => {
       const job = options?.job;
@@ -337,7 +368,7 @@ export function useSyncManager() {
         reason: job?.reason ?? options?.reason ?? 'manual_sync',
         userPubkey: job?.userPubkey ?? currentUser?.npub,
         retryCount: job?.retryCount ?? 0,
-        maxRetries: job?.maxRetries ?? (job ? job.maxRetries : 1),
+        maxRetries: job?.maxRetries ?? 1,
         retryDelayMs: job?.retryDelayMs,
         requestedAt: job?.requestedAt,
         trigger,
@@ -446,13 +477,10 @@ export function useSyncManager() {
         }
 
         await persistSyncStatuses(result);
-        await submitRetryOutcome(
-          result.failedActions.length > 0 ? 'failure' : 'success',
-          {
-            success: result.syncedActions.length,
-            failure: result.failedActions.length,
-          },
-        );
+        await submitRetryOutcome(result.failedActions.length > 0 ? 'failure' : 'success', {
+          success: result.syncedActions.length,
+          failure: result.failedActions.length,
+        });
       } catch (error) {
         errorHandler.log('同期エラー', error, {
           context: 'useSyncManager.triggerManualSync',
@@ -485,6 +513,105 @@ export function useSyncManager() {
     ],
   );
 
+  const resolveConflict = useCallback(
+    async (conflict: SyncConflict, resolution: 'local' | 'remote' | 'merge') => {
+      const applyAction =
+        (syncEngine as unknown as { applyAction?: (action: OfflineAction) => Promise<void> })
+          .applyAction ?? null;
+      if (!applyAction) {
+        errorHandler.log('SyncEngine.applyActionUnavailable', null, {
+          context: 'useSyncManager.resolveConflict',
+        });
+        toast.error('遶ｶ蜷医・隗｣豎ｺ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+        return;
+      }
+
+      let actionToApply: OfflineAction | null = null;
+      switch (resolution) {
+        case 'local':
+          actionToApply = conflict.localAction;
+          break;
+        case 'remote':
+          actionToApply = conflict.remoteAction ?? null;
+          break;
+        case 'merge':
+          if (!conflict.mergedData) {
+            actionToApply = null;
+            break;
+          }
+          actionToApply = {
+            ...conflict.localAction,
+            actionData:
+              typeof conflict.mergedData === 'string'
+                ? conflict.mergedData
+                : JSON.stringify(conflict.mergedData),
+          };
+          break;
+        default:
+          actionToApply = conflict.localAction;
+          break;
+      }
+
+      if (!actionToApply) {
+        toast.error('遶ｶ蜷医・隗｣豎ｺ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+        return;
+      }
+
+      try {
+        await applyAction.call(syncEngine, actionToApply);
+
+        removePendingAction(conflict.localAction.localId);
+        clearSyncError(conflict.localAction.localId);
+        updateLastSyncedAt();
+
+        setSyncStatus((prev) => ({
+          ...prev,
+          syncedItems: prev.syncedItems + 1,
+          totalItems: Math.max(prev.totalItems, prev.syncedItems + 1),
+          conflicts: prev.conflicts.filter(
+            (item) => item.localAction.localId !== conflict.localAction.localId,
+          ),
+        }));
+
+        await persistSyncStatuses({
+          syncedActions: [conflict.localAction],
+          conflicts: [],
+          failedActions: [],
+          totalProcessed: 1,
+        });
+
+        const successMessage =
+          resolution === 'remote'
+            ? '繝ｪ繝｢繝ｼ繝医・螟画峩繧帝←逕ｨ縺励∪縺励◆'
+            : resolution === 'merge'
+              ? '螟画峩繧偵・繝ｼ繧ｸ縺励∪縺励◆'
+              : '繝ｭ繝ｼ繧ｫ繝ｫ縺ｮ螟画峩繧帝←逕ｨ縺励∪縺励◆';
+        toast.success(successMessage);
+      } catch (error) {
+        errorHandler.log('Failed to resolve sync conflict', error, {
+          context: 'useSyncManager.resolveConflict',
+          metadata: { conflictType: conflict.conflictType },
+        });
+        toast.error('遶ｶ蜷医・隗｣豎ｺ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+      }
+    },
+    [clearSyncError, persistSyncStatuses, removePendingAction, updateLastSyncedAt],
+  );
+
+  const updateProgress = useCallback((synced: number, total: number) => {
+    setSyncStatus((prev) => {
+      const normalizedTotal = total > 0 ? total : prev.totalItems;
+      const safeTotal = Math.max(normalizedTotal, synced, 0);
+      const progress =
+        safeTotal > 0 ? Math.max(0, Math.min(100, Math.round((synced / safeTotal) * 100))) : 0;
+      return {
+        ...prev,
+        syncedItems: synced,
+        totalItems: safeTotal,
+        progress,
+      };
+    });
+  }, []);
 
   /**
    * 自動同期の設定
@@ -569,7 +696,10 @@ export function useSyncManager() {
     workerChannelRef.current = channel;
 
     const handleMessage = (
-      event: MessageEvent<{ type?: string; payload?: OfflineSyncWorkerJob | ScheduledRetryPayload }>,
+      event: MessageEvent<{
+        type?: string;
+        payload?: OfflineSyncWorkerJob | ScheduledRetryPayload;
+      }>,
     ) => {
       const message = event.data;
       if (!message) {

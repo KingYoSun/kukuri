@@ -614,8 +614,8 @@ export function SyncStatusIndicator() {
               {scheduledRetry && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   次回 #{scheduledRetry.jobId} を{' '}
-                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}に再送
-                  （{scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
+                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}
+                  に再送 （{scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
                 </p>
               )}
             </div>
@@ -977,7 +977,9 @@ export function SyncStatusIndicator() {
 
             {/* 手動同期ボタン */}
             <Button
-              onClick={triggerManualSync}
+              onClick={() => {
+                void triggerManualSync();
+              }}
               disabled={!isOnline || syncStatus.isSyncing || pendingActionsCount === 0}
               className="w-full"
               size="sm"
