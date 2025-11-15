@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -72,7 +72,7 @@ impl Default for RetryOutcomeMetadata {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct LastRetryMetadata {
     last_outcome: Option<RetryOutcomeStatus>,
     job_id: Option<String>,
@@ -98,7 +98,7 @@ struct OfflineRetryMetrics {
 }
 
 impl OfflineRetryMetrics {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self {
             success: AtomicU64::new(0),
             failure: AtomicU64::new(0),
@@ -121,8 +121,7 @@ impl OfflineRetryMetrics {
                 self.failure.fetch_add(1, Ordering::Relaxed);
                 self.last_failure_ms
                     .store(current_unix_ms(), Ordering::Relaxed);
-                self.consecutive_failure
-                    .fetch_add(1, Ordering::Relaxed);
+                self.consecutive_failure.fetch_add(1, Ordering::Relaxed);
             }
         }
 
@@ -138,9 +137,7 @@ impl OfflineRetryMetrics {
             guard.duration_ms = meta.duration_ms;
             guard.success_count = meta.success_count;
             guard.failure_count = meta.failure_count;
-            guard.timestamp_ms = meta
-                .timestamp_ms
-                .or_else(|| Some(current_unix_ms()));
+            guard.timestamp_ms = meta.timestamp_ms.or_else(|| Some(current_unix_ms()));
         }
     }
 
@@ -148,8 +145,8 @@ impl OfflineRetryMetrics {
         let metadata = self
             .metadata
             .lock()
-            .cloned()
-            .unwrap_or_else(LastRetryMetadata::default);
+            .map(|guard| guard.clone())
+            .unwrap_or_else(|_| LastRetryMetadata::default());
 
         OfflineRetryMetricsSnapshot {
             total_success: self.success.load(Ordering::Relaxed),
@@ -174,11 +171,7 @@ impl OfflineRetryMetrics {
 }
 
 fn to_option(value: u64) -> Option<u64> {
-    if value == 0 {
-        None
-    } else {
-        Some(value)
-    }
+    if value == 0 { None } else { Some(value) }
 }
 
 fn current_unix_ms() -> u64 {
@@ -188,7 +181,8 @@ fn current_unix_ms() -> u64 {
         .unwrap_or(0)
 }
 
-static OFFLINE_RETRY_METRICS: OfflineRetryMetrics = OfflineRetryMetrics::new();
+static OFFLINE_RETRY_METRICS: LazyLock<OfflineRetryMetrics> =
+    LazyLock::new(OfflineRetryMetrics::new);
 
 pub fn record_outcome(
     status: RetryOutcomeStatus,
@@ -204,7 +198,7 @@ pub fn snapshot() -> OfflineRetryMetricsSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::{snapshot, RetryOutcomeMetadata, RetryOutcomeStatus};
+    use super::{RetryOutcomeMetadata, RetryOutcomeStatus, snapshot};
 
     #[test]
     fn record_success_and_failure() {

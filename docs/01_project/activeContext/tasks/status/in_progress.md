@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月14日
+最終更新日: 2025年11月15日
 
 ## 方針（2025年09月15日 更新）
 
@@ -30,6 +30,7 @@
     - メモ (2025年11月14日): `Format Check` 失敗は `kukuri-tauri/src-tauri/src/infrastructure/p2p/event_distributor/state.rs` と `tests/common/performance/{mod.rs,offline_seed.rs}` の整形漏れが原因だったため `cargo fmt` で修正済み。`gh act --workflows .github/workflows/test.yml --job format-check --container-options "--user root"` によりローカル再現・緑化を確認。`docker-test` / `native-test-linux` の artefact への影響は無く、GitHub Actions 本番では `Test` ワークフローの再実行で回復予定。
     - メモ (2025年11月15日): `gh run view 19377708787 --job format-check --log` で再発を確認。`kukuri-tauri/src-tauri/src/state.rs:516` の `sync_service.schedule_sync(DEFAULT_SYNC_INTERVAL_SECS).await` が rustfmt 規約（引数ごとの改行）に反しており CI が再度失敗しているため、該当ブロックの整形をやり直し `gh act --workflows .github/workflows/test.yml --job format-check` でローカル再検証予定。
     - メモ (2025年11月15日): `gh run view 19384995086` で `format-check`/`native-test-linux` が `src/routes/search.tsx` の未使用型インポートと Prettier 警告で落ちていたため修正。`scripts/test-docker.ps1 ts` で TypeScript テスト/型チェック/ESLint を Docker 経由で再実行し、`gh act -j format-check --container-options "--user 0"` でフォーマット専用ジョブがローカルでも完走することを確認。
+    - メモ (2025年11月15日): `gh run view 19387135994` の `format-check` では `get_offline_retry_metrics` の改行崩れ、`build-test-windows` では `RecordOfflineRetryOutcomeRequest::validate` 未 import・`OfflineRetryMetrics::new` での `LastRetryMetadata::default()` 呼び出し・`MutexGuard::cloned()` 使用が原因で Rust ビルドが落ちていたため、`Validate` import 追加と `LazyLock` ベースの初期化、`LastRetryMetadata` へ `Clone` を付与して `cargo fmt` → `cargo check --workspace --all-features`（`kukuri-tauri/src-tauri` / `kukuri-cli`）までローカルで確認。`gh act --workflows .github/workflows/test.yml --job format-check --reuse` では Rust/CLI フォーマットは通過したが Prettier が Windows 側の CRLF 差分で `src/components/SyncStatusIndicator.tsx` 等 3 ファイルに警告を出すため失敗扱いになる点と、`pnpm format:check` / `pnpm type-check` が同理由（および既存の `useSyncManager` の TODO) でローカルのみ失敗する旨を記録。
 
 ### リファクタリングプラン完了タスク
 

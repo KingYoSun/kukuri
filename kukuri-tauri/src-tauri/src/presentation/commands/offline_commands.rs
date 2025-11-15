@@ -1,4 +1,3 @@
-use crate::presentation::dto::ApiResponse;
 use crate::infrastructure::offline::metrics::{
     self, OfflineRetryMetricsSnapshot, RetryOutcomeMetadata, RetryOutcomeStatus,
 };
@@ -9,6 +8,7 @@ use crate::presentation::dto::offline::{
     SyncOfflineActionsRequest, SyncOfflineActionsResponse, SyncQueueItemResponse,
     UpdateCacheMetadataRequest, UpdateSyncStatusRequest,
 };
+use crate::presentation::dto::{ApiResponse, Validate};
 use crate::shared::AppError;
 use crate::state::AppState;
 use serde_json::Value;
@@ -187,8 +187,8 @@ pub async fn record_offline_retry_outcome(
 }
 
 #[tauri::command]
-pub async fn get_offline_retry_metrics(
-) -> Result<ApiResponse<OfflineRetryMetricsResponse>, AppError> {
+pub async fn get_offline_retry_metrics()
+-> Result<ApiResponse<OfflineRetryMetricsResponse>, AppError> {
     let snapshot = metrics::snapshot();
     Ok(ApiResponse::success(snapshot.into()))
 }
@@ -201,12 +201,10 @@ impl From<OfflineRetryMetricsSnapshot> for OfflineRetryMetricsResponse {
             consecutive_failure: value.consecutive_failure,
             last_success_ms: value.last_success_ms,
             last_failure_ms: value.last_failure_ms,
-            last_outcome: value
-                .last_outcome
-                .map(|status| match status {
-                    RetryOutcomeStatus::Success => "success".to_string(),
-                    RetryOutcomeStatus::Failure => "failure".to_string(),
-                }),
+            last_outcome: value.last_outcome.map(|status| match status {
+                RetryOutcomeStatus::Success => "success".to_string(),
+                RetryOutcomeStatus::Failure => "failure".to_string(),
+            }),
             last_job_id: value.last_job_id,
             last_job_reason: value.last_job_reason,
             last_trigger: value.last_trigger,
