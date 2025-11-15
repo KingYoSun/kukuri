@@ -628,6 +628,8 @@
   - TypeScript: `components/trending/TrendingSummaryPanel.test.tsx` / `components/following/FollowingSummaryPanel.test.tsx` を追加し、DM カードの Helper 表示と CTA で `openInbox` が呼ばれることを確認。`phase5_ci_path_audit.md` の test:unit 行へ追記し、Nightly Frontend Unit Tests で監視。
   - Rust / IPC: 既読カウンタ永続化と会話一覧 API（`list_direct_message_threads` 仮称）を `direct_message_service` に追加し、Inbox の初期表示に反映する。`direct-message:received` イベント payload へ `increment_amount` を含め、他端末での未読同期を検討する。
   - 2025年11月12日: `useDirectMessageBootstrap` に 30 秒間隔の `list_direct_message_conversations` 再取得・`visibilitychange` フォーカス復帰処理・Inbox/Dialog オープン時の即時同期を実装し、多端末既読共有を安定化。`DirectMessageInbox` の検索成功時に `errorHandler.info('DirectMessageInbox.search_completed', …)` を出力し、`npx pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/components/trending/TrendingSummaryPanel.test.tsx src/tests/unit/components/following/FollowingSummaryPanel.test.tsx | tee tmp/logs/vitest_direct_message_20251112-124608.log` を取得。
+  - 2025年11月15日: `./scripts/test-docker.{sh,ps1} ts -Scenario direct-message --no-build` を追加し、DM 関連ユニットテストを Docker で一括実行。`tmp/logs/vitest_direct_message_20251115-074009.log` を Nightly artefact に保存し、`test-results/direct-message/20251115-074009-*.json`（Dialog/Inbox/Header/useDirectMessageBadge）が参照できるようにした。
+  - Rust contract: `./scripts/test-docker.ps1 rust -NoBuild | Tee-Object tmp/logs/rust_docker_20251115-074043.log` で `tests/contract/direct_messages.rs::direct_message_read_receipts_sync_across_devices` を再取得し、多端末既読共有のデータパスを Runbook/CI から参照可能にした。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 

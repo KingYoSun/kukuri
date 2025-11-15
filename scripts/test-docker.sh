@@ -408,6 +408,59 @@ pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/ap
   return 0
 }
 
+run_ts_direct_message() {
+  local timestamp
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  local log_rel_path="tmp/logs/vitest_direct_message_${timestamp}.log"
+  local log_host_path="${REPO_ROOT}/${log_rel_path}"
+  local results_dir="${RESULTS_DIR}/direct-message"
+  mkdir -p "$(dirname "$log_host_path")" "$results_dir"
+  : >"$log_host_path"
+
+  echo "Running TypeScript scenario 'direct-message'..."
+  local vitest_targets=(
+    'src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx'
+    'src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx'
+    'src/tests/unit/components/layout/Header.test.tsx'
+    'src/tests/unit/hooks/useDirectMessageBadge.test.tsx'
+  )
+
+  local vitest_status=0
+  for target in "${vitest_targets[@]}"; do
+    local slug="${target//\//_}"
+    slug="${slug//./_}"
+    local report_rel_path="test-results/direct-message/${timestamp}-${slug}.json"
+    local command="
+set -euo pipefail
+cd /app/kukuri-tauri
+if [ ! -f node_modules/.bin/vitest ]; then
+  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+  pnpm install --frozen-lockfile --ignore-workspace
+fi
+pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
+"
+    if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
+      vitest_status=${PIPESTATUS[0]}
+      echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
+      break
+    fi
+
+    if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
+      echo "[OK] Scenario report saved to ${report_rel_path}"
+    else
+      echo "[WARN] Scenario report was not generated at ${report_rel_path}" >&2
+    fi
+  done
+
+  if [[ $vitest_status -ne 0 ]]; then
+    echo "[ERROR] Scenario 'direct-message' failed. See ${log_rel_path} for details." >&2
+    return $vitest_status
+  fi
+
+  echo "[OK] Scenario log saved to ${log_rel_path}"
+  return 0
+}
+
 run_ts_post_delete_cache() {
   local timestamp
   timestamp="$(date +%Y%m%d-%H%M%S)"
@@ -559,6 +612,9 @@ run_ts_tests() {
         ;;
       user-search-pagination)
         run_ts_user_search_pagination
+        ;;
+      direct-message)
+        run_ts_direct_message
         ;;
       post-delete-cache)
         run_ts_post_delete_cache

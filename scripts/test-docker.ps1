@@ -597,15 +597,19 @@ function Invoke-TypeScriptUserSearchScenario {
         $slug = $target.Replace("/", "_").Replace(".", "_")
         $reportRelPath = "test-results/user-search-pagination/${timestamp}-${slug}.json"
 
-        $command = @"
-set -euo pipefail
-cd /app/kukuri-tauri
-if [ ! -f node_modules/.bin/vitest ]; then
-  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-  pnpm install --frozen-lockfile --ignore-workspace
-fi
-pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'
-"@
+        $commandLines = @(
+            "set -euo pipefail",
+            "cd /app/kukuri-tauri",
+            "if [ ! -f node_modules/.bin/vitest ]; then",
+            "  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'",
+            "  pnpm install --frozen-lockfile --ignore-workspace",
+            "fi",
+            "pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
+        )
+        $command = [string]::Join("`n", $commandLines)
+
+
+
 
         $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
         & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
@@ -631,6 +635,130 @@ pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/
         Write-Success "Scenario log saved to $logRelPath"
     }
 }
+
+
+
+
+
+function Invoke-TypeScriptDirectMessageScenario {
+
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+    $logRelPath = "tmp/logs/vitest_direct_message_$timestamp.log"
+
+    $logHostPath = Join-Path $repositoryRoot $logRelPath
+
+    $logDir = Split-Path $logHostPath -Parent
+
+    if (-not (Test-Path $logDir)) {
+
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+
+    }
+
+    Set-Content -Path $logHostPath -Value @()
+
+
+
+    $resultsDir = Join-Path $repositoryRoot "test-results/direct-message"
+
+    if (-not (Test-Path $resultsDir)) {
+
+        New-Item -ItemType Directory -Path $resultsDir | Out-Null
+
+    }
+
+
+
+    Write-Host "Running TypeScript scenario 'direct-message'..."
+
+    $vitestTargets = @(
+
+        "src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx",
+
+        "src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx",
+
+        "src/tests/unit/components/layout/Header.test.tsx",
+
+        "src/tests/unit/hooks/useDirectMessageBadge.test.tsx"
+
+    )
+
+
+
+    $vitestStatus = 0
+
+    foreach ($target in $vitestTargets) {
+
+        $slug = $target.Replace("/", "_").Replace(".", "_")
+
+        $reportRelPath = "test-results/direct-message/${timestamp}-${slug}.json"
+
+
+
+        $commandLines = @(
+            "set -euo pipefail",
+            "cd /app/kukuri-tauri",
+            "if [ ! -f node_modules/.bin/vitest ]; then",
+            "  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'",
+            "  pnpm install --frozen-lockfile --ignore-workspace",
+            "fi",
+            "pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
+        )
+        $command = [string]::Join("`n", $commandLines)
+
+
+
+
+        $dockerArgs = @('compose', '-f', 'docker-compose.test.yml', 'run', '--rm', 'ts-test', 'bash', '-lc', $command)
+
+        & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
+
+        $exitCode = $LASTEXITCODE
+
+
+
+        if ($exitCode -ne 0) {
+
+            $vitestStatus = $exitCode
+
+            Write-Warning "Vitest target $target failed with exit code $exitCode"
+
+            break
+
+        }
+
+
+
+        $reportHostPath = Join-Path $repositoryRoot $reportRelPath
+
+        if (Test-Path $reportHostPath) {
+
+            Write-Success "Scenario report saved to $reportRelPath"
+
+        } else {
+
+            Write-Warning "Scenario report was not generated at $reportRelPath"
+
+        }
+
+    }
+
+
+
+    if ($vitestStatus -ne 0) {
+
+        throw "Scenario 'direct-message' failed. See $logRelPath for details."
+
+    }
+
+
+
+    Write-Success "Scenario log saved to $logRelPath"
+
+}
+
+
 
 function Invoke-TypeScriptPostDeleteCacheScenario {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -808,6 +936,12 @@ function Invoke-TypeScriptTests {
         }
             "user-search-pagination" {
                 Invoke-TypeScriptUserSearchScenario
+            }
+
+            "direct-message" {
+
+                Invoke-TypeScriptDirectMessageScenario
+
             }
             "post-delete-cache" {
                 Invoke-TypeScriptPostDeleteCacheScenario
