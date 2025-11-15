@@ -1,7 +1,7 @@
 use crate::domain::p2p::P2PEvent;
-use crate::infrastructure::p2p::gossip_service::GossipService;
 use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
-use iroh::{Endpoint, NodeAddr};
+use crate::infrastructure::p2p::{DiscoveryOptions, gossip_service::GossipService};
+use iroh::{Endpoint, EndpointAddr, discovery::static_provider::StaticProvider};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -15,7 +15,7 @@ pub const DEFAULT_EVENT_TIMEOUT: Duration = Duration::from_secs(15);
 #[derive(Clone, Debug)]
 pub struct BootstrapContext {
     pub hints: Vec<String>,
-    pub node_addrs: Vec<NodeAddr>,
+    pub node_addrs: Vec<EndpointAddr>,
 }
 
 pub async fn create_service(ctx: &BootstrapContext) -> IrohGossipService {
@@ -25,26 +25,24 @@ pub async fn create_service(ctx: &BootstrapContext) -> IrohGossipService {
         bind_addr,
         ctx.hints.join(", ")
     );
-    let endpoint = Arc::new(
-        Endpoint::builder()
-            .discovery_dht()
-            .bind_addr_v4(bind_addr)
-            .bind()
-            .await
-            .expect("failed to bind iroh endpoint"),
-    );
+    let static_discovery = Arc::new(StaticProvider::new());
+    let builder = DiscoveryOptions::default()
+        .apply_to_builder(Endpoint::builder())
+        .discovery(static_discovery.clone())
+        .bind_addr_v4(bind_addr);
+    let endpoint = Arc::new(builder.bind().await.expect("failed to bind iroh endpoint"));
     endpoint.online().await;
     for addr in &ctx.node_addrs {
-        log_step!("adding bootstrap node addr {}", addr.node_id);
-        let _ = endpoint.add_node_addr_with_source(addr.clone(), "integration-bootstrap");
+        log_step!("adding bootstrap node addr {}", addr.id);
+        static_discovery.add_endpoint_info(addr.clone());
         match endpoint.connect(addr.clone(), iroh_gossip::ALPN).await {
-            Ok(_) => log_step!("connected to bootstrap {}", addr.node_id),
-            Err(err) => log_step!("failed to connect to bootstrap {}: {:?}", addr.node_id, err),
+            Ok(_) => log_step!("connected to bootstrap {}", addr.id),
+            Err(err) => log_step!("failed to connect to bootstrap {}: {:?}", addr.id, err),
         }
     }
     log_step!("endpoint ready, building gossip service");
     sleep(Duration::from_millis(200)).await;
-    IrohGossipService::new(endpoint).expect("failed to create gossip service")
+    IrohGossipService::new(endpoint, static_discovery).expect("failed to create gossip service")
 }
 
 pub fn build_peer_hints(

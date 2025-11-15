@@ -1,4 +1,4 @@
-﻿[title] 作業中タスク（in_progress）
+[title] 作業中タスク（in_progress）
 
 最終更新日: 2025年11月15日
 
@@ -33,6 +33,13 @@
     - メモ (2025年11月15日): `gh run view 19387135994` の `format-check` では `get_offline_retry_metrics` の改行崩れ、`build-test-windows` では `RecordOfflineRetryOutcomeRequest::validate` 未 import・`OfflineRetryMetrics::new` での `LastRetryMetadata::default()` 呼び出し・`MutexGuard::cloned()` 使用が原因で Rust ビルドが落ちていたため、`Validate` import 追加と `LazyLock` ベースの初期化、`LastRetryMetadata` へ `Clone` を付与して `cargo fmt` → `cargo check --workspace --all-features`（`kukuri-tauri/src-tauri` / `kukuri-cli`）までローカルで確認。`gh act --workflows .github/workflows/test.yml --job format-check --reuse` では Rust/CLI フォーマットは通過したが Prettier が Windows 側の CRLF 差分で `src/components/SyncStatusIndicator.tsx` 等 3 ファイルに警告を出すため失敗扱いになる点と、`pnpm format:check` / `pnpm type-check` が同理由（および既存の `useSyncManager` の TODO) でローカルのみ失敗する旨を記録。
     - メモ (2025年11月15日-2): `gh run view 19389007187 --job native-test-linux --log` で `kukuri-tauri/src-tauri/src/infrastructure/offline/metrics.rs` のユニットテスト内で `snapshot()` 関数と同名変数が衝突し `error[E0618]` となっていたため、`super::snapshot()` 呼び出しに変更。`gh act --workflows .github/workflows/test.yml --job native-test-linux --container-options "--user root"` による再現では `Run Rust tests` / `Run Rust clippy` まで完走し、残る failure は既知の `useSyncManager` Vitest locale issue であることを確認。
     - メモ (2025年11月15日-3): `gh run view 19389473094 --job native-test-linux --log` の Vitest 失敗（`useSyncManager` のトースト文言が文字化け＆ `SyncStatusIndicator.test.tsx` がポップオーバー前提へ未更新）を修正。`useSyncManager.ts` の `toast.success/error` および `setSyncError` 文字列を正規化し、`useSyncManager.test.tsx` へ `removePendingAction` / `updateLastSyncedAt` のモックを追加、`SyncStatusIndicator.test.tsx` では `fireEvent.click` でポップオーバーを開いてから再送メトリクスを検証。`gh act --workflows .github/workflows/test.yml --job native-test-linux --container-options "--user root"` を `tmp/gh-act-native.log` に記録しつつ再実行したところ、TypeScript tests / type-check / ESLint まで緑化した。
+
+### 追加メンテナンスタスク
+
+- **iroh / iroh-gossip 0.95 系追随（2025年11月XX日 着手）**  
+  - 背景: upstream 0.95.x で discovery API が  から  ベースへ刷新されており、既存 0.93.1 では Mainline DHT の改良や  等の API を活用できない。  
+  - やること: (1)  /  の  を ・ へ更新し lockfile を再生成。(2)  を導入してブートストラップ情報を discovery レイヤーに連動させ、 依存の箇所を  へ移行（Tauri/CLI 双方）。(3) / API 廃止に伴い  / CLI builder を  +  +  +  の組合せに差し替え。  
+  - 完了条件: Rust 側の P2P サービスと CLI が 0.95 系 API でビルド・テストを通過し、ドキュメント内のバージョン表記 ( / ) が最新化されていること。
 
 ### リファクタリングプラン完了タスク
 

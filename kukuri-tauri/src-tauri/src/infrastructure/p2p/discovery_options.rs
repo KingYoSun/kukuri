@@ -1,4 +1,9 @@
 use crate::shared::config::NetworkConfig;
+use iroh::discovery::{
+    dns::DnsDiscovery,
+    mdns::MdnsDiscovery,
+    pkarr::{PkarrPublisher, dht::DhtDiscovery},
+};
 
 /// P2Pネットワークのディスカバリー設定
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,14 +35,21 @@ impl DiscoveryOptions {
         &self,
         mut builder: iroh::endpoint::Builder,
     ) -> iroh::endpoint::Builder {
+        builder = builder.clear_discovery();
+
         if self.enable_dns {
-            builder = builder.discovery_n0();
+            builder = builder.discovery(PkarrPublisher::n0_dns());
+            builder = builder.discovery(DnsDiscovery::n0_dns());
         }
         if self.enable_mainline {
-            builder = builder.discovery_dht();
+            builder = builder.discovery(
+                DhtDiscovery::builder()
+                    .include_direct_addresses(true)
+                    .n0_dns_pkarr_relay(),
+            );
         }
         if self.enable_local {
-            builder = builder.discovery_local_network();
+            builder = builder.discovery(MdnsDiscovery::builder());
         }
         builder
     }

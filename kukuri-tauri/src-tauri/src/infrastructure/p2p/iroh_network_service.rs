@@ -6,7 +6,7 @@ use crate::domain::p2p::P2PEvent;
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{Endpoint, protocol::Router};
+use iroh::{Endpoint, EndpointAddr, discovery::static_provider::StaticProvider, protocol::Router};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing;
@@ -14,6 +14,7 @@ use tracing;
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
     router: Arc<Router>,
+    static_discovery: Arc<StaticProvider>,
     connected: Arc<RwLock<bool>>,
     peers: Arc<RwLock<Vec<Peer>>>,
     stats: Arc<RwLock<NetworkStats>>,
@@ -33,8 +34,10 @@ impl IrohNetworkService {
         event_tx: Option<broadcast::Sender<P2PEvent>>,
     ) -> Result<Self, AppError> {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
+        let static_discovery = Arc::new(StaticProvider::new());
         let builder = Endpoint::builder().secret_key(secret_key);
         let builder = discovery_options.apply_to_builder(builder);
+        let builder = builder.discovery(static_discovery.clone());
         let endpoint = builder
             .bind()
             .await
@@ -58,9 +61,11 @@ impl IrohNetworkService {
         };
 
         let network_config = Arc::new(RwLock::new(net_cfg.clone()));
+        let endpoint = Arc::new(endpoint);
         let service = Self {
-            endpoint: Arc::new(endpoint),
+            endpoint: Arc::clone(&endpoint),
             router: Arc::new(router),
+            static_discovery,
             connected: Arc::new(RwLock::new(false)),
             peers: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(NetworkStats {
@@ -85,6 +90,10 @@ impl IrohNetworkService {
 
     pub fn endpoint(&self) -> &Arc<Endpoint> {
         &self.endpoint
+    }
+
+    pub fn static_discovery(&self) -> Arc<StaticProvider> {
+        Arc::clone(&self.static_discovery)
     }
 
     pub fn router(&self) -> &Arc<Router> {
@@ -131,7 +140,7 @@ impl IrohNetworkService {
     }
 
     pub fn node_id(&self) -> String {
-        self.endpoint.node_id().to_string()
+        self.endpoint.id().to_string()
     }
 
     pub async fn discovery_options(&self) -> DiscoveryOptions {
@@ -141,10 +150,10 @@ impl IrohNetworkService {
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
         // 直接アドレスを解決し、`node_id@ip:port` 形式で返却
         self.endpoint.online().await;
-        let node_id = self.endpoint.node_id().to_string();
-        let node_addr = self.endpoint.node_addr();
+        let node_addr = self.endpoint.addr();
+        let node_id = node_addr.id.to_string();
         let mut out = Vec::new();
-        for addr in node_addr.direct_addresses() {
+        for addr in node_addr.ip_addrs() {
             out.push(format!("{node_id}@{addr}"));
         }
         if out.is_empty() {
@@ -212,11 +221,12 @@ impl IrohNetworkService {
 
         for node_addr in fallback_peers {
             peers.push(Peer {
-                id: node_addr.node_id.to_string(),
-                address: format!("{}@fallback", node_addr.node_id),
+                id: node_addr.id.to_string(),
+                address: format!("{}@fallback", node_addr.id),
                 connected_at: now,
                 last_seen: now,
             });
+            self.static_discovery.add_endpoint_info(node_addr);
         }
 
         // 統計を更新
@@ -249,7 +259,7 @@ impl NetworkService for IrohNetworkService {
         *connected = true;
         drop(connected);
         if !was_connected {
-            let node_id = self.endpoint.node_id().to_string();
+            let node_id = self.endpoint.id().to_string();
             let addresses = match self.node_addr().await {
                 Ok(addresses) => addresses,
                 Err(err) => {
@@ -276,7 +286,7 @@ impl NetworkService for IrohNetworkService {
 
         tracing::info!("Network service disconnected");
         if was_connected {
-            let node_id = self.endpoint.node_id().to_string();
+            let node_id = self.endpoint.id().to_string();
             self.emit_event(P2PEvent::NetworkDisconnected { node_id });
         }
         Ok(())
@@ -289,7 +299,7 @@ impl NetworkService for IrohNetworkService {
 
     async fn add_peer(&self, address: &str) -> Result<(), AppError> {
         // アドレスからNodeIdを抽出（例: "node_id@socket_addr"）
-        use iroh::NodeId;
+        use iroh::EndpointId;
         use std::net::SocketAddr;
         use std::str::FromStr;
 
@@ -299,7 +309,7 @@ impl NetworkService for IrohNetworkService {
             return Err("Invalid address format: expected 'node_id@socket_addr'".into());
         }
 
-        let node_id = NodeId::from_str(parts[0]).map_err(|e| {
+        let node_id = EndpointId::from_str(parts[0]).map_err(|e| {
             super::metrics::record_mainline_connection_failure();
             AppError::from(format!("Failed to parse node ID: {e}"))
         })?;
@@ -309,7 +319,8 @@ impl NetworkService for IrohNetworkService {
         })?;
 
         // NodeAddrを構築
-        let node_addr = iroh::NodeAddr::new(node_id).with_direct_addresses([socket_addr]);
+        let node_addr = EndpointAddr::new(node_id).with_ip_addr(socket_addr);
+        self.static_discovery.add_endpoint_info(node_addr.clone());
 
         // ピアに接続
         self.endpoint
@@ -324,7 +335,7 @@ impl NetworkService for IrohNetworkService {
         let mut peers = self.peers.write().await;
         let now = chrono::Utc::now().timestamp();
         peers.push(Peer {
-            id: node_id.to_string(),
+            id: node_addr.id.to_string(),
             address: address.to_string(),
             connected_at: now,
             last_seen: now,
@@ -364,7 +375,7 @@ impl NetworkService for IrohNetworkService {
     }
 
     async fn get_node_id(&self) -> Result<String, AppError> {
-        Ok(self.endpoint.node_id().to_string())
+        Ok(self.endpoint.id().to_string())
     }
 
     async fn get_addresses(&self) -> Result<Vec<String>, AppError> {

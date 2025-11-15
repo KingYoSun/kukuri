@@ -4,7 +4,7 @@ use crate::infrastructure::p2p::utils::{ParsedPeer, parse_peer_hint};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use futures::StreamExt;
-use iroh::protocol::Router;
+use iroh::{discovery::static_provider::StaticProvider, protocol::Router};
 use iroh_gossip::{
     ALPN as GOSSIP_ALPN,
     api::{Event as GossipApiEvent, GossipSender, GossipTopic},
@@ -26,6 +26,7 @@ const METRICS_TARGET: &str = "kukuri::p2p::metrics";
 
 pub struct IrohGossipService {
     endpoint: Arc<iroh::Endpoint>,
+    static_discovery: Arc<StaticProvider>,
     gossip: Arc<Gossip>,
     router: Arc<Router>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
@@ -41,7 +42,10 @@ struct TopicHandle {
 }
 
 impl IrohGossipService {
-    pub fn new(endpoint: Arc<iroh::Endpoint>) -> Result<Self, AppError> {
+    pub fn new(
+        endpoint: Arc<iroh::Endpoint>,
+        static_discovery: Arc<StaticProvider>,
+    ) -> Result<Self, AppError> {
         // Gossipインスタンスの作成
         let gossip = Gossip::builder().spawn((*endpoint).clone());
 
@@ -52,6 +56,7 @@ impl IrohGossipService {
 
         Ok(Self {
             endpoint,
+            static_discovery,
             gossip: Arc::new(gossip),
             router: Arc::new(router),
             topics: Arc::new(RwLock::new(HashMap::new())),
@@ -64,10 +69,10 @@ impl IrohGossipService {
     }
 
     pub fn local_peer_hint(&self) -> Option<String> {
-        let node_addr = self.endpoint.node_addr();
-        let node_id = node_addr.node_id.to_string();
+        let node_addr = self.endpoint.addr();
+        let node_id = node_addr.id.to_string();
         node_addr
-            .direct_addresses()
+            .ip_addrs()
             .next()
             .map(|addr| format!("{node_id}@{addr}"))
     }
@@ -100,14 +105,9 @@ impl IrohGossipService {
             if let Some(addr) = &peer.node_addr {
                 eprintln!(
                     "[iroh_gossip_service] re-applying node addr {} for topic {}",
-                    addr.node_id, topic
+                    addr.id, topic
                 );
-                if let Err(e) = self
-                    .endpoint
-                    .add_node_addr_with_source(addr.clone(), "gossip-bootstrap")
-                {
-                    tracing::warn!("Failed to add node addr for {}: {:?}", topic, e);
-                }
+                self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
 
@@ -171,12 +171,7 @@ impl GossipService for IrohGossipService {
 
         for peer in &parsed_peers {
             if let Some(addr) = &peer.node_addr {
-                if let Err(e) = self
-                    .endpoint
-                    .add_node_addr_with_source(addr.clone(), "gossip-bootstrap")
-                {
-                    tracing::warn!("Failed to add node addr for {}: {:?}", topic, e);
-                }
+                self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
 
@@ -398,7 +393,7 @@ impl GossipService for IrohGossipService {
         if let Some(handle) = topics.get(topic) {
             // イベントをシリアライズ
             let payload = serde_json::to_vec(event)?;
-            let sender_id = self.endpoint.node_addr().node_id.to_string().into_bytes();
+            let sender_id = self.endpoint.addr().id.to_string().into_bytes();
             let gossip_message = GossipMessage::new(MessageType::NostrEvent, payload, sender_id);
             let message_bytes = gossip_message.to_bytes().map_err(|e| {
                 AppError::P2PError(format!("Failed to serialize gossip message: {e}"))
@@ -555,8 +550,15 @@ mod tests {
             return;
         }
         // エンドポイント作成（ローカル、ディスカバリ無し）
-        let endpoint = Arc::new(Endpoint::builder().bind().await.unwrap());
-        let service = IrohGossipService::new(endpoint).unwrap();
+        let static_discovery = Arc::new(StaticProvider::new());
+        let endpoint = Arc::new(
+            Endpoint::builder()
+                .discovery(static_discovery.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service = IrohGossipService::new(endpoint, static_discovery).unwrap();
 
         // トピック参加
         let topic = "test-topic-ig";
@@ -573,8 +575,15 @@ mod tests {
         if !should_run_p2p_tests("test_join_and_leave_topic") {
             return;
         }
-        let endpoint = Arc::new(Endpoint::builder().bind().await.unwrap());
-        let service = IrohGossipService::new(endpoint).unwrap();
+        let static_discovery = Arc::new(StaticProvider::new());
+        let endpoint = Arc::new(
+            Endpoint::builder()
+                .discovery(static_discovery.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service = IrohGossipService::new(endpoint, static_discovery).unwrap();
 
         let topic = "test-topic-leave";
         service.join_topic(topic, vec![]).await.unwrap();

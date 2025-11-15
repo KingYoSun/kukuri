@@ -4,7 +4,7 @@ mod tests {
     use crate::domain::p2p::generate_topic_id;
     use crate::infrastructure::p2p::gossip_service::GossipService;
     use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
-    use iroh::Endpoint;
+    use iroh::{Endpoint, discovery::static_provider::StaticProvider};
     use std::sync::Arc;
 
     macro_rules! skip_unless_p2p_enabled {
@@ -17,8 +17,13 @@ mod tests {
     }
 
     async fn create_test_service() -> IrohGossipService {
-        let endpoint = Endpoint::builder().bind().await.unwrap();
-        IrohGossipService::new(Arc::new(endpoint)).unwrap()
+        let static_discovery = Arc::new(StaticProvider::new());
+        let endpoint = Endpoint::builder()
+            .discovery(static_discovery.clone())
+            .bind()
+            .await
+            .unwrap();
+        IrohGossipService::new(Arc::new(endpoint), static_discovery).unwrap()
     }
 
     #[tokio::test]

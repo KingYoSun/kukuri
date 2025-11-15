@@ -51,8 +51,8 @@
 
 ### 2.2 現在の実装状況（2025年09月15日時点）
 - Cargo.toml:
-  - iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }（設定済み）
-  - iroh-gossip = "0.93.1"
+  - iroh = { version = "0.95.1", features = ["discovery-pkarr-dht"] }（設定済み）
+  - iroh-gossip = "0.95.0"
   - distributed-topic-tracker はコメントアウト済み（非推奨化）
 - エンドポイント初期化: `discovery_n0()` + `discovery_dht()` を併用（有効化済み）。
   ```rust
@@ -89,8 +89,8 @@
 
 #### Cargo.tomlの更新（実施済み）
 ```toml
-iroh = { version = "0.93.1", features = ["discovery-pkarr-dht"] }
-iroh-gossip = "0.93.1"
+iroh = { version = "0.95.1", features = ["discovery-pkarr-dht"] }
+iroh-gossip = "0.95.0"
 # distributed-topic-tracker = "0.1.1"  # Deprecated
 ```
 

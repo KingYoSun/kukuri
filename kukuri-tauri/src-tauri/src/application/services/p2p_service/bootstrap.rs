@@ -79,7 +79,8 @@ impl P2PServiceBuilder {
             .await?,
         );
         let endpoint_arc = iroh_network.endpoint().clone();
-        let mut gossip_inner = IrohGossipService::new(endpoint_arc)?;
+        let static_discovery = iroh_network.static_discovery();
+        let mut gossip_inner = IrohGossipService::new(endpoint_arc, static_discovery)?;
         if let Some(tx) = gossip_event_sender {
             gossip_inner.set_event_sender(tx);
         }

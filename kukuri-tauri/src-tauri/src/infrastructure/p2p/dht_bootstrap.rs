@@ -3,7 +3,7 @@
 use super::utils::parse_node_addr;
 use crate::shared::config::BootstrapSource;
 use crate::shared::error::AppError;
-use iroh::Endpoint;
+use iroh::{Endpoint, EndpointAddr};
 use iroh_gossip::{
     api::{GossipSender, GossipTopic},
     net::Gossip,
@@ -45,13 +45,13 @@ impl DhtGossip {
     pub async fn join_topic(
         &self,
         topic: &[u8],
-        neighbors: Vec<iroh::NodeAddr>,
+        neighbors: Vec<EndpointAddr>,
     ) -> Result<(), AppError> {
         let topic_id = Self::make_topic_id(topic);
         let topic_key = Self::topic_key(&topic_id);
 
-        // subscribe には NodeAddrのリストではなく、NodeIdのリストが必要
-        let peer_ids: Vec<_> = neighbors.iter().map(|addr| addr.node_id).collect();
+        // subscribe には EndpointAddrのリストではなく、EndpointIdのリストが必要
+        let peer_ids: Vec<_> = neighbors.iter().map(|addr| addr.id).collect();
         let topic: GossipTopic = self
             .gossip
             .subscribe(topic_id, peer_ids)
@@ -275,7 +275,6 @@ pub mod fallback {
     use super::*;
     use crate::infrastructure::p2p::bootstrap_config;
     use crate::infrastructure::p2p::metrics;
-    use iroh::NodeAddr;
 
     /// ハードコードされたブートストラップノード（将来的に設定ファイルから読み込み）
     /// 形式: "NodeId@Address" (例: "abc123...@192.168.1.1:11204")
@@ -285,7 +284,7 @@ pub mod fallback {
     ];
 
     /// フォールバックノードに接続
-    pub async fn connect_to_fallback(endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
+    pub async fn connect_to_fallback(endpoint: &Endpoint) -> Result<Vec<EndpointAddr>, AppError> {
         let mut connected_nodes = Vec::new();
 
         for node_str in FALLBACK_NODES {
@@ -323,7 +322,7 @@ pub mod fallback {
     }
 
     /// ユーザーUI設定 または 設定ファイル（bootstrap_nodes.json）から NodeId@Addr を読み込み接続
-    pub async fn connect_from_config(endpoint: &Endpoint) -> Result<Vec<NodeAddr>, AppError> {
+    pub async fn connect_from_config(endpoint: &Endpoint) -> Result<Vec<EndpointAddr>, AppError> {
         // 1) ユーザー設定を優先
         let mut node_addrs = bootstrap_config::load_user_bootstrap_node_addrs();
         // 2) ユーザー設定が空なら、プロジェクト同梱のJSONを利用
@@ -335,7 +334,7 @@ pub mod fallback {
         for node_addr in node_addrs {
             match endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
                 Ok(_) => {
-                    info!("Connected to config bootstrap node: {}", node_addr.node_id);
+                    info!("Connected to config bootstrap node: {}", node_addr.id);
                     metrics::record_mainline_connection_success();
                     connected.push(node_addr);
                 }

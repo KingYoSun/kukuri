@@ -2,7 +2,15 @@ use anyhow::{Result, anyhow};
 use base64::prelude::*;
 use clap::{Parser, Subcommand};
 use iroh::{
-    Endpoint, NodeAddr, NodeId, SecretKey, endpoint::Builder as EndpointBuilder, protocol::Router,
+    Endpoint, EndpointAddr, EndpointId, SecretKey,
+    discovery::{
+        dns::DnsDiscovery,
+        mdns::MdnsDiscovery,
+        pkarr::{PkarrPublisher, dht::DhtDiscovery},
+        static_provider::StaticProvider,
+    },
+    endpoint::Builder as EndpointBuilder,
+    protocol::Router,
 };
 use iroh_gossip::net::Gossip;
 use serde_json::Value;
@@ -129,6 +137,28 @@ fn apply_bind_address(builder: EndpointBuilder, bind_addr: SocketAddr) -> Endpoi
     }
 }
 
+fn apply_discovery_services(
+    mut builder: EndpointBuilder,
+    enable_dht: bool,
+    enable_mdns: bool,
+    static_discovery: &Arc<StaticProvider>,
+) -> EndpointBuilder {
+    builder = builder.clear_discovery();
+    builder = builder.discovery(PkarrPublisher::n0_dns());
+    builder = builder.discovery(DnsDiscovery::n0_dns());
+    if enable_dht {
+        builder = builder.discovery(
+            DhtDiscovery::builder()
+                .include_direct_addresses(true)
+                .n0_dns_pkarr_relay(),
+        );
+    }
+    if enable_mdns {
+        builder = builder.discovery(MdnsDiscovery::builder());
+    }
+    builder.discovery(static_discovery.clone())
+}
+
 async fn run_bootstrap_node(
     cli: &Cli,
     bootstrap_peers: Vec<String>,
@@ -138,13 +168,15 @@ async fn run_bootstrap_node(
 
     let bind_addr = SocketAddr::from_str(&cli.bind)?;
 
-    let builder = Endpoint::builder().discovery_dht();
+    let static_discovery = Arc::new(StaticProvider::new());
+    let builder = Endpoint::builder();
     let builder = apply_bind_address(builder, bind_addr);
     let builder = apply_secret_key(builder, cli)?;
+    let builder = apply_discovery_services(builder, true, false, &static_discovery);
     let endpoint = builder.bind().await?;
 
-    let node_id = endpoint.node_id();
-    let _node_addr = endpoint.node_addr();
+    let node_id = endpoint.id();
+    let _node_addr = endpoint.addr();
 
     info!("Node ID: {}", node_id);
     debug!("Node address configured");
@@ -165,9 +197,10 @@ async fn run_bootstrap_node(
     for peer_str in peers.iter() {
         match parse_node_addr(peer_str) {
             Ok(node_addr) => {
-                info!("Connecting to bootstrap peer: {}", node_addr.node_id);
+                info!("Connecting to bootstrap peer: {}", node_addr.id);
+                static_discovery.add_endpoint_info(node_addr.clone());
                 if let Err(e) = endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
-                    error!("Failed to connect to peer {}: {}", node_addr.node_id, e);
+                    error!("Failed to connect to peer {}: {}", node_addr.id, e);
                 }
             }
             Err(e) => error!("Invalid peer address '{}': {e}", peer_str),
@@ -204,7 +237,7 @@ async fn run_bootstrap_node(
 
 fn export_bootstrap_list(
     path: &Path,
-    node_id: &NodeId,
+    node_id: &EndpointId,
     bind_addr: &SocketAddr,
     peers: &[String],
 ) -> Result<()> {
@@ -224,13 +257,15 @@ async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
 
     let bind_addr = SocketAddr::from_str(&cli.bind)?;
 
-    let builder = Endpoint::builder().discovery_dht();
+    let static_discovery = Arc::new(StaticProvider::new());
+    let builder = Endpoint::builder();
     let builder = apply_bind_address(builder, bind_addr);
     let builder = apply_secret_key(builder, cli)?;
+    let builder = apply_discovery_services(builder, true, false, &static_discovery);
     let endpoint = builder.bind().await?;
 
-    let node_id = endpoint.node_id();
-    let _node_addr = endpoint.node_addr();
+    let node_id = endpoint.id();
+    let _node_addr = endpoint.addr();
 
     info!("Node ID: {}", node_id);
     debug!("Node address configured");
@@ -273,19 +308,13 @@ async fn run_connectivity_probe(
 
     let bind_addr = SocketAddr::from_str(&cli.bind)?;
 
-    let mut builder = Endpoint::builder();
-    if enable_dht {
-        builder = builder.discovery_dht();
-    }
-
-    if enable_mdns {
-        builder = builder.discovery_local_network();
-    }
-
-    builder = apply_bind_address(builder, bind_addr);
+    let static_discovery = Arc::new(StaticProvider::new());
+    let builder = Endpoint::builder();
+    let builder = apply_bind_address(builder, bind_addr);
     let builder = apply_secret_key(builder, cli)?;
+    let builder = apply_discovery_services(builder, enable_dht, enable_mdns, &static_discovery);
     let endpoint = builder.bind().await?;
-    info!("Local node id: {}", endpoint.node_id());
+    info!("Local node id: {}", endpoint.id());
 
     let peer_target = parse_peer_target(peer)?;
     let timeout_duration = Duration::from_secs(timeout_secs);
@@ -298,6 +327,7 @@ async fn run_connectivity_probe(
     let connect_result = timeout(timeout_duration, async {
         match peer_target {
             PeerTarget::NodeAddr(ref addr) => {
+                static_discovery.add_endpoint_info(addr.clone());
                 endpoint.connect(addr.clone(), iroh_gossip::ALPN).await
             }
             PeerTarget::NodeId(id) => endpoint.connect(id, iroh_gossip::ALPN).await,
@@ -348,30 +378,30 @@ fn init_logging(level: &str, json: bool) -> Result<()> {
 
 #[derive(Debug)]
 enum PeerTarget {
-    NodeId(NodeId),
-    NodeAddr(NodeAddr),
+    NodeId(EndpointId),
+    NodeAddr(EndpointAddr),
 }
 
 fn parse_peer_target(s: &str) -> Result<PeerTarget> {
     if s.contains('@') {
         Ok(PeerTarget::NodeAddr(parse_node_addr(s)?))
     } else {
-        Ok(PeerTarget::NodeId(NodeId::from_str(s)?))
+        Ok(PeerTarget::NodeId(EndpointId::from_str(s)?))
     }
 }
 
-fn parse_node_addr(s: &str) -> Result<NodeAddr> {
+fn parse_node_addr(s: &str) -> Result<EndpointAddr> {
     // Format: node_id@host:port
     let parts: Vec<&str> = s.split('@').collect();
     if parts.len() != 2 {
         return Err(anyhow!("Invalid format. Expected: node_id@host:port"));
     }
 
-    let node_id = NodeId::from_str(parts[0])?;
+    let node_id = EndpointId::from_str(parts[0])?;
     let address_part = parts[1];
 
     if let Ok(socket_addr) = SocketAddr::from_str(address_part) {
-        return Ok(NodeAddr::new(node_id).with_direct_addresses([socket_addr]));
+        return Ok(EndpointAddr::new(node_id).with_ip_addr(socket_addr));
     }
 
     let (host, port_str) = address_part
@@ -386,7 +416,7 @@ fn parse_node_addr(s: &str) -> Result<NodeAddr> {
         .map_err(|e| anyhow!("Failed to resolve host `{}`: {}", host, e))?;
 
     if let Some(addr) = addrs_iter.next() {
-        Ok(NodeAddr::new(node_id).with_direct_addresses([addr]))
+        Ok(EndpointAddr::new(node_id).with_ip_addr(addr))
     } else {
         Err(anyhow!(
             "Resolved host `{}` but no socket addresses were returned",
@@ -466,7 +496,7 @@ mod tests {
     #[test]
     fn export_bootstrap_list_writes_unique_nodes() {
         let path = temp_file("bootstrap.json");
-        let node_id = NodeId::from_str(SAMPLE_NODE_ID).unwrap();
+        let node_id = EndpointId::from_str(SAMPLE_NODE_ID).unwrap();
         let bind_addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
         let peers = vec![
             format!("{SECOND_NODE_ID}@10.0.0.2:7000"),
@@ -493,11 +523,11 @@ mod tests {
     fn parse_node_addr_supports_ip_and_hostnames() {
         let ip_input = format!("{SAMPLE_NODE_ID}@127.0.0.1:32145");
         let ip_addr = parse_node_addr(&ip_input).expect("ip parse succeeds");
-        assert_eq!(ip_addr.node_id, NodeId::from_str(SAMPLE_NODE_ID).unwrap());
+        assert_eq!(ip_addr.id, EndpointId::from_str(SAMPLE_NODE_ID).unwrap());
 
         let host_input = format!("{SAMPLE_NODE_ID}@localhost:32145");
         let host_addr = parse_node_addr(&host_input).expect("hostname parse succeeds");
-        assert_eq!(host_addr.node_id, NodeId::from_str(SAMPLE_NODE_ID).unwrap());
+        assert_eq!(host_addr.id, EndpointId::from_str(SAMPLE_NODE_ID).unwrap());
     }
 
     #[test]

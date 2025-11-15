@@ -1,8 +1,8 @@
-﻿/// ブートストラップノード設定モジュール
+/// ブートストラップノード設定モジュール
 use crate::shared::config::BootstrapSource;
 use crate::shared::error::AppError;
 use dirs;
-use iroh::{NodeAddr, NodeId};
+use iroh::{EndpointAddr, EndpointId};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
@@ -104,17 +104,20 @@ impl BootstrapConfig {
         addrs
     }
 
-    /// 形式: "<node_id>@<host:port>" のみ NodeAddr に変換する
+    /// 形式: "<node_id>@<host:port>" のみ EndpointAddr に変換する
     /// SocketAddr のみの指定は警告を出してスキップ
-    pub fn get_node_addrs_with_id(&self, environment: &str) -> Vec<NodeAddr> {
+    pub fn get_node_addrs_with_id(&self, environment: &str) -> Vec<EndpointAddr> {
         let nodes = self.get_nodes(environment);
         let mut out = Vec::new();
 
         for node in nodes {
             if let Some((id_part, addr_part)) = node.split_once('@') {
-                match (NodeId::from_str(id_part), addr_part.parse::<SocketAddr>()) {
+                match (
+                    EndpointId::from_str(id_part),
+                    addr_part.parse::<SocketAddr>(),
+                ) {
                     (Ok(node_id), Ok(sock)) => {
-                        out.push(NodeAddr::new(node_id).with_direct_addresses([sock]));
+                        out.push(EndpointAddr::new(node_id).with_ip_addr(sock));
                     }
                     (id_res, addr_res) => {
                         debug!(
@@ -161,9 +164,9 @@ pub fn load_env_bootstrap_nodes() -> Option<Vec<String>> {
     }
 }
 
-fn format_node_addrs(node_addr: &NodeAddr) -> Vec<String> {
-    let node_id = node_addr.node_id.to_string();
-    let direct: Vec<_> = node_addr.direct_addresses().collect();
+fn format_node_addrs(node_addr: &EndpointAddr) -> Vec<String> {
+    let node_id = node_addr.id.to_string();
+    let direct: Vec<_> = node_addr.ip_addrs().cloned().collect();
     if direct.is_empty() {
         vec![node_id]
     } else {
@@ -254,9 +257,9 @@ pub fn load_bootstrap_nodes() -> Result<Vec<SocketAddr>, AppError> {
     Ok(addrs)
 }
 
-/// NodeId を含むブートストラップノードを取得（NodeAddr）。
+/// NodeId を含むブートストラップノードを取得（EndpointAddr）。
 /// NodeId がないエントリは警告してスキップする。
-pub fn load_bootstrap_node_addrs() -> Result<Vec<NodeAddr>, AppError> {
+pub fn load_bootstrap_node_addrs() -> Result<Vec<EndpointAddr>, AppError> {
     let env = get_current_environment();
     info!("Loading bootstrap NodeAddrs for environment: {}", env);
 
@@ -297,7 +300,7 @@ pub fn validate_bootstrap_config() -> Result<(), AppError> {
 
     for node in nodes {
         if let Some((id_part, addr_part)) = node.split_once('@') {
-            if NodeId::from_str(id_part).is_ok() && addr_part.parse::<SocketAddr>().is_ok() {
+            if EndpointId::from_str(id_part).is_ok() && addr_part.parse::<SocketAddr>().is_ok() {
                 with_id += 1;
             } else {
                 invalid += 1;
@@ -384,15 +387,16 @@ pub fn load_user_bootstrap_nodes() -> Vec<String> {
     }
 }
 
-/// ユーザー定義のブートストラップノード（NodeAddr）
-pub fn load_user_bootstrap_node_addrs() -> Vec<NodeAddr> {
+/// ユーザー定義のブートストラップノード（EndpointAddr）
+pub fn load_user_bootstrap_node_addrs() -> Vec<EndpointAddr> {
     let mut out = Vec::new();
     for node in load_user_bootstrap_nodes() {
         if let Some((id_part, addr_part)) = node.split_once('@') {
-            match (NodeId::from_str(id_part), addr_part.parse::<SocketAddr>()) {
-                (Ok(node_id), Ok(sock)) => {
-                    out.push(NodeAddr::new(node_id).with_direct_addresses([sock]))
-                }
+            match (
+                EndpointId::from_str(id_part),
+                addr_part.parse::<SocketAddr>(),
+            ) {
+                (Ok(node_id), Ok(sock)) => out.push(EndpointAddr::new(node_id).with_ip_addr(sock)),
                 _ => debug!("Invalid user bootstrap entry: {}", node),
             }
         } else {
