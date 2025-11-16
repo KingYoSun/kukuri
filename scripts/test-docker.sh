@@ -250,9 +250,8 @@ run_ts_trending_feed() {
     } >>"$log_host_path"
 
     echo "  › pnpm vitest run ${target}"
-    if ! compose_run '' run --rm \
-      -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
-      ts-test bash -lc "
+    local command_template command
+    command_template=$(cat <<'BASH'
         set -euo pipefail
         cd /app/kukuri-tauri
         declare -a PNPM_BIN
@@ -264,18 +263,23 @@ run_ts_trending_feed() {
           echo '[ERROR] Neither pnpm nor corepack is available inside container.' >&2
           exit 1
         fi
-        echo "[INFO] Using \\${PNPM_BIN[*]} for pnpm commands"
+        echo "[INFO] Using ${PNPM_BIN[*]} for pnpm commands"
         if [ ! -f node_modules/.bin/vitest ]; then
-          echo "[INFO] Installing frontend dependencies inside container (\\${PNPM_BIN[*]} install --frozen-lockfile)..."
-          "\\${PNPM_BIN[@]}" install --frozen-lockfile --ignore-workspace
+          echo "[INFO] Installing frontend dependencies inside container (${PNPM_BIN[*]} install --frozen-lockfile)..."
+          "${PNPM_BIN[@]}" install --frozen-lockfile --ignore-workspace
         fi
-        "\\${PNPM_BIN[@]}" vitest run '${target}' --reporter=default --reporter=json --outputFile "${report_container_path}"
-      " | tee -a "$log_host_path"; then
+        "${PNPM_BIN[@]}" vitest run '__TARGET__' --reporter=default --reporter=json --outputFile "__REPORT_PATH__"
+BASH
+    )
+    command="${command_template//__TARGET__/${target}}"
+    command="${command//__REPORT_PATH__/${report_container_path}}"
+    if ! compose_run '' run --rm \
+      -e "VITE_TRENDING_FIXTURE_PATH=${fixture_path}" \
+      ts-test bash -lc "$command" | tee -a "$log_host_path"; then
       vitest_status=${PIPESTATUS[0]}
       echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
       break
     fi
-
     if [[ -f "${REPO_ROOT}/${report_rel_path}" ]]; then
       echo "[OK] Scenario report saved to ${report_rel_path}"
     else
@@ -330,26 +334,42 @@ run_ts_profile_avatar_sync() {
   fi
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
   mkdir -p "$(dirname "$log_host_path")"
-  local worker_tests=""
+  local tests_block=""
+  local -a profile_tests=(
+    "src/tests/unit/components/settings/ProfileEditDialog.test.tsx"
+    "src/tests/unit/components/auth/ProfileSetup.test.tsx"
+    "src/tests/unit/hooks/useProfileAvatarSync.test.tsx"
+  )
+  for spec in "${profile_tests[@]}"; do
+    local line
+    printf -v line "      '%s' \\\\\n" "$spec"
+    tests_block+="$line"
+  done
   if [[ $PROFILE_AVATAR_SW -eq 1 ]]; then
-    worker_tests=" 'src/tests/unit/workers/profileAvatarSyncWorker.test.ts'"
+    local worker_line
+    printf -v worker_line "      '%s' \\\\\n" 'src/tests/unit/workers/profileAvatarSyncWorker.test.ts'
+    tests_block+="$worker_line"
   fi
 
   echo "Running TypeScript scenario 'profile-avatar-sync'..."
-  compose_run '' run --rm ts-test bash -lc "
-    set -euo pipefail
-    cd /app/kukuri-tauri
-    if [ ! -f node_modules/.bin/vitest ]; then
-      echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
-      pnpm install --frozen-lockfile --ignore-workspace
-    fi
-    pnpm vitest run \
-      'src/tests/unit/components/settings/ProfileEditDialog.test.tsx' \
-      'src/tests/unit/components/auth/ProfileSetup.test.tsx' \
-      'src/tests/unit/hooks/useProfileAvatarSync.test.tsx' \
-      ${worker_tests} \
-      | tee '/app/${log_rel_path}'
-  "
+  local command_template command container_log_path
+  container_log_path="/app/${log_rel_path}"
+  command_template=$(cat <<'BASH'
+        set -euo pipefail
+        cd /app/kukuri-tauri
+        if [ ! -f node_modules/.bin/vitest ]; then
+          echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
+          pnpm install --frozen-lockfile --ignore-workspace
+        fi
+        pnpm vitest run \
+__TEST_BLOCK__
+        | tee '__LOG_PATH__'
+BASH
+  )
+  command="${command_template//__TEST_BLOCK__/${tests_block}}"
+  command="${command//__LOG_PATH__/${container_log_path}}"
+  compose_run '' run --rm ts-test bash -lc "$command"
+
 
   if [[ -f "$log_host_path" ]]; then
     echo "[OK] Scenario log saved to ${log_rel_path}"

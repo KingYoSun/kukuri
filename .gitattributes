@@ -1,0 +1,4 @@
+* text=auto
+
+# Ensure bash scripts stay executable on Linux
+*.sh text eol=lf
