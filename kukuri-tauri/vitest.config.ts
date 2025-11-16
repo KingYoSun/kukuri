@@ -10,6 +10,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/tests/setup.ts',
     css: false, // CSSの処理を無効化
+    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'tests/e2e/**'],
   },
   resolve: {
     alias: {

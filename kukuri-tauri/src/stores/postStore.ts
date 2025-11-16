@@ -268,7 +268,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       };
     }),
 
-  deletePostRemote: async ({ id, topicId: fallbackTopicId, authorPubkey: fallbackAuthorPubkey }: DeletePostRemoteInput) => {
+  deletePostRemote: async ({
+    id,
+    topicId: fallbackTopicId,
+    authorPubkey: fallbackAuthorPubkey,
+  }: DeletePostRemoteInput) => {
     try {
       const offlineStore = useOfflineStore.getState();
       const isOnline = offlineStore.isOnline;
