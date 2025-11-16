@@ -20,8 +20,14 @@ echo "=== desktop-e2e: building debug bundle ==="
 pnpm e2e:build
 
 echo "=== desktop-e2e: running pnpm e2e:ci ==="
+E2E_COMMAND=(pnpm e2e:ci)
+if command -v dbus-run-session >/dev/null 2>&1; then
+  echo "Detected dbus-run-session; running E2E inside a dedicated DBus session"
+  E2E_COMMAND=(dbus-run-session -- pnpm e2e:ci)
+fi
+
 set +e
-pnpm e2e:ci 2>&1 | tee "$log_file"
+"${E2E_COMMAND[@]}" 2>&1 | tee "$log_file"
 status=${PIPESTATUS[0]}
 set -e
 

@@ -35,9 +35,36 @@ function sanitizeFileName(title: string): string {
   return title.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
 }
 
+function pruneUnsupportedCapabilities(target: unknown): void {
+  if (!target || typeof target !== 'object') {
+    return;
+  }
+  const record = target as Record<string, unknown>;
+  if ('webSocketUrl' in record) {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete record.webSocketUrl;
+  }
+  if ('unhandledPromptBehavior' in record) {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete record.unhandledPromptBehavior;
+  }
+
+  if ('alwaysMatch' in record) {
+    pruneUnsupportedCapabilities(record.alwaysMatch);
+  }
+  if ('firstMatch' in record && Array.isArray(record.firstMatch)) {
+    for (const entry of record.firstMatch) {
+      pruneUnsupportedCapabilities(entry);
+    }
+  }
+  if ('desiredCapabilities' in record) {
+    pruneUnsupportedCapabilities(record.desiredCapabilities);
+  }
+}
+
 export const config: Options.Testrunner = {
   runner: 'local',
-  specs: ['./tests/e2e/specs/**/*.spec.ts'],
+  specs: [join(__dirname, 'specs/**/*.spec.ts')],
   maxInstances: 1,
   logLevel: 'info',
   waitforTimeout: 15000,
@@ -69,7 +96,8 @@ export const config: Options.Testrunner = {
   port: 4445,
   capabilities: [
     {
-      browserName: 'tauri',
+      browserName: 'wry',
+      'wdio:enforceWebDriverClassic': true,
       'tauri:options': {
         application:
           process.env.TAURI_E2E_APP_PATH ??
@@ -77,14 +105,20 @@ export const config: Options.Testrunner = {
       }
     }
   ],
-  onPrepare: () => {
+  onPrepare: (_config, capabilities) => {
     mkdirSync(OUTPUT_DIR, { recursive: true });
+    if (Array.isArray(capabilities)) {
+      for (const capability of capabilities) {
+        pruneUnsupportedCapabilities(capability as Record<string, unknown>);
+      }
+    }
     if (process.env.E2E_SKIP_BUILD === '1') {
       return;
     }
     runScript('pnpm', ['e2e:build']);
   },
-  beforeSession: async () => {
+  beforeSession: async function (_config, capabilities) {
+    pruneUnsupportedCapabilities(capabilities);
     await startDriver();
   },
   afterTest: async function (test, _context, { error }) {
