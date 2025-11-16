@@ -143,9 +143,18 @@ impl GossipMessage {
     }
 }
 
-/// トピックIDの生成
+/// トピックIDの生成（既に `kukuri:` で始まる場合は再利用する）
 pub fn generate_topic_id(topic_name: &str) -> String {
-    format!("kukuri:topic:{}", topic_name.to_lowercase())
+    let trimmed = topic_name.trim();
+    if trimmed.is_empty() {
+        return "kukuri:topic:default".to_string();
+    }
+
+    if trimmed.starts_with("kukuri:") {
+        trimmed.to_string()
+    } else {
+        format!("kukuri:topic:{}", trimmed.to_lowercase())
+    }
 }
 
 /// グローバルトピック（全体のタイムライン）

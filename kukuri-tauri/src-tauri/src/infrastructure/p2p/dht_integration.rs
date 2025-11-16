@@ -1,6 +1,7 @@
 //! DHT統合モジュール
 //! iroh-gossipとdistributed-topic-trackerの統合
 use crate::domain::entities::Event;
+use crate::domain::p2p::generate_topic_id;
 use crate::infrastructure::p2p::dht_bootstrap::DhtGossip;
 use crate::shared::error::AppError;
 // use iroh_gossip::proto::Event as GossipEvent;
@@ -69,13 +70,17 @@ impl DhtIntegration {
 
     /// トピックに参加
     pub async fn join_topic(&self, topic: &str) -> Result<(), AppError> {
-        self.dht_gossip.join_topic(topic.as_bytes(), vec![]).await?;
+        let canonical = generate_topic_id(topic);
+        self.dht_gossip
+            .join_topic(canonical.as_bytes(), vec![])
+            .await?;
         Ok(())
     }
 
     /// トピックから離脱
     pub async fn leave_topic(&self, topic: &str) -> Result<(), AppError> {
-        self.dht_gossip.leave_topic(topic.as_bytes()).await?;
+        let canonical = generate_topic_id(topic);
+        self.dht_gossip.leave_topic(canonical.as_bytes()).await?;
         Ok(())
     }
 
@@ -86,9 +91,15 @@ impl DhtIntegration {
             .map_err(|e| AppError::SerializationError(format!("Failed to serialize: {e:?}")))?;
 
         // DHTにブロードキャスト
-        self.dht_gossip.broadcast(topic.as_bytes(), message).await?;
+        let canonical = generate_topic_id(topic);
+        self.dht_gossip
+            .broadcast(canonical.as_bytes(), message)
+            .await?;
 
-        debug!("Event broadcast to topic: {topic}");
+        debug!(
+            "Event broadcast to topic: {} (canonical: {})",
+            topic, canonical
+        );
         Ok(())
     }
 }

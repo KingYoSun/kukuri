@@ -252,6 +252,18 @@ fn export_bootstrap_list(
     write_cache(cache, path)
 }
 
+fn ensure_kukuri_namespace(topic: &str) -> Option<String> {
+    let trimmed = topic.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("kukuri:") {
+        Some(trimmed.to_string())
+    } else {
+        Some(format!("kukuri:topic:{}", trimmed.to_lowercase()))
+    }
+}
+
 async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
     info!("Starting relay node on {} for topics: {}", cli.bind, topics);
 
@@ -277,13 +289,28 @@ async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
         .spawn();
 
     // Subscribe to topics
-    let topic_list: Vec<&str> = topics.split(',').collect();
-    for topic in topic_list {
-        let topic_id = blake3::hash(topic.as_bytes());
+    let mut subscribed = 0usize;
+    for topic in topics.split(',') {
+        let Some(namespaced_topic) = ensure_kukuri_namespace(topic) else {
+            continue;
+        };
+        let topic_id = blake3::hash(namespaced_topic.as_bytes());
         let topic_bytes = *topic_id.as_bytes();
 
-        info!("Subscribing to topic: {} (hash: {})", topic, topic_id);
+        info!(
+            "Subscribing to topic: {} -> {} (hash: {})",
+            topic.trim(),
+            namespaced_topic,
+            topic_id
+        );
         gossip.subscribe(topic_bytes.into(), vec![]).await?;
+        subscribed += 1;
+    }
+
+    if subscribed == 0 {
+        return Err(anyhow!(
+            "No valid topics provided after applying namespace (input: {topics})"
+        ));
     }
 
     info!("Relay node is running. Press Ctrl+C to stop.");
@@ -491,6 +518,19 @@ mod tests {
 
     fn remove_env_var(key: &str) {
         unsafe { std::env::remove_var(key) };
+    }
+
+    #[test]
+    fn ensure_kukuri_namespace_normalizes_topics() {
+        assert_eq!(
+            super::ensure_kukuri_namespace("Public Topic"),
+            Some("kukuri:topic:public topic".to_string())
+        );
+        assert_eq!(
+            super::ensure_kukuri_namespace("kukuri:user:npub123"),
+            Some("kukuri:user:npub123".to_string())
+        );
+        assert_eq!(super::ensure_kukuri_namespace("   "), None);
     }
 
     #[test]

@@ -42,6 +42,15 @@ mod tests {
         assert_eq!(generate_topic_id("Bitcoin"), "kukuri:topic:bitcoin");
         assert_eq!(generate_topic_id("NOSTR"), "kukuri:topic:nostr");
         assert_eq!(generate_topic_id("Test Topic"), "kukuri:topic:test topic");
+        assert_eq!(
+            generate_topic_id("kukuri:user:npub123"),
+            "kukuri:user:npub123"
+        );
+        assert_eq!(
+            generate_topic_id("   kukuri:topic:public   "),
+            "kukuri:topic:public"
+        );
+        assert_eq!(generate_topic_id("   "), "kukuri:topic:default");
     }
 
     #[test]

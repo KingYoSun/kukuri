@@ -19,7 +19,7 @@ use tokio::time::timeout;
 
 use crate::domain::p2p::events::P2PEvent;
 use crate::domain::p2p::message::{GossipMessage, MessageType};
-use crate::domain::p2p::{TopicMesh, TopicStats};
+use crate::domain::p2p::{TopicMesh, TopicStats, generate_topic_id};
 
 const LOG_TARGET: &str = "kukuri::p2p::gossip";
 const METRICS_TARGET: &str = "kukuri::p2p::metrics";
@@ -175,11 +175,13 @@ impl GossipService for IrohGossipService {
             }
         }
 
-        let topic_id = Self::create_topic_id(topic);
+        let canonical_topic = generate_topic_id(topic);
+        let topic_id = Self::create_topic_id(&canonical_topic);
         let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
         eprintln!(
-            "[iroh_gossip_service] subscribing topic {} with {} peer hints",
+            "[iroh_gossip_service] subscribing topic {} (canonical {}) with {} peer hints",
             topic,
+            canonical_topic,
             peer_ids.len()
         );
 

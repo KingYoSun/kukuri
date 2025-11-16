@@ -66,7 +66,7 @@ kukuri-cli relay [OPTIONS]
 ```
 
 オプション:
-- `--topics <TOPICS>`: 購読するトピック（カンマ区切り、デフォルト: kukuri）
+- `--topics <TOPICS>`: 購読するトピック（カンマ区切り、デフォルト: kukuri。指定値は内部的に `kukuri:` 名前空間へ変換されます）
 
 ## 環境変数
 
