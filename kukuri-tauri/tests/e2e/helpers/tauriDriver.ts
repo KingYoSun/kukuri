@@ -58,7 +58,7 @@ export async function startDriver(): Promise<void> {
 
   driverProcess.once('exit', (code, signal) => {
     if (code !== 0) {
-      console.error(`tauri-driver exited unexpectedly (code=${code}, signal=${signal})`);
+      console.warn(`tauri-driver exited unexpectedly (code=${code}, signal=${signal})`);
     }
     driverProcess = null;
   });

@@ -58,5 +58,18 @@ export default [
       },
     },
   },
+  {
+    files: ['tests/e2e/tools/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'no-console': 'off',
+      'no-undef': 'off',
+    },
+  },
   prettierConfig,
 ]
