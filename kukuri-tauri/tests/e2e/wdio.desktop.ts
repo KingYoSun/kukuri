@@ -41,11 +41,9 @@ function pruneUnsupportedCapabilities(target: unknown): void {
   }
   const record = target as Record<string, unknown>;
   if ('webSocketUrl' in record) {
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete record.webSocketUrl;
   }
   if ('unhandledPromptBehavior' in record) {
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete record.unhandledPromptBehavior;
   }
 
