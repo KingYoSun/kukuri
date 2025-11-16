@@ -363,7 +363,7 @@ run_ts_profile_avatar_sync() {
         fi
         pnpm vitest run \
 __TEST_BLOCK__
-        | tee '__LOG_PATH__'
+        2>&1 | tee '__LOG_PATH__'
 BASH
   )
   command="${command_template//__TEST_BLOCK__/${tests_block}}"
@@ -910,7 +910,7 @@ case "$COMMAND" in
     usage
     exit 0
     ;;
-  all|rust|lint|coverage|build|clean|cache-clean|performance)
+  all|rust|lint|coverage|build|clean|cache-clean|performance|e2e)
     ;;
   ts)
     while [[ $# -gt 0 ]]; do

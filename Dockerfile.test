@@ -68,6 +68,9 @@ COPY kukuri-tauri/src-tauri/.sqlx ./kukuri-tauri/src-tauri/.sqlx
 WORKDIR /app
 COPY . .
 
+# Windows ホストでも entrypoint の実行権限を維持する
+RUN chmod +x scripts/docker/ts-test-entrypoint.sh
+
 # SQLiteテスト用のディレクトリ設定と権限付与
 RUN mkdir -p /tmp && chmod 777 /tmp
 ENV DOCKER_ENV=1
