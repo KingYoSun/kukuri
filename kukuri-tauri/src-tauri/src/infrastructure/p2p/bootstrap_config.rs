@@ -457,6 +457,16 @@ pub fn apply_cli_bootstrap_nodes() -> Result<Vec<String>, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    static CLI_BOOTSTRAP_ENV_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn lock_cli_bootstrap_env() -> MutexGuard<'static, ()> {
+        CLI_BOOTSTRAP_ENV_GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("cli bootstrap env guard poisoned")
+    }
 
     fn temp_cli_path(suffix: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -472,6 +482,7 @@ mod tests {
 
     #[test]
     fn load_cli_bootstrap_nodes_returns_data_when_file_exists() {
+        let _guard = lock_cli_bootstrap_env();
         let path = temp_cli_path("load");
         unsafe {
             std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
@@ -492,6 +503,7 @@ mod tests {
 
     #[test]
     fn load_cli_bootstrap_nodes_returns_none_when_missing() {
+        let _guard = lock_cli_bootstrap_env();
         let path = temp_cli_path("missing");
         unsafe {
             std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
