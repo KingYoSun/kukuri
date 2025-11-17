@@ -18,9 +18,7 @@
     - やること: (1) GitHub Actions `trending-feed` ジョブで発生している Docker 権限問題と artefact 不足を切り分け、`nightly.yml` の `*-logs` / `*-reports` 命名を固定。(2) `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を `docs/01_project/setup_guide.md` / Runbook に追記し、`scripts/test-docker.ps1 all` で同前提を明文化。(3) `docs/01_project/progressReports/` へ Nightly テスト ID（`nightly.profile-avatar-sync`, `nightly.trending-feed`, `nightly.user-search-pagination`, ほか）と対応するログ/artefact リンクを整理。  
     - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。  
     - 子タスク:  
-        - **14-1: `trending-feed` ジョブの Docker 権限恒久対処と `nightly.yml` artefact 再編**  
-          - 目的: `trending-feed` で発生している Docker permission エラーと artefact 不足を恒久的に解消し、`*-logs` / `*-reports` の命名と権限を統一して Nightly から必要な証跡を確実に取得できるようにする。  
-          - 完了条件: `nightly.trending-feed` が GitHub Actions / `gh act` の双方で Green になり、修正した権限設定と artefact 命名が Runbook に反映されている。  
+        - ~~14-1: `trending-feed` ジョブの Docker 権限恒久対処と `nightly.yml` artefact 再編~~（2025年11月17日完了。`nightly.trending-feed-logs` / `nightly.trending-feed-reports` / `nightly.trending-feed-metrics` へ統一し、`gh act --bind --container-options "--privileged"` での再現手順を `docs/01_project/progressReports/nightly.trending-feed.md` に追記。`ACT=true` 時は artefact アップロードをスキップしてログ一覧のみを出力するよう更新。）  
         - **14-2: `corepack enable pnpm` → `pnpm install --frozen-lockfile` 手順の Runbook 化と `scripts/test-docker.ps1 all` での前提チェック**  
           - 目的: Windows ホストでの Nightly/Vitest 再現に必須な pnpm 初期化手順を `docs/01_project/setup_guide.md` および `docs/01_project/progressReports/` の Runbook に追記し、`scripts/test-docker.ps1 all` が未実施時に明示的な失敗理由を表示できるようにする。  
           - 完了条件: Setup Guide / Runbook に該当手順が追加され、スクリプト実行時に corepack/pnpm が未初期化の場合はメッセージ付きで停止する。  

@@ -79,38 +79,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Clean previous trending feed artefacts
+        shell: bash
+        run: |
+          rm -rf tmp/logs/trending-feed
+          rm -f tmp/logs/trending_metrics_job_stage4_*.log
+          rm -rf test-results/trending-feed
+
       - name: Run trending feed scenario (Docker)
         run: |
           chmod +x scripts/test-docker.sh
           ./scripts/test-docker.sh ts --scenario trending-feed
 
-      - name: Upload trending feed artefacts
+      - name: Upload trending feed logs
+        if: ${{ env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: trending-feed-reports
+          name: nightly.trending-feed-logs
+          path: |
+            tmp/logs/trending-feed
+            tmp/logs/trending_metrics_job_stage4_*.log
+            test-results/trending-feed/prometheus
+          if-no-files-found: error
+
+      - name: Upload trending feed reports
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.trending-feed-reports
           path: test-results/trending-feed/reports
           if-no-files-found: error
 
-      - name: Upload trending metrics logs
+      - name: Upload trending feed metrics
+        if: ${{ env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: trending-metrics-logs
-          path: tmp/logs/trending_metrics_job_stage4_*.log
-          if-no-files-found: error
-
-      - name: Upload Prometheus snapshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: trending-metrics-prometheus
-          path: test-results/trending-feed/prometheus
-          if-no-files-found: warn
-
-      - name: Upload trending metrics json
-        uses: actions/upload-artifact@v4
-        with:
-          name: trending-metrics-json
+          name: nightly.trending-feed-metrics
           path: test-results/trending-feed/metrics
           if-no-files-found: warn
+
+      - name: List trending feed outputs (act)
+        if: ${{ env.ACT == 'true' }}
+        shell: bash
+        run: |
+          echo "[Nightly Trending Feed] tmp/logs/trending-feed"
+          ls -al tmp/logs/trending-feed || true
+          echo "[Nightly Trending Feed] test-results/trending-feed"
+          find test-results/trending-feed -maxdepth 2 -type f -print || true
 
   profile-avatar-sync:
     name: Profile Avatar Sync (Docker)
