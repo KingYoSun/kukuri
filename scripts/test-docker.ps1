@@ -138,9 +138,10 @@ function Assert-CorepackPnpmReady {
         Write-ErrorMessage "Corepack �̓��l pnpm shim �����s���Ă��Ȃ��A�܂��̓C���X�g�[�������Ă��܂��Ȃ��ł��Bcmd.exe /c ""corepack enable pnpm"" ����s���A������ cmd.exe /c ""corepack pnpm install --frozen-lockfile"" �i macOS / Linux: corepack enable pnpm && corepack pnpm install --frozen-lockfile �j�Ō\�̋@�\����̋�E���Ɠ�����݂��Ă��������Bdocs/01_project/setup_guide.md ����Q�Ƃ��Ă��������B"
     }
 
-    $modulesFile = Join-Path (Join-Path $RepoRoot "node_modules") ".modules.yaml"
+    $tauriRoot = Join-Path $RepoRoot "kukuri-tauri"
+    $modulesFile = Join-Path (Join-Path $tauriRoot "node_modules") ".modules.yaml"
     if (-not (Test-Path $modulesFile)) {
-        Write-ErrorMessage "node_modules/.modules.yaml ���݂��Ȃ��̂ŁAcorepack pnpm install --frozen-lockfile ���s���Ă��Ȃ��ƌ�����܂��Bcmd.exe /c ""corepack pnpm install --frozen-lockfile"" �܂��� corepack pnpm install --frozen-lockfile ����s���A��̍����Ń_�C�A�g�����ɗ��������Բ����Ă��������B�s���ɗ� scripts/test-docker.ps1 $Command ����s���Ă��������B"
+        Write-ErrorMessage "kukuri-tauri/node_modules/.modules.yaml ���݂��Ȃ��̂ŁA corepack pnpm install --frozen-lockfile ���s���Ă��Ȃ��ƌ�����܂��Bcmd.exe /c ""cd kukuri-tauri && corepack pnpm install --frozen-lockfile"" �܂��� cd kukuri-tauri && corepack pnpm install --frozen-lockfile ����s���A��̍����Ń_�C�A�g�����ɗ��������Բ����Ă��������B�s���ɗ� scripts/test-docker.ps1 $Command ����s���Ă��������B"
     }
 }
 
