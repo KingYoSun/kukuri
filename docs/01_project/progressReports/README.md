@@ -2,6 +2,11 @@
 
 このディレクトリには、kukuriプロジェクトの開発進捗レポートを格納しています。
 
+## Nightly Runbook
+
+- [Nightly テストID / Artefact マッピング](./nightly.index.md) - Nightly ジョブと `*-logs` / `*-reports` artefact の対応表
+- [Nightly `trending-feed` Runbook](./nightly.trending-feed.md) - `/trending` `/following` Docker シナリオのトリアージ手順
+
 ## レポート一覧
 
 ### 2025年07月28日

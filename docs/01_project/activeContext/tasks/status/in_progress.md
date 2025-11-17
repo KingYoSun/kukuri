@@ -20,9 +20,10 @@
     - 子タスク:  
         - ~~14-1: `trending-feed` ジョブの Docker 権限恒久対処と `nightly.yml` artefact 再編~~（2025年11月17日完了。`nightly.trending-feed-logs` / `nightly.trending-feed-reports` / `nightly.trending-feed-metrics` へ統一し、`gh act --bind --container-options "--privileged"` での再現手順を `docs/01_project/progressReports/nightly.trending-feed.md` に追記。`ACT=true` 時は artefact アップロードをスキップしてログ一覧のみを出力するよう更新。）  
         - ~~14-2: `corepack enable pnpm` → `pnpm install --frozen-lockfile` 手順の Runbook 化と `scripts/test-docker.ps1 all` での前提チェック~~（2025年11月17日完了。`docs/01_project/setup_guide.md` と `docs/01_project/progressReports/nightly.trending-feed.md` に Corepack+pnpm 初期化フローを追記し、`scripts/test-docker.ps1` で `cmd.exe /c "corepack pnpm --version"` と `node_modules/.modules.yaml` を検証して未初期化時は即時停止するガードを実装。）  
-        - **14-3: Nightly テスト ID と log/report artefact のひも付け整理**  
+        - ~~14-3: Nightly テスト ID と log/report artefact のひも付け整理~~  
           - 目的: `docs/01_project/progressReports/` 配下で `nightly.profile-avatar-sync` など各 ID とアップロード artefact の URL/パスを網羅し、failure 調査の起点を 1 箇所にまとめる。  
           - 完了条件: 各 Nightly ID エントリから該当する `*-logs` / `*-reports` artefact へ遷移できる記述が揃っている。  
+          - 2025年11月17日: `docs/01_project/progressReports/nightly.index.md` に Nightly ID ↔ artefact ↔ 参照Runbookの対応表を追加し、`progressReports/README.md` からリンク。`nightly.profile-avatar-sync` / `post-delete-cache` / `user-search-pagination` など全8シナリオのログディレクトリ・JSON 保存先・再現コマンドを記載して failure 調査時の入り口を一元化した。  
         - **14-4: `gh act` を用いた CI failure 再現手順の Runbook 追記**  
           - 目的: `format-check`・`ts` 系ジョブの再現で必要になった `--container-options "--user 0"` や entrypoint 追記、`Dockerfile.test` の chmod といったノウハウを手順化し、Windows ホストでも即時に failure を再現できるようにする。  
           - 完了条件: Runbook に再現コマンドと前提条件がまとまり、対象ジョブ（format-check / ts / profile-avatar-sync など）を `gh act` で実行して緑化できることを確認済みである。  
