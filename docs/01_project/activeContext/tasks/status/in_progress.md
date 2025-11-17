@@ -16,7 +16,20 @@
 14. **Ops/CI: Nightly & GitHub Actions で MVP 導線を安定再現**  
     - 背景: `docs/01_project/roadmap.md:20` と `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` の「追加予定のテスト/artefact」節で、GitHub Actions の `trending-feed` Docker 失敗・Nightly artefact 権限・`scripts/test-docker.ps1 all` の安定化・`docs/01_project/progressReports/` への Runbook リンク不足が指摘されている。  
     - やること: (1) GitHub Actions `trending-feed` ジョブで発生している Docker 権限問題と artefact 不足を切り分け、`nightly.yml` の `*-logs` / `*-reports` 命名を固定。(2) `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を `docs/01_project/setup_guide.md` / Runbook に追記し、`scripts/test-docker.ps1 all` で同前提を明文化。(3) `docs/01_project/progressReports/` へ Nightly テスト ID（`nightly.profile-avatar-sync`, `nightly.trending-feed`, `nightly.user-search-pagination`, ほか）と対応するログ/artefact リンクを整理。  
-    - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。
+    - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。  
+    - 子タスク:  
+        - **14-1: `trending-feed` ジョブの Docker 権限恒久対処と `nightly.yml` artefact 再編**  
+          - 目的: `trending-feed` で発生している Docker permission エラーと artefact 不足を恒久的に解消し、`*-logs` / `*-reports` の命名と権限を統一して Nightly から必要な証跡を確実に取得できるようにする。  
+          - 完了条件: `nightly.trending-feed` が GitHub Actions / `gh act` の双方で Green になり、修正した権限設定と artefact 命名が Runbook に反映されている。  
+        - **14-2: `corepack enable pnpm` → `pnpm install --frozen-lockfile` 手順の Runbook 化と `scripts/test-docker.ps1 all` での前提チェック**  
+          - 目的: Windows ホストでの Nightly/Vitest 再現に必須な pnpm 初期化手順を `docs/01_project/setup_guide.md` および `docs/01_project/progressReports/` の Runbook に追記し、`scripts/test-docker.ps1 all` が未実施時に明示的な失敗理由を表示できるようにする。  
+          - 完了条件: Setup Guide / Runbook に該当手順が追加され、スクリプト実行時に corepack/pnpm が未初期化の場合はメッセージ付きで停止する。  
+        - **14-3: Nightly テスト ID と log/report artefact のひも付け整理**  
+          - 目的: `docs/01_project/progressReports/` 配下で `nightly.profile-avatar-sync` など各 ID とアップロード artefact の URL/パスを網羅し、failure 調査の起点を 1 箇所にまとめる。  
+          - 完了条件: 各 Nightly ID エントリから該当する `*-logs` / `*-reports` artefact へ遷移できる記述が揃っている。  
+        - **14-4: `gh act` を用いた CI failure 再現手順の Runbook 追記**  
+          - 目的: `format-check`・`ts` 系ジョブの再現で必要になった `--container-options "--user 0"` や entrypoint 追記、`Dockerfile.test` の chmod といったノウハウを手順化し、Windows ホストでも即時に failure を再現できるようにする。  
+          - 完了条件: Runbook に再現コマンドと前提条件がまとまり、対象ジョブ（format-check / ts / profile-avatar-sync など）を `gh act` で実行して緑化できることを確認済みである。  
     - メモ (2025年11月14日): `Format Check` 失敗は `kukuri-tauri/src-tauri/src/infrastructure/p2p/event_distributor/state.rs` と `tests/common/performance/{mod.rs,offline_seed.rs}` の整形漏れが原因だったため `cargo fmt` で修正済み。`gh act --workflows .github/workflows/test.yml --job format-check --container-options "--user root"` によりローカル再現・緑化を確認。`docker-test` / `native-test-linux` の artefact への影響は無く、GitHub Actions 本番では `Test` ワークフローの再実行で回復予定。
     - メモ (2025年11月15日): `gh run view 19377708787 --job format-check --log` で再発を確認。`kukuri-tauri/src-tauri/src/state.rs:516` の `sync_service.schedule_sync(DEFAULT_SYNC_INTERVAL_SECS).await` が rustfmt 規約（引数ごとの改行）に反しており CI が再度失敗しているため、該当ブロックの整形をやり直し `gh act --workflows .github/workflows/test.yml --job format-check` でローカル再検証予定。
     - メモ (2025年11月15日): `gh run view 19384995086` で `format-check`/`native-test-linux` が `src/routes/search.tsx` の未使用型インポートと Prettier 警告で落ちていたため修正。`scripts/test-docker.ps1 ts` で TypeScript テスト/型チェック/ESLint を Docker 経由で再実行し、`gh act -j format-check --container-options "--user 0"` でフォーマット専用ジョブがローカルでも完走することを確認。
