@@ -2,7 +2,7 @@
 
 ## ドキュメント情報
 - **作成日**: 2025年07月25日
-- **最終更新**: 2025年11月12日
+- **最終更新**: 2025年11月17日
 - **目的**: kukuriプロジェクトの開発環境構築手順
 
 ## 目次
@@ -69,7 +69,7 @@ corepack enable pnpm
 corepack pnpm --version
 ```
 
-上記を実行したら、pnpm コマンドも Corepack 経由で呼び出す（例: `corepack pnpm install --frozen-lockfile`, `corepack pnpm vitest run …`）。Ops / CI Onboarding のチェックリストでは、`tmp/logs/*.log` に残す各種テストログと併せて本手順を完了済みであることを記録する。
+上記を実行したら、pnpm コマンドも Corepack 経由で呼び出す（例: `corepack pnpm install --frozen-lockfile`, `corepack pnpm vitest run …`）。Ops / CI Onboarding のチェックリストでは、`tmp/logs/*.log` に残す各種テストログと併せて本手順を完了済みであることを記録する。Windows の Nightly/Vitest 再現では `cmd.exe /c "corepack enable pnpm"` → `cmd.exe /c "corepack pnpm install --frozen-lockfile"` の結果が `scripts/test-docker.ps1` の前提チェック（Corepack shim＋`node_modules/.modules.yaml`）として扱われる。
 
 #### 3. Rust & Cargo
 ```bash
@@ -108,11 +108,22 @@ cd kukuri
 ```
 
 ### 2. 依存関係のインストール
-```bash
-# Node.js依存関係
-pnpm install
 
-# Rust依存関係（自動的にインストールされます）
+#### Node.js依存関係（Corepack + pnpm）
+Windows ホストでは `cmd.exe` 経由で Corepack を初期化してから pnpm を固定バージョンで実行する。
+```powershell
+cmd.exe /c "corepack enable pnpm"
+cmd.exe /c "corepack pnpm install --frozen-lockfile"
+```
+macOS / Linux では同じ手順をシェルから直接実行する。
+```bash
+corepack enable pnpm
+corepack pnpm install --frozen-lockfile
+```
+> `scripts/test-docker.ps1 all` / `ts` / `lint` などの Nightly 再現系コマンドは、上記初期化と `node_modules/.modules.yaml` の存在を確認してから処理を進める。未実施の場合はスクリプトがエラーで停止するため、Runbook やログに初期化済みであることを残しておく。
+
+#### Rust依存関係（自動的にインストールされます）
+```bash
 cargo build
 ```
 
@@ -207,8 +218,18 @@ cargo update            # Rust依存関係の更新
 ## トラブルシューティング
 
 ### pnpmが見つからない
+Corepack 未初期化または PATH が更新されていない可能性がある。
+```powershell
+# Windows
+cmd.exe /c "corepack enable pnpm"
+cmd.exe /c "corepack pnpm --version"
+```
 ```bash
-# パスを再読み込み
+# macOS / Linux
+corepack enable pnpm
+corepack pnpm --version
+
+# パスを再読み込み（必要に応じて）
 source ~/.bashrc
 # または
 source ~/.zshrc

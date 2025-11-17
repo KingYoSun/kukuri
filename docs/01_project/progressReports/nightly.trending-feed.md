@@ -14,6 +14,16 @@
   - `nightly.trending-feed-metrics`: `test-results/trending-feed/metrics/*.json`（`DATABASE_URL` 未設定時はスキップし、CI では `if-no-files-found: warn`）
 
 ## ローカル再現
+
+### Corepack / pnpm 初期化（Windowsホスト）
+- `scripts/test-docker.ps1 all` / `ts -Scenario trending-feed` は実行前に Corepack shim と `node_modules/.modules.yaml` を検証するため、Windows では先に `cmd.exe` から pnpm を初期化しておく。
+- 実行例:
+  ```powershell
+  cmd.exe /c "corepack enable pnpm"
+  cmd.exe /c "corepack pnpm install --frozen-lockfile"
+  ```
+- macOS / Linux では同じコマンドをターミナルから実行する（`corepack enable pnpm && corepack pnpm install --frozen-lockfile`）。Runbook ではテストログと一緒に「Corepack + pnpm 初期化済み」の記録を残し、再現時に同じ環境を保証する。
+
 ### Docker スクリプト
 - Bash: `./scripts/test-docker.sh ts --scenario trending-feed [--fixture tests/fixtures/trending/<file>.json]`
 - PowerShell: `.\scripts\test-docker.ps1 ts -Scenario trending-feed`

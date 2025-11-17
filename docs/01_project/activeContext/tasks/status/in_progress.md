@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月16日
+最終更新日: 2025年11月17日
 
 ## 方針（2025年09月15日 更新）
 
@@ -19,9 +19,7 @@
     - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。  
     - 子タスク:  
         - ~~14-1: `trending-feed` ジョブの Docker 権限恒久対処と `nightly.yml` artefact 再編~~（2025年11月17日完了。`nightly.trending-feed-logs` / `nightly.trending-feed-reports` / `nightly.trending-feed-metrics` へ統一し、`gh act --bind --container-options "--privileged"` での再現手順を `docs/01_project/progressReports/nightly.trending-feed.md` に追記。`ACT=true` 時は artefact アップロードをスキップしてログ一覧のみを出力するよう更新。）  
-        - **14-2: `corepack enable pnpm` → `pnpm install --frozen-lockfile` 手順の Runbook 化と `scripts/test-docker.ps1 all` での前提チェック**  
-          - 目的: Windows ホストでの Nightly/Vitest 再現に必須な pnpm 初期化手順を `docs/01_project/setup_guide.md` および `docs/01_project/progressReports/` の Runbook に追記し、`scripts/test-docker.ps1 all` が未実施時に明示的な失敗理由を表示できるようにする。  
-          - 完了条件: Setup Guide / Runbook に該当手順が追加され、スクリプト実行時に corepack/pnpm が未初期化の場合はメッセージ付きで停止する。  
+        - ~~14-2: `corepack enable pnpm` → `pnpm install --frozen-lockfile` 手順の Runbook 化と `scripts/test-docker.ps1 all` での前提チェック~~（2025年11月17日完了。`docs/01_project/setup_guide.md` と `docs/01_project/progressReports/nightly.trending-feed.md` に Corepack+pnpm 初期化フローを追記し、`scripts/test-docker.ps1` で `cmd.exe /c "corepack pnpm --version"` と `node_modules/.modules.yaml` を検証して未初期化時は即時停止するガードを実装。）  
         - **14-3: Nightly テスト ID と log/report artefact のひも付け整理**  
           - 目的: `docs/01_project/progressReports/` 配下で `nightly.profile-avatar-sync` など各 ID とアップロード artefact の URL/パスを網羅し、failure 調査の起点を 1 箇所にまとめる。  
           - 完了条件: 各 Nightly ID エントリから該当する `*-logs` / `*-reports` artefact へ遷移できる記述が揃っている。  

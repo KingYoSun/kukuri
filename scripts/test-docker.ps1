@@ -121,6 +121,24 @@ Performance Tips:
     exit 0
 }
 
+function Assert-CorepackPnpmReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    Write-Info "Checking Corepack/pnpm initialization..."
+    & cmd.exe /c "corepack pnpm --version" 1>$null 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMessage "Corepack �̓��l pnpm shim �����s���Ă��Ȃ��A�܂��̓C���X�g�[�������Ă��܂��Ȃ��ł��Bcmd.exe /c ""corepack enable pnpm"" ����s���A������ cmd.exe /c ""corepack pnpm install --frozen-lockfile"" �i macOS / Linux: corepack enable pnpm && corepack pnpm install --frozen-lockfile �j�Ō\�̋@�\����̋�E���Ɠ�����݂��Ă��������Bdocs/01_project/setup_guide.md ����Q�Ƃ��Ă��������B"
+    }
+
+    $modulesFile = Join-Path (Join-Path $RepoRoot "node_modules") ".modules.yaml"
+    if (-not (Test-Path $modulesFile)) {
+        Write-ErrorMessage "node_modules/.modules.yaml ���݂��Ȃ��̂ŁAcorepack pnpm install --frozen-lockfile ���s���Ă��Ȃ��ƌ�����܂��Bcmd.exe /c ""corepack pnpm install --frozen-lockfile"" �܂��� corepack pnpm install --frozen-lockfile ����s���A��̍����Ń_�C�A�g�����ɗ��������Բ����Ă��������B�s���ɗ� scripts/test-docker.ps1 $Command ����s���Ă��������B"
+    }
+}
+
 # Docker Buildkit ��L����
 $env:DOCKER_BUILDKIT = "1"
 $env:COMPOSE_DOCKER_CLI_BUILD = "1"
@@ -1237,6 +1255,11 @@ if ($Help) {
 # �e�X�g���ʃf�B���N�g���̍쐬
 if (-not (Test-Path "test-results")) {
     New-Item -ItemType Directory -Path "test-results" | Out-Null
+}
+
+$pnpmRequiredCommands = @("all", "ts", "lint", "metrics", "performance", "contracts", "e2e")
+if (-not $Help -and $pnpmRequiredCommands -contains $Command) {
+    Assert-CorepackPnpmReady -RepoRoot $repositoryRoot
 }
 
 # �R�}���h�̎��s
