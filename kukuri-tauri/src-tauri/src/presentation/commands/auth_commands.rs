@@ -1,11 +1,11 @@
 use crate::{
     presentation::{
         dto::{
-            ApiResponse,
+            ApiResponse, Validate,
             auth_dto::{
-                ExportPrivateKeyRequest, ExportPrivateKeyResponse, LoginResponse, LoginWithNsecRequest,
+                ExportPrivateKeyRequest, ExportPrivateKeyResponse, LoginResponse,
+                LoginWithNsecRequest,
             },
-            Validate,
         },
         handlers::AuthHandler,
     },

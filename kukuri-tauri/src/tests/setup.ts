@@ -7,7 +7,9 @@ const storeResetFns = new Set<() => void>();
 
 // zustand/middlewareをモック
 vi.mock('zustand/middleware', () => ({
-  persist: vi.fn((config) => config),
+  persist: vi.fn((config) => {
+    return (set: any, get: any, api: any) => config(set, get, api);
+  }),
   createJSONStorage: vi.fn(() => ({
     getItem: vi.fn(),
     setItem: vi.fn(),
@@ -24,7 +26,12 @@ vi.mock('zustand', async () => {
     let state: any;
     const setState = (partial: any, replace?: any) => {
       const nextState = typeof partial === 'function' ? partial(state) : partial;
-      if (replace ?? typeof partial !== 'object') {
+      if (nextState === state) {
+        return;
+      }
+      const shouldReplace =
+        (replace ?? false) || nextState === null || typeof nextState !== 'object';
+      if (shouldReplace) {
         state = nextState;
       } else {
         state = Object.assign({}, state, nextState);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { open, save } from '@tauri-apps/plugin-dialog';
+import { open as showOpenDialog, save as showSaveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { toast } from 'sonner';
 
@@ -130,7 +130,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
     }
     setIsSaving(true);
     try {
-      const targetPath = await save({
+      const targetPath = await showSaveDialog({
         filters: NSEC_FILE_FILTERS,
         defaultPath: buildDefaultFileName(currentUser?.npub),
         title: '秘密鍵バックアップを保存',
@@ -205,7 +205,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
 
   const handleSelectFile = async () => {
     try {
-      const selection = await open({
+      const selection = await showOpenDialog({
         directory: false,
         multiple: false,
         filters: NSEC_FILE_FILTERS,
@@ -302,7 +302,10 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'export' | 'import')}>
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as 'export' | 'import')}
+        >
           <TabsList className="grid grid-cols-2">
             <TabsTrigger value="export">エクスポート</TabsTrigger>
             <TabsTrigger value="import">インポート</TabsTrigger>
@@ -370,7 +373,8 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
             <Alert>
               <AlertTitle>バックアップから復元する</AlertTitle>
               <AlertDescription>
-                保存済みの `.nsec` ファイルを読み込むか、秘密鍵を手動で入力してセキュアストレージに登録します。復旧後は不要なバックアップを破棄してください。
+                保存済みの `.nsec`
+                ファイルを読み込むか、秘密鍵を手動で入力してセキュアストレージに登録します。復旧後は不要なバックアップを破棄してください。
               </AlertDescription>
             </Alert>
 

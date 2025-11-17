@@ -40,6 +40,10 @@ const mockUseAuthStore = useAuthStore as unknown as vi.Mock;
 const mockExportPrivateKey = TauriApi.exportPrivateKey as unknown as vi.Mock;
 const mockToast = toast as unknown as { success: vi.Mock; error: vi.Mock };
 const mockErrorHandler = errorHandler as unknown as { log: vi.Mock; info: vi.Mock };
+interface MockAuthStoreState {
+  currentUser: { npub: string } | null;
+  loginWithNsec: vi.Mock;
+}
 
 let mockDialogOpen: ReturnType<typeof vi.fn>;
 let mockDialogSave: ReturnType<typeof vi.fn>;
@@ -48,6 +52,23 @@ let mockWriteTextFile: ReturnType<typeof vi.fn>;
 
 const renderDialog = () => {
   render(<KeyManagementDialog open onOpenChange={() => undefined} />);
+};
+
+const setupAuthStore = (overrides: Partial<MockAuthStoreState> = {}) => {
+  const state: MockAuthStoreState = {
+    currentUser: null,
+    loginWithNsec: vi.fn(),
+    ...overrides,
+  };
+  mockUseAuthStore.mockImplementation(
+    (selector: ((state: MockAuthStoreState) => unknown) | undefined) => {
+      if (typeof selector === 'function') {
+        return selector(state);
+      }
+      return state;
+    },
+  );
+  return state;
 };
 
 beforeAll(async () => {
@@ -79,9 +100,8 @@ beforeEach(() => {
 describe('KeyManagementDialog', () => {
   it('exports the private key when requested', async () => {
     const user = userEvent.setup();
-    mockUseAuthStore.mockReturnValue({
+    setupAuthStore({
       currentUser: { npub: 'npub1example' },
-      loginWithNsec: vi.fn(),
     });
     mockExportPrivateKey.mockResolvedValue('nsec1examplekey');
 
@@ -99,9 +119,8 @@ describe('KeyManagementDialog', () => {
 
   it('saves exported key to a file', async () => {
     const user = userEvent.setup();
-    mockUseAuthStore.mockReturnValue({
+    setupAuthStore({
       currentUser: { npub: 'npub1example' },
-      loginWithNsec: vi.fn(),
     });
     mockExportPrivateKey.mockResolvedValue('nsec1fileexport');
     mockDialogSave.mockResolvedValue('C:/temp/key.nsec');
@@ -126,7 +145,7 @@ describe('KeyManagementDialog', () => {
   it('imports a key from manual input', async () => {
     const user = userEvent.setup();
     const loginWithNsec = vi.fn();
-    mockUseAuthStore.mockReturnValue({
+    setupAuthStore({
       currentUser: { npub: 'npub1example' },
       loginWithNsec,
     });
@@ -146,9 +165,8 @@ describe('KeyManagementDialog', () => {
 
   it('loads a key from file selection', async () => {
     const user = userEvent.setup();
-    mockUseAuthStore.mockReturnValue({
+    setupAuthStore({
       currentUser: { npub: 'npub1example' },
-      loginWithNsec: vi.fn(),
     });
     mockDialogOpen.mockResolvedValue('C:/backup/key.nsec');
     mockReadTextFile.mockResolvedValue('nsec1fromfile');

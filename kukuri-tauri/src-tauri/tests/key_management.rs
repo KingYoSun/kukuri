@@ -10,10 +10,7 @@ use kukuri_lib::test_support::{
         services::AuthService,
     },
     domain::entities::User,
-    infrastructure::{
-        crypto::DefaultKeyManager,
-        storage::secure_storage::SecureStorage,
-    },
+    infrastructure::{crypto::DefaultKeyManager, storage::secure_storage::SecureStorage},
     shared::error::AppError,
 };
 use tokio::sync::Mutex;
