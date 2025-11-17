@@ -128,7 +128,12 @@ function Assert-CorepackPnpmReady {
     )
 
     Write-Info "Checking Corepack/pnpm initialization..."
-    & cmd.exe /c "corepack pnpm --version" 1>$null 2>$null
+    if ($IsWindows) {
+        & cmd.exe /c "corepack pnpm --version" 1>$null 2>$null
+    }
+    else {
+        & corepack pnpm --version 1>$null 2>$null
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorMessage "Corepack �̓��l pnpm shim �����s���Ă��Ȃ��A�܂��̓C���X�g�[�������Ă��܂��Ȃ��ł��Bcmd.exe /c ""corepack enable pnpm"" ����s���A������ cmd.exe /c ""corepack pnpm install --frozen-lockfile"" �i macOS / Linux: corepack enable pnpm && corepack pnpm install --frozen-lockfile �j�Ō\�̋@�\����̋�E���Ɠ�����݂��Ă��������Bdocs/01_project/setup_guide.md ����Q�Ƃ��Ă��������B"
     }
