@@ -37,6 +37,7 @@ pub mod test_support {
         pub use crate::infrastructure::event;
         pub use crate::infrastructure::offline;
         pub use crate::infrastructure::p2p;
+        pub use crate::infrastructure::storage;
     }
     pub mod shared {
         pub use crate::shared::{config, error};
@@ -71,6 +72,7 @@ pub fn run() {
             presentation::commands::generate_keypair,
             presentation::commands::login,
             presentation::commands::logout,
+            presentation::commands::export_private_key,
             // セキュアストレージ関連コマンド
             presentation::commands::add_account,
             presentation::commands::list_accounts,

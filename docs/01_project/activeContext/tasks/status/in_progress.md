@@ -13,12 +13,7 @@
 
 ### MVP Exit タスク
 
-14. **鍵管理ダイアログ: 鍵バックアップ/復旧フローの提供**  
-    - 背景: `docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:125` で、設定 > 鍵管理ボタンが未配線でバックアップ手段が無いことが MVP ブロッカーとして挙げられている。  
-    - やること: (1) `KeyManagementDialog` を実装し、`export_private_key` / `SecureStorageApi.addAccount` / `add_relay` 連動と注意喚起 UI を整備。(2) エクスポート/インポート操作を `errorHandler` に記録、`withPersist` へ操作履歴を残す。(3) `pnpm vitest`（UI）と `./scripts/test-docker.ps1 rust -Test key_management`（仮）でバックアップ/復旧の契約テストを追加し、Runbook・`phase5_user_flow_inventory.md` 5.1/5.6 に掲載。  
-    - 完了条件: ユーザーが UI から鍵を安全にバックアップ/復旧でき、テストとドキュメントで手順が保証される。
-
-15. **Ops/CI: Nightly & GitHub Actions で MVP 導線を安定再現**  
+14. **Ops/CI: Nightly & GitHub Actions で MVP 導線を安定再現**  
     - 背景: `docs/01_project/roadmap.md:20` と `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` の「追加予定のテスト/artefact」節で、GitHub Actions の `trending-feed` Docker 失敗・Nightly artefact 権限・`scripts/test-docker.ps1 all` の安定化・`docs/01_project/progressReports/` への Runbook リンク不足が指摘されている。  
     - やること: (1) GitHub Actions `trending-feed` ジョブで発生している Docker 権限問題と artefact 不足を切り分け、`nightly.yml` の `*-logs` / `*-reports` 命名を固定。(2) `cmd.exe /c "corepack enable pnpm"` → `pnpm install --frozen-lockfile` を `docs/01_project/setup_guide.md` / Runbook に追記し、`scripts/test-docker.ps1 all` で同前提を明文化。(3) `docs/01_project/progressReports/` へ Nightly テスト ID（`nightly.profile-avatar-sync`, `nightly.trending-feed`, `nightly.user-search-pagination`, ほか）と対応するログ/artefact リンクを整理。  
     - 完了条件: GitHub Actions / Nightly がすべての MVP 導線を再現し、failure 時に参照すべき artefact ・ Runbook リンクが一元化されている。

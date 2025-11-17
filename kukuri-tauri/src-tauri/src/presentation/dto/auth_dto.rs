@@ -31,3 +31,25 @@ pub struct CreateAccountResponse {
     pub nsec: String,
     pub pubkey: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExportPrivateKeyRequest {
+    pub npub: String,
+}
+
+impl Validate for ExportPrivateKeyRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.npub.trim().is_empty() {
+            return Err("npub is required".to_string());
+        }
+        if !self.npub.starts_with("npub1") {
+            return Err("npub must start with npub1".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExportPrivateKeyResponse {
+    pub nsec: String,
+}

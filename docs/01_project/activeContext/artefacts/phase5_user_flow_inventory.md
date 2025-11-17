@@ -223,6 +223,10 @@
     - Doc/Blob 連携: `upload_profile_avatar` が `ProfileAvatarService`→`profile_avatar_store`→`iroh_blobs`→`profile_avatars` Doc を一直線で更新し、Doc entry に `share_ticket` / `encrypted_key` / `doc_version` を保存。`profile_avatar_sync` Tauri コマンドは `npub` + `known_doc_version` を受け取り、Doc バージョン差分がある場合のみ payload（プライバシーフラグ/Blob base64）を返す。
     - UI/UX: `ProfileEditDialog` は `update_privacy_settings` → `upload_profile_avatar` → `authStore.updateUser` をシリアル実行し、成功時に `useProfileAvatarSync.syncNow({ force: true })` を呼んで `__root.tsx` 常駐の同期フックへ通知。`ProfileSetup` も同ルートを利用し、`OfflineIndicator` とヘッダーのプロフィール画像が Doc 更新後即座に差し替わる。
     - Ops/Runbook: `docs/03_implementation/p2p_mainline_runbook.md` Chapter4 に Profile Avatar Sync 手順（ローカルDB/Blob フォルダのクリーンアップ、`tmp/logs/profile_avatar_sync_<timestamp>.log` の採取）を追加し、CI パス監査 (`phase5_ci_path_audit.md`) に `pnpm vitest` + Docker テスト（`scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync`、`scripts/test-docker.ps1 rust -Test profile_avatar_sync`）を登録。
+  - **Stage4（鍵管理/バックアップ 2025年11月17日完了）**:
+    - `KeyManagementDialog` を Settings > アカウントに追加し、`TauriApi.exportPrivateKey` → `@tauri-apps/plugin-dialog.save`/`@tauri-apps/plugin-fs.writeTextFile` で `.nsec` を保存、`authStore.loginWithNsec(nsec, true)` で Secure Storage へ復旧する導線を実装。操作履歴は `useKeyManagementStore`（`persistKeys.keyManagement`）に保存し、`errorHandler.info/log` で成功/失敗を追跡する。
+    - テスト: `src/tests/unit/components/settings/KeyManagementDialog.test.tsx` / `src/tests/unit/stores/keyManagementStore.test.ts` を追加し、`./scripts/test-docker.ps1 ts` で Vitest を実行。Rust 側は `tests/key_management.rs` + `./scripts/test-docker.ps1 rust -Test key_management` でバックアップ→復旧を検証。
+    - Runbook/ドキュメント: `docs/03_implementation/p2p_mainline_runbook.md` Chapter4.4 に鍵バックアップ/復旧チェックリストを追加し、`phase5_user_flow_summary.md` / `tasks/completed/2025-11-17.md` / `phase5_ci_path_audit.md` にテスト ID を記録。
 - **バックエンド連携（Stage2）**
   - `presentation::commands::update_privacy_settings` で `public_profile` / `show_online_status` を受け取り、`UserService::update_privacy_settings` で存在確認後に `Utc::now()` で `updated_at` を更新して永続化。`UserRepository::update_user` / `.sqlx` モデルへ新フィールドを追加した。
   - 既存の `update_nostr_metadata` とは別にドメイン値を保持するため、`UserMetadata` に依存しない軽量更新 API として整理。`phase5_ci_path_audit.md` / `tasks/completed/2025-11-09.md` へも証跡を記録済み。
@@ -280,30 +284,22 @@
   - Tauri コマンドの結合テストで `upload_profile_avatar` → `iroh_blobs::client` 呼び出し → `iroh_docs::Doc` 更新までのハッピーパス／エラーパス（Blob 登録失敗・Doc 競合）を検証。
   - リモートノード同期テストとして `iroh_docs` の複数ノードシナリオを Docker で再現し、Doc 更新から Blob ダウンロードまでを `phase5_ci_path_audit.md` に記録する。
 
-### 5.4 鍵管理ボタンの実装方針（検討中）
-- **目的**: 秘密鍵のバックアップ・復旧をアプリ内で完結させ、複数デバイス運用時の手順とリスクをユーザーに提示する。
-- **UI 実装案**
-  - 設定 > アカウントの「鍵管理」ボタンから `KeyManagementDialog`（新規）を開き、「エクスポート」「インポート」のタブを提供する。
-  - エクスポートタブ: `export_private_key` で取得した nsec を `dialog.save` + `fs.writeTextFile` により `.nsec` ファイルとして保存し、必要に応じてマスク表示→コピー (`navigator.clipboard.writeText`) も提供する。操作前に注意文と確認ダイアログを表示。
-  - インポートタブ: `dialog.open` で `.nsec` ファイルを読み込み、`SecureStorageApi.addAccount` / `authStore.loginWithNsec` を再利用。既存アカウントと重複する場合は確認ダイアログを挟み、キャンセル時は状態を変更しない。
-- **バックエンド連携**
-  - エクスポート: 既存の Tauri コマンド `export_private_key` を TypeScript ラッパー（例: `TauriApi.exportPrivateKey`）として公開し、取得した秘密鍵はフロント側でのみ保持する。ファイル保存前に `withPersist` へログを追加して操作痕跡を残す。
-  - インポート: 追加の Tauri コマンドが不要な場合は `login_with_nsec` / `SecureStorageApi.addAccount` で完結。今後エラーバリデーションを強化するために Rust 側へ `validate_nsec` コマンドを追加する案を backlog に記録する。
-- **セキュリティ**
-  - エクスポート結果をクリップボードへコピーした場合は 30 秒後に空文字列を書き込むオプションを設定。ログには秘密鍵を含めず、`errorHandler.info` で操作種別のみ記録。
-  - エクスポート/インポートどちらも実行後に `toast` でフィードバックを表示し、エラー時は `errorHandler.log('KeyManagementDialog.export', error)` などコンテキスト付きで出力する。
-- **テスト計画**
-  - `KeyManagementDialog` のユニットテストでエクスポート成功/失敗・保存キャンセル・クリップボードコピーのパスを検証。`export_private_key` が 1 回のみ呼ばれることとローディング表示を確認。
-  - `authStore` 統合テストに `.addAccount` を通じたインポートケースを追加し、重複アカウント時にエラーが表示されることを確認。
-
-- **構成更新メモ**: 2025年11月03日、下記の通り実装とテストを完了。
-
-#### MVP Exit（2025年11月10日更新）
-- **ゴール**: 設定 > アカウントから鍵のエクスポート/インポート/検証を完結させ、複数端末における秘密鍵管理を Runbook で追跡できるようにする。
-- **現状**: UI/バックエンド/テスト計画はドラフト化済みだが、`KeyManagementDialog` コンポーネントと `validate_nsec` コマンドは未実装。ユーザーへの注意喚起や操作ログ保存の仕様も確定していない。
-- **ブロッカー**: セキュリティレビューと UX コピーの確定、`SecureStorageApi` との例外ハンドリング設計、`tmp/logs/key_management_*` 収集方針が未決定。MVP Exit では最低限エクスポート/インポートを UI から実行できることと、操作履歴を `withPersist` へ記録することが条件。
-- **テスト/Runbook**: 実装後に `pnpm vitest run src/tests/unit/components/settings/KeyManagementDialog.test.tsx src/tests/unit/stores/authStore.test.ts` を Nightly に追加し、Windows では `./scripts/test-docker.ps1 ts -Tests KeyManagementDialog` を予定。Runbook Chapter4 へ鍵バックアップ手順を追加し、`tmp/logs/key_management_<timestamp>.log` を保存する。
-- **参照**: `tauri_app_implementation_plan.md` Phase3（アカウント管理）、`refactoring_plan_2025-08-08_v3.md`（Security/Key Management 行）、`phase5_user_flow_summary.md` Quick View。
+### 5.4 鍵管理ボタンの実装（2025年11月17日更新）
+- **目的**: 秘密鍵のバックアップ/復旧をアプリ内で完結させ、複数端末運用時に Runbook と連携した注意喚起を行う。
+- **対応内容**
+  - 設定 > アカウントの「鍵管理」ボタンから `KeyManagementDialog` を開き、エクスポート/インポートのタブを切り替えて操作する導線を実装。`Alert` でリスクを明示し、履歴欄に `useKeyManagementStore`（`persistKeys.keyManagement`）の最新操作を表示。
+  - エクスポートタブでは新規 `TauriApi.exportPrivateKey` を呼び出し、`@tauri-apps/plugin-dialog.save` + `@tauri-apps/plugin-fs.writeTextFile` で `.nsec` ファイルとして保存。クリップボードコピーや表示切り替えを用意し、`errorHandler.info/log` と `KeyManagementHistoryEntry` に成功/失敗を記録する。
+  - インポートタブでは `dialog.open` + `fs.readTextFile` でファイルを読み込み、または手動入力欄から `authStore.loginWithNsec(nsec, true)` を呼び出して Secure Storage に登録。ソース種別（ファイル/手動）やキャンセルを履歴に残し、入力形式が誤っている場合は `toast.error` と `status: error` を記録する。
+  - バックエンドは `presentation::commands::export_private_key` を追加し、`AuthHandler` から `AuthService.export_private_key` を公開。`tests/key_management.rs` で `DefaultKeyManager` + インメモリ Secure Storage によるバックアップ/復元の契約テストを追加した。
+- **ログ/セキュリティ**
+  - 履歴は最大20件を保持し、`npub` の一部と操作ステージのみを保存（秘密鍵は永続化しない）。UI では必ずマスク表示を初期状態とし、Runbook Chapter4 にオフライン保管・クリップボードクリア・復旧確認の手順を追記。
+  - `errorHandler.log('KeyManagementDialog.handle…')` で UI 側のエラーパスを捕捉し、`errorHandler.info` で Runbook 用の成功メッセージを統一。
+- **テスト/Runbook**
+  - `src/tests/unit/components/settings/KeyManagementDialog.test.tsx` / `src/tests/unit/stores/keyManagementStore.test.ts` を追加して UI/ストアのパスを Vitest で検証。`./scripts/test-docker.ps1 ts` を実行して Windows 環境でも成功を確認。
+  - `./scripts/test-docker.ps1 rust -Test key_management` を新設し、バックアップ→ログアウト→復元のラウンドトリップを Docker 上で検証。Runbook Chapter4「鍵バックアップ/復元チェックリスト」を更新し、運用時に本コマンドを参照できるようにした。
+- **ステータス**
+  - ✅ UI/バックエンド/Runbook/テストを揃えたことで MVP Exit 条件を満たした。`validate_nsec` コマンドによるフォーマット検証は Phase7 backlog（Security Hardening）で継続検討。
+  - 📌 Nightly artefact への履歴ダンプ（`persistKeys.keyManagement`）と `key_management` ジョブのログ収集を次回 CI 更新にて取り込む予定。
 
 ### 5.5 Relay/P2P ステータスカードと監視タスク（2025年11月03日更新）
 - **目的**: サイドバー下部の `RelayStatus` / `P2PStatus` カードでネットワーク状態とメトリクスを可視化し、Phase 5 の接続系リグレッション検出を支援する。

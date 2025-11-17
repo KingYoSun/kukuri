@@ -11,6 +11,7 @@ export const persistKeys = {
   p2p: 'p2p-storage',
   topic: 'topic-storage',
   privacy: 'privacy-settings',
+  keyManagement: 'key-management-history',
 } as const;
 
 export const createAuthPersistConfig = <
@@ -67,4 +68,15 @@ export const createTopicPersistConfig = <
     'joinedTopics' | 'currentTopic' | 'topicUnreadCounts' | 'topicLastReadAt'
   >(['joinedTopics', 'currentTopic', 'topicUnreadCounts', 'topicLastReadAt']),
   storage: createMapAwareStorage(),
+});
+
+export const createKeyManagementPersistConfig = <
+  T extends { history: unknown[]; lastExportedAt: number | null; lastImportedAt: number | null },
+>(): PersistOptions<T> => ({
+  name: persistKeys.keyManagement,
+  partialize: createPartializer<T, 'history' | 'lastExportedAt' | 'lastImportedAt'>([
+    'history',
+    'lastExportedAt',
+    'lastImportedAt',
+  ]),
 });

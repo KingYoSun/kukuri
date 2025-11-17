@@ -72,4 +72,8 @@ impl AuthHandler {
             None => Ok(None),
         }
     }
+
+    pub async fn export_private_key(&self, npub: &str) -> Result<String, AppError> {
+        self.auth_service.export_private_key(npub).await
+    }
 }

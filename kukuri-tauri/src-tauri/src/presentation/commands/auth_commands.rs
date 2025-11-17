@@ -2,7 +2,10 @@ use crate::{
     presentation::{
         dto::{
             ApiResponse,
-            auth_dto::{LoginResponse, LoginWithNsecRequest},
+            auth_dto::{
+                ExportPrivateKeyRequest, ExportPrivateKeyResponse, LoginResponse, LoginWithNsecRequest,
+            },
+            Validate,
         },
         handlers::AuthHandler,
     },
@@ -63,4 +66,17 @@ pub async fn logout(state: State<'_, AppState>) -> Result<ApiResponse<()>, AppEr
     }
 
     Ok(ApiResponse::success(()))
+}
+
+/// 秘寁E��をエクスポ�E��する
+#[tauri::command]
+pub async fn export_private_key(
+    state: State<'_, AppState>,
+    request: ExportPrivateKeyRequest,
+) -> Result<ApiResponse<ExportPrivateKeyResponse>, AppError> {
+    request.validate().map_err(AppError::InvalidInput)?;
+    let handler = AuthHandler::new(state.auth_service.clone());
+    let nsec = handler.export_private_key(&request.npub).await?;
+
+    Ok(ApiResponse::success(ExportPrivateKeyResponse { nsec }))
 }

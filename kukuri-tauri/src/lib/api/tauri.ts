@@ -17,6 +17,10 @@ export interface LoginResponse {
   npub: string;
 }
 
+export interface ExportPrivateKeyResponse {
+  nsec: string;
+}
+
 // トピック関連の型定義
 export interface Topic {
   id: string;
@@ -320,6 +324,13 @@ export class TauriApi {
 
   static async logout(): Promise<void> {
     await invokeCommandVoid('logout');
+  }
+
+  static async exportPrivateKey(npub: string): Promise<string> {
+    const response = await invokeCommand<ExportPrivateKeyResponse>('export_private_key', {
+      request: { npub },
+    });
+    return response.nsec;
   }
 
   // トピック関連

@@ -210,6 +210,25 @@ $env:RUST_LOG = "info,iroh_tests=debug"
   3. `./scripts/test-docker.ps1 rust -Test profile_avatar_sync`（Windows では `-NoBuild` 併用可）または `cargo test --package kukuri-tauri --test profile_avatar_sync`
 - 失敗時は `kukuri-tauri/src-tauri/target/profile_avatars/doc.json`（Docker: `/app/kukuri-tauri/src-tauri/target/profile_avatars/doc.json`）と `blobs/` 配下のハッシュ、`cache_metadata` の `metadata.result`、`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` を突き合わせ、Service Worker の再送ログと Doc/Blob 差分を確認する。必要に応じて `rm -rf profile_avatars` → `cargo test --package kukuri-tauri --test profile_avatar_sync` を再実行し、`AppError::Storage` が消えるかを確認する。
 
+### 4.4 鍵バックアップ/復旧（2025年11月17日追加）
+1. **事前確認**
+   - Settings > アカウントに「鍵管理」ボタンが表示されていること、`src/routes/settings.tsx` で `KeyManagementDialog` がレンダリングされていることを確認する。
+   - `persistKeys.keyManagement` が localStorage に作成されることを DevTools で確認し、履歴がローテーション（最大20件）されることを確認する。
+2. **バックアップ手順**
+   1. 「鍵管理」→「エクスポート」タブで `秘密鍵を取得` を押し、`KeyManagementDialog` に `nsec` が表示されることを確認する。
+   2. 「ファイルに保存」で `.nsec` をオフライン媒体へ保存し、必要に応じて「クリップボードにコピー」を利用する（30 秒以内に貼り付けて削除する）。
+   3. `useKeyManagementStore` の履歴に `action: export / stage: fetch, save-file` が `status: success` で記録されていることを確認し、証跡として Runbook に貼り付ける。
+3. **復旧手順**
+   1. 「インポート」タブで `鍵ファイルを選択` → `.nsec` を読み込み、または手動入力欄に貼り付ける。
+   2. `セキュアストレージに追加` を押し、`authStore.loginWithNsec(nsec, true)` が成功することを確認。完了後に `currentUser.npub` が切り替わっているか、リレー状態が更新されるかを Settings で確認する。
+   3. 履歴に `action: import / status: success / metadata.source: file|manual` が記録されることを確認し、監査ログとして保存する。
+4. **検証コマンド**
+   - UI/ストア: `./scripts/test-docker.ps1 ts`（Vitest 全体に `KeyManagementDialog` / `keyManagementStore` のテストが含まれる）。
+   - バックアップ/復旧契約: `./scripts/test-docker.ps1 rust -Test key_management`。
+5. **障害対応メモ**
+   - エクスポート失敗時は `src/lib/api/tauri.ts` の `exportPrivateKey` 呼び出し結果と `src-tauri/src/presentation/commands/auth_commands.rs` の `AppError` を突合し、`AuthService::export_private_key` で鍵が見つからない場合は `SecureStorage` の ledger を調査する。
+   - インポート失敗時は `.nsec` の形式（`nsec1` 始まり）と `KeyManagementDialog` のバリデーション結果 (`status: cancelled|error`) を確認し、`useKeyManagementStore` の履歴と `errorHandler.log('KeyManagementDialog.handleImport', …)` をエビデンスとして Runbook に貼り付ける。
+
 
 ## 9. get_p2p_status API 拡張実装（2025年11月03日）
 - `application::services::p2p_service::P2PStatus` に `connection_status: ConnectionStatus`（`connected` / `connecting` / `disconnected` / `error`）と `peers: Vec<PeerStatus>` を追加し、`presentation::handlers::p2p_handler::get_p2p_status` → `presentation::dto::p2p::P2PStatusResponse` 経由でフロントへ返却する。`PeerStatus` は Node ID・endpoint アドレス・最終観測時刻を含む。

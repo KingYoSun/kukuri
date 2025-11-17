@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
 import { updateNostrMetadata } from '@/lib/api/nostr';
+import { KeyManagementDialog } from '@/components/settings/KeyManagementDialog';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -32,6 +33,7 @@ function SettingsPage() {
   const hydrateFromUser = storeHydrateFromUser ?? (() => {});
   const { currentUser, updateUser } = useAuthStore();
   const [isProfileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [isKeyDialogOpen, setKeyDialogOpen] = useState(false);
   const [savingField, setSavingField] = useState<'public' | 'online' | null>(null);
 
   useEffect(() => {
@@ -134,7 +136,9 @@ function SettingsPage() {
               <p className="font-medium">鍵管理</p>
               <p className="text-sm text-muted-foreground">秘密鍵のバックアップとインポート</p>
             </div>
-            <Button variant="outline">管理</Button>
+            <Button variant="outline" onClick={() => setKeyDialogOpen(true)}>
+              管理
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -198,6 +202,7 @@ function SettingsPage() {
         open={isProfileDialogOpen}
         onOpenChange={(open) => setProfileDialogOpen(open)}
       />
+      <KeyManagementDialog open={isKeyDialogOpen} onOpenChange={setKeyDialogOpen} />
     </div>
   );
 }
