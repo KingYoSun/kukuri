@@ -17,11 +17,6 @@
 
 ### リファクタリングプラン完了タスク
 
-17. **機能使用状況マップ: アクティブ導線の呼び出し元トレース確定**  
-    - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:214` で「機能名: 呼び出し元 → 実装箇所」を網羅したマップが未チェックのまま残っており、`phase5_feature_usage_map.md` の内容と Tauri コマンド一覧の整合を証跡付きで残す必要がある。  
-    - やること: (1) `scripts/check-tauri-commands.mjs` の結果と `phase5_feature_usage_map.md` 3章を突き合わせ、各アクティブ導線について「UIイベント → Hook/Store → Tauri Command」の紐付け表を埋める。(2) `phase5_user_flow_inventory.md` の導線 ID と相互参照できるよう、マップにテスト ID・Nightly artefact へのリンクを追加。(3) マップ更新後に refactoring plan のチェックボックスへ反映し、エビデンスを `phase5_ci_path_audit.md` に追記。  
-    - 完了条件: 主要導線ごとに呼び出し元トレースが文書で確認でき、該当チェックボックスを完了に更新できる状態。
-
 18. **機能使用状況マップ: 未使用機能/ dead_code の棚卸し完了**  
     - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:217` にある「機能名: 実装箇所（dead_code）」が未完了で、`add_relay` など Phase5 backlog に残る未導線 API の扱いが確定していない。  
     - やること: (1) `phase5_feature_usage_map.md` と `phase5_dependency_inventory_template.md` を用い、未導線 API / dead_code の一覧に削除 or 代替導線を明記。(2) 削除対象は Rust/TypeScript 双方から撤去し、Nightly ログと CI 監査に反映。(3) 維持する場合は UI 導線作成の期日・責務を追記し、refactoring plan のチェックボックスを完了させる。  

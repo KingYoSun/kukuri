@@ -1,6 +1,11 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
 最終更新日: 2025年11月15日
 
+## 2025年11月17日: 機能使用状況マップ整合性チェック
+- `node scripts/check-tauri-commands.mjs` を実行し、Tauri コマンド 85 件がすべてフロントエンドから呼び出されていることを確認（CLI 出力: "Tauri コマンド 85 件はすべてフロントエンドから呼び出されています。"）。
+- `docs/01_project/activeContext/artefacts/phase5_feature_usage_map.md` 第3章に UIイベント→Hook/Store→Tauriコマンド→テストID/artefact の表（3.1節）を追加し、`phase5_user_flow_inventory.md` の導線 ID / Nightly artefact との突合を記録した。
+
+
 ## 2025年11月14日: Tauri API 棚卸しログ
 - `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri 側の `invoke_handler` とフロントエンド API から撤去し、`phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` / `phase5_feature_usage_map.md` で未導線リストを 0 件に更新。  
 - `refactoring_plan_2025-08-08_v3.md:436-446` と `tasks/status/in_progress.md` へ棚卸し完了を反映し、今後は新コマンド追加時に同 artefact 群へ即ログを残すルールを明示。  
