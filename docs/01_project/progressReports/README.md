@@ -6,6 +6,7 @@
 
 - [Nightly テストID / Artefact マッピング](./nightly.index.md) - Nightly ジョブと `*-logs` / `*-reports` artefact の対応表
 - [Nightly `trending-feed` Runbook](./nightly.trending-feed.md) - `/trending` `/following` Docker シナリオのトリアージ手順
+- [gh act CI failure 再現手順](./gh-act_ci-runbook.md) - `format-check` / `ts` シナリオを `gh act` で再実行するための共通手順
 
 ## レポート一覧
 

@@ -36,7 +36,7 @@ Nightly ワークフローで収集している導線テストは、ID ごとに
 - `gh act` 実行時は `--bind --container-options "--privileged"` を必須とし、ログ一覧のみを出力する `List trending feed outputs (act)` ステップで成果物を確認してから Runbook のトリアージ手順に沿って解析する。
 
 ### `nightly.profile-avatar-sync`
-- 参照: [`docs/03_implementation/p2p_mainline_runbook.md` Chapter4](../../03_implementation/p2p_mainline_runbook.md)
+- 参照: [`docs/03_implementation/p2p_mainline_runbook.md` Chapter4](../../03_implementation/p2p_mainline_runbook.md)、[`docs/01_project/progressReports/gh-act_ci-runbook.md`](./gh-act_ci-runbook.md)
 - 目的: Service Worker 経由での avatar 再送・`cache_metadata` 更新を Docker で再現し、Stage4 仕様（TTL 30 分 / BroadcastChannel / `offlineApi.addToSyncQueue` ログ）が壊れていないかを追跡する。
 - artefact:
   - `profile-avatar-sync-logs`: `tmp/logs/profile_avatar_sync_stage4_<timestamp>.log`（Vitest + Worker 実行結果を同一ファイルに集約）。
@@ -82,4 +82,3 @@ Nightly ワークフローで収集している導線テストは、ID ごとに
   - `direct-message-logs`: `tmp/logs/vitest_direct_message_<timestamp>.log`
   - `direct-message-reports`: `test-results/direct-message/<timestamp>-*.json`
 - 追加予定のコマンドは `./scripts/test-docker.sh ts --scenario direct-message --no-build`（PowerShell: `./scripts/test-docker.ps1 ts -Scenario direct-message -NoBuild`）。Rust contract (`tests/contract/direct_messages.rs`) のログは `./scripts/test-docker.ps1 rust` で別途取得し、`phase5_user_flow_summary.md` の DM 行で共有している。
-
