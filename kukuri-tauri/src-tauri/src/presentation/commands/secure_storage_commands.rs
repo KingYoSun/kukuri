@@ -75,25 +75,3 @@ pub async fn secure_login(
     let result = handler.secure_login(npub).await;
     Ok(ApiResponse::from_result(result))
 }
-
-/// 全てのアカウントデータをクリア（テスト用）
-#[tauri::command]
-pub async fn clear_all_accounts_for_test(
-    _state: State<'_, AppState>,
-) -> Result<ApiResponse<()>, AppError> {
-    #[cfg(not(debug_assertions))]
-    {
-        return Err(AppError::ConfigurationError(
-            "This command is only available in debug builds".to_string(),
-        ));
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        use crate::infrastructure::storage::secure_storage::DefaultSecureStorage;
-
-        DefaultSecureStorage::clear_all_accounts_for_test()
-            .map_err(|e| AppError::Storage(e.to_string()))?;
-        Ok(ApiResponse::success(()))
-    }
-}

@@ -80,8 +80,6 @@ pub fn run() {
             presentation::commands::remove_account,
             presentation::commands::get_current_account,
             presentation::commands::secure_login,
-            // テスト用コマンド
-            presentation::commands::clear_all_accounts_for_test,
             // ユーザー関連コマンド
             presentation::commands::get_user,
             presentation::commands::get_user_by_pubkey,

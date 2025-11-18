@@ -1,7 +1,7 @@
 # Phase 5 機能使用状況マップ（アクティブ）
 
 作成日: 2025年11月14日  
-最終更新: 2025年11月14日
+最終更新: 2025年11月18日
 
 参照:
 - `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（最終更新: 2025年11月10日）
@@ -71,7 +71,7 @@
 
 ## 2. 未使用機能（削除候補）
 
-`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md:168-196` で backlog 管理している未導線 API／dead code をコードベースと突合した結果を記録する。各項目について削除 or 保留の判断と次アクションを明記した。
+`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md:168-196` で backlog 管理している未導線 API／dead code をコードベースと突合した結果を記録する。各項目について削除 or 保留の判断と次アクションを明記した。2025年11月18日時点での未使用機能は 0 件となり、UI/コマンド・バックエンド双方の backlog を消化済み。
 
 ### 2.1 UI/コマンド未導線
 
@@ -81,13 +81,13 @@
 | Tauriコマンド | `get_nostr_pubkey` | （2025年11月14日撤去） | `authStore` が pubkey/npub を保持しているため API を廃止。 | 完了 | multi-identity 再開時に SecureStorage からの再取得方式を再検討する。 |
 | Tauriコマンド | `delete_events` | （2025年11月14日撤去） | 投稿削除フロー内で EventService が処理するため直接コマンドを廃止。 | 完了 | `delete_post` の統合テストで削除伝搬とキャッシュ整合性を保証する。 |
 | Tauriコマンド | `join_topic_by_name` | （2025年11月14日撤去） | Global Composer fallback を再設計するまで API を廃止。 | 完了 | 次期仕様で名称解決ロジックと UI 導線をまとめて復活させる。 |
-| Tauriコマンド | `clear_all_accounts_for_test` | `kukuri-tauri/src/lib/api/secureStorage.ts:93`<br>`kukuri-tauri/src-tauri/src/presentation/commands/secure_storage_commands.rs:80-99` | デバッグ目的だが UI から呼べず、`rg "clearAllAccountsForTest"` の利用箇所も API 内のみ。`phase5_user_flow_inventory.md:185,195` で backlog 管理されている。 | 保留（DEVパネル組み込み前提） | Settings > DEV パネルに「Secure Storage リセット」ボタン＋確認ダイアログを追加し、`errorHandler` ログと合わせて安全に実行できるようにする。 |
+| Tauriコマンド | ~~`clear_all_accounts_for_test`~~ | （2025年11月18日撤去） | Dev 導線未接続のまま残存していたため UI/バックエンド双方から削除。 | 完了（2025年11月18日） | `SecureStorageApi` / `secure_storage_commands.rs` / `lib.rs` からコマンド登録を除去し、Keyring クリア処理も `DefaultSecureStorage` から削除済み。 |
 
 ### 2.2 バックエンド dead_code
 
 | 種別 | 機能 | 実装箇所 | 未使用理由 | 判断 | 次アクション |
 | --- | --- | --- | --- | --- | --- |
-| Rust helper | `TopicMesh::get_peers` / `get_recent_messages` / `clear_cache` | `kukuri-tauri/src-tauri/src/domain/p2p/topic_mesh.rs:101-122` | 3 関数とも `#[allow(dead_code)]` 指定で、利用箇所は `domain/p2p/tests/topic_mesh_tests.rs` などテストのみ（本番コードからの `rg` ヒットなし）。メトリクスは `get_p2p_metrics` へ集約されたため UI から参照されない。 | 削除 | TopicMesh の内部構造を DEV 用に保持する必要が無いので削除し、必要なら将来のデバッグ用に独立した util を用意する。 |
+| Rust helper | ~~`TopicMesh::get_peers` / `get_recent_messages` / `clear_cache`~~ | （2025年11月18日撤去） | テスト専用の内部検査 API だったため、`TopicMesh` 本体から削除しユニットテストを `get_stats` / `subscribe` ベースに書き換えた。 | 完了（2025年11月18日） | `domain/p2p/topic_mesh.rs` と `domain/p2p/tests/topic_mesh_tests.rs`（および同ファイル内のテスト）でデバッグ API 依存を排除し、dead_code 扱いを解消。 |
 | Rustサービス | ~~`AppState.encryption_service` / `DefaultEncryptionService`~~ | `kukuri-tauri/src-tauri/src/state.rs`（2025年11月14日時点で削除済） | DM 暗号化導線が未整備のまま放置されていたため、`AppState` から暗号サービス依存を撤去。暗号化ロジックを再導入する場合は `infrastructure::crypto` を再配線して利用する。 | 完了（2025年11月14日） | Phase6 以降で暗号導線を追加する際は、新ポート／サービス経由で必要な箇所に注入する。 |
 
 ## 3. 部分的に使用されている機能

@@ -17,11 +17,6 @@
 
 ### リファクタリングプラン完了タスク
 
-18. **機能使用状況マップ: 未使用機能/ dead_code の棚卸し完了**  
-    - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:217` にある「機能名: 実装箇所（dead_code）」が未完了で、`add_relay` など Phase5 backlog に残る未導線 API の扱いが確定していない。  
-    - やること: (1) `phase5_feature_usage_map.md` と `phase5_dependency_inventory_template.md` を用い、未導線 API / dead_code の一覧に削除 or 代替導線を明記。(2) 削除対象は Rust/TypeScript 双方から撤去し、Nightly ログと CI 監査に反映。(3) 維持する場合は UI 導線作成の期日・責務を追記し、refactoring plan のチェックボックスを完了させる。  
-    - 完了条件: 未使用機能一覧がゼロまたは明確な移行計画付きでドキュメント化され、対応結果を refactoring plan に反映できている。
-
 19. **機能使用状況マップ: 部分利用機能の使用/未使用整理**  
     - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:220` で「使用箇所 / 未使用箇所」の棚卸しが未完了扱いとなっており、Summary/Inventory とメトリクスの突合が必要。  
     - やること: (1) `/profile`, `/search`, Offline Sync など部分的に利用されている UI を対象に、導線と未配線部位を `phase5_user_flow_summary.md`・`phase5_user_flow_inventory.md` と同期。(2) `docs/01_project/progressReports/` にテスト ID / artefact 参照先を記載して、部分利用箇所のトリアージ手順を Runbook 化。(3) Refactoring plan 側のチェックボックスと更新履歴を最新化。  

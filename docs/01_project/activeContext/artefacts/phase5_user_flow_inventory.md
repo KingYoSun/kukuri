@@ -183,8 +183,7 @@
 | `delete_events` | （2025年11月14日撤去） | Nostrイベント削除 | 投稿削除フローの EventService 呼び出しに統合済みのため直接コマンドを廃止。 |
 | `join_topic_by_name` | （2025年11月14日撤去） | 名前ベース参加 | Global Composer fallback 仕様は backlog で再設計。 |
 
-2025年11月14日時点でユーザー向け未導線 API は 0 件。`clear_all_accounts_for_test` などデバッグ専用コマンドのみ backlog 管理とする。
-| `clear_all_accounts_for_test` | `SecureStorageApi.clearAllAccountsForTest` | テスト用リセット | デバッグ UI 未接続。 |
+2025年11月18日時点でユーザー向け/デバッグ問わず未導線 API は 0 件。`clear_all_accounts_for_test` も撤去済みのため backlog は解消された。
 
 ### 3.3 未接続コマンドの対応優先度（2025年11月07日更新）
 
@@ -194,7 +193,7 @@
 2. **`delete_events`** — 投稿削除フローから EventService 経由で呼び出されるため、フロントから直接叩く API は 2025年11月14日に廃止。`delete_post` 統合テストで整合性を担保する。
 3. **`add_relay`** — 2025年11月14日に API を撤去。外部リレーを再開する場合は Phase 7 backlog で鍵管理モーダルと併せて再設計する。
 4. **`get_nostr_pubkey`** — `authStore` に pubkey/npub が常駐しているため 2025年11月14日に API を撤去。multi-identity 再設計が始まるまで backlog で監視する。
-5. **`clear_all_accounts_for_test`** — Debug パネルの「テスト用リセット」導線に組み込む計画。誤操作防止の確認ダイアログとログ記録を実装した後、開発者向け機能として公開する。
+5. ~~`clear_all_accounts_for_test`~~ — 2025年11月18日に Dev 限定コマンドごと削除。リセット用途は SecureStorage CLI や Nightly 用の専用スクリプトで代替し、UI への導線は提供しない方針となった。
 
 統合テストでは以下のコマンドを直接 `invoke` し、バックエンド API の状態確認やスモーク検証を実施している（UI 導線なし）。
 - 認証 E2E: `import_key`, `get_public_key`

@@ -214,7 +214,8 @@ grep -r "関数名" kukuri-tauri/src --include="*.rs" --include="*.ts"
 - [ ] 機能名: 呼び出し元 → 実装箇所
   
 ## 未使用の機能（削除候補）
-- [ ] 機能名: 実装箇所（dead_code）
+- [x] 機能名: 実装箇所（dead_code）
+  - 2025年11月18日: `clear_all_accounts_for_test` コマンドと `TopicMesh` デバッグ API を撤去し、`phase5_feature_usage_map.md` / `phase5_dependency_inventory_template.md` / `phase5_user_flow_inventory.md` に反映。未導線 API / dead_code リストは 0 件となった。
   
 ## 部分的に使用されている機能
 - [ ] 機能名: 使用箇所 / 未使用箇所

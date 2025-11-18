@@ -65,58 +65,13 @@ mod tests {
         mesh.update_peer_status(peer1.clone(), true).await;
         mesh.update_peer_status(peer2.clone(), true).await;
 
-        let peers = mesh.get_peers().await;
-        assert_eq!(peers.len(), 2);
-        assert!(peers.contains(&peer1));
-        assert!(peers.contains(&peer2));
+        let stats = mesh.get_stats().await;
+        assert_eq!(stats.peer_count, 2);
 
         // ピアの削除
-        mesh.update_peer_status(peer1.clone(), false).await;
-
-        let peers = mesh.get_peers().await;
-        assert_eq!(peers.len(), 1);
-        assert!(!peers.contains(&peer1));
-        assert!(peers.contains(&peer2));
-    }
-
-    #[tokio::test]
-    async fn test_recent_messages() {
-        let mesh = create_test_mesh();
-
-        // 複数のメッセージを追加
-        for i in 0..5 {
-            let message = create_test_message(i);
-            mesh.handle_message(message).await.unwrap();
-        }
-
-        // 最新のメッセージを取得
-        let recent = mesh.get_recent_messages(3).await;
-        assert_eq!(recent.len(), 3);
-
-        // タイムスタンプが降順であることを確認
-        for i in 0..recent.len() - 1 {
-            assert!(recent[i].timestamp >= recent[i + 1].timestamp);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_cache_clear() {
-        let mesh = create_test_mesh();
-
-        // メッセージを追加
-        for i in 0..3 {
-            let message = create_test_message(i);
-            mesh.handle_message(message).await.unwrap();
-        }
-
+        mesh.update_peer_status(peer1, false).await;
         let stats = mesh.get_stats().await;
-        assert_eq!(stats.message_count, 3);
-
-        // キャッシュをクリア
-        mesh.clear_cache().await;
-
-        let stats = mesh.get_stats().await;
-        assert_eq!(stats.message_count, 0);
+        assert_eq!(stats.peer_count, 1);
     }
 
     #[tokio::test]
@@ -204,8 +159,8 @@ mod tests {
         }
 
         // 最終的なピア数を確認
-        let peers = mesh.get_peers().await;
-        assert_eq!(peers.len(), 50); // 奇数番号のピアのみ残る
+        let stats = mesh.get_stats().await;
+        assert_eq!(stats.peer_count, 50); // 奇数番号のピアのみ残る
     }
 
     #[tokio::test]
@@ -237,19 +192,8 @@ mod tests {
             }
         });
 
-        // 最新メッセージ取得タスク
-        let mesh_recent = mesh.clone();
-        let recent_task = task::spawn(async move {
-            for _ in 0..30 {
-                let messages = mesh_recent.get_recent_messages(10).await;
-                assert!(messages.len() <= 10);
-                tokio::time::sleep(tokio::time::Duration::from_millis(8)).await;
-            }
-        });
-
         // すべてのタスクが完了するのを待つ
         add_task.await.unwrap();
         stats_task.await.unwrap();
-        recent_task.await.unwrap();
     }
 }

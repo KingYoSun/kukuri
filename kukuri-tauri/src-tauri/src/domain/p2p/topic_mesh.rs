@@ -208,30 +208,6 @@ impl TopicMesh {
     }
 }
 
-#[cfg(test)]
-impl TopicMesh {
-    /// 接続中のピアのリストを取得（テスト/診断用）
-    pub async fn get_peers(&self) -> Vec<Vec<u8>> {
-        let peers = self.peers.read().await;
-        peers.iter().cloned().collect()
-    }
-
-    /// キャッシュされたメッセージを取得（テスト/診断用）
-    pub async fn get_recent_messages(&self, limit: usize) -> Vec<GossipMessage> {
-        let cache = self.message_cache.read().await;
-        let mut messages: Vec<_> = cache.iter().map(|(_, msg)| msg.clone()).collect();
-
-        messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        messages.into_iter().take(limit).collect()
-    }
-
-    /// キャッシュをクリア（テスト/診断用）
-    pub async fn clear_cache(&self) {
-        let mut cache = self.message_cache.write().await;
-        cache.clear();
-    }
-}
-
 pub struct TopicMeshSubscription {
     pub id: u64,
     pub receiver: mpsc::Receiver<GossipMessage>,
@@ -267,13 +243,12 @@ mod tests {
         let peer = vec![0x02; 33];
 
         mesh.update_peer_status(peer.clone(), true).await;
-        let peers = mesh.get_peers().await;
-        assert_eq!(peers.len(), 1);
-        assert_eq!(peers[0], peer);
+        let stats = mesh.get_stats().await;
+        assert_eq!(stats.peer_count, 1);
 
-        mesh.update_peer_status(peer.clone(), false).await;
-        let peers = mesh.get_peers().await;
-        assert_eq!(peers.len(), 0);
+        mesh.update_peer_status(peer, false).await;
+        let stats = mesh.get_stats().await;
+        assert_eq!(stats.peer_count, 0);
     }
 
     #[tokio::test]
