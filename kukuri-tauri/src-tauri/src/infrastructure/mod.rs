@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod cache;
 pub mod crypto;
 pub mod database;

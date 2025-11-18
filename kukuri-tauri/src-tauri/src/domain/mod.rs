@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-#![allow(dead_code)]
 
 pub mod entities;
 pub mod p2p;

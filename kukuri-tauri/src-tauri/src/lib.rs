@@ -8,10 +8,14 @@ use tracing::info;
 mod application;
 mod domain;
 mod infrastructure;
-mod modules;
 mod presentation;
 mod shared;
 mod state;
+
+pub use application::ports::repositories::TopicMetricsRepository;
+pub use domain::entities::{TopicMetricsRecord, TopicMetricsSnapshot};
+pub use infrastructure::database::{connection_pool::ConnectionPool, sqlite_repository::SqliteRepository};
+pub use shared::config::AppConfig;
 
 pub mod ops {
     pub mod p2p {

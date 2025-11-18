@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-
-//! 共通テストユーティリティ。
+//! Shared test utilities.
 
 pub mod event;
 pub mod p2p;

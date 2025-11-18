@@ -1,5 +1,25 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
-最終更新日: 2025年11月15日
+最終更新日: 2025年11月19日
+
+## 2025年11月19日: dead_code allowリスト棚卸し
+- コマンド: `rg '#\[allow(dead_code)' -g '*.rs' | Tee-Object tmp/logs/dead_code_inventory_20251119-053142.log`  
+  - 結果: `application` / `shared` / `presentation` / `infrastructure` / `domain` / `application/shared/tests` / `modules` の7件で `#![allow(dead_code)]` を検出。Pathごとの扱いは下表の通り。  
+  - ログ: `tmp/logs/dead_code_inventory_20251119-053142.log` / `tmp/logs/dead_code_inventory_20251119-053645.log`（削除後に再実行し 0 件を確認）。  
+- コマンド: `./scripts/test-docker.ps1 rust`  
+  - 結果: `tmp/logs/test_docker_rust_20251119-055648.log` に 190 件の Rust テスト成功ログを採取。`p2p_metrics_export` を `test_support` に頼らず本番モジュールから依存解決した状態でパスすることを確認。  
+- `docker compose -f docker-compose.test.yml run --rm --entrypoint bash lint-check -lc 'cd /app/kukuri-tauri && pnpm lint && pnpm format:check'`  
+  - 結果: `tmp/logs/pnpm_lint_20251119-055434.log`。`pnpm lint` / `pnpm format:check` とも成功。  
+  - 備考: `cargo fmt -- --check` / `cargo clippy --workspace --all-features -- -D warnings` は Rust 1.86.0 の `rustfmt`/`rustc` が `application/shared/tests/mod.rs` の UTF-8/マルチバイト解析で panic する既知不具合により失敗（`tmp/logs/test_docker_lint_20251119-055329.log` / `tmp/logs/cargo_clippy_20251119-055408.log`）。ファイル自体は LF + ASCII コメントへ変換済みで、toolchain 更新待ちとして Runbook に記録。
+
+| Path | 種別 | 対応 | 検証ログ |
+| ---- | ---- | ---- | ---- |
+| `kukuri-tauri/src-tauri/src/application/mod.rs` | crate ルート | `#![allow(dead_code)]` 削除。`lib.rs` で `TopicMetricsRepository` を再エクスポートし、`p2p_metrics_export` から直接参照。 | `tmp/logs/test_docker_rust_20251119-055648.log` |
+| `kukuri-tauri/src-tauri/src/domain/mod.rs` | ドメイン | `#![allow(dead_code)]` 削除。`TopicMesh` などは `lib.rs` で従来通り `pub use`。 | 同上 |
+| `kukuri-tauri/src-tauri/src/shared/mod.rs` | 共有層 | `#![allow(dead_code)]` 削除し、`AppConfig` を `lib.rs` で再エクスポート。 | 同上 |
+| `kukuri-tauri/src-tauri/src/infrastructure/mod.rs` | インフラ | `#![allow(dead_code)]` 削除。`ConnectionPool` / `SqliteRepository` を `lib.rs` で公開。 | 同上 |
+| `kukuri-tauri/src-tauri/src/presentation/mod.rs` | プレゼン層 | `#![allow(dead_code)]` 削除。`cargo test` で Command/IPC 経路の参照が継続することを確認。 | 同上 |
+| `kukuri-tauri/src-tauri/src/application/shared/tests/mod.rs` | テスト支援 | `#![allow(dead_code)]` 削除。UTF-8 + LF へ変換し、`//! Shared test utilities.` コメントのみを残して `p2p_gossip_smoke` などから利用。 | `tmp/logs/test_docker_rust_20251119-055648.log` |
+| `kukuri-tauri/src-tauri/src/modules/**/*` | Legacy モジュール | ディレクトリごと削除（`rm -r kukuri-tauri/src-tauri/src/modules`）。`mod modules;` も `lib.rs` から撤去。 | `git status` / `tmp/logs/test_docker_rust_20251119-055648.log` |
 
 ## 2025年11月18日: コード重複率30%削減の検証
 - コマンド: `pnpm dlx jscpd --format typescript,tsx,javascript --min-lines 5 --reporters json --gitignore --absolute --silent --output tmp/jscpd/frontend kukuri-tauri/src`  
