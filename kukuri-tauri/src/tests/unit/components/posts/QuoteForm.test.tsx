@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { QuoteForm } from '@/components/posts/QuoteForm';
 import type { Post } from '@/stores';
 import {
   createMockProfile,
@@ -11,6 +10,7 @@ import {
   mockToast,
   mockUseAuthStore,
 } from './__utils__/postFormTestUtils';
+import { QuoteForm } from '@/components/posts/QuoteForm';
 
 describe('QuoteForm', () => {
   const mockProfile = createMockProfile();
@@ -143,6 +143,12 @@ describe('QuoteForm', () => {
     const textarea = screen.getByPlaceholderText('コメントを追加...');
     await user.type(textarea, 'これは引用コメントです');
     await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => {
+      expect(mockTauriApi.createPost).toHaveBeenCalledTimes(1);
+    });
+
+    await user.type(textarea, '2回目の引用コメントです');
     await user.keyboard('{Meta>}{Enter}{/Meta}');
 
     await waitFor(() => {

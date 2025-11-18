@@ -109,7 +109,7 @@ async fn query_follow_relation(
                 let timestamp = primary_str
                     .parse::<i64>()
                     .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-                builder.push(&format!(
+                builder.push(format!(
                     " AND (f.created_at < ? OR (f.created_at = ? AND {relation_column} < ?))",
                     relation_column = descriptor.relation_column,
                 ));
@@ -121,7 +121,7 @@ async fn query_follow_relation(
                 let timestamp = primary_str
                     .parse::<i64>()
                     .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-                builder.push(&format!(
+                builder.push(format!(
                     " AND (f.created_at > ? OR (f.created_at = ? AND {relation_column} > ?))",
                     relation_column = descriptor.relation_column,
                 ));
@@ -132,7 +132,7 @@ async fn query_follow_relation(
             FollowListSort::NameAsc => {
                 builder.push(" AND (");
                 builder.push(SORT_KEY_LOWER_EXPR);
-                builder.push(&format!(
+                builder.push(format!(
                     " > ? OR ({expr} = ? AND {relation_column} > ?))",
                     expr = SORT_KEY_LOWER_EXPR,
                     relation_column = descriptor.relation_column,
@@ -144,7 +144,7 @@ async fn query_follow_relation(
             FollowListSort::NameDesc => {
                 builder.push(" AND (");
                 builder.push(SORT_KEY_LOWER_EXPR);
-                builder.push(&format!(
+                builder.push(format!(
                     " < ? OR ({expr} = ? AND {relation_column} < ?))",
                     expr = SORT_KEY_LOWER_EXPR,
                     relation_column = descriptor.relation_column,
@@ -158,25 +158,25 @@ async fn query_follow_relation(
 
     match sort {
         FollowListSort::Recent => {
-            builder.push(&format!(
+            builder.push(format!(
                 " ORDER BY f.created_at DESC, {relation_column} DESC",
                 relation_column = descriptor.relation_column,
             ));
         }
         FollowListSort::Oldest => {
-            builder.push(&format!(
+            builder.push(format!(
                 " ORDER BY f.created_at ASC, {relation_column} ASC",
                 relation_column = descriptor.relation_column,
             ));
         }
         FollowListSort::NameAsc => {
-            builder.push(&format!(
+            builder.push(format!(
                 " ORDER BY sort_key_normalized ASC, {relation_column} ASC",
                 relation_column = descriptor.relation_column,
             ));
         }
         FollowListSort::NameDesc => {
-            builder.push(&format!(
+            builder.push(format!(
                 " ORDER BY sort_key_normalized DESC, {relation_column} DESC",
                 relation_column = descriptor.relation_column,
             ));

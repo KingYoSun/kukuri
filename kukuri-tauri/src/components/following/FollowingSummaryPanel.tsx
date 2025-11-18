@@ -31,7 +31,8 @@ export function FollowingSummaryPanel({
   const latestServerTime = data
     ? data.pages.reduce((latest, page) => Math.max(latest, page.serverTime ?? 0), 0) || null
     : null;
-  const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTimeInfo(latestServerTime);
+  const { display: updatedDisplay, helper: updatedHelper } =
+    formatRelativeTimeInfo(latestServerTime);
   const updatedLagLabel = formatLagLabel(latestServerTime);
 
   const remainingPages = data || hasNextPage ? (hasNextPage ? 'あり' : 'なし') : null;

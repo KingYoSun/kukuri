@@ -37,9 +37,11 @@ export const getUserInitials = (value?: string | null, fallback = 'U'): string =
   if (!trimmed) {
     return fallback;
   }
-  return trimmed
-    .split(/\s+/)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-    .slice(0, 2) || fallback;
+  return (
+    trimmed
+      .split(/\s+/)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('')
+      .slice(0, 2) || fallback
+  );
 };

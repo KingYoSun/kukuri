@@ -1,5 +1,5 @@
 use crate::shared::error::AppError;
-use crate::shared::metrics::{AtomicMetric, AtomicSnapshot};
+use crate::shared::metrics::AtomicMetric;
 use serde::Serialize;
 #[cfg(test)]
 use std::cell::Cell;

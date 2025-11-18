@@ -68,9 +68,5 @@ pub fn current_unix_ms() -> u64 {
 
 #[inline]
 pub fn timestamp_to_option(value: u64) -> Option<u64> {
-    if value == UNSET_TS {
-        None
-    } else {
-        Some(value)
-    }
+    if value == UNSET_TS { None } else { Some(value) }
 }

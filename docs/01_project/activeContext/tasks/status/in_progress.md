@@ -13,7 +13,11 @@
 
 ### MVP Exit タスク
 
-- （現在進行中のタスクはありません。2025年11月17日更新）
+24. **GitHub Actions ワークフロー失敗の恒久修正**
+    - 背景: `Test` ワークフローの `Format Check`/`Native Test (Linux)`/`Docker Test Suite` が、Rust フォーマットの崩れ・clippy 警告・Vitest/ESLint の失敗で毎回こけており、`gh run view` で 55660781722/55660781731/55660781733 が全滅している。
+    - やること: (1) `kukuri-tauri/src-tauri` の `cargo fmt` と TS 側の Prettier を通して差分を解消。(2) clippy (`needless_borrows_for_generic_args` など) と未使用 import を除去。(3) Reply/Quote/Profile 系テストが正しくモックを掴むように import 順序を直し、`SummaryDirectMessageCard` の data-testid 更新に追従。(4) `scripts/test-docker.ps1 ts` および `gh act --workflows .github/workflows/test.yml --job {format-check,native-test-linux}` で CI 手順をホスト再現し、緑のログを添付。
+    - 進捗メモ (2025年11月18日): rustfmt 差分と Prettier 欠けを解消し、TS テストをまとめて再配線。`gh act` で Format Check / Native Test を通過させ、Windows 指定の `./scripts/test-docker.ps1 ts` も成功。Native ジョブでは Docker → Rust → CLI → Vitest → ESLint まで完走することを確認済み。
+    - 完了条件: GitHub Actions (Test) ワークフローが再実行で成功するか、`gh act`/`test-docker.ps1` の再現ログで全ジョブが成功していることを CI channel に報告できる状態。
 
 ### リファクタリングプラン完了タスク
 

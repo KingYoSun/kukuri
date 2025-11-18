@@ -57,7 +57,7 @@ describe('FollowingSummaryPanel', () => {
       '1分前 / 会話: npub1following',
     );
 
-    await user.click(screen.getByTestId('following-summary-dm-cta'));
+    await user.click(screen.getByTestId('following-summary-direct-messages-cta'));
     expect(openInboxMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -36,10 +36,7 @@ export function ReplyForm({
     emptyErrorMessage: '返信内容を入力してください',
     errorContext: 'ReplyForm',
     errorToastTitle: '返信の投稿に失敗しました',
-    invalidations: [
-      { queryKey: ['timeline'] },
-      topicId ? { queryKey: ['posts', topicId] } : null,
-    ],
+    invalidations: [{ queryKey: ['timeline'] }, topicId ? { queryKey: ['posts', topicId] } : null],
     onSuccess,
   });
 

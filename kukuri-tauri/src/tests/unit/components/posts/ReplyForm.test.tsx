@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { ReplyForm } from '@/components/posts/ReplyForm';
 import {
   createMockProfile,
   createPostFormRenderer,
@@ -10,6 +9,7 @@ import {
   mockToast,
   mockUseAuthStore,
 } from './__utils__/postFormTestUtils';
+import { ReplyForm } from '@/components/posts/ReplyForm';
 
 describe('ReplyForm', () => {
   const mockProfile = createMockProfile();

@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ProfileSetup } from '@/components/auth/ProfileSetup';
-import { useAuthStore } from '@/stores/authStore';
-import { updateNostrMetadata } from '@/lib/api/nostr';
-import { toast } from 'sonner';
-import { errorHandler } from '@/lib/errorHandler';
 import {
   createQueryWrapper,
   initializeTauriMocks,
   mockNavigate,
   stubObjectUrl,
 } from './__utils__/profileTestUtils';
+import { ProfileSetup } from '@/components/auth/ProfileSetup';
+import { useAuthStore } from '@/stores/authStore';
+import { updateNostrMetadata } from '@/lib/api/nostr';
+import { toast } from 'sonner';
+import { errorHandler } from '@/lib/errorHandler';
 
 const createWrapper = createQueryWrapper;
 const objectUrlMock = stubObjectUrl();

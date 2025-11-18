@@ -44,7 +44,11 @@ interface PostStore extends PostState {
 const removePostCollections = (
   state: PostStore,
   id: string,
-): { posts: Map<string, Post>; postsByTopic: Map<string, string[]>; removedTopicId: string } | null => {
+): {
+  posts: Map<string, Post>;
+  postsByTopic: Map<string, string[]>;
+  removedTopicId: string;
+} | null => {
   const post = state.posts.get(id);
   if (!post) {
     return null;

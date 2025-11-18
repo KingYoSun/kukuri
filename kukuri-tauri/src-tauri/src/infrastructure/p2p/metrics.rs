@@ -1,5 +1,5 @@
 use crate::shared::config::BootstrapSource;
-use crate::shared::metrics::{AtomicMetric, current_unix_ms, timestamp_to_option, UNSET_TS};
+use crate::shared::metrics::{AtomicMetric, UNSET_TS, current_unix_ms, timestamp_to_option};
 use crate::shared::validation::ValidationFailureKind;
 use once_cell::sync::Lazy;
 use serde::Serialize;

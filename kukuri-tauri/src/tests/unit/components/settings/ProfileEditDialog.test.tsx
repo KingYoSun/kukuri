@@ -3,12 +3,12 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { initializeTauriMocks, stubObjectUrl } from '../auth/__utils__/profileTestUtils';
 import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
 import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-import { initializeTauriMocks, stubObjectUrl } from '../auth/__utils__/profileTestUtils';
 
 let mockOpen: ReturnType<typeof vi.fn>;
 let mockReadFile: ReturnType<typeof vi.fn>;

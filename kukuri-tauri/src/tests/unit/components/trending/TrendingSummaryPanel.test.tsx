@@ -49,7 +49,7 @@ describe('TrendingSummaryPanel', () => {
       '1分前 / 会話: npub1demo123',
     );
 
-    await user.click(screen.getByTestId('trending-summary-dm-cta'));
+    await user.click(screen.getByTestId('trending-summary-direct-messages-cta'));
     expect(openInboxMock).toHaveBeenCalledTimes(1);
   });
 });

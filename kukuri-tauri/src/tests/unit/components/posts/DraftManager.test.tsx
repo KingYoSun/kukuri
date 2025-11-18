@@ -182,7 +182,7 @@ describe('DraftManager', () => {
   });
 
   it('clears all drafts when confirmed', async () => {
-    const { user } = await openClearAllDialog();
+    await openClearAllDialog();
     await waitFor(() => {
       expect(
         screen.getByText('すべての下書きを削除してもよろしいですか？この操作は取り消せません。'),

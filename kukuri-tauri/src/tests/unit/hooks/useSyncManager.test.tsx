@@ -111,21 +111,17 @@ describe('useSyncManager', () => {
   };
 
   const setOfflineStoreState = (overrides: Partial<typeof defaultOfflineState>) => {
-    vi.mocked(useOfflineStore).mockReturnValue(
-      {
-        ...defaultOfflineState,
-        ...overrides,
-      } as any,
-    );
+    vi.mocked(useOfflineStore).mockReturnValue({
+      ...defaultOfflineState,
+      ...overrides,
+    } as any);
   };
 
   const setAuthStoreState = (overrides: Partial<typeof defaultAuthState>) => {
-    vi.mocked(useAuthStore).mockReturnValue(
-      {
-        ...defaultAuthState,
-        ...overrides,
-      } as any,
-    );
+    vi.mocked(useAuthStore).mockReturnValue({
+      ...defaultAuthState,
+      ...overrides,
+    } as any);
   };
 
   beforeEach(() => {
