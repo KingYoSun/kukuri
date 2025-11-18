@@ -1,68 +1,65 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useOffline, useOptimisticUpdate } from '@/hooks/useOffline';
-import { useOfflineStore } from '@/stores/offlineStore';
-import { useAuthStore } from '@/stores/authStore';
 import { OfflineActionType, EntityType } from '@/types/offline';
+import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
+import {
+  createOfflineStoreTestState,
+  type OfflineStoreTestState,
+} from '@/tests/utils/offlineStoreMocks';
+import { createToastMock } from '@/tests/utils/toastMock';
 
-// モックの設定
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
+type AuthStoreState = {
+  currentUser: {
+    npub: string;
+    displayName: string;
+  } | null;
+};
+
+const toastMock = createToastMock();
+
+vi.mock('sonner', () => ({ toast: toastMock }));
+
+const mockSaveOfflineAction = vi.fn();
+const mockSyncPendingActions = vi.fn();
+const mockLoadPendingActions = vi.fn();
+
+const authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
+  currentUser: {
+    npub: 'test_npub',
+    displayName: 'Test User',
   },
 }));
 
-vi.mock('@/stores/authStore', () => ({
-  useAuthStore: vi.fn(),
-}));
-
-vi.mock('@/stores/offlineStore', () => ({
-  useOfflineStore: vi.fn(),
-}));
-
-describe('useOffline', () => {
-  const mockSaveOfflineAction = vi.fn();
-  const mockSyncPendingActions = vi.fn();
-  const mockLoadPendingActions = vi.fn();
-
-  const defaultOfflineState = {
-    isOnline: true,
-    pendingActions: [],
-    isSyncing: false,
-    lastSyncedAt: undefined,
+const offlineStoreMock = createZustandStoreMock<OfflineStoreTestState>(() =>
+  createOfflineStoreTestState({
     saveOfflineAction: mockSaveOfflineAction,
     syncPendingActions: mockSyncPendingActions,
     loadPendingActions: mockLoadPendingActions,
+  }),
+);
+
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: authStoreMock.hook,
+}));
+
+vi.mock('@/stores/offlineStore', () => ({
+  useOfflineStore: offlineStoreMock.hook,
+}));
+
+describe('useOffline', () => {
+  const setOfflineStoreState = (overrides?: Partial<OfflineStoreTestState>) => {
+    offlineStoreMock.apply(overrides);
   };
 
-  const defaultAuthState = {
-    currentUser: {
-      npub: 'test_npub',
-      displayName: 'Test User',
-    },
-  };
-
-  const setOfflineStoreState = (overrides: Partial<typeof defaultOfflineState>) => {
-    vi.mocked(useOfflineStore).mockReturnValue({
-      ...defaultOfflineState,
-      ...overrides,
-    } as any);
-  };
-
-  const setAuthStoreState = (overrides: Partial<typeof defaultAuthState>) => {
-    vi.mocked(useAuthStore).mockReturnValue({
-      ...defaultAuthState,
-      ...overrides,
-    } as any);
+  const setAuthStoreState = (overrides?: Partial<AuthStoreState>) => {
+    authStoreMock.apply(overrides);
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    setOfflineStoreState({});
-    setAuthStoreState({});
+    setOfflineStoreState();
+    setAuthStoreState();
   });
 
   afterEach(() => {
@@ -161,10 +158,9 @@ describe('useOffline', () => {
   describe('triggerSync', () => {
     it('手動で同期をトリガーできる', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        pendingActions: [{ id: 1 }],
-      } as any);
+      setOfflineStoreState({
+        pendingActions: [{ id: 1 } as any],
+      });
 
       const { result } = renderHook(() => useOffline());
 
@@ -178,11 +174,10 @@ describe('useOffline', () => {
 
     it('オフライン時は同期できない', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
+      setOfflineStoreState({
         isOnline: false,
-        pendingActions: [{ id: 1 }],
-      } as any);
+        pendingActions: [{ id: 1 } as any],
+      });
 
       const { result } = renderHook(() => useOffline());
 
@@ -196,11 +191,10 @@ describe('useOffline', () => {
 
     it('同期中は再度同期しない', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
+      setOfflineStoreState({
         isSyncing: true,
-        pendingActions: [{ id: 1 }],
-      } as any);
+        pendingActions: [{ id: 1 } as any],
+      });
 
       const { result } = renderHook(() => useOffline());
 
@@ -228,10 +222,9 @@ describe('useOffline', () => {
     it('同期エラー時にエラーメッセージを表示する', async () => {
       const { toast } = await import('sonner');
       mockSyncPendingActions.mockRejectedValue(new Error('Sync failed'));
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        pendingActions: [{ id: 1 }],
-      } as any);
+      setOfflineStoreState({
+        pendingActions: [{ id: 1 } as any],
+      });
 
       const { result } = renderHook(() => useOffline());
 
@@ -245,13 +238,12 @@ describe('useOffline', () => {
 
   describe('返り値', () => {
     it('正しい値を返す', () => {
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
+      setOfflineStoreState({
         isOnline: false,
         isSyncing: true,
-        pendingActions: [{ id: 1 }, { id: 2 }],
+        pendingActions: [{ id: 1 } as any, { id: 2 } as any],
         lastSyncedAt: 1234567890,
-      } as any);
+      });
 
       const { result } = renderHook(() => useOffline());
 
@@ -272,11 +264,11 @@ describe('useOptimisticUpdate', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useOfflineStore).mockReturnValue({
+    offlineStoreMock.apply({
       applyOptimisticUpdate: mockApplyOptimisticUpdate,
       confirmUpdate: mockConfirmUpdate,
       rollbackUpdate: mockRollbackUpdate,
-    } as any);
+    });
   });
 
   it('楽観的更新を適用できる', async () => {

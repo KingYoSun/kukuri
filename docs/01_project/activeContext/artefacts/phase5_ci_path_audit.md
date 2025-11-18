@@ -1,6 +1,13 @@
 # Phase 5 CI/ローカルスクリプト パス依存調査
 最終更新日: 2025年11月15日
 
+## 2025年11月18日: コード重複率30%削減の検証
+- コマンド: `pnpm dlx jscpd --format typescript,tsx,javascript --min-lines 5 --reporters json --gitignore --absolute --silent --output tmp/jscpd/frontend kukuri-tauri/src`  
+  - 結果: 382ファイル/54,709行中の重複 1,523行（2.78%）。2025年11月14日時点の 2,231行（4.16%）から 31.7% 削減。レポート: `tmp/jscpd/frontend/jscpd-report.json`。
+- コマンド: `pnpm dlx jscpd --format rust --min-lines 5 --reporters json --gitignore --absolute --silent --output tmp/jscpd/rust kukuri-tauri/src-tauri/src kukuri-cli/src`  
+  - 結果: 249ファイル/34,220行中の重複 1,287行（3.76%）。Rust 側は現状維持だが、再計測ログ `tmp/jscpd/rust/jscpd-report.json` を更新し、TypeScript 側の削減率と合わせて Runbook/監査ドキュメントに記録。
+- 併せて `src/tests/utils/{zustandTestUtils.ts,offlineStoreMocks.ts,toastMock.ts}` を追加し、ダイレクトメッセージ系/Sync系テストの Zustand モックやトーストモックを共有化。`DirectMessageDialog.test.tsx` / `profile.$userId.test.tsx` / `useOffline.test.tsx` / `useSyncManager.test.tsx` にまたがっていた 29～30行規模の重複ブロックを除去し、Phase5 CI パス監査の「Zustand persist 定義の乱立」項目を解消した。
+
 ## 2025年11月17日: 機能使用状況マップ整合性チェック
 - `node scripts/check-tauri-commands.mjs` を実行し、Tauri コマンド 85 件がすべてフロントエンドから呼び出されていることを確認（CLI 出力: "Tauri コマンド 85 件はすべてフロントエンドから呼び出されています。"）。
 - `docs/01_project/activeContext/artefacts/phase5_feature_usage_map.md` 第3章に UIイベント→Hook/Store→Tauriコマンド→テストID/artefact の表（3.1節）を追加し、`phase5_user_flow_inventory.md` の導線 ID / Nightly artefact との突合を記録した。

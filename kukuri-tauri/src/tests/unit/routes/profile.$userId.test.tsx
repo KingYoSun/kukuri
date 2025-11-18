@@ -9,6 +9,8 @@ import type { UserProfile as UserProfileDto } from '@/lib/api/tauri';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
+import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
+import { createToastMock } from '@/tests/utils/toastMock';
 
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
@@ -45,10 +47,9 @@ type AuthStoreState = {
   } | null;
 };
 
-var mockAuthState: AuthStoreState = {
+const authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
   currentUser: null,
-};
-var useAuthStoreMock: ReturnType<typeof vi.fn>;
+}));
 
 const mockDirectMessageStoreState = {
   openDialog: vi.fn(),
@@ -57,12 +58,9 @@ var useDirectMessageStoreMock: ReturnType<typeof vi.fn>;
 
 vi.mock('@/stores', async () => {
   const actual = await vi.importActual<typeof import('@/stores')>('@/stores');
-  useAuthStoreMock = vi.fn((selector?: (state: AuthStoreState) => unknown) =>
-    selector ? selector(mockAuthState) : mockAuthState,
-  );
   return {
     ...actual,
-    useAuthStore: useAuthStoreMock,
+    useAuthStore: authStoreMock.hook,
   };
 });
 
@@ -93,15 +91,9 @@ vi.mock('@/lib/api/nostr', () => ({
   subscribeToUser: vi.fn(),
 }));
 
-var toastMock: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+const toastMock = createToastMock();
 
-vi.mock('sonner', () => {
-  toastMock = {
-    success: vi.fn(),
-    error: vi.fn(),
-  };
-  return { toast: toastMock };
-});
+vi.mock('sonner', () => ({ toast: toastMock }));
 
 const targetUserProfile = {
   npub: 'npub1target',
@@ -211,11 +203,9 @@ describe('ProfilePage route', () => {
       },
     });
 
-    mockAuthState.currentUser = { ...currentUserProfile };
+    authStoreMock.apply({ currentUser: { ...currentUserProfile } });
     mockDirectMessageStoreState.openDialog.mockClear();
-    if (useAuthStoreMock) {
-      useAuthStoreMock.mockClear();
-    }
+    authStoreMock.hook.mockClear();
     if (useDirectMessageStoreMock) {
       useDirectMessageStoreMock.mockClear();
     }
@@ -321,7 +311,7 @@ describe('ProfilePage route', () => {
   });
 
   it('未ログイン時はメッセージボタンが無効化される', async () => {
-    mockAuthState.currentUser = null;
+    authStoreMock.apply({ currentUser: null });
     renderWithClient(queryClient);
 
     await waitFor(() =>
@@ -440,7 +430,7 @@ describe('ProfilePage route', () => {
   });
 
   it('未ログイン時はフォローボタンが無効化される', async () => {
-    mockAuthState.currentUser = null;
+    authStoreMock.apply({ currentUser: null });
     renderWithClient(queryClient);
 
     const followButton = await screen.findByRole('button', { name: 'ログインが必要' });

@@ -1,16 +1,62 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useSyncManager } from '@/hooks/useSyncManager';
-import { useOfflineStore } from '@/stores/offlineStore';
-import { useAuthStore } from '@/stores/authStore';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import { offlineApi } from '@/api/offline';
 import type { OfflineAction } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
+import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
+import {
+  createOfflineStoreTestState,
+  type OfflineStoreTestState,
+} from '@/tests/utils/offlineStoreMocks';
+import { createToastMock } from '@/tests/utils/toastMock';
+
+type AuthStoreState = {
+  currentUser: {
+    npub: string;
+    name: string;
+  } | null;
+};
+
+const toastMock = createToastMock();
+
+vi.mock('sonner', () => ({ toast: toastMock }));
+
+const mockPendingActions: OfflineAction[] = [
+  {
+    id: 1,
+    localId: 'local_1',
+    userPubkey: 'user123',
+    actionType: OfflineActionType.CREATE_POST,
+    actionData: { content: 'Test post' },
+    createdAt: new Date().toISOString(),
+    isSynced: false,
+  },
+];
+
+const authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
+  currentUser: {
+    npub: 'npub123',
+    name: 'Test User',
+  },
+}));
+
+const offlineStoreMock = createZustandStoreMock<OfflineStoreTestState>(() =>
+  createOfflineStoreTestState({
+    pendingActions: mockPendingActions,
+  }),
+);
+
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: authStoreMock.hook,
+}));
+
+vi.mock('@/stores/offlineStore', () => ({
+  useOfflineStore: offlineStoreMock.hook,
+}));
 
 // モックの設定
-vi.mock('@/stores/offlineStore');
-vi.mock('@/stores/authStore');
 vi.mock('@/lib/sync/syncEngine');
 vi.mock('@/api/offline', () => ({
   offlineApi: {
@@ -63,14 +109,6 @@ vi.mock('@/api/offline', () => ({
     }),
   },
 }));
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-    info: vi.fn(),
-  },
-}));
 vi.mock('@/serviceWorker/offlineSyncBridge', () => ({
   registerOfflineSyncWorker: vi.fn().mockResolvedValue(null),
   enqueueOfflineSyncJob: vi.fn().mockResolvedValue('job-1'),
@@ -78,56 +116,18 @@ vi.mock('@/serviceWorker/offlineSyncBridge', () => ({
 }));
 
 describe('useSyncManager', () => {
-  const mockPendingActions: OfflineAction[] = [
-    {
-      id: 1,
-      localId: 'local_1',
-      userPubkey: 'user123',
-      actionType: OfflineActionType.CREATE_POST,
-      actionData: { content: 'Test post' },
-      createdAt: new Date().toISOString(),
-      isSynced: false,
-    },
-  ];
-
-  const defaultOfflineState = {
-    pendingActions: mockPendingActions,
-    isOnline: true,
-    lastSyncedAt: undefined,
-    syncPendingActions: vi.fn().mockResolvedValue(undefined),
-    clearPendingActions: vi.fn(),
-    removePendingAction: vi.fn(),
-    setSyncError: vi.fn(),
-    clearSyncError: vi.fn(),
-    refreshCacheMetadata: vi.fn().mockResolvedValue(undefined),
-    updateLastSyncedAt: vi.fn(),
+  const setOfflineStoreState = (overrides?: Partial<OfflineStoreTestState>) => {
+    offlineStoreMock.apply(overrides);
   };
 
-  const defaultAuthState = {
-    currentUser: {
-      npub: 'npub123',
-      name: 'Test User',
-    },
-  };
-
-  const setOfflineStoreState = (overrides: Partial<typeof defaultOfflineState>) => {
-    vi.mocked(useOfflineStore).mockReturnValue({
-      ...defaultOfflineState,
-      ...overrides,
-    } as any);
-  };
-
-  const setAuthStoreState = (overrides: Partial<typeof defaultAuthState>) => {
-    vi.mocked(useAuthStore).mockReturnValue({
-      ...defaultAuthState,
-      ...overrides,
-    } as any);
+  const setAuthStoreState = (overrides?: Partial<AuthStoreState>) => {
+    authStoreMock.apply(overrides);
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    setOfflineStoreState({});
-    setAuthStoreState({});
+    setOfflineStoreState();
+    setAuthStoreState();
   });
 
   const renderManagerHook = async (options?: { skipClear?: boolean }) => {

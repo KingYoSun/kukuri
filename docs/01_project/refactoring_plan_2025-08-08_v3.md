@@ -431,7 +431,7 @@ tests/
 - [x] 700行超のファイル0件（現在0件を維持） — 2025年11月01日: `infrastructure/p2p/event_distributor` を責務別モジュールへ分割し、`application/services/p2p_service` を `core` / `bootstrap` / `metrics` 構成に再編。
 - [x] manager_old.rsの削除
 - [x] すべてのRustテスト成功（2025年11月14日: `./scripts/test-docker.ps1 rust` / `cd kukuri-cli && cargo test` 成功）
-- [ ] コード重複率30%削減
+- [x] コード重複率30%削減（2025年11月18日: `pnpm dlx jscpd` で 54,709 行中 1,523 行 = 2.78% / 旧 2,231 行 = 4.16% ・ `tmp/jscpd/frontend/jscpd-report.json`）
 
 ### ユーザー導線指標【新規追加】
 - [x] UIから到達可能な全機能の文書化完了 — `docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md` に導線マップとギャップ分析を追記（2025年11月01日作成、2025年11月02日: グローバル導線と統合テスト専用コマンドを追記）

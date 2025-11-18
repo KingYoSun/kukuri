@@ -8,6 +8,8 @@ import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/di
 import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
+import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
+import { createToastMock } from '@/tests/utils/toastMock';
 
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
@@ -39,19 +41,23 @@ const defaultCurrentUser = {
   nip05: '',
 };
 
-var mockAuthState: AuthStoreState = {
+const createAuthStoreState = (): AuthStoreState => ({
   currentUser: { ...defaultCurrentUser },
-};
-var useAuthStoreMock: ReturnType<typeof vi.fn>;
-
-vi.mock('@/stores/authStore', () => {
-  useAuthStoreMock = vi.fn((selector?: (state: AuthStoreState) => unknown) =>
-    selector ? selector(mockAuthState) : mockAuthState,
-  );
-  return {
-    useAuthStore: useAuthStoreMock,
-  };
 });
+
+const authStoreMock = createZustandStoreMock<AuthStoreState>(createAuthStoreState);
+
+const requireCurrentUser = () => {
+  const user = authStoreMock.getState().currentUser;
+  if (!user) {
+    throw new Error('Auth store user is not initialized');
+  }
+  return user;
+};
+
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: authStoreMock.hook,
+}));
 
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
@@ -62,15 +68,9 @@ vi.mock('@/lib/api/tauri', () => ({
   },
 }));
 
-var toastMock: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+const toastMock = createToastMock();
 
-vi.mock('sonner', () => {
-  toastMock = {
-    success: vi.fn(),
-    error: vi.fn(),
-  };
-  return { toast: toastMock };
-});
+vi.mock('sonner', () => ({ toast: toastMock }));
 
 const targetNpub = 'npub1target';
 
@@ -103,10 +103,8 @@ const openDialog = (draft = '') => {
 
 describe('DirectMessageDialog', () => {
   beforeEach(() => {
-    mockAuthState.currentUser = { ...defaultCurrentUser };
-    if (useAuthStoreMock) {
-      useAuthStoreMock.mockClear();
-    }
+    authStoreMock.apply();
+    authStoreMock.hook.mockClear();
     toast.success.mockClear();
     toast.error.mockClear();
     errorHandler.log.mockClear();
@@ -154,7 +152,7 @@ describe('DirectMessageDialog', () => {
           eventId: 'evt-1',
           clientMessageId: 'client-1',
           senderNpub: targetNpub,
-          recipientNpub: mockAuthState.currentUser!.npub,
+          recipientNpub: requireCurrentUser().npub,
           content: 'こんにちは',
           createdAt: 1_730_000_000_000,
           delivered: true,
@@ -303,7 +301,7 @@ describe('DirectMessageDialog', () => {
       eventId: 'evt-1',
       clientMessageId: 'client-1',
       senderNpub: targetNpub,
-      recipientNpub: mockAuthState.currentUser!.npub,
+      recipientNpub: requireCurrentUser().npub,
       content: 'hello there',
       createdAt: 1_730_000_000_500,
       status: 'sent' as const,
