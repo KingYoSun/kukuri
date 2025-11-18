@@ -17,11 +17,6 @@
 
 ### リファクタリングプラン完了タスク
 
-19. **機能使用状況マップ: 部分利用機能の使用/未使用整理**  
-    - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:220` で「使用箇所 / 未使用箇所」の棚卸しが未完了扱いとなっており、Summary/Inventory とメトリクスの突合が必要。  
-    - やること: (1) `/profile`, `/search`, Offline Sync など部分的に利用されている UI を対象に、導線と未配線部位を `phase5_user_flow_summary.md`・`phase5_user_flow_inventory.md` と同期。(2) `docs/01_project/progressReports/` にテスト ID / artefact 参照先を記載して、部分利用箇所のトリアージ手順を Runbook 化。(3) Refactoring plan 側のチェックボックスと更新履歴を最新化。  
-    - 完了条件: 部分利用機能の残課題が Inventory/Runbook 上で一元管理され、refactoring plan の該当チェックを完了できる。
-
 20. **コード重複率30%削減の実測と実装**  
     - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:431` で KPI として掲げられているが、Zustand ストア persist 定義や Vitest モックの重複解消が未完。  
     - やること: (1) `pnpm dlx jscpd --reporters json` 等で TypeScript 側の重複レポートを採取し、`cargo llvm-cov --json` / `cargo udeps` を併用して Rust 側の重複候補を洗い出す。(2) `phase5_dependency_inventory_template.md` 2章に記載された重複パターン（Zustand persist、MockEventManager など）を共通モジュール化し、利用箇所を差し替える。(3) レポートを `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` に添付し、30% 減を達成した時点で refactoring plan を更新。  

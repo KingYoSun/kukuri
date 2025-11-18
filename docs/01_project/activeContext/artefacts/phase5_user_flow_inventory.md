@@ -376,6 +376,15 @@
     - 2 ページ目以降を自動補充する際のキャッシュ整合性（`FOLLOW_PAGE_SIZE` 超過時の繰り上げ）と E2E カバレッジの整備。
     - フォロワー非公開（403）ケースや多端末既読同期など、残タスクのシナリオテストを Rust / Vitest 側に追加。
 
+#### 5.6.3 部分利用マップ（2025年11月18日更新）
+
+| セグメント | 使用できている範囲 | 未接続/残タスク | テスト / Artefact / Runbook |
+| --- | --- | --- | --- |
+| プロフィール詳細 → DirectMessageDialog | `Header` / Summary Panel / `/profile/$userId` の「メッセージ」ボタンは `useDirectMessageStore` と `DirectMessageDialog` を共有し、Kind4 IPC・無限スクロール・`useDirectMessageBootstrap` の 30 秒再取得・Service Worker Stage4 までは稼働している。`profile_avatar_sync` と同じ BroadcastChannel 手順で `DirectMessageInbox` の既読状態を同期済み。 | `direct_message_conversations` 50件超のカーソル/API 拡張、既読状態の多端末共有ログ、`nightly.direct-message`（Nightly 追加中）の成果物紐付けが未完。 | `./scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build`（`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json`）、`./scripts/test-docker.ps1 rust -Test direct_messages`、`docs/01_project/progressReports/nightly.partial-feature-usage.md#profile-ルート` |
+| フォロワー/フォロー一覧 | ソート/検索/件数表示は `ProfilePage` から利用でき、フォロー/フォロー解除は React Query キャッシュ（`['social','following']` / `['profile',npub,'followers']`）と `subscribe_to_user` を通じて即時反映される。 | 2ページ目以降のページング / 差分更新、`UserSearchResults` 以外の画面（Home/DM）からのフォロー導線、一覧の仮想スクロール最適化が backlog。 | `pnpm vitest src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx src/tests/unit/components/layout/Header.test.tsx | Tee-Object tmp/logs/vitest_direct_message_<timestamp>.log`、`phase5_ci_path_audit.md` の direct-message 行でログを確認。 |
+
+> 参照: `phase5_user_flow_summary.md` 「部分利用導線マトリクス」 `/profile/$userId` 行、`docs/01_project/progressReports/nightly.partial-feature-usage.md#profile-ルート`
+
 ### 5.7 トレンド/フォロー中導線実装計画（2025年11月04日追加）
 - **目的**: サイドバーカテゴリー「トレンド」「フォロー中」からアクセスできる発見導線とマイフィード導線を整備し、Home タイムラインとの差別化と優先度の可視化を実現する。
 - **進捗（2025年11月15日更新）**
@@ -491,6 +500,14 @@
 - CI では Nightly Frontend Unit Tests に `UserSearchResults` / `useUserSearchQuery` テストの実行ログを追加し、`phase5_ci_path_audit.md` にテスト ID を記録。
 - 2025年11月10日: `useUserSearchQuery` に `sort` オプションを導入し、キャッシュキーと `TauriApi.searchUsers` が `relevance` / `recency` を判別できるようにした。`UserSearchResults` へ関連度/最新順トグルを追加し、選択状態に応じて Infinite Query を再取得。`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx` を実行し、ソート変更が API 引数に伝播するユニットテストを追加済み（ホスト環境に corepack が無いため `npx pnpm` で代替）。
 - 2025年11月10日: `useUserSearchQuery` が `#` / `@` 付きの補助検索を検知して `allow_incomplete=true` で再試行し、短い入力でもキャッシュ結果を維持できるように更新。`SearchBar` は警告スタイル・補助検索ラベルを表示し、`UserSearchResults` から入力状態を受け取ってフィードバックを同期する実装を追加。`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx | tee tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log` を実行し、短いクエリ・レート制限・ソート切替の回帰を取得。同日に `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build` / `.\scripts\test-docker.ps1 ts -Scenario user-search-pagination -NoBuild` を追加し、`tmp/logs/user_search_pagination_20251110-142854.log` を保存。Nightly へのシナリオ組み込みと `test-results/user-search-pagination/*.json` 固定化が残課題。
+
+#### 5.8.1 部分利用マップ（2025年11月18日更新）
+
+| セグメント | 使用できている範囲 | 未接続/残タスク | テスト / Artefact / Runbook |
+| --- | --- | --- | --- |
+| `/search` (users) | Infinite Query（`useUserSearchQuery`）と `UserSearchResults` のレートリミット UI / ソート / `allow_incomplete` フォールバック / DM Inbox 再利用導線は稼働中。Docker `user-search-pagination` シナリオと `tmp/logs/user_search_pagination_<timestamp>.log` で cursor / sort / retry UI を再現している。 | 2文字未満入力時の補助検索と Nightly 自動化、`SearchErrorState` の artefact 保存、`retryAfter` 自動復帰ログを Runbook 化する必要がある。 | `./scripts/test-docker.{ps1,sh} ts --scenario user-search-pagination --no-build`、artefact `user-search-pagination-logs` / `user-search-pagination-log-archive` / `user-search-pagination-reports`、`docs/01_project/progressReports/nightly.partial-feature-usage.md#search` |
+
+> 参照: `phase5_user_flow_summary.md` 「部分利用導線マトリクス」 `/search` 行
 
 ### 5.9 ホーム/サイドバーからのトピック作成導線（2025年11月06日追加）
 - **目的**: タイムラインやサイドバーから離脱せずに新しいトピックを作成し、そのまま投稿作成へ移行できる導線を提供する。
@@ -609,6 +626,14 @@
   - **ブロッカー**: Doc/Blob 以外の OfflineAction（Topic/Post など）の Docker シナリオ自動化、`errorHandler` の `SyncStatus.*` 系統整備は Post-MVP backlog に移行。
 - **テスト/Runbook**: `npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`、`./scripts/test-docker.{sh,ps1} ts -Scenario offline-sync --no-build`、`cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry cache_status_includes_doc_fields` を `phase5_ci_path_audit.md` に記録。
 - **参照**: `phase5_user_flow_summary.md` MVP Exit（Offline sync 行）、`tauri_app_implementation_plan.md` Phase4、`phase5_ci_path_audit.md` SyncStatus 行。
+
+#### 5.11.1 部分利用マップ（2025年11月18日更新）
+
+| セグメント | 使用できている範囲 | 未接続/残タスク | テスト / Artefact / Runbook |
+| --- | --- | --- | --- |
+| SyncStatusIndicator / OfflineIndicator | Stage4 時点で Doc/Blob 対応 `cache_metadata`、Service Worker（`profileAvatarSyncSW.ts`）、BroadcastChannel 同期、Doc/Blob 競合バナー、`offline-sync` Docker シナリオを整備済み。ヘッダー CTA と `OfflineIndicator` は同じ `useSyncManager` / `useOfflineStore` を共有し、`get_cache_status` ポーリング・`add_to_sync_queue` CTA も UI 上で完結する。 | Topic/Post/Follow など Doc/Blob 以外の OfflineAction を Nightly シナリオに含める段階（手動ログ `tmp/logs/offline-sync_host_<timestamp>.log` 依存）、`errorHandler` の `SyncStatus.*` イベント拡張、`profile-avatar-sync` 以外の Service Worker ルートや `SyncStatus` CTA のテレメトリ ID が backlog。 | `./scripts/test-docker.{ps1,sh} ts --scenario offline-sync --no-build`、artefact `sync-status-indicator-logs` / `test-results/offline-sync/*.json`、`profile-avatar-sync-logs`（Doc/Blob テレメトリ）と `docs/01_project/progressReports/nightly.partial-feature-usage.md#syncstatusindicator` のトリアージ手順。 |
+
+> 参照: `phase5_user_flow_summary.md` 「部分利用導線マトリクス」 SyncStatusIndicator 行
 
 ### 5.12 ヘッダーDMボタンと Summary Panel 連携（2025年11月08日更新）
 - **現状**
