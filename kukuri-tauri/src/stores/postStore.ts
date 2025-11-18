@@ -41,6 +41,31 @@ interface PostStore extends PostState {
   refreshAuthorMetadata: (npub: string) => void;
 }
 
+const removePostCollections = (
+  state: PostStore,
+  id: string,
+): { posts: Map<string, Post>; postsByTopic: Map<string, string[]>; removedTopicId: string } | null => {
+  const post = state.posts.get(id);
+  if (!post) {
+    return null;
+  }
+  const posts = new Map(state.posts);
+  posts.delete(id);
+
+  const postsByTopic = new Map(state.postsByTopic);
+  const topicPosts = postsByTopic.get(post.topicId) || [];
+  postsByTopic.set(
+    post.topicId,
+    topicPosts.filter((postId) => postId !== id),
+  );
+
+  return {
+    posts,
+    postsByTopic,
+    removedTopicId: post.topicId,
+  };
+};
+
 export const usePostStore = create<PostStore>()((set, get) => ({
   posts: new Map(),
   postsByTopic: new Map(),
@@ -249,22 +274,13 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
   removePost: (id: string) =>
     set((state) => {
-      const post = state.posts.get(id);
-      if (!post) return state;
-
-      const newPosts = new Map(state.posts);
-      newPosts.delete(id);
-
-      const newPostsByTopic = new Map(state.postsByTopic);
-      const topicPosts = newPostsByTopic.get(post.topicId) || [];
-      newPostsByTopic.set(
-        post.topicId,
-        topicPosts.filter((postId) => postId !== id),
-      );
-
+      const next = removePostCollections(state, id);
+      if (!next) {
+        return state;
+      }
       return {
-        posts: newPosts,
-        postsByTopic: newPostsByTopic,
+        posts: next.posts,
+        postsByTopic: next.postsByTopic,
       };
     }),
 
@@ -312,23 +328,14 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         });
         let removedTopicId: string | null = null;
         set((state) => {
-          const post = state.posts.get(id);
-          if (!post) return state;
-          removedTopicId = post.topicId;
-
-          const newPosts = new Map(state.posts);
-          newPosts.delete(id);
-
-          const newPostsByTopic = new Map(state.postsByTopic);
-          const topicPosts = newPostsByTopic.get(post.topicId) || [];
-          newPostsByTopic.set(
-            post.topicId,
-            topicPosts.filter((postId) => postId !== id),
-          );
-
+          const next = removePostCollections(state, id);
+          if (!next) {
+            return state;
+          }
+          removedTopicId = next.removedTopicId;
           return {
-            posts: newPosts,
-            postsByTopic: newPostsByTopic,
+            posts: next.posts,
+            postsByTopic: next.postsByTopic,
           };
         });
         if (removedTopicId) {
@@ -342,23 +349,14 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       await TauriApi.deletePost(id);
       let removedTopicId: string | null = null;
       set((state) => {
-        const post = state.posts.get(id);
-        if (!post) return state;
-        removedTopicId = post.topicId;
-
-        const newPosts = new Map(state.posts);
-        newPosts.delete(id);
-
-        const newPostsByTopic = new Map(state.postsByTopic);
-        const topicPosts = newPostsByTopic.get(post.topicId) || [];
-        newPostsByTopic.set(
-          post.topicId,
-          topicPosts.filter((postId) => postId !== id),
-        );
-
+        const next = removePostCollections(state, id);
+        if (!next) {
+          return state;
+        }
+        removedTopicId = next.removedTopicId;
         return {
-          posts: newPosts,
-          postsByTopic: newPostsByTopic,
+          posts: next.posts,
+          postsByTopic: next.postsByTopic,
         };
       });
       if (removedTopicId) {

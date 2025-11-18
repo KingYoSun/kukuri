@@ -8,39 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-
-vi.mock('@/stores/authStore');
-vi.mock('@/lib/api/nostr');
-
-vi.mock('@/lib/api/tauri', () => ({
-  TauriApi: {
-    uploadProfileAvatar: vi.fn(),
-    fetchProfileAvatar: vi.fn(),
-    updatePrivacySettings: vi.fn(),
-    profileAvatarSync: vi.fn(),
-  },
-}));
-
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}));
-
-vi.mock('@/lib/errorHandler', () => ({
-  errorHandler: {
-    log: vi.fn(),
-  },
-}));
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/plugin-fs', () => ({
-  readFile: vi.fn(),
-}));
+import { initializeTauriMocks, stubObjectUrl } from '../auth/__utils__/profileTestUtils';
 
 let mockOpen: ReturnType<typeof vi.fn>;
 let mockReadFile: ReturnType<typeof vi.fn>;
@@ -48,43 +16,28 @@ let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
 let mockUpdatePrivacySettings: ReturnType<typeof vi.fn>;
 let mockProfileAvatarSync: ReturnType<typeof vi.fn>;
+const objectUrlMock = stubObjectUrl();
 
 beforeAll(async () => {
-  const dialogModule = await import('@tauri-apps/plugin-dialog');
-  const fsModule = await import('@tauri-apps/plugin-fs');
-  const tauriModule = await import('@/lib/api/tauri');
-  mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
-  mockReadFile = fsModule.readFile as unknown as ReturnType<typeof vi.fn>;
-  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<
-    typeof vi.fn
-  >;
-  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<
-    typeof vi.fn
-  >;
-  tauriModule.TauriApi.updatePrivacySettings = vi.fn();
-  tauriModule.TauriApi.profileAvatarSync = vi.fn();
-  mockUpdatePrivacySettings = tauriModule.TauriApi.updatePrivacySettings as unknown as ReturnType<
-    typeof vi.fn
-  >;
-  mockProfileAvatarSync = tauriModule.TauriApi.profileAvatarSync as unknown as ReturnType<
-    typeof vi.fn
-  >;
+  ({
+    mockOpen,
+    mockReadFile,
+    mockUploadProfileAvatar,
+    mockFetchProfileAvatar,
+    mockUpdatePrivacySettings,
+    mockProfileAvatarSync,
+  } = await initializeTauriMocks());
 });
 
 const mockUseAuthStore = useAuthStore as unknown as vi.Mock;
 const mockUpdateNostrMetadata = updateNostrMetadata as unknown as vi.Mock;
 
-const originalCreateObjectURL = global.URL.createObjectURL;
-const originalRevokeObjectURL = global.URL.revokeObjectURL;
-
 beforeAll(() => {
-  global.URL.createObjectURL = vi.fn(() => 'blob:profile-edit');
-  global.URL.revokeObjectURL = vi.fn();
+  objectUrlMock.setup();
 });
 
 afterAll(() => {
-  global.URL.createObjectURL = originalCreateObjectURL;
-  global.URL.revokeObjectURL = originalRevokeObjectURL;
+  objectUrlMock.restore();
 });
 
 describe('ProfileEditDialog', () => {

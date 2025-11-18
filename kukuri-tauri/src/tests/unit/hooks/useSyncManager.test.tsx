@@ -110,10 +110,28 @@ describe('useSyncManager', () => {
     },
   };
 
+  const setOfflineStoreState = (overrides: Partial<typeof defaultOfflineState>) => {
+    vi.mocked(useOfflineStore).mockReturnValue(
+      {
+        ...defaultOfflineState,
+        ...overrides,
+      } as any,
+    );
+  };
+
+  const setAuthStoreState = (overrides: Partial<typeof defaultAuthState>) => {
+    vi.mocked(useAuthStore).mockReturnValue(
+      {
+        ...defaultAuthState,
+        ...overrides,
+      } as any,
+    );
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useOfflineStore).mockReturnValue(defaultOfflineState as any);
-    vi.mocked(useAuthStore).mockReturnValue(defaultAuthState as any);
+    setOfflineStoreState({});
+    setAuthStoreState({});
   });
 
   const renderManagerHook = async (options?: { skipClear?: boolean }) => {
@@ -152,10 +170,7 @@ describe('useSyncManager', () => {
   describe('triggerManualSync', () => {
     it('オフライン時は同期をスキップ', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        isOnline: false,
-      } as any);
+      setOfflineStoreState({ isOnline: false });
 
       const { result } = await renderManagerHook();
 
@@ -169,10 +184,7 @@ describe('useSyncManager', () => {
 
     it('保留中のアクションがない場合は同期をスキップ', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        pendingActions: [],
-      } as any);
+      setOfflineStoreState({ pendingActions: [] });
 
       const { result } = await renderManagerHook();
 
@@ -424,20 +436,12 @@ describe('useSyncManager', () => {
       vi.mocked(syncEngine.performDifferentialSync).mockResolvedValue(mockSyncResult);
 
       // 最初はオフライン
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        isOnline: false,
-        pendingActions: mockPendingActions,
-      } as any);
+      setOfflineStoreState({ isOnline: false, pendingActions: mockPendingActions });
 
       const { rerender } = await renderManagerHook();
 
       // オンラインに変更（pendingActionsも保持）
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        isOnline: true,
-        pendingActions: mockPendingActions,
-      } as any);
+      setOfflineStoreState({ isOnline: true, pendingActions: mockPendingActions });
 
       rerender();
 

@@ -56,6 +56,32 @@ describe('DraftManager', () => {
     });
   });
 
+  const renderManager = (props: Partial<React.ComponentProps<typeof DraftManager>> = {}) =>
+    render(<DraftManager onSelectDraft={mockOnSelectDraft} {...props} />);
+
+  const getDeleteButtons = () =>
+    screen
+      .getAllByRole('button')
+      .filter((btn) => btn.className.includes('text-destructive') && btn.querySelector('svg'));
+
+  const openDeleteDialog = async (
+    props: Partial<React.ComponentProps<typeof DraftManager>> = {},
+  ) => {
+    const user = userEvent.setup();
+    renderManager(props);
+    await user.click(getDeleteButtons()[0]);
+    return { user };
+  };
+
+  const openClearAllDialog = async (
+    props: Partial<React.ComponentProps<typeof DraftManager>> = {},
+  ) => {
+    const user = userEvent.setup();
+    renderManager(props);
+    await user.click(screen.getByRole('button', { name: 'すべて削除' }));
+    return { user };
+  };
+
   it('renders empty state when no drafts', () => {
     vi.mocked(useDraftStore).mockReturnValue({
       drafts: [],
@@ -71,13 +97,13 @@ describe('DraftManager', () => {
       autosaveDraft: vi.fn(),
     });
 
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     expect(screen.getByText('下書きはありません')).toBeInTheDocument();
   });
 
   it('renders list of drafts', () => {
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     expect(screen.getByText('下書き一覧')).toBeInTheDocument();
     expect(screen.getByText(/This is the first draft content/)).toBeInTheDocument();
@@ -85,14 +111,14 @@ describe('DraftManager', () => {
   });
 
   it('displays topic name when available', () => {
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     expect(screen.getByText('Technology')).toBeInTheDocument();
     expect(screen.getByText('Life')).toBeInTheDocument();
   });
 
   it('truncates long content in preview', () => {
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     const longDraftPreview = screen.getByText(/A very long draft content/);
     expect(longDraftPreview.textContent).toContain('...');
@@ -101,7 +127,7 @@ describe('DraftManager', () => {
 
   it('calls onSelectDraft when draft is clicked', async () => {
     const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     const firstDraft = screen
       .getByText(/This is the first draft content/)
@@ -113,7 +139,7 @@ describe('DraftManager', () => {
 
   it('calls onSelectDraft when edit button is clicked', async () => {
     const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     const editButtons = screen.getAllByRole('button', { name: '' });
     const firstEditButton = editButtons.find((btn) => btn.querySelector('svg'));
@@ -124,15 +150,7 @@ describe('DraftManager', () => {
   });
 
   it('shows delete confirmation dialog when delete button is clicked', async () => {
-    const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
-
-    const deleteButtons = screen
-      .getAllByRole('button')
-      .filter((btn) => btn.className.includes('text-destructive') && btn.querySelector('svg'));
-
-    await user.click(deleteButtons[0]);
-
+    await openDeleteDialog();
     expect(screen.getByText('下書きを削除')).toBeInTheDocument();
     expect(
       screen.getByText('この下書きを削除してもよろしいですか？この操作は取り消せません。'),
@@ -140,15 +158,7 @@ describe('DraftManager', () => {
   });
 
   it('deletes draft when confirmed', async () => {
-    const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
-
-    const deleteButtons = screen
-      .getAllByRole('button')
-      .filter((btn) => btn.className.includes('text-destructive') && btn.querySelector('svg'));
-
-    await user.click(deleteButtons[0]);
-
+    const { user } = await openDeleteDialog();
     const confirmButton = screen.getByRole('button', { name: '削除' });
     await user.click(confirmButton);
 
@@ -156,15 +166,7 @@ describe('DraftManager', () => {
   });
 
   it('cancels delete when cancel is clicked', async () => {
-    const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
-
-    const deleteButtons = screen
-      .getAllByRole('button')
-      .filter((btn) => btn.className.includes('text-destructive') && btn.querySelector('svg'));
-
-    await user.click(deleteButtons[0]);
-
+    const { user } = await openDeleteDialog();
     const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
     await user.click(cancelButton);
 
@@ -172,12 +174,7 @@ describe('DraftManager', () => {
   });
 
   it('shows clear all confirmation dialog', async () => {
-    const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
-
-    const clearAllButton = screen.getByRole('button', { name: 'すべて削除' });
-    await user.click(clearAllButton);
-
+    await openClearAllDialog();
     expect(screen.getByText('すべての下書きを削除')).toBeInTheDocument();
     expect(
       screen.getByText('すべての下書きを削除してもよろしいですか？この操作は取り消せません。'),
@@ -185,13 +182,7 @@ describe('DraftManager', () => {
   });
 
   it('clears all drafts when confirmed', async () => {
-    const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
-
-    const clearAllButton = screen.getByRole('button', { name: 'すべて削除' });
-    await user.click(clearAllButton);
-
-    // Wait for dialog to appear
+    const { user } = await openClearAllDialog();
     await waitFor(() => {
       expect(
         screen.getByText('すべての下書きを削除してもよろしいですか？この操作は取り消せません。'),
@@ -220,16 +211,14 @@ describe('DraftManager', () => {
   });
 
   it('applies custom className', () => {
-    const { container } = render(
-      <DraftManager onSelectDraft={mockOnSelectDraft} className="custom-class" />,
-    );
+    const { container } = renderManager({ className: 'custom-class' });
 
     const card = container.querySelector('.custom-class');
     expect(card).toBeInTheDocument();
   });
 
   it('displays updated time correctly', () => {
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     expect(screen.getByText(/更新: 7月30日 09:00/)).toBeInTheDocument();
     expect(screen.getByText(/更新: 7月29日 11:00/)).toBeInTheDocument();
@@ -238,7 +227,7 @@ describe('DraftManager', () => {
 
   it('prevents event propagation when clicking action buttons', async () => {
     const user = userEvent.setup();
-    render(<DraftManager onSelectDraft={mockOnSelectDraft} />);
+    renderManager();
 
     const deleteButtons = screen
       .getAllByRole('button')

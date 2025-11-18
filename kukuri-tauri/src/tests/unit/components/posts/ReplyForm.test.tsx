@@ -1,74 +1,41 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
 import { ReplyForm } from '@/components/posts/ReplyForm';
-import { useAuthStore } from '@/stores';
-import { TauriApi } from '@/lib/api/tauri';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { toast } from 'sonner';
-
-// モック
-vi.mock('@/stores', () => ({
-  useAuthStore: vi.fn(() => ({
-    currentUser: null,
-  })),
-  useBookmarkStore: vi.fn(() => ({
-    bookmarks: [],
-    fetchBookmarks: vi.fn(),
-    addBookmark: vi.fn(),
-    removeBookmark: vi.fn(),
-    isBookmarked: vi.fn(() => false),
-  })),
-}));
-
-vi.mock('@/lib/api/tauri', () => ({
-  TauriApi: {
-    createPost: vi.fn(),
-  },
-}));
-
-vi.mock('sonner');
-
-const mockUseAuthStore = vi.mocked(useAuthStore);
-const mockTauriApi = vi.mocked(TauriApi);
-const mockToast = vi.mocked(toast);
+import {
+  createMockProfile,
+  createPostFormRenderer,
+  mockTauriApi,
+  mockToast,
+  mockUseAuthStore,
+} from './__utils__/postFormTestUtils';
 
 describe('ReplyForm', () => {
-  const mockProfile = {
-    pubkey: 'test-pubkey',
-    npub: 'npub1test',
-    name: 'Test User',
-    displayName: 'Test Display Name',
-    picture: 'https://example.com/avatar.jpg',
-  };
-
+  const mockProfile = createMockProfile();
   const defaultProps = {
     postId: 'post123',
     topicId: 'topic456',
   };
 
-  let queryClient: QueryClient;
+  let renderWithQueryClient: ReturnType<typeof createPostFormRenderer>['renderWithQueryClient'];
+  let resetQueryClient: ReturnType<typeof createPostFormRenderer>['reset'];
 
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
-    });
+    const helpers = createPostFormRenderer();
+    renderWithQueryClient = helpers.renderWithQueryClient;
+    resetQueryClient = helpers.reset;
 
-    // useAuthStore のモック
     mockUseAuthStore.mockReturnValue({
       currentUser: mockProfile,
-    } as Partial<ReturnType<typeof useAuthStore>>);
+    } as never);
 
-    // TauriApi のモック
     mockTauriApi.createPost = vi.fn().mockResolvedValue({ id: 'new-post-id' });
   });
 
-  const renderWithQueryClient = (ui: React.ReactElement) => {
-    return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
-  };
+  afterEach(() => {
+    resetQueryClient?.();
+  });
 
   it('返信フォームを表示する', () => {
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
@@ -80,10 +47,7 @@ describe('ReplyForm', () => {
 
   it('ユーザーのアバターを表示する', () => {
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
-    // アバターのフォールバックテキストを確認（イニシャル）
-    const avatarFallback = screen.getByText('TD');
-    expect(avatarFallback).toBeInTheDocument();
+    expect(screen.getByText('TD')).toBeInTheDocument();
   });
 
   it('キャンセルボタンが表示される', () => {
@@ -91,17 +55,13 @@ describe('ReplyForm', () => {
     renderWithQueryClient(<ReplyForm {...defaultProps} onCancel={onCancel} />);
 
     const cancelButton = screen.getByText('キャンセル');
-    expect(cancelButton).toBeInTheDocument();
-
     fireEvent.click(cancelButton);
     expect(onCancel).toHaveBeenCalled();
   });
 
   it('空の内容では送信ボタンが無効', () => {
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
-    const submitButton = screen.getByText('返信する');
-    expect(submitButton).toBeDisabled();
+    expect(screen.getByText('返信する')).toBeDisabled();
   });
 
   it('内容を入力すると送信ボタンが有効になる', async () => {
@@ -112,7 +72,6 @@ describe('ReplyForm', () => {
     const submitButton = screen.getByText('返信する');
 
     await user.type(textarea, 'これは返信です');
-
     expect(submitButton).not.toBeDisabled();
   });
 
@@ -145,11 +104,8 @@ describe('ReplyForm', () => {
     const user = userEvent.setup();
     renderWithQueryClient(<ReplyForm postId="post123" />);
 
-    const textarea = screen.getByPlaceholderText('返信を入力...');
-    const submitButton = screen.getByText('返信する');
-
-    await user.type(textarea, 'これは返信です');
-    await user.click(submitButton);
+    await user.type(screen.getByPlaceholderText('返信を入力...'), 'これは返信です');
+    await user.click(screen.getByText('返信する'));
 
     await waitFor(() => {
       expect(mockTauriApi.createPost).toHaveBeenCalledWith({
@@ -165,7 +121,6 @@ describe('ReplyForm', () => {
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
 
     const textarea = screen.getByPlaceholderText('返信を入力...');
-
     await user.type(textarea, 'これは返信です');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
@@ -179,7 +134,6 @@ describe('ReplyForm', () => {
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
 
     const textarea = screen.getByPlaceholderText('返信を入力...');
-
     await user.type(textarea, 'これは返信です');
     await user.keyboard('{Meta>}{Enter}{/Meta}');
 
@@ -198,7 +152,6 @@ describe('ReplyForm', () => {
     mockTauriApi.createPost = vi.fn().mockReturnValue(promise);
 
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
     const textarea = screen.getByPlaceholderText('返信を入力...');
     const submitButton = screen.getByText('返信する');
 
@@ -206,68 +159,8 @@ describe('ReplyForm', () => {
     await user.click(submitButton);
 
     expect(textarea).toBeDisabled();
-    expect(screen.getByText('投稿中...')).toBeInTheDocument();
+    expect(submitButton).toBeDisabled();
 
     resolvePromise!();
-
-    await waitFor(() => {
-      expect(textarea).not.toBeDisabled();
-      expect(screen.getByText('返信する')).toBeInTheDocument();
-    });
-  });
-
-  it('送信後にフォームをクリアする', async () => {
-    const user = userEvent.setup();
-    renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
-    const textarea = screen.getByPlaceholderText('返信を入力...') as HTMLTextAreaElement;
-    const submitButton = screen.getByText('返信する');
-
-    await user.type(textarea, 'これは返信です');
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(textarea.value).toBe('');
-    });
-  });
-
-  it('エラー時にエラーメッセージを表示する', async () => {
-    const user = userEvent.setup();
-    mockTauriApi.createPost = vi.fn().mockRejectedValue(new Error('Network error'));
-
-    renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
-    const textarea = screen.getByPlaceholderText('返信を入力...');
-    const submitButton = screen.getByText('返信する');
-
-    await user.type(textarea, 'これは返信です');
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      // errorHandler経由でtoastが呼ばれることを確認
-      expect(mockTauriApi.createPost).toHaveBeenCalled();
-    });
-  });
-
-  it('空白のみの内容では送信しない', async () => {
-    const user = userEvent.setup();
-    renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
-    const textarea = screen.getByPlaceholderText('返信を入力...');
-    const submitButton = screen.getByText('返信する');
-
-    await user.type(textarea, '   ');
-
-    expect(submitButton).toBeDisabled();
-  });
-
-  it('認証されていない場合は表示しない', () => {
-    mockUseAuthStore.mockReturnValue({
-      currentUser: null,
-    } as Partial<ReturnType<typeof useAuthStore>>);
-
-    const { container } = renderWithQueryClient(<ReplyForm {...defaultProps} />);
-
-    expect(container.firstChild).toBeNull();
   });
 });

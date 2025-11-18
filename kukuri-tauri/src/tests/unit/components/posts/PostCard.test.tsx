@@ -18,6 +18,11 @@ import {
 
 import { PostCard } from '@/components/posts/PostCard';
 
+const buildPost = (overrides: Partial<Post> = {}): Post => ({
+  ...mockPost,
+  ...overrides,
+});
+
 const getBookmarkButton = () => {
   const buttons = screen.getAllByRole('button');
   const target = buttons.find((button) =>
@@ -86,13 +91,12 @@ describe('PostCard', () => {
   });
 
   it('アバター画像がある場合は画像URLが設定される', () => {
-    const postWithAvatar = {
-      ...mockPost,
+    const postWithAvatar = buildPost({
       author: {
         ...mockPost.author,
         picture: 'https://example.com/avatar.jpg',
       },
-    };
+    });
 
     renderWithQueryClient(<PostCard post={postWithAvatar} />);
 
@@ -156,11 +160,10 @@ describe('PostCard', () => {
   });
 
   it('未同期の投稿には「同期待ち」バッジが表示される', () => {
-    const unsyncedPost = {
-      ...mockPost,
+    const unsyncedPost = buildPost({
       isSynced: false,
       localId: 'local-1',
-    };
+    });
 
     renderWithQueryClient(<PostCard post={unsyncedPost} />);
 
@@ -173,7 +176,7 @@ describe('PostCard', () => {
     vi.mocked(TauriApi.boostPost).mockResolvedValue(undefined);
     toast.success.mockClear();
 
-    renderWithQueryClient(<PostCard post={{ ...mockPost, boosts: 3 }} />);
+    renderWithQueryClient(<PostCard post={buildPost({ boosts: 3 })} />);
 
     const boostButton = screen.getByRole('button', { name: '3' });
     fireEvent.click(boostButton);
@@ -190,7 +193,7 @@ describe('PostCard', () => {
     vi.mocked(TauriApi.boostPost).mockRejectedValue(new Error('failed'));
     toast.error.mockClear();
 
-    renderWithQueryClient(<PostCard post={{ ...mockPost, boosts: 4 }} />);
+    renderWithQueryClient(<PostCard post={buildPost({ boosts: 4 })} />);
 
     const boostButton = screen.getByRole('button', { name: '4' });
     fireEvent.click(boostButton);

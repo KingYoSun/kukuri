@@ -33,6 +33,21 @@ const createWrapper = () => {
   };
 };
 
+const createApiUser = (overrides: Record<string, unknown> = {}) => ({
+  npub: 'npub1alice',
+  pubkey: 'pubkey1',
+  name: 'Alice',
+  display_name: 'Alice',
+  about: '',
+  picture: '',
+  banner: null,
+  website: null,
+  nip05: null,
+  is_profile_public: true,
+  show_online_status: false,
+  ...overrides,
+});
+
 describe('useUserSearchQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,21 +55,7 @@ describe('useUserSearchQuery', () => {
 
   it('fetches users when query length meets minimum', async () => {
     searchUsersMock.mockResolvedValueOnce({
-      items: [
-        {
-          npub: 'npub1alice',
-          pubkey: 'pubkey1',
-          name: 'Alice',
-          display_name: 'Alice',
-          about: '',
-          picture: '',
-          banner: null,
-          website: null,
-          nip05: null,
-          is_profile_public: true,
-          show_online_status: false,
-        },
-      ],
+      items: [createApiUser()],
       nextCursor: null,
       hasMore: false,
       totalCount: 1,
@@ -142,21 +143,7 @@ describe('useUserSearchQuery', () => {
   it('fetches next page when fetchNextPage is called', async () => {
     searchUsersMock
       .mockResolvedValueOnce({
-        items: [
-          {
-            npub: 'npub1alice',
-            pubkey: 'pubkey1',
-            name: 'Alice',
-            display_name: 'Alice',
-            about: '',
-            picture: '',
-            banner: null,
-            website: null,
-            nip05: null,
-            is_profile_public: true,
-            show_online_status: false,
-          },
-        ],
+        items: [createApiUser()],
         nextCursor: 'cursor123',
         hasMore: true,
         totalCount: 2,
@@ -164,19 +151,12 @@ describe('useUserSearchQuery', () => {
       })
       .mockResolvedValueOnce({
         items: [
-          {
+          createApiUser({
             npub: 'npub1bob',
             pubkey: 'pubkey2',
             name: 'Bob',
             display_name: 'Bob',
-            about: '',
-            picture: '',
-            banner: null,
-            website: null,
-            nip05: null,
-            is_profile_public: true,
-            show_online_status: false,
-          },
+          }),
         ],
         nextCursor: null,
         hasMore: false,
@@ -225,19 +205,12 @@ describe('useUserSearchQuery', () => {
       })
       .mockResolvedValueOnce({
         items: [
-          {
+          createApiUser({
             npub: 'npub1bob',
             pubkey: 'pubkey2',
             name: 'Bob',
             display_name: 'Bob',
-            about: '',
-            picture: '',
-            banner: null,
-            website: null,
-            nip05: null,
-            is_profile_public: true,
-            show_online_status: false,
-          },
+          }),
         ],
         nextCursor: null,
         hasMore: false,

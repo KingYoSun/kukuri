@@ -276,6 +276,101 @@ mod tests {
         follows: RwLock<HashSet<(String, String)>>,
     }
 
+    enum FollowRelationKind {
+        Followers,
+        Following,
+    }
+
+    impl InMemoryUserRepository {
+        async fn paginate_relation(
+            &self,
+            npub: &str,
+            cursor: Option<&str>,
+            limit: usize,
+            sort: FollowListSort,
+            search: Option<&str>,
+            kind: FollowRelationKind,
+        ) -> Result<UserCursorPage, AppError> {
+            let users = self.users.read().await;
+            let target_pubkey = match users.get(npub) {
+                Some(user) => user.pubkey.clone(),
+                None => {
+                    return Ok(UserCursorPage {
+                        users: vec![],
+                        next_cursor: None,
+                        has_more: false,
+                        total_count: 0,
+                    });
+                }
+            };
+            let follows = self.follows.read().await;
+            let mut entries: Vec<User> = follows
+                .iter()
+                .filter_map(|(follower, followed)| match kind {
+                    FollowRelationKind::Followers if followed == &target_pubkey => {
+                        Some(follower.clone())
+                    }
+                    FollowRelationKind::Following if follower == &target_pubkey => {
+                        Some(followed.clone())
+                    }
+                    _ => None,
+                })
+                .filter_map(|pubkey| users.values().find(|u| u.pubkey == pubkey).cloned())
+                .collect();
+
+            let search_lower = search.map(|s| s.to_lowercase());
+            if let Some(search_value) = search_lower.as_ref() {
+                entries.retain(|user| {
+                    let display = user.profile.display_name.to_lowercase();
+                    let npub_value = user.npub.to_lowercase();
+                    let pubkey = user.pubkey.to_lowercase();
+                    display.contains(search_value)
+                        || npub_value.contains(search_value)
+                        || pubkey.contains(search_value)
+                });
+            }
+
+            match sort {
+                FollowListSort::Recent => {
+                    entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+                }
+                FollowListSort::Oldest => {
+                    entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
+                }
+                FollowListSort::NameAsc => {
+                    entries.sort_by(|a, b| name_key(a).cmp(&name_key(b)));
+                }
+                FollowListSort::NameDesc => {
+                    entries.sort_by(|a, b| name_key(b).cmp(&name_key(a)));
+                }
+            }
+
+            let total_entries = entries.len();
+            let mut offset = 0usize;
+            if let Some(cursor) = cursor {
+                offset = parse_offset_cursor(cursor)?;
+            }
+            offset = offset.min(total_entries);
+
+            let end = offset.saturating_add(limit);
+            let has_more = end < total_entries;
+            let next_cursor = if has_more {
+                Some(format!("offset:{}", end))
+            } else {
+                None
+            };
+
+            let items: Vec<User> = entries.into_iter().skip(offset).take(limit).collect();
+
+            Ok(UserCursorPage {
+                users: items,
+                next_cursor,
+                has_more,
+                total_count: total_entries as u64,
+            })
+        }
+    }
+
     #[async_trait]
     impl UserRepository for InMemoryUserRepository {
         async fn create_user(&self, user: &User) -> Result<(), AppError> {
@@ -347,81 +442,15 @@ mod tests {
             sort: FollowListSort,
             search: Option<&str>,
         ) -> Result<UserCursorPage, AppError> {
-            let users = self.users.read().await;
-            let target_pubkey = match users.get(npub) {
-                Some(user) => user.pubkey.clone(),
-                None => {
-                    return Ok(UserCursorPage {
-                        users: vec![],
-                        next_cursor: None,
-                        has_more: false,
-                        total_count: 0,
-                    });
-                }
-            };
-            let follows = self.follows.read().await;
-            let mut entries: Vec<User> = follows
-                .iter()
-                .filter_map(|(follower, followed)| {
-                    if followed == &target_pubkey {
-                        Some(follower.clone())
-                    } else {
-                        None
-                    }
-                })
-                .filter_map(|pubkey| users.values().find(|u| u.pubkey == pubkey).cloned())
-                .collect();
-
-            let search_lower = search.map(|s| s.to_lowercase());
-            if let Some(search_value) = search_lower.as_ref() {
-                entries.retain(|user| {
-                    let display = user.profile.display_name.to_lowercase();
-                    let npub = user.npub.to_lowercase();
-                    let pubkey = user.pubkey.to_lowercase();
-                    display.contains(search_value)
-                        || npub.contains(search_value)
-                        || pubkey.contains(search_value)
-                });
-            }
-
-            match sort {
-                FollowListSort::Recent => {
-                    entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-                }
-                FollowListSort::Oldest => {
-                    entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
-                }
-                FollowListSort::NameAsc => {
-                    entries.sort_by(|a, b| name_key(a).cmp(&name_key(b)));
-                }
-                FollowListSort::NameDesc => {
-                    entries.sort_by(|a, b| name_key(b).cmp(&name_key(a)));
-                }
-            }
-
-            let total_entries = entries.len();
-            let mut offset = 0usize;
-            if let Some(cursor) = cursor {
-                offset = parse_offset_cursor(cursor)?;
-            }
-            offset = offset.min(total_entries);
-
-            let end = offset.saturating_add(limit);
-            let has_more = end < total_entries;
-            let next_cursor = if has_more {
-                Some(format!("offset:{}", end))
-            } else {
-                None
-            };
-
-            let items: Vec<User> = entries.into_iter().skip(offset).take(limit).collect();
-
-            Ok(UserCursorPage {
-                users: items,
-                next_cursor,
-                has_more,
-                total_count: total_entries as u64,
-            })
+            self.paginate_relation(
+                npub,
+                cursor,
+                limit,
+                sort,
+                search,
+                FollowRelationKind::Followers,
+            )
+            .await
         }
 
         async fn get_following_paginated(
@@ -432,81 +461,15 @@ mod tests {
             sort: FollowListSort,
             search: Option<&str>,
         ) -> Result<UserCursorPage, AppError> {
-            let users = self.users.read().await;
-            let follower_pubkey = match users.get(npub) {
-                Some(user) => user.pubkey.clone(),
-                None => {
-                    return Ok(UserCursorPage {
-                        users: vec![],
-                        next_cursor: None,
-                        has_more: false,
-                        total_count: 0,
-                    });
-                }
-            };
-            let follows = self.follows.read().await;
-            let mut entries: Vec<User> = follows
-                .iter()
-                .filter_map(|(follower, followed)| {
-                    if follower == &follower_pubkey {
-                        Some(followed.clone())
-                    } else {
-                        None
-                    }
-                })
-                .filter_map(|pubkey| users.values().find(|u| u.pubkey == pubkey).cloned())
-                .collect();
-
-            let search_lower = search.map(|s| s.to_lowercase());
-            if let Some(search_value) = search_lower.as_ref() {
-                entries.retain(|user| {
-                    let display = user.profile.display_name.to_lowercase();
-                    let npub = user.npub.to_lowercase();
-                    let pubkey = user.pubkey.to_lowercase();
-                    display.contains(search_value)
-                        || npub.contains(search_value)
-                        || pubkey.contains(search_value)
-                });
-            }
-
-            match sort {
-                FollowListSort::Recent => {
-                    entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-                }
-                FollowListSort::Oldest => {
-                    entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
-                }
-                FollowListSort::NameAsc => {
-                    entries.sort_by(|a, b| name_key(a).cmp(&name_key(b)));
-                }
-                FollowListSort::NameDesc => {
-                    entries.sort_by(|a, b| name_key(b).cmp(&name_key(a)));
-                }
-            }
-
-            let total_entries = entries.len();
-            let mut offset = 0usize;
-            if let Some(cursor) = cursor {
-                offset = parse_offset_cursor(cursor)?;
-            }
-            offset = offset.min(total_entries);
-
-            let end = offset.saturating_add(limit);
-            let has_more = end < total_entries;
-            let next_cursor = if has_more {
-                Some(format!("offset:{}", end))
-            } else {
-                None
-            };
-
-            let items: Vec<User> = entries.into_iter().skip(offset).take(limit).collect();
-
-            Ok(UserCursorPage {
-                users: items,
-                next_cursor,
-                has_more,
-                total_count: total_entries as u64,
-            })
+            self.paginate_relation(
+                npub,
+                cursor,
+                limit,
+                sort,
+                search,
+                FollowRelationKind::Following,
+            )
+            .await
         }
 
         async fn add_follow_relation(

@@ -42,6 +42,53 @@ const mockInitializeNostr = initializeNostr as MockedFunction<typeof initializeN
 const mockDisconnectNostr = disconnectNostr as MockedFunction<typeof disconnectNostr>;
 const mockGetRelayStatus = getRelayStatus as MockedFunction<typeof getRelayStatus>;
 
+type AuthStoreState = ReturnType<typeof useAuthStore.getState>;
+
+const createTestUser = (overrides: Partial<User> = {}): User => ({
+  id: 'test123',
+  pubkey: 'pubkey123',
+  npub: 'npub123',
+  name: 'テストユーザー',
+  displayName: 'テストユーザー',
+  picture: '',
+  about: '',
+  nip05: '',
+  avatar: null,
+  ...overrides,
+});
+
+const setAuthenticatedState = (
+  stateOverrides: Partial<AuthStoreState> = {},
+  userOverrides: Partial<User> = {},
+): User => {
+  const user = createTestUser(userOverrides);
+  useAuthStore.setState({
+    isAuthenticated: true,
+    currentUser: user,
+    privateKey: 'nsec123',
+    relayStatus: [],
+    relayStatusError: null,
+    relayStatusBackoffMs: 30_000,
+    lastRelayStatusFetchedAt: null,
+    isFetchingRelayStatus: false,
+    accounts: [],
+    ...stateOverrides,
+  });
+  return user;
+};
+
+const expectLoggedOutState = () => {
+  const state = useAuthStore.getState();
+  expect(state.isAuthenticated).toBe(false);
+  expect(state.currentUser).toBeNull();
+  expect(state.privateKey).toBeNull();
+  expect(state.relayStatus).toEqual([]);
+  expect(state.relayStatusError).toBeNull();
+  expect(state.relayStatusBackoffMs).toBe(30_000);
+  expect(state.lastRelayStatusFetchedAt).toBeNull();
+  expect(state.isFetchingRelayStatus).toBe(false);
+};
+
 describe('authStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,16 +118,7 @@ describe('authStore', () => {
   });
 
   it('loginメソッドが正しく動作すること', () => {
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
+    const testUser = createTestUser();
     const testPrivateKey = 'nsec123';
 
     useAuthStore.getState().login(testPrivateKey, testUser);
@@ -92,44 +130,17 @@ describe('authStore', () => {
   });
 
   it('logoutメソッドが正しく動作すること', async () => {
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
-    useAuthStore.setState({
-      isAuthenticated: true,
-      currentUser: testUser,
-      privateKey: 'nsec123',
-      relayStatus: [
-        {
-          url: 'wss://relay.example',
-          status: 'connected',
-        },
-      ],
+    setAuthenticatedState({
+      relayStatus: [{ url: 'wss://relay.example', status: 'connected' }],
       relayStatusError: 'error',
       relayStatusBackoffMs: 120_000,
       lastRelayStatusFetchedAt: Date.now(),
       isFetchingRelayStatus: true,
-      accounts: [],
     });
 
     await useAuthStore.getState().logout();
 
-    const state = useAuthStore.getState();
-    expect(state.isAuthenticated).toBe(false);
-    expect(state.currentUser).toBeNull();
-    expect(state.privateKey).toBeNull();
-    expect(state.relayStatus).toEqual([]);
-    expect(state.relayStatusError).toBeNull();
-    expect(state.relayStatusBackoffMs).toBe(30_000);
-    expect(state.lastRelayStatusFetchedAt).toBeNull();
-    expect(state.isFetchingRelayStatus).toBe(false);
+    expectLoggedOutState();
   });
 
   it('updateRelayStatusが成功すると状態とバックオフがリセットされる', async () => {
@@ -160,21 +171,7 @@ describe('authStore', () => {
   });
 
   it('updateUserメソッドが正しく動作すること', () => {
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
-    useAuthStore.setState({
-      isAuthenticated: true,
-      currentUser: testUser,
-      privateKey: 'nsec123',
-    });
+    const testUser = setAuthenticatedState();
 
     const updates = {
       name: '更新されたユーザー',
@@ -196,16 +193,7 @@ describe('authStore', () => {
   });
 
   it('loginメソッドがNostrを初期化すること', async () => {
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
+    const testUser = createTestUser();
     const testPrivateKey = 'nsec123';
 
     await useAuthStore.getState().login(testPrivateKey, testUser);
@@ -214,21 +202,7 @@ describe('authStore', () => {
   });
 
   it('logoutメソッドがNostrを切断すること', async () => {
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
-    useAuthStore.setState({
-      isAuthenticated: true,
-      currentUser: testUser,
-      privateKey: 'nsec123',
-    });
+    setAuthenticatedState();
 
     await useAuthStore.getState().logout();
 
@@ -251,21 +225,7 @@ describe('authStore', () => {
     // 初期状態では false
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
 
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
-    useAuthStore.setState({
-      isAuthenticated: true,
-      currentUser: testUser,
-      privateKey: 'nsec123',
-    });
+    setAuthenticatedState();
 
     // 認証後は true - isAuthenticatedを直接確認
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
@@ -274,16 +234,7 @@ describe('authStore', () => {
   it('Nostr初期化エラーが処理されること', async () => {
     mockInitializeNostr.mockRejectedValueOnce(new Error('Nostr init failed'));
 
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
+    const testUser = createTestUser();
 
     await useAuthStore.getState().login('nsec123', testUser);
 
@@ -301,21 +252,7 @@ describe('authStore', () => {
   it('Nostr切断エラーが処理されること', async () => {
     mockDisconnectNostr.mockRejectedValueOnce(new Error('Disconnect failed'));
 
-    const testUser: User = {
-      id: 'test123',
-      pubkey: 'pubkey123',
-      npub: 'npub123',
-      name: 'テストユーザー',
-      displayName: 'テストユーザー',
-      picture: '',
-      about: '',
-      nip05: '',
-    };
-    useAuthStore.setState({
-      isAuthenticated: true,
-      currentUser: testUser,
-      privateKey: 'nsec123',
-    });
+    setAuthenticatedState();
 
     await useAuthStore.getState().logout();
 
@@ -338,20 +275,7 @@ describe('authStore', () => {
 
     it('初期化時に常に未認証状態になること', async () => {
       // 既存の認証状態を設定
-      useAuthStore.setState({
-        isAuthenticated: true,
-        currentUser: {
-          id: 'test123',
-          pubkey: 'pubkey123',
-          npub: 'npub123',
-          name: 'テストユーザー',
-          displayName: 'テストユーザー',
-          picture: '',
-          about: '',
-          nip05: '',
-        },
-        privateKey: 'nsec123',
-      });
+      setAuthenticatedState();
 
       // initialize実行
       await useAuthStore.getState().initialize();

@@ -5,63 +5,16 @@ import { ProfileSetup } from '@/components/auth/ProfileSetup';
 import { useAuthStore } from '@/stores/authStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactNode } from 'react';
 import { errorHandler } from '@/lib/errorHandler';
+import {
+  createQueryWrapper,
+  initializeTauriMocks,
+  mockNavigate,
+  stubObjectUrl,
+} from './__utils__/profileTestUtils';
 
-// モック
-const mockNavigate = vi.fn();
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => mockNavigate,
-}));
-
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}));
-
-vi.mock('@/stores/authStore');
-vi.mock('@/lib/api/nostr');
-
-vi.mock('@/lib/errorHandler', () => ({
-  errorHandler: {
-    log: vi.fn(),
-  },
-}));
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
-}));
-vi.mock('@tauri-apps/plugin-fs', () => ({
-  readFile: vi.fn(),
-}));
-
-vi.mock('@/lib/api/tauri', () => ({
-  TauriApi: {
-    uploadProfileAvatar: vi.fn(),
-    fetchProfileAvatar: vi.fn(),
-    updatePrivacySettings: vi.fn(),
-    profileAvatarSync: vi.fn(),
-  },
-}));
-
-const createWrapper = () => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
-
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-};
-
-const originalCreateObjectURL = global.URL.createObjectURL;
-const originalRevokeObjectURL = global.URL.revokeObjectURL;
+const createWrapper = createQueryWrapper;
+const objectUrlMock = stubObjectUrl();
 
 let mockOpen: ReturnType<typeof vi.fn>;
 let mockReadFile: ReturnType<typeof vi.fn>;
@@ -71,35 +24,22 @@ let mockUpdatePrivacySettings: ReturnType<typeof vi.fn>;
 let mockProfileAvatarSync: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
-  const dialogModule = await import('@tauri-apps/plugin-dialog');
-  const fsModule = await import('@tauri-apps/plugin-fs');
-  const tauriModule = await import('@/lib/api/tauri');
-  mockOpen = dialogModule.open as unknown as ReturnType<typeof vi.fn>;
-  mockReadFile = fsModule.readFile as unknown as ReturnType<typeof vi.fn>;
-  mockUploadProfileAvatar = tauriModule.TauriApi.uploadProfileAvatar as unknown as ReturnType<
-    typeof vi.fn
-  >;
-  mockFetchProfileAvatar = tauriModule.TauriApi.fetchProfileAvatar as unknown as ReturnType<
-    typeof vi.fn
-  >;
-  tauriModule.TauriApi.updatePrivacySettings = vi.fn();
-  tauriModule.TauriApi.profileAvatarSync = vi.fn();
-  mockUpdatePrivacySettings = tauriModule.TauriApi.updatePrivacySettings as unknown as ReturnType<
-    typeof vi.fn
-  >;
-  mockProfileAvatarSync = tauriModule.TauriApi.profileAvatarSync as unknown as ReturnType<
-    typeof vi.fn
-  >;
+  ({
+    mockOpen,
+    mockReadFile,
+    mockUploadProfileAvatar,
+    mockFetchProfileAvatar,
+    mockUpdatePrivacySettings,
+    mockProfileAvatarSync,
+  } = await initializeTauriMocks());
 });
 
 beforeAll(() => {
-  global.URL.createObjectURL = vi.fn(() => 'blob:profile-setup');
-  global.URL.revokeObjectURL = vi.fn();
+  objectUrlMock.setup();
 });
 
 afterAll(() => {
-  global.URL.createObjectURL = originalCreateObjectURL;
-  global.URL.revokeObjectURL = originalRevokeObjectURL;
+  objectUrlMock.restore();
 });
 
 describe('ProfileSetup', () => {

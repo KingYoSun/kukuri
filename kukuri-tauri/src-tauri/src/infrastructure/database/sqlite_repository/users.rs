@@ -48,6 +48,182 @@ fn decode_follow_cursor(
     Ok((primary, pubkey.to_string()))
 }
 
+struct FollowQueryDescriptor {
+    join_expr: &'static str,
+    filter_column: &'static str,
+    relation_column: &'static str,
+}
+
+async fn query_follow_relation(
+    repo: &SqliteRepository,
+    npub: &str,
+    cursor: Option<&str>,
+    limit: usize,
+    sort: FollowListSort,
+    search: Option<&str>,
+    descriptor: FollowQueryDescriptor,
+) -> Result<UserCursorPage, AppError> {
+    let limit = limit.clamp(1, 100);
+    let fetch_limit = limit + 1;
+    let normalized_search = search.map(|s| s.to_lowercase());
+
+    let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
+        "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
+                f.created_at AS relation_created_at, {relation_column} AS relation_pubkey, \
+                {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
+             FROM users u \
+             INNER JOIN follows f ON u.pubkey = {join_expr} \
+             WHERE {filter_column} = (SELECT pubkey FROM users WHERE npub = ?)",
+        relation_column = descriptor.relation_column,
+        join_expr = descriptor.join_expr,
+        filter_column = descriptor.filter_column,
+    ));
+    builder.push_bind(npub);
+
+    let mut count_builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
+        "SELECT COUNT(*) as total_count \
+         FROM users u \
+         INNER JOIN follows f ON u.pubkey = {join_expr} \
+         WHERE {filter_column} = (SELECT pubkey FROM users WHERE npub = ?)",
+        join_expr = descriptor.join_expr,
+        filter_column = descriptor.filter_column,
+    ));
+    count_builder.push_bind(npub);
+
+    if let Some(search_value) = normalized_search.as_ref() {
+        let pattern = format!("%{search_value}%");
+        for builder_ref in [&mut builder, &mut count_builder] {
+            builder_ref.push(" AND (");
+            builder_ref.push(SORT_KEY_LOWER_EXPR);
+            builder_ref.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
+            builder_ref.push_bind(pattern.clone());
+            builder_ref.push_bind(pattern.clone());
+            builder_ref.push_bind(pattern.clone());
+        }
+    }
+
+    if let Some(cursor_str) = cursor {
+        let (primary_str, cursor_pubkey) = decode_follow_cursor(cursor_str, sort)?;
+        match sort {
+            FollowListSort::Recent => {
+                let timestamp = primary_str
+                    .parse::<i64>()
+                    .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
+                builder.push(&format!(
+                    " AND (f.created_at < ? OR (f.created_at = ? AND {relation_column} < ?))",
+                    relation_column = descriptor.relation_column,
+                ));
+                builder.push_bind(timestamp);
+                builder.push_bind(timestamp);
+                builder.push_bind(cursor_pubkey.clone());
+            }
+            FollowListSort::Oldest => {
+                let timestamp = primary_str
+                    .parse::<i64>()
+                    .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
+                builder.push(&format!(
+                    " AND (f.created_at > ? OR (f.created_at = ? AND {relation_column} > ?))",
+                    relation_column = descriptor.relation_column,
+                ));
+                builder.push_bind(timestamp);
+                builder.push_bind(timestamp);
+                builder.push_bind(cursor_pubkey.clone());
+            }
+            FollowListSort::NameAsc => {
+                builder.push(" AND (");
+                builder.push(SORT_KEY_LOWER_EXPR);
+                builder.push(&format!(
+                    " > ? OR ({expr} = ? AND {relation_column} > ?))",
+                    expr = SORT_KEY_LOWER_EXPR,
+                    relation_column = descriptor.relation_column,
+                ));
+                builder.push_bind(primary_str.clone());
+                builder.push_bind(primary_str.clone());
+                builder.push_bind(cursor_pubkey.clone());
+            }
+            FollowListSort::NameDesc => {
+                builder.push(" AND (");
+                builder.push(SORT_KEY_LOWER_EXPR);
+                builder.push(&format!(
+                    " < ? OR ({expr} = ? AND {relation_column} < ?))",
+                    expr = SORT_KEY_LOWER_EXPR,
+                    relation_column = descriptor.relation_column,
+                ));
+                builder.push_bind(primary_str.clone());
+                builder.push_bind(primary_str);
+                builder.push_bind(cursor_pubkey.clone());
+            }
+        }
+    }
+
+    match sort {
+        FollowListSort::Recent => {
+            builder.push(&format!(
+                " ORDER BY f.created_at DESC, {relation_column} DESC",
+                relation_column = descriptor.relation_column,
+            ));
+        }
+        FollowListSort::Oldest => {
+            builder.push(&format!(
+                " ORDER BY f.created_at ASC, {relation_column} ASC",
+                relation_column = descriptor.relation_column,
+            ));
+        }
+        FollowListSort::NameAsc => {
+            builder.push(&format!(
+                " ORDER BY sort_key_normalized ASC, {relation_column} ASC",
+                relation_column = descriptor.relation_column,
+            ));
+        }
+        FollowListSort::NameDesc => {
+            builder.push(&format!(
+                " ORDER BY sort_key_normalized DESC, {relation_column} DESC",
+                relation_column = descriptor.relation_column,
+            ));
+        }
+    }
+    builder.push(" LIMIT ?");
+    builder.push_bind(fetch_limit as i64);
+
+    let rows = builder.build().fetch_all(repo.pool.get_pool()).await?;
+    let count_row = count_builder
+        .build()
+        .fetch_one(repo.pool.get_pool())
+        .await?;
+    let total_count: i64 = count_row.try_get("total_count")?;
+    let total_count = total_count.max(0) as u64;
+
+    let mut users = Vec::with_capacity(rows.len().min(limit));
+    let mut next_cursor = None;
+
+    for (index, row) in rows.into_iter().enumerate() {
+        if index >= limit {
+            let relation_pubkey: String = row.try_get("relation_pubkey")?;
+            let primary_value = match sort {
+                FollowListSort::Recent | FollowListSort::Oldest => {
+                    let timestamp: i64 = row.try_get("relation_created_at")?;
+                    timestamp.to_string()
+                }
+                FollowListSort::NameAsc | FollowListSort::NameDesc => {
+                    row.try_get::<String, _>("sort_key_normalized")?
+                }
+            };
+            next_cursor = Some(encode_follow_cursor(sort, &primary_value, &relation_pubkey));
+            break;
+        }
+        users.push(map_user_row(&row)?);
+    }
+
+    let has_more = next_cursor.is_some();
+
+    Ok(UserCursorPage {
+        users,
+        next_cursor,
+        has_more,
+        total_count,
+    })
+}
+
 #[async_trait]
 impl UserRepository for SqliteRepository {
     async fn create_user(&self, user: &User) -> Result<(), AppError> {
@@ -142,147 +318,20 @@ impl UserRepository for SqliteRepository {
         sort: FollowListSort,
         search: Option<&str>,
     ) -> Result<UserCursorPage, AppError> {
-        let limit = limit.clamp(1, 100);
-        let fetch_limit = limit + 1;
-        let normalized_search = search.map(|s| s.to_lowercase());
-
-        let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
-            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
-                    f.created_at AS relation_created_at, f.follower_pubkey AS relation_pubkey, \
-                    {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
-                 FROM users u \
-                 INNER JOIN follows f ON u.pubkey = f.follower_pubkey \
-                 WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-        ));
-        builder.push_bind(npub);
-
-        let mut count_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
-            "SELECT COUNT(*) as total_count \
-                 FROM users u \
-                 INNER JOIN follows f ON u.pubkey = f.follower_pubkey \
-                 WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-        );
-        count_builder.push_bind(npub);
-
-        if let Some(search_value) = normalized_search.as_ref() {
-            let pattern = format!("%{search_value}%");
-            builder.push(" AND (");
-            builder.push(SORT_KEY_LOWER_EXPR);
-            builder.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
-            builder.push_bind(pattern.clone());
-            builder.push_bind(pattern.clone());
-            builder.push_bind(pattern.clone());
-
-            count_builder.push(" AND (");
-            count_builder.push(SORT_KEY_LOWER_EXPR);
-            count_builder.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
-            count_builder.push_bind(pattern.clone());
-            count_builder.push_bind(pattern.clone());
-            count_builder.push_bind(pattern);
-        }
-
-        if let Some(cursor_str) = cursor {
-            let (primary_str, cursor_pubkey) = decode_follow_cursor(cursor_str, sort)?;
-            match sort {
-                FollowListSort::Recent => {
-                    let timestamp = primary_str
-                        .parse::<i64>()
-                        .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-                    builder.push(
-                        " AND (f.created_at < ? OR (f.created_at = ? AND f.follower_pubkey < ?))",
-                    );
-                    builder.push_bind(timestamp);
-                    builder.push_bind(timestamp);
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-                FollowListSort::Oldest => {
-                    let timestamp = primary_str
-                        .parse::<i64>()
-                        .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-                    builder.push(
-                        " AND (f.created_at > ? OR (f.created_at = ? AND f.follower_pubkey > ?))",
-                    );
-                    builder.push_bind(timestamp);
-                    builder.push_bind(timestamp);
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-                FollowListSort::NameAsc => {
-                    builder.push(" AND (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" > ? OR (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" = ? AND f.follower_pubkey > ?))");
-                    builder.push_bind(primary_str.clone());
-                    builder.push_bind(primary_str.clone());
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-                FollowListSort::NameDesc => {
-                    builder.push(" AND (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" < ? OR (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" = ? AND f.follower_pubkey < ?))");
-                    builder.push_bind(primary_str.clone());
-                    builder.push_bind(primary_str);
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-            }
-        }
-
-        match sort {
-            FollowListSort::Recent => {
-                builder.push(" ORDER BY f.created_at DESC, f.follower_pubkey DESC");
-            }
-            FollowListSort::Oldest => {
-                builder.push(" ORDER BY f.created_at ASC, f.follower_pubkey ASC");
-            }
-            FollowListSort::NameAsc => {
-                builder.push(" ORDER BY sort_key_normalized ASC, f.follower_pubkey ASC");
-            }
-            FollowListSort::NameDesc => {
-                builder.push(" ORDER BY sort_key_normalized DESC, f.follower_pubkey DESC");
-            }
-        }
-        builder.push(" LIMIT ?");
-        builder.push_bind(fetch_limit as i64);
-
-        let rows = builder.build().fetch_all(self.pool.get_pool()).await?;
-        let count_row = count_builder
-            .build()
-            .fetch_one(self.pool.get_pool())
-            .await?;
-        let total_count: i64 = count_row.try_get("total_count")?;
-        let total_count = total_count.max(0) as u64;
-
-        let mut users = Vec::with_capacity(rows.len().min(limit));
-        let mut next_cursor = None;
-
-        for (index, row) in rows.into_iter().enumerate() {
-            if index >= limit {
-                let relation_pubkey: String = row.try_get("relation_pubkey")?;
-                let primary_value = match sort {
-                    FollowListSort::Recent | FollowListSort::Oldest => {
-                        let timestamp: i64 = row.try_get("relation_created_at")?;
-                        timestamp.to_string()
-                    }
-                    FollowListSort::NameAsc | FollowListSort::NameDesc => {
-                        row.try_get::<String, _>("sort_key_normalized")?
-                    }
-                };
-                next_cursor = Some(encode_follow_cursor(sort, &primary_value, &relation_pubkey));
-                break;
-            }
-            users.push(map_user_row(&row)?);
-        }
-
-        let has_more = next_cursor.is_some();
-
-        Ok(UserCursorPage {
-            users,
-            next_cursor,
-            has_more,
-            total_count,
-        })
+        query_follow_relation(
+            self,
+            npub,
+            cursor,
+            limit,
+            sort,
+            search,
+            FollowQueryDescriptor {
+                join_expr: "f.follower_pubkey",
+                filter_column: "f.followed_pubkey",
+                relation_column: "f.follower_pubkey",
+            },
+        )
+        .await
     }
 
     async fn get_following_paginated(
@@ -293,147 +342,20 @@ impl UserRepository for SqliteRepository {
         sort: FollowListSort,
         search: Option<&str>,
     ) -> Result<UserCursorPage, AppError> {
-        let limit = limit.clamp(1, 100);
-        let fetch_limit = limit + 1;
-        let normalized_search = search.map(|s| s.to_lowercase());
-
-        let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
-            "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
-                    f.created_at AS relation_created_at, f.followed_pubkey AS relation_pubkey, \
-                    {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
-                 FROM users u \
-                 INNER JOIN follows f ON u.pubkey = f.followed_pubkey \
-                 WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-        ));
-        builder.push_bind(npub);
-
-        let mut count_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
-            "SELECT COUNT(*) as total_count \
-             FROM users u \
-             INNER JOIN follows f ON u.pubkey = f.followed_pubkey \
-             WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)",
-        );
-        count_builder.push_bind(npub);
-
-        if let Some(search_value) = normalized_search.as_ref() {
-            let pattern = format!("%{search_value}%");
-            builder.push(" AND (");
-            builder.push(SORT_KEY_LOWER_EXPR);
-            builder.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
-            builder.push_bind(pattern.clone());
-            builder.push_bind(pattern.clone());
-            builder.push_bind(pattern.clone());
-
-            count_builder.push(" AND (");
-            count_builder.push(SORT_KEY_LOWER_EXPR);
-            count_builder.push(" LIKE ? OR LOWER(u.npub) LIKE ? OR LOWER(u.pubkey) LIKE ?)");
-            count_builder.push_bind(pattern.clone());
-            count_builder.push_bind(pattern.clone());
-            count_builder.push_bind(pattern);
-        }
-
-        if let Some(cursor_str) = cursor {
-            let (primary_str, cursor_pubkey) = decode_follow_cursor(cursor_str, sort)?;
-            match sort {
-                FollowListSort::Recent => {
-                    let timestamp = primary_str
-                        .parse::<i64>()
-                        .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-                    builder.push(
-                        " AND (f.created_at < ? OR (f.created_at = ? AND f.followed_pubkey < ?))",
-                    );
-                    builder.push_bind(timestamp);
-                    builder.push_bind(timestamp);
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-                FollowListSort::Oldest => {
-                    let timestamp = primary_str
-                        .parse::<i64>()
-                        .map_err(|_| AppError::InvalidInput("Invalid cursor timestamp".into()))?;
-                    builder.push(
-                        " AND (f.created_at > ? OR (f.created_at = ? AND f.followed_pubkey > ?))",
-                    );
-                    builder.push_bind(timestamp);
-                    builder.push_bind(timestamp);
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-                FollowListSort::NameAsc => {
-                    builder.push(" AND (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" > ? OR (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" = ? AND f.followed_pubkey > ?))");
-                    builder.push_bind(primary_str.clone());
-                    builder.push_bind(primary_str.clone());
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-                FollowListSort::NameDesc => {
-                    builder.push(" AND (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" < ? OR (");
-                    builder.push(SORT_KEY_LOWER_EXPR);
-                    builder.push(" = ? AND f.followed_pubkey < ?))");
-                    builder.push_bind(primary_str.clone());
-                    builder.push_bind(primary_str);
-                    builder.push_bind(cursor_pubkey.clone());
-                }
-            }
-        }
-
-        match sort {
-            FollowListSort::Recent => {
-                builder.push(" ORDER BY f.created_at DESC, f.followed_pubkey DESC");
-            }
-            FollowListSort::Oldest => {
-                builder.push(" ORDER BY f.created_at ASC, f.followed_pubkey ASC");
-            }
-            FollowListSort::NameAsc => {
-                builder.push(" ORDER BY sort_key_normalized ASC, f.followed_pubkey ASC");
-            }
-            FollowListSort::NameDesc => {
-                builder.push(" ORDER BY sort_key_normalized DESC, f.followed_pubkey DESC");
-            }
-        }
-        builder.push(" LIMIT ?");
-        builder.push_bind(fetch_limit as i64);
-
-        let rows = builder.build().fetch_all(self.pool.get_pool()).await?;
-        let count_row = count_builder
-            .build()
-            .fetch_one(self.pool.get_pool())
-            .await?;
-        let total_count: i64 = count_row.try_get("total_count")?;
-        let total_count = total_count.max(0) as u64;
-
-        let mut users = Vec::with_capacity(rows.len().min(limit));
-        let mut next_cursor = None;
-
-        for (index, row) in rows.into_iter().enumerate() {
-            if index >= limit {
-                let relation_pubkey: String = row.try_get("relation_pubkey")?;
-                let primary_value = match sort {
-                    FollowListSort::Recent | FollowListSort::Oldest => {
-                        let timestamp: i64 = row.try_get("relation_created_at")?;
-                        timestamp.to_string()
-                    }
-                    FollowListSort::NameAsc | FollowListSort::NameDesc => {
-                        row.try_get::<String, _>("sort_key_normalized")?
-                    }
-                };
-                next_cursor = Some(encode_follow_cursor(sort, &primary_value, &relation_pubkey));
-                break;
-            }
-            users.push(map_user_row(&row)?);
-        }
-
-        let has_more = next_cursor.is_some();
-
-        Ok(UserCursorPage {
-            users,
-            next_cursor,
-            has_more,
-            total_count,
-        })
+        query_follow_relation(
+            self,
+            npub,
+            cursor,
+            limit,
+            sort,
+            search,
+            FollowQueryDescriptor {
+                join_expr: "f.followed_pubkey",
+                filter_column: "f.follower_pubkey",
+                relation_column: "f.followed_pubkey",
+            },
+        )
+        .await
     }
 
     async fn add_follow_relation(

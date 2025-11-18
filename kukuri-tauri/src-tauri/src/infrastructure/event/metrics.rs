@@ -1,60 +1,10 @@
 use crate::shared::error::AppError;
+use crate::shared::metrics::{AtomicMetric, AtomicSnapshot};
 use serde::Serialize;
 #[cfg(test)]
 use std::cell::Cell;
-use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-const UNSET_TS: u64 = 0;
-
-#[derive(Debug)]
-struct AtomicMetric {
-    success: AtomicU64,
-    failure: AtomicU64,
-    last_success_ms: AtomicU64,
-    last_failure_ms: AtomicU64,
-}
-
-impl AtomicMetric {
-    const fn new() -> Self {
-        Self {
-            success: AtomicU64::new(0),
-            failure: AtomicU64::new(0),
-            last_success_ms: AtomicU64::new(UNSET_TS),
-            last_failure_ms: AtomicU64::new(UNSET_TS),
-        }
-    }
-
-    fn record_success(&self) {
-        self.success.fetch_add(1, Ordering::Relaxed);
-        self.last_success_ms
-            .store(current_unix_ms(), Ordering::Relaxed);
-    }
-
-    fn record_failure(&self) {
-        self.failure.fetch_add(1, Ordering::Relaxed);
-        self.last_failure_ms
-            .store(current_unix_ms(), Ordering::Relaxed);
-    }
-
-    fn snapshot(&self) -> GatewayMetricSnapshot {
-        GatewayMetricSnapshot {
-            total: self.success.load(Ordering::Relaxed),
-            failures: self.failure.load(Ordering::Relaxed),
-            last_success_ms: to_option(self.last_success_ms.load(Ordering::Relaxed)),
-            last_failure_ms: to_option(self.last_failure_ms.load(Ordering::Relaxed)),
-        }
-    }
-
-    fn reset(&self) {
-        self.success.store(0, Ordering::Relaxed);
-        self.failure.store(0, Ordering::Relaxed);
-        self.last_success_ms.store(UNSET_TS, Ordering::Relaxed);
-        self.last_failure_ms.store(UNSET_TS, Ordering::Relaxed);
-    }
-}
 
 static INCOMING_EVENTS: AtomicMetric = AtomicMetric::new();
 static PUBLISH_TEXT: AtomicMetric = AtomicMetric::new();
@@ -165,15 +115,14 @@ pub struct EventGatewayMetrics {
     pub reposts: GatewayMetricSnapshot,
 }
 
-fn current_unix_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(UNSET_TS)
-}
-
-fn to_option(value: u64) -> Option<u64> {
-    if value == UNSET_TS { None } else { Some(value) }
+fn snapshot_from_atomic(metric: &AtomicMetric) -> GatewayMetricSnapshot {
+    let snapshot = metric.snapshot();
+    GatewayMetricSnapshot {
+        total: snapshot.successes,
+        failures: snapshot.failures,
+        last_success_ms: snapshot.last_success_ms,
+        last_failure_ms: snapshot.last_failure_ms,
+    }
 }
 
 pub fn record_success(kind: GatewayMetricKind) {
@@ -205,14 +154,14 @@ pub fn record_outcome<T>(
 pub fn snapshot() -> EventGatewayMetrics {
     let _guard = lock_guard();
     EventGatewayMetrics {
-        incoming: INCOMING_EVENTS.snapshot(),
-        publish_text_note: PUBLISH_TEXT.snapshot(),
-        publish_topic_post: PUBLISH_TOPIC.snapshot(),
-        reactions: SEND_REACTION.snapshot(),
-        metadata_updates: UPDATE_METADATA.snapshot(),
-        deletions: DELETE_EVENTS.snapshot(),
-        disconnects: DISCONNECT.snapshot(),
-        reposts: REPOST_EVENTS.snapshot(),
+        incoming: snapshot_from_atomic(&INCOMING_EVENTS),
+        publish_text_note: snapshot_from_atomic(&PUBLISH_TEXT),
+        publish_topic_post: snapshot_from_atomic(&PUBLISH_TOPIC),
+        reactions: snapshot_from_atomic(&SEND_REACTION),
+        metadata_updates: snapshot_from_atomic(&UPDATE_METADATA),
+        deletions: snapshot_from_atomic(&DELETE_EVENTS),
+        disconnects: snapshot_from_atomic(&DISCONNECT),
+        reposts: snapshot_from_atomic(&REPOST_EVENTS),
     }
 }
 

@@ -5,6 +5,13 @@
 - `node scripts/check-tauri-commands.mjs` を実行し、Tauri コマンド 85 件がすべてフロントエンドから呼び出されていることを確認（CLI 出力: "Tauri コマンド 85 件はすべてフロントエンドから呼び出されています。"）。
 - `docs/01_project/activeContext/artefacts/phase5_feature_usage_map.md` 第3章に UIイベント→Hook/Store→Tauriコマンド→テストID/artefact の表（3.1節）を追加し、`phase5_user_flow_inventory.md` の導線 ID / Nightly artefact との突合を記録した。
 
+## 2025年11月17日: コード重複率再計測
+- コマンド: `npx --yes jscpd --format typescript,tsx,javascript --min-lines 5 --reporters json --gitignore --absolute --silent --output tmp/jscpd/frontend kukuri-tauri/src`
+  - 結果: 382ファイル/54,250行中の重複 1,505行（2.75%）
+- コマンド: `npx --yes jscpd --format rust --min-lines 5 --reporters json --gitignore --absolute --silent --output tmp/jscpd/rust kukuri-tauri/src-tauri/src kukuri-cli/src`
+  - 結果: 249ファイル/34,220行中の重複 1,287行（3.76%）
+- TypeScript 側では PostForm 共通コンポーネント導入・Profile系テストモック共通化等を行い、Rust 側では metrics/persisted storage の共通化やフォロー系クエリの集約を実施。引き続き `direct_message_service/tests.rs` や `useSyncManager.test.tsx` などの重複を削減し、目標の 30% 減を目指す。
+
 
 ## 2025年11月14日: Tauri API 棚卸しログ
 - `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri 側の `invoke_handler` とフロントエンド API から撤去し、`phase5_user_flow_inventory.md` / `phase5_user_flow_summary.md` / `phase5_feature_usage_map.md` で未導線リストを 0 件に更新。  

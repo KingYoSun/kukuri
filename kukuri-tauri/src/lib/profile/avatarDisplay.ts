@@ -28,3 +28,18 @@ export function resolveUserAvatarSrc(user?: AvatarOwner | null): string {
 
   return defaultAvatar;
 }
+
+export const getUserInitials = (value?: string | null, fallback = 'U'): string => {
+  if (!value) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  return trimmed
+    .split(/\s+/)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2) || fallback;
+};

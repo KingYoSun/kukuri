@@ -45,10 +45,28 @@ describe('useOffline', () => {
     },
   };
 
+  const setOfflineStoreState = (overrides: Partial<typeof defaultOfflineState>) => {
+    vi.mocked(useOfflineStore).mockReturnValue(
+      {
+        ...defaultOfflineState,
+        ...overrides,
+      } as any,
+    );
+  };
+
+  const setAuthStoreState = (overrides: Partial<typeof defaultAuthState>) => {
+    vi.mocked(useAuthStore).mockReturnValue(
+      {
+        ...defaultAuthState,
+        ...overrides,
+      } as any,
+    );
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useOfflineStore).mockReturnValue(defaultOfflineState as any);
-    vi.mocked(useAuthStore).mockReturnValue(defaultAuthState as any);
+    setOfflineStoreState({});
+    setAuthStoreState({});
   });
 
   afterEach(() => {
@@ -63,9 +81,7 @@ describe('useOffline', () => {
     });
 
     it('ユーザーが未ログインの場合はアクションを読み込まない', () => {
-      vi.mocked(useAuthStore).mockReturnValue({
-        currentUser: null,
-      } as any);
+      setAuthStoreState({ currentUser: null });
 
       renderHook(() => useOffline());
 
@@ -76,10 +92,7 @@ describe('useOffline', () => {
   describe('オンライン/オフライン状態の監視', () => {
     it('オフライン時に通知を表示する', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        isOnline: false,
-      } as any);
+      setOfflineStoreState({ isOnline: false });
 
       renderHook(() => useOffline());
 
@@ -88,10 +101,7 @@ describe('useOffline', () => {
 
     it('オンラインになった時に同期を開始する', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        pendingActions: [{ id: 1 }],
-      } as any);
+      setOfflineStoreState({ pendingActions: [{ id: 1 }] });
 
       renderHook(() => useOffline());
 
@@ -128,10 +138,7 @@ describe('useOffline', () => {
 
     it('オフライン時に通知を表示する', async () => {
       const { toast } = await import('sonner');
-      vi.mocked(useOfflineStore).mockReturnValue({
-        ...defaultOfflineState,
-        isOnline: false,
-      } as any);
+      setOfflineStoreState({ isOnline: false });
 
       const { result } = renderHook(() => useOffline());
 
@@ -145,9 +152,7 @@ describe('useOffline', () => {
     });
 
     it('未ログイン時はエラーをスローする', async () => {
-      vi.mocked(useAuthStore).mockReturnValue({
-        currentUser: null,
-      } as any);
+      setAuthStoreState({ currentUser: null });
 
       const { result } = renderHook(() => useOffline());
 

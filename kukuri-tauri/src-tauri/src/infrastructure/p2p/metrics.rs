@@ -1,60 +1,11 @@
 use crate::shared::config::BootstrapSource;
+use crate::shared::metrics::{AtomicMetric, current_unix_ms, timestamp_to_option, UNSET_TS};
 use crate::shared::validation::ValidationFailureKind;
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-const UNSET_TS: u64 = 0;
-
-#[derive(Debug)]
-struct AtomicMetric {
-    success: AtomicU64,
-    failure: AtomicU64,
-    last_success_ms: AtomicU64,
-    last_failure_ms: AtomicU64,
-}
-
-impl AtomicMetric {
-    const fn new() -> Self {
-        Self {
-            success: AtomicU64::new(0),
-            failure: AtomicU64::new(0),
-            last_success_ms: AtomicU64::new(UNSET_TS),
-            last_failure_ms: AtomicU64::new(UNSET_TS),
-        }
-    }
-
-    fn record_success(&self) {
-        self.success.fetch_add(1, Ordering::Relaxed);
-        self.last_success_ms
-            .store(current_unix_ms(), Ordering::Relaxed);
-    }
-
-    fn record_failure(&self) {
-        self.failure.fetch_add(1, Ordering::Relaxed);
-        self.last_failure_ms
-            .store(current_unix_ms(), Ordering::Relaxed);
-    }
-
-    fn snapshot(&self) -> GossipMetricDetails {
-        GossipMetricDetails {
-            total: self.success.load(Ordering::Relaxed),
-            failures: self.failure.load(Ordering::Relaxed),
-            last_success_ms: to_option(self.last_success_ms.load(Ordering::Relaxed)),
-            last_failure_ms: to_option(self.last_failure_ms.load(Ordering::Relaxed)),
-        }
-    }
-
-    fn reset(&self) {
-        self.success.store(0, Ordering::Relaxed);
-        self.failure.store(0, Ordering::Relaxed);
-        self.last_success_ms.store(UNSET_TS, Ordering::Relaxed);
-        self.last_failure_ms.store(UNSET_TS, Ordering::Relaxed);
-    }
-}
 
 static JOIN_METRIC: AtomicMetric = AtomicMetric::new();
 static LEAVE_METRIC: AtomicMetric = AtomicMetric::new();
@@ -79,6 +30,16 @@ pub struct GossipMetricDetails {
     pub failures: u64,
     pub last_success_ms: Option<u64>,
     pub last_failure_ms: Option<u64>,
+}
+
+fn to_gossip_details(metric: &AtomicMetric) -> GossipMetricDetails {
+    let snapshot = metric.snapshot();
+    GossipMetricDetails {
+        total: snapshot.successes,
+        failures: snapshot.failures,
+        last_success_ms: snapshot.last_success_ms,
+        last_failure_ms: snapshot.last_failure_ms,
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -139,18 +100,6 @@ pub struct BootstrapMetricsSnapshot {
 }
 
 #[inline]
-fn current_unix_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(UNSET_TS)
-}
-
-#[inline]
-fn to_option(value: u64) -> Option<u64> {
-    if value == UNSET_TS { None } else { Some(value) }
-}
-
 pub fn record_join_success() {
     JOIN_METRIC.record_success();
 }
@@ -259,10 +208,10 @@ pub fn reset_all() {
 }
 
 pub fn snapshot() -> GossipMetricsSnapshot {
-    let join_details = JOIN_METRIC.snapshot();
-    let leave_details = LEAVE_METRIC.snapshot();
-    let broadcast_details = BROADCAST_METRIC.snapshot();
-    let receive_details = RECEIVE_METRIC.snapshot();
+    let join_details = to_gossip_details(&JOIN_METRIC);
+    let leave_details = to_gossip_details(&LEAVE_METRIC);
+    let broadcast_details = to_gossip_details(&BROADCAST_METRIC);
+    let receive_details = to_gossip_details(&RECEIVE_METRIC);
     let receive_failures_by_reason = if let Ok(map) = RECEIVE_FAILURES_BY_REASON.lock() {
         map.iter()
             .map(|(kind, count)| ReceiveFailureBreakdown {
@@ -294,30 +243,30 @@ pub fn mainline_snapshot() -> MainlineMetricsSnapshot {
     let connected_peers = MAINLINE_CONNECTED_PEERS.load(Ordering::Relaxed);
     let bootstrap = bootstrap_snapshot();
 
-    let connection_attempts = connection_details.total + connection_details.failures;
-    let routing_attempts = routing_details.total + routing_details.failures;
+    let connection_attempts = connection_details.successes + connection_details.failures;
+    let routing_attempts = routing_details.successes + routing_details.failures;
     let routing_success_rate = if routing_attempts == 0 {
         0.0
     } else {
-        routing_details.total as f64 / routing_attempts as f64
+        routing_details.successes as f64 / routing_attempts as f64
     };
-    let reconnect_attempts = reconnect_details.total + reconnect_details.failures;
+    let reconnect_attempts = reconnect_details.successes + reconnect_details.failures;
 
     MainlineMetricsSnapshot {
         connected_peers,
         connection_attempts,
-        connection_successes: connection_details.total,
+        connection_successes: connection_details.successes,
         connection_failures: connection_details.failures,
         connection_last_success_ms: connection_details.last_success_ms,
         connection_last_failure_ms: connection_details.last_failure_ms,
         routing_attempts,
-        routing_successes: routing_details.total,
+        routing_successes: routing_details.successes,
         routing_failures: routing_details.failures,
         routing_success_rate,
         routing_last_success_ms: routing_details.last_success_ms,
         routing_last_failure_ms: routing_details.last_failure_ms,
         reconnect_attempts,
-        reconnect_successes: reconnect_details.total,
+        reconnect_successes: reconnect_details.successes,
         reconnect_failures: reconnect_details.failures,
         last_reconnect_success_ms: reconnect_details.last_success_ms,
         last_reconnect_failure_ms: reconnect_details.last_failure_ms,
@@ -348,6 +297,6 @@ fn bootstrap_snapshot() -> BootstrapMetricsSnapshot {
         bundle_uses: BOOTSTRAP_BUNDLE_COUNT.load(Ordering::Relaxed),
         fallback_uses: BOOTSTRAP_FALLBACK_COUNT.load(Ordering::Relaxed),
         last_source,
-        last_applied_ms: to_option(BOOTSTRAP_LAST_MS.load(Ordering::Relaxed)),
+        last_applied_ms: timestamp_to_option(BOOTSTRAP_LAST_MS.load(Ordering::Relaxed)),
     }
 }

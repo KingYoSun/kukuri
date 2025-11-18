@@ -1,11 +1,7 @@
-import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
-
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import type { TrendingPostsResult, TrendingTopicsResult } from '@/hooks/useTrendingFeeds';
-import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
-import { Button } from '@/components/ui/button';
-import { useDirectMessageStore } from '@/stores/directMessageStore';
+import { SummaryDirectMessageCard } from '@/components/summary/SummaryDirectMessageCard';
+import { formatLagLabel, formatRelativeTimeInfo } from '@/components/summary/summaryTime';
 
 interface TrendingSummaryPanelProps {
   topics?: TrendingTopicsResult;
@@ -14,36 +10,12 @@ interface TrendingSummaryPanelProps {
   isPostsFetching?: boolean;
 }
 
-const formatRelativeTime = (timestamp: number | null | undefined) => {
-  if (!timestamp) {
-    return { display: null, helper: null };
-  }
-
-  const date = new Date(timestamp);
-  return {
-    display: formatDistanceToNow(date, { addSuffix: true, locale: ja }),
-    helper: date.toLocaleString('ja-JP'),
-  };
-};
-
-const formatLagLabel = (timestamp: number | null | undefined) => {
-  if (!timestamp) {
-    return null;
-  }
-
-  const lagSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  return `ラグ ${lagSeconds.toLocaleString()}秒`;
-};
-
 export function TrendingSummaryPanel({
   topics,
   posts,
   isTopicsFetching = false,
   isPostsFetching = false,
 }: TrendingSummaryPanelProps) {
-  const { unreadTotal, latestMessage, latestConversationNpub } = useDirectMessageBadge();
-  const openInbox = useDirectMessageStore((state) => state.openInbox);
-
   const topicsCount = topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
 
   const previewPostsCount =
@@ -63,24 +35,15 @@ export function TrendingSummaryPanel({
         ? '0pt'
         : null;
 
-  const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTime(
+  const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTimeInfo(
     topics?.generatedAt ?? null,
   );
   const topicsLagLabel = formatLagLabel(topics?.generatedAt ?? null);
 
-  const { display: previewUpdatedDisplay, helper: previewUpdatedHelper } = formatRelativeTime(
+  const { display: previewUpdatedDisplay, helper: previewUpdatedHelper } = formatRelativeTimeInfo(
     posts?.generatedAt ?? null,
   );
   const previewLagLabel = formatLagLabel(posts?.generatedAt ?? null);
-
-  const { display: dmDisplay, helper: dmHelper } = formatRelativeTime(
-    latestMessage ? latestMessage.createdAt : null,
-  );
-  const dmHelperText = latestMessage
-    ? [dmDisplay ?? dmHelper, latestConversationNpub ? `会話: ${latestConversationNpub}` : null]
-        .filter(Boolean)
-        .join(' / ') || '受信履歴なし'
-    : '受信履歴なし';
 
   return (
     <section
@@ -122,24 +85,7 @@ export function TrendingSummaryPanel({
         isLoading={isPostsFetching && !posts}
         testId="trending-summary-preview-updated"
       />
-      <SummaryMetricCard
-        label="DM未読"
-        value={`${unreadTotal.toLocaleString()}件`}
-        helperText={dmHelperText}
-        isLoading={false}
-        testId="trending-summary-direct-messages"
-        action={
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={openInbox}
-            className="w-full"
-            data-testid="trending-summary-dm-cta"
-          >
-            DM Inbox を開く
-          </Button>
-        }
-      />
+      <SummaryDirectMessageCard testIdPrefix="trending-summary" />
     </section>
   );
 }

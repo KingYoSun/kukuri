@@ -20,6 +20,7 @@
 20. **コード重複率30%削減の実測と実装**  
     - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:431` で KPI として掲げられているが、Zustand ストア persist 定義や Vitest モックの重複解消が未完。  
     - やること: (1) `pnpm dlx jscpd --reporters json` 等で TypeScript 側の重複レポートを採取し、`cargo llvm-cov --json` / `cargo udeps` を併用して Rust 側の重複候補を洗い出す。(2) `phase5_dependency_inventory_template.md` 2章に記載された重複パターン（Zustand persist、MockEventManager など）を共通モジュール化し、利用箇所を差し替える。(3) レポートを `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` に添付し、30% 減を達成した時点で refactoring plan を更新。  
+    - 進捗メモ (2025年11月17日): PostActionComposer や profile 系テストユーティリティを導入し、TypeScript 側の重複率を 4.01%→2.75% に削減。Rust 側も metrics 共通化とフォロークエリ集約で 4.51%→3.76% まで低減済み。残りは direct message テスト群と `useSyncManager`/`useOffline` 系テストの共通化で 30% 目標を目指す。
     - 完了条件: 重複検出ツールの最新版で 30% 減を確認でき、Runbook/監査ドキュメントにも値が記録されている。
 
 21. **未使用 API エンドポイント 0 件の達成**  

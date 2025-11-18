@@ -33,6 +33,24 @@ interface TopicStore extends TopicState {
   refreshPendingTopics: () => Promise<void>;
 }
 
+const computeTopicCollections = (state: TopicStore, topics: Topic[]) => {
+  const nextTopics = new Map(topics.map((t) => [t.id, t]));
+  const topicIds = new Set(nextTopics.keys());
+
+  const unread = new Map(
+    Array.from(state.topicUnreadCounts.entries()).filter(([id]) => topicIds.has(id)),
+  );
+  const lastRead = new Map(
+    Array.from(state.topicLastReadAt.entries()).filter(([id]) => topicIds.has(id)),
+  );
+
+  return {
+    topics: nextTopics,
+    topicUnreadCounts: unread,
+    topicLastReadAt: lastRead,
+  };
+};
+
 export const useTopicStore = create<TopicStore>()(
   withPersist<TopicStore>((set, get) => {
     const handlePendingTransition = (previous: PendingTopic | undefined, next: PendingTopic) => {
@@ -58,24 +76,7 @@ export const useTopicStore = create<TopicStore>()(
       topicLastReadAt: new Map(),
       pendingTopics: new Map(),
 
-      setTopics: (topics: Topic[]) =>
-        set((state) => {
-          const nextTopics = new Map(topics.map((t) => [t.id, t]));
-          const topicIds = new Set(nextTopics.keys());
-
-          const unread = new Map(
-            Array.from(state.topicUnreadCounts.entries()).filter(([id]) => topicIds.has(id)),
-          );
-          const lastRead = new Map(
-            Array.from(state.topicLastReadAt.entries()).filter(([id]) => topicIds.has(id)),
-          );
-
-          return {
-            topics: nextTopics,
-            topicUnreadCounts: unread,
-            topicLastReadAt: lastRead,
-          };
-        }),
+      setTopics: (topics: Topic[]) => set((state) => computeTopicCollections(state, topics)),
       setPendingTopics: (pendingList: PendingTopic[]) =>
         set((state) => {
           const next = new Map(state.pendingTopics);
@@ -133,23 +134,7 @@ export const useTopicStore = create<TopicStore>()(
             isActive: true,
             tags: [],
           }));
-          set((state) => {
-            const nextTopics = new Map(topics.map((t) => [t.id, t]));
-            const topicIds = new Set(nextTopics.keys());
-
-            const unread = new Map(
-              Array.from(state.topicUnreadCounts.entries()).filter(([id]) => topicIds.has(id)),
-            );
-            const lastRead = new Map(
-              Array.from(state.topicLastReadAt.entries()).filter(([id]) => topicIds.has(id)),
-            );
-
-            return {
-              topics: nextTopics,
-              topicUnreadCounts: unread,
-              topicLastReadAt: lastRead,
-            };
-          });
+          set((state) => computeTopicCollections(state, topics));
           const refreshPendingTopics = get().refreshPendingTopics;
           if (typeof refreshPendingTopics === 'function') {
             await refreshPendingTopics();
