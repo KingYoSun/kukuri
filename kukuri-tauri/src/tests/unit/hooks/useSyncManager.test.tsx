@@ -5,12 +5,8 @@ import { syncEngine } from '@/lib/sync/syncEngine';
 import { offlineApi } from '@/api/offline';
 import type { OfflineAction } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
-import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
-import {
-  createOfflineStoreTestState,
-  type OfflineStoreTestState,
-} from '@/tests/utils/offlineStoreMocks';
-import { createToastMock } from '@/tests/utils/toastMock';
+import type { ZustandStoreMock } from '@/tests/utils/zustandTestUtils';
+import type { OfflineStoreTestState } from '@/tests/utils/offlineStoreMocks';
 
 type AuthStoreState = {
   currentUser: {
@@ -19,9 +15,11 @@ type AuthStoreState = {
   } | null;
 };
 
-const toastMock = createToastMock();
-
-vi.mock('sonner', () => ({ toast: toastMock }));
+vi.mock('sonner', async () => {
+  const { createToastMock } =
+    await vi.importActual<typeof import('@/tests/utils/toastMock')>('@/tests/utils/toastMock');
+  return { toast: createToastMock() };
+});
 
 const mockPendingActions: OfflineAction[] = [
   {
@@ -35,26 +33,44 @@ const mockPendingActions: OfflineAction[] = [
   },
 ];
 
-const authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
-  currentUser: {
-    npub: 'npub123',
-    name: 'Test User',
-  },
-}));
+var authStoreMock: ZustandStoreMock<AuthStoreState>;
+var offlineStoreMock: ZustandStoreMock<OfflineStoreTestState>;
 
-const offlineStoreMock = createZustandStoreMock<OfflineStoreTestState>(() =>
-  createOfflineStoreTestState({
-    pendingActions: mockPendingActions,
-  }),
-);
+vi.mock('@/stores/authStore', async () => {
+  const { createZustandStoreMock } = await vi.importActual<
+    typeof import('@/tests/utils/zustandTestUtils')
+  >('@/tests/utils/zustandTestUtils');
 
-vi.mock('@/stores/authStore', () => ({
-  useAuthStore: authStoreMock.hook,
-}));
+  authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
+    currentUser: {
+      npub: 'npub123',
+      name: 'Test User',
+    },
+  }));
 
-vi.mock('@/stores/offlineStore', () => ({
-  useOfflineStore: offlineStoreMock.hook,
-}));
+  return {
+    useAuthStore: authStoreMock.hook,
+  };
+});
+
+vi.mock('@/stores/offlineStore', async () => {
+  const [{ createZustandStoreMock }, { createOfflineStoreTestState }] = await Promise.all([
+    vi.importActual<typeof import('@/tests/utils/zustandTestUtils')>(
+      '@/tests/utils/zustandTestUtils',
+    ),
+    vi.importActual<typeof import('@/tests/utils/offlineStoreMocks')>(
+      '@/tests/utils/offlineStoreMocks',
+    ),
+  ]);
+
+  offlineStoreMock = createZustandStoreMock<OfflineStoreTestState>(() =>
+    createOfflineStoreTestState(),
+  );
+
+  return {
+    useOfflineStore: offlineStoreMock.hook,
+  };
+});
 
 // モックの設定
 vi.mock('@/lib/sync/syncEngine');
@@ -117,7 +133,10 @@ vi.mock('@/serviceWorker/offlineSyncBridge', () => ({
 
 describe('useSyncManager', () => {
   const setOfflineStoreState = (overrides?: Partial<OfflineStoreTestState>) => {
-    offlineStoreMock.apply(overrides);
+    offlineStoreMock.apply({
+      pendingActions: mockPendingActions,
+      ...overrides,
+    });
   };
 
   const setAuthStoreState = (overrides?: Partial<AuthStoreState>) => {

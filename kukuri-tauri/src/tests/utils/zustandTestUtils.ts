@@ -9,9 +9,7 @@ export interface ZustandStoreMock<TState> {
   reset: () => void;
 }
 
-export const createZustandStoreMock = <TState>(
-  factory: () => TState,
-): ZustandStoreMock<TState> => {
+export const createZustandStoreMock = <TState>(factory: () => TState): ZustandStoreMock<TState> => {
   let state = factory();
 
   const hook = vi.fn((selector?: (state: TState) => unknown) =>

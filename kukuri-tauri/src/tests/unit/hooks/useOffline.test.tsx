@@ -2,12 +2,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useOffline, useOptimisticUpdate } from '@/hooks/useOffline';
 import { OfflineActionType, EntityType } from '@/types/offline';
-import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
-import {
-  createOfflineStoreTestState,
-  type OfflineStoreTestState,
-} from '@/tests/utils/offlineStoreMocks';
-import { createToastMock } from '@/tests/utils/toastMock';
+import type { ZustandStoreMock } from '@/tests/utils/zustandTestUtils';
+import type { OfflineStoreTestState } from '@/tests/utils/offlineStoreMocks';
 
 type AuthStoreState = {
   currentUser: {
@@ -16,36 +12,62 @@ type AuthStoreState = {
   } | null;
 };
 
-const toastMock = createToastMock();
+vi.mock('sonner', async () => {
+  const { createToastMock } =
+    await vi.importActual<typeof import('@/tests/utils/toastMock')>('@/tests/utils/toastMock');
+  return { toast: createToastMock() };
+});
 
-vi.mock('sonner', () => ({ toast: toastMock }));
-
-const mockSaveOfflineAction = vi.fn();
-const mockSyncPendingActions = vi.fn();
-const mockLoadPendingActions = vi.fn();
-
-const authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
-  currentUser: {
-    npub: 'test_npub',
-    displayName: 'Test User',
-  },
-}));
-
-const offlineStoreMock = createZustandStoreMock<OfflineStoreTestState>(() =>
-  createOfflineStoreTestState({
-    saveOfflineAction: mockSaveOfflineAction,
-    syncPendingActions: mockSyncPendingActions,
-    loadPendingActions: mockLoadPendingActions,
+const { mockSaveOfflineAction, mockSyncPendingActions, mockLoadPendingActions } = vi.hoisted(
+  () => ({
+    mockSaveOfflineAction: vi.fn(),
+    mockSyncPendingActions: vi.fn(),
+    mockLoadPendingActions: vi.fn(),
   }),
 );
 
-vi.mock('@/stores/authStore', () => ({
-  useAuthStore: authStoreMock.hook,
-}));
+var authStoreMock: ZustandStoreMock<AuthStoreState>;
+var offlineStoreMock: ZustandStoreMock<OfflineStoreTestState>;
 
-vi.mock('@/stores/offlineStore', () => ({
-  useOfflineStore: offlineStoreMock.hook,
-}));
+vi.mock('@/stores/authStore', async () => {
+  const { createZustandStoreMock } = await vi.importActual<
+    typeof import('@/tests/utils/zustandTestUtils')
+  >('@/tests/utils/zustandTestUtils');
+
+  authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
+    currentUser: {
+      npub: 'test_npub',
+      displayName: 'Test User',
+    },
+  }));
+
+  return {
+    useAuthStore: authStoreMock.hook,
+  };
+});
+
+vi.mock('@/stores/offlineStore', async () => {
+  const [{ createZustandStoreMock }, { createOfflineStoreTestState }] = await Promise.all([
+    vi.importActual<typeof import('@/tests/utils/zustandTestUtils')>(
+      '@/tests/utils/zustandTestUtils',
+    ),
+    vi.importActual<typeof import('@/tests/utils/offlineStoreMocks')>(
+      '@/tests/utils/offlineStoreMocks',
+    ),
+  ]);
+
+  offlineStoreMock = createZustandStoreMock<OfflineStoreTestState>(() =>
+    createOfflineStoreTestState({
+      saveOfflineAction: mockSaveOfflineAction,
+      syncPendingActions: mockSyncPendingActions,
+      loadPendingActions: mockLoadPendingActions,
+    }),
+  );
+
+  return {
+    useOfflineStore: offlineStoreMock.hook,
+  };
+});
 
 describe('useOffline', () => {
   const setOfflineStoreState = (overrides?: Partial<OfflineStoreTestState>) => {

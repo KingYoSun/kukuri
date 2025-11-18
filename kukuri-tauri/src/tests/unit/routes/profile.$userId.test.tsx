@@ -9,8 +9,7 @@ import type { UserProfile as UserProfileDto } from '@/lib/api/tauri';
 import { subscribeToUser } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
-import { createToastMock } from '@/tests/utils/toastMock';
+import type { ZustandStoreMock } from '@/tests/utils/zustandTestUtils';
 
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
@@ -47,9 +46,7 @@ type AuthStoreState = {
   } | null;
 };
 
-const authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
-  currentUser: null,
-}));
+var authStoreMock: ZustandStoreMock<AuthStoreState>;
 
 const mockDirectMessageStoreState = {
   openDialog: vi.fn(),
@@ -57,9 +54,19 @@ const mockDirectMessageStoreState = {
 var useDirectMessageStoreMock: ReturnType<typeof vi.fn>;
 
 vi.mock('@/stores', async () => {
-  const actual = await vi.importActual<typeof import('@/stores')>('@/stores');
+  const [{ createZustandStoreMock }, actualStores] = await Promise.all([
+    vi.importActual<typeof import('@/tests/utils/zustandTestUtils')>(
+      '@/tests/utils/zustandTestUtils',
+    ),
+    vi.importActual<typeof import('@/stores')>('@/stores'),
+  ]);
+
+  authStoreMock = createZustandStoreMock<AuthStoreState>(() => ({
+    currentUser: null,
+  }));
+
   return {
-    ...actual,
+    ...actualStores,
     useAuthStore: authStoreMock.hook,
   };
 });
@@ -91,9 +98,11 @@ vi.mock('@/lib/api/nostr', () => ({
   subscribeToUser: vi.fn(),
 }));
 
-const toastMock = createToastMock();
-
-vi.mock('sonner', () => ({ toast: toastMock }));
+vi.mock('sonner', async () => {
+  const { createToastMock } =
+    await vi.importActual<typeof import('@/tests/utils/toastMock')>('@/tests/utils/toastMock');
+  return { toast: createToastMock() };
+});
 
 const targetUserProfile = {
   npub: 'npub1target',

@@ -35,8 +35,20 @@ def iter_markdown_files(paths: Iterable[pathlib.Path]) -> Iterable[pathlib.Path]
                     yield file_path
 
 
+def read_text_with_fallback(path: pathlib.Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        for encoding in ("utf-8-sig", "cp932", "shift_jis"):
+            try:
+                return path.read_text(encoding=encoding)
+            except UnicodeDecodeError:
+                continue
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
 def find_invalid_dates(path: pathlib.Path) -> List[Tuple[int, str]]:
-    text = path.read_text(encoding="utf-8")
+    text = read_text_with_fallback(path)
     results: List[Tuple[int, str]] = []
 
     for line_no, line in enumerate(text.splitlines(), start=1):
@@ -50,7 +62,7 @@ def find_invalid_dates(path: pathlib.Path) -> List[Tuple[int, str]]:
 
 
 def fix_dates(path: pathlib.Path) -> bool:
-    text = path.read_text(encoding="utf-8")
+    text = read_text_with_fallback(path)
 
     def repl(match: re.Match[str]) -> str:
         year, month, day = match.groups()
@@ -122,4 +134,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

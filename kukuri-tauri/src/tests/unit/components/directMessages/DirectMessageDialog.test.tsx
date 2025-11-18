@@ -8,8 +8,7 @@ import { useDirectMessageStore, getDirectMessageInitialState } from '@/stores/di
 import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-import { createZustandStoreMock } from '@/tests/utils/zustandTestUtils';
-import { createToastMock } from '@/tests/utils/toastMock';
+import type { ZustandStoreMock } from '@/tests/utils/zustandTestUtils';
 
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
@@ -30,7 +29,7 @@ type AuthStoreState = {
   } | null;
 };
 
-const defaultCurrentUser = {
+var defaultCurrentUser = {
   id: 'current-user',
   npub: 'npub1current',
   pubkey: 'pubkey-current',
@@ -41,11 +40,13 @@ const defaultCurrentUser = {
   nip05: '',
 };
 
-const createAuthStoreState = (): AuthStoreState => ({
-  currentUser: { ...defaultCurrentUser },
-});
+function createAuthStoreState(): AuthStoreState {
+  return {
+    currentUser: { ...defaultCurrentUser },
+  };
+}
 
-const authStoreMock = createZustandStoreMock<AuthStoreState>(createAuthStoreState);
+var authStoreMock: ZustandStoreMock<AuthStoreState>;
 
 const requireCurrentUser = () => {
   const user = authStoreMock.getState().currentUser;
@@ -55,9 +56,17 @@ const requireCurrentUser = () => {
   return user;
 };
 
-vi.mock('@/stores/authStore', () => ({
-  useAuthStore: authStoreMock.hook,
-}));
+vi.mock('@/stores/authStore', async () => {
+  const { createZustandStoreMock } = await vi.importActual<
+    typeof import('@/tests/utils/zustandTestUtils')
+  >('@/tests/utils/zustandTestUtils');
+
+  authStoreMock = createZustandStoreMock<AuthStoreState>(createAuthStoreState);
+
+  return {
+    useAuthStore: authStoreMock.hook,
+  };
+});
 
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
@@ -68,9 +77,11 @@ vi.mock('@/lib/api/tauri', () => ({
   },
 }));
 
-const toastMock = createToastMock();
-
-vi.mock('sonner', () => ({ toast: toastMock }));
+vi.mock('sonner', async () => {
+  const { createToastMock } =
+    await vi.importActual<typeof import('@/tests/utils/toastMock')>('@/tests/utils/toastMock');
+  return { toast: createToastMock() };
+});
 
 const targetNpub = 'npub1target';
 
@@ -194,7 +205,7 @@ describe('DirectMessageDialog', () => {
 
     await waitFor(() => expect(TauriApi.listDirectMessages).toHaveBeenCalled());
 
-    expect(useAuthStoreMock).toHaveBeenCalled();
+    expect(authStoreMock.hook).toHaveBeenCalled();
     expect(useDirectMessageStore.getState().messageDraft).toBe('test message');
 
     const sendButton = screen.getByRole('button', { name: '送信' });
