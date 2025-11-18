@@ -165,7 +165,7 @@
 | `connect_to_peer` | `p2pApi.connectToPeer` | `PeerConnectionPanel` | 設定>ピア接続 |
 | `get_bootstrap_config` / `set_bootstrap_nodes` / `clear_bootstrap_nodes` | `p2pApi.*` | `BootstrapConfigPanel` | 設定>Bootstrap 設定 |
 
-### 3.2 未使用・要確認コマンド（2025年11月07日更新）
+### 3.2 未使用・要確認コマンド（2025年11月18日更新）
 
 #### 3.2.1 連携済み・監視対象
 | コマンド | ラッパー | 状態 | 参照箇所 |
@@ -176,18 +176,22 @@
 | `update_sync_status` | `offlineApi.updateSyncStatus` | `useSyncManager.persistSyncStatuses` で同期失敗・競合情報を Tauri 側へ記録し、次回ロード時に UI へ表示。 | Inventory 5.5 / 5.11、Summary グローバル要素 |
 
 #### 3.2.2 未接続コマンド
-| コマンド | ラッパー | 想定用途 | 備考 |
+2025年11月18日更新: 未接続コマンドは 0 件。`node scripts/check-tauri-commands.mjs`（2025年11月18日実行、出力:「Tauri コマンド 84 件はすべてフロントエンドから呼び出されています。」）および CI ジョブ `pnpm run check:tauri-commands` により 84/84 件の `#[tauri::command]` が UI/Hook/テストコードから参照されていることを確認済み。新規コマンド追加時は即本節へ登録し、CI ログと突合する。
+
+##### 監査ログ
+| コマンド | 対応日 | 処置 | 備考 |
 | --- | --- | --- | --- |
-| `add_relay` | （2025年11月14日撤去） | リレー追加 | 外部リレー再接続フェーズまで API ごと削除済み。 |
-| `get_nostr_pubkey` | （2025年11月14日撤去） | 現在の公開鍵取得 | `authStore` が pubkey/npub を保持しているため API を無効化。 |
-| `delete_events` | （2025年11月14日撤去） | Nostrイベント削除 | 投稿削除フローの EventService 呼び出しに統合済みのため直接コマンドを廃止。 |
-| `join_topic_by_name` | （2025年11月14日撤去） | 名前ベース参加 | Global Composer fallback 仕様は backlog で再設計。 |
+| `add_relay` | 2025年11月14日 | API/ラッパーごと撤去 | 外部リレー再接続は Phase 7 backlog で再設計。 |
+| `get_nostr_pubkey` | 2025年11月14日 | API/ラッパーごと撤去 | `authStore` が pubkey/npub を保持しているため不要。 |
+| `delete_events` | 2025年11月14日 | API/ラッパーごと撤去 | 投稿削除フローで EventService に委譲済み。 |
+| `join_topic_by_name` | 2025年11月14日 | API/ラッパーごと撤去 | Global Composer fallback を backlog へ移管。 |
+| `clear_all_accounts_for_test` | 2025年11月18日 | Dev 導線専用コマンドを撤去 | SecureStorage CLI / Nightly スクリプトで代替。 |
 
-2025年11月18日時点でユーザー向け/デバッグ問わず未導線 API は 0 件。`clear_all_accounts_for_test` も撤去済みのため backlog は解消された。
+### 3.3 未接続コマンドの対応優先度（2025年11月18日更新）
 
-### 3.3 未接続コマンドの対応優先度（2025年11月07日更新）
+`follow_user` / `unfollow_user` 経由で `subscribe_to_user` を利用開始済み。SyncStatus 系の 4 コマンドも 2025年11月07日に UI 配線とテストを完了し監視対象へ移行済みのため、2025年11月18日時点で優先度リストは空欄。新規コマンド発生時は 3.2.2 に追加し、本節で導線 ID / テスト ID / backlog 連携を定義する。
 
-`follow_user` / `unfollow_user` 経由で `subscribe_to_user` を利用開始済み。SyncStatus 系の 4 コマンドは 2025年11月07日に UI 配線とテストを完了し、監視対象へ移行した。残コマンドの Phase 5 backlog 優先度は以下のとおり。
+#### 対応履歴
 
 1. **`join_topic_by_name`** — 2025年11月14日に API を撤去。Global Composer fallback の要件は Inventory 5.9 backlog へ移し、次期仕様で名称解決ロジックごと再検討する。
 2. **`delete_events`** — 投稿削除フローから EventService 経由で呼び出されるため、フロントから直接叩く API は 2025年11月14日に廃止。`delete_post` 統合テストで整合性を担保する。

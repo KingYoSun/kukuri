@@ -71,7 +71,7 @@
 
 ## 2. 未使用機能（削除候補）
 
-`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md:168-196` で backlog 管理している未導線 API／dead code をコードベースと突合した結果を記録する。各項目について削除 or 保留の判断と次アクションを明記した。2025年11月18日時点での未使用機能は 0 件となり、UI/コマンド・バックエンド双方の backlog を消化済み。
+`docs/01_project/activeContext/artefacts/phase5_user_flow_inventory.md`（Sec.3.2〜3.3）で backlog 管理している未導線 API／dead code をコードベースと突合した結果を記録する。各項目について削除 or 保留の判断と次アクションを明記した。2025年11月18日時点での未使用機能は 0 件となり、UI/コマンド・バックエンド双方の backlog を消化済み（同日 `node scripts/check-tauri-commands.mjs` の出力でも 84/84 件を確認）。
 
 ### 2.1 UI/コマンド未導線
 
@@ -106,7 +106,7 @@
 | `Inv 5.1 / 5.4` プライバシートグル | `SettingsPage` の `Switch#public-profile` / `Switch#show-online`、`ProfileSetup` / `ProfileEditDialog` Submit で `Inv 5.1` の公開範囲を更新。 | `usePrivacySettingsStore.setPublicProfile|setShowOnlineStatus` → `persistPrivacy`（`TauriApi.updatePrivacySettings` + `updateNostrMetadata`）→ `authStore.updateUser`、`useProfileAvatarSync.syncNow`。 | `update_privacy_settings`, `update_nostr_metadata`, `upload_profile_avatar`, `fetch_profile_avatar`。 | `scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker`（`profile-avatar-sync-logs` + `test-results/profile-avatar-sync/*` artefact）<br>`./scripts/test-docker.ps1 rust -Test profile_avatar_sync`<br>`src/tests/unit/routes/settings.test.tsx` |
 | `Inv 1.5` DEV 検証パネル（Nostr/P2P） | `SettingsPage` DEV セクションで `NostrTestPanel`（投稿/購読/リアクション）と `P2PDebugPanel`（Join/Leave/Broadcast/metrics）を操作。 | `nostrApi.publishTextNote` / `.publishTopicPost` / `.sendReaction` / `.subscribeToTopic`、`useP2P`（`joinTopic` / `leaveTopic` / `broadcast`）、`useNostrSubscriptions`（`listNostrSubscriptions`） + `p2pApi.getMetrics`。 | `publish_text_note`, `publish_topic_post`, `send_reaction`, `subscribe_to_topic`, `join_p2p_topic`, `leave_p2p_topic`, `broadcast_to_topic`, `get_p2p_metrics`, `list_nostr_subscriptions`。 | `src/tests/unit/components/NostrTestPanel.test.tsx`<br>`src/tests/unit/components/P2PDebugPanel.test.tsx`<br>`src/tests/unit/routes/settings.test.tsx`（Nightly Frontend Unit Tests: `pnpm test:unit` artefact） |
 
-> 2025年11月17日: `node scripts/check-tauri-commands.mjs` を実行し、Tauri コマンド 85 件すべてが上記導線いずれかから呼び出されることを確認。
+> 2025年11月18日: `node scripts/check-tauri-commands.mjs` を実行し、Tauri コマンド 84 件すべてが上記導線いずれかから呼び出されることを確認（CLI 出力: "Tauri コマンド 84 件はすべてフロントエンドから呼び出されています。"）。
 
 ### 3.2 ギャップとアクション
 

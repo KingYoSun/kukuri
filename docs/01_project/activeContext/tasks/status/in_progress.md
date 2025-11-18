@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2025年11月17日
+最終更新日: 2025年11月19日
 
 ## 方針（2025年09月15日 更新）
 
@@ -12,11 +12,6 @@
 ## 現在のタスク
 
 ### リファクタリングプラン完了タスク
-
-21. **未使用 API エンドポイント 0 件の達成**  
-    - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:442` にて未使用 API をゼロにする KPI が未完。`phase5_user_flow_summary.md` では `add_relay` / `join_topic_by_name` などが backlog に残っている。  
-    - やること: (1) `scripts/check-tauri-commands.mjs` と Inventory 3.2/3.3 の一覧を同期し、未導線コマンドの削除または UI 配線計画を確定。(2) 削除対象は `.sqlx` / Runbook の参照先を更新し、CI の `check:tauri-commands` でゼロ件を検証。(3) UI へ残す場合は導線 ID + テスト ID を作成し、Nightly artefact と紐づける。  
-    - 完了条件: 未導線 API のリストが空になり、refactoring plan・Inventory・CI 監査でゼロ件が確認できる。
 
 22. **孤立コンポーネント 0 件の証跡化**  
     - 背景: `docs/01_project/refactoring_plan_2025-08-08_v3.md:448` にて孤立コンポーネント撲滅が未達成。鍵管理ダイアログや一部 Summary Widget が未配線として Inventory 5章に残っている。  

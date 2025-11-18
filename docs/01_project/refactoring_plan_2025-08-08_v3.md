@@ -442,12 +442,13 @@ tests/
   - 2025年11月07日: Inventory 5.6.1/5.6.2 と Summary 2章に `/profile/$userId` の DM 起点導線・フォロー/フォロワー一覧のソート/検索/件数表示、`DirectMessageDialog` の Kind4 IPC・未読バッジ・再送ボタン実装状況を反映。`profile.$userId.test.tsx` を Nightly に追加し、Rust（`kukuri-cli`）と TypeScript のテスト結果を記録。
   - 2025年11月07日: Inventory 5.11 と Summary Quick View に `SyncStatusIndicator` / `OfflineIndicator` の役割分担、`useSyncManager` + `offlineStore` + `offlineApi.update_cache_metadata/update_sync_status` の流れ、`get_cache_status` / `add_to_sync_queue` 連携、Vitest (`useSyncManager.test.tsx`, `SyncStatusIndicator.test.tsx`) を追記し、同期導線の不足を可視化。
   - 2025年11月09日: Summary に「MVP Exit Checklist（2025年11月09日版）」、Inventory に Sec.0「MVP Exit クロスウォーク」を追加。4カテゴリ（UX/体験 / P2P & Discovery / データ・同期 / Ops・CI）の担当セクションとテストログ（`tmp/logs/*.log`）の参照先を明示し、`tauri_app_implementation_plan.md` のステータス欄と連携させた。
-- [ ] 未使用APIエンドポイント0件
+- [x] 未使用APIエンドポイント0件
   - 2025年11月02日: 同ドキュメント 3.2/3.3 に未導線API（`delete_post` / `add_relay` など）とテスト専用 `invoke` コマンドを整理。UI導線追加または削除方針の判断待ち。
   - 2025年11月06日: Kind4 DM 系コマンド（`send_direct_message` / `list_direct_messages`）を UI 導線へ接続し、Inventory 3.2 と 5.6 の未使用一覧を更新。残る候補は `add_relay` / `join_topic_by_name` などに絞り、削除方針は Phase 5 backlog で継続検討。
   - 2025年11月07日: `get_cache_status` / `add_to_sync_queue` を `useSyncManager`・`SyncStatusIndicator` へ組み込み、Inventory 5.11 の未接続一覧から除外。未導線 API は `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` など最小グループに整理し、Phase 5 backlog と同期。
   - 2025年11月09日: `phase5_dependency_inventory_template.md` の MVP注視モジュール表を更新し、EventGateway / P2PService Stack / OfflineService / TopicSelector ショートカットの優先度と `phase5_user_flow_summary.md` クロスウォークをリンク。`add_relay` / `join_topic_by_name` は Phase 5 backlog のまま、`profile_avatar_sync` Doc/Blob 対応と紐付けて整理。
-- 2025年11月14日: `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri + フロントエンドから撤去し、Inventory 3.2/3.3 と `phase5_user_flow_summary.md` の未導線一覧をクローズ。`phase5_ci_path_audit.md` へ棚卸し結果を追記し、今後は新コマンド発生時に即ドキュメントへ反映する運用を徹底する。
+  - 2025年11月14日: `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri + フロントエンドから撤去し、Inventory 3.2/3.3 と `phase5_user_flow_summary.md` の未導線一覧をクローズ。`phase5_ci_path_audit.md` へ棚卸し結果を追記し、今後は新コマンド発生時に即ドキュメントへ反映する運用を徹底する。
+  - 2025年11月18日: `node scripts/check-tauri-commands.mjs`（出力: "Tauri コマンド 84 件はすべてフロントエンドから呼び出されています。"）を再実行し、84/84 件の `#[tauri::command]` が UI/Hook/テストコードから参照されていることを確認。CI ジョブ `check:tauri-commands`（`pnpm run check:tauri-commands`）でも同ロジックを維持し、`phase5_user_flow_inventory.md` Sec.3.2/3.3・`phase5_feature_usage_map.md`・`phase5_ci_path_audit.md` に監査ログを反映して backlog 0 件を継続する運用を明記した。
 - [ ] 孤立コンポーネント0件
   - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` / `DirectMessageDialog` の導線を Inventory 5.7・Summary 2 に反映し、Sidebar・Header からの呼び出し経路とテストケースを整理。未接続要素（鍵管理ダイアログ等）は Inventory 5.4 の backlog として明示。
   - 2025年11月07日: `SyncStatusIndicator`・`OfflineIndicator` の UI 役割と `SyncStatusIndicator` → `useSyncManager` → `offlineStore` のバッジ/手動再送導線を Inventory 5.11 / Summary Quick View / Phase5 優先度リストへ反映し、孤立していた同期ステータス UI を主要導線に統合した。

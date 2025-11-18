@@ -8,6 +8,12 @@
   - 結果: 249ファイル/34,220行中の重複 1,287行（3.76%）。Rust 側は現状維持だが、再計測ログ `tmp/jscpd/rust/jscpd-report.json` を更新し、TypeScript 側の削減率と合わせて Runbook/監査ドキュメントに記録。
 - 併せて `src/tests/utils/{zustandTestUtils.ts,offlineStoreMocks.ts,toastMock.ts}` を追加し、ダイレクトメッセージ系/Sync系テストの Zustand モックやトーストモックを共有化。`DirectMessageDialog.test.tsx` / `profile.$userId.test.tsx` / `useOffline.test.tsx` / `useSyncManager.test.tsx` にまたがっていた 29～30行規模の重複ブロックを除去し、Phase5 CI パス監査の「Zustand persist 定義の乱立」項目を解消した。
 
+## 2025年11月18日: 未導線 API 棚卸し
+- コマンド: `node scripts/check-tauri-commands.mjs`（CLI 出力: "Tauri コマンド 84 件はすべてフロントエンドから呼び出されています。"）  
+  - 結果: 84/84 件の `#[tauri::command]` が `kukuri-tauri/src`（UI + Hook + テストコード）から参照されていることを確認。`pnpm run check:tauri-commands` も同一ロジックで `check:tauri-commands` ジョブに組み込み、Nightly/PR いずれでも未導線 API を検出できる状態を維持。
+- ドキュメント更新: `phase5_user_flow_inventory.md` Sec.3.2/3.3 を 2025年11月18日版へ更新し、未接続コマンド 0 件であること・監査ログ（`add_relay` ほか撤去日）を追記。`phase5_feature_usage_map.md` でも同日の監査結果とコマンド件数（84 件）を記録し、Runbook から参照できるようにした。
+- 運用メモ: 今後新規 Tauri コマンドを追加する場合は追加日の Pull Request で (1) `phase5_user_flow_inventory.md` へ導線 ID/テスト ID を追記、(2) `pnpm run check:tauri-commands` のログを `tmp/logs/check_tauri_commands_<timestamp>.log` へ残し、本監査セクションへリンクを追記する。
+
 ## 2025年11月17日: 機能使用状況マップ整合性チェック
 - `node scripts/check-tauri-commands.mjs` を実行し、Tauri コマンド 85 件がすべてフロントエンドから呼び出されていることを確認（CLI 出力: "Tauri コマンド 85 件はすべてフロントエンドから呼び出されています。"）。
 - `docs/01_project/activeContext/artefacts/phase5_feature_usage_map.md` 第3章に UIイベント→Hook/Store→Tauriコマンド→テストID/artefact の表（3.1節）を追加し、`phase5_user_flow_inventory.md` の導線 ID / Nightly artefact との突合を記録した。
