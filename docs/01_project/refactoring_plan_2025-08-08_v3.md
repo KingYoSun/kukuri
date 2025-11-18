@@ -449,9 +449,10 @@ tests/
   - 2025年11月09日: `phase5_dependency_inventory_template.md` の MVP注視モジュール表を更新し、EventGateway / P2PService Stack / OfflineService / TopicSelector ショートカットの優先度と `phase5_user_flow_summary.md` クロスウォークをリンク。`add_relay` / `join_topic_by_name` は Phase 5 backlog のまま、`profile_avatar_sync` Doc/Blob 対応と紐付けて整理。
   - 2025年11月14日: `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` を Tauri + フロントエンドから撤去し、Inventory 3.2/3.3 と `phase5_user_flow_summary.md` の未導線一覧をクローズ。`phase5_ci_path_audit.md` へ棚卸し結果を追記し、今後は新コマンド発生時に即ドキュメントへ反映する運用を徹底する。
   - 2025年11月18日: `node scripts/check-tauri-commands.mjs`（出力: "Tauri コマンド 84 件はすべてフロントエンドから呼び出されています。"）を再実行し、84/84 件の `#[tauri::command]` が UI/Hook/テストコードから参照されていることを確認。CI ジョブ `check:tauri-commands`（`pnpm run check:tauri-commands`）でも同ロジックを維持し、`phase5_user_flow_inventory.md` Sec.3.2/3.3・`phase5_feature_usage_map.md`・`phase5_ci_path_audit.md` に監査ログを反映して backlog 0 件を継続する運用を明記した。
-- [ ] 孤立コンポーネント0件
+- [x] 孤立コンポーネント0件
   - 2025年11月06日: `TrendingSummaryPanel` / `FollowingSummaryPanel` / `DirectMessageDialog` の導線を Inventory 5.7・Summary 2 に反映し、Sidebar・Header からの呼び出し経路とテストケースを整理。未接続要素（鍵管理ダイアログ等）は Inventory 5.4 の backlog として明示。
   - 2025年11月07日: `SyncStatusIndicator`・`OfflineIndicator` の UI 役割と `SyncStatusIndicator` → `useSyncManager` → `offlineStore` のバッジ/手動再送導線を Inventory 5.11 / Summary Quick View / Phase5 優先度リストへ反映し、孤立していた同期ステータス UI を主要導線に統合した。
+  - 2025年11月19日: Inventory 5.13 に `KeyManagementDialog`、`TrendingSummaryPanel` / `FollowingSummaryPanel` / `SummaryDirectMessageCard`、`SyncStatusIndicator` / `ConflictResolutionDialog` の導線・テレメトリ・Docker テスト（`./scripts/test-docker.ps1 ts -Scenario trending-feed` / `./scripts/test-docker.ps1 ts -Scenario offline-sync` / `./scripts/test-docker.ps1 rust -Test key_management`）を記録。`phase5_user_flow_summary.md` 1.5 / 2 章・Runbook Chapter4.4 へも証跡を同期し、Sidebar / Header / モーダル経由で全コンポーネントへ到達できることを確認した。
 - [ ] dead_codeのうち80%以上が削除または使用開始
   - 2025年11月06日: Inventory 5.7-5.10 で各導線に紐づくストア/API 呼び出しを洗い出し、未参照だった削除/集計系のコードを対象外として明文化。dead_code 候補は `hybrid_distributor` / `event_sync` 等バックエンド側に集約した状態を Phase 5 backlog に記録。
   - 2025年11月07日: Inventory 5.11 で `update_cache_metadata` / `update_sync_status` / `get_cache_status` / `add_to_sync_queue` の利用パスをテキスト化し、`offline_api.rs` の dead_code 候補（未呼び出しだった同期系コマンド）を全て使用中へ更新。`phase5_ci_path_audit.md` に新テスト ID を登録し、除外候補リストから同期 API 群を削除。

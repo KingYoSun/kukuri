@@ -55,7 +55,7 @@
 ### 1.5 設定 & デバッグ
 | セクション | パス | 主な機能 | 主なコマンド |
 | --- | --- | --- | --- |
-| 外観・アカウント | `/settings` | テーマ切替、プロフィール編集モーダル、鍵管理ボタン（未実装） | `useUIStore.setTheme`、`update_nostr_metadata`、`authStore.updateUser`（ProfileEditDialog） |
+| 外観・アカウント | `/settings` | テーマ切替、プロフィール編集モーダル、鍵管理ダイアログ（エクスポート/インポート/履歴表示） | `useUIStore.setTheme`、`update_nostr_metadata`、`authStore.updateUser`（ProfileEditDialog）、`TauriApi.exportPrivateKey`、`authStore.loginWithNsec`（KeyManagementDialog） |
 | プライバシー設定 | `/settings` | プロフィール公開/オンライン表示トグル（ローカル永続化） | `usePrivacySettingsStore.setPublicProfile` / `.setShowOnlineStatus`（Tauri 連携待ち） |
 | P2P 接続状況 | `/settings` | `PeerConnectionPanel` – ノード初期化、手動接続、履歴管理 | `initialize_p2p`, `get_node_address`, `get_p2p_status`, `connect_to_peer` |
 | Bootstrap 設定 | `/settings` | `BootstrapConfigPanel` – ノード一覧取得/保存/リセット | `get_bootstrap_config`, `set_bootstrap_nodes`, `clear_bootstrap_nodes` |
@@ -93,7 +93,7 @@
 - `/profile/$userId` はフォロー導線と DM モーダル、フォロワー/フォロー中リストのソート・検索を備えたが、既読ステータスの多端末同期とページング拡張（2ページ目以降の自動補充/差分同期）が未実装。
 - `TopicsPage` 以外にはトピック作成導線が存在せず、タイムラインから直接作成できない。
 - 投稿削除は UI から利用可能になったが、React Query のキャッシュ無効化と `delete_post` コマンド統合テスト整備が未完了。
-- 設定画面の「鍵管理」ボタンは依然として UI 表示のみで実装が無い。
+- 2025年11月19日: 設定画面の「鍵管理」ボタンは `KeyManagementDialog` を起動し、`errorHandler.info/log('KeyManagementDialog.*')` テレメトリと `useKeyManagementStore` の履歴更新を伴うエクスポート/インポートフローとして稼働している。`src/routes/settings.tsx` からモーダルを描画し、Docker テスト（`./scripts/test-docker.ps1 ts -Tests src/tests/unit/components/settings/KeyManagementDialog.test.tsx`、`./scripts/test-docker.ps1 rust -Test key_management`）で同導線を検証済み。
 - 設定画面の「プライバシー」トグル（プロフィール公開/オンライン表示）は 2025年11月02日時点で `usePrivacySettingsStore` によるローカル永続化まで対応済み。バックエンド連携と反映タイミングは未実装。
 
 ## 3. Tauri コマンド呼び出しマップ
@@ -213,7 +213,7 @@
 4. `/profile/$userId` のメッセージ導線で既読同期の多端末反映と Docker/contract テストを整備し、フォロワー/フォロー中リストのソート／フィルタリング／ページングを含めてブラッシュアップする。
 5. 投稿削除後の React Query キャッシュ無効化と `delete_post` コマンド統合テストを整備する。
 6. 設定画面のプライバシートグルをバックエンドへ同期する API 設計・実装を行う。
-7. 設定画面の「鍵管理」ボタンについて、バックアップ/インポート導線とコマンド連携を定義する。
+7. ✅ 2025年11月17日: 設定画面の「鍵管理」ボタンから `KeyManagementDialog` を起動し、バックアップ/インポート導線と `export_private_key` / `authStore.loginWithNsec` のコマンド連携を実装済み。2025年11月19日には Sec.5.13 の孤立コンポーネント監査で導線証跡を採取し、`errorHandler` テレメトリと Docker テストログを Runbook/CI に紐付けた。
 
 ## 5. 優先実装メモ（2025年11月04日更新）
 
@@ -657,6 +657,16 @@
   - 2025年11月12日: `useDirectMessageBootstrap` に 30 秒間隔の `list_direct_message_conversations` 再取得・`visibilitychange` フォーカス復帰処理・Inbox/Dialog オープン時の即時同期を実装し、多端末既読共有を安定化。`DirectMessageInbox` の検索成功時に `errorHandler.info('DirectMessageInbox.search_completed', …)` を出力し、`npx pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/components/trending/TrendingSummaryPanel.test.tsx src/tests/unit/components/following/FollowingSummaryPanel.test.tsx | tee tmp/logs/vitest_direct_message_20251112-124608.log` を取得。
   - 2025年11月15日: `./scripts/test-docker.{sh,ps1} ts -Scenario direct-message --no-build` を追加し、DM 関連ユニットテストを Docker で一括実行。`tmp/logs/vitest_direct_message_20251115-074009.log` を Nightly artefact に保存し、`test-results/direct-message/20251115-074009-*.json`（Dialog/Inbox/Header/useDirectMessageBadge）が参照できるようにした。
   - Rust contract: `./scripts/test-docker.ps1 rust -NoBuild | Tee-Object tmp/logs/rust_docker_20251115-074043.log` で `tests/contract/direct_messages.rs::direct_message_read_receipts_sync_across_devices` を再取得し、多端末既読共有のデータパスを Runbook/CI から参照可能にした。
+
+### 5.13 孤立コンポーネント監査（2025年11月19日追加）
+
+| コンポーネント | エントリーポイント | テレメトリ / テスト | 備考 |
+| --- | --- | --- | --- |
+| `KeyManagementDialog` / `useKeyManagementStore` | Settings > アカウント > 「鍵管理」ボタン（`src/routes/settings.tsx`）。Sidebar から `/settings` を開いた直後にモーダルを起動可能。 | `errorHandler.info/log('KeyManagementDialog.*')`、`src/tests/unit/components/settings/KeyManagementDialog.test.tsx`、`./scripts/test-docker.ps1 ts`、`./scripts/test-docker.ps1 rust -Test key_management` | 履歴は `persistKeys.keyManagement` に保存し、Runbook Chapter4.4 の手順と突合できる。 |
+| `TrendingSummaryPanel` / `FollowingSummaryPanel` / `SummaryDirectMessageCard` | Sidebar カテゴリー（`category-trending` / `category-following`）→ `/trending` `/following` の Summary セクション。CTA から `DirectMessageInbox` を共有導線で起動。 | `src/routes/trending.test.tsx`、`src/routes/following.test.tsx`、`src/tests/unit/components/trending/TrendingSummaryPanel.test.tsx`、`src/tests/unit/components/following/FollowingSummaryPanel.test.tsx`、Docker `./scripts/test-docker.ps1 ts -Scenario trending-feed`（`test-results/trending-feed/*` artefact） | `useDirectMessageBadge` と `useDirectMessageStore.openInbox` を共用し、ヘッダー/Sidebar/モーダルの未読が同期される。 |
+| `SyncStatusIndicator` / `ConflictResolutionDialog` | `Header.tsx` で常時描画し、Popover から競合検知モーダルを開く。Sidebar 下部の `RelayStatus` / `P2PStatus` と同列に配置。 | `errorHandler.log('SyncStatusIndicator.*')`、`src/tests/unit/components/SyncStatusIndicator.test.tsx`、`src/tests/unit/components/sync/ConflictResolutionDialog.test.tsx`、`./scripts/test-docker.ps1 ts -Scenario offline-sync` | 競合解決操作は `offlineStore` / `useSyncManager` テレメトリと連動し、Nightly `sync-status-indicator-logs` artefact で監査できる。 |
+
+> 監査結果: Sidebar / Header / Settings モーダル経由の導線がいずれも稼働しているため、孤立コンポーネントは 0 件。証跡は本節と `phase5_user_flow_summary.md` 1.5 節、`docs/03_implementation/p2p_mainline_runbook.md` Chapter4.4 に記録した。
 
 ## 6. プロフィール画像リモート同期設計（iroh-blobs 0.96.0 / iroh-docs 0.94.0）
 

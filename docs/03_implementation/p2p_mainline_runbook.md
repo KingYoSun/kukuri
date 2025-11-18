@@ -228,6 +228,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 5. **障害対応メモ**
    - エクスポート失敗時は `src/lib/api/tauri.ts` の `exportPrivateKey` 呼び出し結果と `src-tauri/src/presentation/commands/auth_commands.rs` の `AppError` を突合し、`AuthService::export_private_key` で鍵が見つからない場合は `SecureStorage` の ledger を調査する。
    - インポート失敗時は `.nsec` の形式（`nsec1` 始まり）と `KeyManagementDialog` のバリデーション結果 (`status: cancelled|error`) を確認し、`useKeyManagementStore` の履歴と `errorHandler.log('KeyManagementDialog.handleImport', …)` をエビデンスとして Runbook に貼り付ける。
+- **孤立コンポーネント監査（2025年11月19日）**: Settings > アカウント > 鍵管理ボタン経由で `KeyManagementDialog` を開いた際の `errorHandler.info/log('KeyManagementDialog.*')` テレメトリと `persistKeys.keyManagement` の履歴を採取し、Inventory 5.13 / `phase5_user_flow_summary.md` 1.5 / refactoring plan KPI「孤立コンポーネント0件」と突合する。Docker `./scripts/test-docker.ps1 ts`（UI）と `./scripts/test-docker.ps1 rust -Test key_management`（コマンド）を同日実行し、ログ採取時は `tmp/logs/key_management_<timestamp>.log` および Nightly `key-management` artefact へ保存する。
 
 
 ## 9. get_p2p_status API 拡張実装（2025年11月03日）
