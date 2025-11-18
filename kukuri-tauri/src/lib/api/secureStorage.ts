@@ -86,5 +86,4 @@ export const SecureStorageApi = {
   async secureLogin(npub: string): Promise<LoginResponse> {
     return await invokeCommand<LoginResponse>('secure_login', { npub });
   },
-
 };
