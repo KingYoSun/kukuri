@@ -21,7 +21,7 @@
 | プロジェクト概要 | `docs/01_project/design_doc.md` | 最終更新日 | 対応済み（2025年10月22日修正） |
 | プロジェクト概要 | `docs/01_project/requirements.md` | 作成日、最終更新日 | 対応済み（2025年10月22日修正） |
 | プロジェクト概要 | `docs/01_project/roadmap.md` | 作成日、最終更新 | 問題なし |
-| プロジェクト概要 | `docs/01_project/refactoring_plan_2025-08-08_v3.md` | 作成日、改訂履歴 | 対応済み（2025年10月22日修正） |
+| プロジェクト概要 | `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md`（アーカイブ済み） | 作成日、改訂履歴 | 対応済み（2025年10月22日修正） |
 | プロジェクト概要 | `docs/01_project/setup_guide.md` | 作成日、最終更新 | 対応済み（2025年10月22日修正） |
 | プロジェクト概要 | `docs/01_project/windows_setup_guide.md` | 日付メタ情報 | 日付情報なし（必要なら追記検討） |
 | ActiveContext | `docs/01_project/activeContext/summary.md` | 最終確認日、補足 | 問題なし |

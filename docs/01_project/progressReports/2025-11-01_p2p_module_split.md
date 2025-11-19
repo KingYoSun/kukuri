@@ -16,7 +16,7 @@ Phase 5 で継続していた巨大ファイル分割タスクを完了するた
 ### 2. P2PService モジュール再編
 - 旧 `builder.rs` を `bootstrap.rs` へリネームし、DI に関わる組み立て処理を明示化。`mod.rs` では `core` / `bootstrap` / `metrics` / `status` を再輸出する構成に整理。
 - `metrics.rs` を新設し、`GossipMetricsSummary` の整形処理と `FromSnapshot` ロジックを移動。`core.rs` は `GossipMetricsSummary::from_snapshot` を利用して責務分離。
-- `phase5_dependency_inventory_template.md` に新モジュール構成を追記し、成功指標「700行超のファイル0件」を `refactoring_plan_2025-08-08_v3.md` で達成済みに更新。
+- `phase5_dependency_inventory_template.md` に新モジュール構成を追記し、成功指標「700行超のファイル0件」を `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` で達成済みに更新。
 
 ### 3. タスク/進捗トラッキング
 - `tasks/status/in_progress.md` から当該セクションを削除し、成果を `tasks/completed/2025-11-01.md` へ移設。

@@ -473,7 +473,7 @@ export function PeerConnectionPanel() {
 
 ### ⏭️ MVP後プラン（Phase4）
 - **Service Worker 拡張**: 4.4 の「バックグラウンド同期/キャッシュ管理/リソース事前ロード」は MVP 後に段階導入し、`docs/03_implementation/pwa_offline_runbook.md`（新規予定）で配布する。第一段階ではヘッダーUIと Runbook 整備を優先し、Push/バックグラウンドフェッチはベータ後に実験する。
-- **オフライン添付ファイル & Queue 圧縮**: `OfflineActionType::CREATE_TOPIC` 等へ大型ペイロードを積むシナリオは Post-MVP backlog に移動。`refactoring_plan_2025-08-08_v3.md` Phase5（OfflineService 行）でスコープ管理する。
+- **オフライン添付ファイル & Queue 圧縮**: `OfflineActionType::CREATE_TOPIC` 等へ大型ペイロードを積むシナリオは Post-MVP backlog に移動。`docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md`（アーカイブ済み） Phase5（OfflineService 行）でスコープ管理する。
 
 ## Phase 5: アーキテクチャ再構成（準備中）
 
@@ -493,7 +493,7 @@ export function PeerConnectionPanel() {
 - 2025年11月07日: Inventory 5.6.1/5.6.2 と `phase5_user_flow_summary.md` 2章/Quick View を更新し、`/profile/$userId` の DM 呼び出し導線・フォロー/フォロワー一覧（ソート/検索/件数表示）・`profile.$userId.test.tsx` の Nightly 追加、Rust (`kukuri-cli`) 検証ログを記録。フォロー導線 backlog を再整理し、優先タスク（プロフィール導線/DM 再送/フォロー一覧拡張）を Phase 5 リストに反映。
 - 2025年11月07日: Inventory 5.11 に `SyncStatusIndicator` / `OfflineIndicator` / `useSyncManager` / `offlineStore` / `offlineApi.update_cache_metadata` / `update_sync_status` / `get_cache_status` / `add_to_sync_queue` のフローとギャップ・テスト計画を追記し、`phase5_user_flow_summary.md` のグローバル要素および `phase5_ci_path_audit.md` のテーブル（SyncStatusIndicator/useSyncManager テスト行）へリンク。`pnpm vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx` を Nightly へ追加したログを保存。
 - 2025年11月09日: `list_sync_queue_items` / 再送キュー履歴 UI を実装し、Inventory 5.11 / Summary / CI path audit を更新。`npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`、`cargo test`（Docker 経由）を実行し、Phase4.3 Stage3 の要件を満たした。
-- 2025年11月08日: Inventory 5.12 / Summary 2章・Quick View / `refactoring_plan_2025-08-08_v3.md` を更新し、`DirectMessageInbox` / `useDirectMessageBadge` / `MessageCircle` + `Plus` ボタン / Summary Panel CTA から DM を開始できる導線と `Header.test.tsx`・`useDirectMessageBadge.test.tsx`・`TrendingSummaryPanel.test.tsx`・`FollowingSummaryPanel.test.tsx` のカバレッジを整理。残課題（会話一覧 API、宛先検索/補完、未読永続化、会話リストの仮想スクロール）を Phase 5 backlog へ追加し、`direct_message_service` 次フェーズの要件として追跡。
+- 2025年11月08日: Inventory 5.12 / Summary 2章・Quick View / `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` を更新し、`DirectMessageInbox` / `useDirectMessageBadge` / `MessageCircle` + `Plus` ボタン / Summary Panel CTA から DM を開始できる導線と `Header.test.tsx`・`useDirectMessageBadge.test.tsx`・`TrendingSummaryPanel.test.tsx`・`FollowingSummaryPanel.test.tsx` のカバレッジを整理。残課題（会話一覧 API、宛先検索/補完、未読永続化、会話リストの仮想スクロール）を Phase 5 backlog へ追加し、`direct_message_service` 次フェーズの要件として追跡。
 - 2025年11月08日: `direct_message_conversations` テーブルと `list_direct_message_conversations` / `mark_direct_message_conversation_read` コマンドを実装し、DirectMessageInbox の会話一覧・未読数を永続化。`DirectMessageDialog` は既読更新時に Tauri API を呼び、`useDirectMessageBootstrap` がログイン直後に Inbox をハイドレートする構成へ刷新。`pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/components/layout/Header.test.tsx`、`./scripts/test-docker.ps1 rust`、`cargo test`（`kukuri-cli`）を実行して回帰確認済み（Windows ネイティブ `cargo test` は既知の `STATUS_ENTRYPOINT_NOT_FOUND` のため Docker 実行で代替）。
 
 ### Phase 5 優先度更新（2025年11月03日）

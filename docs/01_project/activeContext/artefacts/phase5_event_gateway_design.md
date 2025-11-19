@@ -59,11 +59,11 @@
 
 | 項目 | 状態 | メモ / フォローアップ |
 | --- | --- | --- |
-| EventGateway ポート + Domain 値オブジェクト | ✅ ポート定義案と `DomainEvent/TopicId/ProfileMetadata` の不足要素を洗い出し済み（本書1章〜2章）。 | `refactoring_plan_2025-08-08_v3.md` の MVPギャップ表に反映。 |
+| EventGateway ポート + Domain 値オブジェクト | ✅ ポート定義案と `DomainEvent/TopicId/ProfileMetadata` の不足要素を洗い出し済み（本書1章〜2章）。 | `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` の MVPギャップ表に反映。 |
 | Mapper 抽出 (`application/shared/mappers/event/*`) | ✅ `nostr_to_domain.rs` / `metadata_mapper.rs` / `event_id_mapper.rs` を追加し、`EventService` から DTO/nostr 型変換を分離済み。 | `application/services/event_service/core.rs` が mapper 経由で `LegacyEventManagerGateway` に委譲していることを `tests/integration/test_event_service_gateway.rs` で回帰。 |
 | Infrastructure 実装 (`event_manager_gateway.rs`) | ✅ `infrastructure/event/event_manager_gateway.rs` を実装し、`state.rs` から `Arc<dyn EventGateway>` を DI。UI emit や metrics 連携も Gateway 側へ集約済み。 | `legacy_event_manager_gateway` 経由の Publish/Reaction/Delete を `tests/integration/test_event_gateway.rs` / `tests/integration/test_event_service_gateway.rs` で検証。 |
 
-> 2025年11月09日: `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` の「MVP Exit」クロスウォークを参照し、本設計メモは「P2P & Discovery」行の根拠ドキュメントとして指定。Gateway 実装ステータスは `refactoring_plan_2025-08-08_v3.md` ユーザー導線指標（未使用 API 行）からリンク。
+> 2025年11月09日: `phase5_user_flow_summary.md` / `phase5_user_flow_inventory.md` の「MVP Exit」クロスウォークを参照し、本設計メモは「P2P & Discovery」行の根拠ドキュメントとして指定。Gateway 実装ステータスは `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` ユーザー導線指標（未使用 API 行）からリンク。
 | SubscriptionInvoker / `handle_incoming_event` 連携 | ✅ `application::ports::subscription_invoker.rs` と `EventManagerSubscriptionInvoker` で購読実行を抽象化し、Gateway 経由の受信パスを `AppState` で初期化。 | 受信イベントは `handle_incoming_event` から UI emit → `tests/integration/event/test_event_gateway.rs` で回帰。 |
 | テスト整備 | ✅ `tests/integration/test_event_service_gateway.rs` / `tests/integration/event/test_event_gateway.rs` に Gateway 回帰を追加し、`application/shared/tests/event/manager_tests.rs` で Legacy 依存を統合。 | `cargo test --package kukuri-tauri --test test_event_service_gateway` で CI カバレッジを監視。 |
 
