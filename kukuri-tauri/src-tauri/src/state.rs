@@ -51,8 +51,7 @@ use crate::infrastructure::{
     storage::{SecureStorage, secure_storage::DefaultSecureStorage},
 };
 use crate::presentation::handlers::{
-    event_handler::EventHandler, offline_handler::OfflineHandler, p2p_handler::P2PHandler,
-    secure_storage_handler::SecureStorageHandler,
+    EventHandler, OfflineHandler, P2PHandler, SecureStorageHandler,
 };
 use crate::presentation::ipc::direct_message_notifier::IpcDirectMessageNotifier;
 

@@ -261,6 +261,7 @@ impl GossipService for IrohGossipService {
                             (event_tx_clone.as_ref(), decoded_message.clone())
                         {
                             let _ = tx.send(P2PEvent::MessageReceived {
+                                topic_id: topic_clone.clone(),
                                 message,
                                 _from_peer: msg.delivered_from.as_bytes().to_vec(),
                             });
@@ -326,6 +327,7 @@ impl GossipService for IrohGossipService {
                         let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
                             let _ = tx.send(P2PEvent::PeerJoined {
+                                topic_id: topic_clone.clone(),
                                 peer_id: peer_bytes.clone(),
                             });
                         } else {
@@ -337,6 +339,7 @@ impl GossipService for IrohGossipService {
                         let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
                             let _ = tx.send(P2PEvent::PeerLeft {
+                                topic_id: topic_clone.clone(),
                                 peer_id: peer_bytes.clone(),
                             });
                         } else {

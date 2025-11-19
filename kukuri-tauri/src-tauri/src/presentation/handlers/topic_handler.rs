@@ -3,7 +3,6 @@ use crate::{
     domain::entities::PendingTopic,
     presentation::dto::{
         Validate,
-        offline::OfflineAction,
         topic_dto::{
             CreateTopicRequest, DeleteTopicRequest, EnqueueTopicCreationRequest,
             EnqueueTopicCreationResponse, GetTopicStatsRequest, JoinTopicRequest,
