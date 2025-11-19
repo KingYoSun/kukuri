@@ -279,6 +279,14 @@ function sanitizeQuery(raw: string): string {
   return raw.replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim();
 }
 
+export function sanitizeUserSearchQuery(raw: string): string {
+  return sanitizeQuery(raw);
+}
+
+export function detectUserSearchHelper(query: string): HelperSearchDescriptor | null {
+  return detectHelperSearch(query);
+}
+
 function deriveStatus({
   clampedQuery,
   meetsMinLength,

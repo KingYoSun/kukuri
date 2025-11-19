@@ -609,7 +609,8 @@ function Invoke-TypeScriptUserSearchScenario {
     $resultsDir = Join-Path $repositoryRoot "test-results/user-search-pagination"
     $reportsDir = Join-Path $resultsDir "reports"
     $logsDir = Join-Path $resultsDir "logs"
-    foreach ($dir in @($resultsDir, $reportsDir, $logsDir)) {
+    $searchErrorDir = Join-Path $resultsDir "search-error"
+    foreach ($dir in @($resultsDir, $reportsDir, $logsDir, $searchErrorDir)) {
         if (-not (Test-Path $dir)) {
             New-Item -ItemType Directory -Path $dir | Out-Null
         }
@@ -618,7 +619,8 @@ function Invoke-TypeScriptUserSearchScenario {
     Write-Host "Running TypeScript scenario 'user-search-pagination'..."
     $vitestTargets = @(
         "src/tests/unit/hooks/useUserSearchQuery.test.tsx",
-        "src/tests/unit/components/search/UserSearchResults.test.tsx"
+        "src/tests/unit/components/search/UserSearchResults.test.tsx",
+        "src/tests/unit/scenario/userSearchPaginationArtefact.test.tsx"
     )
 
     $vitestStatus = 0
@@ -633,14 +635,19 @@ function Invoke-TypeScriptUserSearchScenario {
             "  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'",
             "  pnpm install --frozen-lockfile --ignore-workspace",
             "fi",
-            "pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
+            "pnpm vitest run '$target' --testTimeout 15000 --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
         )
         $command = [string]::Join("`n", $commandLines)
 
 
 
 
-        $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
+        $dockerArgs = @(
+            "compose", "-f", "docker-compose.test.yml",
+            "run", "--rm",
+            "--env", "USER_SEARCH_SCENARIO_TIMESTAMP=$timestamp",
+            "ts-test", "bash", "-lc", $command
+        )
         & docker @dockerArgs 2>&1 | Tee-Object -FilePath $logHostPath -Append | Out-Null
         $exitCode = $LASTEXITCODE
 

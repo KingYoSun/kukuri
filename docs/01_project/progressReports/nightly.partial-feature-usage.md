@@ -10,7 +10,7 @@
 | Flow / Route | テストID（Nightly） | Docker / Vitest エントリ | 主な artefact / ログ | 関連ドキュメント |
 | --- | --- | --- | --- | --- |
 | `/profile/$userId`（プロフィール詳細 + DM） | `nightly.profile-avatar-sync`（Service Worker / Doc）、`nightly.direct-message`、Rust: `direct_messages` 契約テスト | TypeScript: `./scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build`<br>Rust: `./scripts/test-docker.ps1 rust -Test direct_messages`<br>Service Worker: `./scripts/test-docker.{ps1,sh} ts --scenario profile-avatar-sync --service-worker` | `nightly.direct-message-logs`（`tmp/logs/vitest_direct_message_<timestamp>.log`）、`nightly.direct-message-reports`（`test-results/direct-message/<timestamp>-*.json`）、`profile-avatar-sync-logs`、`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` | `phase5_user_flow_inventory.md` 5.6 / 5.6.1 / 5.6.2 / 5.6.3、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/profile/$userId` 行 |
-| `/search` (users) | `nightly.user-search-pagination` | `./scripts/test-docker.{ps1,sh} ts --scenario user-search-pagination --no-build` | `user-search-pagination-logs`（`tmp/logs/user_search_pagination_<timestamp>.log`）、`user-search-pagination-log-archive`、`user-search-pagination-reports` | `phase5_user_flow_inventory.md` 5.8 / 5.8.1、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/search` 行 |
+| `/search` (users) | `nightly.user-search-pagination` | `./scripts/test-docker.{ps1,sh} ts --scenario user-search-pagination --no-build` | `user-search-pagination-logs`（`tmp/logs/user_search_pagination_<timestamp>.log`）、`user-search-pagination-log-archive`、`user-search-pagination-reports`、`user-search-pagination-search-error`（2文字未満→補助検索→`retryAfter` 自動解除→`SearchErrorState` JSON） | `phase5_user_flow_inventory.md` 5.8 / 5.8.1、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/search` 行 |
 | SyncStatusIndicator / Offline Sync | `nightly.sync-status-indicator`、Doc/Blob 連携: `nightly.profile-avatar-sync` | `./scripts/test-docker.{ps1,sh} ts --scenario offline-sync --no-build`（Doc/Blob 競合 + Service Worker）、`./scripts/test-docker.{ps1,sh} ts --scenario profile-avatar-sync --service-worker` | `sync-status-indicator-logs`（`tmp/logs/sync_status_indicator_stage4_<timestamp>.log`）、`test-results/offline-sync/<timestamp>-*.json`、`profile-avatar-sync-logs` | `phase5_user_flow_inventory.md` 5.11 / 5.11.1、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 SyncStatus 行 |
 
 ---
@@ -41,18 +41,19 @@
 
 ### 2.1 監視対象
 - `useUserSearchQuery` の cursor / sort / rate limit UI が `user-search-pagination` シナリオで再現できるか。
-- `allow_incomplete` フォールバック時に `SearchBar` の警告ラベルと `errorHandler.info('UserSearch.allow_incomplete_enabled', …)` がログへ出力されているか。
-- `retryAfterSeconds` のカウントダウンが UI と JSON レポートに一致しているか。
+- 2文字未満の補助検索で `allow_incomplete` が有効化され、`errorHandler.info('UserSearch.allow_incomplete_enabled', …)` と SearchBar 警告がログに残っているか。
+- `retryAfterSeconds` のカウントダウンが `SearchErrorState` で表示され、artefact JSON と UI の表示が一致しているか。
 
 ### 2.2 トリアージ手順
 1. `./scripts/test-docker.ps1 ts -Scenario user-search-pagination -NoBuild` を実行し、`tmp/logs/user_search_pagination_<timestamp>.log` を `user-search-pagination-logs` artefact へアップロード。`test-results/user-search-pagination/reports/<timestamp>.json` とログの `retryAfter` 値を突き合わせる。
-2. `phase5_ci_path_audit.md` の user-search 行で最新ログのタイムスタンプと `phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/search` 行の backlog（2文字未満補助検索など）が一致しているか確認。
-3. SearchBar の補助検索（2文字未満）を Nightly に含める場合は、`tmp/logs/user_search_pagination_<timestamp>.log` 内の `UserSearch.allow_incomplete_enabled` イベントを Runbook Chapter6 と本書へ追記し、artefact に `allow-incomplete` 前後のログ断片を残す。
+2. `user-search-pagination-search-error` artefact (`test-results/user-search-pagination/search-error/<timestamp>-search-error-state.json`) を開き、`helperSearch.term` / `steps[].retryAfterSeconds` / `searchErrorState.buttonLabelBefore/After` がログと一致しているか確認。補助検索ワードが 2 文字未満になっていることを合わせて確認する。
+3. `phase5_ci_path_audit.md` の user-search 行と `phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/search` 行で最新タイムスタンプが一致しているか、Nightly failure 時は JSON を添付して Runbook 6.4 に記録する。
 
 ### 2.3 Artefact / 参照
 - `user-search-pagination-logs`
 - `user-search-pagination-log-archive`
 - `user-search-pagination-reports`
+- `user-search-pagination-search-error`
 - `phase5_ci_path_audit.md` user-search 行
 
 ---

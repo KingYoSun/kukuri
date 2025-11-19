@@ -198,6 +198,13 @@ jobs:
           path: test-results/user-search-pagination/reports
           if-no-files-found: error
 
+      - name: Upload user search error artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-search-pagination-search-error
+          path: test-results/user-search-pagination/search-error
+          if-no-files-found: error
+
   direct-message:
     name: Direct Message (Docker)
     runs-on: ubuntu-latest

@@ -386,15 +386,17 @@ run_ts_user_search_pagination() {
   local results_dir="${RESULTS_DIR}/user-search-pagination"
   local reports_dir="${results_dir}/reports"
   local logs_dir="${results_dir}/logs"
+  local search_error_dir="${results_dir}/search-error"
   local log_archive_rel_path="test-results/user-search-pagination/logs/${timestamp}.log"
   local log_archive_host_path="${REPO_ROOT}/${log_archive_rel_path}"
-  mkdir -p "$(dirname "$log_host_path")" "$reports_dir" "$logs_dir"
+  mkdir -p "$(dirname "$log_host_path")" "$reports_dir" "$logs_dir" "$search_error_dir"
   : >"$log_host_path"
 
   echo "Running TypeScript scenario 'user-search-pagination'..."
   local vitest_targets=(
     'src/tests/unit/hooks/useUserSearchQuery.test.tsx'
     'src/tests/unit/components/search/UserSearchResults.test.tsx'
+    'src/tests/unit/scenario/userSearchPaginationArtefact.test.tsx'
   )
 
   local vitest_status=0
@@ -409,9 +411,11 @@ if [ ! -f node_modules/.bin/vitest ]; then
   echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
   pnpm install --frozen-lockfile --ignore-workspace
 fi
-pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
+pnpm vitest run '${target}' --testTimeout 15000 --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
 "
-    if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
+    if ! compose_run '' run --rm \
+      -e "USER_SEARCH_SCENARIO_TIMESTAMP=${timestamp}" \
+      ts-test bash -lc "$command" | tee -a "$log_host_path"; then
       vitest_status=${PIPESTATUS[0]}
       echo "[ERROR] Vitest target ${target} failed with exit code ${vitest_status}" >&2
       break
