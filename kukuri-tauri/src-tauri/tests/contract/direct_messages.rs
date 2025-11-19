@@ -52,16 +52,16 @@ async fn direct_message_read_receipts_sync_across_devices() {
     }
 
     let initial = repository
-        .list_direct_message_conversations(OWNER_NPUB, 10)
+        .list_direct_message_conversations(OWNER_NPUB, None, 10)
         .await
         .expect("list conversations");
-    assert_eq!(initial.len(), 1);
+    assert_eq!(initial.items.len(), 1);
     assert_eq!(
-        initial[0].unread_count, 3,
+        initial.items[0].unread_count, 3,
         "all inbound messages start unread"
     );
     assert_eq!(
-        initial[0].last_read_at, 0,
+        initial.items[0].last_read_at, 0,
         "last_read_at defaults to zero before any device reads"
     );
 
@@ -71,15 +71,15 @@ async fn direct_message_read_receipts_sync_across_devices() {
         .await
         .expect("mark read up to second message");
     let after_second = repository
-        .list_direct_message_conversations(OWNER_NPUB, 10)
+        .list_direct_message_conversations(OWNER_NPUB, None, 10)
         .await
         .expect("list after read");
     assert_eq!(
-        after_second[0].last_read_at, second_message_timestamp,
+        after_second.items[0].last_read_at, second_message_timestamp,
         "read receipt should store the latest acknowledged timestamp"
     );
     assert_eq!(
-        after_second[0].unread_count, 1,
+        after_second.items[0].unread_count, 1,
         "only the newest inbound message remains unread"
     );
 
@@ -88,14 +88,14 @@ async fn direct_message_read_receipts_sync_across_devices() {
         .await
         .expect("stale read marker should be ignored");
     let after_stale = repository
-        .list_direct_message_conversations(OWNER_NPUB, 10)
+        .list_direct_message_conversations(OWNER_NPUB, None, 10)
         .await
         .expect("list after stale mark");
     assert_eq!(
-        after_stale[0].last_read_at, second_message_timestamp,
+        after_stale.items[0].last_read_at, second_message_timestamp,
         "stale timestamps must not overwrite newer read positions"
     );
-    assert_eq!(after_stale[0].unread_count, 1);
+    assert_eq!(after_stale.items[0].unread_count, 1);
 
     let final_timestamp = base_timestamp + 2_000;
     repository
@@ -103,9 +103,9 @@ async fn direct_message_read_receipts_sync_across_devices() {
         .await
         .expect("mark all messages read");
     let final_state = repository
-        .list_direct_message_conversations(OWNER_NPUB, 10)
+        .list_direct_message_conversations(OWNER_NPUB, None, 10)
         .await
         .expect("list after all read");
-    assert_eq!(final_state[0].unread_count, 0);
-    assert_eq!(final_state[0].last_read_at, final_timestamp);
+    assert_eq!(final_state.items[0].unread_count, 0);
+    assert_eq!(final_state.items[0].last_read_at, final_timestamp);
 }

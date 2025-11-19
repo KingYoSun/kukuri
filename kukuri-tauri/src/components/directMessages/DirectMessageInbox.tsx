@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -16,7 +17,12 @@ import type { Profile } from '@/stores';
 import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
-import { TauriApi } from '@/lib/api/tauri';
+import {
+  TauriApi,
+  type DirectMessageConversationList,
+  type DirectMessageConversationSummary,
+  type DirectMessageItem,
+} from '@/lib/api/tauri';
 import { cn } from '@/lib/utils';
 
 const formatRelativeTime = (timestamp: number | null | undefined) => {
@@ -37,17 +43,19 @@ const formatNpub = (npub: string) => {
   return `${npub.slice(0, 8)}…${npub.slice(-6)}`;
 };
 
+type ConversationEntry = {
+  npub: string;
+  lastMessage: DirectMessageItem | null;
+  unread: number;
+  lastReadAt: number;
+};
+
 export function DirectMessageInbox() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const isInboxOpen = useDirectMessageStore((state) => state.isInboxOpen);
   const closeInbox = useDirectMessageStore((state) => state.closeInbox);
   const openDialog = useDirectMessageStore((state) => state.openDialog);
-  const conversations = useDirectMessageStore((state) => state.conversations);
-  const unreadCounts = useDirectMessageStore((state) => state.unreadCounts);
   const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
-  const conversationReadTimestamps = useDirectMessageStore(
-    (state) => state.conversationReadTimestamps,
-  );
   const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
   const [targetNpub, setTargetNpub] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -58,23 +66,38 @@ export function DirectMessageInbox() {
   const debouncedRecipientQuery = useDebounce(targetNpub.trim(), 300);
   const normalizedConversationQuery = conversationQuery.trim().toLowerCase();
 
-  const conversationEntries = useMemo(() => {
-    return Object.entries(conversations)
-      .map(([npub, messages]) => {
-        const lastMessage = messages[messages.length - 1] ?? null;
-        return {
-          npub,
-          lastMessage,
-          unread: unreadCounts[npub] ?? 0,
-          lastReadAt: conversationReadTimestamps[npub] ?? 0,
-        };
-      })
-      .sort((a, b) => {
-        const aTime = a.lastMessage?.createdAt ?? 0;
-        const bTime = b.lastMessage?.createdAt ?? 0;
-        return bTime - aTime;
+  const conversationsQuery = useInfiniteQuery<
+    DirectMessageConversationList,
+    Error,
+    InfiniteData<DirectMessageConversationList, string | null>,
+    ['direct-message-conversations'],
+    string | null
+  >({
+    queryKey: ['direct-message-conversations'],
+    enabled: isInboxOpen,
+    retry: false,
+    initialPageParam: null,
+    queryFn: async ({ pageParam }) => {
+      return await TauriApi.listDirectMessageConversations({
+        cursor: pageParam ?? null,
+        limit: 30,
       });
-  }, [conversations, unreadCounts, conversationReadTimestamps]);
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
+  });
+
+  const conversationPages = conversationsQuery.data?.pages ?? [];
+  const conversationEntries = useMemo<ConversationEntry[]>(() => {
+    return conversationPages
+      .flatMap((page: DirectMessageConversationList) => page.items)
+      .map((item: DirectMessageConversationSummary) => ({
+        npub: item.conversationNpub,
+        lastMessage: item.lastMessage,
+        unread: item.unreadCount,
+        lastReadAt: item.lastReadAt,
+      }));
+  }, [conversationPages]);
   const filteredConversationEntries = useMemo(() => {
     if (!normalizedConversationQuery) {
       return conversationEntries;
@@ -90,12 +113,23 @@ export function DirectMessageInbox() {
   const hasConversations = conversationEntries.length > 0;
   const hasFilteredConversations = filteredConversationEntries.length > 0;
   const conversationListRef = useRef<HTMLDivElement | null>(null);
+  const {
+    isLoading: isConversationsLoading,
+    isError: isConversationsError,
+    error: conversationsError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch: refetchConversations,
+  } = conversationsQuery;
   const rowVirtualizer = useVirtualizer({
-    count: filteredConversationEntries.length,
+    count: hasNextPage
+      ? filteredConversationEntries.length + 1
+      : filteredConversationEntries.length,
     getScrollElement: () => conversationListRef.current,
     estimateSize: () => 88,
     overscan: 12,
-    getItemKey: (index) => filteredConversationEntries[index]?.npub ?? index,
+    getItemKey: (index) => filteredConversationEntries[index]?.npub ?? `loader-${index}`,
   });
   const autoCompleteConversationNpub = filteredConversationEntries[0]?.npub ?? null;
 
@@ -110,6 +144,26 @@ export function DirectMessageInbox() {
       rowVirtualizer.scrollToIndex(index, { align: 'center' });
     }
   }, [isInboxOpen, activeConversationNpub, filteredConversationEntries, rowVirtualizer]);
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) {
+      return;
+    }
+    const virtualItems = rowVirtualizer.getVirtualItems();
+    if (virtualItems.length === 0) {
+      return;
+    }
+    const lastItem = virtualItems[virtualItems.length - 1];
+    if (lastItem.index >= filteredConversationEntries.length) {
+      void fetchNextPage();
+    }
+  }, [
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    filteredConversationEntries.length,
+    rowVirtualizer,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -376,18 +430,51 @@ export function DirectMessageInbox() {
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>
-              {filteredConversationEntries.length} 件 / 全 {conversationEntries.length} 件
+              {filteredConversationEntries.length} 件 / 読み込み済み {conversationEntries.length} 件
             </span>
-            {conversationQuery && autoCompleteConversationNpub ? (
-              <span>Enter で {formatNpub(autoCompleteConversationNpub)} を開く</span>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {conversationQuery && autoCompleteConversationNpub ? (
+                <span>Enter で {formatNpub(autoCompleteConversationNpub)} を開く</span>
+              ) : null}
+              {hasNextPage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  data-testid="dm-inbox-load-more"
+                >
+                  {isFetchingNextPage ? '読み込み中…' : 'さらに表示'}
+                </Button>
+              ) : null}
+            </div>
           </div>
           <div
             ref={conversationListRef}
             className="h-60 rounded-md border border-border overflow-y-auto"
             data-testid="dm-inbox-list"
           >
-            {!hasConversations ? (
+            {isConversationsLoading ? (
+              <div className="p-4 text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>会話を読み込んでいます…</span>
+              </div>
+            ) : isConversationsError ? (
+              <div className="p-4 space-y-2">
+                <p className="text-sm text-destructive">
+                  会話の取得に失敗しました。時間をおいて再試行してください。
+                </p>
+                <Button size="sm" variant="outline" onClick={() => refetchConversations()}>
+                  再試行
+                </Button>
+                {conversationsError ? (
+                  <p className="text-xs text-muted-foreground break-all">
+                    {conversationsError.message}
+                  </p>
+                ) : null}
+              </div>
+            ) : !hasConversations ? (
               <div className="p-4 text-sm text-muted-foreground">
                 まだ会話がありません。プロフィールから、または上の宛先入力から開始できます。
               </div>
@@ -405,7 +492,25 @@ export function DirectMessageInbox() {
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                   const entry = filteredConversationEntries[virtualRow.index];
                   if (!entry) {
-                    return null;
+                    return (
+                      <div
+                        key={virtualRow.key}
+                        className="absolute left-0 right-0 flex items-center justify-center text-xs text-muted-foreground"
+                        style={{
+                          transform: `translateY(${virtualRow.start}px)`,
+                          height: `${virtualRow.size}px`,
+                        }}
+                      >
+                        {isFetchingNextPage ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>さらに読み込み中…</span>
+                          </div>
+                        ) : (
+                          <span>これ以上の会話はありません</span>
+                        )}
+                      </div>
+                    );
                   }
                   const lastMessageTime = formatRelativeTime(entry.lastMessage?.createdAt);
                   const lastReadTime = entry.lastReadAt

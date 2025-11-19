@@ -128,7 +128,11 @@ describe('DirectMessageDialog', () => {
       nextCursor: null,
       hasMore: false,
     });
-    vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({ items: [] });
+    vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
     vi.mocked(TauriApi.markDirectMessageConversationRead).mockResolvedValue();
     useDirectMessageStore.setState(getDirectMessageInitialState());
     if (typeof useDirectMessageStore.getState().setDraft !== 'function') {

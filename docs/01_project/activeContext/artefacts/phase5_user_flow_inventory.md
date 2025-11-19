@@ -326,7 +326,7 @@
 - **テスト/Runbook**: `npx vitest run src/tests/unit/components/RelayStatus.test.tsx src/tests/unit/components/P2PStatus.test.tsx src/tests/unit/hooks/useP2P.test.tsx`、`./scripts/test-docker.ps1 rust -Test p2p_mainline_smoke` を結果ログ付きで実行し、`docs/03_implementation/p2p_mainline_runbook.md` のトラブルシュート節へリンク。
 - **参照**: `phase5_user_flow_summary.md` Ops/CI 行、`phase5_ci_path_audit.md` Relay/P2P テスト ID、`docs/03_implementation/p2p_mainline_runbook.md` Chapter9。
 
-### 5.6 プロフィール詳細導線とフォロー体験（2025年11月05日更新）
+### 5.6 プロフィール詳細導線とフォロー体験（2025年11月19日更新）
 - **目的**: `/profile/$userId` を起点にプロフィール閲覧・フォロー操作・投稿参照を一貫した導線として提供し、検索結果や他画面からの遷移後も同等の体験を維持する。
 - **実装状況**
   - 2025年11月03日: プレースホルダールートを差し替え、`getUserProfile` / `getUserProfileByPubkey` / `getPosts({ author_pubkey })` を用いた実データ取得と、フォロー/フォロー解除ボタンを実装。
@@ -342,29 +342,30 @@
   - 送信失敗後の自動バックオフやレート制御は未整備。現状は手動の「再送」ボタンのみのため、再送間隔と失敗履歴のコントロールを追加する。
   - Tauri 経由のエラーハンドリングはトースト表示に偏っているため、`errorHandler` のメタデータ拡充とリトライ導線を検討。
 - **対応計画（2025年11月13日更新）**
-  - Direct Message は 5.6.1 の実装状況を参照。Kind4 IPC + 多端末既読同期・会話検索/補完・仮想スクロール最適化を完了し、`tests/contract/direct_messages.rs` を Docker で常時実行できるようになった。今後は送信レート制御/バックオフと会話一覧 API の limit 超過時ページングを計画。
+  - Direct Message は 5.6.1 の実装状況を参照。Kind4 IPC + 多端末既読同期・会話検索/補完・仮想スクロール最適化を完了し、2025年11月19日に `list_direct_message_conversations` のカーソル/`has_more` 対応と `DirectMessageInbox` の Infinite Query 化を実施。`nightly.direct-message` artefact でログ/JSON を監視可能になったため、今後は送信レート制御・バックオフ・Kind4 失敗時の自動リトライ計測を計画。
   - フォロワー一覧のソート/ページネーションは 5.6.2 に実装計画を記載。API 拡張・フロント実装・テストカバレッジを網羅。
 
-#### 5.6.1 DirectMessage Tauri 実装状況（2025年11月05日更新）
+#### 5.6.1 DirectMessage Tauri 実装状況（2025年11月19日更新）
 - **実装済みコンポーネント**
   - `application/services/direct_message_service.rs` が `send_direct_message` / `list_direct_messages` を提供。空メッセージは `ValidationFailureKind::Generic` で検証し、暗号化と配送は `MessagingGateway` に委譲。
   - `infrastructure/messaging/nostr_gateway.rs` が kind 4 の生成と配信を担当し、`KeyManager.export_private_key` から秘密鍵を取得して `nip04` で暗号化・復号。
-  - `infrastructure/database/sqlite_repository/direct_messages.rs` が SQLite 永続化とカーソルページング（"{created_at}:{event_id}"）・方向指定（Backward/Forward）を実装。
+  - `infrastructure/database/sqlite_repository/direct_messages.rs` がメッセージ履歴の `"{created_at}:{event_id}"` カーソルと方向指定（Backward/Forward）に加え、会話一覧向けの `DirectMessageConversationCursor`（`bucket:last_message_created_at:base64(conversation_npub)`）と `has_more` / `next_cursor` 付きページングを実装。
   - `presentation/commands/direct_message_commands.rs` が Tauri コマンド `send_direct_message` / `list_direct_messages` を公開し、`ensure_authenticated` で owner npub を決定した上で `ApiResponse` を返却。
 - **UI 連携**
   - `DirectMessageDialog` は `useInfiniteQuery(['direct-messages', npub])` で `list_direct_messages` を呼び出し、IntersectionObserver と `Load more` ボタンで無限スクロール・再取得を制御。取得したページは `dedupeMessages` でストアの会話履歴に統合し、読み込み成功時に `markConversationAsRead` で未読カウントをリセットする。
   - `DirectMessageDialog` からの送信は従来どおり楽観更新を行い、`resolveOptimisticMessage` / `failOptimisticMessage` で状態同期。sonner toast で成功/失敗を通知し、`queued` フラグは `status: 'pending'` 表示に対応。
   - `useDirectMessageStore` が既読カウントと会話ログを保持し、`dedupeMessages` で `eventId` / `clientMessageId` をキーに重複排除。
-  - `DirectMessageInbox` は TanStack Virtualizer の測定付き仮想スクロール・npub/本文検索・Enter 補完・多端末既読バッジを備え、`markConversationAsRead(conversationNpub, lastReadAt?)` の第二引数で `lastReadAt` をストアに取り込みつつ `TauriApi.markDirectMessageConversationRead` を呼び出す。`useDirectMessageBootstrap` は `list_direct_message_conversations` から取得した `lastReadAt` をハイドレートし、ヘッダー/Summary CTA から同じ Inbox を再利用する。
+  - `DirectMessageInbox` は `useInfiniteQuery(['direct-message-conversations'])` + TanStack Virtualizer でカーソルごとのページングを実装し、npub/本文検索・Enter 補完・多端末既読バッジと併せて `fetchNextPage` / 「さらに表示」ボタンで 50 件超の会話を段階的に表示する。`markConversationAsRead(conversationNpub, lastReadAt?)` でストアと SQLite の既読状態を同期し、`nightly.direct-message` artefact（`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json`）から UI 回帰をトレースできる。`useDirectMessageBootstrap` も 50 件単位でページを巡回し、ヘッダー/Summary CTA と同じストアをハイドレートする。
 - **テスト / 検証**
   - Rust: `cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で Direct Message サービスとリポジトリのユニットテストを実行済み。
   - 2025年11月05日: `pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を実行し、履歴ロード・送信フローが回帰しないことを確認。
   - TypeScript: `DirectMessageDialog.test.tsx` で Optimistic Update・エラーハンドリング・トースト表示・初期履歴の描画を検証し、Vitest 結果を記録。
   - 2025年11月13日: Windows ネイティブの `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` で停止するため、`./scripts/test-docker.ps1 rust` を再実行し、`tmp/logs/rust_docker_20251113-141846.log` に `tests/contract/direct_messages.rs` を含む Docker Rust テスト結果を保存。
   - 2025年11月13日: `corepack pnpm vitest run src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を `tmp/logs/direct_message_inbox_20251113-140827.log` に記録し、会話検索・既読バッジ・モーダル連携の回帰を確認。
+  - 2025年11月19日: `./scripts/test-docker.ps1 ts -Scenario direct-message -NoBuild` → `tmp/logs/vitest_direct_message_20251119-*.log` / `test-results/direct-message/20251119-*.json`、`./scripts/test-docker.ps1 rust -NoBuild` → `tmp/logs/rust_docker_20251119-*.log` を採取し、`nightly.direct-message` artefact と契約テストの双方を更新。`DirectMessageInbox.test.tsx` では Infinite Query / Load more / `markDirectMessageConversationRead` のモックを追加して回帰確認。
 - **残課題**
-  - 会話リストのページング（50件超の limit / cursor）と React Query キャッシュ整合性を検討し、Sidebar 想定の最新メッセージ反映と `list_direct_message_conversations` API の limit 拡張を行う。
-  - 送信レート制御・暗号化鍵キャッシュ・失敗時のバックオフは運用シナリオでの検証が必要。
+  - Kind4 送信レート制御・暗号化鍵キャッシュ・バックオフは引き続き backlog。`MessagingGateway` からリトライメトリクスを取得し、Nightly artefact に残す仕組みを検討する。
+  - `DirectMessageInbox` の検索時に全ページを読み切るフロー（事前フェッチ）と、Sidebar バッジ用に `useDirectMessageStore` / `nightly.direct-message` のログをどう突合するかを整理する。
 #### 5.6.2 フォロワー一覧ソート/検索実装状況（2025年11月07日更新）
   - **実装内容**
     - `get_followers` / `get_following` リクエストに `sort`（`recent` / `oldest` / `name_asc` / `name_desc`）と `search` を追加し、レスポンスへ `total_count` を含めるよう更新。既存呼び出しとの後方互換は維持。
@@ -384,7 +385,7 @@
 
 | セグメント | 使用できている範囲 | 未接続/残タスク | テスト / Artefact / Runbook |
 | --- | --- | --- | --- |
-| プロフィール詳細 → DirectMessageDialog | `Header` / Summary Panel / `/profile/$userId` の「メッセージ」ボタンは `useDirectMessageStore` と `DirectMessageDialog` を共有し、Kind4 IPC・無限スクロール・`useDirectMessageBootstrap` の 30 秒再取得・Service Worker Stage4 までは稼働している。`profile_avatar_sync` と同じ BroadcastChannel 手順で `DirectMessageInbox` の既読状態を同期済み。 | `direct_message_conversations` 50件超のカーソル/API 拡張、既読状態の多端末共有ログ、`nightly.direct-message`（Nightly 追加中）の成果物紐付けが未完。 | `./scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build`（`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json`）、`./scripts/test-docker.ps1 rust -Test direct_messages`、`docs/01_project/progressReports/nightly.partial-feature-usage.md#profile-ルート` |
+| プロフィール詳細 → DirectMessageDialog | `Header` / Summary Panel / `/profile/$userId` の「メッセージ」ボタンは `DirectMessageDialog`・`DirectMessageInbox`・`useDirectMessageBootstrap` を共有し、Kind4 IPC・多端末既読同期・TanStack Virtualizer + Infinite Query（`DirectMessageInbox`）・30 秒再取得まで稼働。`list_direct_message_conversations` はカーソル/`has_more` 対応で 50 件超の会話も段階的に読み込める。 | Kind4 送信レート制御/バックオフ、Inbox 検索時の全件フェッチ戦略、Nightly artefact への Kind4 再送メトリクス追加。 | `./scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build`（`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json`）、`./scripts/test-docker.ps1 rust -NoBuild`（`tests/contract/direct_messages.rs`）、Nightly artefact `nightly.direct-message-{logs,reports}`、`docs/03_implementation/windows_test_docker_runbook.md#53-docker-direct-message-シナリオ`。 |
 | フォロワー/フォロー一覧 | ソート/検索/件数表示は `ProfilePage` から利用でき、フォロー/フォロー解除は React Query キャッシュ（`['social','following']` / `['profile',npub,'followers']`）と `subscribe_to_user` を通じて即時反映される。 | 2ページ目以降のページング / 差分更新、`UserSearchResults` 以外の画面（Home/DM）からのフォロー導線、一覧の仮想スクロール最適化が backlog。 | `pnpm vitest src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/components/directMessages/DirectMessageInbox.test.tsx src/tests/unit/components/layout/Header.test.tsx | Tee-Object tmp/logs/vitest_direct_message_<timestamp>.log`、`phase5_ci_path_audit.md` の direct-message 行でログを確認。 |
 
 > 参照: `phase5_user_flow_summary.md` 「部分利用導線マトリクス」 `/profile/$userId` 行、`docs/01_project/progressReports/nightly.partial-feature-usage.md#profile-ルート`

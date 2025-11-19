@@ -1,6 +1,7 @@
 #[cfg(test)]
 use crate::application::ports::messaging_gateway::MessagingSendResult;
 use crate::application::ports::repositories::{
+    DirectMessageConversationCursor, DirectMessageConversationPageRaw,
     DirectMessageConversationRecord, DirectMessageCursor, DirectMessageListDirection,
     DirectMessagePageRaw, DirectMessageRepository,
 };
@@ -39,6 +40,13 @@ pub struct DirectMessageConversationSummary {
     pub unread_count: u64,
     pub last_read_at: i64,
     pub last_message: Option<DirectMessage>,
+}
+
+#[derive(Debug)]
+pub struct DirectMessageConversationPageResult {
+    pub items: Vec<DirectMessageConversationSummary>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -172,16 +180,18 @@ impl DirectMessageService {
     pub async fn list_direct_message_conversations(
         &self,
         owner_npub: &str,
+        cursor: Option<&str>,
         limit: Option<usize>,
-    ) -> Result<Vec<DirectMessageConversationSummary>, AppError> {
+    ) -> Result<DirectMessageConversationPageResult, AppError> {
         let limit = limit.unwrap_or(50).clamp(1, 200);
-        let records: Vec<DirectMessageConversationRecord> = self
+        let parsed_cursor = parse_conversation_cursor(cursor)?;
+        let page: DirectMessageConversationPageRaw = self
             .repository
-            .list_direct_message_conversations(owner_npub, limit)
+            .list_direct_message_conversations(owner_npub, parsed_cursor, limit)
             .await?;
 
-        let mut summaries = Vec::with_capacity(records.len());
-        for record in records {
+        let mut summaries = Vec::with_capacity(page.items.len());
+        for record in page.items {
             let DirectMessageConversationRecord {
                 conversation_npub,
                 last_message,
@@ -212,7 +222,11 @@ impl DirectMessageService {
             });
         }
 
-        Ok(summaries)
+        Ok(DirectMessageConversationPageResult {
+            items: summaries,
+            next_cursor: page.next_cursor,
+            has_more: page.has_more,
+        })
     }
 
     pub async fn mark_conversation_as_read(
@@ -314,6 +328,22 @@ fn parse_cursor(cursor: Option<&str>) -> Result<Option<DirectMessageCursor>, App
                 AppError::validation(
                     ValidationFailureKind::Generic,
                     format!("Invalid cursor format: {raw}"),
+                )
+            })
+            .map(Some),
+    }
+}
+
+fn parse_conversation_cursor(
+    cursor: Option<&str>,
+) -> Result<Option<DirectMessageConversationCursor>, AppError> {
+    match cursor {
+        None => Ok(None),
+        Some(raw) => DirectMessageConversationCursor::parse(raw)
+            .ok_or_else(|| {
+                AppError::validation(
+                    ValidationFailureKind::Generic,
+                    format!("Invalid conversation cursor format: {raw}"),
                 )
             })
             .map(Some),

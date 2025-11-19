@@ -1,5 +1,6 @@
 use super::SqliteRepository;
 use crate::application::ports::repositories::{
+    DirectMessageConversationCursor, DirectMessageConversationPageRaw,
     DirectMessageConversationRecord, DirectMessageCursor, DirectMessageListDirection,
     DirectMessagePageRaw, DirectMessageRepository,
 };
@@ -13,8 +14,7 @@ use std::str::FromStr;
 
 use super::queries::{
     INSERT_DIRECT_MESSAGE, INSERT_DM_CONVERSATION, MARK_DIRECT_MESSAGE_DELIVERED_BY_CLIENT_ID,
-    MARK_DM_CONVERSATION_READ, SELECT_DIRECT_MESSAGE_BY_ID, SELECT_DM_CONVERSATIONS_BY_OWNER,
-    UPDATE_DM_CONVERSATION_LAST_MESSAGE,
+    MARK_DM_CONVERSATION_READ, SELECT_DIRECT_MESSAGE_BY_ID, UPDATE_DM_CONVERSATION_LAST_MESSAGE,
 };
 
 #[derive(Debug, Clone)]
@@ -74,6 +74,7 @@ impl From<DirectMessageRow> for DirectMessage {
 struct DirectMessageConversationJoinedRow {
     owner_npub: String,
     conversation_npub: String,
+    last_message_created_at: Option<i64>,
     last_read_at: i64,
     unread_count: i64,
     msg_id: Option<i64>,
@@ -94,6 +95,7 @@ impl<'r> FromRow<'r, SqliteRow> for DirectMessageConversationJoinedRow {
         Ok(Self {
             owner_npub: row.try_get("owner_npub")?,
             conversation_npub: row.try_get("conversation_npub")?,
+            last_message_created_at: row.try_get("last_message_created_at")?,
             last_read_at: row.try_get("last_read_at")?,
             unread_count: row.try_get("unread_count")?,
             msg_id: row.try_get("msg_id")?,
@@ -118,6 +120,7 @@ impl DirectMessageConversationJoinedRow {
             owner_npub: self.owner_npub,
             conversation_npub: self.conversation_npub,
             last_message,
+            last_message_created_at: self.last_message_created_at,
             last_read_at: self.last_read_at,
             unread_count: self.unread_count,
         }
@@ -371,17 +374,109 @@ impl DirectMessageRepository for SqliteRepository {
     async fn list_direct_message_conversations(
         &self,
         owner_npub: &str,
+        cursor: Option<DirectMessageConversationCursor>,
         limit: usize,
-    ) -> Result<Vec<DirectMessageConversationRecord>, AppError> {
-        let fetch_limit = limit.max(1);
-        let rows = sqlx::query_as::<_, DirectMessageConversationJoinedRow>(
-            SELECT_DM_CONVERSATIONS_BY_OWNER,
-        )
-        .bind(owner_npub)
-        .bind(fetch_limit as i64)
-        .fetch_all(self.pool.get_pool())
-        .await?;
+    ) -> Result<DirectMessageConversationPageRaw, AppError> {
+        let fetch_limit = limit.saturating_add(1).max(1);
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            r#"
+SELECT
+    c.owner_npub AS owner_npub,
+    c.conversation_npub AS conversation_npub,
+    c.last_message_id AS last_message_id,
+    c.last_message_created_at AS last_message_created_at,
+    c.last_read_at AS last_read_at,
+    (
+        SELECT COUNT(*)
+        FROM direct_messages dm_unread
+        WHERE dm_unread.owner_npub = c.owner_npub
+          AND dm_unread.conversation_npub = c.conversation_npub
+          AND dm_unread.direction = 'inbound'
+          AND dm_unread.created_at > c.last_read_at
+    ) AS unread_count,
+    dm.id AS msg_id,
+    dm.owner_npub AS msg_owner_npub,
+    dm.conversation_npub AS msg_conversation_npub,
+    dm.sender_npub AS msg_sender_npub,
+    dm.recipient_npub AS msg_recipient_npub,
+    dm.event_id AS msg_event_id,
+    dm.client_message_id AS msg_client_message_id,
+    dm.payload_cipher_base64 AS msg_payload_cipher_base64,
+    dm.created_at AS msg_created_at,
+    dm.delivered AS msg_delivered,
+    dm.direction AS msg_direction
+FROM direct_message_conversations c
+LEFT JOIN direct_messages dm ON dm.id = c.last_message_id
+WHERE c.owner_npub = "#,
+        );
+        builder.push_bind(owner_npub);
 
-        Ok(rows.into_iter().map(|row| row.into_record()).collect())
+        if let Some(cursor) = &cursor {
+            let bucket = cursor.bucket();
+            builder.push(" AND (");
+            builder.push("CASE WHEN c.last_message_created_at IS NULL THEN 1 ELSE 0 END > ");
+            builder.push_bind(bucket);
+            builder.push(" OR (");
+            builder.push("CASE WHEN c.last_message_created_at IS NULL THEN 1 ELSE 0 END = ");
+            builder.push_bind(bucket);
+            builder.push(" AND ");
+            if bucket == 0 {
+                let created_at = cursor.last_message_created_at.unwrap_or(0);
+                builder.push("(");
+                builder.push("c.last_message_created_at < ");
+                builder.push_bind(created_at);
+                builder.push(" OR (c.last_message_created_at = ");
+                builder.push_bind(created_at);
+                builder.push(" AND c.conversation_npub > ");
+                builder.push_bind(&cursor.conversation_npub);
+                builder.push("))");
+            } else {
+                builder.push("(");
+                builder.push("c.last_message_created_at IS NULL AND c.conversation_npub > ");
+                builder.push_bind(&cursor.conversation_npub);
+                builder.push(")");
+            }
+            builder.push("))");
+        }
+
+        builder.push(
+            " ORDER BY
+    c.last_message_created_at IS NULL,
+    c.last_message_created_at DESC,
+    c.conversation_npub ASC
+LIMIT ",
+        );
+        builder.push_bind(fetch_limit as i64);
+
+        let mut rows = builder
+            .build_query_as::<DirectMessageConversationJoinedRow>()
+            .fetch_all(self.pool.get_pool())
+            .await?;
+
+        let has_more = rows.len() > limit;
+        if has_more {
+            rows.truncate(limit);
+        }
+
+        let records: Vec<DirectMessageConversationRecord> =
+            rows.into_iter().map(|row| row.into_record()).collect();
+
+        let next_cursor = if has_more {
+            records.last().map(|record| {
+                DirectMessageConversationCursor::new(
+                    record.last_message_created_at,
+                    record.conversation_npub.clone(),
+                )
+                .to_string()
+            })
+        } else {
+            None
+        };
+
+        Ok(DirectMessageConversationPageRaw {
+            items: records,
+            next_cursor,
+            has_more,
+        })
     }
 }

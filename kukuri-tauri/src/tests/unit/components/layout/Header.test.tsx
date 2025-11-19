@@ -103,7 +103,11 @@ describe('Header', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-    vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({ items: [] });
+    vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    });
     useDirectMessageStore.setState(getDirectMessageInitialState());
     const originalOpenInbox = useDirectMessageStore.getState().openInbox;
     openInboxSpy = vi.fn(() => {

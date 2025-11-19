@@ -198,6 +198,32 @@ jobs:
           path: test-results/user-search-pagination/reports
           if-no-files-found: error
 
+  direct-message:
+    name: Direct Message (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run direct-message scenario (Docker)
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh ts --scenario direct-message --no-build
+
+      - name: Upload direct-message logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.direct-message-logs
+          path: tmp/logs/vitest_direct_message_*.log
+          if-no-files-found: warn
+
+      - name: Upload direct-message reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.direct-message-reports
+          path: test-results/direct-message
+          if-no-files-found: warn
+
   topic-create:
     name: Topic Create (Docker)
     runs-on: ubuntu-latest

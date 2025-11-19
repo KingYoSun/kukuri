@@ -84,42 +84,6 @@ pub(super) const MARK_DM_CONVERSATION_READ: &str = r#"
     WHERE owner_npub = ?1 AND conversation_npub = ?2
 "#;
 
-pub(super) const SELECT_DM_CONVERSATIONS_BY_OWNER: &str = r#"
-    SELECT
-        c.owner_npub AS owner_npub,
-        c.conversation_npub AS conversation_npub,
-        c.last_message_id AS last_message_id,
-        c.last_message_created_at AS last_message_created_at,
-        c.last_read_at AS last_read_at,
-        (
-            SELECT COUNT(*)
-            FROM direct_messages dm_unread
-            WHERE dm_unread.owner_npub = c.owner_npub
-              AND dm_unread.conversation_npub = c.conversation_npub
-              AND dm_unread.direction = 'inbound'
-              AND dm_unread.created_at > c.last_read_at
-        ) AS unread_count,
-        dm.id AS msg_id,
-        dm.owner_npub AS msg_owner_npub,
-        dm.conversation_npub AS msg_conversation_npub,
-        dm.sender_npub AS msg_sender_npub,
-        dm.recipient_npub AS msg_recipient_npub,
-        dm.event_id AS msg_event_id,
-        dm.client_message_id AS msg_client_message_id,
-        dm.payload_cipher_base64 AS msg_payload_cipher_base64,
-        dm.created_at AS msg_created_at,
-        dm.delivered AS msg_delivered,
-        dm.direction AS msg_direction
-    FROM direct_message_conversations c
-    LEFT JOIN direct_messages dm ON dm.id = c.last_message_id
-    WHERE c.owner_npub = ?1
-    ORDER BY
-        c.last_message_created_at IS NULL,
-        c.last_message_created_at DESC,
-        c.conversation_npub ASC
-    LIMIT ?2
-"#;
-
 pub(super) const INSERT_POST_EVENT: &str = r#"
     INSERT INTO events (event_id, public_key, content, kind, tags, created_at)
     VALUES (?, ?, ?, ?, ?, ?)

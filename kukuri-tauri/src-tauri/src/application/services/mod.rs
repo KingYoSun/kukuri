@@ -18,7 +18,7 @@ pub use crate::domain::value_objects::subscription::{
 pub use auth_lifecycle::DefaultAuthLifecycle;
 pub use auth_service::AuthService;
 pub use direct_message_service::{
-    DirectMessagePageResult, DirectMessageService,
+    DirectMessageConversationPageResult, DirectMessagePageResult, DirectMessageService,
     MessagePageDirection as DirectMessageServiceDirection, SendDirectMessageResult,
 };
 pub use event_service::EventService;

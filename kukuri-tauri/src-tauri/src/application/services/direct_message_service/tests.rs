@@ -2,6 +2,7 @@ use super::*;
 use crate::application::ports::{
     direct_message_notifier::DirectMessageNotifier,
     repositories::{
+        DirectMessageConversationCursor, DirectMessageConversationPageRaw,
         DirectMessageConversationRecord, DirectMessageCursor, DirectMessageListDirection,
         DirectMessagePageRaw,
     },
@@ -55,8 +56,9 @@ mock! {
         async fn list_direct_message_conversations(
             &self,
             owner_npub: &str,
+            cursor: Option<DirectMessageConversationCursor>,
             limit: usize,
-        ) -> Result<Vec<DirectMessageConversationRecord>, AppError>;
+        ) -> Result<DirectMessageConversationPageRaw, AppError>;
     }
 }
 
@@ -419,27 +421,38 @@ async fn list_direct_message_conversations_returns_decrypted_last_message() {
     let mut repo = MockRepo::new();
     repo.expect_list_direct_message_conversations()
         .times(1)
-        .withf(|owner, limit| owner == "npub_owner" && *limit == 20)
-        .returning(|_, _| {
-            Ok(vec![DirectMessageConversationRecord {
-                owner_npub: "npub_owner".into(),
-                conversation_npub: "npub_friend".into(),
-                last_message: Some(DirectMessage::new(
-                    42,
-                    "npub_owner".into(),
-                    "npub_friend".into(),
-                    "npub_owner".into(),
-                    "npub_friend".into(),
-                    Some("evt".into()),
-                    Some("client".into()),
-                    "cipher".into(),
-                    1_700_000_000_000,
-                    true,
-                    MessageDirection::Outbound,
-                )),
-                last_read_at: 0,
-                unread_count: 3,
-            }])
+        .withf(|owner, cursor, limit| owner == "npub_owner" && cursor.is_none() && *limit == 20)
+        .returning(|_, _, _| {
+            Ok(DirectMessageConversationPageRaw {
+                items: vec![DirectMessageConversationRecord {
+                    owner_npub: "npub_owner".into(),
+                    conversation_npub: "npub_friend".into(),
+                    last_message: Some(DirectMessage::new(
+                        42,
+                        "npub_owner".into(),
+                        "npub_friend".into(),
+                        "npub_owner".into(),
+                        "npub_friend".into(),
+                        Some("evt".into()),
+                        Some("client".into()),
+                        "cipher".into(),
+                        1_700_000_000_000,
+                        true,
+                        MessageDirection::Outbound,
+                    )),
+                    last_message_created_at: Some(1_700_000_000_000),
+                    last_read_at: 0,
+                    unread_count: 3,
+                }],
+                next_cursor: Some(
+                    DirectMessageConversationCursor::new(
+                        Some(1_700_000_000_000),
+                        "npub_friend".into(),
+                    )
+                    .to_string(),
+                ),
+                has_more: true,
+            })
         });
 
     let mut gateway = MockGateway::new();
@@ -452,21 +465,23 @@ async fn list_direct_message_conversations_returns_decrypted_last_message() {
     let gateway: Arc<dyn MessagingGateway> = Arc::new(gateway);
     let service = DirectMessageService::new(repo, gateway, None);
 
-    let items = service
-        .list_direct_message_conversations("npub_owner", Some(20))
+    let page = service
+        .list_direct_message_conversations("npub_owner", None, Some(20))
         .await
         .expect("list succeeds");
 
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0].conversation_npub, "npub_friend");
-    assert_eq!(items[0].unread_count, 3);
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].conversation_npub, "npub_friend");
+    assert_eq!(page.items[0].unread_count, 3);
     assert_eq!(
-        items[0]
+        page.items[0]
             .last_message
             .as_ref()
             .and_then(|message| message.decrypted_content.clone()),
         Some("hello friend".into())
     );
+    assert!(page.has_more);
+    assert!(page.next_cursor.is_some());
 }
 
 #[tokio::test]

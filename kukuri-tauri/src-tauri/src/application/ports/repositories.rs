@@ -6,6 +6,7 @@ use crate::domain::entities::{
 use crate::domain::value_objects::{EventId, PublicKey};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -265,6 +266,54 @@ impl fmt::Display for DirectMessageCursor {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DirectMessageConversationCursor {
+    pub last_message_created_at: Option<i64>,
+    pub conversation_npub: String,
+}
+
+impl DirectMessageConversationCursor {
+    pub fn new(last_message_created_at: Option<i64>, conversation_npub: String) -> Self {
+        Self {
+            last_message_created_at,
+            conversation_npub,
+        }
+    }
+
+    pub fn parse(cursor: &str) -> Option<Self> {
+        let mut parts = cursor.splitn(3, ':');
+        let bucket = parts.next()?.parse::<i64>().ok()?;
+        if bucket != 0 && bucket != 1 {
+            return None;
+        }
+        let timestamp = parts.next()?.parse::<i64>().ok()?;
+        let encoded_npub = parts.next()?;
+        let npub_bytes = URL_SAFE_NO_PAD.decode(encoded_npub).ok()?;
+        let conversation_npub = String::from_utf8(npub_bytes).ok()?;
+        let last_message_created_at = if bucket == 0 { Some(timestamp) } else { None };
+        Some(Self {
+            last_message_created_at,
+            conversation_npub,
+        })
+    }
+
+    pub fn bucket(&self) -> i64 {
+        if self.last_message_created_at.is_some() {
+            0
+        } else {
+            1
+        }
+    }
+}
+
+impl fmt::Display for DirectMessageConversationCursor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let encoded_npub = URL_SAFE_NO_PAD.encode(self.conversation_npub.as_bytes());
+        let timestamp = self.last_message_created_at.unwrap_or(0);
+        write!(f, "{}:{}:{}", self.bucket(), timestamp, encoded_npub)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum DirectMessageListDirection {
     Backward,
@@ -283,8 +332,16 @@ pub struct DirectMessageConversationRecord {
     pub owner_npub: String,
     pub conversation_npub: String,
     pub last_message: Option<DirectMessage>,
+    pub last_message_created_at: Option<i64>,
     pub last_read_at: i64,
     pub unread_count: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectMessageConversationPageRaw {
+    pub items: Vec<DirectMessageConversationRecord>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
 }
 
 #[async_trait]
@@ -329,6 +386,7 @@ pub trait DirectMessageRepository: Send + Sync {
     async fn list_direct_message_conversations(
         &self,
         owner_npub: &str,
+        cursor: Option<DirectMessageConversationCursor>,
         limit: usize,
-    ) -> Result<Vec<DirectMessageConversationRecord>, AppError>;
+    ) -> Result<DirectMessageConversationPageRaw, AppError>;
 }

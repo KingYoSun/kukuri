@@ -1,7 +1,7 @@
 # Windows向け Docker テスト運用ガイド
 
 作成日: 2025年10月20日
-最終更新日: 2025年11月10日
+最終更新日: 2025年11月19日
 
 ## 位置づけ
 Windows では DLL 依存の問題によりネイティブ実行が不安定なため、`.\scripts\test-docker.ps1` を **標準テスト経路** とする。  
@@ -31,6 +31,7 @@ Windows では DLL 依存の問題によりネイティブ実行が不安定な�
 | `.\scripts\test-docker.ps1 ts` | TypeScript テスト | UI 改修の単体テスト確認 |
 | `.\scripts\test-docker.ps1 ts -Scenario trending-feed` | `/trending` `/following` ルートの Vitest（`routes/trending.test.tsx` / `routes/following.test.tsx` / `hooks/useTrendingFeeds.test.tsx`）を Docker 上で実行。フィクスチャは `VITE_TRENDING_FIXTURE_PATH` で切替可能。実行後は `test-results/trending-feed/reports/*.json`・`tmp/logs/trending_metrics_job_stage4_<timestamp>.log`・`test-results/trending-feed/prometheus/*.log`・`test-results/trending-feed/metrics/<timestamp>-trending-metrics.json` を自動採取する。 | トレンドメトリクス関連変更時のスモーク、Nightly Frontend Unit Tests と同一条件の再現 |
 | `.\scripts\test-docker.ps1 ts -Scenario user-search-pagination` | `useUserSearchQuery` / `UserSearchResults` のカーソル・ソート・`allow_incomplete`・429レート制限 UI を Docker で再現し、`tmp/logs/user_search_pagination_<timestamp>.log` を保存。 | `/search` (users) タブの UX 回帰、Nightly との同一条件チェック |
+| `.\scripts\test-docker.ps1 ts -Scenario direct-message` | `Header` / `DirectMessageInbox` / `DirectMessageDialog` / `useDirectMessageBadge` の Vitest を Docker で実行し、カーソル API・Infinite Query・Kind4 既読同期の回帰を検証。`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/<timestamp>-*.json` を自動採取する。 | DM ナイトリー (`nightly.direct-message`) と同条件での会話ページング/既読共有スモーク。 |
 | `.\scripts\test-docker.ps1 lint` | ESLint / rustfmt / pnpm format:check を一括実行 | Lint 修復後の再確認 |
 | `.\scripts\test-docker.ps1 metrics` | メトリクス抽出向けショートテスト | `scripts/metrics/collect-metrics.ps1` 実行前のスモーク |
 | `.\scripts\test-docker.ps1 build` | イメージのみビルド | 依存更新時のキャッシュ再生成 |
@@ -114,3 +115,8 @@ Stage4 で追加した投稿削除キャッシュ検証はローカルと Docker
 3. ログ/レポートは Nightly artefact `post-delete-cache-logs` / `post-delete-cache-reports` に追加し、`phase5_ci_path_audit.md` と本 Runbook から辿れるようにする。
 
 > メモ: SCENARIO なしで docker compose run test-runner を実行すると従来の /app/run-smoke-tests.sh が起動する。post-delete-cache 専用パスを利用する際は必ず環境変数を渡すこと。
+
+### 5.3 Docker direct-message シナリオ
+1. `.\scripts\test-docker.ps1 ts -Scenario direct-message -NoBuild`（PowerShell）または `./scripts/test-docker.sh ts --scenario direct-message --no-build`（Git Bash/WSL）を実行すると、`Header` / `DirectMessageInbox` / `DirectMessageDialog` / `useDirectMessageBadge` の Vitest を Docker 内で再取得する。
+2. 実行結果は `tmp/logs/vitest_direct_message_<timestamp>.log` にストリームされ、各ターゲットの JSON レポートは `test-results/direct-message/<timestamp>-*.json` に保存される。ログ/JSON は Nightly artefact `nightly.direct-message-logs` / `nightly.direct-message-reports` と同一レイアウトで保管されるため、Runbook から直接参照できる。
+3. 本シナリオでは `list_direct_message_conversations` のカーソル API、`DirectMessageInbox` の Infinite Query、Kind4 既読同期メトリクスを一括で回帰確認できる。`phase5_ci_path_audit.md` の `nightly.direct-message` 行と本節を併読し、Nightly 失敗時の再現手順として利用する。

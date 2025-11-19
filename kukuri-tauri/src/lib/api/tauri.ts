@@ -230,9 +230,12 @@ export interface DirectMessageConversationSummary {
 
 export interface DirectMessageConversationList {
   items: DirectMessageConversationSummary[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export interface ListDirectMessageConversationsParams {
+  cursor?: string | null;
   limit?: number;
 }
 
@@ -696,8 +699,11 @@ export class TauriApi {
           delivered: boolean;
         };
       }>;
+      next_cursor: string | null;
+      has_more: boolean;
     }>('list_direct_message_conversations', {
       request: {
+        cursor: params.cursor ?? null,
         limit: params.limit,
       },
     });
@@ -720,6 +726,8 @@ export class TauriApi {
               }
             : null,
         })) ?? [],
+      nextCursor: response?.next_cursor ?? null,
+      hasMore: response?.has_more ?? false,
     };
   }
 

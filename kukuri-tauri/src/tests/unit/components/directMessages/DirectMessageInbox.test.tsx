@@ -1,9 +1,11 @@
 import { beforeAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import userEvent from '@testing-library/user-event';
 
 import { DirectMessageInbox } from '@/components/directMessages/DirectMessageInbox';
-import { useDirectMessageStore, type DirectMessageModel } from '@/stores/directMessageStore';
+import { useDirectMessageStore } from '@/stores/directMessageStore';
 import { useAuthStore } from '@/stores/authStore';
 import { TauriApi } from '@/lib/api/tauri';
 
@@ -28,29 +30,28 @@ vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     searchUsers: vi.fn(),
     markDirectMessageConversationRead: vi.fn(),
+    listDirectMessageConversations: vi.fn(),
   },
 }));
 
 type Mocked<T> = T extends (...args: infer P) => infer R ? vi.Mock<R, P> : never;
-type SetupOptions = {
-  conversations?: Record<string, DirectMessageModel[]>;
-  unreadCounts?: Record<string, number>;
-  readTimestamps?: Record<string, number>;
-};
-
 const mockSearchUsers = TauriApi.searchUsers as Mocked<typeof TauriApi.searchUsers>;
 const mockMarkConversationRead = TauriApi.markDirectMessageConversationRead as Mocked<
   typeof TauriApi.markDirectMessageConversationRead
 >;
+const mockListConversations = TauriApi.listDirectMessageConversations as Mocked<
+  typeof TauriApi.listDirectMessageConversations
+>;
 
+const baseTimestamp = 1_730_000_000_000;
 const baseMessage = {
   eventId: 'evt-1',
   clientMessageId: 'client-1',
   senderNpub: 'npub1alice',
   recipientNpub: 'npub1tester',
   content: 'こんにちは',
-  createdAt: Date.now(),
-  status: 'sent' as const,
+  createdAt: baseTimestamp,
+  delivered: true,
 };
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
@@ -83,7 +84,7 @@ afterAll(() => {
   HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
 });
 
-const setupStore = (options: SetupOptions = {}) => {
+const setupStore = () => {
   const closeInbox = vi.fn();
   const openDialog = vi.fn();
   const markConversationAsRead = vi.fn();
@@ -94,16 +95,6 @@ const setupStore = (options: SetupOptions = {}) => {
     closeInbox,
     openDialog,
     markConversationAsRead,
-    conversations: options.conversations ?? {
-      npub1alice: [baseMessage],
-    },
-    unreadCounts: options.unreadCounts ?? {
-      npub1alice: 2,
-    },
-    conversationReadTimestamps: {
-      ...state.conversationReadTimestamps,
-      ...(options.readTimestamps ?? {}),
-    },
   }));
 
   useAuthStore.setState({
@@ -122,6 +113,24 @@ const setupStore = (options: SetupOptions = {}) => {
   return { closeInbox, openDialog, markConversationAsRead };
 };
 
+const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: Infinity,
+      },
+    },
+  });
+
+const renderWithClient = (ui: ReactElement) => {
+  const client = createQueryClient();
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
+  };
+};
+
 describe('DirectMessageInbox', () => {
   const user = userEvent.setup();
 
@@ -132,8 +141,20 @@ describe('DirectMessageInbox', () => {
   });
 
   it('renders conversation entries using virtualization', async () => {
+    mockListConversations.mockResolvedValue({
+      items: [
+        {
+          conversationNpub: 'npub1alice',
+          unreadCount: 2,
+          lastReadAt: 0,
+          lastMessage: baseMessage,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
     setupStore();
-    render(<DirectMessageInbox />);
+    renderWithClient(<DirectMessageInbox />);
 
     expect(await screen.findByTestId('dm-inbox-list')).toBeInTheDocument();
     await waitFor(() =>
@@ -165,7 +186,19 @@ describe('DirectMessageInbox', () => {
       tookMs: 4,
     });
 
-    render(<DirectMessageInbox />);
+    mockListConversations.mockResolvedValue({
+      items: [
+        {
+          conversationNpub: 'npub1alice',
+          unreadCount: 2,
+          lastReadAt: 0,
+          lastMessage: baseMessage,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
+    renderWithClient(<DirectMessageInbox />);
 
     const input = screen.getByTestId('dm-inbox-target-input');
     await user.type(input, 'bo');
@@ -179,7 +212,19 @@ describe('DirectMessageInbox', () => {
 
   it('marks a conversation as read without opening it', async () => {
     const { markConversationAsRead } = setupStore();
-    render(<DirectMessageInbox />);
+    mockListConversations.mockResolvedValue({
+      items: [
+        {
+          conversationNpub: 'npub1alice',
+          unreadCount: 2,
+          lastReadAt: 0,
+          lastMessage: baseMessage,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
+    renderWithClient(<DirectMessageInbox />);
 
     const markButton = await screen.findByTestId('dm-inbox-mark-read-npub1alice');
     await user.click(markButton);
@@ -192,27 +237,36 @@ describe('DirectMessageInbox', () => {
   });
 
   it('filters conversations via search input and opens the highlighted match with Enter', async () => {
-    const secondMessage: DirectMessageModel = {
-      ...baseMessage,
+    const secondMessage = {
       eventId: 'evt-2',
       clientMessageId: 'client-2',
       senderNpub: 'npub1bob',
       recipientNpub: 'npub1tester',
       content: 'Bob からのメッセージ',
-      createdAt: baseMessage.createdAt + 5_000,
+      createdAt: baseTimestamp + 5_000,
+      delivered: true,
     };
-    const { openDialog, closeInbox } = setupStore({
-      conversations: {
-        npub1alice: [baseMessage],
-        npub1bob: [secondMessage],
-      },
-      unreadCounts: {
-        npub1alice: 0,
-        npub1bob: 1,
-      },
+    const { openDialog, closeInbox } = setupStore();
+    mockListConversations.mockResolvedValue({
+      items: [
+        {
+          conversationNpub: 'npub1alice',
+          unreadCount: 0,
+          lastReadAt: 0,
+          lastMessage: baseMessage,
+        },
+        {
+          conversationNpub: 'npub1bob',
+          unreadCount: 1,
+          lastReadAt: 0,
+          lastMessage: secondMessage,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
     });
 
-    render(<DirectMessageInbox />);
+    renderWithClient(<DirectMessageInbox />);
     const searchInput = await screen.findByTestId('dm-inbox-conversation-search');
     await user.type(searchInput, 'bob');
 
@@ -226,12 +280,21 @@ describe('DirectMessageInbox', () => {
   });
 
   it('shows multi-device read indicators when lastReadAt is synced', async () => {
-    setupStore({
-      unreadCounts: { npub1alice: 0 },
-      readTimestamps: { npub1alice: baseMessage.createdAt },
+    setupStore();
+    mockListConversations.mockResolvedValue({
+      items: [
+        {
+          conversationNpub: 'npub1alice',
+          unreadCount: 0,
+          lastReadAt: baseMessage.createdAt,
+          lastMessage: baseMessage,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
     });
 
-    render(<DirectMessageInbox />);
+    renderWithClient(<DirectMessageInbox />);
 
     expect(await screen.findByTestId('dm-inbox-read-sync-npub1alice')).toBeInTheDocument();
     expect(screen.getByTestId('dm-inbox-read-receipt-npub1alice')).toHaveTextContent('既読同期');

@@ -35,7 +35,7 @@ interface ReceiveMessageOptions {
   incrementAmount?: number;
 }
 
-interface DirectMessageConversationHydration {
+export interface DirectMessageConversationHydration {
   conversationNpub: string;
   unreadCount: number;
   lastReadAt: number;

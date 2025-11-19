@@ -38,6 +38,7 @@ pub struct ListDirectMessagesRequest {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ListDirectMessageConversationsRequest {
+    pub cursor: Option<String>,
     pub limit: Option<u32>,
 }
 
@@ -69,6 +70,8 @@ pub struct DirectMessageConversationSummaryDto {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DirectMessageConversationListDto {
     pub items: Vec<DirectMessageConversationSummaryDto>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

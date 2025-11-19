@@ -37,7 +37,7 @@ Commands:
   p2p          Run P2P integration tests inside Docker
 
 Options for ts:
-  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-sync)
+  --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, direct-message, user-search-pagination, topic-create, post-delete-cache, offline-sync)
   --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
   --service-worker       Extend profile-avatar-sync scenario with Service Worker worker tests and Stage4 logs
   --no-build             Skip Docker image build (use existing image)

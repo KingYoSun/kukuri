@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { useAuthStore } from '@/stores/authStore';
-import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
+import {
+  mapApiMessageToModel,
+  useDirectMessageStore,
+  type DirectMessageConversationHydration,
+} from '@/stores/directMessageStore';
 
 const SYNC_INTERVAL_MS = 30_000;
 const MIN_SYNC_INTERVAL_MS = 5_000;
@@ -38,17 +42,31 @@ export function useDirectMessageBootstrap() {
 
       syncLockRef.current = true;
       try {
-        const response = await TauriApi.listDirectMessageConversations({});
+        const summaries: DirectMessageConversationHydration[] = [];
+        let cursor: string | null = null;
+        let pageCount = 0;
+        while (pageCount < 20) {
+          const response = await TauriApi.listDirectMessageConversations({
+            cursor,
+            limit: 50,
+          });
+          cursor = response.nextCursor;
+          pageCount += 1;
+          for (const item of response.items) {
+            summaries.push({
+              conversationNpub: item.conversationNpub,
+              unreadCount: item.unreadCount,
+              lastReadAt: item.lastReadAt,
+              lastMessage: item.lastMessage ? mapApiMessageToModel(item.lastMessage) : undefined,
+            });
+          }
+          if (!response.hasMore || !cursor) {
+            break;
+          }
+        }
         if (lastNpubRef.current !== currentNpub) {
           return;
         }
-        const summaries = response.items.map((item) => ({
-          conversationNpub: item.conversationNpub,
-          unreadCount: item.unreadCount,
-          lastReadAt: item.lastReadAt,
-          lastMessage: item.lastMessage ? mapApiMessageToModel(item.lastMessage) : undefined,
-        }));
-
         useDirectMessageStore.getState().hydrateConversations(summaries);
         lastSyncedAtRef.current = Date.now();
         hasFetchedRef.current = true;

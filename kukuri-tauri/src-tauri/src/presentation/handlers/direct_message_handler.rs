@@ -1,6 +1,6 @@
 use crate::application::services::{
-    DirectMessagePageResult, DirectMessageService, DirectMessageServiceDirection,
-    SendDirectMessageResult,
+    DirectMessageConversationPageResult, DirectMessagePageResult, DirectMessageService,
+    DirectMessageServiceDirection, SendDirectMessageResult,
 };
 use crate::domain::entities::DirectMessage;
 use crate::presentation::dto::direct_message_dto::{
@@ -70,12 +70,13 @@ impl DirectMessageHandler {
         request: ListDirectMessageConversationsRequest,
     ) -> Result<DirectMessageConversationListDto, AppError> {
         let limit = request.limit.map(|value| value as usize);
-        let summaries = self
+        let page: DirectMessageConversationPageResult = self
             .service
-            .list_direct_message_conversations(owner_npub, limit)
+            .list_direct_message_conversations(owner_npub, request.cursor.as_deref(), limit)
             .await?;
 
-        let items = summaries
+        let items = page
+            .items
             .into_iter()
             .map(|summary| DirectMessageConversationSummaryDto {
                 conversation_npub: summary.conversation_npub,
@@ -85,7 +86,11 @@ impl DirectMessageHandler {
             })
             .collect();
 
-        Ok(DirectMessageConversationListDto { items })
+        Ok(DirectMessageConversationListDto {
+            items,
+            next_cursor: page.next_cursor,
+            has_more: page.has_more,
+        })
     }
 
     pub async fn mark_conversation_as_read(

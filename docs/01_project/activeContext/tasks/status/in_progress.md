@@ -10,18 +10,6 @@
 - テスト戦略: Tauri v2 では E2E が困難なため、層別テスト（ユニット/結合/契約）＋スモーク最小限に切替。
 
 ## 現在のタスク
-### GitHub Actions ワークフロー失敗調査（担当: Codex）
-- 状況: `gh act` でローカル再現しつつ、ワークフロー失敗要因を特定・修正する。
-- メモ: 2025年11月19日着手。失敗ログの解析と修正内容は作業完了時に追記する。
-- 進捗: `trending_metrics_job.rs` の未使用メソッドと `DistributorState::strategy` のテスト専用アクセサを整理し、`scripts/test-docker.ps1 lint` で `cargo clippy -D warnings` を再実行してエラーが消えたことを確認。`gh act --job format-check` と `gh act --job native-test-linux`（`NPM_CONFIG_PREFIX=/tmp/npm-global`, `--container-options "--user root"`）も完走し、Linux ネイティブ経路での Rust/TS/Lint すべて green。
-
-### Direct Message ナイトリー/会話ページング整備（担当: Codex）
-- 状況: `/profile/$userId` 導線の残タスクとして、DM 会話の50件超ページングと `nightly.direct-message` ジョブ未配備が指摘されている（`docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:21-24`）。現状の `list_direct_message_conversations` は LIMIT のみでカーソルに未対応（`kukuri-tauri/src-tauri/src/infrastructure/database/sqlite_repository/queries.rs:84-116`）。
-- メモ: `scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build` で Kind4 IPC/既読同期のスモークは取得できるが、Nightly artefact や Runbookへの紐付けがない。UI 側も `DirectMessageInbox` がストア全件を前提にしているため、カーソル API 実装後の Infinite Query 化が必要。
-- TODO:
-  1. Rust の `list_direct_message_conversations` / DTO / `TauriApi` を cursor + `has_more` 対応へ拡張し、`DirectMessageInbox` に Infinite Query を導入する。
-  2. `scripts/test-docker` に `direct-message` シナリオを正式追加し、`nightly.yml` へ `nightly.direct-message` ジョブ（ログ/JSON artefact含む）を追加する。
-  3. Runbook Chapter5・`phase5_user_flow_inventory.md`・`phase5_ci_path_audit.md` に Nightly 手順とログパスを追記し、DM の多端末既読共有証跡を固定化する。
 
 ### `/search` 補助検索と SearchErrorState artefact 自動化（担当: Codex）
 - 状況: `/search` 行は cursor/レートリミット UI まで実装済みだが、2文字未満補助検索や `SearchErrorState` の artefact 化が未着手と整理されている（`docs/01_project/activeContext/artefacts/phase5_user_flow_summary.md:21-25`）。Nightly では `user-search-pagination` job があるものの、短文キーワードや `retryAfter` 解除パスを検証していない。

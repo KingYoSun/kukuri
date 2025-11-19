@@ -90,7 +90,7 @@ Commands:
 Options:
   -Integration  - Rust�R�}���h�ƕ����� P2P �����e�X�g�̂ݎ��s
   -Test <target> - Rust�R�}���h���Ɏw��e�X�g�o�C�i���̂ݎ��s�i��: event_manager_integration�j
-  -Scenario <name> - TypeScript�e�X�g���ɃV�i���I��w��i��: trending-feed, profile-avatar-sync, user-search-pagination, topic-create, post-delete-cache, offline-sync�j
+  -Scenario <name> - TypeScript�e�X�g���ɃV�i���I��w��i��: trending-feed, profile-avatar-sync, direct-message, user-search-pagination, topic-create, post-delete-cache, offline-sync�j
   -Fixture <path>  - �V�i���I�p�t�B�N�X�`���p�X��㏑���i����: tests/fixtures/trending/default.json�j
   -ServiceWorker   - `ts -Scenario profile-avatar-sync` ���s���� Service Worker �g���e�X�g�� Stage4 ���O��L����
   -BootstrapPeers <node@host:port,...> - �����e�X�g�Ŏg�p����u�[�g�X�g���b�v�s�A��w��
