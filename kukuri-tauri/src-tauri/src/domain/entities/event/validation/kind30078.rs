@@ -213,6 +213,13 @@ impl Event {
             )
         })?;
 
+        if parsed.metadata.edited {
+            return Err(EventValidationError::new(
+                ValidationFailureKind::Kind30078ContentSchema,
+                "metadata.edited=true is not supported for kind30078".to_string(),
+            ));
+        }
+
         Ok(())
     }
 }

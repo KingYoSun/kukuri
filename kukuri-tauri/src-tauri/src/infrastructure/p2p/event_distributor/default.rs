@@ -40,7 +40,7 @@ impl DefaultEventDistributor {
         metrics: Arc<dyn DistributionMetrics>,
     ) -> Self {
         Self {
-            state: Arc::new(RwLock::new(DistributorState::new(strategy, 3))),
+            state: Arc::new(RwLock::new(DistributorState::new(strategy))),
             metrics,
             gossip_service: Arc::new(RwLock::new(None)),
             network_service: Arc::new(RwLock::new(None)),

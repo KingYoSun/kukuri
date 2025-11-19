@@ -479,38 +479,6 @@ pub(super) const DELETE_USER: &str = r#"
     WHERE npub = ?
 "#;
 
-pub(super) const SELECT_FOLLOWERS: &str = r#"
-    SELECT
-        u.npub,
-        u.pubkey,
-        u.display_name,
-        u.bio,
-        u.avatar_url,
-        u.is_profile_public,
-        u.show_online_status,
-        u.created_at,
-        u.updated_at
-    FROM users u
-    INNER JOIN follows f ON u.pubkey = f.follower_pubkey
-    WHERE f.followed_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
-"#;
-
-pub(super) const SELECT_FOLLOWING: &str = r#"
-    SELECT
-        u.npub,
-        u.pubkey,
-        u.display_name,
-        u.bio,
-        u.avatar_url,
-        u.is_profile_public,
-        u.show_online_status,
-        u.created_at,
-        u.updated_at
-    FROM users u
-    INNER JOIN follows f ON u.pubkey = f.followed_pubkey
-    WHERE f.follower_pubkey = (SELECT pubkey FROM users WHERE npub = ?)
-"#;
-
 pub(super) const SELECT_FOLLOWING_PUBKEYS: &str = r#"
     SELECT followed_pubkey
     FROM follows

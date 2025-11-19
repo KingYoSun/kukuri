@@ -28,14 +28,12 @@ pub struct IrohGossipService {
     endpoint: Arc<iroh::Endpoint>,
     static_discovery: Arc<StaticProvider>,
     gossip: Arc<Gossip>,
-    router: Arc<Router>,
+    _router: Arc<Router>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
     event_tx: Option<broadcast::Sender<P2PEvent>>,
 }
 
 struct TopicHandle {
-    topic_id: String,
-    iroh_topic_id: TopicId,
     sender: Arc<TokioMutex<GossipSender>>, // GossipSenderでbroadcast可能
     receiver_task: tokio::task::JoinHandle<()>,
     mesh: Arc<TopicMesh>,
@@ -58,7 +56,7 @@ impl IrohGossipService {
             endpoint,
             static_discovery,
             gossip: Arc::new(gossip),
-            router: Arc::new(router),
+            _router: Arc::new(router),
             topics: Arc::new(RwLock::new(HashMap::new())),
             event_tx: None,
         })
@@ -263,7 +261,6 @@ impl GossipService for IrohGossipService {
                             (event_tx_clone.as_ref(), decoded_message.clone())
                         {
                             let _ = tx.send(P2PEvent::MessageReceived {
-                                topic_id: topic_clone.clone(),
                                 message,
                                 _from_peer: msg.delivered_from.as_bytes().to_vec(),
                             });
@@ -329,7 +326,6 @@ impl GossipService for IrohGossipService {
                         let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
                             let _ = tx.send(P2PEvent::PeerJoined {
-                                topic_id: topic_clone.clone(),
                                 peer_id: peer_bytes.clone(),
                             });
                         } else {
@@ -341,7 +337,6 @@ impl GossipService for IrohGossipService {
                         let peer_bytes = peer.as_bytes().to_vec();
                         if let Some(tx) = &event_tx_clone {
                             let _ = tx.send(P2PEvent::PeerLeft {
-                                topic_id: topic_clone.clone(),
                                 peer_id: peer_bytes.clone(),
                             });
                         } else {
@@ -360,8 +355,6 @@ impl GossipService for IrohGossipService {
         });
 
         let handle = TopicHandle {
-            topic_id: topic.to_string(),
-            iroh_topic_id: topic_id,
             sender,
             receiver_task,
             mesh,

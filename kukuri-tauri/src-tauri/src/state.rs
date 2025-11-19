@@ -52,7 +52,7 @@ use crate::infrastructure::{
 };
 use crate::presentation::handlers::{
     event_handler::EventHandler, offline_handler::OfflineHandler, p2p_handler::P2PHandler,
-    secure_storage_handler::SecureStorageHandler, user_handler::UserHandler,
+    secure_storage_handler::SecureStorageHandler,
 };
 use crate::presentation::ipc::direct_message_notifier::IpcDirectMessageNotifier;
 
@@ -105,7 +105,6 @@ pub struct AppState {
     pub profile_avatar_service: Arc<ProfileAvatarService>,
 
     // プレゼンテーション層のハンドラー（最適化用）
-    pub user_handler: Arc<UserHandler>,
     pub secure_storage_handler: Arc<SecureStorageHandler>,
     pub event_handler: Arc<EventHandler>,
     pub p2p_handler: Arc<P2PHandler>,
@@ -414,7 +413,6 @@ impl AppState {
         );
 
         // プレゼンテーション層のハンドラーを初期化
-        let user_handler = Arc::new(UserHandler::new(Arc::clone(&user_service)));
         let secure_storage_handler = Arc::new(SecureStorageHandler::new(
             Arc::clone(&auth_service),
             Arc::clone(&secure_account_store),
@@ -500,7 +498,6 @@ impl AppState {
             p2p_service,
             offline_service,
             profile_avatar_service,
-            user_handler,
             secure_storage_handler,
             event_handler,
             p2p_handler,

@@ -1,5 +1,5 @@
 use crate::domain::entities::offline::{
-    CacheMetadataRecord, OfflineActionRecord, OptimisticUpdateRecord, SyncQueueItem, SyncResult,
+    CacheMetadataRecord, OfflineActionRecord, OptimisticUpdateRecord, SyncQueueItem,
     SyncStatusRecord,
 };
 use crate::domain::value_objects::event_gateway::PublicKey;
@@ -57,18 +57,6 @@ pub fn offline_action_from_row(row: OfflineActionRow) -> Result<OfflineActionRec
         created_at,
         synced_at,
         remote_id,
-    ))
-}
-
-pub fn sync_result_from_counts(
-    synced: i32,
-    failed: i32,
-    pending: i32,
-) -> Result<SyncResult, AppError> {
-    Ok(SyncResult::new(
-        try_i32_to_u32(synced, "synced_count")?,
-        try_i32_to_u32(failed, "failed_count")?,
-        try_i32_to_u32(pending, "pending_count")?,
     ))
 }
 

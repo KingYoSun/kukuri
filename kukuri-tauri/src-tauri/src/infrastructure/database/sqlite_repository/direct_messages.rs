@@ -74,8 +74,6 @@ impl From<DirectMessageRow> for DirectMessage {
 struct DirectMessageConversationJoinedRow {
     owner_npub: String,
     conversation_npub: String,
-    last_message_id: Option<i64>,
-    last_message_created_at: Option<i64>,
     last_read_at: i64,
     unread_count: i64,
     msg_id: Option<i64>,
@@ -96,8 +94,6 @@ impl<'r> FromRow<'r, SqliteRow> for DirectMessageConversationJoinedRow {
         Ok(Self {
             owner_npub: row.try_get("owner_npub")?,
             conversation_npub: row.try_get("conversation_npub")?,
-            last_message_id: row.try_get("last_message_id")?,
-            last_message_created_at: row.try_get("last_message_created_at")?,
             last_read_at: row.try_get("last_read_at")?,
             unread_count: row.try_get("unread_count")?,
             msg_id: row.try_get("msg_id")?,

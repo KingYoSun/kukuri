@@ -20,7 +20,6 @@ const METRICS_TARGET: &str = "kukuri::p2p::metrics";
 /// DHT統合付きGossipサービス
 pub struct DhtGossip {
     gossip: Gossip,
-    endpoint: Arc<Endpoint>,
     senders: Arc<RwLock<HashMap<String, Arc<TokioMutex<GossipSender>>>>>,
 }
 
@@ -36,7 +35,6 @@ impl DhtGossip {
 
         Ok(Self {
             gossip,
-            endpoint,
             senders: Arc::new(RwLock::new(HashMap::new())),
         })
     }

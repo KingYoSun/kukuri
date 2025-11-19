@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use kukuri_lib::{
-    ops::p2p::metrics, AppConfig, ConnectionPool, SqliteRepository, TopicMetricsRecord,
-    TopicMetricsRepository, TopicMetricsSnapshot,
+    AppConfig, ConnectionPool, SqliteRepository, TopicMetricsRecord, TopicMetricsRepository,
+    TopicMetricsSnapshot, ops::p2p::metrics,
 };
 use std::{
     env, fs,

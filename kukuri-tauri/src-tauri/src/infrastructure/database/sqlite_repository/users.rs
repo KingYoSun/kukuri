@@ -12,7 +12,6 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sqlx::{QueryBuilder, Row, Sqlite};
 
-const SORT_KEY_EXPR: &str = "COALESCE(NULLIF(TRIM(u.display_name), ''), u.npub)";
 const SORT_KEY_LOWER_EXPR: &str = "LOWER(COALESCE(NULLIF(TRIM(u.display_name), ''), u.npub))";
 
 fn encode_follow_cursor(sort: FollowListSort, primary: &str, pubkey: &str) -> String {

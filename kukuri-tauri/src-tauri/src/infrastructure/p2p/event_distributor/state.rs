@@ -7,16 +7,14 @@ pub(crate) struct DistributorState {
     strategy: DistributionStrategy,
     pending_events: VecDeque<Event>,
     failed_events: Vec<(Event, DistributionStrategy)>,
-    max_retries: u32,
 }
 
 impl DistributorState {
-    pub(crate) fn new(strategy: DistributionStrategy, max_retries: u32) -> Self {
+    pub(crate) fn new(strategy: DistributionStrategy) -> Self {
         Self {
             strategy,
             pending_events: VecDeque::new(),
             failed_events: Vec::new(),
-            max_retries,
         }
     }
 

@@ -37,22 +37,9 @@ impl PostCacheService {
         Self::add_internal(&self.inner, post).await;
     }
 
-    pub async fn add_many(&self, posts: Vec<Post>) {
-        for post in posts {
-            Self::add_internal(&self.inner, post).await;
-        }
-    }
-
     pub async fn get(&self, id: &str) -> Option<Post> {
         let inner = self.inner.read().await;
         inner.posts_by_id.get(id).cloned()
-    }
-
-    pub async fn get_many(&self, ids: &[String]) -> Vec<Post> {
-        let inner = self.inner.read().await;
-        ids.iter()
-            .filter_map(|id| inner.posts_by_id.get(id).cloned())
-            .collect()
     }
 
     pub async fn get_by_topic(&self, topic_id: &str, limit: usize) -> Vec<Post> {
@@ -126,17 +113,6 @@ impl PostCacheService {
         removed
     }
 
-    pub async fn clear(&self) {
-        let mut inner = self.inner.write().await;
-        inner.posts_by_id.clear();
-        inner.topic_index.clear();
-    }
-
-    pub async fn size(&self) -> usize {
-        let inner = self.inner.read().await;
-        inner.posts_by_id.len()
-    }
-
     async fn add_internal(inner: &Arc<RwLock<PostCacheInner>>, post: Post) {
         let mut guard = inner.write().await;
         let topic_id = post.topic_id.clone();
@@ -155,6 +131,33 @@ impl PostCacheService {
         if entries.len() > MAX_TOPIC_CACHE {
             entries.truncate(MAX_TOPIC_CACHE);
         }
+    }
+}
+
+#[cfg(test)]
+impl PostCacheService {
+    pub async fn add_many(&self, posts: Vec<Post>) {
+        for post in posts {
+            Self::add_internal(&self.inner, post).await;
+        }
+    }
+
+    pub async fn get_many(&self, ids: &[String]) -> Vec<Post> {
+        let inner = self.inner.read().await;
+        ids.iter()
+            .filter_map(|id| inner.posts_by_id.get(id).cloned())
+            .collect()
+    }
+
+    pub async fn clear(&self) {
+        let mut inner = self.inner.write().await;
+        inner.posts_by_id.clear();
+        inner.topic_index.clear();
+    }
+
+    pub async fn size(&self) -> usize {
+        let inner = self.inner.read().await;
+        inner.posts_by_id.len()
     }
 }
 

@@ -34,16 +34,6 @@ impl<T> ApiResponse<T> {
         }
     }
 
-    pub fn error(error: String) -> Self {
-        Self {
-            success: false,
-            data: None,
-            error: Some(error),
-            error_code: None,
-            error_details: None,
-        }
-    }
-
     pub fn from_app_error(error: AppError) -> Self {
         let error_details = match error {
             AppError::RateLimited {

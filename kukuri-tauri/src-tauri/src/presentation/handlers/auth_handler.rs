@@ -45,16 +45,6 @@ impl AuthHandler {
         })
     }
 
-    pub async fn login_with_npub(&self, npub: String) -> Result<LoginResponse, AppError> {
-        let user = self.auth_service.login_with_npub(&npub).await?;
-
-        Ok(LoginResponse {
-            success: true,
-            npub: user.npub,
-            pubkey: user.pubkey,
-        })
-    }
-
     pub async fn logout(&self, npub: String) -> Result<(), AppError> {
         // npubは使用しない（現在のユーザーをログアウト）
         let _ = npub;

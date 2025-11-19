@@ -14,7 +14,9 @@ mod state;
 
 pub use application::ports::repositories::TopicMetricsRepository;
 pub use domain::entities::{TopicMetricsRecord, TopicMetricsSnapshot};
-pub use infrastructure::database::{connection_pool::ConnectionPool, sqlite_repository::SqliteRepository};
+pub use infrastructure::database::{
+    connection_pool::ConnectionPool, sqlite_repository::SqliteRepository,
+};
 pub use shared::config::AppConfig;
 
 pub mod ops {
@@ -182,7 +184,6 @@ pub fn run() {
                 let p2p_service = Arc::clone(&app_state.p2p_service);
                 let offline_service = Arc::clone(&app_state.offline_service);
                 let profile_avatar_service = Arc::clone(&app_state.profile_avatar_service);
-                let user_handler = Arc::clone(&app_state.user_handler);
 
                 // P2P機能を初期化
                 if let Err(e) = app_state.initialize_p2p().await {
@@ -200,7 +201,6 @@ pub fn run() {
                 app_handle.manage(p2p_service);
                 app_handle.manage(offline_service);
                 app_handle.manage(profile_avatar_service);
-                app_handle.manage(user_handler);
             });
 
             info!("Application setup complete");

@@ -12,16 +12,12 @@ use tracing::{debug, error};
 /// DHTイベントハンドラー
 pub struct DhtEventHandler {
     event_tx: mpsc::Sender<Event>,
-    dht_gossip: Arc<DhtGossip>,
 }
 
 impl DhtEventHandler {
     /// 新しいハンドラーを作成
-    pub fn new(event_tx: mpsc::Sender<Event>, dht_gossip: Arc<DhtGossip>) -> Self {
-        Self {
-            event_tx,
-            dht_gossip,
-        }
+    pub fn new(event_tx: mpsc::Sender<Event>) -> Self {
+        Self { event_tx }
     }
 
     /// Gossipメッセージを処理
@@ -65,7 +61,7 @@ impl DhtIntegration {
 
     /// イベントハンドラーを設定
     pub fn set_event_handler(&mut self, event_tx: mpsc::Sender<Event>) {
-        self.event_handler = Some(DhtEventHandler::new(event_tx, Arc::clone(&self.dht_gossip)));
+        self.event_handler = Some(DhtEventHandler::new(event_tx));
     }
 
     /// トピックに参加

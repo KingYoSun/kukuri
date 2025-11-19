@@ -101,6 +101,16 @@ impl ProfileAvatarService {
             })?;
 
         let ticket = decode_share_ticket(&metadata.share_ticket)?;
+        if ticket.access_level != metadata.access_level {
+            return Err(AppError::validation(
+                crate::shared::validation::ValidationFailureKind::Generic,
+                format!(
+                    "share ticket access level mismatch (ticket={}, metadata={})",
+                    ticket.access_level.as_str(),
+                    metadata.access_level.as_str()
+                ),
+            ));
+        }
         let capability_secret = ticket.capability_secret;
         let encrypted_key = BASE64_STANDARD
             .decode(metadata.encrypted_key.as_bytes())
