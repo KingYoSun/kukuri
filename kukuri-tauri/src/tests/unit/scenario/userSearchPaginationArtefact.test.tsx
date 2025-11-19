@@ -41,7 +41,8 @@ describe('user-search pagination artefact', () => {
     expect(helperSearch?.term).toBe('a');
 
     const allowIncompleteActive =
-      (helperSearch?.term.length ?? 0) > 0 && (helperSearch?.term.length ?? 0) < MIN_USER_SEARCH_QUERY_LENGTH;
+      (helperSearch?.term.length ?? 0) > 0 &&
+      (helperSearch?.term.length ?? 0) < MIN_USER_SEARCH_QUERY_LENGTH;
     const scenarioTimestamp =
       process.env.USER_SEARCH_SCENARIO_TIMESTAMP ?? formatTimestamp(new Date());
 
@@ -73,8 +74,7 @@ describe('user-search pagination artefact', () => {
       />,
     );
 
-    log.searchErrorState.title =
-      screen.getByText('リクエストが多すぎます')?.textContent ?? null;
+    log.searchErrorState.title = screen.getByText('リクエストが多すぎます')?.textContent ?? null;
     log.searchErrorState.buttonLabelBefore = screen.getByRole('button').textContent ?? null;
 
     rerender(
@@ -84,8 +84,7 @@ describe('user-search pagination artefact', () => {
         onRetry={() => {}}
       />,
     );
-    log.searchErrorState.buttonLabelAfter =
-      screen.getByRole('button').textContent ?? null;
+    log.searchErrorState.buttonLabelAfter = screen.getByRole('button').textContent ?? null;
 
     log.steps.push({
       step: 'retryAfterCleared',
@@ -115,6 +114,5 @@ function writeSearchErrorArtefact(log: SearchErrorScenarioLog) {
   const filePath = join(outputDir, `${log.timestamp}-search-error-state.json`);
   writeFileSync(filePath, JSON.stringify(log, null, 2), 'utf8');
   const relPath = relative(repoRoot, filePath);
-  // eslint-disable-next-line no-console
   console.info(`[UserSearchScenario] search error artefact saved to ${relPath}`);
 }
