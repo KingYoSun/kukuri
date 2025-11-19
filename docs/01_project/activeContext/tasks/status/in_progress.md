@@ -13,4 +13,4 @@
 ### GitHub Actions ワークフロー失敗調査（担当: Codex）
 - 状況: `gh act` でローカル再現しつつ、ワークフロー失敗要因を特定・修正する。
 - メモ: 2025年11月19日着手。失敗ログの解析と修正内容は作業完了時に追記する。
-- 進捗: Rust 側で `P2PEvent` に追加された `topic_id` を未設定だった箇所を修正し、`cargo clippy -D warnings` を遮っていた未使用インポート警告も `state.rs`/`topic_handler.rs` で解消。`gh act --job format-check` は成功、`native-test-linux` は CLI の Docker 依存テストがローカル権限不足で失敗する点を確認済み（本番Runnerでは権限有り）。
+- 進捗: `trending_metrics_job.rs` の未使用メソッドと `DistributorState::strategy` のテスト専用アクセサを整理し、`scripts/test-docker.ps1 lint` で `cargo clippy -D warnings` を再実行してエラーが消えたことを確認。`gh act --job format-check` と `gh act --job native-test-linux`（`NPM_CONFIG_PREFIX=/tmp/npm-global`, `--container-options "--user root"`）も完走し、Linux ネイティブ経路での Rust/TS/Lint すべて green。

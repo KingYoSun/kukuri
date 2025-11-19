@@ -18,6 +18,7 @@ impl DistributorState {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn strategy(&self) -> DistributionStrategy {
         self.strategy.clone()
     }

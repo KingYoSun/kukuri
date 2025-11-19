@@ -52,10 +52,6 @@ impl TrendingMetricsJob {
         }
     }
 
-    pub fn score_weights(&self) -> ScoreWeights {
-        self.score_weights
-    }
-
     pub async fn run_once(&self) -> Result<(), AppError> {
         let started = Instant::now();
         let result = self.execute_once().await;
