@@ -11,6 +11,7 @@ param(
     [string]$Scenario,               # TypeScript�e�X�g�p�̃V�i���I�w��
     [string]$Fixture,                # �V�i���I�p�t�B�N�X�`���p�X
     [switch]$ServiceWorker,          # profile-avatar-sync �V�i���I�� Service Worker �g������s
+    [string]$OfflineCategory,        # offline-sync �V�i���I�p�J�e�S���[
     [string]$BootstrapPeers,         # �����e�X�g�p�̃u�[�g�X�g���b�v�s�A�w��
     [string]$IrohBin,                # iroh �o�C�i���̃p�X
     [string]$IntegrationLog = "info,iroh_tests=debug", # �����e�X�g�p��RUST_LOG
@@ -60,6 +61,10 @@ if ($Scenario -and $Command -ne "ts") {
     Write-ErrorMessage "-Scenario �� ts �R�}���h�ł̂ݎg�p�ł��܂��B"
 }
 
+if ($OfflineCategory -and $Scenario -ne "offline-sync") {
+    Write-ErrorMessage "-OfflineCategory �� ts -Scenario offline-sync �ł̂ݎg�p�ł��܂��B"
+}
+
 if ($Fixture -and $Command -ne "ts") {
     Write-ErrorMessage "-Fixture �� ts �R�}���h�ł̂ݎg�p�ł��܂��B"
 }
@@ -91,6 +96,7 @@ Options:
   -Integration  - Rust�R�}���h�ƕ����� P2P �����e�X�g�̂ݎ��s
   -Test <target> - Rust�R�}���h���Ɏw��e�X�g�o�C�i���̂ݎ��s�i��: event_manager_integration�j
   -Scenario <name> - TypeScript�e�X�g���ɃV�i���I��w��i��: trending-feed, profile-avatar-sync, direct-message, user-search-pagination, topic-create, post-delete-cache, offline-sync�j
+  -OfflineCategory <name> - offline-sync �V�i���I�p�J�e�S���[ (topic/post/follow/dm)
   -Fixture <path>  - �V�i���I�p�t�B�N�X�`���p�X��㏑���i����: tests/fixtures/trending/default.json�j
   -ServiceWorker   - `ts -Scenario profile-avatar-sync` ���s���� Service Worker �g���e�X�g�� Stage4 ���O��L����
   -BootstrapPeers <node@host:port,...> - �����e�X�g�Ŏg�p����u�[�g�X�g���b�v�s�A��w��
@@ -923,11 +929,21 @@ function Invoke-TypeScriptTopicCreateScenario {
 }
 
 function Invoke-TypeScriptOfflineSyncScenario {
+    param(
+        [string]$Category
+    )
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $logRelPath = "tmp/logs/sync_status_indicator_stage4_$timestamp.log"
+    $suffix = ""
+    if ($Category) {
+        $suffix = "_$Category"
+    }
+    $logRelPath = "tmp/logs/sync_status_indicator_stage4${suffix}_$timestamp.log"
     $logHostPath = Join-Path $repositoryRoot $logRelPath
     $logDir = Split-Path $logHostPath -Parent
     $reportsDir = Join-Path $ResultsDir "offline-sync"
+    if ($Category) {
+        $reportsDir = Join-Path $reportsDir $Category
+    }
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir | Out-Null
     }
@@ -936,16 +952,30 @@ function Invoke-TypeScriptOfflineSyncScenario {
     }
     Set-Content -Path $logHostPath -Value @()
 
-    Write-Host "Running TypeScript scenario 'offline-sync'..."
-    $targets = @(
-        "src/tests/unit/hooks/useSyncManager.test.tsx",
-        "src/tests/unit/components/SyncStatusIndicator.test.tsx",
-        "src/tests/unit/components/OfflineIndicator.test.tsx"
-    )
+    if ($Category) {
+        Write-Host "Running TypeScript scenario 'offline-sync' (category: $Category)..."
+    } else {
+        Write-Host "Running TypeScript scenario 'offline-sync'..."
+    }
+
+    $targets = @()
+    if ($Category) {
+        $targets = @("src/tests/unit/scenarios/offlineSyncTelemetry.test.tsx")
+    } else {
+        $targets = @(
+            "src/tests/unit/hooks/useSyncManager.test.tsx",
+            "src/tests/unit/components/SyncStatusIndicator.test.tsx",
+            "src/tests/unit/components/OfflineIndicator.test.tsx"
+        )
+    }
     $vitestStatus = 0
     foreach ($target in $targets) {
         $slug = $target.Replace("/", "_").Replace(".", "_")
-        $reportRelPath = "test-results/offline-sync/${timestamp}-${slug}.json"
+        $reportRelPath = "test-results/offline-sync"
+        if ($Category) {
+            $reportRelPath = "$reportRelPath/$Category"
+        }
+        $reportRelPath = "$reportRelPath/${timestamp}-${slug}.json"
 
         $commandLines = @(
             "set -euo pipefail",
@@ -953,9 +983,12 @@ function Invoke-TypeScriptOfflineSyncScenario {
             "if [ ! -f node_modules/.bin/vitest ]; then",
             "  echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'",
             "  pnpm install --frozen-lockfile --ignore-workspace",
-            "fi",
-            "pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
+            "fi"
         )
+        if ($Category) {
+            $commandLines += "export OFFLINE_SYNC_CATEGORY='$Category'"
+        }
+        $commandLines += "pnpm vitest run '$target' --reporter=default --reporter=json --outputFile '/app/$reportRelPath'"
         $command = [string]::Join("`n", $commandLines)
 
         $dockerArgs = @("compose", "-f", "docker-compose.test.yml", "run", "--rm", "ts-test", "bash", "-lc", $command)
@@ -1043,7 +1076,7 @@ function Invoke-TypeScriptTests {
                 Invoke-TypeScriptTopicCreateScenario
             }
             "offline-sync" {
-                Invoke-TypeScriptOfflineSyncScenario
+                Invoke-TypeScriptOfflineSyncScenario -Category $OfflineCategory
             }
             default {
                 Write-ErrorMessage "Unknown TypeScript scenario: $Scenario"

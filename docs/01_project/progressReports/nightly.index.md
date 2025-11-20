@@ -10,7 +10,7 @@ Nightly ワークフローで収集している導線テストは、ID ごとに
 | `nightly.desktop-e2e` | `.github/workflows/nightly.yml` `desktop-e2e` | `./scripts/test-docker.sh e2e` | `nightly.desktop-e2e-logs`, `nightly.desktop-e2e-reports` |
 | `nightly.trending-feed` | `trending-feed` | `./scripts/test-docker.sh ts --scenario trending-feed` | `nightly.trending-feed-logs`, `nightly.trending-feed-reports`, `nightly.trending-feed-metrics` |
 | `nightly.profile-avatar-sync` | `profile-avatar-sync` | `./scripts/test-docker.sh ts --scenario profile-avatar-sync --service-worker` | `profile-avatar-sync-logs` |
-| `nightly.sync-status-indicator` | `sync-status-indicator` | `./scripts/test-docker.sh ts --scenario offline-sync` | `sync-status-indicator-logs`（JSON: `test-results/offline-sync/`） |
+| `nightly.sync-status-indicator.{topic,post,follow,dm}` | `sync-status-indicator` | `./scripts/test-docker.sh ts --scenario offline-sync --offline-category <cat>` | `sync-status-indicator-{topic,post,follow,dm}`（`tmp/logs/sync_status_indicator_stage4_{cat}_*.log` / `test-results/offline-sync/{cat}/`） |
 | `nightly.user-search-pagination` | `user-search-pagination` | `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build` | `user-search-pagination-logs`, `user-search-pagination-log-archive`, `user-search-pagination-reports` |
 | `nightly.topic-create` | `topic-create` | `./scripts/test-docker.sh ts --scenario topic-create` | `topic-create-logs`, `topic-create-reports` |
 | `nightly.post-delete-cache` | `post-delete-cache` | `./scripts/test-docker.sh ts --scenario post-delete-cache` | `post-delete-cache-logs`, `post-delete-cache-reports` |
@@ -42,13 +42,13 @@ Nightly ワークフローで収集している導線テストは、ID ごとに
   - `profile-avatar-sync-logs`: `tmp/logs/profile_avatar_sync_stage4_<timestamp>.log`（Vitest + Worker 実行結果を同一ファイルに集約）。
 - 参考コマンド: `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync -ServiceWorker -NoBuild`（Windows）、`./scripts/test-docker.sh ts --scenario profile-avatar-sync --service-worker`（Bash）。Rust 側の `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` も Runbook 4.2 で合わせて参照する。
 
-### `nightly.sync-status-indicator`
+### `nightly.sync-status-indicator.{topic,post,follow,dm}`
 - 参照: [`docs/03_implementation/p2p_mainline_runbook.md` Chapter5](../../03_implementation/p2p_mainline_runbook.md)
-- 目的: `SyncStatusIndicator` / `OfflineIndicator` / `useSyncManager` の Stage4/Stage5 仕様（再送履歴 / `retryMetrics`）を Docker `offline-sync` シナリオで検証する。
+- 目的: `SyncStatusIndicator` / `OfflineIndicator` / `useSyncManager` の Stage4/Stage5 仕様（再送履歴 / `pendingActionSummary` / `retryMetrics`）を Docker `offline-sync` シナリオでカテゴリ別に検証し、`errorHandler.info('SyncStatus.*')` 経由で `sync_queue` / `offline_actions` の Nightly ログを採取する。
 - artefact:
-  - `sync-status-indicator-logs`: `tmp/logs/sync_status_indicator_stage4_<timestamp>.log`
-  - JSON レポートは `test-results/offline-sync/<timestamp>-*.json` に保存される（現状はワークスペース内に出力。必要に応じて `sync-status-indicator-logs` と一緒に圧縮してアップロードする）。
-- 参考コマンド: `./scripts/test-docker.ps1 ts -Scenario offline-sync -NoBuild`。`phase5_ci_path_audit.md` の該当行にログ採取例がまとまっている。
+  - `sync-status-indicator-{topic,post,follow,dm}`: `tmp/logs/sync_status_indicator_stage4_{cat}_<timestamp>.log`（`queue_snapshot` / `pending_actions_snapshot` / `retry_metrics_snapshot` を含む）
+  - `test-results/offline-sync/{cat}/${timestamp}-*.json`: `offlineSyncTelemetry.test.tsx` の JSON 出力
+- 参考コマンド: `./scripts/test-docker.ps1 ts -Scenario offline-sync -OfflineCategory <cat> [-NoBuild]`。`phase5_ci_path_audit.md` の該当行にログ採取例とカテゴリ別 artefact のリンクをまとめている。
 
 ### `nightly.user-search-pagination`
 - 参照: [`docs/03_implementation/p2p_mainline_runbook.md` Chapter6](../../03_implementation/p2p_mainline_runbook.md), [`docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md`](../activeContext/artefacts/phase5_ci_path_audit.md)

@@ -11,7 +11,7 @@
 | --- | --- | --- | --- | --- |
 | `/profile/$userId`（プロフィール詳細 + DM） | `nightly.profile-avatar-sync`（Service Worker / Doc）、`nightly.direct-message`、Rust: `direct_messages` 契約テスト | TypeScript: `./scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build`<br>Rust: `./scripts/test-docker.ps1 rust -Test direct_messages`<br>Service Worker: `./scripts/test-docker.{ps1,sh} ts --scenario profile-avatar-sync --service-worker` | `nightly.direct-message-logs`（`tmp/logs/vitest_direct_message_<timestamp>.log`）、`nightly.direct-message-reports`（`test-results/direct-message/<timestamp>-*.json`）、`profile-avatar-sync-logs`、`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` | `phase5_user_flow_inventory.md` 5.6 / 5.6.1 / 5.6.2 / 5.6.3、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/profile/$userId` 行 |
 | `/search` (users) | `nightly.user-search-pagination` | `./scripts/test-docker.{ps1,sh} ts --scenario user-search-pagination --no-build` | `user-search-pagination-logs`（`tmp/logs/user_search_pagination_<timestamp>.log`）、`user-search-pagination-log-archive`、`user-search-pagination-reports`、`user-search-pagination-search-error`（2文字未満→補助検索→`retryAfter` 自動解除→`SearchErrorState` JSON） | `phase5_user_flow_inventory.md` 5.8 / 5.8.1、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 `/search` 行 |
-| SyncStatusIndicator / Offline Sync | `nightly.sync-status-indicator`、Doc/Blob 連携: `nightly.profile-avatar-sync` | `./scripts/test-docker.{ps1,sh} ts --scenario offline-sync --no-build`（Doc/Blob 競合 + Service Worker）、`./scripts/test-docker.{ps1,sh} ts --scenario profile-avatar-sync --service-worker` | `sync-status-indicator-logs`（`tmp/logs/sync_status_indicator_stage4_<timestamp>.log`）、`test-results/offline-sync/<timestamp>-*.json`、`profile-avatar-sync-logs` | `phase5_user_flow_inventory.md` 5.11 / 5.11.1、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 SyncStatus 行 |
+| SyncStatusIndicator / Offline Sync | `nightly.sync-status-indicator.{topic,post,follow,dm}`、Doc/Blob 連携: `nightly.profile-avatar-sync` | `./scripts/test-docker.{ps1,sh} ts --scenario offline-sync --offline-category <cat> --no-build`（Topic/Post/Follow/DM の OfflineAction）＋ `offlineSyncTelemetry.test.tsx`、`./scripts/test-docker.{ps1,sh} ts --scenario profile-avatar-sync --service-worker` | `sync-status-indicator-{topic,post,follow,dm}`（`tmp/logs/sync_status_indicator_stage4_{cat}_<timestamp>.log` と `test-results/offline-sync/{cat}/${timestamp}-*.json`）、`profile-avatar-sync-logs` | `phase5_user_flow_inventory.md` 5.11 / 5.11.1、`phase5_user_flow_summary.md`「部分利用導線マトリクス」 SyncStatus 行 |
 
 ---
 
@@ -61,18 +61,25 @@
 ## 3. SyncStatusIndicator / Offline Sync
 
 ### 3.1 監視対象
-- Doc/Blob 対応 `cache_metadata` と `SyncStatusIndicator` Stage4 UI（Doc/Blob 競合カード / Offline CTA）が Docker `offline-sync` シナリオで再現できるか。
-- `sync-status-indicator-logs` に `add_to_sync_queue` / `update_cache_metadata` / `update_sync_status` の値が含まれているか。
-- `profile-avatar-sync` の Service Worker ログと `offline-sync` のメトリクスが矛盾していないか。
+- Doc/Blob 対応 `cache_metadata` と Stage4 UI（Doc/Blob 競合カード / Offline CTA）が Docker `offline-sync` シナリオで再現できるか。
+- `pendingActionSummary` のカテゴリ（Topic/Post/Follow/DM）が UI に表示され、`errorHandler.info('SyncStatus.queue_snapshot' | '...pending_actions_snapshot' | '...retry_metrics_snapshot')` が `tmp/logs/sync_status_indicator_stage4_{cat}_<timestamp>.log` に出力されているか。
+- `profile-avatar-sync` の Service Worker ログと各カテゴリの `offline-sync` メトリクスが矛盾していないか（Doc/Blob + Topic/Post/Follow/DM の Nightly artefact が揃っているか）。
 
 ### 3.2 トリアージ手順
-1. `./scripts/test-docker.ps1 ts -Scenario offline-sync -NoBuild` を実行して `tmp/logs/sync_status_indicator_stage4_<timestamp>.log` と `test-results/offline-sync/<timestamp>-*.json` を採取。Doc/Blob 競合カード・`cache-doc-*` セクションが描画されているか確認。
-2. `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync -ServiceWorker` を同じターミナルで実行し、Service Worker ジョブの `offlineApi.addToSyncQueue` ログと `cache_metadata` の TTL 30 分が維持されているかを確認。
-3. `phase5_user_flow_inventory.md` 5.11.1 と `phase5_user_flow_summary.md` の SyncStatus 行を参照し、Topic/Post/Follow actions の backlog を `phase5_ci_path_audit.md`（SyncStatus 行）のログメモへ追記する。
+1. 各カテゴリで Docker シナリオを実行  
+   ```powershell
+   ./scripts/test-docker.ps1 ts -Scenario offline-sync -OfflineCategory topic [-NoBuild]
+   ./scripts/test-docker.ps1 ts -Scenario offline-sync -OfflineCategory post -NoBuild
+   ./scripts/test-docker.ps1 ts -Scenario offline-sync -OfflineCategory follow -NoBuild
+   ./scripts/test-docker.ps1 ts -Scenario offline-sync -OfflineCategory dm -NoBuild
+   ```  
+   生成された `tmp/logs/sync_status_indicator_stage4_{cat}_<timestamp>.log` に `queue_snapshot` / `pending_actions_snapshot` / `retry_metrics_snapshot` の JSON が揃っているか確認し、JSON レポートは `test-results/offline-sync/{cat}/${timestamp}-*.json` に保管する。
+2. `./scripts/test-docker.ps1 ts -Scenario profile-avatar-sync -ServiceWorker` を同じターミナルで実行し、Doc/Blob 側の `offlineApi.addToSyncQueue` ログと TTL が維持されているか確認する。
+3. `phase5_user_flow_inventory.md` 5.11.1 と `phase5_user_flow_summary.md` SyncStatus 行を参照し、カテゴリごとの Nightly artefact（Topic/Post/Follow/DM）が揃っているか、`phase5_ci_path_audit.md` の同期ログにタイムスタンプを追記する。
 
 ### 3.3 Artefact / 参照
-- `sync-status-indicator-logs`
-- `test-results/offline-sync/<timestamp>-*.json`
+- `sync-status-indicator-topic` / `sync-status-indicator-post` / `sync-status-indicator-follow` / `sync-status-indicator-dm`
+- `test-results/offline-sync/{topic,post,follow,dm}/${timestamp}-*.json`
 - `profile-avatar-sync-logs`
 - `phase5_ci_path_audit.md` sync-status / profile-avatar-sync 行
 

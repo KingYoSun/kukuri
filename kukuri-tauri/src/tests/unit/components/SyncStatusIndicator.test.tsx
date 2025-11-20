@@ -5,6 +5,7 @@ import { useSyncManager } from '@/hooks/useSyncManager';
 import type { SyncStatus } from '@/hooks/useSyncManager';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { OfflineActionType } from '@/types/offline';
+import { errorHandler } from '@/lib/errorHandler';
 
 const { mockManualRetryDelete, toastMock } = vi.hoisted(() => {
   return {
@@ -28,11 +29,6 @@ vi.mock('@/hooks/usePosts', () => ({
 }));
 vi.mock('sonner', () => ({
   toast: toastMock,
-}));
-vi.mock('@/lib/errorHandler', () => ({
-  errorHandler: {
-    log: vi.fn(),
-  },
 }));
 describe('SyncStatusIndicator', () => {
   const mockTriggerManualSync = vi.fn();
@@ -95,6 +91,10 @@ describe('SyncStatusIndicator', () => {
     scheduledRetry: null,
     showConflictDialog: false,
     setShowConflictDialog: mockSetShowConflictDialog,
+    pendingActionSummary: {
+      total: 0,
+      categories: [],
+    },
   };
 
   beforeEach(() => {
@@ -136,6 +136,34 @@ describe('SyncStatusIndicator', () => {
 
       expect(screen.getByText('未同期: 5件')).toBeInTheDocument();
       expect(screen.getByText('5')).toHaveClass('ml-1'); // バッジ
+    });
+
+    it('オフライン操作の内訳を表示する', () => {
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        pendingActionsCount: 6,
+        pendingActionSummary: {
+          total: 6,
+          categories: [
+            { category: 'topic', count: 2, actionTypes: ['topic_create'], samples: [] },
+            { category: 'post', count: 2, actionTypes: ['create_post'], samples: [] },
+            { category: 'dm', count: 1, actionTypes: ['send_direct_message'], samples: [] },
+            { category: 'follow', count: 1, actionTypes: ['follow'], samples: [] },
+            { category: 'profile', count: 1, actionTypes: ['profile_update'], samples: [] },
+          ],
+        },
+      });
+
+      render(<SyncStatusIndicator />);
+
+      const indicatorButton = screen.getByTestId('sync-indicator');
+      fireEvent.click(indicatorButton);
+
+      const summary = screen.getByTestId('offline-action-summary');
+      const summaryQueries = within(summary);
+      expect(summaryQueries.getByText('トピック')).toBeInTheDocument();
+      expect(summaryQueries.getAllByText(/\d+件/)[0]).toHaveTextContent('2件');
+      expect(summaryQueries.getByText('他 1 カテゴリ')).toBeInTheDocument();
     });
 
     it('同期中の状態を表示', () => {
@@ -764,6 +792,72 @@ describe('SyncStatusIndicator', () => {
       });
       expect(refreshQueueItems).toHaveBeenCalled();
       expect(toastMock.success).toHaveBeenCalled();
+    });
+  });
+
+  describe('テレメトリ', () => {
+    it('pending/queue/retry メトリクスを記録する', () => {
+      const infoSpy = vi.spyOn(errorHandler, 'info').mockImplementation(() => {});
+      const retrySnapshot = {
+        ...defaultManagerState.retryMetrics!,
+        totalSuccess: 3,
+        totalFailure: 1,
+        consecutiveFailure: 0,
+        lastOutcome: 'success' as const,
+        lastJobId: 'job-1',
+        lastRetryCount: 1,
+        lastMaxRetries: 3,
+        lastDurationMs: 1500,
+        lastTimestampMs: Date.now(),
+      };
+      vi.mocked(useSyncManager).mockReturnValue({
+        ...defaultManagerState,
+        pendingActionsCount: 2,
+        pendingActionSummary: {
+          total: 2,
+          categories: [
+            { category: 'topic', count: 1, actionTypes: ['topic_create'], samples: [] },
+            { category: 'dm', count: 1, actionTypes: ['send_direct_message'], samples: [] },
+          ],
+        },
+        queueItems: [
+          {
+            id: 10,
+            action_type: OfflineActionType.TOPIC_CREATE,
+            status: 'pending',
+            retry_count: 0,
+            max_retries: 3,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+            payload: {
+              cacheType: 'topics',
+              requestedBy: 'test-user',
+              requestedAt: new Date().toISOString(),
+            },
+          },
+        ],
+        retryMetrics: retrySnapshot,
+      });
+
+      render(<SyncStatusIndicator />);
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        'SyncStatus.pending_actions_snapshot',
+        'SyncStatusIndicator.telemetry',
+        expect.objectContaining({ total: 2 }),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        'SyncStatus.queue_snapshot',
+        'SyncStatusIndicator.telemetry',
+        expect.objectContaining({ total: 1 }),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        'SyncStatus.retry_metrics_snapshot',
+        'SyncStatusIndicator.telemetry',
+        expect.objectContaining({ totalSuccess: 3, totalFailure: 1 }),
+      );
+
+      infoSpy.mockRestore();
     });
   });
 });

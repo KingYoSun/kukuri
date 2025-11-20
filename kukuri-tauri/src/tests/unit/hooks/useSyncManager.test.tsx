@@ -33,6 +33,17 @@ const mockPendingActions: OfflineAction[] = [
   },
 ];
 
+const createPendingAction = (overrides: Partial<OfflineAction> = {}): OfflineAction => ({
+  id: Math.floor(Math.random() * 1000) + 2,
+  localId: `local_${Math.random().toString(36).slice(2, 8)}`,
+  userPubkey: 'user123',
+  actionType: OfflineActionType.CREATE_POST,
+  actionData: { content: 'Test' },
+  createdAt: Date.now(),
+  isSynced: false,
+  ...overrides,
+});
+
 var authStoreMock: ZustandStoreMock<AuthStoreState>;
 var offlineStoreMock: ZustandStoreMock<OfflineStoreTestState>;
 
@@ -534,6 +545,45 @@ describe('useSyncManager', () => {
       );
       // enqueue 後にキャッシュステータスを再取得
       expect(offlineApi.getCacheStatus).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('pendingActionSummary', () => {
+    it('カテゴリごとの件数とサンプルを計算する', async () => {
+      setOfflineStoreState({
+        pendingActions: [
+          createPendingAction({
+            actionType: OfflineActionType.TOPIC_CREATE,
+            targetId: 'topic-1',
+          }),
+          createPendingAction({
+            actionType: OfflineActionType.CREATE_POST,
+            targetId: 'post-1',
+          }),
+          createPendingAction({
+            actionType: OfflineActionType.FOLLOW,
+            targetId: 'npub-follow',
+          }),
+          createPendingAction({
+            actionType: 'send_direct_message',
+            targetId: 'dm-1',
+          }),
+        ],
+      });
+
+      const { result } = await renderManagerHook();
+      const summary = result.current.pendingActionSummary;
+      expect(summary.total).toBe(4);
+      expect(summary.categories).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ category: 'topic', count: 1 }),
+          expect.objectContaining({ category: 'post', count: 1 }),
+          expect.objectContaining({ category: 'follow', count: 1 }),
+          expect.objectContaining({ category: 'dm', count: 1 }),
+        ]),
+      );
+      const dmCategory = summary.categories.find((category) => category.category === 'dm');
+      expect(dmCategory?.samples[0]).toMatchObject({ targetId: 'dm-1' });
     });
   });
 });

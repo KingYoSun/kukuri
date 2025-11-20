@@ -194,6 +194,9 @@ try {
 | `UserSearch.invalid_query` | `/search` (users) の `UserSearchResults` | `2文字以上入力してください` | クエリ長が足りない場合に表示。入力欄へエラースタイルを適用し、既存結果は保持。 |
 | `UserSearch.fetch_failed` | `UserSearchResults` / `useUserSearchQuery` | `ユーザー検索に失敗しました` | ネットワーク/サーバーエラー時。`context` に `statusCode` を含める。 |
 | `UserSearch.rate_limited` | 同上 | `一定時間後に再試行してください` | `meta.retryAfter`（秒）を UI に表示し、再試行ボタンを無効化。 |
+| `SyncStatus.queue_snapshot` | `SyncStatusIndicator` Telemetry | `同期キューの状態を記録しました` | Nightly ログ用。`metadata` に `total` と `sample`（`id` / `actionType` / `retryCount` / `cacheType` など）を含める。 |
+| `SyncStatus.pending_actions_snapshot` | 同上 | `未同期アクションの内訳を記録しました` | `pendingActionSummary`（カテゴリ + 件数 + sample）をそのまま渡す。UI には表示せず、ログ専用。 |
+| `SyncStatus.retry_metrics_snapshot` | 同上 | `再送メトリクスを記録しました` | `OfflineRetryMetrics` から `totalSuccess` / `totalFailure` / `consecutiveFailure` / `last*` を抽出。`errorHandler` の Test モードでも記録できるよう `setTestEnvironment('development')` を併用。 |
 | `Topic.create_failed` | `TopicFormModal` / `TopicCreationDialog` | `トピックの作成に失敗しました` | Inventory 5.9 参照。モーダル内にインラインエラーを表示し、`metadata` に `formValues` を含める。 |
 | `Topic.join_failed` | `TopicFormModal` / `createAndJoinTopic` | `トピックへの参加に失敗しました` | 新規作成直後の `join_topic` が失敗した場合に発火。`metadata.topicId` を付与し、`OfflineActionType::CREATE_TOPIC` の再送で解消する旨をガイド。 |
 | `Post.delete_failed` | `PostCard` / `useDeletePost` | `投稿の削除に失敗しました` | Inventory 5.10 参照。`metadata` に `postId` / `topicId` を含め、再試行ボタンを削除モーダルに表示。 |

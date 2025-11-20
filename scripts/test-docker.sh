@@ -39,6 +39,7 @@ Commands:
 Options for ts:
   --scenario <name>      Execute a preset scenario (e.g. trending-feed, profile-avatar-sync, direct-message, user-search-pagination, topic-create, post-delete-cache, offline-sync)
   --fixture <path>       Override VITE_TRENDING_FIXTURE_PATH for the scenario
+  --offline-category <name>  Offline-sync sub category (topic, post, follow, dm)
   --service-worker       Extend profile-avatar-sync scenario with Service Worker worker tests and Stage4 logs
   --no-build             Skip Docker image build (use existing image)
 
@@ -605,22 +606,48 @@ pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/ap
 run_ts_offline_sync() {
   local timestamp
   timestamp="$(date '+%Y%m%d-%H%M%S')"
-  local log_rel_path="tmp/logs/sync_status_indicator_stage4_${timestamp}.log"
+  local variant="${OFFLINE_SYNC_CATEGORY:-}"
+  local category_suffix=""
+  if [[ -n "$variant" ]]; then
+    category_suffix="_${variant}"
+  fi
+  local log_rel_path="tmp/logs/sync_status_indicator_stage4${category_suffix}_${timestamp}.log"
   local log_host_path="${REPO_ROOT}/${log_rel_path}"
   local reports_dir="${RESULTS_DIR}/offline-sync"
+  if [[ -n "$variant" ]]; then
+    reports_dir="${reports_dir}/${variant}"
+  fi
   mkdir -p "$(dirname "$log_host_path")" "$reports_dir"
 
-  echo "Running TypeScript scenario 'offline-sync'..."
-  local vitest_targets=(
-    'src/tests/unit/hooks/useSyncManager.test.tsx'
-    'src/tests/unit/components/SyncStatusIndicator.test.tsx'
-    'src/tests/unit/components/OfflineIndicator.test.tsx'
-  )
+  if [[ -n "$variant" ]]; then
+    echo "Running TypeScript scenario 'offline-sync' (category: ${variant})..."
+  else
+    echo "Running TypeScript scenario 'offline-sync'..."
+  fi
+
+  local vitest_targets=()
+  if [[ -n "$variant" ]]; then
+    vitest_targets=('src/tests/unit/scenarios/offlineSyncTelemetry.test.tsx')
+  else
+    vitest_targets=(
+      'src/tests/unit/hooks/useSyncManager.test.tsx'
+      'src/tests/unit/components/SyncStatusIndicator.test.tsx'
+      'src/tests/unit/components/OfflineIndicator.test.tsx'
+    )
+  fi
   local vitest_status=0
   for target in "${vitest_targets[@]}"; do
     local slug="${target//\//_}"
     slug="${slug//./_}"
-    local report_rel_path="test-results/offline-sync/${timestamp}-${slug}.json"
+    local report_rel_path="test-results/offline-sync"
+    if [[ -n "$variant" ]]; then
+      report_rel_path="${report_rel_path}/${variant}"
+    fi
+    report_rel_path="${report_rel_path}/${timestamp}-${slug}.json"
+    local export_category=""
+    if [[ -n "$variant" ]]; then
+      export_category="export OFFLINE_SYNC_CATEGORY='${variant}'"
+    fi
     local command="
 set -euo pipefail
 cd /app/kukuri-tauri
@@ -628,6 +655,7 @@ if [ ! -f node_modules/.bin/vitest ]; then
   echo '[INFO] Installing frontend dependencies inside container (pnpm install --frozen-lockfile)...'
   pnpm install --frozen-lockfile --ignore-workspace
 fi
+${export_category}
 pnpm vitest run '${target}' --reporter=default --reporter=json --outputFile '/app/${report_rel_path}'
 "
     if ! compose_run '' run --rm ts-test bash -lc "$command" | tee -a "$log_host_path"; then
@@ -908,6 +936,7 @@ RUST_BACKTRACE="full"
 TS_SCENARIO=""
 TS_FIXTURE=""
 PROFILE_AVATAR_SW=0
+OFFLINE_SYNC_CATEGORY=""
 
 case "$COMMAND" in
   -h|--help)
@@ -927,6 +956,10 @@ case "$COMMAND" in
           TS_FIXTURE="$2"
           shift 2
           ;;
+        --offline-category)
+          OFFLINE_SYNC_CATEGORY="$2"
+          shift 2
+          ;;
         --service-worker)
           PROFILE_AVATAR_SW=1
           shift
@@ -943,7 +976,12 @@ case "$COMMAND" in
           echo "Unknown option for ts command: $1" >&2
           exit 1
           ;;
-      esac
+esac
+
+if [[ -n "$OFFLINE_SYNC_CATEGORY" && "$TS_SCENARIO" != "offline-sync" ]]; then
+  echo "--offline-category is only supported with --scenario offline-sync" >&2
+  exit 1
+fi
     done
     ;;
   p2p)

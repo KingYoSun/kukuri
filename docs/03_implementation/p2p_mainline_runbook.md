@@ -118,19 +118,23 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 ### 5.2 SyncStatusIndicator 再送メトリクス（Stage5, 2025年11月15日追加）
 - 目的: Offline SyncEngine／Service Worker／`offline_actions` テーブルの再送フローを `metrics::record_outcome` に集約し、UI・Nightly artefact・Runbook で同じ再送メトリクスを参照できるようにする。
 - 手順:
-  1. TypeScript シナリオを実行  
+  1. TypeScript シナリオをカテゴリ別に実行  
      ```bash
-     ./scripts/test-docker.sh ts --scenario offline-sync --no-build
-     # PowerShell: .\scripts\test-docker.ps1 ts -Scenario offline-sync -NoBuild
+     ./scripts/test-docker.sh ts --scenario offline-sync --offline-category topic
+     ./scripts/test-docker.sh ts --scenario offline-sync --offline-category post --no-build
+     ./scripts/test-docker.sh ts --scenario offline-sync --offline-category follow --no-build
+     ./scripts/test-docker.sh ts --scenario offline-sync --offline-category dm --no-build
+     # PowerShell: .\scripts\test-docker.ps1 ts -Scenario offline-sync -OfflineCategory topic [-NoBuild]
      ```
-     - 出力: `tmp/logs/sync_status_indicator_stage4_<timestamp>.log`（Vitest ログ）と `test-results/offline-sync/<timestamp>-*.json`（`useSyncManager` / `SyncStatusIndicator` / `OfflineIndicator` の JSON レポート）。Nightly artefact は `sync-status-indicator-logs`（ログ）と `sync-status-indicator-reports`（JSON）をセットで保存する。
+     - 出力: `tmp/logs/sync_status_indicator_stage4_{topic,post,follow,dm}_<timestamp>.log`（Vitest + `errorHandler SyncStatus.*` ログ）と `test-results/offline-sync/{topic,post,follow,dm}/${timestamp}-*.json`（カテゴリ別 JSON レポート）。Nightly artefact は `sync-status-indicator-topic` / `...-post` / `...-follow` / `...-dm` をそれぞれアップロードし、Runbook から直接リンクできるようにした。
   2. UI 側で確認する項目  
      - SyncStatusIndicator ポップオーバー内の「再送メトリクス」カードに `成功/失敗` 合計、`連続失敗数`、`直近の再送`（`jobId` / `reason` / `retryCount/maxRetries` / `backoff` / 実行時間 / 記録時刻）が表示される。
      - `scheduledRetry` が存在する場合は「次回 #<jobId> を <timestamp> に再送（n/m）」の警告が表示され、Service Worker の Backoff と一致する。
+     - `errorHandler` の `SyncStatus.queue_snapshot` / `...pending_actions_snapshot` / `...retry_metrics_snapshot` が `tmp/logs/sync_status_indicator_stage4_*` に JSON を追記し、`sync_queue` / `offline_actions` / `offline_retry_metrics` の Nightly 計測値を UI から直接取得できる。
   3. バックエンド側の計測  
      - `presentation::commands::record_offline_retry_outcome` を通じて `infrastructure::offline::metrics::record_outcome` が呼ばれ、`OfflineRetryMetricsSnapshot`（`total_success` / `total_failure` / `consecutive_failure` / `last_*` フィールド）を更新する。
-     - snapshot は `get_offline_retry_metrics` コマンド経由で取得でき、Vitest JSON には `retryMetrics` の状態が記録される。`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` にも `retry_outcome` ログ行が出力され、CI で triage 可能。
-- 期待成果物: `tmp/logs/sync_status_indicator_stage4_<timestamp>.log`, `test-results/offline-sync/<timestamp>-*.json`。`phase5_ci_path_audit.md` と `nightly.sync-status-indicator.*` 行から参照する。
+     - snapshot は `get_offline_retry_metrics` コマンド経由で取得でき、Vitest JSON には `retryMetrics` の状態が記録される。`tmp/logs/sync_status_indicator_stage4_{topic,post,follow,dm}_<timestamp>.log` にも `retry_outcome` ログ行が出力され、CI で triage 可能。
+- 期待成果物: `tmp/logs/sync_status_indicator_stage4_{topic,post,follow,dm}_<timestamp>.log`, `test-results/offline-sync/{topic,post,follow,dm}/${timestamp}-*.json`。`phase5_ci_path_audit.md` と `nightly.sync-status-indicator.*` 行から参照する。
 
 ## 6. CI 統合ポイント
 - GitHub Actions（`ci/rust-tests.yml`）では統合テスト専用ステップを追加し、以下を設定する:
@@ -167,7 +171,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 | --- | --- | --- | --- |
 | `trending-feed` | `./scripts/test-docker.sh ts --scenario trending-feed --no-build`（PowerShell 版あり） | `trending-feed-reports`（`test-results/trending-feed/*.json`）<br>`trending-metrics-logs`（Prometheus `curl` スナップショット）<br>`trending-metrics-prometheus`（`test-results/trending-feed/prometheus/*`） | `tmp/logs/trending-feed/<timestamp>.log` と `tmp/logs/trending-feed/latest.log`<br>`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` |
 | `profile-avatar-sync` | `./scripts/test-docker.sh ts --scenario profile-avatar-sync` | `profile-avatar-sync-logs` | `tmp/logs/profile_avatar_sync_<timestamp>.log` |
-| `sync-status-indicator` | `./scripts/test-docker.sh ts --scenario offline-sync` | `sync-status-indicator-logs` / `sync-status-indicator-reports` | `tmp/logs/sync_status_indicator_stage4_<timestamp>.log` / `test-results/offline-sync/<timestamp>-*.json` |
+| `sync-status-indicator` | `./scripts/test-docker.sh ts --scenario offline-sync --offline-category {topic,post,follow,dm}` | `sync-status-indicator-topic` / `-post` / `-follow` / `-dm` | `tmp/logs/sync_status_indicator_stage4_{topic,post,follow,dm}_<timestamp>.log` / `test-results/offline-sync/{topic,post,follow,dm}/${timestamp}-*.json` |
 | `user-search-pagination` | `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build` | `user-search-pagination-logs`（Vitest stdout）<br>`user-search-pagination-log-archive`（`test-results/user-search-pagination/logs/*.log`）<br>`user-search-pagination-reports`（`test-results/user-search-pagination/reports/*.json`）<br>`user-search-pagination-search-error`（`test-results/user-search-pagination/search-error/<timestamp>-search-error-state.json`：2文字未満→補助検索→SearchErrorState） | `tmp/logs/user_search_pagination_<timestamp>.log` |
 | `post-delete-cache` | `./scripts/test-docker.sh ts --scenario post-delete-cache`<br>`.\scripts\test-docker.ps1 ts -Scenario post-delete-cache` | `post-delete-cache-logs`（`tmp/logs/post_delete_cache_<timestamp>.log`）<br>`post-delete-cache-reports`（`test-results/post-delete-cache/<timestamp>-*.json`：`useDeletePost` / `postStore` / `PostCard` 系4ファイル） | `tmp/logs/post_delete_cache_<timestamp>.log`（PowerShell 版は `tmp/logs/post_delete_cache_YYYYMMDD-HHMMSS.log` が自動採取される） |
 

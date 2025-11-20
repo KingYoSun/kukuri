@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSyncManager } from '@/hooks/useSyncManager';
+import type { PendingActionSummary, PendingActionCategory } from '@/hooks/useSyncManager';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +26,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import type { CacheTypeStatus, SyncQueueItem } from '@/types/offline';
+import type { CacheTypeStatus, SyncQueueItem, OfflineRetryMetrics } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -56,6 +57,132 @@ type CacheDocSummary = {
   blobHash?: string;
   payloadBytes?: number;
 };
+
+const ACTION_CATEGORY_LABELS: Record<PendingActionCategory, string> = {
+  topic: 'トピック',
+  post: '投稿/リアクション',
+  follow: 'フォロー',
+  dm: 'DM',
+  profile: 'プロフィール',
+  other: 'その他',
+};
+
+type QueueTelemetryEntry = {
+  id: number;
+  actionType: string;
+  cacheType?: string;
+  status: string;
+  retryCount: number;
+  maxRetries: number;
+  requestedBy?: string;
+  requestedAt?: string;
+  source?: string;
+};
+
+type RetryMetricsLogPayload = {
+  totalSuccess: number;
+  totalFailure: number;
+  consecutiveFailure: number;
+  lastOutcome?: string | null;
+  lastJobId?: string | null;
+  lastJobReason?: string | null;
+  lastRetryCount?: number | null;
+  lastMaxRetries?: number | null;
+  lastDurationMs?: number | null;
+  lastTimestampMs?: number | null;
+};
+
+function buildQueueTelemetryPayload(queueItems: SyncQueueItem[]): QueueTelemetryEntry[] {
+  return queueItems.slice(0, 5).map((item) => ({
+    id: item.id,
+    actionType: item.action_type,
+    cacheType: getPayloadString(item.payload, 'cacheType'),
+    status: item.status,
+    retryCount: item.retry_count,
+    maxRetries: item.max_retries,
+    requestedBy: getPayloadString(item.payload, 'requestedBy'),
+    requestedAt: getPayloadString(item.payload, 'requestedAt'),
+    source: getPayloadString(item.payload, 'source'),
+  }));
+}
+
+function buildRetryMetricsPayload(metrics: OfflineRetryMetrics | null): RetryMetricsLogPayload | null {
+  if (!metrics) {
+    return null;
+  }
+  return {
+    totalSuccess: metrics.totalSuccess,
+    totalFailure: metrics.totalFailure,
+    consecutiveFailure: metrics.consecutiveFailure,
+    lastOutcome: metrics.lastOutcome,
+    lastJobId: metrics.lastJobId,
+    lastJobReason: metrics.lastJobReason,
+    lastRetryCount: metrics.lastRetryCount,
+    lastMaxRetries: metrics.lastMaxRetries,
+    lastDurationMs: metrics.lastDurationMs,
+    lastTimestampMs: metrics.lastTimestampMs,
+  };
+}
+
+function useSyncStatusTelemetry({
+  queueItems,
+  pendingSummary,
+  retryMetrics,
+}: {
+  queueItems: SyncQueueItem[];
+  pendingSummary: PendingActionSummary;
+  retryMetrics: OfflineRetryMetrics | null;
+}) {
+  const queueLogEntries = React.useMemo(() => buildQueueTelemetryPayload(queueItems), [queueItems]);
+  const retryMetricsPayload = React.useMemo(
+    () => buildRetryMetricsPayload(retryMetrics),
+    [retryMetrics],
+  );
+  const lastPayloadRef = React.useRef({
+    queue: '',
+    pending: '',
+    metrics: '',
+  });
+
+  React.useEffect(() => {
+    if (queueLogEntries.length === 0) {
+      return;
+    }
+    const serialized = JSON.stringify(queueLogEntries);
+    if (serialized === lastPayloadRef.current.queue) {
+      return;
+    }
+    lastPayloadRef.current.queue = serialized;
+    errorHandler.info('SyncStatus.queue_snapshot', 'SyncStatusIndicator.telemetry', {
+      total: queueItems.length,
+      sample: queueLogEntries,
+    });
+  }, [queueItems.length, queueLogEntries]);
+
+  React.useEffect(() => {
+    if (pendingSummary.total === 0) {
+      return;
+    }
+    const serialized = JSON.stringify(pendingSummary);
+    if (serialized === lastPayloadRef.current.pending) {
+      return;
+    }
+    lastPayloadRef.current.pending = serialized;
+    errorHandler.info('SyncStatus.pending_actions_snapshot', 'SyncStatusIndicator.telemetry', pendingSummary);
+  }, [pendingSummary]);
+
+  React.useEffect(() => {
+    if (!retryMetricsPayload) {
+      return;
+    }
+    const serialized = JSON.stringify(retryMetricsPayload);
+    if (serialized === lastPayloadRef.current.metrics) {
+      return;
+    }
+    lastPayloadRef.current.metrics = serialized;
+    errorHandler.info('SyncStatus.retry_metrics_snapshot', 'SyncStatusIndicator.telemetry', retryMetricsPayload);
+  }, [retryMetricsPayload]);
+}
 
 function parseCacheMetadata(
   metadata?: Record<string, unknown> | null,
@@ -273,12 +400,18 @@ export function SyncStatusIndicator() {
     scheduledRetry,
     showConflictDialog,
     setShowConflictDialog,
+    pendingActionSummary,
   } = useSyncManager();
 
   const [focusedConflictIndex, setFocusedConflictIndex] = React.useState(0);
   const [queueFilter, setQueueFilter] = React.useState('');
   const [retryingItemId, setRetryingItemId] = React.useState<number | null>(null);
   const deletePostMutation = useDeletePost();
+  useSyncStatusTelemetry({
+    queueItems,
+    pendingSummary: pendingActionSummary,
+    retryMetrics,
+  });
 
   React.useEffect(() => {
     if (focusedConflictIndex >= syncStatus.conflicts.length) {
@@ -638,6 +771,29 @@ export function SyncStatusIndicator() {
                 <p className="text-sm text-muted-foreground">
                   {pendingActionsCount}件のアクションが同期待ちです
                 </p>
+                {pendingActionSummary.total > 0 && (
+                  <div
+                    className="mt-2 rounded border border-dashed border-border/70 p-2 text-xs"
+                    data-testid="offline-action-summary"
+                  >
+                    <p className="mb-1 font-medium text-muted-foreground/80">
+                      オフライン操作の内訳（Nightly）
+                    </p>
+                    <div className="space-y-1">
+                      {pendingActionSummary.categories.slice(0, 4).map((category) => (
+                        <div className="flex items-center justify-between" key={category.category}>
+                          <span>{ACTION_CATEGORY_LABELS[category.category] ?? category.category}</span>
+                          <span className="font-semibold text-foreground">{category.count}件</span>
+                        </div>
+                      ))}
+                    </div>
+                    {pendingActionSummary.categories.length > 4 && (
+                      <p className="mt-1 text-[11px] text-muted-foreground/80">
+                        他 {pendingActionSummary.categories.length - 4} カテゴリ
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

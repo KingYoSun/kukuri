@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncEngine';
@@ -62,6 +62,25 @@ type ScheduledRetryPayload = {
 
 type ScheduledRetryInfo = ScheduledRetryPayload | null;
 
+const PENDING_ACTION_SAMPLE_LIMIT = 5;
+
+export type PendingActionCategory = 'topic' | 'post' | 'follow' | 'dm' | 'profile' | 'other';
+
+export type PendingActionSummary = {
+  total: number;
+  categories: Array<{
+    category: PendingActionCategory;
+    count: number;
+    actionTypes: string[];
+    samples: Array<{
+      localId: string;
+      actionType: string;
+      targetId?: string;
+      createdAt?: number | string;
+    }>;
+  }>;
+};
+
 function inferEntityType(actionType: string): string | null {
   switch (actionType) {
     case OfflineActionType.CREATE_POST:
@@ -115,8 +134,79 @@ function extractEntityContext(
       entityId: String(candidateId),
     };
   } catch {
-    return null;
+      return null;
   }
+}
+
+function categorizeOfflineAction(actionType?: string): PendingActionCategory {
+  if (!actionType) {
+    return 'other';
+  }
+  const normalized = actionType.toLowerCase();
+  if (normalized.includes('topic')) {
+    return 'topic';
+  }
+  if (normalized.includes('follow')) {
+    return 'follow';
+  }
+  if (normalized.includes('direct_message') || normalized.includes('dm')) {
+    return 'dm';
+  }
+  if (
+    normalized.includes('post') ||
+    normalized.includes('like') ||
+    normalized.includes('bookmark') ||
+    normalized.includes('boost') ||
+    normalized.includes('delete')
+  ) {
+    return 'post';
+  }
+  if (normalized.includes('profile')) {
+    return 'profile';
+  }
+  return 'other';
+}
+
+function buildPendingActionSummary(pendingActions: OfflineAction[]): PendingActionSummary {
+  const summary = new Map<
+    PendingActionCategory,
+    { count: number; actionTypes: Set<string>; samples: PendingActionSummary['categories'][number]['samples'] }
+  >();
+
+  for (const action of pendingActions) {
+    const category = categorizeOfflineAction(action.actionType);
+    if (!summary.has(category)) {
+      summary.set(category, { count: 0, actionTypes: new Set<string>(), samples: [] });
+    }
+    const entry = summary.get(category)!;
+    entry.count += 1;
+    if (action.actionType) {
+      entry.actionTypes.add(action.actionType);
+    }
+    if (entry.samples.length < PENDING_ACTION_SAMPLE_LIMIT) {
+      const entityContext = extractEntityContext(action);
+      entry.samples.push({
+        localId: action.localId,
+        actionType: action.actionType,
+        targetId: entityContext?.entityId ?? action.targetId,
+        createdAt: action.createdAt,
+      });
+    }
+  }
+
+  const categories = Array.from(summary.entries())
+    .map(([category, value]) => ({
+      category,
+      count: value.count,
+      actionTypes: Array.from(value.actionTypes).sort(),
+      samples: value.samples,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    total: pendingActions.length,
+    categories,
+  };
 }
 
 export function useSyncManager() {
@@ -155,6 +245,10 @@ export function useSyncManager() {
   const [retryMetricsError, setRetryMetricsError] = useState<string | null>(null);
   const [isRetryMetricsLoading, setRetryMetricsLoading] = useState(false);
   const [scheduledRetry, setScheduledRetry] = useState<ScheduledRetryInfo>(null);
+  const pendingActionSummary = useMemo(
+    () => buildPendingActionSummary(pendingActions),
+    [pendingActions],
+  );
   const workerChannelRef = useRef<BroadcastChannel | null>(null);
   const workerScheduleRef = useRef(0);
   const pendingActionsRef = useRef(pendingActions.length);
@@ -832,5 +926,6 @@ export function useSyncManager() {
     isRetryMetricsLoading,
     refreshRetryMetrics,
     scheduledRetry,
+    pendingActionSummary,
   };
 }
