@@ -6,6 +6,9 @@ OUTPUT_DIR="$APP_DIR/tests/e2e/output"
 RESULT_DIR="/app/test-results/desktop-e2e"
 LOG_DIR="/app/tmp/logs/desktop-e2e"
 
+export VITE_ENABLE_E2E=true
+export TAURI_ENV_DEBUG=true
+
 mkdir -p "$RESULT_DIR" "$LOG_DIR" "$OUTPUT_DIR"
 rm -f "$OUTPUT_DIR"/*.png "$OUTPUT_DIR"/*.json 2>/dev/null || true
 

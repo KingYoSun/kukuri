@@ -10,6 +10,9 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
 const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
 
+process.env.VITE_ENABLE_E2E ??= 'true';
+process.env.TAURI_ENV_DEBUG ??= 'true';
+
 function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
     cwd: PROJECT_ROOT,
