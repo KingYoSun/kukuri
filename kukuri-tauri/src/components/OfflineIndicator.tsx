@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { WifiOff, Wifi } from 'lucide-react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -16,8 +16,7 @@ export function OfflineIndicator() {
       setShowBanner(true);
       setWasOffline(true);
     } else if (wasOffline) {
-      // オンライン復帰時
-      setShowBanner(true);
+      // 繧ｪ繝ｳ繝ｩ繧､繝ｳ蠕ｩ蟶ｰ譎・      setShowBanner(true);
       const timer = setTimeout(() => {
         setShowBanner(false);
         setWasOffline(false);
@@ -27,7 +26,7 @@ export function OfflineIndicator() {
   }, [isOnline, wasOffline]);
 
   const getLastSyncText = () => {
-    if (!lastSyncedAt) return '未同期';
+    if (!lastSyncedAt) return '譛ｪ蜷梧悄';
     return formatDistanceToNow(lastSyncedAt, {
       addSuffix: true,
       locale: ja,
@@ -38,7 +37,7 @@ export function OfflineIndicator() {
 
   return (
     <>
-      {/* ヘッダーバナー */}
+      {/* 繝倥ャ繝繝ｼ繝舌リ繝ｼ */}
       {showBanner && (
         <div
           className={cn(
@@ -51,24 +50,23 @@ export function OfflineIndicator() {
             {isOnline ? (
               <>
                 <Wifi className="h-4 w-4" />
-                <span className="text-sm font-medium">オンラインに復帰しました</span>
-                {isSyncing && <span className="text-xs opacity-90">（同期中...）</span>}
+                <span className="text-sm font-medium">繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｫ蠕ｩ蟶ｰ縺励∪縺励◆</span>
+                {isSyncing && <span className="text-xs opacity-90">・亥酔譛滉ｸｭ...・・/span>}
               </>
             ) : (
               <>
                 <WifiOff className="h-4 w-4" />
-                <span className="text-sm font-medium">オフラインモード</span>
+                <span className="text-sm font-medium">繧ｪ繝輔Λ繧､繝ｳ繝｢繝ｼ繝・/span>
                 <span className="text-xs opacity-90">
-                  （変更は保存され、オンライン時に同期されます）
-                </span>
+                  ・亥､画峩縺ｯ菫晏ｭ倥＆繧後√が繝ｳ繝ｩ繧､繝ｳ譎ゅ↓蜷梧悄縺輔ｌ縺ｾ縺呻ｼ・                </span>
               </>
             )}
           </div>
         </div>
       )}
 
-      {/* 常設インジケーター（詳細は SyncStatusIndicator 側で表示） */}
-      {(pendingCount > 0 || !isOnline || isSyncing || Boolean(lastSyncedAt)) && (
+      {/* 蟶ｸ險ｭ繧､繝ｳ繧ｸ繧ｱ繝ｼ繧ｿ繝ｼ・郁ｩｳ邏ｰ縺ｯ SyncStatusIndicator 蛛ｴ縺ｧ陦ｨ遉ｺ・・*/}
+      {(pendingCount > 0 || !isOnline || isSyncing) && (
         <div
           className="fixed bottom-4 right-4 left-4 mx-auto max-w-sm z-40"
           data-testid="offline-indicator-container"
@@ -89,21 +87,20 @@ export function OfflineIndicator() {
                   {isOnline ? (
                     <>
                       <Wifi className="h-4 w-4 inline mr-2" />
-                      最終同期: {getLastSyncText()}
+                      譛邨ょ酔譛・ {getLastSyncText()}
                     </>
                   ) : (
                     <>
                       <WifiOff className="h-4 w-4 inline mr-2" />
-                      オフラインです（ヘッダー右上の SyncStatusIndicator で詳細を確認できます）
-                    </>
+                      繧ｪ繝輔Λ繧､繝ｳ縺ｧ縺呻ｼ医・繝・ム繝ｼ蜿ｳ荳翫・ SyncStatusIndicator 縺ｧ隧ｳ邏ｰ繧堤｢ｺ隱阪〒縺阪∪縺呻ｼ・                    </>
                   )}
                 </button>
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  {isSyncing && <p>同期中です…</p>}
-                  {pendingCount > 0 && <p>未同期アクション: {pendingCount}件</p>}
-                  <p>詳細なステータスはヘッダー右上の SyncStatusIndicator から確認できます。</p>
+                  {isSyncing && <p>蜷梧悄荳ｭ縺ｧ縺吮ｦ</p>}
+                  {pendingCount > 0 && <p>譛ｪ蜷梧悄繧｢繧ｯ繧ｷ繝ｧ繝ｳ: {pendingCount}莉ｶ</p>}
+                  <p>隧ｳ邏ｰ縺ｪ繧ｹ繝・・繧ｿ繧ｹ縺ｯ繝倥ャ繝繝ｼ蜿ｳ荳翫・ SyncStatusIndicator 縺九ｉ遒ｺ隱阪〒縺阪∪縺吶・/p>
                 </div>
               </TooltipContent>
             </Tooltip>
