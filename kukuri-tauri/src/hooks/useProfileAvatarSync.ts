@@ -8,6 +8,7 @@ import { offlineApi } from '@/api/offline';
 import { errorHandler } from '@/lib/errorHandler';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
 import { useAuthStore } from '@/stores/authStore';
+import { useOfflineStore } from '@/stores/offlineStore';
 import {
   enqueueProfileAvatarSyncJob,
   PROFILE_AVATAR_SYNC_CHANNEL,
@@ -157,6 +158,7 @@ export function useProfileAvatarSync(
             });
           }
           setLastSyncedAt(new Date());
+          useOfflineStore.getState().updateLastSyncedAt();
           setError(null);
           return response;
         } catch (err) {

@@ -1,97 +1,14 @@
 import { $, $$, browser, expect } from '@wdio/globals';
 import { waitForAppReady } from '../helpers/waitForAppReady';
-
-type BridgeAction = 'resetAppState' | 'getAuthSnapshot';
-
-interface AuthSnapshot {
-  currentUser: { npub: string | null; displayName?: string | null } | null;
-  accounts: Array<{ npub: string; display_name: string }>;
-}
-
-type BridgeResultMap = {
-  resetAppState: null;
-  getAuthSnapshot: AuthSnapshot;
-};
-
-declare global {
-  interface Window {
-    __KUKURI_E2E__?: {
-      resetAppState: () => Promise<void>;
-      getAuthSnapshot: () => AuthSnapshot;
-    };
-  }
-}
-
-interface ProfileInfo {
-  name: string;
-  displayName: string;
-  about: string;
-}
-
-async function callBridge<T extends BridgeAction>(action: T): Promise<BridgeResultMap[T]> {
-  const response = await browser.executeAsync<
-    { error?: string; result?: BridgeResultMap[T] },
-    [BridgeAction]
-  >((name, done) => {
-    const helper = window.__KUKURI_E2E__;
-    if (!helper) {
-      done({ error: 'E2E bridge is unavailable' });
-      return;
-    }
-    const fn = helper[name];
-    if (typeof fn !== 'function') {
-      done({ error: `Unknown bridge action: ${name}` });
-      return;
-    }
-    Promise.resolve(fn())
-      .then((result) => done({ result: (result ?? null) as BridgeResultMap[T] }))
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        done({ error: message });
-      });
-  }, action);
-
-  if (response?.error) {
-    throw new Error(response.error);
-  }
-  return (response?.result ?? null) as BridgeResultMap[T];
-}
-
-async function resetAppState(): Promise<void> {
-  await callBridge('resetAppState');
-  await browser.refresh();
-  await waitForAppReady();
-}
-
-async function waitForWelcome(): Promise<void> {
-  const welcome = await $('[data-testid="welcome-screen"]');
-  await welcome.waitForDisplayed();
-}
-
-async function completeProfileSetup(profile: ProfileInfo): Promise<void> {
-  const form = await $('[data-testid="profile-form"]');
-  await form.waitForDisplayed();
-
-  await $('[data-testid="profile-name"]').setValue(profile.name);
-  await $('[data-testid="profile-display-name"]').setValue(profile.displayName);
-  await $('[data-testid="profile-about"]').setValue(profile.about);
-  await $('[data-testid="profile-submit"]').click();
-}
-
-async function waitForHome(): Promise<void> {
-  const home = await $('[data-testid="home-page"]');
-  await home.waitForDisplayed();
-}
-
-async function openSettings(): Promise<void> {
-  await $('[data-testid="open-settings-button"]').click();
-  await $('[data-testid="settings-page"]').waitForDisplayed();
-}
-
-async function openAccountMenu(): Promise<void> {
-  await $('[data-testid="account-switcher-trigger"]').click();
-  await $('[data-testid="account-menu-go-login"]').waitForDisplayed();
-}
+import { callBridge, resetAppState } from '../helpers/bridge';
+import {
+  completeProfileSetup,
+  waitForHome,
+  waitForWelcome,
+  openSettings,
+  openAccountMenu,
+  type ProfileInfo,
+} from '../helpers/appActions';
 
 describe('オンボーディングとキー管理', () => {
   before(async () => {

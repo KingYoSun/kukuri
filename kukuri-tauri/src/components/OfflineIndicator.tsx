@@ -45,6 +45,7 @@ export function OfflineIndicator() {
             'fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center transition-all duration-300',
             isOnline ? 'bg-green-500 text-white' : 'bg-orange-500 text-white',
           )}
+          data-testid="offline-indicator-banner"
         >
           <div className="flex items-center justify-center gap-2">
             {isOnline ? (
@@ -67,8 +68,11 @@ export function OfflineIndicator() {
       )}
 
       {/* 常設インジケーター（詳細は SyncStatusIndicator 側で表示） */}
-      {(pendingCount > 0 || !isOnline || isSyncing) && (
-        <div className="fixed bottom-4 right-4 left-4 mx-auto max-w-sm z-40">
+      {(pendingCount > 0 || !isOnline || isSyncing || Boolean(lastSyncedAt)) && (
+        <div
+          className="fixed bottom-4 right-4 left-4 mx-auto max-w-sm z-40"
+          data-testid="offline-indicator-container"
+        >
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -80,6 +84,7 @@ export function OfflineIndicator() {
                       ? 'bg-white text-gray-700 border-gray-200'
                       : 'bg-orange-100 text-orange-800 border-orange-200',
                   )}
+                  data-testid="offline-indicator-pill"
                 >
                   {isOnline ? (
                     <>

@@ -2,12 +2,29 @@ import { SecureStorageApi } from '@/lib/api/secureStorage';
 import { errorHandler } from '@/lib/errorHandler';
 import { persistKeys } from '@/stores/config/persist';
 import { useAuthStore } from '@/stores/authStore';
+import { useOfflineStore } from '@/stores/offlineStore';
 
 type AuthSnapshot = Pick<ReturnType<typeof useAuthStore.getState>, 'currentUser' | 'accounts'>;
 
-interface E2EBridge {
+interface OfflineSnapshot {
+  isOnline: boolean;
+  isSyncing: boolean;
+  lastSyncedAt: number | null;
+  pendingActionCount: number;
+}
+
+interface ProfileAvatarFixture {
+  base64: string;
+  format: string;
+  fileName?: string;
+}
+
+export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
+  getOfflineSnapshot: () => OfflineSnapshot;
+  setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => void;
+  consumeProfileAvatarFixture: () => ProfileAvatarFixture | null;
 }
 
 declare global {
@@ -25,6 +42,8 @@ const PERSISTED_KEYS: string[] = [
   persistKeys.privacy,
   persistKeys.keyManagement,
 ];
+
+let pendingAvatarFixture: ProfileAvatarFixture | null = null;
 
 async function purgeSecureAccounts() {
   try {
@@ -91,6 +110,23 @@ export function registerE2EBridge(): void {
         currentUser: state.currentUser,
         accounts: state.accounts,
       };
+    },
+    getOfflineSnapshot: () => {
+      const offlineState = useOfflineStore.getState();
+      return {
+        isOnline: offlineState.isOnline,
+        isSyncing: offlineState.isSyncing,
+        lastSyncedAt: offlineState.lastSyncedAt ?? null,
+        pendingActionCount: offlineState.pendingActions.length,
+      };
+    },
+    setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => {
+      pendingAvatarFixture = fixture ?? null;
+    },
+    consumeProfileAvatarFixture: () => {
+      const fixture = pendingAvatarFixture;
+      pendingAvatarFixture = null;
+      return fixture;
     },
   };
 }

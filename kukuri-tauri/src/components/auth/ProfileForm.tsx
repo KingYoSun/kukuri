@@ -14,6 +14,12 @@ import defaultAvatar from '@/assets/profile/default_avatar.png';
 import { errorHandler } from '@/lib/errorHandler';
 import { MAX_PROFILE_AVATAR_BYTES } from '@/lib/profile/avatar';
 
+type E2EAvatarFixture = {
+  base64: string;
+  format: string;
+  fileName?: string;
+};
+
 export interface ProfileFormValues {
   name: string;
   displayName: string;
@@ -99,6 +105,10 @@ export function ProfileForm({
   const handleAvatarSelect = async () => {
     try {
       setIsAvatarLoading(true);
+      const consumedFixture = tryConsumeAvatarFixture();
+      if (consumedFixture) {
+        return;
+      }
       const selection = await open({
         multiple: false,
         directory: false,
@@ -118,23 +128,7 @@ export function ProfileForm({
 
       const rawBytes = await readFile(filePath);
       const bytes = rawBytes instanceof Uint8Array ? rawBytes : Uint8Array.from(rawBytes);
-      if (bytes.byteLength > MAX_PROFILE_AVATAR_BYTES) {
-        toast.error('画像サイズが大きすぎます（最大2MBまで）');
-        return;
-      }
-
-      const objectUrl = createObjectUrl(bytes, format, objectUrlRef);
-      setSelectedAvatar({
-        bytes,
-        format,
-        sizeBytes: bytes.byteLength,
-        fileName: extractFileName(filePath),
-      });
-      setAvatarPreview(objectUrl);
-      setValues((current) => ({
-        ...current,
-        picture: '',
-      }));
+      applyAvatarSelection(extractFileName(filePath), format, bytes);
     } catch (error) {
       toast.error('画像の読み込みに失敗しました');
       errorHandler.log('ProfileForm.avatarLoadFailed', error, {
@@ -143,6 +137,56 @@ export function ProfileForm({
     } finally {
       setIsAvatarLoading(false);
     }
+  };
+
+  const applyAvatarSelection = (fileName: string, format: string, bytes: Uint8Array) => {
+    if (bytes.byteLength === 0) {
+      toast.error('画像の読み込みに失敗しました');
+      return false;
+    }
+    if (bytes.byteLength > MAX_PROFILE_AVATAR_BYTES) {
+      toast.error('画像サイズが大きすぎます（最大2MBまで）');
+      return false;
+    }
+
+    const objectUrl = createObjectUrl(bytes, format, objectUrlRef);
+    setSelectedAvatar({
+      bytes,
+      format,
+      sizeBytes: bytes.byteLength,
+      fileName,
+    });
+    setAvatarPreview(objectUrl);
+    setValues((current) => ({
+      ...current,
+      picture: '',
+    }));
+    return true;
+  };
+
+  const tryConsumeAvatarFixture = (): boolean => {
+    const fixture = consumeProfileAvatarFixture();
+    if (!fixture) {
+      return false;
+    }
+    if (!fixture.format?.startsWith('image/')) {
+      toast.error('テスト用アバターの読み込みに失敗しました');
+      return true;
+    }
+    if (!fixture.base64?.trim()) {
+      toast.error('テスト用アバターの読み込みに失敗しました');
+      return true;
+    }
+    try {
+      const bytes = decodeBase64ToUint8Array(fixture.base64);
+      applyAvatarSelection(fixture.fileName ?? 'e2e-avatar.png', fixture.format, bytes);
+    } catch (error) {
+      toast.error('テスト用アバターの読み込みに失敗しました');
+      errorHandler.log('ProfileForm.decodeE2EAvatarFailed', error, {
+        context: 'ProfileForm.tryConsumeAvatarFixture',
+      });
+    }
+    return true;
   };
 
   const handlePictureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,6 +227,7 @@ export function ProfileForm({
           size="sm"
           onClick={handleAvatarSelect}
           disabled={isSubmitting || isAvatarLoading}
+          data-testid="profile-avatar-upload"
         >
           <Upload className="mr-2 h-4 w-4" />
           {isAvatarLoading ? '読み込み中...' : '画像をアップロード'}
@@ -296,6 +341,41 @@ export function ProfileForm({
       </div>
     </form>
   );
+}
+
+function consumeProfileAvatarFixture(): E2EAvatarFixture | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const helper = window.__KUKURI_E2E__;
+  if (!helper?.consumeProfileAvatarFixture) {
+    return null;
+  }
+  try {
+    return helper.consumeProfileAvatarFixture() ?? null;
+  } catch (error) {
+    errorHandler.log('ProfileForm.consumeE2EAvatarFixtureFailed', error, {
+      context: 'ProfileForm.consumeProfileAvatarFixture',
+    });
+    return null;
+  }
+}
+
+function decodeBase64ToUint8Array(base64: string): Uint8Array {
+  const normalized = base64.trim();
+  if (!normalized) {
+    return new Uint8Array();
+  }
+  const decoder = typeof globalThis.atob === 'function' ? globalThis.atob : null;
+  if (!decoder) {
+    throw new Error('Base64 decoder is unavailable');
+  }
+  const binaryString = decoder(normalized);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i += 1) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
 }
 
 function resolveMimeType(filePath: string): string | null {
