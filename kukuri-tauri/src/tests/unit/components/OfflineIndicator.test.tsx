@@ -44,7 +44,7 @@ describe('OfflineIndicator', () => {
 
     render(<OfflineIndicator />);
     expect(screen.getByText('オフラインモード')).toBeInTheDocument();
-    expect(screen.getByText('（変更は保存され、オンライン時に同期されます）')).toBeInTheDocument();
+    expect(screen.getByText('変更は保存され、オンライン時に同期されます')).toBeInTheDocument();
   });
 
   it('オンライン復帰時に成功メッセージが表示される', async () => {
@@ -84,7 +84,6 @@ describe('OfflineIndicator', () => {
     });
 
     render(<OfflineIndicator />);
-    // オフラインバナーが表示される
     expect(screen.getByText('オフラインモード')).toBeInTheDocument();
   });
 
@@ -171,7 +170,7 @@ describe('OfflineIndicator', () => {
 
     await waitFor(() => {
       const guidance = screen.getAllByText(
-        '詳細なステータスはヘッダー右上の SyncStatusIndicator から確認できます。',
+        '詳細なステータスはヘッダー右上の SyncStatusIndicator から確認できます',
       );
       expect(guidance.length).toBeGreaterThan(0);
     });
@@ -201,7 +200,6 @@ describe('OfflineIndicator', () => {
   it.skip('オンライン復帰後5秒でバナーが自動的に非表示になる', async () => {
     vi.useFakeTimers();
 
-    // 最初はオフライン状態でマウント
     mockUseOfflineStore.mockReturnValue({
       isOnline: false,
       lastSyncedAt: Date.now(),
@@ -210,7 +208,6 @@ describe('OfflineIndicator', () => {
     });
     const { rerender } = render(<OfflineIndicator />);
 
-    // オンラインに復帰
     mockUseOfflineStore.mockReturnValue({
       isOnline: true,
       lastSyncedAt: Date.now(),
@@ -221,17 +218,14 @@ describe('OfflineIndicator', () => {
       rerender(<OfflineIndicator />);
     });
 
-    // オンライン復帰メッセージが表示されている
     await waitFor(() => {
       expect(screen.getByText('オンラインに復帰しました')).toBeInTheDocument();
     });
 
-    // 5秒経過
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
 
-    // バナーが非表示になっている
     await waitFor(() => {
       expect(screen.queryByText('オンラインに復帰しました')).not.toBeInTheDocument();
     });
