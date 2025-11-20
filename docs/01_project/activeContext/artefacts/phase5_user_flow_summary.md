@@ -1,18 +1,17 @@
 ﻿# Phase 5 ユーザー導線サマリー
 作成日: 2025年11月03日  
-最終更新: 2025年11月18日
+最終更新: 2025年11月20日
 
 ## 概要
 - Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
 - 詳細なフロー・API 連携・設計メモは `phase5_user_flow_inventory.md` を参照し、本書では意思決定に必要なサマリーのみを掲載。
 - 導線の状態は「稼働中」「改善中」「未実装」の 3 区分で整理し、次の対応タスクを明示する。
 
-## MVP残タスクハイライト（2025年11月12日更新）
-- **トレンド/フォロー**: Summary Panel と `/trending` `/following` UI は安定。2025年11月10日に `corepack enable pnpm` → `pnpm install --frozen-lockfile` を通し、`pnpm vitest run …` と Docker `./scripts/test-docker.sh ts --scenario trending-feed --no-build` をローカルで再実行（`tmp/logs/vitest_trending_topics_20251110020449.log` / `trending-feed_20251110020528.log`）。同日に `KUKURI_METRICS_PROMETHEUS_PORT` / `KUKURI_METRICS_EMIT_HISTOGRAM` を追加し、`curl http://localhost:<port>/metrics` で `trending_metrics_job_*` 指標を確認できるようになった。2025年11月11日には `scripts/test-docker.{sh,ps1} ts --scenario trending-feed` へ `prometheus-trending` サービスの自動起動と `curl http://127.0.0.1:9898/metrics` のスナップショット採取を追加し、`tmp/logs/trending_metrics_job_stage4_20251111-191137.log` に `curl` 出力とコンテナログを記録。2025年11月12日: Nightly `trending-feed` ジョブで `tmp/logs/trending_metrics_job_stage4_*.log` を artefact 化し、Runbook/CI 双方で metrics ログをトレースできる状態にした。2025年11月15日: Summary Panel に `generated_at` ラグ表示と DM 会話ラベルを追加し、Docker シナリオが `test-results/trending-feed/reports/`（Vitest）、`test-results/trending-feed/metrics/`（`p2p_metrics_export --job trending`）を生成するよう更新。`nightly.yml` へ `trending-metrics-json` artefact を追加済み。 |
-  さらに同ログは `test-results/trending-feed/prometheus/` にも複製され、Nightly artefact `trending-metrics-prometheus` として Runbook から直接参照可能となった。
-- **Direct Message / Inbox**: Kind4 IPC / `DirectMessageDialog` の無限スクロールは稼働中。2025年11月12日に `useDirectMessageBootstrap` へ 30 秒間隔の再取得・フォーカス復帰・`DirectMessageInbox`/`DirectMessageDialog` オープン時の即時同期を追加し、多端末既読共有を SQLite `direct_message_conversations` の未読数と連動させた。2025年11月19日には `list_direct_message_conversations` をカーソル/`has_more` 対応へ拡張し、`DirectMessageInbox` を `useInfiniteQuery(['direct-message-conversations'])` + TanStack Virtualizer でページング。Nightly/Runbook 両方の DM 行から `nightly.direct-message-{logs,reports}`（`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json`）を参照できるよう整理済み（Inventory 5.4 / 5.6.x 更新）。
-- **プロフィール/設定**: Stage3（Doc/Blob + privacy）を 2025年11月10日に完了し、`ProfileEditDialog` / `ProfileSetup` が `update_privacy_settings` → `upload_profile_avatar` → `useProfileAvatarSync` を直列実行。2025年11月12日: Stage4（Service Worker + Offline ログ）も完了し、`profileAvatarSyncSW.ts` の指数バックオフ／`offlineApi.addToSyncQueue` ログ／`profile_avatar_sync` の `cache_metadata` TTL 30 分を Runbook / CI artefact（`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log`）に統合。Nightly は `scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker` と `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` をセットで実行し、`phase5_ci_path_audit.md` / Runbook Chapter4 に Test ID（`nightly.profile-avatar-sync`）と採取パスを明記。
-- **ユーザー検索**: `useUserSearchQuery` と `UserSearchResults` に cursor/sort／レートリミット UI／無限スクロールを実装し、2025年11月10日に `allow_incomplete` フォールバックと SearchBar 警告スタイル・補助検索ラベルを追加。同日 `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build` を実行し、`tmp/logs/user_search_pagination_20251110-142854.log` を採取。2025年11月12日: `nightly.yml` に `user-search-pagination` ジョブを追加し、`test-results/user-search-pagination/*.json` と `tmp/logs/user_search_pagination_<timestamp>.log` を artefact 化。2025年11月19日: 2文字未満→補助検索→`retryAfter` 自動解除→`SearchErrorState` までを `user-search-pagination-search-error` artefact（`test-results/user-search-pagination/search-error/<timestamp>-search-error-state.json`）として自動記録。
+## MVP完了ハイライト（2025年11月20日更新）
+- **トレンド/フォロー**: Summary Panel・`TrendingSummaryPanel` の `generated_at` ラグ表示と DM カードを組み込み、`scripts/test-docker.{sh,ps1} ts --scenario trending-feed` が `test-results/trending-feed/{reports,prometheus,metrics}` を常時生成。`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` / `test-results/trending-feed/prometheus/` を Nightly artefact 化し、`phase5_ci_path_audit.md` から Runbook へ直接リンクできる状態になった。
+- **Direct Message / Inbox**: `useDirectMessageBootstrap` と TanStack Virtualizer による会話リストが安定。2025年11月19日の `list_direct_message_conversations` カーソル対応と contract テスト（`kukuri-tauri/src-tauri/tests/contract/direct_messages.rs`）で多端末既読同期を保証。`nightly.direct-message-{logs,reports}` artefact には `tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json` を収集済み。
+- **プロフィール/設定**: Stage4（Service Worker + Offline ログ）を `nightly.profile-avatar-sync` で再現し、`profileAvatarSyncSW.ts` の指数バックオフや `offlineApi.addToSyncQueue` ログを `tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` に集約。`ProfileEditDialog` / `ProfileSetup` は `update_privacy_settings` → `upload_profile_avatar` → `useProfileAvatarSync` を直列化済み。
+- **ユーザー検索**: `useUserSearchQuery` は rate limit/allowIncomplete/cooldown を持つ状態機械で、`scripts/test-docker.{sh,ps1} ts --scenario user-search-pagination --no-build` が `test-results/user-search-pagination/{reports,logs,search-error}` を生成。補助検索と `retryAfter` の解除は `user-search-pagination-search-error` artefact で確認でき、導線は「稼働中」に集約された。
 
 ## 部分利用導線マトリクス（2025年11月18日更新）
 
@@ -132,17 +131,6 @@
 - `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` 2.5 節 — 導線指標と未対応項目チェックリスト。
 - `docs/03_implementation/trending_metrics_job.md` — トレンドメトリクス集計ジョブの設計案と監視手順ドラフト。
 
-## 6. 未実装項目の優先度見直し（2025年11月05日）
+## 6. Post-MVP backlog（2025年11月20日）
 
-| 優先度 | 項目 | 現状/課題 | ユーザー影響 | 次アクション |
-| --- | --- | --- | --- | --- |
-| A | 投稿削除 (`delete_post`) | 2025年11月03日: PostCard 削除メニューと `postStore.deletePostRemote` のオフライン対応を実装し、ユニットテストで検証済み。 | 楽観削除は機能するが、React Query キャッシュと Rust 統合テストが未整備。 | Inventory 5.10 に沿って React Query 側のキャッシュ無効化と `delete_post` コマンドの統合テスト追加、CI での回帰監視をフォローアップ。 |
-| B | `/profile/$userId` ルート | `DirectMessageDialog` は Kind4 IPC・未読管理・再送ボタンまで実装済み。フォロワー/フォロー一覧のソート（最新/古い/名前）・検索・件数表示を実装済みで、既読同期の多端末共有とページング拡張が残課題。 | DM 履歴はモーダル表示で確認でき、フォロー一覧もソート/検索可能になったが、会話既読の多端末反映と 2 ページ目以降の自動補充が未対応。 | Inventory 5.6.1 で delivered/既読同期と Docker/contract テストを追加し、Inventory 5.6.2 でページング整合性とフォローアップテストを進める。 |
-| 完了 | 鍵管理ダイアログ | 2025年11月17日: `KeyManagementDialog` でエクスポート/インポート/履歴表示を提供。2025年11月19日: Inventory 5.13 と Runbook Chapter4.4 で導線監査とテレメトリ（`KeyManagementDialog.*`）を記録。 | 端末故障時にもバックアップ済み nsec から復旧可能。 | `./scripts/test-docker.ps1 ts`（Vitest）と `./scripts/test-docker.ps1 rust -Test key_management`（Rust）を定期実行し、`persistKeys.keyManagement` 履歴を Nightly artefact へ採取する。 |
-| B | プライバシー設定のバックエンド連携 | トグルはローカル永続のみで、他クライアントへ反映されない。 | 公開範囲が端末ごとに不一致。誤公開や表示不整合の恐れ。 | `usePrivacySettingsStore` から Tauri コマンドを呼ぶ設計策定、Nostr/P2P への伝播API定義、同期テスト計画を追記。 |
-| B | ユーザー検索導線改善 | `/search` (users) は `search_users` で実ユーザーを表示し、Infinite Query・レートリミット UI・関連度/最新順トグル・`allow_incomplete` フォールバック・SearchBar 警告スタイルまで実装済み（2025年11月10日）。Docker `user-search-pagination` シナリオも追加。 | ソートやページネーションは利用できるが、短い入力時の補助検索を Nightly で再現する自動化と成果物保存が未整備。 | Inventory 5.8 に沿って Nightly ジョブへシナリオを追加し、`tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log` / `tmp/logs/user_search_pagination_20251110-142854.log` を Runbook/CI に登録する。 |
-| B | `/trending` / `/following` フィード | Summary Panel で派生メトリクスと DM 未読カードを表示。Docker シナリオ・`trending_metrics_job` は未実装。 | ✅ 2025年11月15日: `trending_metrics_job` のラグ/係数をログ・Prometheus・JSON へ出力し、`test-results/trending-feed/{reports,prometheus,metrics}` を Nightly artefact (`trending-feed-reports` / `trending-metrics-logs` / `trending-metrics-prometheus` / `trending-metrics-json`) として公開。Summary Panel も `generated_at` ラグと DM 会話ラベルを表示。 | 5.7 節の順序 (Docker シナリオ → `trending_metrics_job`) に沿って実装し、各ステップ後にテスト/ドキュメント/CI を更新。 |
-
-> 優先度A: 現行体験に致命的影響があるもの。<br>
-> 優先度B: 早期に手当てしたいが依存タスクがあるもの。<br>
-> 優先度C: 情報提供や暫定UIでの回避が可能なもの。
+MVP Exit Criteria に紐づく未実装項目は 0 件。今後は Phase 7（リリース準備）とベータに向けた改善のみを扱う。Post-MVP の検討事項は `phase5_user_flow_inventory.md` と `tauri_app_implementation_plan.md` の backlog セクションで管理する。
