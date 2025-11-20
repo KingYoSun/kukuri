@@ -55,7 +55,8 @@ function resolveNativeDriver(): string | undefined {
   }
 
   if (platform() === 'win32') {
-    return resolve(process.cwd(), 'msedgedriver.exe');
+    const candidate = resolve(process.cwd(), 'msedgedriver.exe');
+    return existsSync(candidate) ? candidate : undefined;
   }
 
   if (platform() === 'linux') {

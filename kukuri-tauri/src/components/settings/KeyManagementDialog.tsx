@@ -294,7 +294,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" data-testid="key-management-dialog">
         <DialogHeader className="space-y-2">
           <DialogTitle>鍵管理</DialogTitle>
           <DialogDescription>
@@ -307,8 +307,12 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
           onValueChange={(value) => setActiveTab(value as 'export' | 'import')}
         >
           <TabsList className="grid grid-cols-2">
-            <TabsTrigger value="export">エクスポート</TabsTrigger>
-            <TabsTrigger value="import">インポート</TabsTrigger>
+            <TabsTrigger value="export" data-testid="key-tab-export">
+              エクスポート
+            </TabsTrigger>
+            <TabsTrigger value="import" data-testid="key-tab-import">
+              インポート
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="export" className="space-y-4 pt-4">
@@ -320,7 +324,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
             </Alert>
 
             <div className="space-y-3">
-              <Button onClick={handleExport} disabled={isExporting}>
+              <Button onClick={handleExport} disabled={isExporting} data-testid="key-export-button">
                 {isExporting ? '取得中...' : '秘密鍵を取得'}
               </Button>
 
@@ -333,11 +337,13 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       type={isKeyVisible ? 'text' : 'password'}
                       value={exportedKey}
                       readOnly
+                      data-testid="key-exported-value"
                     />
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setIsKeyVisible((value) => !value)}
+                      data-testid="key-toggle-visibility"
                     >
                       {isKeyVisible ? '非表示' : '表示'}
                     </Button>
@@ -348,6 +354,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       variant="outline"
                       onClick={handleCopy}
                       disabled={isCopying}
+                      data-testid="key-copy-button"
                     >
                       {isCopying ? 'コピー中...' : 'クリップボードにコピー'}
                     </Button>
@@ -356,6 +363,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       variant="outline"
                       onClick={handleSaveToFile}
                       disabled={isSaving}
+                      data-testid="key-save-button"
                     >
                       {isSaving ? '保存中...' : 'ファイルに保存'}
                     </Button>
@@ -380,7 +388,11 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
 
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={handleSelectFile}>
+                <Button
+                  variant="outline"
+                  onClick={handleSelectFile}
+                  data-testid="key-import-select-file"
+                >
                   鍵ファイルを選択
                 </Button>
                 {importSource && (
@@ -398,10 +410,15 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                   value={importedNsec}
                   onChange={(event) => setImportedNsec(event.target.value)}
                   placeholder="nsec1..."
+                  data-testid="key-import-input"
                 />
               </div>
 
-              <Button onClick={handleImport} disabled={isImporting || !canImport}>
+              <Button
+                onClick={handleImport}
+                disabled={isImporting || !canImport}
+                data-testid="key-import-button"
+              >
                 {isImporting ? 'インポート中...' : 'セキュアストレージに追加'}
               </Button>
 

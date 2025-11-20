@@ -96,7 +96,7 @@ function SettingsPage() {
     };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6" data-testid="settings-page">
       <h1 className="text-3xl font-bold">設定</h1>
 
       <Card>
@@ -127,7 +127,11 @@ function SettingsPage() {
               <p className="font-medium">プロフィール編集</p>
               <p className="text-sm text-muted-foreground">表示名、自己紹介、アバター画像を編集</p>
             </div>
-            <Button variant="outline" onClick={() => setProfileDialogOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setProfileDialogOpen(true)}
+              data-testid="open-profile-dialog"
+            >
               編集
             </Button>
           </div>
@@ -136,7 +140,11 @@ function SettingsPage() {
               <p className="font-medium">鍵管理</p>
               <p className="text-sm text-muted-foreground">秘密鍵のバックアップとインポート</p>
             </div>
-            <Button variant="outline" onClick={() => setKeyDialogOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setKeyDialogOpen(true)}
+              data-testid="open-key-dialog"
+            >
               管理
             </Button>
           </div>

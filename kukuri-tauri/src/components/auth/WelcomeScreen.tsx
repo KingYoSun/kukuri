@@ -26,7 +26,10 @@ export function WelcomeScreen() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
+    <div
+      className="flex items-center justify-center min-h-screen bg-background"
+      data-testid="welcome-screen"
+    >
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center">
@@ -46,10 +49,21 @@ export function WelcomeScreen() {
             <p>・Nostrプロトコルによる分散型アーキテクチャ</p>
           </div>
           <div className="space-y-3">
-            <Button onClick={handleCreateAccount} className="w-full" size="lg">
+            <Button
+              onClick={handleCreateAccount}
+              className="w-full"
+              size="lg"
+              data-testid="welcome-create-account"
+            >
               新規アカウント作成
             </Button>
-            <Button onClick={handleLogin} variant="outline" className="w-full" size="lg">
+            <Button
+              onClick={handleLogin}
+              variant="outline"
+              className="w-full"
+              size="lg"
+              data-testid="welcome-login"
+            >
               既存アカウントでログイン
             </Button>
           </div>

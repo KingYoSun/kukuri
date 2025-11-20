@@ -206,6 +206,7 @@ export function ProfileForm({
             value={values.name}
             onChange={(event) => setValues({ ...values, name: event.target.value })}
             placeholder="表示名"
+            data-testid="profile-name"
           />
         </div>
 
@@ -216,6 +217,7 @@ export function ProfileForm({
             value={values.displayName}
             onChange={(event) => setValues({ ...values, displayName: event.target.value })}
             placeholder="@handle（省略可）"
+            data-testid="profile-display-name"
           />
         </div>
 
@@ -227,6 +229,7 @@ export function ProfileForm({
             onChange={(event) => setValues({ ...values, about: event.target.value })}
             placeholder="あなたについて教えてください"
             rows={3}
+            data-testid="profile-about"
           />
         </div>
 
@@ -265,6 +268,7 @@ export function ProfileForm({
             onClick={onCancel}
             className="flex-1"
             disabled={isSubmitting}
+            data-testid="profile-cancel"
           >
             {cancelLabel}
           </Button>
@@ -276,11 +280,17 @@ export function ProfileForm({
             onClick={onSkip}
             className="flex-1"
             disabled={isSubmitting}
+            data-testid="profile-skip"
           >
             {skipLabel}
           </Button>
         )}
-        <Button type="submit" className="flex-1" disabled={isSubmitting}>
+        <Button
+          type="submit"
+          className="flex-1"
+          disabled={isSubmitting}
+          data-testid="profile-submit"
+        >
           {submitLabel}
         </Button>
       </div>

@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Hash, Plus, TrendingUp, Users, List, Search, MessageSquare } from 'lucide-react';
+import { Hash, Plus, TrendingUp, Users, List, Search, MessageSquare, Settings } from 'lucide-react';
 import { useTopicStore, useUIStore, useComposerStore, type SidebarCategory } from '@/stores';
 import { useP2P } from '@/hooks/useP2P';
 import { cn } from '@/lib/utils';
@@ -127,6 +127,12 @@ export function Sidebar() {
     openComposer({ topicId: topic.id });
   };
 
+  const handleOpenSettings = () => {
+    setCurrentTopic(null);
+    setActiveSidebarCategory(null);
+    navigate({ to: '/settings' });
+  };
+
   const handleCategoryClick = useCallback(
     (category: SidebarCategoryItem) => {
       setCurrentTopic(null);
@@ -241,6 +247,15 @@ export function Sidebar() {
         <div className="p-4 space-y-4">
           <RelayStatus />
           <P2PStatus />
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={handleOpenSettings}
+            data-testid="open-settings-button"
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            設定
+          </Button>
         </div>
       </div>
       <TopicFormModal

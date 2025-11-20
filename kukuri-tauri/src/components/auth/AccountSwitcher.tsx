@@ -58,7 +58,11 @@ export function AccountSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          className="flex items-center gap-2"
+          data-testid="account-switcher-trigger"
+        >
           <Avatar className="h-8 w-8">
             <AvatarImage src={currentUserAvatarSrc} alt={currentUser.displayName} />
             <AvatarFallback>{getInitials(currentUser.displayName)}</AvatarFallback>
@@ -96,6 +100,7 @@ export function AccountSwitcher() {
               key={account.npub}
               className="cursor-pointer"
               onSelect={() => handleSwitchAccount(account.npub)}
+              data-testid="account-switch-option"
             >
               <div className="flex items-center gap-3 w-full">
                 <Avatar className="h-8 w-8">
@@ -119,7 +124,10 @@ export function AccountSwitcher() {
         <DropdownMenuSeparator />
 
         {/* アクション */}
-        <DropdownMenuItem onSelect={() => navigate({ to: '/login' })}>
+        <DropdownMenuItem
+          onSelect={() => navigate({ to: '/login' })}
+          data-testid="account-menu-go-login"
+        >
           <User className="mr-2 h-4 w-4" />
           <span>別のアカウントを追加</span>
         </DropdownMenuItem>
@@ -127,12 +135,13 @@ export function AccountSwitcher() {
         <DropdownMenuItem
           onSelect={() => handleRemoveAccount(currentUser.npub)}
           className="text-destructive"
+          data-testid="account-menu-remove-current"
         >
           <Trash2 className="mr-2 h-4 w-4" />
           <span>アカウントを削除</span>
         </DropdownMenuItem>
 
-        <DropdownMenuItem onSelect={logout}>
+        <DropdownMenuItem onSelect={logout} data-testid="account-menu-logout">
           <LogOut className="mr-2 h-4 w-4" />
           <span>ログアウト</span>
         </DropdownMenuItem>

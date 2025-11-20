@@ -20,6 +20,7 @@
      - `/welcome`→`/login`→`/profile-setup` で `generate_keypair` / `login` / `add_account` / `initialize_nostr` / `update_nostr_metadata` が一連で動作し、複数アカウントを `authStore` から切り替えられる。
      - `ProfileSetup` で入力したプロフィールが Settings > Profile でも同期され、オンボーディング後の再編集時にもドラフト復元が効く。
      - `KeyManagementDialog` から `.nsec` をエクスポート/復旧し、`authStore.loginWithNsec(..., true)` で Secure Storage へ再登録できる（`scripts/test-docker.ps1 ts --filter KeyManagementDialog` / `rust -Test key_management` ログを確認）。
+     - ✅ `tests/e2e/specs/onboarding.key-management.spec.ts` でオンボーディング〜キー管理〜複数アカウント切替までを自動検証（msedgedriver 未導入のためローカルWDIO実行は driver 不足で失敗するが、シナリオ自体は自動化済み）
   2. **プロフィール/プライバシー/アバター同期**
      - `ProfileEditDialog` / `SettingsPage` でのプライバシーフラグ更新が `update_privacy_settings`→`authStore.updateUser` に即時反映される。
      - `upload_profile_avatar` → `ProfileAvatarService` → Doc/Blob 保存 → `useProfileAvatarSync.syncNow` の連携でヘッダー画像と `OfflineIndicator` が即更新される。
