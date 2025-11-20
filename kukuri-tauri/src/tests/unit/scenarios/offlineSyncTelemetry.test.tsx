@@ -55,7 +55,11 @@ const createPendingSummary = (category: CategoryKey): PendingActionSummary => ({
       count: 2,
       actionTypes: [`${category}_action`],
       samples: [
-        { localId: `${category}-1`, actionType: `${category}_action`, targetId: `${category}-target-1` },
+        {
+          localId: `${category}-1`,
+          actionType: `${category}_action`,
+          targetId: `${category}-target-1`,
+        },
       ],
     },
   ],

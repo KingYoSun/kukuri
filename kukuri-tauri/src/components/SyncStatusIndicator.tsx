@@ -106,7 +106,9 @@ function buildQueueTelemetryPayload(queueItems: SyncQueueItem[]): QueueTelemetry
   }));
 }
 
-function buildRetryMetricsPayload(metrics: OfflineRetryMetrics | null): RetryMetricsLogPayload | null {
+function buildRetryMetricsPayload(
+  metrics: OfflineRetryMetrics | null,
+): RetryMetricsLogPayload | null {
   if (!metrics) {
     return null;
   }
@@ -168,7 +170,11 @@ function useSyncStatusTelemetry({
       return;
     }
     lastPayloadRef.current.pending = serialized;
-    errorHandler.info('SyncStatus.pending_actions_snapshot', 'SyncStatusIndicator.telemetry', pendingSummary);
+    errorHandler.info(
+      'SyncStatus.pending_actions_snapshot',
+      'SyncStatusIndicator.telemetry',
+      pendingSummary,
+    );
   }, [pendingSummary]);
 
   React.useEffect(() => {
@@ -180,7 +186,11 @@ function useSyncStatusTelemetry({
       return;
     }
     lastPayloadRef.current.metrics = serialized;
-    errorHandler.info('SyncStatus.retry_metrics_snapshot', 'SyncStatusIndicator.telemetry', retryMetricsPayload);
+    errorHandler.info(
+      'SyncStatus.retry_metrics_snapshot',
+      'SyncStatusIndicator.telemetry',
+      retryMetricsPayload,
+    );
   }, [retryMetricsPayload]);
 }
 
@@ -782,7 +792,9 @@ export function SyncStatusIndicator() {
                     <div className="space-y-1">
                       {pendingActionSummary.categories.slice(0, 4).map((category) => (
                         <div className="flex items-center justify-between" key={category.category}>
-                          <span>{ACTION_CATEGORY_LABELS[category.category] ?? category.category}</span>
+                          <span>
+                            {ACTION_CATEGORY_LABELS[category.category] ?? category.category}
+                          </span>
                           <span className="font-semibold text-foreground">{category.count}件</span>
                         </div>
                       ))}

@@ -134,7 +134,7 @@ function extractEntityContext(
       entityId: String(candidateId),
     };
   } catch {
-      return null;
+    return null;
   }
 }
 
@@ -170,7 +170,11 @@ function categorizeOfflineAction(actionType?: string): PendingActionCategory {
 function buildPendingActionSummary(pendingActions: OfflineAction[]): PendingActionSummary {
   const summary = new Map<
     PendingActionCategory,
-    { count: number; actionTypes: Set<string>; samples: PendingActionSummary['categories'][number]['samples'] }
+    {
+      count: number;
+      actionTypes: Set<string>;
+      samples: PendingActionSummary['categories'][number]['samples'];
+    }
   >();
 
   for (const action of pendingActions) {
