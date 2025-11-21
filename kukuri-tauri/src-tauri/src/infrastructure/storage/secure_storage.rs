@@ -11,7 +11,10 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use keyring::Entry;
-use nostr_sdk::{FromBech32, prelude::SecretKey};
+use nostr_sdk::{
+    FromBech32,
+    prelude::{Keys, PublicKey, SecretKey},
+};
 use tracing::{debug, error};
 
 const SERVICE_NAME: &str = "kukuri";
@@ -418,14 +421,23 @@ impl KeyMaterialStore for DefaultSecureStorage {
 
     async fn set_current(&self, npub: &str) -> Result<(), AppError> {
         let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
-        if ledger.records.contains_key(npub) {
-            ledger.touch_current(npub);
-            Self::save_key_material_ledger(&ledger).map_err(to_storage_error)
-        } else {
-            Err(AppError::NotFound(format!(
-                "Keypair not found for npub {npub}"
-            )))
+        if !ledger.records.contains_key(npub) {
+            // Ledger entries can go missing on some platforms; recreate them on-demand.
+            let public_key = match Self::get_private_key(npub).map_err(to_storage_error)? {
+                Some(nsec) => {
+                    let secret_key = SecretKey::from_bech32(&nsec).map_err(|e| {
+                        AppError::Crypto(format!("Invalid nsec stored for npub {npub}: {e:?}"))
+                    })?;
+                    Keys::new(secret_key).public_key().to_hex()
+                }
+                None => PublicKey::from_bech32(npub)
+                    .map_err(|e| AppError::Crypto(format!("Failed to decode npub {npub}: {e:?}")))?
+                    .to_hex(),
+            };
+            ledger.upsert(KeyMaterialRecord::new(npub.to_string(), public_key));
         }
+        ledger.touch_current(npub);
+        Self::save_key_material_ledger(&ledger).map_err(to_storage_error)
     }
 
     async fn current_keypair(&self) -> Result<Option<KeyPair>, AppError> {

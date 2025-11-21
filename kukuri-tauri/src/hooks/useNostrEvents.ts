@@ -5,6 +5,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
 import type { NostrEventPayload } from '@/types/nostr';
+import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
 
 /**
  * Nostrイベントリスナーフック
@@ -165,6 +166,10 @@ export function useNostrEvents() {
   );
 
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
     let unlisten: UnlistenFn | null = null;
 
     const setupListener = async () => {

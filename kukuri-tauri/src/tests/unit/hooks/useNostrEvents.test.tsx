@@ -12,7 +12,10 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(),
 }));
 
-// ストアのモック
+vi.mock('@/lib/utils/tauriEnvironment', () => ({
+  isTauriRuntime: () => true,
+}));
+
 vi.mock('@/stores/postStore');
 vi.mock('@/stores/topicStore');
 

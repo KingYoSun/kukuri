@@ -50,19 +50,26 @@ function SettingsPage() {
       showOnlineStatus: field === 'online' ? value : showOnlineStatus,
     };
     setSavingField(field);
+    updateUser(payload);
     try {
       await TauriApi.updatePrivacySettings({
         npub: currentUser.npub,
         publicProfile: payload.publicProfile,
         showOnlineStatus: payload.showOnlineStatus,
       });
-      await updateNostrMetadata({
-        kukuri_privacy: {
-          public_profile: payload.publicProfile,
-          show_online_status: payload.showOnlineStatus,
-        },
-      });
-      updateUser(payload);
+      try {
+        await updateNostrMetadata({
+          kukuri_privacy: {
+            public_profile: payload.publicProfile,
+            show_online_status: payload.showOnlineStatus,
+          },
+        });
+      } catch (nostrError) {
+        errorHandler.log('SettingsPage.updatePrivacyNostrSkipped', nostrError, {
+          context: 'SettingsPage.persistPrivacy.updateNostrMetadata',
+          metadata: { field },
+        });
+      }
       toast.success('プライバシー設定を更新しました');
     } catch (error) {
       errorHandler.log('SettingsPage.updatePrivacyFailed', error, {
@@ -70,11 +77,6 @@ function SettingsPage() {
         metadata: { field },
       });
       toast.error('プライバシー設定の更新に失敗しました');
-      if (field === 'public') {
-        setPublicProfile(!value);
-      } else {
-        setShowOnlineStatus(!value);
-      }
     } finally {
       setSavingField(null);
     }

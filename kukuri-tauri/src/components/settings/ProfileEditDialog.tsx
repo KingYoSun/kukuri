@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   Dialog,
@@ -30,6 +30,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
   const { currentUser, updateUser } = useAuthStore();
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const shouldCloseOnFinallyRef = useRef(false);
   const { syncNow: syncAvatar } = useProfileAvatarSync({ autoStart: false });
 
   const initialValues: ProfileFormValues = useMemo(
@@ -44,7 +45,21 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
   );
 
   const handleClose = () => {
+    shouldCloseOnFinallyRef.current = false;
     onOpenChange(false);
+  };
+
+  useEffect(() => {
+    if (!open) {
+      shouldCloseOnFinallyRef.current = false;
+    }
+  }, [open]);
+
+  const handleSubmitFinally = () => {
+    if (!shouldCloseOnFinallyRef.current) {
+      return;
+    }
+    handleClose();
   };
 
   const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
@@ -58,7 +73,9 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       return;
     }
 
+    shouldCloseOnFinallyRef.current = true;
     setIsSubmitting(true);
+    let hasError = false;
     try {
       let updatedPicture = profile.picture || currentUser.picture || '';
       let updatedAvatar = currentUser.avatar ?? null;
@@ -67,39 +84,62 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
       if (profile.avatarFile) {
         if (!currentUser.npub) {
-          throw new Error('Missing npub for avatar upload');
+          toast.error('アバターのアップロードに必要な情報が不足しています');
+          hasError = true;
+        } else {
+          try {
+            const uploadResult = await TauriApi.uploadProfileAvatar({
+              npub: currentUser.npub,
+              data: profile.avatarFile.bytes,
+              format: profile.avatarFile.format,
+              accessLevel: 'contacts_only',
+            });
+            const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
+            updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
+            updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
+            nostrPicture = updatedAvatar.nostrUri;
+          } catch (error) {
+            hasError = true;
+            errorHandler.log('ProfileEditDialog.avatarUploadFailed', error, {
+              context: 'ProfileEditDialog.handleSubmit',
+            });
+          }
         }
-        const uploadResult = await TauriApi.uploadProfileAvatar({
-          npub: currentUser.npub,
-          data: profile.avatarFile.bytes,
-          format: profile.avatarFile.format,
-          accessLevel: 'contacts_only',
-        });
-        const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
-        updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
-        updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
-        nostrPicture = updatedAvatar.nostrUri;
       }
 
       if (currentUser?.npub) {
-        await TauriApi.updatePrivacySettings({
-          npub: currentUser.npub,
-          publicProfile,
-          showOnlineStatus,
-        });
+        try {
+          await TauriApi.updatePrivacySettings({
+            npub: currentUser.npub,
+            publicProfile,
+            showOnlineStatus,
+          });
+        } catch (error) {
+          hasError = true;
+          errorHandler.log('ProfileEditDialog.privacyUpdateFailed', error, {
+            context: 'ProfileEditDialog.handleSubmit',
+          });
+        }
       }
 
-      await updateNostrMetadata({
-        name: profile.name,
-        display_name: profile.displayName || profile.name,
-        about: profile.about,
-        picture: nostrPicture,
-        nip05: profile.nip05,
-        kukuri_privacy: {
-          public_profile: publicProfile,
-          show_online_status: showOnlineStatus,
-        },
-      });
+      try {
+        await updateNostrMetadata({
+          name: profile.name,
+          display_name: profile.displayName || profile.name,
+          about: profile.about,
+          picture: nostrPicture,
+          nip05: profile.nip05,
+          kukuri_privacy: {
+            public_profile: publicProfile,
+            show_online_status: showOnlineStatus,
+          },
+        });
+      } catch (error) {
+        hasError = true;
+        errorHandler.log('ProfileEditDialog.submitFailed', error, {
+          context: 'ProfileEditDialog.handleSubmit',
+        });
+      }
 
       updateUser({
         name: profile.name,
@@ -112,10 +152,22 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         showOnlineStatus,
       });
 
-      toast.success('プロフィールを更新しました');
-      await syncAvatar({ force: true });
-      handleClose();
+      try {
+        await syncAvatar({ force: true });
+      } catch (error) {
+        hasError = true;
+        errorHandler.log('ProfileEditDialog.avatarSyncFailed', error, {
+          context: 'ProfileEditDialog.handleSubmit',
+        });
+      }
+
+      if (hasError) {
+        toast.error('プロフィールの更新に失敗しました');
+      } else {
+        toast.success('プロフィールを更新しました');
+      }
     } catch (error) {
+      hasError = true;
       toast.error('プロフィールの更新に失敗しました');
       errorHandler.log('ProfileEditDialog.submitFailed', error, {
         context: 'ProfileEditDialog.handleSubmit',
@@ -139,6 +191,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
           cancelLabel="キャンセル"
           submitLabel={isSubmitting ? '保存中...' : '保存'}
           isSubmitting={isSubmitting}
+          onSubmitFinally={handleSubmitFinally}
         />
       </DialogContent>
     </Dialog>

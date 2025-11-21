@@ -6,6 +6,7 @@ import {
   type DirectMessageDeliveryStatus,
 } from '@/stores/directMessageStore';
 import { errorHandler } from '@/lib/errorHandler';
+import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
 
 interface DirectMessageEventPayload {
   owner_npub: string;
@@ -31,21 +32,7 @@ export function useDirectMessageEvents() {
       return;
     }
 
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const tauriWindow = window as Window & {
-      __TAURI_INTERNALS__?: { transformCallback?: unknown };
-      __TAURI__?: unknown;
-      __TAURI_IPC__?: unknown;
-    };
-
-    if (
-      !tauriWindow.__TAURI_INTERNALS__?.transformCallback &&
-      !tauriWindow.__TAURI__ &&
-      !tauriWindow.__TAURI_IPC__
-    ) {
+    if (!isTauriRuntime()) {
       return;
     }
 

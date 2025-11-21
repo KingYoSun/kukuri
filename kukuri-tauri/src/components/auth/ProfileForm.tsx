@@ -48,6 +48,7 @@ interface ProfileFormProps {
   skipLabel?: string;
   submitLabel?: string;
   isSubmitting?: boolean;
+  onSubmitFinally?: () => void;
 }
 
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
@@ -74,6 +75,7 @@ export function ProfileForm({
   skipLabel = '後で設定',
   submitLabel = '保存',
   isSubmitting = false,
+  onSubmitFinally,
 }: ProfileFormProps) {
   const [values, setValues] = useState<ProfileFormValues>(initialValues);
   const [avatarPreview, setAvatarPreview] = useState<string>(initialValues.picture || '');
@@ -96,10 +98,14 @@ export function ProfileForm({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await onSubmit({
-      ...values,
-      avatarFile: selectedAvatar ?? undefined,
-    });
+    try {
+      await onSubmit({
+        ...values,
+        avatarFile: selectedAvatar ?? undefined,
+      });
+    } finally {
+      onSubmitFinally?.();
+    }
   };
 
   const handleAvatarSelect = async () => {

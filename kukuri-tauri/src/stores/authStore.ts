@@ -10,6 +10,7 @@ import { usePrivacySettingsStore } from './privacySettingsStore';
 import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
+import { setE2EAuthDebug } from '@/lib/utils/e2eDebug';
 
 const DEFAULT_RELAY_STATUS_INTERVAL = 30_000;
 const RELAY_STATUS_BACKOFF_SEQUENCE = [120_000, 300_000, 600_000];
@@ -39,6 +40,20 @@ export const listFallbackAccountMetadata = (): AccountMetadata[] =>
 const getFallbackNsec = (npub: string): string | null => {
   const entry = fallbackAccounts.get(npub);
   return entry?.nsec ?? null;
+};
+
+const updateFallbackAccountMetadata = (npub: string, update: Partial<AccountMetadata>) => {
+  const existing = fallbackAccounts.get(npub);
+  if (!existing) {
+    return;
+  }
+  fallbackAccounts.set(npub, {
+    ...existing,
+    metadata: {
+      ...existing.metadata,
+      ...update,
+    },
+  });
 };
 
 const buildAccountMetadata = (user: User, lastUsed?: string): AccountMetadata => ({
@@ -124,6 +139,18 @@ export const useAuthStore = create<AuthStore>()(
       }
     };
 
+    const updateAuthDebug = () => {
+      const state = useAuthStore.getState();
+      setE2EAuthDebug({
+        isAuthenticated: state.isAuthenticated,
+        npub: state.currentUser?.npub ?? null,
+        accounts: state.accounts?.map((account) => ({
+          npub: account.npub,
+          display_name: account.display_name,
+        })),
+      });
+    };
+
     return {
       isAuthenticated: false,
       currentUser: null,
@@ -141,6 +168,7 @@ export const useAuthStore = create<AuthStore>()(
           currentUser: user,
           privateKey,
         });
+        updateAuthDebug();
         hydratePrivacyFromUser(user);
         try {
           await initializeNostr();
@@ -197,6 +225,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: nsec,
           });
+          updateAuthDebug();
           hydratePrivacyFromUser(user);
           errorHandler.info('Auth state set after loginWithNsec', 'AuthStore.loginWithNsec', {
             npub: user.npub,
@@ -312,6 +341,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: response.nsec,
           });
+          updateAuthDebug();
           hydratePrivacyFromUser(user);
           errorHandler.info(
             'Auth state set after keypair generation',
@@ -408,6 +438,7 @@ export const useAuthStore = create<AuthStore>()(
           lastRelayStatusFetchedAt: null,
           isFetchingRelayStatus: false,
         });
+        updateAuthDebug();
       },
 
       updateUser: (userUpdate: Partial<User>) =>
@@ -420,7 +451,28 @@ export const useAuthStore = create<AuthStore>()(
             ...userUpdate,
           };
           hydratePrivacyFromUser(updatedUser);
-          return { currentUser: updatedUser };
+          updateFallbackAccountMetadata(updatedUser.npub, {
+            name: updatedUser.name,
+            display_name: updatedUser.displayName,
+            picture: updatedUser.picture,
+            public_profile: updatedUser.publicProfile,
+            show_online_status: updatedUser.showOnlineStatus,
+          });
+          return {
+            currentUser: updatedUser,
+            accounts: state.accounts.map((account) =>
+              account.npub === updatedUser.npub
+                ? {
+                    ...account,
+                    name: updatedUser.name,
+                    display_name: updatedUser.displayName,
+                    picture: updatedUser.picture,
+                    public_profile: updatedUser.publicProfile,
+                    show_online_status: updatedUser.showOnlineStatus,
+                  }
+                : account,
+            ),
+          };
         }),
 
       updateRelayStatus: async () => {
@@ -506,6 +558,7 @@ export const useAuthStore = create<AuthStore>()(
               currentUser: user,
               privateKey: currentAccount.nsec,
             });
+            updateAuthDebug();
 
             // Nostrクライアントを初期化
             await initializeNostr();
@@ -527,6 +580,7 @@ export const useAuthStore = create<AuthStore>()(
               lastRelayStatusFetchedAt: null,
               isFetchingRelayStatus: false,
             });
+            updateAuthDebug();
           }
 
           // アカウントリストを読み込み
@@ -548,6 +602,7 @@ export const useAuthStore = create<AuthStore>()(
             lastRelayStatusFetchedAt: null,
             isFetchingRelayStatus: false,
           });
+          updateAuthDebug();
         }
       },
 
@@ -583,6 +638,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: null,
           });
+          updateAuthDebug();
 
           await initializeNostr();
           await useAuthStore.getState().updateRelayStatus();
@@ -630,11 +686,13 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const accounts = await SecureStorageApi.listAccounts();
           set({ accounts });
+          updateAuthDebug();
         } catch (error) {
           errorHandler.log('Failed to load accounts', error, {
             context: 'AuthStore.loadAccounts',
           });
           set({ accounts: listFallbackAccountMetadata() });
+          updateAuthDebug();
         }
       },
 

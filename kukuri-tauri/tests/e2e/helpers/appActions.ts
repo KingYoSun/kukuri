@@ -13,7 +13,20 @@ export async function waitForWelcome(): Promise<void> {
 
 export async function completeProfileSetup(profile: ProfileInfo): Promise<void> {
   const form = await $('[data-testid="profile-form"]');
-  await form.waitForDisplayed();
+  try {
+    await form.waitForDisplayed();
+  } catch {
+    const debugSnapshot = await browser.execute(() => {
+      return {
+        location: window.location.pathname,
+        auth: document.documentElement?.getAttribute('data-e2e-auth') ?? null,
+        lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
+      };
+    });
+    throw new Error(
+      `profile-form not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog})`,
+    );
+  }
 
   await $('[data-testid="profile-name"]').setValue(profile.name);
   await $('[data-testid="profile-display-name"]').setValue(profile.displayName);
@@ -23,7 +36,20 @@ export async function completeProfileSetup(profile: ProfileInfo): Promise<void> 
 
 export async function waitForHome(): Promise<void> {
   const home = await $('[data-testid="home-page"]');
-  await home.waitForDisplayed();
+  try {
+    await home.waitForDisplayed();
+  } catch {
+    const debugSnapshot = await browser.execute(() => {
+      return {
+        location: window.location.pathname,
+        auth: document.documentElement?.getAttribute('data-e2e-auth') ?? null,
+        lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
+      };
+    });
+    throw new Error(
+      `home-page not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog})`,
+    );
+  }
 }
 
 export async function openSettings(): Promise<void> {

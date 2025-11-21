@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
 import { usePrivacySettingsStore } from '@/stores/privacySettingsStore';
-import { updateNostrMetadata } from '@/lib/api/nostr';
+import { initializeNostr, updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { ProfileForm, type ProfileFormSubmitPayload, type ProfileFormValues } from './ProfileForm';
@@ -16,6 +16,8 @@ export function ProfileSetup() {
   const { currentUser, updateUser } = useAuthStore();
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [showForm, setShowForm] = useState(true);
+  const shouldNavigateRef = useRef(false);
   const { syncNow: syncAvatar } = useProfileAvatarSync({ autoStart: false });
 
   const initialProfile: ProfileFormValues = {
@@ -26,6 +28,21 @@ export function ProfileSetup() {
     nip05: currentUser?.nip05 || '',
   };
 
+  const navigateHome = () => {
+    try {
+      navigate({ to: '/' });
+    } catch (navError) {
+      errorHandler.log('ProfileSetup.navigateFailed', navError, {
+        context: 'ProfileSetup.navigateHome',
+      });
+    }
+  };
+
+  const hideFormAndNavigate = () => {
+    setShowForm(false);
+    navigateHome();
+  };
+
   const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
     if (!profile.name.trim()) {
       toast.error('名前を入力してください');
@@ -33,11 +50,37 @@ export function ProfileSetup() {
     }
 
     setIsLoading(true);
+    shouldNavigateRef.current = false;
+    let updatedPicture = profile.picture || currentUser?.picture || '';
+    let updatedAvatar = currentUser?.avatar ?? null;
+    let nostrPicture =
+      profile.picture || currentUser?.avatar?.nostrUri || currentUser?.picture || '';
+    const displayName = profile.displayName || profile.name;
+
     try {
-      let updatedPicture = profile.picture || currentUser?.picture || '';
-      let updatedAvatar = currentUser?.avatar ?? null;
-      let nostrPicture =
-        profile.picture || currentUser?.avatar?.nostrUri || currentUser?.picture || '';
+      try {
+        // Nostrクライアントが未初期化でもプロフィール設定を進められるように再初期化を試行する
+        await initializeNostr();
+      } catch (nostrInitError) {
+        errorHandler.log('Failed to initialize Nostr for profile setup', nostrInitError, {
+          context: 'ProfileSetup.handleSubmit.initializeNostr',
+        });
+      }
+
+      if (currentUser?.npub) {
+        try {
+          await TauriApi.updatePrivacySettings({
+            npub: currentUser.npub,
+            publicProfile,
+            showOnlineStatus,
+          });
+        } catch (privacyError) {
+          // プライバシー反映が失敗してもUI反映は続行する
+          errorHandler.log('Privacy update skipped (proceeding anyway)', privacyError, {
+            context: 'ProfileSetup.handleSubmit.updatePrivacySettings',
+          });
+        }
+      }
 
       if (profile.avatarFile) {
         if (!currentUser?.npub) {
@@ -60,29 +103,32 @@ export function ProfileSetup() {
         throw new Error('Missing npub for profile setup');
       }
 
-      await TauriApi.updatePrivacySettings({
-        npub: currentUser.npub,
-        publicProfile,
-        showOnlineStatus,
-      });
-
       // Nostrプロフィールメタデータを更新
-      await updateNostrMetadata({
-        name: profile.name,
-        display_name: profile.displayName || profile.name,
-        about: profile.about,
-        picture: nostrPicture,
-        nip05: profile.nip05,
-        kukuri_privacy: {
-          public_profile: publicProfile,
-          show_online_status: showOnlineStatus,
-        },
-      });
+      try {
+        await updateNostrMetadata({
+          name: profile.name,
+          display_name: profile.displayName || profile.name,
+          about: profile.about,
+          picture: nostrPicture,
+          nip05: profile.nip05,
+          kukuri_privacy: {
+            public_profile: publicProfile,
+            show_online_status: showOnlineStatus,
+          },
+        });
+      } catch (nostrError) {
+        // Nostr反映に失敗してもオンボーディング自体は続行する
+        errorHandler.log('Nostr metadata update skipped (proceeding anyway)', nostrError, {
+          context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
+        });
+        shouldNavigateRef.current = false;
+        throw nostrError;
+      }
 
       // ローカルストアを更新
       updateUser({
         name: profile.name,
-        displayName: profile.displayName || profile.name,
+        displayName,
         about: profile.about,
         picture: updatedPicture,
         nip05: profile.nip05,
@@ -99,7 +145,7 @@ export function ProfileSetup() {
           context: 'ProfileSetup.handleSubmit',
         });
       }
-      await navigate({ to: '/' });
+      shouldNavigateRef.current = true;
     } catch (error) {
       toast.error('プロフィールの設定に失敗しました');
       errorHandler.log('Profile setup failed', error, {
@@ -107,12 +153,19 @@ export function ProfileSetup() {
       });
     } finally {
       setIsLoading(false);
+      if (shouldNavigateRef.current) {
+        hideFormAndNavigate();
+      }
     }
   };
 
   const handleSkip = () => {
-    navigate({ to: '/' });
+    hideFormAndNavigate();
   };
+
+  if (!showForm) {
+    return null;
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -125,6 +178,19 @@ export function ProfileSetup() {
           <ProfileForm
             initialValues={initialProfile}
             onSubmit={handleSubmit}
+            onSubmitFinally={() => {
+              if (!shouldNavigateRef.current) {
+                return;
+              }
+              // プロフィール画面に留まり続けないよう、送信後はホームへ誘導
+              try {
+                navigate({ to: '/' });
+              } catch (navError) {
+                errorHandler.log('ProfileSetup.finallyNavigateFailed', navError, {
+                  context: 'ProfileSetup.onSubmitFinally',
+                });
+              }
+            }}
             onSkip={handleSkip}
             skipLabel="後で設定"
             submitLabel={isLoading ? '保存中...' : '設定を完了'}

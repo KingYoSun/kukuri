@@ -6,6 +6,7 @@ use nostr_sdk::{FromBech32, prelude::*};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 /// デフォルトのKeyManager実装
 #[derive(Clone)]
@@ -76,7 +77,16 @@ impl DefaultKeyManager {
             inner.keys = Some(keys.clone());
         }
         self.key_store.save_keypair(keypair).await?;
-        self.key_store.set_current(&keypair.npub).await
+
+        if let Err(err) = self.key_store.set_current(&keypair.npub).await {
+            warn!(
+                npub = %keypair.npub,
+                "set_current failed after save_keypair, retrying once: {err}"
+            );
+            self.key_store.save_keypair(keypair).await?;
+            self.key_store.set_current(&keypair.npub).await?;
+        }
+        Ok(())
     }
 
     async fn install_current_from_pair(&self, keypair: &KeyPair) -> Result<(), AppError> {

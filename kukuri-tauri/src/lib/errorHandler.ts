@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { setE2EDebugMessage } from './utils/e2eDebug';
 
 export interface ErrorLogOptions {
   showToast?: boolean;
@@ -8,7 +9,6 @@ export interface ErrorLogOptions {
 }
 
 class ErrorHandler {
-  // テスト時に環境を強制的に変更できるようにする
   private _forceEnvironment: 'development' | 'production' | 'test' | null = null;
 
   private get isDevelopment() {
@@ -27,20 +27,32 @@ class ErrorHandler {
     return import.meta.env.MODE === 'test';
   }
 
-  // テスト用メソッド
   setTestEnvironment(env: 'development' | 'production' | 'test' | null) {
     this._forceEnvironment = env;
   }
 
   log(message: string, error?: unknown, options?: ErrorLogOptions): void {
-    // テスト環境では何もしない（テストエラーとの混同を避けるため）
     if (this.isTest) {
       return;
     }
 
-    // 開発環境のみコンソールに出力
+    const errorMessage =
+      error instanceof Error ? error.message : error === undefined ? null : String(error);
+    let errorDetail: string | null = null;
+    if (error) {
+      try {
+        errorDetail = JSON.stringify(error);
+      } catch {
+        errorDetail = null;
+      }
+    }
+    setE2EDebugMessage(
+      message,
+      { level: 'error', context: options?.context, error: errorMessage, detail: errorDetail },
+      { key: 'last-log' },
+    );
+
     if (this.isDevelopment) {
-      // console.warnを使用（console.errorは使わない）
       if (options?.metadata) {
         console.warn(`[ERROR] ${options.context || 'App'}: ${message}`, error, options.metadata);
       } else {
@@ -48,23 +60,19 @@ class ErrorHandler {
       }
     }
 
-    // ユーザーへの通知（オプション）
     if (options?.showToast) {
       toast.error(options.toastTitle || 'エラーが発生しました', {
         description: message,
       });
     }
-
-    // 本番環境では将来的にエラーレポーティングサービスに送信可能
-    // if (!this.isDevelopment) {
-    //   // Sentry, LogRocket などにエラーを送信
-    // }
   }
 
   warn(message: string, context?: string): void {
     if (this.isTest) {
       return;
     }
+
+    setE2EDebugMessage(message, { level: 'warn', context }, { key: 'last-log' });
 
     if (this.isDevelopment) {
       console.warn(`[WARN] ${context || 'App'}: ${message}`);
@@ -75,6 +83,8 @@ class ErrorHandler {
     if (this.isTest) {
       return;
     }
+
+    setE2EDebugMessage(message, { level: 'info', context, ...metadata }, { key: 'last-log' });
 
     if (this.isDevelopment) {
       if (metadata) {
@@ -88,5 +98,4 @@ class ErrorHandler {
 
 export const errorHandler = new ErrorHandler();
 
-// テスト用のエクスポート
 export { ErrorHandler };
