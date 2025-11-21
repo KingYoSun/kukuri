@@ -36,6 +36,7 @@ export interface E2EBridge {
   getOfflineSnapshot: () => OfflineSnapshot;
   setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => void;
   consumeProfileAvatarFixture: () => ProfileAvatarFixture | null;
+  switchAccount: (npub: string) => Promise<void>;
 }
 
 declare global {
@@ -144,6 +145,9 @@ export function registerE2EBridge(): void {
             hasPrivateKey: Boolean(state.privateKey),
             fallbackAccounts: listFallbackAccountMetadata(),
           };
+        },
+        switchAccount: async (npub: string) => {
+          await useAuthStore.getState().switchAccount(npub);
         },
         getOfflineSnapshot: () => {
           const offlineState = useOfflineStore.getState();

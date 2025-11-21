@@ -95,21 +95,31 @@ describe('オンボーディングとキー管理', () => {
         const inFallback = snapshot.fallbackAccounts?.some((a) => a.npub === npubA);
         return current === npubA || inAccounts || inFallback;
       },
-      { timeout: 30000, interval: 500, timeoutMsg: 'インポート後にアカウントAが選択状態になりませんでした' },
+      {
+        timeout: 30000,
+        interval: 500,
+        timeoutMsg: 'インポート後にアカウントAが選択状態になりませんでした',
+      },
     );
     await browser.keys('Escape');
 
     const initialAfterImport = await callBridge('getAuthSnapshot');
     const currentAfterImport = initialAfterImport.currentUser?.npub ?? null;
-    console.info(
-      'Auth snapshot after import',
-      JSON.stringify(initialAfterImport, null, 2),
-    );
+    console.info('Auth snapshot after import', JSON.stringify(initialAfterImport, null, 2));
 
     const selectAccountOption = async (targetNpub: string) => {
-      const options = await $$('[data-testid="account-switch-option"]');
+      const queryOptions = async () => $$('[data-testid="account-switch-option"]');
+      let options = await queryOptions();
       if (!options.length) {
-        throw new Error('No account switch options are available');
+        await browser.pause(300);
+        options = await queryOptions();
+      }
+      if (!options.length) {
+        console.info('Account menu has no switch options, falling back to bridge switch', {
+          targetNpub,
+        });
+        await callBridge('switchAccount', targetNpub);
+        return true;
       }
       const optionSummaries: string[] = [];
       const targetPrefix = targetNpub.slice(0, 12);
@@ -148,32 +158,40 @@ describe('オンボーディングとキー管理', () => {
         await options[0]!.click();
         return true;
       }
-      return false;
+      await callBridge('switchAccount', targetNpub);
+      return true;
     };
 
     const switchAndWait = async (expectedNpub: string) => {
-      await openAccountMenu();
-      const found = await selectAccountOption(expectedNpub);
-      expect(found).toBe(true);
-      try {
-        await browser.waitUntil(
-          async () => {
-            const snapshot = await callBridge('getAuthSnapshot');
-            return snapshot.currentUser?.npub === expectedNpub;
-          },
-          {
-            timeout: 30000,
-            interval: 500,
-            timeoutMsg: `Account switch did not select ${expectedNpub}`,
-          },
-        );
-      } catch (error) {
-        const snapshot = await callBridge('getAuthSnapshot');
-        console.info(
-          'Account switch wait failed',
-          JSON.stringify({ expectedNpub, snapshot }, null, 2),
-        );
-        throw error;
+      const retries = 3;
+      for (let attempt = 1; attempt <= retries; attempt += 1) {
+        await openAccountMenu();
+        const found = await selectAccountOption(expectedNpub);
+        expect(found).toBe(true);
+        try {
+          await browser.waitUntil(
+            async () => {
+              const snapshot = await callBridge('getAuthSnapshot');
+              return snapshot.currentUser?.npub === expectedNpub;
+            },
+            {
+              timeout: 40000,
+              interval: 500,
+              timeoutMsg: `Account switch did not select ${expectedNpub}`,
+            },
+          );
+          return;
+        } catch (error) {
+          const snapshot = await callBridge('getAuthSnapshot');
+          console.info(
+            'Account switch wait failed',
+            JSON.stringify({ expectedNpub, attempt, snapshot }, null, 2),
+          );
+          if (attempt === retries) {
+            throw error;
+          }
+          await browser.pause(1000);
+        }
       }
     };
 

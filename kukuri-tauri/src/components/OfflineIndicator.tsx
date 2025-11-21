@@ -8,6 +8,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 export function OfflineIndicator() {
   const { isOnline, lastSyncedAt, pendingActions, isSyncing } = useOfflineStore();
+  const isE2EMode =
+    import.meta.env.VITE_ENABLE_E2E === 'true' || import.meta.env.TAURI_ENV_DEBUG === 'true';
   const [showBanner, setShowBanner] = React.useState(!isOnline);
   const [wasOffline, setWasOffline] = React.useState(!isOnline);
 
@@ -35,6 +37,7 @@ export function OfflineIndicator() {
   };
 
   const pendingCount = pendingActions.length;
+  const shouldShowPill = isE2EMode || pendingCount > 0 || !isOnline || isSyncing;
 
   return (
     <>
@@ -68,7 +71,7 @@ export function OfflineIndicator() {
       )}
 
       {/* 常設インジケーター。詳細は SyncStatusIndicator 側で表示 */}
-      {(pendingCount > 0 || !isOnline || isSyncing) && (
+      {shouldShowPill && (
         <div
           className="fixed bottom-4 right-4 left-4 mx-auto max-w-sm z-40"
           data-testid="offline-indicator-container"

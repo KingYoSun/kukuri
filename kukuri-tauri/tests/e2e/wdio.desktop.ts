@@ -106,21 +106,20 @@ export const config: Options.Testrunner = {
       }
     }
   ],
-  onPrepare: (_config, capabilities) => {
+  onPrepare: async (_config, capabilities) => {
     mkdirSync(OUTPUT_DIR, { recursive: true });
     if (Array.isArray(capabilities)) {
       for (const capability of capabilities) {
         pruneUnsupportedCapabilities(capability as Record<string, unknown>);
       }
     }
-    if (process.env.E2E_SKIP_BUILD === '1') {
-      return;
+    if (process.env.E2E_SKIP_BUILD !== '1') {
+      runScript('pnpm', ['e2e:build']);
     }
-    runScript('pnpm', ['e2e:build']);
+    await startDriver();
   },
   beforeSession: async function (_config, capabilities) {
     pruneUnsupportedCapabilities(capabilities);
-    await startDriver();
   },
   afterTest: async function (test, _context, { error }) {
     if (!error) {
