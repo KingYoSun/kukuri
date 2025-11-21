@@ -9,6 +9,25 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        const doc = document.documentElement;
+        doc?.setAttribute('data-kukuri-e2e-html', 'loaded');
+
+        const setProbeError = (message) => {
+          const normalized = typeof message === 'string' ? message : String(message ?? 'unknown');
+          window.__KUKURI_E2E_PAGE_ERROR__ = normalized;
+          doc?.setAttribute('data-kukuri-e2e-error', normalized);
+        };
+
+        window.addEventListener('error', (event) => {
+          setProbeError(event?.message ?? event?.error);
+        });
+        window.addEventListener('unhandledrejection', (event) => {
+          setProbeError(event?.reason?.message ?? event?.reason);
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

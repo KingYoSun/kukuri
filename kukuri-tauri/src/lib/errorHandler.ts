@@ -15,7 +15,9 @@ class ErrorHandler {
     if (this._forceEnvironment) {
       return this._forceEnvironment === 'development';
     }
-    return import.meta.env.DEV;
+    const isE2EDebug =
+      import.meta.env.TAURI_ENV_DEBUG === 'true' || import.meta.env.VITE_ENABLE_E2E === 'true';
+    return import.meta.env.DEV || isE2EDebug;
   }
 
   private get isTest() {

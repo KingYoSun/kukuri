@@ -23,6 +23,7 @@ vi.mock('@/stores/authStore');
 vi.mock('@/lib/errorHandler', () => ({
   errorHandler: {
     log: vi.fn(),
+    info: vi.fn(),
   },
 }));
 
@@ -34,6 +35,10 @@ describe('WelcomeScreen', () => {
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       generateNewKeypair: mockGenerateNewKeypair,
     });
+    (useAuthStore as unknown as vi.Mock).getState = vi.fn(() => ({
+      isLoggedIn: false,
+      currentUser: null,
+    }));
   });
 
   afterEach(() => {

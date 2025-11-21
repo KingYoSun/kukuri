@@ -3,7 +3,7 @@ import { errorHandler } from '@/lib/errorHandler';
 export const PROFILE_AVATAR_SYNC_CHANNEL = 'profile-avatar-sync';
 
 const workerUrl = new URL('./profileAvatarSyncSW.ts', import.meta.url);
-const workerScope = new URL('./', workerUrl).pathname;
+const workerScope = workerUrl.pathname.replace(/[^/]*$/, '');
 
 let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 

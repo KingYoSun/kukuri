@@ -11,6 +11,12 @@
 
 ## 現在のタスク
 
+### 2025年11月21日 E2Eオンボーディング遷移調査
+
+- 目標 `/welcome` → `/profile-setup` 遷移が E2E で止まる事象を解消し、authStore.generateNewKeypair/loginWithNsec と RootRoute ガード挙動を確認する
+- 状態 着手（E2E ブリッジ状態確認と UI ロジックの再点検を実施中）
+- 次のアクション generateNewKeypair 周辺のログ拡充と `/profile-setup` リダイレクト抑止有無の切り分け
+
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。

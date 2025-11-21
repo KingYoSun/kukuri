@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, MockedFunction } from 'vitest';
-import { useAuthStore } from '@/stores/authStore';
+import { clearFallbackAccounts, useAuthStore } from '@/stores/authStore';
 import type { User } from '@/stores/types';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -103,6 +103,7 @@ describe('authStore', () => {
       isFetchingRelayStatus: false,
       accounts: [],
     });
+    clearFallbackAccounts();
   });
 
   it('初期状態が正しく設定されていること', () => {

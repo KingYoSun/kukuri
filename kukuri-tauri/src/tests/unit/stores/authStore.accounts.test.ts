@@ -1,6 +1,10 @@
 import { waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useAuthStore } from '@/stores/authStore';
+import {
+  clearFallbackAccounts,
+  listFallbackAccountMetadata,
+  useAuthStore,
+} from '@/stores/authStore';
 import { TauriApi } from '@/lib/api/tauri';
 import { SecureStorageApi } from '@/lib/api/secureStorage';
 import * as nostrApi from '@/lib/api/nostr';
@@ -86,6 +90,7 @@ describe('authStore - Multiple Account Management', () => {
       relayStatus: [],
       accounts: [],
     });
+    clearFallbackAccounts();
 
     vi.clearAllMocks();
 
@@ -472,7 +477,7 @@ describe('authStore - Multiple Account Management', () => {
       await useAuthStore.getState().loadAccounts();
 
       const state = useAuthStore.getState();
-      expect(state.accounts).toEqual([]);
+      expect(state.accounts).toEqual(listFallbackAccountMetadata());
     });
   });
 });

@@ -3,7 +3,7 @@ import { errorHandler } from '@/lib/errorHandler';
 export const OFFLINE_SYNC_CHANNEL = 'offline-sync';
 
 const workerUrl = new URL('./offlineSyncWorker.ts', import.meta.url);
-const workerScope = new URL('./', workerUrl).pathname;
+const workerScope = workerUrl.pathname.replace(/[^/]*$/, '');
 
 let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 

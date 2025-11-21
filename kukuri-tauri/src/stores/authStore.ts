@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 
 import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';
@@ -13,6 +13,44 @@ import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/prof
 
 const DEFAULT_RELAY_STATUS_INTERVAL = 30_000;
 const RELAY_STATUS_BACKOFF_SEQUENCE = [120_000, 300_000, 600_000];
+
+type FallbackAccount = {
+  metadata: AccountMetadata;
+  nsec: string;
+};
+
+const fallbackAccounts = new Map<string, FallbackAccount>();
+
+const upsertFallbackAccount = (metadata: AccountMetadata, nsec: string) => {
+  fallbackAccounts.set(metadata.npub, { metadata: { ...metadata }, nsec });
+};
+
+const removeFallbackAccount = (npub: string) => {
+  fallbackAccounts.delete(npub);
+};
+
+export const clearFallbackAccounts = () => {
+  fallbackAccounts.clear();
+};
+
+export const listFallbackAccountMetadata = (): AccountMetadata[] =>
+  Array.from(fallbackAccounts.values()).map((item) => item.metadata);
+
+const getFallbackNsec = (npub: string): string | null => {
+  const entry = fallbackAccounts.get(npub);
+  return entry?.nsec ?? null;
+};
+
+const buildAccountMetadata = (user: User, lastUsed?: string): AccountMetadata => ({
+  npub: user.npub,
+  pubkey: user.pubkey,
+  name: user.name,
+  display_name: user.displayName,
+  picture: user.picture,
+  last_used: lastUsed ?? new Date().toISOString(),
+  public_profile: user.publicProfile,
+  show_online_status: user.showOnlineStatus,
+});
 
 const nextRelayStatusBackoff = (current: number) => {
   for (const value of RELAY_STATUS_BACKOFF_SEQUENCE) {
@@ -116,6 +154,9 @@ export const useAuthStore = create<AuthStore>()(
 
       loginWithNsec: async (nsec: string, saveToSecureStorage = false) => {
         try {
+          errorHandler.info('Attempting login with nsec', 'AuthStore.loginWithNsec', {
+            saveToSecureStorage,
+          });
           const response = await TauriApi.login({ nsec });
           const user: User = {
             id: response.public_key,
@@ -130,15 +171,25 @@ export const useAuthStore = create<AuthStore>()(
             showOnlineStatus: false,
             avatar: null,
           };
+          const accountMetadata = buildAccountMetadata(user);
 
           // セキュアストレージに保存
           if (saveToSecureStorage) {
-            await SecureStorageApi.addAccount({
-              nsec,
-              name: user.name,
-              display_name: user.displayName,
-              picture: user.picture,
-            });
+            try {
+              await SecureStorageApi.addAccount({
+                nsec,
+                name: user.name,
+                display_name: user.displayName,
+                picture: user.picture,
+              });
+            } catch (storageError) {
+              errorHandler.log('Secure storage add failed (loginWithNsec)', storageError, {
+                context: 'AuthStore.loginWithNsec',
+              });
+              upsertFallbackAccount(accountMetadata, nsec);
+            }
+          } else {
+            upsertFallbackAccount(accountMetadata, nsec);
           }
 
           set({
@@ -147,28 +198,56 @@ export const useAuthStore = create<AuthStore>()(
             privateKey: nsec,
           });
           hydratePrivacyFromUser(user);
+          errorHandler.info('Auth state set after loginWithNsec', 'AuthStore.loginWithNsec', {
+            npub: user.npub,
+            saveToSecureStorage,
+          });
 
           // Nostrクライアントを初期化
-          await initializeNostr();
+          try {
+            await initializeNostr();
+          } catch (nostrError) {
+            errorHandler.log('Failed to initialize Nostr', nostrError, {
+              context: 'AuthStore.loginWithNsec.initializeNostr',
+            });
+          }
           // リレー状態を更新
-          await useAuthStore.getState().updateRelayStatus();
+          try {
+            await useAuthStore.getState().updateRelayStatus();
+          } catch (relayError) {
+            errorHandler.log('Failed to update relay status', relayError, {
+              context: 'AuthStore.loginWithNsec.updateRelayStatus',
+            });
+          }
           // アカウントリストを更新
-          await useAuthStore.getState().loadAccounts();
+          try {
+            await useAuthStore.getState().loadAccounts();
+          } catch (loadError) {
+            errorHandler.log('Failed to load accounts', loadError, {
+              context: 'AuthStore.loginWithNsec.loadAccounts',
+            });
+          }
 
           // 初回ログイン時（アカウント追加時）は#publicトピックに参加
           if (saveToSecureStorage) {
             const topicStore = useTopicStore.getState();
-            // トピック一覧を取得
-            await topicStore.fetchTopics();
-            // #publicトピックを探す
-            const publicTopic = Array.from(topicStore.topics.values()).find(
-              (t) => t.id === 'public',
-            );
-            if (publicTopic) {
-              // #publicトピックに参加
-              await topicStore.joinTopic('public');
-              // #publicトピックをデフォルト表示に設定
-              topicStore.setCurrentTopic(publicTopic);
+            try {
+              // トピック一覧を取得
+              await topicStore.fetchTopics();
+              // #publicトピックを探す
+              const publicTopic = Array.from(topicStore.topics.values()).find(
+                (t) => t.id === 'public',
+              );
+              if (publicTopic) {
+                // #publicトピックに参加
+                await topicStore.joinTopic('public');
+                // #publicトピックをデフォルト表示に設定
+                topicStore.setCurrentTopic(publicTopic);
+              }
+            } catch (topicError) {
+              errorHandler.log('Topic bootstrap failed after loginWithNsec', topicError, {
+                context: 'AuthStore.loginWithNsec.topicBootstrap',
+              });
             }
           }
 
@@ -185,6 +264,9 @@ export const useAuthStore = create<AuthStore>()(
 
       generateNewKeypair: async (saveToSecureStorage = true) => {
         try {
+          errorHandler.info('Generating new keypair', 'AuthStore.generateNewKeypair', {
+            saveToSecureStorage,
+          });
           const response = await TauriApi.generateKeypair();
           const user: User = {
             id: response.public_key,
@@ -199,6 +281,7 @@ export const useAuthStore = create<AuthStore>()(
             showOnlineStatus: false,
             avatar: null,
           };
+          const accountMetadata = buildAccountMetadata(user);
 
           // セキュアストレージに保存
           if (saveToSecureStorage) {
@@ -206,13 +289,22 @@ export const useAuthStore = create<AuthStore>()(
               'Saving new account to secure storage...',
               'AuthStore.generateNewKeypair',
             );
-            await SecureStorageApi.addAccount({
-              nsec: response.nsec,
-              name: user.name,
-              display_name: user.displayName,
-              picture: user.picture,
-            });
-            errorHandler.info('Account saved successfully', 'AuthStore.generateNewKeypair');
+            try {
+              await SecureStorageApi.addAccount({
+                nsec: response.nsec,
+                name: user.name,
+                display_name: user.displayName,
+                picture: user.picture,
+              });
+              errorHandler.info('Account saved successfully', 'AuthStore.generateNewKeypair');
+            } catch (storageError) {
+              errorHandler.log('Secure storage add failed (generateNewKeypair)', storageError, {
+                context: 'AuthStore.generateNewKeypair',
+              });
+              upsertFallbackAccount(accountMetadata, response.nsec);
+            }
+          } else {
+            upsertFallbackAccount(accountMetadata, response.nsec);
           }
 
           set({
@@ -221,28 +313,60 @@ export const useAuthStore = create<AuthStore>()(
             privateKey: response.nsec,
           });
           hydratePrivacyFromUser(user);
+          errorHandler.info(
+            'Auth state set after keypair generation',
+            'AuthStore.generateNewKeypair',
+            {
+              npub: user.npub,
+              saveToSecureStorage,
+            },
+          );
 
           // Nostrクライアントを初期化
-          await initializeNostr();
+          try {
+            await initializeNostr();
+          } catch (nostrError) {
+            errorHandler.log('Failed to initialize Nostr', nostrError, {
+              context: 'AuthStore.generateNewKeypair.initializeNostr',
+            });
+          }
           // リレー状態を更新
-          await useAuthStore.getState().updateRelayStatus();
+          try {
+            await useAuthStore.getState().updateRelayStatus();
+          } catch (relayError) {
+            errorHandler.log('Failed to update relay status', relayError, {
+              context: 'AuthStore.generateNewKeypair.updateRelayStatus',
+            });
+          }
           // アカウントリストを更新
-          await useAuthStore.getState().loadAccounts();
+          try {
+            await useAuthStore.getState().loadAccounts();
+          } catch (loadError) {
+            errorHandler.log('Failed to load accounts', loadError, {
+              context: 'AuthStore.generateNewKeypair.loadAccounts',
+            });
+          }
 
           // 新規アカウント作成時は#publicトピックに参加
           if (saveToSecureStorage) {
             const topicStore = useTopicStore.getState();
-            // トピック一覧を取得
-            await topicStore.fetchTopics();
-            // #publicトピックを探す
-            const publicTopic = Array.from(topicStore.topics.values()).find(
-              (t) => t.id === 'public',
-            );
-            if (publicTopic) {
-              // #publicトピックに参加
-              await topicStore.joinTopic('public');
-              // #publicトピックをデフォルト表示に設定
-              topicStore.setCurrentTopic(publicTopic);
+            try {
+              // トピック一覧を取得
+              await topicStore.fetchTopics();
+              // #publicトピックを探す
+              const publicTopic = Array.from(topicStore.topics.values()).find(
+                (t) => t.id === 'public',
+              );
+              if (publicTopic) {
+                // #publicトピックに参加
+                await topicStore.joinTopic('public');
+                // #publicトピックをデフォルト表示に設定
+                topicStore.setCurrentTopic(publicTopic);
+              }
+            } catch (topicError) {
+              errorHandler.log('Topic bootstrap failed after keypair generation', topicError, {
+                context: 'AuthStore.generateNewKeypair.topicBootstrap',
+              });
             }
           }
 
@@ -429,10 +553,8 @@ export const useAuthStore = create<AuthStore>()(
 
       switchAccount: async (npub: string) => {
         try {
-          // セキュアストレージからログイン
           const response = await SecureStorageApi.secureLogin(npub);
 
-          // アカウント情報を取得
           const accounts = await SecureStorageApi.listAccounts();
           const account = accounts.find((a) => a.npub === npub);
 
@@ -459,16 +581,19 @@ export const useAuthStore = create<AuthStore>()(
           set({
             isAuthenticated: true,
             currentUser: user,
-            privateKey: null, // セキュアストレージから取得したものは保持しない
+            privateKey: null,
           });
 
-          // Nostrクライアントを初期化
           await initializeNostr();
-          // リレー状態を更新
           await useAuthStore.getState().updateRelayStatus();
 
           await fetchAndApplyAvatar(response.npub);
         } catch (error) {
+          const fallbackNsec = getFallbackNsec(npub);
+          if (fallbackNsec) {
+            await get().loginWithNsec(fallbackNsec, false);
+            return;
+          }
           errorHandler.log('Failed to switch account', error, {
             context: 'AuthStore.switchAccount',
             showToast: true,
@@ -481,6 +606,7 @@ export const useAuthStore = create<AuthStore>()(
       removeAccount: async (npub: string) => {
         try {
           await SecureStorageApi.removeAccount(npub);
+          removeFallbackAccount(npub);
 
           // 現在のアカウントが削除された場合はログアウト
           const currentUser = get().currentUser;
@@ -508,7 +634,7 @@ export const useAuthStore = create<AuthStore>()(
           errorHandler.log('Failed to load accounts', error, {
             context: 'AuthStore.loadAccounts',
           });
-          set({ accounts: [] });
+          set({ accounts: listFallbackAccountMetadata() });
         }
       },
 

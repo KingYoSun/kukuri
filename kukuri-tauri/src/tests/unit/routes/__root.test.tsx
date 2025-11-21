@@ -207,7 +207,7 @@ describe('__root (Authentication Guard)', () => {
   it('認証ページのリストが正しく設定されている', async () => {
     mockInitialize.mockResolvedValue(undefined);
 
-    const authPaths = ['/welcome', '/login', '/profile-setup'];
+    const authPaths = ['/welcome', '/login'];
 
     for (const path of authPaths) {
       vi.clearAllMocks();
@@ -224,6 +224,23 @@ describe('__root (Authentication Guard)', () => {
         expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
       });
     }
+  });
+
+  it('/profile-setup は認証済みでもリダイレクトされない', async () => {
+    mockInitialize.mockResolvedValue(undefined);
+    mockLocation.pathname = '/profile-setup';
+
+    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+      isAuthenticated: true,
+      initialize: mockInitialize,
+    });
+
+    render(<RootComponent />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('outlet')).toBeInTheDocument();
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('トピックデータが読み込まれた時にerrorHandlerへ情報ログを送る', async () => {

@@ -10,9 +10,25 @@ export function WelcomeScreen() {
   const { generateNewKeypair } = useAuthStore();
 
   const handleCreateAccount = async () => {
+    errorHandler.info('Starting account creation...', 'WelcomeScreen.handleCreateAccount');
     try {
-      await generateNewKeypair();
+      const result = await generateNewKeypair();
+      const authState =
+        typeof useAuthStore.getState === 'function' ? useAuthStore.getState() : null;
+      errorHandler.info(
+        'Keypair generated, navigating to profile setup',
+        'WelcomeScreen.handleCreateAccount',
+        {
+          hasNsec: Boolean(result?.nsec),
+          isAuthenticated: authState?.isLoggedIn ?? false,
+          currentNpub: authState?.currentUser?.npub ?? null,
+        },
+      );
       await navigate({ to: '/profile-setup' });
+      errorHandler.info(
+        'Navigation to /profile-setup requested',
+        'WelcomeScreen.handleCreateAccount',
+      );
     } catch (error) {
       toast.error('アカウントの作成に失敗しました');
       errorHandler.log('Failed to create account', error, {

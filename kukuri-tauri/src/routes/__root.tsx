@@ -10,6 +10,10 @@ import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { registerProfileAvatarSyncWorker } from '@/serviceWorker/profileAvatarSyncBridge';
 
+const PROTECTED_PATHS = ['/topics', '/settings', '/profile-setup'];
+const AUTH_REDIRECT_PATHS = ['/welcome', '/login'];
+const AUTH_LAYOUT_PATHS = [...AUTH_REDIRECT_PATHS, '/profile-setup'];
+
 function RootComponent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,20 +52,24 @@ function RootComponent() {
     if (!isInitializing) {
       const pathname = location.pathname;
 
-      // 認証が必要なページのリスト
-      const authRequiredPaths = ['/topics', '/settings'];
-      const authPaths = ['/welcome', '/login', '/profile-setup'];
-
       // ルートパスの特別な処理
       const isRootPath = pathname === '/';
       const isAuthRequiredPath =
-        isRootPath || authRequiredPaths.some((path) => pathname.startsWith(path));
+        isRootPath || PROTECTED_PATHS.some((path) => pathname.startsWith(path));
 
       if (!isAuthenticated && isAuthRequiredPath) {
         // 未認証でprotectedページにアクセスしようとした場合
+        errorHandler.info(
+          `Redirecting unauthenticated user from ${pathname} to /welcome`,
+          'RootRoute.authGuard',
+        );
         navigate({ to: '/welcome' });
-      } else if (isAuthenticated && authPaths.includes(pathname)) {
-        // 認証済みで認証ページにアクセスしようとした場合
+      } else if (isAuthenticated && AUTH_REDIRECT_PATHS.includes(pathname)) {
+        // 認証済みで認証ページ（welcome/login）にアクセスしようとした場合
+        errorHandler.info(
+          `Redirecting authenticated user from ${pathname} to /`,
+          'RootRoute.authGuard',
+        );
         navigate({ to: '/' });
       }
     }
@@ -90,8 +98,7 @@ function RootComponent() {
   // 認証が必要なページで未認証の場合
   const pathname = location.pathname;
   const isRootPath = pathname === '/';
-  const isProtectedRoute =
-    isRootPath || ['/topics', '/settings'].some((path) => pathname.startsWith(path));
+  const isProtectedRoute = isRootPath || PROTECTED_PATHS.some((path) => pathname.startsWith(path));
 
   if (!isAuthenticated && isProtectedRoute) {
     return (
@@ -102,7 +109,7 @@ function RootComponent() {
   }
 
   // 認証ページの場合はレイアウトなしで表示
-  const isAuthPage = ['/welcome', '/login', '/profile-setup'].includes(pathname);
+  const isAuthPage = AUTH_LAYOUT_PATHS.includes(pathname);
 
   if (isAuthPage) {
     return <Outlet />;
