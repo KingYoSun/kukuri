@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   TauriApi,
@@ -28,6 +28,7 @@ interface SyncOptions {
   requestedAt?: string;
   retryCount?: number;
   knownDocVersion?: number | null;
+  timeoutMs?: number;
 }
 
 interface UseProfileAvatarSyncResult {
@@ -40,6 +41,7 @@ interface UseProfileAvatarSyncResult {
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WORKER_SOURCE_PREFIX = 'profile-avatar-sync-worker';
 const MANUAL_SOURCE = 'useProfileAvatarSync:manual';
+const DEFAULT_SYNC_TIMEOUT_MS = 10_000;
 
 type ProfileAvatarSyncWorkerMessage =
   | {
@@ -102,6 +104,15 @@ async function logWorkerSyncQueueEntry(
   }
 }
 
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string) => {
+  return await Promise.race<Promise<T>>([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs),
+    ),
+  ]);
+};
+
 export function useProfileAvatarSync(
   options: UseProfileAvatarSyncOptions = {},
 ): UseProfileAvatarSyncResult {
@@ -132,6 +143,8 @@ export function useProfileAvatarSync(
 
       const request = (async () => {
         setIsSyncing(true);
+        const attemptedAt = new Date();
+        const timeoutMs = Math.max(1000, syncOptions?.timeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS);
         try {
           const source = syncOptions?.source ?? MANUAL_SOURCE;
           const requestedAt = syncOptions?.requestedAt ?? new Date().toISOString();
@@ -140,14 +153,18 @@ export function useProfileAvatarSync(
             syncOptions?.force === true
               ? null
               : (syncOptions?.knownDocVersion ?? (syncOptions?.force ? null : currentDocVersion));
-          const response = await TauriApi.profileAvatarSync({
-            npub,
-            knownDocVersion,
-            source,
-            requestedAt,
-            retryCount,
-            jobId: syncOptions?.jobId,
-          });
+          const response = await withTimeout(
+            TauriApi.profileAvatarSync({
+              npub,
+              knownDocVersion,
+              source,
+              requestedAt,
+              retryCount,
+              jobId: syncOptions?.jobId,
+            }),
+            timeoutMs,
+            'profileAvatarSync',
+          );
 
           if (response.updated && response.avatar) {
             const metadata = buildUserAvatarMetadataFromFetch(npub, response.avatar);
@@ -157,7 +174,7 @@ export function useProfileAvatarSync(
               picture,
             });
           }
-          setLastSyncedAt(new Date());
+          setLastSyncedAt(attemptedAt);
           useOfflineStore.getState().updateLastSyncedAt();
           setError(null);
           return response;
@@ -167,6 +184,8 @@ export function useProfileAvatarSync(
             metadata: { npub, jobId: syncOptions?.jobId },
           });
           setError('プロフィール画像の同期に失敗しました');
+          setLastSyncedAt(attemptedAt);
+          useOfflineStore.getState().updateLastSyncedAt();
           throw err;
         } finally {
           setIsSyncing(false);

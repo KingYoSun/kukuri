@@ -1,4 +1,4 @@
-import { $ } from '@wdio/globals';
+import { $, browser } from '@wdio/globals';
 
 export interface ProfileInfo {
   name: string;
@@ -58,6 +58,19 @@ export async function openSettings(): Promise<void> {
 }
 
 export async function openAccountMenu(): Promise<void> {
-  await $('[data-testid="account-switcher-trigger"]').click();
-  await $('[data-testid="account-menu-go-login"]').waitForDisplayed();
+  const trigger = await $('[data-testid="account-switcher-trigger"]');
+  const menu = () => $('[data-testid="account-menu-go-login"]');
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await trigger.click();
+    try {
+      await (await menu()).waitForDisplayed({ timeout: 7000 });
+      return;
+    } catch {
+      if (attempt === 2) {
+        throw new Error('Account menu did not open after multiple attempts');
+      }
+      await browser.pause(500);
+    }
+  }
 }

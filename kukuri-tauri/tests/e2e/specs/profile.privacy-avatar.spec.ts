@@ -114,7 +114,9 @@ describe('プロフィール/プライバシー/アバター同期', () => {
       { timeout: 20000, timeoutMsg: 'プロフィール情報がAuthストアに反映されませんでした' },
     );
 
-    const switcherText = await $('[data-testid="account-switcher-trigger"]').getText();
+    const switcherText =
+      (await $('[data-testid="account-switcher-trigger"]').getAttribute('aria-label')) ||
+      (await $('[data-testid="account-switcher-trigger-text"]').getText());
     expect(switcherText.toLowerCase()).toContain(updatedProfile.displayName.toLowerCase());
 
     const avatarImg = await $('[data-testid="account-switcher-trigger"] img');

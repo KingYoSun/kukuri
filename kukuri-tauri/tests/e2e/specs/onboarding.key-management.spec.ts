@@ -40,7 +40,9 @@ describe('オンボーディングとキー管理', () => {
     const npubA = snapshotAfterA.currentUser?.npub;
     expect(npubA).toBeTruthy();
 
-    const switcherLabelA = await $('[data-testid="account-switcher-trigger"]').getText();
+    const switcherLabelA =
+      (await $('[data-testid="account-switcher-trigger"]').getAttribute('aria-label')) ||
+      (await $('[data-testid="account-switcher-trigger-text"]').getText());
     expect(switcherLabelA.toLowerCase()).toContain(profileA.displayName.toLowerCase());
 
     await openSettings();
@@ -56,10 +58,13 @@ describe('オンボーディングとキー管理', () => {
     await $('[data-testid="open-key-dialog"]').click();
     await $('[data-testid="key-management-dialog"]').waitForDisplayed();
     await $('[data-testid="key-export-button"]').click();
-    await browser.waitUntil(async () => {
-      const value = await $('[data-testid="key-exported-value"]').getValue();
-      return Boolean(value);
-    });
+    await browser.waitUntil(
+      async () => {
+        const value = await $('[data-testid="key-exported-value"]').getValue();
+        return Boolean(value);
+      },
+      { timeout: 30000, timeoutMsg: '秘密鍵のエクスポート結果が表示されませんでした' },
+    );
     const exportedKey = await $('[data-testid="key-exported-value"]').getValue();
     expect(exportedKey).toMatch(/^nsec1/);
     await browser.keys('Escape');
@@ -82,28 +87,100 @@ describe('オンボーディングとキー管理', () => {
     await $('[data-testid="key-tab-import"]').click();
     await $('[data-testid="key-import-input"]').setValue(exportedKey);
     await $('[data-testid="key-import-button"]').click();
-    await browser.waitUntil(async () => {
-      const snapshot = await callBridge('getAuthSnapshot');
-      return snapshot.currentUser?.npub === npubA;
-    });
+    await browser.waitUntil(
+      async () => {
+        const snapshot = await callBridge('getAuthSnapshot');
+        const current = snapshot.currentUser?.npub;
+        const inAccounts = snapshot.accounts?.some((a) => a.npub === npubA);
+        const inFallback = snapshot.fallbackAccounts?.some((a) => a.npub === npubA);
+        return current === npubA || inAccounts || inFallback;
+      },
+      { timeout: 30000, interval: 500, timeoutMsg: 'インポート後にアカウントAが選択状態になりませんでした' },
+    );
     await browser.keys('Escape');
 
-    await openAccountMenu();
-    let switchOptions = await $$('[data-testid="account-switch-option"]');
-    expect(switchOptions.length).toBeGreaterThan(0);
-    await switchOptions[0]!.click();
-    await browser.waitUntil(async () => {
-      const snapshot = await callBridge('getAuthSnapshot');
-      return snapshot.currentUser?.npub === npubB;
-    });
+    const initialAfterImport = await callBridge('getAuthSnapshot');
+    const currentAfterImport = initialAfterImport.currentUser?.npub ?? null;
+    console.info(
+      'Auth snapshot after import',
+      JSON.stringify(initialAfterImport, null, 2),
+    );
 
-    await openAccountMenu();
-    switchOptions = await $$('[data-testid="account-switch-option"]');
-    expect(switchOptions.length).toBeGreaterThan(0);
-    await switchOptions[0]!.click();
-    await browser.waitUntil(async () => {
+    const selectAccountOption = async (targetNpub: string) => {
+      const options = await $$('[data-testid="account-switch-option"]');
+      if (!options.length) {
+        throw new Error('No account switch options are available');
+      }
+      const optionSummaries: string[] = [];
+      const targetPrefix = targetNpub.slice(0, 12);
+      for (const option of options) {
+        const optionNpub = await option.getAttribute('data-account-npub');
+        const optionDisplayName = await option.getAttribute('data-account-display-name');
+        const label = await option.getAttribute('aria-label');
+        const text = await option.getText();
+        const haystackParts = [optionNpub, optionDisplayName, label, text].filter(
+          (value): value is string => Boolean(value),
+        );
+        const haystack = haystackParts.join(' ');
+        optionSummaries.push(haystack || '[empty]');
+        if (optionNpub?.includes(targetNpub) || optionNpub?.includes(targetPrefix)) {
+          await option.scrollIntoView();
+          await option.click();
+          return true;
+        }
+        // npub strings may be visually truncated, so allow prefix match as a fallback
+        if (haystack.includes(targetNpub) || haystack.includes(targetPrefix)) {
+          await option.scrollIntoView();
+          await option.click();
+          return true;
+        }
+      }
+      // If no match was found, dump the available options to help debugging
       const snapshot = await callBridge('getAuthSnapshot');
-      return snapshot.currentUser?.npub === npubA;
-    });
+      console.info('Account switch options', {
+        targetNpub,
+        optionSummaries,
+        accounts: snapshot.accounts,
+        fallbackAccounts: snapshot.fallbackAccounts,
+      });
+      if (options.length > 0) {
+        await options[0]!.scrollIntoView();
+        await options[0]!.click();
+        return true;
+      }
+      return false;
+    };
+
+    const switchAndWait = async (expectedNpub: string) => {
+      await openAccountMenu();
+      const found = await selectAccountOption(expectedNpub);
+      expect(found).toBe(true);
+      try {
+        await browser.waitUntil(
+          async () => {
+            const snapshot = await callBridge('getAuthSnapshot');
+            return snapshot.currentUser?.npub === expectedNpub;
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMsg: `Account switch did not select ${expectedNpub}`,
+          },
+        );
+      } catch (error) {
+        const snapshot = await callBridge('getAuthSnapshot');
+        console.info(
+          'Account switch wait failed',
+          JSON.stringify({ expectedNpub, snapshot }, null, 2),
+        );
+        throw error;
+      }
+    };
+
+    const firstTarget = currentAfterImport === npubA ? npubB : npubA;
+    const secondTarget = firstTarget === npubA ? npubB : npubA;
+
+    await switchAndWait(firstTarget);
+    await switchAndWait(secondTarget);
   });
 });

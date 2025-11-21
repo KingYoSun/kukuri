@@ -2,13 +2,11 @@ import React from 'react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useAuthStore } from '@/stores/authStore';
+import { clearFallbackAccounts, useAuthStore } from '@/stores/authStore';
 import { SecureStorageApi } from '@/lib/api/secureStorage';
 import { TauriApi } from '@/lib/api/tauri';
 import * as nostrApi from '@/lib/api/nostr';
 
-// モック設定
-vi.mock('@/lib/api/tauri');
 vi.mock('@/lib/api/secureStorage');
 vi.mock('@/lib/api/nostr');
 
@@ -33,7 +31,6 @@ const mockNostrApi = nostrApi as unknown as {
   getRelayStatus: ReturnType<typeof vi.fn>;
 };
 
-// テスト用コンポーネント
 function AccountSwitcher() {
   const { isAuthenticated, currentUser, accounts, switchAccount, removeAccount, loadAccounts } =
     useAuthStore();
@@ -83,7 +80,7 @@ describe('Multiple Accounts Integration', () => {
   const user = userEvent.setup();
 
   beforeEach(() => {
-    // ストアをリセット
+    clearFallbackAccounts();
     useAuthStore.setState({
       isAuthenticated: false,
       currentUser: null,
@@ -92,10 +89,7 @@ describe('Multiple Accounts Integration', () => {
       accounts: [],
     });
 
-    // モックをクリア
     vi.clearAllMocks();
-
-    // デフォルトのモック実装
     mockNostrApi.initializeNostr = vi.fn().mockResolvedValue(undefined);
     mockNostrApi.disconnectNostr = vi.fn().mockResolvedValue(undefined);
     mockNostrApi.getRelayStatus = vi.fn().mockResolvedValue([]);
@@ -104,7 +98,6 @@ describe('Multiple Accounts Integration', () => {
 
   describe('Account Switching Workflow', () => {
     it('should handle complete account switching workflow', async () => {
-      // 複数アカウントのリスト
       const mockAccounts = [
         {
           npub: 'npub1alice',
@@ -124,7 +117,6 @@ describe('Multiple Accounts Integration', () => {
         },
       ];
 
-      // 初期ログイン状態を設定
       useAuthStore.setState({
         isAuthenticated: true,
         currentUser: {
@@ -142,17 +134,14 @@ describe('Multiple Accounts Integration', () => {
       });
 
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue(mockAccounts);
-
-      render(<AccountSwitcher />);
-
-      // 現在のアカウントが表示されていることを確認
-      expect(screen.getByTestId('current-account')).toHaveTextContent('Alice Smith (npub1alice)');
-
-      // Bobに切り替え
       mockSecureStorageApi.secureLogin = vi.fn().mockResolvedValue({
         public_key: 'pubkey_bob',
         npub: 'npub1bob',
       });
+
+      render(<AccountSwitcher />);
+
+      expect(screen.getByTestId('current-account')).toHaveTextContent('Alice Smith (npub1alice)');
 
       await user.click(screen.getByTestId('switch-npub1bob'));
 
@@ -160,7 +149,6 @@ describe('Multiple Accounts Integration', () => {
         expect(useAuthStore.getState().currentUser?.npub).toBe('npub1bob');
       });
 
-      // Nostrが再初期化されたことを確認
       expect(mockNostrApi.initializeNostr).toHaveBeenCalled();
     });
 
@@ -182,7 +170,6 @@ describe('Multiple Accounts Integration', () => {
         },
       ];
 
-      // Aliceでログイン中
       useAuthStore.setState({
         isAuthenticated: true,
         currentUser: {
@@ -202,24 +189,21 @@ describe('Multiple Accounts Integration', () => {
       mockSecureStorageApi.listAccounts = vi
         .fn()
         .mockResolvedValueOnce(mockAccounts)
-        .mockResolvedValueOnce([mockAccounts[0]]); // Bob削除後
+        .mockResolvedValueOnce([mockAccounts[0]]);
       mockSecureStorageApi.removeAccount = vi.fn().mockResolvedValue(undefined);
 
       render(<AccountSwitcher />);
 
-      // Bobを削除
       await user.click(screen.getByTestId('remove-npub1bob'));
 
       await waitFor(() => {
         expect(mockSecureStorageApi.removeAccount).toHaveBeenCalledWith('npub1bob');
       });
 
-      // アカウントリストが更新されたことを確認
       await waitFor(() => {
         expect(useAuthStore.getState().accounts).toHaveLength(1);
       });
 
-      // 現在のアカウント（Alice）はログイン状態を維持
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
       expect(useAuthStore.getState().currentUser?.npub).toBe('npub1alice');
     });
@@ -235,7 +219,6 @@ describe('Multiple Accounts Integration', () => {
         },
       ];
 
-      // Aliceでログイン中
       useAuthStore.setState({
         isAuthenticated: true,
         currentUser: {
@@ -255,19 +238,17 @@ describe('Multiple Accounts Integration', () => {
       mockSecureStorageApi.listAccounts = vi
         .fn()
         .mockResolvedValueOnce(mockAccounts)
-        .mockResolvedValueOnce([]); // 削除後
+        .mockResolvedValueOnce([]);
       mockSecureStorageApi.removeAccount = vi.fn().mockResolvedValue(undefined);
 
       render(<AccountSwitcher />);
 
-      // 現在のアカウントを削除
       await user.click(screen.getByTestId('remove-npub1alice'));
 
       await waitFor(() => {
         expect(mockSecureStorageApi.removeAccount).toHaveBeenCalledWith('npub1alice');
       });
 
-      // ログアウトされたことを確認
       await waitFor(() => {
         expect(useAuthStore.getState().isAuthenticated).toBe(false);
       });
@@ -281,17 +262,18 @@ describe('Multiple Accounts Integration', () => {
     it('should create new account and save to secure storage', async () => {
       const mockKeypairResponse = {
         public_key: 'pubkey_new',
+        npub: 'npub1new',
         nsec: 'nsec1new',
       };
 
       mockTauriApi.generateKeypair = vi.fn().mockResolvedValue(mockKeypairResponse);
       mockSecureStorageApi.addAccount = vi.fn().mockResolvedValue({
-        npub: 'pubkey_new',
+        npub: 'npub1new',
         pubkey: 'pubkey_new',
       });
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([
         {
-          npub: 'pubkey_new',
+          npub: 'npub1new',
           pubkey: 'pubkey_new',
           name: '新規ユーザー',
           display_name: '新規ユーザー',
@@ -299,7 +281,6 @@ describe('Multiple Accounts Integration', () => {
         },
       ]);
 
-      // 新規アカウント作成
       const result = await useAuthStore.getState().generateNewKeypair(true);
 
       expect(result.nsec).toBe('nsec1new');
@@ -310,7 +291,6 @@ describe('Multiple Accounts Integration', () => {
         picture: '',
       });
 
-      // ログイン状態になったことを確認
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(true);
       expect(state.accounts).toHaveLength(1);

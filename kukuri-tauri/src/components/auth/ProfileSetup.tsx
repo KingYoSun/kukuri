@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
@@ -59,7 +59,6 @@ export function ProfileSetup() {
 
     try {
       try {
-        // Nostrクライアントが未初期化でもプロフィール設定を進められるように再初期化を試行する
         await initializeNostr();
       } catch (nostrInitError) {
         errorHandler.log('Failed to initialize Nostr for profile setup', nostrInitError, {
@@ -75,7 +74,7 @@ export function ProfileSetup() {
             showOnlineStatus,
           });
         } catch (privacyError) {
-          // プライバシー反映が失敗してもUI反映は続行する
+          // プライバシー更新に失敗してもログだけ出して続行
           errorHandler.log('Privacy update skipped (proceeding anyway)', privacyError, {
             context: 'ProfileSetup.handleSubmit.updatePrivacySettings',
           });
@@ -103,7 +102,7 @@ export function ProfileSetup() {
         throw new Error('Missing npub for profile setup');
       }
 
-      // Nostrプロフィールメタデータを更新
+      // Nostr繝励Ο繝輔ぅ繝ｼ繝ｫ繝｡繧ｿ繝・・繧ｿ繧呈峩譁ｰ
       try {
         await updateNostrMetadata({
           name: profile.name,
@@ -117,15 +116,14 @@ export function ProfileSetup() {
           },
         });
       } catch (nostrError) {
-        // Nostr反映に失敗してもオンボーディング自体は続行する
+        // Nostr側で失敗した場合はエラーを通知して処理を中断
         errorHandler.log('Nostr metadata update skipped (proceeding anyway)', nostrError, {
           context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
         });
-        shouldNavigateRef.current = false;
         throw nostrError;
       }
 
-      // ローカルストアを更新
+      // 繝ｭ繝ｼ繧ｫ繝ｫ繧ｹ繝医い繧呈峩譁ｰ
       updateUser({
         name: profile.name,
         displayName,
@@ -182,7 +180,7 @@ export function ProfileSetup() {
               if (!shouldNavigateRef.current) {
                 return;
               }
-              // プロフィール画面に留まり続けないよう、送信後はホームへ誘導
+              // プロフィール送信後にホーム遷移（失敗しても処理は継続）
               try {
                 navigate({ to: '/' });
               } catch (navError) {

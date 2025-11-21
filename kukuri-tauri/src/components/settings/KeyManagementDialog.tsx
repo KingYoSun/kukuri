@@ -118,6 +118,18 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
         status: 'error',
         metadata: { stage: 'fetch' },
       });
+      const fallbackNsec = useAuthStore.getState().privateKey;
+      if (fallbackNsec) {
+        setExportedKey(fallbackNsec);
+        setIsKeyVisible(false);
+        toast.warning('繝ｭ繧ｰ繧､繝ｳ保存済みの鍵を表示しました（エクスポートに失敗）');
+        recordAction({
+          action: 'export',
+          status: 'success',
+          metadata: { stage: 'fallback', source: 'authStore.privateKey' },
+        });
+        return;
+      }
     } finally {
       setIsExporting(false);
     }

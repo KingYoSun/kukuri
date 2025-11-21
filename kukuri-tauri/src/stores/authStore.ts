@@ -67,6 +67,41 @@ const buildAccountMetadata = (user: User, lastUsed?: string): AccountMetadata =>
   show_online_status: user.showOnlineStatus,
 });
 
+const toUserOverride = (metadata?: AccountMetadata): Partial<User> | undefined => {
+  if (!metadata) {
+    return undefined;
+  }
+  return {
+    name: metadata.name,
+    displayName: metadata.display_name || metadata.name,
+    picture: metadata.picture ?? '',
+    publicProfile:
+      typeof metadata.public_profile === 'boolean' ? metadata.public_profile : undefined,
+    showOnlineStatus:
+      typeof metadata.show_online_status === 'boolean' ? metadata.show_online_status : undefined,
+  };
+};
+
+const applyUserMetadataOverride = (base: User, override?: Partial<User>): User => {
+  if (!override) {
+    return base;
+  }
+  return {
+    ...base,
+    name: override.name ?? base.name,
+    displayName: override.displayName ?? base.displayName,
+    about: override.about ?? base.about,
+    picture: override.picture ?? base.picture,
+    nip05: override.nip05 ?? base.nip05,
+    publicProfile:
+      typeof override.publicProfile === 'boolean' ? override.publicProfile : base.publicProfile,
+    showOnlineStatus:
+      typeof override.showOnlineStatus === 'boolean'
+        ? override.showOnlineStatus
+        : base.showOnlineStatus,
+  };
+};
+
 const nextRelayStatusBackoff = (current: number) => {
   for (const value of RELAY_STATUS_BACKOFF_SEQUENCE) {
     if (current < value) {
@@ -88,7 +123,11 @@ interface AuthStore extends AuthState {
   isFetchingRelayStatus: boolean;
   accounts: AccountMetadata[];
   login: (privateKey: string, user: User) => Promise<void>;
-  loginWithNsec: (nsec: string, saveToSecureStorage?: boolean) => Promise<void>;
+  loginWithNsec: (
+    nsec: string,
+    saveToSecureStorage?: boolean,
+    metadataOverride?: Partial<User>,
+  ) => Promise<void>;
   generateNewKeypair: (saveToSecureStorage?: boolean) => Promise<{ nsec: string }>;
   logout: () => Promise<void>;
   updateUser: (user: Partial<User>) => void;
@@ -180,7 +219,11 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      loginWithNsec: async (nsec: string, saveToSecureStorage = false) => {
+      loginWithNsec: async (
+        nsec: string,
+        saveToSecureStorage = false,
+        metadataOverride?: Partial<User>,
+      ) => {
         try {
           errorHandler.info('Attempting login with nsec', 'AuthStore.loginWithNsec', {
             saveToSecureStorage,
@@ -199,16 +242,17 @@ export const useAuthStore = create<AuthStore>()(
             showOnlineStatus: false,
             avatar: null,
           };
-          const accountMetadata = buildAccountMetadata(user);
+          const mergedUser = applyUserMetadataOverride(user, metadataOverride);
+          const accountMetadata = buildAccountMetadata(mergedUser);
 
           // セキュアストレージに保存
           if (saveToSecureStorage) {
             try {
               await SecureStorageApi.addAccount({
                 nsec,
-                name: user.name,
-                display_name: user.displayName,
-                picture: user.picture,
+                name: mergedUser.name,
+                display_name: mergedUser.displayName,
+                picture: mergedUser.picture,
               });
             } catch (storageError) {
               errorHandler.log('Secure storage add failed (loginWithNsec)', storageError, {
@@ -216,19 +260,19 @@ export const useAuthStore = create<AuthStore>()(
               });
               upsertFallbackAccount(accountMetadata, nsec);
             }
-          } else {
-            upsertFallbackAccount(accountMetadata, nsec);
           }
+          // secure storage の有無に関わらずフォールバックにも保存しておく
+          upsertFallbackAccount(accountMetadata, nsec);
 
           set({
             isAuthenticated: true,
-            currentUser: user,
+            currentUser: mergedUser,
             privateKey: nsec,
           });
           updateAuthDebug();
-          hydratePrivacyFromUser(user);
+          hydratePrivacyFromUser(mergedUser);
           errorHandler.info('Auth state set after loginWithNsec', 'AuthStore.loginWithNsec', {
-            npub: user.npub,
+            npub: mergedUser.npub,
             saveToSecureStorage,
           });
 
@@ -293,6 +337,10 @@ export const useAuthStore = create<AuthStore>()(
 
       generateNewKeypair: async (saveToSecureStorage = true) => {
         try {
+          const state = get();
+          if (!state.isAuthenticated && state.accounts.length === 0) {
+            clearFallbackAccounts();
+          }
           errorHandler.info('Generating new keypair', 'AuthStore.generateNewKeypair', {
             saveToSecureStorage,
           });
@@ -332,9 +380,9 @@ export const useAuthStore = create<AuthStore>()(
               });
               upsertFallbackAccount(accountMetadata, response.nsec);
             }
-          } else {
-            upsertFallbackAccount(accountMetadata, response.nsec);
           }
+          // secure storage の成否に関わらずフォールバックにも保持してアカウント切替を安定させる
+          upsertFallbackAccount(accountMetadata, response.nsec);
 
           set({
             isAuthenticated: true,
@@ -607,6 +655,73 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       switchAccount: async (npub: string) => {
+        const accountMetadata =
+          get().accounts.find((account) => account.npub === npub) ||
+          listFallbackAccountMetadata().find((account) => account.npub === npub);
+        const metadataOverride = toUserOverride(accountMetadata);
+        const fallbackNsec = getFallbackNsec(npub);
+        errorHandler.info('Attempting account switch', 'AuthStore.switchAccount', {
+          npub,
+          hasFallback: Boolean(fallbackNsec),
+          displayName: metadataOverride?.displayName,
+        });
+
+        const tryFallbackLogin = async () => {
+          if (!fallbackNsec) {
+            return false;
+          }
+          if (accountMetadata) {
+            const fallbackUser: User = {
+              id: accountMetadata.pubkey,
+              pubkey: accountMetadata.pubkey,
+              npub: accountMetadata.npub,
+              name: accountMetadata.name,
+              displayName: accountMetadata.display_name,
+              about: '',
+              picture: accountMetadata.picture ?? '',
+              nip05: '',
+              avatar: null,
+              publicProfile:
+                typeof accountMetadata.public_profile === 'boolean'
+                  ? accountMetadata.public_profile
+                  : true,
+              showOnlineStatus:
+                typeof accountMetadata.show_online_status === 'boolean'
+                  ? accountMetadata.show_online_status
+                  : false,
+            };
+            set({
+              isAuthenticated: true,
+              currentUser: fallbackUser,
+              privateKey: fallbackNsec,
+            });
+            updateAuthDebug();
+            hydratePrivacyFromUser(fallbackUser);
+            try {
+              await initializeNostr();
+              await useAuthStore.getState().updateRelayStatus();
+              await fetchAndApplyAvatar(accountMetadata.npub);
+            } catch (fallbackError) {
+              errorHandler.log('Fallback account switch initialization failed', fallbackError, {
+                context: 'AuthStore.switchAccount.fallbackInitialize',
+              });
+            }
+            errorHandler.info('Switched account via fallback metadata', 'AuthStore.switchAccount', {
+              npub,
+            });
+            return true;
+          }
+          await get().loginWithNsec(fallbackNsec, false, metadataOverride);
+          errorHandler.info('Switched account via fallback nsec', 'AuthStore.switchAccount', {
+            npub,
+          });
+          return true;
+        };
+
+        if (await tryFallbackLogin()) {
+          return;
+        }
+
         try {
           const response = await SecureStorageApi.secureLogin(npub);
 
@@ -614,7 +729,7 @@ export const useAuthStore = create<AuthStore>()(
           const account = accounts.find((a) => a.npub === npub);
 
           if (!account) {
-            throw new Error('Account not found');
+            throw new Error('Account not found in secure storage');
           }
 
           const user: User = {
@@ -633,9 +748,11 @@ export const useAuthStore = create<AuthStore>()(
               typeof account.show_online_status === 'boolean' ? account.show_online_status : false,
           };
 
+          const mergedUser = applyUserMetadataOverride(user, metadataOverride);
+
           set({
             isAuthenticated: true,
-            currentUser: user,
+            currentUser: mergedUser,
             privateKey: null,
           });
           updateAuthDebug();
@@ -644,16 +761,23 @@ export const useAuthStore = create<AuthStore>()(
           await useAuthStore.getState().updateRelayStatus();
 
           await fetchAndApplyAvatar(response.npub);
+
+          errorHandler.info('Switched account via secure storage', 'AuthStore.switchAccount', {
+            npub,
+          });
+          if (useAuthStore.getState().currentUser?.npub !== npub) {
+            if (await tryFallbackLogin()) {
+              return;
+            }
+          }
         } catch (error) {
-          const fallbackNsec = getFallbackNsec(npub);
-          if (fallbackNsec) {
-            await get().loginWithNsec(fallbackNsec, false);
+          if (await tryFallbackLogin()) {
             return;
           }
           errorHandler.log('Failed to switch account', error, {
             context: 'AuthStore.switchAccount',
             showToast: true,
-            toastTitle: 'アカウントの切り替えに失敗しました',
+            toastTitle: '?????????????????',
           });
           throw error;
         }
@@ -685,7 +809,18 @@ export const useAuthStore = create<AuthStore>()(
       loadAccounts: async () => {
         try {
           const accounts = await SecureStorageApi.listAccounts();
-          set({ accounts });
+          const fallback = listFallbackAccountMetadata();
+          const merged = new Map<string, AccountMetadata>();
+          for (const account of accounts) {
+            merged.set(account.npub, account);
+          }
+          for (const account of fallback) {
+            if (!merged.has(account.npub)) {
+              merged.set(account.npub, account);
+            }
+          }
+          const resolvedAccounts = Array.from(merged.values());
+          set({ accounts: resolvedAccounts });
           updateAuthDebug();
         } catch (error) {
           errorHandler.log('Failed to load accounts', error, {

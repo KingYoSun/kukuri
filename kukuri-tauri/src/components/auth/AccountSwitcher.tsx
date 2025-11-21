@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +19,7 @@ import { resolveAvatarSrc, resolveUserAvatarSrc } from '@/lib/profile/avatarDisp
 export function AccountSwitcher() {
   const { currentUser, accounts, switchAccount, removeAccount, logout } = useAuthStore();
   const navigate = useNavigate();
+  const isSwitchingRef = useRef(false);
 
   if (!currentUser) {
     return null;
@@ -33,13 +36,21 @@ export function AccountSwitcher() {
       .slice(0, 2);
   };
 
+  const labelText = currentUser.displayName || currentUser.name || currentUser.npub;
+
   const handleSwitchAccount = async (npub: string) => {
+    if (isSwitchingRef.current) {
+      return;
+    }
+    isSwitchingRef.current = true;
     try {
       await switchAccount(npub);
     } catch (error) {
       errorHandler.log('Failed to switch account', error, {
         context: 'AccountSwitcher.handleSwitchAccount',
       });
+    } finally {
+      isSwitchingRef.current = false;
     }
   };
 
@@ -62,12 +73,16 @@ export function AccountSwitcher() {
           variant="ghost"
           className="flex items-center gap-2"
           data-testid="account-switcher-trigger"
+          title={labelText}
+          aria-label={labelText}
         >
           <Avatar className="h-8 w-8">
             <AvatarImage src={currentUserAvatarSrc} alt={currentUser.displayName} />
             <AvatarFallback>{getInitials(currentUser.displayName)}</AvatarFallback>
           </Avatar>
-          <span className="max-w-[150px] truncate">{currentUser.displayName}</span>
+          <span className="max-w-[150px] truncate" data-testid="account-switcher-trigger-text">
+            {labelText}
+          </span>
           <ChevronDown className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -100,7 +115,11 @@ export function AccountSwitcher() {
               key={account.npub}
               className="cursor-pointer"
               onSelect={() => handleSwitchAccount(account.npub)}
+              onClick={() => handleSwitchAccount(account.npub)}
               data-testid="account-switch-option"
+              aria-label={`${account.display_name || account.name || 'account'} (${account.npub})`}
+              data-account-npub={account.npub}
+              data-account-display-name={account.display_name}
             >
               <div className="flex items-center gap-3 w-full">
                 <Avatar className="h-8 w-8">
