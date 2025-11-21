@@ -2,7 +2,7 @@
 
 ## ドキュメント情報
 - **作成日**: 2025年07月25日
-- **最終更新**: 2025年11月17日
+- **最終更新**: 2025年11月21日
 - **目的**: kukuriプロジェクトの開発環境構築手順
 
 ## 目次
@@ -145,6 +145,17 @@ sqlx migrate run
 cd ..
 ```
 
+#### P2P ブートストラップの準備（手動検証時）
+手動検証では Mainline DHT ブートストラップノードをローカルで起動する。
+```bash
+# Docker でブートストラップノードを起動
+docker compose -f docker-compose.test.yml up -d p2p-bootstrap
+
+# 既存ノード一覧を `kukuri-cli` から適用する場合
+kukuri-cli bootstrap --export-path tmp/bootstrap-nodes.json
+```
+検証後は `docker compose -f docker-compose.test.yml down --remove-orphans` で停止する。
+
 ## 開発環境の確認
 
 ### ツールのバージョン確認
@@ -200,8 +211,11 @@ pnpm tauri build        # プロダクションビルド
 pnpm build              # フロントエンドのみビルド
 
 # テスト
-pnpm test               # フロントエンドテスト
-cargo test              # Rustテスト
+./scripts/test-docker.ps1 all   # Windows は必ず Docker 経由で実行（ts/rust/lint をまとめて実行）
+./scripts/test-docker.ps1 ts    # Windows の TypeScript テスト
+./scripts/test-docker.ps1 rust  # Windows の Rust テスト
+pnpm test               # Linux/macOS/WSL2 でのフロントエンドテスト
+cargo test              # Linux/macOS/WSL2 での Rust テスト
 
 # リント/フォーマット
 pnpm lint               # ESLint実行

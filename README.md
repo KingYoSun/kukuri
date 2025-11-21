@@ -97,7 +97,7 @@ kukuri/
 │   └── Cargo.toml
 ├── docs/                   # ドキュメント
 ├── scripts/                # ユーティリティスクリプト
-└── workers/                # Cloudflare Workers
+└── test-results/           # Nightly/CI ログ・アーティファクト
 `
 
 ## ドキュメント

@@ -20,22 +20,16 @@
    npm --version
    ```
 
-### 2. pnpm のインストール
+### 2. pnpm の有効化（Corepack）
 
-PowerShellを**管理者として実行**し、以下を実行：
+Node.js 20 以降は Corepack が同梱されているため、`pnpm` は Corepack 経由で有効化する。PowerShell で次を実行：
 
 ```powershell
-# PowerShellの実行ポリシーを一時的に変更
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-
-# pnpmのインストール
-iwr https://get.pnpm.io/install.ps1 -useb | iex
+cmd.exe /c "corepack enable pnpm"
+cmd.exe /c "corepack pnpm --version"
 ```
 
-インストール後、新しいターミナルを開いて確認：
-```powershell
-pnpm --version
-```
+以降の npm/pnpm 操作は `corepack pnpm ...` として実行する（例: `corepack pnpm install --frozen-lockfile`）。グローバルインストーラー経由の pnpm セットアップは不要。
 
 ### 3. Rust & Cargo のインストール
 
@@ -78,7 +72,7 @@ cargo install sqlx-cli --no-default-features --features native-tls,sqlite
 ```powershell
 # バージョン確認コマンド
 node --version
-pnpm --version
+corepack pnpm --version
 rustc --version
 cargo --version
 cargo tauri --version
@@ -95,19 +89,19 @@ sqlx --version
 2. 依存関係のインストール：
    ```powershell
    cd kukuri-tauri
-   pnpm install
+   cmd.exe /c "corepack pnpm install --frozen-lockfile"
    ```
 
 3. 開発サーバーの起動：
    ```powershell
-   pnpm tauri dev
+   corepack pnpm tauri dev
    ```
 
 ## トラブルシューティング
 
 ### pnpmが認識されない
-- 新しいターミナルを開いて再試行
-- 環境変数PATHに`%USERPROFILE%\.pnpm`が追加されているか確認
+- `cmd.exe /c "corepack enable pnpm"` を再実行し、`cmd.exe /c "corepack pnpm --version"` で確認
+- 新しいターミナルを開いて再試行（Corepack の shim が反映されているか確認）
 
 ### Rustのコンパイルエラー
 - Visual Studio C++ Build Toolsがインストールされているか確認
@@ -140,6 +134,6 @@ sqlx --version
 
 ## 次のステップ
 
-1. `CLAUDE.md`を確認して開発ルールを理解
-2. `docs/01_project/activeContext/current_tasks.md`で現在のタスクを確認
-3. `pnpm test`でテストの実行を確認
+1. `AGENTS.md` と `docs/01_project/activeContext/tasks/status/in_progress.md` を確認し、開発ルールと着手中タスクを把握
+2. Windows でのテストは必ず `./scripts/test-docker.ps1 all`（もしくは `ts`/`rust`/`lint`）を使用し、ホスト上で `pnpm test` / `cargo test` を直接実行しない
+3. 手動で P2P を確認する場合は `docker compose -f docker-compose.test.yml up -d p2p-bootstrap` で Mainline DHT ブートストラップを起動
