@@ -8,8 +8,25 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 export function OfflineIndicator() {
   const { isOnline, lastSyncedAt, pendingActions, isSyncing } = useOfflineStore();
-  const isE2EMode =
-    import.meta.env.VITE_ENABLE_E2E === 'true' || import.meta.env.TAURI_ENV_DEBUG === 'true';
+  const isE2EMode = React.useMemo(() => {
+    if (import.meta.env.VITE_ENABLE_E2E === 'true' || import.meta.env.TAURI_ENV_DEBUG === 'true') {
+      return true;
+    }
+
+    // ビルド時に環境変数が伝搬しなかった場合でも、E2Eブリッジの存在で検出する
+    if (typeof window !== 'undefined') {
+      const win = window as unknown as Record<string, unknown>;
+      const status = win.__KUKURI_E2E_STATUS__;
+      if (status === 'registered' || status === 'pending') {
+        return true;
+      }
+      if (win.__KUKURI_E2E__ || win.__KUKURI_E2E_BOOTSTRAP__) {
+        return true;
+      }
+    }
+
+    return false;
+  }, []);
   const [showBanner, setShowBanner] = React.useState(!isOnline);
   const [wasOffline, setWasOffline] = React.useState(!isOnline);
 
