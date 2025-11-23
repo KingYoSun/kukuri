@@ -59,13 +59,17 @@ impl EventManager {
         let event_id = match client_manager.publish_event(event.clone()).await {
             Ok(id) => id,
             Err(e) => {
-                if std::env::var("KUKURI_ALLOW_NO_RELAY")
+                let msg = e.to_string();
+                let allow_no_relay = std::env::var("KUKURI_ALLOW_NO_RELAY")
                     .map(|value| value == "1")
                     .unwrap_or(false)
-                {
+                    || msg.contains("no relays specified")
+                    || msg.contains("not connected to any relays");
+
+                if allow_no_relay {
                     tracing::warn!(
                         target: "event_manager",
-                        "skipping publish_event error in test mode: {e}"
+                        "publish_event skipped (no relay connected): {msg}"
                     );
                     event.id
                 } else {

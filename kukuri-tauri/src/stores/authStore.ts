@@ -191,6 +191,26 @@ export const useAuthStore = create<AuthStore>()(
       });
     };
 
+    const bootstrapTopics = async () => {
+      const topicStore = useTopicStore.getState();
+      try {
+        await topicStore.fetchTopics();
+        const publicTopic = Array.from(topicStore.topics.values()).find(
+          (topic) => topic.id === DEFAULT_PUBLIC_TOPIC_ID,
+        );
+        if (publicTopic) {
+          await topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID);
+          if (!topicStore.currentTopic) {
+            topicStore.setCurrentTopic(publicTopic);
+          }
+        }
+      } catch (error) {
+        errorHandler.log('Failed to bootstrap topics', error, {
+          context: 'AuthStore.bootstrapTopics',
+        });
+      }
+    };
+
     return {
       isAuthenticated: false,
       currentUser: null,
@@ -212,6 +232,7 @@ export const useAuthStore = create<AuthStore>()(
         hydratePrivacyFromUser(user);
         try {
           await initializeNostr();
+          await bootstrapTopics();
           await fetchAndApplyAvatar(user.npub);
         } catch (error) {
           errorHandler.log('Failed to initialize Nostr', error, {
@@ -246,7 +267,6 @@ export const useAuthStore = create<AuthStore>()(
           const mergedUser = applyUserMetadataOverride(user, metadataOverride);
           const accountMetadata = buildAccountMetadata(mergedUser);
 
-          // セキュアストレージに保存
           if (saveToSecureStorage) {
             try {
               await SecureStorageApi.addAccount({
@@ -262,7 +282,6 @@ export const useAuthStore = create<AuthStore>()(
               upsertFallbackAccount(accountMetadata, nsec);
             }
           }
-          // secure storage の有無に関わらずフォールバックにも保存しておく
           upsertFallbackAccount(accountMetadata, nsec);
 
           set({
@@ -277,7 +296,6 @@ export const useAuthStore = create<AuthStore>()(
             saveToSecureStorage,
           });
 
-          // Nostrクライアントを初期化
           try {
             await initializeNostr();
           } catch (nostrError) {
@@ -285,7 +303,6 @@ export const useAuthStore = create<AuthStore>()(
               context: 'AuthStore.loginWithNsec.initializeNostr',
             });
           }
-          // リレー状態を更新
           try {
             await useAuthStore.getState().updateRelayStatus();
           } catch (relayError) {
@@ -293,7 +310,6 @@ export const useAuthStore = create<AuthStore>()(
               context: 'AuthStore.loginWithNsec.updateRelayStatus',
             });
           }
-          // アカウントリストを更新
           try {
             await useAuthStore.getState().loadAccounts();
           } catch (loadError) {
@@ -302,29 +318,7 @@ export const useAuthStore = create<AuthStore>()(
             });
           }
 
-          // 初回ログイン時（アカウント追加時）は#publicトピックに参加
-          if (saveToSecureStorage) {
-            const topicStore = useTopicStore.getState();
-            try {
-              // トピック一覧を取得
-              await topicStore.fetchTopics();
-              // #publicトピックを探す
-              const publicTopic = Array.from(topicStore.topics.values()).find(
-                (t) => t.id === DEFAULT_PUBLIC_TOPIC_ID,
-              );
-              if (publicTopic) {
-                // #publicトピックに参加
-                await topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID);
-                // #publicトピックをデフォルト表示に設定
-                topicStore.setCurrentTopic(publicTopic);
-              }
-            } catch (topicError) {
-              errorHandler.log('Topic bootstrap failed after loginWithNsec', topicError, {
-                context: 'AuthStore.loginWithNsec.topicBootstrap',
-              });
-            }
-          }
-
+          await bootstrapTopics();
           await fetchAndApplyAvatar(response.npub);
         } catch (error) {
           errorHandler.log('Login failed', error, {
@@ -426,28 +420,7 @@ export const useAuthStore = create<AuthStore>()(
             });
           }
 
-          // 新規アカウント作成時は#publicトピックに参加
-          if (saveToSecureStorage) {
-            const topicStore = useTopicStore.getState();
-            try {
-              // トピック一覧を取得
-              await topicStore.fetchTopics();
-              // #publicトピックを探す
-              const publicTopic = Array.from(topicStore.topics.values()).find(
-                (t) => t.id === DEFAULT_PUBLIC_TOPIC_ID,
-              );
-              if (publicTopic) {
-                // #publicトピックに参加
-                await topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID);
-                // #publicトピックをデフォルト表示に設定
-                topicStore.setCurrentTopic(publicTopic);
-              }
-            } catch (topicError) {
-              errorHandler.log('Topic bootstrap failed after keypair generation', topicError, {
-                context: 'AuthStore.generateNewKeypair.topicBootstrap',
-              });
-            }
-          }
+          await bootstrapTopics();
 
           await fetchAndApplyAvatar(response.npub);
 
@@ -613,6 +586,7 @@ export const useAuthStore = create<AuthStore>()(
             await initializeNostr();
             // リレー状態を更新
             await useAuthStore.getState().updateRelayStatus();
+            await bootstrapTopics();
             errorHandler.info('Auto-login completed successfully', 'AuthStore.initialize');
 
             await fetchAndApplyAvatar(currentAccount.npub);
@@ -701,6 +675,7 @@ export const useAuthStore = create<AuthStore>()(
             try {
               await initializeNostr();
               await useAuthStore.getState().updateRelayStatus();
+              await bootstrapTopics();
               await fetchAndApplyAvatar(accountMetadata.npub);
             } catch (fallbackError) {
               errorHandler.log('Fallback account switch initialization failed', fallbackError, {
@@ -760,6 +735,7 @@ export const useAuthStore = create<AuthStore>()(
 
           await initializeNostr();
           await useAuthStore.getState().updateRelayStatus();
+          await bootstrapTopics();
 
           await fetchAndApplyAvatar(response.npub);
 

@@ -205,8 +205,14 @@ impl TopicHandler {
         Ok(())
     }
 
-    pub async fn get_all_topics(&self) -> Result<Vec<TopicResponse>, AppError> {
-        let topics = self.topic_service.get_all_topics().await?;
+    pub async fn get_all_topics(
+        &self,
+        user_pubkey: Option<&str>,
+    ) -> Result<Vec<TopicResponse>, AppError> {
+        let topics = self
+            .topic_service
+            .list_topics_with_membership(user_pubkey)
+            .await?;
 
         Ok(topics
             .into_iter()

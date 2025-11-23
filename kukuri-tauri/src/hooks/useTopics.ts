@@ -30,13 +30,15 @@ export const useTopics = () => {
             return {
               id: topic.id,
               name: topic.name,
-              description: topic.description,
+              description: topic.description ?? '',
               tags: [], // APIにタグ情報がない場合は空配列
               memberCount: stats.member_count,
               postCount: stats.post_count,
               lastActive: topic.updated_at,
               isActive: true,
               createdAt: new Date(topic.created_at * 1000),
+              visibility: topic.visibility ?? 'public',
+              isJoined: Boolean(topic.is_joined),
             } as Topic;
           } catch (error) {
             // 統計情報の取得に失敗した場合はデフォルト値を使用
@@ -46,13 +48,15 @@ export const useTopics = () => {
             return {
               id: topic.id,
               name: topic.name,
-              description: topic.description,
+              description: topic.description ?? '',
               tags: [],
-              memberCount: 0,
-              postCount: 0,
+              memberCount: topic.member_count ?? 0,
+              postCount: topic.post_count ?? 0,
               lastActive: topic.updated_at,
               isActive: true,
               createdAt: new Date(topic.created_at * 1000),
+              visibility: topic.visibility ?? 'public',
+              isJoined: Boolean(topic.is_joined),
             } as Topic;
           }
         }),
@@ -89,8 +93,8 @@ export const useTopic = (topicId: string) => {
       // 統計情報を取得
       const stats = await TauriApi.getTopicStats(apiTopic.id).catch(() => ({
         topic_id: apiTopic.id,
-        member_count: 0,
-        post_count: 0,
+        member_count: apiTopic.member_count ?? 0,
+        post_count: apiTopic.post_count ?? 0,
         active_users_24h: 0,
         trending_score: 0,
       }));
@@ -98,13 +102,15 @@ export const useTopic = (topicId: string) => {
       return {
         id: apiTopic.id,
         name: apiTopic.name,
-        description: apiTopic.description,
+        description: apiTopic.description ?? '',
         tags: [],
         memberCount: stats.member_count,
         postCount: stats.post_count,
         lastActive: apiTopic.updated_at,
         isActive: true,
         createdAt: new Date(apiTopic.created_at * 1000),
+        visibility: apiTopic.visibility ?? 'public',
+        isJoined: Boolean(apiTopic.is_joined),
       } as Topic;
     },
     enabled: !!topicId,

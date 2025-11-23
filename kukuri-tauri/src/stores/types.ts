@@ -40,6 +40,7 @@ export interface Topic {
   isActive: boolean;
   createdAt: Date;
   visibility?: 'public' | 'private';
+  isJoined?: boolean;
 }
 
 export interface Post {

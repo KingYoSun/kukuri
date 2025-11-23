@@ -31,6 +31,7 @@ export interface Topic {
   member_count?: number;
   post_count?: number;
   visibility?: 'public' | 'private';
+  is_joined?: boolean;
 }
 
 export interface CreateTopicRequest {

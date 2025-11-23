@@ -84,7 +84,44 @@ export const useTopicStore = create<TopicStore>()(
       topicLastReadAt: new Map(),
       pendingTopics: new Map(),
 
-      setTopics: (topics: Topic[]) => set((state) => computeTopicCollections(state, topics)),
+      setTopics: (topics: Topic[]) =>
+        set((state) => {
+          const collections = computeTopicCollections(state, topics);
+          const joinedFromPayload = topics
+            .filter((topic) => topic.isJoined)
+            .map((topic) => normalizeTopicId(topic.id));
+          const preservedJoined = state.joinedTopics.filter((id) => collections.topics.has(id));
+          const joinedTopics =
+            joinedFromPayload.length > 0
+              ? Array.from(new Set([...joinedFromPayload, ...preservedJoined]))
+              : preservedJoined;
+
+          const unread = new Map(collections.topicUnreadCounts);
+          const lastRead = new Map(collections.topicLastReadAt);
+          const now = Math.floor(Date.now() / 1000);
+          joinedTopics.forEach((id) => {
+            unread.set(id, unread.get(id) ?? 0);
+            lastRead.set(id, lastRead.get(id) ?? now);
+          });
+
+          let currentTopic = state.currentTopic;
+          if (!currentTopic || !collections.topics.has(currentTopic.id)) {
+            const fallbackTopic =
+              collections.topics.get(DEFAULT_PUBLIC_TOPIC_ID) ??
+              (joinedTopics.length > 0 ? collections.topics.get(joinedTopics[0]) : undefined);
+            currentTopic = fallbackTopic ?? null;
+          } else {
+            currentTopic = collections.topics.get(currentTopic.id) ?? null;
+          }
+
+          return {
+            ...collections,
+            joinedTopics,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+            currentTopic,
+          };
+        }),
 
       setPendingTopics: (pendingList: PendingTopic[]) =>
         set((state) => {
@@ -127,26 +164,19 @@ export const useTopicStore = create<TopicStore>()(
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
-          if (!apiTopics) {
-            set({
-              topics: new Map(),
-              topicUnreadCounts: new Map(),
-              topicLastReadAt: new Map(),
-            });
-            return;
-          }
-          const topics: Topic[] = apiTopics.map((t) => ({
-            id: normalizeTopicId(t.id),
+          const topics: Topic[] = (apiTopics ?? []).map((t) => ({
+            id: t.id,
             name: t.name,
             description: t.description,
             createdAt: new Date(t.created_at * 1000),
-            memberCount: 0,
-            postCount: 0,
+            memberCount: t.member_count ?? 0,
+            postCount: t.post_count ?? 0,
             isActive: true,
             tags: [],
             visibility: t.visibility ?? 'public',
+            isJoined: Boolean(t.is_joined),
           }));
-          set((state) => computeTopicCollections(state, topics));
+          get().setTopics(topics);
           const refreshPendingTopics = get().refreshPendingTopics;
           if (typeof refreshPendingTopics === 'function') {
             await refreshPendingTopics();
@@ -177,7 +207,22 @@ export const useTopicStore = create<TopicStore>()(
           const normalizedId = normalizeTopicId(topic.id);
           const newTopics = new Map(state.topics);
           newTopics.set(normalizedId, { ...topic, id: normalizedId });
-          return { topics: newTopics };
+          const joinedTopics = topic.isJoined
+            ? Array.from(new Set([...state.joinedTopics, normalizedId]))
+            : state.joinedTopics;
+          const unread = new Map(state.topicUnreadCounts);
+          const lastRead = new Map(state.topicLastReadAt);
+          if (topic.isJoined) {
+            const now = Math.floor(Date.now() / 1000);
+            unread.set(normalizedId, unread.get(normalizedId) ?? 0);
+            lastRead.set(normalizedId, lastRead.get(normalizedId) ?? now);
+          }
+          return {
+            topics: newTopics,
+            joinedTopics,
+            topicUnreadCounts: unread,
+            topicLastReadAt: lastRead,
+          };
         }),
 
       queueTopicCreation: async (name: string, description: string) => {
@@ -214,17 +259,17 @@ export const useTopicStore = create<TopicStore>()(
             name: apiTopic.name,
             description: apiTopic.description,
             createdAt: new Date(apiTopic.created_at * 1000),
-            memberCount: 0,
-            postCount: 0,
+            memberCount: apiTopic.member_count ?? 0,
+            postCount: apiTopic.post_count ?? 0,
             isActive: true,
             tags: [],
             visibility: apiTopic.visibility ?? 'public',
+            isJoined: apiTopic.is_joined ?? true,
           };
-          set((state) => {
-            const newTopics = new Map(state.topics);
-            newTopics.set(topic.id, topic);
-            return { topics: newTopics };
-          });
+          const existingTopics = Array.from(get().topics.values()).filter(
+            (existing) => normalizeTopicId(existing.id) !== topic.id,
+          );
+          get().setTopics([...existingTopics, topic]);
           return topic;
         } catch (error) {
           errorHandler.log('Failed to create topic', error, {
@@ -285,9 +330,19 @@ export const useTopicStore = create<TopicStore>()(
           const lastRead = new Map(state.topicLastReadAt);
           lastRead.delete(topicId);
 
+          const joinedTopics = state.joinedTopics.filter((joined) => joined !== topicId);
+          let currentTopic = state.currentTopic?.id === topicId ? null : state.currentTopic;
+          if (!currentTopic || !newTopics.has(currentTopic.id)) {
+            const fallback =
+              newTopics.get(DEFAULT_PUBLIC_TOPIC_ID) ??
+              (joinedTopics.length > 0 ? newTopics.get(joinedTopics[0]) : undefined);
+            currentTopic = fallback ?? null;
+          }
+
           return {
             topics: newTopics,
-            currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
+            currentTopic,
+            joinedTopics,
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
@@ -307,9 +362,19 @@ export const useTopicStore = create<TopicStore>()(
             const lastRead = new Map(state.topicLastReadAt);
             lastRead.delete(topicId);
 
+            const joinedTopics = state.joinedTopics.filter((joined) => joined !== topicId);
+            let currentTopic = state.currentTopic?.id === topicId ? null : state.currentTopic;
+            if (!currentTopic || !newTopics.has(currentTopic.id)) {
+              const fallback =
+                newTopics.get(DEFAULT_PUBLIC_TOPIC_ID) ??
+                (joinedTopics.length > 0 ? newTopics.get(joinedTopics[0]) : undefined);
+              currentTopic = fallback ?? null;
+            }
+
             return {
               topics: newTopics,
-              currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
+              currentTopic,
+              joinedTopics,
               topicUnreadCounts: unread,
               topicLastReadAt: lastRead,
             };

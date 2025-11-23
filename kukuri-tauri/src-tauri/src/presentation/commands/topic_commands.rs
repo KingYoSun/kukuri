@@ -94,8 +94,14 @@ pub async fn mark_pending_topic_failed(
 pub async fn get_topics(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<TopicResponse>>, AppError> {
+    let user_pubkey = state
+        .key_manager
+        .current_keypair()
+        .await
+        .map(|pair| pair.public_key)
+        .ok();
     let handler = TopicHandler::new(state.topic_service.clone());
-    let result = handler.get_all_topics().await;
+    let result = handler.get_all_topics(user_pubkey.as_deref()).await;
     Ok(ApiResponse::from_result(result))
 }
 

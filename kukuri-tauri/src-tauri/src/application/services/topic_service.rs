@@ -15,6 +15,7 @@ use crate::domain::value_objects::offline::{
 use crate::shared::{ValidationFailureKind, error::AppError};
 use chrono::Utc;
 use serde_json::json;
+use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -80,6 +81,14 @@ impl TopicService {
         topic.visibility = visibility;
         self.repository.create_topic(&topic).await?;
         self.join_topic(&topic.id, creator_pubkey).await?;
+
+        if let Some(mut stored) = self.get_topic(&topic.id).await? {
+            stored.is_joined = true;
+            return Ok(stored);
+        }
+
+        topic.is_joined = true;
+        topic.member_count = topic.member_count.saturating_add(1);
         Ok(topic)
     }
 
@@ -94,6 +103,26 @@ impl TopicService {
 
     pub async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError> {
         self.repository.get_all_topics().await
+    }
+
+    pub async fn list_topics_with_membership(
+        &self,
+        user_pubkey: Option<&str>,
+    ) -> Result<Vec<Topic>, AppError> {
+        let mut topics = self.repository.get_all_topics().await?;
+
+        if let Some(pubkey) = user_pubkey {
+            let joined = self.repository.get_joined_topics(pubkey).await?;
+            let joined_ids: HashSet<String> = joined.into_iter().map(|topic| topic.id).collect();
+
+            for topic in topics.iter_mut() {
+                if joined_ids.contains(&topic.id) {
+                    topic.is_joined = true;
+                }
+            }
+        }
+
+        Ok(topics)
     }
 
     pub async fn get_joined_topics(&self, user_pubkey: &str) -> Result<Vec<Topic>, AppError> {
@@ -383,12 +412,14 @@ mod tests {
         OfflineActionsQuery, OfflineServiceTrait, SaveOfflineActionParams,
     };
     use crate::application::services::p2p_service::{P2PServiceTrait, P2PStatus};
+    use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
     use crate::domain::entities::offline::{
         CacheMetadataUpdate, CacheStatusSnapshot, OfflineActionRecord, OptimisticUpdateDraft,
         SavedOfflineAction, SyncQueueItem, SyncQueueItemDraft, SyncResult, SyncStatusUpdate,
     };
     use crate::domain::entities::{
         MetricsWindow, PendingTopic, TopicActivityRow, TopicMetricsSnapshot, TopicMetricsUpsert,
+        TopicVisibility,
     };
     use crate::domain::value_objects::event_gateway::PublicKey;
     use crate::domain::value_objects::offline::{OfflinePayload, OptimisticUpdateId, SyncQueueId};
@@ -750,6 +781,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_topics_with_membership_marks_joined_flags() {
+        let mut repo = MockTopicRepo::new();
+        let public = topic_with_counts(DEFAULT_PUBLIC_TOPIC_ID, "Public", 0, 0);
+        let private = topic_with_counts("private", "Private", 0, 0);
+
+        let public_for_all = public.clone();
+        let private_for_all = private.clone();
+        repo.expect_get_all_topics()
+            .times(1)
+            .returning(move || Ok(vec![public_for_all.clone(), private_for_all.clone()]));
+        let public_for_joined = public.clone();
+        repo.expect_get_joined_topics()
+            .with(eq("pubkey1"))
+            .times(1)
+            .returning(move |_| Ok(vec![public_for_joined.clone()]));
+
+        let repo_arc: Arc<dyn PortTopicRepository> = Arc::new(repo);
+        let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
+            Arc::new(MockTopicMetricsRepo::new());
+        let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(MockP2P::new());
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
+
+        let topics = service
+            .list_topics_with_membership(Some("pubkey1"))
+            .await
+            .expect("topics with membership");
+
+        assert_eq!(topics.len(), 2);
+        assert!(
+            topics
+                .iter()
+                .any(|topic| topic.id == DEFAULT_PUBLIC_TOPIC_ID && topic.is_joined)
+        );
+        assert!(
+            topics
+                .iter()
+                .any(|topic| topic.id == "private" && !topic.is_joined)
+        );
+    }
+
+    #[tokio::test]
     async fn test_get_joined_topics_passes_user_pubkey() {
         let mut repo = MockTopicRepo::new();
         repo.expect_get_joined_topics()
@@ -798,5 +870,46 @@ mod tests {
             service.latest_metrics_generated_at().await.unwrap(),
             Some(999)
         );
+    }
+
+    #[tokio::test]
+    async fn create_topic_returns_joined_topic_with_repo_state() {
+        let mut repo = MockTopicRepo::new();
+        repo.expect_create_topic().times(1).returning(|_| Ok(()));
+        repo.expect_join_topic()
+            .times(1)
+            .withf(|topic_id, user| !topic_id.is_empty() && user == "creator")
+            .return_once(|_, _| Ok(()));
+        repo.expect_get_topic().times(1).returning(|id| {
+            let mut topic = Topic::new("My Topic".to_string(), Some("desc".to_string()));
+            topic.id = id.to_string();
+            topic.member_count = 1;
+            topic.visibility = TopicVisibility::Public;
+            Ok(Some(topic))
+        });
+
+        let repo_arc: Arc<dyn PortTopicRepository> = Arc::new(repo);
+        let metrics_arc: Arc<dyn PortTopicMetricsRepository> =
+            Arc::new(MockTopicMetricsRepo::new());
+        let mut p2p = MockP2P::new();
+        p2p.expect_join_topic()
+            .times(1)
+            .withf(|topic_id, peers| !topic_id.is_empty() && peers.is_empty())
+            .return_once(|_, _| Ok(()));
+        let p2p_arc: Arc<dyn P2PServiceTrait> = Arc::new(p2p);
+        let service = build_topic_service(repo_arc, metrics_arc, p2p_arc, false);
+
+        let topic = service
+            .create_topic(
+                "My Topic".to_string(),
+                Some("desc".to_string()),
+                TopicVisibility::Public,
+                "creator",
+            )
+            .await
+            .expect("topic created");
+
+        assert!(topic.is_joined);
+        assert!(topic.member_count >= 1);
     }
 }

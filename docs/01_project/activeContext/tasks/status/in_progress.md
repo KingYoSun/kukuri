@@ -22,8 +22,8 @@
 - 状況: 着手（チェックリスト化のみ完了）。次は `./scripts/test-docker.ps1` / Nightly artefact で実施予定。
 - 重点確認: オンボーディングとキー管理、プロフィール/プライバシー同期、ホーム/トピック/投稿操作、トレンド・フォロー導線、DM、検索、SyncStatusIndicator、P2P/RelayStatus/CLI 連携、Nightlyジョブ、CIジョブ成功。
 
-### 2025年11月23日 トピック購読仕様変更実装（完了）
+### 2025年11月23日 トピック購読仕様変更フォローアップ（不具合対応）
 
-- 目標: docs/01_project/activeContext/topic_subscription_spec_review.md に沿って、公開/非公開IDスキーム刷新と購読レジストリ化を進める。
-- 状況: ID正規化・visibility対応・デフォルトトピック切替・UI文言/導線更新まで完了し、format-check も通過。
-- 次のアクション: なし（完了）。
+- 目標: docs/01_project/activeContext/topic_subscription_spec_review.md に沿って購読ベースの導線を反映し、pnpm tauri dev で #public を購読済み表示にして投稿確認まで通す。
+- 状況: 実装済みと報告していたが、UI が「トピック作成」表記のままで参加できず、参加トピック一覧に public が出ず、n0 接続設定でも Relay/peer が 0 のまま投稿不可。再調査・修正中。
+- 次のアクション: Rust 側の購読状態返却とストア初期化を点検・修正し、ローカルで #public 購読＋投稿テストを通す。
