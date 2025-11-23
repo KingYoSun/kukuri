@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { Check, ChevronsUpDown, PlusCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Command,
@@ -10,9 +11,9 @@ import {
   CommandItem,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useTopicStore } from '@/stores';
-import { Badge } from '@/components/ui/badge';
 import type { PendingTopic } from '@/lib/api/tauri';
+import { cn } from '@/lib/utils';
+import { useTopicStore } from '@/stores';
 
 interface TopicSelectorProps {
   value?: string;
@@ -60,7 +61,7 @@ export function TopicSelector({
       case 'failed':
         return '再送待ち';
       default:
-        return '待機中';
+        return '同期中';
     }
   };
 
@@ -92,7 +93,7 @@ export function TopicSelector({
                   data-testid="topic-selector-create-empty"
                 >
                   <PlusCircle className="h-4 w-4 mr-1" />
-                  新しいトピックを作成
+                  新しいトピックを追加（購読）
                 </Button>
               )}
             </div>
@@ -107,7 +108,7 @@ export function TopicSelector({
                       {pending.status === 'failed'
                         ? pending.error_message || '再送待ちです'
                         : pending.status === 'synced'
-                          ? '同期済みです。投稿作成に戻れます。'
+                          ? '同期済みです。投稿作成に戻れます'
                           : 'オフラインのため同期待ちです'}
                     </div>
                   </div>
@@ -161,7 +162,7 @@ export function TopicSelector({
                 data-testid="topic-selector-create"
               >
                 <PlusCircle className="mr-2 h-4 w-4" />
-                新しいトピックを作成
+                新しいトピックを追加（購読）
               </CommandItem>
             )}
           </CommandGroup>

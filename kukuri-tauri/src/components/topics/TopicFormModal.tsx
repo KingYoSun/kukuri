@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Loader2 } from 'lucide-react';
 import * as z from 'zod';
+
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -21,12 +24,10 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
-import { useTopicStore } from '@/stores/topicStore';
-import { useOfflineStore } from '@/stores/offlineStore';
-import { useComposerStore } from '@/stores/composerStore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { useComposerStore } from '@/stores/composerStore';
+import { useOfflineStore } from '@/stores/offlineStore';
+import { useTopicStore } from '@/stores/topicStore';
 import type { Topic } from '@/stores';
 
 const topicFormSchema = z.object({
@@ -112,7 +113,7 @@ export function TopicFormModal({
           } catch (error) {
             toast({
               title: '注意',
-              description: 'トピックの参加に失敗しました。再試行してください。',
+              description: 'トピックの購読に失敗しました。再試行してください。',
               variant: 'destructive',
             });
             throw error;
@@ -121,7 +122,7 @@ export function TopicFormModal({
 
         toast({
           title: '成功',
-          description: 'トピックを作成しました',
+          description: 'トピックを作成し購読に追加しました',
         });
         onCreated?.(createdTopic);
       } else if (mode === 'edit' && topic) {
@@ -148,14 +149,14 @@ export function TopicFormModal({
             {mode === 'edit'
               ? 'トピックを編集'
               : mode === 'create-from-composer'
-                ? '投稿用の新しいトピック'
-                : '新しいトピックを作成'}
+                ? '投稿用の新しいトピックを追加'
+                : '新しいトピックを追加'}
           </DialogTitle>
           <DialogDescription>
             {mode === 'create'
               ? 'トピックの名前と説明を入力してください'
               : mode === 'create-from-composer'
-                ? '投稿を続けるためのトピックを作成します。作成後すぐに参加します。'
+                ? '投稿を続けるためのトピックを作成し、購読として追加します。'
                 : 'トピックの情報を更新します'}
           </DialogDescription>
         </DialogHeader>
