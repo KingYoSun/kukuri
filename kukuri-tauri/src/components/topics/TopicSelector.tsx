@@ -61,7 +61,7 @@ export function TopicSelector({
       case 'failed':
         return '再送待ち';
       default:
-        return '同期中';
+        return '待機中';
     }
   };
 
@@ -109,7 +109,7 @@ export function TopicSelector({
                         ? pending.error_message || '再送待ちです'
                         : pending.status === 'synced'
                           ? '同期済みです。投稿作成に戻れます'
-                          : 'オフラインのため同期待ちです'}
+                          : 'オフラインのため待機中です'}
                     </div>
                   </div>
                   <Badge
