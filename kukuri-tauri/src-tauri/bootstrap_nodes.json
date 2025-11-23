@@ -1,7 +1,10 @@
 {
   "development": {
     "description": "Local development bootstrap nodes",
-    "nodes": []
+    "nodes": [
+      "aa523d74eb268ea8fd7947ae341f70fd03ac2d6403e42854ca1a4e70bb60b837@127.0.0.1:11223",
+      "cb88ed2e4496ecef97ced88d985c34b20eff3afbd3928c7741c13307d7b53147@127.0.0.1:11225"
+    ]
   },
   "staging": {
     "description": "Staging environment bootstrap nodes",

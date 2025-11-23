@@ -56,6 +56,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Print the node ID derived from the configured secret key
+    NodeId,
     /// Run as DHT bootstrap node
     Bootstrap {
         /// Additional bootstrap peers (format: node_id@host:port)
@@ -109,6 +111,14 @@ async fn main() -> Result<()> {
             mdns,
             timeout,
         } => run_connectivity_probe(&cli, peer, !no_dht, mdns, timeout).await?,
+        Commands::NodeId => {
+            let bind_addr = SocketAddr::from_str(&cli.bind)?;
+            let builder = Endpoint::builder();
+            let builder = apply_bind_address(builder, bind_addr);
+            let builder = apply_secret_key(builder, &cli)?;
+            let endpoint = builder.bind().await?;
+            println!("{}", endpoint.id());
+        }
     }
 
     Ok(())

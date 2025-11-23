@@ -1,4 +1,4 @@
-/// ブートストラップノード設定モジュール
+//! Bootstrap node configuration helpers
 use crate::shared::config::BootstrapSource;
 use crate::shared::error::AppError;
 use dirs;
@@ -9,6 +9,18 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, info, trace, warn};
+
+fn find_bootstrap_config_path() -> Option<PathBuf> {
+    let primary = PathBuf::from("bootstrap_nodes.json");
+    if primary.exists() {
+        return Some(primary);
+    }
+    let alt = PathBuf::from("src-tauri").join("bootstrap_nodes.json");
+    if alt.exists() {
+        return Some(alt);
+    }
+    None
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootstrapConfig {
@@ -43,7 +55,7 @@ struct CliBootstrapCacheFile {
 }
 
 impl BootstrapConfig {
-    /// 設定ファイルから読み込み
+    /// Load configuration from a JSON file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, AppError> {
         let content = fs::read_to_string(path).map_err(|e| {
             AppError::ConfigurationError(format!("Failed to read bootstrap config: {e}"))
@@ -56,7 +68,7 @@ impl BootstrapConfig {
         Ok(config)
     }
 
-    /// デフォルト設定を取得
+    /// Default configuration used when no file is available
     pub fn default_config() -> Self {
         Self {
             development: EnvironmentConfig {
@@ -74,7 +86,7 @@ impl BootstrapConfig {
         }
     }
 
-    /// 環境に応じたノードリストを取得
+    /// Get node list for the given environment key
     pub fn get_nodes(&self, environment: &str) -> Vec<String> {
         match environment {
             "development" | "dev" => self.development.nodes.clone(),
@@ -87,7 +99,7 @@ impl BootstrapConfig {
         }
     }
 
-    /// ソケットアドレスのリストを取得
+    /// Get SocketAddr list for the environment
     pub fn get_socket_addrs(&self, environment: &str) -> Vec<SocketAddr> {
         let nodes = self.get_nodes(environment);
         let mut addrs = Vec::new();
@@ -104,8 +116,7 @@ impl BootstrapConfig {
         addrs
     }
 
-    /// 形式: "<node_id>@<host:port>" のみ EndpointAddr に変換する
-    /// SocketAddr のみの指定は警告を出してスキップ
+    /// Convert entries in the form "<node_id>@<host:port>" into EndpointAddr
     pub fn get_node_addrs_with_id(&self, environment: &str) -> Vec<EndpointAddr> {
         let nodes = self.get_nodes(environment);
         let mut out = Vec::new();
@@ -128,16 +139,13 @@ impl BootstrapConfig {
                         );
                     }
                 }
+            } else if node.parse::<SocketAddr>().is_ok() {
+                warn!(
+                    "Bootstrap node '{}' lacks NodeId; expected '<node_id>@<host:port>'. Skipping.",
+                    node
+                );
             } else {
-                // SocketAddr 形式のみ → 警告しつつスキップ（仕様は node_id@addr 推奨）
-                if node.parse::<SocketAddr>().is_ok() {
-                    warn!(
-                        "Bootstrap node '{}' lacks NodeId; expected '<node_id>@<host:port>'. Skipping.",
-                        node
-                    );
-                } else {
-                    debug!("Unrecognized bootstrap node entry: {}", node);
-                }
+                debug!("Unrecognized bootstrap node entry: {}", node);
             }
         }
 
@@ -153,7 +161,7 @@ fn parse_bootstrap_list(value: &str) -> Vec<String> {
         .collect()
 }
 
-/// 環境変数 `KUKURI_BOOTSTRAP_PEERS` に設定されたブートストラップノードを取得する
+/// Read bootstrap nodes from environment variable if set
 pub fn load_env_bootstrap_nodes() -> Option<Vec<String>> {
     match std::env::var("KUKURI_BOOTSTRAP_PEERS") {
         Ok(raw) => {
@@ -190,9 +198,10 @@ fn load_bundle_bootstrap_strings() -> Vec<String> {
     }
 }
 
-/// UI・設定ファイル・環境変数を考慮したブートストラップノードの決定結果を返す。
-/// 優先順位: 環境変数 > ユーザー設定 > 同梱JSON > なし
+/// Decide effective bootstrap nodes. Priority: env > user config > bundled file (only when ENABLE_P2P_INTEGRATION=1)
 pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
+    let integration_enabled = std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() == "1";
+
     if let Some(nodes) = load_env_bootstrap_nodes() {
         trace!("Using bootstrap peers from environment variable");
         return BootstrapSelection {
@@ -210,13 +219,17 @@ pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
         };
     }
 
-    let bundle_nodes = load_bundle_bootstrap_strings();
-    if !bundle_nodes.is_empty() {
-        trace!("Using bootstrap peers from bundled configuration");
-        return BootstrapSelection {
-            source: BootstrapSource::Bundle,
-            nodes: bundle_nodes,
-        };
+    if integration_enabled {
+        let bundle_nodes = load_bundle_bootstrap_strings();
+        if !bundle_nodes.is_empty() {
+            trace!("Using bootstrap peers from bundled configuration");
+            return BootstrapSelection {
+                source: BootstrapSource::Bundle,
+                nodes: bundle_nodes,
+            };
+        }
+    } else {
+        trace!("P2P integration disabled; skipping bundled bootstrap nodes");
     }
 
     BootstrapSelection {
@@ -225,22 +238,28 @@ pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
     }
 }
 
-/// 現在の環境を取得
+/// Resolve current environment string
 pub fn get_current_environment() -> String {
     std::env::var("KUKURI_ENV")
         .or_else(|_| std::env::var("ENVIRONMENT"))
         .unwrap_or_else(|_| "development".to_string())
 }
 
-/// ブートストラップノードを読み込み
+/// Load bootstrap nodes as SocketAddr
 pub fn load_bootstrap_nodes() -> Result<Vec<SocketAddr>, AppError> {
     let env = get_current_environment();
     info!("Loading bootstrap nodes for environment: {}", env);
 
-    // まず設定ファイルを探す
-    let config_path = "bootstrap_nodes.json";
-    let config = if Path::new(config_path).exists() {
-        BootstrapConfig::load_from_file(config_path)?
+    if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1"
+        && load_env_bootstrap_nodes().is_none()
+        && load_user_bootstrap_nodes().is_empty()
+    {
+        info!("P2P integration disabled; returning empty bootstrap node list");
+        return Ok(Vec::new());
+    }
+
+    let config = if let Some(path) = find_bootstrap_config_path() {
+        BootstrapConfig::load_from_file(path)?
     } else {
         info!("Bootstrap config file not found, using defaults");
         BootstrapConfig::default_config()
@@ -257,15 +276,21 @@ pub fn load_bootstrap_nodes() -> Result<Vec<SocketAddr>, AppError> {
     Ok(addrs)
 }
 
-/// NodeId を含むブートストラップノードを取得（EndpointAddr）。
-/// NodeId がないエントリは警告してスキップする。
+/// Load bootstrap nodes as EndpointAddr (requires node id)
 pub fn load_bootstrap_node_addrs() -> Result<Vec<EndpointAddr>, AppError> {
     let env = get_current_environment();
     info!("Loading bootstrap NodeAddrs for environment: {}", env);
 
-    let config_path = "bootstrap_nodes.json";
-    let config = if Path::new(config_path).exists() {
-        BootstrapConfig::load_from_file(config_path)?
+    if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1"
+        && load_env_bootstrap_nodes().is_none()
+        && load_user_bootstrap_nodes().is_empty()
+    {
+        info!("P2P integration disabled; returning empty NodeAddr list");
+        return Ok(Vec::new());
+    }
+
+    let config = if let Some(path) = find_bootstrap_config_path() {
+        BootstrapConfig::load_from_file(path)?
     } else {
         info!("Bootstrap config file not found, using defaults");
         BootstrapConfig::default_config()
@@ -283,12 +308,11 @@ pub fn load_bootstrap_node_addrs() -> Result<Vec<EndpointAddr>, AppError> {
     Ok(addrs)
 }
 
-/// 検証: JSONのノード配列のうち、NodeId@Addr と SocketAddr の件数をカウントしてログ出力
+/// Validate bootstrap_nodes.json and log counts
 pub fn validate_bootstrap_config() -> Result<(), AppError> {
     let env = get_current_environment();
-    let config_path = "bootstrap_nodes.json";
-    let config = if Path::new(config_path).exists() {
-        BootstrapConfig::load_from_file(config_path)?
+    let config = if let Some(path) = find_bootstrap_config_path() {
+        BootstrapConfig::load_from_file(path)?
     } else {
         BootstrapConfig::default_config()
     };
@@ -320,7 +344,7 @@ pub fn validate_bootstrap_config() -> Result<(), AppError> {
     Ok(())
 }
 
-// =============== ユーザーUIによるブートストラップ指定 ===============
+// =============== user-managed bootstrap config =================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UserBootstrapConfig {
@@ -334,7 +358,7 @@ fn user_config_path() -> PathBuf {
     dir.join("user_bootstrap_nodes.json")
 }
 
-/// ユーザー定義のブートストラップノード（NodeId@host:port）を保存
+/// Persist user-provided bootstrap nodes (node_id@host:port)
 pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
     let path = user_config_path();
     let cfg = UserBootstrapConfig {
@@ -354,7 +378,7 @@ pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
     Ok(())
 }
 
-/// ユーザー定義のブートストラップノードを削除
+/// Remove user bootstrap configuration
 pub fn clear_user_bootstrap_nodes() -> Result<(), AppError> {
     let path = user_config_path();
     if path.exists() {
@@ -366,7 +390,7 @@ pub fn clear_user_bootstrap_nodes() -> Result<(), AppError> {
     Ok(())
 }
 
-/// ユーザー定義のブートストラップノード（文字列）を読み込み
+/// Load user bootstrap nodes (raw strings)
 pub fn load_user_bootstrap_nodes() -> Vec<String> {
     let path = user_config_path();
     if !path.exists() {
@@ -387,7 +411,7 @@ pub fn load_user_bootstrap_nodes() -> Vec<String> {
     }
 }
 
-/// ユーザー定義のブートストラップノード（EndpointAddr）
+/// Load user bootstrap nodes as EndpointAddr
 pub fn load_user_bootstrap_node_addrs() -> Vec<EndpointAddr> {
     let mut out = Vec::new();
     for node in load_user_bootstrap_nodes() {

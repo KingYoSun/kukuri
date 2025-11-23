@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: kukuri-bootstrap-dev
     environment:
+      KUKURI_SECRET_KEY: Lk2VhCbWDgGBJvr+OewZTc8WLs+rmcsvehAV8uVIEZg=
       LOG_LEVEL: info
       BIND_ADDRESS: 0.0.0.0:11223
     ports:
@@ -24,6 +25,7 @@ services:
     depends_on:
       - kukuri-bootstrap
     environment:
+      KUKURI_SECRET_KEY: N55ru+z8dxH/5udqTeA0byBBw3is6DWAX0siMVqjbFw=
       LOG_LEVEL: info
       BIND_ADDRESS: 0.0.0.0:11225
       RELAY_TOPICS: kukuri:tauri:public
