@@ -61,3 +61,8 @@
   10. **Ops/CI ガード**
       - `gh act --workflows .github/workflows/test.yml --job format-check` / `--job native-test-linux` が成功し、`.act-artifacts/` に最新ログが保存される。
       - Windows ホストでは必ず `./scripts/test-docker.ps1 ts|rust|all`（必要に応じて `--scenario trending-feed` など）を経由して Vitest / Cargo / ESLint / integration を再実行し、`test-results/` ディレクトリが更新される。
+### 2025年11月23日 トピック購読仕様変更実装
+
+- 目標 docs/01_project/activeContext/topic_subscription_spec_review.md に基づき、購読モデル（公開/非公開 ID 生成・デフォルトトピック名変更・購読レジストリ化）を実装する。
+- 状態 着手（現行実装の TopicService/P2P/フロント導線を棚卸し済み）。
+- 次のアクション バックエンドのスキーマ拡張と TopicId 生成ロジック統一、購読フロー/既定トピック初期化刷新とフロント購読 UI/ストア対応。

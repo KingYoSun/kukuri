@@ -1,5 +1,22 @@
+use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, TOPIC_NAMESPACE};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum TopicVisibility {
+    #[default]
+    Public,
+    Private,
+}
+
+impl TopicVisibility {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TopicVisibility::Public => "public",
+            TopicVisibility::Private => "private",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Topic {
@@ -11,7 +28,7 @@ pub struct Topic {
     pub is_joined: bool,
     pub member_count: u32,
     pub post_count: u32,
-    pub is_public: bool,
+    pub visibility: TopicVisibility,
     pub owner: Option<String>,
     pub image_url: Option<String>,
 }
@@ -28,7 +45,7 @@ impl Topic {
             is_joined: false,
             member_count: 0,
             post_count: 0,
-            is_public: true,
+            visibility: TopicVisibility::Public,
             owner: None,
             image_url: None,
         }
@@ -37,15 +54,15 @@ impl Topic {
     pub fn public_topic() -> Self {
         let now = chrono::Utc::now();
         Self {
-            id: "public".to_string(),
+            id: DEFAULT_PUBLIC_TOPIC_ID.to_string(),
             name: "#public".to_string(),
             description: Some("公開タイムライン".to_string()),
             created_at: now,
             updated_at: now,
-            is_joined: true,
+            is_joined: false,
             member_count: 0,
             post_count: 0,
-            is_public: true,
+            visibility: TopicVisibility::Public,
             owner: None,
             image_url: None,
         }
@@ -102,7 +119,7 @@ impl Topic {
             is_joined: false,
             member_count: 0,
             post_count: 0,
-            is_public: true,
+            visibility: TopicVisibility::Public,
             owner: None,
             image_url: None,
         }

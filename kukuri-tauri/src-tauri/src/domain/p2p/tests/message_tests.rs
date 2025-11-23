@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, TOPIC_NAMESPACE};
+    use crate::domain::entities::TopicVisibility;
     use crate::domain::p2p::message::*;
 
     #[test]
@@ -39,18 +41,36 @@ mod tests {
 
     #[test]
     fn test_generate_topic_id() {
-        assert_eq!(generate_topic_id("Bitcoin"), "kukuri:topic:bitcoin");
-        assert_eq!(generate_topic_id("NOSTR"), "kukuri:topic:nostr");
-        assert_eq!(generate_topic_id("Test Topic"), "kukuri:topic:test topic");
+        assert_eq!(generate_topic_id("Bitcoin"), "kukuri:tauri:bitcoin");
+        assert_eq!(generate_topic_id("NOSTR"), "kukuri:tauri:nostr");
+        assert_eq!(generate_topic_id("Test Topic"), "kukuri:tauri:test topic");
+        assert_eq!(generate_topic_id("public"), DEFAULT_PUBLIC_TOPIC_ID);
         assert_eq!(
-            generate_topic_id("kukuri:user:npub123"),
-            "kukuri:user:npub123"
+            generate_topic_id("   kukuri:tauri:public   "),
+            DEFAULT_PUBLIC_TOPIC_ID
         );
+        assert_eq!(generate_topic_id("   "), "kukuri:tauri:default");
+
+        let private = generate_topic_id_with_visibility("secret-room", TopicVisibility::Private);
+        assert!(private.starts_with(TOPIC_NAMESPACE));
+        let tail = private.trim_start_matches(TOPIC_NAMESPACE);
+        assert_eq!(tail.len(), 64);
+        assert!(tail.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_topic_id_bytes_respects_visibility() {
+        let private = generate_topic_id_with_visibility("hidden", TopicVisibility::Private);
+        let private_tail = private.trim_start_matches(TOPIC_NAMESPACE);
+        let bytes = topic_id_bytes(&private);
+        assert_eq!(hex::encode(bytes), private_tail[..64]);
+
+        let public_bytes = topic_id_bytes(DEFAULT_PUBLIC_TOPIC_ID);
+        assert_eq!(public_bytes.len(), 32);
         assert_eq!(
-            generate_topic_id("   kukuri:topic:public   "),
-            "kukuri:topic:public"
+            &public_bytes[..TOPIC_NAMESPACE.len().min(32)],
+            &DEFAULT_PUBLIC_TOPIC_ID.as_bytes()[..TOPIC_NAMESPACE.len().min(32)]
         );
-        assert_eq!(generate_topic_id("   "), "kukuri:topic:default");
     }
 
     #[test]

@@ -39,6 +39,7 @@ export interface Topic {
   lastActive?: number;
   isActive: boolean;
   createdAt: Date;
+  visibility?: 'public' | 'private';
 }
 
 export interface Post {

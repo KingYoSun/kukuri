@@ -9,6 +9,7 @@ mod tests;
 pub use distribution::{DistributionMetrics, DistributionStrategy};
 pub use events::P2PEvent;
 pub use message::{
-    GLOBAL_TOPIC, GossipMessage, MessageId, MessageType, generate_topic_id, user_topic_id,
+    GLOBAL_TOPIC, GossipMessage, MessageId, MessageType, generate_topic_id,
+    generate_topic_id_with_visibility, topic_id_bytes, user_topic_id,
 };
 pub use topic_mesh::{TopicMesh, TopicStats};

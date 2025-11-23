@@ -227,10 +227,7 @@ impl P2PServiceTrait for P2PService {
     }
 
     fn generate_topic_id(&self, topic_name: &str) -> String {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(topic_name.as_bytes());
-        format!("{:x}", hasher.finalize())
+        crate::domain::p2p::generate_topic_id(topic_name)
     }
 
     async fn apply_bootstrap_nodes(

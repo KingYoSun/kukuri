@@ -8,6 +8,7 @@ import {
 import { TauriApi } from '@/lib/api/tauri';
 import { SecureStorageApi } from '@/lib/api/secureStorage';
 import * as nostrApi from '@/lib/api/nostr';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
@@ -31,9 +32,9 @@ const topicStoreState = {
   fetchTopics: vi.fn(async () => {
     topicStoreState.topics = new Map([
       [
-        'public',
+        DEFAULT_PUBLIC_TOPIC_ID,
         {
-          id: 'public',
+          id: DEFAULT_PUBLIC_TOPIC_ID,
           name: '#public',
           description: '',
           tags: [],
@@ -109,9 +110,9 @@ describe('authStore - Multiple Account Management', () => {
     topicStoreState.fetchTopics = vi.fn(async () => {
       topicStoreState.topics = new Map([
         [
-          'public',
+          DEFAULT_PUBLIC_TOPIC_ID,
           {
-            id: 'public',
+            id: DEFAULT_PUBLIC_TOPIC_ID,
             name: '#public',
             description: '',
             tags: [],

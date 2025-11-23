@@ -18,6 +18,7 @@ use kukuri_lib::infrastructure::p2p::event_distributor::{
 };
 use kukuri_lib::presentation::dto::event::NostrMetadataDto;
 use kukuri_lib::shared::error::AppError;
+use kukuri_lib::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use nostr_sdk::prelude::{EventId as NostrEventId, Keys, Metadata, PublicKey};
 use nostr_sdk::Timestamp;
 use serde_json::Value;
@@ -54,14 +55,14 @@ async fn publish_topic_post_converts_topic_and_reply() {
     let (service, manager, _) = build_service().await;
     let reply_id = repeating_hex('b');
     service
-        .publish_topic_post("public", "phase5 topic body", Some(&reply_id))
+        .publish_topic_post(DEFAULT_PUBLIC_TOPIC_ID, "phase5 topic body", Some(&reply_id))
         .await
         .expect("publish topic post");
 
     let posts = manager.topic_posts().await;
     assert_eq!(posts.len(), 1);
     let post = &posts[0];
-    assert_eq!(post.topic_id, "public");
+    assert_eq!(post.topic_id, DEFAULT_PUBLIC_TOPIC_ID);
     assert_eq!(post.content, "phase5 topic body");
     assert_eq!(post.reply_to_hex.as_deref(), Some(&reply_id));
 }
@@ -175,7 +176,7 @@ impl RecordingEventManager {
             reactions: Arc::new(Mutex::new(Vec::new())),
             metadata: Arc::new(Mutex::new(Vec::new())),
             deletions: Arc::new(Mutex::new(Vec::new())),
-            default_topics: Arc::new(Mutex::new(vec!["public".into()])),
+            default_topics: Arc::new(Mutex::new(vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()])),
             public_key: keys.public_key(),
             counter: Arc::new(AtomicU32::new(1)),
             last_event_hex: Arc::new(Mutex::new(None)),

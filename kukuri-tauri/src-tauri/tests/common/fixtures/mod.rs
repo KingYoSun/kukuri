@@ -42,7 +42,7 @@ pub fn create_test_topic(id: &str, name: &str) -> serde_json::Value {
         "is_joined": false,
         "member_count": 0,
         "post_count": 0,
-        "is_public": true,
+        "visibility": "public",
         "owner": null
     })
 }

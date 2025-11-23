@@ -113,7 +113,7 @@ async fn enqueue_create_and_sync_pending_topic() {
     assert_eq!(enqueue.pending_topic.status, PendingTopicStatus::Queued);
 
     let created = topic_service
-        .create_topic("offline.topic".into(), Some("desc".into()), &user_pubkey)
+        .create_topic("offline.topic".into(), Some("desc".into()), TopicVisibility::Public, &user_pubkey)
         .await
         .expect("create topic");
 

@@ -6,7 +6,7 @@ use tracing::info;
 
 // モジュール定義
 mod application;
-mod domain;
+pub mod domain;
 mod infrastructure;
 mod presentation;
 mod shared;

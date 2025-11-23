@@ -30,11 +30,13 @@ export interface Topic {
   updated_at: number;
   member_count?: number;
   post_count?: number;
+  visibility?: 'public' | 'private';
 }
 
 export interface CreateTopicRequest {
   name: string;
   description: string;
+  visibility?: 'public' | 'private';
 }
 
 export interface TopicStats {
@@ -70,6 +72,7 @@ export interface UpdateTopicRequest {
 export interface EnqueueTopicCreationRequest {
   name: string;
   description?: string;
+  visibility?: 'public' | 'private';
 }
 
 export interface PendingTopic {

@@ -25,7 +25,7 @@ pub use offline::{
 pub use pending_topic::{PendingTopic, PendingTopicStatus};
 pub use post::Post;
 pub use profile_avatar::{ProfileAvatarAccessLevel, ProfileAvatarDocEntry};
-pub use topic::Topic;
+pub use topic::{Topic, TopicVisibility};
 pub use topic_metrics::{
     MetricsWindow, ScoreWeights, TopicActivityRow, TopicMetricsRecord, TopicMetricsSnapshot,
     TopicMetricsUpsert,

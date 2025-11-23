@@ -19,7 +19,7 @@ use tokio::time::timeout;
 
 use crate::domain::p2p::events::P2PEvent;
 use crate::domain::p2p::message::{GossipMessage, MessageType};
-use crate::domain::p2p::{TopicMesh, TopicStats, generate_topic_id};
+use crate::domain::p2p::{TopicMesh, TopicStats, generate_topic_id, topic_id_bytes};
 
 const LOG_TARGET: &str = "kukuri::p2p::gossip";
 const METRICS_TARGET: &str = "kukuri::p2p::metrics";
@@ -76,12 +76,8 @@ impl IrohGossipService {
     }
 
     fn create_topic_id(topic: &str) -> TopicId {
-        // トピック名からTopicIdを生成
-        use blake3::Hasher;
-        let mut hasher = Hasher::new();
-        hasher.update(topic.as_bytes());
-        let hash = hasher.finalize();
-        TopicId::from_bytes(*hash.as_bytes())
+        let bytes = topic_id_bytes(topic);
+        TopicId::from_bytes(bytes)
     }
 
     async fn apply_initial_peers(

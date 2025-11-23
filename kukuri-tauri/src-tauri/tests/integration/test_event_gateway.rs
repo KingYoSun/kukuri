@@ -1,6 +1,7 @@
 use chrono::Utc;
 use kukuri_lib::domain::entities::event_gateway::{DomainEvent, EventTag};
 use kukuri_lib::domain::entities::EventKind;
+use kukuri_lib::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use kukuri_lib::domain::value_objects::event_gateway::PublicKey;
 use kukuri_lib::domain::value_objects::EventId;
 use kukuri_lib::infrastructure::database::{
@@ -36,7 +37,7 @@ async fn gateway_persists_p2p_events_via_event_manager() -> anyhow::Result<()> {
         EventId::from_hex(&"a".repeat(64)).expect("64 hex characters produce a valid event id");
     let public_key =
         PublicKey::from_hex_str(&"b".repeat(64)).expect("64 hex characters produce a public key");
-    let topic_tag = EventTag::new("t", vec!["public".to_string()]).expect("tag construction");
+    let topic_tag = EventTag::new("t", vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()]).expect("tag construction");
     let signature = "c".repeat(128);
     let payload = DomainEvent::new(
         event_id.clone(),
@@ -74,7 +75,7 @@ async fn gateway_persists_p2p_events_via_event_manager() -> anyhow::Result<()> {
         1,
         "event_topics should receive a single hashtag mapping"
     );
-    assert_eq!(topics[0].try_get::<String, _>("topic_id")?, "public");
+    assert_eq!(topics[0].try_get::<String, _>("topic_id")?, DEFAULT_PUBLIC_TOPIC_ID);
 
     pool.close().await;
     Ok(())

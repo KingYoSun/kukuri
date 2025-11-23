@@ -27,6 +27,9 @@ mod bootstrap_cache;
 
 use bootstrap_cache::{CliBootstrapCache, resolve_export_path, write_cache};
 
+const TOPIC_NAMESPACE: &str = "kukuri:tauri:";
+const DEFAULT_PUBLIC_TOPIC_ID: &str = "kukuri:tauri:public";
+
 #[derive(Parser)]
 #[command(name = "kukuri-cli")]
 #[command(about = "Kukuri DHT Bootstrap / Relay / Connectivity helper", long_about = None)]
@@ -65,7 +68,7 @@ enum Commands {
     /// Run as relay node
     Relay {
         /// Topics to relay (comma-separated)
-        #[arg(long, default_value = "kukuri")]
+        #[arg(long, default_value = DEFAULT_PUBLIC_TOPIC_ID, env = "RELAY_TOPICS")]
         topics: String,
     },
     /// Attempt to connect to a peer and exit (for connectivity debugging)
@@ -257,11 +260,39 @@ fn ensure_kukuri_namespace(topic: &str) -> Option<String> {
     if trimmed.is_empty() {
         return None;
     }
-    if trimmed.starts_with("kukuri:") {
-        Some(trimmed.to_string())
-    } else {
-        Some(format!("kukuri:topic:{}", trimmed.to_lowercase()))
+    let normalized = trimmed.to_lowercase();
+    if normalized == "public" || normalized == DEFAULT_PUBLIC_TOPIC_ID {
+        return Some(DEFAULT_PUBLIC_TOPIC_ID.to_string());
     }
+    if normalized.starts_with(TOPIC_NAMESPACE) {
+        Some(normalized)
+    } else {
+        Some(format!("{TOPIC_NAMESPACE}{normalized}"))
+    }
+}
+
+fn topic_bytes(canonical: &str) -> [u8; 32] {
+    if let Some(tail) = canonical.strip_prefix(TOPIC_NAMESPACE) {
+        if tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()) {
+            if let Ok(decoded) = hex::decode(tail) {
+                if decoded.len() >= 32 {
+                    let mut out = [0u8; 32];
+                    out.copy_from_slice(&decoded[..32]);
+                    return out;
+                }
+            }
+        }
+        let mut out = [0u8; 32];
+        let bytes = canonical.as_bytes();
+        if bytes.len() >= 32 {
+            out.copy_from_slice(&bytes[..32]);
+        } else {
+            out[..bytes.len()].copy_from_slice(bytes);
+        }
+        return out;
+    }
+
+    *blake3::hash(canonical.as_bytes()).as_bytes()
 }
 
 async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
@@ -294,14 +325,12 @@ async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
         let Some(namespaced_topic) = ensure_kukuri_namespace(topic) else {
             continue;
         };
-        let topic_id = blake3::hash(namespaced_topic.as_bytes());
-        let topic_bytes = *topic_id.as_bytes();
+        let topic_bytes = topic_bytes(&namespaced_topic);
 
         info!(
-            "Subscribing to topic: {} -> {} (hash: {})",
+            "Subscribing to topic: {} -> {}",
             topic.trim(),
-            namespaced_topic,
-            topic_id
+            namespaced_topic
         );
         gossip.subscribe(topic_bytes.into(), vec![]).await?;
         subscribed += 1;
@@ -524,11 +553,15 @@ mod tests {
     fn ensure_kukuri_namespace_normalizes_topics() {
         assert_eq!(
             super::ensure_kukuri_namespace("Public Topic"),
-            Some("kukuri:topic:public topic".to_string())
+            Some("kukuri:tauri:public topic".to_string())
         );
         assert_eq!(
-            super::ensure_kukuri_namespace("kukuri:user:npub123"),
-            Some("kukuri:user:npub123".to_string())
+            super::ensure_kukuri_namespace("kukuri:tauri:custom"),
+            Some("kukuri:tauri:custom".to_string())
+        );
+        assert_eq!(
+            super::ensure_kukuri_namespace("public"),
+            Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
         );
         assert_eq!(super::ensure_kukuri_namespace("   "), None);
     }

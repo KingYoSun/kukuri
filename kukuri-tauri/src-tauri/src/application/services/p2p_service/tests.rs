@@ -1,5 +1,6 @@
 use super::core::{P2PService, P2PServiceTrait};
 use crate::application::services::p2p_service::status::ConnectionStatus;
+use crate::domain::constants::TOPIC_NAMESPACE;
 use crate::domain::p2p::TopicStats;
 use crate::infrastructure::p2p::network_service::Peer;
 use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
@@ -534,4 +535,5 @@ async fn test_generate_topic_id() {
 
     assert_eq!(topic_id1, topic_id2);
     assert_ne!(topic_id1, topic_id3);
+    assert!(topic_id1.starts_with(TOPIC_NAMESPACE));
 }

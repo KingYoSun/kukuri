@@ -9,6 +9,7 @@ import { useTopicStore } from './topicStore';
 import { usePrivacySettingsStore } from './privacySettingsStore';
 import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
 import { setE2EAuthDebug } from '@/lib/utils/e2eDebug';
 
@@ -309,11 +310,11 @@ export const useAuthStore = create<AuthStore>()(
               await topicStore.fetchTopics();
               // #publicトピックを探す
               const publicTopic = Array.from(topicStore.topics.values()).find(
-                (t) => t.id === 'public',
+                (t) => t.id === DEFAULT_PUBLIC_TOPIC_ID,
               );
               if (publicTopic) {
                 // #publicトピックに参加
-                await topicStore.joinTopic('public');
+                await topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID);
                 // #publicトピックをデフォルト表示に設定
                 topicStore.setCurrentTopic(publicTopic);
               }
@@ -433,11 +434,11 @@ export const useAuthStore = create<AuthStore>()(
               await topicStore.fetchTopics();
               // #publicトピックを探す
               const publicTopic = Array.from(topicStore.topics.values()).find(
-                (t) => t.id === 'public',
+                (t) => t.id === DEFAULT_PUBLIC_TOPIC_ID,
               );
               if (publicTopic) {
                 // #publicトピックに参加
-                await topicStore.joinTopic('public');
+                await topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID);
                 // #publicトピックをデフォルト表示に設定
                 topicStore.setCurrentTopic(publicTopic);
               }

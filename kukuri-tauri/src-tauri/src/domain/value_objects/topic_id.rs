@@ -1,3 +1,4 @@
+use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -17,7 +18,7 @@ impl TopicId {
     }
 
     pub fn public() -> Self {
-        Self("public".to_string())
+        Self(DEFAULT_PUBLIC_TOPIC_ID.to_string())
     }
 
     pub fn as_str(&self) -> &str {
@@ -25,7 +26,7 @@ impl TopicId {
     }
 
     pub fn is_public(&self) -> bool {
-        self.0 == "public"
+        self.0 == DEFAULT_PUBLIC_TOPIC_ID || self.0 == LEGACY_PUBLIC_TOPIC_ID
     }
 }
 

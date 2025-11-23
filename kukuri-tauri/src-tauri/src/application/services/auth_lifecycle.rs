@@ -2,13 +2,12 @@ use super::{TopicService, UserService};
 use crate::application::ports::auth_lifecycle::{
     AuthAccountContext, AuthLifecycleEvent, AuthLifecyclePort, AuthLifecycleStage,
 };
+use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
 use crate::domain::entities::User;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::debug;
-
-const DEFAULT_PUBLIC_TOPIC: &str = "public";
 
 pub struct DefaultAuthLifecycle {
     user_service: Arc<UserService>,
@@ -21,7 +20,7 @@ impl DefaultAuthLifecycle {
         Self {
             user_service,
             topic_service,
-            default_topics: vec![DEFAULT_PUBLIC_TOPIC.to_string()],
+            default_topics: vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()],
         }
     }
 
@@ -29,7 +28,16 @@ impl DefaultAuthLifecycle {
         if topics.is_empty() {
             return self;
         }
-        self.default_topics = topics;
+        self.default_topics = topics
+            .into_iter()
+            .map(|topic| {
+                if topic == LEGACY_PUBLIC_TOPIC_ID {
+                    DEFAULT_PUBLIC_TOPIC_ID.to_string()
+                } else {
+                    topic
+                }
+            })
+            .collect();
         self
     }
 

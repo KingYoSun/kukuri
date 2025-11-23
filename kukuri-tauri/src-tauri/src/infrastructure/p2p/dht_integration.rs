@@ -1,7 +1,7 @@
 //! DHT統合モジュール
 //! iroh-gossipとdistributed-topic-trackerの統合
 use crate::domain::entities::Event;
-use crate::domain::p2p::generate_topic_id;
+use crate::domain::p2p::{generate_topic_id, topic_id_bytes};
 use crate::infrastructure::p2p::dht_bootstrap::DhtGossip;
 use crate::shared::error::AppError;
 // use iroh_gossip::proto::Event as GossipEvent;
@@ -59,38 +59,37 @@ impl DhtIntegration {
         }
     }
 
-    /// イベントハンドラーを設定
+    /// ????????????
     pub fn set_event_handler(&mut self, event_tx: mpsc::Sender<Event>) {
         self.event_handler = Some(DhtEventHandler::new(event_tx));
     }
 
-    /// トピックに参加
+    /// ???????
     pub async fn join_topic(&self, topic: &str) -> Result<(), AppError> {
         let canonical = generate_topic_id(topic);
-        self.dht_gossip
-            .join_topic(canonical.as_bytes(), vec![])
-            .await?;
+        let topic_bytes = topic_id_bytes(&canonical);
+        self.dht_gossip.join_topic(&topic_bytes, vec![]).await?;
         Ok(())
     }
 
-    /// トピックから離脱
+    /// ????????
     pub async fn leave_topic(&self, topic: &str) -> Result<(), AppError> {
         let canonical = generate_topic_id(topic);
-        self.dht_gossip.leave_topic(canonical.as_bytes()).await?;
+        let topic_bytes = topic_id_bytes(&canonical);
+        self.dht_gossip.leave_topic(&topic_bytes).await?;
         Ok(())
     }
 
-    /// イベントをブロードキャスト
+    /// ?????????????
     pub async fn broadcast_event(&self, topic: &str, event: &Event) -> Result<(), AppError> {
-        // イベントをシリアライズ
+        // ???????????
         let message = bincode::serde::encode_to_vec(event, bincode::config::standard())
             .map_err(|e| AppError::SerializationError(format!("Failed to serialize: {e:?}")))?;
 
-        // DHTにブロードキャスト
+        // DHT?????????
         let canonical = generate_topic_id(topic);
-        self.dht_gossip
-            .broadcast(canonical.as_bytes(), message)
-            .await?;
+        let topic_bytes = topic_id_bytes(&canonical);
+        self.dht_gossip.broadcast(&topic_bytes, message).await?;
 
         debug!(
             "Event broadcast to topic: {} (canonical: {})",

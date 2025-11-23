@@ -4,6 +4,7 @@ use crate::application::ports::{
 };
 use crate::application::shared::default_topics::DefaultTopicsRegistry;
 use crate::application::shared::nostr::EventPublisher;
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::infrastructure::database::connection_pool::ConnectionPool;
 use crate::infrastructure::event::{
     handler::EventHandler, nostr_client_manager::NostrClientManager,
@@ -35,7 +36,9 @@ impl EventManager {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
             event_handler: Arc::new(EventHandler::new()),
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
-            default_topics: Arc::new(DefaultTopicsRegistry::with_topics(["public".into()])),
+            default_topics: Arc::new(DefaultTopicsRegistry::with_topics([
+                DEFAULT_PUBLIC_TOPIC_ID.to_string(),
+            ])),
             is_initialized: Arc::new(RwLock::new(false)),
             gossip_service: Arc::new(RwLock::new(None)),
             event_topic_store: Arc::new(RwLock::new(None)),
@@ -51,7 +54,9 @@ impl EventManager {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
             event_handler: Arc::new(event_handler),
             event_publisher: Arc::new(RwLock::new(EventPublisher::new())),
-            default_topics: Arc::new(DefaultTopicsRegistry::with_topics(["public".into()])),
+            default_topics: Arc::new(DefaultTopicsRegistry::with_topics([
+                DEFAULT_PUBLIC_TOPIC_ID.to_string(),
+            ])),
             is_initialized: Arc::new(RwLock::new(false)),
             gossip_service: Arc::new(RwLock::new(None)),
             event_topic_store: Arc::new(RwLock::new(None)),

@@ -3,8 +3,11 @@ use super::p2p_service::P2PServiceTrait;
 use crate::application::ports::repositories::{
     PendingTopicRepository, TopicMetricsRepository, TopicRepository,
 };
+use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
 use crate::domain::entities::offline::OfflineActionRecord;
-use crate::domain::entities::{PendingTopic, PendingTopicStatus, Topic, TopicMetricsRecord};
+use crate::domain::entities::{
+    PendingTopic, PendingTopicStatus, Topic, TopicMetricsRecord, TopicVisibility,
+};
 use crate::domain::value_objects::event_gateway::PublicKey;
 use crate::domain::value_objects::offline::{
     EntityId, EntityType, OfflineActionType, OfflinePayload,
@@ -70,16 +73,23 @@ impl TopicService {
         &self,
         name: String,
         description: Option<String>,
+        visibility: TopicVisibility,
         creator_pubkey: &str,
     ) -> Result<Topic, AppError> {
-        let topic = Topic::new(name, description);
+        let mut topic = Topic::new(name, description);
+        topic.visibility = visibility;
         self.repository.create_topic(&topic).await?;
         self.join_topic(&topic.id, creator_pubkey).await?;
         Ok(topic)
     }
 
     pub async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError> {
-        self.repository.get_topic(id).await
+        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            id
+        };
+        self.repository.get_topic(normalized).await
     }
 
     pub async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError> {
@@ -91,14 +101,24 @@ impl TopicService {
     }
 
     pub async fn join_topic(&self, id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        self.repository.join_topic(id, user_pubkey).await?;
-        self.p2p.join_topic(id, Vec::new()).await?;
+        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            id
+        };
+        self.repository.join_topic(normalized, user_pubkey).await?;
+        self.p2p.join_topic(normalized, Vec::new()).await?;
         Ok(())
     }
 
     pub async fn leave_topic(&self, id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        self.repository.leave_topic(id, user_pubkey).await?;
-        self.p2p.leave_topic(id).await?;
+        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            id
+        };
+        self.repository.leave_topic(normalized, user_pubkey).await?;
+        self.p2p.leave_topic(normalized).await?;
         Ok(())
     }
 
@@ -107,17 +127,27 @@ impl TopicService {
     }
 
     pub async fn delete_topic(&self, id: &str) -> Result<(), AppError> {
+        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            id
+        };
         // Prevent deletion of public topic
-        if id == "public" {
+        if normalized == DEFAULT_PUBLIC_TOPIC_ID {
             return Err("Cannot delete public topic".into());
         }
 
-        self.p2p.leave_topic(id).await?;
-        self.repository.delete_topic(id).await
+        self.p2p.leave_topic(normalized).await?;
+        self.repository.delete_topic(normalized).await
     }
 
     pub async fn get_topic_stats(&self, id: &str) -> Result<(u32, u32), AppError> {
-        if let Some(topic) = self.repository.get_topic(id).await? {
+        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            id
+        };
+        if let Some(topic) = self.repository.get_topic(normalized).await? {
             Ok((topic.member_count, topic.post_count))
         } else {
             Ok((0, 0))
@@ -125,10 +155,14 @@ impl TopicService {
     }
 
     pub async fn ensure_public_topic(&self) -> Result<(), AppError> {
-        if self.repository.get_topic("public").await?.is_none() {
+        if self
+            .repository
+            .get_topic(DEFAULT_PUBLIC_TOPIC_ID)
+            .await?
+            .is_none()
+        {
             let public_topic = Topic::public_topic();
             self.repository.create_topic(&public_topic).await?;
-            self.p2p.join_topic("public", Vec::new()).await?;
         }
         Ok(())
     }
@@ -138,6 +172,7 @@ impl TopicService {
         user_pubkey: &str,
         name: String,
         description: Option<String>,
+        visibility: TopicVisibility,
     ) -> Result<EnqueuedTopicCreation, AppError> {
         let public_key = PublicKey::from_hex_str(user_pubkey).map_err(|err| {
             AppError::validation(
@@ -151,6 +186,7 @@ impl TopicService {
             "pendingId": pending_id,
             "name": name,
             "description": description,
+            "visibility": visibility.as_str(),
         }))
         .map_err(AppError::validation_mapper(ValidationFailureKind::Generic))?;
         let action_type = OfflineActionType::new("topic_create".to_string())

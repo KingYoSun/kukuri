@@ -11,6 +11,7 @@ pub struct TopicResponse {
     pub member_count: u32,
     pub post_count: u32,
     pub is_joined: bool,
+    pub visibility: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -32,6 +33,7 @@ pub struct PendingTopicResponse {
 pub struct EnqueueTopicCreationRequest {
     pub name: String,
     pub description: Option<String>,
+    pub visibility: Option<String>,
 }
 
 impl Validate for EnqueueTopicCreationRequest {
@@ -47,6 +49,12 @@ impl Validate for EnqueueTopicCreationRequest {
                 return Err("説明は500文字以内で入力してください".to_string());
             }
         }
+        if let Some(visibility) = &self.visibility {
+            if visibility != "public" && visibility != "private" {
+                return Err("visibility must be 'public' or 'private'".to_string());
+            }
+        }
+
         Ok(())
     }
 }
@@ -63,6 +71,7 @@ pub struct CreateTopicRequest {
     pub name: String,
     pub description: String,
     pub image_url: Option<String>,
+    pub visibility: Option<String>,
 }
 
 impl Validate for CreateTopicRequest {
@@ -78,6 +87,12 @@ impl Validate for CreateTopicRequest {
         }
 
         // URLのバリデーション（もし提供されている場合）
+        if let Some(visibility) = &self.visibility {
+            if visibility != "public" && visibility != "private" {
+                return Err("visibility must be 'public' or 'private'".to_string());
+            }
+        }
+
         if let Some(url) = &self.image_url {
             if !url.is_empty() && !url.starts_with("http") {
                 return Err("無効な画像URLです".to_string());

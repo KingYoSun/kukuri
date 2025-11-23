@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use kukuri_lib::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use kukuri_lib::test_support::application::ports::event_topic_store::EventTopicStore;
 use kukuri_lib::test_support::application::ports::key_manager::KeyManager;
 use kukuri_lib::test_support::domain::entities::Event as DomainEvent;
@@ -26,7 +27,7 @@ async fn handle_p2p_event_persists_rows() -> Result<()> {
 
     let keys = Keys::generate();
     let event = EventBuilder::text_note("phase5-incoming-event")
-        .tag(Tag::hashtag("public"))
+        .tag(Tag::hashtag(DEFAULT_PUBLIC_TOPIC_ID))
         .sign_with_keys(&keys)?;
 
     ctx.manager.handle_p2p_event(event.clone()).await?;
@@ -51,7 +52,9 @@ async fn handle_p2p_event_persists_rows() -> Result<()> {
         })
         .collect();
     assert!(
-        topic_ids.iter().any(|topic| topic == "public"),
+        topic_ids
+            .iter()
+            .any(|topic| topic == DEFAULT_PUBLIC_TOPIC_ID),
         "expected hashtag mapping for public"
     );
 
@@ -64,20 +67,19 @@ async fn publish_topic_post_broadcasts_and_links_topics() -> Result<()> {
     let ctx = TestContext::setup().await?;
     let manager: Arc<dyn EventManagerHandle> = ctx.manager.clone();
 
-    manager.set_default_p2p_topics(vec!["public".into()]).await;
+    manager
+        .set_default_p2p_topics(vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()])
+        .await;
 
     unsafe {
         std::env::set_var("KUKURI_ALLOW_NO_RELAY", "1");
     }
     let _event_id = manager
-        .publish_topic_post("public", "phase5-topic-body", None)
+        .publish_topic_post(DEFAULT_PUBLIC_TOPIC_ID, "phase5-topic-body", None)
         .await?;
 
     let joined = ctx.gossip.joined_topics().await;
-    assert!(
-        joined.iter().any(|topic| topic == "public"),
-        "gossip join should include target topic"
-    );
+    assert!(joined.iter().any(|topic| topic == DEFAULT_PUBLIC_TOPIC_ID));
 
     unsafe {
         std::env::remove_var("KUKURI_ALLOW_NO_RELAY");

@@ -2,6 +2,7 @@
 
 use super::mocks::TestGossipService;
 use crate::application::ports::key_manager::KeyManager;
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::crypto::DefaultKeyManager;
 use crate::infrastructure::event::EventManager;
@@ -94,7 +95,7 @@ async fn default_topics_api_behaves_idempotently() {
 
     let mut topics = manager.list_default_p2p_topics().await;
     topics.sort();
-    assert_eq!(topics, vec!["public".to_string()]);
+    assert_eq!(topics, vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()]);
 
     manager
         .set_default_p2p_topics(vec!["a".into(), "b".into()])

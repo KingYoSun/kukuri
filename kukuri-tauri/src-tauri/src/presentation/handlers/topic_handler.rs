@@ -1,6 +1,6 @@
 use crate::{
     application::services::TopicService,
-    domain::entities::PendingTopic,
+    domain::entities::{PendingTopic, TopicVisibility},
     presentation::dto::{
         Validate,
         topic_dto::{
@@ -33,9 +33,18 @@ impl TopicHandler {
     ) -> Result<TopicResponse, AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
 
+        let visibility = match request.visibility.as_deref() {
+            Some("private") => TopicVisibility::Private,
+            _ => TopicVisibility::Public,
+        };
         let topic = self
             .topic_service
-            .create_topic(request.name, Some(request.description), user_pubkey)
+            .create_topic(
+                request.name,
+                Some(request.description),
+                visibility,
+                user_pubkey,
+            )
             .await?;
 
         Ok(TopicResponse {
@@ -46,6 +55,7 @@ impl TopicHandler {
             member_count: topic.member_count,
             post_count: topic.post_count,
             is_joined: topic.is_joined,
+            visibility: topic.visibility.as_str().to_string(),
             created_at: topic.created_at.timestamp(),
             updated_at: topic.updated_at.timestamp(),
         })
@@ -58,9 +68,13 @@ impl TopicHandler {
     ) -> Result<EnqueueTopicCreationResponse, AppError> {
         request.validate().map_err(AppError::InvalidInput)?;
 
+        let visibility = match request.visibility.as_deref() {
+            Some("private") => TopicVisibility::Private,
+            _ => TopicVisibility::Public,
+        };
         let result = self
             .topic_service
-            .enqueue_topic_creation(user_pubkey, request.name, request.description)
+            .enqueue_topic_creation(user_pubkey, request.name, request.description, visibility)
             .await?;
 
         Ok(EnqueueTopicCreationResponse {
@@ -178,6 +192,7 @@ impl TopicHandler {
             member_count: topic.member_count,
             post_count: topic.post_count,
             is_joined: topic.is_joined,
+            visibility: topic.visibility.as_str().to_string(),
             created_at: topic.created_at.timestamp(),
             updated_at: topic.updated_at.timestamp(),
         })
@@ -203,6 +218,7 @@ impl TopicHandler {
                 member_count: t.member_count,
                 post_count: t.post_count,
                 is_joined: t.is_joined,
+                visibility: t.visibility.as_str().to_string(),
                 created_at: t.created_at.timestamp(),
                 updated_at: t.updated_at.timestamp(),
             })

@@ -6,6 +6,7 @@ use bincode::serde::encode_to_vec;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
 use crate::domain::entities::Event;
 use crate::domain::p2p::distribution::{DistributionMetrics, DistributionStrategy};
 use crate::infrastructure::p2p::{GossipService, NetworkService};
@@ -44,7 +45,7 @@ impl DefaultEventDistributor {
             metrics,
             gossip_service: Arc::new(RwLock::new(None)),
             network_service: Arc::new(RwLock::new(None)),
-            default_topics: Arc::new(RwLock::new(vec!["public".to_string()])),
+            default_topics: Arc::new(RwLock::new(vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()])),
         }
     }
 
@@ -65,10 +66,17 @@ impl DefaultEventDistributor {
             topics
                 .into_iter()
                 .filter(|topic| !topic.trim().is_empty())
-                .map(|topic| topic.trim().to_string()),
+                .map(|topic| {
+                    let trimmed = topic.trim();
+                    if trimmed == LEGACY_PUBLIC_TOPIC_ID {
+                        DEFAULT_PUBLIC_TOPIC_ID.to_string()
+                    } else {
+                        trimmed.to_string()
+                    }
+                }),
         );
         if guard.is_empty() {
-            guard.push("public".to_string());
+            guard.push(DEFAULT_PUBLIC_TOPIC_ID.to_string());
         }
     }
 

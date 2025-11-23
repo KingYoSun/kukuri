@@ -147,8 +147,8 @@ pub(super) const SELECT_RECENT_POSTS: &str = r#"
 "#;
 
 pub(super) const INSERT_TOPIC: &str = r#"
-    INSERT INTO topics (topic_id, name, description, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO topics (topic_id, name, description, created_at, updated_at, visibility)
+    VALUES (?, ?, ?, ?, ?, ?)
 "#;
 
 pub(super) const INSERT_PENDING_TOPIC: &str = r#"
@@ -167,13 +167,13 @@ pub(super) const INSERT_PENDING_TOPIC: &str = r#"
 "#;
 
 pub(super) const SELECT_TOPIC_BY_ID: &str = r#"
-    SELECT topic_id, name, description, created_at, updated_at, member_count, post_count
+    SELECT topic_id, name, description, created_at, updated_at, member_count, post_count, visibility
     FROM topics
     WHERE topic_id = ?
 "#;
 
 pub(super) const SELECT_ALL_TOPICS: &str = r#"
-    SELECT topic_id, name, description, created_at, updated_at, member_count, post_count
+    SELECT topic_id, name, description, created_at, updated_at, member_count, post_count, visibility
     FROM topics
     ORDER BY created_at ASC
 "#;
@@ -224,7 +224,7 @@ pub(super) const DELETE_PENDING_TOPIC: &str = r#"
 "#;
 
 pub(super) const SELECT_JOINED_TOPICS: &str = r#"
-    SELECT t.topic_id, t.name, t.description, t.created_at, t.updated_at, t.member_count, t.post_count
+    SELECT t.topic_id, t.name, t.description, t.created_at, t.updated_at, t.member_count, t.post_count, t.visibility
     FROM topics t
     INNER JOIN user_topics ut ON t.topic_id = ut.topic_id
     WHERE ut.is_joined = 1 AND ut.user_pubkey = ?

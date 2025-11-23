@@ -1,15 +1,15 @@
 import { create } from 'zustand';
 
-import type { TopicState, Topic } from './types';
-import { TauriApi } from '@/lib/api/tauri';
-import type { PendingTopic } from '@/lib/api/tauri';
-import { errorHandler } from '@/lib/errorHandler';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
-import { useOfflineStore } from './offlineStore';
-import { useComposerStore } from './composerStore';
+import { TauriApi, type PendingTopic } from '@/lib/api/tauri';
+import { errorHandler } from '@/lib/errorHandler';
 import { OfflineActionType, EntityType } from '@/types/offline';
-import { withPersist } from './utils/persistHelpers';
+import { useComposerStore } from './composerStore';
+import { useOfflineStore } from './offlineStore';
 import { createTopicPersistConfig } from './config/persist';
+import { withPersist } from './utils/persistHelpers';
+import type { Topic, TopicState } from './types';
 
 interface TopicStore extends TopicState {
   setTopics: (topics: Topic[]) => void;
@@ -33,8 +33,16 @@ interface TopicStore extends TopicState {
   refreshPendingTopics: () => Promise<void>;
 }
 
+const normalizeTopicId = (topicId: string) =>
+  topicId === 'public' ? DEFAULT_PUBLIC_TOPIC_ID : topicId;
+
 const computeTopicCollections = (state: TopicStore, topics: Topic[]) => {
-  const nextTopics = new Map(topics.map((t) => [t.id, t]));
+  const nextTopics = new Map(
+    topics.map((t) => {
+      const normalizedId = normalizeTopicId(t.id);
+      return [normalizedId, { ...t, id: normalizedId }];
+    }),
+  );
   const topicIds = new Set(nextTopics.keys());
 
   const unread = new Map(
@@ -77,6 +85,7 @@ export const useTopicStore = create<TopicStore>()(
       pendingTopics: new Map(),
 
       setTopics: (topics: Topic[]) => set((state) => computeTopicCollections(state, topics)),
+
       setPendingTopics: (pendingList: PendingTopic[]) =>
         set((state) => {
           const next = new Map(state.pendingTopics);
@@ -94,6 +103,7 @@ export const useTopicStore = create<TopicStore>()(
           });
           return { pendingTopics: next };
         }),
+
       upsertPendingTopic: (pending: PendingTopic) =>
         set((state) => {
           const next = new Map(state.pendingTopics);
@@ -102,6 +112,7 @@ export const useTopicStore = create<TopicStore>()(
           handlePendingTransition(previous, pending);
           return { pendingTopics: next };
         }),
+
       removePendingTopic: (pendingId: string) =>
         set((state) => {
           if (!state.pendingTopics.has(pendingId)) {
@@ -125,7 +136,7 @@ export const useTopicStore = create<TopicStore>()(
             return;
           }
           const topics: Topic[] = apiTopics.map((t) => ({
-            id: t.id,
+            id: normalizeTopicId(t.id),
             name: t.name,
             description: t.description,
             createdAt: new Date(t.created_at * 1000),
@@ -133,6 +144,7 @@ export const useTopicStore = create<TopicStore>()(
             postCount: 0,
             isActive: true,
             tags: [],
+            visibility: t.visibility ?? 'public',
           }));
           set((state) => computeTopicCollections(state, topics));
           const refreshPendingTopics = get().refreshPendingTopics;
@@ -148,6 +160,7 @@ export const useTopicStore = create<TopicStore>()(
           throw error;
         }
       },
+
       refreshPendingTopics: async () => {
         try {
           const pending = await TauriApi.listPendingTopics();
@@ -161,8 +174,9 @@ export const useTopicStore = create<TopicStore>()(
 
       addTopic: (topic: Topic) =>
         set((state) => {
+          const normalizedId = normalizeTopicId(topic.id);
           const newTopics = new Map(state.topics);
-          newTopics.set(topic.id, topic);
+          newTopics.set(normalizedId, { ...topic, id: normalizedId });
           return { topics: newTopics };
         }),
 
@@ -191,11 +205,12 @@ export const useTopicStore = create<TopicStore>()(
           throw error;
         }
       },
+
       createTopic: async (name: string, description: string) => {
         try {
           const apiTopic = await TauriApi.createTopic({ name, description });
           const topic: Topic = {
-            id: apiTopic.id,
+            id: normalizeTopicId(apiTopic.id),
             name: apiTopic.name,
             description: apiTopic.description,
             createdAt: new Date(apiTopic.created_at * 1000),
@@ -203,6 +218,7 @@ export const useTopicStore = create<TopicStore>()(
             postCount: 0,
             isActive: true,
             tags: [],
+            visibility: apiTopic.visibility ?? 'public',
           };
           set((state) => {
             const newTopics = new Map(state.topics);
@@ -222,22 +238,24 @@ export const useTopicStore = create<TopicStore>()(
 
       updateTopic: (id: string, update: Partial<Topic>) =>
         set((state) => {
+          const topicId = normalizeTopicId(id);
           const newTopics = new Map(state.topics);
-          const existing = newTopics.get(id);
+          const existing = newTopics.get(topicId);
           if (existing) {
-            newTopics.set(id, { ...existing, ...update });
+            newTopics.set(topicId, { ...existing, ...update, id: topicId });
           }
           return { topics: newTopics };
         }),
 
       updateTopicRemote: async (id: string, name: string, description: string) => {
+        const topicId = normalizeTopicId(id);
         try {
-          const apiTopic = await TauriApi.updateTopic({ id, name, description });
+          const apiTopic = await TauriApi.updateTopic({ id: topicId, name, description });
           set((state) => {
             const newTopics = new Map(state.topics);
-            const existing = newTopics.get(id);
+            const existing = newTopics.get(topicId);
             if (existing) {
-              newTopics.set(id, {
+              newTopics.set(topicId, {
                 ...existing,
                 name: apiTopic.name,
                 description: apiTopic.description,
@@ -257,39 +275,41 @@ export const useTopicStore = create<TopicStore>()(
 
       removeTopic: (id: string) =>
         set((state) => {
+          const topicId = normalizeTopicId(id);
           const newTopics = new Map(state.topics);
-          newTopics.delete(id);
+          newTopics.delete(topicId);
 
           const unread = new Map(state.topicUnreadCounts);
-          unread.delete(id);
+          unread.delete(topicId);
 
           const lastRead = new Map(state.topicLastReadAt);
-          lastRead.delete(id);
+          lastRead.delete(topicId);
 
           return {
             topics: newTopics,
-            currentTopic: state.currentTopic?.id === id ? null : state.currentTopic,
+            currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
         }),
 
       deleteTopicRemote: async (id: string) => {
+        const topicId = normalizeTopicId(id);
         try {
-          await TauriApi.deleteTopic(id);
+          await TauriApi.deleteTopic(topicId);
           set((state) => {
             const newTopics = new Map(state.topics);
-            newTopics.delete(id);
+            newTopics.delete(topicId);
 
             const unread = new Map(state.topicUnreadCounts);
-            unread.delete(id);
+            unread.delete(topicId);
 
             const lastRead = new Map(state.topicLastReadAt);
-            lastRead.delete(id);
+            lastRead.delete(topicId);
 
             return {
               topics: newTopics,
-              currentTopic: state.currentTopic?.id === id ? null : state.currentTopic,
+              currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
               topicUnreadCounts: unread,
               topicLastReadAt: lastRead,
             };
@@ -310,36 +330,36 @@ export const useTopicStore = create<TopicStore>()(
             return { currentTopic: null };
           }
 
+          const topicId = normalizeTopicId(topic.id);
           const unread = new Map(state.topicUnreadCounts);
-          unread.set(topic.id, 0);
+          unread.set(topicId, 0);
 
           const lastRead = new Map(state.topicLastReadAt);
-          lastRead.set(topic.id, Math.floor(Date.now() / 1000));
+          lastRead.set(topicId, Math.floor(Date.now() / 1000));
 
           return {
-            currentTopic: topic,
+            currentTopic: { ...topic, id: topicId },
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
         }),
 
       joinTopic: async (topicId: string) => {
-        // 既に参加している場合は何もしない
+        const normalizedId = normalizeTopicId(topicId);
         const currentState = useTopicStore.getState();
-        if (currentState.joinedTopics.includes(topicId)) {
+        if (currentState.joinedTopics.includes(normalizedId)) {
           return;
         }
 
         const offlineStore = useOfflineStore.getState();
         const isOnline = offlineStore.isOnline;
 
-        // 先にUIを更新（楽観的UI更新）
         set((state) => {
-          const joinedTopics = [...new Set([...state.joinedTopics, topicId])];
+          const joinedTopics = [...new Set([...state.joinedTopics, normalizedId])];
           const unread = new Map(state.topicUnreadCounts);
-          unread.set(topicId, 0);
+          unread.set(normalizedId, 0);
           const lastRead = new Map(state.topicLastReadAt);
-          lastRead.set(topicId, Math.floor(Date.now() / 1000));
+          lastRead.set(normalizedId, Math.floor(Date.now() / 1000));
 
           return {
             joinedTopics,
@@ -348,41 +368,36 @@ export const useTopicStore = create<TopicStore>()(
           };
         });
 
-        // オフラインの場合、アクションを保存して後で同期
         if (!isOnline) {
           const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
           await offlineStore.saveOfflineAction({
             userPubkey,
             actionType: OfflineActionType.JOIN_TOPIC,
             entityType: EntityType.TOPIC,
-            entityId: topicId,
-            data: JSON.stringify({ topicId }),
+            entityId: normalizedId,
+            data: JSON.stringify({ topicId: normalizedId }),
           });
           return;
         }
 
         try {
-          // バックエンドのサービス層経由で参加処理を実行（P2P join + DB更新）
-          await TauriApi.joinTopic(topicId);
+          await TauriApi.joinTopic(normalizedId);
 
-          // P2P接続が安定した後にNostrサブスクリプションを開始
-          // リレー接続が無効化されている場合でも、将来的な互換性のために呼び出しは維持
           setTimeout(() => {
-            nostrSubscribe(topicId).catch((error) => {
+            nostrSubscribe(normalizedId).catch((error) => {
               errorHandler.log('Failed to subscribe to Nostr topic', error, {
                 context: 'TopicStore.joinTopic.nostrSubscribe',
-                showToast: false, // P2Pが成功していればエラーは表示しない
+                showToast: false,
               });
             });
-          }, 500); // 500msの遅延
+          }, 500);
         } catch (error) {
-          // エラーが発生した場合は状態を元に戻す
           set((state) => {
-            const joinedTopics = state.joinedTopics.filter((id) => id !== topicId);
+            const joinedTopics = state.joinedTopics.filter((id) => id !== normalizedId);
             const unread = new Map(state.topicUnreadCounts);
-            unread.delete(topicId);
+            unread.delete(normalizedId);
             const lastRead = new Map(state.topicLastReadAt);
-            lastRead.delete(topicId);
+            lastRead.delete(normalizedId);
             return {
               joinedTopics,
               topicUnreadCounts: unread,
@@ -399,61 +414,57 @@ export const useTopicStore = create<TopicStore>()(
       },
 
       leaveTopic: async (topicId: string) => {
-        // 参加していない場合は何もしない
+        const normalizedId = normalizeTopicId(topicId);
         const currentState = useTopicStore.getState();
-        if (!currentState.joinedTopics.includes(topicId)) {
+        if (!currentState.joinedTopics.includes(normalizedId)) {
           return;
         }
 
         const offlineStore = useOfflineStore.getState();
         const isOnline = offlineStore.isOnline;
 
-        // 先にUIを更新（楽観的UI更新）
         let previousUnread: number | undefined;
         let previousLastRead: number | undefined;
         set((state) => {
-          previousUnread = state.topicUnreadCounts.get(topicId);
-          previousLastRead = state.topicLastReadAt.get(topicId);
+          previousUnread = state.topicUnreadCounts.get(normalizedId);
+          previousLastRead = state.topicLastReadAt.get(normalizedId);
 
-          const joinedTopics = state.joinedTopics.filter((id) => id !== topicId);
+          const joinedTopics = state.joinedTopics.filter((id) => id !== normalizedId);
           const unread = new Map(state.topicUnreadCounts);
-          unread.delete(topicId);
+          unread.delete(normalizedId);
           const lastRead = new Map(state.topicLastReadAt);
-          lastRead.delete(topicId);
+          lastRead.delete(normalizedId);
 
           return {
             joinedTopics,
-            currentTopic: state.currentTopic?.id === topicId ? null : state.currentTopic,
+            currentTopic: state.currentTopic?.id === normalizedId ? null : state.currentTopic,
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
         });
 
-        // オフラインの場合、アクションを保存して後で同期
         if (!isOnline) {
           const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
           await offlineStore.saveOfflineAction({
             userPubkey,
             actionType: OfflineActionType.LEAVE_TOPIC,
             entityType: EntityType.TOPIC,
-            entityId: topicId,
-            data: JSON.stringify({ topicId }),
+            entityId: normalizedId,
+            data: JSON.stringify({ topicId: normalizedId }),
           });
           return;
         }
 
         try {
-          // バックエンドのサービス層経由で離脱処理を実行（P2P leave + DB更新）
-          await TauriApi.leaveTopic(topicId);
+          await TauriApi.leaveTopic(normalizedId);
         } catch (error) {
-          // エラーが発生した場合は状態を元に戻す
           set((state) => {
-            const joinedTopics = [...new Set([...state.joinedTopics, topicId])];
+            const joinedTopics = [...new Set([...state.joinedTopics, normalizedId])];
             const unread = new Map(state.topicUnreadCounts);
-            unread.set(topicId, previousUnread ?? 0);
+            unread.set(normalizedId, previousUnread ?? 0);
             const lastRead = new Map(state.topicLastReadAt);
             if (previousLastRead !== undefined) {
-              lastRead.set(topicId, previousLastRead);
+              lastRead.set(normalizedId, previousLastRead);
             }
             return {
               joinedTopics,
@@ -472,42 +483,47 @@ export const useTopicStore = create<TopicStore>()(
 
       updateTopicPostCount: (topicId: string, delta: number) =>
         set((state) => {
+          const normalizedId = normalizeTopicId(topicId);
           const newTopics = new Map(state.topics);
-          const topic = newTopics.get(topicId);
+          const topic = newTopics.get(normalizedId);
           if (topic) {
-            newTopics.set(topicId, {
+            newTopics.set(normalizedId, {
               ...topic,
               postCount: topic.postCount + delta,
             });
           }
           return { topics: newTopics };
         }),
+
       markTopicRead: (topicId: string) =>
         set((state) => {
+          const normalizedId = normalizeTopicId(topicId);
           const unread = new Map(state.topicUnreadCounts);
-          unread.set(topicId, 0);
+          unread.set(normalizedId, 0);
 
           const lastRead = new Map(state.topicLastReadAt);
-          lastRead.set(topicId, Math.floor(Date.now() / 1000));
+          lastRead.set(normalizedId, Math.floor(Date.now() / 1000));
 
           return {
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
         }),
+
       handleIncomingTopicMessage: (topicId: string, timestamp: number) =>
         set((state) => {
+          const normalizedId = normalizeTopicId(topicId);
           const unread = new Map(state.topicUnreadCounts);
           const lastRead = new Map(state.topicLastReadAt);
           const normalisedTimestamp =
             timestamp > 1_000_000_000_000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
 
-          if (state.currentTopic?.id === topicId) {
-            unread.set(topicId, 0);
-            lastRead.set(topicId, normalisedTimestamp);
+          if (state.currentTopic?.id === normalizedId) {
+            unread.set(normalizedId, 0);
+            lastRead.set(normalizedId, normalisedTimestamp);
           } else {
-            const current = unread.get(topicId) ?? 0;
-            unread.set(topicId, current + 1);
+            const current = unread.get(normalizedId) ?? 0;
+            unread.set(normalizedId, current + 1);
           }
 
           return {
@@ -515,7 +531,6 @@ export const useTopicStore = create<TopicStore>()(
             topicLastReadAt: lastRead,
           };
         }),
-      // ... rest of store methods
     };
   }, createTopicPersistConfig<TopicStore>()),
 );

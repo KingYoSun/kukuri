@@ -1,4 +1,5 @@
 use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore};
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::entities::ScoreWeights;
 use crate::domain::p2p::P2PEvent;
 
@@ -226,7 +227,9 @@ impl AppState {
             .ensure_public_topic()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to ensure public topic: {}", e))?;
-        event_manager.set_default_p2p_topic_id("public").await;
+        event_manager
+            .set_default_p2p_topic_id(DEFAULT_PUBLIC_TOPIC_ID)
+            .await;
         let distributor_default_topics = event_manager.list_default_p2p_topics().await;
         default_event_distributor
             .set_default_topics(distributor_default_topics)

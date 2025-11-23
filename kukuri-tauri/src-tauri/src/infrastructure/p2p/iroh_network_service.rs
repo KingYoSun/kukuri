@@ -2,7 +2,7 @@ use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
 };
-use crate::domain::p2p::{P2PEvent, generate_topic_id};
+use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -162,11 +162,12 @@ impl IrohNetworkService {
         Ok(out)
     }
 
-    /// DHTを使用してトピックに参加
+    /// DHT????????????
     pub async fn join_dht_topic(&self, topic_name: &str) -> Result<(), AppError> {
         let canonical = generate_topic_id(topic_name);
+        let topic_bytes = topic_id_bytes(&canonical);
         if let Some(ref dht_gossip) = self.dht_gossip {
-            dht_gossip.join_topic(canonical.as_bytes(), vec![]).await?;
+            dht_gossip.join_topic(&topic_bytes, vec![]).await?;
             tracing::info!(
                 "Joined DHT topic: {} (requested: {})",
                 canonical,
@@ -174,33 +175,33 @@ impl IrohNetworkService {
             );
         } else {
             tracing::warn!("DHT service not available, using fallback");
-            // フォールバックモードを使用
+            // ?????????????
             self.connect_fallback().await?;
         }
         Ok(())
     }
 
-    /// DHTを使用してトピックから離脱
+    /// DHT?????????????
     pub async fn leave_dht_topic(&self, topic_name: &str) -> Result<(), AppError> {
         let canonical = generate_topic_id(topic_name);
+        let topic_bytes = topic_id_bytes(&canonical);
         if let Some(ref dht_gossip) = self.dht_gossip {
-            dht_gossip.leave_topic(canonical.as_bytes()).await?;
+            dht_gossip.leave_topic(&topic_bytes).await?;
             tracing::info!("Left DHT topic: {} (requested: {})", canonical, topic_name);
         }
         Ok(())
     }
-
-    /// DHTを使用してメッセージをブロードキャスト
+    /// DHT???????????????????
     pub async fn broadcast_dht(&self, topic_name: &str, message: Vec<u8>) -> Result<(), AppError> {
         let canonical = generate_topic_id(topic_name);
+        let topic_bytes = topic_id_bytes(&canonical);
         if let Some(ref dht_gossip) = self.dht_gossip {
-            dht_gossip.broadcast(canonical.as_bytes(), message).await?;
+            dht_gossip.broadcast(&topic_bytes, message).await?;
         } else {
             return Err(AppError::P2PError("DHT service not available".to_string()));
         }
         Ok(())
     }
-
     /// フォールバックモードでピアに接続
     async fn connect_fallback(&self) -> Result<(), AppError> {
         // 1) 設定ファイルからのブートストラップ接続を優先

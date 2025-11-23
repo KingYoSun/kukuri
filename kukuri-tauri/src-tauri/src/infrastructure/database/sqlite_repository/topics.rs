@@ -6,6 +6,7 @@ use super::queries::{
     UPDATE_TOPIC_MEMBER_COUNT, UPDATE_TOPIC_STATS, UPSERT_USER_TOPIC,
 };
 use crate::application::ports::repositories::TopicRepository;
+use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
 use crate::domain::entities::Topic;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -21,6 +22,7 @@ impl TopicRepository for SqliteRepository {
             .bind(&topic.description)
             .bind(topic.created_at.timestamp_millis())
             .bind(topic.updated_at.timestamp_millis())
+            .bind(topic.visibility.as_str())
             .execute(self.pool.get_pool())
             .await?;
 
@@ -81,17 +83,23 @@ impl TopicRepository for SqliteRepository {
     }
 
     async fn delete_topic(&self, id: &str) -> Result<(), AppError> {
-        if id == "public" {
+        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            id
+        };
+
+        if normalized == DEFAULT_PUBLIC_TOPIC_ID {
             return Err("デフォルトトピックは削除できません".into());
         }
 
         sqlx::query(DELETE_USER_TOPICS_BY_TOPIC)
-            .bind(id)
+            .bind(normalized)
             .execute(self.pool.get_pool())
             .await?;
 
         sqlx::query(DELETE_TOPIC)
-            .bind(id)
+            .bind(normalized)
             .execute(self.pool.get_pool())
             .await?;
 
@@ -127,7 +135,13 @@ impl TopicRepository for SqliteRepository {
     }
 
     async fn leave_topic(&self, topic_id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        if topic_id == "public" {
+        let normalized = if topic_id == LEGACY_PUBLIC_TOPIC_ID {
+            DEFAULT_PUBLIC_TOPIC_ID
+        } else {
+            topic_id
+        };
+
+        if normalized == DEFAULT_PUBLIC_TOPIC_ID {
             return Err("デフォルトトピックから離脱することはできません".into());
         }
 
@@ -136,13 +150,13 @@ impl TopicRepository for SqliteRepository {
 
         sqlx::query(MARK_TOPIC_LEFT)
             .bind(now)
-            .bind(topic_id)
+            .bind(normalized)
             .bind(user_pubkey)
             .execute(&mut *tx)
             .await?;
 
         let member_count: i64 = sqlx::query(SELECT_TOPIC_MEMBER_COUNT)
-            .bind(topic_id)
+            .bind(normalized)
             .fetch_one(&mut *tx)
             .await?
             .try_get("count")?;
@@ -150,7 +164,7 @@ impl TopicRepository for SqliteRepository {
         sqlx::query(UPDATE_TOPIC_MEMBER_COUNT)
             .bind(member_count)
             .bind(now)
-            .bind(topic_id)
+            .bind(normalized)
             .execute(&mut *tx)
             .await?;
 
