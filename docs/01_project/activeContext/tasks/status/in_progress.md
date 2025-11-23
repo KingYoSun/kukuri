@@ -22,8 +22,8 @@
 - 状況: 着手（チェックリスト化のみ完了）。次は `./scripts/test-docker.ps1` / Nightly artefact で実施予定。
 - 重点確認: オンボーディングとキー管理、プロフィール/プライバシー同期、ホーム/トピック/投稿操作、トレンド・フォロー導線、DM、検索、SyncStatusIndicator、P2P/RelayStatus/CLI 連携、Nightlyジョブ、CIジョブ成功。
 
-### 2025年11月23日 トピック購読仕様変更実装
+### 2025年11月23日 トピック購読仕様変更実装（完了）
 
 - 目標: docs/01_project/activeContext/topic_subscription_spec_review.md に沿って、公開/非公開IDスキーム刷新と購読レジストリ化を進める。
-- 状況: バックエンド/CLI/フロントでID正規化・visibility対応・デフォルトトピック切替を実装済み。format-checkは修正完了。
-- 次のアクション: 購読レジストリ化とUI文言・導線の整理を継続。
+- 状況: ID正規化・visibility対応・デフォルトトピック切替・UI文言/導線更新まで完了し、format-check も通過。
+- 次のアクション: なし（完了）。
