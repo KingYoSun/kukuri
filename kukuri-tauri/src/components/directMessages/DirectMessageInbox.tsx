@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -57,6 +57,11 @@ export function DirectMessageInbox() {
   const openDialog = useDirectMessageStore((state) => state.openDialog);
   const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
   const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
+  const conversationMessages = useDirectMessageStore((state) => state.conversations);
+  const conversationUnreadCounts = useDirectMessageStore((state) => state.unreadCounts);
+  const conversationReadTimestamps = useDirectMessageStore(
+    (state) => state.conversationReadTimestamps,
+  );
   const [targetNpub, setTargetNpub] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
@@ -88,7 +93,7 @@ export function DirectMessageInbox() {
   });
 
   const conversationPages = conversationsQuery.data?.pages ?? [];
-  const conversationEntries = useMemo<ConversationEntry[]>(() => {
+  const apiConversationEntries = useMemo<ConversationEntry[]>(() => {
     return conversationPages
       .flatMap((page: DirectMessageConversationList) => page.items)
       .map((item: DirectMessageConversationSummary) => ({
@@ -98,6 +103,50 @@ export function DirectMessageInbox() {
         lastReadAt: item.lastReadAt,
       }));
   }, [conversationPages]);
+  const storeConversationEntries = useMemo<ConversationEntry[]>(() => {
+    const entries: ConversationEntry[] = [];
+    const candidates = new Set<string>([
+      ...Object.keys(conversationMessages),
+      ...Object.keys(conversationUnreadCounts),
+    ]);
+
+    for (const npub of candidates) {
+      const messages = conversationMessages[npub] ?? [];
+      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+      entries.push({
+        npub,
+        lastMessage: lastMessage
+          ? {
+              eventId: lastMessage.eventId,
+              clientMessageId: lastMessage.clientMessageId ?? null,
+              senderNpub: lastMessage.senderNpub,
+              recipientNpub: lastMessage.recipientNpub,
+              content: lastMessage.content,
+              createdAt: lastMessage.createdAt,
+              delivered: lastMessage.status !== 'pending',
+            }
+          : null,
+        unread: conversationUnreadCounts[npub] ?? 0,
+        lastReadAt: conversationReadTimestamps[npub] ?? 0,
+      });
+    }
+
+    return entries
+      .filter((entry) => entry.lastMessage !== null || entry.unread > 0)
+      .sort((a, b) => (b.lastMessage?.createdAt ?? 0) - (a.lastMessage?.createdAt ?? 0));
+  }, [conversationMessages, conversationUnreadCounts, conversationReadTimestamps]);
+  const conversationEntries = useMemo<ConversationEntry[]>(() => {
+    const merged = new Map<string, ConversationEntry>();
+    for (const entry of apiConversationEntries) {
+      merged.set(entry.npub, entry);
+    }
+    for (const entry of storeConversationEntries) {
+      if (!merged.has(entry.npub)) {
+        merged.set(entry.npub, entry);
+      }
+    }
+    return Array.from(merged.values());
+  }, [apiConversationEntries, storeConversationEntries]);
   const filteredConversationEntries = useMemo(() => {
     if (!normalizedConversationQuery) {
       return conversationEntries;
@@ -122,6 +171,8 @@ export function DirectMessageInbox() {
     isFetchingNextPage,
     refetch: refetchConversations,
   } = conversationsQuery;
+  const showLoadingState = isConversationsLoading && !hasConversations;
+  const showErrorState = isConversationsError && !hasConversations;
   const rowVirtualizer = useVirtualizer({
     count: hasNextPage
       ? filteredConversationEntries.length + 1
@@ -131,6 +182,9 @@ export function DirectMessageInbox() {
     overscan: 12,
     getItemKey: (index) => filteredConversationEntries[index]?.npub ?? `loader-${index}`,
   });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const shouldRenderFallbackList =
+    filteredConversationEntries.length <= 20 || virtualItems.length === 0;
   const autoCompleteConversationNpub = filteredConversationEntries[0]?.npub ?? null;
 
   useEffect(() => {
@@ -230,11 +284,11 @@ export function DirectMessageInbox() {
   const handleStartConversation = () => {
     const npub = targetNpub.trim();
     if (!npub) {
-      setValidationError('宛先の npub または ID を入力してください。');
+      setValidationError('宛先の npub または ID を入力してください');
       return;
     }
     if (currentUser?.npub === npub) {
-      setValidationError('自分自身にはメッセージを送信できません。');
+      setValidationError('自分自身にはメッセージを送信できません');
       return;
     }
     setValidationError(null);
@@ -409,7 +463,7 @@ export function DirectMessageInbox() {
           </div>
           <div className="flex items-center gap-2">
             <Input
-              placeholder="会話を検索（npub / メッセージ本文）"
+              placeholder="会話を検索 (npub / メッセージ本文)"
               value={conversationQuery}
               onChange={(event) => setConversationQuery(event.target.value)}
               onKeyDown={handleConversationSearchKeyDown}
@@ -450,17 +504,22 @@ export function DirectMessageInbox() {
               ) : null}
             </div>
           </div>
+          {isConversationsError && hasConversations ? (
+            <div className="text-[11px] text-destructive/80">
+              最新の会話一覧の取得に失敗しました。保存済みの会話を表示しています。
+            </div>
+          ) : null}
           <div
             ref={conversationListRef}
             className="h-60 rounded-md border border-border overflow-y-auto"
             data-testid="dm-inbox-list"
           >
-            {isConversationsLoading ? (
+            {showLoadingState ? (
               <div className="p-4 text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>会話を読み込んでいます…</span>
               </div>
-            ) : isConversationsError ? (
+            ) : showErrorState ? (
               <div className="p-4 space-y-2">
                 <p className="text-sm text-destructive">
                   会話の取得に失敗しました。時間をおいて再試行してください。
@@ -480,7 +539,101 @@ export function DirectMessageInbox() {
               </div>
             ) : !hasFilteredConversations ? (
               <div className="p-4 text-sm text-muted-foreground" data-testid="dm-inbox-no-results">
-                “{conversationQuery}” に一致する会話が見つかりません。
+                “{conversationQuery}”に一致する会話が見つかりません。
+              </div>
+            ) : shouldRenderFallbackList ? (
+              <div className="divide-y divide-border/40">
+                {filteredConversationEntries.map((entry) => {
+                  const lastMessageTime = formatRelativeTime(entry.lastMessage?.createdAt);
+                  const lastReadTime = entry.lastReadAt
+                    ? formatRelativeTime(entry.lastReadAt)
+                    : { display: null, helper: null };
+                  const isSyncedRead =
+                    entry.unread === 0 &&
+                    entry.lastReadAt > 0 &&
+                    (entry.lastMessage?.createdAt ?? 0) <= entry.lastReadAt;
+                  const isHighlighted =
+                    normalizedConversationQuery.length > 0 &&
+                    autoCompleteConversationNpub === entry.npub;
+                  return (
+                    <div
+                      key={entry.npub}
+                      className={cn(
+                        'w-full px-4 py-3 text-left hover:bg-muted transition-colors border-b border-border/40 last:border-b-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+                        {
+                          'ring-1 ring-primary/30 bg-primary/5': isHighlighted,
+                        },
+                      )}
+                      role="button"
+                      tabIndex={0}
+                      aria-current={activeConversationNpub === entry.npub ? 'true' : undefined}
+                      onClick={() => handleOpenConversation(entry.npub)}
+                      onKeyDown={(event) => handleConversationKeyDown(event, entry.npub)}
+                      data-testid={`dm-inbox-conversation-${entry.npub}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{formatNpub(entry.npub)}</p>
+                          <p className="text-xs text-muted-foreground break-all">{entry.npub}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isSyncedRead ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[11px]"
+                              data-testid={`dm-inbox-read-sync-${entry.npub}`}
+                            >
+                              既読同期済み
+                            </Badge>
+                          ) : null}
+                          {entry.unread > 0 ? (
+                            <>
+                              <Badge
+                                variant="destructive"
+                                data-testid={`dm-inbox-unread-${entry.npub}`}
+                              >
+                                {entry.unread > 99 ? '99+' : entry.unread}
+                              </Badge>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMarkConversationRead(
+                                    entry.npub,
+                                    entry.lastMessage?.createdAt ?? null,
+                                  );
+                                }}
+                                data-testid={`dm-inbox-mark-read-${entry.npub}`}
+                              >
+                                既読にする
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {entry.lastMessage?.content ?? 'メッセージはまだありません'}
+                      </p>
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+                        <span>
+                          最終受信: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
+                        </span>
+                        {activeConversationNpub === entry.npub ? <span>開いています</span> : null}
+                      </div>
+                      {entry.lastReadAt > 0 ? (
+                        <div
+                          className="text-[11px] text-muted-foreground"
+                          data-testid={`dm-inbox-read-receipt-${entry.npub}`}
+                        >
+                          既読同期: {lastReadTime.display ?? lastReadTime.helper ?? '---'}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div
@@ -489,7 +642,7 @@ export function DirectMessageInbox() {
                   position: 'relative',
                 }}
               >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                {virtualItems.map((virtualRow) => {
                   const entry = filteredConversationEntries[virtualRow.index];
                   if (!entry) {
                     return (
@@ -556,7 +709,7 @@ export function DirectMessageInbox() {
                               className="text-[11px]"
                               data-testid={`dm-inbox-read-sync-${entry.npub}`}
                             >
-                              既読同期済
+                              既読同期済み
                             </Badge>
                           ) : null}
                           {entry.unread > 0 ? (

@@ -11,6 +11,8 @@ use crate::application::ports::{
 use crate::domain::entities::{DirectMessage, MessageDirection, NewDirectMessage};
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::{DateTime, TimeZone, Utc};
+use nostr_sdk::prelude::nip04;
+use nostr_sdk::prelude::{FromBech32, Keys, PublicKey, SecretKey, ToBech32};
 use std::sync::Arc;
 use tracing::{debug, error};
 
@@ -288,6 +290,100 @@ impl DirectMessageService {
                     Err(err)
                 }
             }
+        }
+    }
+
+    pub async fn seed_incoming_message_for_e2e(
+        &self,
+        owner_npub: &str,
+        content: &str,
+        created_at_millis: Option<i64>,
+        owner_nsec: Option<&str>,
+    ) -> Result<DirectMessage, AppError> {
+        let owner_keys = if let Some(nsec) = owner_nsec {
+            let secret_key =
+                SecretKey::from_bech32(nsec).map_err(|err| AppError::ValidationError {
+                    kind: ValidationFailureKind::Generic,
+                    message: format!("Invalid owner nsec for seeded direct message: {err}"),
+                })?;
+            Some(Keys::new(secret_key))
+        } else {
+            None
+        };
+
+        let owner_pk = match &owner_keys {
+            Some(keys) => keys.public_key(),
+            None => {
+                PublicKey::from_bech32(owner_npub).map_err(|err| AppError::ValidationError {
+                    kind: ValidationFailureKind::Generic,
+                    message: format!("Invalid owner npub {owner_npub}: {err}"),
+                })?
+            }
+        };
+
+        let sender_keys = Keys::generate();
+        let sender_pk = sender_keys.public_key();
+        let ciphertext =
+            nip04::encrypt(sender_keys.secret_key(), &owner_pk, content).map_err(|err| {
+                AppError::Crypto(format!("Failed to encrypt seeded direct message: {err}"))
+            })?;
+        let sender_npub = sender_pk
+            .to_bech32()
+            .map_err(|err| AppError::Crypto(format!("Failed to encode seeded npub: {err}")))?;
+        let created_at = created_at_millis.unwrap_or_else(|| Utc::now().timestamp_millis());
+
+        if let Some(keys) = owner_keys {
+            let plaintext =
+                nip04::decrypt(keys.secret_key(), &sender_pk, &ciphertext).map_err(|err| {
+                    AppError::Crypto(format!(
+                        "Failed to decrypt seeded direct message with provided nsec: {err}"
+                    ))
+                })?;
+
+            let new_message = NewDirectMessage {
+                owner_npub: owner_npub.to_string(),
+                conversation_npub: sender_npub.clone(),
+                sender_npub: sender_npub.clone(),
+                recipient_npub: owner_npub.to_string(),
+                event_id: None,
+                client_message_id: None,
+                payload_cipher_base64: ciphertext.clone(),
+                created_at: millis_to_datetime(created_at).unwrap_or_else(chrono::Utc::now),
+                delivered: true,
+                direction: MessageDirection::Inbound,
+            };
+
+            match self.repository.insert_direct_message(&new_message).await {
+                Ok(record) => {
+                    let stored = record.with_decrypted_content(plaintext);
+                    self.persist_conversation_snapshot(owner_npub, &stored)
+                        .await?;
+                    self.dispatch_notification(owner_npub, &stored).await;
+                    Ok(stored)
+                }
+                Err(err) => {
+                    if is_unique_violation(&err) {
+                        debug!(
+                            owner_npub,
+                            conversation = sender_npub,
+                            "Duplicate seeded direct message detected; skipping insertion"
+                        );
+                        Err(AppError::Internal(
+                            "Failed to persist seeded direct message conversation".into(),
+                        ))
+                    } else {
+                        Err(err)
+                    }
+                }
+            }
+        } else {
+            self.ingest_incoming_message(owner_npub, &sender_npub, &ciphertext, None, created_at)
+                .await?
+                .ok_or_else(|| {
+                    AppError::Internal(
+                        "Failed to persist seeded direct message conversation".into(),
+                    )
+                })
         }
     }
 

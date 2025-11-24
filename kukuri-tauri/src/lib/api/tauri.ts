@@ -255,6 +255,12 @@ export interface SendDirectMessageResult {
   queued: boolean;
 }
 
+export interface SeedDirectMessageConversationResult {
+  conversationNpub: string;
+  createdAt: number;
+  content: string;
+}
+
 export interface ListFollowingFeedParams {
   cursor?: string | null;
   limit?: number;
@@ -745,6 +751,28 @@ export class TauriApi {
         last_read_at: Math.max(0, Math.floor(params.lastReadAt)),
       },
     });
+  }
+
+  static async seedDirectMessageConversation(
+    params: { content?: string; createdAt?: number; recipientNsec?: string } = {},
+  ): Promise<SeedDirectMessageConversationResult> {
+    const response = await invokeCommand<{
+      conversation_npub: string;
+      created_at: number;
+      content: string;
+    }>('seed_direct_message_for_e2e', {
+      request: {
+        content: params.content ?? null,
+        created_at: typeof params.createdAt === 'number' ? params.createdAt : null,
+        recipient_nsec: params.recipientNsec ?? null,
+      },
+    });
+
+    return {
+      conversationNpub: response?.conversation_npub ?? '',
+      createdAt: response?.created_at ?? 0,
+      content: response?.content ?? '',
+    };
   }
 
   static async followUser(followerNpub: string, targetNpub: string): Promise<void> {

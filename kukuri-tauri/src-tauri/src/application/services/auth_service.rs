@@ -1,7 +1,7 @@
 use crate::application::ports::auth_lifecycle::{
     AuthAccountContext, AuthLifecycleEvent, AuthLifecyclePort,
 };
-use crate::application::ports::key_manager::KeyManager;
+use crate::application::ports::key_manager::{KeyManager, KeyPair};
 use crate::domain::entities::User;
 use crate::infrastructure::storage::SecureStorage;
 use crate::shared::error::AppError;
@@ -170,21 +170,26 @@ impl AuthService {
         }
     }
 
-    pub async fn create_account(&self) -> Result<User, AppError> {
-        // Generate new keypair
+    pub async fn create_account_with_keys(&self) -> Result<(User, KeyPair), AppError> {
         let keypair = self.key_manager.generate_keypair().await?;
 
-        // Store securely
         self.key_manager.store_keypair(&keypair).await?;
         self.secure_storage
             .store("current_npub", &keypair.npub)
             .await?;
 
-        // Create user
         let context = AuthAccountContext::from(&keypair);
-        self.lifecycle_port
+        let user = self
+            .lifecycle_port
             .handle(AuthLifecycleEvent::account_created(context))
-            .await
+            .await?;
+
+        Ok((user, keypair))
+    }
+
+    pub async fn create_account(&self) -> Result<User, AppError> {
+        let (user, _) = self.create_account_with_keys().await?;
+        Ok(user)
     }
 
     pub async fn login_with_nsec(&self, nsec: &str) -> Result<User, AppError> {
@@ -249,6 +254,10 @@ impl AuthService {
             current_user,
             npub,
         })
+    }
+
+    pub async fn current_keypair(&self) -> Result<KeyPair, AppError> {
+        self.key_manager.current_keypair().await
     }
 
     pub async fn export_private_key(&self, npub: &str) -> Result<String, AppError> {

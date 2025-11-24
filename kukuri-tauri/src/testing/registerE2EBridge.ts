@@ -1,4 +1,5 @@
 import { SecureStorageApi } from '@/lib/api/secureStorage';
+import { TauriApi, type SeedDirectMessageConversationResult } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { persistKeys } from '@/stores/config/persist';
 import {
@@ -6,6 +7,7 @@ import {
   listFallbackAccountMetadata,
   useAuthStore,
 } from '@/stores/authStore';
+import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { getE2EStatus, setE2EStatus, type E2EStatus } from './e2eStatus';
 
@@ -30,13 +32,29 @@ interface ProfileAvatarFixture {
   fileName?: string;
 }
 
+interface DirectMessageSnapshot {
+  unreadCounts: Record<string, number>;
+  unreadTotal: number;
+  conversations: Record<string, number>;
+  conversationKeys: string[];
+  latestConversationNpub: string | null;
+  activeConversationNpub: string | null;
+  isInboxOpen: boolean;
+  isDialogOpen: boolean;
+}
+
 export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
   getOfflineSnapshot: () => OfflineSnapshot;
+  getDirectMessageSnapshot: () => DirectMessageSnapshot;
   setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => void;
   consumeProfileAvatarFixture: () => ProfileAvatarFixture | null;
   switchAccount: (npub: string) => Promise<void>;
+  seedDirectMessageConversation: (payload?: {
+    content?: string;
+    createdAt?: number;
+  }) => Promise<SeedDirectMessageConversationResult>;
 }
 
 declare global {
@@ -158,6 +176,35 @@ export function registerE2EBridge(): void {
             pendingActionCount: offlineState.pendingActions.length,
           };
         },
+        getDirectMessageSnapshot: () => {
+          const state = useDirectMessageStore.getState();
+          const unreadCounts = { ...state.unreadCounts };
+          const conversations: Record<string, number> = {};
+          for (const [npub, messages] of Object.entries(state.conversations)) {
+            conversations[npub] = messages?.length ?? 0;
+          }
+          const latest = Object.entries(state.conversations)
+            .map(([npub, messages]) => ({
+              npub,
+              last: messages && messages.length > 0 ? messages[messages.length - 1] : null,
+            }))
+            .filter((item) => item.last !== null)
+            .sort((a, b) => (b.last?.createdAt ?? 0) - (a.last?.createdAt ?? 0))[0]?.npub;
+
+          return {
+            unreadCounts,
+            unreadTotal: Object.values(unreadCounts).reduce((sum, value) => sum + value, 0),
+            conversations,
+            conversationKeys: Object.keys({
+              ...state.conversations,
+              ...state.unreadCounts,
+            }),
+            latestConversationNpub: latest ?? null,
+            activeConversationNpub: state.activeConversationNpub,
+            isInboxOpen: state.isInboxOpen,
+            isDialogOpen: state.isDialogOpen,
+          };
+        },
         setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => {
           pendingAvatarFixture = fixture ?? null;
         },
@@ -165,6 +212,76 @@ export function registerE2EBridge(): void {
           const fixture = pendingAvatarFixture;
           pendingAvatarFixture = null;
           return fixture;
+        },
+        seedDirectMessageConversation: async (payload) => {
+          const authState = useAuthStore.getState();
+          const current = authState.currentUser;
+          if (!current?.npub) {
+            throw new Error('No active account for direct message seeding');
+          }
+          let recipientNsec: string | undefined =
+            typeof authState.privateKey === 'string' && authState.privateKey.trim().length > 0
+              ? authState.privateKey
+              : undefined;
+          try {
+            recipientNsec = await TauriApi.exportPrivateKey(current.npub);
+          } catch (error) {
+            errorHandler.log('E2EBridge.dmSeedExportFailed', error, {
+              context: 'registerE2EBridge.seedDirectMessageConversation',
+              metadata: { npub: current.npub },
+            });
+          }
+          const result = await TauriApi.seedDirectMessageConversation({
+            ...(payload ?? {}),
+            recipientNsec,
+          });
+          const fallbackSummary = {
+            conversationNpub: result.conversationNpub,
+            unreadCount: 1,
+            lastReadAt: 0,
+            lastMessage: {
+              eventId: null,
+              clientMessageId: `seed-${result.conversationNpub}-${result.createdAt}`,
+              senderNpub: result.conversationNpub,
+              recipientNpub: current.npub,
+              content: result.content,
+              createdAt: result.createdAt,
+              status: 'sent' as const,
+            },
+          };
+          try {
+            useDirectMessageStore
+              .getState()
+              .receiveIncomingMessage(result.conversationNpub, fallbackSummary.lastMessage, {
+                incrementUnread: true,
+              });
+          } catch (error) {
+            errorHandler.log('E2EBridge.dmSeedReceiveFailed', error, {
+              context: 'registerE2EBridge.seedDirectMessageConversation',
+            });
+          }
+          try {
+            const conversations = await TauriApi.listDirectMessageConversations({
+              cursor: null,
+              limit: 50,
+            });
+            let summaries = conversations.items.map((item) => ({
+              conversationNpub: item.conversationNpub,
+              unreadCount: item.unreadCount,
+              lastReadAt: item.lastReadAt,
+              lastMessage: item.lastMessage ? mapApiMessageToModel(item.lastMessage) : undefined,
+            }));
+            if (!summaries.some((item) => item.conversationNpub === result.conversationNpub)) {
+              summaries = [fallbackSummary, ...summaries];
+            }
+            useDirectMessageStore.getState().hydrateConversations(summaries);
+          } catch (error) {
+            errorHandler.log('E2EBridge.dmSeedHydrationFailed', error, {
+              context: 'registerE2EBridge.seedDirectMessageConversation',
+            });
+            useDirectMessageStore.getState().hydrateConversations([fallbackSummary]);
+          }
+          return result;
         },
       };
     }

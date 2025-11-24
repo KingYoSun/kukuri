@@ -20,8 +20,8 @@
     "check:tauri-commands": "node ../scripts/check-tauri-commands.mjs",
     "e2e:seed": "node ./tests/e2e/tools/seed-db.cjs",
     "e2e:build": "pnpm e2e:seed && pnpm tauri build --debug --no-bundle",
-    "e2e": "wdio run ./tests/e2e/wdio.desktop.ts",
-    "e2e:ci": "xvfb-run -a wdio run ./tests/e2e/wdio.desktop.ts"
+    "e2e": "wdio run ./tests/e2e/wdio.desktop.ts --maxWorkers 1 --workers 1",
+    "e2e:ci": "xvfb-run -a wdio run ./tests/e2e/wdio.desktop.ts --maxWorkers 1 --workers 1"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.0",

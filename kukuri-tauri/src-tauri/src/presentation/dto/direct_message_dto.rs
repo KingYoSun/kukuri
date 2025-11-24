@@ -79,3 +79,17 @@ pub struct MarkDirectMessageConversationReadRequest {
     pub conversation_npub: String,
     pub last_read_at: i64,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SeedDirectMessageRequest {
+    pub content: Option<String>,
+    pub created_at: Option<i64>,
+    pub recipient_nsec: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SeedDirectMessageResponse {
+    pub conversation_npub: String,
+    pub created_at: i64,
+    pub content: String,
+}

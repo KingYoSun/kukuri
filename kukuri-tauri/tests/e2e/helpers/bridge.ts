@@ -1,4 +1,5 @@
 import { browser } from '@wdio/globals';
+import type { SeedDirectMessageConversationResult } from '@/lib/api/tauri';
 import type { E2EBridge } from '@/testing/registerE2EBridge';
 import { waitForAppReady } from './waitForAppReady';
 
@@ -13,9 +14,11 @@ export type BridgeAction =
   | 'resetAppState'
   | 'getAuthSnapshot'
   | 'getOfflineSnapshot'
+  | 'getDirectMessageSnapshot'
   | 'setProfileAvatarFixture'
   | 'consumeProfileAvatarFixture'
-  | 'switchAccount';
+  | 'switchAccount'
+  | 'seedDirectMessageConversation';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -56,6 +59,17 @@ export interface OfflineSnapshot {
   pendingActionCount: number;
 }
 
+export interface DirectMessageSnapshot {
+  unreadCounts: Record<string, number>;
+  unreadTotal: number;
+  conversations: Record<string, number>;
+  conversationKeys: string[];
+  latestConversationNpub: string | null;
+  activeConversationNpub: string | null;
+  isInboxOpen: boolean;
+  isDialogOpen: boolean;
+}
+
 export interface AvatarFixture {
   base64: string;
   format: string;
@@ -66,9 +80,11 @@ type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
   getOfflineSnapshot: OfflineSnapshot;
+  getDirectMessageSnapshot: DirectMessageSnapshot;
   setProfileAvatarFixture: null;
   consumeProfileAvatarFixture: AvatarFixture | null;
   switchAccount: null;
+  seedDirectMessageConversation: SeedDirectMessageConversationResult;
 };
 
 declare global {
@@ -77,6 +93,20 @@ declare global {
     __KUKURI_E2E_BOOTSTRAP__?: () => Promise<void> | void;
   }
 }
+
+const serializeError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
 
 export async function callBridge<T extends BridgeAction>(
   action: T,
@@ -99,6 +129,19 @@ export async function callBridge<T extends BridgeAction>(
     async (name, args, config, done) => {
       const { channelId, requestAttr, responseAttr, readyAttr, timeoutMs } = config;
       const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+      const toMessage = (error: unknown): string => {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        if (error && typeof error === 'object') {
+          try {
+            return JSON.stringify(error);
+          } catch {
+            return String(error);
+          }
+        }
+        return String(error);
+      };
 
       const runDirect = async () => {
         const helper = window.__KUKURI_E2E__;
@@ -113,8 +156,7 @@ export async function callBridge<T extends BridgeAction>(
           const result = await (args !== undefined ? fn(args as never) : fn());
           return { result: result ?? null };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return { error: message };
+          return { error: toMessage(error) };
         }
       };
 
@@ -246,7 +288,7 @@ export async function callBridge<T extends BridgeAction>(
   );
 
   if (response?.error) {
-    throw new Error(response.error);
+    throw new Error(serializeError(response.error));
   }
   return (response?.result ?? null) as BridgeResultMap[T];
 }
@@ -265,6 +307,64 @@ export async function getOfflineSnapshot(): Promise<OfflineSnapshot> {
   return await callBridge('getOfflineSnapshot');
 }
 
+export async function getDirectMessageSnapshot(): Promise<DirectMessageSnapshot> {
+  return await callBridge('getDirectMessageSnapshot');
+}
+
 export async function setAvatarFixture(fixture: AvatarFixture | null): Promise<void> {
   await callBridge('setProfileAvatarFixture', fixture ? { ...fixture } : null);
+}
+
+export async function seedDirectMessageConversation(
+  params?: { content?: string; createdAt?: number },
+): Promise<SeedDirectMessageConversationResult> {
+  await waitForAppReady();
+  try {
+    return await callBridge('seedDirectMessageConversation', params ?? {});
+  } catch (error) {
+    const message = serializeError(error);
+    const fallback = await browser.executeAsync<
+      { result?: SeedDirectMessageConversationResult; error?: string },
+      [{ content?: string; createdAt?: number }]
+    >((payload, done) => {
+      (async () => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const toMessage = (err: unknown): string => {
+            if (err instanceof Error) {
+              return err.message;
+            }
+            if (err && typeof err === 'object') {
+              try {
+                return JSON.stringify(err);
+              } catch {
+                return String(err);
+              }
+            }
+            return String(err);
+          };
+          if (typeof (window as Record<string, unknown>).__KUKURI_E2E_BOOTSTRAP__ === 'function') {
+            (window as Record<string, unknown>).__KUKURI_E2E_BOOTSTRAP__?.();
+          }
+          const helper = (window as Record<string, unknown>).__KUKURI_E2E__;
+          if (!helper || typeof helper.seedDirectMessageConversation !== 'function') {
+            done({ error: 'E2E bridge helper is unavailable' });
+            return;
+          }
+          const result = await helper.seedDirectMessageConversation(payload ?? {});
+          done({ result: result ?? null });
+        } catch (err) {
+          done({ error: toMessage(err) });
+        }
+      })();
+    }, params ?? {});
+
+    if (fallback?.error) {
+      throw new Error(`${message} (fallback failed: ${fallback.error})`);
+    }
+    return (fallback.result ??
+      ((): SeedDirectMessageConversationResult => {
+        throw new Error(`Bridge fallback returned no result: ${message}`);
+      })()) as SeedDirectMessageConversationResult;
+  }
 }

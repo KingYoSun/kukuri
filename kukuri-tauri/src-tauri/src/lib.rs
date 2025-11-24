@@ -99,6 +99,7 @@ pub fn run() {
             presentation::commands::list_direct_messages,
             presentation::commands::list_direct_message_conversations,
             presentation::commands::mark_direct_message_conversation_read,
+            presentation::commands::seed_direct_message_for_e2e,
             presentation::commands::upload_profile_avatar,
             presentation::commands::fetch_profile_avatar,
             presentation::commands::profile_avatar_sync,

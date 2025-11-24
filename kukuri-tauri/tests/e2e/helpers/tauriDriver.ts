@@ -4,6 +4,7 @@ import { access } from 'node:fs/promises';
 import { constants as fsConstants, existsSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
+import { createConnection } from 'node:net';
 
 let driverProcess: ChildProcess | null = null;
 let proxyServer: ReturnType<typeof createServer> | null = null;
@@ -78,6 +79,16 @@ export async function startDriver(): Promise<void> {
   const isLinux = platform() === 'linux';
   const proxyListenPort = Number(DEFAULT_PORT);
   const driverPort = isLinux ? proxyListenPort + 1 : proxyListenPort;
+
+  if (
+    (await isPortInUse(proxyListenPort)) ||
+    (isLinux && (await isPortInUse(driverPort)))
+  ) {
+    console.warn(
+      `tauri-driver ports already in use (proxy=${proxyListenPort}, driver=${driverPort}); assuming existing driver`
+    );
+    return;
+  }
 
   if (isLinux) {
     startCapabilityProxy(proxyListenPort, driverPort);
@@ -179,6 +190,17 @@ function startCapabilityProxy(listenPort: number, targetPort: number): void {
   });
 
   proxyServer.listen(listenPort, '127.0.0.1');
+}
+
+async function isPortInUse(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const socket = createConnection({ host: '127.0.0.1', port });
+    socket.once('connect', () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+  });
 }
 
 function pruneCapabilityPayload(payload: unknown): void {

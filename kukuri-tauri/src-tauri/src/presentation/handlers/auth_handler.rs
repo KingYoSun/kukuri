@@ -18,15 +18,12 @@ impl AuthHandler {
     }
 
     pub async fn create_account(&self) -> Result<CreateAccountResponse, AppError> {
-        let user = self.auth_service.create_account().await?;
-
-        // nsecの生成（実際の実装では秘密鍵から生成）
-        let nsec = format!("nsec1{}", &user.pubkey[..32]); // 仮実装
+        let (user, keypair) = self.auth_service.create_account_with_keys().await?;
 
         Ok(CreateAccountResponse {
-            npub: user.npub,
-            nsec,
-            pubkey: user.pubkey,
+            npub: user.npub.clone(),
+            nsec: keypair.nsec.clone(),
+            pubkey: user.pubkey.clone(),
         })
     }
 
@@ -46,7 +43,6 @@ impl AuthHandler {
     }
 
     pub async fn logout(&self, npub: String) -> Result<(), AppError> {
-        // npubは使用しない（現在のユーザーをログアウト）
         let _ = npub;
         self.auth_service.logout().await?;
         Ok(())

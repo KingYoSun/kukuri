@@ -12,6 +12,11 @@ const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
 
 process.env.VITE_ENABLE_E2E ??= 'true';
 process.env.TAURI_ENV_DEBUG ??= 'true';
+process.env.WDIO_WORKERS ??= '1';
+process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
+
+const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
+console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
 
 function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
@@ -65,8 +70,9 @@ function pruneUnsupportedCapabilities(target: unknown): void {
 
 export const config: Options.Testrunner = {
   runner: 'local',
+  workers: WORKER_COUNT,
   specs: [join(__dirname, 'specs/**/*.spec.ts')],
-  maxInstances: 1,
+  maxInstances: WORKER_COUNT,
   logLevel: 'info',
   waitforTimeout: 15000,
   connectionRetryTimeout: 120000,
@@ -97,6 +103,7 @@ export const config: Options.Testrunner = {
   port: 4445,
   capabilities: [
     {
+      maxInstances: WORKER_COUNT,
       browserName: 'wry',
       'wdio:enforceWebDriverClassic': true,
       'tauri:options': {

@@ -115,37 +115,41 @@ describe('オンボーディングとキー管理', () => {
         options = await queryOptions();
       }
       if (!options.length) {
-        console.info('Account menu has no switch options, falling back to bridge switch', {
-          targetNpub,
-        });
         await callBridge('switchAccount', targetNpub);
         return true;
       }
       const optionSummaries: string[] = [];
       const targetPrefix = targetNpub.slice(0, 12);
       for (const option of options) {
-        const optionNpub = await option.getAttribute('data-account-npub');
-        const optionDisplayName = await option.getAttribute('data-account-display-name');
-        const label = await option.getAttribute('aria-label');
-        const text = await option.getText();
-        const haystackParts = [optionNpub, optionDisplayName, label, text].filter(
-          (value): value is string => Boolean(value),
-        );
-        const haystack = haystackParts.join(' ');
-        optionSummaries.push(haystack || '[empty]');
-        if (optionNpub?.includes(targetNpub) || optionNpub?.includes(targetPrefix)) {
-          await option.scrollIntoView();
-          await option.click();
-          return true;
-        }
-        // npub strings may be visually truncated, so allow prefix match as a fallback
-        if (haystack.includes(targetNpub) || haystack.includes(targetPrefix)) {
-          await option.scrollIntoView();
-          await option.click();
-          return true;
+        try {
+          if (!(await option.isExisting())) {
+            continue;
+          }
+          const optionNpub = (await option.getAttribute('data-account-npub').catch(() => null)) ?? '';
+          const optionDisplayName =
+            (await option.getAttribute('data-account-display-name').catch(() => null)) ?? '';
+          const label = (await option.getAttribute('aria-label').catch(() => null)) ?? '';
+          const text = (await option.getText().catch(() => null)) ?? '';
+          const haystackParts = [optionNpub, optionDisplayName, label, text].filter(Boolean);
+          const haystack = haystackParts.join(' ');
+          optionSummaries.push(haystack || '[empty]');
+          const matches =
+            optionNpub.includes(targetNpub) ||
+            optionNpub.includes(targetPrefix) ||
+            haystack.includes(targetNpub) ||
+            haystack.includes(targetPrefix);
+          if (matches) {
+            await option.scrollIntoView();
+            await option.click();
+            return true;
+          }
+        } catch (error) {
+          console.info('Account switch option interaction failed', {
+            targetNpub,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
-      // If no match was found, dump the available options to help debugging
       const snapshot = await callBridge('getAuthSnapshot');
       console.info('Account switch options', {
         targetNpub,
@@ -153,11 +157,6 @@ describe('オンボーディングとキー管理', () => {
         accounts: snapshot.accounts,
         fallbackAccounts: snapshot.fallbackAccounts,
       });
-      if (options.length > 0) {
-        await options[0]!.scrollIntoView();
-        await options[0]!.click();
-        return true;
-      }
       await callBridge('switchAccount', targetNpub);
       return true;
     };
