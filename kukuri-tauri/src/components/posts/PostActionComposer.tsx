@@ -19,6 +19,8 @@ interface PostActionComposerProps {
   onCancel?: () => void;
   hintText?: string;
   children?: ReactNode;
+  dataTestId?: string;
+  submitDataTestId?: string;
 }
 
 export const PostActionComposer = ({
@@ -35,6 +37,8 @@ export const PostActionComposer = ({
   onCancel,
   hintText = 'Ctrl+Enter または ⌘+Enter で送信',
   children,
+  dataTestId,
+  submitDataTestId,
 }: PostActionComposerProps) => {
   return (
     <form onSubmit={onSubmit} className="space-y-3">
@@ -52,6 +56,7 @@ export const PostActionComposer = ({
             className="min-h-[80px] resize-none"
             autoFocus={autoFocus}
             disabled={isPending}
+            data-testid={dataTestId}
           />
           {children}
           <div className="flex items-center justify-between">
@@ -69,7 +74,12 @@ export const PostActionComposer = ({
                   キャンセル
                 </Button>
               )}
-              <Button type="submit" size="sm" disabled={!content.trim() || isPending}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!content.trim() || isPending}
+                data-testid={submitDataTestId}
+              >
                 {isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

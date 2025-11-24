@@ -5,6 +5,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import * as nostrApi from '@/lib/api/nostr';
 import { errorHandler } from '@/lib/errorHandler';
 
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 vi.mock('@/lib/api/tauri');
 vi.mock('@/lib/api/nostr');
 vi.mock('@/lib/errorHandler');
@@ -71,9 +72,10 @@ describe('useTopicStore', () => {
       useTopicStore.getState().setTopics([mockTopic1, mockTopic2]);
 
       const state = useTopicStore.getState();
-      expect(state.topics.size).toBe(2);
+      expect(state.topics.size).toBe(3);
       expect(state.topics.get('topic1')).toEqual(mockTopic1);
       expect(state.topics.get('topic2')).toEqual(mockTopic2);
+      expect(state.topics.has(DEFAULT_PUBLIC_TOPIC_ID)).toBe(true);
     });
 
     it('addTopicメソッドが正しく動作すること', () => {

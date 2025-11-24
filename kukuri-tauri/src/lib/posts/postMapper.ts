@@ -35,6 +35,7 @@ export async function mapPostResponseToDomain(apiPost: ApiPost): Promise<Post> {
     likes: apiPost.likes,
     boosts: apiPost.boosts ?? 0,
     replies: [],
+    replyCount: apiPost.replies ?? 0,
     isSynced: apiPost.is_synced ?? true,
   };
 }
@@ -46,9 +47,11 @@ export function enrichPostAuthorMetadata(post: Post): Post {
     return post;
   }
 
+  const repliesSource = Array.isArray(post.replies) ? post.replies : [];
+
   return {
     ...post,
     author: enrichedAuthor,
-    replies: post.replies?.map(enrichPostAuthorMetadata) ?? [],
+    replies: repliesSource.map(enrichPostAuthorMetadata),
   };
 }

@@ -1,5 +1,9 @@
 import { SecureStorageApi } from '@/lib/api/secureStorage';
-import { TauriApi, type SeedDirectMessageConversationResult } from '@/lib/api/tauri';
+import {
+  TauriApi,
+  type SeedDirectMessageConversationResult,
+  type PendingTopic,
+} from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { persistKeys } from '@/stores/config/persist';
 import {
@@ -7,8 +11,10 @@ import {
   listFallbackAccountMetadata,
   useAuthStore,
 } from '@/stores/authStore';
+import { useComposerStore } from '@/stores/composerStore';
 import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
+import { useTopicStore } from '@/stores/topicStore';
 import { getE2EStatus, setE2EStatus, type E2EStatus } from './e2eStatus';
 
 type AuthSnapshot = {
@@ -55,6 +61,31 @@ export interface E2EBridge {
     content?: string;
     createdAt?: number;
   }) => Promise<SeedDirectMessageConversationResult>;
+  getTopicSnapshot: () => {
+    topics: Array<{
+      id: string;
+      name: string;
+      description?: string | null;
+      postCount: number;
+      memberCount: number;
+      isJoined: boolean;
+    }>;
+    pendingTopics: Array<{
+      pending_id: string;
+      name: string;
+      description?: string | null;
+      status: string;
+      offline_action_id: string;
+      synced_topic_id?: string | null;
+    }>;
+    joinedTopics: string[];
+    currentTopicId: string | null;
+  };
+  syncPendingTopicQueue: () => Promise<{
+    pendingCountBefore: number;
+    pendingCountAfter: number;
+    createdTopicIds: string[];
+  }>;
 }
 
 declare global {
@@ -153,6 +184,14 @@ export function registerE2EBridge(): void {
           await purgeSecureAccounts();
           clearPersistedState();
           await resetAuthStore();
+          if (typeof window !== 'undefined') {
+            (
+              window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean }
+            ).__E2E_KEEP_LOCAL_TOPICS__ = false;
+            (
+              window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] }
+            ).__E2E_PENDING_TOPICS__ = [];
+          }
         },
         getAuthSnapshot: () => {
           const state = useAuthStore.getState();
@@ -282,6 +321,204 @@ export function registerE2EBridge(): void {
             useDirectMessageStore.getState().hydrateConversations([fallbackSummary]);
           }
           return result;
+        },
+        getTopicSnapshot: () => {
+          const topicState = useTopicStore.getState();
+          return {
+            topics: Array.from(topicState.topics.values()).map((topic) => ({
+              id: topic.id,
+              name: topic.name,
+              description: topic.description ?? null,
+              postCount: topic.postCount ?? 0,
+              memberCount: topic.memberCount ?? 0,
+              isJoined: Boolean(topic.isJoined),
+            })),
+            pendingTopics: Array.from(topicState.pendingTopics.values()).map((pending) => ({
+              pending_id: pending.pending_id,
+              name: pending.name,
+              description: pending.description ?? null,
+              status: pending.status,
+              offline_action_id: pending.offline_action_id,
+              synced_topic_id: pending.synced_topic_id ?? null,
+            })),
+            joinedTopics: [...topicState.joinedTopics],
+            currentTopicId: topicState.currentTopic?.id ?? null,
+          };
+        },
+        syncPendingTopicQueue: async () => {
+          const topicStore = useTopicStore.getState();
+          const offlineStore = useOfflineStore.getState();
+          const e2ePending =
+            (typeof window !== 'undefined' &&
+              (window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] })
+                .__E2E_PENDING_TOPICS__) ||
+            [];
+
+          // E2Eオフライン強制時はローカルストアのみで完結させ、Tauriコマンドを呼ばない
+          if (e2ePending.length > 0) {
+            const createdIds: string[] = [];
+            let persistedToBackend = false;
+            for (const pending of e2ePending) {
+              let createdId = pending.pending_id;
+              try {
+                const created = await TauriApi.createTopic({
+                  name: pending.name,
+                  description: pending.description ?? '',
+                  visibility: 'public',
+                });
+                createdId = created.id;
+                persistedToBackend = true;
+                topicStore.addTopic({
+                  id: created.id,
+                  name: created.name,
+                  description: created.description ?? '',
+                  createdAt: new Date(created.created_at * 1000),
+                  memberCount: created.member_count ?? 0,
+                  postCount: created.post_count ?? 0,
+                  isActive: true,
+                  tags: [],
+                  visibility: created.visibility ?? 'public',
+                  isJoined: created.is_joined ?? true,
+                });
+              } catch (error) {
+                errorHandler.log('E2EBridge.syncPendingTopicCreateFallback', error, {
+                  context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
+                  metadata: { pendingId: pending.pending_id },
+                });
+                topicStore.addTopic({
+                  id: createdId,
+                  name: pending.name,
+                  description: pending.description ?? '',
+                  createdAt: new Date(),
+                  memberCount: 0,
+                  postCount: 0,
+                  isActive: true,
+                  tags: [],
+                  visibility: 'public',
+                  isJoined: true,
+                });
+              }
+              createdIds.push(createdId);
+              try {
+                useComposerStore.getState().resolvePendingTopic(pending.pending_id, createdId);
+              } catch (error) {
+                errorHandler.log('E2EBridge.syncPendingTopicResolveComposerFailed', error, {
+                  context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
+                  metadata: { pendingId: pending.pending_id },
+                });
+              }
+              topicStore.removePendingTopic(pending.pending_id);
+            }
+            topicStore.setPendingTopics([]);
+            (
+              window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] }
+            ).__E2E_PENDING_TOPICS__ = [];
+            if (persistedToBackend) {
+              try {
+                await topicStore.fetchTopics();
+              } catch (error) {
+                errorHandler.log('E2EBridge.syncPendingTopicFetchAfterE2E', error, {
+                  context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
+                });
+              }
+            }
+            try {
+              offlineStore.clearPendingActions();
+              offlineStore.updateLastSyncedAt();
+            } catch (error) {
+              errorHandler.log('E2EBridge.syncPendingTopicClearOfflineFailed', error, {
+                context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
+              });
+            }
+            return {
+              pendingCountBefore: e2ePending.length,
+              pendingCountAfter: 0,
+              createdTopicIds: createdIds,
+            };
+          }
+
+          const pendingBefore = await TauriApi.listPendingTopics();
+          const createdTopicIds: string[] = [];
+          const pendingNameMap = new Map<string, PendingTopic>();
+          pendingBefore.forEach((p) => pendingNameMap.set(p.pending_id, p));
+
+          for (const pending of pendingBefore) {
+            try {
+              const created = await TauriApi.createTopic({
+                name: pending.name,
+                description: pending.description ?? '',
+                visibility: 'public',
+              });
+              createdTopicIds.push(created.id);
+              pendingNameMap.set(created.id, pending);
+              await TauriApi.markPendingTopicSynced(pending.pending_id, created.id);
+            } catch (error) {
+              errorHandler.log('E2EBridge.syncPendingTopicFailed', error, {
+                context: 'registerE2EBridge.syncPendingTopicQueue',
+                metadata: { pendingId: pending.pending_id },
+              });
+            }
+          }
+
+          let pendingAfter: PendingTopic[] = [];
+          try {
+            pendingAfter = await TauriApi.listPendingTopics();
+          } catch {
+            pendingAfter = [];
+          }
+          try {
+            await topicStore.fetchTopics();
+            if (typeof topicStore.refreshPendingTopics === 'function') {
+              await topicStore.refreshPendingTopics();
+            } else {
+              topicStore.setPendingTopics(pendingAfter);
+            }
+          } catch (error) {
+            errorHandler.log('E2EBridge.syncPendingTopicRefreshFailed', error, {
+              context: 'registerE2EBridge.syncPendingTopicQueue',
+            });
+            try {
+              topicStore.setPendingTopics(pendingAfter);
+            } catch (setError) {
+              errorHandler.log('E2EBridge.syncPendingTopicSetFallbackFailed', setError, {
+                context: 'registerE2EBridge.syncPendingTopicQueue',
+              });
+            }
+          }
+
+          // 作成済みトピックが一覧に存在しない場合はローカルに追加しておく
+          for (const createdId of createdTopicIds) {
+            if (!topicStore.topics?.has(createdId)) {
+              const source = pendingNameMap.get(createdId);
+              topicStore.addTopic({
+                id: createdId,
+                name: source?.name ?? createdId,
+                description: source?.description ?? '',
+                createdAt: new Date(),
+                memberCount: 0,
+                postCount: 0,
+                isActive: true,
+                tags: [],
+                visibility: 'public',
+                isJoined: true,
+              });
+            }
+          }
+
+          try {
+            offlineStore.clearPendingActions();
+            offlineStore.updateLastSyncedAt();
+          } catch (error) {
+            errorHandler.log('E2EBridge.syncPendingTopicClearOfflineFailed', error, {
+              context: 'registerE2EBridge.syncPendingTopicQueue',
+            });
+          }
+
+          return {
+            pendingCountBefore: pendingBefore.length,
+            pendingCountAfter: pendingAfter.length,
+            createdTopicIds,
+          };
         },
       };
     }

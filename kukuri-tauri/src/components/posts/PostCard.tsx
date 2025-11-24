@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Post } from '@/stores';
 import { useBookmarkStore, useAuthStore } from '@/stores';
+import { usePostStore } from '@/stores/postStore';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -59,9 +60,29 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const isPostBookmarked = isBookmarked(post.id);
+  const [isBookmarkedLocal, setIsBookmarkedLocal] = useState(isPostBookmarked);
   const { isOnline, pendingActions } = useOfflineStore();
   const canDelete = currentUser?.pubkey === post.author.pubkey;
   const deletePostMutation = useDeletePost();
+  const replyCount =
+    typeof post.replyCount === 'number'
+      ? post.replyCount
+      : Array.isArray(post.replies)
+        ? post.replies.length
+        : typeof post.replies === 'number'
+          ? post.replies
+          : 0;
+  const baseTestId = dataTestId ?? `post-${post.id}`;
+  const [likeCount, setLikeCount] = useState(post.likes ?? 0);
+  const [boostCount, setBoostCount] = useState(post.boosts ?? 0);
+
+  useEffect(() => {
+    setLikeCount(post.likes ?? 0);
+  }, [post.likes]);
+
+  useEffect(() => {
+    setBoostCount(post.boosts ?? 0);
+  }, [post.boosts]);
 
   // この投稿が未同期かどうかを確認
   const isPostPending = pendingActions.some(
@@ -73,23 +94,30 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     fetchBookmarks();
   }, [fetchBookmarks]);
 
+  useEffect(() => {
+    setIsBookmarkedLocal(isPostBookmarked);
+  }, [isPostBookmarked]);
+
   // いいね機能
+  const likePost = usePostStore((state) => state.likePost);
   const likeMutation = useMutation({
     mutationFn: async () => {
-      await TauriApi.likePost(post.id);
-    },
-    onSuccess: () => {
-      // 楽観的UI更新
-      queryClient.invalidateQueries({ queryKey: ['timeline'] });
-      queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
-    },
-    onError: () => {
-      toast.error('いいねに失敗しました');
+      await likePost(post.id);
     },
   });
 
   const handleLike = () => {
-    likeMutation.mutate();
+    if (likeMutation.isPending) {
+      return;
+    }
+    const previousLikes = likeCount ?? 0;
+    setLikeCount(previousLikes + 1);
+    likeMutation.mutate(undefined, {
+      onError: () => {
+        setLikeCount(previousLikes);
+        toast.error('いいねに失敗しました');
+      },
+    });
   };
 
   const handleReply = () => {
@@ -108,20 +136,33 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       await TauriApi.boostPost(post.id);
     },
     onSuccess: () => {
+      const updateBoosts = (posts?: Post[]) =>
+        posts?.map((item) =>
+          item.id === post.id ? { ...item, boosts: (item.boosts ?? 0) + 1, isBoosted: true } : item,
+        ) ?? posts;
+      queryClient.setQueryData<Post[]>(['timeline'], (prev) => updateBoosts(prev));
+      queryClient.setQueryData<Post[]>(['posts', post.topicId], (prev) => updateBoosts(prev));
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
       queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
       toast.success('ブーストしました');
     },
-    onError: () => {
-      toast.error('ブーストに失敗しました');
-    },
   });
 
   const handleBoost = () => {
-    boostMutation.mutate();
+    if (boostMutation.isPending) {
+      return;
+    }
+    const previousBoosts = boostCount ?? 0;
+    setBoostCount(previousBoosts + 1);
+    boostMutation.mutate(undefined, {
+      onError: () => {
+        setBoostCount(previousBoosts);
+        toast.error('ブーストに失敗しました');
+      },
+    });
   };
 
-  // ブックマーク機能
+  // Bookmark
   const bookmarkMutation = useMutation({
     mutationFn: async () => {
       await toggleBookmark(post.id);
@@ -137,7 +178,15 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   });
 
   const handleBookmark = () => {
-    bookmarkMutation.mutate();
+    if (bookmarkMutation.isPending) {
+      return;
+    }
+    setIsBookmarkedLocal((prev) => !prev);
+    bookmarkMutation.mutate(undefined, {
+      onError: () => {
+        setIsBookmarkedLocal(isPostBookmarked);
+      },
+    });
   };
 
   const handleConfirmDelete = () => {
@@ -165,7 +214,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const authorAvatarSrc = resolveUserAvatarSrc(post.author);
 
   return (
-    <Card data-testid={dataTestId}>
+    <Card data-testid={baseTestId}>
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-1 items-start gap-3">
@@ -234,41 +283,52 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
             variant="ghost"
             size="sm"
             onClick={handleReply}
+            data-testid={`${baseTestId}-reply`}
             className={showReplyForm ? 'text-primary' : ''}
           >
             <MessageCircle className="mr-2 h-4 w-4" />
-            {post.replies.length}
+            {replyCount}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBoost}
             disabled={boostMutation.isPending}
-            className={post.isBoosted ? 'text-primary' : ''}
+            data-testid={`${baseTestId}-boost`}
+            className={post.isBoosted || boostCount > (post.boosts ?? 0) ? 'text-primary' : ''}
           >
             <Repeat2 className="mr-2 h-4 w-4" />
-            {post.boosts || 0}
+            {boostCount}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleQuote}
+            data-testid={`${baseTestId}-quote`}
             className={showQuoteForm ? 'text-primary' : ''}
           >
             <Quote className="mr-2 h-4 w-4" />0
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleLike} disabled={likeMutation.isPending}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLike}
+            disabled={likeMutation.isPending}
+            data-testid={`${baseTestId}-like`}
+          >
             <Heart className="mr-2 h-4 w-4" />
-            {post.likes}
+            {likeCount}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBookmark}
             disabled={bookmarkMutation.isPending}
-            className={isPostBookmarked ? 'text-yellow-500' : ''}
+            className={isBookmarkedLocal ? 'text-yellow-500' : ''}
+            data-testid={`${baseTestId}-bookmark`}
+            aria-pressed={isBookmarkedLocal}
           >
-            <Bookmark className={`h-4 w-4 ${isPostBookmarked ? 'fill-current' : ''}`} />
+            <Bookmark className={`h-4 w-4 ${isBookmarkedLocal ? 'fill-current' : ''}`} />
           </Button>
           <ReactionPicker postId={post.id} topicId={post.topicId} />
           <Button variant="ghost" size="sm" aria-label="share" disabled>

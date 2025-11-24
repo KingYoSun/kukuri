@@ -18,7 +18,9 @@ export type BridgeAction =
   | 'setProfileAvatarFixture'
   | 'consumeProfileAvatarFixture'
   | 'switchAccount'
-  | 'seedDirectMessageConversation';
+  | 'seedDirectMessageConversation'
+  | 'getTopicSnapshot'
+  | 'syncPendingTopicQueue';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -70,6 +72,33 @@ export interface DirectMessageSnapshot {
   isDialogOpen: boolean;
 }
 
+export interface TopicSnapshot {
+  topics: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    postCount: number;
+    memberCount: number;
+    isJoined: boolean;
+  }>;
+  pendingTopics: Array<{
+    pending_id: string;
+    name: string;
+    description?: string | null;
+    status: string;
+    offline_action_id: string;
+    synced_topic_id?: string | null;
+  }>;
+  joinedTopics: string[];
+  currentTopicId: string | null;
+}
+
+export interface SyncPendingTopicResult {
+  pendingCountBefore: number;
+  pendingCountAfter: number;
+  createdTopicIds: string[];
+}
+
 export interface AvatarFixture {
   base64: string;
   format: string;
@@ -85,6 +114,8 @@ type BridgeResultMap = {
   consumeProfileAvatarFixture: AvatarFixture | null;
   switchAccount: null;
   seedDirectMessageConversation: SeedDirectMessageConversationResult;
+  getTopicSnapshot: TopicSnapshot;
+  syncPendingTopicQueue: SyncPendingTopicResult;
 };
 
 declare global {
@@ -367,4 +398,12 @@ export async function seedDirectMessageConversation(
         throw new Error(`Bridge fallback returned no result: ${message}`);
       })()) as SeedDirectMessageConversationResult;
   }
+}
+
+export async function getTopicSnapshot(): Promise<TopicSnapshot> {
+  return await callBridge('getTopicSnapshot');
+}
+
+export async function syncPendingTopicQueue(): Promise<SyncPendingTopicResult> {
+  return await callBridge('syncPendingTopicQueue');
 }

@@ -4,7 +4,6 @@ import { TopicsPage } from '@/routes/topics';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Topic } from '@/stores';
 
-// useTopicsフックのモック
 const mockTopicsData: Topic[] = [
   {
     id: 'topic-1',
@@ -51,7 +50,6 @@ vi.mock('@/hooks', () => ({
   useTopics: () => mockUseTopics,
 }));
 
-// TopicCardコンポーネントのモック
 vi.mock('@/components/topics/TopicCard', () => ({
   TopicCard: ({ topic }: { topic: Topic }) => (
     <div data-testid={`topic-card-${topic.id}`}>
@@ -70,7 +68,6 @@ describe('Topics Page', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // デフォルトの状態に戻す
     mockUseTopics.data = mockTopicsData;
     mockUseTopics.isLoading = false;
     mockUseTopics.error = null;
@@ -134,7 +131,6 @@ describe('Topics Page', () => {
 
     const searchInput = screen.getByPlaceholderText('トピックを検索...');
 
-    // "Nostr"で検索
     fireEvent.change(searchInput, { target: { value: 'Nostr' } });
 
     await waitFor(() => {
@@ -149,7 +145,6 @@ describe('Topics Page', () => {
 
     const searchInput = screen.getByPlaceholderText('トピックを検索...');
 
-    // "tech"タグで検索
     fireEvent.change(searchInput, { target: { value: 'tech' } });
 
     await waitFor(() => {
@@ -164,7 +159,6 @@ describe('Topics Page', () => {
 
     const searchInput = screen.getByPlaceholderText('トピックを検索...');
 
-    // 説明文の一部で検索
     fireEvent.change(searchInput, { target: { value: 'プロトコル' } });
 
     await waitFor(() => {
@@ -179,7 +173,6 @@ describe('Topics Page', () => {
 
     const searchInput = screen.getByPlaceholderText('トピックを検索...');
 
-    // 存在しない検索ワード
     fireEvent.change(searchInput, { target: { value: '存在しないトピック' } });
 
     await waitFor(() => {
@@ -193,7 +186,7 @@ describe('Topics Page', () => {
     renderTopicsPage();
 
     expect(
-      screen.getByText('トピックがまだありません。最初のトピックを作成してみましょう！'),
+      screen.getByText('トピックがまだありません。最初のトピックを作成してみましょう。'),
     ).toBeInTheDocument();
   });
 
@@ -202,7 +195,6 @@ describe('Topics Page', () => {
 
     const searchInput = screen.getByPlaceholderText('トピックを検索...');
 
-    // 大文字で検索
     fireEvent.change(searchInput, { target: { value: 'NOSTR' } });
 
     await waitFor(() => {

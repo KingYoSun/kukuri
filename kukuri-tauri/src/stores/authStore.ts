@@ -68,6 +68,17 @@ const buildAccountMetadata = (user: User, lastUsed?: string): AccountMetadata =>
   show_online_status: user.showOnlineStatus,
 });
 
+const persistCurrentUserPubkey = (pubkey: string | null) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  if (pubkey) {
+    window.localStorage?.setItem('currentUserPubkey', pubkey);
+  } else {
+    window.localStorage?.removeItem('currentUserPubkey');
+  }
+};
+
 const toUserOverride = (metadata?: AccountMetadata): Partial<User> | undefined => {
   if (!metadata) {
     return undefined;
@@ -228,6 +239,7 @@ export const useAuthStore = create<AuthStore>()(
           currentUser: user,
           privateKey,
         });
+        persistCurrentUserPubkey(user.pubkey);
         updateAuthDebug();
         hydratePrivacyFromUser(user);
         try {
@@ -289,6 +301,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: mergedUser,
             privateKey: nsec,
           });
+          persistCurrentUserPubkey(mergedUser.pubkey);
           updateAuthDebug();
           hydratePrivacyFromUser(mergedUser);
           errorHandler.info('Auth state set after loginWithNsec', 'AuthStore.loginWithNsec', {
@@ -384,6 +397,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: user,
             privateKey: response.nsec,
           });
+          persistCurrentUserPubkey(user.pubkey);
           updateAuthDebug();
           hydratePrivacyFromUser(user);
           errorHandler.info(
@@ -460,6 +474,7 @@ export const useAuthStore = create<AuthStore>()(
           lastRelayStatusFetchedAt: null,
           isFetchingRelayStatus: false,
         });
+        persistCurrentUserPubkey(null);
         updateAuthDebug();
       },
 
@@ -580,6 +595,7 @@ export const useAuthStore = create<AuthStore>()(
               currentUser: user,
               privateKey: currentAccount.nsec,
             });
+            persistCurrentUserPubkey(user.pubkey);
             updateAuthDebug();
 
             // Nostrクライアントを初期化
@@ -603,6 +619,7 @@ export const useAuthStore = create<AuthStore>()(
               lastRelayStatusFetchedAt: null,
               isFetchingRelayStatus: false,
             });
+            persistCurrentUserPubkey(null);
             updateAuthDebug();
           }
 
@@ -670,6 +687,7 @@ export const useAuthStore = create<AuthStore>()(
               currentUser: fallbackUser,
               privateKey: fallbackNsec,
             });
+            persistCurrentUserPubkey(fallbackUser.pubkey);
             updateAuthDebug();
             hydratePrivacyFromUser(fallbackUser);
             try {
@@ -731,6 +749,7 @@ export const useAuthStore = create<AuthStore>()(
             currentUser: mergedUser,
             privateKey: null,
           });
+          persistCurrentUserPubkey(mergedUser.pubkey);
           updateAuthDebug();
 
           await initializeNostr();

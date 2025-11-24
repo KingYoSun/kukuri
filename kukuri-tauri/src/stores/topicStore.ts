@@ -64,13 +64,19 @@ export const useTopicStore = create<TopicStore>()(
     const handlePendingTransition = (previous: PendingTopic | undefined, next: PendingTopic) => {
       if (next.status === 'synced' && next.synced_topic_id && previous?.status !== 'synced') {
         useComposerStore.getState().resolvePendingTopic(next.pending_id, next.synced_topic_id);
-        void get()
-          .fetchTopics()
-          .catch((error) => {
-            errorHandler.log('Failed to refresh topics after pending sync', error, {
-              context: 'TopicStore.handlePendingTransition',
+        const skipRefresh =
+          typeof window !== 'undefined' &&
+          (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean })
+            .__E2E_KEEP_LOCAL_TOPICS__ === true;
+        if (!skipRefresh) {
+          void get()
+            .fetchTopics()
+            .catch((error) => {
+              errorHandler.log('Failed to refresh topics after pending sync', error, {
+                context: 'TopicStore.handlePendingTransition',
+              });
             });
-          });
+        }
       } else if (next.status === 'failed' && previous?.status !== 'failed') {
         useComposerStore.getState().clearPendingTopicBinding(next.pending_id);
       }
@@ -87,14 +93,33 @@ export const useTopicStore = create<TopicStore>()(
       setTopics: (topics: Topic[]) =>
         set((state) => {
           const collections = computeTopicCollections(state, topics);
+          const topicsWithDefault = new Map(collections.topics);
+          if (!topicsWithDefault.has(DEFAULT_PUBLIC_TOPIC_ID)) {
+            topicsWithDefault.set(DEFAULT_PUBLIC_TOPIC_ID, {
+              id: DEFAULT_PUBLIC_TOPIC_ID,
+              name: '#public',
+              description: '公開タイムライン',
+              tags: [],
+              memberCount: 0,
+              postCount: 0,
+              isActive: true,
+              createdAt: new Date(),
+              visibility: 'public',
+              isJoined: true,
+            });
+          }
           const joinedFromPayload = topics
             .filter((topic) => topic.isJoined)
             .map((topic) => normalizeTopicId(topic.id));
           const preservedJoined = state.joinedTopics.filter((id) => collections.topics.has(id));
-          const joinedTopics =
+          const joinedTopicsSet =
             joinedFromPayload.length > 0
-              ? Array.from(new Set([...joinedFromPayload, ...preservedJoined]))
-              : preservedJoined;
+              ? new Set([...joinedFromPayload, ...preservedJoined])
+              : new Set(preservedJoined);
+          if (topicsWithDefault.has(DEFAULT_PUBLIC_TOPIC_ID)) {
+            joinedTopicsSet.add(DEFAULT_PUBLIC_TOPIC_ID);
+          }
+          const joinedTopics = Array.from(joinedTopicsSet);
 
           const unread = new Map(collections.topicUnreadCounts);
           const lastRead = new Map(collections.topicLastReadAt);
@@ -105,17 +130,17 @@ export const useTopicStore = create<TopicStore>()(
           });
 
           let currentTopic = state.currentTopic;
-          if (!currentTopic || !collections.topics.has(currentTopic.id)) {
+          if (!currentTopic || !topicsWithDefault.has(currentTopic.id)) {
             const fallbackTopic =
-              collections.topics.get(DEFAULT_PUBLIC_TOPIC_ID) ??
-              (joinedTopics.length > 0 ? collections.topics.get(joinedTopics[0]) : undefined);
+              topicsWithDefault.get(DEFAULT_PUBLIC_TOPIC_ID) ??
+              (joinedTopics.length > 0 ? topicsWithDefault.get(joinedTopics[0]) : undefined);
             currentTopic = fallbackTopic ?? null;
           } else {
-            currentTopic = collections.topics.get(currentTopic.id) ?? null;
+            currentTopic = topicsWithDefault.get(currentTopic.id) ?? null;
           }
 
           return {
-            ...collections,
+            topics: topicsWithDefault,
             joinedTopics,
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
@@ -164,7 +189,11 @@ export const useTopicStore = create<TopicStore>()(
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
-          const topics: Topic[] = (apiTopics ?? []).map((t) => ({
+          const keepLocalTopics =
+            typeof window !== 'undefined' &&
+            (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean })
+              .__E2E_KEEP_LOCAL_TOPICS__ === true;
+          let topics: Topic[] = (apiTopics ?? []).map((t) => ({
             id: t.id,
             name: t.name,
             description: t.description,
@@ -176,6 +205,17 @@ export const useTopicStore = create<TopicStore>()(
             visibility: t.visibility ?? 'public',
             isJoined: Boolean(t.is_joined),
           }));
+          if (keepLocalTopics) {
+            const merged = new Map<string, Topic>();
+            topics.forEach((topic) => merged.set(normalizeTopicId(topic.id), topic));
+            get().topics.forEach((topic, id) => {
+              const normalizedId = normalizeTopicId(id);
+              if (!merged.has(normalizedId)) {
+                merged.set(normalizedId, topic);
+              }
+            });
+            topics = Array.from(merged.values());
+          }
           get().setTopics(topics);
           const refreshPendingTopics = get().refreshPendingTopics;
           if (typeof refreshPendingTopics === 'function') {

@@ -481,19 +481,19 @@ export class TauriApi {
   }
 
   static async likePost(postId: string): Promise<void> {
-    await invokeCommandVoid('like_post', { postId });
+    await invokeCommandVoid('like_post', { post_id: postId });
   }
 
   static async boostPost(postId: string): Promise<void> {
-    await invokeCommandVoid('boost_post', { postId });
+    await invokeCommandVoid('boost_post', { post_id: postId });
   }
 
   static async bookmarkPost(postId: string): Promise<void> {
-    await invokeCommandVoid('bookmark_post', { postId });
+    await invokeCommandVoid('bookmark_post', { request: { post_id: postId } });
   }
 
   static async unbookmarkPost(postId: string): Promise<void> {
-    await invokeCommandVoid('unbookmark_post', { postId });
+    await invokeCommandVoid('unbookmark_post', { request: { post_id: postId } });
   }
 
   static async getBookmarkedPostIds(): Promise<string[]> {

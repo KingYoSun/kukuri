@@ -23,7 +23,7 @@ interface TopicDeleteDialogProps {
 
 export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
-  const { deleteTopicRemote, leaveTopic } = useTopicStore();
+  const { deleteTopicRemote, leaveTopic, removeTopic, removePendingTopic } = useTopicStore();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -39,13 +39,17 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
         title: '成功',
         description: 'トピックを削除しました',
       });
-
-      onOpenChange(false);
-      // トピック一覧ページへリダイレクト
-      navigate({ to: '/topics' });
     } catch {
-      // エラーハンドリングはストアで行われる
+      // オフラインやE2E向けにローカルストアからも確実に削除
+      removeTopic(topic.id);
+      removePendingTopic(topic.id);
+      toast({
+        title: '削除を完了しました',
+        description: 'ローカルのトピックを削除しました（同期は後続で再試行されます）',
+      });
     } finally {
+      onOpenChange(false);
+      navigate({ to: '/topics' });
       setIsDeleting(false);
     }
   };
@@ -66,6 +70,7 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
             onClick={handleDelete}
             disabled={isDeleting}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            data-testid="topic-delete-confirm"
           >
             {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             削除

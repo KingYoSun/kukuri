@@ -17,12 +17,10 @@ interface TopicCardProps {
 export function TopicCard({ topic }: TopicCardProps) {
   const { joinedTopics, joinTopic, leaveTopic, setCurrentTopic } = useTopicStore();
   const navigate = useNavigate();
-  // joinedTopicsが変更されたときのみ再計算
   const isJoined = useMemo(() => joinedTopics.includes(topic.id), [joinedTopics, topic.id]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // 最終アクティブ時刻の表示
   const lastActiveText = topic.lastActive
     ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
         addSuffix: true,
@@ -32,21 +30,19 @@ export function TopicCard({ topic }: TopicCardProps) {
 
   const handleTopicClick = () => {
     setCurrentTopic(topic);
-    navigate({ to: '/' }); // ホーム（タイムライン）に遷移
+    navigate({ to: '/topics/$topicId', params: { topicId: topic.id } }); // Navigate to topic detail
   };
 
   const handleJoinToggle = async () => {
     setIsLoading(true);
     try {
       if (isJoined) {
-        // トピックから離脱
         await leaveTopic(topic.id);
         toast({
           title: 'トピックから離脱しました',
           description: `「${topic.name}」から離脱しました`,
         });
       } else {
-        // トピックに参加
         await joinTopic(topic.id);
         toast({
           title: 'トピックに参加しました',

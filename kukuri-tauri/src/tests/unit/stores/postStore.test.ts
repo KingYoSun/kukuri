@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+﻿import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const { mockCreatePost, mockGetPosts, invalidatePostCachesMock } = vi.hoisted(() => ({
   mockCreatePost: vi.fn(),
@@ -19,6 +19,10 @@ vi.mock('@/lib/posts/cacheUtils', () => ({
   invalidatePostCaches: (...args: unknown[]) => invalidatePostCachesMock(...args),
 }));
 
+vi.mock('uuid', () => ({
+  v4: () => 'temp-id',
+}));
+
 import { usePostStore } from '@/stores/postStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -30,8 +34,8 @@ describe('postStore', () => {
     id: 'user1',
     pubkey: 'pubkey123',
     npub: 'npub123',
-    name: 'ユーザー1',
-    displayName: 'ユーザー1',
+    name: '繝ｦ繝ｼ繧ｶ繝ｼ1',
+    displayName: '繝ｦ繝ｼ繧ｶ繝ｼ1',
     picture: '',
     about: '',
     nip05: '',
@@ -42,8 +46,8 @@ describe('postStore', () => {
     id: 'user2',
     pubkey: 'pubkey456',
     npub: 'npub456',
-    name: 'ユーザー2',
-    displayName: 'ユーザー2',
+    name: '繝ｦ繝ｼ繧ｶ繝ｼ2',
+    displayName: '繝ｦ繝ｼ繧ｶ繝ｼ2',
     picture: '',
     about: '',
     nip05: '',
@@ -54,8 +58,8 @@ describe('postStore', () => {
     id: 'user3',
     pubkey: 'pubkey789',
     npub: 'npub789',
-    name: 'ユーザー3',
-    displayName: 'ユーザー3',
+    name: '繝ｦ繝ｼ繧ｶ繝ｼ3',
+    displayName: '繝ｦ繝ｼ繧ｶ繝ｼ3',
     picture: '',
     about: '',
     nip05: '',
@@ -64,35 +68,38 @@ describe('postStore', () => {
 
   const mockPost1: Post = {
     id: 'post1',
-    content: 'テスト投稿1',
+    content: '繝・せ繝域兜遞ｿ1',
     author: mockUser1,
     topicId: 'topic1',
     created_at: Date.now(),
     tags: [],
     likes: 0,
     replies: [],
+    replyCount: 0,
   };
 
   const mockPost2: Post = {
     id: 'post2',
-    content: 'テスト投稿2',
+    content: '繝・せ繝域兜遞ｿ2',
     author: mockUser2,
     topicId: 'topic1',
     created_at: Date.now() - 1000,
     tags: [],
     likes: 5,
     replies: [],
+    replyCount: 0,
   };
 
   const mockPost3: Post = {
     id: 'post3',
-    content: 'テスト投稿3',
+    content: '繝・せ繝域兜遞ｿ3',
     author: mockUser3,
     topicId: 'topic2',
     created_at: Date.now() - 2000,
     tags: [],
     likes: 10,
     replies: [],
+    replyCount: 0,
   };
 
   beforeEach(async () => {
@@ -124,13 +131,13 @@ describe('postStore', () => {
     });
   });
 
-  it('初期状態が正しく設定されていること', () => {
+  it('蛻晄悄迥ｶ諷九′豁｣縺励￥險ｭ螳壹＆繧後※縺・ｋ縺薙→', () => {
     const state = usePostStore.getState();
     expect(state.posts.size).toBe(0);
     expect(state.postsByTopic.size).toBe(0);
   });
 
-  it('setPostsメソッドが正しく動作すること', () => {
+  it('setPosts繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     usePostStore.getState().setPosts([mockPost1, mockPost2, mockPost3]);
 
     const state = usePostStore.getState();
@@ -139,7 +146,7 @@ describe('postStore', () => {
     expect(state.postsByTopic.get('topic2')).toEqual(['post3']);
   });
 
-  it('addPostメソッドが正しく動作すること', () => {
+  it('addPost繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     usePostStore.getState().addPost(mockPost1);
 
     const state = usePostStore.getState();
@@ -148,18 +155,18 @@ describe('postStore', () => {
     expect(state.postsByTopic.get('topic1')).toEqual(['post1']);
   });
 
-  it('updatePostメソッドが正しく動作すること', () => {
+  it('updatePost繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     usePostStore.setState({
       posts: new Map([['post1', mockPost1]]),
     });
 
-    usePostStore.getState().updatePost('post1', { content: '更新された内容' });
+    usePostStore.getState().updatePost('post1', { content: '譖ｴ譁ｰ縺輔ｌ縺溷・螳ｹ' });
 
     const state = usePostStore.getState();
-    expect(state.posts.get('post1')?.content).toBe('更新された内容');
+    expect(state.posts.get('post1')?.content).toBe('譖ｴ譁ｰ縺輔ｌ縺溷・螳ｹ');
   });
 
-  it('removePostメソッドが正しく動作すること', () => {
+  it('removePost繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     usePostStore.setState({
       posts: new Map([
         ['post1', mockPost1],
@@ -176,13 +183,13 @@ describe('postStore', () => {
     expect(state.postsByTopic.get('topic1')).toEqual(['post2']);
   });
 
-  it('addReplyメソッドが正しく動作すること', () => {
+  it('addReply繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     const mockReplyUser = {
       id: 'user999',
       pubkey: 'pubkey999',
       npub: 'npub999',
-      name: 'リプライユーザー',
-      displayName: 'リプライユーザー',
+      name: '繝ｪ繝励Λ繧､繝ｦ繝ｼ繧ｶ繝ｼ',
+      displayName: '繝ｪ繝励Λ繧､繝ｦ繝ｼ繧ｶ繝ｼ',
       picture: '',
       about: '',
       nip05: '',
@@ -190,7 +197,7 @@ describe('postStore', () => {
 
     const reply: Post = {
       id: 'reply1',
-      content: '返信テスト',
+      content: 'reply content',
       author: mockReplyUser,
       topicId: 'topic1',
       created_at: Date.now(),
@@ -211,7 +218,7 @@ describe('postStore', () => {
     expect(parentPost?.replies?.[0]).toEqual(reply);
   });
 
-  it('getPostsByTopicメソッドが正しく動作すること', () => {
+  it('getPostsByTopic繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     usePostStore.setState({
       posts: new Map([
         ['post1', mockPost1],
@@ -226,8 +233,7 @@ describe('postStore', () => {
 
     const topic1Posts = usePostStore.getState().getPostsByTopic('topic1');
     expect(topic1Posts).toHaveLength(2);
-    expect(topic1Posts[0].id).toBe('post1'); // 新しい順
-    expect(topic1Posts[1].id).toBe('post2');
+    expect(topic1Posts[0].id).toBe('post1'); // 譁ｰ縺励＞鬆・    expect(topic1Posts[1].id).toBe('post2');
 
     const topic2Posts = usePostStore.getState().getPostsByTopic('topic2');
     expect(topic2Posts).toHaveLength(1);
@@ -237,10 +243,10 @@ describe('postStore', () => {
     expect(emptyPosts).toHaveLength(0);
   });
 
-  it('オンライン時はcreatePostがTauri API経由で投稿すること', async () => {
+  it('繧ｪ繝ｳ繝ｩ繧､繝ｳ譎ゅ・createPost縺卦auri API邨檎罰縺ｧ謚慕ｨｿ縺吶ｋ縺薙→', async () => {
     const apiResponse = {
       id: 'real-post',
-      content: 'こんにちは',
+      content: '縺薙ｓ縺ｫ縺｡縺ｯ',
       author_pubkey: 'pubkey123',
       author_npub: 'npub1pubkey123',
       topic_id: 'topic1',
@@ -252,26 +258,55 @@ describe('postStore', () => {
     };
     mockCreatePost.mockResolvedValueOnce(apiResponse);
 
-    const result = await usePostStore.getState().createPost('こんにちは', 'topic1');
+    const result = await usePostStore.getState().createPost('縺薙ｓ縺ｫ縺｡縺ｯ', 'topic1');
 
     expect(mockCreatePost).toHaveBeenCalledTimes(1);
     expect(mockCreatePost).toHaveBeenCalledWith({
-      content: 'こんにちは',
+      content: '縺薙ｓ縺ｫ縺｡縺ｯ',
       topic_id: 'topic1',
       reply_to: undefined,
       quoted_post: undefined,
     });
 
     const state = usePostStore.getState();
-    expect(state.posts.get('real-post')?.content).toBe('こんにちは');
+    expect(state.posts.get('real-post')?.content).toBe('縺薙ｓ縺ｫ縺｡縺ｯ');
     expect(state.postsByTopic.get('topic1')).toEqual(['real-post']);
     expect(result.id).toBe('real-post');
   });
 
-  it('replyToを指定するとreply_toパラメータを付与すること', async () => {
+  it('createPostがAPI失敗時にオフラインキューへ保存されること', async () => {
+    mockCreatePost.mockRejectedValueOnce(new Error('network error'));
+    const saveOfflineActionSpy = vi
+      .spyOn(useOfflineStore.getState(), 'saveOfflineAction')
+      .mockResolvedValue(undefined);
+
+    const result = await usePostStore.getState().createPost('fallback body', 'topic1');
+    const expectedTempId = 'temp-temp-id';
+
+    expect(saveOfflineActionSpy).toHaveBeenCalledWith({
+      userPubkey: mockUser1.pubkey,
+      actionType: OfflineActionType.CREATE_POST,
+      entityType: EntityType.POST,
+      entityId: expectedTempId,
+      data: JSON.stringify({
+        content: 'fallback body',
+        topicId: 'topic1',
+        replyTo: undefined,
+        quotedPost: undefined,
+      }),
+    });
+    const state = usePostStore.getState();
+    expect(state.posts.has(expectedTempId)).toBe(true);
+    expect(state.postsByTopic.get('topic1')).toEqual([expectedTempId]);
+    expect(result.isSynced).toBe(false);
+
+    saveOfflineActionSpy.mockRestore();
+  });
+
+  it('replyTo繧呈欠螳壹☆繧九→reply_to繝代Λ繝｡繝ｼ繧ｿ繧剃ｻ倅ｸ弱☆繧九％縺ｨ', async () => {
     const apiResponse = {
       id: 'reply-post',
-      content: '返信本文',
+      content: 'reply body',
       author_pubkey: 'pubkey123',
       author_npub: 'npub1pubkey123',
       topic_id: 'topic1',
@@ -283,21 +318,21 @@ describe('postStore', () => {
     };
     mockCreatePost.mockResolvedValueOnce(apiResponse);
 
-    await usePostStore.getState().createPost('返信本文', 'topic1', { replyTo: 'event123' });
+    await usePostStore.getState().createPost('reply body', 'topic1', { replyTo: 'event123' });
 
     expect(mockCreatePost).toHaveBeenCalledTimes(1);
     expect(mockCreatePost).toHaveBeenLastCalledWith({
-      content: '返信本文',
+      content: 'reply body',
       topic_id: 'topic1',
       reply_to: 'event123',
       quoted_post: undefined,
     });
   });
 
-  it('quotedPostを指定するとquoted_postパラメータを付与すること', async () => {
+  it('quotedPost繧呈欠螳壹☆繧九→quoted_post繝代Λ繝｡繝ｼ繧ｿ繧剃ｻ倅ｸ弱☆繧九％縺ｨ', async () => {
     const apiResponse = {
       id: 'quote-post',
-      content: '引用本文',
+      content: 'quote body',
       author_pubkey: 'pubkey123',
       author_npub: 'npub1pubkey123',
       topic_id: 'topic1',
@@ -309,23 +344,23 @@ describe('postStore', () => {
     };
     mockCreatePost.mockResolvedValueOnce(apiResponse);
 
-    await usePostStore.getState().createPost('引用本文', 'topic1', { quotedPost: 'note1' });
+    await usePostStore.getState().createPost('quote body', 'topic1', { quotedPost: 'note1' });
 
     expect(mockCreatePost).toHaveBeenCalledTimes(1);
     expect(mockCreatePost).toHaveBeenLastCalledWith({
-      content: '引用本文',
+      content: 'quote body',
       topic_id: 'topic1',
       reply_to: undefined,
       quoted_post: 'note1',
     });
   });
 
-  it('fetchPostsがAPIレスポンスをストアに反映すること', async () => {
+  it('fetchPosts縺窟PI繝ｬ繧ｹ繝昴Φ繧ｹ繧偵せ繝医い縺ｫ蜿肴丐縺吶ｋ縺薙→', async () => {
     const now = Math.floor(Date.now() / 1000);
     mockGetPosts.mockResolvedValueOnce([
       {
         id: 'api-post-1',
-        content: 'P2Pからの投稿',
+        content: 'P2P縺九ｉ縺ｮ謚慕ｨｿ',
         author_pubkey: 'pubkey999',
         author_npub: 'npub1pubkey999',
         topic_id: 'topic1',
@@ -347,10 +382,10 @@ describe('postStore', () => {
     const posts = usePostStore.getState().getPostsByTopic('topic1');
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe('api-post-1');
-    expect(posts[0].content).toBe('P2Pからの投稿');
+    expect(posts[0].content).toBe('P2P縺九ｉ縺ｮ謚慕ｨｿ');
   });
 
-  it('オンライン時に投稿を削除できること', async () => {
+  it('繧ｪ繝ｳ繝ｩ繧､繝ｳ譎ゅ↓謚慕ｨｿ繧貞炎髯､縺ｧ縺阪ｋ縺薙→', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
 
@@ -373,7 +408,7 @@ describe('postStore', () => {
     expect(usePostStore.getState().postsByTopic.get('topic1')).toEqual([]);
   });
 
-  it('オフライン時は削除アクションとして保存されること', async () => {
+  it('繧ｪ繝輔Λ繧､繝ｳ譎ゅ・蜑企勁繧｢繧ｯ繧ｷ繝ｧ繝ｳ縺ｨ縺励※菫晏ｭ倥＆繧後ｋ縺薙→', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
 
@@ -417,7 +452,7 @@ describe('postStore', () => {
     useOfflineStore.setState(originalOfflineState, true);
   });
 
-  it('deletePostRemote 繧剃ｽ懈・縺励°繧ｭ繝｣繝・す繝･繧剃ｺ育ｴ・＠縺ｦ繧ｭ繝｣繝・す繝･繧定阪螟ｮ縺悟￣蜉・', async () => {
+  it('deletePostRemote 郢ｧ蜑・ｽｽ諛医・邵ｺ蜉ｱﾂｰ郢ｧ・ｭ郢晢ｽ｣郢昴・縺咏ｹ晢ｽ･郢ｧ蜑・ｽｺ閧ｲ・ｴ繝ｻ・邵ｺ・ｦ郢ｧ・ｭ郢晢ｽ｣郢昴・縺咏ｹ晢ｽ･郢ｧ螳夐亂陞滂ｽｮ邵ｺ謔滂ｿ｣陷峨・', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
 
@@ -438,7 +473,7 @@ describe('postStore', () => {
     );
   });
 
-  it('deletePostRemote 縺ｯ繧ｿ繧､繝・・繧ｭ繝｣繝・す繝･繧定ｭ門ｮ壹＠縺ｾ縺ｧ陦ｨ遉ｺ蜀・峩螟悶↓繧ｭ繝｣繝・す繝･繧定阪螟ｮ縺悟￣蜉・', async () => {
+  it('deletePostRemote 邵ｺ・ｯ郢ｧ・ｿ郢ｧ・､郢昴・繝ｻ郢ｧ・ｭ郢晢ｽ｣郢昴・縺咏ｹ晢ｽ･郢ｧ螳夲ｽｭ髢・ｮ螢ｹ・邵ｺ・ｾ邵ｺ・ｧ髯ｦ・ｨ驕会ｽｺ陷繝ｻ蟲ｩ陞滓じ竊鍋ｹｧ・ｭ郢晢ｽ｣郢昴・縺咏ｹ晢ｽ･郢ｧ螳夐亂陞滂ｽｮ邵ｺ謔滂ｿ｣陷峨・', async () => {
     const { TauriApi } = await import('@/lib/api/tauri');
     vi.mocked(TauriApi.deletePost).mockResolvedValue(undefined);
 

@@ -24,13 +24,42 @@ export const Route = createFileRoute('/topics/$topicId')({
 
 function TopicPage() {
   const { topicId } = Route.useParams();
-  const { topics, joinedTopics } = useTopicStore();
+  const { topics, joinedTopics, currentTopic, pendingTopics } = useTopicStore();
   const { data: posts, isLoading, refetch } = usePostsByTopic(topicId);
   const [showComposer, setShowComposer] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const topic = topics.get(topicId);
+  const pendingTopic = pendingTopics.get(topicId);
+  const topic = topics.get(topicId) ??
+    (currentTopic?.id === topicId ? currentTopic : undefined) ??
+    (pendingTopic
+      ? {
+          id: pendingTopic.pending_id,
+          name: pendingTopic.name,
+          description: pendingTopic.description ?? '',
+          tags: [],
+          memberCount: 0,
+          postCount: 0,
+          lastActive: pendingTopic.updated_at ?? pendingTopic.created_at,
+          isActive: true,
+          createdAt: new Date((pendingTopic.created_at ?? Math.floor(Date.now() / 1000)) * 1000),
+          visibility: 'public',
+          isJoined: true,
+        }
+      : undefined) ?? {
+      id: topicId,
+      name: topicId,
+      description: '',
+      tags: [],
+      memberCount: 0,
+      postCount: 0,
+      lastActive: Math.floor(Date.now() / 1000),
+      isActive: true,
+      createdAt: new Date(),
+      visibility: 'public',
+      isJoined: joinedTopics.includes(topicId),
+    };
   const isJoined = useMemo(() => joinedTopics.includes(topicId), [joinedTopics, topicId]);
 
   if (!topic) {
@@ -74,7 +103,7 @@ function TopicPage() {
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" data-testid="topic-actions-menu">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -87,6 +116,7 @@ function TopicPage() {
                 <DropdownMenuItem
                   onClick={() => setShowDeleteDialog(true)}
                   className="text-destructive"
+                  data-testid="topic-delete-menu"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   削除

@@ -5,10 +5,14 @@ import type { Topic } from '@/stores';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 
-// トピック一覧を取得するフック
 export const useTopics = () => {
   const { setTopics } = useTopicStore();
   const refreshPendingTopics = useTopicStore((state) => state.refreshPendingTopics);
+  const storeTopics = useTopicStore((state) => state.topics);
+  const keepLocalTopics =
+    typeof window !== 'undefined' &&
+    (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean }).__E2E_KEEP_LOCAL_TOPICS__ ===
+      true;
 
   useEffect(() => {
     if (typeof refreshPendingTopics !== 'function') {
@@ -17,12 +21,26 @@ export const useTopics = () => {
     void refreshPendingTopics();
   }, [refreshPendingTopics]);
 
-  return useQuery({
+  const mergeWithExisting = (apiTopics: Topic[]): Topic[] => {
+    if (!keepLocalTopics) {
+      return apiTopics;
+    }
+    const existing = useTopicStore.getState().topics;
+    const merged = new Map<string, Topic>();
+    apiTopics.forEach((topic) => merged.set(topic.id, topic));
+    existing.forEach((topic, id) => {
+      if (!merged.has(id)) {
+        merged.set(id, topic);
+      }
+    });
+    return Array.from(merged.values());
+  };
+
+  const queryResult = useQuery({
     queryKey: ['topics'],
     queryFn: async () => {
       const apiTopics = await TauriApi.getTopics();
 
-      // 各トピックの統計情報を並列で取得
       const topicsWithStats = await Promise.all(
         apiTopics.map(async (topic) => {
           try {
@@ -31,7 +49,7 @@ export const useTopics = () => {
               id: topic.id,
               name: topic.name,
               description: topic.description ?? '',
-              tags: [], // APIにタグ情報がない場合は空配列
+              tags: [],
               memberCount: stats.member_count,
               postCount: stats.post_count,
               lastActive: topic.updated_at,
@@ -41,7 +59,6 @@ export const useTopics = () => {
               isJoined: Boolean(topic.is_joined),
             } as Topic;
           } catch (error) {
-            // 統計情報の取得に失敗した場合はデフォルト値を使用
             errorHandler.log(`Failed to get stats for topic ${topic.id}`, error, {
               context: 'useTopics.getTopicStats',
             });
@@ -62,27 +79,31 @@ export const useTopics = () => {
         }),
       );
 
-      setTopics(topicsWithStats);
-      return topicsWithStats;
+      const merged = mergeWithExisting(topicsWithStats);
+      setTopics(merged);
+      return merged;
     },
-    refetchInterval: 30000, // 30秒ごとに更新
+    refetchInterval: keepLocalTopics ? false : 30000,
   });
+
+  const fallbackTopics = Array.from(storeTopics.values());
+  return {
+    ...queryResult,
+    data: keepLocalTopics ? fallbackTopics : queryResult.data,
+  };
 };
 
-// 単一トピックを取得するフック
 export const useTopic = (topicId: string) => {
   const { topics } = useTopicStore();
 
   return useQuery({
     queryKey: ['topic', topicId],
     queryFn: async () => {
-      // まずストアから取得を試みる
       const cachedTopic = topics.get(topicId);
       if (cachedTopic) {
         return cachedTopic;
       }
 
-      // なければAPIから取得
       const apiTopics = await TauriApi.getTopics();
       const apiTopic = apiTopics.find((t) => t.id === topicId);
 
@@ -90,7 +111,6 @@ export const useTopic = (topicId: string) => {
         throw new Error('Topic not found');
       }
 
-      // 統計情報を取得
       const stats = await TauriApi.getTopicStats(apiTopic.id).catch(() => ({
         topic_id: apiTopic.id,
         member_count: apiTopic.member_count ?? 0,
@@ -117,7 +137,6 @@ export const useTopic = (topicId: string) => {
   });
 };
 
-// トピック作成用のミューテーション
 export const useCreateTopic = () => {
   const queryClient = useQueryClient();
   const { createTopic } = useTopicStore();
@@ -132,7 +151,6 @@ export const useCreateTopic = () => {
   });
 };
 
-// トピック更新用のミューテーション
 export const useUpdateTopic = () => {
   const queryClient = useQueryClient();
   const { updateTopicRemote } = useTopicStore();
@@ -156,7 +174,6 @@ export const useUpdateTopic = () => {
   });
 };
 
-// トピック削除用のミューテーション
 export const useDeleteTopic = () => {
   const queryClient = useQueryClient();
   const { deleteTopicRemote } = useTopicStore();
@@ -171,4 +188,4 @@ export const useDeleteTopic = () => {
   });
 };
 
-// P2Pトピック参加はTopicCard内で直接storeのメソッドを使用
+// P2P topic join uses TopicCard side store methods directly

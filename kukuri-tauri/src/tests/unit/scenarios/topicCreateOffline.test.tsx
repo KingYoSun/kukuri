@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
 import { TopicFormModal } from '@/components/topics/TopicFormModal';
 
 const mockQueueTopicCreation = vi.fn();
@@ -64,7 +65,7 @@ describe('topicCreateOffline scenario', () => {
 
     await userEvent.type(screen.getByLabelText('トピック名 *'), 'オフライン作成');
     await userEvent.type(
-      screen.getByPlaceholderText('このトピックについての説明を入力してください'),
+      screen.getByPlaceholderText('このトピックに関する説明を入力してください'),
       'desc',
     );
 
@@ -77,7 +78,7 @@ describe('topicCreateOffline scenario', () => {
     expect(mockWatchPendingTopic).toHaveBeenCalledWith('pending-123');
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: '作成を予約しました',
+        title: '作成をキューに追加しました',
       }),
     );
   });

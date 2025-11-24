@@ -14,7 +14,11 @@ const hoisted = vi.hoisted(() => {
   const offlineState = {
     isOnline: true,
     pendingActions: [] as Array<{ actionType: string; localId?: string }>,
+    saveOfflineAction: vi.fn(),
   };
+  const useOfflineStore = vi.fn(() => offlineState);
+  (useOfflineStore as unknown as { getState: () => typeof offlineState }).getState = () =>
+    offlineState;
 
   const deletePostMutation = {
     mutate: vi.fn(),
@@ -50,6 +54,7 @@ const hoisted = vi.hoisted(() => {
     },
     useAuthStoreMock: useAuthStore,
     useDeletePostMock: vi.fn(() => deletePostMutation),
+    useOfflineStoreMock: useOfflineStore,
   };
 });
 
@@ -63,6 +68,7 @@ export const {
   toastMock,
   useAuthStoreMock,
   useDeletePostMock,
+  useOfflineStoreMock,
 } = hoisted;
 
 export const mockPost: Post = {
@@ -186,5 +192,5 @@ vi.mock('@/stores', () => ({
 }));
 
 vi.mock('@/stores/offlineStore', () => ({
-  useOfflineStore: vi.fn(() => offlineStoreState),
+  useOfflineStore: useOfflineStoreMock,
 }));

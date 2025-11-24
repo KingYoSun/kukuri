@@ -72,6 +72,8 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
       onContentChange={setContent}
       onShortcut={handleKeyboardSubmit}
       onCancel={onCancel}
+      dataTestId="quote-composer-input"
+      submitDataTestId="quote-submit-button"
     >
       <Card className="bg-muted/50 border-muted">
         <CardContent className="p-3">

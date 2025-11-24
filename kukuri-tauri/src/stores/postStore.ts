@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import type { PostState, Post } from './types';
 import { TauriApi, type GetPostsRequest } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
@@ -11,6 +11,77 @@ import { useAuthStore } from './authStore';
 import { useTopicStore } from './topicStore';
 import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
 import { queryClient } from '@/lib/queryClient';
+
+const sortPostsDesc = (posts: Post[]): Post[] =>
+  [...posts].sort((a, b) => b.created_at - a.created_at);
+
+const upsertPostIntoList = (posts: Post[] | undefined, post: Post): Post[] => {
+  const filtered = (posts ?? []).filter((item) => item.id !== post.id);
+  return sortPostsDesc([post, ...filtered]);
+};
+
+const addPostToCaches = (post: Post) => {
+  queryClient.setQueryData<Post[]>(['timeline'], (prev) => upsertPostIntoList(prev, post));
+  queryClient.setQueryData<Post[]>(['posts', post.topicId], (prev) =>
+    upsertPostIntoList(prev, post),
+  );
+};
+
+const replacePostInCaches = (oldId: string, post: Post) => {
+  queryClient.setQueryData<Post[]>(['timeline'], (prev) =>
+    sortPostsDesc([
+      post,
+      ...((prev ?? []).filter((item) => item.id !== oldId && item.id !== post.id) ?? []),
+    ]),
+  );
+  queryClient.setQueryData<Post[]>(['posts', post.topicId], (prev) =>
+    sortPostsDesc([
+      post,
+      ...((prev ?? []).filter((item) => item.id !== oldId && item.id !== post.id) ?? []),
+    ]),
+  );
+};
+
+const removePostFromCaches = (id: string, topicId: string) => {
+  queryClient.setQueryData<Post[]>(['timeline'], (prev) =>
+    (prev ?? []).filter((item) => item.id !== id),
+  );
+  queryClient.setQueryData<Post[]>(['posts', topicId], (prev) =>
+    (prev ?? []).filter((item) => item.id !== id),
+  );
+};
+
+const updatePostLikesInCaches = (postId: string, topicId: string | undefined, likes: number) => {
+  if (!topicId) {
+    return;
+  }
+  const updateLikes = (posts?: Post[]) =>
+    posts?.map((item) => (item.id === postId ? { ...item, likes } : item)) ?? posts;
+  queryClient.setQueryData<Post[]>(['timeline'], (prev) => updateLikes(prev));
+  queryClient.setQueryData<Post[]>(['posts', topicId], (prev) => updateLikes(prev));
+};
+
+const resolveReplyCount = (post: Post): number => {
+  if (typeof post.replyCount === 'number') {
+    return post.replyCount;
+  }
+  if (Array.isArray(post.replies)) {
+    return post.replies.length;
+  }
+  if (typeof post.replies === 'number') {
+    return post.replies;
+  }
+  return 0;
+};
+
+const normalizePost = (post: Post): Post => {
+  const replies = Array.isArray(post.replies) ? post.replies : [];
+  return {
+    ...post,
+    replies,
+    replyCount: resolveReplyCount(post),
+  };
+};
 
 type DeletePostRemoteInput = {
   id: string;
@@ -75,7 +146,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   postsByTopic: new Map(),
 
   setPosts: (posts: Post[]) => {
-    const enrichedPosts = posts.map((post) => enrichPostAuthorMetadata(post));
+    const enrichedPosts = posts.map((post) => normalizePost(enrichPostAuthorMetadata(post)));
     const postsMap = new Map(enrichedPosts.map((p) => [p.id, p]));
     const postsByTopicMap = new Map<string, string[]>();
 
@@ -100,7 +171,9 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       }
       const apiPosts = await TauriApi.getPosts(requestPayload);
       const posts: Post[] = await Promise.all(
-        apiPosts.map(async (post) => enrichPostAuthorMetadata(await mapPostResponseToDomain(post))),
+        apiPosts.map(async (post) =>
+          normalizePost(enrichPostAuthorMetadata(await mapPostResponseToDomain(post))),
+        ),
       );
 
       const postsMap = new Map(posts.map((p) => [p.id, p]));
@@ -119,7 +192,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       errorHandler.log('Failed to fetch posts', error, {
         context: 'PostStore.fetchPosts',
         showToast: true,
-        toastTitle: '謚慕ｨｿ縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆',
+        toastTitle: '���e�̎擾�Ɏ��s���܂���',
       });
       throw error;
     }
@@ -128,7 +201,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
   addPost: (post: Post) =>
     set((state) => {
       const newPosts = new Map(state.posts);
-      newPosts.set(post.id, enrichPostAuthorMetadata(post));
+      newPosts.set(post.id, normalizePost(enrichPostAuthorMetadata(post)));
 
       const newPostsByTopic = new Map(state.postsByTopic);
       const topicPosts = newPostsByTopic.get(post.topicId) || [];
@@ -173,17 +246,18 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       likes: 0,
       boosts: 0,
       replies: [],
-      isSynced: false, // 譛ｪ蜷梧悄縺ｨ縺励※陦ｨ遉ｺ
+      replyCount: 0,
+      isSynced: false, // 未同期として表示
     };
 
-    // 讌ｽ隕ｳ逧・峩譁ｰ: 蜊ｳ蠎ｧ縺ｫUI縺ｫ蜿肴丐
+    // 楽観皁E�E�E�E��E�E�E�新: 即座にUIに反映
     set((state) => {
       const newPosts = new Map(state.posts);
       newPosts.set(tempId, optimisticPost);
 
       const newPostsByTopic = new Map(state.postsByTopic);
       const topicPosts = newPostsByTopic.get(topicId) || [];
-      // 譁ｰ縺励＞謚慕ｨｿ繧貞・鬆ｭ縺ｫ霑ｽ蜉・域怙譁ｰ縺ｮ謚慕ｨｿ縺御ｸ翫↓陦ｨ遉ｺ縺輔ｌ繧九ｈ縺・↓・・
+      // 新しい投稿を�E頭に追加�E�E�E�E�E�E�E�最新の投稿が上に表示されるよぁE�E�E�E��E�E�E��E�E�E�E�E�E�E�E
       newPostsByTopic.set(topicId, [tempId, ...topicPosts]);
 
       return {
@@ -191,8 +265,9 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         postsByTopic: newPostsByTopic,
       };
     });
+    addPostToCaches(optimisticPost);
 
-    // 繧ｪ繝輔Λ繧､繝ｳ縺ｮ蝣ｴ蜷医√い繧ｯ繧ｷ繝ｧ繝ｳ繧剃ｿ晏ｭ倥＠縺ｦ蠕後〒蜷梧悄
+    // オフラインの場合、アクションを保存して後で同期
     if (!isOnline) {
       const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
       await offlineStore.saveOfflineAction({
@@ -211,7 +286,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return optimisticPost;
     }
 
-    // 繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｮ蝣ｴ蜷医√ヰ繝・け繧ｰ繝ｩ繧ｦ繝ｳ繝峨〒繧ｵ繝ｼ繝舌・縺ｫ騾∽ｿ｡
+    // オンラインの場合、バチE�E�E�E��E�E�E�グラウンドでサーバ�Eに送信
     try {
       const apiPost = await TauriApi.createPost({
         content,
@@ -220,9 +295,11 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         quoted_post: options?.quotedPost,
       });
 
-      const realPost = enrichPostAuthorMetadata(await mapPostResponseToDomain(apiPost));
+      const realPost = normalizePost(
+        enrichPostAuthorMetadata(await mapPostResponseToDomain(apiPost)),
+      );
 
-      // 荳譎・D繧貞ｮ滄圀縺ｮID縺ｫ鄂ｮ縺肴鋤縺・
+      // 一晁EDを実際のIDに置き換ぁE
       set((state) => {
         const newPosts = new Map(state.posts);
         newPosts.delete(tempId);
@@ -238,31 +315,59 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           postsByTopic: newPostsByTopic,
         };
       });
+      replacePostInCaches(tempId, realPost);
 
       return realPost;
     } catch (error) {
-      // 螟ｱ謨励＠縺溷ｴ蜷医√Ο繝ｼ繝ｫ繝舌ャ繧ｯ
-      set((state) => {
-        const newPosts = new Map(state.posts);
-        newPosts.delete(tempId);
+      const userPubkey =
+        currentUser.pubkey || localStorage.getItem('currentUserPubkey') || 'unknown';
+      try {
+        await offlineStore.saveOfflineAction({
+          userPubkey,
+          actionType: OfflineActionType.CREATE_POST,
+          entityType: EntityType.POST,
+          entityId: tempId,
+          data: JSON.stringify({
+            content,
+            topicId,
+            replyTo: options?.replyTo,
+            quotedPost: options?.quotedPost,
+          }),
+        });
+        errorHandler.log('Failed to create post online, queued for offline sync', error, {
+          context: 'PostStore.createPost.offlineFallback',
+          showToast: false,
+          metadata: { topicId, userPubkey },
+        });
+        return optimisticPost;
+      } catch (offlineError) {
+        set((state) => {
+          const newPosts = new Map(state.posts);
+          newPosts.delete(tempId);
 
-        const newPostsByTopic = new Map(state.postsByTopic);
-        const topicPosts = newPostsByTopic.get(topicId) || [];
-        const updatedTopicPosts = topicPosts.filter((id) => id !== tempId);
-        newPostsByTopic.set(topicId, updatedTopicPosts);
+          const newPostsByTopic = new Map(state.postsByTopic);
+          const topicPosts = newPostsByTopic.get(topicId) || [];
+          const updatedTopicPosts = topicPosts.filter((id) => id !== tempId);
+          newPostsByTopic.set(topicId, updatedTopicPosts);
 
-        return {
-          posts: newPosts,
-          postsByTopic: newPostsByTopic,
-        };
-      });
+          return {
+            posts: newPosts,
+            postsByTopic: newPostsByTopic,
+          };
+        });
+        removePostFromCaches(tempId, topicId);
 
-      errorHandler.log('Failed to create post', error, {
-        context: 'PostStore.createPost',
-        showToast: true,
-        toastTitle: '謚慕ｨｿ縺ｮ菴懈・縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
-      });
-      throw error;
+        errorHandler.log('Failed to create post', error, {
+          context: 'PostStore.createPost',
+          showToast: true,
+          toastTitle: '���e�̍쐬�Ɏ��s���܂���',
+          metadata: {
+            offlineError:
+              offlineError instanceof Error ? offlineError.message : String(offlineError),
+          },
+        });
+        throw error;
+      }
     }
   },
 
@@ -271,7 +376,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       const newPosts = new Map(state.posts);
       const existing = newPosts.get(id);
       if (existing) {
-        newPosts.set(id, { ...existing, ...update });
+        newPosts.set(id, normalizePost({ ...existing, ...update }));
       }
       return { posts: newPosts };
     }),
@@ -372,7 +477,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       errorHandler.log('Failed to delete post', error, {
         context: 'PostStore.deletePostRemote',
         showToast: true,
-        toastTitle: '謚慕ｨｿ縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
+        toastTitle: '���e�̍폜�Ɏ��s���܂���',
       });
       throw error;
     }
@@ -382,8 +487,10 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
 
-    // 讌ｽ隕ｳ逧・峩譁ｰ: 蜊ｳ蠎ｧ縺ｫUI縺ｫ蜿肴丐
-    const previousLikes = get().posts.get(postId)?.likes || 0;
+    const targetPost = get().posts.get(postId);
+    const topicId = targetPost?.topicId;
+    const previousLikes = targetPost?.likes || 0;
+
     set((state) => {
       const newPosts = new Map(state.posts);
       const post = newPosts.get(postId);
@@ -395,8 +502,8 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       }
       return { posts: newPosts };
     });
+    updatePostLikesInCaches(postId, topicId, previousLikes + 1);
 
-    // 繧ｪ繝輔Λ繧､繝ｳ縺ｮ蝣ｴ蜷医√い繧ｯ繧ｷ繝ｧ繝ｳ繧剃ｿ晏ｭ倥＠縺ｦ蠕後〒蜷梧悄
     if (!isOnline) {
       const userPubkey = localStorage.getItem('currentUserPubkey') || 'unknown';
       await offlineStore.saveOfflineAction({
@@ -409,12 +516,9 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       return;
     }
 
-    // 繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｮ蝣ｴ蜷医√ヰ繝・け繧ｰ繝ｩ繧ｦ繝ｳ繝峨〒繧ｵ繝ｼ繝舌・縺ｫ騾∽ｿ｡
     try {
       await TauriApi.likePost(postId);
-      // 謌仙粥縺励◆蝣ｴ蜷医・迚ｹ縺ｫ菴輔ｂ縺励↑縺・ｼ域里縺ｫ讌ｽ隕ｳ逧・峩譁ｰ貂医∩・・
     } catch (error) {
-      // 螟ｱ謨励＠縺溷ｴ蜷医√Ο繝ｼ繝ｫ繝舌ャ繧ｯ
       set((state) => {
         const newPosts = new Map(state.posts);
         const post = newPosts.get(postId);
@@ -426,25 +530,27 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         }
         return { posts: newPosts };
       });
+      updatePostLikesInCaches(postId, topicId, previousLikes);
 
       errorHandler.log('Failed to like post', error, {
         context: 'PostStore.likePost',
         showToast: true,
-        toastTitle: '縺・＞縺ｭ縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
+        toastTitle: '�����˂Ɏ��s���܂���',
       });
       throw error;
     }
   },
-
   addReply: (parentId: string, reply: Post) =>
     set((state) => {
       const newPosts = new Map(state.posts);
       const parent = newPosts.get(parentId);
       if (parent) {
-        const updatedParent = {
+        const replies = Array.isArray(parent.replies) ? parent.replies : [];
+        const updatedParent = normalizePost({
           ...parent,
-          replies: [...(parent.replies || []), reply],
-        };
+          replies: [...replies, reply],
+          replyCount: resolveReplyCount(parent) + 1,
+        });
         newPosts.set(parentId, updatedParent);
       }
       return { posts: newPosts };
@@ -486,7 +592,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         const authorPubkey = post.author.pubkey?.toLowerCase() ?? '';
         const shouldUpdate = authorNpub === normalized || authorPubkey === normalized;
 
-        const repliesSource = post.replies ?? [];
+        const repliesSource = Array.isArray(post.replies) ? post.replies : [];
         const updatedReplies = repliesSource.map(updatePostAuthor);
         const repliesChanged =
           updatedReplies.length !== repliesSource.length ||
@@ -503,11 +609,12 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
         if (authorChanged || repliesChanged) {
           hasChanges = true;
-          return {
+          return normalizePost({
             ...post,
             author: updatedAuthor,
             replies: updatedReplies,
-          };
+            replyCount: post.replyCount ?? updatedReplies.length,
+          });
         }
 
         return post;

@@ -52,7 +52,8 @@ export interface Post {
   tags: string[];
   likes: number;
   boosts: number;
-  replies: Post[];
+  replies: Post[] | number;
+  replyCount?: number;
   isSynced?: boolean; // P2Pネットワークに同期済みかどうか
   isBoosted?: boolean; // 現在のユーザーがブーストしたか
   isBookmarked?: boolean; // 現在のユーザーがブックマークしたか

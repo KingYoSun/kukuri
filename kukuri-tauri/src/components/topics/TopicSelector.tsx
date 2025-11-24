@@ -21,6 +21,7 @@ interface TopicSelectorProps {
   disabled?: boolean;
   placeholder?: string;
   onCreateTopicRequest?: () => void;
+  dataTestId?: string;
 }
 
 export function TopicSelector({
@@ -29,6 +30,7 @@ export function TopicSelector({
   disabled = false,
   placeholder = 'トピックを選択',
   onCreateTopicRequest,
+  dataTestId,
 }: TopicSelectorProps) {
   const [open, setOpen] = useState(false);
   const { topics, joinedTopics, pendingTopics } = useTopicStore();
@@ -74,6 +76,7 @@ export function TopicSelector({
           aria-expanded={open}
           className="w-full justify-between"
           disabled={disabled}
+          data-testid={dataTestId}
         >
           {selectedTopic ? selectedTopic.name : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

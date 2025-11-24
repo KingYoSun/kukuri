@@ -215,6 +215,9 @@ describe('TopicCard', () => {
     fireEvent.click(topicTitle);
 
     expect(mockSetCurrentTopic).toHaveBeenCalledWith(mockTopic);
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/topics/$topicId',
+      params: { topicId: mockTopic.id },
+    });
   });
 });

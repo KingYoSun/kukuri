@@ -60,6 +60,8 @@ export function ReplyForm({
       onContentChange={setContent}
       onShortcut={handleKeyboardSubmit}
       onCancel={onCancel}
+      dataTestId="reply-composer-input"
+      submitDataTestId="reply-submit-button"
     />
   );
 }

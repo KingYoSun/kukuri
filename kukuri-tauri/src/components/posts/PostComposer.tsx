@@ -133,14 +133,15 @@ export function PostComposer({
 
     setIsSubmitting(true);
     try {
-      await createPost(content, selectedTopicId, {
+      const createdPost = await createPost(content, selectedTopicId, {
         replyTo,
         quotedPost,
       });
+      const isSynced = createdPost?.isSynced !== false;
 
       toast({
         title: '成功',
-        description: '投稿を作成しました',
+        description: isSynced ? '投稿を作成しました' : '投稿を同期待ちとして保存しました',
       });
 
       // Clean up
@@ -149,6 +150,13 @@ export function PostComposer({
       }
 
       resetForm();
+      if (!isSynced) {
+        onCancel?.();
+        if (!onCancel) {
+          onSuccess?.();
+        }
+        return;
+      }
       onSuccess?.();
     } catch (error) {
       errorHandler.log('Failed to create post', error, {
@@ -245,12 +253,21 @@ export function PostComposer({
         <Tabs value={editorMode} onValueChange={(v) => setEditorMode(v as 'simple' | 'markdown')}>
           <div className="flex items-center justify-between mb-4">
             <TabsList>
-              <TabsTrigger value="simple">シンプル</TabsTrigger>
-              <TabsTrigger value="markdown">Markdown</TabsTrigger>
+              <TabsTrigger value="simple" data-testid="composer-tab-simple">
+                シンプル
+              </TabsTrigger>
+              <TabsTrigger value="markdown" data-testid="composer-tab-markdown">
+                Markdown
+              </TabsTrigger>
             </TabsList>
 
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setShowDrafts(!showDrafts)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowDrafts(!showDrafts)}
+                data-testid="drafts-toggle"
+              >
                 <FileText className="w-4 h-4 mr-1" />
                 下書き
               </Button>
@@ -269,7 +286,7 @@ export function PostComposer({
           </div>
 
           {showDrafts && (
-            <div className="mb-4">
+            <div className="mb-4" data-testid="drafts-panel">
               <DraftManager onSelectDraft={handleSelectDraft} />
             </div>
           )}
@@ -282,6 +299,7 @@ export function PostComposer({
               disabled={!!topicId || isSubmitting}
               placeholder="トピックを選択"
               onCreateTopicRequest={topicId ? undefined : () => setShowTopicCreationDialog(true)}
+              dataTestId="topic-selector"
             />
 
             {/* Content editor */}
@@ -301,7 +319,7 @@ export function PostComposer({
               </div>
             </TabsContent>
 
-            <TabsContent value="markdown" className="mt-0">
+            <TabsContent value="markdown" className="mt-0" data-testid="markdown-editor-pane">
               <MarkdownEditor
                 value={content}
                 onChange={setContent}
@@ -340,6 +358,7 @@ export function PostComposer({
             variant="outline"
             onClick={handleSaveDraft}
             disabled={isSubmitting || !content.trim()}
+            data-testid="save-draft-button"
           >
             <Save className="w-4 h-4 mr-1" />
             下書き保存

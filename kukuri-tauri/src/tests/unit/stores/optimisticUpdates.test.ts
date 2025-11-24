@@ -174,21 +174,26 @@ describe('楽観的UI更新', () => {
       });
     });
 
-    it('サーバーエラー時: ロールバックされる', async () => {
+    it('サーバーエラー時: オフラインキューに保存される', async () => {
+      const offlineStore = useOfflineStore.getState();
+      const saveOfflineActionSpy = vi.spyOn(offlineStore, 'saveOfflineAction');
       vi.mocked(TauriApi.createPost).mockRejectedValue(new Error('サーバーエラー'));
 
       const createPost = usePostStore.getState().createPost;
 
-      // 投稿を作成（エラーになる）
-      await expect(createPost('エラー投稿', 'topic1')).rejects.toThrow('サーバーエラー');
+      const result = await createPost('エラー投稿', 'topic1');
 
-      // UIから削除されているか確認
+      expect(result.id).toContain('temp-');
+      expect(result.isSynced).toBe(false);
+      expect(saveOfflineActionSpy).toHaveBeenCalled();
+
       const storeState = usePostStore.getState();
       const errorPost = Array.from(storeState.posts.values()).find(
         (p) => p.content === 'エラー投稿',
       );
 
-      expect(errorPost).toBeUndefined();
+      expect(errorPost).toBeDefined();
+      saveOfflineActionSpy.mockRestore();
     });
   });
 
