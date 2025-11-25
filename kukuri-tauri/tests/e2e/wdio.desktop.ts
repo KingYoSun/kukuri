@@ -24,10 +24,12 @@ function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
     cwd: PROJECT_ROOT,
     stdio: 'inherit',
-    shell: process.platform === 'win32'
+    shell: process.platform === 'win32',
   });
   if (child.status !== 0) {
-    throw new Error(`Command "${command} ${args.join(' ')}" failed with code ${child.status ?? 'unknown'}`);
+    throw new Error(
+      `Command "${command} ${args.join(' ')}" failed with code ${child.status ?? 'unknown'}`,
+    );
   }
 }
 
@@ -85,25 +87,24 @@ export const config: Options.Testrunner = {
     tsNodeOpts: {
       project: './tests/e2e/tsconfig.json',
       transpileOnly: true,
-      require: ['tsconfig-paths/register']
-    }
+      require: ['tsconfig-paths/register'],
+    },
   },
   reporters: [
     'spec',
     [
       '@wdio/spec-reporter',
       {
-        showPreface: false
-      }
-    ]
+        showPreface: false,
+      },
+    ],
   ],
   framework: 'mocha',
   mochaOpts: {
     ui: 'bdd',
-    timeout: 60000
+    timeout: 60000,
   },
   hostname: '127.0.0.1',
-  port: Number(process.env.TAURI_DRIVER_PORT ?? '4445'),
   capabilities: [
     {
       maxInstances: WORKER_COUNT,
@@ -112,9 +113,9 @@ export const config: Options.Testrunner = {
       'tauri:options': {
         application:
           process.env.TAURI_E2E_APP_PATH ??
-          join(PROJECT_ROOT, 'src-tauri', 'target', 'debug', binaryName())
-      }
-    }
+          join(PROJECT_ROOT, 'src-tauri', 'target', 'debug', binaryName()),
+      },
+    },
   ],
   onPrepare: async (_config, capabilities) => {
     mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -142,5 +143,5 @@ export const config: Options.Testrunner = {
   },
   onComplete: async () => {
     await stopDriver();
-  }
+  },
 };

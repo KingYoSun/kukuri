@@ -196,7 +196,8 @@ export const useTopicStore = create<TopicStore>()(
           const deletedTopicIds =
             typeof window !== 'undefined' &&
             Array.isArray(
-              (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: unknown }).__E2E_DELETED_TOPIC_IDS__,
+              (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: unknown })
+                .__E2E_DELETED_TOPIC_IDS__,
             )
               ? ((window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] })
                   .__E2E_DELETED_TOPIC_IDS__ ?? [])

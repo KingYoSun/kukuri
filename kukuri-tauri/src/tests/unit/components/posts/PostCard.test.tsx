@@ -167,7 +167,7 @@ describe('PostCard', () => {
 
     renderWithQueryClient(<PostCard post={unsyncedPost} />);
 
-    expect(screen.getByText('同期待ち')).toBeInTheDocument();
+    expect(screen.getByTestId('post-1-sync-badge')).toBeInTheDocument();
   });
 
   it('ブースト操作が成功するとトーストが表示される', async () => {
@@ -510,7 +510,6 @@ describe('PostCard', () => {
       });
     });
   });
-
   describe('削除メニュー', () => {
     const createOwnPost = (): Post => ({
       ...mockPost,
@@ -521,10 +520,19 @@ describe('PostCard', () => {
       },
     });
 
+    const openDeleteMenu = () => {
+      const trigger = screen.getByTestId('post-1-menu');
+      if (!trigger) {
+        throw new Error('投稿メニューのボタンが見つかりませんでした');
+      }
+      fireEvent.click(trigger);
+    };
+
     it('他人の投稿には削除メニューが表示されない', () => {
       renderWithQueryClient(<PostCard post={mockPost} />);
 
-      expect(screen.queryByRole('button', { name: /削除/ })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('投稿メニュー')).not.toBeInTheDocument();
+      expect(screen.queryByText('削除')).not.toBeInTheDocument();
     });
 
     it('削除を確定すると useDeletePost の変異が呼び出される', async () => {
@@ -537,10 +545,12 @@ describe('PostCard', () => {
 
       renderWithQueryClient(<PostCard post={ownPost} />);
 
-      fireEvent.click(screen.getByRole('button', { name: /削除/ }));
-      expect(screen.getByText('投稿を削除しますか？')).toBeInTheDocument();
+      openDeleteMenu();
+      fireEvent.click(screen.getByTestId('post-1-delete'));
+      const confirmDialogTitle = await screen.findByTestId('post-1-confirm-title');
+      expect(confirmDialogTitle).toBeInTheDocument();
 
-      fireEvent.click(screen.getByText('削除する'));
+      fireEvent.click(await screen.findByTestId('post-1-confirm-delete'));
 
       await waitFor(() => {
         expect(deletePostMutationMock.mutate).toHaveBeenCalledWith(
@@ -568,9 +578,10 @@ describe('PostCard', () => {
 
       renderWithQueryClient(<PostCard post={ownPost} />);
 
-      fireEvent.click(screen.getByRole('button', { name: /削除/ }));
+      openDeleteMenu();
+      fireEvent.click(screen.getByTestId('post-1-delete'));
 
-      fireEvent.click(screen.getByText('削除する'));
+      fireEvent.click(await screen.findByTestId('post-1-confirm-delete'));
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith('投稿の削除に失敗しました');

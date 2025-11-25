@@ -233,8 +233,9 @@ export function registerE2EBridge(): void {
             (
               window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] }
             ).__E2E_PENDING_TOPICS__ = [];
-            (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] }).__E2E_DELETED_TOPIC_IDS__ =
-              [];
+            (
+              window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] }
+            ).__E2E_DELETED_TOPIC_IDS__ = [];
           }
         },
         getAuthSnapshot: () => {
@@ -824,10 +825,7 @@ export function registerE2EBridge(): void {
             queryClient.setQueryData(trendingTopicsQueryKey(10), trendingTopics, {
               updatedAt: now,
             });
-            queryClient.setQueriesData(
-              { queryKey: ['trending', 'topics'] },
-              () => trendingTopics,
-            );
+            queryClient.setQueriesData({ queryKey: ['trending', 'topics'] }, () => trendingTopics);
             queryClient.setQueryDefaults(trendingTopicsQueryKey(10), {
               staleTime: 10 * 60 * 1000,
               gcTime: 15 * 60 * 1000,
@@ -868,10 +866,10 @@ export function registerE2EBridge(): void {
             hydrateFollowingFeedCache(20, true);
             hydrateFollowingFeedCache(10, true);
             hydrateFollowingFeedCache(10, false);
-            queryClient.setQueriesData(
-              { queryKey: ['followingFeed'] },
-              () => ({ pages: [followingPage], pageParams: [null] }),
-            );
+            queryClient.setQueriesData({ queryKey: ['followingFeed'] }, () => ({
+              pages: [followingPage],
+              pageParams: [null],
+            }));
           } catch (error) {
             errorHandler.log('E2EBridge.seedTrendingFixture.cacheFailed', error, {
               context: 'registerE2EBridge.seedTrendingFixture.cache',

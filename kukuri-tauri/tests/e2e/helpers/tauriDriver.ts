@@ -16,7 +16,7 @@ async function ensureExecutable(binaryPath: string): Promise<void> {
   } catch {
     throw new Error(
       `tauri-driver binary not found or not executable at ${binaryPath}. ` +
-        'Install it via "cargo install tauri-driver --locked" or set TAURI_DRIVER_BINARY.'
+        'Install it via "cargo install tauri-driver --locked" or set TAURI_DRIVER_BINARY.',
     );
   }
 }
@@ -46,7 +46,7 @@ async function resolveDriverBinary(): Promise<string> {
 
   throw new Error(
     `tauri-driver binary not found. Checked paths: ${candidates.join(', ')}. ` +
-      'Install it via "cargo install tauri-driver --locked" or set TAURI_DRIVER_BINARY.'
+      'Install it via "cargo install tauri-driver --locked" or set TAURI_DRIVER_BINARY.',
   );
 }
 
@@ -82,7 +82,7 @@ export async function startDriver(): Promise<void> {
   let proxyListenPort = resolvedPort;
   const nativeHost = process.env.TAURI_NATIVE_DRIVER_HOST ?? '127.0.0.1';
   let nativePort = Number(
-    process.env.TAURI_NATIVE_DRIVER_PORT ?? (isLinux ? proxyListenPort + 100 : 4444)
+    process.env.TAURI_NATIVE_DRIVER_PORT ?? (isLinux ? proxyListenPort + 100 : 4444),
   );
 
   if (isLinux) {
@@ -104,7 +104,7 @@ export async function startDriver(): Promise<void> {
     (isLinux && (await isPortInUse(nativePort)))
   ) {
     console.warn(
-      `tauri-driver ports already in use (proxy=${proxyListenPort}, driver=${driverPort}, native=${nativePort}); assuming existing driver`
+      `tauri-driver ports already in use (proxy=${proxyListenPort}, driver=${driverPort}, native=${nativePort}); assuming existing driver`,
     );
     return;
   }
@@ -125,10 +125,10 @@ export async function startDriver(): Promise<void> {
   try {
     console.info(`[tauriDriver] spawning ${binaryPath} ${args.join(' ')}`);
     driverProcess = spawn(binaryPath, args, {
-      stdio: 'inherit'
+      stdio: 'inherit',
     });
   } catch (error) {
-    console.error('[tauriDriver] failed to spawn driver', error);
+    console.warn('[tauriDriver] failed to spawn driver', error);
     driverProcess = null;
     throw error;
   }
@@ -166,19 +166,12 @@ function startCapabilityProxy(listenPort: number, targetPort: number): void {
       let body = Buffer.concat(chunks);
       const headers = { ...req.headers };
 
-      if (
-        req.method === 'POST' &&
-        req.url &&
-        req.url.startsWith('/session') &&
-        body.length > 0
-      ) {
+      if (req.method === 'POST' && req.url && req.url.startsWith('/session') && body.length > 0) {
         try {
           const json = JSON.parse(body.toString('utf-8'));
           pruneCapabilityPayload(json);
           const serialized = Buffer.from(JSON.stringify(json), 'utf-8');
-          headers['content-length'] = Buffer.byteLength(
-            serialized
-          ).toString();
+          headers['content-length'] = Buffer.byteLength(serialized).toString();
           body = serialized;
         } catch (error) {
           res.statusCode = 400;
@@ -193,12 +186,12 @@ function startCapabilityProxy(listenPort: number, targetPort: number): void {
           port: targetPort,
           path: req.url,
           method: req.method,
-          headers
+          headers,
         },
         (proxyRes) => {
           res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
           proxyRes.pipe(res);
-        }
+        },
       );
 
       proxyReq.on('error', (error) => {
@@ -228,11 +221,7 @@ async function isPortInUse(port: number): Promise<boolean> {
 }
 
 function pruneCapabilityPayload(payload: unknown): void {
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    'capabilities' in payload
-  ) {
+  if (payload && typeof payload === 'object' && 'capabilities' in payload) {
     pruneUnsupportedCapabilities((payload as { capabilities?: unknown }).capabilities);
   }
 }

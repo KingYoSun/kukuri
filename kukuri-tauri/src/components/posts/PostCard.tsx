@@ -2,7 +2,18 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Bookmark, Heart, Loader2, MessageCircle, MoreVertical, Quote, Repeat2, Share, Trash2, WifiOff } from 'lucide-react';
+import {
+  Bookmark,
+  Heart,
+  Loader2,
+  MessageCircle,
+  MoreVertical,
+  Quote,
+  Repeat2,
+  Share,
+  Trash2,
+  WifiOff,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useDeletePost } from '@/hooks/usePosts';
 import { useBookmarkStore, useAuthStore } from '@/stores';
@@ -101,12 +112,16 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const applyLikeUpdate = (nextLikes: number) => {
     setLikeCount(nextLikes);
     updatePostLikesStore(post.id, nextLikes);
-    queryClient.setQueryData<Post[]>(['timeline'], (prev) =>
-      prev?.map((item) => (item.id === post.id ? { ...item, likes: nextLikes } : item)) ?? prev,
+    queryClient.setQueryData<Post[]>(
+      ['timeline'],
+      (prev) =>
+        prev?.map((item) => (item.id === post.id ? { ...item, likes: nextLikes } : item)) ?? prev,
     );
     if (post.topicId) {
-      queryClient.setQueryData<Post[]>(['posts', post.topicId], (prev) =>
-        prev?.map((item) => (item.id === post.id ? { ...item, likes: nextLikes } : item)) ?? prev,
+      queryClient.setQueryData<Post[]>(
+        ['posts', post.topicId],
+        (prev) =>
+          prev?.map((item) => (item.id === post.id ? { ...item, likes: nextLikes } : item)) ?? prev,
       );
     }
   };
@@ -155,16 +170,20 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const applyBoostUpdate = (nextBoosts: number, boosted: boolean) => {
     setBoostCount(nextBoosts);
     updatePostStore(post.id, { boosts: nextBoosts, isBoosted: boosted });
-    queryClient.setQueryData<Post[]>(['timeline'], (prev) =>
-      prev?.map((item) =>
-        item.id === post.id ? { ...item, boosts: nextBoosts, isBoosted: boosted } : item,
-      ) ?? prev,
-    );
-    if (post.topicId) {
-      queryClient.setQueryData<Post[]>(['posts', post.topicId], (prev) =>
+    queryClient.setQueryData<Post[]>(
+      ['timeline'],
+      (prev) =>
         prev?.map((item) =>
           item.id === post.id ? { ...item, boosts: nextBoosts, isBoosted: boosted } : item,
         ) ?? prev,
+    );
+    if (post.topicId) {
+      queryClient.setQueryData<Post[]>(
+        ['posts', post.topicId],
+        (prev) =>
+          prev?.map((item) =>
+            item.id === post.id ? { ...item, boosts: nextBoosts, isBoosted: boosted } : item,
+          ) ?? prev,
       );
     }
   };
@@ -194,10 +213,16 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
       queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
-      toast.success(isPostBookmarked ? '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u3092\u89e3\u9664\u3057\u307e\u3057\u305f' : '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u3057\u307e\u3057\u305f');
+      toast.success(
+        isPostBookmarked
+          ? '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u3092\u89e3\u9664\u3057\u307e\u3057\u305f'
+          : '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u3057\u307e\u3057\u305f',
+      );
     },
     onError: () => {
-      toast.error('\u30d6\u30c3\u30af\u30de\u30fc\u30af\u306e\u64cd\u4f5c\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+      toast.error(
+        '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u306e\u64cd\u4f5c\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
+      );
     },
   });
 
@@ -260,6 +285,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                         ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                         : 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
                     }`}
+                    data-testid={`${baseTestId}-sync-badge`}
                   >
                     {!isOnline ? (
                       <>
@@ -281,7 +307,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
           {canDelete && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="\u6295\u7a3f\u30e1\u30cb\u30e5\u30fc">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="\u6295\u7a3f\u30e1\u30cb\u30e5\u30fc"
+                  data-testid={`${baseTestId}-menu`}
+                >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -289,6 +320,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => setShowDeleteDialog(true)}
+                  data-testid={`${baseTestId}-delete`}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   \u524a\u9664
@@ -386,7 +418,9 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>\u6295\u7a3f\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f</AlertDialogTitle>
+            <AlertDialogTitle data-testid={`${baseTestId}-confirm-title`}>
+              \u6295\u7a3f\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f
+            </AlertDialogTitle>
             <AlertDialogDescription>
               \u4e00\u5ea6\u524a\u9664\u3059\u308b\u3068\u3053\u306e\u6295\u7a3f\u306f\u5fa9\u5143\u3067\u304d\u307e\u305b\u3093\u3002\u3088\u308d\u3057\u3051\u308c\u3070\u300c\u524a\u9664\u3059\u308b\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002
             </AlertDialogDescription>
@@ -399,6 +433,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleConfirmDelete}
               disabled={deletePostMutation.isPending}
+              data-testid={`${baseTestId}-confirm-delete`}
             >
               {deletePostMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

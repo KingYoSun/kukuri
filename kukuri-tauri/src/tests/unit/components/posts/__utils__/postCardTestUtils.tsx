@@ -134,28 +134,29 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenuItem: ({
     children,
     onClick,
+    ...rest
   }: {
     children: React.ReactNode;
     onClick?: () => void;
+    [key: string]: unknown;
   }) => (
-    <button type="button" onClick={onClick}>
+    <button type="button" onClick={onClick} {...rest}>
       {children}
     </button>
   ),
 }));
 
 vi.mock('@/components/ui/alert-dialog', () => ({
-  AlertDialog: ({
-    children,
-    open,
-  }: {
-    children: React.ReactNode;
-    open: boolean;
-    onOpenChange?: (next: boolean) => void;
-  }) => (open ? <div>{children}</div> : null),
+  AlertDialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  AlertDialogTitle: ({ children }: { children: React.ReactNode }) => <h3>{children}</h3>,
+  AlertDialogTitle: ({
+    children,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => <h3 {...rest}>{children}</h3>,
   AlertDialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
   AlertDialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogCancel: ({
@@ -175,12 +176,13 @@ vi.mock('@/components/ui/alert-dialog', () => ({
     children,
     disabled,
     onClick,
+    ...rest
   }: {
     children: React.ReactNode;
     disabled?: boolean;
     onClick?: () => void;
   }) => (
-    <button type="button" disabled={disabled} onClick={onClick}>
+    <button type="button" disabled={disabled} onClick={onClick} {...rest}>
       {children}
     </button>
   ),

@@ -254,7 +254,7 @@ export function DirectMessageDialog() {
     const confirmed =
       confirmedFromQuery && confirmedFromQuery.length > 0
         ? confirmedFromQuery
-        : conversations[activeConversationNpub] ?? [];
+        : (conversations[activeConversationNpub] ?? []);
     const pending = optimisticMessages[activeConversationNpub] ?? [];
     return [...confirmed, ...pending].sort((a, b) => a.createdAt - b.createdAt);
   }, [activeConversationNpub, confirmedFromQuery, conversations, optimisticMessages]);

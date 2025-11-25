@@ -33,6 +33,10 @@ describe('PostCard delete flow (offline)', () => {
     useDeletePostMock.mockReturnValue(deletePostMutationMock);
   });
 
+  const openDeleteMenu = () => {
+    fireEvent.click(screen.getByTestId('post-1-menu'));
+  };
+
   it('オフライン時は削除予約のトーストを表示する', async () => {
     const ownPost = createOwnPost();
     useDeletePostMock.mockReturnValue({
@@ -46,8 +50,9 @@ describe('PostCard delete flow (offline)', () => {
 
     renderWithQueryClient(<PostCard post={ownPost} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /削除/ }));
-    fireEvent.click(screen.getByText('削除する'));
+    openDeleteMenu();
+    fireEvent.click(screen.getByTestId('post-1-delete'));
+    fireEvent.click(screen.getByTestId('post-1-confirm-delete'));
 
     await waitFor(() => {
       expect(toastMock.success).toHaveBeenCalledWith('削除は接続復旧後に反映されます');
@@ -66,9 +71,10 @@ describe('PostCard delete flow (offline)', () => {
     });
 
     renderWithQueryClient(<PostCard post={ownPost} />);
-    const deleteButton = screen.getByRole('button', { name: /削除/ });
+    openDeleteMenu();
+    const deleteButton = screen.getByTestId('post-1-delete');
     fireEvent.click(deleteButton);
-    fireEvent.click(screen.getByText('削除する'));
+    fireEvent.click(screen.getByTestId('post-1-confirm-delete'));
 
     await waitFor(() => {
       expect(mutateSpy).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
   type InfiniteData,
+  type UseInfiniteQueryOptions,
 } from '@tanstack/react-query';
 import { TauriApi, type FollowingFeedPage, type ListFollowingFeedParams } from '@/lib/api/tauri';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
@@ -180,45 +181,59 @@ export const useFollowingFeedQuery = (options: FollowingFeedQueryOptions = {}) =
   const includeReactions = options.includeReactions ?? false;
   const queryKey = followingFeedQueryKey(limit, includeReactions);
 
-  if (isE2E) {
-    return useInfiniteQuery<
-      FollowingFeedPageResult,
-      Error,
-      InfiniteData<FollowingFeedPageResult>,
-      ReturnType<typeof followingFeedQueryKey>,
-      string | null
-    >({
-      queryKey,
-      initialPageParam: null,
-      staleTime: 10 * 60 * 1000,
-      gcTime: 15 * 60 * 1000,
-      retry: false,
-      refetchOnMount: false,
-      refetchOnReconnect: false,
-      refetchInterval: false,
-      networkMode: 'offlineFirst',
-      getNextPageParam: () => undefined,
-      queryFn: async () => {
-        const cached = queryClient.getQueryData<InfiniteData<FollowingFeedPageResult>>(queryKey);
-        const fallbackPages =
-          queryClient
-            .getQueriesData<InfiniteData<FollowingFeedPageResult>>({ queryKey: ['followingFeed'] })
-            .map(([, data]) => data?.pages ?? [])
-            .reduce<FollowingFeedPageResult[]>((acc, pages) => acc.concat(pages), []) ?? [];
-        const resolved = cached?.pages?.[0] ?? fallbackPages.find(Boolean);
-        if (resolved) {
-          return resolved;
-        }
-        return {
-          cursor: null,
-          items: [],
-          nextCursor: null,
-          hasMore: false,
-          serverTime: Date.now(),
-        };
-      },
-    });
-  }
+  const queryOptions: UseInfiniteQueryOptions<
+    FollowingFeedPageResult,
+    Error,
+    InfiniteData<FollowingFeedPageResult>,
+    ReturnType<typeof followingFeedQueryKey>,
+    string | null
+  > = isE2E
+    ? {
+        queryKey,
+        initialPageParam: null,
+        staleTime: 10 * 60 * 1000,
+        gcTime: 15 * 60 * 1000,
+        retry: false,
+        refetchOnMount: false,
+        refetchOnReconnect: false,
+        refetchInterval: false,
+        networkMode: 'offlineFirst',
+        getNextPageParam: () => undefined,
+        queryFn: async () => {
+          const cached = queryClient.getQueryData<InfiniteData<FollowingFeedPageResult>>(queryKey);
+          const fallbackPages =
+            queryClient
+              .getQueriesData<InfiniteData<FollowingFeedPageResult>>({
+                queryKey: ['followingFeed'],
+              })
+              .map(([, data]) => data?.pages ?? [])
+              .reduce<FollowingFeedPageResult[]>((acc, pages) => acc.concat(pages), []) ?? [];
+          const resolved = cached?.pages?.[0] ?? fallbackPages.find(Boolean);
+          if (resolved) {
+            return resolved;
+          }
+          return {
+            cursor: null,
+            items: [],
+            nextCursor: null,
+            hasMore: false,
+            serverTime: Date.now(),
+          };
+        },
+      }
+    : {
+        queryKey,
+        initialPageParam: null,
+        getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+        staleTime: FOLLOWING_FEED_STALE_TIME,
+        retry: 1,
+        queryFn: ({ pageParam }) =>
+          fetchFollowingFeedPage({
+            cursor: pageParam ?? null,
+            limit,
+            includeReactions,
+          }),
+      };
 
   return useInfiniteQuery<
     FollowingFeedPageResult,
@@ -226,19 +241,7 @@ export const useFollowingFeedQuery = (options: FollowingFeedQueryOptions = {}) =
     InfiniteData<FollowingFeedPageResult>,
     ReturnType<typeof followingFeedQueryKey>,
     string | null
-  >({
-    queryKey,
-    initialPageParam: null,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    staleTime: FOLLOWING_FEED_STALE_TIME,
-    retry: 1,
-    queryFn: ({ pageParam }) =>
-      fetchFollowingFeedPage({
-        cursor: pageParam ?? null,
-        limit,
-        includeReactions,
-      }),
-  });
+  >(queryOptions);
 };
 
 export interface PrefetchTrendingCategoryOptions {
