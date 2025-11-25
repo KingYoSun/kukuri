@@ -20,7 +20,8 @@ export type BridgeAction =
   | 'switchAccount'
   | 'seedDirectMessageConversation'
   | 'getTopicSnapshot'
-  | 'syncPendingTopicQueue';
+  | 'syncPendingTopicQueue'
+  | 'seedTrendingFixture';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -99,6 +100,36 @@ export interface SyncPendingTopicResult {
   createdTopicIds: string[];
 }
 
+export interface TrendingFixturePost {
+  id?: string;
+  title: string;
+  author?: string;
+}
+
+export interface TrendingFixtureTopic {
+  topicId?: string;
+  title: string;
+  description?: string;
+  posts?: TrendingFixturePost[];
+}
+
+export interface TrendingFixture {
+  topics: TrendingFixtureTopic[];
+}
+
+export interface SeedTrendingFixtureResult {
+  topics: Array<{
+    id: string;
+    name: string;
+    author: string;
+  }>;
+  authors: Array<{
+    name: string;
+    npub: string;
+  }>;
+  followerNpub: string;
+}
+
 export interface AvatarFixture {
   base64: string;
   format: string;
@@ -116,6 +147,7 @@ type BridgeResultMap = {
   seedDirectMessageConversation: SeedDirectMessageConversationResult;
   getTopicSnapshot: TopicSnapshot;
   syncPendingTopicQueue: SyncPendingTopicResult;
+  seedTrendingFixture: SeedTrendingFixtureResult;
 };
 
 declare global {
@@ -406,4 +438,10 @@ export async function getTopicSnapshot(): Promise<TopicSnapshot> {
 
 export async function syncPendingTopicQueue(): Promise<SyncPendingTopicResult> {
   return await callBridge('syncPendingTopicQueue');
+}
+
+export async function seedTrendingFixture(
+  fixture: TrendingFixture,
+): Promise<SeedTrendingFixtureResult> {
+  return await callBridge('seedTrendingFixture', fixture);
 }

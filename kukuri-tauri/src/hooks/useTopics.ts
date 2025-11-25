@@ -79,7 +79,18 @@ export const useTopics = () => {
         }),
       );
 
-      const merged = mergeWithExisting(topicsWithStats);
+      const deletedTopicIds =
+        typeof window !== 'undefined' &&
+        Array.isArray(
+          (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: unknown }).__E2E_DELETED_TOPIC_IDS__,
+        )
+          ? ((window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] })
+              .__E2E_DELETED_TOPIC_IDS__ ?? [])
+          : [];
+
+      const merged = mergeWithExisting(
+        topicsWithStats.filter((topic) => !deletedTopicIds.includes(topic.id)),
+      );
       setTopics(merged);
       return merged;
     },

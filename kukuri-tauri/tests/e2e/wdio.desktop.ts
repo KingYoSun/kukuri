@@ -14,9 +14,11 @@ process.env.VITE_ENABLE_E2E ??= 'true';
 process.env.TAURI_ENV_DEBUG ??= 'true';
 process.env.WDIO_WORKERS ??= '1';
 process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
+process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
 
 const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
+console.info(`[wdio.desktop] driver port resolved to ${process.env.TAURI_DRIVER_PORT}`);
 
 function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
@@ -77,6 +79,7 @@ export const config: Options.Testrunner = {
   waitforTimeout: 15000,
   connectionRetryTimeout: 120000,
   connectionRetryCount: 2,
+  port: Number(process.env.TAURI_DRIVER_PORT ?? '4445'),
   autoCompileOpts: {
     autoCompile: true,
     tsNodeOpts: {
@@ -100,7 +103,7 @@ export const config: Options.Testrunner = {
     timeout: 60000
   },
   hostname: '127.0.0.1',
-  port: 4445,
+  port: Number(process.env.TAURI_DRIVER_PORT ?? '4445'),
   capabilities: [
     {
       maxInstances: WORKER_COUNT,

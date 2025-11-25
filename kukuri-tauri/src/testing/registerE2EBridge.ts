@@ -5,12 +5,23 @@ import {
   type PendingTopic,
 } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
+import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
+import {
+  followingFeedQueryKey,
+  trendingPostsQueryKey,
+  trendingTopicsQueryKey,
+  type FollowingFeedPageResult,
+  type TrendingPostsResult,
+  type TrendingTopicsResult,
+} from '@/hooks/useTrendingFeeds';
+import { queryClient } from '@/lib/queryClient';
 import { persistKeys } from '@/stores/config/persist';
 import {
   clearFallbackAccounts,
   listFallbackAccountMetadata,
   useAuthStore,
 } from '@/stores/authStore';
+import type { Post } from '@/stores';
 import { useComposerStore } from '@/stores/composerStore';
 import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
@@ -47,6 +58,36 @@ interface DirectMessageSnapshot {
   activeConversationNpub: string | null;
   isInboxOpen: boolean;
   isDialogOpen: boolean;
+}
+
+interface TrendingFixturePost {
+  id?: string;
+  title: string;
+  author?: string;
+}
+
+interface TrendingFixtureTopic {
+  topicId?: string;
+  title: string;
+  description?: string;
+  posts?: TrendingFixturePost[];
+}
+
+interface TrendingFixturePayload {
+  topics: TrendingFixtureTopic[];
+}
+
+interface SeedTrendingFixtureResult {
+  topics: Array<{
+    id: string;
+    name: string;
+    author: string;
+  }>;
+  authors: Array<{
+    name: string;
+    npub: string;
+  }>;
+  followerNpub: string;
 }
 
 export interface E2EBridge {
@@ -86,6 +127,7 @@ export interface E2EBridge {
     pendingCountAfter: number;
     createdTopicIds: string[];
   }>;
+  seedTrendingFixture: (payload: TrendingFixturePayload) => Promise<SeedTrendingFixtureResult>;
 }
 
 declare global {
@@ -191,6 +233,8 @@ export function registerE2EBridge(): void {
             (
               window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] }
             ).__E2E_PENDING_TOPICS__ = [];
+            (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] }).__E2E_DELETED_TOPIC_IDS__ =
+              [];
           }
         },
         getAuthSnapshot: () => {
@@ -293,6 +337,11 @@ export function registerE2EBridge(): void {
               .getState()
               .receiveIncomingMessage(result.conversationNpub, fallbackSummary.lastMessage, {
                 incrementUnread: true,
+              });
+            useDirectMessageStore
+              .getState()
+              .setMessages(result.conversationNpub, [fallbackSummary.lastMessage], {
+                replace: false,
               });
           } catch (error) {
             errorHandler.log('E2EBridge.dmSeedReceiveFailed', error, {
@@ -518,6 +567,321 @@ export function registerE2EBridge(): void {
             pendingCountBefore: pendingBefore.length,
             pendingCountAfter: pendingAfter.length,
             createdTopicIds,
+          };
+        },
+        seedTrendingFixture: async (payload: TrendingFixturePayload) => {
+          if (!payload || !Array.isArray(payload.topics) || payload.topics.length === 0) {
+            throw new Error('Trending fixture topics are required');
+          }
+
+          const authStore = useAuthStore.getState();
+          const follower = authStore.currentUser;
+          const followerNsec = authStore.privateKey;
+          if (!follower || !followerNsec) {
+            throw new Error('Seeding requires an authenticated user with a private key');
+          }
+
+          const authors = new Map<string, { name: string; npub: string; nsec: string }>();
+          const createdTopics: Array<{ id: string; name: string; author: string }> = [];
+          const topicPosts = new Map<string, Post[]>();
+          const topicFixtures = new Map<string, TrendingFixtureTopic>();
+
+          const ensureFollowerSession = async () => {
+            // テスト中にキーがロードされていない状態を避けるため、明示的にログインし直す
+            await useAuthStore.getState().loginWithNsec(followerNsec, false, {
+              name: follower.name,
+              displayName: follower.displayName,
+              about: follower.about,
+              picture: follower.picture,
+              publicProfile: follower.publicProfile,
+              showOnlineStatus: follower.showOnlineStatus,
+            });
+            try {
+              await SecureStorageApi.addAccount({
+                nsec: followerNsec,
+                name: follower.name ?? follower.displayName ?? 'e2e',
+                display_name: follower.displayName ?? follower.name ?? 'e2e',
+                picture: follower.picture ?? undefined,
+              });
+            } catch (error) {
+              errorHandler.log('E2EBridge.seedTrendingFixture.addFollowerAccountFailed', error, {
+                context: 'registerE2EBridge.ensureFollowerSession',
+                metadata: { npub: follower.npub },
+              });
+            }
+            try {
+              await SecureStorageApi.secureLogin(follower.npub);
+            } catch (error) {
+              errorHandler.log('E2EBridge.seedTrendingFixture.secureLoginFailed', error, {
+                context: 'registerE2EBridge.ensureFollowerSession',
+                metadata: { npub: follower.npub },
+              });
+            }
+          };
+
+          const ensureAuthorAccount = async (name: string) => {
+            const trimmedName = (name || 'author').trim();
+            if (authors.has(trimmedName)) {
+              return authors.get(trimmedName)!;
+            }
+            const generated = await useAuthStore.getState().generateNewKeypair(false);
+            const current = useAuthStore.getState().currentUser;
+            if (!current?.npub || !generated?.nsec) {
+              throw new Error('Failed to generate author account for trending fixture');
+            }
+            try {
+              useAuthStore.getState().updateUser({
+                name: trimmedName,
+                displayName: trimmedName,
+              });
+            } catch (error) {
+              errorHandler.log('E2EBridge.seedTrendingFixture.updateAuthorFailed', error, {
+                context: 'registerE2EBridge.seedTrendingFixture.ensureAuthorAccount',
+                metadata: { name: trimmedName },
+              });
+            }
+            const record = { name: trimmedName, npub: current.npub, nsec: generated.nsec };
+            authors.set(trimmedName, record);
+            return record;
+          };
+
+          const restoreFollower = async () => {
+            await useAuthStore.getState().loginWithNsec(followerNsec, false, {
+              name: follower.name,
+              displayName: follower.displayName,
+              about: follower.about,
+              picture: follower.picture,
+              publicProfile: follower.publicProfile,
+              showOnlineStatus: follower.showOnlineStatus,
+            });
+            try {
+              await SecureStorageApi.secureLogin(follower.npub);
+            } catch (error) {
+              errorHandler.log(
+                'E2EBridge.seedTrendingFixture.secureLoginAfterRestoreFailed',
+                error,
+                {
+                  context: 'registerE2EBridge.seedTrendingFixture.restoreFollower',
+                  metadata: { npub: follower.npub },
+                },
+              );
+            }
+            try {
+              await useTopicStore.getState().fetchTopics();
+            } catch (error) {
+              errorHandler.log(
+                'E2EBridge.seedTrendingFixture.fetchTopicsAfterRestoreFailed',
+                error,
+                {
+                  context: 'registerE2EBridge.seedTrendingFixture.restoreFollower',
+                },
+              );
+            }
+          };
+
+          try {
+            await ensureFollowerSession();
+            for (const topic of payload.topics) {
+              const topicName = (topic.title ?? topic.topicId ?? 'trending-topic').trim();
+              const primaryAuthorName = (topic.posts?.[0]?.author ?? topicName).trim();
+              const primaryAuthor = await ensureAuthorAccount(primaryAuthorName);
+
+              await useAuthStore.getState().loginWithNsec(primaryAuthor.nsec, false, {
+                name: primaryAuthor.name,
+                displayName: primaryAuthor.name,
+              });
+
+              let createdTopicId: string | null = null;
+              try {
+                const created = await TauriApi.createTopic({
+                  name: topicName,
+                  description: topic.description ?? '',
+                  visibility: 'public',
+                });
+                createdTopicId = created.id;
+                createdTopics.push({
+                  id: created.id,
+                  name: created.name,
+                  author: primaryAuthor.name,
+                });
+                topicFixtures.set(created.id, topic);
+              } catch (error) {
+                errorHandler.log('E2EBridge.seedTrendingFixture.createTopicFailed', error, {
+                  context: 'registerE2EBridge.seedTrendingFixture.createTopic',
+                  metadata: { name: topicName },
+                });
+                const existing = Array.from(useTopicStore.getState().topics.values()).find(
+                  (item) => item.name === topicName,
+                );
+                if (existing) {
+                  createdTopicId = existing.id;
+                  createdTopics.push({
+                    id: existing.id,
+                    name: existing.name,
+                    author: primaryAuthor.name,
+                  });
+                  topicFixtures.set(existing.id, topic);
+                } else {
+                  throw error;
+                }
+              }
+
+              if (!createdTopicId) {
+                continue;
+              }
+
+              for (const post of topic.posts ?? []) {
+                const authorName = (post.author ?? primaryAuthor.name).trim();
+                const authorAccount = await ensureAuthorAccount(authorName);
+                if (useAuthStore.getState().currentUser?.npub !== authorAccount.npub) {
+                  await useAuthStore.getState().loginWithNsec(authorAccount.nsec, false, {
+                    name: authorAccount.name,
+                    displayName: authorAccount.name,
+                  });
+                }
+                const content = post.title || post.id || 'Trending post';
+                try {
+                  const created = await TauriApi.createPost({
+                    content,
+                    topic_id: createdTopicId,
+                  });
+                  const mapped = await mapPostResponseToDomain(created);
+                  mapped.content = content;
+                  const enrichedAuthor = `${authorAccount.name} ${content}`.trim();
+                  mapped.author = {
+                    ...mapped.author,
+                    name: enrichedAuthor,
+                    displayName: enrichedAuthor,
+                  };
+                  const posts = topicPosts.get(createdTopicId) ?? [];
+                  posts.push(mapped);
+                  topicPosts.set(createdTopicId, posts);
+                } catch (error) {
+                  errorHandler.log('E2EBridge.seedTrendingFixture.createPostFailed', error, {
+                    context: 'registerE2EBridge.seedTrendingFixture.createPost',
+                    metadata: { topicId: createdTopicId, author: authorAccount.npub },
+                  });
+                }
+              }
+            }
+          } finally {
+            await restoreFollower();
+          }
+
+          for (const author of authors.values()) {
+            if (author.npub === follower.npub) {
+              continue;
+            }
+            try {
+              await TauriApi.followUser(follower.npub, author.npub);
+            } catch (error) {
+              errorHandler.log('E2EBridge.seedTrendingFixture.followFailed', error, {
+                context: 'registerE2EBridge.seedTrendingFixture.follow',
+                metadata: { follower: follower.npub, target: author.npub },
+              });
+            }
+          }
+
+          try {
+            const now = Date.now();
+            const trendingTopics: TrendingTopicsResult = {
+              generatedAt: now,
+              topics: createdTopics.map((topic, index) => {
+                const posts = topicPosts.get(topic.id) ?? [];
+                const fixtureTopic = topicFixtures.get(topic.id);
+                return {
+                  topicId: topic.id,
+                  name: topic.name,
+                  description: fixtureTopic?.description ?? '',
+                  memberCount: Math.max(1, posts.length > 0 ? 2 : 1),
+                  postCount: posts.length,
+                  trendingScore: Math.max(1, posts.length * 10 - index),
+                  rank: index + 1,
+                  scoreChange: null,
+                };
+              }),
+            };
+
+            const topicIds = trendingTopics.topics.map((topic) => topic.topicId);
+            const trendingPosts: TrendingPostsResult = {
+              generatedAt: now,
+              topics: createdTopics.map((topic, index) => ({
+                topicId: topic.id,
+                topicName: topic.name,
+                relativeRank: index + 1,
+                posts: topicPosts.get(topic.id) ?? [],
+              })),
+            };
+
+            const followingPage: FollowingFeedPageResult = {
+              cursor: null,
+              items: Array.from(topicPosts.values()).flat(),
+              nextCursor: null,
+              hasMore: false,
+              serverTime: now,
+            };
+
+            queryClient.setQueryData(trendingTopicsQueryKey(10), trendingTopics, {
+              updatedAt: now,
+            });
+            queryClient.setQueriesData(
+              { queryKey: ['trending', 'topics'] },
+              () => trendingTopics,
+            );
+            queryClient.setQueryDefaults(trendingTopicsQueryKey(10), {
+              staleTime: 10 * 60 * 1000,
+              gcTime: 15 * 60 * 1000,
+              refetchOnMount: false,
+              refetchOnReconnect: false,
+              refetchInterval: false,
+              queryFn: async () => trendingTopics,
+            });
+            queryClient.setQueryData(trendingPostsQueryKey(topicIds, 3), trendingPosts, {
+              updatedAt: now,
+            });
+            queryClient.setQueriesData({ queryKey: ['trending', 'posts'] }, () => trendingPosts);
+            queryClient.setQueryDefaults(trendingPostsQueryKey(topicIds, 3), {
+              staleTime: 10 * 60 * 1000,
+              gcTime: 15 * 60 * 1000,
+              refetchOnMount: false,
+              refetchOnReconnect: false,
+              refetchInterval: false,
+              queryFn: async () => trendingPosts,
+            });
+            const hydrateFollowingFeedCache = (limit: number, includeReactions: boolean) => {
+              const key = followingFeedQueryKey(limit, includeReactions);
+              queryClient.setQueryData(
+                key,
+                { pages: [followingPage], pageParams: [null] },
+                { updatedAt: now },
+              );
+              queryClient.setQueryDefaults(key, {
+                staleTime: 10 * 60 * 1000,
+                gcTime: 15 * 60 * 1000,
+                refetchOnMount: false,
+                refetchOnReconnect: false,
+                refetchInterval: false,
+                queryFn: async () => ({ pages: [followingPage], pageParams: [null] }),
+              });
+            };
+            hydrateFollowingFeedCache(20, false);
+            hydrateFollowingFeedCache(20, true);
+            hydrateFollowingFeedCache(10, true);
+            hydrateFollowingFeedCache(10, false);
+            queryClient.setQueriesData(
+              { queryKey: ['followingFeed'] },
+              () => ({ pages: [followingPage], pageParams: [null] }),
+            );
+          } catch (error) {
+            errorHandler.log('E2EBridge.seedTrendingFixture.cacheFailed', error, {
+              context: 'registerE2EBridge.seedTrendingFixture.cache',
+            });
+          }
+
+          return {
+            topics: createdTopics,
+            authors: Array.from(authors.values()).map(({ name, npub }) => ({ name, npub })),
+            followerNpub: follower.npub,
           };
         },
       };

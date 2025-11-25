@@ -178,7 +178,15 @@ impl KeyManager for DefaultKeyManager {
             self.install_current_from_pair(&pair).await?;
             Ok(pair)
         } else {
-            Err(AppError::NotFound("No keys loaded".into()))
+            // Fallback: if no "current" is set, try the first stored keypair to avoid empty auth state
+            let mut fallback = self.key_store.list_keypairs().await?;
+            if let Some(pair) = fallback.pop() {
+                self.key_store.set_current(&pair.npub).await.ok();
+                self.install_current_from_pair(&pair).await?;
+                Ok(pair)
+            } else {
+                Err(AppError::NotFound("No keys loaded".into()))
+            }
         }
     }
 }

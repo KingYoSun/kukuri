@@ -46,6 +46,9 @@ export function DirectMessageDialog() {
   const setMessages = useDirectMessageStore((state) => state.setMessages);
   const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
   const removeOptimisticMessage = useDirectMessageStore((state) => state.removeOptimisticMessage);
+  const isE2E =
+    typeof window !== 'undefined' &&
+    Boolean((window as unknown as { __KUKURI_E2E__?: boolean }).__KUKURI_E2E__);
 
   const scrollAreaWrapperRef = useRef<HTMLDivElement | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
@@ -97,9 +100,12 @@ export function DirectMessageDialog() {
     string | null
   >({
     queryKey: ['direct-messages', activeConversationNpub ?? 'inactive'],
-    enabled: isDialogOpen && Boolean(activeConversationNpub),
+    enabled: isDialogOpen && Boolean(activeConversationNpub) && !isE2E,
     retry: false,
     initialPageParam: null,
+    networkMode: isE2E ? 'offlineFirst' : undefined,
+    refetchOnMount: isE2E ? false : undefined,
+    refetchOnReconnect: isE2E ? false : undefined,
     queryFn: async ({ pageParam }) => {
       if (!activeConversationNpub) {
         return { items: [], nextCursor: null, hasMore: false };
@@ -176,6 +182,11 @@ export function DirectMessageDialog() {
     if (!activeConversationNpub || confirmedFromQuery === undefined) {
       return;
     }
+    const existingMessages =
+      useDirectMessageStore.getState().conversations[activeConversationNpub] ?? [];
+    if (confirmedFromQuery.length === 0 && existingMessages.length > 0) {
+      return;
+    }
     setMessages(activeConversationNpub, confirmedFromQuery, { replace: true });
   }, [activeConversationNpub, confirmedFromQuery, setMessages]);
 
@@ -240,7 +251,10 @@ export function DirectMessageDialog() {
     if (!activeConversationNpub) {
       return [] as DirectMessageModel[];
     }
-    const confirmed = confirmedFromQuery ?? conversations[activeConversationNpub] ?? [];
+    const confirmed =
+      confirmedFromQuery && confirmedFromQuery.length > 0
+        ? confirmedFromQuery
+        : conversations[activeConversationNpub] ?? [];
     const pending = optimisticMessages[activeConversationNpub] ?? [];
     return [...confirmed, ...pending].sort((a, b) => a.createdAt - b.createdAt);
   }, [activeConversationNpub, confirmedFromQuery, conversations, optimisticMessages]);

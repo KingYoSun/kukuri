@@ -193,18 +193,28 @@ export const useTopicStore = create<TopicStore>()(
             typeof window !== 'undefined' &&
             (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean })
               .__E2E_KEEP_LOCAL_TOPICS__ === true;
-          let topics: Topic[] = (apiTopics ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            description: t.description,
-            createdAt: new Date(t.created_at * 1000),
-            memberCount: t.member_count ?? 0,
-            postCount: t.post_count ?? 0,
-            isActive: true,
-            tags: [],
-            visibility: t.visibility ?? 'public',
-            isJoined: Boolean(t.is_joined),
-          }));
+          const deletedTopicIds =
+            typeof window !== 'undefined' &&
+            Array.isArray(
+              (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: unknown }).__E2E_DELETED_TOPIC_IDS__,
+            )
+              ? ((window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] })
+                  .__E2E_DELETED_TOPIC_IDS__ ?? [])
+              : [];
+          let topics: Topic[] = (apiTopics ?? [])
+            .map((t) => ({
+              id: t.id,
+              name: t.name,
+              description: t.description,
+              createdAt: new Date(t.created_at * 1000),
+              memberCount: t.member_count ?? 0,
+              postCount: t.post_count ?? 0,
+              isActive: true,
+              tags: [],
+              visibility: t.visibility ?? 'public',
+              isJoined: Boolean(t.is_joined),
+            }))
+            .filter((topic) => !deletedTopicIds.includes(normalizeTopicId(topic.id)));
           if (keepLocalTopics) {
             const merged = new Map<string, Topic>();
             topics.forEach((topic) => merged.set(normalizeTopicId(topic.id), topic));

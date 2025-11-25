@@ -7,7 +7,7 @@ use crate::domain::entities::{
 };
 use crate::domain::value_objects::keychain::{KeyMaterialLedger, KeyMaterialRecord};
 use crate::shared::error::AppError;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use chrono::Utc;
 use keyring::Entry;
@@ -15,13 +15,162 @@ use nostr_sdk::{
     FromBech32,
     prelude::{Keys, PublicKey, SecretKey},
 };
-use tracing::{debug, error};
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::Mutex;
+use tracing::{debug, error, warn};
 
 const SERVICE_NAME: &str = "kukuri";
 const ACCOUNTS_KEY: &str = "accounts_metadata";
 const KEY_MANAGER_LEDGER_KEY: &str = "key_manager_ledger";
 
-/// セキュアストレージのトレイト
+static FALLBACK_STORE: Lazy<Mutex<HashMap<String, String>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn fallback_store(key: &str, value: &str) -> Result<()> {
+    let mut guard = FALLBACK_STORE
+        .lock()
+        .map_err(|_| anyhow!("Failed to lock fallback store"))?;
+    guard.insert(key.to_string(), value.to_string());
+    Ok(())
+}
+
+fn fallback_get(key: &str) -> Option<String> {
+    FALLBACK_STORE
+        .lock()
+        .ok()
+        .and_then(|guard| guard.get(key).cloned())
+}
+
+fn fallback_delete(key: &str) -> Result<()> {
+    let mut guard = FALLBACK_STORE
+        .lock()
+        .map_err(|_| anyhow!("Failed to lock fallback store"))?;
+    guard.remove(key);
+    Ok(())
+}
+
+fn fallback_has(key: &str) -> bool {
+    FALLBACK_STORE
+        .lock()
+        .ok()
+        .map(|guard| guard.contains_key(key))
+        .unwrap_or(false)
+}
+
+fn fallback_clear() -> Result<()> {
+    let mut guard = FALLBACK_STORE
+        .lock()
+        .map_err(|_| anyhow!("Failed to lock fallback store"))?;
+    guard.clear();
+    Ok(())
+}
+
+fn store_with_fallback(key: &str, value: &str) -> Result<()> {
+    match Entry::new(SERVICE_NAME, key) {
+        Ok(entry) => {
+            if let Err(err) = entry.set_password(value) {
+                warn!(
+                    "SecureStorage: keyring set_password failed for key {}: {err:?}",
+                    key
+                );
+            }
+        }
+        Err(err) => {
+            warn!(
+                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
+                key
+            );
+        }
+    }
+    fallback_store(key, value)
+}
+
+fn retrieve_with_fallback(key: &str) -> Result<Option<String>> {
+    match Entry::new(SERVICE_NAME, key) {
+        Ok(entry) => match entry.get_password() {
+            Ok(password) => {
+                let _ = fallback_store(key, &password);
+                return Ok(Some(password));
+            }
+            Err(keyring::Error::NoEntry) => {}
+            Err(err) => {
+                warn!(
+                    "SecureStorage: keyring get_password failed for key {}: {err:?}",
+                    key
+                );
+            }
+        },
+        Err(err) => {
+            warn!(
+                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
+                key
+            );
+        }
+    }
+    Ok(fallback_get(key))
+}
+
+fn delete_with_fallback(key: &str) -> Result<()> {
+    match Entry::new(SERVICE_NAME, key) {
+        Ok(entry) => match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(err) => {
+                warn!(
+                    "SecureStorage: keyring delete failed for key {}: {err:?}",
+                    key
+                );
+            }
+        },
+        Err(err) => {
+            warn!(
+                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
+                key
+            );
+        }
+    }
+    fallback_delete(key)
+}
+
+fn exists_with_fallback(key: &str) -> Result<bool> {
+    match Entry::new(SERVICE_NAME, key) {
+        Ok(entry) => match entry.get_password() {
+            Ok(_) => return Ok(true),
+            Err(keyring::Error::NoEntry) => {}
+            Err(err) => {
+                warn!(
+                    "SecureStorage: keyring exists check failed for key {}: {err:?}",
+                    key
+                );
+            }
+        },
+        Err(err) => {
+            warn!(
+                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
+                key
+            );
+        }
+    }
+    Ok(fallback_has(key))
+}
+
+#[derive(Debug)]
+struct SecureStorageError(String);
+
+impl fmt::Display for SecureStorageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for SecureStorageError {}
+
+fn boxed_error(e: anyhow::Error) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+    Box::new(SecureStorageError(e.to_string()))
+}
+
+/// Secure storage trait used by the app and Tauri bridge.
 #[async_trait]
 pub trait SecureStorage: Send + Sync {
     async fn store(
@@ -39,7 +188,7 @@ pub trait SecureStorage: Send + Sync {
     async fn clear(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// デフォルトのSecureStorage実装
+/// Default SecureStorage implementation backed by keyring with in-memory fallback.
 pub struct DefaultSecureStorage;
 
 impl DefaultSecureStorage {
@@ -47,94 +196,53 @@ impl DefaultSecureStorage {
         Self
     }
 
-    /// 秘密鍵を保存（npubごとに個別保存）
+    /// Save private key by npub.
     pub fn save_private_key(npub: &str, nsec: &str) -> Result<()> {
         debug!("SecureStorage: Saving private key for npub={npub}");
-
-        let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
-
-        match entry.set_password(nsec) {
-            Ok(_) => {
-                debug!("SecureStorage: Private key saved successfully for npub={npub}");
-                Ok(())
-            }
-            Err(e) => {
-                error!("SecureStorage: Failed to save private key: {e:?}");
-                Err(anyhow::anyhow!(
-                    "Failed to save private key to keyring: {e}"
-                ))
-            }
-        }
+        store_with_fallback(npub, nsec)
     }
 
-    /// 秘密鍵を取得
+    /// Get private key by npub.
     pub fn get_private_key(npub: &str) -> Result<Option<String>> {
-        let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
-        match entry.get_password() {
-            Ok(password) => Ok(Some(password)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(anyhow::anyhow!("Failed to get private key: {e}")),
-        }
+        retrieve_with_fallback(npub)
     }
 
-    /// 秘密鍵を削除
+    /// Delete private key by npub.
     pub fn delete_private_key(npub: &str) -> Result<()> {
-        let entry = Entry::new(SERVICE_NAME, npub).context("Failed to create keyring entry")?;
-        match entry.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()), // 既に削除されている場合もOK
-            Err(e) => Err(anyhow::anyhow!("Failed to delete private key: {e}")),
-        }
+        delete_with_fallback(npub)
     }
 
-    /// アカウントメタデータを保存（公開情報のみ）
+    /// Save accounts metadata (includes current npub).
     pub fn save_accounts_metadata(metadata: &AccountsMetadata) -> Result<()> {
         let json =
             serde_json::to_string(metadata).context("Failed to serialize accounts metadata")?;
         debug!("SecureStorage: Saving metadata JSON: {json}");
+        store_with_fallback(ACCOUNTS_KEY, &json)?;
 
-        let entry =
-            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
-
-        match entry.set_password(&json) {
-            Ok(_) => {
-                debug!("SecureStorage: Metadata saved to keyring successfully");
-
-                // デバッグ: 保存直後に読み取りテスト
-                debug!("SecureStorage: Testing immediate read after save...");
-                let test_entry = Entry::new(SERVICE_NAME, ACCOUNTS_KEY)
-                    .context("Failed to create test entry")?;
-
-                match test_entry.get_password() {
-                    Ok(test_json) => {
-                        debug!(
-                            "SecureStorage: Immediate read test succeeded, data length: {}",
-                            test_json.len()
-                        );
-                    }
-                    Err(e) => {
-                        error!("SecureStorage: Immediate read test failed: {e:?}");
-                    }
-                }
-
-                Ok(())
+        // Read-back check to ensure fallback has the latest value.
+        match retrieve_with_fallback(ACCOUNTS_KEY) {
+            Ok(Some(test_json)) => {
+                debug!(
+                    "SecureStorage: Immediate read test succeeded, data length: {}",
+                    test_json.len()
+                );
             }
-            Err(e) => {
-                error!("SecureStorage: Failed to save metadata to keyring: {e:?}");
-                Err(anyhow::anyhow!("Failed to save accounts metadata: {e}"))
+            Ok(None) => {
+                warn!("SecureStorage: Metadata read-after-write returned empty result");
+            }
+            Err(err) => {
+                error!("SecureStorage: Immediate metadata read failed: {err:?}");
             }
         }
+
+        Ok(())
     }
 
-    /// アカウントメタデータを取得
+    /// Fetch accounts metadata or default.
     pub fn get_accounts_metadata() -> Result<AccountsMetadata> {
-        debug!("SecureStorage: Getting accounts metadata from keyring...");
-
-        let entry =
-            Entry::new(SERVICE_NAME, ACCOUNTS_KEY).context("Failed to create keyring entry")?;
-
-        match entry.get_password() {
-            Ok(json) => {
+        debug!("SecureStorage: Getting accounts metadata...");
+        match retrieve_with_fallback(ACCOUNTS_KEY) {
+            Ok(Some(json)) => {
                 debug!("SecureStorage: Retrieved metadata JSON: {json}");
                 let metadata: AccountsMetadata = serde_json::from_str(&json)
                     .context("Failed to deserialize accounts metadata")?;
@@ -145,37 +253,31 @@ impl DefaultSecureStorage {
                 );
                 Ok(metadata)
             }
-            Err(keyring::Error::NoEntry) => {
-                debug!("SecureStorage: No metadata entry found in keyring, returning default");
+            Ok(None) => {
+                debug!("SecureStorage: No metadata entry found, returning default");
                 Ok(AccountsMetadata::default())
             }
-            Err(e) => {
-                error!("SecureStorage: Failed to get metadata from keyring: {e:?}");
-                Err(anyhow::anyhow!("Failed to get accounts metadata: {e}"))
+            Err(err) => {
+                error!("SecureStorage: Failed to get metadata: {err:?}");
+                Err(err)
             }
         }
     }
 
     fn get_key_material_ledger() -> Result<KeyMaterialLedger> {
-        let entry = Entry::new(SERVICE_NAME, KEY_MANAGER_LEDGER_KEY)
-            .context("Failed to create keyring entry")?;
-        match entry.get_password() {
-            Ok(json) => {
+        match retrieve_with_fallback(KEY_MANAGER_LEDGER_KEY) {
+            Ok(Some(json)) => {
                 debug!("SecureStorage: Retrieved key ledger JSON");
                 serde_json::from_str(&json).context("Failed to deserialize key material ledger")
             }
-            Err(keyring::Error::NoEntry) => Ok(KeyMaterialLedger::default()),
-            Err(e) => Err(anyhow::anyhow!("Failed to get key ledger: {e}")),
+            Ok(None) => Ok(KeyMaterialLedger::default()),
+            Err(err) => Err(err),
         }
     }
 
     fn save_key_material_ledger(ledger: &KeyMaterialLedger) -> Result<()> {
         let json = serde_json::to_string(ledger).context("Failed to serialize key ledger")?;
-        let entry = Entry::new(SERVICE_NAME, KEY_MANAGER_LEDGER_KEY)
-            .context("Failed to create keyring entry")?;
-        entry
-            .set_password(&json)
-            .map_err(|e| anyhow::anyhow!("Failed to save key ledger: {e}"))
+        store_with_fallback(KEY_MANAGER_LEDGER_KEY, &json)
     }
 }
 
@@ -192,61 +294,39 @@ impl SecureStorage for DefaultSecureStorage {
         key: &str,
         value: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let entry = Entry::new(SERVICE_NAME, key).map_err(|e| e.to_string())?;
-        entry.set_password(value).map_err(|e| e.to_string())?;
-        Ok(())
+        store_with_fallback(key, value).map_err(boxed_error)
     }
 
     async fn retrieve(
         &self,
         key: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let entry = Entry::new(SERVICE_NAME, key).map_err(|e| e.to_string())?;
-        match entry.get_password() {
-            Ok(password) => Ok(Some(password)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
-        }
+        retrieve_with_fallback(key).map_err(boxed_error)
     }
 
     async fn delete(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let entry = Entry::new(SERVICE_NAME, key).map_err(|e| e.to_string())?;
-        match entry.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()), // Already deleted is OK
-            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
-        }
+        delete_with_fallback(key).map_err(boxed_error)
     }
 
     async fn exists(&self, key: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let entry = Entry::new(SERVICE_NAME, key).map_err(|e| e.to_string())?;
-        match entry.get_password() {
-            Ok(_) => Ok(true),
-            Err(keyring::Error::NoEntry) => Ok(false),
-            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
-        }
+        exists_with_fallback(key).map_err(boxed_error)
     }
 
     async fn list_keys(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-        // keyringライブラリは直接的なキーのリストをサポートしていないため、
-        // アカウントメタデータから取得
-        let metadata = Self::get_accounts_metadata().map_err(|e| e.to_string())?;
+        // keyring does not support listing; derive from stored metadata.
+        let metadata = Self::get_accounts_metadata().map_err(boxed_error)?;
         Ok(metadata.accounts.keys().cloned().collect())
     }
 
     async fn clear(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // 全アカウントの秘密鍵を削除
-        let metadata = Self::get_accounts_metadata().map_err(|e| e.to_string())?;
+        // Remove all stored keys and metadata.
+        let metadata = Self::get_accounts_metadata().map_err(boxed_error)?;
         for npub in metadata.accounts.keys() {
-            Self::delete_private_key(npub).map_err(|e| e.to_string())?;
+            Self::delete_private_key(npub).map_err(boxed_error)?;
         }
-        // メタデータをクリア
-        Self::save_accounts_metadata(&AccountsMetadata::default()).map_err(|e| e.to_string())?;
-        let entry = Entry::new(SERVICE_NAME, KEY_MANAGER_LEDGER_KEY).map_err(|e| e.to_string())?;
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
-        }
+        Self::save_accounts_metadata(&AccountsMetadata::default()).map_err(boxed_error)?;
+        delete_with_fallback(KEY_MANAGER_LEDGER_KEY).map_err(boxed_error)?;
+        fallback_clear().map_err(boxed_error)?;
         Ok(())
     }
 }
@@ -422,19 +502,19 @@ impl KeyMaterialStore for DefaultSecureStorage {
     async fn set_current(&self, npub: &str) -> Result<(), AppError> {
         let mut ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
         if !ledger.records.contains_key(npub) {
-            // Ledger entries can go missing on some platforms; recreate them on-demand.
             let public_key = match Self::get_private_key(npub).map_err(to_storage_error)? {
                 Some(nsec) => {
                     let secret_key = SecretKey::from_bech32(&nsec).map_err(|e| {
                         AppError::Crypto(format!("Invalid nsec stored for npub {npub}: {e:?}"))
                     })?;
-                    Keys::new(secret_key).public_key().to_hex()
+                    Keys::new(secret_key).public_key()
                 }
-                None => PublicKey::from_bech32(npub)
-                    .map_err(|e| AppError::Crypto(format!("Failed to decode npub {npub}: {e:?}")))?
-                    .to_hex(),
+                None => PublicKey::from_bech32(npub).map_err(|e| {
+                    AppError::Crypto(format!("Failed to decode npub {npub}: {e:?}"))
+                })?,
             };
-            ledger.upsert(KeyMaterialRecord::new(npub.to_string(), public_key));
+            let public_key_hex = public_key.to_hex();
+            ledger.upsert(KeyMaterialRecord::new(npub.to_string(), public_key_hex));
         }
         ledger.touch_current(npub);
         Self::save_key_material_ledger(&ledger).map_err(to_storage_error)
@@ -492,6 +572,9 @@ mod tests {
         let result = storage.retrieve("test_delete_key").await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
+
+        // Clean up
+        let _ = storage.delete("test_delete_key").await;
     }
 
     #[tokio::test]

@@ -75,17 +75,36 @@ export async function startDriver(): Promise<void> {
     return;
   }
 
+  const resolvedPort = Number(process.env.TAURI_DRIVER_PORT ?? DEFAULT_PORT);
+  console.info(`[tauriDriver] starting with port=${resolvedPort}`);
   const binaryPath = await resolveDriverBinary();
   const isLinux = platform() === 'linux';
-  const proxyListenPort = Number(DEFAULT_PORT);
+  let proxyListenPort = resolvedPort;
+  const nativeHost = process.env.TAURI_NATIVE_DRIVER_HOST ?? '127.0.0.1';
+  let nativePort = Number(
+    process.env.TAURI_NATIVE_DRIVER_PORT ?? (isLinux ? proxyListenPort + 100 : 4444)
+  );
+
+  if (isLinux) {
+    if (proxyListenPort === nativePort) {
+      proxyListenPort += 2;
+    }
+    // avoid binding failures if the native port is already taken
+    let attempts = 0;
+    while (attempts < 5 && (await isPortInUse(nativePort))) {
+      nativePort += 2;
+      attempts += 1;
+    }
+  }
   const driverPort = isLinux ? proxyListenPort + 1 : proxyListenPort;
 
   if (
     (await isPortInUse(proxyListenPort)) ||
-    (isLinux && (await isPortInUse(driverPort)))
+    (isLinux && (await isPortInUse(driverPort))) ||
+    (isLinux && (await isPortInUse(nativePort)))
   ) {
     console.warn(
-      `tauri-driver ports already in use (proxy=${proxyListenPort}, driver=${driverPort}); assuming existing driver`
+      `tauri-driver ports already in use (proxy=${proxyListenPort}, driver=${driverPort}, native=${nativePort}); assuming existing driver`
     );
     return;
   }
@@ -99,15 +118,20 @@ export async function startDriver(): Promise<void> {
   if (nativeDriverPath) {
     args.push('--native-driver', nativeDriverPath);
     if (platform() === 'linux') {
-      const nativeHost = process.env.TAURI_NATIVE_DRIVER_HOST ?? '127.0.0.1';
-      const nativePort = process.env.TAURI_NATIVE_DRIVER_PORT ?? '4444';
-      args.push('--native-host', nativeHost, '--native-port', nativePort);
+      args.push('--native-host', nativeHost, '--native-port', nativePort.toString());
     }
   }
 
-  driverProcess = spawn(binaryPath, args, {
-    stdio: 'inherit'
-  });
+  try {
+    console.info(`[tauriDriver] spawning ${binaryPath} ${args.join(' ')}`);
+    driverProcess = spawn(binaryPath, args, {
+      stdio: 'inherit'
+    });
+  } catch (error) {
+    console.error('[tauriDriver] failed to spawn driver', error);
+    driverProcess = null;
+    throw error;
+  }
 
   driverProcess.once('exit', (code, signal) => {
     if (code !== 0) {

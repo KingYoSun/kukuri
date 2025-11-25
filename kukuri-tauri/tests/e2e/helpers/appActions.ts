@@ -99,7 +99,17 @@ export async function openAccountMenu(): Promise<void> {
   const menu = () => $('[data-testid="account-menu-go-login"]');
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await trigger.click();
+    try {
+      await trigger.waitForClickable({ timeout: 7000 });
+      await trigger.click();
+    } catch {
+      await browser.execute(() => {
+        const el = document.querySelector(
+          '[data-testid="account-switcher-trigger"]',
+        ) as HTMLButtonElement | null;
+        el?.click();
+      });
+    }
     try {
       await (await menu()).waitForDisplayed({ timeout: 7000 });
       return;

@@ -108,13 +108,13 @@ function TopicPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowEditModal(true)}>
+                <DropdownMenuItem onSelect={() => setShowEditModal(true)}>
                   <Edit className="h-4 w-4 mr-2" />
                   編集
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => setShowDeleteDialog(true)}
+                  onSelect={() => setShowDeleteDialog(true)}
                   className="text-destructive"
                   data-testid="topic-delete-menu"
                 >

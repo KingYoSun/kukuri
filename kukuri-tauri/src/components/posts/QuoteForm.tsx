@@ -1,14 +1,14 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { Quote } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { Quote } from 'lucide-react';
 
+import { PostActionComposer } from '@/components/posts/PostActionComposer';
+import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
+import { Card, CardContent } from '@/components/ui/card';
 import { TauriApi } from '@/lib/api/tauri';
+import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDisplay';
 import { useAuthStore } from '@/stores';
 import type { Post } from '@/stores';
-import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDisplay';
-import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
-import { PostActionComposer } from '@/components/posts/PostActionComposer';
 
 interface QuoteFormProps {
   post: Post;
@@ -46,7 +46,6 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
     onSuccess,
   });
 
-  // 時間表示のフォーマット
   const timeAgo = formatDistanceToNow(new Date(post.created_at * 1000), {
     addSuffix: true,
     locale: ja,

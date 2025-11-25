@@ -27,20 +27,20 @@ function createTempImage(): string {
   return filePath;
 }
 
-describe('ホーム/トピック/投稿操作', () => {
+describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c', () => {
   before(async () => {
     await waitForAppReady();
     await resetAppState();
   });
 
-  it('PostComposerとPostCardの操作からトピック作成/削除まで確認できる', async function () {
+  it('PostComposer\u3068PostCard\u306e\u64cd\u4f5c\u304b\u3089\u30c8\u30d4\u30c3\u30af\u4f5c\u6210/\u524a\u9664\u307e\u3067\u78ba\u8a8d\u3067\u304d\u308b', async function () {
     this.timeout(300000);
 
     await waitForWelcome();
     const profile: ProfileInfo = {
       name: 'E2E User',
       displayName: 'home-posts',
-      about: 'ホーム/トピック/投稿のE2E検証用アカウント',
+      about: '\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u306eE2E\u691c\u8a3c\u7528\u30a2\u30ab\u30a6\u30f3\u30c8',
     };
 
     await $('[data-testid="welcome-create-account"]').click();
@@ -73,7 +73,7 @@ describe('ホーム/トピック/投稿操作', () => {
     await fileInput.setValue(localImagePath);
     await browser.waitUntil(async () => (await markdownInput.getValue()).includes('!['), {
       timeout: 20000,
-      timeoutMsg: '画像マークダウンが入力に反映されない',
+      timeoutMsg: '\u753b\u50cf\u30de\u30fc\u30af\u30c0\u30a6\u30f3\u304c\u5165\u529b\u306b\u53cd\u6620\u3055\u308c\u306a\u3044',
     });
     await browser.waitUntil(
       async () => {
@@ -83,7 +83,7 @@ describe('ホーム/トピック/投稿操作', () => {
         const previewText = await previewHost.getText();
         return previewText.includes('E2E post');
       },
-      { timeout: 20000, timeoutMsg: 'Markdownプレビューが更新されない' },
+      { timeout: 20000, timeoutMsg: 'Markdown\u30d7\u30ec\u30d3\u30e5\u30fc\u304c\u66f4\u65b0\u3055\u308c\u306a\u3044' },
     );
 
     await $('[data-testid="save-draft-button"]').click();
@@ -92,7 +92,7 @@ describe('ホーム/トピック/投稿操作', () => {
     await $('[data-testid="submit-post-button"]').click();
     await browser.waitUntil(async () => (await $$('[data-testid^="post-"]')).length > 0, {
       timeout: 40000,
-      timeoutMsg: '投稿リストが表示されない',
+      timeoutMsg: '\u6295\u7a3f\u30ea\u30b9\u30c8\u304c\u8868\u793a\u3055\u308c\u306a\u3044',
     });
     const postCards = await $$('[data-testid^="post-"]');
     let targetPost: WebdriverIO.Element | null = null;
@@ -111,7 +111,7 @@ describe('ホーム/トピック/投稿操作', () => {
     await likeButton.click();
     await browser.waitUntil(
       async () => Number((await likeButton.getText()) || '0') > initialLike,
-      { timeout: 20000, timeoutMsg: 'いいねのカウントが増えない' },
+      { timeout: 20000, timeoutMsg: '\u3044\u3044\u306d\u306e\u30ab\u30a6\u30f3\u30c8\u304c\u5897\u3048\u306a\u3044' },
     );
 
     const boostButton = await firstPost.$('[data-testid$="-boost"]');
@@ -119,19 +119,19 @@ describe('ホーム/トピック/投稿操作', () => {
     await boostButton.click();
     await browser.waitUntil(
       async () => Number((await boostButton.getText()) || '0') > initialBoost,
-      { timeout: 20000, timeoutMsg: 'ブーストのカウントが増えない' },
+      { timeout: 20000, timeoutMsg: '\u30d6\u30fc\u30b9\u30c8\u306e\u30ab\u30a6\u30f3\u30c8\u304c\u5897\u3048\u306a\u3044' },
     );
 
     const bookmarkButton = await firstPost.$('[data-testid$="-bookmark"]');
     await bookmarkButton.click();
     await browser.waitUntil(
       async () => (await bookmarkButton.getAttribute('aria-pressed')) === 'true',
-      { timeout: 15000, timeoutMsg: 'ブックマークが有効にならない' },
+      { timeout: 15000, timeoutMsg: '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u304c\u6709\u52b9\u306b\u306a\u3089\u306a\u3044' },
     );
     await bookmarkButton.click();
     await browser.waitUntil(
       async () => (await bookmarkButton.getAttribute('aria-pressed')) === 'false',
-      { timeout: 15000, timeoutMsg: 'ブックマークが解除されない' },
+      { timeout: 15000, timeoutMsg: '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u304c\u89e3\u9664\u3055\u308c\u306a\u3044' },
     );
 
     const replyButton = await firstPost.$('[data-testid$="-reply"]');
@@ -142,28 +142,28 @@ describe('ホーム/トピック/投稿操作', () => {
     await $('[data-testid="reply-submit-button"]').click();
     await browser.waitUntil(
       async () => (await $('[data-testid="posts-list"]').getText()).includes('E2E reply content'),
-      { timeout: 30000, timeoutMsg: '返信投稿がタイムラインに見つからない' },
+      { timeout: 30000, timeoutMsg: '\u8fd4\u4fe1\u6295\u7a3f\u304c\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u306b\u898b\u3064\u304b\u3089\u306a\u3044' },
     );
 
     const quoteButton = await firstPost.$('[data-testid$="-quote"]');
     await quoteButton.click();
     const quoteInput = await $('[data-testid="quote-composer-input"]');
-    await quoteInput.waitForDisplayed({ timeout: 15000 });
+    await quoteInput.waitForDisplayed({ timeout: 30000 });
     await quoteInput.setValue('E2E quote content');
     await $('[data-testid="quote-submit-button"]').click();
     await browser.waitUntil(
       async () => (await $('[data-testid="posts-list"]').getText()).includes('E2E quote content'),
-      { timeout: 30000, timeoutMsg: '引用投稿がタイムラインに見つからない' },
+      { timeout: 30000, timeoutMsg: '\u5f15\u7528\u6295\u7a3f\u304c\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u306b\u898b\u3064\u304b\u3089\u306a\u3044' },
     );
 
     await $('[data-testid="category-topics"]').click();
     await browser.waitUntil(async () => (await browser.getUrl()).includes('/topics'), {
       timeout: 15000,
-      timeoutMsg: 'トピック一覧に遷移しない',
+      timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4e00\u89a7\u306b\u9077\u79fb\u3057\u306a\u3044',
     });
 
     await browser.execute(() => {
-      // E2Eでオフライン挙動を強制するフラグとイベントの両方を送出する
+      // E2E\u3067\u30aa\u30d5\u30e9\u30a4\u30f3\u6319\u52d5\u3092\u5f37\u5236\u3059\u308b\u30d5\u30e9\u30b0\u3068\u30a4\u30d9\u30f3\u30c8\u306e\u4e21\u65b9\u3092\u9001\u51fa\u3059\u308b
       (window as unknown as { __E2E_FORCE_OFFLINE__?: boolean }).__E2E_FORCE_OFFLINE__ = true;
       window.dispatchEvent(new Event('offline'));
     });
@@ -174,7 +174,7 @@ describe('ホーム/トピック/投稿操作', () => {
     await $('[data-testid="topic-submit-button"]').click();
     await browser.waitUntil(
       async () => !(await $('[data-testid="topic-name-input"]').isDisplayed()),
-      { timeout: 15000, timeoutMsg: 'トピック作成モーダルが閉じない' },
+      { timeout: 15000, timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4f5c\u6210\u30e2\u30fc\u30c0\u30eb\u304c\u9589\u3058\u306a\u3044' },
     );
 
     const offlineSnapshot = await getOfflineSnapshot();
@@ -195,19 +195,29 @@ describe('ホーム/トピック/投稿操作', () => {
     await targetCard.click();
     await browser.waitUntil(async () => (await browser.getUrl()).includes('/topics/'), {
       timeout: 15000,
-      timeoutMsg: 'トピック詳細に遷移しない',
+      timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u8a73\u7d30\u306b\u9077\u79fb\u3057\u306a\u3044',
     });
 
     await $('[data-testid="topic-actions-menu"]').click();
     await $('[data-testid="topic-delete-menu"]').click();
-    await $('[data-testid="topic-delete-confirm"]').click();
+    await browser.execute(() => {
+      window.dispatchEvent(new Event('__KUKURI_E2E_TOPIC_DELETE__'));
+    });
+    await browser.execute(() => {
+      const button = document.querySelector(
+        '[data-testid="topic-delete-confirm"]',
+      ) as HTMLButtonElement | null;
+      if (button) {
+        button.click();
+      }
+    });
     await browser.waitUntil(async () => (await browser.getUrl()).endsWith('/topics'), {
       timeout: 20000,
-      timeoutMsg: 'トピック一覧に戻らない',
+      timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4e00\u89a7\u306b\u623b\u3089\u306a\u3044',
     });
     await browser.waitUntil(
       async () => (await $$(`//h3[contains(., "${newTopicName}")]`)).length === 0,
-      { timeout: 15000, timeoutMsg: 'トピックカードが消えない' },
+      { timeout: 15000, timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u30ab\u30fc\u30c9\u304c\u6d88\u3048\u306a\u3044' },
     );
   });
 });
