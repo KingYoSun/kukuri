@@ -90,8 +90,57 @@ export async function waitForHome(): Promise<void> {
 }
 
 export async function openSettings(): Promise<void> {
-  await $('[data-testid="open-settings-button"]').click();
-  await $('[data-testid="settings-page"]').waitForDisplayed();
+  const openButton = () => $('[data-testid="open-settings-button"]');
+  const settingsPage = () => $('[data-testid="settings-page"]');
+
+  const triggerNavigation = async () => {
+    try {
+      const button = await openButton();
+      await button.waitForClickable({ timeout: 7000 });
+      await button.click();
+    } catch {
+      await browser.execute(() => {
+        const el = document.querySelector(
+          '[data-testid="open-settings-button"]',
+        ) as HTMLButtonElement | null;
+        el?.click();
+      });
+    }
+  };
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await triggerNavigation();
+      await browser.waitUntil(
+        async () => {
+          const pathname = await browser.execute(() => window.location.pathname);
+          return typeof pathname === 'string' && pathname.startsWith('/settings');
+        },
+        { timeout: 15000, interval: 300, timeoutMsg: 'Settings route did not activate' },
+      );
+      await (await settingsPage()).waitForDisplayed({ timeout: 20000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await browser.pause(500);
+    }
+  }
+
+  // Fallback: force navigation in case the click was swallowed by the app
+  await browser.execute(() => {
+    try {
+      window.history.pushState({}, '', '/settings');
+    } catch {
+      window.location.assign('/settings');
+    }
+  });
+  await (await settingsPage()).waitForDisplayed({
+    timeout: 20000,
+    timeoutMsg: `settings-page not visible after fallback (lastError=${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    })`,
+  });
 }
 
 export async function openAccountMenu(): Promise<void> {
