@@ -174,7 +174,7 @@ export function RelayStatus() {
   const hasRelays = relayStatus.length > 0;
 
   return (
-    <Card className="mb-4">
+    <Card className="mb-4" data-testid="relay-status-card">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -195,6 +195,7 @@ export function RelayStatus() {
             size="sm"
             onClick={handleManualRefresh}
             disabled={isFetchingRelayStatus}
+            data-testid="relay-refresh-button"
           >
             {isFetchingRelayStatus ? (
               <>
@@ -206,7 +207,7 @@ export function RelayStatus() {
             )}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1" data-testid="relay-last-updated">
           最終更新: {lastUpdatedLabel} / 次回再取得: {nextRefreshLabel}
         </p>
       </CardHeader>
@@ -236,7 +237,13 @@ export function RelayStatus() {
                       : { badgeClass: 'bg-red-100 text-red-800', label: 'エラー' };
 
               return (
-                <div key={relay.url} className="flex items-center justify-between text-sm">
+                <div
+                  key={relay.url}
+                  className="flex items-center justify-between text-sm"
+                  data-testid="relay-status-item"
+                  data-relay-url={relay.url}
+                  data-relay-status={status}
+                >
                   <span className="truncate max-w-[200px]" title={relay.url}>
                     {relay.url}
                   </span>
@@ -246,13 +253,24 @@ export function RelayStatus() {
             })}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">接続中のリレーはありません。</p>
+          <p className="text-xs text-muted-foreground" data-testid="relay-status-empty">
+            接続中のリレーはありません。
+          </p>
         )}
-        <div className="rounded-md border border-muted p-3 text-xs space-y-2 bg-muted/20">
+        <div
+          className="rounded-md border border-muted p-3 text-xs space-y-2 bg-muted/20"
+          data-testid="relay-bootstrap-panel"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
             <div className="flex flex-col">
-              <span>ブートストラップソース: {bootstrapSourceLabel}</span>
-              <span className="text-[11px]">
+              <span data-testid="relay-bootstrap-source">
+                ブートストラップソース: {bootstrapSourceLabel}
+              </span>
+              <span
+                className="text-[11px]"
+                data-testid="relay-effective-count"
+                data-count={effectiveNodes.length}
+              >
                 適用中: {effectiveNodes.length > 0 ? effectiveNodes.length : 'n0 デフォルト'}
               </span>
             </div>
@@ -261,6 +279,7 @@ export function RelayStatus() {
               size="sm"
               disabled={!canApplyCli}
               onClick={handleApplyCliBootstrap}
+              data-testid="relay-apply-cli-button"
             >
               {applyingCli ? (
                 <>
@@ -272,12 +291,17 @@ export function RelayStatus() {
               )}
             </Button>
           </div>
-          <div className="text-muted-foreground">
+          <div
+            className="text-muted-foreground"
+            data-testid="relay-cli-info"
+            data-cli-count={cliNodes.length}
+            data-cli-updated-ms={bootstrapInfo?.cliUpdatedAtMs ?? null}
+          >
             CLI 提供:{' '}
             {cliAvailable ? `${cliNodes.length}件 / 更新: ${cliLastUpdatedLabel}` : '未取得'}
           </div>
           {envLocked && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground" data-testid="relay-cli-locked">
               <code className="font-mono text-[11px]">KUKURI_BOOTSTRAP_PEERS</code>{' '}
               が設定されているため CLIリストを適用できません。
             </p>

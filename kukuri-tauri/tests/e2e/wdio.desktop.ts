@@ -1,6 +1,6 @@
 import { browser } from '@wdio/globals';
-import { mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import type { Options } from '@wdio/types';
@@ -9,16 +9,21 @@ import { startDriver, stopDriver } from './helpers/tauriDriver.ts';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
 const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
+const CLI_BOOTSTRAP_PATH =
+  process.env.KUKURI_CLI_BOOTSTRAP_PATH ?? join(OUTPUT_DIR, 'cli_bootstrap_nodes.json');
 
 process.env.VITE_ENABLE_E2E ??= 'true';
 process.env.TAURI_ENV_DEBUG ??= 'true';
+process.env.KUKURI_BOOTSTRAP_PEERS = '';
 process.env.WDIO_WORKERS ??= '1';
 process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
 process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
+process.env.KUKURI_CLI_BOOTSTRAP_PATH = CLI_BOOTSTRAP_PATH;
 
 const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
 console.info(`[wdio.desktop] driver port resolved to ${process.env.TAURI_DRIVER_PORT}`);
+console.info(`[wdio.desktop] cli bootstrap path resolved to ${CLI_BOOTSTRAP_PATH}`);
 
 function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
@@ -72,6 +77,16 @@ function pruneUnsupportedCapabilities(target: unknown): void {
   }
 }
 
+function seedCliBootstrapFixture(): void {
+  const payload = {
+    nodes: ['node1@127.0.0.1:11223', 'node2@127.0.0.1:11224'],
+    updated_at_ms: Date.now(),
+  };
+  mkdirSync(dirname(CLI_BOOTSTRAP_PATH), { recursive: true });
+  writeFileSync(CLI_BOOTSTRAP_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+  console.info(`[wdio.desktop] wrote CLI bootstrap fixture to ${CLI_BOOTSTRAP_PATH}`);
+}
+
 export const config: Options.Testrunner = {
   runner: 'local',
   workers: WORKER_COUNT,
@@ -119,6 +134,7 @@ export const config: Options.Testrunner = {
   ],
   onPrepare: async (_config, capabilities) => {
     mkdirSync(OUTPUT_DIR, { recursive: true });
+    seedCliBootstrapFixture();
     if (Array.isArray(capabilities)) {
       for (const capability of capabilities) {
         pruneUnsupportedCapabilities(capability as Record<string, unknown>);

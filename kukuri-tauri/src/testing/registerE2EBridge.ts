@@ -8,6 +8,7 @@ import {
   type SearchUsersResponse as SearchUsersResponseDto,
 } from '@/lib/api/tauri';
 import { TauriCommandError } from '@/lib/api/tauriClient';
+import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import {
@@ -117,6 +118,14 @@ interface PrimeUserSearchRateLimitResult {
   triggered: boolean;
 }
 
+interface BootstrapSnapshot {
+  source: string;
+  effectiveNodes: string[];
+  cliNodes: string[];
+  cliUpdatedAtMs: number | null;
+  envLocked: boolean;
+}
+
 export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
@@ -174,6 +183,9 @@ export interface E2EBridge {
     query?: string;
     limit?: number;
   }) => Promise<PrimeUserSearchRateLimitResult>;
+  getBootstrapSnapshot: () => Promise<BootstrapSnapshot>;
+  applyCliBootstrap: () => Promise<BootstrapSnapshot>;
+  clearBootstrapNodes: () => Promise<BootstrapSnapshot>;
 }
 
 declare global {
@@ -253,6 +265,26 @@ async function resetAuthStore() {
     accounts: [],
   });
 }
+
+const bootstrapSnapshotFromConfig = (
+  config: Awaited<ReturnType<typeof p2pApi.getBootstrapConfig>>,
+): BootstrapSnapshot => ({
+  source: config.source ?? 'none',
+  effectiveNodes: config.effective_nodes ?? [],
+  cliNodes: config.cli_nodes ?? [],
+  cliUpdatedAtMs: config.cli_updated_at_ms ?? null,
+  envLocked: Boolean(config.env_locked),
+});
+
+const refreshRelayStatusSafe = async () => {
+  try {
+    await useAuthStore.getState().updateRelayStatus();
+  } catch (error) {
+    errorHandler.log('E2EBridge.refreshRelayStatusFailed', error, {
+      context: 'registerE2EBridge.refreshRelayStatusSafe',
+    });
+  }
+};
 
 export function registerE2EBridge(): void {
   if (typeof window === 'undefined') {
@@ -1330,6 +1362,21 @@ export function registerE2EBridge(): void {
             retryAfterSeconds,
             triggered: retryAfterSeconds !== null,
           };
+        },
+        getBootstrapSnapshot: async () => {
+          const config = await p2pApi.getBootstrapConfig();
+          return bootstrapSnapshotFromConfig(config);
+        },
+        applyCliBootstrap: async () => {
+          const config = await p2pApi.applyCliBootstrapNodes();
+          await refreshRelayStatusSafe();
+          return bootstrapSnapshotFromConfig(config);
+        },
+        clearBootstrapNodes: async () => {
+          await p2pApi.clearBootstrapNodes();
+          await refreshRelayStatusSafe();
+          const config = await p2pApi.getBootstrapConfig();
+          return bootstrapSnapshotFromConfig(config);
         },
       };
     }

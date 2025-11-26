@@ -28,7 +28,10 @@ export type BridgeAction =
   | 'syncPendingTopicQueue'
   | 'seedTrendingFixture'
   | 'seedUserSearchFixture'
-  | 'primeUserSearchRateLimit';
+  | 'primeUserSearchRateLimit'
+  | 'getBootstrapSnapshot'
+  | 'applyCliBootstrap'
+  | 'clearBootstrapNodes';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -190,6 +193,14 @@ export interface PrimeUserSearchRateLimitResult {
   triggered: boolean;
 }
 
+export interface BootstrapSnapshot {
+  source: string;
+  effectiveNodes: string[];
+  cliNodes: string[];
+  cliUpdatedAtMs: number | null;
+  envLocked: boolean;
+}
+
 type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
@@ -209,6 +220,9 @@ type BridgeResultMap = {
   seedTrendingFixture: SeedTrendingFixtureResult;
   seedUserSearchFixture: SeedUserSearchFixtureResult;
   primeUserSearchRateLimit: PrimeUserSearchRateLimitResult;
+  getBootstrapSnapshot: BootstrapSnapshot;
+  applyCliBootstrap: BootstrapSnapshot;
+  clearBootstrapNodes: BootstrapSnapshot;
 };
 
 declare global {
@@ -546,4 +560,16 @@ export async function primeUserSearchRateLimit(params?: {
   limit?: number;
 }): Promise<PrimeUserSearchRateLimitResult> {
   return await callBridge('primeUserSearchRateLimit', params ?? {});
+}
+
+export async function getBootstrapSnapshot(): Promise<BootstrapSnapshot> {
+  return await callBridge('getBootstrapSnapshot');
+}
+
+export async function applyCliBootstrap(): Promise<BootstrapSnapshot> {
+  return await callBridge('applyCliBootstrap');
+}
+
+export async function clearBootstrapNodes(): Promise<BootstrapSnapshot> {
+  return await callBridge('clearBootstrapNodes');
 }
