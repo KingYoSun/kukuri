@@ -14,6 +14,11 @@ export type BridgeAction =
   | 'resetAppState'
   | 'getAuthSnapshot'
   | 'getOfflineSnapshot'
+  | 'setOnlineStatus'
+  | 'seedOfflineActions'
+  | 'enqueueSyncQueueItem'
+  | 'ensureTestTopic'
+  | 'clearOfflineState'
   | 'getDirectMessageSnapshot'
   | 'setProfileAvatarFixture'
   | 'consumeProfileAvatarFixture'
@@ -61,6 +66,32 @@ export interface OfflineSnapshot {
   isOnline: boolean;
   isSyncing: boolean;
   lastSyncedAt: number | null;
+  pendingActionCount: number;
+}
+
+export interface SetOnlineStatusResult {
+  isOnline: boolean;
+  pendingActionCount: number;
+}
+
+export interface SeedOfflineActionsResult {
+  pendingActionCount: number;
+  localIds: string[];
+  conflictedLocalId: string | null;
+}
+
+export interface EnqueueSyncQueueItemResult {
+  queueId: number;
+  cacheType: string;
+  requestedAt: string;
+}
+
+export interface EnsureTestTopicResult {
+  id: string;
+  name: string;
+}
+
+export interface ClearOfflineStateResult {
   pendingActionCount: number;
 }
 
@@ -163,6 +194,11 @@ type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
   getOfflineSnapshot: OfflineSnapshot;
+  setOnlineStatus: SetOnlineStatusResult;
+  seedOfflineActions: SeedOfflineActionsResult;
+  enqueueSyncQueueItem: EnqueueSyncQueueItemResult;
+  ensureTestTopic: EnsureTestTopicResult;
+  clearOfflineState: ClearOfflineStateResult;
   getDirectMessageSnapshot: DirectMessageSnapshot;
   setProfileAvatarFixture: null;
   consumeProfileAvatarFixture: AvatarFixture | null;
@@ -395,6 +431,33 @@ export async function getOfflineSnapshot(): Promise<OfflineSnapshot> {
   return await callBridge('getOfflineSnapshot');
 }
 
+export async function setOnlineStatus(isOnline: boolean): Promise<SetOnlineStatusResult> {
+  return await callBridge('setOnlineStatus', isOnline);
+}
+
+export async function ensureTestTopic(payload?: { name?: string }): Promise<EnsureTestTopicResult> {
+  return await callBridge('ensureTestTopic', payload ?? {});
+}
+
+export async function seedOfflineActions(payload: {
+  topicId: string;
+  includeConflict?: boolean;
+  markOffline?: boolean;
+}): Promise<SeedOfflineActionsResult> {
+  return await callBridge('seedOfflineActions', payload);
+}
+
+export async function enqueueSyncQueueItem(payload?: {
+  cacheType?: string;
+  source?: string;
+}): Promise<EnqueueSyncQueueItemResult> {
+  return await callBridge('enqueueSyncQueueItem', payload ?? {});
+}
+
+export async function clearOfflineState(): Promise<ClearOfflineStateResult> {
+  return await callBridge('clearOfflineState');
+}
+
 export async function getDirectMessageSnapshot(): Promise<DirectMessageSnapshot> {
   return await callBridge('getDirectMessageSnapshot');
 }
@@ -403,9 +466,10 @@ export async function setAvatarFixture(fixture: AvatarFixture | null): Promise<v
   await callBridge('setProfileAvatarFixture', fixture ? { ...fixture } : null);
 }
 
-export async function seedDirectMessageConversation(
-  params?: { content?: string; createdAt?: number },
-): Promise<SeedDirectMessageConversationResult> {
+export async function seedDirectMessageConversation(params?: {
+  content?: string;
+  createdAt?: number;
+}): Promise<SeedDirectMessageConversationResult> {
   await waitForAppReady();
   try {
     return await callBridge('seedDirectMessageConversation', params ?? {});

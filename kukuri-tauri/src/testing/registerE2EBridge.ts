@@ -31,6 +31,8 @@ import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMess
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useTopicStore } from '@/stores/topicStore';
 import { getE2EStatus, setE2EStatus, type E2EStatus } from './e2eStatus';
+import { offlineApi } from '@/api/offline';
+import { EntityType, OfflineActionType } from '@/types/offline';
 
 type AuthSnapshot = {
   currentUser: ReturnType<typeof useAuthStore.getState>['currentUser'];
@@ -119,6 +121,18 @@ export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
   getOfflineSnapshot: () => OfflineSnapshot;
+  setOnlineStatus: (isOnline: boolean) => { isOnline: boolean; pendingActionCount: number };
+  seedOfflineActions: (payload: {
+    topicId: string;
+    includeConflict?: boolean;
+    markOffline?: boolean;
+  }) => { pendingActionCount: number; localIds: string[]; conflictedLocalId: string | null };
+  enqueueSyncQueueItem: (payload?: {
+    cacheType?: string;
+    source?: string;
+  }) => Promise<{ queueId: number; cacheType: string; requestedAt: string }>;
+  ensureTestTopic: (payload?: { name?: string }) => Promise<{ id: string; name: string }>;
+  clearOfflineState: () => Promise<{ pendingActionCount: number }>;
   getDirectMessageSnapshot: () => DirectMessageSnapshot;
   setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => void;
   consumeProfileAvatarFixture: () => ProfileAvatarFixture | null;
@@ -290,6 +304,190 @@ export function registerE2EBridge(): void {
             isSyncing: offlineState.isSyncing,
             lastSyncedAt: offlineState.lastSyncedAt ?? null,
             pendingActionCount: offlineState.pendingActions.length,
+          };
+        },
+        setOnlineStatus: (isOnline: boolean) => {
+          const offlineStore = useOfflineStore.getState();
+          offlineStore.setOnlineStatus(isOnline);
+          const nextState = useOfflineStore.getState();
+          return {
+            isOnline: nextState.isOnline,
+            pendingActionCount: nextState.pendingActions.length,
+          };
+        },
+        seedOfflineActions: (payload) => {
+          const authState = useAuthStore.getState();
+          const topicId = payload?.topicId;
+          if (!topicId) {
+            throw new Error('topicId is required to seed offline actions');
+          }
+          if (!authState.currentUser?.npub) {
+            throw new Error('Active account is required to seed offline actions');
+          }
+
+          const offlineStore = useOfflineStore.getState();
+          if (payload?.markOffline !== false) {
+            offlineStore.setOnlineStatus(false);
+          }
+
+          const now = Date.now();
+          const actions: Array<{
+            type: OfflineActionType;
+            createdAt: number;
+            data: Record<string, unknown>;
+          }> = [
+            {
+              type: OfflineActionType.JOIN_TOPIC,
+              createdAt: payload?.includeConflict ? now - 36 * 60 * 60 * 1000 : now,
+              data: {
+                topicId,
+                entityType: EntityType.TOPIC,
+                entityId: topicId,
+              },
+            },
+            {
+              type: OfflineActionType.CREATE_POST,
+              createdAt: now,
+              data: {
+                topicId,
+                entityType: EntityType.POST,
+                entityId: `e2e-post-${now}`,
+                content: 'E2E offline sync post',
+                replyTo: null,
+                quotedPost: null,
+              },
+            },
+          ];
+
+          const localIds: string[] = [];
+          actions.forEach((action, index) => {
+            const localId = `e2e-offline-${action.type}-${now + index}`;
+            offlineStore.addPendingAction({
+              id: now + index,
+              userPubkey: authState.currentUser!.npub,
+              actionType: action.type,
+              targetId: topicId,
+              actionData: JSON.stringify(action.data),
+              localId,
+              isSynced: false,
+              createdAt: action.createdAt,
+              syncedAt: undefined,
+            });
+            localIds.push(localId);
+          });
+
+          return {
+            pendingActionCount: useOfflineStore.getState().pendingActions.length,
+            localIds,
+            conflictedLocalId: payload?.includeConflict ? (localIds[0] ?? null) : null,
+          };
+        },
+        enqueueSyncQueueItem: async (payload) => {
+          const cacheType = payload?.cacheType ?? 'sync_queue';
+          const requestedAt = new Date().toISOString();
+          const userPubkey = useAuthStore.getState().currentUser?.npub ?? 'unknown';
+          const queueId = await offlineApi.addToSyncQueue({
+            action_type: 'manual_sync_refresh',
+            payload: {
+              cacheType,
+              requestedAt,
+              source: payload?.source ?? 'e2e-bridge',
+              requestedBy: userPubkey,
+            },
+            priority: 5,
+          });
+          try {
+            await offlineApi.updateCacheMetadata({
+              cacheKey: 'offline_actions',
+              cacheType,
+              metadata: {
+                cacheType,
+                requestedAt,
+                requestedBy: userPubkey,
+                queueItemId: queueId,
+                source: payload?.source ?? 'e2e-bridge',
+              },
+              expirySeconds: 3600,
+              isStale: true,
+            });
+          } catch (error) {
+            errorHandler.log('E2EBridge.enqueueSyncQueue.metadataFailed', error, {
+              context: 'registerE2EBridge.enqueueSyncQueueItem',
+              metadata: { queueId, cacheType },
+            });
+          }
+          return { queueId, cacheType, requestedAt };
+        },
+        ensureTestTopic: async (payload) => {
+          const authState = useAuthStore.getState();
+          if (!authState.currentUser?.npub) {
+            throw new Error('Active account is required to create topics');
+          }
+          const desiredName =
+            (payload?.name || '').trim() || `e2e-offline-topic-${Date.now().toString(36)}`;
+          const existing = Array.from(useTopicStore.getState().topics.values()).find(
+            (topic) => topic.name === desiredName,
+          );
+          if (existing) {
+            return { id: existing.id, name: existing.name };
+          }
+          try {
+            const created = await TauriApi.createTopic({
+              name: desiredName,
+              description: 'E2E offline sync topic',
+              visibility: 'public',
+            });
+            try {
+              await useTopicStore.getState().fetchTopics();
+            } catch (error) {
+              errorHandler.log('E2EBridge.ensureTestTopic.fetchFailed', error, {
+                context: 'registerE2EBridge.ensureTestTopic',
+              });
+            }
+            return { id: created.id, name: created.name ?? desiredName };
+          } catch (error) {
+            errorHandler.log('E2EBridge.ensureTestTopic.createFailed', error, {
+              context: 'registerE2EBridge.ensureTestTopic',
+              metadata: { name: desiredName },
+            });
+            const fallback = Array.from(useTopicStore.getState().topics.values())[0] ?? null;
+            if (fallback) {
+              return { id: fallback.id, name: fallback.name };
+            }
+            throw error;
+          }
+        },
+        clearOfflineState: async () => {
+          const offlineStore = useOfflineStore.getState();
+          offlineStore.clearPendingActions();
+          if (typeof useOfflineStore.setState === 'function') {
+            useOfflineStore.setState((state) => ({
+              ...state,
+              syncErrors: new Map(),
+            }));
+          }
+          offlineStore.updateLastSyncedAt();
+          try {
+            await offlineApi.updateCacheMetadata({
+              cacheKey: 'offline_actions',
+              cacheType: 'sync_queue',
+              metadata: {
+                cacheType: 'sync_queue',
+                requestedAt: null,
+                requestedBy: useAuthStore.getState().currentUser?.npub ?? 'unknown',
+                queueItemId: null,
+                source: 'e2e-bridge',
+              },
+              expirySeconds: 3600,
+              isStale: false,
+            });
+          } catch (error) {
+            errorHandler.log('E2EBridge.clearOfflineState.metadataFailed', error, {
+              context: 'registerE2EBridge.clearOfflineState',
+            });
+          }
+          return {
+            pendingActionCount: useOfflineStore.getState().pendingActions.length,
           };
         },
         getDirectMessageSnapshot: () => {

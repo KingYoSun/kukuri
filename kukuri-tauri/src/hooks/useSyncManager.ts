@@ -18,6 +18,12 @@ import {
   registerOfflineSyncWorker,
 } from '@/serviceWorker/offlineSyncBridge';
 
+declare global {
+  interface Window {
+    __E2E_DISABLE_AUTO_SYNC__?: boolean;
+  }
+}
+
 export interface SyncStatus {
   isSyncing: boolean;
   progress: number;
@@ -719,6 +725,10 @@ export function useSyncManager() {
       return;
     }
 
+    if (typeof window !== 'undefined' && window.__E2E_DISABLE_AUTO_SYNC__) {
+      return;
+    }
+
     // オンライン復帰時に自動同期
     const syncTimer = setTimeout(() => {
       triggerManualSync();
@@ -732,6 +742,10 @@ export function useSyncManager() {
    */
   useEffect(() => {
     if (!isOnline) {
+      return;
+    }
+
+    if (typeof window !== 'undefined' && window.__E2E_DISABLE_AUTO_SYNC__) {
       return;
     }
 
@@ -879,6 +893,9 @@ export function useSyncManager() {
       return;
     }
     if (!isOnline) {
+      return;
+    }
+    if (typeof window !== 'undefined' && window.__E2E_DISABLE_AUTO_SYNC__) {
       return;
     }
     if (pendingActions.length === 0) {
