@@ -21,7 +21,9 @@ export type BridgeAction =
   | 'seedDirectMessageConversation'
   | 'getTopicSnapshot'
   | 'syncPendingTopicQueue'
-  | 'seedTrendingFixture';
+  | 'seedTrendingFixture'
+  | 'seedUserSearchFixture'
+  | 'primeUserSearchRateLimit';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -136,6 +138,27 @@ export interface AvatarFixture {
   fileName?: string;
 }
 
+export interface UserSearchFixtureUser {
+  displayName: string;
+  about?: string;
+  follow?: boolean;
+}
+
+export interface SeedUserSearchFixtureResult {
+  users: Array<{
+    npub: string;
+    displayName: string;
+    about: string;
+    isFollowed: boolean;
+  }>;
+}
+
+export interface PrimeUserSearchRateLimitResult {
+  attempts: number;
+  retryAfterSeconds: number | null;
+  triggered: boolean;
+}
+
 type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
@@ -148,6 +171,8 @@ type BridgeResultMap = {
   getTopicSnapshot: TopicSnapshot;
   syncPendingTopicQueue: SyncPendingTopicResult;
   seedTrendingFixture: SeedTrendingFixtureResult;
+  seedUserSearchFixture: SeedUserSearchFixtureResult;
+  primeUserSearchRateLimit: PrimeUserSearchRateLimitResult;
 };
 
 declare global {
@@ -444,4 +469,17 @@ export async function seedTrendingFixture(
   fixture: TrendingFixture,
 ): Promise<SeedTrendingFixtureResult> {
   return await callBridge('seedTrendingFixture', fixture);
+}
+
+export async function seedUserSearchFixture(payload: {
+  users: UserSearchFixtureUser[];
+}): Promise<SeedUserSearchFixtureResult> {
+  return await callBridge('seedUserSearchFixture', payload);
+}
+
+export async function primeUserSearchRateLimit(params?: {
+  query?: string;
+  limit?: number;
+}): Promise<PrimeUserSearchRateLimitResult> {
+  return await callBridge('primeUserSearchRateLimit', params ?? {});
 }

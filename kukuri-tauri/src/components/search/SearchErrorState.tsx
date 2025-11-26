@@ -74,7 +74,7 @@ export function SearchErrorState({
   const isRetryDisabled = errorKey === 'UserSearch.rate_limited' && (remainingSeconds ?? 0) > 0;
 
   return (
-    <Card className="border-dashed">
+    <Card className="border-dashed" data-testid="user-search-error">
       <CardContent className="flex items-center gap-3 py-6">
         {errorKey === 'UserSearch.rate_limited' ? (
           <Clock className="h-5 w-5 text-yellow-500" />
@@ -86,7 +86,13 @@ export function SearchErrorState({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         {showRetry && onRetry && (
-          <Button variant="outline" onClick={onRetry} disabled={isRetryDisabled}>
+          <Button
+            variant="outline"
+            onClick={onRetry}
+            disabled={isRetryDisabled}
+            data-testid="user-search-retry-button"
+            aria-disabled={isRetryDisabled}
+          >
             {retryLabel}
           </Button>
         )}

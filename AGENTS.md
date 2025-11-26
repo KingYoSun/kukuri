@@ -15,7 +15,7 @@
 - Rust(kukuri-tauri): `cd kukuri-tauri/src-tauri && cargo test && cargo clippy -D warnings`
 - Rust(kukuri-cli): `cd kukuri-cli && cargo test && cargo build --release`
 - Dockerテスト: `docker compose -f docker-compose.test.yml up --build test-runner`
-- Windows必須: `./scripts/test-docker.ps1 all|rust|ts|lint|integration`（PowerShell から Docker 内で実行する。ホスト上で `cargo test` / `pnpm test` を直接叩くのは厳禁）
+- Windows必須: `./scripts/test-docker.ps1 all|rust|ts|lint|integration|e2e`（PowerShell から Docker 内で実行する。ホスト上で `cargo test` / `pnpm test` を直接叩くのは厳禁）
 
 ## コーディング規約
 - EditorConfig: LF、TS/JS 2スペース、Rust/TOML 4スペース

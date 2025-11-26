@@ -1,9 +1,13 @@
 import { SecureStorageApi } from '@/lib/api/secureStorage';
 import {
   TauriApi,
+  NostrAPI,
   type SeedDirectMessageConversationResult,
   type PendingTopic,
+  type UserProfile,
+  type SearchUsersResponse as SearchUsersResponseDto,
 } from '@/lib/api/tauri';
+import { TauriCommandError } from '@/lib/api/tauriClient';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import {
@@ -90,6 +94,27 @@ interface SeedTrendingFixtureResult {
   followerNpub: string;
 }
 
+interface UserSearchFixtureUser {
+  displayName: string;
+  about?: string;
+  follow?: boolean;
+}
+
+interface SeedUserSearchFixtureResult {
+  users: Array<{
+    npub: string;
+    displayName: string;
+    about: string;
+    isFollowed: boolean;
+  }>;
+}
+
+interface PrimeUserSearchRateLimitResult {
+  attempts: number;
+  retryAfterSeconds: number | null;
+  triggered: boolean;
+}
+
 export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
@@ -128,6 +153,13 @@ export interface E2EBridge {
     createdTopicIds: string[];
   }>;
   seedTrendingFixture: (payload: TrendingFixturePayload) => Promise<SeedTrendingFixtureResult>;
+  seedUserSearchFixture: (payload: {
+    users: UserSearchFixtureUser[];
+  }) => Promise<SeedUserSearchFixtureResult>;
+  primeUserSearchRateLimit: (payload?: {
+    query?: string;
+    limit?: number;
+  }) => Promise<PrimeUserSearchRateLimitResult>;
 }
 
 declare global {
@@ -880,6 +912,225 @@ export function registerE2EBridge(): void {
             topics: createdTopics,
             authors: Array.from(authors.values()).map(({ name, npub }) => ({ name, npub })),
             followerNpub: follower.npub,
+          };
+        },
+        seedUserSearchFixture: async (payload: { users: UserSearchFixtureUser[] }) => {
+          if (!payload || !Array.isArray(payload.users) || payload.users.length === 0) {
+            throw new Error('User search fixtures are required');
+          }
+          const authStore = useAuthStore.getState();
+          const baseUser = authStore.currentUser;
+          const baseNsec = authStore.privateKey;
+          if (!baseUser || !baseNsec) {
+            throw new Error('Seeding requires an authenticated user with a private key');
+          }
+
+          const baseProfile = {
+            name: baseUser.name,
+            displayName: baseUser.displayName,
+            about: baseUser.about,
+            picture: baseUser.picture,
+            publicProfile: baseUser.publicProfile,
+            showOnlineStatus: baseUser.showOnlineStatus,
+          };
+
+          const seeded: Array<{
+            npub: string;
+            displayName: string;
+            about: string;
+            follow: boolean;
+          }> = [];
+          const profiles: UserProfile[] = [];
+
+          for (const [index, entry] of payload.users.entries()) {
+            const displayName = (entry.displayName || `search-user-${index + 1}`).trim();
+            const about = entry.about ?? '';
+            try {
+              await useAuthStore.getState().generateNewKeypair(false);
+              const fixtureUser = useAuthStore.getState().currentUser;
+              if (!fixtureUser?.npub) {
+                throw new Error('Failed to generate fixture account');
+              }
+              useAuthStore.getState().updateUser({
+                name: displayName,
+                displayName,
+                about,
+                publicProfile: true,
+                showOnlineStatus: true,
+              });
+              try {
+                await NostrAPI.updateMetadata({
+                  name: displayName,
+                  display_name: displayName,
+                  about,
+                  kukuri_privacy: { public_profile: true, show_online_status: true },
+                });
+              } catch (error) {
+                errorHandler.log('E2EBridge.userSearchSeedMetadataFailed', error, {
+                  context: 'registerE2EBridge.seedUserSearchFixture',
+                  metadata: { npub: fixtureUser.npub },
+                });
+              }
+              seeded.push({
+                npub: fixtureUser.npub,
+                displayName,
+                about,
+                follow: Boolean(entry.follow),
+              });
+              profiles.push({
+                npub: fixtureUser.npub,
+                pubkey: fixtureUser.pubkey ?? fixtureUser.npub,
+                name: displayName,
+                display_name: displayName,
+                about,
+                picture: fixtureUser.picture ?? null,
+                banner: null,
+                website: null,
+                nip05: null,
+                is_profile_public: true,
+                show_online_status: true,
+              });
+            } catch (error) {
+              errorHandler.log('E2EBridge.seedUserSearchFixtureFailed', error, {
+                context: 'registerE2EBridge.seedUserSearchFixture',
+                metadata: { index },
+              });
+            }
+          }
+
+          try {
+            await useAuthStore.getState().loginWithNsec(baseNsec, false, {
+              name: baseProfile.name,
+              displayName: baseProfile.displayName,
+              about: baseProfile.about,
+              picture: baseProfile.picture,
+              publicProfile: baseProfile.publicProfile,
+              showOnlineStatus: baseProfile.showOnlineStatus,
+            });
+            try {
+              await SecureStorageApi.secureLogin(baseUser.npub);
+            } catch (error) {
+              errorHandler.log('E2EBridge.userSearchSeedSecureLoginFailed', error, {
+                context: 'registerE2EBridge.seedUserSearchFixture.restore',
+                metadata: { npub: baseUser.npub },
+              });
+            }
+            try {
+              await useAuthStore.getState().loadAccounts();
+            } catch (error) {
+              errorHandler.log('E2EBridge.userSearchSeedLoadAccountsFailed', error, {
+                context: 'registerE2EBridge.seedUserSearchFixture.restore',
+              });
+            }
+          } catch (error) {
+            errorHandler.log('E2EBridge.seedUserSearchFixtureRestoreFailed', error, {
+              context: 'registerE2EBridge.seedUserSearchFixture',
+            });
+          }
+
+          for (const entry of seeded.filter((user) => user.follow)) {
+            try {
+              await TauriApi.followUser(baseUser.npub, entry.npub);
+            } catch (error) {
+              errorHandler.log('E2EBridge.userSearchSeedFollowFailed', error, {
+                context: 'registerE2EBridge.seedUserSearchFixture',
+                metadata: { target: entry.npub },
+              });
+            }
+          }
+
+          if (typeof window !== 'undefined') {
+            (
+              window as unknown as {
+                __E2E_USER_SEARCH_FIXTURE__?: SearchUsersResponseDto;
+              }
+            ).__E2E_USER_SEARCH_FIXTURE__ = {
+              items: profiles,
+              nextCursor: null,
+              hasMore: false,
+              totalCount: profiles.length,
+              tookMs: 1,
+            };
+          }
+
+          return {
+            users: seeded.map(({ follow, ...user }) => ({
+              ...user,
+              isFollowed: follow,
+            })),
+          };
+        },
+        primeUserSearchRateLimit: async (payload?: { query?: string; limit?: number }) => {
+          const authState = useAuthStore.getState();
+          const viewerNpub = authState.currentUser?.npub ?? null;
+          const query =
+            (payload?.query?.trim().length ?? 0) > 0
+              ? (payload?.query?.trim() ?? '')
+              : 'rate-limit';
+          const limit = payload?.limit && payload.limit > 0 ? payload.limit : 40;
+          let attempts = 0;
+          let retryAfterSeconds: number | null = null;
+
+          while (attempts < limit) {
+            attempts += 1;
+            try {
+              await TauriApi.searchUsers({
+                query,
+                cursor: null,
+                limit: 1,
+                sort: 'relevance',
+                allowIncomplete: true,
+                viewerNpub,
+              });
+            } catch (error) {
+              const code =
+                error instanceof TauriCommandError
+                  ? error.code
+                  : ((error as { code?: string | null })?.code ?? null);
+              const rateLimitedDetails =
+                (error as {
+                  RateLimited?: { retry_after_seconds?: number | string | null };
+                  rateLimited?: { retry_after_seconds?: number | string | null };
+                  retry_after_seconds?: number | string | null;
+                }) ?? null;
+
+              if (code === 'RATE_LIMITED') {
+                const retrySecondsFromDetails =
+                  Number(
+                    error instanceof TauriCommandError ? error.details?.retry_after_seconds : null,
+                  ) || null;
+                retryAfterSeconds = retrySecondsFromDetails;
+                if (retryAfterSeconds === null) {
+                  retryAfterSeconds = 5;
+                }
+                break;
+              }
+
+              const retrySecondsFromPayload =
+                rateLimitedDetails?.RateLimited?.retry_after_seconds ??
+                rateLimitedDetails?.rateLimited?.retry_after_seconds ??
+                rateLimitedDetails?.retry_after_seconds ??
+                null;
+
+              if (retrySecondsFromPayload !== null && retrySecondsFromPayload !== undefined) {
+                retryAfterSeconds = Number(retrySecondsFromPayload) || null;
+                retryAfterSeconds =
+                  retryAfterSeconds !== null && Number.isFinite(retryAfterSeconds)
+                    ? retryAfterSeconds
+                    : null;
+                if (retryAfterSeconds === null) {
+                  retryAfterSeconds = 5;
+                }
+                break;
+              }
+              throw error;
+            }
+          }
+
+          return {
+            attempts,
+            retryAfterSeconds,
+            triggered: retryAfterSeconds !== null,
           };
         },
       };

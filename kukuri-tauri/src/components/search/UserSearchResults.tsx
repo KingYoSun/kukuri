@@ -41,6 +41,13 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
   const [sort, setSort] = useState<UserSearchSort>('relevance');
+  const pageSize =
+    import.meta.env.VITE_ENABLE_E2E === 'true' && typeof window !== 'undefined'
+      ? Number(
+          (window as unknown as { __E2E_USER_SEARCH_PAGE_SIZE__?: number })
+            .__E2E_USER_SEARCH_PAGE_SIZE__,
+        ) || 24
+      : 24;
 
   const {
     status,
@@ -59,7 +66,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
     allowIncompleteActive,
   } = useUserSearchQuery(query, {
     viewerNpub: currentUser?.npub ?? null,
-    pageSize: 24,
+    pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 24,
     sort,
   });
 
@@ -192,7 +199,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="user-search-results">
       {showIdle && (
         <p className="text-sm text-muted-foreground">検索キーワードを入力してください。</p>
       )}
@@ -210,7 +217,10 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
       )}
 
       {showSortControls && (
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div
+          className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
+          data-testid="user-search-summary"
+        >
           <p className="text-xs text-muted-foreground">
             検索対象: {sanitizedQuery ? `「${sanitizedQuery}」` : 'キーワード未入力'}
           </p>
@@ -227,6 +237,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
                   disabled={isSortDisabled && sort !== option.value}
                   data-testid={`user-search-sort-${option.value}`}
                   className="h-8"
+                  aria-pressed={sort === option.value}
                 >
                   {option.label}
                 </Button>
@@ -277,6 +288,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
                       variant={sort === option.value ? 'default' : 'outline'}
                       onClick={() => setSort(option.value)}
                       disabled={isSortDisabled && sort !== option.value}
+                      aria-pressed={sort === option.value}
                       className="h-8"
                     >
                       {option.label}
@@ -311,6 +323,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
                 variant="outline"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
+                data-testid="user-search-load-more"
               >
                 {isFetchingNextPage ? '読み込み中...' : 'さらに表示'}
               </Button>
@@ -370,7 +383,7 @@ function UserCard({
   };
 
   return (
-    <Card>
+    <Card data-testid="user-search-result">
       <CardContent className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12">
@@ -398,6 +411,7 @@ function UserCard({
           disabled={!canFollow || isSelf || isProcessing}
           onClick={handleClick}
           className="min-w-[110px]"
+          data-testid="user-search-follow-toggle"
         >
           {isProcessing ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />

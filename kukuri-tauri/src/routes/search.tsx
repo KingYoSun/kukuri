@@ -118,7 +118,7 @@ function SearchPage() {
   const searchBarHelperLabel = activeTab === 'users' ? userValidation.helperLabel : undefined;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6" data-testid="search-page">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">検索</h1>
         <p className="text-muted-foreground">投稿、トピック、ユーザーを検索できます</p>
@@ -143,9 +143,15 @@ function SearchPage() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SearchTab)}>
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="posts">投稿</TabsTrigger>
-          <TabsTrigger value="topics">トピック</TabsTrigger>
-          <TabsTrigger value="users">ユーザー</TabsTrigger>
+          <TabsTrigger value="posts" data-testid="search-tab-posts">
+            投稿
+          </TabsTrigger>
+          <TabsTrigger value="topics" data-testid="search-tab-topics">
+            トピック
+          </TabsTrigger>
+          <TabsTrigger value="users" data-testid="search-tab-users">
+            ユーザー
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="posts" className="mt-6">
