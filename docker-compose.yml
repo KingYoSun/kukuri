@@ -1,23 +1,25 @@
 services:
-  # DHTブートストラップノード（kukuri-tauriが最初に接続するピア）
   kukuri-bootstrap:
+    env_file:
+      - .env
     build:
       context: ./kukuri-cli
       dockerfile: Dockerfile
     container_name: kukuri-bootstrap-dev
     environment:
-      KUKURI_SECRET_KEY: Lk2VhCbWDgGBJvr+OewZTc8WLs+rmcsvehAV8uVIEZg=
-      LOG_LEVEL: info
-      BIND_ADDRESS: 0.0.0.0:11223
+      KUKURI_SECRET_KEY: ${KUKURI_BOOTSTRAP_SECRET_KEY:?Set KUKURI_BOOTSTRAP_SECRET_KEY in .env}
+      LOG_LEVEL: ${BOOTSTRAP_LOG_LEVEL:-info}
+      BIND_ADDRESS: ${BOOTSTRAP_BIND_ADDRESS:-0.0.0.0:11223}
     ports:
-      - '11223:11223'
+      - "11223:11223"
     volumes:
       - bootstrap-data:/home/kukuri/data
     restart: unless-stopped
-    command: ['bootstrap']
+    command: ["bootstrap"]
 
-  # Nostr互換リレー。デフォルトでpublicトピックを購読する
   kukuri-relay:
+    env_file:
+      - .env
     build:
       context: ./kukuri-cli
       dockerfile: Dockerfile
@@ -25,37 +27,38 @@ services:
     depends_on:
       - kukuri-bootstrap
     environment:
-      KUKURI_SECRET_KEY: N55ru+z8dxH/5udqTeA0byBBw3is6DWAX0siMVqjbFw=
-      LOG_LEVEL: info
-      BIND_ADDRESS: 0.0.0.0:11225
-      RELAY_TOPICS: kukuri:tauri:public
+      KUKURI_SECRET_KEY: ${KUKURI_RELAY_SECRET_KEY:?Set KUKURI_RELAY_SECRET_KEY in .env}
+      LOG_LEVEL: ${RELAY_LOG_LEVEL:-info}
+      BIND_ADDRESS: ${RELAY_BIND_ADDRESS:-0.0.0.0:11225}
+      RELAY_TOPICS: ${RELAY_TOPICS:-kukuri:tauri:public}
     ports:
-      - '11225:11225'
+      - "11225:11225"
     volumes:
       - relay-data:/home/kukuri/data
     restart: unless-stopped
-    command: ['relay']
+    command: ["relay"]
 
   # Relay using n0 bootstrap discovery (no local bootstrap dependency)
   kukuri-relay-n0:
+    env_file:
+      - .env
     build:
       context: ./kukuri-cli
       dockerfile: Dockerfile
     container_name: kukuri-relay-n0
     environment:
-      KUKURI_SECRET_KEY: 2Fo+P2s6E3GFol29SukyyHhlLRgtXgRQihHN1tyc7KY=
-      LOG_LEVEL: info
-      BIND_ADDRESS: 0.0.0.0:11226
-      RELAY_TOPICS: kukuri:tauri:public
+      KUKURI_SECRET_KEY: ${KUKURI_RELAY_N0_SECRET_KEY:?Set KUKURI_RELAY_N0_SECRET_KEY in .env}
+      LOG_LEVEL: ${RELAY_N0_LOG_LEVEL:-info}
+      BIND_ADDRESS: ${RELAY_N0_BIND_ADDRESS:-0.0.0.0:11226}
+      RELAY_TOPICS: ${RELAY_N0_TOPICS:-kukuri:tauri:public}
     ports:
-      - '11226:11226'
+      - "11226:11226"
     volumes:
       - relay-n0-data:/home/kukuri/data
     restart: unless-stopped
-    command: ['relay']
+    command: ["relay"]
 
 volumes:
   bootstrap-data:
   relay-data:
   relay-n0-data:
-
