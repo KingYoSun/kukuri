@@ -50,6 +50,8 @@ release/
 # Rust
 **/*.rs.bk
 Cargo.lock
+!kukuri-tauri/src-tauri/Cargo.lock
+!kukuri-cli/Cargo.lock
 
 # SQLite
 *.db

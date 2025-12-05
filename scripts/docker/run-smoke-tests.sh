@@ -25,7 +25,7 @@ run_p2p_suite() {
   local target="$2"
   local description="$3"
 
-  local -a cargo_cmd=(cargo test --package kukuri-tauri --test "$target" -- --nocapture --test-threads=1)
+  local -a cargo_cmd=(cargo test --locked --package kukuri-tauri --test "$target" -- --nocapture --test-threads=1)
 
   echo "=== Running ${description} (integration target: ${target}) ==="
 

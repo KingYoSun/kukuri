@@ -163,22 +163,22 @@ jobs:
       - name: Run Rust tests
         run: |
           cd kukuri-tauri/src-tauri
-          cargo test --workspace --all-features
+          cargo test --locked --workspace --all-features
 
       - name: Run Rust clippy
         run: |
           cd kukuri-tauri/src-tauri
-          cargo clippy --workspace --all-features -- -D warnings -A dead_code -A unused_variables
+          cargo clippy --locked --workspace --all-features -- -D warnings -A dead_code -A unused_variables
 
       - name: Run CLI tests
         run: |
           cd kukuri-cli
-          cargo test --workspace --all-features
+          cargo test --locked --workspace --all-features
 
       - name: Run CLI clippy
         run: |
           cd kukuri-cli
-          cargo clippy --workspace --all-features -- -D warnings
+          cargo clippy --locked --workspace --all-features -- -D warnings
 
       - name: Run TypeScript tests
         run: |
@@ -278,12 +278,12 @@ jobs:
       - name: Build check (Rust)
         run: |
           cd kukuri-tauri/src-tauri
-          cargo check --workspace --all-features
+          cargo check --locked --workspace --all-features
 
       - name: Build check (CLI)
         run: |
           cd kukuri-cli
-          cargo check --workspace --all-features
+          cargo check --locked --workspace --all-features
 
       - name: Build check (TypeScript)
         run: |
