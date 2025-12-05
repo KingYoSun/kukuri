@@ -5,7 +5,7 @@ use dirs;
 use iroh::{EndpointAddr, EndpointId};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, info, trace, warn};
@@ -161,6 +161,51 @@ fn parse_bootstrap_list(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
+    let trimmed = entry.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let (node_id, addr_part) = match trimmed.split_once('@') {
+        Some((id, addr)) => (id.trim(), addr.trim()),
+        None => return Some(trimmed.to_string()),
+    };
+
+    let mut socket_addr = match addr_part.parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(err) => {
+            warn!("Invalid bootstrap node '{}': {}", entry, err);
+            return None;
+        }
+    };
+
+    if socket_addr.ip().is_unspecified() {
+        let replacement = match socket_addr {
+            SocketAddr::V4(_) => IpAddr::V4(Ipv4Addr::LOCALHOST),
+            SocketAddr::V6(_) => IpAddr::V6(Ipv6Addr::LOCALHOST),
+        };
+        socket_addr.set_ip(replacement);
+        warn!(
+            original = %entry,
+            normalized = %format!("{node_id}@{socket_addr}"),
+            "Bootstrap node address was unspecified; replaced with loopback"
+        );
+    }
+
+    Some(format!("{node_id}@{socket_addr}"))
+}
+
+fn sanitize_bootstrap_nodes(nodes: &[String]) -> Vec<String> {
+    let mut normalized: Vec<String> = nodes
+        .iter()
+        .filter_map(|entry| sanitize_bootstrap_node(entry))
+        .collect();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
 /// Read bootstrap nodes from environment variable if set
 pub fn load_env_bootstrap_nodes() -> Option<Vec<String>> {
     match std::env::var("KUKURI_BOOTSTRAP_PEERS") {
@@ -203,6 +248,7 @@ pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
     let integration_enabled = std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() == "1";
 
     if let Some(nodes) = load_env_bootstrap_nodes() {
+        let nodes = sanitize_bootstrap_nodes(&nodes);
         trace!("Using bootstrap peers from environment variable");
         return BootstrapSelection {
             source: BootstrapSource::Env,
@@ -210,7 +256,7 @@ pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
         };
     }
 
-    let user_nodes = load_user_bootstrap_nodes();
+    let user_nodes = sanitize_bootstrap_nodes(&load_user_bootstrap_nodes());
     if !user_nodes.is_empty() {
         trace!("Using bootstrap peers from user configuration");
         return BootstrapSelection {
@@ -220,7 +266,7 @@ pub fn load_effective_bootstrap_nodes() -> BootstrapSelection {
     }
 
     if integration_enabled {
-        let bundle_nodes = load_bundle_bootstrap_strings();
+        let bundle_nodes = sanitize_bootstrap_nodes(&load_bundle_bootstrap_strings());
         if !bundle_nodes.is_empty() {
             trace!("Using bootstrap peers from bundled configuration");
             return BootstrapSelection {
@@ -361,9 +407,8 @@ fn user_config_path() -> PathBuf {
 /// Persist user-provided bootstrap nodes (node_id@host:port)
 pub fn save_user_bootstrap_nodes(nodes: &[String]) -> Result<(), AppError> {
     let path = user_config_path();
-    let cfg = UserBootstrapConfig {
-        nodes: nodes.to_vec(),
-    };
+    let normalized = sanitize_bootstrap_nodes(nodes);
+    let cfg = UserBootstrapConfig { nodes: normalized };
     let json = serde_json::to_string_pretty(&cfg).map_err(|e| {
         AppError::ConfigurationError(format!("Failed to serialize user bootstrap: {e}"))
     })?;
@@ -449,13 +494,13 @@ pub fn load_cli_bootstrap_nodes() -> Option<CliBootstrapInfo> {
     let content = fs::read_to_string(&path).ok()?;
     let cache: CliBootstrapCacheFile = serde_json::from_str(&content).ok()?;
 
-    let mut nodes: Vec<String> = cache
-        .nodes
-        .into_iter()
-        .map(|entry| entry.trim().to_string())
-        .filter(|entry| !entry.is_empty())
-        .collect();
-    nodes.dedup();
+    let nodes = sanitize_bootstrap_nodes(
+        &cache
+            .nodes
+            .into_iter()
+            .map(|entry| entry.trim().to_string())
+            .collect::<Vec<_>>(),
+    );
 
     if nodes.is_empty() {
         return None;
@@ -474,8 +519,9 @@ pub fn apply_cli_bootstrap_nodes() -> Result<Vec<String>, AppError> {
             "CLI bootstrap list is not available. Run kukuri-cli to export nodes.".to_string(),
         )
     })?;
-    save_user_bootstrap_nodes(&info.nodes)?;
-    Ok(info.nodes)
+    let normalized = sanitize_bootstrap_nodes(&info.nodes);
+    save_user_bootstrap_nodes(&normalized)?;
+    Ok(normalized)
 }
 
 #[cfg(test)]
@@ -505,13 +551,29 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_bootstrap_nodes_rewrites_unspecified_addresses() {
+        let nodes = vec![
+            "node1@0.0.0.0:11223".to_string(),
+            "node2@[::]:11223".to_string(),
+            " node3@127.0.0.1:11223 ".to_string(),
+        ];
+
+        let normalized = sanitize_bootstrap_nodes(&nodes);
+
+        assert!(normalized.contains(&"node1@127.0.0.1:11223".to_string()));
+        assert!(normalized.contains(&"node2@[::1]:11223".to_string()));
+        assert!(normalized.contains(&"node3@127.0.0.1:11223".to_string()));
+        assert_eq!(normalized.len(), 3);
+    }
+
+    #[test]
     fn load_cli_bootstrap_nodes_returns_data_when_file_exists() {
         let _guard = lock_cli_bootstrap_env();
         let path = temp_cli_path("load");
         unsafe {
             std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
         }
-        let payload = r#"{"nodes":["node1@example:1234","node1@example:1234","node2@example:5678"],"updated_at_ms":12345}"#;
+        let payload = r#"{"nodes":["node1@127.0.0.1:1234","node1@127.0.0.1:1234","node2@[::1]:5678"],"updated_at_ms":12345}"#;
         fs::write(&path, payload).expect("write cli bootstrap cache");
 
         let info = load_cli_bootstrap_nodes().expect("cli bootstrap info");

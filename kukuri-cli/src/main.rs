@@ -15,7 +15,7 @@ use iroh::{
 use iroh_gossip::net::Gossip;
 use serde_json::Value;
 use std::fs;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -254,8 +254,24 @@ fn export_bootstrap_list(
     bind_addr: &SocketAddr,
     peers: &[String],
 ) -> Result<()> {
+    let export_addr = if bind_addr.ip().is_unspecified() {
+        let mut addr = *bind_addr;
+        match addr {
+            SocketAddr::V4(ref mut v4) => v4.set_ip(Ipv4Addr::LOCALHOST),
+            SocketAddr::V6(ref mut v6) => v6.set_ip(Ipv6Addr::LOCALHOST),
+        }
+        warn!(
+            original = %bind_addr,
+            normalized = %addr,
+            "Bootstrap bind address is unspecified; exporting loopback for clients"
+        );
+        addr
+    } else {
+        *bind_addr
+    };
+
     let mut entries = Vec::new();
-    entries.push(format!("{node_id}@{bind_addr}"));
+    entries.push(format!("{node_id}@{export_addr}"));
     for peer in peers {
         if !entries.iter().any(|existing| existing == peer) {
             entries.push(peer.clone());
@@ -574,6 +590,22 @@ mod tests {
             Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
         );
         assert_eq!(super::ensure_kukuri_namespace("   "), None);
+    }
+
+    #[test]
+    fn export_bootstrap_list_rewrites_unspecified_bind_addr() {
+        let path = temp_file("bootstrap_unspecified.json");
+        let node_id = EndpointId::from_str(SAMPLE_NODE_ID).unwrap();
+        let bind_addr: SocketAddr = "0.0.0.0:9999".parse().unwrap();
+        let peers = Vec::new();
+
+        export_bootstrap_list(&path, &node_id, &bind_addr, &peers).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        let cache: CliBootstrapCache = serde_json::from_str(&contents).unwrap();
+        assert_eq!(cache.nodes[0], format!("{node_id}@127.0.0.1:9999"));
+
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
