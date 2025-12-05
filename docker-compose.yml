@@ -36,7 +36,26 @@ services:
     restart: unless-stopped
     command: ['relay']
 
+  # Relay using n0 bootstrap discovery (no local bootstrap dependency)
+  kukuri-relay-n0:
+    build:
+      context: ./kukuri-cli
+      dockerfile: Dockerfile
+    container_name: kukuri-relay-n0
+    environment:
+      KUKURI_SECRET_KEY: 2Fo+P2s6E3GFol29SukyyHhlLRgtXgRQihHN1tyc7KY=
+      LOG_LEVEL: info
+      BIND_ADDRESS: 0.0.0.0:11226
+      RELAY_TOPICS: kukuri:tauri:public
+    ports:
+      - '11226:11226'
+    volumes:
+      - relay-n0-data:/home/kukuri/data
+    restart: unless-stopped
+    command: ['relay']
+
 volumes:
   bootstrap-data:
   relay-data:
+  relay-n0-data:
 
