@@ -3,8 +3,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
 
 export class OfflineSyncService {
-  private syncInterval: NodeJS.Timeout | null = null;
-  private retryTimeout: NodeJS.Timeout | null = null;
+  private syncInterval: ReturnType<typeof setInterval> | null = null;
+  private retryTimeout: ReturnType<typeof setTimeout> | null = null;
   private networkListener: (() => void) | null = null;
 
   /**

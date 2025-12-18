@@ -9,7 +9,6 @@ vi.mock('sonner', () => ({
 }));
 
 describe('errorHandler', () => {
-  const originalEnv = import.meta.env;
   let errorHandler: ErrorHandler;
 
   beforeEach(() => {
@@ -21,17 +20,10 @@ describe('errorHandler', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    import.meta.env = originalEnv;
   });
 
   describe('in test environment', () => {
     beforeEach(() => {
-      // テスト環境をシミュレート
-      import.meta.env = {
-        ...originalEnv,
-        MODE: 'test',
-        DEV: false,
-      };
       errorHandler = new ErrorHandler();
       errorHandler.setTestEnvironment('test');
     });
@@ -58,12 +50,6 @@ describe('errorHandler', () => {
 
   describe('in development environment', () => {
     beforeEach(() => {
-      // 開発環境をシミュレート
-      import.meta.env = {
-        ...originalEnv,
-        MODE: 'development',
-        DEV: true,
-      };
       errorHandler = new ErrorHandler();
       errorHandler.setTestEnvironment('development');
     });
@@ -114,12 +100,6 @@ describe('errorHandler', () => {
 
   describe('in production environment', () => {
     beforeEach(() => {
-      // 本番環境をシミュレート
-      import.meta.env = {
-        ...originalEnv,
-        MODE: 'production',
-        DEV: false,
-      };
       errorHandler = new ErrorHandler();
       errorHandler.setTestEnvironment('production');
     });
