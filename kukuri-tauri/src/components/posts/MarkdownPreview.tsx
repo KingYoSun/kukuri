@@ -10,6 +10,17 @@ interface MarkdownPreviewProps {
   className?: string;
 }
 
+type MarkdownElementProps<T extends React.ElementType> = React.ComponentPropsWithoutRef<T> & {
+  node?: unknown;
+};
+
+type PossibleEmbedChildProps = {
+  href?: string;
+  children?: React.ReactNode;
+  className?: string;
+  'data-embed'?: string;
+};
+
 const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className }) => {
   return (
     <ReactMarkdown
@@ -18,7 +29,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
       rehypePlugins={[rehypeRaw]}
       components={{
         // Custom link renderer for consistent attributes
-        a: ({ node: _node, href, children, ...props }) => {
+        a: ({ node: _node, href, children, ...props }: MarkdownElementProps<'a'>) => {
           if (!href) {
             return <a {...props}>{children}</a>;
           }
@@ -30,7 +41,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
           );
         },
         // Override paragraph to handle media embeds properly
-        p: ({ node: _node, children, ...props }) => {
+        p: ({ node: _node, children, ...props }: MarkdownElementProps<'p'>) => {
           const childrenArray = React.Children.toArray(children);
           const meaningfulChildren = childrenArray.filter((child) => {
             if (typeof child === 'string') {
@@ -41,8 +52,8 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
 
           if (meaningfulChildren.length === 1) {
             const child = meaningfulChildren[0];
-            if (React.isValidElement(child)) {
-              const href: string | undefined = child.props?.href;
+            if (React.isValidElement<PossibleEmbedChildProps>(child)) {
+              const href = child.props.href;
 
               if (href) {
                 const textContent = React.Children.toArray(child.props.children)
@@ -67,12 +78,12 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, className })
               }
 
               if (
-                child.props?.['data-embed'] === 'media-embed' ||
+                child.props['data-embed'] === 'media-embed' ||
                 child.type === MediaEmbed ||
                 (typeof child.type === 'function' && child.type.name === MediaEmbed.name)
               ) {
-                return React.cloneElement(child as React.ReactElement, {
-                  className: cn((child as React.ReactElement).props.className, 'my-4'),
+                return React.cloneElement(child, {
+                  className: cn(child.props.className, 'my-4'),
                 });
               }
             }

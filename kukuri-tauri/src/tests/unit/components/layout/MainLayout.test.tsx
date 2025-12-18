@@ -2,8 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuthStore, useTopicStore, useUIStore } from '@/stores';
+
+vi.mock('@/components/layout/Header', () => ({
+  Header: () => <header role="banner">Header</header>,
+}));
+
+vi.mock('@/components/layout/Sidebar', () => ({
+  Sidebar: () => <aside role="complementary">Sidebar</aside>,
+}));
+
+vi.mock('@/components/posts/GlobalComposer', () => ({
+  GlobalComposer: () => null,
+}));
+
+vi.mock('@/components/directMessages/DirectMessageDialog', () => ({
+  DirectMessageDialog: () => null,
+}));
+
+type MainLayoutType = typeof import('@/components/layout/MainLayout').MainLayout;
 
 // モック
 vi.mock('@tanstack/react-router', () => ({
@@ -50,11 +67,13 @@ vi.mock('@/components/P2PStatus', () => ({
 }));
 
 describe('MainLayout', () => {
+  let MainLayout: MainLayoutType;
   let queryClient: QueryClient;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     queryClient = new QueryClient();
+    ({ MainLayout } = await import('@/components/layout/MainLayout'));
 
     // デフォルトのストア状態
     useAuthStore.setState({

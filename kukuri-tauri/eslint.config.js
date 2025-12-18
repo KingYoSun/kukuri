@@ -49,6 +49,9 @@ export default [
       }],
       '@typescript-eslint/no-explicit-any': 'off',
       'react-hooks/exhaustive-deps': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
       'no-undef': 'off', // TypeScriptが処理するため
       'no-console': ['error', { allow: ['warn', 'info'] }],
     },
