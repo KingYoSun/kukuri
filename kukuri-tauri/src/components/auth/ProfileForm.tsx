@@ -416,7 +416,7 @@ function createObjectUrl(
   ref: MutableRefObject<string | null>,
 ): string {
   releaseObjectUrl(ref);
-  const blob = new Blob([bytes], { type: format });
+  const blob = new Blob([bytes as unknown as BlobPart], { type: format });
   const url = URL.createObjectURL(blob);
   ref.current = url;
   return url;

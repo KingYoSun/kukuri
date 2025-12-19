@@ -1,6 +1,6 @@
 # 最重要タスク（Critical）
 
-最終更新日: 2025年10月17日
+最終更新日: 2025年12月19日
 
 目的: 今後直近で着手すべき最重要タスクの一覧。着手時は本ファイルから `tasks/status/in_progress.md` へ移動して進捗を管理します。
 
@@ -9,6 +9,7 @@
 - Iroh DHT/Discovery 残タスクは `tasks/status/in_progress.md` に移動（2025年09月15日）
 - v2 アプリ Phase 7 - Mainline DHT 統合タスク群を `tasks/status/in_progress.md` に移動（2025年10月17日）
 - MVP 残タスク棚卸しとドキュメント刷新を `tasks/status/in_progress.md` に移動（2025年11月08日着手）
+- Tauri/関連ライブラリのバージョン更新を `tasks/status/in_progress.md` に移動（2025年12月19日着手）
 
 方針更新（2025年09月15日）
 - 当面は Nostr リレーとは接続しない。まず P2P（iroh + iroh-gossip + DHT）で完結した体験の実現を優先。

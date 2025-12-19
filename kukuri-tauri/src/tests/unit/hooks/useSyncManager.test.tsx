@@ -166,6 +166,9 @@ describe('useSyncManager', () => {
       expect(offlineApi.getCacheStatus).toHaveBeenCalled();
       expect(offlineApi.listSyncQueueItems).toHaveBeenCalled();
       expect(offlineApi.getOfflineRetryMetrics).toHaveBeenCalled();
+      expect(utils.result.current.isCacheStatusLoading).toBe(false);
+      expect(utils.result.current.isQueueItemsLoading).toBe(false);
+      expect(utils.result.current.isRetryMetricsLoading).toBe(false);
     });
     if (!options?.skipClear) {
       vi.mocked(offlineApi.getCacheStatus).mockClear();
