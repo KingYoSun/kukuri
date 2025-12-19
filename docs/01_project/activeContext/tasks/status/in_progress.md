@@ -10,6 +10,11 @@
 
 ## 現在のタスク
 
+### 2025年12月19日 GitHub Actions 失敗調査（Docker Test Suite）
+
+- 状態: 修正済み（`No space left on device` の回避策を追加。CI 再実行待ち）。
+- 次の作業: GitHub Actions の `docker-test` 再実行で再発確認。
+
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。
