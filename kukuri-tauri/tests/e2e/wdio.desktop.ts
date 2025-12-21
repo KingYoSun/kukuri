@@ -12,8 +12,6 @@ const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
 const CLI_BOOTSTRAP_PATH =
   process.env.KUKURI_CLI_BOOTSTRAP_PATH ?? join(OUTPUT_DIR, 'cli_bootstrap_nodes.json');
 
-process.env.VITE_ENABLE_E2E ??= 'true';
-process.env.TAURI_ENV_DEBUG ??= 'true';
 process.env.KUKURI_BOOTSTRAP_PEERS = '';
 process.env.WDIO_WORKERS ??= '1';
 process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;

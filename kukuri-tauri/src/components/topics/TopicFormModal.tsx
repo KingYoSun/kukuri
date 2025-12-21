@@ -30,7 +30,6 @@ import { useComposerStore } from '@/stores/composerStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useTopicStore } from '@/stores/topicStore';
 import type { Topic } from '@/stores';
-import { OfflineActionType } from '@/types/offline';
 
 const isNavigatorOnline = () => (typeof navigator !== 'undefined' ? navigator.onLine : true);
 
@@ -135,73 +134,10 @@ export function TopicFormModal({
 
   const onSubmit = async (values: TopicFormValues) => {
     setIsSubmitting(true);
-    const forceE2EOffline =
-      typeof window !== 'undefined' &&
-      (window as unknown as { __E2E_FORCE_OFFLINE__?: boolean }).__E2E_FORCE_OFFLINE__ === true;
-    const offlineMode =
-      forceOffline || forceE2EOffline || offlineEventFlag || !isOnline || !isNavigatorOnline();
+    const offlineMode = forceOffline || offlineEventFlag || !isOnline || !isNavigatorOnline();
 
     try {
       if (offlineMode && (mode === 'create' || mode === 'create-from-composer')) {
-        if (forceE2EOffline) {
-          const pendingId = `e2e-pending-${Date.now()}`;
-          const pendingTopic = {
-            pending_id: pendingId,
-            name: values.name,
-            description: values.description || '',
-            status: 'queued' as const,
-            offline_action_id: pendingId,
-            synced_topic_id: null,
-            error_message: null,
-            created_at: Date.now() / 1000,
-            updated_at: Date.now() / 1000,
-          };
-          useTopicStore.getState().upsertPendingTopic(pendingTopic);
-          useTopicStore.getState().addTopic({
-            id: pendingId,
-            name: values.name,
-            description: values.description || '',
-            createdAt: new Date(),
-            memberCount: 0,
-            postCount: 0,
-            isActive: true,
-            tags: [],
-            visibility: 'public',
-            isJoined: true,
-          });
-          const userPubkey = localStorage.getItem('currentUserPubkey') ?? 'unknown';
-          useOfflineStore.getState().addPendingAction({
-            id: Date.now(),
-            userPubkey,
-            actionType: OfflineActionType.TOPIC_CREATE,
-            targetId: pendingId,
-            actionData: JSON.stringify({
-              name: values.name,
-              description: values.description || '',
-            }),
-            localId: pendingId,
-            isSynced: false,
-            createdAt: Date.now(),
-          });
-          const e2ePendingList =
-            (typeof window !== 'undefined' &&
-              (window as unknown as { __E2E_PENDING_TOPICS__?: (typeof pendingTopic)[] })
-                .__E2E_PENDING_TOPICS__) ||
-            [];
-          (
-            window as unknown as { __E2E_PENDING_TOPICS__?: (typeof pendingTopic)[] }
-          ).__E2E_PENDING_TOPICS__ = [...e2ePendingList, pendingTopic];
-          (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean }).__E2E_KEEP_LOCAL_TOPICS__ =
-            true;
-          toast({
-            title: '作成をキューに追加しました',
-            description: 'オフラインのため接続回復後に自動で処理されます。',
-          });
-          onOpenChange(false);
-          form.reset();
-          return;
-        }
-
         const pending = await queueTopicCreation(values.name, values.description || '');
         if (mode === 'create-from-composer' || autoJoin) {
           watchPendingTopic(pending.pending_id);

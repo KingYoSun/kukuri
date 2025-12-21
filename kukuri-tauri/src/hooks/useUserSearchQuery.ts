@@ -265,45 +265,6 @@ async function fetchSearchPage({
   sort: UserSearchSort;
   allowIncomplete: boolean;
 }): Promise<SearchUsersResponseDto> {
-  const resolveE2EFixturePage = (): SearchUsersResponseDto | null => {
-    if (import.meta.env.VITE_ENABLE_E2E !== 'true' || typeof window === 'undefined') {
-      return null;
-    }
-    const fixture = (window as unknown as { __E2E_USER_SEARCH_FIXTURE__?: SearchUsersResponseDto })
-      .__E2E_USER_SEARCH_FIXTURE__;
-    if (!fixture || !Array.isArray(fixture.items) || fixture.items.length === 0) {
-      return null;
-    }
-
-    const parsedCursor =
-      typeof cursor === 'number'
-        ? cursor
-        : typeof cursor === 'string' && cursor.length > 0
-          ? Number.parseInt(cursor, 10)
-          : 0;
-    const startIndex =
-      Number.isNaN(parsedCursor) || !Number.isFinite(parsedCursor) || parsedCursor < 0
-        ? 0
-        : parsedCursor;
-    const effectivePageSize =
-      Number.isFinite(pageSize) && pageSize > 0 ? pageSize : fixture.items.length;
-
-    const start = Math.min(startIndex, fixture.items.length);
-    const end = Math.min(start + effectivePageSize, fixture.items.length);
-    const pageItems = fixture.items.slice(start, end);
-    const nextCursor = end < fixture.items.length ? String(end) : null;
-
-    return {
-      items: pageItems,
-      nextCursor,
-      hasMore: nextCursor !== null,
-      totalCount: fixture.totalCount ?? fixture.items.length,
-      tookMs: fixture.tookMs ?? 1,
-    };
-  };
-
-  const e2eFixturePage = resolveE2EFixturePage();
-
   let response: SearchUsersResponseDto | null = null;
   try {
     response = await TauriApi.searchUsers({
@@ -342,22 +303,11 @@ async function fetchSearchPage({
         retryAfterSeconds !== null ? { retry_after_seconds: retryAfterSeconds } : undefined,
       );
     }
-    if (e2eFixturePage) {
-      return e2eFixturePage;
-    }
     throw error;
-  }
-
-  if (e2eFixturePage) {
-    return e2eFixturePage;
   }
 
   if (response && response.items.length > 0) {
     return response;
-  }
-
-  if (e2eFixturePage) {
-    return e2eFixturePage;
   }
 
   return (

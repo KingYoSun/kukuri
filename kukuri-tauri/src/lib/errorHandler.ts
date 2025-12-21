@@ -1,5 +1,4 @@
 import { toast } from 'sonner';
-import { setE2EDebugMessage } from './utils/e2eDebug';
 
 export interface ErrorLogOptions {
   showToast?: boolean;
@@ -15,9 +14,7 @@ class ErrorHandler {
     if (this._forceEnvironment) {
       return this._forceEnvironment === 'development';
     }
-    const isE2EDebug =
-      import.meta.env.TAURI_ENV_DEBUG === 'true' || import.meta.env.VITE_ENABLE_E2E === 'true';
-    return import.meta.env.DEV || isE2EDebug;
+    return import.meta.env.DEV;
   }
 
   private get isTest() {
@@ -35,22 +32,6 @@ class ErrorHandler {
     if (this.isTest) {
       return;
     }
-
-    const errorMessage =
-      error instanceof Error ? error.message : error === undefined ? null : String(error);
-    let errorDetail: string | null = null;
-    if (error) {
-      try {
-        errorDetail = JSON.stringify(error);
-      } catch {
-        errorDetail = null;
-      }
-    }
-    setE2EDebugMessage(
-      message,
-      { level: 'error', context: options?.context, error: errorMessage, detail: errorDetail },
-      { key: 'last-log' },
-    );
 
     if (this.isDevelopment) {
       if (options?.metadata) {
@@ -72,8 +53,6 @@ class ErrorHandler {
       return;
     }
 
-    setE2EDebugMessage(message, { level: 'warn', context }, { key: 'last-log' });
-
     if (this.isDevelopment) {
       console.warn(`[WARN] ${context || 'App'}: ${message}`);
     }
@@ -83,8 +62,6 @@ class ErrorHandler {
     if (this.isTest) {
       return;
     }
-
-    setE2EDebugMessage(message, { level: 'info', context, ...metadata }, { key: 'last-log' });
 
     if (this.isDevelopment) {
       if (metadata) {

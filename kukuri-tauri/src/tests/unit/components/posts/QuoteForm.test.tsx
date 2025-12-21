@@ -6,6 +6,7 @@ import type { Post } from '@/stores';
 import {
   createMockProfile,
   createPostFormRenderer,
+  mockCreatePost,
   mockTauriApi,
   mockToast,
   mockUseAuthStore,
@@ -46,6 +47,7 @@ describe('QuoteForm', () => {
       currentUser: mockProfile,
     } as never);
 
+    mockCreatePost.mockReset();
     mockTauriApi.createPost = vi.fn().mockResolvedValue({ id: 'new-quote-id' });
   });
 
@@ -102,15 +104,13 @@ describe('QuoteForm', () => {
     await user.click(screen.getByText('引用して投稿'));
 
     await waitFor(() => {
-      expect(mockTauriApi.createPost).toHaveBeenCalledWith({
-        content: 'これは引用コメントです\n\nnostr:post123',
-        topic_id: 'topic456',
-        tags: [
-          ['e', 'post123', '', 'mention'],
-          ['q', 'post123'],
-          ['t', 'topic456'],
-        ],
-      });
+      expect(mockCreatePost).toHaveBeenCalledWith(
+        'これは引用コメントです\n\nnostr:post123',
+        'topic456',
+        {
+          quotedPost: 'post123',
+        },
+      );
       expect(mockToast.success).toHaveBeenCalledWith('引用投稿を作成しました');
       expect(onSuccess).toHaveBeenCalled();
     });
@@ -145,14 +145,14 @@ describe('QuoteForm', () => {
     await user.keyboard('{Control>}{Enter}{/Control}');
 
     await waitFor(() => {
-      expect(mockTauriApi.createPost).toHaveBeenCalledTimes(1);
+      expect(mockCreatePost).toHaveBeenCalledTimes(1);
     });
 
     await user.type(textarea, '2回目の引用コメントです');
     await user.keyboard('{Meta>}{Enter}{/Meta}');
 
     await waitFor(() => {
-      expect(mockTauriApi.createPost).toHaveBeenCalledTimes(2);
+      expect(mockCreatePost).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -162,7 +162,7 @@ describe('QuoteForm', () => {
     const promise = new Promise<void>((resolve) => {
       resolvePromise = resolve;
     });
-    mockTauriApi.createPost = vi.fn().mockReturnValue(promise);
+    mockCreatePost.mockReturnValue(promise);
 
     renderWithQueryClient(<QuoteForm post={mockPost} />);
     const textarea = screen.getByPlaceholderText('コメントを追加...');

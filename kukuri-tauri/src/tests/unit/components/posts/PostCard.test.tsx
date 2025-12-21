@@ -252,20 +252,8 @@ describe('PostCard', () => {
     });
 
     it('返信を送信できる', async () => {
-      const { TauriApi } = await import('@/lib/api/tauri');
       const { toast } = await import('sonner');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({
-        id: 'reply-id',
-        content: '',
-        author_pubkey: '',
-        author_npub: '',
-        topic_id: '',
-        created_at: Date.now(),
-        likes: 0,
-        boosts: 0,
-        replies: 0,
-        is_synced: false,
-      });
+      createPostMock.mockResolvedValue(mockPost);
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -286,32 +274,15 @@ describe('PostCard', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(TauriApi.createPost).toHaveBeenCalledWith({
-          content: 'これは返信です',
-          topic_id: 'topic1',
-          tags: [
-            ['e', '1', '', 'reply'],
-            ['t', 'topic1'],
-          ],
+        expect(createPostMock).toHaveBeenCalledWith('これは返信です', 'topic1', {
+          replyTo: '1',
         });
         expect(toast.success).toHaveBeenCalledWith('返信を投稿しました');
       });
     });
 
     it('返信成功後にフォームが閉じる', async () => {
-      const { TauriApi } = await import('@/lib/api/tauri');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({
-        id: 'reply-id',
-        content: '',
-        author_pubkey: '',
-        author_npub: '',
-        topic_id: '',
-        created_at: Date.now(),
-        likes: 0,
-        boosts: 0,
-        replies: 0,
-        is_synced: false,
-      });
+      createPostMock.mockResolvedValue(mockPost);
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -332,7 +303,7 @@ describe('PostCard', () => {
 
       // フォームが閉じるまで待つ（成功メッセージが表示されることも確認）
       await waitFor(() => {
-        expect(TauriApi.createPost).toHaveBeenCalled();
+        expect(createPostMock).toHaveBeenCalled();
       });
 
       await waitFor(
@@ -396,20 +367,8 @@ describe('PostCard', () => {
     });
 
     it('引用投稿を送信できる', async () => {
-      const { TauriApi } = await import('@/lib/api/tauri');
       const { toast } = await import('sonner');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({
-        id: 'quote-id',
-        content: '',
-        author_pubkey: '',
-        author_npub: '',
-        topic_id: '',
-        created_at: Date.now(),
-        likes: 0,
-        boosts: 0,
-        replies: 0,
-        is_synced: false,
-      });
+      createPostMock.mockResolvedValue(mockPost);
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -430,33 +389,15 @@ describe('PostCard', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(TauriApi.createPost).toHaveBeenCalledWith({
-          content: 'これは引用コメントです\n\nnostr:1',
-          topic_id: 'topic1',
-          tags: [
-            ['e', '1', '', 'mention'],
-            ['q', '1'],
-            ['t', 'topic1'],
-          ],
+        expect(createPostMock).toHaveBeenCalledWith('これは引用コメントです\n\nnostr:1', 'topic1', {
+          quotedPost: '1',
         });
         expect(toast.success).toHaveBeenCalledWith('引用投稿を作成しました');
       });
     });
 
     it('引用成功後にフォームが閉じる', async () => {
-      const { TauriApi } = await import('@/lib/api/tauri');
-      vi.mocked(TauriApi.createPost).mockResolvedValue({
-        id: 'quote-id',
-        content: '',
-        author_pubkey: '',
-        author_npub: '',
-        topic_id: '',
-        created_at: Date.now(),
-        likes: 0,
-        boosts: 0,
-        replies: 0,
-        is_synced: false,
-      });
+      createPostMock.mockResolvedValue(mockPost);
 
       renderWithQueryClient(<PostCard post={mockPost} />);
 
@@ -477,7 +418,7 @@ describe('PostCard', () => {
 
       // フォームが閉じるまで待つ（成功メッセージが表示されることも確認）
       await waitFor(() => {
-        expect(TauriApi.createPost).toHaveBeenCalled();
+        expect(createPostMock).toHaveBeenCalled();
       });
 
       await waitFor(

@@ -64,19 +64,13 @@ export const useTopicStore = create<TopicStore>()(
     const handlePendingTransition = (previous: PendingTopic | undefined, next: PendingTopic) => {
       if (next.status === 'synced' && next.synced_topic_id && previous?.status !== 'synced') {
         useComposerStore.getState().resolvePendingTopic(next.pending_id, next.synced_topic_id);
-        const skipRefresh =
-          typeof window !== 'undefined' &&
-          (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean })
-            .__E2E_KEEP_LOCAL_TOPICS__ === true;
-        if (!skipRefresh) {
-          void get()
-            .fetchTopics()
-            .catch((error) => {
-              errorHandler.log('Failed to refresh topics after pending sync', error, {
-                context: 'TopicStore.handlePendingTransition',
-              });
+        void get()
+          .fetchTopics()
+          .catch((error) => {
+            errorHandler.log('Failed to refresh topics after pending sync', error, {
+              context: 'TopicStore.handlePendingTransition',
             });
-        }
+          });
       } else if (next.status === 'failed' && previous?.status !== 'failed') {
         useComposerStore.getState().clearPendingTopicBinding(next.pending_id);
       }
@@ -189,44 +183,18 @@ export const useTopicStore = create<TopicStore>()(
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
-          const keepLocalTopics =
-            typeof window !== 'undefined' &&
-            (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean })
-              .__E2E_KEEP_LOCAL_TOPICS__ === true;
-          const deletedTopicIds =
-            typeof window !== 'undefined' &&
-            Array.isArray(
-              (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: unknown })
-                .__E2E_DELETED_TOPIC_IDS__,
-            )
-              ? ((window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] })
-                  .__E2E_DELETED_TOPIC_IDS__ ?? [])
-              : [];
-          let topics: Topic[] = (apiTopics ?? [])
-            .map((t) => ({
-              id: t.id,
-              name: t.name,
-              description: t.description,
-              createdAt: new Date(t.created_at * 1000),
-              memberCount: t.member_count ?? 0,
-              postCount: t.post_count ?? 0,
-              isActive: true,
-              tags: [],
-              visibility: t.visibility ?? 'public',
-              isJoined: Boolean(t.is_joined),
-            }))
-            .filter((topic) => !deletedTopicIds.includes(normalizeTopicId(topic.id)));
-          if (keepLocalTopics) {
-            const merged = new Map<string, Topic>();
-            topics.forEach((topic) => merged.set(normalizeTopicId(topic.id), topic));
-            get().topics.forEach((topic, id) => {
-              const normalizedId = normalizeTopicId(id);
-              if (!merged.has(normalizedId)) {
-                merged.set(normalizedId, topic);
-              }
-            });
-            topics = Array.from(merged.values());
-          }
+          let topics: Topic[] = (apiTopics ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            description: t.description,
+            createdAt: new Date(t.created_at * 1000),
+            memberCount: t.member_count ?? 0,
+            postCount: t.post_count ?? 0,
+            isActive: true,
+            tags: [],
+            visibility: t.visibility ?? 'public',
+            isJoined: Boolean(t.is_joined),
+          }));
           get().setTopics(topics);
           const refreshPendingTopics = get().refreshPendingTopics;
           if (typeof refreshPendingTopics === 'function') {

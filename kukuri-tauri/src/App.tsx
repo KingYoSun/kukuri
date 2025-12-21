@@ -5,11 +5,14 @@ import { router } from './router';
 import { queryClient } from './lib/queryClient';
 import { Toaster } from 'sonner';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AppErrorBoundary>
+        <RouterProvider router={router} />
+      </AppErrorBoundary>
       <OfflineIndicator />
       <Toaster />
     </QueryClientProvider>

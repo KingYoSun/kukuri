@@ -9,6 +9,8 @@ import { createConnection } from 'node:net';
 let driverProcess: ChildProcess | null = null;
 let proxyServer: ReturnType<typeof createServer> | null = null;
 const DEFAULT_PORT = process.env.TAURI_DRIVER_PORT ?? '4445';
+const DRIVER_READY_TIMEOUT_MS = Number(process.env.TAURI_DRIVER_READY_TIMEOUT ?? '15000');
+const DRIVER_READY_POLL_MS = 200;
 
 async function ensureExecutable(binaryPath: string): Promise<void> {
   try {
@@ -84,6 +86,7 @@ export async function startDriver(): Promise<void> {
   let nativePort = Number(
     process.env.TAURI_NATIVE_DRIVER_PORT ?? (isLinux ? proxyListenPort + 100 : 4444),
   );
+  const nativeDriverPath = resolveNativeDriver();
 
   if (isLinux) {
     if (proxyListenPort === nativePort) {
@@ -114,7 +117,6 @@ export async function startDriver(): Promise<void> {
   }
 
   const args = ['--port', driverPort.toString()];
-  const nativeDriverPath = resolveNativeDriver();
   if (nativeDriverPath) {
     args.push('--native-driver', nativeDriverPath);
     if (platform() === 'linux') {
@@ -139,6 +141,15 @@ export async function startDriver(): Promise<void> {
     }
     driverProcess = null;
   });
+
+  if (isLinux && nativeDriverPath) {
+    await waitForPortReady(nativePort, DRIVER_READY_TIMEOUT_MS);
+  }
+  if (isLinux) {
+    await waitForPortReady(proxyListenPort, DRIVER_READY_TIMEOUT_MS);
+  }
+  await waitForPortReady(driverPort, DRIVER_READY_TIMEOUT_MS);
+  await waitForDriverStatus(isLinux ? proxyListenPort : driverPort, DRIVER_READY_TIMEOUT_MS);
 }
 
 export async function stopDriver(): Promise<void> {
@@ -218,6 +229,68 @@ async function isPortInUse(port: number): Promise<boolean> {
     });
     socket.once('error', () => resolve(false));
   });
+}
+
+async function waitForPortReady(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isPortInUse(port)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, DRIVER_READY_POLL_MS));
+  }
+  throw new Error(`tauri-driver did not listen on port ${port} within ${timeoutMs}ms`);
+}
+
+async function waitForDriverStatus(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const isReady = await new Promise<boolean>((resolve) => {
+      const req = request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: '/status',
+          method: 'GET',
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => chunks.push(chunk as Buffer));
+          res.on('end', () => {
+            if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+              resolve(false);
+              return;
+            }
+            if (chunks.length === 0) {
+              resolve(true);
+              return;
+            }
+            try {
+              const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as {
+                value?: { ready?: boolean };
+              };
+              if (payload?.value?.ready === false) {
+                resolve(false);
+                return;
+              }
+            } catch {
+              // Assume ready when a successful response does not contain JSON.
+            }
+            resolve(true);
+          });
+        },
+      );
+
+      req.on('error', () => resolve(false));
+      req.end();
+    });
+
+    if (isReady) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, DRIVER_READY_POLL_MS));
+  }
+  throw new Error(`tauri-driver did not respond to /status on port ${port} within ${timeoutMs}ms`);
 }
 
 function pruneCapabilityPayload(payload: unknown): void {

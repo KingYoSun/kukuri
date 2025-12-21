@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -50,6 +50,8 @@ type ConversationEntry = {
   lastReadAt: number;
 };
 
+const EMPTY_CONVERSATION_PAGES: DirectMessageConversationList[] = [];
+
 export function DirectMessageInbox() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const isInboxOpen = useDirectMessageStore((state) => state.isInboxOpen);
@@ -92,7 +94,7 @@ export function DirectMessageInbox() {
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
   });
 
-  const conversationPages = conversationsQuery.data?.pages ?? [];
+  const conversationPages = conversationsQuery.data?.pages ?? EMPTY_CONVERSATION_PAGES;
   const apiConversationEntries = useMemo<ConversationEntry[]>(() => {
     return conversationPages
       .flatMap((page: DirectMessageConversationList) => page.items)
@@ -173,6 +175,10 @@ export function DirectMessageInbox() {
   } = conversationsQuery;
   const showLoadingState = isConversationsLoading && !hasConversations;
   const showErrorState = isConversationsError && !hasConversations;
+  const getConversationItemKey = useCallback(
+    (index: number) => filteredConversationEntries[index]?.npub ?? `loader-${index}`,
+    [filteredConversationEntries],
+  );
   const rowVirtualizer = useVirtualizer({
     count: hasNextPage
       ? filteredConversationEntries.length + 1
@@ -180,7 +186,7 @@ export function DirectMessageInbox() {
     getScrollElement: () => conversationListRef.current,
     estimateSize: () => 88,
     overscan: 12,
-    getItemKey: (index) => filteredConversationEntries[index]?.npub ?? `loader-${index}`,
+    getItemKey: getConversationItemKey,
   });
   const virtualItems = rowVirtualizer.getVirtualItems();
   const shouldRenderFallbackList =

@@ -62,6 +62,8 @@ describe('ProfileSetup', () => {
     mockReadFile.mockReset();
     mockUploadProfileAvatar.mockReset();
     mockFetchProfileAvatar.mockReset();
+    mockUpdatePrivacySettings.mockReset();
+    mockProfileAvatarSync.mockReset();
     mockUpdatePrivacySettings.mockResolvedValue(undefined);
     mockProfileAvatarSync.mockResolvedValue({
       npub: mockCurrentUser.npub,
@@ -69,8 +71,6 @@ describe('ProfileSetup', () => {
       updated: false,
       avatar: undefined,
     });
-    mockUpdatePrivacySettings.mockReset();
-    mockProfileAvatarSync.mockReset();
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       currentUser: mockCurrentUser,
       updateUser: mockUpdateUser,
@@ -357,21 +357,22 @@ describe('ProfileSetup', () => {
     const submitButton = screen.getByRole('button', { name: '設定を完了' });
     await user.click(submitButton);
 
-    // エラーメッセージ
+    // 部分的な失敗メッセージ
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('プロフィールの設定に失敗しました');
+      expect(toast.error).toHaveBeenCalledWith(
+        'プロフィールは保存しましたが、一部の同期に失敗しました',
+      );
     });
 
     // errorHandlerが呼ばれる
-    expect(errorHandler.log).toHaveBeenCalledWith('Profile setup failed', error, {
-      context: 'ProfileSetup.handleSubmit',
+    expect(errorHandler.log).toHaveBeenCalledWith('Failed to update Nostr metadata', error, {
+      context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
     });
 
-    // ナビゲーションは発生しない
-    expect(mockNavigate).not.toHaveBeenCalled();
-
-    // ローディング状態が解除される
-    expect(screen.getByRole('button', { name: '設定を完了' })).not.toBeDisabled();
+    // ナビゲーションが発生する
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+    });
   });
 
   it('アバターのイニシャルが正しく表示される', async () => {

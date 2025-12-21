@@ -11,7 +11,6 @@ import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
-import { setE2EAuthDebug } from '@/lib/utils/e2eDebug';
 
 const DEFAULT_RELAY_STATUS_INTERVAL = 30_000;
 const RELAY_STATUS_BACKOFF_SEQUENCE = [120_000, 300_000, 600_000];
@@ -190,18 +189,6 @@ export const useAuthStore = create<AuthStore>()(
       }
     };
 
-    const updateAuthDebug = () => {
-      const state = useAuthStore.getState();
-      setE2EAuthDebug({
-        isAuthenticated: state.isAuthenticated,
-        npub: state.currentUser?.npub ?? null,
-        accounts: state.accounts?.map((account) => ({
-          npub: account.npub,
-          display_name: account.display_name,
-        })),
-      });
-    };
-
     const bootstrapTopics = async () => {
       const topicStore = useTopicStore.getState();
       try {
@@ -240,7 +227,7 @@ export const useAuthStore = create<AuthStore>()(
           privateKey,
         });
         persistCurrentUserPubkey(user.pubkey);
-        updateAuthDebug();
+
         hydratePrivacyFromUser(user);
         try {
           await initializeNostr();
@@ -302,7 +289,7 @@ export const useAuthStore = create<AuthStore>()(
             privateKey: nsec,
           });
           persistCurrentUserPubkey(mergedUser.pubkey);
-          updateAuthDebug();
+
           hydratePrivacyFromUser(mergedUser);
           errorHandler.info('Auth state set after loginWithNsec', 'AuthStore.loginWithNsec', {
             npub: mergedUser.npub,
@@ -398,7 +385,7 @@ export const useAuthStore = create<AuthStore>()(
             privateKey: response.nsec,
           });
           persistCurrentUserPubkey(user.pubkey);
-          updateAuthDebug();
+
           hydratePrivacyFromUser(user);
           errorHandler.info(
             'Auth state set after keypair generation',
@@ -475,7 +462,6 @@ export const useAuthStore = create<AuthStore>()(
           isFetchingRelayStatus: false,
         });
         persistCurrentUserPubkey(null);
-        updateAuthDebug();
       },
 
       updateUser: (userUpdate: Partial<User>) =>
@@ -596,7 +582,6 @@ export const useAuthStore = create<AuthStore>()(
               privateKey: currentAccount.nsec,
             });
             persistCurrentUserPubkey(user.pubkey);
-            updateAuthDebug();
 
             // Nostrクライアントを初期化
             await initializeNostr();
@@ -620,7 +605,6 @@ export const useAuthStore = create<AuthStore>()(
               isFetchingRelayStatus: false,
             });
             persistCurrentUserPubkey(null);
-            updateAuthDebug();
           }
 
           // アカウントリストを読み込み
@@ -642,7 +626,6 @@ export const useAuthStore = create<AuthStore>()(
             lastRelayStatusFetchedAt: null,
             isFetchingRelayStatus: false,
           });
-          updateAuthDebug();
         }
       },
 
@@ -688,7 +671,7 @@ export const useAuthStore = create<AuthStore>()(
               privateKey: fallbackNsec,
             });
             persistCurrentUserPubkey(fallbackUser.pubkey);
-            updateAuthDebug();
+
             hydratePrivacyFromUser(fallbackUser);
             try {
               await initializeNostr();
@@ -750,7 +733,6 @@ export const useAuthStore = create<AuthStore>()(
             privateKey: null,
           });
           persistCurrentUserPubkey(mergedUser.pubkey);
-          updateAuthDebug();
 
           await initializeNostr();
           await useAuthStore.getState().updateRelayStatus();
@@ -817,13 +799,11 @@ export const useAuthStore = create<AuthStore>()(
           }
           const resolvedAccounts = Array.from(merged.values());
           set({ accounts: resolvedAccounts });
-          updateAuthDebug();
         } catch (error) {
           errorHandler.log('Failed to load accounts', error, {
             context: 'AuthStore.loadAccounts',
           });
           set({ accounts: listFallbackAccountMetadata() });
-          updateAuthDebug();
         }
       },
 

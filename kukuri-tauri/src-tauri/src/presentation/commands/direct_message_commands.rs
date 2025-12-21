@@ -53,9 +53,9 @@ async fn ensure_authenticated(
 }
 
 fn is_e2e_allowed() -> bool {
-    tauri::is_dev()
+    cfg!(debug_assertions)
+        || tauri::is_dev()
         || matches!(std::env::var("TAURI_ENV_DEBUG"), Ok(value) if value == "true")
-        || matches!(std::env::var("VITE_ENABLE_E2E"), Ok(value) if value == "true")
 }
 
 #[tauri::command]

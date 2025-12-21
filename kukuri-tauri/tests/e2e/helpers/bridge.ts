@@ -20,8 +20,6 @@ export type BridgeAction =
   | 'ensureTestTopic'
   | 'clearOfflineState'
   | 'getDirectMessageSnapshot'
-  | 'setProfileAvatarFixture'
-  | 'consumeProfileAvatarFixture'
   | 'switchAccount'
   | 'seedDirectMessageConversation'
   | 'getTopicSnapshot'
@@ -166,12 +164,6 @@ export interface SeedTrendingFixtureResult {
   followerNpub: string;
 }
 
-export interface AvatarFixture {
-  base64: string;
-  format: string;
-  fileName?: string;
-}
-
 export interface UserSearchFixtureUser {
   displayName: string;
   about?: string;
@@ -211,8 +203,6 @@ type BridgeResultMap = {
   ensureTestTopic: EnsureTestTopicResult;
   clearOfflineState: ClearOfflineStateResult;
   getDirectMessageSnapshot: DirectMessageSnapshot;
-  setProfileAvatarFixture: null;
-  consumeProfileAvatarFixture: AvatarFixture | null;
   switchAccount: null;
   seedDirectMessageConversation: SeedDirectMessageConversationResult;
   getTopicSnapshot: TopicSnapshot;
@@ -474,10 +464,6 @@ export async function clearOfflineState(): Promise<ClearOfflineStateResult> {
 
 export async function getDirectMessageSnapshot(): Promise<DirectMessageSnapshot> {
   return await callBridge('getDirectMessageSnapshot');
-}
-
-export async function setAvatarFixture(fixture: AvatarFixture | null): Promise<void> {
-  await callBridge('setProfileAvatarFixture', fixture ? { ...fixture } : null);
 }
 
 export async function seedDirectMessageConversation(params?: {

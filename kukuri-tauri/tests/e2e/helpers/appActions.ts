@@ -21,10 +21,11 @@ export async function completeProfileSetup(profile: ProfileInfo): Promise<void> 
         location: window.location.pathname,
         auth: document.documentElement?.getAttribute('data-e2e-auth') ?? null,
         lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
+        pageError: document.documentElement?.getAttribute('data-kukuri-e2e-error') ?? null,
       };
     });
     throw new Error(
-      `profile-form not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog})`,
+      `profile-form not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog}, pageError=${debugSnapshot.pageError})`,
     );
   }
 
@@ -44,10 +45,15 @@ export async function waitForHome(): Promise<void> {
       if (appliedFallback) {
         return null;
       }
-      const snapshot = await browser.execute<{ location: string; lastLog: string | null }>(() => {
+      const snapshot = await browser.execute<{
+        location: string;
+        lastLog: string | null;
+        pageError: string | null;
+      }>(() => {
         return {
           location: window.location.pathname,
           lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
+          pageError: document.documentElement?.getAttribute('data-kukuri-e2e-error') ?? null,
         };
       });
       if (
@@ -74,6 +80,7 @@ export async function waitForHome(): Promise<void> {
         location: window.location.pathname,
         auth: document.documentElement?.getAttribute('data-e2e-auth') ?? null,
         lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
+        pageError: document.documentElement?.getAttribute('data-kukuri-e2e-error') ?? null,
       };
     });
     await bootstrapFallback();
@@ -84,7 +91,7 @@ export async function waitForHome(): Promise<void> {
       void 0;
     }
     throw new Error(
-      `home-page not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog})`,
+      `home-page not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog}, pageError=${debugSnapshot.pageError})`,
     );
   }
 }

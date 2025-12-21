@@ -1,8 +1,8 @@
-import { TauriApi } from '@/lib/api/tauri';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, usePostStore } from '@/stores';
 import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDisplay';
 import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
 import { PostActionComposer } from '@/components/posts/PostActionComposer';
+import { TauriApi } from '@/lib/api/tauri';
 
 interface ReplyFormProps {
   postId: string;
@@ -20,12 +20,14 @@ export function ReplyForm({
   autoFocus = true,
 }: ReplyFormProps) {
   const { currentUser } = useAuthStore();
+  const { createPost } = usePostStore();
   const { content, setContent, isPending, handleSubmit, handleKeyboardSubmit } = usePostActionForm({
     submit: async (message: string) => {
-      const tags: string[][] = [['e', postId, '', 'reply']];
       if (topicId) {
-        tags.push(['t', topicId]);
+        await createPost(message, topicId, { replyTo: postId });
+        return;
       }
+      const tags: string[][] = [['e', postId, '', 'reply']];
       await TauriApi.createPost({
         content: message,
         topic_id: topicId,

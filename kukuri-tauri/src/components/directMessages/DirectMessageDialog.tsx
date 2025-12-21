@@ -46,9 +46,6 @@ export function DirectMessageDialog() {
   const setMessages = useDirectMessageStore((state) => state.setMessages);
   const markConversationAsRead = useDirectMessageStore((state) => state.markConversationAsRead);
   const removeOptimisticMessage = useDirectMessageStore((state) => state.removeOptimisticMessage);
-  const isE2E =
-    typeof window !== 'undefined' &&
-    Boolean((window as unknown as { __KUKURI_E2E__?: boolean }).__KUKURI_E2E__);
 
   const scrollAreaWrapperRef = useRef<HTMLDivElement | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
@@ -100,12 +97,9 @@ export function DirectMessageDialog() {
     string | null
   >({
     queryKey: ['direct-messages', activeConversationNpub ?? 'inactive'],
-    enabled: isDialogOpen && Boolean(activeConversationNpub) && !isE2E,
+    enabled: isDialogOpen && Boolean(activeConversationNpub),
     retry: false,
     initialPageParam: null,
-    networkMode: isE2E ? 'offlineFirst' : undefined,
-    refetchOnMount: isE2E ? false : undefined,
-    refetchOnReconnect: isE2E ? false : undefined,
     queryFn: async ({ pageParam }) => {
       if (!activeConversationNpub) {
         return { items: [], nextCursor: null, hasMore: false };

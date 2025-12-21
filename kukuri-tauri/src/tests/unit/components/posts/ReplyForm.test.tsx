@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import {
   createMockProfile,
   createPostFormRenderer,
+  mockCreatePost,
   mockTauriApi,
   mockToast,
   mockUseAuthStore,
@@ -30,6 +31,7 @@ describe('ReplyForm', () => {
       currentUser: mockProfile,
     } as never);
 
+    mockCreatePost.mockReset();
     mockTauriApi.createPost = vi.fn().mockResolvedValue({ id: 'new-post-id' });
   });
 
@@ -87,13 +89,8 @@ describe('ReplyForm', () => {
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(mockTauriApi.createPost).toHaveBeenCalledWith({
-        content: 'これは返信です',
-        topic_id: 'topic456',
-        tags: [
-          ['e', 'post123', '', 'reply'],
-          ['t', 'topic456'],
-        ],
+      expect(mockCreatePost).toHaveBeenCalledWith('これは返信です', 'topic456', {
+        replyTo: 'post123',
       });
       expect(mockToast.success).toHaveBeenCalledWith('返信を投稿しました');
       expect(onSuccess).toHaveBeenCalled();
@@ -125,7 +122,7 @@ describe('ReplyForm', () => {
     await user.keyboard('{Control>}{Enter}{/Control}');
 
     await waitFor(() => {
-      expect(mockTauriApi.createPost).toHaveBeenCalled();
+      expect(mockCreatePost).toHaveBeenCalled();
     });
   });
 
@@ -138,7 +135,7 @@ describe('ReplyForm', () => {
     await user.keyboard('{Meta>}{Enter}{/Meta}');
 
     await waitFor(() => {
-      expect(mockTauriApi.createPost).toHaveBeenCalled();
+      expect(mockCreatePost).toHaveBeenCalled();
     });
   });
 
@@ -149,7 +146,7 @@ describe('ReplyForm', () => {
       resolvePromise = resolve;
     });
 
-    mockTauriApi.createPost = vi.fn().mockReturnValue(promise);
+    mockCreatePost.mockReturnValue(promise);
 
     renderWithQueryClient(<ReplyForm {...defaultProps} />);
     const textarea = screen.getByPlaceholderText('返信を入力...');

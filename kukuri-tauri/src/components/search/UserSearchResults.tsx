@@ -41,13 +41,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
   const [sort, setSort] = useState<UserSearchSort>('relevance');
-  const pageSize =
-    import.meta.env.VITE_ENABLE_E2E === 'true' && typeof window !== 'undefined'
-      ? Number(
-          (window as unknown as { __E2E_USER_SEARCH_PAGE_SIZE__?: number })
-            .__E2E_USER_SEARCH_PAGE_SIZE__,
-        ) || 24
-      : 24;
+  const pageSize = 24;
 
   const {
     status,

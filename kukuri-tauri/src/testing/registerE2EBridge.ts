@@ -5,7 +5,6 @@ import {
   type SeedDirectMessageConversationResult,
   type PendingTopic,
   type UserProfile,
-  type SearchUsersResponse as SearchUsersResponseDto,
 } from '@/lib/api/tauri';
 import { TauriCommandError } from '@/lib/api/tauriClient';
 import { p2pApi } from '@/lib/api/p2p';
@@ -27,7 +26,6 @@ import {
   useAuthStore,
 } from '@/stores/authStore';
 import type { Post } from '@/stores';
-import { useComposerStore } from '@/stores/composerStore';
 import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useTopicStore } from '@/stores/topicStore';
@@ -48,12 +46,6 @@ interface OfflineSnapshot {
   isSyncing: boolean;
   lastSyncedAt: number | null;
   pendingActionCount: number;
-}
-
-interface ProfileAvatarFixture {
-  base64: string;
-  format: string;
-  fileName?: string;
 }
 
 interface DirectMessageSnapshot {
@@ -143,8 +135,6 @@ export interface E2EBridge {
   ensureTestTopic: (payload?: { name?: string }) => Promise<{ id: string; name: string }>;
   clearOfflineState: () => Promise<{ pendingActionCount: number }>;
   getDirectMessageSnapshot: () => DirectMessageSnapshot;
-  setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => void;
-  consumeProfileAvatarFixture: () => ProfileAvatarFixture | null;
   switchAccount: (npub: string) => Promise<void>;
   seedDirectMessageConversation: (payload?: {
     content?: string;
@@ -217,8 +207,6 @@ const READY_ATTR = 'data-e2e-ready';
 
 type BridgeRequest = { requestId: string; action: keyof E2EBridge; args?: unknown };
 type BridgeResponse = { requestId: string; result?: unknown; error?: string };
-
-let pendingAvatarFixture: ProfileAvatarFixture | null = null;
 
 async function purgeSecureAccounts() {
   try {
@@ -304,17 +292,6 @@ export function registerE2EBridge(): void {
           await purgeSecureAccounts();
           clearPersistedState();
           await resetAuthStore();
-          if (typeof window !== 'undefined') {
-            (
-              window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean }
-            ).__E2E_KEEP_LOCAL_TOPICS__ = false;
-            (
-              window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] }
-            ).__E2E_PENDING_TOPICS__ = [];
-            (
-              window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] }
-            ).__E2E_DELETED_TOPIC_IDS__ = [];
-          }
         },
         getAuthSnapshot: () => {
           const state = useAuthStore.getState();
@@ -551,14 +528,6 @@ export function registerE2EBridge(): void {
             isDialogOpen: state.isDialogOpen,
           };
         },
-        setProfileAvatarFixture: (fixture: ProfileAvatarFixture | null) => {
-          pendingAvatarFixture = fixture ?? null;
-        },
-        consumeProfileAvatarFixture: () => {
-          const fixture = pendingAvatarFixture;
-          pendingAvatarFixture = null;
-          return fixture;
-        },
         seedDirectMessageConversation: async (payload) => {
           const authState = useAuthStore.getState();
           const current = authState.currentUser;
@@ -660,95 +629,6 @@ export function registerE2EBridge(): void {
         syncPendingTopicQueue: async () => {
           const topicStore = useTopicStore.getState();
           const offlineStore = useOfflineStore.getState();
-          const e2ePending =
-            (typeof window !== 'undefined' &&
-              (window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] })
-                .__E2E_PENDING_TOPICS__) ||
-            [];
-
-          // E2Eオフライン強制時はローカルストアのみで完結させ、Tauriコマンドを呼ばない
-          if (e2ePending.length > 0) {
-            const createdIds: string[] = [];
-            let persistedToBackend = false;
-            for (const pending of e2ePending) {
-              let createdId = pending.pending_id;
-              try {
-                const created = await TauriApi.createTopic({
-                  name: pending.name,
-                  description: pending.description ?? '',
-                  visibility: 'public',
-                });
-                createdId = created.id;
-                persistedToBackend = true;
-                topicStore.addTopic({
-                  id: created.id,
-                  name: created.name,
-                  description: created.description ?? '',
-                  createdAt: new Date(created.created_at * 1000),
-                  memberCount: created.member_count ?? 0,
-                  postCount: created.post_count ?? 0,
-                  isActive: true,
-                  tags: [],
-                  visibility: created.visibility ?? 'public',
-                  isJoined: created.is_joined ?? true,
-                });
-              } catch (error) {
-                errorHandler.log('E2EBridge.syncPendingTopicCreateFallback', error, {
-                  context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
-                  metadata: { pendingId: pending.pending_id },
-                });
-                topicStore.addTopic({
-                  id: createdId,
-                  name: pending.name,
-                  description: pending.description ?? '',
-                  createdAt: new Date(),
-                  memberCount: 0,
-                  postCount: 0,
-                  isActive: true,
-                  tags: [],
-                  visibility: 'public',
-                  isJoined: true,
-                });
-              }
-              createdIds.push(createdId);
-              try {
-                useComposerStore.getState().resolvePendingTopic(pending.pending_id, createdId);
-              } catch (error) {
-                errorHandler.log('E2EBridge.syncPendingTopicResolveComposerFailed', error, {
-                  context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
-                  metadata: { pendingId: pending.pending_id },
-                });
-              }
-              topicStore.removePendingTopic(pending.pending_id);
-            }
-            topicStore.setPendingTopics([]);
-            (
-              window as unknown as { __E2E_PENDING_TOPICS__?: PendingTopic[] }
-            ).__E2E_PENDING_TOPICS__ = [];
-            if (persistedToBackend) {
-              try {
-                await topicStore.fetchTopics();
-              } catch (error) {
-                errorHandler.log('E2EBridge.syncPendingTopicFetchAfterE2E', error, {
-                  context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
-                });
-              }
-            }
-            try {
-              offlineStore.clearPendingActions();
-              offlineStore.updateLastSyncedAt();
-            } catch (error) {
-              errorHandler.log('E2EBridge.syncPendingTopicClearOfflineFailed', error, {
-                context: 'registerE2EBridge.syncPendingTopicQueue.e2e',
-              });
-            }
-            return {
-              pendingCountBefore: e2ePending.length,
-              pendingCountAfter: 0,
-              createdTopicIds: createdIds,
-            };
-          }
-
           const pendingBefore = await TauriApi.listPendingTopics();
           const createdTopicIds: string[] = [];
           const pendingNameMap = new Map<string, PendingTopic>();
@@ -1267,20 +1147,6 @@ export function registerE2EBridge(): void {
                 metadata: { target: entry.npub },
               });
             }
-          }
-
-          if (typeof window !== 'undefined') {
-            (
-              window as unknown as {
-                __E2E_USER_SEARCH_FIXTURE__?: SearchUsersResponseDto;
-              }
-            ).__E2E_USER_SEARCH_FIXTURE__ = {
-              items: profiles,
-              nextCursor: null,
-              hasMore: false,
-              totalCount: profiles.length,
-              tookMs: 1,
-            };
           }
 
           return {

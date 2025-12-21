@@ -8,11 +8,6 @@ import { errorHandler } from '@/lib/errorHandler';
 export const useTopics = () => {
   const { setTopics } = useTopicStore();
   const refreshPendingTopics = useTopicStore((state) => state.refreshPendingTopics);
-  const storeTopics = useTopicStore((state) => state.topics);
-  const keepLocalTopics =
-    typeof window !== 'undefined' &&
-    (window as unknown as { __E2E_KEEP_LOCAL_TOPICS__?: boolean }).__E2E_KEEP_LOCAL_TOPICS__ ===
-      true;
 
   useEffect(() => {
     if (typeof refreshPendingTopics !== 'function') {
@@ -20,21 +15,6 @@ export const useTopics = () => {
     }
     void refreshPendingTopics();
   }, [refreshPendingTopics]);
-
-  const mergeWithExisting = (apiTopics: Topic[]): Topic[] => {
-    if (!keepLocalTopics) {
-      return apiTopics;
-    }
-    const existing = useTopicStore.getState().topics;
-    const merged = new Map<string, Topic>();
-    apiTopics.forEach((topic) => merged.set(topic.id, topic));
-    existing.forEach((topic, id) => {
-      if (!merged.has(id)) {
-        merged.set(id, topic);
-      }
-    });
-    return Array.from(merged.values());
-  };
 
   const queryResult = useQuery({
     queryKey: ['topics'],
@@ -79,29 +59,13 @@ export const useTopics = () => {
         }),
       );
 
-      const deletedTopicIds =
-        typeof window !== 'undefined' &&
-        Array.isArray(
-          (window as unknown as { __E2E_DELETED_TOPIC_IDS__?: unknown }).__E2E_DELETED_TOPIC_IDS__,
-        )
-          ? ((window as unknown as { __E2E_DELETED_TOPIC_IDS__?: string[] })
-              .__E2E_DELETED_TOPIC_IDS__ ?? [])
-          : [];
-
-      const merged = mergeWithExisting(
-        topicsWithStats.filter((topic) => !deletedTopicIds.includes(topic.id)),
-      );
-      setTopics(merged);
-      return merged;
+      setTopics(topicsWithStats);
+      return topicsWithStats;
     },
-    refetchInterval: keepLocalTopics ? false : 30000,
+    refetchInterval: 30000,
   });
 
-  const fallbackTopics = Array.from(storeTopics.values());
-  return {
-    ...queryResult,
-    data: keepLocalTopics ? fallbackTopics : queryResult.data,
-  };
+  return queryResult;
 };
 
 export const useTopic = (topicId: string) => {

@@ -53,12 +53,8 @@ interface PostCardProps {
 }
 
 export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
-  const isE2E =
-    typeof window !== 'undefined' &&
-    Boolean((window as unknown as { __KUKURI_E2E__?: boolean }).__KUKURI_E2E__);
-
   const [showReplyForm, setShowReplyForm] = useState(false);
-  const [showQuoteForm, setShowQuoteForm] = useState(isE2E);
+  const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
   const [boostCount, setBoostCount] = useState(post.boosts ?? 0);
@@ -133,9 +129,6 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     const previousLikes = likeCount ?? 0;
     const nextLikes = previousLikes + 1;
     applyLikeUpdate(nextLikes);
-    if (isE2E) {
-      return;
-    }
     likeMutation.mutate(undefined, {
       onError: () => {
         applyLikeUpdate(previousLikes);
@@ -195,9 +188,6 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     const previousBoosts = boostCount ?? 0;
     const nextBoosts = previousBoosts + 1;
     applyBoostUpdate(nextBoosts, true);
-    if (isE2E) {
-      return;
-    }
     boostMutation.mutate(undefined, {
       onError: () => {
         applyBoostUpdate(previousBoosts, post.isBoosted ?? false);

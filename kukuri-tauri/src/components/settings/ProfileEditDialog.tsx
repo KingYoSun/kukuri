@@ -13,6 +13,7 @@ import {
   type ProfileFormValues,
 } from '@/components/auth/ProfileForm';
 import { useAuthStore } from '@/stores/authStore';
+import { useOfflineStore } from '@/stores/offlineStore';
 import { usePrivacySettingsStore } from '@/stores/privacySettingsStore';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
@@ -159,6 +160,8 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         errorHandler.log('ProfileEditDialog.avatarSyncFailed', error, {
           context: 'ProfileEditDialog.handleSubmit',
         });
+      } finally {
+        useOfflineStore.getState().updateLastSyncedAt();
       }
 
       if (hasError) {

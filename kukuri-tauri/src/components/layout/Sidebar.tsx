@@ -137,13 +137,9 @@ export function Sidebar() {
     (category: SidebarCategoryItem) => {
       setCurrentTopic(null);
       setActiveSidebarCategory(category.key);
-
-      const isE2E =
-        typeof window !== 'undefined' &&
-        Boolean((window as unknown as { __KUKURI_E2E__?: boolean }).__KUKURI_E2E__);
-      if (!isE2E && category.key === 'trending') {
+      if (category.key === 'trending') {
         void prefetchTrendingCategory(queryClient);
-      } else if (!isE2E && category.key === 'following') {
+      } else if (category.key === 'following') {
         void prefetchFollowingCategory(queryClient);
       }
 

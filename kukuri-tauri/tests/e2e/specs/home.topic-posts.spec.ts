@@ -13,6 +13,7 @@ import {
   getOfflineSnapshot,
   getTopicSnapshot,
   resetAppState,
+  setOnlineStatus,
   syncPendingTopicQueue,
 } from '../helpers/bridge';
 import { waitForAppReady } from '../helpers/waitForAppReady';
@@ -162,10 +163,11 @@ describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c',
       timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4e00\u89a7\u306b\u9077\u79fb\u3057\u306a\u3044',
     });
 
-    await browser.execute(() => {
-      // E2E\u3067\u30aa\u30d5\u30e9\u30a4\u30f3\u6319\u52d5\u3092\u5f37\u5236\u3059\u308b\u30d5\u30e9\u30b0\u3068\u30a4\u30d9\u30f3\u30c8\u306e\u4e21\u65b9\u3092\u9001\u51fa\u3059\u308b
-      (window as unknown as { __E2E_FORCE_OFFLINE__?: boolean }).__E2E_FORCE_OFFLINE__ = true;
-      window.dispatchEvent(new Event('offline'));
+    await setOnlineStatus(false);
+    await browser.waitUntil(async () => !(await getOfflineSnapshot()).isOnline, {
+      timeout: 10000,
+      interval: 200,
+      timeoutMsg: '\u30aa\u30d5\u30e9\u30a4\u30f3\u72b6\u614b\u306b\u5207\u308a\u66ff\u308f\u308a\u307e\u305b\u3093',
     });
     const newTopicName = `e2e-offline-topic-${Date.now()}`;
     await $('[data-testid="open-topic-create"]').click();
@@ -180,10 +182,7 @@ describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c',
     const offlineSnapshot = await getOfflineSnapshot();
     expect(offlineSnapshot.pendingActionCount).toBeGreaterThan(0);
 
-    await browser.execute(() => {
-      (window as unknown as { __E2E_FORCE_OFFLINE__?: boolean }).__E2E_FORCE_OFFLINE__ = false;
-      window.dispatchEvent(new Event('online'));
-    });
+    await setOnlineStatus(true);
     const syncResult = await syncPendingTopicQueue();
     const topicSnapshotAfterSync = await getTopicSnapshot();
     expect(topicSnapshotAfterSync.pendingTopics.length).toBe(syncResult.pendingCountAfter);
@@ -200,17 +199,19 @@ describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c',
 
     await $('[data-testid="topic-actions-menu"]').click();
     await $('[data-testid="topic-delete-menu"]').click();
-    await browser.execute(() => {
-      window.dispatchEvent(new Event('__KUKURI_E2E_TOPIC_DELETE__'));
-    });
-    await browser.execute(() => {
-      const button = document.querySelector(
-        '[data-testid="topic-delete-confirm"]',
-      ) as HTMLButtonElement | null;
-      if (button) {
-        button.click();
-      }
-    });
+    const confirmDelete = await $('[data-testid="topic-delete-confirm"]');
+    await confirmDelete.waitForDisplayed({ timeout: 10000 });
+    await confirmDelete.scrollIntoView();
+    try {
+      await confirmDelete.click();
+    } catch {
+      await browser.execute(() => {
+        const button = document.querySelector(
+          '[data-testid="topic-delete-confirm"]',
+        ) as HTMLButtonElement | null;
+        button?.click();
+      });
+    }
     await browser.waitUntil(async () => (await browser.getUrl()).endsWith('/topics'), {
       timeout: 20000,
       timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4e00\u89a7\u306b\u623b\u3089\u306a\u3044',

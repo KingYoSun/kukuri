@@ -1,6 +1,6 @@
 import { $, $$, browser, expect } from '@wdio/globals';
 
-import { resetAppState, seedUserSearchFixture, primeUserSearchRateLimit } from '../helpers/bridge';
+import { resetAppState, primeUserSearchRateLimit } from '../helpers/bridge';
 import {
   completeProfileSetup,
   waitForHome,
@@ -44,23 +44,6 @@ describe('ユーザー検索', () => {
     await completeProfileSetup(profile);
     await waitForHome();
     await waitForAppReady();
-
-    await browser.execute(() => {
-      (
-        window as unknown as { __E2E_USER_SEARCH_PAGE_SIZE__?: number }
-      ).__E2E_USER_SEARCH_PAGE_SIZE__ = 3;
-    });
-
-    const seeded = await seedUserSearchFixture({
-      users: [
-        { displayName: 'Search Alpha', about: 'alpha fixture', follow: true },
-        { displayName: 'Search Beta', about: 'beta fixture' },
-        { displayName: 'Search Gamma', about: 'gamma fixture' },
-        { displayName: 'Search Delta', about: 'delta fixture' },
-        { displayName: 'Search Epsilon', about: 'epsilon fixture' },
-      ],
-    });
-    expect(seeded.users.length).toBeGreaterThanOrEqual(5);
 
     await $('[data-testid="category-search"]').click();
     await $('[data-testid="search-page"]').waitForDisplayed({ timeout: 20000 });

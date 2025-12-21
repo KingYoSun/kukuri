@@ -2,6 +2,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
+import { useOfflineStore } from '@/stores/offlineStore';
 import { usePrivacySettingsStore } from '@/stores/privacySettingsStore';
 import { initializeNostr, updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
@@ -17,8 +18,6 @@ export function ProfileSetup() {
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(true);
-  const isE2EMode =
-    import.meta.env.TAURI_ENV_DEBUG === 'true' || import.meta.env.VITE_ENABLE_E2E === 'true';
   const shouldNavigateRef = useRef(false);
   const { syncNow: syncAvatar } = useProfileAvatarSync({ autoStart: false });
 
@@ -58,35 +57,18 @@ export function ProfileSetup() {
 
     setIsLoading(true);
     shouldNavigateRef.current = false;
+    let hasError = false;
     let updatedPicture = profile.picture || currentUser?.picture || '';
     let updatedAvatar = currentUser?.avatar ?? null;
     let nostrPicture =
       profile.picture || currentUser?.avatar?.nostrUri || currentUser?.picture || '';
     const displayName = profile.displayName || profile.name;
-    const applyLocalUpdate = () => {
-      updateUser({
-        name: profile.name,
-        displayName,
-        about: profile.about,
-        picture: updatedPicture,
-        nip05: profile.nip05,
-        avatar: updatedAvatar,
-        publicProfile,
-        showOnlineStatus,
-      });
-    };
 
     try {
-      if (isE2EMode) {
-        applyLocalUpdate();
-        toast.success('プロフィールを設定しました');
-        shouldNavigateRef.current = true;
-        return;
-      }
-
       try {
         await initializeNostr();
       } catch (nostrInitError) {
+        hasError = true;
         errorHandler.log('Failed to initialize Nostr for profile setup', nostrInitError, {
           context: 'ProfileSetup.handleSubmit.initializeNostr',
         });
@@ -100,6 +82,7 @@ export function ProfileSetup() {
             showOnlineStatus,
           });
         } catch (privacyError) {
+          hasError = true;
           // プライバシー更新に失敗してもログだけ出して続行
           errorHandler.log('Privacy update skipped (proceeding anyway)', privacyError, {
             context: 'ProfileSetup.handleSubmit.updatePrivacySettings',
@@ -112,42 +95,46 @@ export function ProfileSetup() {
           throw new Error('Missing npub for avatar upload');
         }
 
-        const uploadResult = await TauriApi.uploadProfileAvatar({
-          npub: currentUser.npub,
-          data: profile.avatarFile.bytes,
-          format: profile.avatarFile.format,
-          accessLevel: 'contacts_only',
-        });
-        const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
-        updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
-        updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
-        nostrPicture = updatedAvatar.nostrUri;
+        try {
+          const uploadResult = await TauriApi.uploadProfileAvatar({
+            npub: currentUser.npub,
+            data: profile.avatarFile.bytes,
+            format: profile.avatarFile.format,
+            accessLevel: 'contacts_only',
+          });
+          const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
+          updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
+          updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
+          nostrPicture = updatedAvatar.nostrUri;
+        } catch (avatarError) {
+          hasError = true;
+          errorHandler.log('ProfileSetup.avatarUploadFailed', avatarError, {
+            context: 'ProfileSetup.handleSubmit.avatarUpload',
+          });
+        }
       }
 
       if (!currentUser?.npub) {
         throw new Error('Missing npub for profile setup');
       }
 
-      // Nostr???????????????E2E????????????????????
-      if (!isE2EMode) {
-        try {
-          await updateNostrMetadata({
-            name: profile.name,
-            display_name: profile.displayName || profile.name,
-            about: profile.about,
-            picture: nostrPicture,
-            nip05: profile.nip05,
-            kukuri_privacy: {
-              public_profile: publicProfile,
-              show_online_status: showOnlineStatus,
-            },
-          });
-        } catch (nostrError) {
-          errorHandler.log('Failed to update Nostr metadata', nostrError, {
-            context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
-          });
-          throw nostrError;
-        }
+      try {
+        await updateNostrMetadata({
+          name: profile.name,
+          display_name: profile.displayName || profile.name,
+          about: profile.about,
+          picture: nostrPicture,
+          nip05: profile.nip05,
+          kukuri_privacy: {
+            public_profile: publicProfile,
+            show_online_status: showOnlineStatus,
+          },
+        });
+      } catch (nostrError) {
+        hasError = true;
+        errorHandler.log('Failed to update Nostr metadata', nostrError, {
+          context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
+        });
       }
 
       // 繝ｭ繝ｼ繧ｫ繝ｫ繧ｹ繝医い繧呈峩譁ｰ
@@ -162,13 +149,20 @@ export function ProfileSetup() {
         showOnlineStatus,
       });
 
-      toast.success('プロフィールを設定しました');
       try {
         await syncAvatar({ force: true });
       } catch (syncError) {
+        hasError = true;
         errorHandler.log('ProfileSetup.avatarSyncFailed', syncError, {
           context: 'ProfileSetup.handleSubmit',
         });
+      } finally {
+        useOfflineStore.getState().updateLastSyncedAt();
+      }
+      if (hasError) {
+        toast.error('プロフィールは保存しましたが、一部の同期に失敗しました');
+      } else {
+        toast.success('プロフィールを設定しました');
       }
       shouldNavigateRef.current = true;
     } catch (error) {
@@ -176,13 +170,9 @@ export function ProfileSetup() {
       errorHandler.log('Profile setup failed', error, {
         context: 'ProfileSetup.handleSubmit',
       });
-      if (isE2EMode) {
-        applyLocalUpdate();
-        shouldNavigateRef.current = true;
-      }
     } finally {
       setIsLoading(false);
-      if (shouldNavigateRef.current || isE2EMode) {
+      if (shouldNavigateRef.current) {
         hideFormAndNavigate();
       }
     }

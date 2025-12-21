@@ -2,7 +2,6 @@ import {
   QueryClient,
   useInfiniteQuery,
   useQuery,
-  useQueryClient,
   type InfiniteData,
   type UseInfiniteQueryOptions,
 } from '@tanstack/react-query';
@@ -173,10 +172,6 @@ export const useTrendingPostsQuery = (
   });
 
 export const useFollowingFeedQuery = (options: FollowingFeedQueryOptions = {}) => {
-  const queryClient = useQueryClient();
-  const isE2E =
-    typeof window !== 'undefined' &&
-    Boolean((window as unknown as { __KUKURI_E2E__?: boolean }).__KUKURI_E2E__);
   const limit = options.limit ?? 20;
   const includeReactions = options.includeReactions ?? false;
   const queryKey = followingFeedQueryKey(limit, includeReactions);
@@ -187,53 +182,19 @@ export const useFollowingFeedQuery = (options: FollowingFeedQueryOptions = {}) =
     InfiniteData<FollowingFeedPageResult>,
     ReturnType<typeof followingFeedQueryKey>,
     string | null
-  > = isE2E
-    ? {
-        queryKey,
-        initialPageParam: null,
-        staleTime: 10 * 60 * 1000,
-        gcTime: 15 * 60 * 1000,
-        retry: false,
-        refetchOnMount: false,
-        refetchOnReconnect: false,
-        refetchInterval: false,
-        networkMode: 'offlineFirst',
-        getNextPageParam: () => undefined,
-        queryFn: async () => {
-          const cached = queryClient.getQueryData<InfiniteData<FollowingFeedPageResult>>(queryKey);
-          const fallbackPages =
-            queryClient
-              .getQueriesData<InfiniteData<FollowingFeedPageResult>>({
-                queryKey: ['followingFeed'],
-              })
-              .map(([, data]) => data?.pages ?? [])
-              .reduce<FollowingFeedPageResult[]>((acc, pages) => acc.concat(pages), []) ?? [];
-          const resolved = cached?.pages?.[0] ?? fallbackPages.find(Boolean);
-          if (resolved) {
-            return resolved;
-          }
-          return {
-            cursor: null,
-            items: [],
-            nextCursor: null,
-            hasMore: false,
-            serverTime: Date.now(),
-          };
-        },
-      }
-    : {
-        queryKey,
-        initialPageParam: null,
-        getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-        staleTime: FOLLOWING_FEED_STALE_TIME,
-        retry: 1,
-        queryFn: ({ pageParam }) =>
-          fetchFollowingFeedPage({
-            cursor: pageParam ?? null,
-            limit,
-            includeReactions,
-          }),
-      };
+  > = {
+    queryKey,
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: FOLLOWING_FEED_STALE_TIME,
+    retry: 1,
+    queryFn: ({ pageParam }) =>
+      fetchFollowingFeedPage({
+        cursor: pageParam ?? null,
+        limit,
+        includeReactions,
+      }),
+  };
 
   return useInfiniteQuery<
     FollowingFeedPageResult,

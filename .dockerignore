@@ -58,6 +58,7 @@ tmp/
 *.db-journal
 *.db-wal
 *.db-shm
+!kukuri-tauri/testdata/e2e_seed.db
 
 # Keys and secrets
 *.key

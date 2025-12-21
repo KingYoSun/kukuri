@@ -7,7 +7,7 @@ import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
 import { Card, CardContent } from '@/components/ui/card';
 import { TauriApi } from '@/lib/api/tauri';
 import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDisplay';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, usePostStore } from '@/stores';
 import type { Post } from '@/stores';
 
 interface QuoteFormProps {
@@ -19,9 +19,14 @@ interface QuoteFormProps {
 
 export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: QuoteFormProps) {
   const { currentUser } = useAuthStore();
+  const { createPost } = usePostStore();
   const { content, setContent, isPending, handleSubmit, handleKeyboardSubmit } = usePostActionForm({
     submit: async (message: string) => {
       const quoteContent = `${message}\n\nnostr:${post.id}`;
+      if (post.topicId) {
+        await createPost(quoteContent, post.topicId, { quotedPost: post.id });
+        return;
+      }
       const tags: string[][] = [
         ['e', post.id, '', 'mention'],
         ['q', post.id],

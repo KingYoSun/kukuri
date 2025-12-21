@@ -3,13 +3,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import { useAuthStore } from '@/stores';
+import { useAuthStore, usePostStore } from '@/stores';
 import { TauriApi } from '@/lib/api/tauri';
 import { toast } from 'sonner';
+
+const createPostMock = vi.fn();
 
 vi.mock('@/stores', () => ({
   useAuthStore: vi.fn(() => ({
     currentUser: null,
+  })),
+  usePostStore: vi.fn(() => ({
+    createPost: createPostMock,
   })),
   useBookmarkStore: vi.fn(() => ({
     bookmarks: [],
@@ -34,6 +39,8 @@ vi.mock('sonner', () => ({
 }));
 
 export const mockUseAuthStore = vi.mocked(useAuthStore);
+export const mockUsePostStore = vi.mocked(usePostStore);
+export const mockCreatePost = createPostMock;
 export const mockTauriApi = vi.mocked(TauriApi);
 export const mockToast = vi.mocked(toast);
 

@@ -27,6 +27,11 @@ const hoisted = vi.hoisted(() => {
     manualRetryDelete: vi.fn(),
   };
 
+  const createPost = vi.fn();
+  const usePostStore = vi.fn(() => ({
+    createPost,
+  }));
+
   const authState = {
     currentUser: {
       pubkey: 'user-pubkey',
@@ -46,7 +51,7 @@ const hoisted = vi.hoisted(() => {
     offlineStoreState: offlineState,
     likePostMock: vi.fn(),
     boostPostMock: vi.fn(),
-    createPostMock: vi.fn(),
+    createPostMock: createPost,
     deletePostMutationMock: deletePostMutation,
     toastMock: {
       error: vi.fn(),
@@ -55,6 +60,7 @@ const hoisted = vi.hoisted(() => {
     useAuthStoreMock: useAuthStore,
     useDeletePostMock: vi.fn(() => deletePostMutation),
     useOfflineStoreMock: useOfflineStore,
+    usePostStoreMock: usePostStore,
   };
 });
 
@@ -69,6 +75,7 @@ export const {
   useAuthStoreMock,
   useDeletePostMock,
   useOfflineStoreMock,
+  usePostStoreMock,
 } = hoisted;
 
 export const mockPost: Post = {
@@ -191,6 +198,7 @@ vi.mock('@/components/ui/alert-dialog', () => ({
 vi.mock('@/stores', () => ({
   useAuthStore: useAuthStoreMock,
   useBookmarkStore: vi.fn(() => bookmarkStoreMock),
+  usePostStore: usePostStoreMock,
 }));
 
 vi.mock('@/stores/offlineStore', () => ({
