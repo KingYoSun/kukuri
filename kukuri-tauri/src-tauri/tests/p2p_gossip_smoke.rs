@@ -432,17 +432,15 @@ async fn test_p2p_quote_flow() {
         .expect("base channel closed");
     log_step!("base event received, sending quote");
 
-    let mention_tag = Tag::from_standardized(TagStandard::Event {
+    let quote_tag = Tag::from_standardized(TagStandard::Quote {
         event_id: base_note.id,
         relay_url: None,
-        marker: Some(Marker::Mention),
         public_key: None,
-        uppercase: false,
     });
-    let mention_pubkey_tag = Tag::from_standardized(TagStandard::public_key(base_note.pubkey));
+    let quote_pubkey_tag = Tag::from_standardized(TagStandard::public_key(base_note.pubkey));
     let quote_keys = Keys::generate();
     let quote_note = EventBuilder::text_note("quote-post")
-        .tags([mention_tag, mention_pubkey_tag])
+        .tags([quote_tag, quote_pubkey_tag])
         .sign_with_keys(&quote_keys)
         .unwrap();
     let quote_event = nostr_to_domain(&quote_note);
@@ -454,13 +452,12 @@ async fn test_p2p_quote_flow() {
         .expect("quote channel closed");
     assert_eq!(received_quote.content, "quote-post");
 
-    let e_tag = received_quote
+    let q_tag = received_quote
         .tags
         .iter()
-        .find(|tag| tag.first().map(|s| s.as_str()) == Some("e"))
-        .expect("quote event missing e tag");
-    assert_eq!(e_tag.get(1).map(|s| s.as_str()), Some(base_id.as_str()));
-    assert_eq!(e_tag.get(3).map(|s| s.as_str()), Some("mention"));
+        .find(|tag| tag.first().map(|s| s.as_str()) == Some("q"))
+        .expect("quote event missing q tag");
+    assert_eq!(q_tag.get(1).map(|s| s.as_str()), Some(base_id.as_str()));
 
     let p_tag = received_quote
         .tags

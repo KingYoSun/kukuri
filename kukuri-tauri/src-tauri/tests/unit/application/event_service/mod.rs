@@ -512,7 +512,7 @@ async fn test_handle_network_connected_restores_subscriptions() {
         .times(1)
         .withf(move |pubkey, since| {
             pubkey == "user"
-                && since.map(|ts| ts.as_u64())
+                && since.map(|ts| ts.as_secs())
                     == predicate_user
                         .last_synced_at
                         .map(|value| (value - 300) as u64)

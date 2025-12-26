@@ -29,7 +29,7 @@ pub(crate) fn nostr_event_to_domain_event(event: &NostrEvent) -> Result<Event, A
         )
     })?;
 
-    let created_at = DateTime::<Utc>::from_timestamp(event.created_at.as_u64() as i64, 0)
+    let created_at = DateTime::<Utc>::from_timestamp(event.created_at.as_secs() as i64, 0)
         .ok_or_else(|| {
             AppError::validation(ValidationFailureKind::Generic, "Invalid event timestamp")
         })?;

@@ -367,7 +367,7 @@ impl AppState {
                         };
 
                         let created_at_millis =
-                            (event_clone.created_at.as_u64() as i64).saturating_mul(1000);
+                            (event_clone.created_at.as_secs() as i64).saturating_mul(1000);
                         if let Err(err) = dm_service
                             .ingest_incoming_message(
                                 &keypair.npub,

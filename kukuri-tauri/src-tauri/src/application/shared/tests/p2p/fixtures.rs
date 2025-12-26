@@ -2,7 +2,7 @@ use crate::domain::entities::Event;
 
 pub fn nostr_to_domain(ev: &nostr_sdk::Event) -> Event {
     let created_at =
-        chrono::DateTime::<chrono::Utc>::from_timestamp(ev.created_at.as_u64() as i64, 0)
+        chrono::DateTime::<chrono::Utc>::from_timestamp(ev.created_at.as_secs() as i64, 0)
             .expect("invalid timestamp in nostr event");
     Event {
         id: ev.id.to_string(),

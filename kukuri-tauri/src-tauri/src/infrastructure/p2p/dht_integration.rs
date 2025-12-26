@@ -108,7 +108,7 @@ pub mod bridge {
 
     /// NostrイベントをKukuriイベントに変換
     pub fn nostr_to_kukuri(event: &NostrEvent) -> Result<Event, AppError> {
-        let timestamp_raw = event.created_at.as_u64();
+        let timestamp_raw = event.created_at.as_secs();
         let timestamp = i64::try_from(timestamp_raw).map_err(|_| {
             AppError::DeserializationError(format!(
                 "timestamp overflow when converting nostr event: {timestamp_raw}"

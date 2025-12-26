@@ -3661,12 +3661,6 @@ checksum = "227748d55f2f0ab4735d87fd623798cb6b664512fe979705f829c9f81c934465"
 
 [[package]]
 name = "lru"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
-
-[[package]]
-name = "lru"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86ea4e65087ff52f3862caff188d489f1fab49a0cb09e01b2e3f1a617b10aaed"
@@ -4082,9 +4076,9 @@ checksum = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 
 [[package]]
 name = "nostr"
-version = "0.42.2"
+version = "0.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d193102a62a22b61f9a61b9df54fb19ebab8c1763d088fbb9a6f0f57000fba2d"
+checksum = "3aa5e3b6a278ed061835fe1ee293b71641e6bf8b401cfe4e1834bbf4ef0a34e1"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -4095,8 +4089,8 @@ dependencies = [
  "chacha20 0.9.1",
  "chacha20poly1305",
  "getrandom 0.2.16",
+ "hex",
  "instant",
- "regex",
  "scrypt",
  "secp256k1",
  "serde",
@@ -4107,25 +4101,35 @@ dependencies = [
 
 [[package]]
 name = "nostr-database"
-version = "0.42.0"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aafe85dc7c039c399796043b76009fa744c3a45ac073a023932f7b7d91b1e7"
+checksum = "7462c9d8ae5ef6a28d66a192d399ad2530f1f2130b13186296dbb11bdef5b3d1"
 dependencies = [
- "lru 0.14.0",
+ "lru 0.16.0",
  "nostr",
  "tokio",
 ]
 
 [[package]]
-name = "nostr-relay-pool"
-version = "0.42.1"
+name = "nostr-gossip"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fccd6f534c3b7c8bae575bb87947b5c388c4aaedbfba5cf8122f7278fb21ea77"
+checksum = "ade30de16869618919c6b5efc8258f47b654a98b51541eb77f85e8ec5e3c83a6"
+dependencies = [
+ "nostr",
+]
+
+[[package]]
+name = "nostr-relay-pool"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b1073ccfbaea5549fb914a9d52c68dab2aecda61535e5143dd73e95445a804b"
 dependencies = [
  "async-utility",
  "async-wsocket",
  "atomic-destructor",
- "lru 0.14.0",
+ "hex",
+ "lru 0.16.0",
  "negentropy",
  "nostr",
  "nostr-database",
@@ -4135,13 +4139,14 @@ dependencies = [
 
 [[package]]
 name = "nostr-sdk"
-version = "0.42.0"
+version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e928ba9ac2695fbe10b8aefda59f2abfeb23c10a0e86a0b3e0f6a27bb274a2"
+checksum = "471732576710e779b64f04c55e3f8b5292f865fea228436daf19694f0bf70393"
 dependencies = [
  "async-utility",
  "nostr",
  "nostr-database",
+ "nostr-gossip",
  "nostr-relay-pool",
  "tokio",
  "tracing",

@@ -80,7 +80,7 @@ impl MessagingGateway for NostrMessagingGateway {
             )));
         }
 
-        let created_at_millis = (event.created_at.as_u64() as i64) * 1000;
+        let created_at_millis = (event.created_at.as_secs() as i64) * 1000;
         let event_id = event.id.to_hex();
 
         Ok(MessagingSendResult {

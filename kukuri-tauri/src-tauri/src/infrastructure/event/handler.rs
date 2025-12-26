@@ -75,7 +75,7 @@ impl EventHandler {
         if let Some(pool) = &self.connection_pool {
             let event_id = event.id.to_string();
             let public_key = event.pubkey.to_string();
-            let created_at = event.created_at.as_u64() as i64;
+            let created_at = event.created_at.as_secs() as i64;
             let kind = event.kind.as_u16() as i64;
             let content = event.content.clone();
             let tags = serde_json::to_string(&event.tags)?;
@@ -161,7 +161,7 @@ impl EventHandler {
                 .get("nip05")
                 .and_then(|v| v.as_str())
                 .map(String::from);
-            let created_at = event.created_at.as_u64() as i64;
+            let created_at = event.created_at.as_secs() as i64;
             let updated_at = chrono::Utc::now().timestamp();
             let public_key = event.pubkey.to_string();
 
@@ -258,7 +258,7 @@ impl EventHandler {
 
             let reactor_pubkey = event.pubkey.to_string();
             let reaction_content = event.content.clone();
-            let created_at = event.created_at.as_u64() as i64;
+            let created_at = event.created_at.as_secs() as i64;
             let updated_at = chrono::Utc::now().timestamp();
             sqlx::query!(
                 r#"

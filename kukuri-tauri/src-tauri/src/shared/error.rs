@@ -212,10 +212,4 @@ impl From<iroh::endpoint::Builder> for AppError {
     }
 }
 
-impl From<nostr_sdk::key::vanity::Error> for AppError {
-    fn from(err: nostr_sdk::key::vanity::Error) -> Self {
-        AppError::NostrError(err.to_string())
-    }
-}
-
 pub type Result<T> = std::result::Result<T, AppError>;

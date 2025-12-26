@@ -13,7 +13,7 @@ async fn test_validate_nip01_ok() {
         .unwrap();
 
     let created_at =
-        chrono::DateTime::<chrono::Utc>::from_timestamp(nostr_ev.created_at.as_u64() as i64, 0)
+        chrono::DateTime::<chrono::Utc>::from_timestamp(nostr_ev.created_at.as_secs() as i64, 0)
             .unwrap();
 
     let dom = Event {
@@ -37,7 +37,7 @@ async fn test_validate_nip01_bad_id() {
         .unwrap();
 
     let created_at =
-        chrono::DateTime::<chrono::Utc>::from_timestamp(nostr_ev.created_at.as_u64() as i64, 0)
+        chrono::DateTime::<chrono::Utc>::from_timestamp(nostr_ev.created_at.as_secs() as i64, 0)
             .unwrap();
 
     let mut dom = Event {

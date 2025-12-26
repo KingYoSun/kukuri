@@ -52,7 +52,7 @@ impl From<&NostrEvent> for FrontendEventPayload {
             id: event.id.to_string(),
             author: event.pubkey.to_string(),
             content: event.content.clone(),
-            created_at: event.created_at.as_u64(),
+            created_at: event.created_at.as_secs(),
             kind: event.kind.as_u16() as u32,
             tags: event.tags.iter().map(|tag| tag.clone().to_vec()).collect(),
         }
