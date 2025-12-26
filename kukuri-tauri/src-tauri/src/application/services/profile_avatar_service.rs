@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use blake3::Hasher as Blake3;
-use rand::RngCore;
+use rand::TryRngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -66,7 +66,11 @@ impl ProfileAvatarService {
             .await?;
 
         let mut capability_secret = [0u8; AES_KEY_SIZE];
-        rand::rngs::OsRng.fill_bytes(&mut capability_secret);
+        rand::rngs::OsRng
+            .try_fill_bytes(&mut capability_secret)
+            .map_err(|err| {
+                AppError::Crypto(format!("Failed to generate capability secret: {err}"))
+            })?;
 
         let encrypted_session_key =
             CapabilityEncryptor::encrypt_session_key(&encrypted.session_key, &capability_secret)?;

@@ -1,7 +1,7 @@
 # Docker環境でのテスト実行ガイド
 
 **作成日**: 2025年08月05日
-**最終更新**: 2025年11月10日
+**最終更新**: 2025年12月26日
 
 ## 概要
 
@@ -145,7 +145,7 @@ docker compose -f docker-compose.test.yml down --rmi local --volumes
 ## Docker環境の詳細
 
 ### Dockerfile.test
-- ベースイメージ: `rust:1.85-bookworm` （edition2024のサポートのため）
+- ベースイメージ: `rust:1.86-bookworm` （edition2024のサポートのため）
 - Node.js 20.x と pnpm 9 をインストール
 - Tauri開発に必要なシステムパッケージをすべて含む
 - 依存関係のキャッシュを最適化
@@ -239,7 +239,7 @@ ERROR  packages field missing or empty
 error: failed to parse manifest
 feature `edition2024` is required
 ```
-→ Rust 1.85以上を使用（Dockerfileで`FROM rust:1.85-bookworm`を指定）
+→ Rust 1.86以上を使用（Dockerfileで`FROM rust:1.86-bookworm`を指定）
 
 ## メリット
 

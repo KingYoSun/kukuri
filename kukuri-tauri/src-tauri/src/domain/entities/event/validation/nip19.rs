@@ -1,30 +1,25 @@
 use super::errors::{EventValidationError, ValidationResult};
 use super::utils::is_ws_url;
 use crate::shared::validation::ValidationFailureKind;
-use bech32::{self, FromBase32 as _};
+use bech32;
 
 pub(super) const MAX_TLV_RELAY_URLS: usize = 16;
 pub(super) const MAX_TLV_RELAY_URL_LEN: usize = 255;
 
 pub(super) fn validate_nprofile_tlv(s: &str) -> ValidationResult<()> {
-    let (hrp, data, _) = bech32::decode(s).map_err(|_| {
+    let (hrp, data) = bech32::decode(s).map_err(|_| {
         EventValidationError::new(
             ValidationFailureKind::Nip19Encoding,
             "invalid nprofile bech32 encoding",
         )
     })?;
-    if hrp != "nprofile" {
+    if hrp.as_str() != "nprofile" {
         return Err(EventValidationError::new(
             ValidationFailureKind::Nip19Encoding,
             format!("unexpected nprofile hrp: {hrp}"),
         ));
     }
-    let bytes = Vec::<u8>::from_base32(&data).map_err(|_| {
-        EventValidationError::new(
-            ValidationFailureKind::Nip19Encoding,
-            "invalid nprofile bech32 payload",
-        )
-    })?;
+    let bytes = data;
     let mut has_pubkey = false;
     let mut relay_count = 0usize;
     parse_tlv(&bytes, |tag, value| match tag {
@@ -61,24 +56,19 @@ pub(super) fn validate_nprofile_tlv(s: &str) -> ValidationResult<()> {
 }
 
 pub(super) fn validate_nevent_tlv(s: &str) -> ValidationResult<()> {
-    let (hrp, data, _) = bech32::decode(s).map_err(|_| {
+    let (hrp, data) = bech32::decode(s).map_err(|_| {
         EventValidationError::new(
             ValidationFailureKind::Nip19Encoding,
             "invalid nevent bech32 encoding",
         )
     })?;
-    if hrp != "nevent" {
+    if hrp.as_str() != "nevent" {
         return Err(EventValidationError::new(
             ValidationFailureKind::Nip19Encoding,
             format!("unexpected nevent hrp: {hrp}"),
         ));
     }
-    let bytes = Vec::<u8>::from_base32(&data).map_err(|_| {
-        EventValidationError::new(
-            ValidationFailureKind::Nip19Encoding,
-            "invalid nevent bech32 payload",
-        )
-    })?;
+    let bytes = data;
     let mut has_event_id = false;
     let mut has_author = false;
     let mut has_kind = false;

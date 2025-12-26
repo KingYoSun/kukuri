@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_VERSION: 1.85
+  RUST_VERSION: 1.86
   NODE_VERSION: 20
 
 jobs:

@@ -96,11 +96,10 @@ impl GossipMessage {
         let hash = hasher.finalize();
 
         // ハッシュからSecp256k1メッセージを作成
-        let message = Secp256k1Message::from_digest_slice(&hash)
-            .map_err(|e| format!("Failed to create message: {e}"))?;
+        let message = Secp256k1Message::from_digest(hash.into());
 
         // 署名
-        let signature = SECP256K1.sign_ecdsa(&message, secret_key);
+        let signature = SECP256K1.sign_ecdsa(message, secret_key);
         self.signature = signature.serialize_compact().to_vec();
 
         // 公開鍵を設定（圧縮形式）
@@ -135,12 +134,11 @@ impl GossipMessage {
         let hash = hasher.finalize();
 
         // ハッシュからSecp256k1メッセージを作成
-        let message = Secp256k1Message::from_digest_slice(&hash)
-            .map_err(|e| format!("Failed to create message: {e}"))?;
+        let message = Secp256k1Message::from_digest(hash.into());
 
         // 署名を検証
         Ok(SECP256K1
-            .verify_ecdsa(&message, &signature, &public_key)
+            .verify_ecdsa(message, &signature, &public_key)
             .is_ok())
     }
 }
@@ -241,7 +239,8 @@ mod tests {
     #[test]
     fn test_message_signing_and_verification() {
         // 秘密鍵を生成
-        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let mut rng = rand::rng();
+        let secret_key = SecretKey::new(&mut rng);
 
         // メッセージを作成
         let mut message = GossipMessage::new(MessageType::NostrEvent, vec![1, 2, 3, 4, 5], vec![]);

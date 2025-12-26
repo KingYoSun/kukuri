@@ -1,8 +1,7 @@
 use aes_gcm::{
     Aes256Gcm, Key,
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, AeadCore, KeyInit, OsRng, rand_core::RngCore},
 };
-use rand::RngCore;
 
 use crate::shared::AppError;
 

@@ -116,7 +116,8 @@ async fn test_mainline_dht_handshake_and_routing() {
 
     let discovery = DiscoveryOptions::new(false, true, true);
 
-    let mut rng = StdRng::from_entropy();
+    let mut thread_rng = rand::rng();
+    let mut rng = StdRng::from_rng(&mut thread_rng);
     let secret_a = random_secret(&mut rng);
     let secret_b = random_secret(&mut rng);
 

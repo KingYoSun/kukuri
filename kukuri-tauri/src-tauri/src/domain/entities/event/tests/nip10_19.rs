@@ -1,6 +1,6 @@
 use crate::domain::entities::event::Event;
 use crate::shared::validation::ValidationFailureKind;
-use bech32::{ToBase32 as _, Variant};
+use bech32::{Bech32, Hrp};
 use nostr_sdk::prelude::*;
 
 fn dummy_event_with_tags(tags: Vec<Vec<String>>) -> Event {
@@ -13,6 +13,11 @@ fn dummy_event_with_tags(tags: Vec<Vec<String>>) -> Event {
         content: String::new(),
         sig: "f".repeat(128),
     }
+}
+
+fn encode_bech32(hrp: &str, bytes: &[u8]) -> String {
+    let hrp = Hrp::parse(hrp).expect("valid hrp");
+    bech32::encode::<Bech32>(hrp, bytes).expect("encode")
 }
 
 #[test]
@@ -59,7 +64,7 @@ fn test_nprofile_tlv_multiple_relays_ok() {
         bytes.push(relay_bytes.len() as u8);
         bytes.extend_from_slice(relay_bytes);
     }
-    let encoded = bech32::encode("nprofile", bytes.to_base32(), Variant::Bech32).expect("encode");
+    let encoded = encode_bech32("nprofile", &bytes);
     assert!(Event::validate_nprofile_tlv(&encoded).is_ok());
 }
 
@@ -74,7 +79,7 @@ fn test_nprofile_tlv_rejects_invalid_relay_scheme() {
     bytes.push(1);
     bytes.push(relay_bytes.len() as u8);
     bytes.extend_from_slice(relay_bytes);
-    let encoded = bech32::encode("nprofile", bytes.to_base32(), Variant::Bech32).expect("encode");
+    let encoded = encode_bech32("nprofile", &bytes);
     assert!(Event::validate_nprofile_tlv(&encoded).is_err());
 }
 
@@ -99,7 +104,7 @@ fn test_nevent_tlv_with_optional_author_and_kind() {
     bytes.push(3);
     bytes.push(kind_bytes.len() as u8);
     bytes.extend_from_slice(&kind_bytes);
-    let encoded = bech32::encode("nevent", bytes.to_base32(), Variant::Bech32).unwrap();
+    let encoded = encode_bech32("nevent", &bytes);
     assert!(Event::validate_nevent_tlv(&encoded).is_ok());
 }
 
@@ -112,6 +117,6 @@ fn test_nevent_tlv_rejects_invalid_author_length() {
     bytes.push(2);
     bytes.push(31);
     bytes.extend_from_slice(&[0u8; 31]);
-    let encoded = bech32::encode("nevent", bytes.to_base32(), Variant::Bech32).unwrap();
+    let encoded = encode_bech32("nevent", &bytes);
     assert!(Event::validate_nevent_tlv(&encoded).is_err());
 }

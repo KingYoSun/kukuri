@@ -236,7 +236,7 @@ pub mod secret {
         }
 
         // 新しいシークレットを生成
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut secret = vec![0u8; 32];
         rng.fill(&mut secret[..]);
 
@@ -252,7 +252,7 @@ pub mod secret {
 
     /// シークレットをローテーション
     pub async fn rotate_secret() -> Result<Vec<u8>, AppError> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut secret = vec![0u8; 32];
         rng.fill(&mut secret[..]);
 
