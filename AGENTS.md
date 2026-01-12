@@ -47,7 +47,7 @@
 - 依存追加: 追加時は最新安定版を確認して採用。
 - フロントのエラー処理: `console.error` は禁止。`docs/03_implementation/error_handling_guidelines.md` の `errorHandler` を使用。
 - Windowsテスト: DLL 等の理由でホスト実行が必ず失敗するため、PowerShell では常に `./scripts/test-docker.ps1 <suite>` を用いて Docker 経由で実行（例: `./scripts/test-docker.ps1 rust`, `./scripts/test-docker.ps1 ts`, `./scripts/test-docker.ps1 all -Scenario trending-feed`）。ユーザーからの明示がない限りホストで `pnpm test` / `cargo test` を呼ばない。
-- 各セッションの作業完了時は必ず `gh act --workflows .github/workflows/test.yml --job format-check` と `--job native-test-linux` を実行し、成功または既知の理由で失敗したログを収集して報告する（`NPM_CONFIG_PREFIX=/tmp/npm-global` などの実行に必要な環境設定も忘れないこと）。
+- 各セッションの作業完了時、ファイルが変更されている場合は `gh act --workflows .github/workflows/test.yml --job format-check` と `--job native-test-linux` を実行し、成功または既知の理由で失敗したログを収集して報告する（`NPM_CONFIG_PREFIX=/tmp/npm-global` などの実行に必要な環境設定も忘れないこと）。
 - ファイル編集時は既存ファイルのエンコーディング（UTF-8/LF）を必ず維持し、スクリプトでのバイト列操作でも UTF-8 を明示して読み書きすること（Shift_JIS など別エンコーディングでの保存禁止）。
 - 検証必須: テスト・型・リント修正タスクは、実際にコマンドを実行しエラーが出ないことを確認してから完了とする。
 - Rustテスト実行方針: Rust（`kukuri-tauri/src-tauri` と `kukuri-cli`）の `cargo test` は所要時間が長くても必ず実行し、完了まで待つ。必要に応じてタイムアウトを延長してでもテスト結果を確認する。
