@@ -3,7 +3,7 @@ use super::p2p_service::P2PServiceTrait;
 use crate::application::ports::repositories::{
     PendingTopicRepository, TopicMetricsRepository, TopicRepository,
 };
-use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::entities::offline::OfflineActionRecord;
 use crate::domain::entities::{
     PendingTopic, PendingTopicStatus, Topic, TopicMetricsRecord, TopicVisibility,
@@ -93,12 +93,7 @@ impl TopicService {
     }
 
     pub async fn get_topic(&self, id: &str) -> Result<Option<Topic>, AppError> {
-        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            id
-        };
-        self.repository.get_topic(normalized).await
+        self.repository.get_topic(id).await
     }
 
     pub async fn get_all_topics(&self) -> Result<Vec<Topic>, AppError> {
@@ -130,24 +125,14 @@ impl TopicService {
     }
 
     pub async fn join_topic(&self, id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            id
-        };
-        self.repository.join_topic(normalized, user_pubkey).await?;
-        self.p2p.join_topic(normalized, Vec::new()).await?;
+        self.repository.join_topic(id, user_pubkey).await?;
+        self.p2p.join_topic(id, Vec::new()).await?;
         Ok(())
     }
 
     pub async fn leave_topic(&self, id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            id
-        };
-        self.repository.leave_topic(normalized, user_pubkey).await?;
-        self.p2p.leave_topic(normalized).await?;
+        self.repository.leave_topic(id, user_pubkey).await?;
+        self.p2p.leave_topic(id).await?;
         Ok(())
     }
 
@@ -156,27 +141,17 @@ impl TopicService {
     }
 
     pub async fn delete_topic(&self, id: &str) -> Result<(), AppError> {
-        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            id
-        };
         // Prevent deletion of public topic
-        if normalized == DEFAULT_PUBLIC_TOPIC_ID {
+        if id == DEFAULT_PUBLIC_TOPIC_ID {
             return Err("Cannot delete public topic".into());
         }
 
-        self.p2p.leave_topic(normalized).await?;
-        self.repository.delete_topic(normalized).await
+        self.p2p.leave_topic(id).await?;
+        self.repository.delete_topic(id).await
     }
 
     pub async fn get_topic_stats(&self, id: &str) -> Result<(u32, u32), AppError> {
-        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            id
-        };
-        if let Some(topic) = self.repository.get_topic(normalized).await? {
+        if let Some(topic) = self.repository.get_topic(id).await? {
             Ok((topic.member_count, topic.post_count))
         } else {
             Ok((0, 0))

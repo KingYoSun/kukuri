@@ -2,7 +2,7 @@ use super::{TopicService, UserService};
 use crate::application::ports::auth_lifecycle::{
     AuthAccountContext, AuthLifecycleEvent, AuthLifecyclePort, AuthLifecycleStage,
 };
-use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::entities::User;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -28,16 +28,7 @@ impl DefaultAuthLifecycle {
         if topics.is_empty() {
             return self;
         }
-        self.default_topics = topics
-            .into_iter()
-            .map(|topic| {
-                if topic == LEGACY_PUBLIC_TOPIC_ID {
-                    DEFAULT_PUBLIC_TOPIC_ID.to_string()
-                } else {
-                    topic
-                }
-            })
-            .collect();
+        self.default_topics = topics;
         self
     }
 

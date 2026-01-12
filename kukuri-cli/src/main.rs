@@ -28,7 +28,8 @@ mod bootstrap_cache;
 use bootstrap_cache::{CliBootstrapCache, resolve_export_path, write_cache};
 
 const TOPIC_NAMESPACE: &str = "kukuri:tauri:";
-const DEFAULT_PUBLIC_TOPIC_ID: &str = "kukuri:tauri:public";
+const DEFAULT_PUBLIC_TOPIC_ID: &str =
+    "kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0";
 
 #[derive(Parser)]
 #[command(name = "kukuri-cli")]
@@ -281,20 +282,21 @@ fn export_bootstrap_list(
     write_cache(cache, path)
 }
 
-fn ensure_kukuri_namespace(topic: &str) -> Option<String> {
+fn generate_topic_id(topic: &str) -> Option<String> {
     let trimmed = topic.trim();
     if trimmed.is_empty() {
         return None;
     }
     let normalized = trimmed.to_lowercase();
-    if normalized == "public" || normalized == DEFAULT_PUBLIC_TOPIC_ID {
-        return Some(DEFAULT_PUBLIC_TOPIC_ID.to_string());
-    }
-    if normalized.starts_with(TOPIC_NAMESPACE) {
-        Some(normalized)
+    let base = if normalized.starts_with(TOPIC_NAMESPACE) {
+        normalized
     } else {
-        Some(format!("{TOPIC_NAMESPACE}{normalized}"))
+        format!("{TOPIC_NAMESPACE}{normalized}")
+    };
+    if is_hashed_topic_id(&base) {
+        return Some(base);
     }
+    Some(hash_topic_id(&base))
 }
 
 fn topic_bytes(canonical: &str) -> [u8; 32] {
@@ -308,17 +310,24 @@ fn topic_bytes(canonical: &str) -> [u8; 32] {
                 }
             }
         }
-        let mut out = [0u8; 32];
-        let bytes = canonical.as_bytes();
-        if bytes.len() >= 32 {
-            out.copy_from_slice(&bytes[..32]);
-        } else {
-            out[..bytes.len()].copy_from_slice(bytes);
-        }
-        return out;
     }
 
     *blake3::hash(canonical.as_bytes()).as_bytes()
+}
+
+fn is_hashed_topic_id(topic_id: &str) -> bool {
+    topic_id
+        .strip_prefix(TOPIC_NAMESPACE)
+        .is_some_and(|tail| tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn hash_topic_id(base: &str) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(base.as_bytes());
+    format!(
+        "{TOPIC_NAMESPACE}{}",
+        hex::encode(hasher.finalize().as_bytes())
+    )
 }
 
 async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
@@ -348,15 +357,15 @@ async fn run_relay_node(cli: &Cli, topics: &str) -> Result<()> {
     // Subscribe to topics
     let mut subscribed = 0usize;
     for topic in topics.split(',') {
-        let Some(namespaced_topic) = ensure_kukuri_namespace(topic) else {
+        let Some(canonical_topic) = generate_topic_id(topic) else {
             continue;
         };
-        let topic_bytes = topic_bytes(&namespaced_topic);
+        let topic_bytes = topic_bytes(&canonical_topic);
 
         info!(
             "Subscribing to topic: {} -> {}",
             topic.trim(),
-            namespaced_topic
+            canonical_topic
         );
         gossip.subscribe(topic_bytes.into(), vec![]).await?;
         subscribed += 1;
@@ -576,20 +585,26 @@ mod tests {
     }
 
     #[test]
-    fn ensure_kukuri_namespace_normalizes_topics() {
+    fn generate_topic_id_normalizes_topics() {
+        let public_base = format!("{TOPIC_NAMESPACE}public topic");
+        let custom_base = format!("{TOPIC_NAMESPACE}custom");
         assert_eq!(
-            super::ensure_kukuri_namespace("Public Topic"),
-            Some("kukuri:tauri:public topic".to_string())
+            super::generate_topic_id("Public Topic"),
+            Some(super::hash_topic_id(&public_base))
         );
         assert_eq!(
-            super::ensure_kukuri_namespace("kukuri:tauri:custom"),
-            Some("kukuri:tauri:custom".to_string())
+            super::generate_topic_id("kukuri:tauri:custom"),
+            Some(super::hash_topic_id(&custom_base))
         );
         assert_eq!(
-            super::ensure_kukuri_namespace("public"),
+            super::generate_topic_id("public"),
             Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
         );
-        assert_eq!(super::ensure_kukuri_namespace("   "), None);
+        assert_eq!(
+            super::generate_topic_id("kukuri:tauri:public"),
+            Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
+        );
+        assert_eq!(super::generate_topic_id("   "), None);
     }
 
     #[test]

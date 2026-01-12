@@ -30,7 +30,7 @@ services:
       KUKURI_SECRET_KEY: ${KUKURI_RELAY_SECRET_KEY:?Set KUKURI_RELAY_SECRET_KEY in .env}
       LOG_LEVEL: ${RELAY_LOG_LEVEL:-info}
       BIND_ADDRESS: ${RELAY_BIND_ADDRESS:-0.0.0.0:11225}
-      RELAY_TOPICS: ${RELAY_TOPICS:-kukuri:tauri:public}
+      RELAY_TOPICS: ${RELAY_TOPICS:-public}
     ports:
       - "11225:11225"
     volumes:
@@ -50,7 +50,7 @@ services:
       KUKURI_SECRET_KEY: ${KUKURI_RELAY_N0_SECRET_KEY:?Set KUKURI_RELAY_N0_SECRET_KEY in .env}
       LOG_LEVEL: ${RELAY_N0_LOG_LEVEL:-info}
       BIND_ADDRESS: ${RELAY_N0_BIND_ADDRESS:-0.0.0.0:11226}
-      RELAY_TOPICS: ${RELAY_N0_TOPICS:-kukuri:tauri:public}
+      RELAY_TOPICS: ${RELAY_N0_TOPICS:-public}
     ports:
       - "11226:11226"
     volumes:

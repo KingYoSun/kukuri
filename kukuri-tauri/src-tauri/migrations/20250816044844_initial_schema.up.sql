@@ -181,4 +181,4 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
 
 -- デフォルトデータの挿入
 INSERT OR IGNORE INTO topics (topic_id, name, description, created_at, updated_at)
-VALUES ('public', '#public', 'パブリックトピック - すべての投稿が表示されます', unixepoch() * 1000, unixepoch() * 1000);
+VALUES ('kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0', '#public', 'パブリックトピック - すべての投稿が表示されます', unixepoch() * 1000, unixepoch() * 1000);

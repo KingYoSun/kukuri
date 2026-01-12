@@ -1,4 +1,4 @@
-use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID, TOPIC_NAMESPACE};
+use crate::domain::constants::TOPIC_NAMESPACE;
 use crate::domain::entities::TopicVisibility;
 use bincode::{Decode, Encode};
 use chrono::Utc;
@@ -148,43 +148,28 @@ pub fn generate_topic_id(topic_name: &str) -> String {
     generate_topic_id_with_visibility(topic_name, TopicVisibility::Public)
 }
 
-pub fn generate_topic_id_with_visibility(topic_name: &str, visibility: TopicVisibility) -> String {
+pub fn generate_topic_id_with_visibility(topic_name: &str, _visibility: TopicVisibility) -> String {
     let trimmed = topic_name.trim();
-    if trimmed.is_empty() {
-        return format!("{TOPIC_NAMESPACE}default");
-    }
-
-    let normalized = trimmed.to_lowercase();
-    if normalized == LEGACY_PUBLIC_TOPIC_ID || normalized == DEFAULT_PUBLIC_TOPIC_ID {
-        return DEFAULT_PUBLIC_TOPIC_ID.to_string();
-    }
-
-    let base = if normalized.starts_with(TOPIC_NAMESPACE) {
-        normalized
+    let base = if trimmed.is_empty() {
+        format!("{TOPIC_NAMESPACE}default")
     } else {
-        format!("{TOPIC_NAMESPACE}{normalized}")
+        let normalized = trimmed.to_lowercase();
+        if normalized.starts_with(TOPIC_NAMESPACE) {
+            normalized
+        } else {
+            format!("{TOPIC_NAMESPACE}{normalized}")
+        }
     };
 
-    match visibility {
-        TopicVisibility::Public => base,
-        TopicVisibility::Private => {
-            let mut hasher = blake3::Hasher::new();
-            hasher.update(base.as_bytes());
-            format!(
-                "{TOPIC_NAMESPACE}{}",
-                hex::encode(hasher.finalize().as_bytes())
-            )
-        }
+    if is_hashed_topic_id(&base) {
+        return base;
     }
+
+    hash_topic_id(&base)
 }
 
 pub fn topic_id_bytes(canonical_id: &str) -> [u8; 32] {
-    if canonical_id == LEGACY_PUBLIC_TOPIC_ID {
-        return topic_id_bytes(DEFAULT_PUBLIC_TOPIC_ID);
-    }
-
     if let Some(tail) = canonical_id.strip_prefix(TOPIC_NAMESPACE) {
-        // private: encoded as namespace + hex(hash)
         if tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()) {
             if let Ok(decoded) = hex::decode(tail) {
                 if decoded.len() >= 32 {
@@ -194,23 +179,24 @@ pub fn topic_id_bytes(canonical_id: &str) -> [u8; 32] {
                 }
             }
         }
-
-        // public or non-hex namespace => pad/truncate the canonical id bytes
-        return pad_or_truncate(canonical_id.as_bytes());
     }
 
-    // legacy fallback: hash non-namespaced topics to avoid leaking identifiers
     *blake3::hash(canonical_id.as_bytes()).as_bytes()
 }
 
-fn pad_or_truncate(bytes: &[u8]) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    if bytes.len() >= 32 {
-        out.copy_from_slice(&bytes[..32]);
-    } else {
-        out[..bytes.len()].copy_from_slice(bytes);
-    }
-    out
+fn is_hashed_topic_id(topic_id: &str) -> bool {
+    topic_id
+        .strip_prefix(TOPIC_NAMESPACE)
+        .is_some_and(|tail| tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn hash_topic_id(base: &str) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(base.as_bytes());
+    format!(
+        "{TOPIC_NAMESPACE}{}",
+        hex::encode(hasher.finalize().as_bytes())
+    )
 }
 
 /// グローバルトピック（全体のタイムライン）

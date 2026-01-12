@@ -6,7 +6,7 @@ use bincode::serde::encode_to_vec;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::entities::Event;
 use crate::domain::p2p::distribution::{DistributionMetrics, DistributionStrategy};
 use crate::infrastructure::p2p::{GossipService, NetworkService};
@@ -66,14 +66,7 @@ impl DefaultEventDistributor {
             topics
                 .into_iter()
                 .filter(|topic| !topic.trim().is_empty())
-                .map(|topic| {
-                    let trimmed = topic.trim();
-                    if trimmed == LEGACY_PUBLIC_TOPIC_ID {
-                        DEFAULT_PUBLIC_TOPIC_ID.to_string()
-                    } else {
-                        trimmed.to_string()
-                    }
-                }),
+                .map(|topic| topic.trim().to_string()),
         );
         if guard.is_empty() {
             guard.push(DEFAULT_PUBLIC_TOPIC_ID.to_string());

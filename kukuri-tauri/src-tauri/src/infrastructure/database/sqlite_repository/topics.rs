@@ -6,7 +6,7 @@ use super::queries::{
     UPDATE_TOPIC_MEMBER_COUNT, UPDATE_TOPIC_STATS, UPSERT_USER_TOPIC,
 };
 use crate::application::ports::repositories::TopicRepository;
-use crate::domain::constants::{DEFAULT_PUBLIC_TOPIC_ID, LEGACY_PUBLIC_TOPIC_ID};
+use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::entities::Topic;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -83,23 +83,17 @@ impl TopicRepository for SqliteRepository {
     }
 
     async fn delete_topic(&self, id: &str) -> Result<(), AppError> {
-        let normalized = if id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            id
-        };
-
-        if normalized == DEFAULT_PUBLIC_TOPIC_ID {
+        if id == DEFAULT_PUBLIC_TOPIC_ID {
             return Err("デフォルトトピックは削除できません".into());
         }
 
         sqlx::query(DELETE_USER_TOPICS_BY_TOPIC)
-            .bind(normalized)
+            .bind(id)
             .execute(self.pool.get_pool())
             .await?;
 
         sqlx::query(DELETE_TOPIC)
-            .bind(normalized)
+            .bind(id)
             .execute(self.pool.get_pool())
             .await?;
 
@@ -135,13 +129,7 @@ impl TopicRepository for SqliteRepository {
     }
 
     async fn leave_topic(&self, topic_id: &str, user_pubkey: &str) -> Result<(), AppError> {
-        let normalized = if topic_id == LEGACY_PUBLIC_TOPIC_ID {
-            DEFAULT_PUBLIC_TOPIC_ID
-        } else {
-            topic_id
-        };
-
-        if normalized == DEFAULT_PUBLIC_TOPIC_ID {
+        if topic_id == DEFAULT_PUBLIC_TOPIC_ID {
             return Err("デフォルトトピックから離脱することはできません".into());
         }
 
@@ -150,13 +138,13 @@ impl TopicRepository for SqliteRepository {
 
         sqlx::query(MARK_TOPIC_LEFT)
             .bind(now)
-            .bind(normalized)
+            .bind(topic_id)
             .bind(user_pubkey)
             .execute(&mut *tx)
             .await?;
 
         let member_count: i64 = sqlx::query(SELECT_TOPIC_MEMBER_COUNT)
-            .bind(normalized)
+            .bind(topic_id)
             .fetch_one(&mut *tx)
             .await?
             .try_get("count")?;
@@ -164,7 +152,7 @@ impl TopicRepository for SqliteRepository {
         sqlx::query(UPDATE_TOPIC_MEMBER_COUNT)
             .bind(member_count)
             .bind(now)
-            .bind(normalized)
+            .bind(topic_id)
             .execute(&mut *tx)
             .await?;
 

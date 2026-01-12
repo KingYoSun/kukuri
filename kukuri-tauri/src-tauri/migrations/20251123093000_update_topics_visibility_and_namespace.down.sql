@@ -3,7 +3,7 @@ BEGIN TRANSACTION;
 CREATE TABLE topics_backup AS
 SELECT
     CASE
-        WHEN topic_id = 'kukuri:tauri:public' THEN 'public'
+        WHEN topic_id IN ('kukuri:tauri:public', 'kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0') THEN 'public'
         ELSE topic_id
     END AS topic_id,
     name,
@@ -49,6 +49,6 @@ DROP TABLE topics_backup;
 
 UPDATE user_topics
 SET topic_id = 'public'
-WHERE topic_id = 'kukuri:tauri:public';
+WHERE topic_id IN ('kukuri:tauri:public', 'kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0');
 
 COMMIT;

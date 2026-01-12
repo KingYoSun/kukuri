@@ -41,15 +41,43 @@ mod tests {
 
     #[test]
     fn test_generate_topic_id() {
-        assert_eq!(generate_topic_id("Bitcoin"), "kukuri:tauri:bitcoin");
-        assert_eq!(generate_topic_id("NOSTR"), "kukuri:tauri:nostr");
-        assert_eq!(generate_topic_id("Test Topic"), "kukuri:tauri:test topic");
+        let bitcoin_base = format!("{TOPIC_NAMESPACE}bitcoin");
+        let nostr_base = format!("{TOPIC_NAMESPACE}nostr");
+        let test_topic_base = format!("{TOPIC_NAMESPACE}test topic");
+        assert_eq!(
+            generate_topic_id("Bitcoin"),
+            format!(
+                "{TOPIC_NAMESPACE}{}",
+                hex::encode(blake3::hash(bitcoin_base.as_bytes()).as_bytes())
+            )
+        );
+        assert_eq!(
+            generate_topic_id("NOSTR"),
+            format!(
+                "{TOPIC_NAMESPACE}{}",
+                hex::encode(blake3::hash(nostr_base.as_bytes()).as_bytes())
+            )
+        );
+        assert_eq!(
+            generate_topic_id("Test Topic"),
+            format!(
+                "{TOPIC_NAMESPACE}{}",
+                hex::encode(blake3::hash(test_topic_base.as_bytes()).as_bytes())
+            )
+        );
         assert_eq!(generate_topic_id("public"), DEFAULT_PUBLIC_TOPIC_ID);
         assert_eq!(
             generate_topic_id("   kukuri:tauri:public   "),
             DEFAULT_PUBLIC_TOPIC_ID
         );
-        assert_eq!(generate_topic_id("   "), "kukuri:tauri:default");
+        let default_base = format!("{TOPIC_NAMESPACE}default");
+        assert_eq!(
+            generate_topic_id("   "),
+            format!(
+                "{TOPIC_NAMESPACE}{}",
+                hex::encode(blake3::hash(default_base.as_bytes()).as_bytes())
+            )
+        );
 
         let private = generate_topic_id_with_visibility("secret-room", TopicVisibility::Private);
         assert!(private.starts_with(TOPIC_NAMESPACE));
@@ -66,11 +94,9 @@ mod tests {
         assert_eq!(hex::encode(bytes), private_tail[..64]);
 
         let public_bytes = topic_id_bytes(DEFAULT_PUBLIC_TOPIC_ID);
+        let public_tail = DEFAULT_PUBLIC_TOPIC_ID.trim_start_matches(TOPIC_NAMESPACE);
         assert_eq!(public_bytes.len(), 32);
-        assert_eq!(
-            &public_bytes[..TOPIC_NAMESPACE.len().min(32)],
-            &DEFAULT_PUBLIC_TOPIC_ID.as_bytes()[..TOPIC_NAMESPACE.len().min(32)]
-        );
+        assert_eq!(hex::encode(public_bytes), public_tail);
     }
 
     #[test]

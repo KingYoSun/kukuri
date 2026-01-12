@@ -34,7 +34,22 @@ interface TopicStore extends TopicState {
 }
 
 const normalizeTopicId = (topicId: string) =>
-  topicId === 'public' ? DEFAULT_PUBLIC_TOPIC_ID : topicId;
+  topicId === 'public' || topicId === 'kukuri:tauri:public' ? DEFAULT_PUBLIC_TOPIC_ID : topicId;
+
+const normalizeTopicMap = <T>(
+  source: Map<string, T> | Record<string, T> | Array<[string, T]> | null | undefined,
+) => {
+  if (source instanceof Map) {
+    return source;
+  }
+  if (Array.isArray(source)) {
+    return new Map(source);
+  }
+  if (source && typeof source === 'object') {
+    return new Map(Object.entries(source) as Array<[string, T]>);
+  }
+  return new Map<string, T>();
+};
 
 const computeTopicCollections = (state: TopicStore, topics: Topic[]) => {
   const nextTopics = new Map(
@@ -45,12 +60,10 @@ const computeTopicCollections = (state: TopicStore, topics: Topic[]) => {
   );
   const topicIds = new Set(nextTopics.keys());
 
-  const unread = new Map(
-    Array.from(state.topicUnreadCounts.entries()).filter(([id]) => topicIds.has(id)),
-  );
-  const lastRead = new Map(
-    Array.from(state.topicLastReadAt.entries()).filter(([id]) => topicIds.has(id)),
-  );
+  const unreadSource = normalizeTopicMap(state.topicUnreadCounts);
+  const lastReadSource = normalizeTopicMap(state.topicLastReadAt);
+  const unread = new Map(Array.from(unreadSource.entries()).filter(([id]) => topicIds.has(id)));
+  const lastRead = new Map(Array.from(lastReadSource.entries()).filter(([id]) => topicIds.has(id)));
 
   return {
     topics: nextTopics,
