@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useShallow } from 'zustand/react/shallow';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { AlertCircle, ChevronDown, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { p2pApi } from '@/lib/api/p2p';
@@ -41,6 +42,7 @@ export function RelayStatus() {
   const [bootstrapInfo, setBootstrapInfo] = useState<BootstrapInfoState | null>(null);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [applyingCli, setApplyingCli] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(true);
 
   const refreshBootstrapInfo = useCallback(async () => {
     try {
@@ -174,140 +176,153 @@ export function RelayStatus() {
   const hasRelays = relayStatus.length > 0;
 
   return (
-    <Card className="mb-4" data-testid="relay-status-card">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-sm">リレー接続状態</CardTitle>
-            <Button variant="link" size="sm" className="-ml-1 h-auto px-0 text-xs" asChild>
-              <a
-                href={MAINLINE_RUNBOOK_URL}
-                target="_blank"
-                rel="noreferrer"
-                data-testid="relay-runbook-link"
-              >
-                Runbook
-              </a>
-            </Button>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleManualRefresh}
-            disabled={isFetchingRelayStatus}
-            data-testid="relay-refresh-button"
-          >
-            {isFetchingRelayStatus ? (
-              <>
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                更新中…
-              </>
-            ) : (
-              '再試行'
-            )}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-1" data-testid="relay-last-updated">
-          最終更新: {lastUpdatedLabel} / 次回再取得: {nextRefreshLabel}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {relayStatusError && (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-            <AlertCircle className="mt-0.5 h-4 w-4" />
-            <div>
-              <p>リレー状態の取得に失敗しました。</p>
-              <p className="text-[11px] text-destructive/80">詳細: {relayStatusError}</p>
-            </div>
-          </div>
-        )}
-
-        {hasRelays ? (
-          <div className="space-y-2">
-            {relayStatus.map((relay) => {
-              const statusRaw = relay.status.toLowerCase();
-              const status = statusRaw.startsWith('error') ? 'error' : statusRaw;
-              const { badgeClass, label } =
-                status === 'connected'
-                  ? { badgeClass: 'bg-green-100 text-green-800', label: '接続済み' }
-                  : status === 'connecting'
-                    ? { badgeClass: 'bg-yellow-100 text-yellow-800', label: '接続中' }
-                    : status === 'disconnected'
-                      ? { badgeClass: 'bg-gray-100 text-gray-800', label: '切断' }
-                      : { badgeClass: 'bg-red-100 text-red-800', label: 'エラー' };
-
-              return (
-                <div
-                  key={relay.url}
-                  className="flex items-center justify-between text-sm"
-                  data-testid="relay-status-item"
-                  data-relay-url={relay.url}
-                  data-relay-status={status}
+    <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+      <Card className="mb-4" data-testid="relay-status-card">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-auto px-1 text-sm font-semibold">
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      detailsOpen ? 'rotate-0' : '-rotate-90'
+                    }`}
+                  />
+                  リレー接続状態
+                </Button>
+              </CollapsibleTrigger>
+              <Button variant="link" size="sm" className="-ml-1 h-auto px-0 text-xs" asChild>
+                <a
+                  href={MAINLINE_RUNBOOK_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="relay-runbook-link"
                 >
-                  <span className="truncate max-w-[200px]" title={relay.url}>
-                    {relay.url}
-                  </span>
-                  <span className={`px-2 py-1 rounded text-xs ${badgeClass}`}>{label}</span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground" data-testid="relay-status-empty">
-            接続中のリレーはありません。
-          </p>
-        )}
-        <div
-          className="rounded-md border border-muted p-3 text-xs space-y-2 bg-muted/20"
-          data-testid="relay-bootstrap-panel"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
-            <div className="flex flex-col">
-              <span data-testid="relay-bootstrap-source">
-                ブートストラップソース: {bootstrapSourceLabel}
-              </span>
-              <span
-                className="text-[11px]"
-                data-testid="relay-effective-count"
-                data-count={effectiveNodes.length}
-              >
-                適用中: {effectiveNodes.length > 0 ? effectiveNodes.length : 'n0 デフォルト'}
-              </span>
+                  Runbook
+                </a>
+              </Button>
             </div>
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
-              disabled={!canApplyCli}
-              onClick={handleApplyCliBootstrap}
-              data-testid="relay-apply-cli-button"
+              onClick={handleManualRefresh}
+              disabled={isFetchingRelayStatus}
+              data-testid="relay-refresh-button"
             >
-              {applyingCli ? (
+              {isFetchingRelayStatus ? (
                 <>
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  切替中…
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  更新中…
                 </>
               ) : (
-                '最新リストを適用'
+                '再試行'
               )}
             </Button>
           </div>
-          <div
-            className="text-muted-foreground"
-            data-testid="relay-cli-info"
-            data-cli-count={cliNodes.length}
-            data-cli-updated-ms={bootstrapInfo?.cliUpdatedAtMs ?? null}
-          >
-            CLI 提供:{' '}
-            {cliAvailable ? `${cliNodes.length}件 / 更新: ${cliLastUpdatedLabel}` : '未取得'}
-          </div>
-          {envLocked && (
-            <p className="text-[11px] text-muted-foreground" data-testid="relay-cli-locked">
-              <code className="font-mono text-[11px]">KUKURI_BOOTSTRAP_PEERS</code>{' '}
-              が設定されているため CLIリストを適用できません。
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          <p className="text-xs text-muted-foreground mt-1" data-testid="relay-last-updated">
+            最終更新: {lastUpdatedLabel} / 次回再取得: {nextRefreshLabel}
+          </p>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-3 text-sm">
+            {relayStatusError && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4" />
+                <div>
+                  <p>リレー状態の取得に失敗しました。</p>
+                  <p className="text-[11px] text-destructive/80">詳細: {relayStatusError}</p>
+                </div>
+              </div>
+            )}
+
+            {hasRelays ? (
+              <div className="space-y-2">
+                {relayStatus.map((relay) => {
+                  const statusRaw = relay.status.toLowerCase();
+                  const status = statusRaw.startsWith('error') ? 'error' : statusRaw;
+                  const { badgeClass, label } =
+                    status === 'connected'
+                      ? { badgeClass: 'bg-green-100 text-green-800', label: '接続済み' }
+                      : status === 'connecting'
+                        ? { badgeClass: 'bg-yellow-100 text-yellow-800', label: '接続中' }
+                        : status === 'disconnected'
+                          ? { badgeClass: 'bg-gray-100 text-gray-800', label: '切断' }
+                          : { badgeClass: 'bg-red-100 text-red-800', label: 'エラー' };
+
+                  return (
+                    <div
+                      key={relay.url}
+                      className="flex items-center justify-between text-sm"
+                      data-testid="relay-status-item"
+                      data-relay-url={relay.url}
+                      data-relay-status={status}
+                    >
+                      <span className="truncate max-w-[200px]" title={relay.url}>
+                        {relay.url}
+                      </span>
+                      <span className={`px-2 py-1 rounded text-xs ${badgeClass}`}>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground" data-testid="relay-status-empty">
+                接続中のリレーはありません。
+              </p>
+            )}
+            <div
+              className="rounded-md border border-muted p-3 text-xs space-y-2 bg-muted/20"
+              data-testid="relay-bootstrap-panel"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                <div className="flex flex-col">
+                  <span data-testid="relay-bootstrap-source">
+                    ブートストラップソース: {bootstrapSourceLabel}
+                  </span>
+                  <span
+                    className="text-[11px]"
+                    data-testid="relay-effective-count"
+                    data-count={effectiveNodes.length}
+                  >
+                    適用中: {effectiveNodes.length > 0 ? effectiveNodes.length : 'n0 デフォルト'}
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!canApplyCli}
+                  onClick={handleApplyCliBootstrap}
+                  data-testid="relay-apply-cli-button"
+                >
+                  {applyingCli ? (
+                    <>
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      切替中…
+                    </>
+                  ) : (
+                    '最新リストを適用'
+                  )}
+                </Button>
+              </div>
+              <div
+                className="text-muted-foreground"
+                data-testid="relay-cli-info"
+                data-cli-count={cliNodes.length}
+                data-cli-updated-ms={bootstrapInfo?.cliUpdatedAtMs ?? null}
+              >
+                CLI 提供:{' '}
+                {cliAvailable ? `${cliNodes.length}件 / 更新: ${cliLastUpdatedLabel}` : '未取得'}
+              </div>
+              {envLocked && (
+                <p className="text-[11px] text-muted-foreground" data-testid="relay-cli-locked">
+                  <code className="font-mono text-[11px]">KUKURI_BOOTSTRAP_PEERS</code>{' '}
+                  が設定されているため CLIリストを適用できません。
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }

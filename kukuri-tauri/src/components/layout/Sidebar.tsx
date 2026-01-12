@@ -153,109 +153,111 @@ export function Sidebar() {
       role="complementary"
       data-testid="sidebar"
       className={cn(
-        'border-r bg-background transition-all duration-300 overflow-hidden',
+        'border-r bg-background transition-all duration-300 overflow-hidden h-full',
         sidebarOpen ? 'w-64' : 'w-0',
       )}
     >
-      <div className="flex flex-col h-full w-64">
-        <div className="p-4">
-          <Button className="w-full" variant="default" onClick={handleCreatePost}>
-            <Plus className="mr-2 h-4 w-4" />
-            新規投稿
-          </Button>
-        </div>
-
-        <Separator />
-
-        <div className="p-4">
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">カテゴリー</h3>
-          <div className="space-y-1">
-            {categories.map((category) => (
-              <Button
-                key={category.key}
-                variant={activeSidebarCategory === category.key ? 'secondary' : 'ghost'}
-                className={cn(
-                  'w-full justify-start',
-                  activeSidebarCategory === category.key && 'font-semibold',
-                )}
-                data-testid={`category-${category.key}`}
-                aria-current={activeSidebarCategory === category.key ? 'page' : undefined}
-                onClick={() => handleCategoryClick(category)}
-              >
-                <category.icon className="mr-2 h-4 w-4" />
-                {category.name}
+      <div className="flex h-full w-64 flex-col min-h-0">
+        <ScrollArea className="h-full w-full">
+          <div className="flex min-h-full flex-col">
+            <div className="p-4">
+              <Button className="w-full" variant="default" onClick={handleCreatePost}>
+                <Plus className="mr-2 h-4 w-4" />
+                新規投稿
               </Button>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        <Separator />
+            <Separator />
 
-        <ScrollArea className="flex-1">
-          <div className="p-4" data-testid="topics-list">
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">参加中のトピック</h3>
-            <div className="space-y-1">
-              {joinedTopicsList.length === 0 ? (
-                <p className="text-sm text-muted-foreground">参加中のトピックはありません</p>
-              ) : (
-                joinedTopicsList.map((topic) => {
-                  const lastActiveText = topic.lastActive
-                    ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
-                        addSuffix: false,
-                        locale: ja,
-                      })
-                    : '未投稿';
+            <div className="p-4">
+              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">カテゴリー</h3>
+              <div className="space-y-1">
+                {categories.map((category) => (
+                  <Button
+                    key={category.key}
+                    variant={activeSidebarCategory === category.key ? 'secondary' : 'ghost'}
+                    className={cn(
+                      'w-full justify-start',
+                      activeSidebarCategory === category.key && 'font-semibold',
+                    )}
+                    data-testid={`category-${category.key}`}
+                    aria-current={activeSidebarCategory === category.key ? 'page' : undefined}
+                    onClick={() => handleCategoryClick(category)}
+                  >
+                    <category.icon className="mr-2 h-4 w-4" />
+                    {category.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
 
-                  return (
-                    <Button
-                      key={topic.id}
-                      variant={currentTopic?.id === topic.id ? 'secondary' : 'ghost'}
-                      className="w-full justify-start p-2 h-auto"
-                      data-testid={`topic-${topic.id}`}
-                      onClick={() => handleTopicClick(topic.id)}
-                    >
-                      <Hash className="mr-2 h-4 w-4 flex-shrink-0" />
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="font-medium truncate">{topic.name}</div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <MessageSquare className="h-3 w-3" />
-                          <span>{topic.postCount}</span>
-                          <span className="mx-1">·</span>
-                          <span className="truncate">{lastActiveText}</span>
+            <Separator />
+
+            <div className="p-4" data-testid="topics-list">
+              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">参加中のトピック</h3>
+              <div className="space-y-1">
+                {joinedTopicsList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">参加中のトピックはありません</p>
+                ) : (
+                  joinedTopicsList.map((topic) => {
+                    const lastActiveText = topic.lastActive
+                      ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
+                          addSuffix: false,
+                          locale: ja,
+                        })
+                      : '未投稿';
+
+                    return (
+                      <Button
+                        key={topic.id}
+                        variant={currentTopic?.id === topic.id ? 'secondary' : 'ghost'}
+                        className="w-full justify-start p-2 h-auto"
+                        data-testid={`topic-${topic.id}`}
+                        onClick={() => handleTopicClick(topic.id)}
+                      >
+                        <Hash className="mr-2 h-4 w-4 flex-shrink-0" />
+                        <div className="flex-1 text-left min-w-0">
+                          <div className="font-medium truncate">{topic.name}</div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <MessageSquare className="h-3 w-3" />
+                            <span>{topic.postCount}</span>
+                            <span className="mx-1">·</span>
+                            <span className="truncate">{lastActiveText}</span>
+                          </div>
                         </div>
-                      </div>
-                      {topic.unreadCount > 0 && (
-                        <Badge
-                          variant="default"
-                          className="ml-2 h-5 px-1.5 text-xs"
-                          data-testid={`topic-${topic.id}-unread`}
-                        >
-                          {topic.unreadCount}
-                        </Badge>
-                      )}
-                    </Button>
-                  );
-                })
-              )}
+                        {topic.unreadCount > 0 && (
+                          <Badge
+                            variant="default"
+                            className="ml-2 h-5 px-1.5 text-xs"
+                            data-testid={`topic-${topic.id}-unread`}
+                          >
+                            {topic.unreadCount}
+                          </Badge>
+                        )}
+                      </Button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="p-4 space-y-4">
+              <RelayStatus />
+              <P2PStatus />
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={handleOpenSettings}
+                data-testid="open-settings-button"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                設定
+              </Button>
             </div>
           </div>
         </ScrollArea>
-
-        <Separator />
-
-        <div className="p-4 space-y-4">
-          <RelayStatus />
-          <P2PStatus />
-          <Button
-            variant="ghost"
-            className="w-full justify-start"
-            onClick={handleOpenSettings}
-            data-testid="open-settings-button"
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            設定
-          </Button>
-        </div>
       </div>
       <TopicFormModal
         open={showTopicCreationDialog}
