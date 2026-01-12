@@ -64,15 +64,14 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
       await leaveTopic(topic.id);
       await deleteTopicRemote(topic.id);
       toast({
-        title: '\u6210\u529f',
-        description: '\u30c8\u30d4\u30c3\u30af\u3092\u524a\u9664\u3057\u307e\u3057\u305f',
+        title: '成功',
+        description: 'トピックを削除しました',
       });
     } catch {
       ensureCleanup();
       toast({
-        title: '\u524a\u9664\u3092\u5b8c\u4e86\u3057\u307e\u3057\u305f',
-        description:
-          '\u30ed\u30fc\u30ab\u30eb\u306e\u30c8\u30d4\u30c3\u30af\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002\u540c\u671f\u306f\u5f8c\u7d9a\u3067\u518d\u8a66\u884c\u3055\u308c\u307e\u3059\u3002',
+        title: '削除を完了しました',
+        description: 'ローカルのトピックを削除しました。同期は後続で再試行されます。',
       });
     } finally {
       ensureCleanup();
@@ -102,18 +101,14 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            \u30c8\u30d4\u30c3\u30af\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f
-          </AlertDialogTitle>
+          <AlertDialogTitle>トピックを削除しますか？</AlertDialogTitle>
           <AlertDialogDescription>
-            \u300c{topic.name}
-            \u300d\u3092\u524a\u9664\u3057\u307e\u3059\u3002\u3053\u306e\u64cd\u4f5c\u306f\u53d6\u308a\u6d88\u305b\u307e\u305b\u3093\u3002\u30c8\u30d4\u30c3\u30af\u3068\u3059\u3079\u3066\u306e\u6295\u7a3f\u3082\u524a\u9664\u3055\u308c\u307e\u3059\u3002
+            「{topic.name}
+            」を削除します。この操作は取り消せません。トピックとすべての投稿も削除されます。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>
-            \u30ad\u30e3\u30f3\u30bb\u30eb
-          </AlertDialogCancel>
+          <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isDeleting}
@@ -121,7 +116,7 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
             data-testid="topic-delete-confirm"
           >
             {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            \u524a\u9664
+            削除
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

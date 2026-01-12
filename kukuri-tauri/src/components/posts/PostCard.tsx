@@ -132,7 +132,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     likeMutation.mutate(undefined, {
       onError: () => {
         applyLikeUpdate(previousLikes);
-        toast.error('\u3044\u3044\u306d\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+        toast.error('いいねに失敗しました');
       },
     });
   };
@@ -156,7 +156,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       if (post.topicId) {
         queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
       }
-      toast.success('\u30d6\u30fc\u30b9\u30c8\u3057\u307e\u3057\u305f');
+      toast.success('ブーストしました');
     },
   });
 
@@ -191,7 +191,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     boostMutation.mutate(undefined, {
       onError: () => {
         applyBoostUpdate(previousBoosts, post.isBoosted ?? false);
-        toast.error('\u30d6\u30fc\u30b9\u30c8\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+        toast.error('ブーストに失敗しました');
       },
     });
   };
@@ -203,16 +203,10 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
       queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
-      toast.success(
-        isPostBookmarked
-          ? '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u3092\u89e3\u9664\u3057\u307e\u3057\u305f'
-          : '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u3057\u307e\u3057\u305f',
-      );
+      toast.success(isPostBookmarked ? 'ブックマークを解除しました' : 'ブックマークしました');
     },
     onError: () => {
-      toast.error(
-        '\u30d6\u30c3\u30af\u30de\u30fc\u30af\u306e\u64cd\u4f5c\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
-      );
+      toast.error('ブックマークの操作に失敗しました');
     },
   });
 
@@ -264,7 +258,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="font-semibold">
-                  {post.author.displayName || post.author.name || '\u30e6\u30fc\u30b6\u30fc'}
+                  {post.author.displayName || post.author.name || 'ユーザー'}
                 </h4>
                 <span className="text-sm text-muted-foreground">{timeAgo}</span>
                 {(post.isSynced === false || isPostPending) && (
@@ -280,12 +274,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                     {!isOnline ? (
                       <>
                         <WifiOff className="h-3 w-3" />
-                        \u30aa\u30d5\u30e9\u30a4\u30f3\u4fdd\u5b58
+                        オフライン保存
                       </>
                     ) : (
                       <>
                         <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-                        \u540c\u671f\u5f85\u3061
+                        同期待ち
                       </>
                     )}
                   </Badge>
@@ -300,7 +294,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="\u6295\u7a3f\u30e1\u30cb\u30e5\u30fc"
+                  aria-label="投稿メニュー"
                   data-testid={`${baseTestId}-menu`}
                 >
                   <MoreVertical className="h-4 w-4" />
@@ -313,7 +307,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                   data-testid={`${baseTestId}-delete`}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  \u524a\u9664
+                  削除
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -409,15 +403,15 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle data-testid={`${baseTestId}-confirm-title`}>
-              \u6295\u7a3f\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f
+              投稿を削除しますか？
             </AlertDialogTitle>
             <AlertDialogDescription>
-              \u4e00\u5ea6\u524a\u9664\u3059\u308b\u3068\u3053\u306e\u6295\u7a3f\u306f\u5fa9\u5143\u3067\u304d\u307e\u305b\u3093\u3002\u3088\u308d\u3057\u3051\u308c\u3070\u300c\u524a\u9664\u3059\u308b\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002
+              一度削除するとこの投稿は復元できません。よろしければ「削除する」を押してください。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletePostMutation.isPending}>
-              \u30ad\u30e3\u30f3\u30bb\u30eb
+              キャンセル
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -430,7 +424,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               ) : (
                 <Trash2 className="mr-2 h-4 w-4" />
               )}
-              \u524a\u9664\u3059\u308b
+              削除する
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
