@@ -15,10 +15,17 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Cleanup Docker disk usage
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          docker system df
+          docker builder prune -af || true
+          docker system prune -af || true
+          df -h
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Docker Compose Smoke (test-runner)
         run: |
           docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner p2p-bootstrap test-runner
-
