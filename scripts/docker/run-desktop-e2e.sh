@@ -21,6 +21,7 @@ pnpm e2e:build
 
 echo "=== desktop-e2e: running pnpm e2e:ci ==="
 E2E_COMMAND=(pnpm e2e:ci)
+export E2E_SKIP_BUILD=1
 if command -v dbus-run-session >/dev/null 2>&1; then
   echo "Detected dbus-run-session; running E2E inside a dedicated DBus session"
   E2E_COMMAND=(dbus-run-session -- pnpm e2e:ci)
