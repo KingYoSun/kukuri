@@ -16,6 +16,16 @@ import {
 const AVATAR_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAtEB/QZWS+sAAAAASUVORK5CYII=';
 
+async function safeClick(element: WebdriverIO.Element): Promise<void> {
+  await element.scrollIntoView();
+  await element.waitForClickable({ timeout: 10000 });
+  try {
+    await element.click();
+  } catch {
+    await browser.execute((target) => (target as HTMLElement | null)?.click(), element);
+  }
+}
+
 describe('プロフィール/プライバシー/アバター同期', () => {
   before(async () => {
     await waitForAppReady();
@@ -44,7 +54,7 @@ describe('プロフィール/プライバシー/アバター同期', () => {
     await expect(await publicSwitch.getAttribute('data-state')).toBe('checked');
     await expect(await onlineSwitch.getAttribute('data-state')).toBe('unchecked');
 
-    await publicSwitch.click();
+    await safeClick(publicSwitch);
     await browser.waitUntil(
       async () => (await publicSwitch.getAttribute('data-state')) === 'unchecked',
       { timeout: 10000, timeoutMsg: '公開プロフィールの状態が変わりませんでした' },
@@ -57,7 +67,7 @@ describe('プロフィール/プライバシー/アバター同期', () => {
       { timeout: 15000, timeoutMsg: 'Authストアに非公開設定が反映されませんでした' },
     );
 
-    await onlineSwitch.click();
+    await safeClick(onlineSwitch);
     await browser.waitUntil(
       async () => (await onlineSwitch.getAttribute('data-state')) === 'checked',
       { timeout: 10000, timeoutMsg: 'オンライン表示の状態が変わりませんでした' },

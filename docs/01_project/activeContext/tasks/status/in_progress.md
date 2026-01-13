@@ -10,12 +10,6 @@
 
 ## 現在のタスク
 
-### 2026年01月13日 GitHub Actions E2E 失敗調査
-
-- 目的: Desktop E2E (Docker) の失敗原因を特定し、CIでの安定稼働を回復する。
-- 状態: 解析・修正中（ディスク枯渇対策とE2Eビルド重複の削減を反映）。
-- 対応: `test.yml` / `nightly.yml` にクリーンアップ手順を追加し、`run-desktop-e2e.sh` で `E2E_SKIP_BUILD=1` を設定。
-
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。

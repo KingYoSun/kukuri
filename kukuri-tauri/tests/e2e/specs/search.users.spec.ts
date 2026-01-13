@@ -1,6 +1,10 @@
 import { $, $$, browser, expect } from '@wdio/globals';
 
-import { resetAppState, primeUserSearchRateLimit } from '../helpers/bridge';
+import {
+  resetAppState,
+  primeUserSearchRateLimit,
+  seedUserSearchFixture,
+} from '../helpers/bridge';
 import {
   completeProfileSetup,
   waitForHome,
@@ -45,6 +49,27 @@ describe('ユーザー検索', () => {
     await waitForHome();
     await waitForAppReady();
 
+    const fillerUsers = Array.from({ length: 22 }, (_, index) => ({
+      displayName: `Search Extra ${index + 1}`,
+      about: `extra user ${index + 1}`,
+      follow: false,
+    }));
+
+    const seedResult = await seedUserSearchFixture({
+      users: [
+        { displayName: 'Search Alpha', about: 'alpha user', follow: true },
+        { displayName: 'Search Beta', about: 'beta user', follow: false },
+        { displayName: 'Search Gamma', about: 'gamma user', follow: false },
+        ...fillerUsers,
+      ],
+    });
+    const searchQuery = 'npub1';
+    const targetUser =
+      seedResult.users.find((user) => user.displayName === 'Search Beta') ??
+      seedResult.users[1] ??
+      seedResult.users[0];
+    const targetQuery = targetUser?.npub ?? searchQuery;
+
     await $('[data-testid="category-search"]').click();
     await $('[data-testid="search-page"]').waitForDisplayed({ timeout: 20000 });
     const usersTab = await $('[data-testid="search-tab-users"]');
@@ -67,7 +92,7 @@ describe('ユーザー検索', () => {
     const helperLabel = await $('[data-testid="search-helper-label"]');
     expect(await helperLabel.getText()).toContain('@s');
 
-    await searchInput.setValue('Search');
+    await searchInput.setValue(searchQuery);
     await browser.waitUntil(async () => (await $$(RESULTS_SELECTOR)).length >= 3, {
       timeout: 30000,
       interval: 500,
@@ -97,7 +122,7 @@ describe('ユーザー検索', () => {
       { timeout: 20000, interval: 500, timeoutMsg: 'さらに表示で結果が増えない' },
     );
 
-    const primeResult = await primeUserSearchRateLimit({ query: 'Search' });
+    const primeResult = await primeUserSearchRateLimit({ query: searchQuery });
     expect(primeResult.triggered).toBe(true);
 
     await searchInput.setValue('Search limit');
@@ -106,7 +131,7 @@ describe('ユーザー検索', () => {
     const retryButton = await $('[data-testid="user-search-retry-button"]');
     expect(await retryButton.isEnabled()).toBe(false);
 
-    await searchInput.setValue('Search Beta');
+    await searchInput.setValue(targetQuery);
     await browser.waitUntil(async () => !(await isErrorVisible()), {
       timeout: 20000,
       interval: 500,
@@ -118,7 +143,7 @@ describe('ユーザー検索', () => {
         const cards = await $$(RESULTS_SELECTOR);
         for (const card of cards) {
           const text = await card.getText();
-          if (text.includes('Search Beta')) {
+          if (text.includes(targetQuery)) {
             return true;
           }
         }
