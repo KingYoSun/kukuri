@@ -33,6 +33,7 @@ pub fn apply_standard_layers(router: Router, service_name: &'static str) -> Rout
     let request_id_header = HeaderName::from_static("x-request-id");
 
     router
+        .layer(crate::metrics::MetricsLayer::new(service_name))
         .layer(trace)
         .layer(TimeoutLayer::new(Duration::from_secs(30)))
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024))

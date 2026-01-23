@@ -7,8 +7,18 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+base64.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sqlx.workspace = true
+tokio.workspace = true
 tracing.workspace = true
+blake3.workspace = true
+futures-util.workspace = true
+hex.workspace = true
+iroh.workspace = true
+iroh-gossip.workspace = true
+nostr-sdk.workspace = true
+uuid.workspace = true
 
 cn-core = { path = "../cn-core" }

@@ -1,8 +1,14 @@
 pub mod admin;
+pub mod auth;
 pub mod config;
 pub mod db;
 pub mod http;
 pub mod logging;
 pub mod metrics;
 pub mod migrations;
+pub mod node_key;
+pub mod nostr;
+pub mod rate_limit;
 pub mod server;
+pub mod service_config;
+pub mod topic;

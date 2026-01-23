@@ -28,6 +28,8 @@ services:
     command: ["user-api"]
     environment:
       USER_API_ADDR: ${USER_API_ADDR}
+    volumes:
+      - cn_data:/data
     expose:
       - "8080"
     ports:
@@ -62,7 +64,14 @@ services:
     working_dir: /app
     volumes:
       - ./apps/admin-console:/app
-    command: ["bash", "-lc", "node -v && sleep infinity"]
+    environment:
+      VITE_ADMIN_API_BASE: /admin-api
+    command:
+      [
+        "bash",
+        "-lc",
+        "corepack enable && pnpm install --no-frozen-lockfile && pnpm dev --host 0.0.0.0 --port 5173"
+      ]
     networks:
       - cn
 
@@ -73,6 +82,8 @@ services:
       - bootstrap
     environment:
       BOOTSTRAP_ADDR: ${BOOTSTRAP_ADDR}
+    volumes:
+      - cn_data:/data
     expose:
       - "8083"
     ports:
@@ -131,11 +142,14 @@ services:
     profiles:
       - tools
     command: ["--help"]
+    volumes:
+      - cn_data:/data
 
 volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  cn_data:
 
 networks:
   cn:

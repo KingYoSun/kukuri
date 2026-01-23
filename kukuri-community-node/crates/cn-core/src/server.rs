@@ -7,7 +7,7 @@ pub async fn serve(addr: SocketAddr, router: Router) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(%addr, "listening");
 
-    axum::serve(listener, router.into_make_service())
+    axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 

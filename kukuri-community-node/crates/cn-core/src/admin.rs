@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use argon2::password_hash::{PasswordHasher, SaltString};
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
 use rand_core::OsRng;
 use serde_json::json;
@@ -102,10 +102,73 @@ pub async fn reset_admin_password(
 
 pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> {
     let seeds = vec![
-        ("relay", json!({"auth_required": false})),
-        ("bootstrap", json!({"auth_required": false})),
-        ("user-api", json!({"rate_limit": {"enabled": false}})),
-        ("admin-api", json!({"session_cookie": true})),
+        (
+            "relay",
+            json!({
+                "auth": {
+                    "mode": "off",
+                    "enforce_at": null,
+                    "grace_seconds": 900,
+                    "ws_auth_timeout_seconds": 10
+                },
+                "limits": {
+                    "max_event_bytes": 32768,
+                    "max_tags": 200
+                },
+                "rate_limit": {
+                    "enabled": true,
+                    "ws": {
+                        "events_per_minute": 120,
+                        "reqs_per_minute": 60,
+                        "conns_per_minute": 30
+                    }
+                },
+                "retention": {
+                    "events_days": 30,
+                    "tombstone_days": 180,
+                    "dedupe_days": 180,
+                    "outbox_days": 30,
+                    "cleanup_interval_seconds": 3600
+                }
+            }),
+        ),
+        (
+            "bootstrap",
+            json!({
+                "auth": {
+                    "mode": "off",
+                    "enforce_at": null,
+                    "grace_seconds": 900
+                },
+                "descriptor": {
+                    "name": "Kukuri Community Node",
+                    "roles": ["bootstrap", "relay"],
+                    "endpoints": {
+                        "http": "http://localhost:8080",
+                        "ws": "ws://localhost:8082/relay"
+                    },
+                    "policy_url": "",
+                    "jurisdiction": "",
+                    "contact": ""
+                },
+                "exp": {
+                    "descriptor_days": 7,
+                    "topic_hours": 48
+                }
+            }),
+        ),
+        (
+            "user-api",
+            json!({
+                "rate_limit": {
+                    "enabled": true,
+                    "auth_per_minute": 20,
+                    "public_per_minute": 120,
+                    "protected_per_minute": 120
+                }
+            }),
+        ),
+        ("admin-api", json!({"session_cookie": true, "session_ttl_seconds": 86400})),
         ("index", json!({"enabled": false})),
         ("moderation", json!({"enabled": false})),
         ("trust", json!({"enabled": false})),
@@ -130,11 +193,39 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
     Ok(inserted)
 }
 
-fn hash_password(password: &str) -> Result<String> {
+pub fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .map_err(|err| anyhow!("argon2 hash failed: {}", err))?
         .to_string();
     Ok(hash)
+}
+
+pub fn verify_password(password: &str, hashed: &str) -> Result<bool> {
+    let parsed = PasswordHash::new(hashed).map_err(|err| anyhow!("invalid password hash: {err}"))?;
+    Ok(Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok())
+}
+
+pub async fn log_audit(
+    pool: &Pool<Postgres>,
+    actor: &str,
+    action: &str,
+    target: &str,
+    diff: Option<serde_json::Value>,
+    request_id: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_admin.audit_logs          (actor_admin_user_id, action, target, diff_json, request_id)          VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(actor)
+    .bind(action)
+    .bind(target)
+    .bind(diff.map(Json))
+    .bind(request_id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }

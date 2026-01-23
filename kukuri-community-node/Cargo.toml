@@ -21,8 +21,21 @@ license = "Apache-2.0"
 [workspace.dependencies]
 anyhow = "1.0.86"
 argon2 = "0.5.3"
-axum = { version = "0.7.5", features = ["macros", "json"] }
+axum = { version = "0.7.5", features = ["macros", "json", "ws"] }
+axum-extra = { version = "0.12.5", features = ["cookie"] }
+base64 = "0.22.1"
+blake3 = "1.8.3"
+chrono = { version = "0.4.38", features = ["serde"] }
 clap = { version = "4.5.4", features = ["derive"] }
+dirs = "6.0.0"
+futures-util = "0.3.31"
+hex = "0.4.3"
+httpdate = "1.0.3"
+iroh = { version = "0.95.1", features = ["discovery-pkarr-dht", "discovery-local-network"] }
+iroh-gossip = "0.95.0"
+jsonwebtoken = "10.2.0"
+nostr-sdk = { version = "0.44.1", features = ["nip04", "nip44"] }
+reqwest = { version = "0.12.8", features = ["json", "rustls-tls"] }
 rand_core = "0.6.4"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
@@ -34,3 +47,4 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["fmt", "json", "env-filter"] }
 utoipa = { version = "4.2.3", features = ["axum_extras"] }
 uuid = { version = "1.8.0", features = ["v4"] }
+prometheus = "0.14.0"
