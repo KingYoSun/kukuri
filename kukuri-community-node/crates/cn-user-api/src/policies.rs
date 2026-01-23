@@ -11,7 +11,7 @@ use crate::auth::{require_auth, AuthContext};
 use crate::{ApiError, ApiResult, AppState};
 
 #[derive(Serialize)]
-struct PolicySummary {
+pub(crate) struct PolicySummary {
     policy_id: String,
     policy_type: String,
     version: String,
@@ -24,7 +24,7 @@ struct PolicySummary {
 }
 
 #[derive(Serialize)]
-struct PolicyDetail {
+pub(crate) struct PolicyDetail {
     policy_id: String,
     policy_type: String,
     version: String,
@@ -37,7 +37,7 @@ struct PolicyDetail {
 }
 
 #[derive(Serialize)]
-struct ConsentStatusResponse {
+pub(crate) struct ConsentStatusResponse {
     pubkey: String,
     consents: Vec<ConsentRecord>,
     missing: Vec<PolicySummary>,

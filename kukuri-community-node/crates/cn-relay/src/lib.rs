@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
-use cn_core::{config, db, http, logging, metrics, rate_limit, server, service_config};
+use cn_core::{config as core_config, db, http, logging, metrics, rate_limit, server, service_config};
 use serde::Serialize;
 use sqlx::{Pool, Postgres, Row};
 use std::collections::{HashMap, HashSet};
@@ -50,9 +50,9 @@ pub struct RelayConfig {
 }
 
 pub fn load_config() -> Result<RelayConfig> {
-    let addr = config::socket_addr_from_env("RELAY_ADDR", "0.0.0.0:8082")?;
-    let database_url = config::required_env("DATABASE_URL")?;
-    let p2p_bind_addr = config::socket_addr_from_env("RELAY_P2P_BIND", "0.0.0.0:11223")?;
+    let addr = core_config::socket_addr_from_env("RELAY_ADDR", "0.0.0.0:8082")?;
+    let database_url = core_config::required_env("DATABASE_URL")?;
+    let p2p_bind_addr = core_config::socket_addr_from_env("RELAY_P2P_BIND", "0.0.0.0:11223")?;
     let p2p_secret_key = std::env::var("RELAY_P2P_SECRET_KEY").ok();
     let topic_poll_seconds = std::env::var("RELAY_TOPIC_POLL_SECONDS")
         .ok()

@@ -89,6 +89,32 @@ services:
     ports:
       - "8083:8083"
 
+  index:
+    <<: *cn-service
+    command: ["index"]
+    profiles:
+      - index
+    environment:
+      INDEX_ADDR: ${INDEX_ADDR}
+    depends_on:
+      - postgres
+      - meilisearch
+    expose:
+      - "8084"
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.5.0
+    profiles:
+      - index
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+    volumes:
+      - meili_data:/meili_data
+    expose:
+      - "7700"
+    networks:
+      - cn
+
   caddy:
     image: caddy:2.7.6
     depends_on:
@@ -150,6 +176,7 @@ volumes:
   caddy_data:
   caddy_config:
   cn_data:
+  meili_data:
 
 networks:
   cn:

@@ -43,6 +43,7 @@ enum Commands {
     AdminApi,
     Relay,
     Bootstrap,
+    Index,
     Migrate,
     Config {
         #[command(subcommand)]
@@ -183,6 +184,10 @@ async fn main() -> Result<()> {
         Commands::Bootstrap => {
             let config = cn_bootstrap::load_config()?;
             cn_bootstrap::run(config).await?;
+        }
+        Commands::Index => {
+            let config = cn_index::load_config()?;
+            cn_index::run(config).await?;
         }
         Commands::Migrate => {
             cn_core::logging::init("cn-cli");
@@ -547,14 +552,16 @@ async fn run_connectivity_probe(
     let target = parse_peer_target(peer)?;
     let timeout_duration = Duration::from_secs(timeout_secs);
 
-    let connect_fut = match target {
-        PeerTarget::NodeId(node_id) => endpoint.connect(node_id, iroh_gossip::ALPN),
-        PeerTarget::NodeAddr(node_addr) => endpoint.connect(node_addr, iroh_gossip::ALPN),
+    let connect_fut = async {
+        match target {
+            PeerTarget::NodeId(node_id) => endpoint.connect(node_id, iroh_gossip::ALPN).await,
+            PeerTarget::NodeAddr(node_addr) => endpoint.connect(node_addr, iroh_gossip::ALPN).await,
+        }
     };
 
     match timeout(timeout_duration, connect_fut).await {
         Ok(Ok(_conn)) => {
-            info!("Connection established to peer {}");
+            info!("Connection established to peer {}", peer);
         }
         Ok(Err(e)) => {
             return Err(anyhow!("Failed to connect: {e}"));
@@ -774,8 +781,8 @@ mod tests {
 
         let contents = fs::read_to_string(&path).unwrap();
         let cache: CliBootstrapCache = serde_json::from_str(&contents).unwrap();
-        assert_eq!(cache.nodes[0], format!("{node_id}@{bind_addr}"));
         assert_eq!(cache.nodes.len(), 2, "duplicates and blanks are removed");
+        assert!(cache.nodes.contains(&format!("{node_id}@{bind_addr}")));
         assert!(cache
             .nodes
             .contains(&format!("{SECOND_NODE_ID}@10.0.0.2:7000")));

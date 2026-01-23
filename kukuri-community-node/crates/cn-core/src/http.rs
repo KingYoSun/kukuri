@@ -1,4 +1,5 @@
 use axum::http::header::HeaderName;
+use axum::http::StatusCode;
 use axum::Router;
 use std::time::Duration;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -35,7 +36,10 @@ pub fn apply_standard_layers(router: Router, service_name: &'static str) -> Rout
     router
         .layer(crate::metrics::MetricsLayer::new(service_name))
         .layer(trace)
-        .layer(TimeoutLayer::new(Duration::from_secs(30)))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024))
         .layer(PropagateRequestIdLayer::new(request_id_header.clone()))
         .layer(SetRequestIdLayer::new(request_id_header, MakeRequestUuid))

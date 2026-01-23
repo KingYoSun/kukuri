@@ -15,6 +15,7 @@ use std::time::Duration;
 
 mod auth;
 mod policies;
+mod reindex;
 mod services;
 mod subscriptions;
 
@@ -56,6 +57,12 @@ impl ApiError {
     fn with_details(mut self, details: Value) -> Self {
         self.details = Some(details);
         self
+    }
+}
+
+impl From<sqlx::Error> for ApiError {
+    fn from(err: sqlx::Error) -> Self {
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
     }
 }
 
@@ -194,6 +201,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         )
         .route("/v1/admin/usage", get(subscriptions::list_usage))
         .route("/v1/admin/audit-logs", get(services::list_audit_logs))
+        .route("/v1/reindex", post(reindex::enqueue_reindex))
         .with_state(state);
 
     let router = http::apply_standard_layers(router, SERVICE_NAME);
@@ -240,6 +248,7 @@ fn parse_health_targets() -> HashMap<String, String> {
         ("user-api", "USER_API_HEALTH_URL", "http://user-api:8080/healthz"),
         ("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz"),
         ("bootstrap", "BOOTSTRAP_HEALTH_URL", "http://bootstrap:8083/healthz"),
+        ("index", "INDEX_HEALTH_URL", "http://index:8084/healthz"),
     ];
     for (name, env, default_url) in fallback {
         if targets.contains_key(name) {

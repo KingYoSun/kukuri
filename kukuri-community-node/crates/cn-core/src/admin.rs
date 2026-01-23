@@ -169,7 +169,15 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
             }),
         ),
         ("admin-api", json!({"session_cookie": true, "session_ttl_seconds": 86400})),
-        ("index", json!({"enabled": false})),
+        (
+            "index",
+            json!({
+                "enabled": true,
+                "consumer": { "batch_size": 200, "poll_interval_seconds": 5 },
+                "reindex": { "poll_interval_seconds": 30 },
+                "expiration": { "sweep_interval_seconds": 300 }
+            }),
+        ),
         ("moderation", json!({"enabled": false})),
         ("trust", json!({"enabled": false})),
     ];

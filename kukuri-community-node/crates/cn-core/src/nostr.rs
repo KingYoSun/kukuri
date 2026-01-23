@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use nostr_sdk::prelude::{Event as NostrEvent, EventBuilder, Keys, Kind, Tag, TagKind};
+use nostr_sdk::prelude::{Event as NostrEvent, EventBuilder, JsonUtil, Keys, Kind, Tag, TagKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -91,4 +91,3 @@ pub fn build_signed_event(
     let value = serde_json::to_value(&signed)?;
     parse_event(&value)
 }
-

@@ -4,6 +4,7 @@ use cn_core::{metrics, topic};
 use futures_util::StreamExt;
 use iroh::{protocol::Router, Endpoint, SecretKey};
 use iroh_gossip::{api::Event, Gossip, TopicId};
+use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -80,8 +81,8 @@ async fn sync_topics(
         guard.keys().cloned().collect::<HashSet<_>>()
     };
 
-    for topic_id in desired.difference(&current) {
-        let topic_id = topic_id.to_string();
+    let to_add: Vec<String> = desired.difference(&current).cloned().collect();
+    for topic_id in to_add {
         let sender_handle = {
             let topic_bytes = topic::topic_id_to_gossip_bytes(&topic_id)?;
             let mut topic = gossip.subscribe(TopicId::from(topic_bytes), vec![]).await?;

@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::{interval, Instant};
 use uuid::Uuid;
-use sqlx::{Postgres, QueryBuilder};
+use sqlx::{Postgres, QueryBuilder, Row};
 
 use crate::config::RelayRuntimeConfig;
 use crate::filters::{matches_filter, parse_filters, RelayFilter};
@@ -108,7 +108,7 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
                             &mut subscriptions,
                             &mut auth_pubkey,
                             &mut auth_challenge,
-                            text,
+                            text.to_string(),
                         ).await {
                             let _ = send_json(&mut sender, json!(["NOTICE", err.to_string()])).await;
                         }
@@ -370,6 +370,7 @@ async fn fetch_events(state: &AppState, filter: &RelayFilter) -> Result<Vec<nost
         builder.push(")");
     }
     if let Some(kinds) = &filter.kinds {
+        let kinds: Vec<i32> = kinds.iter().map(|value| *value as i32).collect();
         builder.push(" AND e.kind = ANY(");
         builder.push_bind(kinds);
         builder.push(")");
@@ -505,7 +506,7 @@ async fn send_json(
     value: serde_json::Value,
 ) -> Result<()> {
     let text = serde_json::to_string(&value)?;
-    sender.send(Message::Text(text)).await?;
+    sender.send(Message::Text(text.into())).await?;
     Ok(())
 }
 

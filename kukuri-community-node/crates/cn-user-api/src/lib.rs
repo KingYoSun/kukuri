@@ -1,11 +1,11 @@
 use anyhow::Result;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, HeaderValue};
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use cn_core::{config, db, http, logging, metrics, node_key, server, service_config};
+use cn_core::{config, db, http, logging, meili, metrics, node_key, server, service_config};
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::Value;
@@ -37,6 +37,7 @@ pub(crate) struct AppState {
     node_keys: Keys,
     export_dir: PathBuf,
     hmac_secret: Vec<u8>,
+    meili: meili::MeiliClient,
 }
 
 #[derive(Debug, Serialize)]
@@ -72,12 +73,18 @@ impl ApiError {
     }
 
     fn with_header(mut self, name: &'static str, value: String) -> Self {
-        if let Ok(header_name) = name.parse() {
-            if let Ok(header_value) = value.parse() {
+        if let Ok(header_name) = name.parse::<axum::http::header::HeaderName>() {
+            if let Ok(header_value) = value.parse::<HeaderValue>() {
                 self.headers.insert(header_name, header_value);
             }
         }
         self
+    }
+}
+
+impl From<sqlx::Error> for ApiError {
+    fn from(err: sqlx::Error) -> Self {
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
     }
 }
 
@@ -113,6 +120,8 @@ pub struct UserApiConfig {
     pub config_poll_seconds: u64,
     pub export_dir: PathBuf,
     pub hmac_secret: Vec<u8>,
+    pub meili_url: String,
+    pub meili_master_key: Option<String>,
 }
 
 pub fn load_config() -> Result<UserApiConfig> {
@@ -135,6 +144,8 @@ pub fn load_config() -> Result<UserApiConfig> {
     let hmac_secret = std::env::var("PERSONAL_DATA_HMAC_SECRET")
         .ok()
         .unwrap_or_else(|| jwt_secret.clone());
+    let meili_url = config::required_env("MEILI_URL")?;
+    let meili_master_key = std::env::var("MEILI_MASTER_KEY").ok();
     Ok(UserApiConfig {
         addr,
         database_url,
@@ -145,6 +156,8 @@ pub fn load_config() -> Result<UserApiConfig> {
         config_poll_seconds,
         export_dir,
         hmac_secret: hmac_secret.into_bytes(),
+        meili_url,
+        meili_master_key,
     })
 }
 
@@ -196,6 +209,7 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
         ttl_seconds: config.jwt_ttl_seconds,
     };
 
+    let meili_client = meili::MeiliClient::new(config.meili_url, config.meili_master_key)?;
     let state = AppState {
         pool,
         jwt_config,
@@ -206,6 +220,7 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
         node_keys,
         export_dir: config.export_dir,
         hmac_secret: config.hmac_secret,
+        meili: meili_client,
     };
 
     let router = Router::new()

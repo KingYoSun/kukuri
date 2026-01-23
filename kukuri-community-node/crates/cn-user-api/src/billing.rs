@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::http::StatusCode;
 use cn_core::metrics;
 use serde_json::json;
-use sqlx::{Pool, Postgres, Row};
+use sqlx::{Pool, Postgres};
 
 use crate::{ApiError, ApiResult};
 

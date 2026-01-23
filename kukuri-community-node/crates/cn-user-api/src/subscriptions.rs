@@ -61,6 +61,8 @@ pub struct KeyEnvelopeQuery {
 pub struct SearchQuery {
     pub topic: String,
     pub q: Option<String>,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -487,11 +489,60 @@ pub async fn search(
     )
     .await?;
 
+    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    let offset = query
+        .cursor
+        .as_deref()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let uid = cn_core::meili::topic_index_uid(&topic);
+    let search_result = match state
+        .meili
+        .search(&uid, query.q.as_deref().unwrap_or(""), limit, offset)
+        .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            let message = err.to_string();
+            if message.contains("404") {
+                return Ok(Json(json!({
+                    "topic": topic,
+                    "query": query.q,
+                    "items": [],
+                    "next_cursor": null,
+                    "total": 0
+                })));
+            }
+            return Err(ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "SEARCH_UNAVAILABLE",
+                message,
+            ));
+        }
+    };
+
+    let hits = search_result
+        .get("hits")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let total = search_result
+        .get("estimatedTotalHits")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(hits.len() as u64);
+    let next_offset = offset + hits.len();
+    let next_cursor = if (next_offset as u64) < total {
+        Some(next_offset.to_string())
+    } else {
+        None
+    };
+
     Ok(Json(json!({
         "topic": topic,
         "query": query.q,
-        "items": [],
-        "next_cursor": null
+        "items": hits,
+        "next_cursor": next_cursor,
+        "total": total
     })))
 }
 
@@ -516,7 +567,34 @@ pub async fn trending(
     )
     .await?;
 
-    Ok(Json(json!({ "topic": topic, "items": [] })))
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let window_hours = 24;
+    let since = now.saturating_sub(window_hours * 3600);
+
+    let row = sqlx::query(
+        "SELECT              COUNT(*) FILTER (WHERE kind = 1) AS post_count,              COUNT(*) FILTER (WHERE kind IN (6, 7)) AS reaction_count          FROM cn_relay.events e          JOIN cn_relay.event_topics t            ON e.event_id = t.event_id          WHERE t.topic_id = $1            AND e.is_deleted = FALSE            AND e.is_ephemeral = FALSE            AND e.is_current = TRUE            AND (e.expires_at IS NULL OR e.expires_at > $2)            AND e.created_at >= $3",
+    )
+    .bind(&topic)
+    .bind(now)
+    .bind(since)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    let post_count: i64 = row.try_get("post_count")?;
+    let reaction_count: i64 = row.try_get("reaction_count")?;
+    let score = post_count.saturating_add(reaction_count);
+
+    Ok(Json(json!({
+        "topic": topic,
+        "window_hours": window_hours,
+        "metrics": {
+            "posts": post_count,
+            "reactions": reaction_count,
+            "score": score
+        },
+        "items": []
+    })))
 }
 
 pub async fn trust_report_based(
