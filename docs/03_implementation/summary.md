@@ -1,6 +1,6 @@
 # 実装ドキュメント概要
 
-**最終更新**: 2025年08月03日
+**最終更新**: 2026年01月22日
 
 このディレクトリには、Kukuriプロジェクトの実装に関する詳細なドキュメントが含まれています。
 
@@ -8,6 +8,9 @@
 
 ### 基本実装計画
 - [implementation_plan.md](./implementation_plan.md) - プロジェクト全体の実装計画（MVP・ベータ版）
+
+### コミュニティノード
+- [community_nodes/summary.md](./community_nodes/summary.md) - コミュニティノード（bootstrap/relay/index/moderation/trust）実装計画
 
 ### ストレージ実装
 - [storage_implementation_guide.md](./storage_implementation_guide.md) - ストレージ実装のガイドライン
