@@ -1,0 +1,48 @@
+# Community Nodes 実装タスク（M5: Trust v1）
+
+最終更新日: 2026年01月23日
+
+目的: Apache AGE を用いた trust 計算（2方式）と attestation（39010）発行を実装し、User API から参照できる状態にする。
+
+参照（設計）:
+- `docs/03_implementation/community_nodes/services_trust.md`
+- `docs/03_implementation/community_nodes/postgres_age_design.md`
+- `docs/03_implementation/community_nodes/outbox_notify_semantics.md`
+- `docs/03_implementation/community_nodes/event_treatment_policy.md`
+- `docs/03_implementation/community_nodes/user_api.md`
+
+## M5-1 AGE 有効化（Compose/スキーマ）
+
+- [ ] Postgres を AGE 対応イメージで起動し、`CREATE EXTENSION age` を migrations で再実行可能にする
+- [ ] trust 用の graph 初期化（vertex/edge の最小モデル）を行う
+
+## M5-2 outbox consumer（trust worker）
+
+- [ ] outbox を `seq` で追従し、at-least-once を冪等で吸収する
+- [ ] replaceable/addressable の effective view、delete/expiration の扱いを `event_treatment_policy.md` に合わせる
+
+## M5-3 方式A: 通報ベース trust（v1）
+
+- [ ] report（39005）と label（39006）を入力に risk_score を算出する（まずは単純集計）
+- [ ] `attestation(kind=39010)` を署名し、`exp` を付与して配布できるようにする
+
+## M5-4 方式B: コミュニケーション濃度 trust（v1）
+
+- [ ] public な相互作用から interaction graph を更新し、単純な密度指標を算出する
+- [ ] 暗号化領域（friend/invite）は原則入力にしない（プライバシー保護）
+
+## M5-5 User API: trust 参照
+
+- [ ] `GET /v1/trust/report-based?subject=pubkey:...`
+- [ ] `GET /v1/trust/communication-density?subject=pubkey:...`
+
+## M5-6 ジョブ運用（再計算/再発行）
+
+- [ ] 再計算ジョブのキュー/進捗/失敗を Postgres に記録する
+- [ ] Admin API/Console から手動実行/スケジュール変更できる導線を用意する
+
+## M5 完了条件
+
+- [ ] 2方式の trust が User API から参照でき、attestation が更新/失効（`exp`）で回る
+- [ ] 再計算が運用手順として実行できる（ジョブ化/監査/ログ）
+
