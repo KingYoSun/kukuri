@@ -113,3 +113,97 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_user_api() {
+        let cli = Cli::try_parse_from(["cn", "user-api"]).unwrap();
+        assert!(matches!(cli.command, Commands::UserApi));
+    }
+
+    #[test]
+    fn parse_admin_api() {
+        let cli = Cli::try_parse_from(["cn", "admin-api"]).unwrap();
+        assert!(matches!(cli.command, Commands::AdminApi));
+    }
+
+    #[test]
+    fn parse_relay() {
+        let cli = Cli::try_parse_from(["cn", "relay"]).unwrap();
+        assert!(matches!(cli.command, Commands::Relay));
+    }
+
+    #[test]
+    fn parse_bootstrap() {
+        let cli = Cli::try_parse_from(["cn", "bootstrap"]).unwrap();
+        assert!(matches!(cli.command, Commands::Bootstrap));
+    }
+
+    #[test]
+    fn parse_migrate() {
+        let cli = Cli::try_parse_from(["cn", "migrate"]).unwrap();
+        assert!(matches!(cli.command, Commands::Migrate));
+    }
+
+    #[test]
+    fn parse_config_seed() {
+        let cli = Cli::try_parse_from(["cn", "config", "seed"]).unwrap();
+        match cli.command {
+            Commands::Config { command } => {
+                assert!(matches!(command, ConfigCommand::Seed));
+            }
+            _ => panic!("expected config seed command"),
+        }
+    }
+
+    #[test]
+    fn parse_admin_bootstrap() {
+        let cli = Cli::try_parse_from([
+            "cn",
+            "admin",
+            "bootstrap",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Admin { command } => match command {
+                AdminCommand::Bootstrap { username, password } => {
+                    assert_eq!(username, "admin");
+                    assert_eq!(password, "secret");
+                }
+                _ => panic!("expected admin bootstrap command"),
+            },
+            _ => panic!("expected admin command"),
+        }
+    }
+
+    #[test]
+    fn parse_admin_reset_password() {
+        let cli = Cli::try_parse_from([
+            "cn",
+            "admin",
+            "reset-password",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Admin { command } => match command {
+                AdminCommand::ResetPassword { username, password } => {
+                    assert_eq!(username, "admin");
+                    assert_eq!(password, "secret");
+                }
+                _ => panic!("expected admin reset-password command"),
+            },
+            _ => panic!("expected admin command"),
+        }
+    }
+}

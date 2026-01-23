@@ -39,3 +39,25 @@ pub fn apply_standard_layers(router: Router, service_name: &'static str) -> Rout
         .layer(PropagateRequestIdLayer::new(request_id_header.clone()))
         .layer(SetRequestIdLayer::new(request_id_header, MakeRequestUuid))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn apply_standard_layers_sets_request_id_header() {
+        let router = Router::new().route("/", get(|| async { StatusCode::OK }));
+        let router = apply_standard_layers(router, "cn-test");
+
+        let response = router
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert!(response.headers().get("x-request-id").is_some());
+    }
+}

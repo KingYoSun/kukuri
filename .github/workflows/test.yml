@@ -196,6 +196,42 @@ jobs:
           cd kukuri-tauri
           pnpm lint
 
+
+  community-node-tests:
+    name: Community Node Tests
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            kukuri-community-node/target/
+          key: ${{ runner.os }}-community-node-cargo-${{ hashFiles('kukuri-community-node/**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-community-node-cargo-
+
+      - name: Run community node tests
+        run: |
+          cd kukuri-community-node
+          cargo test --workspace --all-features
+
+
   # フォーマットチェック（別ジョブ）
   format-check:
     name: Format Check
@@ -294,7 +330,7 @@ jobs:
   # テスト結果のサマリー
   test-summary:
     name: Test Summary
-    needs: [docker-test, native-test-linux, format-check, build-test-windows, desktop-e2e]
+    needs: [docker-test, native-test-linux, community-node-tests, format-check, build-test-windows, desktop-e2e]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -302,6 +338,7 @@ jobs:
         run: |
           if [[ "${{ needs.docker-test.result }}" == "failure" ]] || \
              [[ "${{ needs.native-test-linux.result }}" == "failure" ]] || \
+             [[ "${{ needs.community-node-tests.result }}" == "failure" ]] || \
              [[ "${{ needs.format-check.result }}" == "failure" ]] || \
              [[ "${{ needs.build-test-windows.result }}" == "failure" ]]; then
             echo "Some tests failed!"
