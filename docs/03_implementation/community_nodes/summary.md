@@ -72,6 +72,18 @@
 6. **M5: Trust v1**
    - AGE による2方式（通報/コミュ濃度）計算 → attestation(39010) 発行
 
+## v2互換の実装ルール（破壊的変更を避ける）
+
+v2/後回し事項（RBAC、決済連携、NIP-98互換、`friend_plus`、bytes課金、分散rate limit、outbox水平化等）を v1 の後に後付けできるよう、v1 実装では次のルールを守る。
+
+- **APIバージョニング**: `v1` の挙動は変えず、拡張は `v2` 追加または後方互換な“追加”に寄せる（レスポンスのフィールド追加は許容、必須化/意味変更は避ける）
+- **文字列enum前提**: `scope/role/status` 等は文字列（DBは `TEXT`）として扱い、未知値は安全側（deny/ignore）で処理できるようにする（Postgres `ENUM` は原則使わない）
+- **設定の前方互換**: `cn_admin.service_configs.config_json` は未知フィールド/未知設定値で落ちない（ignore + default）。必要なら `schema_version` を持たせる（`docs/03_implementation/community_nodes/admin_api.md`）
+- **DB移行の非破壊**: expand→deploy→contract の順で行い、同一リリースでの破壊的DDL（`DROP`/rename等）を避ける（`docs/03_implementation/community_nodes/ops_runbook.md`）
+- **公開URLの固定**: `PUBLIC_BASE_URL`（例: `https://node.example/api`）とパス（`/api/*`、`/relay`）は長期固定を前提にする（NIP-42 `relay` の一致/JWT `iss` の一致を壊さない）。やむを得ず変更する場合は alias/許可リストを実装側で持てる余地を残す
+- **Nostrイベント拡張耐性**: tags/content は“追加される”前提で扱い、tag順に依存しない。検証は必須tagの最小セットに限定する
+- **内部I/Fの差し替え**: rate limit/outbox などは backend/consumer 追加を見越した差し込み点を維持する（`docs/03_implementation/community_nodes/rate_limit_design.md` / `docs/03_implementation/community_nodes/outbox_notify_semantics.md`）
+
 ## 未決定事項チェックリスト
 
 実装に着手する前に、少なくとも以下を確定する。
