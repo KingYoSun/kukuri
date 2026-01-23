@@ -19,6 +19,7 @@ kukuri-community-node/
   README.md
   docker-compose.yml
   .env.example
+  .sqlx/                           # sqlx offline schema（`query!` を使う場合。コミットする）
   apps/
     admin-console/                 # React + TS + Vite（shadcn/ui）
   crates/
@@ -32,7 +33,7 @@ kukuri-community-node/
     cn-moderation/                 # moderation（daemon）
     cn-trust/                      # trust（daemon: AGE計算）
     cn-cli/                        # 管理CLI（既存kukuri-cliの統合先）
-  migrations/                      # Postgres用（sqlx等）
+  migrations/                      # Postgres用（sqlx）
   docker/
     postgres-age/                  # Apache AGE入りPostgresイメージ（Dockerfile）
 ```

@@ -119,7 +119,7 @@ v1 は「全消去」ではなく **匿名化（pseudonymization）+ 追跡停�
 ### 3.3 削除ジョブの具体（例）
 
 1. `user_deletion_requests` を作成（status=`queued`）
-2. トークン/セッションを失効
+2. トークン/セッションを失効（JWT の場合も `cn_user.subscriber_accounts.status=deleting` 等で以後の保護 API を即時拒否できる）
 3. `cn_user` のユーザー関連テーブルを削除/匿名化
    - consents: `accepter_pubkey` を NULL 化し、`accepter_hmac` のみ保持（同意レシートとして必要な範囲）
    - subscriptions/topic_subscriptions: 無効化→削除（監査が必要なら `subscriber_hmac` を残す）

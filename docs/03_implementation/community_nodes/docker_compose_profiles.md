@@ -43,7 +43,7 @@ docker compose --profile moderation --profile llm-local up -d
 
 - 外部公開は原則 `user-api`（HTTP）+ `relay`（WS）に集約し、他サービスは内部ネットワークに閉じる
 - `admin-api` / `admin-console` は VPN/社内NW などで保護し、インターネット公開しない運用を推奨
-- 外部公開時は reverse proxy（Caddy/Traefik 等）で TLS 終端 + 追加防御（WAF/Basic/Auth 等）を推奨
+- 外部公開時は reverse proxy（v1 推奨: **Caddy**）で TLS 終端 + 追加防御（WAF/Basic/Auth 等）を推奨
 
 ## 環境変数（例）
 
@@ -52,16 +52,19 @@ docker compose --profile moderation --profile llm-local up -d
 - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`
 - `DATABASE_URL`（サービス側。例: `postgres://...`）
 - `MEILI_URL` / `MEILI_MASTER_KEY`
-- `ADMIN_JWT_SECRET`（または `ADMIN_SESSION_SECRET`）
-- `USER_JWT_SECRET`（または `USER_SESSION_SECRET`）
+- `ADMIN_SESSION_SECRET`（Admin API の session cookie 署名/暗号用。v1推奨）
+- （代替）`ADMIN_JWT_SECRET`（Admin API を JWT 運用する場合）
+- `USER_JWT_SECRET`（User API の access token 署名用。v1 は JWT（HS256））
 - `OPENAI_API_KEY`（`llm-openai` で使用）
 - `LLM_PROVIDER`（`openai` / `local` / `disabled`）
 - `LLM_LOCAL_ENDPOINT`（`llm-local` 用。例: `http://ollama:11434`）
+- `PUBLIC_BASE_URL`（例: `https://node.example/api`。reverse proxy 後の公開URLを正とする）
 - `RELAY_AUTH_REQUIRED`（`true|false`、デフォルト: `false`）
 - `BOOTSTRAP_AUTH_REQUIRED`（`true|false`、デフォルト: `false`）
 
 補足:
-- これらは「初期デフォルト」の想定で、運用中は Admin Console から DB 上の設定を更新して切り替えられるようにする。
+- これらは「初期デフォルト（seed）」の想定で、運用中は Admin Console から DB（`cn_admin.service_configs`）上の設定を更新して切り替えられるようにする。
+  - seed 後は DB を正として扱い、env の変更で挙動がドリフトしないようにする（secrets は除く）。
   - 認証OFF（`false`）の間は同意（ToS/Privacy）も不要として扱い、認証ON（`true`）に切り替えた場合に同意チェックを有効化できるようにする。
 
 ## Postgres（Apache AGE）について

@@ -113,3 +113,13 @@
 - [x] Rust（User API/Admin API）で採用する Web フレームワークと周辺（OpenAPI、認証、middleware、structured logging、metrics）を確定する（詳細: `docs/03_implementation/community_nodes/api_server_stack.md`）
 - [x] User API の認証方式を確定する（v1: 署名チャレンジ（kind=22242 推奨）→ 短命 access token。v2候補: NIP-98 互換）（詳細: `docs/03_implementation/community_nodes/user_api.md`）
 - [x] rate limit の実装方式を確定する（v1: Redis無し/in-mem。設定の正は cn_admin。profiles 分離と整合。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
+
+## 実装着手前の残件（決め打ち）
+
+チェックリストは完了しているが、実装着手時に “選択肢のまま残っている部分” をブレなく決めるため、少なくとも以下を決め打ちする。
+
+- [x] User API の `access_token` は **JWT（HS256）**に確定（短命/refresh無し）。失効は DB の状態（disable/deletion等）で即時反映（`docs/03_implementation/community_nodes/user_api.md` / `docs/03_implementation/community_nodes/api_server_stack.md` / `docs/03_implementation/community_nodes/personal_data_handling_policy.md`）
+- [x] `cn_admin.service_configs` の正（SoT）は **DB**に確定（env は secrets + 初回seed入力に限定し、seed後は DB を優先してドリフトを避ける）（`docs/03_implementation/community_nodes/admin_api.md` / `docs/03_implementation/community_nodes/docker_compose_profiles.md`）
+- [x] 初期 admin ユーザー作成/復旧は **`cn-cli` で行う**（bootstrap/reset-password 等）（`docs/03_implementation/community_nodes/admin_api.md`）
+- [x] reverse proxy は **Caddy** に確定（外部公開は `https://<host>/api/*`（User API）+ `wss://<host>/relay`（relay）に集約。Admin系は原則インターネット公開しない）（`docs/03_implementation/community_nodes/user_api.md` / `docs/03_implementation/community_nodes/docker_compose_profiles.md`）
+- [x] DB/migrations は **sqlx + migrations** に確定（migrate は `cn-cli` の one-shot で実行。`query!` を使う場合は `.sqlx/` をコミット）（`docs/03_implementation/community_nodes/repository_structure.md`）

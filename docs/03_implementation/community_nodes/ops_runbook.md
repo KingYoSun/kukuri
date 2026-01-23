@@ -202,7 +202,7 @@ trust:
 ### 5.2 削除要求（DSAR deletion）
 
 1. ユーザーが User API へ申請（例: `POST /v1/personal-data-deletion-requests`）
-2. 即時にトークン/セッションを失効し、以後の保護 API を拒否
+2. 即時に失効/無効化を反映し、以後の保護 API を拒否（JWT でも DB の状態で即時拒否できる）
 3. deletion job を実行し、DB データを削除/匿名化し、派生データ（Meilisearch/AGE）を削除/再計算
 4. 完了を監査ログへ記録し、ユーザーへ status を返す（完了までの目安時間を返す）
 

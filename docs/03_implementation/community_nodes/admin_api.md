@@ -36,7 +36,7 @@
 - v1 は **admin単一ロール**を前提にする（RBACは v2）
 - 推奨: password login + **`httpOnly` セッションCookie**
   - ブラウザ運用での XSS 耐性を優先
-- 代替: JWT（`Authorization: Bearer`）でもよいが、失効/ローテの運用を先に決める
+- 代替: JWT（`Authorization: Bearer`）でもよいが、失効/ローテの運用を先に決める（v1 は cookie を推奨）
 
 ## データモデル（`cn_admin` 提案）
 
@@ -68,6 +68,7 @@
 方針:
 - DBに保存してよいのは **非秘匿の設定**（閾値、ON/OFF、URL等）
 - `OPENAI_API_KEY` 等の secrets は DB に保存せず、コンテナの env/secret で注入する
+- **優先順位（v1）**: `cn_admin.service_configs` を正（SoT）とし、env は初回seed入力と secrets に限定する（seed 後に env 変更で挙動がドリフトしないようにする）
 
 ### 3) 監査ログ（必須 / append-only）
 
@@ -119,6 +120,23 @@ v1 は「push + pull のハイブリッド」を推奨し、どちらか片方�
 ### 監査
 
 - `GET /v1/admin/audit-logs?service=...&action=...&since=...`
+
+## 初期セットアップ（v1推奨）
+
+DB が正（SoT）のため、運用開始時は「migrate + seed」を明示的に行う。
+
+- `cn-cli migrate`
+  - Postgres の migrations を適用する（サービスは勝手に migrate しない）
+- `cn-cli admin bootstrap`
+  - 初回 admin を作成する（既に admin が存在する場合は何もしない）
+  - 監査は `system` 相当の actor で記録する（`audit_logs`）
+- （復旧）`cn-cli admin reset-password`
+  - admin のパスワードを再設定する（運用事故時の手順として用意しておく）
+- `cn-cli config seed`
+  - `service_configs` が無いサービス分の default `config_json` を投入する（既存は上書きしない）
+
+補足:
+- secrets（例: `OPENAI_API_KEY`）は seed せず env/secret で注入する。
 
 ## 既存設計との接続点（例）
 

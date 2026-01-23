@@ -12,7 +12,7 @@ v1 は「運用可能なコミュニティノード」を最短で成立させ�
 - **OpenAPI**: `utoipa`（Rust型から spec を生成）
 - **認証**
   - Admin API: password login + **`httpOnly` セッションcookie**（推奨。ブラウザ運用の XSS 耐性を優先）
-  - User API: 署名チャレンジ（nostr鍵）→ access token（JWT 等）
+  - User API: 署名チャレンジ（nostr鍵）→ access token（JWT（HS256））
 - **middleware（基本セット）**: `tower-http` をベースに統一する（request id / timeout / body size limit / trace / CORS 等）
 - **structured logging**: `tracing`（JSON 出力を基本）
 - **metrics**: Prometheus `/metrics` を提供し、運用指標を収集できるようにする
@@ -45,7 +45,7 @@ v1 は「運用可能なコミュニティノード」を最短で成立させ�
 
 ### User API
 
-- 署名チャレンジ（v1採用）で pubkey を確定し、短命 access token（JWT 等）を発行する
+- 署名チャレンジ（v1採用）で pubkey を確定し、短命 access token（JWT（HS256））を発行する
   - `POST /v1/auth/challenge` → `POST /v1/auth/verify`
   - `verify` の署名イベントは **NIP-42 と同形式の kind=22242** を推奨（tag: `relay`/`challenge`）
   - NIP-98（HTTP Auth）は v2 候補（v1 は採用しない）

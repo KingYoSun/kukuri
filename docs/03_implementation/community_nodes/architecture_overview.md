@@ -63,7 +63,7 @@
   - 詳細: `docs/03_implementation/community_nodes/user_api.md`
 - **relay（必須: 取込・配信・永続化）**:
   - topic購読に基づきネットワークからレコードを取込んで Postgres に保存する（取込経路の一本化）
-  - WS（Nostr互換等）の配信口にもなる（公開経路は reverse proxy で統合可能）
+  - WS（Nostr互換等）の配信口にもなる（公開経路は reverse proxy（v1推奨: Caddy）で統合する）
   - WS 等で受け付けたイベントを iroh-gossip topic へ再配信し、P2P 側へも流す（橋渡し。iroh-gossip 由来は再注入せず、`event.id` で冪等処理する）
   - デフォルトは認証OFFで起動でき、管理画面から後から認証必須化できる（NIP-42 等）
     - 認証OFFの間は同意（ToS/Privacy）も不要として扱う（ユーザー操作の手間を最小化）
@@ -95,8 +95,8 @@
   - 署名鍵はサービスごとに分離可能（最小は node 共通鍵）
   - 秘密鍵は Docker volume へ配置し、暗号化保管（パスフレーズは secret/env）
 - **Admin 認証**
-  - 最小は `Admin API` の password login + JWT（もしくは session cookie）
-  - 外部公開する場合は TLS 前提（reverse proxy で終端）
+  - 最小は `Admin API` の password login + session cookie（`httpOnly` 推奨）
+  - 外部公開する場合は TLS 前提（v1推奨: Caddy で終端）。ただし admin 系は原則インターネット公開しない
 - **秘匿情報**
   - `OPENAI_API_KEY` / `MEILI_MASTER_KEY` 等は `.env` と secrets で注入し、DB に平文保存しない
 - **監査ログ**

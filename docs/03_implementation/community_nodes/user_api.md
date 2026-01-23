@@ -28,12 +28,34 @@
 
 ## 外部公開の形（推奨）
 
-外部公開を 1 ドメインにまとめ、逆プロキシでルーティングする（実装は `Caddy/Traefik/nginx` のどれでもよい）。
+外部公開を 1 ドメインにまとめ、逆プロキシでルーティングする。v1 は **Caddy** を推奨する（コンテナ運用可、TLS終端/パスルーティングを最小で揃えられる）。
 
 - `/api/*` → `user-api`
 - `/relay` → `relay`（WS）
 - `/admin/*` → `admin-console`
 - `/admin-api/*` → `admin-api`
+
+補足:
+- `PUBLIC_BASE_URL` は reverse proxy 後の公開URLを正とする（例: `https://node.example/api`）。`auth_event_json` の `["relay","..."]` はこれと一致させる。
+
+参考（例: Caddyfile の最小イメージ）:
+
+```caddyfile
+node.example {
+  handle_path /api/* {
+    reverse_proxy user-api:8080
+  }
+  handle /relay* {
+    reverse_proxy relay:8080
+  }
+  handle_path /admin-api/* {
+    reverse_proxy admin-api:8080
+  }
+  handle_path /admin/* {
+    reverse_proxy admin-console:5173
+  }
+}
+```
 
 ## 公開範囲（デフォルト）
 
@@ -75,9 +97,18 @@
     - `relay` が `PUBLIC_BASE_URL` と一致
     - `challenge` が未使用かつ期限内（単回使用）
     - 署名検証 OK（`pubkey` と `sig`）
-  - token（v1最小）
-    - `access_token` は短命（例: 15分）で、refresh token は v1 では持たない（期限切れは再ログイン）
+  - token（v1確定）
+    - `access_token` は **JWT（HS256）**とする（短命、例: 15分。refresh token は v1 では持たない）
+    - 推奨 claims（最小）: `sub=<pubkey>`, `exp`, `iat`, `jti`, `aud="kukuri-community-node:user-api"`, `iss=<PUBLIC_BASE_URL>`
+    - 失効の即時反映: `cn_user.subscriber_accounts` 等に `status=disabled/deleting/deleted` を持ち、保護 API は token の有効期限内でも拒否する
     - 認可（同意/購読/停止）は毎リクエスト DB 状態で判定し、token の状態に閉じ込めない（即時反映）
+
+補足（v1最小: 認証状態のDB）:
+
+- `cn_user.subscriber_accounts`
+  - `subscriber_pubkey TEXT PRIMARY KEY`
+  - `status TEXT NOT NULL`（`active|disabled|deleting|deleted`）
+  - `updated_at TIMESTAMPTZ NOT NULL`
 
 - **NIP-98（HTTP Auth）互換（v2候補）**
   - NIP-98（kind=27235）を `Authorization: Nostr <base64(event)>` で受理する互換モードを v2 で検討する
