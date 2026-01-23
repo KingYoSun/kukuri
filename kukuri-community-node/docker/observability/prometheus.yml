@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: user-api
+    static_configs:
+      - targets: ["user-api:8080"]
+  - job_name: admin-api
+    static_configs:
+      - targets: ["admin-api:8081"]
+  - job_name: relay
+    static_configs:
+      - targets: ["relay:8082"]
+  - job_name: bootstrap
+    static_configs:
+      - targets: ["bootstrap:8083"]

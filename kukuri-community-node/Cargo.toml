@@ -1,0 +1,36 @@
+[workspace]
+members = [
+  "crates/cn-admin-api",
+  "crates/cn-bootstrap",
+  "crates/cn-cli",
+  "crates/cn-core",
+  "crates/cn-index",
+  "crates/cn-kip-types",
+  "crates/cn-moderation",
+  "crates/cn-relay",
+  "crates/cn-trust",
+  "crates/cn-user-api",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+anyhow = "1.0.86"
+argon2 = "0.5.3"
+axum = { version = "0.7.5", features = ["macros", "json"] }
+clap = { version = "4.5.4", features = ["derive"] }
+rand_core = "0.6.4"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
+sqlx = { version = "0.7.4", features = ["runtime-tokio-rustls", "postgres", "migrate", "json", "uuid", "chrono"] }
+tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros", "signal"] }
+tower = "0.4.13"
+tower-http = { version = "0.5.2", features = ["request-id", "trace", "timeout", "limit"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["fmt", "json", "env-filter"] }
+utoipa = { version = "4.2.3", features = ["axum_extras"] }
+uuid = { version = "1.8.0", features = ["v4"] }

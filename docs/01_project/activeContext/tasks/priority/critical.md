@@ -25,15 +25,6 @@
 - [ ] DHT メトリクスの長期蓄積パイプラインを検討し、Prometheus/Grafana 等への連携要件を整理。
 - [ ] Gossip/P2P の負荷ベンチマーク計画を立案し、ターゲット指標（レイテンシ/スループット）と測定環境を定義。
 
-## 4. Community Nodes 実装（M1着手準備）
-
-- [ ] Community Nodes M1: リポジトリ雛形 + Compose（core/admin）+ Caddy reverse proxy（`docs/01_project/activeContext/tasks/priority/community_nodes.md`）
-- [ ] Community Nodes M1: sqlx migrations + `cn-cli`（migrate/seed/admin bootstrap）で初期セットアップ手順を通す（`docs/01_project/activeContext/tasks/priority/community_nodes.md`）
-- [ ] Community Nodes M1: `cn-user-api` / `cn-admin-api` / `cn-relay` / `cn-bootstrap` の最小起動（`/healthz`/OpenAPI 等）まで到達（`docs/01_project/activeContext/tasks/priority/community_nodes.md`）
-
-関連:
-- Community Nodes ロードマップ（M1-M5）: `docs/01_project/activeContext/tasks/priority/community_nodes_roadmap.md`
-
 運用ルール（再掲）
 - 新規着手: 本ファイルから対象を選び、`tasks/status/in_progress.md` へ移動
 - 完了時: `tasks/completed/YYYY-MM-DD.md` に追記 → `in_progress.md` から削除 → 重要変更は `docs/01_project/progressReports/` にレポート作成

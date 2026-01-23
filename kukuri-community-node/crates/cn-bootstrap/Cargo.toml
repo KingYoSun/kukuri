@@ -1,0 +1,14 @@
+[package]
+name = "cn-bootstrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+
+cn-core = { path = "../cn-core" }

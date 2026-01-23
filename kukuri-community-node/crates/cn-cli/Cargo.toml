@@ -1,0 +1,21 @@
+[package]
+name = "cn-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cn"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+cn-admin-api = { path = "../cn-admin-api" }
+cn-bootstrap = { path = "../cn-bootstrap" }
+cn-core = { path = "../cn-core" }
+cn-relay = { path = "../cn-relay" }
+cn-user-api = { path = "../cn-user-api" }

@@ -1,0 +1,141 @@
+version: "3.9"
+
+x-cn-service: &cn-service
+  build:
+    context: .
+  env_file:
+    - .env
+  networks:
+    - cn
+  depends_on:
+    - postgres
+
+services:
+  postgres:
+    build:
+      context: ./docker/postgres-age
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cn
+
+  user-api:
+    <<: *cn-service
+    command: ["user-api"]
+    environment:
+      USER_API_ADDR: ${USER_API_ADDR}
+    expose:
+      - "8080"
+    ports:
+      - "8080:8080"
+
+  relay:
+    <<: *cn-service
+    command: ["relay"]
+    environment:
+      RELAY_ADDR: ${RELAY_ADDR}
+    expose:
+      - "8082"
+    ports:
+      - "8082:8082"
+
+  admin-api:
+    <<: *cn-service
+    command: ["admin-api"]
+    profiles:
+      - admin
+    environment:
+      ADMIN_API_ADDR: ${ADMIN_API_ADDR}
+    expose:
+      - "8081"
+    ports:
+      - "8081:8081"
+
+  admin-console:
+    image: node:20-bookworm
+    profiles:
+      - admin
+    working_dir: /app
+    volumes:
+      - ./apps/admin-console:/app
+    command: ["bash", "-lc", "node -v && sleep infinity"]
+    networks:
+      - cn
+
+  bootstrap:
+    <<: *cn-service
+    command: ["bootstrap"]
+    profiles:
+      - bootstrap
+    environment:
+      BOOTSTRAP_ADDR: ${BOOTSTRAP_ADDR}
+    expose:
+      - "8083"
+    ports:
+      - "8083:8083"
+
+  caddy:
+    image: caddy:2.7.6
+    depends_on:
+      - user-api
+      - relay
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - cn
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    profiles:
+      - observability
+    volumes:
+      - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - cn
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    profiles:
+      - observability
+    ports:
+      - "3000:3000"
+    networks:
+      - cn
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    profiles:
+      - observability
+    command: ["--config=/etc/otel-collector.yml"]
+    volumes:
+      - ./docker/observability/otel-collector.yml:/etc/otel-collector.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - cn
+
+  cn-cli:
+    <<: *cn-service
+    profiles:
+      - tools
+    command: ["--help"]
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  cn:

@@ -1,0 +1,19 @@
+:80 {
+  encode zstd gzip
+
+  handle_path /api/* {
+    reverse_proxy user-api:8080
+  }
+
+  handle /relay* {
+    reverse_proxy relay:8082
+  }
+
+  handle_path /admin-api/* {
+    reverse_proxy admin-api:8081
+  }
+
+  handle_path /admin/* {
+    reverse_proxy admin-console:5173
+  }
+}
