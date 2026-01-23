@@ -77,7 +77,7 @@
 
 #### 39001 node.topic_service (replaceable)
 - tags:
-  - topic, role, scope
+  - t(topic_id), role, scope
 
 #### 39005 report
 - tags:
@@ -95,15 +95,15 @@
 - content(JSON):
   - schema, subject, claim, value, evidence[], context, expires
 - tags:
-  - sub(type,id), claim, topic?, exp
+  - sub(type,id), claim, t(topic_id)?, exp
 
 #### 39011 trust.anchor (replaceable)
 - tags:
-  - attester, claim?, topic?, weight
+  - attester, claim?, t(topic_id)?, weight
 
 #### 39020 key.envelope
 - tags:
-  - p(recipient), topic, scope, epoch
+  - p(recipient), t(topic_id), scope, epoch
 - content:
   - NIP-44暗号文（中身は {topic,scope,epoch,key_b64,...}）
 
@@ -292,7 +292,7 @@
 
 - **User Key**: ユーザーの署名鍵（Nostr互換）
 - **Node Key**: コミュニティノードの署名鍵（ノード人格）
-- **Topic ID**: kukuriトピック識別子（`topic:<bytes>`）
+- **Topic ID**: kukuriトピック識別子（正規形文字列。例: `kukuri:<64hex>` / `kukuri:global`）
 - **Role**: `bootstrap | relay | index | moderation | trust`
 - **Scope**（公開度）: `public | friend_plus | friend | invite`
 - **Epoch**: 鍵世代番号（追放/漏洩時に増える）
@@ -344,7 +344,7 @@ content（JSON推奨例）:
 
 必須tags:
 
-- `["topic","topic:<id>"]`
+- `["t","<topic_id>"]`（NIP-01 の `#t` フィルタに寄せる）
 - `["role","index|moderation|trust|relay|bootstrap"]`
 - `["scope","public|friend_plus|friend|invite"]`（少なくともindex/moderationに推奨）
 
@@ -386,7 +386,7 @@ tags（例）:
 
 - `["sub","pubkey","<hex>"]` / `["sub","node","<hex>"]` / `["sub","event","<id>"]`
 - `["claim","reputation|identity.link|moderation.risk|capability|social.distance"]`
-- `["topic","topic:<id>"]`（任意）
+- `["t","<topic_id>"]`（任意）
 - `["exp","<unix_ts>"]`（推奨）
 
 content（JSON推奨例）:
@@ -398,7 +398,7 @@ content（JSON推奨例）:
   "claim":"reputation",
   "value":{"score":0.82,"level":"good"},
   "evidence":["event:<id>","url:https://..."],
-  "context":{"topic":"topic:<id>"},
+  "context":{"topic":"<topic_id>"},
   "expires":1767225600
 }
 ```
@@ -411,7 +411,7 @@ tags（例）:
 
 - `["attester","<pubkey_hex>"]`
 - `["claim","reputation"]`（任意）
-- `["topic","topic:<id>"]`（任意）
+- `["t","<topic_id>"]`（任意）
 - `["weight","0.0-1.0"]`
 
 ## 6. Access Control (Public → Friend+ → Friend → Invite)
@@ -428,7 +428,7 @@ scopeごとに共有鍵を持つ: `K_fp`, `K_f`, `K_inv`
 tags（必須）:
 
 - `["p","<recipient_pubkey_hex>"]`
-- `["topic","topic:<id>"]`
+- `["t","<topic_id>"]`
 - `["scope","friend_plus|friend|invite"]`
 - `["epoch","<int>"]`
 
@@ -437,7 +437,7 @@ content（暗号化前のJSON例）:
 ```json
 {
   "schema":"kukuri-keyenv-v1",
-  "topic":"topic:<id>",
+  "topic":"<topic_id>",
   "scope":"friend_plus",
   "epoch":7,
   "key_b64":"....",
@@ -455,7 +455,7 @@ content（暗号化前のJSON例）:
 ```json
 {
   "schema":"kukuri-invite-v1",
-  "topic":"topic:<id>",
+  "topic":"<topic_id>",
   "scope":"invite",
   "expires":...,
   "max_uses":1,

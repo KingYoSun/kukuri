@@ -53,7 +53,8 @@ kukuri-community-node/
 ## 管理画面（admin-console）
 
 - `kukuri-tauri` と同様に `pnpm` を想定（依存管理/作法の統一）
-- `admin-console` は `Admin API` の OpenAPI（または zod schema）に沿って API クライアントを生成/実装する
+- `admin-console` は `Admin API` の OpenAPI（`utoipa` で生成）に沿って API クライアントを生成/実装する
+  - 実装スタックの決定: `docs/03_implementation/community_nodes/api_server_stack.md`
 
 ## `kukuri-cli` 統合（要件）
 

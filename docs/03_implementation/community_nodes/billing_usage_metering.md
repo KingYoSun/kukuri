@@ -94,6 +94,7 @@ relay を課金対象にする場合、認証（NIP-42 等）で pubkey を特�
 ### 2) 瞬間レート超過（DoS/濫用）
 
 - HTTP: `429 Too Many Requests` + `Retry-After`
+- 実装方針（v1）: 各サービス内 in-mem を正とし、Redis/DB は導入しない（詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
 
 ### 3) relay WS（認証ON時）
 

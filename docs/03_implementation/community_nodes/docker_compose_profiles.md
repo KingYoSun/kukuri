@@ -23,6 +23,9 @@
 
 運用要件（監視/バックアップ/マイグレーション/違法・通報対応）の詳細は `docs/03_implementation/community_nodes/ops_runbook.md` を参照。
 
+補足:
+- v1 は redis/valkey profile は持たない（rate limit は in-mem を正とする。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
+
 ## 起動コマンド例
 
 ```bash

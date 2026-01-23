@@ -39,10 +39,13 @@
 - `docs/03_implementation/community_nodes/access_control_design.md`: Access Control（39020/39021、join/redeem、epochローテ/追放）設計
 - `docs/03_implementation/community_nodes/auth_transition_design.md`: relay/bootstrap 認証OFF→ON切替（既存接続/猶予期間/互換性）設計
 - `docs/03_implementation/community_nodes/billing_usage_metering.md`: 課金/利用量計測（課金単位、無料枠/上限、超過時挙動、監査）設計
+- `docs/03_implementation/community_nodes/rate_limit_design.md`: rate limit（DoS/濫用対策）の実装方式（Redis無し/in-mem、適用点、設定の正、監視）
 - `docs/03_implementation/community_nodes/llm_moderation_policy.md`: LLM moderation 送信/保存/開示ポリシー（外部送信範囲、ログ/保持、コスト上限、Privacy への記載）
 - `docs/03_implementation/community_nodes/policy_consent_management.md`: 規約/プライバシーポリシー管理と同意（必須化）設計
 - `docs/03_implementation/community_nodes/personal_data_handling_policy.md`: 個人データの取扱い（保持期間、削除/エクスポート要求、同意ログ）方針
 - `docs/03_implementation/community_nodes/admin_console.md`: 管理画面の画面/状態/通信設計
+- `docs/03_implementation/community_nodes/admin_api.md`: Admin API（control plane）の最小設計（設定モデル/監査/health 集約/設定反映）
+- `docs/03_implementation/community_nodes/api_server_stack.md`: User/Admin API の実装スタック決定（Web FW/OpenAPI/認証/middleware/logging/metrics）
 - `docs/03_implementation/community_nodes/postgres_age_design.md`: Postgres 集約 + Apache AGE のスキーマ/運用設計
 - `docs/03_implementation/community_nodes/services_bootstrap.md`: bootstrap サービス実装計画
 - `docs/03_implementation/community_nodes/services_relay.md`: relay サービス実装計画
@@ -92,3 +95,21 @@
 - [x] LLM moderation の送信/保存/開示ポリシー（外部送信範囲、ログ/保持、コスト上限、Privacy への記載）を v1 方針として決定（`docs/03_implementation/community_nodes/llm_moderation_policy.md` / `docs/03_implementation/community_nodes/services_moderation.md` / `docs/03_implementation/community_nodes/policy_consent_management.md`）
 - [x] 運用要件（監視/メトリクス/ログ、バックアップ/リストア、マイグレーション手順、違法/通報対応 Runbook）を v1 方針として決定（`docs/03_implementation/community_nodes/ops_runbook.md`）
 - [x] 個人データの取扱い（保持期間、削除/エクスポート要求、同意ログの扱い）を v1 方針として決定（`docs/03_implementation/community_nodes/personal_data_handling_policy.md` / `docs/03_implementation/community_nodes/user_api.md` / `docs/03_implementation/community_nodes/policy_consent_management.md` / `docs/03_implementation/community_nodes/billing_usage_metering.md` / `docs/03_implementation/community_nodes/ops_runbook.md`）
+
+## レビュー指摘（要修正/要追記/要検討）チェックリスト
+
+### 要修正（矛盾/読み違いの余地を潰す）
+
+- [x] topic 識別子の表現を統一する（KIP Draft/実装設計ともに `topic_id = kukuri:<64hex>` を正とし、イベントタグは `t`（`#t` フィルタ）に統一）
+- [x] 同意（consent）の「到達可能（public）/認証必須（authenticated）/同意必須（consent_required）」の定義を整理し、`POST /v1/consents` を「認証必須（同意は不要）」として明文化する（`policy_consents` が pubkey 単位である前提と衝突しないようにする）
+
+### 要追記（実装ブレ/運用事故を減らす）
+
+- [x] 39000/39001 の配布経路を確定し、優先順位（DB正/HTTP正/gossip/DHT/既知URL）と運用上の正（source of truth）を明文化する（発行頻度/`exp`/キャッシュ/失効の扱いも含める。詳細: `docs/03_implementation/community_nodes/services_bootstrap.md` / `docs/03_implementation/community_nodes/user_api.md`）
+- [x] `Admin API` の最小設計を 1 枚にまとめる（設定モデルの正: `cn_admin`、監査ログ、認証方式、services health 集約、各サービスへの設定反映方式（poll vs `LISTEN/NOTIFY`）。詳細: `docs/03_implementation/community_nodes/admin_api.md`）
+
+### 要検討（技術選定の“最後の確定”）
+
+- [x] Rust（User API/Admin API）で採用する Web フレームワークと周辺（OpenAPI、認証、middleware、structured logging、metrics）を確定する（詳細: `docs/03_implementation/community_nodes/api_server_stack.md`）
+- [x] User API の認証方式を確定する（v1: 署名チャレンジ（kind=22242 推奨）→ 短命 access token。v2候補: NIP-98 互換）（詳細: `docs/03_implementation/community_nodes/user_api.md`）
+- [x] rate limit の実装方式を確定する（v1: Redis無し/in-mem。設定の正は cn_admin。profiles 分離と整合。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）

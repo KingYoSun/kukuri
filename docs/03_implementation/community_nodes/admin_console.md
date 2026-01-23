@@ -61,9 +61,10 @@
 
 - ブラウザから直接各サービスを叩かず、`Admin API` に集約する（CORS/認証/障害耐性のため）
 - `Admin API` が各サービスの health を収集し、UI は統一のモデルで表示する
+- 詳細: `docs/03_implementation/community_nodes/admin_api.md`
 
 ## 認証（補完）
 
-- 最小: `POST /auth/login`（password）→ JWT（`Authorization: Bearer`）  
+- 最小: `POST /v1/admin/auth/login`（password）→ session cookie（推奨）または JWT
   - ブラウザ運用では `httpOnly cookie` を優先（XSS 耐性）
 - RBAC は後回し（v1 は admin のみ）。ただし監査ログは v1 から必須。

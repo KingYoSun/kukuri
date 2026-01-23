@@ -100,6 +100,6 @@
     - `WS -> iroh-gossip`: validate → 永続化（新規のみ）→ broadcast
     - `iroh-gossip -> WS/outbox`: validate → 永続化（新規のみ）→ WS購読者/下流へ配信（※ iroh-gossip へは再注入しない）
 - Abuse 対策（v1で必須）
-  - IP/鍵単位の rate limit、接続数上限、巨大イベント拒否、購読フィルタの上限
+  - IP/鍵（AUTH後は pubkey）/peer 単位の rate limit、接続数上限、巨大イベント拒否、購読フィルタの上限（v1は in-mem。設定の正は cn_admin。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
   - `#t` 無し REQ の拒否、フィルタ数/値数/`limit`/時間範囲（`since/until`）の上限、バックフィル要求頻度の制限
 - 運用要件（監視/メトリクス/ログ、バックアップ/リストア、マイグレーション、違法/通報対応 Runbook）: `docs/03_implementation/community_nodes/ops_runbook.md`

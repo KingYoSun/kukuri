@@ -19,7 +19,7 @@
 - topic購読の申請/承認/停止（後述の購読設計に従う）
 - read API（検索/トレンド/ラベル/トラスト等）の統合
 - write API（通報/購読申請など）の統合
-- レート制限・利用量計測（IP + pubkey + token）
+- レート制限・利用量計測（IP + pubkey（必要なら token）。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md` / `docs/03_implementation/community_nodes/billing_usage_metering.md`）
 
 ### User API が担わない（原則）
 
@@ -38,28 +38,50 @@
 ## 公開範囲（デフォルト）
 
 - **認証なしで到達可能（public）**
-  - 規約/プライバシーポリシーの取得と同意登録（同意がないと同意できないため）
+  - 規約/プライバシーポリシーの取得（`GET /v1/policies/*`）
+  - 認証（challenge/verify）（`POST /v1/auth/*`）
   - bootstrap 情報（初回接続・発見のため。`BOOTSTRAP_AUTH_REQUIRED=false` の間は同意も不要）
 - **認証が必要（authenticated）**
-  - topic購読申請、検索/トレンド、trust、通報などの「ユーザー操作」
+  - 同意状態の取得/同意登録（`GET /v1/consents/status`, `POST /v1/consents`）
 - **同意が必要（consent_required）**
-  - 原則として authenticated のうち「ユーザー操作」は ToS/Privacy への同意を前提条件にする
+  - 原則として authenticated のうち「ユーザー操作」（topic購読申請、検索/トレンド、trust、通報等）は ToS/Privacy への同意を前提条件にする
 
 補足:
 - relay/boostrap は **デフォルトは認証OFF** とし、管理画面から後から必須化できる（詳細は各サービス設計を参照）。
   - 認証OFFの間は「ユーザー操作の手間を最小化」するため、同意も不要とする（relay は匿名のため同意を強制できない）。
 - 認証OFF→ON 切替時の既存接続/猶予期間/互換性は `docs/03_implementation/community_nodes/auth_transition_design.md` を参照。
 
-## 認証（案）
+## 認証（v1確定）
 
 課金・購読を pubkey 単位で扱う前提で、**Nostr鍵（secp256k1）ベース**の認証に寄せる。
 
 ### HTTP（User API）
 
-- 推奨: **署名チャレンジ方式**（最小実装）
-  - `POST /v1/auth/challenge`（pubkeyを送る）→ nonce + exp
-  - `POST /v1/auth/verify`（nonce署名を送る）→ access token（JWT など）
-- 代替: NIP-98（HTTP Auth）互換に寄せる（既存クライアント実装との整合を確認して選定）
+- **署名チャレンジ方式（v1採用）**
+  - 目的: “毎リクエスト署名”を避け、クライアント実装コストと運用負荷を下げる
+  - フロー:
+    1. `POST /v1/auth/challenge`（入力: `pubkey`）→ `challenge` + `expires_at`
+    2. `POST /v1/auth/verify`（入力: `auth_event_json`）→ `access_token`（短命）+ `expires_at`
+    3. 以後、`Authorization: Bearer <access_token>` で保護 API を呼び出す
+  - `auth_event_json` は **NIP-42 と同形式の署名済みイベント（kind=22242）**を推奨する
+    - 必須 tags（推奨の最小）:
+      - `["relay","<PUBLIC_BASE_URL>"]`（User API の公開 base URL。reverse proxy 後の URL を正とする）
+      - `["challenge","<challenge>"]`
+    - 任意（推奨）:
+      - `["scope","user-api"]`（他用途へのリプレイを避けるため、User API 側で検証してもよい）
+  - サーバの検証（v1最小）
+    - `kind==22242`
+    - `created_at` が許容範囲（例: 10分以内）
+    - `relay` が `PUBLIC_BASE_URL` と一致
+    - `challenge` が未使用かつ期限内（単回使用）
+    - 署名検証 OK（`pubkey` と `sig`）
+  - token（v1最小）
+    - `access_token` は短命（例: 15分）で、refresh token は v1 では持たない（期限切れは再ログイン）
+    - 認可（同意/購読/停止）は毎リクエスト DB 状態で判定し、token の状態に閉じ込めない（即時反映）
+
+- **NIP-98（HTTP Auth）互換（v2候補）**
+  - NIP-98（kind=27235）を `Authorization: Nostr <base64(event)>` で受理する互換モードを v2 で検討する
+  - reverse proxy 配下の “絶対URL一致” や “毎リクエスト署名” の実装負荷があるため、v1 は採用しない
 
 ### WS（relay）
 
@@ -69,7 +91,7 @@
 
 - 保護された API（検索/トラスト/購読申請/通報など）は、**current の ToS/Privacy への同意**を前提条件にする
 - 未同意の場合、User API は `428 Precondition Required`（例）で `CONSENT_REQUIRED` を返す
-- ポリシーの取得と同意登録は、同意がなくても到達できる必要がある
+- ポリシーの取得と同意登録は、同意がなくても到達できる必要がある（ただし同意登録は pubkey を確定するため認証は必要）
 
 補足:
 - bootstrap（認証OFF）と relay（認証OFF）は **同意不要**の運用とし、後から認証必須化した場合に同意チェックを有効化できるようにする。
@@ -99,6 +121,12 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 
 - `GET /v1/bootstrap/nodes`（node descriptor の一覧/差分）
 - `GET /v1/bootstrap/topics/:topic/services`（topic_service の一覧）
+
+配布ポリシー（v1）:
+- 39000/39001 は `bootstrap` が署名生成し、DB に保存された **署名済み event JSON** を配布する（User API は生成しない）
+- `ETag` / `Last-Modified` による条件付きGETを推奨し、`Cache-Control: max-age=300` 程度の短期キャッシュを許容する
+- gossip/DHT/既知URL は発見/更新のヒントであり、最終整合は `GET /v1/bootstrap/*` の取得で行う
+  - 詳細: `docs/03_implementation/community_nodes/services_bootstrap.md`
 
 ### topic購読
 
@@ -145,6 +173,7 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 - `usage_counters`（日次/週次のAPI利用量、超過判定）
 
 v1 の詳細（課金単位、メータリング、超過時の挙動、無料枠/上限、監査）は `docs/03_implementation/community_nodes/billing_usage_metering.md` を参照。
+瞬間レート超過（DoS/濫用）の実装方針（Redis無し/in-mem）は `docs/03_implementation/community_nodes/rate_limit_design.md` を参照。
 
 ## リレー（取込）との関係
 
@@ -155,3 +184,7 @@ v1 の詳細（課金単位、メータリング、超過時の挙動、無料�
 詳細は `docs/03_implementation/community_nodes/topic_subscription_design.md` を参照。
 
 Access Control（39020/39021、join/redeem、epoch ローテ）は `docs/03_implementation/community_nodes/access_control_design.md` を参照。
+
+## 実装スタック（参照）
+
+- Web フレームワーク/OpenAPI/認証/middleware/logging/metrics の決定: `docs/03_implementation/community_nodes/api_server_stack.md`

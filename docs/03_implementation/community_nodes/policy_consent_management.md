@@ -103,8 +103,8 @@
 
 ### 同意状態
 
-- `GET /v1/consents/status`（自分の同意済み version を返す）
-- `POST /v1/consents`（同意登録。ToS/Privacy をまとめて受け付け可能にする）
+- `GET /v1/consents/status`（認証必須。自分の同意済み version を返す）
+- `POST /v1/consents`（認証必須。同意登録。ToS/Privacy をまとめて受け付け可能にする）
 
 ### 同意必須化（拒否レスポンス）
 
@@ -116,7 +116,8 @@
   - `required: [{ type, version, locale, url, content_hash }]`
 
 補足:
-- `GET /v1/policies/*` と `POST /v1/consents` は、同意がなくても到達できる必要がある。
+- `GET /v1/policies/*` は認証不要で到達できる必要がある。
+- `POST /v1/consents` は認証は必要だが、同意がなくても到達できる必要がある（同意登録自体をブロックしない）。
 - 例: `POST /v1/invite/redeem` / `GET /v1/keys/envelopes`（Access Control）は「ユーザー操作」なので同意必須（詳細: `docs/03_implementation/community_nodes/access_control_design.md`）。
 
 ## relay（WS）での同意必須化（計画）
