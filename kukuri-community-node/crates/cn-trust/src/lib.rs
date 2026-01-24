@@ -805,8 +805,10 @@ async fn update_report_score(
             exp,
         )
         .await?;
-        attestation_id = issued.map(|item| item.0);
-        attestation_exp = issued.map(|item| item.1);
+        if let Some((id, exp)) = issued {
+            attestation_id = Some(id);
+            attestation_exp = Some(exp);
+        }
     }
 
     sqlx::query(
@@ -862,8 +864,10 @@ async fn update_communication_score(
             exp,
         )
         .await?;
-        attestation_id = issued.map(|item| item.0);
-        attestation_exp = issued.map(|item| item.1);
+        if let Some((id, exp)) = issued {
+            attestation_id = Some(id);
+            attestation_exp = Some(exp);
+        }
     }
 
     sqlx::query(
