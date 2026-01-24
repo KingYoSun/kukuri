@@ -114,6 +114,18 @@ services:
     expose:
       - "8085"
 
+  trust:
+    <<: *cn-service
+    command: ["trust"]
+    profiles:
+      - trust
+    environment:
+      TRUST_ADDR: ${TRUST_ADDR}
+    volumes:
+      - cn_data:/data
+    expose:
+      - "8086"
+
   meilisearch:
     image: getmeili/meilisearch:v1.5.0
     profiles:

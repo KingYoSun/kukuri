@@ -122,3 +122,25 @@ export type ModerationLabel = {
   source: string;
   issued_at: number;
 };
+
+export type TrustJob = {
+  job_id: string;
+  job_type: string;
+  subject_pubkey?: string | null;
+  status: string;
+  total_targets?: number | null;
+  processed_targets: number;
+  requested_by: string;
+  requested_at: number;
+  started_at?: number | null;
+  completed_at?: number | null;
+  error_message?: string | null;
+};
+
+export type TrustSchedule = {
+  job_type: string;
+  interval_seconds: number;
+  next_run_at: number;
+  is_enabled: boolean;
+  updated_at: number;
+};

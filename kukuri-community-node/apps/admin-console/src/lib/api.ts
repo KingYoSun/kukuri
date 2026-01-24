@@ -188,6 +188,34 @@ export const api = {
     const queryString = params.toString();
     return fetchJson(`/v1/admin/moderation/labels${queryString ? `?${queryString}` : ''}`);
   },
+  trustJobs: (query?: { status?: string; job_type?: string; subject_pubkey?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.status) {
+      params.set('status', query.status);
+    }
+    if (query?.job_type) {
+      params.set('job_type', query.job_type);
+    }
+    if (query?.subject_pubkey) {
+      params.set('subject_pubkey', query.subject_pubkey);
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const queryString = params.toString();
+    return fetchJson(`/v1/admin/trust/jobs${queryString ? `?${queryString}` : ''}`);
+  },
+  createTrustJob: (payload: { job_type: string; subject_pubkey?: string | null }) =>
+    fetchJson('/v1/admin/trust/jobs', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  trustSchedules: () => fetchJson('/v1/admin/trust/schedules'),
+  updateTrustSchedule: (jobType: string, payload: { interval_seconds: number; is_enabled: boolean }) =>
+    fetchJson(`/v1/admin/trust/schedules/${jobType}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
   createManualLabel: (payload: {
     target: string;
     label: string;

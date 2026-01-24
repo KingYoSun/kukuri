@@ -45,6 +45,7 @@ enum Commands {
     Bootstrap,
     Index,
     Moderation,
+    Trust,
     Migrate,
     Config {
         #[command(subcommand)]
@@ -193,6 +194,10 @@ async fn main() -> Result<()> {
         Commands::Moderation => {
             let config = cn_moderation::load_config()?;
             cn_moderation::run(config).await?;
+        }
+        Commands::Trust => {
+            let config = cn_trust::load_config()?;
+            cn_trust::run(config).await?;
         }
         Commands::Migrate => {
             cn_core::logging::init("cn-cli");

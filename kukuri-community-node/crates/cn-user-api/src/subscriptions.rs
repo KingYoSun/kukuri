@@ -619,7 +619,72 @@ pub async fn trust_report_based(
     )
     .await?;
 
-    Ok(Json(json!({ "subject": query.subject, "score": 0.0 })))
+    let subject_pubkey = parse_trust_subject(&query.subject)?;
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+    let row = sqlx::query(
+        "SELECT score, report_count, label_count, window_start, window_end, attestation_id, attestation_exp, updated_at          FROM cn_trust.report_scores          WHERE subject_pubkey = $1",
+    )
+    .bind(&subject_pubkey)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    let subject = format!("pubkey:{subject_pubkey}");
+    let Some(row) = row else {
+        return Ok(Json(json!({
+            "subject": subject,
+            "method": "report-based",
+            "score": 0.0,
+            "report_count": 0,
+            "label_count": 0,
+            "window_start": null,
+            "window_end": null,
+            "attestation": null,
+            "updated_at": null
+        })));
+    };
+
+    let attestation_id: Option<String> = row.try_get("attestation_id")?;
+    let attestation_exp: Option<i64> = row.try_get("attestation_exp")?;
+    let attestation = if let (Some(attestation_id), Some(attestation_exp)) =
+        (attestation_id.as_ref(), attestation_exp)
+    {
+        if attestation_exp > now {
+            let event_json = sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
+            )
+            .bind(attestation_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|err| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+            })?;
+            Some(json!({
+                "attestation_id": attestation_id,
+                "exp": attestation_exp,
+                "event_json": event_json
+            }))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+    Ok(Json(json!({
+        "subject": subject,
+        "method": "report-based",
+        "score": row.try_get::<f64, _>("score")?,
+        "report_count": row.try_get::<i64, _>("report_count")?,
+        "label_count": row.try_get::<i64, _>("label_count")?,
+        "window_start": row.try_get::<i64, _>("window_start")?,
+        "window_end": row.try_get::<i64, _>("window_end")?,
+        "attestation": attestation,
+        "updated_at": updated_at.timestamp()
+    })))
 }
 
 pub async fn trust_communication_density(
@@ -640,7 +705,91 @@ pub async fn trust_communication_density(
     )
     .await?;
 
-    Ok(Json(json!({ "subject": query.subject, "score": 0.0 })))
+    let subject_pubkey = parse_trust_subject(&query.subject)?;
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+    let row = sqlx::query(
+        "SELECT score, interaction_count, peer_count, window_start, window_end, attestation_id, attestation_exp, updated_at          FROM cn_trust.communication_scores          WHERE subject_pubkey = $1",
+    )
+    .bind(&subject_pubkey)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    let subject = format!("pubkey:{subject_pubkey}");
+    let Some(row) = row else {
+        return Ok(Json(json!({
+            "subject": subject,
+            "method": "communication-density",
+            "score": 0.0,
+            "interaction_count": 0,
+            "peer_count": 0,
+            "window_start": null,
+            "window_end": null,
+            "attestation": null,
+            "updated_at": null
+        })));
+    };
+
+    let attestation_id: Option<String> = row.try_get("attestation_id")?;
+    let attestation_exp: Option<i64> = row.try_get("attestation_exp")?;
+    let attestation = if let (Some(attestation_id), Some(attestation_exp)) =
+        (attestation_id.as_ref(), attestation_exp)
+    {
+        if attestation_exp > now {
+            let event_json = sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
+            )
+            .bind(attestation_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|err| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+            })?;
+            Some(json!({
+                "attestation_id": attestation_id,
+                "exp": attestation_exp,
+                "event_json": event_json
+            }))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
+    Ok(Json(json!({
+        "subject": subject,
+        "method": "communication-density",
+        "score": row.try_get::<f64, _>("score")?,
+        "interaction_count": row.try_get::<i64, _>("interaction_count")?,
+        "peer_count": row.try_get::<i64, _>("peer_count")?,
+        "window_start": row.try_get::<i64, _>("window_start")?,
+        "window_end": row.try_get::<i64, _>("window_end")?,
+        "attestation": attestation,
+        "updated_at": updated_at.timestamp()
+    })))
+}
+
+fn parse_trust_subject(subject: &str) -> ApiResult<String> {
+    let subject = subject.trim();
+    let pubkey = subject.strip_prefix("pubkey:").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_SUBJECT",
+            "subject must start with pubkey:",
+        )
+    })?;
+    if PublicKey::from_hex(pubkey).is_err() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_SUBJECT",
+            "invalid pubkey",
+        ));
+    }
+    Ok(pubkey.to_string())
 }
 
 pub async fn list_labels(
@@ -989,4 +1138,23 @@ fn build_key_envelope(
     let raw = nostr::build_signed_event(node_keys, 39020, tags, encrypted)
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
     Ok(serde_json::to_value(raw).unwrap_or(json!({})))
+}
+
+#[cfg(test)]
+mod trust_subject_tests {
+    use super::parse_trust_subject;
+    use nostr_sdk::prelude::Keys;
+
+    #[test]
+    fn parse_trust_subject_accepts_pubkey_prefix() {
+        let pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{pubkey}");
+        let parsed = parse_trust_subject(&subject).unwrap_or_else(|_| String::new());
+        assert_eq!(parsed, pubkey);
+    }
+
+    #[test]
+    fn parse_trust_subject_rejects_invalid_prefix() {
+        assert!(parse_trust_subject("npub1example").is_err());
+    }
 }

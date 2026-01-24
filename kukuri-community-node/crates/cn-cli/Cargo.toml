@@ -30,4 +30,5 @@ cn-core = { path = "../cn-core" }
 cn-index = { path = "../cn-index" }
 cn-moderation = { path = "../cn-moderation" }
 cn-relay = { path = "../cn-relay" }
+cn-trust = { path = "../cn-trust" }
 cn-user-api = { path = "../cn-user-api" }

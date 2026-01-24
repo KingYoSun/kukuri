@@ -14,3 +14,4 @@ pub mod rate_limit;
 pub mod server;
 pub mod service_config;
 pub mod topic;
+pub mod trust;

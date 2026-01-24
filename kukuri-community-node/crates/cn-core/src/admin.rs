@@ -197,7 +197,34 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
                 }
             }),
         ),
-        ("trust", json!({"enabled": false})),
+        (
+            "trust",
+            json!({
+                "enabled": false,
+                "consumer": { "batch_size": 200, "poll_interval_seconds": 5 },
+                "report_based": {
+                    "window_days": 30,
+                    "report_weight": 1.0,
+                    "label_weight": 1.0,
+                    "score_normalization": 10.0
+                },
+                "communication_density": {
+                    "window_days": 30,
+                    "score_normalization": 20.0,
+                    "interaction_weights": {
+                        "1": 1.0,
+                        "6": 0.5,
+                        "7": 0.3
+                    }
+                },
+                "attestation": { "exp_seconds": 86400 },
+                "jobs": {
+                    "schedule_poll_seconds": 30,
+                    "report_based_interval_seconds": 86400,
+                    "communication_interval_seconds": 86400
+                }
+            }),
+        ),
     ];
 
     let mut inserted = Vec::new();

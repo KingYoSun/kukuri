@@ -7,6 +7,7 @@ import { ModerationPage } from './pages/ModerationPage';
 import { PoliciesPage } from './pages/PoliciesPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
+import { TrustPage } from './pages/TrustPage';
 
 const rootRoute = createRootRoute({
   component: App
@@ -48,13 +49,20 @@ const auditRoute = createRoute({
   component: AuditPage
 });
 
+const trustRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/trust',
+  component: TrustPage
+});
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   servicesRoute,
   subscriptionsRoute,
   policiesRoute,
   moderationRoute,
-  auditRoute
+  auditRoute,
+  trustRoute
 ]);
 
 const basepath = import.meta.env.BASE_URL.replace(/\/$/, '');

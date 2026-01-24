@@ -20,6 +20,7 @@ mod policies;
 mod reindex;
 mod services;
 mod subscriptions;
+mod trust;
 
 const SERVICE_NAME: &str = "cn-admin-api";
 
@@ -225,6 +226,18 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         )
         .route("/v1/admin/usage", get(subscriptions::list_usage))
         .route("/v1/admin/audit-logs", get(services::list_audit_logs))
+        .route(
+            "/v1/admin/trust/jobs",
+            get(trust::list_jobs).post(trust::create_job),
+        )
+        .route(
+            "/v1/admin/trust/schedules",
+            get(trust::list_schedules),
+        )
+        .route(
+            "/v1/admin/trust/schedules/:job_type",
+            put(trust::update_schedule),
+        )
         .route("/v1/reindex", post(reindex::enqueue_reindex))
         .with_state(state);
 
