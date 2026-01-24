@@ -86,3 +86,39 @@ export type AuditLog = {
   request_id?: string | null;
   created_at: number;
 };
+
+export type ModerationRule = {
+  rule_id: string;
+  name: string;
+  description?: string | null;
+  is_enabled: boolean;
+  priority: number;
+  conditions: unknown;
+  action: unknown;
+  created_at: number;
+  updated_at: number;
+  updated_by: string;
+};
+
+export type ModerationReport = {
+  report_id: string;
+  reporter_pubkey: string;
+  target: string;
+  reason: string;
+  created_at: number;
+};
+
+export type ModerationLabel = {
+  label_id: string;
+  target: string;
+  topic_id?: string | null;
+  label: string;
+  confidence?: number | null;
+  policy_url: string;
+  policy_ref: string;
+  exp: number;
+  issuer_pubkey: string;
+  rule_id?: string | null;
+  source: string;
+  issued_at: number;
+};

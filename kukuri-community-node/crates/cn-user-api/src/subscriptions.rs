@@ -78,12 +78,16 @@ pub struct TrustQuery {
 #[derive(Deserialize)]
 pub struct LabelsQuery {
     pub target: Option<String>,
+    pub topic: Option<String>,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct ReportRequest {
-    pub target: String,
-    pub reason: String,
+    pub report_event_json: Option<serde_json::Value>,
+    pub target: Option<String>,
+    pub reason: Option<String>,
 }
 
 pub async fn create_subscription_request(
@@ -649,7 +653,58 @@ pub async fn list_labels(
     require_consents(&state, &auth).await?;
     apply_protected_rate_limit(&state, &auth, addr).await?;
 
-    Ok(Json(json!({ "target": query.target, "items": [] })))
+    let target = query.target.ok_or_else(|| {
+        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_REQUEST", "target is required")
+    })?;
+
+    let limit = query.limit.unwrap_or(50).clamp(1, 200) as i64;
+    let offset = query
+        .cursor
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0)
+        .max(0);
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+    let mut builder = QueryBuilder::<Postgres>::new(
+        "SELECT label_event_json FROM cn_moderation.labels WHERE target = ",
+    );
+    builder.push_bind(&target);
+    builder.push(" AND exp > ");
+    builder.push_bind(now);
+    if let Some(topic) = query.topic {
+        builder.push(" AND topic_id = ");
+        builder.push_bind(topic);
+    }
+    builder.push(" ORDER BY issued_at DESC");
+    if offset > 0 {
+        builder.push(" OFFSET ");
+        builder.push(offset.to_string());
+    }
+    builder.push(" LIMIT ");
+    builder.push(limit.to_string());
+
+    let rows = builder
+        .build()
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .filter_map(|row| row.try_get("label_event_json").ok())
+        .collect();
+    let next_cursor = if items.len() as i64 >= limit {
+        Some((offset + items.len() as i64).to_string())
+    } else {
+        None
+    };
+
+    Ok(Json(json!({
+        "target": target,
+        "items": items,
+        "next_cursor": next_cursor
+    })))
 }
 
 pub async fn submit_report(
@@ -670,19 +725,67 @@ pub async fn submit_report(
     )
     .await?;
 
+    let (report_id, target, reason, report_event_json) =
+        if let Some(event_json) = payload.report_event_json {
+            let raw = nostr::parse_event(&event_json)
+                .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
+            if raw.kind != 39005 {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_EVENT",
+                    "invalid report kind",
+                ));
+            }
+            nostr::verify_event(&raw)
+                .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
+            if raw.pubkey != auth.pubkey {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_EVENT",
+                    "reporter pubkey mismatch",
+                ));
+            }
+            let target = raw
+                .first_tag_value("target")
+                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing target"))?;
+            let reason = raw
+                .first_tag_value("reason")
+                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing reason"))?;
+            let report_id = raw.id.clone();
+            let normalized = serde_json::to_value(&raw).unwrap_or(json!({}));
+            (report_id, target, reason, normalized)
+        } else {
+            let target = payload
+                .target
+                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_REQUEST", "target is required"))?;
+            let reason = payload
+                .reason
+                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_REQUEST", "reason is required"))?;
+            let tags = vec![
+                vec!["k".to_string(), "kukuri".to_string()],
+                vec!["ver".to_string(), "1".to_string()],
+                vec!["target".to_string(), target.clone()],
+                vec!["reason".to_string(), reason.clone()],
+            ];
+            let event = nostr::build_signed_event(&state.node_keys, 39005, tags, String::new())
+                .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "REPORT_ERROR", err.to_string()))?;
+            let event_json = serde_json::to_value(&event).unwrap_or(json!({}));
+            (event.id, target, reason, event_json)
+        };
+
     sqlx::query(
-        "INSERT INTO cn_user.reports          (report_id, reporter_pubkey, target, reason, report_event_json)          VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO cn_user.reports          (report_id, reporter_pubkey, target, reason, report_event_json)          VALUES ($1, $2, $3, $4, $5)          ON CONFLICT (report_id) DO NOTHING",
     )
-    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&report_id)
     .bind(&auth.pubkey)
-    .bind(&payload.target)
-    .bind(&payload.reason)
-    .bind(serde_json::json!({ "target": payload.target, "reason": payload.reason }))
+    .bind(&target)
+    .bind(&reason)
+    .bind(report_event_json)
     .execute(&state.pool)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    Ok(Json(json!({ "status": "accepted" })))
+    Ok(Json(json!({ "status": "accepted", "report_id": report_id })))
 }
 
 fn request_id(headers: &axum::http::HeaderMap) -> Option<&str> {

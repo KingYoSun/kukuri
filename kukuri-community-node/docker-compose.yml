@@ -102,6 +102,18 @@ services:
     expose:
       - "8084"
 
+  moderation:
+    <<: *cn-service
+    command: ["moderation"]
+    profiles:
+      - moderation
+    environment:
+      MODERATION_ADDR: ${MODERATION_ADDR}
+    volumes:
+      - cn_data:/data
+    expose:
+      - "8085"
+
   meilisearch:
     image: getmeili/meilisearch:v1.5.0
     profiles:

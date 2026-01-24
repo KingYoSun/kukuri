@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter } from '@tanstack/react-rout
 import App from './App';
 import { AuditPage } from './pages/AuditPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ModerationPage } from './pages/ModerationPage';
 import { PoliciesPage } from './pages/PoliciesPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
@@ -35,6 +36,12 @@ const policiesRoute = createRoute({
   component: PoliciesPage
 });
 
+const moderationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/moderation',
+  component: ModerationPage
+});
+
 const auditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/audit',
@@ -46,6 +53,7 @@ const routeTree = rootRoute.addChildren([
   servicesRoute,
   subscriptionsRoute,
   policiesRoute,
+  moderationRoute,
   auditRoute
 ]);
 

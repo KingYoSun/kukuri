@@ -44,6 +44,7 @@ enum Commands {
     Relay,
     Bootstrap,
     Index,
+    Moderation,
     Migrate,
     Config {
         #[command(subcommand)]
@@ -188,6 +189,10 @@ async fn main() -> Result<()> {
         Commands::Index => {
             let config = cn_index::load_config()?;
             cn_index::run(config).await?;
+        }
+        Commands::Moderation => {
+            let config = cn_moderation::load_config()?;
+            cn_moderation::run(config).await?;
         }
         Commands::Migrate => {
             cn_core::logging::init("cn-cli");

@@ -4,7 +4,8 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use cn_core::{config, db, http, logging, metrics, server, service_config};
+use cn_core::{config, db, http, logging, metrics, node_key, server, service_config};
+use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{Pool, Postgres};
@@ -14,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 mod auth;
+mod moderation;
 mod policies;
 mod reindex;
 mod services;
@@ -27,6 +29,7 @@ pub(crate) struct AppState {
     admin_config: service_config::ServiceConfigHandle,
     health_targets: Arc<HashMap<String, String>>,
     health_client: reqwest::Client,
+    node_keys: Keys,
 }
 
 #[derive(Debug, Serialize)]
@@ -89,6 +92,7 @@ pub struct AdminApiConfig {
     pub database_url: String,
     pub config_poll_seconds: u64,
     pub health_poll_seconds: u64,
+    pub node_key_path: std::path::PathBuf,
 }
 
 pub fn load_config() -> Result<AdminApiConfig> {
@@ -102,11 +106,13 @@ pub fn load_config() -> Result<AdminApiConfig> {
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(10);
+    let node_key_path = node_key::key_path_from_env("NODE_KEY_PATH", "data/node_key.json")?;
     Ok(AdminApiConfig {
         addr,
         database_url,
         config_poll_seconds,
         health_poll_seconds,
+        node_key_path,
     })
 }
 
@@ -126,6 +132,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         Duration::from_secs(config.config_poll_seconds),
     )
     .await?;
+    let node_keys = node_key::load_or_generate(&config.node_key_path)?;
 
     let health_targets = Arc::new(parse_health_targets());
     let health_client = reqwest::Client::builder()
@@ -137,6 +144,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         admin_config,
         health_targets: Arc::clone(&health_targets),
         health_client,
+        node_keys,
     };
 
     services::spawn_health_poll(state.clone(), Duration::from_secs(config.health_poll_seconds));
@@ -165,6 +173,22 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         .route(
             "/v1/admin/policies/:policy_id/make-current",
             post(policies::make_current_policy),
+        )
+        .route(
+            "/v1/admin/moderation/rules",
+            get(moderation::list_rules).post(moderation::create_rule),
+        )
+        .route(
+            "/v1/admin/moderation/rules/:rule_id",
+            put(moderation::update_rule).delete(moderation::delete_rule),
+        )
+        .route(
+            "/v1/admin/moderation/reports",
+            get(moderation::list_reports),
+        )
+        .route(
+            "/v1/admin/moderation/labels",
+            get(moderation::list_labels).post(moderation::create_label),
         )
         .route(
             "/v1/admin/subscription-requests",
@@ -249,6 +273,11 @@ fn parse_health_targets() -> HashMap<String, String> {
         ("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz"),
         ("bootstrap", "BOOTSTRAP_HEALTH_URL", "http://bootstrap:8083/healthz"),
         ("index", "INDEX_HEALTH_URL", "http://index:8084/healthz"),
+        (
+            "moderation",
+            "MODERATION_HEALTH_URL",
+            "http://moderation:8085/healthz",
+        ),
     ];
     for (name, env, default_url) in fallback {
         if targets.contains_key(name) {

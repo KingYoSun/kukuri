@@ -119,5 +119,86 @@ export const api = {
       params.set('days', String(days));
     }
     return fetchJson(`/v1/admin/usage?${params.toString()}`);
-  }
+  },
+  moderationRules: (enabled?: boolean) => {
+    const params = new URLSearchParams();
+    if (typeof enabled === 'boolean') {
+      params.set('enabled', enabled ? 'true' : 'false');
+    }
+    const query = params.toString();
+    return fetchJson(`/v1/admin/moderation/rules${query ? `?${query}` : ''}`);
+  },
+  createModerationRule: (payload: {
+    name: string;
+    description?: string | null;
+    is_enabled?: boolean;
+    priority?: number;
+    conditions: unknown;
+    action: unknown;
+  }) =>
+    fetchJson('/v1/admin/moderation/rules', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateModerationRule: (ruleId: string, payload: {
+    name: string;
+    description?: string | null;
+    is_enabled?: boolean;
+    priority?: number;
+    conditions: unknown;
+    action: unknown;
+  }) =>
+    fetchJson(`/v1/admin/moderation/rules/${ruleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  deleteModerationRule: (ruleId: string) =>
+    fetchJson(`/v1/admin/moderation/rules/${ruleId}`, { method: 'DELETE' }),
+  moderationReports: (query?: { target?: string; reporter_pubkey?: string; since?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.target) {
+      params.set('target', query.target);
+    }
+    if (query?.reporter_pubkey) {
+      params.set('reporter_pubkey', query.reporter_pubkey);
+    }
+    if (typeof query?.since === 'number') {
+      params.set('since', String(query.since));
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const queryString = params.toString();
+    return fetchJson(`/v1/admin/moderation/reports${queryString ? `?${queryString}` : ''}`);
+  },
+  moderationLabels: (query?: { target?: string; topic?: string; since?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.target) {
+      params.set('target', query.target);
+    }
+    if (query?.topic) {
+      params.set('topic', query.topic);
+    }
+    if (typeof query?.since === 'number') {
+      params.set('since', String(query.since));
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const queryString = params.toString();
+    return fetchJson(`/v1/admin/moderation/labels${queryString ? `?${queryString}` : ''}`);
+  },
+  createManualLabel: (payload: {
+    target: string;
+    label: string;
+    confidence?: number | null;
+    exp: number;
+    policy_url: string;
+    policy_ref: string;
+    topic_id?: string | null;
+  }) =>
+    fetchJson('/v1/admin/moderation/labels', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
 };

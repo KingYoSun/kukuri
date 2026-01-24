@@ -37,6 +37,7 @@ jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 nostr-sdk = { version = "0.44.1", features = ["nip04", "nip44"] }
 reqwest = { version = "0.12.8", features = ["json", "rustls-tls"] }
 rand_core = "0.6.4"
+regex = "1.10.5"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 sqlx = { version = "0.7.4", features = ["runtime-tokio-rustls", "postgres", "migrate", "json", "uuid", "chrono"] }

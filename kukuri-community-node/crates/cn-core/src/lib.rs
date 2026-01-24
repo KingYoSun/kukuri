@@ -7,6 +7,7 @@ pub mod logging;
 pub mod meili;
 pub mod metrics;
 pub mod migrations;
+pub mod moderation;
 pub mod node_key;
 pub mod nostr;
 pub mod rate_limit;

@@ -178,7 +178,25 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
                 "expiration": { "sweep_interval_seconds": 300 }
             }),
         ),
-        ("moderation", json!({"enabled": false})),
+        (
+            "moderation",
+            json!({
+                "enabled": false,
+                "consumer": { "batch_size": 200, "poll_interval_seconds": 5 },
+                "queue": { "max_attempts": 3, "retry_delay_seconds": 30 },
+                "rules": { "max_labels_per_event": 5 },
+                "llm": {
+                    "enabled": false,
+                    "provider": "disabled",
+                    "external_send_enabled": false,
+                    "truncate_chars": 2000,
+                    "mask_pii": true,
+                    "max_requests_per_day": 0,
+                    "max_cost_per_day": 0.0,
+                    "max_concurrency": 1
+                }
+            }),
+        ),
         ("trust", json!({"enabled": false})),
     ];
 

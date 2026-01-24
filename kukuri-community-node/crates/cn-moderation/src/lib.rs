@@ -1,1 +1,753 @@
-// Placeholder for moderation service.
+use anyhow::Result;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::{Json, Router};
+use cn_core::{
+    config as env_config, db, http, logging, metrics, moderation as moderation_core, node_key,
+    nostr, server, service_config,
+};
+use nostr_sdk::prelude::Keys;
+use regex::RegexBuilder;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use sqlx::{postgres::PgListener, Pool, Postgres, Row};
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::time::Duration;
+
+mod config;
+mod llm;
+
+const SERVICE_NAME: &str = "cn-moderation";
+const CONSUMER_NAME: &str = "moderation-v1";
+const OUTBOX_CHANNEL: &str = "cn_relay_outbox";
+
+#[derive(Clone)]
+struct AppState {
+    pool: Pool<Postgres>,
+    config: service_config::ServiceConfigHandle,
+    node_keys: Keys,
+}
+
+#[derive(Serialize)]
+struct HealthStatus {
+    status: String,
+}
+
+#[derive(Clone)]
+pub struct ModerationConfig {
+    pub addr: SocketAddr,
+    pub database_url: String,
+    pub node_key_path: PathBuf,
+    pub config_poll_seconds: u64,
+}
+
+#[derive(Deserialize)]
+struct OutboxRow {
+    seq: i64,
+    op: String,
+    event_id: String,
+    topic_id: String,
+}
+
+#[derive(Debug)]
+struct ModerationJob {
+    job_id: String,
+    event_id: String,
+    topic_id: String,
+    attempts: i32,
+    max_attempts: i32,
+}
+
+struct ModerationEvent {
+    raw: nostr::RawEvent,
+    is_deleted: bool,
+    is_current: bool,
+    is_ephemeral: bool,
+    expires_at: Option<i64>,
+}
+
+pub fn load_config() -> Result<ModerationConfig> {
+    let addr = env_config::socket_addr_from_env("MODERATION_ADDR", "0.0.0.0:8085")?;
+    let database_url = env_config::required_env("DATABASE_URL")?;
+    let node_key_path = node_key::key_path_from_env("NODE_KEY_PATH", "data/node_key.json")?;
+    let config_poll_seconds = std::env::var("MODERATION_CONFIG_POLL_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(30);
+    Ok(ModerationConfig {
+        addr,
+        database_url,
+        node_key_path,
+        config_poll_seconds,
+    })
+}
+
+pub async fn run(config: ModerationConfig) -> Result<()> {
+    logging::init(SERVICE_NAME);
+    metrics::init(SERVICE_NAME);
+
+    let pool = db::connect(&config.database_url).await?;
+    let node_keys = node_key::load_or_generate(&config.node_key_path)?;
+
+    let default_config = json!({
+        "enabled": false,
+        "consumer": { "batch_size": 200, "poll_interval_seconds": 5 },
+        "queue": { "max_attempts": 3, "retry_delay_seconds": 30 },
+        "rules": { "max_labels_per_event": 5 },
+        "llm": {
+            "enabled": false,
+            "provider": "disabled",
+            "external_send_enabled": false,
+            "truncate_chars": 2000,
+            "mask_pii": true,
+            "max_requests_per_day": 0,
+            "max_cost_per_day": 0.0,
+            "max_concurrency": 1
+        }
+    });
+    let config_handle = service_config::watch_service_config(
+        pool.clone(),
+        "moderation",
+        default_config,
+        Duration::from_secs(config.config_poll_seconds),
+    )
+    .await?;
+
+    let state = AppState {
+        pool: pool.clone(),
+        config: config_handle,
+        node_keys,
+    };
+
+    spawn_outbox_consumer(state.clone());
+    spawn_job_worker(state.clone());
+
+    let router = Router::new()
+        .route("/healthz", get(healthz))
+        .route("/metrics", get(metrics_endpoint))
+        .with_state(state);
+
+    let router = http::apply_standard_layers(router, SERVICE_NAME);
+    server::serve(config.addr, router).await
+}
+
+async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
+    match db::check_ready(&state.pool).await {
+        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(HealthStatus {
+                status: "unavailable".into(),
+            }),
+        ),
+    }
+}
+
+async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
+    if let Ok(max_seq) = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox",
+    )
+    .fetch_one(&state.pool)
+    .await
+    {
+        if let Ok(last_seq) = sqlx::query_scalar::<_, i64>(
+            "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
+        )
+        .bind(CONSUMER_NAME)
+        .fetch_optional(&state.pool)
+        .await
+        {
+            if let Some(last_seq) = last_seq {
+                let backlog = max_seq.saturating_sub(last_seq);
+                metrics::set_outbox_backlog(SERVICE_NAME, CONSUMER_NAME, backlog);
+            }
+        }
+    }
+
+    metrics::metrics_response(SERVICE_NAME)
+}
+
+fn spawn_outbox_consumer(state: AppState) {
+    tokio::spawn(async move {
+        let mut last_seq = match load_last_seq(&state.pool).await {
+            Ok(seq) => seq,
+            Err(err) => {
+                tracing::error!(error = %err, "failed to load consumer offset");
+                return;
+            }
+        };
+
+        let mut listener = match connect_listener(&state.pool, OUTBOX_CHANNEL).await {
+            Ok(listener) => listener,
+            Err(err) => {
+                tracing::warn!(error = %err, "failed to listen outbox channel");
+                return;
+            }
+        };
+
+        loop {
+            let snapshot = state.config.get().await;
+            let runtime = config::ModerationRuntimeConfig::from_json(&snapshot.config_json);
+            if !runtime.enabled {
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
+                    .await;
+                continue;
+            }
+
+            match fetch_outbox_batch(&state.pool, last_seq, runtime.consumer_batch_size).await {
+                Ok(batch) if batch.is_empty() => {
+                    if wait_for_notify(&mut listener, runtime.consumer_poll_seconds)
+                        .await
+                        .is_err()
+                    {
+                        match connect_listener(&state.pool, OUTBOX_CHANNEL).await {
+                            Ok(new_listener) => listener = new_listener,
+                            Err(err) => {
+                                tracing::warn!(error = %err, "failed to reconnect outbox listener");
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                            }
+                        }
+                    }
+                }
+                Ok(batch) => {
+                    let mut failed = false;
+                    for row in &batch {
+                        if row.op == "upsert" {
+                            if let Err(err) =
+                                enqueue_job(&state.pool, row, runtime.queue_max_attempts).await
+                            {
+                                tracing::warn!(
+                                    error = %err,
+                                    seq = row.seq,
+                                    "failed to enqueue moderation job"
+                                );
+                                failed = true;
+                                break;
+                            }
+                        }
+                        last_seq = row.seq;
+                    }
+                    if failed {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    if let Err(err) = commit_last_seq(&state.pool, last_seq).await {
+                        tracing::warn!(error = %err, "failed to commit consumer offset");
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "outbox fetch failed");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    });
+}
+
+fn spawn_job_worker(state: AppState) {
+    tokio::spawn(async move {
+        loop {
+            let snapshot = state.config.get().await;
+            let runtime = config::ModerationRuntimeConfig::from_json(&snapshot.config_json);
+            if !runtime.enabled {
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
+                    .await;
+                continue;
+            }
+
+            match claim_job(&state.pool).await {
+                Ok(Some(job)) => {
+                    let result = process_job(&state, &runtime, &job).await;
+                    if let Err(err) = &result {
+                        tracing::warn!(error = %err, job_id = %job.job_id, "moderation job failed");
+                    }
+                    finalize_job(
+                        &state.pool,
+                        &job,
+                        &runtime,
+                        result.map(|_| ()).map_err(|err| err.to_string()),
+                    )
+                    .await
+                    .ok();
+                }
+                Ok(None) => {
+                    tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(1)))
+                        .await;
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "moderation job claim failed");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+            }
+        }
+    });
+}
+
+async fn connect_listener(pool: &Pool<Postgres>, channel: &str) -> Result<PgListener> {
+    let mut listener = PgListener::connect_with(pool).await?;
+    listener.listen(channel).await?;
+    Ok(listener)
+}
+
+async fn wait_for_notify(listener: &mut PgListener, poll_seconds: u64) -> Result<()> {
+    tokio::select! {
+        notification = listener.recv() => {
+            notification?;
+            Ok(())
+        }
+        _ = tokio::time::sleep(Duration::from_secs(poll_seconds.max(1))) => Ok(())
+    }
+}
+
+async fn load_last_seq(pool: &Pool<Postgres>) -> Result<i64> {
+    let last_seq = sqlx::query_scalar::<_, i64>(
+        "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
+    )
+    .bind(CONSUMER_NAME)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(last_seq) = last_seq {
+        return Ok(last_seq);
+    }
+
+    sqlx::query(
+        "INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)",
+    )
+    .bind(CONSUMER_NAME)
+    .execute(pool)
+    .await?;
+
+    Ok(0)
+}
+
+async fn commit_last_seq(pool: &Pool<Postgres>, last_seq: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE cn_relay.consumer_offsets SET last_seq = $1, updated_at = NOW() WHERE consumer = $2",
+    )
+    .bind(last_seq)
+    .bind(CONSUMER_NAME)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn fetch_outbox_batch(
+    pool: &Pool<Postgres>,
+    last_seq: i64,
+    batch_size: i64,
+) -> Result<Vec<OutboxRow>> {
+    let rows = sqlx::query(
+        "SELECT seq, op, event_id, topic_id          FROM cn_relay.events_outbox          WHERE seq > $1          ORDER BY seq ASC          LIMIT $2",
+    )
+    .bind(last_seq)
+    .bind(batch_size)
+    .fetch_all(pool)
+    .await?;
+
+    let mut batch = Vec::new();
+    for row in rows {
+        batch.push(OutboxRow {
+            seq: row.try_get("seq")?,
+            op: row.try_get("op")?,
+            event_id: row.try_get("event_id")?,
+            topic_id: row.try_get("topic_id")?,
+        });
+    }
+    Ok(batch)
+}
+
+async fn enqueue_job(pool: &Pool<Postgres>, row: &OutboxRow, max_attempts: i32) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_moderation.jobs          (job_id, event_id, topic_id, source, status, max_attempts)          VALUES ($1, $2, $3, $4, 'pending', $5)          ON CONFLICT (event_id, topic_id) DO NOTHING",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&row.event_id)
+    .bind(&row.topic_id)
+    .bind("outbox")
+    .bind(max_attempts)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn claim_job(pool: &Pool<Postgres>) -> Result<Option<ModerationJob>> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query(
+        "SELECT job_id, event_id, topic_id, attempts, max_attempts          FROM cn_moderation.jobs          WHERE status = 'pending'            AND next_run_at <= NOW()          ORDER BY next_run_at ASC, created_at ASC          LIMIT 1          FOR UPDATE SKIP LOCKED",
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(row) = row else {
+        tx.commit().await?;
+        return Ok(None);
+    };
+
+    let job_id: String = row.try_get("job_id")?;
+    let attempts: i32 = row.try_get("attempts")?;
+    let max_attempts: i32 = row.try_get("max_attempts")?;
+
+    sqlx::query(
+        "UPDATE cn_moderation.jobs          SET status = 'running', attempts = $1, started_at = NOW(), updated_at = NOW()          WHERE job_id = $2",
+    )
+    .bind(attempts + 1)
+    .bind(&job_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let job = ModerationJob {
+        job_id,
+        event_id: row.try_get("event_id")?,
+        topic_id: row.try_get("topic_id")?,
+        attempts: attempts + 1,
+        max_attempts,
+    };
+    tx.commit().await?;
+    Ok(Some(job))
+}
+
+async fn finalize_job(
+    pool: &Pool<Postgres>,
+    job: &ModerationJob,
+    runtime: &config::ModerationRuntimeConfig,
+    result: Result<(), String>,
+) -> Result<()> {
+    match result {
+        Ok(_) => {
+            sqlx::query(
+                "UPDATE cn_moderation.jobs                  SET status = 'succeeded', completed_at = NOW(), updated_at = NOW(), last_error = NULL                  WHERE job_id = $1",
+            )
+            .bind(&job.job_id)
+            .execute(pool)
+            .await?;
+        }
+        Err(err) => {
+            if job.attempts >= job.max_attempts {
+                sqlx::query(
+                    "UPDATE cn_moderation.jobs                      SET status = 'failed', completed_at = NOW(), updated_at = NOW(), last_error = $1                      WHERE job_id = $2",
+                )
+                .bind(&err)
+                .bind(&job.job_id)
+                .execute(pool)
+                .await?;
+            } else {
+                sqlx::query(
+                    "UPDATE cn_moderation.jobs                      SET status = 'pending', next_run_at = NOW() + ($1 * INTERVAL '1 second'),                          updated_at = NOW(), last_error = $2                      WHERE job_id = $3",
+                )
+                .bind(runtime.queue_retry_delay_seconds)
+                .bind(&err)
+                .bind(&job.job_id)
+                .execute(pool)
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn process_job(
+    state: &AppState,
+    runtime: &config::ModerationRuntimeConfig,
+    job: &ModerationJob,
+) -> Result<usize> {
+    let Some(event) = load_event(&state.pool, &job.event_id).await? else {
+        return Ok(0);
+    };
+
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    if event.is_deleted
+        || !event.is_current
+        || event.is_ephemeral
+        || event.expires_at.map(|exp| exp <= now).unwrap_or(false)
+    {
+        return Ok(0);
+    }
+
+    let rules = load_active_rules(&state.pool).await?;
+    if rules.is_empty() {
+        return Ok(0);
+    }
+
+    let mut issued = 0usize;
+    for rule in rules {
+        if issued >= runtime.rules_max_labels_per_event {
+            break;
+        }
+        if !rule_matches(&rule.conditions, &event.raw) {
+            continue;
+        }
+        let exp = now.saturating_add(rule.action.exp_seconds);
+        let input = moderation_core::LabelInput {
+            target: format!("event:{}", event.raw.id),
+            label: rule.action.label.clone(),
+            confidence: rule.action.confidence,
+            exp,
+            policy_url: rule.action.policy_url.clone(),
+            policy_ref: rule.action.policy_ref.clone(),
+            topic_id: Some(job.topic_id.clone()),
+        };
+        let label_event = moderation_core::build_label_event(&state.node_keys, &input)?;
+        let inserted = insert_label(
+            &state.pool,
+            &label_event,
+            &input,
+            Some(&event.raw.id),
+            Some(&rule.rule_id),
+            "rule",
+        )
+        .await?;
+        if inserted {
+            issued += 1;
+        }
+    }
+
+    if runtime.llm.enabled {
+        let provider = llm::build_provider(&runtime.llm);
+        let request = llm::LlmRequest {
+            event_id: event.raw.id.clone(),
+            content: prepare_llm_input(&event.raw.content, &runtime.llm),
+        };
+        let _ = provider.classify(&request).await?;
+    }
+
+    Ok(issued)
+}
+
+async fn load_event(pool: &Pool<Postgres>, event_id: &str) -> Result<Option<ModerationEvent>> {
+    let row = sqlx::query(
+        "SELECT raw_json, is_deleted, is_current, is_ephemeral, expires_at          FROM cn_relay.events          WHERE event_id = $1",
+    )
+    .bind(event_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let raw_json: serde_json::Value = row.try_get("raw_json")?;
+    let raw: nostr::RawEvent = serde_json::from_value(raw_json)?;
+    Ok(Some(ModerationEvent {
+        raw,
+        is_deleted: row.try_get("is_deleted")?,
+        is_current: row.try_get("is_current")?,
+        is_ephemeral: row.try_get("is_ephemeral")?,
+        expires_at: row.try_get("expires_at")?,
+    }))
+}
+
+async fn load_active_rules(
+    pool: &Pool<Postgres>,
+) -> Result<Vec<moderation_core::ModerationRule>> {
+    let rows = sqlx::query(
+        "SELECT rule_id, name, description, is_enabled, priority, conditions_json, action_json          FROM cn_moderation.rules          WHERE is_enabled = TRUE          ORDER BY priority DESC, updated_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut rules = Vec::new();
+    for row in rows {
+        let conditions_json: serde_json::Value = row.try_get("conditions_json")?;
+        let action_json: serde_json::Value = row.try_get("action_json")?;
+        let conditions: moderation_core::RuleCondition =
+            serde_json::from_value(conditions_json)?;
+        let action: moderation_core::RuleAction = serde_json::from_value(action_json)?;
+        if conditions.validate().is_err() || action.validate().is_err() {
+            tracing::warn!(
+                rule_id = row.try_get::<String, _>("rule_id").unwrap_or_default(),
+                "invalid moderation rule configuration"
+            );
+            continue;
+        }
+        rules.push(moderation_core::ModerationRule {
+            rule_id: row.try_get("rule_id")?,
+            name: row.try_get("name")?,
+            description: row.try_get("description")?,
+            is_enabled: row.try_get("is_enabled")?,
+            priority: row.try_get("priority")?,
+            conditions,
+            action,
+        });
+    }
+    Ok(rules)
+}
+
+fn rule_matches(condition: &moderation_core::RuleCondition, raw: &nostr::RawEvent) -> bool {
+    if let Some(kinds) = &condition.kinds {
+        if !kinds.contains(&(raw.kind as i32)) {
+            return false;
+        }
+    }
+    if let Some(authors) = &condition.author_pubkeys {
+        if !authors.iter().any(|author| author == &raw.pubkey) {
+            return false;
+        }
+    }
+    if let Some(keywords) = &condition.content_keywords {
+        let content = raw.content.to_lowercase();
+        if !keywords
+            .iter()
+            .any(|keyword| content.contains(&keyword.to_lowercase()))
+        {
+            return false;
+        }
+    }
+    if let Some(pattern) = &condition.content_regex {
+        let Ok(regex) = RegexBuilder::new(pattern)
+            .case_insensitive(true)
+            .build()
+        else {
+            tracing::warn!(pattern = pattern.as_str(), "invalid content regex");
+            return false;
+        };
+        if !regex.is_match(&raw.content) {
+            return false;
+        }
+    }
+    if let Some(filters) = &condition.tag_filters {
+        for (tag, values) in filters {
+            let tag_values = raw.tag_values(tag);
+            if tag_values.is_empty() {
+                return false;
+            }
+            if !values.is_empty()
+                && !tag_values.iter().any(|value| values.contains(value))
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+async fn insert_label(
+    pool: &Pool<Postgres>,
+    label_event: &nostr::RawEvent,
+    input: &moderation_core::LabelInput,
+    source_event_id: Option<&str>,
+    rule_id: Option<&str>,
+    source: &str,
+) -> Result<bool> {
+    let label_json = serde_json::to_value(label_event)?;
+    let result = sqlx::query(
+        "INSERT INTO cn_moderation.labels          (label_id, source_event_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, label_event_json)          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)          ON CONFLICT (source_event_id, rule_id)          WHERE source_event_id IS NOT NULL AND rule_id IS NOT NULL          DO NOTHING",
+    )
+    .bind(&label_event.id)
+    .bind(source_event_id)
+    .bind(&input.target)
+    .bind(&input.topic_id)
+    .bind(&input.label)
+    .bind(input.confidence)
+    .bind(&input.policy_url)
+    .bind(&input.policy_ref)
+    .bind(input.exp)
+    .bind(&label_event.pubkey)
+    .bind(rule_id)
+    .bind(source)
+    .bind(label_json)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+fn prepare_llm_input(content: &str, config: &config::LlmRuntimeConfig) -> String {
+    let mut result = if config.truncate_chars == 0 {
+        String::new()
+    } else {
+        truncate_chars(content, config.truncate_chars)
+    };
+    if config.mask_pii {
+        result = mask_pii(&result);
+    }
+    result
+}
+
+fn truncate_chars(value: &str, max: usize) -> String {
+    if value.chars().count() <= max {
+        return value.to_string();
+    }
+    value.chars().take(max).collect()
+}
+
+fn mask_pii(value: &str) -> String {
+    let mut masked = value.to_string();
+    let email = RegexBuilder::new(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}")
+        .case_insensitive(true)
+        .build()
+        .ok();
+    if let Some(regex) = email {
+        masked = regex.replace_all(&masked, "[redacted-email]").to_string();
+    }
+    let url = RegexBuilder::new(r"https?://[^\s]+")
+        .case_insensitive(true)
+        .build()
+        .ok();
+    if let Some(regex) = url {
+        masked = regex.replace_all(&masked, "[redacted-url]").to_string();
+    }
+    masked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cn_core::moderation::RuleCondition;
+
+    fn sample_event(content: &str, kind: u32, tags: Vec<Vec<String>>) -> nostr::RawEvent {
+        nostr::RawEvent {
+            id: "event-id".to_string(),
+            pubkey: "pubkey".to_string(),
+            created_at: 123,
+            kind,
+            tags,
+            content: content.to_string(),
+            sig: "sig".to_string(),
+        }
+    }
+
+    #[test]
+    fn rule_matches_content_keyword() {
+        let condition = RuleCondition {
+            kinds: None,
+            content_regex: None,
+            content_keywords: Some(vec!["spam".to_string()]),
+            tag_filters: None,
+            author_pubkeys: None,
+        };
+        let event = sample_event("This is spam content", 1, Vec::new());
+        assert!(rule_matches(&condition, &event));
+    }
+
+    #[test]
+    fn rule_matches_regex() {
+        let condition = RuleCondition {
+            kinds: None,
+            content_regex: Some("spam\\d+".to_string()),
+            content_keywords: None,
+            tag_filters: None,
+            author_pubkeys: None,
+        };
+        let event = sample_event("spam123 detected", 1, Vec::new());
+        assert!(rule_matches(&condition, &event));
+    }
+
+    #[test]
+    fn rule_matches_tag_filters() {
+        let mut tags = Vec::new();
+        tags.push(vec!["t".to_string(), "topic-1".to_string()]);
+        let condition = RuleCondition {
+            kinds: None,
+            content_regex: None,
+            content_keywords: None,
+            tag_filters: Some(std::collections::HashMap::from([(
+                "t".to_string(),
+                vec!["topic-1".to_string()],
+            )])),
+            author_pubkeys: None,
+        };
+        let event = sample_event("content", 1, tags);
+        assert!(rule_matches(&condition, &event));
+    }
+}

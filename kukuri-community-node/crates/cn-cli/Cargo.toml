@@ -28,5 +28,6 @@ cn-admin-api = { path = "../cn-admin-api" }
 cn-bootstrap = { path = "../cn-bootstrap" }
 cn-core = { path = "../cn-core" }
 cn-index = { path = "../cn-index" }
+cn-moderation = { path = "../cn-moderation" }
 cn-relay = { path = "../cn-relay" }
 cn-user-api = { path = "../cn-user-api" }
