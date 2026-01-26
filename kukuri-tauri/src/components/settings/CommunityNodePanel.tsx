@@ -206,19 +206,33 @@ export function CommunityNodePanel() {
           <Label htmlFor="community-node-base-url">Base URL</Label>
           <Input
             id="community-node-base-url"
+            data-testid="community-node-base-url"
             placeholder="https://community.example"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={handleSaveConfig}>
+            <Button
+              variant="outline"
+              onClick={handleSaveConfig}
+              data-testid="community-node-save-config"
+            >
               保存
             </Button>
-            <Button variant="ghost" onClick={handleClearConfig}>
+            <Button
+              variant="ghost"
+              onClick={handleClearConfig}
+              data-testid="community-node-clear-config"
+            >
               クリア
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <div
+            className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+            data-testid="community-node-token-status"
+            data-has-token={configQuery.data?.has_token ? 'true' : 'false'}
+            data-pubkey={configQuery.data?.pubkey ?? ''}
+          >
             <span>認証状態:</span>
             {configQuery.data?.has_token ? (
               <Badge variant="secondary">有効</Badge>
@@ -229,13 +243,18 @@ export function CommunityNodePanel() {
             {tokenExpiresAt && <span>有効期限: {tokenExpiresAt}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={handleAuthenticate} disabled={!baseUrl.trim()}>
+            <Button
+              onClick={handleAuthenticate}
+              disabled={!baseUrl.trim()}
+              data-testid="community-node-authenticate"
+            >
               認証
             </Button>
             <Button
               variant="ghost"
               onClick={handleClearToken}
               disabled={!configQuery.data?.has_token}
+              data-testid="community-node-clear-token"
             >
               トークン削除
             </Button>
@@ -293,13 +312,17 @@ export function CommunityNodePanel() {
 
         <div className="space-y-3">
           <p className="font-medium">同意ステータス</p>
-          <div className="rounded-md border p-3 text-xs text-muted-foreground">
+          <div
+            className="rounded-md border p-3 text-xs text-muted-foreground"
+            data-testid="community-node-consents"
+          >
             {consentsQuery.data ? JSON.stringify(consentsQuery.data, null, 2) : '未取得'}
           </div>
           <Button
             variant="outline"
             onClick={handleAcceptConsents}
             disabled={!configQuery.data?.has_token}
+            data-testid="community-node-accept-consents"
           >
             同意を更新
           </Button>
@@ -347,7 +370,11 @@ export function CommunityNodePanel() {
               onChange={(e) => setSyncAfterEpoch(e.target.value)}
             />
           </div>
-          <Button onClick={handleSyncKeyEnvelopes} disabled={!configQuery.data?.has_token}>
+          <Button
+            onClick={handleSyncKeyEnvelopes}
+            disabled={!configQuery.data?.has_token}
+            data-testid="community-node-sync-keys"
+          >
             同期
           </Button>
         </div>
@@ -361,8 +388,13 @@ export function CommunityNodePanel() {
             rows={6}
             value={inviteJson}
             onChange={(e) => setInviteJson(e.target.value)}
+            data-testid="community-node-invite-json"
           />
-          <Button onClick={handleRedeemInvite} disabled={!configQuery.data?.has_token}>
+          <Button
+            onClick={handleRedeemInvite}
+            disabled={!configQuery.data?.has_token}
+            data-testid="community-node-redeem-invite"
+          >
             招待を適用
           </Button>
         </div>

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import type { Options } from '@wdio/types';
 import { startDriver, stopDriver } from './helpers/tauriDriver.ts';
+import { startCommunityNodeMock, stopCommunityNodeMock } from './helpers/communityNodeMock.ts';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
@@ -133,6 +134,9 @@ export const config: Options.Testrunner = {
   onPrepare: async (_config, capabilities) => {
     mkdirSync(OUTPUT_DIR, { recursive: true });
     seedCliBootstrapFixture();
+    const { baseUrl } = await startCommunityNodeMock();
+    process.env.E2E_COMMUNITY_NODE_URL = baseUrl;
+    console.info(`[wdio.desktop] community node mock running at ${baseUrl}`);
     if (Array.isArray(capabilities)) {
       for (const capability of capabilities) {
         pruneUnsupportedCapabilities(capability as Record<string, unknown>);
@@ -156,6 +160,10 @@ export const config: Options.Testrunner = {
     await browser.saveScreenshot(filePath);
   },
   onComplete: async () => {
-    await stopDriver();
+    try {
+      await stopCommunityNodeMock();
+    } finally {
+      await stopDriver();
+    }
   },
 };
