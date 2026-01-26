@@ -1211,7 +1211,7 @@ mod api_contract_tests {
         let bootstrap_config = service_config::static_handle(serde_json::json!({
             "auth": { "mode": "off" }
         }));
-        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700", None)
+        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
             .expect("meili");
 
         crate::AppState {
