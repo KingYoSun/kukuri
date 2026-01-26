@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年01月26日
+最終更新日: 2026年01月27日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -20,6 +20,18 @@
 - [x] クライアント: ノード採用 UI、label/attestation 適用、key.envelope 受理と鍵保管、scope 別暗号投稿/復号を実装する
 - [x] 計画更新: `docs/01_project/activeContext/community_node_plan.md` の Node HTTP API パスを現行実装に合わせて更新する（`/v1/bootstrap/*`、`/v1/reports`、`/v1/keys/envelopes`、`/v1/search`）
 - [x] テスト: `cn-relay`/`cn-bootstrap`/`cn-admin-api`/`cn-kip-types` の統合・契約テストと、User API 主要エンドポイントの契約テストを追加する
+
+## 実ノードE2E/統合テスト拡充（計画）
+
+- [ ] E2E 用に `kukuri-community-node` を起動する Docker 経路を追加し、実ノードの base URL をテストへ配布する（`docker-compose.test.yml`/`scripts/test-docker.*`/`SCENARIO` を整理）。
+- [ ] 実ノードの DB/Meilisearch に投入する E2E シード（ユーザー/トピック/投稿/label/trust）を作成し、テスト前に投入/後に掃除できるようにする。
+- [ ] 実ノード認証フロー（challenge/verify）を通すヘルパーを追加し、`community-node` 設定/認証/同意取得の E2E を実ノードで再実行する。
+- [ ] invite.capability と key.envelope を実ノードで発行できるテストヘルパー（`cn-cli` or 専用API）を整備し、招待適用/鍵同期/暗号化投稿の E2E を追加する。
+- [ ] label/attestation/trust を実ノードで発行し、PostCard のラベル/信頼バッジ表示まで検証する E2E を追加する。
+- [ ] search/index の実データを投入し、検索UI（サジェスト/ページング/0件）と community node search API の連携を E2E で確認する。
+- [ ] bootstrap/relay 実ノードのエンドポイントを使った P2P 連携確認（list_bootstrap_nodes/services）を E2E に追加する。
+- [ ] 実ノード E2E のログ/artefact を `test-results/community-node-e2e` と `tmp/logs/community-node-e2e` に集約し、Runbook/CI の artefact 収集に追加する。
+- [ ] 実ノード E2E を Nightly/CI（`test.yml`/`nightly.yml`）へ組み込み、実行条件と所要時間を明記する。
 
 ## 参照（設計）
 
