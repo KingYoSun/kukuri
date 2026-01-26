@@ -17,6 +17,14 @@ const OFFLINE_CACHE_KEY = 'offline_actions';
 const OFFLINE_CACHE_TYPE = 'sync_queue';
 const CACHE_METADATA_TTL_SECONDS = 60 * 60; // 1 hour
 
+const nextLastSyncedAt = (current?: number) => {
+  const now = Date.now();
+  if (typeof current !== 'number') {
+    return now;
+  }
+  return now > current ? now : current + 1;
+};
+
 declare global {
   interface Window {
     __TAURI__?: unknown;
@@ -159,7 +167,8 @@ export const useOfflineStore = create<OfflineStore>()(
 
       startSync: () => set({ isSyncing: true }),
       endSync: () => set({ isSyncing: false }),
-      updateLastSyncedAt: () => set({ lastSyncedAt: Date.now() }),
+      updateLastSyncedAt: () =>
+        set((state) => ({ lastSyncedAt: nextLastSyncedAt(state.lastSyncedAt) })),
 
       // 非同期アクション
       saveOfflineAction: async (request) => {
@@ -215,7 +224,7 @@ export const useOfflineStore = create<OfflineStore>()(
             }));
           }
 
-          set({ lastSyncedAt: Date.now() });
+          set((state) => ({ lastSyncedAt: nextLastSyncedAt(state.lastSyncedAt) }));
 
           // エラーがあった場合は再試行をスケジュール
           if (response.failedCount > 0) {

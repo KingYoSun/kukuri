@@ -434,6 +434,7 @@ export function DirectMessageDialog() {
                           'bg-primary text-primary-foreground': isSelf,
                           'bg-muted text-foreground': !isSelf,
                         })}
+                        data-testid="direct-message-content"
                       >
                         {message.content}
                       </div>

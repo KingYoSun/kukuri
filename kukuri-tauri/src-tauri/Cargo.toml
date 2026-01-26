@@ -22,7 +22,7 @@ tauri-build = { version = "2.5.3", features = [] }
 semver = "1.0.27"
 tauri = { version = "2.9.5", features = ["test"] }
 tauri-plugin-opener = "2.5.2"
-tauri-plugin-dialog = "2.4.2"
+tauri-plugin-dialog = "2.6.0"
 tauri-plugin-fs = "2.4.4"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.147"

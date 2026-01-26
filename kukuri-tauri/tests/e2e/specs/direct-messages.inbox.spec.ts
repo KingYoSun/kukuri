@@ -105,7 +105,12 @@ describe('ダイレクトメッセージInbox', () => {
       { timeout: 20000, interval: 300, timeoutMsg: 'DMダイアログが開きませんでした' },
     );
     const messages = await $$('[data-testid="direct-message-item"]');
-    const firstMessageText = await messages[0]!.getText();
+    const messageContent = await messages[0]!.$('[data-testid="direct-message-content"]');
+    await browser.waitUntil(
+      async () => (await messageContent.getText()).includes(seeded.content),
+      { timeout: 20000, interval: 300, timeoutMsg: 'DM本文が取得できませんでした' },
+    );
+    const firstMessageText = await messageContent.getText();
     expect(firstMessageText).toContain(seeded.content);
 
     await browser.keys('Escape');
