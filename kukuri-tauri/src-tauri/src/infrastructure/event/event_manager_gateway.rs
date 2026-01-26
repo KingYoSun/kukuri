@@ -131,6 +131,8 @@ mod tests {
             _: &str,
             _: &str,
             _: Option<NostrEventId>,
+            _: Option<&str>,
+            _: Option<i64>,
         ) -> AnyResult<NostrEventId> {
             Ok(sample_nostr_event_id('2'))
         }
@@ -409,6 +411,8 @@ impl EventGateway for LegacyEventManagerGateway {
         topic_id: &TopicId,
         content: &TopicContent,
         reply_to: Option<&EventId>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<EventId, AppError> {
         record_p2p_broadcast_metrics(metrics::record_outcome(
             async {
@@ -420,7 +424,13 @@ impl EventGateway for LegacyEventManagerGateway {
 
                 let event_id = self
                     .manager
-                    .publish_topic_post(topic_id.as_str(), content.as_str(), reply_to_converted)
+                    .publish_topic_post(
+                        topic_id.as_str(),
+                        content.as_str(),
+                        reply_to_converted,
+                        scope,
+                        epoch,
+                    )
                     .await
                     .map_err(|err| AppError::NostrError(err.to_string()))?;
                 Self::to_domain_event_id(event_id)

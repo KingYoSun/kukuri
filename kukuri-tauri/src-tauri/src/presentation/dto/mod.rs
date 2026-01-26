@@ -1,5 +1,6 @@
 // DTOモジュール
 pub mod auth_dto;
+pub mod community_node_dto;
 pub mod direct_message_dto;
 pub mod event;
 pub mod offline;

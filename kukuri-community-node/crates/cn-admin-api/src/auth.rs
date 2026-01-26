@@ -186,3 +186,54 @@ async fn session_ttl_seconds(state: &AppState) -> i64 {
         .and_then(|value| value.as_i64())
         .unwrap_or(86400)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use axum::Router;
+    use cn_core::service_config;
+    use nostr_sdk::prelude::Keys;
+    use sqlx::postgres::PgPoolOptions;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    fn test_state() -> crate::AppState {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("lazy pool");
+        let admin_config = service_config::static_handle(serde_json::json!({
+            "session_cookie": true,
+            "session_ttl_seconds": 86400
+        }));
+        crate::AppState {
+            pool,
+            admin_config,
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
+            node_keys: Keys::generate(),
+        }
+    }
+
+    #[tokio::test]
+    async fn me_requires_session_cookie() {
+        let app = Router::new()
+            .route("/v1/admin/auth/me", get(me))
+            .with_state(test_state());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/admin/auth/me")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+}

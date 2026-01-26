@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use cn_core::{auth, metrics, nostr, topic};
+use cn_kip_types::{is_kip_kind, validate_kip_event, ValidationOptions};
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::config::RelayRuntimeConfig;
@@ -63,6 +64,20 @@ pub async fn ingest_event(
         return Ok(IngestOutcome::Rejected {
             reason: format!("invalid: signature failed ({err})"),
         });
+    }
+
+    if is_kip_kind(raw.kind) {
+        let options = ValidationOptions {
+            now,
+            verify_signature: false,
+            ..ValidationOptions::default()
+        };
+        if let Err(err) = validate_kip_event(&raw, options) {
+            metrics::inc_ingest_rejected(super::SERVICE_NAME, "invalid");
+            return Ok(IngestOutcome::Rejected {
+                reason: format!("invalid: kip validation failed ({err})"),
+            });
+        }
     }
 
     let mut normalized_topics = Vec::new();
@@ -790,4 +805,86 @@ async fn has_active_subscription(
     .fetch_optional(pool)
     .await?;
     Ok(status.map(|s| s == "active").unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cn_core::rate_limit::RateLimiter;
+    use cn_core::service_config;
+    use cn_kip_types::KIND_NODE_TOPIC_SERVICE;
+    use nostr_sdk::prelude::Keys;
+    use serde_json::json;
+    use sqlx::postgres::PgPoolOptions;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
+    use tokio::sync::{broadcast, RwLock};
+
+    fn test_state() -> AppState {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("lazy pool");
+        let config = service_config::static_handle(json!({
+            "auth": {
+                "mode": "off",
+                "enforce_at": null,
+                "grace_seconds": 900,
+                "ws_auth_timeout_seconds": 10
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            }
+        }));
+        let (realtime_tx, _) = broadcast::channel(8);
+        AppState {
+            pool,
+            config,
+            rate_limiter: Arc::new(RateLimiter::new()),
+            realtime_tx,
+            gossip_senders: Arc::new(RwLock::new(HashMap::new())),
+            node_topics: Arc::new(RwLock::new(HashSet::new())),
+            relay_public_url: None,
+        }
+    }
+
+    fn build_invalid_kip_event() -> nostr::RawEvent {
+        let keys = Keys::generate();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let tags = vec![
+            vec!["d".to_string(), "topic_service:kukuri:topic1:index:private".to_string()],
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["role".to_string(), "index".to_string()],
+            vec!["scope".to_string(), "private".to_string()],
+            vec!["k".to_string(), "kukuri".to_string()],
+            vec!["ver".to_string(), "1".to_string()],
+            vec!["exp".to_string(), (now + 3600).to_string()],
+        ];
+        let content = json!({
+            "schema": "kukuri-topic-service-v1",
+            "topic": "kukuri:topic1",
+            "role": "index",
+            "scope": "private"
+        })
+        .to_string();
+        nostr::build_signed_event(&keys, KIND_NODE_TOPIC_SERVICE as u16, tags, content)
+            .expect("event")
+    }
+
+    #[tokio::test]
+    async fn ingest_event_rejects_invalid_kip_event() {
+        let state = test_state();
+        let raw = build_invalid_kip_event();
+
+        let outcome = ingest_event(&state, raw, IngestSource::Gossip, IngestContext::default())
+            .await
+            .expect("ingest result");
+
+        match outcome {
+            IngestOutcome::Rejected { reason } => {
+                assert!(reason.contains("kip validation failed"));
+            }
+            _ => panic!("expected rejection for invalid kip event"),
+        }
+    }
 }

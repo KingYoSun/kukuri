@@ -22,6 +22,8 @@ pub trait EventManagerHandle: Send + Sync {
         topic_id: &str,
         content: &str,
         reply_to: Option<NostrEventId>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<NostrEventId>;
     async fn send_reaction(&self, target: &NostrEventId, reaction: &str) -> Result<NostrEventId>;
     async fn publish_repost(&self, target: &NostrEventId) -> Result<NostrEventId>;
@@ -104,9 +106,11 @@ impl EventManagerHandle for LegacyEventManagerHandle {
         topic_id: &str,
         content: &str,
         reply_to: Option<NostrEventId>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<NostrEventId> {
         self.inner
-            .publish_topic_post(topic_id, content, reply_to)
+            .publish_topic_post(topic_id, content, reply_to, scope, epoch)
             .await
     }
 

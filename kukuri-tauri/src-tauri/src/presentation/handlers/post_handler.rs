@@ -44,6 +44,9 @@ impl PostHandler {
             author_pubkey: author_pubkey.clone(),
             author_npub: npub,
             topic_id: post.topic_id,
+            scope: post.scope,
+            epoch: post.epoch,
+            is_encrypted: post.is_encrypted,
             created_at: post.created_at.timestamp(),
             likes: post.likes,
             boosts: post.boosts,
@@ -82,7 +85,12 @@ impl PostHandler {
         // サービス層を呼び出し
         let post = self
             .post_service
-            .create_post(request.content, current_user, request.topic_id)
+            .create_post(
+                request.content,
+                current_user,
+                request.topic_id,
+                request.scope,
+            )
             .await?;
 
         // DTOに変換

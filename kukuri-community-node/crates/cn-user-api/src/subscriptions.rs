@@ -5,6 +5,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use cn_core::topic::normalize_topic_id;
 use cn_core::nostr;
+use cn_kip_types::{validate_kip_event, ValidationOptions};
 use chrono::TimeZone;
 use nostr_sdk::prelude::{nip44, Keys, PublicKey};
 use rand_core::{OsRng, RngCore};
@@ -252,11 +253,18 @@ pub async fn redeem_invite(
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
     nostr::verify_event(&raw)
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
-    if raw.kind != 39021 {
+
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let options = ValidationOptions {
+        now,
+        verify_signature: false,
+        ..ValidationOptions::default()
+    };
+    if validate_kip_event(&raw, options).is_err() || raw.kind != 39021 {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "INVALID_EVENT",
-            "invalid capability kind",
+            "invalid capability event",
         ));
     }
 
@@ -287,7 +295,6 @@ pub async fn redeem_invite(
         .unwrap_or(1)
         .max(1);
 
-    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
     let expires_at_ts = if expires > 0 {
         expires
     } else {
@@ -887,6 +894,18 @@ pub async fn submit_report(
             }
             nostr::verify_event(&raw)
                 .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
+            let options = ValidationOptions {
+                now: cn_core::auth::unix_seconds().unwrap_or(0) as i64,
+                verify_signature: false,
+                ..ValidationOptions::default()
+            };
+            if validate_kip_event(&raw, options).is_err() {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_EVENT",
+                    "invalid report event",
+                ));
+            }
             if raw.pubkey != auth.pubkey {
                 return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
@@ -1131,6 +1150,7 @@ fn build_key_envelope(
         vec!["t".to_string(), topic_id.to_string()],
         vec!["scope".to_string(), scope.to_string()],
         vec!["epoch".to_string(), epoch.to_string()],
+        vec!["k".to_string(), "kukuri".to_string()],
         vec!["ver".to_string(), "1".to_string()],
         vec!["d".to_string(), d_tag],
     ];
@@ -1156,5 +1176,103 @@ mod trust_subject_tests {
     #[test]
     fn parse_trust_subject_rejects_invalid_prefix() {
         assert!(parse_trust_subject("npub1example").is_err());
+    }
+}
+
+#[cfg(test)]
+mod api_contract_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::extract::ConnectInfo;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use axum::Router;
+    use cn_core::service_config;
+    use nostr_sdk::prelude::Keys;
+    use sqlx::postgres::PgPoolOptions;
+    use std::net::SocketAddr;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    fn test_state() -> crate::AppState {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("lazy pool");
+        let jwt_config = cn_core::auth::JwtConfig {
+            issuer: "http://localhost".to_string(),
+            audience: crate::TOKEN_AUDIENCE.to_string(),
+            secret: "test-secret".to_string(),
+            ttl_seconds: 3600,
+        };
+        let user_config = service_config::static_handle(serde_json::json!({
+            "rate_limit": { "enabled": false }
+        }));
+        let bootstrap_config = service_config::static_handle(serde_json::json!({
+            "auth": { "mode": "off" }
+        }));
+        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700", None)
+            .expect("meili");
+
+        crate::AppState {
+            pool,
+            jwt_config,
+            public_base_url: "http://localhost".to_string(),
+            user_config,
+            bootstrap_config,
+            rate_limiter: Arc::new(cn_core::rate_limit::RateLimiter::new()),
+            node_keys: Keys::generate(),
+            export_dir: PathBuf::from("tmp/test_exports"),
+            hmac_secret: b"test-secret".to_vec(),
+            meili,
+        }
+    }
+
+    async fn request_status(app: Router, uri: &str) -> StatusCode {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        response.status()
+    }
+
+    #[tokio::test]
+    async fn list_labels_requires_auth() {
+        let app = Router::new()
+            .route("/v1/labels", get(list_labels))
+            .with_state(test_state());
+        let status = request_status(app, "/v1/labels?target=event:abc").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_requires_auth() {
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(test_state());
+        let status = request_status(
+            app,
+            "/v1/trust/report-based?subject=pubkey:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_requires_auth() {
+        let app = Router::new()
+            .route("/v1/trust/communication-density", get(trust_communication_density))
+            .with_state(test_state());
+        let status = request_status(
+            app,
+            "/v1/trust/communication-density?subject=pubkey:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }

@@ -9,6 +9,7 @@ import { useDraftStore } from '@/stores/draftStore';
 import { useToast } from '@/hooks/use-toast';
 import type { Topic } from '@/stores/types';
 import { useComposerStore, getComposerInitialState } from '@/stores/composerStore';
+import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 
 // Mocks
 vi.mock('@/stores/postStore');
@@ -16,6 +17,7 @@ vi.mock('@/stores/topicStore');
 vi.mock('@/stores/draftStore');
 vi.mock('@/hooks/use-toast');
 vi.mock('@/stores/composerStore');
+vi.mock('@/stores/communityNodeStore');
 vi.mock('@/components/topics/TopicFormModal', () => ({
   TopicFormModal: ({
     open,
@@ -259,6 +261,18 @@ describe('PostComposer', () => {
       clearPendingTopicBinding: vi.fn(),
     } as unknown as ReturnType<typeof useComposerStore>);
 
+    vi.mocked(useCommunityNodeStore).mockReturnValue({
+      enableAccessControl: true,
+      enableLabels: true,
+      enableTrust: true,
+      enableSearch: false,
+      setEnableAccessControl: vi.fn(),
+      setEnableLabels: vi.fn(),
+      setEnableTrust: vi.fn(),
+      setEnableSearch: vi.fn(),
+      reset: vi.fn(),
+    } as unknown as ReturnType<typeof useCommunityNodeStore>);
+
     vi.mocked(useToast).mockReturnValue({ toast: mockToast });
   });
 
@@ -316,6 +330,7 @@ describe('PostComposer', () => {
       expect(mockCreatePost).toHaveBeenCalledWith('Test post content', 'topic1', {
         replyTo: undefined,
         quotedPost: undefined,
+        scope: 'public',
       });
       expect(mockToast).toHaveBeenCalledWith({
         title: '成功',

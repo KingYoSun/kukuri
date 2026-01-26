@@ -24,7 +24,7 @@ thread_local! {
 
 #[cfg(test)]
 pub(crate) struct MetricsGuard {
-    guard: Option<std::sync::MutexGuard<'static, ()>>,
+    _guard: Option<std::sync::MutexGuard<'static, ()>>,
 }
 
 #[cfg(test)]
@@ -44,7 +44,7 @@ fn lock_guard() -> MetricsGuard {
         depth.set(current + 1);
         if current == 0 {
             MetricsGuard {
-                guard: Some(
+                _guard: Some(
                     TEST_LOCK
                         .get_or_init(|| Mutex::new(()))
                         .lock()
@@ -52,7 +52,7 @@ fn lock_guard() -> MetricsGuard {
                 ),
             }
         } else {
-            MetricsGuard { guard: None }
+            MetricsGuard { _guard: None }
         }
     })
 }

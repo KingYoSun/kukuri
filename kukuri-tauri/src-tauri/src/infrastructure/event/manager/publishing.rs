@@ -48,11 +48,13 @@ impl EventManager {
         topic_id: &str,
         content: &str,
         reply_to: Option<EventId>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<EventId> {
         self.ensure_initialized().await?;
 
         let publisher = self.event_publisher.read().await;
-        let event = publisher.create_topic_post(topic_id, content, reply_to)?;
+        let event = publisher.create_topic_post(topic_id, content, reply_to, scope, epoch)?;
         drop(publisher);
 
         let client_manager = self.client_manager.read().await;

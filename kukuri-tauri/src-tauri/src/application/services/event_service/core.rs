@@ -158,6 +158,8 @@ pub trait EventServiceTrait: Send + Sync {
         topic_id: &str,
         content: &str,
         reply_to: Option<&str>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<EventId, AppError>;
     async fn send_reaction(&self, event_id: &str, reaction: &str) -> Result<EventId, AppError>;
     async fn update_metadata(&self, metadata: NostrMetadataDto) -> Result<EventId, AppError>;
@@ -190,6 +192,8 @@ impl EventServiceTrait for EventService {
         topic_id: &str,
         content: &str,
         reply_to: Option<&str>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<EventId, AppError> {
         let topic = TopicId::new(topic_id.to_string()).map_err(|err| {
             AppError::validation(
@@ -205,7 +209,7 @@ impl EventServiceTrait for EventService {
         })?;
         let reply_to_id = parse_optional_event_id(reply_to)?;
         self.event_gateway
-            .publish_topic_post(&topic, &topic_content, reply_to_id.as_ref())
+            .publish_topic_post(&topic, &topic_content, reply_to_id.as_ref(), scope, epoch)
             .await
     }
 

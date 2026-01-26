@@ -14,12 +14,12 @@
 - M5: Trust v1（Apache AGE）: `docs/01_project/activeContext/tasks/priority/community_nodes_m5.md`
 - Client: ノード採用/label・attestation適用/鍵管理/暗号化投稿（新規）: `docs/01_project/activeContext/tasks/priority/community_nodes_client.md`
 
-## 欠落タスク（指摘反映）
+## 欠落タスク（対応済み）
 
-- M0: `/kip/` に KIP-0001 v0.1 を追加し、`cn-kip-types` に共通の kind/tag/exp/署名検証を実装する
-- クライアント: ノード採用 UI、label/attestation 適用、key.envelope 受理と鍵保管、scope 別暗号投稿/復号を実装する
-- 計画更新: `docs/01_project/activeContext/community_node_plan.md` の Node HTTP API パスを現行実装に合わせて更新する（`/v1/bootstrap/*`、`/v1/reports`、`/v1/keys/envelopes`、`/v1/search`）
-- テスト: `cn-relay`/`cn-bootstrap`/`cn-admin-api`/`cn-kip-types` の統合・契約テストと、User API 主要エンドポイントの契約テストを追加する
+- [x] M0: `docs/kips/` に KIP-0001 v0.1 を追加し、`cn-kip-types` に共通の kind/tag/exp/署名検証を実装する
+- [x] クライアント: ノード採用 UI、label/attestation 適用、key.envelope 受理と鍵保管、scope 別暗号投稿/復号を実装する
+- [x] 計画更新: `docs/01_project/activeContext/community_node_plan.md` の Node HTTP API パスを現行実装に合わせて更新する（`/v1/bootstrap/*`、`/v1/reports`、`/v1/keys/envelopes`、`/v1/search`）
+- [x] テスト: `cn-relay`/`cn-bootstrap`/`cn-admin-api`/`cn-kip-types` の統合・契約テストと、User API 主要エンドポイントの契約テストを追加する
 
 ## 参照（設計）
 

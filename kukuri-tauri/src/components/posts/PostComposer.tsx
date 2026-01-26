@@ -3,6 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
 import { useDraftStore } from '@/stores/draftStore';
@@ -17,6 +25,8 @@ import { errorHandler } from '@/lib/errorHandler';
 import { TopicFormModal } from '@/components/topics/TopicFormModal';
 import type { Topic } from '@/stores';
 import { useComposerStore } from '@/stores/composerStore';
+import { useCommunityNodeStore } from '@/stores/communityNodeStore';
+import type { PostScope } from '@/stores/types';
 
 interface PostComposerProps {
   topicId?: string;
@@ -25,6 +35,29 @@ interface PostComposerProps {
   replyTo?: string;
   quotedPost?: string;
 }
+
+const scopeOptions: Array<{ value: PostScope; label: string; description: string }> = [
+  {
+    value: 'public',
+    label: '公開',
+    description: '公開範囲: 誰でも閲覧できます。',
+  },
+  {
+    value: 'friend_plus',
+    label: 'フレンド+',
+    description: 'フレンド+範囲: 連鎖的な信頼関係に公開します。',
+  },
+  {
+    value: 'friend',
+    label: 'フレンド',
+    description: 'フレンド範囲: 承認済みのメンバーのみ閲覧できます。',
+  },
+  {
+    value: 'invite',
+    label: '招待',
+    description: '招待範囲: 招待コードを持つ相手のみ閲覧できます。',
+  },
+];
 
 export function PostComposer({
   topicId,
@@ -35,6 +68,7 @@ export function PostComposer({
 }: PostComposerProps) {
   const [content, setContent] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState(topicId || '');
+  const [selectedScope, setSelectedScope] = useState<PostScope>('public');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [showDrafts, setShowDrafts] = useState(false);
@@ -46,12 +80,19 @@ export function PostComposer({
   const { createDraft, deleteDraft, autosaveDraft } = useDraftStore();
   const { toast } = useToast();
   const applyTopicAndResume = useComposerStore((state) => state.applyTopicAndResume);
+  const enableAccessControl = useCommunityNodeStore((state) => state.enableAccessControl);
 
   useEffect(() => {
     if (topicId) {
       setSelectedTopicId(topicId);
     }
   }, [topicId]);
+
+  useEffect(() => {
+    if (!enableAccessControl) {
+      setSelectedScope('public');
+    }
+  }, [enableAccessControl]);
 
   // Get topic name for draft
   const getTopicName = useCallback(() => {
@@ -73,6 +114,7 @@ export function PostComposer({
         metadata: {
           replyTo,
           quotedPost,
+          scope: selectedScope,
         },
       });
     } else if (content.trim()) {
@@ -84,6 +126,7 @@ export function PostComposer({
         metadata: {
           replyTo,
           quotedPost,
+          scope: selectedScope,
         },
       });
       setCurrentDraftId(draft.id);
@@ -94,6 +137,7 @@ export function PostComposer({
     currentDraftId,
     replyTo,
     quotedPost,
+    selectedScope,
     createDraft,
     autosaveDraft,
     getTopicName,
@@ -136,6 +180,7 @@ export function PostComposer({
       const createdPost = await createPost(content, selectedTopicId, {
         replyTo,
         quotedPost,
+        scope: selectedScope,
       });
       const isSynced = createdPost?.isSynced !== false;
 
@@ -192,6 +237,7 @@ export function PostComposer({
   const handleSelectDraft = (draft: PostDraft) => {
     setContent(draft.content);
     setSelectedTopicId(draft.topicId || '');
+    setSelectedScope(draft.metadata?.scope ?? 'public');
     setCurrentDraftId(draft.id);
     setShowDrafts(false);
   };
@@ -209,6 +255,7 @@ export function PostComposer({
   const resetForm = () => {
     setContent('');
     setSelectedTopicId(topicId || '');
+    setSelectedScope('public');
     setCurrentDraftId(null);
   };
 
@@ -301,6 +348,31 @@ export function PostComposer({
               onCreateTopicRequest={topicId ? undefined : () => setShowTopicCreationDialog(true)}
               dataTestId="topic-selector"
             />
+
+            {enableAccessControl && (
+              <div className="space-y-2">
+                <Label htmlFor="post-scope">公開範囲</Label>
+                <Select
+                  value={selectedScope}
+                  onValueChange={(value) => setSelectedScope(value as PostScope)}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger id="post-scope" data-testid="scope-selector">
+                    <SelectValue placeholder="公開範囲を選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {scopeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {scopeOptions.find((option) => option.value === selectedScope)?.description}
+                </p>
+              </div>
+            )}
 
             {/* Content editor */}
             <TabsContent value="simple" className="mt-0">

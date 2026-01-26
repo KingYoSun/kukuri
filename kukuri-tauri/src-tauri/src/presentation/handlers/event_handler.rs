@@ -83,6 +83,8 @@ impl EventHandler {
                 &request.topic_id,
                 &request.content,
                 request.reply_to.as_deref(),
+                None,
+                None,
             )
             .await?;
 

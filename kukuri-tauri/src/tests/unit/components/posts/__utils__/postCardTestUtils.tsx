@@ -32,6 +32,19 @@ const hoisted = vi.hoisted(() => {
     createPost,
   }));
 
+  const communityNodeState = {
+    enableAccessControl: true,
+    enableLabels: true,
+    enableTrust: true,
+    enableSearch: false,
+    setEnableAccessControl: vi.fn(),
+    setEnableLabels: vi.fn(),
+    setEnableTrust: vi.fn(),
+    setEnableSearch: vi.fn(),
+    reset: vi.fn(),
+  };
+  const useCommunityNodeStore = vi.fn(() => communityNodeState);
+
   const authState = {
     currentUser: {
       pubkey: 'user-pubkey',
@@ -61,6 +74,7 @@ const hoisted = vi.hoisted(() => {
     useDeletePostMock: vi.fn(() => deletePostMutation),
     useOfflineStoreMock: useOfflineStore,
     usePostStoreMock: usePostStore,
+    useCommunityNodeStoreMock: useCommunityNodeStore,
   };
 });
 
@@ -76,6 +90,7 @@ export const {
   useDeletePostMock,
   useOfflineStoreMock,
   usePostStoreMock,
+  useCommunityNodeStoreMock,
 } = hoisted;
 
 export const mockPost: Post = {
@@ -116,6 +131,15 @@ vi.mock('@/lib/api/tauri', () => ({
     likePost: likePostMock,
     boostPost: boostPostMock,
     createPost: createPostMock,
+  },
+}));
+
+vi.mock('@/lib/api/communityNode', () => ({
+  communityNodeApi: {
+    getConfig: vi.fn().mockResolvedValue(null),
+    listLabels: vi.fn(),
+    trustReportBased: vi.fn(),
+    trustCommunicationDensity: vi.fn(),
   },
 }));
 
@@ -201,6 +225,10 @@ vi.mock('@/stores', () => ({
   useAuthStore: useAuthStoreMock,
   useBookmarkStore: vi.fn(() => bookmarkStoreMock),
   usePostStore: usePostStoreMock,
+}));
+
+vi.mock('@/stores/communityNodeStore', () => ({
+  useCommunityNodeStore: useCommunityNodeStoreMock,
 }));
 
 vi.mock('@/stores/offlineStore', () => ({

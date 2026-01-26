@@ -48,7 +48,7 @@ async fn operations_fail_before_initialization() {
     assert!(manager.publish_text_note("test").await.is_err());
     assert!(
         manager
-            .publish_topic_post("topic", "content", None)
+            .publish_topic_post("topic", "content", None, None, None)
             .await
             .is_err()
     );

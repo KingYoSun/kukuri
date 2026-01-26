@@ -1,0 +1,84 @@
+use crate::application::ports::group_key_store::GroupKeyEntry;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeConfigRequest {
+    pub base_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeConfigResponse {
+    pub base_url: String,
+    pub has_token: bool,
+    pub token_expires_at: Option<i64>,
+    pub pubkey: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeAuthResponse {
+    pub expires_at: i64,
+    pub pubkey: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeKeyEnvelopeRequest {
+    pub topic_id: String,
+    pub scope: Option<String>,
+    pub after_epoch: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeKeyEnvelopeResponse {
+    pub stored: Vec<GroupKeyEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeRedeemInviteRequest {
+    pub capability_event_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeRedeemInviteResponse {
+    pub topic_id: String,
+    pub scope: String,
+    pub epoch: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeLabelsRequest {
+    pub target: String,
+    pub topic: Option<String>,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeTrustRequest {
+    pub subject: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeSearchRequest {
+    pub topic: String,
+    pub q: Option<String>,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeConsentRequest {
+    pub policy_ids: Option<Vec<String>>,
+    pub accept_all_current: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeReportRequest {
+    pub report_event_json: Option<serde_json::Value>,
+    pub target: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeBootstrapServicesRequest {
+    pub topic_id: String,
+}

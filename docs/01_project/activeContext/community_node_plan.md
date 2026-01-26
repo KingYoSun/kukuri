@@ -165,12 +165,12 @@
 
 > KIP外だが実装を進めるために最小限入れる。後でイベント化してもよい。
 
-- `GET /v1/node/descriptor` : 39000生成の元情報
-- `GET /v1/topic/{topicId}/services` : 39001候補一覧（自ノード分）
+- `GET /v1/bootstrap/nodes` : 39000配布（node.descriptor）
+- `GET /v1/bootstrap/topics/:topic_id/services` : 39001配布（topic_service）
 - `POST /v1/invite/redeem` : capabilityを提示してjoin（rate-limit必須）
-- `POST /v1/keys/envelope` : 鍵再配布（認可が必要）
-- `POST /v1/moderation/report` : report補助（ただし最終は39005で発行しても良い）
-- `GET /v1/index/search?q=...` : index（課金は将来）
+- `GET /v1/keys/envelopes` : 鍵再配布（認可が必要）
+- `POST /v1/reports` : report受理（ただし最終は39005で発行しても良い）
+- `GET /v1/search?q=...` : index（課金は将来）
 
 ## 6. セキュリティ & プライバシー（最低限の脅威モデル）
 
@@ -190,7 +190,7 @@
 
 ## 7. リポジトリ構成（提案）
 
-- `/kip/` : KIP仕様（KIP-0001.md）
+- `docs/kips/` : KIP仕様（KIP-0001.md）
 - `/crates/kip_types/` : kind/tag/contentの型、検証、(de)serialize
 - `/crates/crypto/` : NIP-44ラッパ（既存採用に合わせる）
 - `/apps/client-tauri/` : クライアント
@@ -200,7 +200,7 @@
 ## 8. 実装マイルストーン（最短で価値が出る順）
 
 ### M0: 仕様固定（1〜2日）
-- KIP-0001 v0.1 を `kip/` に追加
+- KIP-0001 v0.1 を `docs/kips/` に追加
 - kind・tag命名・schema名を確定
 - 互換性方針（ver/schema/v2方針）をREADMEに明記
 

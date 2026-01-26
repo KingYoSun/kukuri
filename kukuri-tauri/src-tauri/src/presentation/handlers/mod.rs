@@ -1,4 +1,5 @@
 pub mod auth_handler;
+pub mod community_node_handler;
 pub mod direct_message_handler;
 pub mod event_handler;
 pub mod offline_handler;
@@ -8,6 +9,7 @@ pub mod secure_storage_handler;
 pub mod topic_handler;
 
 pub use auth_handler::AuthHandler;
+pub use community_node_handler::CommunityNodeHandler;
 pub use direct_message_handler::DirectMessageHandler;
 pub use event_handler::EventHandler;
 pub use offline_handler::OfflineHandler;

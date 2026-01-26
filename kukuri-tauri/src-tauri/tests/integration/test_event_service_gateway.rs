@@ -55,7 +55,13 @@ async fn publish_topic_post_converts_topic_and_reply() {
     let (service, manager, _) = build_service().await;
     let reply_id = repeating_hex('b');
     service
-        .publish_topic_post(DEFAULT_PUBLIC_TOPIC_ID, "phase5 topic body", Some(&reply_id))
+        .publish_topic_post(
+            DEFAULT_PUBLIC_TOPIC_ID,
+            "phase5 topic body",
+            Some(&reply_id),
+            None,
+            None,
+        )
         .await
         .expect("publish topic post");
 
@@ -270,6 +276,8 @@ impl EventManagerHandle for RecordingEventManager {
         topic_id: &str,
         content: &str,
         reply_to: Option<NostrEventId>,
+        _scope: Option<&str>,
+        _epoch: Option<i64>,
     ) -> anyhow::Result<NostrEventId> {
         let event_id = self.next_event_id();
         self.record_event_id(&event_id).await;

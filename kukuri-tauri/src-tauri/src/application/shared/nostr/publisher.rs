@@ -104,6 +104,8 @@ impl EventPublisher {
         topic_id: &str,
         content: &str,
         reply_to: Option<EventId>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<Event> {
         let keys = self
             .keys
@@ -121,6 +123,14 @@ impl EventPublisher {
                 TagKind::Custom("reply".into()),
                 vec![reply_id.to_string()],
             ));
+        }
+
+        if let Some(scope) = scope {
+            tags.push(Tag::parse(["scope", scope])?);
+        }
+        if let Some(epoch) = epoch {
+            let epoch_value = epoch.to_string();
+            tags.push(Tag::parse(["epoch", epoch_value.as_str()])?);
         }
 
         let event = EventBuilder::text_note(content)
@@ -262,7 +272,7 @@ mod tests {
         publisher.set_keys(keys);
 
         let event = publisher
-            .create_topic_post("bitcoin", "Let's discuss Bitcoin!", None)
+            .create_topic_post("bitcoin", "Let's discuss Bitcoin!", None, None, None)
             .unwrap();
         assert!(event.content.contains("Let's discuss Bitcoin!"));
 
@@ -283,7 +293,7 @@ mod tests {
 
         let reply_to = EventId::from_slice(&[3; 32]).unwrap();
         let event = publisher
-            .create_topic_post("nostr", "Reply to thread", Some(reply_to))
+            .create_topic_post("nostr", "Reply to thread", Some(reply_to), None, None)
             .unwrap();
 
         // タグにリプライ情報が含まれていることを確認
@@ -310,7 +320,7 @@ mod tests {
         assert!(publisher.create_deletion(vec![], None).is_err());
         assert!(
             publisher
-                .create_topic_post("topic", "content", None)
+                .create_topic_post("topic", "content", None, None, None)
                 .is_err()
         );
     }
@@ -331,7 +341,7 @@ mod tests {
                 .create_reaction(&EventId::from_slice(&[1; 32]).unwrap(), "+")
                 .unwrap(),
             publisher
-                .create_topic_post("test", "content", None)
+                .create_topic_post("test", "content", None, None, None)
                 .unwrap(),
         ];
 

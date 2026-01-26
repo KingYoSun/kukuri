@@ -295,6 +295,7 @@ export class SyncEngine {
           topic_id: actionData.topicId,
           reply_to: actionData.replyTo,
           quoted_post: actionData.quotedPost,
+          scope: actionData.scope,
         });
         break;
 

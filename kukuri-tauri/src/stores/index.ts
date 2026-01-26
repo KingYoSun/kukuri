@@ -9,3 +9,4 @@ export { usePrivacySettingsStore } from './privacySettingsStore';
 export { useComposerStore } from './composerStore';
 export { useDirectMessageStore } from './directMessageStore';
 export { useKeyManagementStore } from './keyManagementStore';
+export { useCommunityNodeStore } from './communityNodeStore';

@@ -313,3 +313,79 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
 async fn metrics_endpoint() -> impl IntoResponse {
     metrics::metrics_response(SERVICE_NAME)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nostr_sdk::prelude::Keys;
+    use serde_json::json;
+
+    fn has_tag(tags: &[Vec<String>], name: &str, value: &str) -> bool {
+        tags.iter().any(|tag| {
+            tag.get(0).map(|v| v.as_str()) == Some(name)
+                && tag.get(1).map(|v| v.as_str()) == Some(value)
+        })
+    }
+
+    #[test]
+    fn build_descriptor_event_includes_required_tags() {
+        let keys = Keys::generate();
+        let descriptor = json!({
+            "name": "Test Node",
+            "roles": ["bootstrap", "index"],
+            "endpoints": { "http": "https://node.example" },
+            "policy_url": "https://node.example/policy",
+            "jurisdiction": "JP",
+            "contact": "ops@example"
+        });
+        let exp = 1_725_000_000_i64;
+
+        let event = build_descriptor_event(&keys, &descriptor, exp).expect("event");
+
+        assert!(has_tag(&event.tags, "d", "descriptor"));
+        assert!(has_tag(&event.tags, "k", "kukuri"));
+        assert!(has_tag(&event.tags, "ver", "1"));
+        assert!(has_tag(&event.tags, "exp", &exp.to_string()));
+        assert!(has_tag(&event.tags, "policy", "https://node.example/policy"));
+        assert!(has_tag(&event.tags, "jurisdiction", "JP"));
+        assert!(has_tag(&event.tags, "role", "bootstrap"));
+        assert!(has_tag(&event.tags, "role", "index"));
+
+        let content: serde_json::Value =
+            serde_json::from_str(&event.content).expect("content json");
+        assert_eq!(
+            content.get("schema").and_then(|v| v.as_str()),
+            Some("kukuri-node-desc-v1")
+        );
+    }
+
+    #[test]
+    fn build_topic_service_event_includes_required_tags() {
+        let keys = Keys::generate();
+        let exp = 1_725_000_000_i64;
+        let event = build_topic_service_event(
+            &keys,
+            "kukuri:topic1",
+            "index",
+            "public",
+            "topic_service:kukuri:topic1:index:public",
+            exp,
+        )
+        .expect("event");
+
+        assert!(has_tag(&event.tags, "d", "topic_service:kukuri:topic1:index:public"));
+        assert!(has_tag(&event.tags, "t", "kukuri:topic1"));
+        assert!(has_tag(&event.tags, "role", "index"));
+        assert!(has_tag(&event.tags, "scope", "public"));
+        assert!(has_tag(&event.tags, "k", "kukuri"));
+        assert!(has_tag(&event.tags, "ver", "1"));
+        assert!(has_tag(&event.tags, "exp", &exp.to_string()));
+
+        let content: serde_json::Value =
+            serde_json::from_str(&event.content).expect("content json");
+        assert_eq!(
+            content.get("schema").and_then(|v| v.as_str()),
+            Some("kukuri-topic-service-v1")
+        );
+    }
+}

@@ -39,6 +39,7 @@ pub async fn setup_offline_service() -> OfflineTestContext {
     }
 }
 
+#[allow(dead_code)]
 pub fn sample_save_params() -> SaveOfflineActionParams {
     SaveOfflineActionParams {
         user_pubkey: PublicKey::from_hex_str(TEST_PUBKEY_HEX).expect("pubkey"),

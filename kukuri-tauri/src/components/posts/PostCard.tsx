@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import {
   Bookmark,
   Heart,
+  Lock,
   Loader2,
   MessageCircle,
   MoreVertical,
   Quote,
   Repeat2,
   Share,
+  ShieldCheck,
   Trash2,
   WifiOff,
 } from 'lucide-react';
@@ -21,6 +23,8 @@ import type { Post } from '@/stores';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { usePostStore } from '@/stores/postStore';
 import { TauriApi } from '@/lib/api/tauri';
+import { communityNodeApi } from '@/lib/api/communityNode';
+import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -46,11 +50,79 @@ import {
 import { ReactionPicker } from './ReactionPicker';
 import { QuoteForm } from './QuoteForm';
 import { ReplyForm } from './ReplyForm';
+import { errorHandler } from '@/lib/errorHandler';
 
 interface PostCardProps {
   post: Post;
   'data-testid'?: string;
 }
+
+const scopeLabels: Record<string, string> = {
+  public: '公開',
+  friend_plus: 'フレンド+',
+  friend: 'フレンド',
+  invite: '招待',
+};
+
+const formatScopeLabel = (scope?: string) => {
+  if (!scope) {
+    return scopeLabels.public;
+  }
+  return scopeLabels[scope] ?? scope;
+};
+
+const extractTagValue = (event: unknown, tagName: string): string | null => {
+  if (!event || typeof event !== 'object') {
+    return null;
+  }
+  const tags = (event as { tags?: unknown }).tags;
+  if (!Array.isArray(tags)) {
+    return null;
+  }
+  for (const tag of tags) {
+    if (Array.isArray(tag) && tag[0] === tagName && typeof tag[1] === 'string') {
+      return tag[1];
+    }
+  }
+  return null;
+};
+
+const formatLabelSummary = (event: unknown): string | null => {
+  const label = extractTagValue(event, 'label');
+  if (!label) {
+    return null;
+  }
+  const confidence = extractTagValue(event, 'confidence');
+  if (!confidence) {
+    return label;
+  }
+  const numeric = Number(confidence);
+  if (Number.isFinite(numeric)) {
+    return `${label} (${numeric.toFixed(2)})`;
+  }
+  return label;
+};
+
+const parseLabelSummaries = (payload: unknown): string[] => {
+  if (!payload || typeof payload !== 'object') {
+    return [];
+  }
+  const items = (payload as { items?: unknown }).items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  const summaries = items
+    .map((item) => formatLabelSummary(item))
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set(summaries));
+};
+
+const toNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  return null;
+};
 
 export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -82,6 +154,44 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const isPostPending = pendingActions.some(
     (action) => action.actionType === 'CREATE_POST' && action.localId === post.localId,
   );
+  const { enableLabels, enableTrust } = useCommunityNodeStore();
+  const communityConfigQuery = useQuery({
+    queryKey: ['community-node', 'config'],
+    queryFn: () => communityNodeApi.getConfig(),
+    staleTime: 1000 * 60 * 5,
+  });
+  const hasCommunityAuth = Boolean(
+    communityConfigQuery.data?.base_url && communityConfigQuery.data?.has_token,
+  );
+  const labelQuery = useQuery({
+    queryKey: ['community-node', 'labels', post.id],
+    queryFn: () =>
+      communityNodeApi.listLabels({
+        target: `event:${post.id}`,
+        limit: 10,
+      }),
+    enabled: enableLabels && hasCommunityAuth,
+    staleTime: 1000 * 60 * 5,
+  });
+  const trustSubject = `pubkey:${post.author.pubkey}`;
+  const trustReportQuery = useQuery({
+    queryKey: ['community-node', 'trust', 'report-based', post.author.pubkey],
+    queryFn: () => communityNodeApi.trustReportBased({ subject: trustSubject }),
+    enabled: enableTrust && hasCommunityAuth,
+    staleTime: 1000 * 60 * 5,
+  });
+  const trustDensityQuery = useQuery({
+    queryKey: ['community-node', 'trust', 'communication-density', post.author.pubkey],
+    queryFn: () => communityNodeApi.trustCommunicationDensity({ subject: trustSubject }),
+    enabled: enableTrust && hasCommunityAuth,
+    staleTime: 1000 * 60 * 5,
+  });
+  const labelSummaries = parseLabelSummaries(labelQuery.data);
+  const reportScore = toNumber(trustReportQuery.data?.score);
+  const densityScore = toNumber(trustDensityQuery.data?.score);
+  const resolvedScope = post.scope ?? 'public';
+  const showScopeBadge = resolvedScope !== 'public';
+  const showEncryptedBadge = post.isEncrypted === true;
 
   useEffect(() => {
     setIsBookmarkedLocal(isPostBookmarked);
@@ -98,6 +208,36 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   useEffect(() => {
     setBoostCount(post.boosts ?? 0);
   }, [post.boosts]);
+
+  useEffect(() => {
+    if (labelQuery.isError) {
+      errorHandler.log('Failed to load community node labels', labelQuery.error, {
+        context: 'PostCard.labels',
+        metadata: { postId: post.id },
+      });
+    }
+  }, [labelQuery.isError, labelQuery.error, post.id]);
+
+  useEffect(() => {
+    if (trustReportQuery.isError) {
+      errorHandler.log('Failed to load community node trust score', trustReportQuery.error, {
+        context: 'PostCard.trustReport',
+        metadata: { author: post.author.pubkey },
+      });
+    }
+    if (trustDensityQuery.isError) {
+      errorHandler.log('Failed to load community node trust density', trustDensityQuery.error, {
+        context: 'PostCard.trustDensity',
+        metadata: { author: post.author.pubkey },
+      });
+    }
+  }, [
+    trustReportQuery.isError,
+    trustReportQuery.error,
+    trustDensityQuery.isError,
+    trustDensityQuery.error,
+    post.author.pubkey,
+  ]);
 
   const likeMutation = useMutation({
     mutationFn: async () => {
@@ -315,6 +455,42 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
         </div>
       </CardHeader>
       <CardContent>
+        {(showScopeBadge ||
+          showEncryptedBadge ||
+          labelSummaries.length > 0 ||
+          reportScore !== null ||
+          densityScore !== null) && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+            {showScopeBadge && (
+              <Badge variant="outline" data-testid={`${baseTestId}-scope`}>
+                {formatScopeLabel(resolvedScope)}
+              </Badge>
+            )}
+            {showEncryptedBadge && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Lock className="h-3 w-3" />
+                暗号化
+              </Badge>
+            )}
+            {labelSummaries.slice(0, 3).map((label) => (
+              <Badge key={label} variant="outline">
+                ラベル: {label}
+              </Badge>
+            ))}
+            {reportScore !== null && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" />
+                信頼 {reportScore.toFixed(2)}
+              </Badge>
+            )}
+            {densityScore !== null && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" />
+                通信 {densityScore.toFixed(2)}
+              </Badge>
+            )}
+          </div>
+        )}
         <p className="mb-4 whitespace-pre-wrap">{post.content}</p>
         <div className="flex items-center gap-6">
           <Button
@@ -380,6 +556,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               <ReplyForm
                 postId={post.id}
                 topicId={post.topicId}
+                scope={post.scope}
                 onCancel={() => setShowReplyForm(false)}
                 onSuccess={() => setShowReplyForm(false)}
               />

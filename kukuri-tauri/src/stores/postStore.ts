@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PostState, Post } from './types';
+import type { PostState, Post, PostScope } from './types';
 import { TauriApi, type GetPostsRequest } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
 import { useOfflineStore } from './offlineStore';
@@ -99,6 +99,7 @@ interface PostStore extends PostState {
     options?: {
       replyTo?: string;
       quotedPost?: string;
+      scope?: PostScope;
     },
   ) => Promise<Post>;
   updatePost: (id: string, update: Partial<Post>) => void;
@@ -219,10 +220,12 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     options?: {
       replyTo?: string;
       quotedPost?: string;
+      scope?: PostScope;
     },
   ) => {
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
+    const scope = options?.scope ?? 'public';
 
     const authState = useAuthStore.getState();
     const currentUser = authState.currentUser;
@@ -241,6 +244,9 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       content,
       author,
       topicId,
+      scope,
+      epoch: null,
+      isEncrypted: scope !== 'public',
       created_at: Math.floor(Date.now() / 1000),
       tags: [],
       likes: 0,
@@ -280,6 +286,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           topicId,
           replyTo: options?.replyTo,
           quotedPost: options?.quotedPost,
+          scope,
         }),
       });
 
@@ -293,6 +300,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         topic_id: topicId,
         reply_to: options?.replyTo,
         quoted_post: options?.quotedPost,
+        scope,
       });
 
       const realPost = normalizePost(
@@ -332,6 +340,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
             topicId,
             replyTo: options?.replyTo,
             quotedPost: options?.quotedPost,
+            scope,
           }),
         });
         errorHandler.log('Failed to create post online, queued for offline sync', error, {

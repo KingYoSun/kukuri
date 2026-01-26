@@ -4,7 +4,8 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 struct Nip10Case {
     name: String,
-    description: Option<String>,
+    #[serde(rename = "description")]
+    _description: Option<String>,
     tags: Vec<Vec<String>>,
     expected: bool,
 }

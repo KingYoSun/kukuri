@@ -11,6 +11,7 @@ import { P2PDebugPanel } from '@/components/P2PDebugPanel';
 import { PeerConnectionPanel } from '@/components/p2p/PeerConnectionPanel';
 import { BootstrapConfigPanel } from '@/components/p2p/BootstrapConfigPanel';
 import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
+import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
@@ -190,6 +191,7 @@ function SettingsPage() {
 
       <PeerConnectionPanel />
       <BootstrapConfigPanel />
+      <CommunityNodePanel />
 
       {/* 開発環境でのみ表示 */}
       {import.meta.env.DEV && (

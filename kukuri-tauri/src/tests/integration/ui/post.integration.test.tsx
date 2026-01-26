@@ -122,6 +122,7 @@ describe('Post Integration Tests', () => {
       created_at: Date.now() / 1000,
       tags: [],
       likes: 0,
+      boosts: 0,
       replies: [],
     };
 
@@ -170,6 +171,7 @@ describe('Post Integration Tests', () => {
         created_at: Date.now() / 1000 - 3600,
         tags: [],
         likes: 0,
+        boosts: 0,
         replies: [],
       },
       {
@@ -180,6 +182,7 @@ describe('Post Integration Tests', () => {
         created_at: Date.now() / 1000 - 1800,
         tags: ['topic'],
         likes: 0,
+        boosts: 0,
         replies: [],
       },
       {
@@ -190,6 +193,7 @@ describe('Post Integration Tests', () => {
         created_at: Date.now() / 1000,
         tags: [],
         likes: 0,
+        boosts: 0,
         replies: [],
       },
     ];
@@ -235,6 +239,7 @@ describe('Post Integration Tests', () => {
       created_at: Date.now() / 1000,
       tags: ['rust', 'programming'],
       likes: 0,
+      boosts: 0,
       replies: [],
     };
 
@@ -342,6 +347,7 @@ describe('Post Integration Tests', () => {
         created_at: Date.now() / 1000 - 3600,
         tags: [],
         likes: 0,
+        boosts: 0,
         replies: [],
       },
     ];
@@ -355,6 +361,7 @@ describe('Post Integration Tests', () => {
         created_at: Date.now() / 1000,
         tags: [],
         likes: 0,
+        boosts: 0,
         replies: [],
       },
       ...initialPosts,

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use kukuri_lib::application::ports::cache::PostCache;
+use kukuri_lib::application::ports::group_key_store::{GroupKeyEntry, GroupKeyRecord, GroupKeyStore};
 use kukuri_lib::application::ports::repositories::{
     BookmarkRepository, PostRepository, UserRepository,
 };
@@ -15,6 +16,37 @@ use kukuri_lib::presentation::dto::event::NostrMetadataDto;
 use kukuri_lib::shared::error::AppError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+#[derive(Default)]
+struct DummyGroupKeyStore;
+
+#[async_trait]
+impl GroupKeyStore for DummyGroupKeyStore {
+    async fn store_key(&self, _record: GroupKeyRecord) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn get_key(
+        &self,
+        _topic_id: &str,
+        _scope: &str,
+        _epoch: i64,
+    ) -> Result<Option<GroupKeyRecord>, AppError> {
+        Ok(None)
+    }
+
+    async fn get_latest_key(
+        &self,
+        _topic_id: &str,
+        _scope: &str,
+    ) -> Result<Option<GroupKeyRecord>, AppError> {
+        Ok(None)
+    }
+
+    async fn list_keys(&self) -> Result<Vec<GroupKeyEntry>, AppError> {
+        Ok(Vec::new())
+    }
+}
 
 #[derive(Default)]
 struct RecordingEventService {
@@ -42,6 +74,8 @@ impl EventServiceTrait for RecordingEventService {
         _topic_id: &str,
         _content: &str,
         _reply_to: Option<&str>,
+        _scope: Option<&str>,
+        _epoch: Option<i64>,
     ) -> Result<EventId, AppError> {
         Ok(EventId::generate())
     }
@@ -122,11 +156,21 @@ async fn delete_post_is_removed_from_following_and_topic_feeds() {
 
     let topic_id = "post-delete-flow-topic";
     let first_post = post_service
-        .create_post("first post".into(), author.clone(), topic_id.to_string())
+        .create_post(
+            "first post".into(),
+            author.clone(),
+            topic_id.to_string(),
+            None,
+        )
         .await
         .expect("create first post");
     let second_post = post_service
-        .create_post("second post".into(), author.clone(), topic_id.to_string())
+        .create_post(
+            "second post".into(),
+            author.clone(),
+            topic_id.to_string(),
+            None,
+        )
         .await
         .expect("create second post");
 
@@ -216,12 +260,14 @@ async fn setup_post_service(
 
     let cache = Arc::new(PostCacheService::new());
     let event_service = Arc::new(RecordingEventService::default());
+    let group_key_store: Arc<dyn GroupKeyStore> = Arc::new(DummyGroupKeyStore::default());
 
     let post_service = Arc::new(PostService::new(
         Arc::clone(&repository) as Arc<dyn PostRepository>,
         Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
         Arc::clone(&event_service) as Arc<dyn EventServiceTrait>,
         Arc::clone(&cache) as Arc<dyn PostCache>,
+        group_key_store,
     ));
 
     (post_service, cache, event_service, repository)

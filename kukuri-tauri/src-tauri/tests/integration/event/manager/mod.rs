@@ -75,7 +75,13 @@ async fn publish_topic_post_broadcasts_and_links_topics() -> Result<()> {
         std::env::set_var("KUKURI_ALLOW_NO_RELAY", "1");
     }
     let _event_id = manager
-        .publish_topic_post(DEFAULT_PUBLIC_TOPIC_ID, "phase5-topic-body", None)
+        .publish_topic_post(
+            DEFAULT_PUBLIC_TOPIC_ID,
+            "phase5-topic-body",
+            None,
+            None,
+            None,
+        )
         .await?;
 
     let joined = ctx.gossip.joined_topics().await;

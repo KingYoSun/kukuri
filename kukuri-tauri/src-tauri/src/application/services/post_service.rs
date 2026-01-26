@@ -1,20 +1,28 @@
 use crate::application::ports::cache::PostCache;
+use crate::application::ports::group_key_store::GroupKeyStore;
 use crate::application::ports::repositories::{BookmarkRepository, PostFeedCursor, PostRepository};
 use crate::application::services::event_service::EventServiceTrait;
 use crate::domain::entities::{Post, User};
-use crate::domain::value_objects::{EventId, PublicKey};
+use crate::domain::value_objects::{EncryptedPostPayload, EventId, PublicKey};
 use crate::shared::{AppError, ValidationFailureKind};
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
+use nostr_sdk::prelude::nip44;
+use nostr_sdk::prelude::nip44::v2::ConversationKey;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::warn;
+
+const ENCRYPTED_PLACEHOLDER: &str = "[Encrypted post]";
+const PRIVATE_SCOPES: [&str; 3] = ["friend", "friend_plus", "invite"];
 
 pub struct PostService {
     repository: Arc<dyn PostRepository>,
     bookmark_repository: Arc<dyn BookmarkRepository>,
     event_service: Arc<dyn EventServiceTrait>,
     cache: Arc<dyn PostCache>,
+    group_key_store: Arc<dyn GroupKeyStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,17 +34,133 @@ pub struct FollowingFeedPage {
 }
 
 impl PostService {
+    fn normalize_scope(scope: Option<String>) -> Result<Option<String>, AppError> {
+        let scope = scope
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let Some(value) = scope.as_deref() else {
+            return Ok(None);
+        };
+        if value == "public" {
+            return Ok(None);
+        }
+        if PRIVATE_SCOPES.contains(&value) {
+            return Ok(Some(value.to_string()));
+        }
+        Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            format!("Invalid scope: {value}"),
+        ))
+    }
+
+    fn conversation_key_from_b64(key_b64: &str) -> Result<ConversationKey, AppError> {
+        let bytes = STANDARD
+            .decode(key_b64)
+            .map_err(|err| AppError::Crypto(format!("Invalid group key: {err}")))?;
+        ConversationKey::from_slice(&bytes)
+            .map_err(|err| AppError::Crypto(format!("Invalid group key: {err}")))
+    }
+
+    fn encrypt_with_group_key(key_b64: &str, plaintext: &str) -> Result<String, AppError> {
+        let conversation_key = Self::conversation_key_from_b64(key_b64)?;
+        let payload = nip44::v2::encrypt_to_bytes(&conversation_key, plaintext.as_bytes())
+            .map_err(|err| AppError::Crypto(format!("Encrypt failed: {err}")))?;
+        Ok(STANDARD.encode(payload))
+    }
+
+    fn decrypt_with_group_key(key_b64: &str, payload_b64: &str) -> Result<String, AppError> {
+        let conversation_key = Self::conversation_key_from_b64(key_b64)?;
+        let payload = STANDARD
+            .decode(payload_b64)
+            .map_err(|err| AppError::Crypto(format!("Invalid payload: {err}")))?;
+        let decrypted = nip44::v2::decrypt_to_bytes(&conversation_key, &payload)
+            .map_err(|err| AppError::Crypto(format!("Decrypt failed: {err}")))?;
+        String::from_utf8(decrypted)
+            .map_err(|err| AppError::Crypto(format!("Decrypt failed: {err}")))
+    }
+
+    async fn encrypt_post_content(
+        &self,
+        content: &str,
+        topic_id: &str,
+        scope: &str,
+    ) -> Result<(String, i64), AppError> {
+        let record = self
+            .group_key_store
+            .get_latest_key(topic_id, scope)
+            .await?
+            .ok_or_else(|| {
+                AppError::validation(
+                    ValidationFailureKind::Generic,
+                    format!("Group key not found for {topic_id}:{scope}"),
+                )
+            })?;
+        let payload_b64 = Self::encrypt_with_group_key(&record.key_b64, content)?;
+        let payload = EncryptedPostPayload::new(
+            topic_id.to_string(),
+            scope.to_string(),
+            record.epoch,
+            payload_b64,
+        );
+        let json = serde_json::to_string(&payload)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        Ok((json, record.epoch))
+    }
+
+    async fn prepare_post(&self, mut post: Post) -> Result<Post, AppError> {
+        let Some(payload) = EncryptedPostPayload::try_parse(&post.content) else {
+            return Ok(post);
+        };
+        post.is_encrypted = true;
+        if post.scope.is_none() {
+            post.scope = Some(payload.scope.clone());
+        }
+        if post.epoch.is_none() {
+            post.epoch = Some(payload.epoch);
+        }
+
+        let record = self
+            .group_key_store
+            .get_key(&payload.topic, &payload.scope, payload.epoch)
+            .await?;
+        let Some(record) = record else {
+            post.content = ENCRYPTED_PLACEHOLDER.to_string();
+            return Ok(post);
+        };
+
+        match Self::decrypt_with_group_key(&record.key_b64, &payload.payload_b64) {
+            Ok(content) => {
+                post.content = content;
+            }
+            Err(_) => {
+                post.content = ENCRYPTED_PLACEHOLDER.to_string();
+            }
+        }
+
+        Ok(post)
+    }
+
+    async fn prepare_posts(&self, posts: Vec<Post>) -> Result<Vec<Post>, AppError> {
+        let mut prepared = Vec::with_capacity(posts.len());
+        for post in posts {
+            prepared.push(self.prepare_post(post).await?);
+        }
+        Ok(prepared)
+    }
+
     pub fn new(
         repository: Arc<dyn PostRepository>,
         bookmark_repository: Arc<dyn BookmarkRepository>,
         event_service: Arc<dyn EventServiceTrait>,
         cache: Arc<dyn PostCache>,
+        group_key_store: Arc<dyn GroupKeyStore>,
     ) -> Self {
         Self {
             repository,
             bookmark_repository,
             event_service,
             cache,
+            group_key_store,
         }
     }
 
@@ -45,13 +169,32 @@ impl PostService {
         content: String,
         author: User,
         topic_id: String,
+        scope: Option<String>,
     ) -> Result<Post, AppError> {
+        let scope = Self::normalize_scope(scope)?;
         let mut post = Post::new(content.clone(), author, topic_id.clone());
+
+        if let Some(ref scope_value) = scope {
+            let (encrypted_content, epoch) = self
+                .encrypt_post_content(&content, &topic_id, scope_value)
+                .await?;
+            post.content = encrypted_content;
+            post.scope = Some(scope_value.clone());
+            post.epoch = Some(epoch);
+            post.is_encrypted = true;
+        }
+
         self.repository.create_post(&post).await?;
 
         match self
             .event_service
-            .publish_topic_post(&topic_id, &content, None)
+            .publish_topic_post(
+                &topic_id,
+                &post.content,
+                None,
+                post.scope.as_deref(),
+                post.epoch,
+            )
             .await
         {
             Ok(event_id) => {
@@ -67,25 +210,28 @@ impl PostService {
             }
         }
 
-        self.cache.add(post.clone()).await;
-        Ok(post)
+        let prepared = self.prepare_post(post.clone()).await?;
+        self.cache.add(prepared.clone()).await;
+        Ok(prepared)
     }
 
     pub async fn get_post(&self, id: &str) -> Result<Option<Post>, AppError> {
         // キャッシュから取得を試みる
         if let Some(post) = self.cache.get(id).await {
-            return Ok(Some(post));
+            return Ok(Some(self.prepare_post(post).await?));
         }
 
         // キャッシュにない場合はDBから取得
         let post = self.repository.get_post(id).await?;
 
         // キャッシュに保存
-        if let Some(ref p) = post {
-            self.cache.add(p.clone()).await;
+        if let Some(post) = post {
+            let prepared = self.prepare_post(post).await?;
+            self.cache.add(prepared.clone()).await;
+            return Ok(Some(prepared));
         }
 
-        Ok(post)
+        Ok(None)
     }
 
     pub async fn get_posts_by_topic(
@@ -115,10 +261,12 @@ impl PostService {
 
         posts.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
-        // キャッシュにも最新の取得結果を反映
-        self.cache.set_topic_posts(topic_id, posts.clone()).await;
+        let prepared = self.prepare_posts(posts).await?;
 
-        Ok(posts.into_iter().take(limit).collect())
+        // キャッシュにも最新の取得結果を反映
+        self.cache.set_topic_posts(topic_id, prepared.clone()).await;
+
+        Ok(prepared.into_iter().take(limit).collect())
     }
 
     pub async fn like_post(&self, post_id: &str) -> Result<(), AppError> {
@@ -151,13 +299,16 @@ impl PostService {
         author_pubkey: &str,
         limit: usize,
     ) -> Result<Vec<Post>, AppError> {
-        self.repository
+        let posts = self
+            .repository
             .get_posts_by_author(author_pubkey, limit)
-            .await
+            .await?;
+        self.prepare_posts(posts).await
     }
 
     pub async fn get_recent_posts(&self, limit: usize) -> Result<Vec<Post>, AppError> {
-        self.repository.get_recent_posts(limit).await
+        let posts = self.repository.get_recent_posts(limit).await?;
+        self.prepare_posts(posts).await
     }
 
     pub async fn list_following_feed(
@@ -172,9 +323,10 @@ impl PostService {
             .repository
             .list_following_feed(follower_pubkey, parsed_cursor, limit)
             .await?;
+        let items = self.prepare_posts(page.items).await?;
 
         Ok(FollowingFeedPage {
-            items: page.items,
+            items,
             next_cursor: page.next_cursor,
             has_more: page.has_more,
             server_time: Utc::now().timestamp_millis(),
@@ -245,7 +397,13 @@ impl PostService {
         for mut post in unsynced_posts {
             match self
                 .event_service
-                .publish_topic_post(&post.topic_id, &post.content, None)
+                .publish_topic_post(
+                    &post.topic_id,
+                    &post.content,
+                    None,
+                    post.scope.as_deref(),
+                    post.epoch,
+                )
                 .await
             {
                 Ok(event_id) => {
@@ -277,6 +435,7 @@ impl super::sync_service::SyncParticipant for PostService {
 mod tests {
     use super::*;
     use crate::application::ports::cache::PostCache;
+    use crate::application::ports::group_key_store::{GroupKeyEntry, GroupKeyRecord};
     use crate::application::ports::repositories::{
         BookmarkRepository, PostRepository, UserRepository,
     };
@@ -292,6 +451,76 @@ mod tests {
     use std::time::Duration;
     use tokio::sync::Mutex;
     use tokio::time::sleep;
+
+    struct TestGroupKeyStore {
+        records: Mutex<Vec<GroupKeyRecord>>,
+    }
+
+    impl TestGroupKeyStore {
+        fn new() -> Self {
+            Self {
+                records: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl GroupKeyStore for TestGroupKeyStore {
+        async fn store_key(&self, record: GroupKeyRecord) -> Result<(), AppError> {
+            let mut guard = self.records.lock().await;
+            if let Some(existing) = guard.iter_mut().find(|entry| {
+                entry.topic_id == record.topic_id
+                    && entry.scope == record.scope
+                    && entry.epoch == record.epoch
+            }) {
+                *existing = record;
+            } else {
+                guard.push(record);
+            }
+            Ok(())
+        }
+
+        async fn get_key(
+            &self,
+            topic_id: &str,
+            scope: &str,
+            epoch: i64,
+        ) -> Result<Option<GroupKeyRecord>, AppError> {
+            let guard = self.records.lock().await;
+            Ok(guard
+                .iter()
+                .find(|entry| {
+                    entry.topic_id == topic_id && entry.scope == scope && entry.epoch == epoch
+                })
+                .cloned())
+        }
+
+        async fn get_latest_key(
+            &self,
+            topic_id: &str,
+            scope: &str,
+        ) -> Result<Option<GroupKeyRecord>, AppError> {
+            let guard = self.records.lock().await;
+            Ok(guard
+                .iter()
+                .filter(|entry| entry.topic_id == topic_id && entry.scope == scope)
+                .max_by_key(|entry| entry.epoch)
+                .cloned())
+        }
+
+        async fn list_keys(&self) -> Result<Vec<GroupKeyEntry>, AppError> {
+            let guard = self.records.lock().await;
+            Ok(guard
+                .iter()
+                .map(|entry| GroupKeyEntry {
+                    topic_id: entry.topic_id.clone(),
+                    scope: entry.scope.clone(),
+                    epoch: entry.epoch,
+                    stored_at: entry.stored_at,
+                })
+                .collect())
+        }
+    }
 
     struct TestEventService {
         publish_topic_post_result: Mutex<Option<Result<EventId, AppError>>>,
@@ -335,6 +564,8 @@ mod tests {
             _: &str,
             _: &str,
             _: Option<&str>,
+            _: Option<&str>,
+            _: Option<i64>,
         ) -> Result<EventId, AppError> {
             self.next_publish_result().await
         }
@@ -377,6 +608,20 @@ mod tests {
     async fn setup_post_service_with_deps(
         event_service: Arc<dyn EventServiceTrait>,
     ) -> (PostService, Arc<SqliteRepository>, Arc<PostCacheService>) {
+        let (service, repository, cache, _group_key_store) =
+            setup_post_service_with_group_store(event_service).await;
+
+        (service, repository, cache)
+    }
+
+    async fn setup_post_service_with_group_store(
+        event_service: Arc<dyn EventServiceTrait>,
+    ) -> (
+        PostService,
+        Arc<SqliteRepository>,
+        Arc<PostCacheService>,
+        Arc<TestGroupKeyStore>,
+    ) {
         let pool = ConnectionPool::new("sqlite::memory:?cache=shared")
             .await
             .expect("failed to create pool");
@@ -402,15 +647,18 @@ mod tests {
             .await
             .expect("failed to initialize repository schema");
         let cache = Arc::new(PostCacheService::new());
+        let group_key_store = Arc::new(TestGroupKeyStore::new());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
 
         let service = PostService::new(
             Arc::clone(&repository) as Arc<dyn PostRepository>,
             Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
             event_service,
             Arc::clone(&cache) as Arc<dyn PostCache>,
+            group_key_store_trait,
         );
 
-        (service, repository, cache)
+        (service, repository, cache, group_key_store)
     }
 
     async fn setup_post_service() -> PostService {
@@ -479,7 +727,12 @@ mod tests {
         let expected_event_hex = expected_event.to_string();
 
         let post = service
-            .create_post("hello world".into(), sample_user(), "topic-sync".into())
+            .create_post(
+                "hello world".into(),
+                sample_user(),
+                "topic-sync".into(),
+                None,
+            )
             .await
             .expect("post creation succeeds");
 
@@ -507,6 +760,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_private_post_encrypts_and_decrypts() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, _cache, group_key_store) =
+            setup_post_service_with_group_store(event_service).await;
+
+        let key_b64 = STANDARD.encode([7u8; 32]);
+        let record = GroupKeyRecord {
+            topic_id: "topic-private".to_string(),
+            scope: "friend".to_string(),
+            epoch: 2,
+            key_b64,
+            stored_at: Utc::now().timestamp(),
+        };
+        group_key_store
+            .store_key(record.clone())
+            .await
+            .expect("store group key");
+
+        let post = service
+            .create_post(
+                "secret message".into(),
+                sample_user(),
+                "topic-private".into(),
+                Some("friend".into()),
+            )
+            .await
+            .expect("create private post");
+
+        assert_eq!(post.content, "secret message");
+        assert!(post.is_encrypted);
+        assert_eq!(post.scope.as_deref(), Some("friend"));
+        assert_eq!(post.epoch, Some(record.epoch));
+
+        let stored = repository
+            .get_post(&post.id)
+            .await
+            .expect("db fetch")
+            .expect("stored post");
+        assert_ne!(stored.content, "secret message");
+        let payload =
+            EncryptedPostPayload::try_parse(&stored.content).expect("encrypted payload parse");
+        assert_eq!(payload.scope, "friend");
+        assert_eq!(payload.epoch, record.epoch);
+    }
+
+    #[tokio::test]
     async fn create_post_caches_on_publish_failure() {
         let event_service: Arc<dyn EventServiceTrait> = Arc::new(
             TestEventService::with_publish_result(Err(AppError::NostrError("failed".into()))),
@@ -514,7 +813,12 @@ mod tests {
         let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
 
         let err = service
-            .create_post("offline".into(), sample_user(), "topic-offline".into())
+            .create_post(
+                "offline".into(),
+                sample_user(),
+                "topic-offline".into(),
+                None,
+            )
             .await
             .expect_err("publish failure propagates");
         assert!(matches!(err, AppError::NostrError(_)));
@@ -564,12 +868,12 @@ mod tests {
         author.npub = format!("npub_{followed_pubkey}");
 
         let first_post = service
-            .create_post("first".into(), author.clone(), "trend".into())
+            .create_post("first".into(), author.clone(), "trend".into(), None)
             .await
             .expect("create first post");
         sleep(Duration::from_millis(5)).await;
         let second_post = service
-            .create_post("second".into(), author.clone(), "trend".into())
+            .create_post("second".into(), author.clone(), "trend".into(), None)
             .await
             .expect("create second post");
 
@@ -600,6 +904,7 @@ mod tests {
         assert!(!page_two.has_more);
     }
 
+    #[tokio::test]
     async fn get_posts_by_topic_prefers_cache_when_available() {
         let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
         let (service, repository, cache) = setup_post_service_with_deps(event_service).await;
@@ -683,7 +988,7 @@ mod tests {
             setup_post_service_with_deps(Arc::new(TestEventService::default())).await;
 
         let post = service
-            .create_post("to delete".into(), sample_user(), "topic-del".into())
+            .create_post("to delete".into(), sample_user(), "topic-del".into(), None)
             .await
             .expect("post creation succeeds");
 

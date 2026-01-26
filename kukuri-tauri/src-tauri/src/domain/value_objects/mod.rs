@@ -1,4 +1,5 @@
 pub mod bookmark;
+pub mod encrypted_post;
 pub mod event_gateway;
 pub mod event_id;
 pub mod keychain;
@@ -8,6 +9,7 @@ pub mod subscription;
 pub mod topic_id;
 
 pub use bookmark::BookmarkId;
+pub use encrypted_post::EncryptedPostPayload;
 pub use event_gateway::{PublicKey, ReactionValue, TopicContent};
 pub use event_id::EventId;
 pub use keychain::{KeyMaterialLedger, KeyMaterialRecord};

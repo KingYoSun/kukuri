@@ -24,7 +24,10 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
     submit: async (message: string) => {
       const quoteContent = `${message}\n\nnostr:${post.id}`;
       if (post.topicId) {
-        await createPost(quoteContent, post.topicId, { quotedPost: post.id });
+        await createPost(quoteContent, post.topicId, {
+          quotedPost: post.id,
+          scope: post.scope,
+        });
         return;
       }
       const tags: string[][] = [
@@ -38,6 +41,7 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
         content: quoteContent,
         topic_id: post.topicId,
         tags,
+        scope: post.scope,
       });
     },
     successMessage: '引用投稿を作成しました',

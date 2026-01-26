@@ -23,3 +23,7 @@ httpdate.workspace = true
 rand_core.workspace = true
 
 cn-core = { path = "../cn-core" }
+cn-kip-types = { path = "../cn-kip-types" }
+
+[dev-dependencies]
+tower.workspace = true

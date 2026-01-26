@@ -21,9 +21,13 @@ pub(crate) fn map_post_row(
     let user = User::from_pubkey(&public_key);
     let created_at = DateTime::from_timestamp_millis(created_at).unwrap_or_else(Utc::now);
 
-    Ok(Post::new_with_id(
-        event_id, content, user, topic_id, created_at,
-    ))
+    let scope = extract_scope_from_tags(&tags_json);
+    let epoch = extract_epoch_from_tags(&tags_json);
+
+    let mut post = Post::new_with_id(event_id, content, user, topic_id, created_at);
+    post.scope = scope;
+    post.epoch = epoch;
+    Ok(post)
 }
 
 pub(crate) fn extract_topic_from_tags(tags_json: &str) -> Option<String> {
@@ -32,4 +36,20 @@ pub(crate) fn extract_topic_from_tags(tags_json: &str) -> Option<String> {
         [key, value, ..] if key == "t" => Some(value.clone()),
         _ => None,
     })
+}
+
+fn extract_tag_value(tags_json: &str, target: &str) -> Option<String> {
+    let tags = serde_json::from_str::<Vec<Vec<String>>>(tags_json).ok()?;
+    tags.into_iter().find_map(|tag| match tag.as_slice() {
+        [key, value, ..] if key == target => Some(value.clone()),
+        _ => None,
+    })
+}
+
+fn extract_scope_from_tags(tags_json: &str) -> Option<String> {
+    extract_tag_value(tags_json, "scope")
+}
+
+fn extract_epoch_from_tags(tags_json: &str) -> Option<i64> {
+    extract_tag_value(tags_json, "epoch").and_then(|value| value.parse::<i64>().ok())
 }

@@ -12,9 +12,15 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::{QueryBuilder, Sqlite};
 
-fn serialize_topic_tags(topic_id: &str) -> String {
-    serde_json::to_string(&vec![vec!["t".to_string(), topic_id.to_string()]])
-        .unwrap_or_else(|_| "[]".to_string())
+fn serialize_topic_tags(post: &Post) -> String {
+    let mut tags = vec![vec!["t".to_string(), post.topic_id.clone()]];
+    if let Some(scope) = post.scope.as_ref() {
+        tags.push(vec!["scope".to_string(), scope.clone()]);
+    }
+    if let Some(epoch) = post.epoch {
+        tags.push(vec!["epoch".to_string(), epoch.to_string()]);
+    }
+    serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string())
 }
 
 fn topic_tag_like(topic_id: &str) -> String {
@@ -24,7 +30,7 @@ fn topic_tag_like(topic_id: &str) -> String {
 #[async_trait]
 impl PostRepository for SqliteRepository {
     async fn create_post(&self, post: &Post) -> Result<(), AppError> {
-        let tags_json = serialize_topic_tags(&post.topic_id);
+        let tags_json = serialize_topic_tags(post);
 
         sqlx::query(INSERT_POST_EVENT)
             .bind(&post.id)

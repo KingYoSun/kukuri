@@ -32,6 +32,7 @@ describe('QuoteForm', () => {
     created_at: Math.floor(Date.now() / 1000) - 3600,
     tags: [],
     likes: 5,
+    boosts: 0,
     replies: [],
   };
 
@@ -109,6 +110,7 @@ describe('QuoteForm', () => {
         'topic456',
         {
           quotedPost: 'post123',
+          scope: undefined,
         },
       );
       expect(mockToast.success).toHaveBeenCalledWith('引用投稿を作成しました');
@@ -132,6 +134,7 @@ describe('QuoteForm', () => {
           ['e', 'post123', '', 'mention'],
           ['q', 'post123'],
         ],
+        scope: undefined,
       });
     });
   });

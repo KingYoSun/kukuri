@@ -43,11 +43,16 @@ export interface Topic {
   isJoined?: boolean;
 }
 
+export type PostScope = 'public' | 'friend_plus' | 'friend' | 'invite';
+
 export interface Post {
   id: string;
   content: string;
   author: User;
   topicId: string;
+  scope?: PostScope;
+  epoch?: number | null;
+  isEncrypted?: boolean;
   created_at: number;
   tags: string[];
   likes: number;

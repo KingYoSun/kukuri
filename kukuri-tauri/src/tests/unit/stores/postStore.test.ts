@@ -74,6 +74,7 @@ describe('postStore', () => {
     created_at: Date.now(),
     tags: [],
     likes: 0,
+    boosts: 0,
     replies: [],
     replyCount: 0,
   };
@@ -86,6 +87,7 @@ describe('postStore', () => {
     created_at: Date.now() - 1000,
     tags: [],
     likes: 5,
+    boosts: 0,
     replies: [],
     replyCount: 0,
   };
@@ -98,6 +100,7 @@ describe('postStore', () => {
     created_at: Date.now() - 2000,
     tags: [],
     likes: 10,
+    boosts: 0,
     replies: [],
     replyCount: 0,
   };
@@ -203,6 +206,7 @@ describe('postStore', () => {
       created_at: Date.now(),
       tags: [],
       likes: 0,
+      boosts: 0,
       replies: [],
     };
 
@@ -266,6 +270,7 @@ describe('postStore', () => {
       topic_id: 'topic1',
       reply_to: undefined,
       quoted_post: undefined,
+      scope: 'public',
     });
 
     const state = usePostStore.getState();
@@ -293,6 +298,7 @@ describe('postStore', () => {
         topicId: 'topic1',
         replyTo: undefined,
         quotedPost: undefined,
+        scope: 'public',
       }),
     });
     const state = usePostStore.getState();
@@ -326,6 +332,7 @@ describe('postStore', () => {
       topic_id: 'topic1',
       reply_to: 'event123',
       quoted_post: undefined,
+      scope: 'public',
     });
   });
 
@@ -352,6 +359,7 @@ describe('postStore', () => {
       topic_id: 'topic1',
       reply_to: undefined,
       quoted_post: 'note1',
+      scope: 'public',
     });
   });
 

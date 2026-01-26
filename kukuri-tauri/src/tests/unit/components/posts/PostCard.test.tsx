@@ -276,6 +276,7 @@ describe('PostCard', () => {
       await waitFor(() => {
         expect(createPostMock).toHaveBeenCalledWith('これは返信です', 'topic1', {
           replyTo: '1',
+          scope: undefined,
         });
         expect(toast.success).toHaveBeenCalledWith('返信を投稿しました');
       });
@@ -391,6 +392,7 @@ describe('PostCard', () => {
       await waitFor(() => {
         expect(createPostMock).toHaveBeenCalledWith('これは引用コメントです\n\nnostr:1', 'topic1', {
           quotedPost: '1',
+          scope: undefined,
         });
         expect(toast.success).toHaveBeenCalledWith('引用投稿を作成しました');
       });

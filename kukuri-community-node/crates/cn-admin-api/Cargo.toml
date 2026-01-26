@@ -21,3 +21,6 @@ uuid.workspace = true
 reqwest.workspace = true
 
 cn-core = { path = "../cn-core" }
+
+[dev-dependencies]
+tower.workspace = true

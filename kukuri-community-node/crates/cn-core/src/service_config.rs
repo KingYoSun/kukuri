@@ -31,6 +31,16 @@ impl ServiceConfigHandle {
     }
 }
 
+pub fn static_handle(config_json: Value) -> ServiceConfigHandle {
+    let snapshot = ServiceConfigSnapshot {
+        version: 0,
+        config_json,
+    };
+    ServiceConfigHandle {
+        state: Arc::new(RwLock::new(snapshot)),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {

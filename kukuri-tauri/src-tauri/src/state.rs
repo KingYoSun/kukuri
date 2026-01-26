@@ -7,6 +7,7 @@ use crate::domain::p2p::P2PEvent;
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
 use crate::application::ports::cache::PostCache;
 use crate::application::ports::event_topic_store::EventTopicStore;
+use crate::application::ports::group_key_store::GroupKeyStore;
 use crate::application::ports::messaging_gateway::MessagingGateway;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::repositories::{
@@ -49,10 +50,10 @@ use crate::infrastructure::{
         bootstrap::P2PBootstrapper,
         event_distributor::{DefaultEventDistributor, EventDistributor},
     },
-    storage::{SecureStorage, secure_storage::DefaultSecureStorage},
+    storage::{SecureGroupKeyStore, SecureStorage, secure_storage::DefaultSecureStorage},
 };
 use crate::presentation::handlers::{
-    EventHandler, OfflineHandler, P2PHandler, SecureStorageHandler,
+    CommunityNodeHandler, EventHandler, OfflineHandler, P2PHandler, SecureStorageHandler,
 };
 use crate::presentation::ipc::direct_message_notifier::IpcDirectMessageNotifier;
 
@@ -103,12 +104,15 @@ pub struct AppState {
     pub p2p_service: Arc<dyn P2PServiceTrait>,
     pub offline_service: Arc<OfflineService>,
     pub profile_avatar_service: Arc<ProfileAvatarService>,
+    #[allow(dead_code)]
+    pub group_key_store: Arc<dyn GroupKeyStore>,
 
     // プレゼンテーション層のハンドラー（最適化用）
     pub secure_storage_handler: Arc<SecureStorageHandler>,
     pub event_handler: Arc<EventHandler>,
     pub p2p_handler: Arc<P2PHandler>,
     pub offline_handler: Arc<OfflineHandler>,
+    pub community_node_handler: Arc<CommunityNodeHandler>,
 }
 
 impl AppState {
@@ -177,6 +181,8 @@ impl AppState {
         )));
         let secure_storage: Arc<dyn SecureStorage> = secure_storage_impl.clone();
         let secure_account_store: Arc<dyn SecureAccountStore> = secure_storage_impl.clone();
+        let group_key_store: Arc<dyn GroupKeyStore> =
+            Arc::new(SecureGroupKeyStore::new(Arc::clone(&secure_storage)));
         let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());
         let default_event_distributor = Arc::new(DefaultEventDistributor::new());
         let event_distributor: Arc<dyn EventDistributor> =
@@ -397,6 +403,7 @@ impl AppState {
             Arc::clone(&repository) as Arc<dyn BookmarkRepository>,
             Arc::clone(&event_service) as Arc<dyn EventServiceTrait>,
             Arc::clone(&post_cache),
+            Arc::clone(&group_key_store),
         ));
 
         let post_sync_participant: Arc<dyn SyncParticipant> = post_service.clone();
@@ -428,6 +435,11 @@ impl AppState {
         let p2p_handler = Arc::new(P2PHandler::new(Arc::clone(&p2p_service)));
         let offline_handler = Arc::new(OfflineHandler::new(Arc::clone(&offline_service)
             as Arc<dyn crate::application::services::offline_service::OfflineServiceTrait>));
+        let community_node_handler = Arc::new(CommunityNodeHandler::new(
+            Arc::clone(&key_manager),
+            Arc::clone(&secure_storage),
+            Arc::clone(&group_key_store),
+        ));
 
         // P2P接続イベントを監視し、再接続時に再索引ジョブをトリガー
         {
@@ -500,10 +512,12 @@ impl AppState {
             p2p_service,
             offline_service,
             profile_avatar_service,
+            group_key_store,
             secure_storage_handler,
             event_handler,
             p2p_handler,
             offline_handler,
+            community_node_handler,
         };
 
         // SyncService の定期実行と P2P 接続状態フックをセットアップ

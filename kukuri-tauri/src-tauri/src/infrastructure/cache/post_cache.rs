@@ -142,6 +142,7 @@ impl PostCacheService {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_many(&self, ids: &[String]) -> Vec<Post> {
         let inner = self.inner.read().await;
         ids.iter()
@@ -226,6 +227,9 @@ mod tests {
             is_synced: true,
             is_boosted: false,
             is_bookmarked: false,
+            scope: None,
+            epoch: None,
+            is_encrypted: false,
             local_id: None,
             event_id: None,
         }

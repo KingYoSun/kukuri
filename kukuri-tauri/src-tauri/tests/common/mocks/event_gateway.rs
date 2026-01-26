@@ -19,6 +19,8 @@ mock! {
             topic_id: &TopicId,
             content: &TopicContent,
             reply_to: Option<&EventId>,
+            scope: Option<&str>,
+            epoch: Option<i64>,
         ) -> Result<EventId, AppError>;
         async fn send_reaction(
             &self,

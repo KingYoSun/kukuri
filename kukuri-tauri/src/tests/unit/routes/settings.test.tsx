@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SettingsPage } from '@/routes/settings';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -32,6 +33,25 @@ vi.mock('@/lib/api/tauri', () => ({
 vi.mock('@/lib/api/nostr', () => ({
   updateNostrMetadata: vi.fn(),
 }));
+vi.mock('@/lib/api/communityNode', () => ({
+  communityNodeApi: {
+    getConfig: vi.fn().mockResolvedValue(null),
+    listGroupKeys: vi.fn().mockResolvedValue([]),
+    getConsentStatus: vi.fn().mockResolvedValue(null),
+    setConfig: vi.fn().mockResolvedValue({
+      base_url: '',
+      has_token: false,
+      token_expires_at: null,
+      pubkey: null,
+    }),
+    clearConfig: vi.fn().mockResolvedValue(undefined),
+    authenticate: vi.fn().mockResolvedValue({ expires_at: 0, pubkey: '' }),
+    clearToken: vi.fn().mockResolvedValue(undefined),
+    syncKeyEnvelopes: vi.fn().mockResolvedValue({ stored: [] }),
+    redeemInvite: vi.fn().mockResolvedValue({ topic_id: '', scope: 'invite', epoch: 1 }),
+    acceptConsents: vi.fn().mockResolvedValue(null),
+  },
+}));
 
 const mockPrivacyStore = {
   publicProfile: true,
@@ -46,7 +66,16 @@ vi.mock('@/stores/privacySettingsStore', () => ({
 }));
 
 const renderSettingsPage = () => {
-  return render(<SettingsPage />);
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SettingsPage />
+    </QueryClientProvider>,
+  );
 };
 
 describe('SettingsPage', () => {

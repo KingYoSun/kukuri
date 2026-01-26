@@ -16,6 +16,9 @@ pub struct Post {
     pub is_synced: bool,
     pub is_boosted: bool,
     pub is_bookmarked: bool,
+    pub scope: Option<String>,
+    pub epoch: Option<i64>,
+    pub is_encrypted: bool,
     pub local_id: Option<String>,
     pub event_id: Option<String>,
 }
@@ -38,6 +41,9 @@ impl Post {
             is_synced: false,
             is_boosted: false,
             is_bookmarked: false,
+            scope: None,
+            epoch: None,
+            is_encrypted: false,
             local_id: Some(local_id),
             event_id: None,
         }
@@ -96,6 +102,9 @@ impl Post {
             is_synced: false,
             is_boosted: false,
             is_bookmarked: false,
+            scope: None,
+            epoch: None,
+            is_encrypted: false,
             local_id: None,
             event_id: None,
         }

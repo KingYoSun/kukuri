@@ -100,6 +100,9 @@ export interface Post {
   author_pubkey: string;
   author_npub: string;
   topic_id: string;
+  scope?: string | null;
+  epoch?: number | null;
+  is_encrypted?: boolean;
   created_at: number;
   likes: number;
   boosts: number;
@@ -130,6 +133,7 @@ export interface CreatePostRequest {
   tags?: string[][];
   reply_to?: string;
   quoted_post?: string;
+  scope?: string;
 }
 
 export interface PaginationRequest {

@@ -3,10 +3,12 @@ import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDispl
 import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
 import { PostActionComposer } from '@/components/posts/PostActionComposer';
 import { TauriApi } from '@/lib/api/tauri';
+import type { PostScope } from '@/stores/types';
 
 interface ReplyFormProps {
   postId: string;
   topicId?: string;
+  scope?: PostScope;
   onCancel?: () => void;
   onSuccess?: () => void;
   autoFocus?: boolean;
@@ -15,6 +17,7 @@ interface ReplyFormProps {
 export function ReplyForm({
   postId,
   topicId,
+  scope,
   onCancel,
   onSuccess,
   autoFocus = true,
@@ -24,7 +27,7 @@ export function ReplyForm({
   const { content, setContent, isPending, handleSubmit, handleKeyboardSubmit } = usePostActionForm({
     submit: async (message: string) => {
       if (topicId) {
-        await createPost(message, topicId, { replyTo: postId });
+        await createPost(message, topicId, { replyTo: postId, scope });
         return;
       }
       const tags: string[][] = [['e', postId, '', 'reply']];
@@ -32,6 +35,7 @@ export function ReplyForm({
         content: message,
         topic_id: topicId,
         tags,
+        scope,
       });
     },
     successMessage: '返信を投稿しました',

@@ -22,3 +22,4 @@ nostr-sdk.workspace = true
 uuid.workspace = true
 
 cn-core = { path = "../cn-core" }
+cn-kip-types = { path = "../cn-kip-types" }

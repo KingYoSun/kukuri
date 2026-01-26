@@ -91,6 +91,7 @@ describe('ReplyForm', () => {
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith('これは返信です', 'topic456', {
         replyTo: 'post123',
+        scope: undefined,
       });
       expect(mockToast.success).toHaveBeenCalledWith('返信を投稿しました');
       expect(onSuccess).toHaveBeenCalled();
@@ -109,6 +110,7 @@ describe('ReplyForm', () => {
         content: 'これは返信です',
         topic_id: undefined,
         tags: [['e', 'post123', '', 'reply']],
+        scope: undefined,
       });
     });
   });

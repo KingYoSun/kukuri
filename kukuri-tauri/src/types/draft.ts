@@ -1,3 +1,5 @@
+import type { PostScope } from '@/stores/types';
+
 /**
  * 投稿の下書き
  */
@@ -12,6 +14,7 @@ export interface PostDraft {
     replyTo?: string;
     quotedPost?: string;
     attachments?: string[];
+    scope?: PostScope;
   };
 }
 

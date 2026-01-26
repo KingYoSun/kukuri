@@ -106,7 +106,9 @@ export const useDraftStore = create<DraftStore>()(
           if (existingDraft) {
             // Only update if content has changed
             const shouldUpdate =
-              existingDraft.content !== params.content || existingDraft.topicId !== params.topicId;
+              existingDraft.content !== params.content ||
+              existingDraft.topicId !== params.topicId ||
+              existingDraft.metadata?.scope !== params.metadata?.scope;
 
             if (shouldUpdate) {
               // Update draft directly by manipulating state

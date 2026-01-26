@@ -19,6 +19,8 @@ pub trait EventGateway: Send + Sync {
         topic_id: &TopicId,
         content: &TopicContent,
         reply_to: Option<&EventId>,
+        scope: Option<&str>,
+        epoch: Option<i64>,
     ) -> Result<EventId, AppError>;
 
     /// 莉ｻ諢上う繝吶Φ繝医∈繝ｪ繧｢繧ｯ繧ｷ繝ｧ繝ｳ繧帝∽ｿ｡縺吶ｋ縲・

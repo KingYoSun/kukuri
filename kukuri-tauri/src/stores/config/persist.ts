@@ -12,6 +12,7 @@ export const persistKeys = {
   topic: 'topic-storage',
   privacy: 'privacy-settings',
   keyManagement: 'key-management-history',
+  communityNode: 'community-node-settings',
 } as const;
 
 export const createAuthPersistConfig = <
@@ -79,4 +80,19 @@ export const createKeyManagementPersistConfig = <
     'lastExportedAt',
     'lastImportedAt',
   ]),
+});
+
+export const createCommunityNodePersistConfig = <
+  T extends {
+    enableAccessControl: boolean;
+    enableLabels: boolean;
+    enableTrust: boolean;
+    enableSearch: boolean;
+  },
+>(): PersistOptions<T> => ({
+  name: persistKeys.communityNode,
+  partialize: createPartializer<
+    T,
+    'enableAccessControl' | 'enableLabels' | 'enableTrust' | 'enableSearch'
+  >(['enableAccessControl', 'enableLabels', 'enableTrust', 'enableSearch']),
 });

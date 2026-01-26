@@ -9,6 +9,9 @@ pub struct PostResponse {
     pub author_pubkey: String,
     pub author_npub: String,
     pub topic_id: String,
+    pub scope: Option<String>,
+    pub epoch: Option<i64>,
+    pub is_encrypted: bool,
     pub created_at: i64,
     pub likes: u32,
     pub boosts: u32,
@@ -22,6 +25,7 @@ pub struct CreatePostRequest {
     pub content: String,
     pub topic_id: String,
     pub media_urls: Option<Vec<String>>,
+    pub scope: Option<String>,
 }
 
 impl Validate for CreatePostRequest {
@@ -34,6 +38,17 @@ impl Validate for CreatePostRequest {
         }
         if self.topic_id.trim().is_empty() {
             return Err("トピックIDが必要です".to_string());
+        }
+        if let Some(scope) = &self.scope {
+            let normalized = scope.trim();
+            if !normalized.is_empty()
+                && normalized != "public"
+                && normalized != "friend_plus"
+                && normalized != "friend"
+                && normalized != "invite"
+            {
+                return Err("スコープが不正です".to_string());
+            }
         }
         Ok(())
     }
