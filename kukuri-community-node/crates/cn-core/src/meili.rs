@@ -128,7 +128,9 @@ impl MeiliClient {
         let url = format!("{}/{}", self.base_url, path.trim_start_matches('/'));
         let builder = self.http.request(method, url);
         if let Some(key) = &self.api_key {
-            builder.header("X-Meili-API-Key", key)
+            builder
+                .header("Authorization", format!("Bearer {key}"))
+                .header("X-Meili-API-Key", key)
         } else {
             builder
         }

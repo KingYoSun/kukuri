@@ -54,3 +54,4 @@
   10. **Ops/CI ガード**
       - `gh act --workflows .github/workflows/test.yml --job format-check` / `--job native-test-linux` が成功し、`.act-artifacts/` に最新ログが保存される。
       - Windows ホストでは必ず `./scripts/test-docker.ps1 ts|rust|all`（必要に応じて `--scenario trending-feed` など）を経由して Vitest / Cargo / ESLint / integration を再実行し、`test-results/` ディレクトリが更新される。
+      - 2026年01月28日: desktop-e2e の Meilisearch 認証ヘッダ修正。`./scripts/test-docker.ps1 e2e-community-node` 通過、`gh act` の format-check / native-test-linux 実行済み。
