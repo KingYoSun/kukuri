@@ -55,7 +55,7 @@ jobs:
           path: test-results/
 
   desktop-e2e:
-    name: Desktop E2E (Docker)
+    name: Desktop E2E (Community Node, Docker)
     runs-on: ubuntu-latest
     needs: docker-test
     steps:
@@ -80,9 +80,9 @@ jobs:
           corepack enable pnpm
           corepack pnpm install --frozen-lockfile
 
-      - name: Run desktop E2E scenario
+      - name: Run community node E2E scenario
         shell: pwsh
-        run: ./scripts/test-docker.ps1 e2e
+        run: ./scripts/test-docker.ps1 e2e-community-node
 
       - name: Upload desktop E2E artefacts
         if: always()
