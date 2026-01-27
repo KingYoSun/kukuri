@@ -761,7 +761,7 @@ start_community_node() {
 
 seed_community_node() {
   echo 'Seeding community node E2E fixtures...'
-  if ! compose_run '' run --rm community-node-user-api cn e2e seed; then
+  if ! compose_run '' run --rm --entrypoint cn community-node-user-api e2e seed; then
     echo 'Community node E2E seed failed.' >&2
     return 1
   fi
@@ -770,7 +770,7 @@ seed_community_node() {
 
 cleanup_community_node() {
   echo 'Cleaning up community node E2E fixtures...'
-  if ! compose_run '' run --rm community-node-user-api cn e2e cleanup >/dev/null 2>&1; then
+  if ! compose_run '' run --rm --entrypoint cn community-node-user-api e2e cleanup >/dev/null 2>&1; then
     echo '[WARN] Community node E2E cleanup failed.' >&2
   else
     echo '[OK] Community node E2E cleanup completed.'
