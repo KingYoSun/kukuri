@@ -15,6 +15,7 @@ BOOTSTRAP_DEFAULT_PEER="03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664
 BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
 PROMETHEUS_SERVICE="prometheus-trending"
 PROMETHEUS_METRICS_URL="${PROMETHEUS_METRICS_URL:-http://127.0.0.1:9898/metrics}"
+COMMUNITY_NODE_BASE_URL_DEFAULT="http://127.0.0.1:18080"
 
 P2P_MAINLINE_TEST="${P2P_MAINLINE_TEST_TARGET:-p2p_mainline_smoke}"
 P2P_GOSSIP_TEST="${P2P_GOSSIP_TEST_TARGET:-p2p_gossip_smoke}"
@@ -30,6 +31,7 @@ Commands:
   lint         Run lint/format checks only
   coverage     Run cargo tarpaulin and export coverage artifacts
   e2e          Run desktop E2E tests (Tauri + WebDriverIO)
+  e2e-community-node  Run desktop E2E tests with community node
   build        Build the Docker image only
   clean        Clean containers and images
   cache-clean  Clean including cache volumes
@@ -720,6 +722,96 @@ run_ts_tests() {
   fi
 }
 
+wait_community_node() {
+  local base_url="$1"
+  local timeout="${2:-120}"
+  local health_url="${base_url%/}/healthz"
+
+  for ((i = 0; i < timeout; i++)); do
+    if command -v curl >/dev/null 2>&1; then
+      if curl --silent --show-error --max-time 5 "${health_url}" >/dev/null; then
+        return 0
+      fi
+    elif command -v wget >/dev/null 2>&1; then
+      if wget -q -T 5 -O /dev/null "${health_url}" 2>/dev/null; then
+        return 0
+      fi
+    else
+      echo "[ERROR] curl or wget is required to check community node health." >&2
+      return 1
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+start_community_node() {
+  local base_url="$1"
+  echo 'Starting community-node-user-api service...'
+  if ! compose_run '' up -d community-node-user-api; then
+    echo 'Failed to start community-node-user-api service.' >&2
+    return 1
+  fi
+  if ! wait_community_node "$base_url" 120; then
+    echo "community-node-user-api health check failed: ${base_url%/}/healthz" >&2
+    return 1
+  fi
+  echo '[OK] community-node-user-api is healthy.'
+}
+
+stop_community_node() {
+  echo 'Stopping community-node services...'
+  compose_run '' rm -sf community-node-user-api community-node-postgres community-node-meilisearch >/dev/null 2>&1 || true
+}
+
+run_desktop_e2e_community_node() {
+  [[ $NO_BUILD -eq 1 ]] || build_image
+  echo 'Running desktop E2E tests (community node) via Docker...'
+
+  local base_url="${COMMUNITY_NODE_BASE_URL:-$COMMUNITY_NODE_BASE_URL_DEFAULT}"
+  local previous_scenario="${SCENARIO-}"
+  local previous_base_url="${COMMUNITY_NODE_BASE_URL-}"
+  local previous_e2e_url="${E2E_COMMUNITY_NODE_URL-}"
+
+  export COMMUNITY_NODE_BASE_URL="$base_url"
+  export E2E_COMMUNITY_NODE_URL="$base_url"
+  export SCENARIO="community-node-e2e"
+
+  local status=0
+  if ! start_community_node "$base_url"; then
+    status=1
+  else
+    set +e
+    compose_run '' run --rm test-runner
+    status=$?
+    set -e
+  fi
+
+  stop_community_node
+
+  if [[ -n "${previous_scenario-}" ]]; then
+    export SCENARIO="$previous_scenario"
+  else
+    unset SCENARIO
+  fi
+  if [[ -n "${previous_base_url-}" ]]; then
+    export COMMUNITY_NODE_BASE_URL="$previous_base_url"
+  else
+    unset COMMUNITY_NODE_BASE_URL
+  fi
+  if [[ -n "${previous_e2e_url-}" ]]; then
+    export E2E_COMMUNITY_NODE_URL="$previous_e2e_url"
+  else
+    unset E2E_COMMUNITY_NODE_URL
+  fi
+
+  if [[ $status -ne 0 ]]; then
+    return $status
+  fi
+
+  echo '[OK] Desktop E2E scenario (community node) finished. Artefacts stored in tmp/logs/desktop-e2e/ and test-results/desktop-e2e/.'
+}
+
 run_desktop_e2e() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   echo 'Running desktop E2E tests via Docker...'
@@ -943,7 +1035,7 @@ case "$COMMAND" in
     usage
     exit 0
     ;;
-  all|rust|lint|coverage|build|clean|cache-clean|performance|e2e)
+  all|rust|lint|coverage|build|clean|cache-clean|performance|e2e|e2e-community-node)
     ;;
   ts)
     while [[ $# -gt 0 ]]; do
@@ -1056,6 +1148,10 @@ case "$COMMAND" in
     ;;
   e2e)
     run_desktop_e2e
+    show_cache_status
+    ;;
+  e2e-community-node)
+    run_desktop_e2e_community_node
     show_cache_status
     ;;
   build)

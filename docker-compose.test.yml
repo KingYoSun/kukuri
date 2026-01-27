@@ -18,6 +18,65 @@ services:
       retries: 10
     command: ["bootstrap"]
 
+  # Community node user API (E2E)
+  community-node-postgres:
+    build:
+      context: ./kukuri-community-node/docker/postgres-age
+    container_name: kukuri-community-node-postgres
+    environment:
+      POSTGRES_USER: cn
+      POSTGRES_PASSWORD: cn_password
+      POSTGRES_DB: cn
+    volumes:
+      - community-node-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cn -d cn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - community-node-network
+
+  community-node-meilisearch:
+    image: getmeili/meilisearch:v1.5.0
+    container_name: kukuri-community-node-meilisearch
+    environment:
+      MEILI_MASTER_KEY: "${COMMUNITY_NODE_MEILI_MASTER_KEY:-change-me}"
+    volumes:
+      - community-node-meili:/meili_data
+    networks:
+      - community-node-network
+
+  community-node-user-api:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-community-node-user-api
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cn migrate && cn config seed && cn user-api"]
+    environment:
+      DATABASE_URL: "postgres://cn:cn_password@community-node-postgres:5432/cn"
+      PUBLIC_BASE_URL: "${COMMUNITY_NODE_BASE_URL:-http://127.0.0.1:18080}"
+      USER_API_ADDR: "0.0.0.0:8080"
+      USER_JWT_SECRET: "${COMMUNITY_NODE_JWT_SECRET:-change-me}"
+      USER_JWT_TTL_SECONDS: "${COMMUNITY_NODE_JWT_TTL_SECONDS:-900}"
+      NODE_KEY_PATH: "/data/node_key.json"
+      PERSONAL_DATA_EXPORT_DIR: "/data/personal_exports"
+      PERSONAL_DATA_HMAC_SECRET: "${COMMUNITY_NODE_HMAC_SECRET:-change-me}"
+      MEILI_URL: "http://community-node-meilisearch:7700"
+      MEILI_MASTER_KEY: "${COMMUNITY_NODE_MEILI_MASTER_KEY:-change-me}"
+    depends_on:
+      community-node-postgres:
+        condition: service_healthy
+      community-node-meilisearch:
+        condition: service_started
+    volumes:
+      - community-node-data:/data
+    ports:
+      - "${COMMUNITY_NODE_USER_API_PORT:-18080}:8080"
+    networks:
+      - community-node-network
+
   # テスト実行サービス
   test-runner:
     build:
@@ -61,6 +120,7 @@ services:
       # CI環境を示す（一部のテストで必要）
       CI: "true"
       SCENARIO: "${SCENARIO:-}"
+      E2E_COMMUNITY_NODE_URL: "${E2E_COMMUNITY_NODE_URL:-}"
     # host network used for UDP reachability between endpoints
 
   # 個別のRustテスト実行
@@ -221,7 +281,15 @@ volumes:
     name: kukuri-cargo-target
   pnpm-store:
     name: kukuri-pnpm-store
+  community-node-postgres:
+    name: kukuri-community-node-postgres
+  community-node-meili:
+    name: kukuri-community-node-meili
+  community-node-data:
+    name: kukuri-community-node-data
 
 networks:
   test-network:
+    driver: bridge
+  community-node-network:
     driver: bridge

@@ -325,7 +325,8 @@ pub async fn list_plans(
         .await
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    let limit_rows = sqlx::query("SELECT plan_id, metric, window, limit FROM cn_user.plan_limits")
+    let limit_rows =
+        sqlx::query("SELECT plan_id, metric, \"window\", \"limit\" FROM cn_user.plan_limits")
         .fetch_all(&state.pool)
         .await
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
@@ -380,7 +381,7 @@ pub async fn create_plan(
 
     for limit in payload.limits.iter() {
         sqlx::query(
-            "INSERT INTO cn_user.plan_limits (plan_id, metric, window, limit) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO cn_user.plan_limits (plan_id, metric, \"window\", \"limit\") VALUES ($1, $2, $3, $4)",
         )
         .bind(&payload.plan_id)
         .bind(&limit.metric)
@@ -443,7 +444,7 @@ pub async fn update_plan(
 
     for limit in payload.limits.iter() {
         sqlx::query(
-            "INSERT INTO cn_user.plan_limits (plan_id, metric, window, limit) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO cn_user.plan_limits (plan_id, metric, \"window\", \"limit\") VALUES ($1, $2, $3, $4)",
         )
         .bind(&plan_id)
         .bind(&limit.metric)

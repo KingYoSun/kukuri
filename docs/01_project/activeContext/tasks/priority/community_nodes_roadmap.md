@@ -23,7 +23,7 @@
 
 ## 実ノードE2E/統合テスト拡充（計画）
 
-- [ ] E2E 用に `kukuri-community-node` を起動する Docker 経路を追加し、実ノードの base URL をテストへ配布する（`docker-compose.test.yml`/`scripts/test-docker.*`/`SCENARIO` を整理）。
+- [x] E2E 用に `kukuri-community-node` を起動する Docker 経路を追加し、実ノードの base URL をテストへ配布する（`docker-compose.test.yml`/`scripts/test-docker.*`/`SCENARIO` を整理）。
 - [ ] 実ノードの DB/Meilisearch に投入する E2E シード（ユーザー/トピック/投稿/label/trust）を作成し、テスト前に投入/後に掃除できるようにする。
 - [ ] 実ノード認証フロー（challenge/verify）を通すヘルパーを追加し、`community-node` 設定/認証/同意取得の E2E を実ノードで再実行する。
 - [ ] invite.capability と key.envelope を実ノードで発行できるテストヘルパー（`cn-cli` or 専用API）を整備し、招待適用/鍵同期/暗号化投稿の E2E を追加する。

@@ -13,6 +13,8 @@ const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
 const CLI_BOOTSTRAP_PATH =
   process.env.KUKURI_CLI_BOOTSTRAP_PATH ?? join(OUTPUT_DIR, 'cli_bootstrap_nodes.json');
 
+let shouldStopCommunityNodeMock = false;
+
 process.env.KUKURI_BOOTSTRAP_PEERS = '';
 process.env.WDIO_WORKERS ??= '1';
 process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
@@ -134,9 +136,16 @@ export const config: Options.Testrunner = {
   onPrepare: async (_config, capabilities) => {
     mkdirSync(OUTPUT_DIR, { recursive: true });
     seedCliBootstrapFixture();
-    const { baseUrl } = await startCommunityNodeMock();
-    process.env.E2E_COMMUNITY_NODE_URL = baseUrl;
-    console.info(`[wdio.desktop] community node mock running at ${baseUrl}`);
+    let baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
+    if (!baseUrl) {
+      const result = await startCommunityNodeMock();
+      baseUrl = result.baseUrl;
+      process.env.E2E_COMMUNITY_NODE_URL = baseUrl;
+      shouldStopCommunityNodeMock = true;
+      console.info(`[wdio.desktop] community node mock running at ${baseUrl}`);
+    } else {
+      console.info(`[wdio.desktop] community node base URL preset to ${baseUrl}`);
+    }
     if (Array.isArray(capabilities)) {
       for (const capability of capabilities) {
         pruneUnsupportedCapabilities(capability as Record<string, unknown>);
@@ -161,7 +170,9 @@ export const config: Options.Testrunner = {
   },
   onComplete: async () => {
     try {
-      await stopCommunityNodeMock();
+      if (shouldStopCommunityNodeMock) {
+        await stopCommunityNodeMock();
+      }
     } finally {
       await stopDriver();
     }

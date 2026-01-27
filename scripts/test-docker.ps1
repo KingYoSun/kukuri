@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e", "e2e-community-node")]
     [string]$Command = "all",
 
     [switch]$Integration,            # Rust�e�X�g����P2P�����e�X�g�݂̂���s
@@ -88,7 +88,9 @@ Commands:
   metrics      - ���g���N�X�֘A�̃V���[�g�e�X�g�iRust test_get_status / TS P2P UI�j
   performance  - �p�t�H�[�}���X�n�[�l�X�iRust ignored �e�X�g�j����s�����ʕ��𐶐�
   contracts    - �_��e�X�g�iNIP-10���E�P�[�X�j����s
-  e2e          - Desktop E2E テスト（tauri-driver + WebDriverIO）を実行`n  build        - Docker�C���[�W�̃r���h�̂ݎ��s
+  e2e          - Desktop E2E テスト（tauri-driver + WebDriverIO）を実行
+  e2e-community-node - Desktop E2E テスト（community node 実体起動）
+  build        - Docker�C���[�W�̃r���h�̂ݎ��s
   clean        - Docker�R���e�i�ƃC���[�W��N���[���A�b�v
   cache-clean  - �L���b�V���{�����[����܂߂Ċ��S�N���[���A�b�v
 
@@ -115,6 +117,8 @@ Examples:
   .\test-docker.ps1 ts -Scenario trending-feed
   .\test-docker.ps1 ts -Scenario profile-avatar-sync
   .\test-docker.ps1 ts -Scenario user-search-pagination
+  .\test-docker.ps1 e2e
+  .\test-docker.ps1 e2e-community-node
   .\test-docker.ps1 performance    # �p�t�H�[�}���X�v���p�e�X�g�o�C�i������s
   .\test-docker.ps1 cache-clean    # �L���b�V����܂߂Ċ��S�N���[���A�b�v
   .\test-docker.ps1 -Help          # �w���v��\��
@@ -1043,6 +1047,55 @@ function Invoke-DesktopE2EScenario {
     Write-Success "Desktop E2E scenario finished. Check tmp/logs/desktop-e2e/ and test-results/desktop-e2e/ for artefacts."
 }
 
+function Invoke-DesktopE2ECommunityNodeScenario {
+    if (-not $NoBuild) {
+        Build-TestImage
+    }
+
+    $logDir = Join-Path $repositoryRoot "tmp/logs/desktop-e2e"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    $baseUrl = if ([string]::IsNullOrWhiteSpace($env:COMMUNITY_NODE_BASE_URL)) {
+        "http://127.0.0.1:18080"
+    } else {
+        $env:COMMUNITY_NODE_BASE_URL
+    }
+
+    Write-Host "Running desktop E2E scenario (community node) via Docker..."
+    $previousScenario = $env:SCENARIO
+    $previousBaseUrl = $env:COMMUNITY_NODE_BASE_URL
+    $previousE2EUrl = $env:E2E_COMMUNITY_NODE_URL
+    $env:COMMUNITY_NODE_BASE_URL = $baseUrl
+    $env:E2E_COMMUNITY_NODE_URL = $baseUrl
+    $env:SCENARIO = "community-node-e2e"
+    try {
+        Start-CommunityNode -BaseUrl $baseUrl
+        Invoke-DockerCompose @("run", "--rm", "test-runner")
+    }
+    finally {
+        Stop-CommunityNode
+        if ($null -ne $previousScenario) {
+            $env:SCENARIO = $previousScenario
+        } else {
+            Remove-Item Env:SCENARIO -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousBaseUrl) {
+            $env:COMMUNITY_NODE_BASE_URL = $previousBaseUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_BASE_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousE2EUrl) {
+            $env:E2E_COMMUNITY_NODE_URL = $previousE2EUrl
+        } else {
+            Remove-Item Env:E2E_COMMUNITY_NODE_URL -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-Success "Desktop E2E scenario (community node) finished. Check tmp/logs/desktop-e2e/ and test-results/desktop-e2e/ for artefacts."
+}
+
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -1293,6 +1346,56 @@ function Stop-P2PBootstrap {
     Invoke-DockerCompose @("down", "--remove-orphans") -IgnoreFailure | Out-Null
 }
 
+function Wait-CommunityNodeHealthy {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BaseUrl,
+        [int]$TimeoutSeconds = 120
+    )
+
+    $healthUrl = "$BaseUrl/healthz"
+    for ($i = 0; $i -lt $TimeoutSeconds; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri $healthUrl -TimeoutSec 5 -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+                return $true
+            }
+        } catch {
+            # Wait and retry.
+        }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
+function Start-CommunityNode {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BaseUrl
+    )
+
+    Write-Info "Starting community-node-user-api service..."
+    $code = Invoke-DockerCompose @("up", "-d", "community-node-user-api") -IgnoreFailure
+    if ($code -ne 0) {
+        throw "Failed to start community-node-user-api (exit code $code)"
+    }
+    if (-not (Wait-CommunityNodeHealthy -BaseUrl $BaseUrl)) {
+        throw "community-node-user-api health check failed: $BaseUrl/healthz"
+    }
+    Write-Success "community-node-user-api is healthy"
+}
+
+function Stop-CommunityNode {
+    Write-Host "Stopping community-node services..."
+    Invoke-DockerCompose -Arguments @(
+        "rm",
+        "-sf",
+        "community-node-user-api",
+        "community-node-postgres",
+        "community-node-meilisearch"
+    ) -IgnoreFailure | Out-Null
+}
+
 # ���C������
 if ($Help) {
     Show-Help
@@ -1303,7 +1406,7 @@ if (-not (Test-Path "test-results")) {
     New-Item -ItemType Directory -Path "test-results" | Out-Null
 }
 
-$pnpmRequiredCommands = @("all", "ts", "lint", "metrics", "performance", "contracts", "e2e")
+$pnpmRequiredCommands = @("all", "ts", "lint", "metrics", "performance", "contracts", "e2e", "e2e-community-node")
 if (-not $Help -and $pnpmRequiredCommands -contains $Command) {
     Assert-CorepackPnpmReady -RepoRoot $repositoryRoot
 }
@@ -1354,6 +1457,10 @@ switch ($Command) {
     }
     "e2e" {
         Invoke-DesktopE2EScenario
+        Show-CacheStatus
+    }
+    "e2e-community-node" {
+        Invoke-DesktopE2ECommunityNodeScenario
         Show-CacheStatus
     }
     "build" {

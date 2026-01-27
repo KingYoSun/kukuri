@@ -17,3 +17,8 @@
 
 ## 補足
 - `native-test-linux` の `useRouter must be used inside a <RouterProvider>` は既存警告。
+
+## 追記（2026年01月27日）
+- docker-compose.test.yml に community node (Postgres/Meilisearch/User API) を追加。
+- scripts/test-docker.* に e2e-community-node を追加し、SCENARIO=community-node-e2e と E2E_COMMUNITY_NODE_URL を配布。
+- WDIO/テストで mock/実ノード切替に対応。

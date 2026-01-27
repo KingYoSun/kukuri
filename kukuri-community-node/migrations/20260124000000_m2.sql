@@ -1,4 +1,4 @@
-﻿CREATE SCHEMA IF NOT EXISTS cn_bootstrap;
+CREATE SCHEMA IF NOT EXISTS cn_bootstrap;
 CREATE SCHEMA IF NOT EXISTS cn_relay;
 
 CREATE TABLE IF NOT EXISTS cn_admin.topic_services (
@@ -225,9 +225,9 @@ CREATE TABLE IF NOT EXISTS cn_user.plans (
 CREATE TABLE IF NOT EXISTS cn_user.plan_limits (
     plan_id TEXT NOT NULL,
     metric TEXT NOT NULL,
-    window TEXT NOT NULL,
-    limit BIGINT NOT NULL,
-    PRIMARY KEY (plan_id, metric, window)
+    "window" TEXT NOT NULL,
+    "limit" BIGINT NOT NULL,
+    PRIMARY KEY (plan_id, metric, "window")
 );
 
 CREATE TABLE IF NOT EXISTS cn_user.subscriptions (

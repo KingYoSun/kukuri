@@ -21,7 +21,7 @@ describe('Community Node settings', () => {
     await resetAppState();
   });
 
-  it('saves config and authenticates against the mock node', async function () {
+  it('saves config and authenticates against the community node endpoint', async function () {
     this.timeout(180000);
 
     const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
@@ -65,7 +65,7 @@ describe('Community Node settings', () => {
     await browser.waitUntil(
       async () => {
         const text = await consents.getText();
-        return text.includes('policies') || text.includes('accepted');
+        return text.includes('policies') || text.includes('consents') || text.includes('accepted');
       },
       {
         timeout: 20000,

@@ -231,14 +231,14 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
         .route("/v1/auth/verify", post(auth::auth_verify))
         .route("/v1/policies/current", get(policies::get_current_policies))
         .route(
-            "/v1/policies/:policy_type/:version",
+            "/v1/policies/{policy_type}/{version}",
             get(policies::get_policy_by_version),
         )
         .route("/v1/consents/status", get(policies::get_consent_status))
         .route("/v1/consents", post(policies::accept_consents))
         .route("/v1/bootstrap/nodes", get(bootstrap::get_bootstrap_nodes))
         .route(
-            "/v1/bootstrap/topics/:topic_id/services",
+            "/v1/bootstrap/topics/{topic_id}/services",
             get(bootstrap::get_bootstrap_services),
         )
         .route(
@@ -250,7 +250,7 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
             get(subscriptions::list_topic_subscriptions),
         )
         .route(
-            "/v1/topic-subscriptions/:topic_id",
+            "/v1/topic-subscriptions/{topic_id}",
             delete(subscriptions::delete_topic_subscription),
         )
         .route("/v1/invite/redeem", post(subscriptions::redeem_invite))
@@ -272,11 +272,11 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
             post(personal_data::create_export_request),
         )
         .route(
-            "/v1/personal-data-export-requests/:export_request_id",
+            "/v1/personal-data-export-requests/{export_request_id}",
             get(personal_data::get_export_request),
         )
         .route(
-            "/v1/personal-data-export-requests/:export_request_id/download",
+            "/v1/personal-data-export-requests/{export_request_id}/download",
             get(personal_data::download_export),
         )
         .route(
@@ -284,7 +284,7 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
             post(personal_data::create_deletion_request),
         )
         .route(
-            "/v1/personal-data-deletion-requests/:deletion_request_id",
+            "/v1/personal-data-deletion-requests/{deletion_request_id}",
             get(personal_data::get_deletion_request),
         )
         .with_state(state);

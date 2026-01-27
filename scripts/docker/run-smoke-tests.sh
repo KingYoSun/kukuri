@@ -6,6 +6,10 @@ case "${SCENARIO:-}" in
     /app/run-desktop-e2e.sh
     exit $?
     ;;
+  "community-node-e2e")
+    /app/run-desktop-e2e.sh
+    exit $?
+    ;;
   "post-delete-cache")
     /app/run-post-delete-cache.sh
     exit $?

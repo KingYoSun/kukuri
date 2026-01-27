@@ -28,7 +28,7 @@ pub async fn ensure_default_plan(pool: &Pool<Postgres>) -> Result<()> {
 
     for (metric, window, limit) in limits {
         sqlx::query(
-            "INSERT INTO cn_user.plan_limits              (plan_id, metric, window, limit)              VALUES ($1, $2, $3, $4)              ON CONFLICT DO NOTHING",
+            "INSERT INTO cn_user.plan_limits              (plan_id, metric, \"window\", \"limit\")              VALUES ($1, $2, $3, $4)              ON CONFLICT DO NOTHING",
         )
         .bind(DEFAULT_PLAN_ID)
         .bind(metric)
@@ -47,7 +47,7 @@ pub(crate) async fn check_topic_limit(
 ) -> ApiResult<()> {
     let plan_id = active_plan_id(pool, pubkey).await?;
     let limit = sqlx::query_scalar::<_, i64>(
-        "SELECT limit FROM cn_user.plan_limits WHERE plan_id = $1 AND metric = 'max_topics' AND window = 'limit'",
+        "SELECT \"limit\" FROM cn_user.plan_limits WHERE plan_id = $1 AND metric = 'max_topics' AND \"window\" = 'limit'",
     )
     .bind(&plan_id)
     .fetch_optional(pool)
@@ -90,7 +90,7 @@ pub(crate) async fn consume_quota(
 ) -> ApiResult<()> {
     let plan_id = active_plan_id(pool, pubkey).await?;
     let limit = sqlx::query_scalar::<_, i64>(
-        "SELECT limit FROM cn_user.plan_limits WHERE plan_id = $1 AND metric = $2 AND window = 'day'",
+        "SELECT \"limit\" FROM cn_user.plan_limits WHERE plan_id = $1 AND metric = $2 AND \"window\" = 'day'",
     )
     .bind(&plan_id)
     .bind(metric)
