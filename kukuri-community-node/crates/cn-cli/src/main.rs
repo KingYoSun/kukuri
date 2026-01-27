@@ -24,6 +24,7 @@ use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
 mod bootstrap_cache;
+mod e2e_seed;
 
 use bootstrap_cache::{resolve_export_path, write_cache, CliBootstrapCache};
 
@@ -46,6 +47,10 @@ enum Commands {
     Index,
     Moderation,
     Trust,
+    E2e {
+        #[command(subcommand)]
+        command: E2eCommand,
+    },
     Migrate,
     Config {
         #[command(subcommand)]
@@ -68,6 +73,12 @@ enum Commands {
 #[derive(Subcommand)]
 enum ConfigCommand {
     Seed,
+}
+
+#[derive(Subcommand)]
+enum E2eCommand {
+    Seed,
+    Cleanup,
 }
 
 #[derive(Subcommand)]
@@ -198,6 +209,17 @@ async fn main() -> Result<()> {
         Commands::Trust => {
             let config = cn_trust::load_config()?;
             cn_trust::run(config).await?;
+        }
+        Commands::E2e { command } => {
+            cn_core::logging::init("cn-cli");
+            match command {
+                E2eCommand::Seed => {
+                    e2e_seed::seed().await?;
+                }
+                E2eCommand::Cleanup => {
+                    e2e_seed::cleanup().await?;
+                }
+            }
         }
         Commands::Migrate => {
             cn_core::logging::init("cn-cli");

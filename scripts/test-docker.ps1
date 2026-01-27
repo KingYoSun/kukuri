@@ -1072,9 +1072,11 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $env:SCENARIO = "community-node-e2e"
     try {
         Start-CommunityNode -BaseUrl $baseUrl
+        Invoke-CommunityNodeE2ESeed
         Invoke-DockerCompose @("run", "--rm", "test-runner")
     }
     finally {
+        Invoke-CommunityNodeE2ECleanup
         Stop-CommunityNode
         if ($null -ne $previousScenario) {
             $env:SCENARIO = $previousScenario
@@ -1383,6 +1385,22 @@ function Start-CommunityNode {
         throw "community-node-user-api health check failed: $BaseUrl/healthz"
     }
     Write-Success "community-node-user-api is healthy"
+}
+
+function Invoke-CommunityNodeE2ESeed {
+    Write-Info "Seeding community node E2E fixtures..."
+    Invoke-DockerCompose @("run", "--rm", "community-node-user-api", "cn", "e2e", "seed")
+    Write-Success "Community node E2E seed applied"
+}
+
+function Invoke-CommunityNodeE2ECleanup {
+    Write-Info "Cleaning up community node E2E fixtures..."
+    $exitCode = Invoke-DockerCompose @("run", "--rm", "community-node-user-api", "cn", "e2e", "cleanup") -IgnoreFailure
+    if ($exitCode -ne 0) {
+        Write-Warning "Community node E2E cleanup failed (exit code $exitCode)"
+    } else {
+        Write-Success "Community node E2E cleanup completed"
+    }
 }
 
 function Stop-CommunityNode {

@@ -759,6 +759,24 @@ start_community_node() {
   echo '[OK] community-node-user-api is healthy.'
 }
 
+seed_community_node() {
+  echo 'Seeding community node E2E fixtures...'
+  if ! compose_run '' run --rm community-node-user-api cn e2e seed; then
+    echo 'Community node E2E seed failed.' >&2
+    return 1
+  fi
+  echo '[OK] Community node E2E seed applied.'
+}
+
+cleanup_community_node() {
+  echo 'Cleaning up community node E2E fixtures...'
+  if ! compose_run '' run --rm community-node-user-api cn e2e cleanup >/dev/null 2>&1; then
+    echo '[WARN] Community node E2E cleanup failed.' >&2
+  else
+    echo '[OK] Community node E2E cleanup completed.'
+  fi
+}
+
 stop_community_node() {
   echo 'Stopping community-node services...'
   compose_run '' rm -sf community-node-user-api community-node-postgres community-node-meilisearch >/dev/null 2>&1 || true
@@ -780,6 +798,8 @@ run_desktop_e2e_community_node() {
   local status=0
   if ! start_community_node "$base_url"; then
     status=1
+  elif ! seed_community_node; then
+    status=1
   else
     set +e
     compose_run '' run --rm test-runner
@@ -787,6 +807,7 @@ run_desktop_e2e_community_node() {
     set -e
   fi
 
+  cleanup_community_node
   stop_community_node
 
   if [[ -n "${previous_scenario-}" ]]; then
