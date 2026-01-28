@@ -27,7 +27,7 @@
 - [x] 実ノードの DB/Meilisearch に投入する E2E シード（ユーザー/トピック/投稿/label/trust）を作成し、テスト前に投入/後に掃除できるようにする。
 - [x] 実ノード認証フロー（challenge/verify）を通すヘルパーを追加し、`community-node` 設定/認証/同意取得の E2E を実ノードで再実行する。
 - [x] （legacy）invite.capability と key.envelope を実ノードで発行できるテストヘルパー（`cn-cli`）を整備し、招待適用/鍵同期/暗号化投稿の E2E を追加した（**P2P-only 移行のため参考扱い**）。
-- [ ] P2P-only: `access_control_issue_invite`/`access_control_request_join` を使った **invite共有→join.request→key.envelope→暗号化投稿** の E2E を追加する。
+- [x] P2P-only: `access_control_issue_invite`/`access_control_request_join` を使った **invite共有→join.request→key.envelope→暗号化投稿** の E2E を追加する。
 - [ ] label/attestation/trust を実ノードで発行し、PostCard のラベル/信頼バッジ表示まで検証する E2E を追加する。
 - [ ] search/index の実データを投入し、検索UI（サジェスト/ページング/0件）と community node search API の連携を E2E で確認する。
 - [ ] bootstrap/relay 実ノードのエンドポイントを使った P2P 連携確認（list_bootstrap_nodes/services）を E2E に追加する。

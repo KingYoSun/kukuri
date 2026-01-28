@@ -45,6 +45,9 @@ pub mod test_support {
         pub use crate::infrastructure::p2p;
         pub use crate::infrastructure::storage;
     }
+    pub mod presentation {
+        pub use crate::presentation::dto;
+    }
     pub mod shared {
         pub use crate::shared::{config, error};
     }
