@@ -8,6 +8,7 @@ import {
 } from '@/lib/api/tauri';
 import { TauriCommandError } from '@/lib/api/tauriClient';
 import { p2pApi } from '@/lib/api/p2p';
+import { communityNodeApi } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import {
@@ -118,6 +119,16 @@ interface BootstrapSnapshot {
   envLocked: boolean;
 }
 
+type CommunityNodeAuth = Awaited<ReturnType<typeof communityNodeApi.authenticate>>;
+type CommunityNodeConfig = Awaited<ReturnType<typeof communityNodeApi.getConfig>>;
+type CommunityNodeConsents = Awaited<ReturnType<typeof communityNodeApi.getConsentStatus>>;
+
+interface CommunityNodeAuthFlowResult {
+  config: CommunityNodeConfig;
+  auth: CommunityNodeAuth;
+  consents: CommunityNodeConsents;
+}
+
 export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
@@ -176,6 +187,7 @@ export interface E2EBridge {
   getBootstrapSnapshot: () => Promise<BootstrapSnapshot>;
   applyCliBootstrap: () => Promise<BootstrapSnapshot>;
   clearBootstrapNodes: () => Promise<BootstrapSnapshot>;
+  communityNodeAuthFlow: (payload: { baseUrl: string }) => Promise<CommunityNodeAuthFlowResult>;
 }
 
 declare global {
@@ -1243,6 +1255,28 @@ export function registerE2EBridge(): void {
           await refreshRelayStatusSafe();
           const config = await p2pApi.getBootstrapConfig();
           return bootstrapSnapshotFromConfig(config);
+        },
+        communityNodeAuthFlow: async (payload: { baseUrl: string }) => {
+          const baseUrl = payload?.baseUrl?.trim();
+          if (!baseUrl) {
+            throw new Error('baseUrl is required to authenticate against community node');
+          }
+          try {
+            await communityNodeApi.setConfig(baseUrl);
+            const auth = await communityNodeApi.authenticate();
+            const config = await communityNodeApi.getConfig();
+            const consents = await communityNodeApi.getConsentStatus();
+            await queryClient.invalidateQueries({ queryKey: ['community-node', 'config'] });
+            await queryClient.invalidateQueries({ queryKey: ['community-node', 'group-keys'] });
+            await queryClient.invalidateQueries({ queryKey: ['community-node', 'consents'] });
+            return { config, auth, consents };
+          } catch (error) {
+            errorHandler.log('E2EBridge.communityNodeAuthFlowFailed', error, {
+              context: 'registerE2EBridge.communityNodeAuthFlow',
+              metadata: { baseUrl },
+            });
+            throw error;
+          }
         },
       };
     }

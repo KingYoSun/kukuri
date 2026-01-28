@@ -1,5 +1,9 @@
 import { browser } from '@wdio/globals';
 import type { SeedDirectMessageConversationResult } from '@/lib/api/tauri';
+import type {
+  CommunityNodeAuthResponse,
+  CommunityNodeConfigResponse,
+} from '@/lib/api/communityNode';
 import type { E2EBridge } from '@/testing/registerE2EBridge';
 import { waitForAppReady } from './waitForAppReady';
 
@@ -29,7 +33,8 @@ export type BridgeAction =
   | 'primeUserSearchRateLimit'
   | 'getBootstrapSnapshot'
   | 'applyCliBootstrap'
-  | 'clearBootstrapNodes';
+  | 'clearBootstrapNodes'
+  | 'communityNodeAuthFlow';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -193,6 +198,12 @@ export interface BootstrapSnapshot {
   envLocked: boolean;
 }
 
+export interface CommunityNodeAuthFlowResult {
+  config: CommunityNodeConfigResponse | null;
+  auth: CommunityNodeAuthResponse;
+  consents: Record<string, unknown>;
+}
+
 type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
@@ -213,6 +224,7 @@ type BridgeResultMap = {
   getBootstrapSnapshot: BootstrapSnapshot;
   applyCliBootstrap: BootstrapSnapshot;
   clearBootstrapNodes: BootstrapSnapshot;
+  communityNodeAuthFlow: CommunityNodeAuthFlowResult;
 };
 
 declare global {
@@ -558,4 +570,10 @@ export async function applyCliBootstrap(): Promise<BootstrapSnapshot> {
 
 export async function clearBootstrapNodes(): Promise<BootstrapSnapshot> {
   return await callBridge('clearBootstrapNodes');
+}
+
+export async function communityNodeAuthFlow(
+  baseUrl: string,
+): Promise<CommunityNodeAuthFlowResult> {
+  return await callBridge('communityNodeAuthFlow', { baseUrl });
 }

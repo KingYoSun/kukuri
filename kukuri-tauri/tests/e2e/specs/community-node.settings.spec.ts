@@ -8,6 +8,7 @@ import {
   openSettings,
   type ProfileInfo,
 } from '../helpers/appActions';
+import { runCommunityNodeAuthFlow } from '../helpers/communityNodeAuth';
 
 const profile: ProfileInfo = {
   name: 'E2E Community',
@@ -47,7 +48,7 @@ describe('Community Node settings', () => {
       interval: 300,
       timeoutMsg: 'Community node auth button did not become enabled',
     });
-    await authButton.click();
+    await runCommunityNodeAuthFlow(baseUrl);
 
     const status = await $('[data-testid="community-node-token-status"]');
     await browser.waitUntil(

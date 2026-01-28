@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年01月27日
+最終更新日: 2026年01月28日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -25,7 +25,7 @@
 
 - [x] E2E 用に `kukuri-community-node` を起動する Docker 経路を追加し、実ノードの base URL をテストへ配布する（`docker-compose.test.yml`/`scripts/test-docker.*`/`SCENARIO` を整理）。
 - [x] 実ノードの DB/Meilisearch に投入する E2E シード（ユーザー/トピック/投稿/label/trust）を作成し、テスト前に投入/後に掃除できるようにする。
-- [ ] 実ノード認証フロー（challenge/verify）を通すヘルパーを追加し、`community-node` 設定/認証/同意取得の E2E を実ノードで再実行する。
+- [x] 実ノード認証フロー（challenge/verify）を通すヘルパーを追加し、`community-node` 設定/認証/同意取得の E2E を実ノードで再実行する。
 - [ ] invite.capability と key.envelope を実ノードで発行できるテストヘルパー（`cn-cli` or 専用API）を整備し、招待適用/鍵同期/暗号化投稿の E2E を追加する。
 - [ ] label/attestation/trust を実ノードで発行し、PostCard のラベル/信頼バッジ表示まで検証する E2E を追加する。
 - [ ] search/index の実データを投入し、検索UI（サジェスト/ページング/0件）と community node search API の連携を E2E で確認する。
