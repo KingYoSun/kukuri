@@ -216,7 +216,9 @@ async fn main() -> Result<()> {
             match command {
                 E2eCommand::Seed => {
                     cn_core::logging::init("cn-cli");
-                    e2e_seed::seed().await?;
+                    let summary = e2e_seed::seed().await?;
+                    let summary_json = serde_json::to_string(&summary)?;
+                    println!("E2E_SEED_JSON={summary_json}");
                 }
                 E2eCommand::Cleanup => {
                     cn_core::logging::init("cn-cli");

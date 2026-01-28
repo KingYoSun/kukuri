@@ -93,7 +93,28 @@ struct IndexDocument {
     tags: Vec<String>,
 }
 
-pub async fn seed() -> Result<()> {
+#[derive(Serialize)]
+pub struct SeedPostSummary {
+    pub event_id: String,
+    pub author_pubkey: String,
+    pub topic_id: String,
+    pub content: String,
+    pub created_at: i64,
+}
+
+#[derive(Serialize)]
+pub struct SeedSummary {
+    pub label_target: String,
+    pub label_target_event_id: String,
+    pub label: String,
+    pub label_confidence: f64,
+    pub trust_subject_pubkey: String,
+    pub trust_report_score: f64,
+    pub trust_density_score: f64,
+    pub post: SeedPostSummary,
+}
+
+pub async fn seed() -> Result<SeedSummary> {
     let database_url = env_config::required_env("DATABASE_URL")?;
     let meili_url = env_config::required_env("MEILI_URL")?;
     let meili_master_key = std::env::var("MEILI_MASTER_KEY").ok();
@@ -103,8 +124,8 @@ pub async fn seed() -> Result<()> {
     let ctx = SeedContext::new()?;
 
     cleanup_with_clients(&pool, &meili, &ctx).await?;
-    seed_with_clients(&pool, &meili, &ctx).await?;
-    Ok(())
+    let summary = seed_with_clients(&pool, &meili, &ctx).await?;
+    Ok(summary)
 }
 
 pub async fn cleanup() -> Result<()> {
@@ -123,7 +144,7 @@ async fn seed_with_clients(
     pool: &Pool<Postgres>,
     meili: &meili::MeiliClient,
     ctx: &SeedContext,
-) -> Result<()> {
+) -> Result<SeedSummary> {
     upsert_subscriber(pool, &ctx.subscriber.pubkey).await?;
     for topic_id in SEED_TOPICS {
         upsert_topic_subscription(pool, topic_id, &ctx.subscriber.pubkey).await?;
@@ -154,6 +175,7 @@ async fn seed_with_clients(
     let subject_pubkey = ctx.author_a.pubkey.clone();
     let subject = format!("pubkey:{subject_pubkey}");
     let report_exp = ctx.now + 86400;
+    let report_score = 0.35_f64;
     let report_context = json!({
         "method": trust_core::METHOD_REPORT_BASED,
         "seed": SEED_TAG_VALUE
@@ -168,7 +190,7 @@ async fn seed_with_clients(
         &trust_core::AttestationInput {
             subject: subject.clone(),
             claim: trust_core::CLAIM_REPORT_BASED.to_string(),
-            score: 0.35,
+            score: report_score,
             value: report_value.clone(),
             evidence: Vec::new(),
             context: report_context.clone(),
@@ -181,7 +203,7 @@ async fn seed_with_clients(
         &report_attestation,
         &subject,
         trust_core::CLAIM_REPORT_BASED,
-        0.35,
+        report_score,
         report_exp,
         &report_value,
         &report_context,
@@ -191,6 +213,7 @@ async fn seed_with_clients(
     upsert_report_score(pool, &subject_pubkey, report_attestation.id.clone(), report_exp).await?;
 
     let comm_exp = ctx.now + 86400;
+    let comm_score = 0.78_f64;
     let comm_context = json!({
         "method": trust_core::METHOD_COMMUNICATION_DENSITY,
         "seed": SEED_TAG_VALUE
@@ -205,7 +228,7 @@ async fn seed_with_clients(
         &trust_core::AttestationInput {
             subject: subject.clone(),
             claim: trust_core::CLAIM_COMMUNICATION_DENSITY.to_string(),
-            score: 0.78,
+            score: comm_score,
             value: comm_value.clone(),
             evidence: Vec::new(),
             context: comm_context.clone(),
@@ -218,7 +241,7 @@ async fn seed_with_clients(
         &comm_attestation,
         &subject,
         trust_core::CLAIM_COMMUNICATION_DENSITY,
-        0.78,
+        comm_score,
         comm_exp,
         &comm_value,
         &comm_context,
@@ -227,12 +250,32 @@ async fn seed_with_clients(
     .await?;
     upsert_communication_score(pool, &subject_pubkey, comm_attestation.id.clone(), comm_exp).await?;
 
+    let primary_event = events
+        .first()
+        .ok_or_else(|| anyhow!("seed events are empty"))?;
+    let summary = SeedSummary {
+        label_target: label_target.clone(),
+        label_target_event_id: primary_event.raw.id.clone(),
+        label: label_input.label.clone(),
+        label_confidence: label_input.confidence.unwrap_or_default(),
+        trust_subject_pubkey: subject_pubkey.clone(),
+        trust_report_score: report_score,
+        trust_density_score: comm_score,
+        post: SeedPostSummary {
+            event_id: primary_event.raw.id.clone(),
+            author_pubkey: primary_event.raw.pubkey.clone(),
+            topic_id: primary_event.topic_id.clone(),
+            content: primary_event.raw.content.clone(),
+            created_at: primary_event.raw.created_at,
+        },
+    };
+
     tracing::info!(
         subscriber_pubkey = %ctx.subscriber.pubkey,
         author_pubkey = %ctx.author_a.pubkey,
         "community node e2e seed applied"
     );
-    Ok(())
+    Ok(summary)
 }
 
 async fn cleanup_with_clients(

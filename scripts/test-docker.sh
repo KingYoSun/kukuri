@@ -765,10 +765,31 @@ start_community_node() {
 
 seed_community_node() {
   echo 'Seeding community node E2E fixtures...'
-  if ! compose_run '' run --rm --entrypoint cn community-node-user-api e2e seed; then
+  local seed_output
+  set +e
+  seed_output=$(compose_run '' run --rm --entrypoint cn community-node-user-api e2e seed 2>&1)
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    echo "$seed_output" >&2
     echo 'Community node E2E seed failed.' >&2
+    return $status
+  fi
+
+  local seed_line
+  seed_line=$(printf '%s\n' "$seed_output" | awk '/^E2E_SEED_JSON=/{line=$0} END{print line}')
+  if [[ -z "$seed_line" ]]; then
+    echo 'Failed to capture E2E seed JSON from community node helper output.' >&2
     return 1
   fi
+  local seed_json="${seed_line#E2E_SEED_JSON=}"
+
+  local log_dir="${REPO_ROOT}/tmp/logs/community-node-e2e"
+  local seed_path="${log_dir}/seed.json"
+  mkdir -p "$log_dir"
+  printf '%s\n' "$seed_json" > "$seed_path"
+  export E2E_COMMUNITY_NODE_SEED_JSON="$seed_json"
+
   echo '[OK] Community node E2E seed applied.'
   issue_community_node_invite
 }
@@ -828,6 +849,7 @@ run_desktop_e2e_community_node() {
   local previous_base_url="${COMMUNITY_NODE_BASE_URL-}"
   local previous_e2e_url="${E2E_COMMUNITY_NODE_URL-}"
   local previous_invite_json="${E2E_COMMUNITY_NODE_INVITE_JSON-}"
+  local previous_seed_json="${E2E_COMMUNITY_NODE_SEED_JSON-}"
   local previous_topic_name="${E2E_COMMUNITY_NODE_TOPIC_NAME-}"
 
   export COMMUNITY_NODE_BASE_URL="$base_url"
@@ -868,6 +890,11 @@ run_desktop_e2e_community_node() {
     export E2E_COMMUNITY_NODE_INVITE_JSON="$previous_invite_json"
   else
     unset E2E_COMMUNITY_NODE_INVITE_JSON
+  fi
+  if [[ -n "${previous_seed_json-}" ]]; then
+    export E2E_COMMUNITY_NODE_SEED_JSON="$previous_seed_json"
+  else
+    unset E2E_COMMUNITY_NODE_SEED_JSON
   fi
   if [[ -n "${previous_topic_name-}" ]]; then
     export E2E_COMMUNITY_NODE_TOPIC_NAME="$previous_topic_name"

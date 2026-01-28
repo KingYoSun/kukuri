@@ -1068,6 +1068,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $previousBaseUrl = $env:COMMUNITY_NODE_BASE_URL
     $previousE2EUrl = $env:E2E_COMMUNITY_NODE_URL
     $previousInviteJson = $env:E2E_COMMUNITY_NODE_INVITE_JSON
+    $previousSeedJson = $env:E2E_COMMUNITY_NODE_SEED_JSON
     $previousTopicName = $env:E2E_COMMUNITY_NODE_TOPIC_NAME
     $env:COMMUNITY_NODE_BASE_URL = $baseUrl
     $env:E2E_COMMUNITY_NODE_URL = $baseUrl
@@ -1099,6 +1100,11 @@ function Invoke-DesktopE2ECommunityNodeScenario {
             $env:E2E_COMMUNITY_NODE_INVITE_JSON = $previousInviteJson
         } else {
             Remove-Item Env:E2E_COMMUNITY_NODE_INVITE_JSON -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousSeedJson) {
+            $env:E2E_COMMUNITY_NODE_SEED_JSON = $previousSeedJson
+        } else {
+            Remove-Item Env:E2E_COMMUNITY_NODE_SEED_JSON -ErrorAction SilentlyContinue
         }
         if ($null -ne $previousTopicName) {
             $env:E2E_COMMUNITY_NODE_TOPIC_NAME = $previousTopicName
@@ -1406,7 +1412,27 @@ function Start-CommunityNode {
 
 function Invoke-CommunityNodeE2ESeed {
     Write-Info "Seeding community node E2E fixtures..."
-    Invoke-DockerCompose @("run", "--rm", "--entrypoint", "cn", "community-node-user-api", "e2e", "seed")
+    $seedOutput = & docker compose -f docker-compose.test.yml run --rm --entrypoint cn community-node-user-api e2e seed 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($seedOutput) {
+            Write-Host $seedOutput
+        }
+        throw "Community node E2E seed failed (exit code $LASTEXITCODE)"
+    }
+
+    $seedLine = $seedOutput | Where-Object { $_ -match '^E2E_SEED_JSON=' } | Select-Object -Last 1
+    if ([string]::IsNullOrWhiteSpace($seedLine)) {
+        throw "Failed to capture E2E seed JSON from community node helper output"
+    }
+    $seedJson = $seedLine -replace '^E2E_SEED_JSON=', ''
+
+    $logDir = Join-Path $repositoryRoot "tmp/logs/community-node-e2e"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    $seedPath = Join-Path $logDir "seed.json"
+    Set-Content -Path $seedPath -Value $seedJson -Encoding UTF8
+    $env:E2E_COMMUNITY_NODE_SEED_JSON = $seedJson
     Write-Success "Community node E2E seed applied"
     Invoke-CommunityNodeE2EInvite
 }

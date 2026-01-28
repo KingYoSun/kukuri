@@ -480,19 +480,34 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 暗号化
               </Badge>
             )}
-            {labelSummaries.slice(0, 3).map((label) => (
-              <Badge key={label} variant="outline">
+            {labelSummaries.slice(0, 3).map((label, index) => (
+              <Badge
+                key={`${label}-${index}`}
+                variant="outline"
+                data-testid={`${baseTestId}-label-${index}`}
+                data-label={label}
+              >
                 ラベル: {label}
               </Badge>
             ))}
             {reportScore !== null && (
-              <Badge variant="secondary" className="flex items-center gap-1">
+              <Badge
+                variant="secondary"
+                className="flex items-center gap-1"
+                data-testid={`${baseTestId}-trust-report`}
+                data-score={reportScore.toFixed(2)}
+              >
                 <ShieldCheck className="h-3 w-3" />
                 信頼 {reportScore.toFixed(2)}
               </Badge>
             )}
             {densityScore !== null && (
-              <Badge variant="secondary" className="flex items-center gap-1">
+              <Badge
+                variant="secondary"
+                className="flex items-center gap-1"
+                data-testid={`${baseTestId}-trust-density`}
+                data-score={densityScore.toFixed(2)}
+              >
                 <ShieldCheck className="h-3 w-3" />
                 通信 {densityScore.toFixed(2)}
               </Badge>

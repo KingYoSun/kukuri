@@ -22,6 +22,7 @@ export type BridgeAction =
   | 'seedOfflineActions'
   | 'enqueueSyncQueueItem'
   | 'ensureTestTopic'
+  | 'seedCommunityNodePost'
   | 'clearOfflineState'
   | 'getDirectMessageSnapshot'
   | 'switchAccount'
@@ -95,6 +96,21 @@ export interface EnqueueSyncQueueItemResult {
 export interface EnsureTestTopicResult {
   id: string;
   name: string;
+}
+
+export interface SeedCommunityNodePostPayload {
+  id: string;
+  content: string;
+  authorPubkey: string;
+  authorNpub?: string;
+  authorName?: string;
+  authorDisplayName?: string;
+  topicId: string;
+  createdAt?: number;
+}
+
+export interface SeedCommunityNodePostResult {
+  id: string;
 }
 
 export interface ClearOfflineStateResult {
@@ -212,6 +228,7 @@ type BridgeResultMap = {
   seedOfflineActions: SeedOfflineActionsResult;
   enqueueSyncQueueItem: EnqueueSyncQueueItemResult;
   ensureTestTopic: EnsureTestTopicResult;
+  seedCommunityNodePost: SeedCommunityNodePostResult;
   clearOfflineState: ClearOfflineStateResult;
   getDirectMessageSnapshot: DirectMessageSnapshot;
   switchAccount: null;
@@ -456,6 +473,12 @@ export async function ensureTestTopic(payload?: {
   topicId?: string;
 }): Promise<EnsureTestTopicResult> {
   return await callBridge('ensureTestTopic', payload ?? {});
+}
+
+export async function seedCommunityNodePost(
+  payload: SeedCommunityNodePostPayload,
+): Promise<SeedCommunityNodePostResult> {
+  return await callBridge('seedCommunityNodePost', payload);
 }
 
 export async function seedOfflineActions(payload: {

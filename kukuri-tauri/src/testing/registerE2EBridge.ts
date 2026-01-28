@@ -11,6 +11,7 @@ import { p2pApi } from '@/lib/api/p2p';
 import { communityNodeApi } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
+import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import {
   followingFeedQueryKey,
   trendingPostsQueryKey,
@@ -26,7 +27,7 @@ import {
   listFallbackAccountMetadata,
   useAuthStore,
 } from '@/stores/authStore';
-import type { Post } from '@/stores';
+import { usePostStore, type Post } from '@/stores';
 import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useTopicStore } from '@/stores/topicStore';
@@ -111,6 +112,21 @@ interface PrimeUserSearchRateLimitResult {
   triggered: boolean;
 }
 
+interface SeedCommunityNodePostPayload {
+  id: string;
+  content: string;
+  authorPubkey: string;
+  authorNpub?: string;
+  authorName?: string;
+  authorDisplayName?: string;
+  topicId: string;
+  createdAt?: number;
+}
+
+interface SeedCommunityNodePostResult {
+  id: string;
+}
+
 interface BootstrapSnapshot {
   source: string;
   effectiveNodes: string[];
@@ -147,6 +163,9 @@ export interface E2EBridge {
     name?: string;
     topicId?: string;
   }) => Promise<{ id: string; name: string }>;
+  seedCommunityNodePost: (
+    payload: SeedCommunityNodePostPayload,
+  ) => Promise<SeedCommunityNodePostResult>;
   clearOfflineState: () => Promise<{ pendingActionCount: number }>;
   getDirectMessageSnapshot: () => DirectMessageSnapshot;
   switchAccount: (npub: string) => Promise<void>;
@@ -506,6 +525,66 @@ export function registerE2EBridge(): void {
             }
             throw error;
           }
+        },
+        seedCommunityNodePost: async (payload) => {
+          if (!payload?.id) {
+            throw new Error('post id is required to seed community node post');
+          }
+          if (!payload?.authorPubkey) {
+            throw new Error('authorPubkey is required to seed community node post');
+          }
+          if (!payload?.topicId) {
+            throw new Error('topicId is required to seed community node post');
+          }
+
+          const createdAt =
+            typeof payload.createdAt === 'number' && Number.isFinite(payload.createdAt)
+              ? payload.createdAt
+              : Math.floor(Date.now() / 1000);
+          const authorName = (payload.authorName ?? '').trim();
+          const authorDisplayName = (payload.authorDisplayName ?? '').trim();
+          const author = applyKnownUserMetadata({
+            id: payload.authorPubkey,
+            pubkey: payload.authorPubkey,
+            npub: payload.authorNpub ?? payload.authorPubkey,
+            name: authorName || payload.authorPubkey,
+            displayName: authorDisplayName || authorName || payload.authorPubkey,
+            picture: '',
+            about: '',
+            nip05: '',
+            publicProfile: false,
+            showOnlineStatus: false,
+          });
+          const post: Post = {
+            id: payload.id,
+            content: payload.content ?? '',
+            author,
+            topicId: payload.topicId,
+            scope: 'public',
+            epoch: null,
+            isEncrypted: false,
+            created_at: createdAt,
+            tags: [],
+            likes: 0,
+            boosts: 0,
+            replies: [],
+            replyCount: 0,
+            isSynced: true,
+          };
+
+          usePostStore.getState().addPost(post);
+
+          const upsertPostIntoList = (posts?: Post[]) => {
+            const filtered = (posts ?? []).filter((item) => item.id !== post.id);
+            return [...filtered, post].sort((a, b) => b.created_at - a.created_at);
+          };
+
+          queryClient.setQueryData<Post[]>(['timeline'], (prev) => upsertPostIntoList(prev));
+          queryClient.setQueryData<Post[]>(['posts', post.topicId], (prev) =>
+            upsertPostIntoList(prev),
+          );
+
+          return { id: post.id };
         },
         clearOfflineState: async () => {
           const offlineStore = useOfflineStore.getState();
