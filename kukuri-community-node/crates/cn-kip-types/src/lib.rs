@@ -14,6 +14,7 @@ pub const KIND_ATTESTATION: u32 = 39010;
 pub const KIND_TRUST_ANCHOR: u32 = 39011;
 pub const KIND_KEY_ENVELOPE: u32 = 39020;
 pub const KIND_INVITE_CAPABILITY: u32 = 39021;
+pub const KIND_JOIN_REQUEST: u32 = 39022;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KipKind {
@@ -25,6 +26,7 @@ pub enum KipKind {
     TrustAnchor,
     KeyEnvelope,
     InviteCapability,
+    JoinRequest,
 }
 
 impl KipKind {
@@ -38,6 +40,7 @@ impl KipKind {
             KIND_TRUST_ANCHOR => Some(Self::TrustAnchor),
             KIND_KEY_ENVELOPE => Some(Self::KeyEnvelope),
             KIND_INVITE_CAPABILITY => Some(Self::InviteCapability),
+            KIND_JOIN_REQUEST => Some(Self::JoinRequest),
             _ => None,
         }
     }
@@ -155,6 +158,16 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
                 return Err(anyhow!("invalid scope: {scope}"));
             }
             require_tag_value(raw, "d")?;
+        }
+        KipKind::JoinRequest => {
+            require_tag_value(raw, "t")?;
+            let scope = require_tag_value(raw, "scope")?;
+            match scope.as_str() {
+                "invite" | "friend" => {}
+                _ => return Err(anyhow!("invalid scope: {scope}")),
+            }
+            require_tag_value(raw, "d")?;
+            validate_schema(raw, "kukuri-join-request-v1")?;
         }
     }
 
@@ -332,6 +345,56 @@ mod tests {
         let event =
             nostr::build_signed_event(&keys, KIND_INVITE_CAPABILITY as u16, tags, content)
                 .expect("event");
+
+        let err = validate_kip_event(
+            &event,
+            ValidationOptions {
+                verify_signature: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect_err("invalid scope");
+        assert!(err.to_string().contains("invalid scope"));
+    }
+
+    #[test]
+    fn validate_join_request_accepts_invite_scope() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["scope".to_string(), "invite".to_string()],
+            vec!["d".to_string(), "join:kukuri:topic1:nonce:requester".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let content = json!({ "schema": "kukuri-join-request-v1" }).to_string();
+        let event = nostr::build_signed_event(&keys, KIND_JOIN_REQUEST as u16, tags, content)
+            .expect("event");
+
+        let kind = validate_kip_event(
+            &event,
+            ValidationOptions {
+                verify_signature: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("valid");
+        assert_eq!(kind, KipKind::JoinRequest);
+    }
+
+    #[test]
+    fn validate_join_request_rejects_invalid_scope() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["scope".to_string(), "friend_plus".to_string()],
+            vec!["d".to_string(), "join:kukuri:topic1:nonce:requester".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let content = json!({ "schema": "kukuri-join-request-v1" }).to_string();
+        let event = nostr::build_signed_event(&keys, KIND_JOIN_REQUEST as u16, tags, content)
+            .expect("event");
 
         let err = validate_kip_event(
             &event,

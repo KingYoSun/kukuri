@@ -747,6 +747,10 @@ wait_community_node() {
 
 start_community_node() {
   local base_url="$1"
+  if [[ $NO_BUILD -eq 0 ]]; then
+    echo 'Building community-node-user-api image...'
+    compose_run '' build community-node-user-api
+  fi
   echo 'Starting community-node-user-api service...'
   if ! compose_run '' up -d community-node-user-api; then
     echo 'Failed to start community-node-user-api service.' >&2
@@ -766,6 +770,39 @@ seed_community_node() {
     return 1
   fi
   echo '[OK] Community node E2E seed applied.'
+  issue_community_node_invite
+}
+
+issue_community_node_invite() {
+  local topic_name="${E2E_COMMUNITY_NODE_TOPIC_NAME:-e2e-community-node-invite}"
+  local log_dir="${REPO_ROOT}/tmp/logs/community-node-e2e"
+  local log_path="${log_dir}/invite.json"
+
+  mkdir -p "$log_dir"
+
+  echo 'Issuing community node invite capability...'
+  local invite_output
+  set +e
+  invite_output=$(compose_run '' run --rm --env RUST_LOG=off --entrypoint cn community-node-user-api e2e invite --topic "$topic_name" 2>&1)
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    echo "$invite_output" >&2
+    echo 'Community node invite helper failed.' >&2
+    return $status
+  fi
+
+  local invite_json
+  invite_json=$(printf '%s\n' "$invite_output" | awk '/^\s*\{/{line=$0} END{print line}')
+  if [[ -z "$invite_json" ]]; then
+    echo 'Failed to capture invite JSON from community node helper output.' >&2
+    return 1
+  fi
+
+  printf '%s\n' "$invite_json" > "$log_path"
+  export E2E_COMMUNITY_NODE_INVITE_JSON="$invite_json"
+  export E2E_COMMUNITY_NODE_TOPIC_NAME="$topic_name"
+  echo "[OK] Community node invite issued (topic=${topic_name})."
 }
 
 cleanup_community_node() {
@@ -790,6 +827,8 @@ run_desktop_e2e_community_node() {
   local previous_scenario="${SCENARIO-}"
   local previous_base_url="${COMMUNITY_NODE_BASE_URL-}"
   local previous_e2e_url="${E2E_COMMUNITY_NODE_URL-}"
+  local previous_invite_json="${E2E_COMMUNITY_NODE_INVITE_JSON-}"
+  local previous_topic_name="${E2E_COMMUNITY_NODE_TOPIC_NAME-}"
 
   export COMMUNITY_NODE_BASE_URL="$base_url"
   export E2E_COMMUNITY_NODE_URL="$base_url"
@@ -824,6 +863,16 @@ run_desktop_e2e_community_node() {
     export E2E_COMMUNITY_NODE_URL="$previous_e2e_url"
   else
     unset E2E_COMMUNITY_NODE_URL
+  fi
+  if [[ -n "${previous_invite_json-}" ]]; then
+    export E2E_COMMUNITY_NODE_INVITE_JSON="$previous_invite_json"
+  else
+    unset E2E_COMMUNITY_NODE_INVITE_JSON
+  fi
+  if [[ -n "${previous_topic_name-}" ]]; then
+    export E2E_COMMUNITY_NODE_TOPIC_NAME="$previous_topic_name"
+  else
+    unset E2E_COMMUNITY_NODE_TOPIC_NAME
   fi
 
   if [[ $status -ne 0 ]]; then

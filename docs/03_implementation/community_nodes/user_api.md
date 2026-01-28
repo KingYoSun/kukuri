@@ -165,12 +165,7 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 - `GET /v1/topic-subscriptions`
 - `DELETE /v1/topic-subscriptions/:topic_id`（解約/停止）
 
-### Access Control（invite/key envelope）
-
-- `POST /v1/invite/redeem`（capability 提示で join。成功時に key.envelope を返す/取得可能にする）
-- `GET /v1/keys/envelopes?topic_id=...&scope=...&after_epoch=...`（鍵封筒の再取得）
-
-詳細: `docs/03_implementation/community_nodes/access_control_design.md`
+詳細: `docs/03_implementation/community_nodes/topic_subscription_design.md`
 
 ### 検索/トレンド（index）
 
@@ -214,7 +209,7 @@ v1 の詳細（課金単位、メータリング、超過時の挙動、無料�
 
 詳細は `docs/03_implementation/community_nodes/topic_subscription_design.md` を参照。
 
-Access Control（39020/39021、join/redeem、epoch ローテ）は `docs/03_implementation/community_nodes/access_control_design.md` を参照。
+Access Control（39020/39021/39022、P2P join、epoch ローテ）は `docs/03_implementation/community_nodes/access_control_design.md` を参照。
 
 ## 実装スタック（参照）
 

@@ -462,12 +462,20 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
           densityScore !== null) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
             {showScopeBadge && (
-              <Badge variant="outline" data-testid={`${baseTestId}-scope`}>
+              <Badge
+                variant="outline"
+                data-testid={`${baseTestId}-scope`}
+                data-scope={resolvedScope}
+              >
                 {formatScopeLabel(resolvedScope)}
               </Badge>
             )}
             {showEncryptedBadge && (
-              <Badge variant="secondary" className="flex items-center gap-1">
+              <Badge
+                variant="secondary"
+                className="flex items-center gap-1"
+                data-testid={`${baseTestId}-encrypted`}
+              >
                 <Lock className="h-3 w-3" />
                 暗号化
               </Badge>

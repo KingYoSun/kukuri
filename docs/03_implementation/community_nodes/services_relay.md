@@ -28,7 +28,7 @@
   - iroh-gossip の topic を subscribe し、イベントを受信する（node-level subscription に追従）
   - node-level の topic購読に基づき、ネットワークからレコードを取得する
   - 受信したイベントの検証（署名/基本スキーマ/レート制限/サイズ制限）
-  - Access Control（scope/epoch）の検証（private scope の扱いは `docs/03_implementation/community_nodes/access_control_design.md`）
+  - Access Control（scope/epoch）は **メタデータ検証のみ**（private scope の内容/鍵は扱わない）
   - 重複排除（NIP-01 の `event.id` で dedupe）
   - 永続化（Postgres。ephemeral は保存しない）
 - **配信（P2P: iroh-gossip）**
@@ -42,9 +42,9 @@
   - 課金/購読制御が必要な場合は認証（NIP-42 等）を実装し、購読範囲を制限できるようにする（後述の「認証」）
   - Access Control（v1 方針）
     - `scope!=public` は `["scope", "..."]` と `["epoch","..."]` を必須化し、暗号化ペイロードとして扱う
-    - write は `event.pubkey` の membership を DB で検証して拒否できる（署名検証済み pubkey による判定）
-    - read/backfill を制御するには購読者 pubkey の特定が必要なので、private scope の WS 購読は NIP-42（AUTH）必須を推奨
-    - join/redeem/鍵配布（39020/39021）の正は User API とし、relay では再配信しない
+    - P2P-only の v1 では **membership を relay が保持しない**ため、write/read の厳密制御は行わない
+    - private scope を relay で扱う場合は **NIP-42（AUTH）必須 + allowlist** を別途導入する
+    - join/鍵配布（39020/39021/39022）の正は **P2P** とし、relay では再配信しない
     - 詳細: `docs/03_implementation/community_nodes/access_control_design.md`
 - **下流通知**
   - `index/moderation/trust` が新着を追従できる仕組みを提供する（outbox を正とし、`LISTEN/NOTIFY` は起床通知に限定）

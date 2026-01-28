@@ -178,6 +178,9 @@ pub fn run() {
             presentation::commands::community_node_list_bootstrap_services,
             presentation::commands::community_node_get_consent_status,
             presentation::commands::community_node_accept_consents,
+            // Access Control (P2P join)
+            presentation::commands::access_control_issue_invite,
+            presentation::commands::access_control_request_join,
             // ユーティリティコマンド
             presentation::commands::pubkey_to_npub,
             presentation::commands::npub_to_pubkey,

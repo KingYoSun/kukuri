@@ -25,11 +25,13 @@ sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 
 cn-admin-api = { path = "../cn-admin-api" }
 cn-bootstrap = { path = "../cn-bootstrap" }
 cn-core = { path = "../cn-core" }
 cn-index = { path = "../cn-index" }
+cn-kip-types = { path = "../cn-kip-types" }
 cn-moderation = { path = "../cn-moderation" }
 cn-relay = { path = "../cn-relay" }
 cn-trust = { path = "../cn-trust" }

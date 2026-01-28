@@ -36,7 +36,7 @@
 - `docs/03_implementation/community_nodes/event_treatment_policy.md`: イベント種別（削除/置換/エフェメラル等）と保存/配信/下流反映ポリシー
 - `docs/03_implementation/community_nodes/ingested_record_persistence_policy.md`: 取込レコード永続化ポリシー（dedupe/保持期間/容量上限/パーティション）
 - `docs/03_implementation/community_nodes/outbox_notify_semantics.md`: outbox/NOTIFY 配信セマンティクス（at-least-once/offset/リプレイ/バックプレッシャ）
-- `docs/03_implementation/community_nodes/access_control_design.md`: Access Control（39020/39021、join/redeem、epochローテ/追放）設計
+- `docs/03_implementation/community_nodes/access_control_design.md`: Access Control（39020/39021/39022、P2P join、epochローテ/追放）設計
 - `docs/03_implementation/community_nodes/auth_transition_design.md`: relay/bootstrap 認証OFF→ON切替（既存接続/猶予期間/互換性）設計
 - `docs/03_implementation/community_nodes/billing_usage_metering.md`: 課金/利用量計測（課金単位、無料枠/上限、超過時挙動、監査）設計
 - `docs/03_implementation/community_nodes/rate_limit_design.md`: rate limit（DoS/濫用対策）の実装方式（Redis無し/in-mem、適用点、設定の正、監視）
@@ -59,7 +59,7 @@
 `community_node_plan.md` の M0-M6（プロトコル中心）を、今回の「運用可能なサービス群」へ落とし込む。
 
 1. **M0: 仕様・境界の確定**
-   - KIP-0001（39000/39001/39005/39006/39010/39011/39020/39021）と HTTP API の責務分界を確定
+   - KIP-0001（39000/39001/39005/39006/39010/39011/39020/39021/39022）と HTTP API の責務分界を確定
 2. **M1: リポジトリ雛形 + Compose**
    - `postgres(+age)` / `relay` / `user-api` / `admin-api` / `admin-console` を `docker compose up` で起動
 3. **M2: bootstrap/relay 統合**
@@ -101,7 +101,7 @@ v2/後回し事項（RBAC、決済連携、NIP-98互換、`friend_plus`、bytes�
 - [x] 取込レコード永続化ポリシー（dedupe/削除/編集/保持期間/容量上限/パーティション）を v1 方針として決定（`docs/03_implementation/community_nodes/ingested_record_persistence_policy.md` / `docs/03_implementation/community_nodes/services_relay.md`）
 - [x] outbox/NOTIFY の配信セマンティクス（at-least-once 前提の idempotency、offset、リプレイ、バックプレッシャ）を v1 方針として決定（`docs/03_implementation/community_nodes/outbox_notify_semantics.md`）
 - [x] 冪等性とループ回避（at-least-once/重複配送/順不同を前提に `event.id` で dedupe、ブリッジでの再注入禁止）を v1 方針として決定
-- [x] KIP-0001 Access Control（39020/39021）と join/redeem API、epochローテ/追放運用の v1 方針を決定（`docs/03_implementation/community_nodes/access_control_design.md` / `docs/03_implementation/community_nodes/user_api.md` / `docs/03_implementation/community_nodes/services_relay.md`）
+- [x] KIP-0001 Access Control（39020/39021/39022）と **P2P join**、epochローテ/追放運用の v1 方針を決定（`docs/03_implementation/community_nodes/access_control_design.md` / `docs/03_implementation/community_nodes/services_relay.md`）
 - [x] relay/bootstrap の認証OFF→ON 切替時の挙動（既存接続の扱い、猶予期間、互換性）を v1 方針として決定（`docs/03_implementation/community_nodes/auth_transition_design.md` / `docs/03_implementation/community_nodes/services_relay.md` / `docs/03_implementation/community_nodes/services_bootstrap.md`）
 - [x] 課金/利用量計測の定義（課金単位、超過時の挙動、無料枠/上限、監査）を v1 方針として決定（`docs/03_implementation/community_nodes/billing_usage_metering.md` / `docs/03_implementation/community_nodes/user_api.md`）
 - [x] LLM moderation の送信/保存/開示ポリシー（外部送信範囲、ログ/保持、コスト上限、Privacy への記載）を v1 方針として決定（`docs/03_implementation/community_nodes/llm_moderation_policy.md` / `docs/03_implementation/community_nodes/services_moderation.md` / `docs/03_implementation/community_nodes/policy_consent_management.md`）

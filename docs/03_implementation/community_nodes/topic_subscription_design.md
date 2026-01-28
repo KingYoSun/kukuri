@@ -145,9 +145,9 @@
 ## Access Control（招待/鍵配布）との関係（v1）
 
 - Access Control は「購読（権限）」とは別に、private scope（`invite/friend` 等）の **鍵配布と epoch ローテ**を扱う
-- `invite.capability(kind=39021)` は join の入口であり、User API の `POST /v1/invite/redeem` で membership を有効化する
-  - v1 は実装簡略のため、redeem 成功時に user-level subscription も同時に `active` にする運用を推奨（課金連携は後回しでも状態管理を統一できる）
-- relay の node-level 取込購読は「user-level subscription の集計」に加えて「private scope の membership」も加味して開始してよい（どちらかが 0 なら停止できる）
+- v1 は **P2P-only** とし、`invite.capability(kind=39021)` + `join.request(kind=39022)` でメンバーが鍵配布を行う
+- user-level subscription（ノードの検索/トラスト/ラベル結果の利用）とは **独立**。必要なら別途申請する
+- relay の node-level 取込購読は **ユーザー購読の集計のみ**を根拠にする（private scope の membership はノード側で保持しない）
 
 詳細: `docs/03_implementation/community_nodes/access_control_design.md`
 

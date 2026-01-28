@@ -24,11 +24,12 @@ use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
 mod bootstrap_cache;
+mod e2e_invite;
 mod e2e_seed;
 
 use bootstrap_cache::{resolve_export_path, write_cache, CliBootstrapCache};
 
-const TOPIC_NAMESPACE: &str = "kukuri:";
+pub(crate) const TOPIC_NAMESPACE: &str = "kukuri:";
 const DEFAULT_PUBLIC_TOPIC_ID: &str = "kukuri:global";
 
 #[derive(Parser)]
@@ -79,6 +80,7 @@ enum ConfigCommand {
 enum E2eCommand {
     Seed,
     Cleanup,
+    Invite(e2e_invite::E2eInviteArgs),
 }
 
 #[derive(Subcommand)]
@@ -211,13 +213,17 @@ async fn main() -> Result<()> {
             cn_trust::run(config).await?;
         }
         Commands::E2e { command } => {
-            cn_core::logging::init("cn-cli");
             match command {
                 E2eCommand::Seed => {
+                    cn_core::logging::init("cn-cli");
                     e2e_seed::seed().await?;
                 }
                 E2eCommand::Cleanup => {
+                    cn_core::logging::init("cn-cli");
                     e2e_seed::cleanup().await?;
+                }
+                E2eCommand::Invite(args) => {
+                    e2e_invite::issue_invite(args)?;
                 }
             }
         }
@@ -711,7 +717,7 @@ fn load_bootstrap_peers_from_json() -> Vec<String> {
     }
 }
 
-fn hash_topic_id(base: &str) -> String {
+pub(crate) fn hash_topic_id(base: &str) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(base.as_bytes());
     format!("{}{}", TOPIC_NAMESPACE, hex::encode(hasher.finalize().as_bytes()))

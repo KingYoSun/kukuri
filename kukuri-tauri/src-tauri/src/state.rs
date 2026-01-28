@@ -21,9 +21,9 @@ use crate::application::services::offline_service::OfflineServiceTrait;
 use crate::application::services::p2p_service::P2PServiceTrait;
 use crate::application::services::sync_service::{SyncParticipant, SyncServiceTrait};
 use crate::application::services::{
-    AuthService, DirectMessageService, EventService, OfflineService, PostService,
-    ProfileAvatarService, SubscriptionStateMachine, SyncService, TopicService, UserSearchService,
-    UserService,
+    AccessControlService, AuthService, DirectMessageService, EventService, OfflineService,
+    PostService, ProfileAvatarService, SubscriptionStateMachine, SyncService, TopicService,
+    UserSearchService, UserService,
 };
 // プレゼンテーション層のハンドラーのインポート
 use crate::application::services::auth_lifecycle::DefaultAuthLifecycle;
@@ -106,6 +106,7 @@ pub struct AppState {
     pub profile_avatar_service: Arc<ProfileAvatarService>,
     #[allow(dead_code)]
     pub group_key_store: Arc<dyn GroupKeyStore>,
+    pub access_control_service: Arc<AccessControlService>,
 
     // プレゼンテーション層のハンドラー（最適化用）
     pub secure_storage_handler: Arc<SecureStorageHandler>,
@@ -195,6 +196,13 @@ impl AppState {
         let network_service: Arc<dyn NetworkService> = Arc::clone(&p2p_stack.network_service);
         let gossip_service: Arc<dyn GossipService> = Arc::clone(&p2p_stack.gossip_service);
         let p2p_service = Arc::clone(&p2p_stack.p2p_service);
+
+        let access_control_service = Arc::new(AccessControlService::new(
+            Arc::clone(&key_manager),
+            Arc::clone(&group_key_store),
+            Arc::clone(&signature_service),
+            Arc::clone(&gossip_service),
+        ));
 
         default_event_distributor
             .set_gossip_service(Arc::clone(&gossip_service))
@@ -513,6 +521,7 @@ impl AppState {
             offline_service,
             profile_avatar_service,
             group_key_store,
+            access_control_service,
             secure_storage_handler,
             event_handler,
             p2p_handler,
@@ -599,11 +608,12 @@ impl AppState {
         }
 
         // 購読開始（joinはTopicService側で行われるが、冪等joinは吸収される）
-        let (gossip, event_manager, p2p_state_arc, app_handle, topic) = {
+        let (gossip, event_manager, access_control, p2p_state_arc, app_handle, topic) = {
             let p2p_state = self.p2p_state.read().await;
             (
                 Arc::clone(&p2p_state.gossip_service),
                 Arc::clone(&self.event_manager),
+                Arc::clone(&self.access_control_service),
                 Arc::clone(&self.p2p_state),
                 self.app_handle.clone(),
                 topic_id.to_string(),
@@ -681,6 +691,22 @@ impl AppState {
                             tracing::error!("Failed to emit UI P2P message: {}", e);
                         }
 
+                        if matches!(evt.kind, 39020 | 39022) {
+                            let access_control = Arc::clone(&access_control);
+                            let event_clone = evt.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(err) =
+                                    access_control.handle_incoming_event(&event_clone).await
+                                {
+                                    tracing::warn!(
+                                        error = %err,
+                                        kind = event_clone.kind,
+                                        "access control event handling failed"
+                                    );
+                                }
+                            });
+                        }
+
                         // 既存Nostr系導線へも流す（必要に応じて）
                         // domain::Event -> NostrEventPayload 相当はEventManager内にあるが、
                         // ここではDB保存・加工は後段で検討するためスキップ
@@ -713,9 +739,8 @@ impl AppState {
     /// 既定トピックとユーザー固有トピックの購読を確立（冪等）
     pub async fn ensure_default_and_user_subscriptions(&self) -> anyhow::Result<()> {
         let mut topics = self.event_manager.list_default_p2p_topics().await;
-        if let Some(pk) = self.event_manager.get_public_key().await {
-            let user_topic = crate::domain::p2p::user_topic_id(&pk.to_string());
-            topics.push(user_topic);
+        if let Ok(keypair) = self.key_manager.current_keypair().await {
+            topics.push(crate::domain::p2p::user_topic_id(&keypair.public_key));
         }
         for t in topics {
             if let Err(e) = self.ensure_ui_subscription(&t).await {

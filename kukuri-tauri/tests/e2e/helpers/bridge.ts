@@ -451,7 +451,10 @@ export async function setOnlineStatus(isOnline: boolean): Promise<SetOnlineStatu
   return await callBridge('setOnlineStatus', isOnline);
 }
 
-export async function ensureTestTopic(payload?: { name?: string }): Promise<EnsureTestTopicResult> {
+export async function ensureTestTopic(payload?: {
+  name?: string;
+  topicId?: string;
+}): Promise<EnsureTestTopicResult> {
   return await callBridge('ensureTestTopic', payload ?? {});
 }
 

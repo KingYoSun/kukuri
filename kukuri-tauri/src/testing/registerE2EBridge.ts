@@ -143,7 +143,10 @@ export interface E2EBridge {
     cacheType?: string;
     source?: string;
   }) => Promise<{ queueId: number; cacheType: string; requestedAt: string }>;
-  ensureTestTopic: (payload?: { name?: string }) => Promise<{ id: string; name: string }>;
+  ensureTestTopic: (payload?: {
+    name?: string;
+    topicId?: string;
+  }) => Promise<{ id: string; name: string }>;
   clearOfflineState: () => Promise<{ pendingActionCount: number }>;
   getDirectMessageSnapshot: () => DirectMessageSnapshot;
   switchAccount: (npub: string) => Promise<void>;
@@ -446,6 +449,32 @@ export function registerE2EBridge(): void {
           }
           const desiredName =
             (payload?.name || '').trim() || `e2e-offline-topic-${Date.now().toString(36)}`;
+          const explicitId = (payload?.topicId ?? '').trim();
+
+          if (explicitId) {
+            const existingById = Array.from(useTopicStore.getState().topics.values()).find(
+              (topic) => topic.id === explicitId,
+            );
+            if (existingById) {
+              return { id: existingById.id, name: existingById.name };
+            }
+
+            const now = new Date();
+            useTopicStore.getState().addTopic({
+              id: explicitId,
+              name: desiredName,
+              description: 'E2E invite topic',
+              tags: [],
+              memberCount: 1,
+              postCount: 0,
+              isActive: true,
+              createdAt: now,
+              visibility: 'public',
+              isJoined: true,
+            });
+            return { id: explicitId, name: desiredName };
+          }
+
           const existing = Array.from(useTopicStore.getState().topics.values()).find(
             (topic) => topic.name === desiredName,
           );

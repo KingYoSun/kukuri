@@ -16,9 +16,8 @@
 - `cn_admin`: 管理者/監査ログ/共通設定（サービス設定: 認証モード/施行時刻/猶予等）、利用規約/プライバシーポリシー本文（policies）と公開状態（current/effective）
   - relay/bootstrap の認証OFF→ON 切替: `docs/03_implementation/community_nodes/auth_transition_design.md`
   - `Admin API`（control plane）の最小設計: `docs/03_implementation/community_nodes/admin_api.md`
-- `cn_user`: ユーザー認証・課金プラン・購読（user-level）・利用量カウンタ・ポリシー同意（consents）、Access Control（membership/invite/key envelope）
+- `cn_user`: ユーザー認証・課金プラン・購読（user-level）・利用量カウンタ・ポリシー同意（consents）
   - 課金/利用量計測（課金単位、クォータ、監査）: `docs/03_implementation/community_nodes/billing_usage_metering.md`
-  - Access Control（39020/39021、join/redeem、epoch ローテ）: `docs/03_implementation/community_nodes/access_control_design.md`
 - `cn_bootstrap`: bootstrap 固有（ノード広告設定、配布対象など）
 - `cn_relay`: 取込レコード（イベント）保存、node-level subscription、outbox（下流通知）
   - 取込レコードの永続化ポリシー（dedupe/保持期間/容量上限/パーティション）: `docs/03_implementation/community_nodes/ingested_record_persistence_policy.md`

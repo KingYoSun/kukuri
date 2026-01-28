@@ -1067,6 +1067,8 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $previousScenario = $env:SCENARIO
     $previousBaseUrl = $env:COMMUNITY_NODE_BASE_URL
     $previousE2EUrl = $env:E2E_COMMUNITY_NODE_URL
+    $previousInviteJson = $env:E2E_COMMUNITY_NODE_INVITE_JSON
+    $previousTopicName = $env:E2E_COMMUNITY_NODE_TOPIC_NAME
     $env:COMMUNITY_NODE_BASE_URL = $baseUrl
     $env:E2E_COMMUNITY_NODE_URL = $baseUrl
     $env:SCENARIO = "community-node-e2e"
@@ -1092,6 +1094,16 @@ function Invoke-DesktopE2ECommunityNodeScenario {
             $env:E2E_COMMUNITY_NODE_URL = $previousE2EUrl
         } else {
             Remove-Item Env:E2E_COMMUNITY_NODE_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousInviteJson) {
+            $env:E2E_COMMUNITY_NODE_INVITE_JSON = $previousInviteJson
+        } else {
+            Remove-Item Env:E2E_COMMUNITY_NODE_INVITE_JSON -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousTopicName) {
+            $env:E2E_COMMUNITY_NODE_TOPIC_NAME = $previousTopicName
+        } else {
+            Remove-Item Env:E2E_COMMUNITY_NODE_TOPIC_NAME -ErrorAction SilentlyContinue
         }
     }
 
@@ -1376,6 +1388,11 @@ function Start-CommunityNode {
         [string]$BaseUrl
     )
 
+    if (-not $NoBuild) {
+        Write-Info "Building community-node-user-api image..."
+        Invoke-DockerCompose @("build", "community-node-user-api")
+    }
+
     Write-Info "Starting community-node-user-api service..."
     $code = Invoke-DockerCompose @("up", "-d", "community-node-user-api") -IgnoreFailure
     if ($code -ne 0) {
@@ -1391,6 +1408,46 @@ function Invoke-CommunityNodeE2ESeed {
     Write-Info "Seeding community node E2E fixtures..."
     Invoke-DockerCompose @("run", "--rm", "--entrypoint", "cn", "community-node-user-api", "e2e", "seed")
     Write-Success "Community node E2E seed applied"
+    Invoke-CommunityNodeE2EInvite
+}
+
+function Invoke-CommunityNodeE2EInvite {
+    param(
+        [string]$TopicName
+    )
+
+    $topic = if (-not [string]::IsNullOrWhiteSpace($TopicName)) {
+        $TopicName
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:E2E_COMMUNITY_NODE_TOPIC_NAME)) {
+        $env:E2E_COMMUNITY_NODE_TOPIC_NAME
+    } else {
+        "e2e-community-node-invite"
+    }
+
+    $logDir = Join-Path $repositoryRoot "tmp/logs/community-node-e2e"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    $logPath = Join-Path $logDir "invite.json"
+
+    Write-Info "Issuing community node invite capability..."
+    $inviteOutput = & docker compose -f docker-compose.test.yml run --rm --env "RUST_LOG=off" --entrypoint cn community-node-user-api e2e invite --topic $topic 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($inviteOutput) {
+            Write-Host $inviteOutput
+        }
+        throw "Community node invite helper failed (exit code $LASTEXITCODE)"
+    }
+
+    $inviteJson = ($inviteOutput | Where-Object { $_ -match '^\s*\{' } | Select-Object -Last 1)
+    if ([string]::IsNullOrWhiteSpace($inviteJson)) {
+        throw "Failed to capture invite JSON from community node helper output"
+    }
+
+    Set-Content -Path $logPath -Value $inviteJson -Encoding UTF8
+    $env:E2E_COMMUNITY_NODE_INVITE_JSON = $inviteJson
+    $env:E2E_COMMUNITY_NODE_TOPIC_NAME = $topic
+    Write-Success "Community node invite issued (topic=$topic)"
 }
 
 function Invoke-CommunityNodeE2ECleanup {

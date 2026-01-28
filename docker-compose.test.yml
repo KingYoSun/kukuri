@@ -121,6 +121,8 @@ services:
       CI: "true"
       SCENARIO: "${SCENARIO:-}"
       E2E_COMMUNITY_NODE_URL: "${E2E_COMMUNITY_NODE_URL:-}"
+      E2E_COMMUNITY_NODE_INVITE_JSON: "${E2E_COMMUNITY_NODE_INVITE_JSON:-}"
+      E2E_COMMUNITY_NODE_TOPIC_NAME: "${E2E_COMMUNITY_NODE_TOPIC_NAME:-}"
     # host network used for UDP reachability between endpoints
 
   # 個別のRustテスト実行

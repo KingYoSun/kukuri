@@ -57,7 +57,7 @@
 - **User API（data plane / 外部I/F統合）**:
   - 外部公開する HTTP API の入口を集約し、認証/課金/購読/レート制限を統一する
   - 利用規約/プライバシーポリシー同意を必須化し、未同意ユーザーの利用を拒否する
-  - Access Control（invite redeem、key.envelope 配布、epoch ローテの運用I/F）を提供する
+  - Access Control は **P2P-only** を正とし、User API は必須点ではない
   - 利用量計測（メータリング）とクォータ超過時の挙動を統一する
   - `index/moderation/trust` の結果参照や、購読申請・通報などの write を受け付ける
   - 詳細: `docs/03_implementation/community_nodes/user_api.md`

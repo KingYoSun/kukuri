@@ -1,14 +1,14 @@
-# Access Control（KIP-0001: 39020/39021）設計
+# Access Control（KIP-0001: 39020/39021/39022）設計
 
 **作成日**: 2026年01月22日  
-**対象**: `./kukuri-community-node`（User API / relay / Admin API/Console）
+**対象**: クライアント（P2P）/ `./kukuri-community-node`（任意の補助ノード）
 
 ## ゴール
 
 - topic の公開度（`public`/`friend`/`invite`/`friend_plus`）を扱える
-- `invite.capability(kind=39021)` による **join/redeem** を提供できる
+- `invite.capability(kind=39021)` と `join.request(kind=39022)` による **P2P join** を提供できる
 - 追放/漏洩時に **epoch ローテーション**で「未来閲覧」を止められる（過去暗号文は回収不能）
-- relay（WS/iroh-gossip）が最低限の整合性・濫用対策（rate limit 等）を保てる
+- **ノード不要**で成立する最小フローを v1 とする（ノードは任意の補助）
 
 ## 参照（ローカル）
 
@@ -16,7 +16,6 @@
 - `docs/nips/01.md`（addressable/replaceable の扱い、イベント検証の前提）
 - `docs/nips/42.md`（WS relay 認証: AUTH）
 - `docs/nips/44.md`（暗号化ペイロード）
-- `docs/03_implementation/community_nodes/user_api.md`
 - `docs/03_implementation/community_nodes/services_relay.md`
 - `docs/03_implementation/community_nodes/topic_subscription_design.md`
 - `docs/03_implementation/community_nodes/policy_consent_management.md`
@@ -33,9 +32,10 @@
 ## v1 スコープ（提案）
 
 - 実装優先度: `invite` と `friend` を先に実装し、`friend_plus` は v2（集合計算/鍵配布負荷が大きい）
-- join/redeem は **HTTP API（User API）**で開始する（KIP Draft を踏襲）
-- `kind=39020/39021` はイベント表現を持つが、**配布経路は relay ではなく User API を正**とする
+- join/鍵配布/ローテは **P2P-only**（クライアントが正）とする
+- `kind=39020/39021/39022` はイベント表現を持つが、**配布経路は direct P2P / out-of-band を正**とする
   - 理由: `p` タグ等のメタデータでメンバーシップが漏れやすく、gossip/relay 配信に不向き
+- コミュニティノードは **Access Control に関与しない**（P2P-only を正とする）
 
 ## イベント設計（提案）
 
@@ -58,8 +58,8 @@
   - 例（暗号化前）: `{ schema, topic, scope, epoch, key_b64, issued_at, expires }`
 
 配布経路（v1）:
-- relay/iroh-gossip へは **再配信しない**
-- User API が「本人にのみ」返す（`GET /v1/keys/envelopes` 等）
+- **direct P2P**（招待者/既存メンバーから対象者へ送付）を正とする
+- relay/iroh-gossip への再配信は **原則しない**（必要な場合も暗号化/最小配布に限定）
 
 ### 39021 `kukuri.invite.capability`（招待capability）
 
@@ -74,42 +74,52 @@
   - `{ schema, topic, scope, expires, max_uses, nonce, issuer }`
 
 配布経路（v1）:
-- Admin Console で発行し、運用者が QR/コピペ等で共有する（User API 経由の配布でもよいが認可必須）
+- 発行者（ユーザー鍵）が作成し、**out-of-band/直接共有**（P2P DM/QR/コピペ等）する
 
-## join/redeem API（User API）
+### 39022 `kukuri.join.request`（join申請）
 
-### `POST /v1/invite/redeem`（v1）
+目的: invite/friend の参加希望を通知する。
 
-- 入力: `capability_event_json`（39021 の event JSON をそのまま提示）
-- 前提: 認証済み + ToS/Privacy 同意済み（未同意は `CONSENT_REQUIRED`）
-- 動作（最小）
-  1. 39021 を検証（署名/期限/nonce/`max_uses`/replay）
-  2. `topic_memberships` を `active` にする（`topic_id, scope=invite, pubkey`）
-  3. `current_epoch` の `39020` を発行し、レスポンスに含める（または直後に取得可能にする）
-  4. 必要なら user-level subscription（課金/権限）も同時に `active` にする（v1 は実装簡略のため同時更新を推奨）
-- 出力（例）: `{ topic_id, scope, epoch, key_envelopes: [key_envelope_event_json...] }`
+- tags（必須）
+  - `["t","<topic_id>"]`
+  - `["scope","invite|friend"]`
+  - `["ver","1"]`
+  - `["d","join:<topic_id>:<nonce>:<requester_pubkey_hex>"]`
+- tags（任意）
+  - `["e","<invite_event_id>"]`（invite 利用時）
+  - `["p","<issuer_pubkey_hex>"]`（招待発行者/鍵配布先の目安）
+- content（暗号化前の JSON 例）
+  - `{ schema, topic, scope, invite_event_json, requester, requested_at }`
 
-### `GET /v1/keys/envelopes`（v1）
+配布経路（v1）:
+- 招待者/既存メンバーへの **direct P2P** が基本（プライバシーを優先）
+- 必要に応じて topic への **ブロードキャスト**も許可（メタデータ露出に注意）
 
-- 用途: 端末追加/再インストール/epoch ローテ後の再取得
-- 認可: `topic_memberships(active)` があること
+## P2P join フロー（v1）
+
+1. **招待発行**: 既存メンバーが `invite.capability` を生成し、対象者へ共有
+2. **参加要求**: 参加希望者が `join.request` を送信
+3. **検証**: 受信側が invite の署名/期限/スコープを検証（`max_uses` は best-effort）
+4. **鍵配布**: 承認したメンバーが `key.envelope` を送付（recipient 宛 NIP-44）
+5. **ローカル反映**: 受信側はローカルに membership/鍵を保存し、以後の復号に利用
 
 補足:
-- relay/bootstrap は認証OFFの間は同意不要という方針だが、`redeem`/`keys` は「ユーザー操作」なので同意必須とする（`docs/03_implementation/community_nodes/policy_consent_management.md`）。
+- `friend` スコープは **招待不要**で join.request を送ることを許容（承認は各メンバーの裁量）。
+- `friend_plus` は v2 に回す（対象集合のプライバシー/計算負荷が大きい）。
 
-## Admin 運用（epoch ローテ/追放）
+## 鍵運用（epoch ローテ/追放）
 
 ### 追放（revoke）
 
 - 手順（推奨）
-  1. 対象 pubkey を `topic_memberships` で `revoked` にする
+  1. 対象を **ローカルのメンバーリスト**から除外する
   2. 直後に `epoch++`（rotate）して残留者へ新しい `39020` を再配布する
 
 ### epoch ローテ（rotate）
 
 - `topic_id + scope` 単位で `current_epoch++` し、新しい群鍵を生成する
 - 残留メンバー全員へ `39020` を再発行する
-- 受理ルール（relay）を更新する（`epoch < current_epoch` の新規投稿は拒否）
+- 受理ルールは **クライアント側**で行う（`epoch < current_epoch` の投稿は無視）
 
 ## relay での受理/拒否（最低限）
 
@@ -120,26 +130,20 @@
   - `["t","<topic_id>"]`
   - `["scope","friend|invite|friend_plus"]`
   - `["epoch","<int>"]`
-- `event.pubkey` が `topic_memberships(active)` に存在しない場合は拒否（署名検証済み pubkey による判定）
-- `epoch` が `topic_scope_state.current_epoch` 未満なら拒否（古い鍵での投稿を抑止）
+- P2P-only の v1 では **relay が membership を持たない**ため、厳密な拒否は行わない
+- private scope を relay で扱う場合は、**認証 + allowlist** を別途導入する（運用オプション）
 
 ### 購読（read/backfill）
 
 - iroh-gossip は購読者を識別しにくいため、**暗号化が第一の防御**になる（メタデータ漏洩は残る）
 - WS で private scope を「誰に返すか」を制御するには、pubkey を特定する必要がある
-  - v1 推奨: private scope の WS 購読/バックフィルは **NIP-42（AUTH）必須**とし、未認証は拒否
-  - 認証済み pubkey に対して `topic_memberships(active)` を確認し、未加入は拒否
+  - v1 は **relay で private scope を扱わない**（配信/バックフィルはオフ）ことを推奨
+  - 例外として扱う場合は、**NIP-42（AUTH）必須 + allowlist** を導入する
 
-## DB データモデル（提案）
+## DB データモデル（v1）
 
-`cn_user`/`cn_admin` のスキーマ分割は `docs/03_implementation/community_nodes/postgres_age_design.md` に従う。
-保持期間/削除要求時の匿名化（member/invite/key_envelope を含む個人データの扱い）は `docs/03_implementation/community_nodes/personal_data_handling_policy.md` を参照。
-
-- `cn_admin.topic_scope_state(topic_id, scope, current_epoch, updated_at)`（PK: topic_id+scope）
-- `cn_admin.topic_scope_keys(topic_id, scope, epoch, key_ciphertext, created_at)`（群鍵。平文保存は禁止）
-- `cn_user.topic_memberships(topic_id, scope, pubkey, status, joined_at, revoked_at, revoked_reason)`（PK: topic_id+scope+pubkey）
-- `cn_user.invite_capabilities(topic_id, issuer_pubkey, nonce, expires_at, max_uses, used_count, revoked_at, capability_event_json, created_at)`（nonce は UNIQUE）
-- `cn_user.key_envelopes(topic_id, scope, epoch, recipient_pubkey, key_envelope_event_json, created_at)`（監査/再配布用。v1 では必須ではない）
+v1 の Access Control は **P2P-only** のため、コミュニティノード側に専用DBを持たない。
+（後日、運用方針を変える場合は別途設計する。）
 
 ## 未決定（v2 以降の検討）
 

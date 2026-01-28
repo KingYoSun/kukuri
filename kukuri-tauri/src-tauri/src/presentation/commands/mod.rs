@@ -1,5 +1,6 @@
 #![allow(unused_imports)]
 
+pub mod access_control_commands;
 pub mod auth_commands;
 pub mod community_node_commands;
 pub mod direct_message_commands;
@@ -12,6 +13,7 @@ pub mod topic_commands;
 pub mod user_commands;
 pub mod utils_commands;
 
+pub use access_control_commands::*;
 pub use auth_commands::*;
 pub use community_node_commands::*;
 pub use direct_message_commands::*;

@@ -40,9 +40,8 @@
 
 ### 1.4 Access Control（KIP-0001）
 
-- topic membership（join/revoke 等の履歴）
-- invite capability の発行/利用履歴
-- key envelope の発行/配布履歴（`39020` の event JSON を含み得る）
+Access Control は **P2P-only** を正とし、本ノードでは原則扱わない。
+（将来的に扱う場合は個人データとして同等の管理が必要。）
 
 ### 1.5 通報・モデレーション・トラスト
 
@@ -78,7 +77,7 @@
 |利用量集計|usage_counters_*|90日|削除要求時は削除（再計算可能）|
 |通報イベント|reports|180日|削除要求時は reporter_pubkey をハッシュ化（ユニーク数/重み付けを維持）|
 |トラスト計算結果|trust_edges/scores|90日（再計算）|削除要求時は対象 pubkey のエッジを削除し、再計算（v1）|
-|Access Control|memberships/invites/key_envelopes|アカウント存続中 + 180日|削除要求時は membership 無効化。key_envelope は暗号化済みでも含有に注意|
+|Access Control|（v1は対象外）|—|—|
 |取込イベント（relay）|cn_relay.events 等|topicごとの ingest_policy|削除要求は「本ノードの保存/検索からの除外」に留まる（ネットワークからの回収は不可）|
 |運用ログ|stdout/trace|7〜30日|本文/識別子は原則含めない。必要ならハッシュ化|
 |バックアップ|pg_dump 等|30日（世代管理）|削除要求の反映は “バックアップの自然消滅” で遅延する（Privacy に明記）|
@@ -124,7 +123,7 @@ v1 は「全消去」ではなく **匿名化（pseudonymization）+ 追跡停�
    - consents: `accepter_pubkey` を NULL 化し、`accepter_hmac` のみ保持（同意レシートとして必要な範囲）
    - subscriptions/topic_subscriptions: 無効化→削除（監査が必要なら `subscriber_hmac` を残す）
    - usage_events/reports: pubkey を hmac 化（ユニーク数/監査用）
-   - access_control: memberships を無効化し、invites/key_envelopes を削除または暗号化済みでも hmac 化して保持（運用要件次第）
+  - access_control: v1 は対象外（将来導入時は memberships を無効化し、invites/key_envelopes を削除または暗号化済みでも hmac 化して保持）
 4. 派生系の削除/再計算
    - Meilisearch: subject が author のドキュメントを削除（取込イベントが残っても検索結果から除外）
    - AGE: subject を頂点/エッジごと削除し、必要ならスコア再計算

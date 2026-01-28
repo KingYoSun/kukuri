@@ -54,7 +54,7 @@ NIP-01 の kind レンジに従い、イベントを次の4種に分類する。
   - `d` タグが無い場合は `invalid: missing d` として受理しない（v1）
   - 同一 `created_at` の競合は `event.id` の辞書順が小さい方を採用（NIP-01）
 - 保存/配信/下流反映: replaceable と同様（effective view は1つ、下流へは `upsert`）
-  - 補足: `39020/39021`（Access Control: key.envelope/invite.capability）は、v1 では relay での配布/再配信を行わず User API を正とする（詳細: `docs/03_implementation/community_nodes/access_control_design.md`）
+  - 補足: `39020/39021/39022`（Access Control）は **P2P-only** を正とし、relay では配布/再配信しない（詳細: `docs/03_implementation/community_nodes/access_control_design.md`）
 
 ### 4) ephemeral
 

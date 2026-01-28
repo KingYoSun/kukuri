@@ -45,7 +45,7 @@ topic購読は「そのtopicのサービス結果を使う権利」。
 - `topic-subscription-requests` の approve 時に `user-level subscription` を `active` にし、プラン上限を超える場合は拒否する
 
 補足:
-- Access Control（invite redeem）で購読を同時に `active` にする運用は許容（詳細: `docs/03_implementation/community_nodes/access_control_design.md`）。
+- Access Control は **P2P-only** を正とし、User API では扱わない。
 
 ## 計測メトリクス（v1提案）
 
@@ -57,7 +57,6 @@ topic購読は「そのtopicのサービス結果を使う権利」。
   - `index.trending_requests`
   - `trust.requests`
   - `moderation.report_submits`
-  - `invite.redeem_attempts`（濫用されやすいので “attempts” を推奨）
 
 ### relay（認証ON時のみ、v1は任意）
 
@@ -179,5 +178,5 @@ relay を課金対象にする場合、認証（NIP-42 等）で pubkey を特�
 ## 実装メモ（v1）
 
 - まずは User API の read API（search/trending/trust）からメータリングを適用する
-- report/redeem は “attempts” を別メトリクスにして濫用対策に寄せる
+- report は “attempts” を別メトリクスにして濫用対策に寄せる
 - Admin Console は購読一覧に加えて、pubkey ごとの usage（当日/過去N日）を見られると運用が安定する

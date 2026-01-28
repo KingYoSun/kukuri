@@ -90,7 +90,7 @@
 - [x] `user_api.md` に沿って認証（署名チャレンジ + JWT（HS256））を実装する
 - [x] `policy_consent_management.md` に沿って policies/consents を実装し、保護 API に同意必須化を適用する
 - [x] `topic_subscription_design.md` に沿って購読申請/承認/停止（user-level / node-level）を実装する
-- [x] `access_control_design.md` に沿って invite redeem / membership / key envelopes を実装する
+- [x] `access_control_design.md` に沿って P2P-only を正とし、Access Control の User API 依存を排除する
 
 ## M2-10 Billing/Metering（v1最小の“状態”）
 

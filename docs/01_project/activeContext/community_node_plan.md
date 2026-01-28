@@ -31,7 +31,7 @@
 - データ検証: 署名検証、tag正当性、期限(exp)処理
 
 ### 1.2 “ノードAPI”の扱い
-- KIPはイベント表現中心。join_requestや課金・購読などはイベント化かHTTP API化か選択が必要。
+- KIPはイベント表現中心。join.request は **イベント化（39022）** で確定し、課金・購読は User API で扱う。
 - 初期は **HTTP API** を併設し、後でKIP化（イベント化）を検討する。
 
 ## 2. アーキテクチャ
@@ -111,6 +111,12 @@
 - content:
   - NIP-44暗号文（中身は {topic,scope,expires,max_uses,nonce,issuer,...}）
 
+#### 39022 join.request
+- tags:
+  - t(topic_id), scope, d(join:...)
+- content:
+  - {topic, scope, invite_event_json?, requester, requested_at}
+
 ## 4. 主要フロー（実装レベル）
 
 ### 4.1 ノード発見・採用
@@ -149,7 +155,7 @@
   - 鍵は受信者ごとに key.envelope(39020) を送付
 - invite:
   - invite.capability(39021) を送る
-  - join承認後、key.envelopeを配る（joinはHTTP APIで開始）
+  - join.request(39022) で参加希望を通知し、承認後に key.envelope を配る（P2P-only）
 
 追放:
 - epoch++（鍵ローテ）
@@ -163,12 +169,10 @@
 
 ## 5. Node HTTP API（初期実装案）
 
-> KIP外だが実装を進めるために最小限入れる。後でイベント化してもよい。
+> KIP外だが実装を進めるために最小限入れる。Access Control（invite/keys）は **P2P-only** を正とする。
 
 - `GET /v1/bootstrap/nodes` : 39000配布（node.descriptor）
 - `GET /v1/bootstrap/topics/:topic_id/services` : 39001配布（topic_service）
-- `POST /v1/invite/redeem` : capabilityを提示してjoin（rate-limit必須）
-- `GET /v1/keys/envelopes` : 鍵再配布（認可が必要）
 - `POST /v1/reports` : report受理（ただし最終は39005で発行しても良い）
 - `GET /v1/search?q=...` : index（課金は将来）
 
@@ -185,7 +189,7 @@
 - クライアント側で「採用ノード」を明示設定（デフォルトは保守的）
 - label/attestationは必ず署名検証 + 期限(exp)
 - capabilityは短命/回数制限/nonce（リプレイ耐性）
-- join/redeemはIP/鍵単位のrate limit
+- join.request は受信側で rate limit/手動承認（濫用耐性）
 - friend+/FoFは **“関係そのもの”を外に出さない**（可能ならローカル計算 or 暗号化配送）
 
 ## 7. リポジトリ構成（提案）
@@ -231,7 +235,7 @@
 ### M4: Access Control v1（5〜10日）
 - key.envelope(39020) 送受信
 - friend/friend+ scopeの暗号投稿（復号できる）
-- invite.capability(39021) と redeem API（最小）
+- invite.capability(39021) + join.request(39022)
 
 **Acceptance**
 - friend投稿が非メンバーには読めず、メンバーは復号できる
@@ -252,7 +256,7 @@
 ## 9. コーディング指示（Codexに渡すプロンプト用要約）
 
 - KIP-0001 kindsを `kip_types` に型定義し、必須tag/exp/署名検証を実装せよ。
-- community-node は 39000/39001 を発行し、HTTP APIで invite redeem と鍵再配布の最小機能を実装せよ。
+- community-node は 39000/39001 を発行し、Access Control は **P2P-only** を正とする。
 - client-tauri は
   - ノード採用設定（role別に複数）
   - label適用（採用ノードのみ）
@@ -468,7 +472,7 @@ content（暗号化前のJSON例）:
 
 - public: 平文 or 最小限のフィルタのみ
 - friend / friend+: 投稿contentを共有鍵で暗号化、鍵は key.envelope で配布
-- invite: capability → join_request（別KIP or node API）→ key.envelope 配布
+- invite: capability → join.request（39022）→ key.envelope 配布
 - ban/追放: epoch++ → 残留者へ新 key.envelope 配布（過去暗号文は回収しない）
 
 ## 7. Client Rules (Minimal)
