@@ -269,6 +269,14 @@ impl AccessControlService {
                 }
             }
         }
+        if let Some(requested_at) = content.requested_at {
+            if requested_at < 0 {
+                return Err(AppError::validation(
+                    ValidationFailureKind::Generic,
+                    "Join.request requested_at is invalid",
+                ));
+            }
+        }
 
         if scope == "invite" {
             let invite_json = content.invite_event_json.ok_or_else(|| {
@@ -579,6 +587,13 @@ fn validate_invite_event(
             "Invite scope must be invite",
         ));
     }
+    let invite_d = require_tag_value(&tags, "d")?;
+    if !invite_d.starts_with("invite:") {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite d tag is invalid",
+        ));
+    }
     if event.verify().is_err() {
         return Err(AppError::validation(
             ValidationFailureKind::Generic,
@@ -615,6 +630,29 @@ fn validate_invite_event(
             return Err(AppError::validation(
                 ValidationFailureKind::Generic,
                 "Invite has expired",
+            ));
+        }
+    }
+    if let Some(max_uses) = payload.max_uses {
+        if max_uses <= 0 {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Invite max_uses must be positive",
+            ));
+        }
+    }
+    if let Some(nonce) = payload.nonce.as_ref() {
+        if nonce.trim().is_empty() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Invite nonce is empty",
+            ));
+        }
+        let expected = format!("invite:{nonce}");
+        if invite_d != expected {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Invite nonce mismatch",
             ));
         }
     }
@@ -996,6 +1034,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn validate_invite_event_rejects_nonce_mismatch() {
+        let (keys, keypair) = make_keypair();
+        let topic_id = "kukuri:topic1";
+
+        let content = json!({
+            "schema": "kukuri-invite-v1",
+            "topic": topic_id,
+            "scope": "invite",
+            "expires": Utc::now().timestamp() + 600,
+            "max_uses": 1,
+            "nonce": "nonce-1",
+            "issuer": format!("pubkey:{}", keypair.public_key),
+        })
+        .to_string();
+
+        let tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "invite"]).expect("tag"),
+            Tag::parse(["d", "invite:nonce-2"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+
+        let nostr_event = EventBuilder::new(Kind::from(KIND_INVITE_CAPABILITY as u16), content)
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("signed");
+
+        let value = serde_json::to_value(nostr_event).expect("value");
+        let err = match validate_invite_event(&value, Some(topic_id)) {
+            Ok(_) => panic!("should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.validation_message(), Some("Invite nonce mismatch"));
+    }
+
+    #[tokio::test]
     async fn handle_join_request_sends_key_envelope() {
         let (_member_keys, member_keypair) = make_keypair();
         let (requester_keys, requester_keypair) = make_keypair();
@@ -1057,6 +1132,58 @@ mod tests {
             broadcasts
                 .iter()
                 .any(|(topic, event)| *topic == expected_topic && event.kind == KIND_KEY_ENVELOPE)
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_join_request_rejects_negative_requested_at() {
+        let (_member_keys, member_keypair) = make_keypair();
+        let (requester_keys, requester_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(member_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            signature_service,
+            gossip_service_trait,
+        );
+
+        let content = json!({
+            "schema": "kukuri-join-request-v1",
+            "topic": "kukuri:topic1",
+            "scope": "friend",
+            "requester": format!("pubkey:{}", requester_keypair.public_key),
+            "requested_at": -1,
+        })
+        .to_string();
+
+        let tags = vec![
+            Tag::parse(["t", "kukuri:topic1"]).expect("tag"),
+            Tag::parse(["scope", "friend"]).expect("tag"),
+            Tag::parse(["d", "join:kukuri:topic1:nonce:requester"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+
+        let nostr_event = EventBuilder::new(Kind::from(KIND_JOIN_REQUEST as u16), content)
+            .tags(tags)
+            .sign_with_keys(&requester_keys)
+            .expect("signed");
+
+        let event = domain_event_from_nostr(&nostr_event);
+        let err = service
+            .handle_incoming_event(&event)
+            .await
+            .expect_err("should fail");
+        assert_eq!(
+            err.validation_message(),
+            Some("Join.request requested_at is invalid")
         );
     }
 }
