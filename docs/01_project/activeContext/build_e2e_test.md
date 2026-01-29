@@ -12,14 +12,14 @@
 ### 改訂方針
 - E2E 関連の依存とソースはすべて `kukuri-tauri` 配下（`tests/e2e` ディレクトリ）に集約し、既存 pnpm ワークスペースで管理する。
 - Tauri v2 が推奨する TypeScript ベースの WebDriverIO 設定を採用し、`tauri-driver`（4445/TCP）と `msedgedriver`（Windows）の両方を明示的に制御する。
-- Docker テストランナーと `./scripts/test-docker.{ps1,sh}` に `SCENARIO=desktop-e2e` を追加し、ローカル（Windows）と GitHub Actions の両方が同じ経路で実行されるようにする。
-- `test-results/desktop-e2e` と `tmp/logs/desktop-e2e` を標準化して artefact を Nightly / GA へ送る。
+- Docker テストランナーと `./scripts/test-docker.{ps1,sh}` に `SCENARIO=desktop-e2e` / `SCENARIO=community-node-e2e` を追加し、ローカル（Windows）と GitHub Actions の両方が同じ経路で実行されるようにする。
+- `desktop-e2e` は `test-results/desktop-e2e` / `tmp/logs/desktop-e2e`、`community-node-e2e` は `test-results/community-node-e2e` / `tmp/logs/community-node-e2e` に集約し、artefact を Nightly / GA へ送る。
 - 既存ガイド（`docs/03_implementation/e2e_test_setup.md` / `e2e_test_stabilization.md`）は前提知識として参照し、このドキュメントでは GitHub Actions 対応に必要な差分のみを記述する。
 
 ## 1. ゴール
 1. `Key import → フィード読込 → 投稿作成` を網羅する最小限のデスクトップ E2E シナリオを自動化し、失敗時に再現ログとスクリーンショットを収集できること。
 2. ローカル（Windows/WSL）では `./scripts/test-docker.ps1 e2e` で、CI では GitHub Actions 上の Linux コンテナで同一シナリオを実行できること。
-3. `test.yml` / `nightly.yml` に `desktop-e2e` ジョブを追加し、`test-results/desktop-e2e` および `tmp/logs/desktop-e2e` を artefact 化する。
+3. `test.yml` の `desktop-e2e` ジョブで `community-node-e2e` を実行し、`test-results/community-node-e2e` および `tmp/logs/community-node-e2e` を artefact 化する。`nightly.yml` は `desktop-e2e` の `test-results/desktop-e2e` / `tmp/logs/desktop-e2e` を維持する。
 
 ## 2. 前提・参照ドキュメント
 - セットアップとトラブルシューティングは `docs/03_implementation/e2e_test_setup.md` と `e2e_test_stabilization.md` を参照。
@@ -147,7 +147,7 @@
 ### 3.4 Docker / `scripts/test-docker` 連携
 1. `scripts/docker/run-smoke-tests.sh` 冒頭にブロックを追加:
    ```bash
-   if [[ "${SCENARIO:-}" == "desktop-e2e" ]]; then
+   if [[ "${SCENARIO:-}" == "desktop-e2e" || "${SCENARIO:-}" == "community-node-e2e" ]]; then
      /app/run-desktop-e2e.sh
      exit $?
    fi
@@ -156,45 +156,58 @@
    ```bash
    #!/bin/bash
    set -euo pipefail
+   SCENARIO_NAME="${SCENARIO:-desktop-e2e}"
+   RESULT_DIR="/app/test-results/desktop-e2e"
+   LOG_DIR="/app/tmp/logs/desktop-e2e"
+   if [[ "$SCENARIO_NAME" == "community-node-e2e" ]]; then
+     RESULT_DIR="/app/test-results/community-node-e2e"
+     LOG_DIR="/app/tmp/logs/community-node-e2e"
+   fi
+   OUTPUT_DIR="/app/kukuri-tauri/tests/e2e/output"
+   mkdir -p "$RESULT_DIR" "$LOG_DIR" "$OUTPUT_DIR"
+   rm -f "$OUTPUT_DIR"/*.png "$OUTPUT_DIR"/*.json 2>/dev/null || true
+   timestamp="$(date -u +"%Y%m%d-%H%M%S")"
+   log_file="$LOG_DIR/$timestamp.log"
+   snapshot_dir="$RESULT_DIR/$timestamp"
+   mkdir -p "$snapshot_dir"
    cd /app/kukuri-tauri
    pnpm e2e:build
    xvfb-run -s "-screen 0 1280x720x24" pnpm e2e || rv=$?
-   mkdir -p /app/test-results/desktop-e2e /app/tmp/logs/desktop-e2e
-   cp tests/e2e/output/*.json /app/test-results/desktop-e2e/ || true
-   cp tests/e2e/output/*.png /app/tmp/logs/desktop-e2e/ || true
+   if compgen -G "$OUTPUT_DIR/*" > /dev/null; then
+     cp -a "$OUTPUT_DIR/." "$snapshot_dir/"
+   fi
    exit ${rv:-0}
    ```
    - `tests/e2e/output` には WDIO の `afterTest` で保存したスクリーンショット/JSON レポートを配置。
 3. `scripts/test-docker.ps1` / `scripts/test-docker.sh` に `Command = "e2e"` を追加し、内部で  
    `SCENARIO=desktop-e2e docker compose -f docker-compose.test.yml run --rm test-runner` を呼び出す。  
-   オプション `-NoBuild` や `-Fixture` は他シナリオと共通で扱う。
+   community node 実ノードは `./scripts/test-docker.ps1 e2e-community-node` / `./scripts/test-docker.sh e2e-community-node` で `SCENARIO=community-node-e2e` を設定する。
 4. 生成物パス:
-   - ログ: `tmp/logs/desktop-e2e/<timestamp>.log`（PowerShell 側で `Tee-Object`）。
-   - WDIO レポート: `test-results/desktop-e2e/<timestamp>-report.json`
-   - スクリーンショット: `test-results/desktop-e2e/screenshots/<spec>/<case>.png`
+   - desktop-e2e: `tmp/logs/desktop-e2e/<timestamp>.log` / `test-results/desktop-e2e/<timestamp>/...`
+   - community-node-e2e: `tmp/logs/community-node-e2e/<timestamp>.log` / `test-results/community-node-e2e/<timestamp>/...` / `tmp/logs/community-node-e2e/seed.json` / `tmp/logs/community-node-e2e/invite.json`
 
 ### 3.5 GitHub Actions への組み込み
-- `.github/workflows/test.yml` に新ジョブ `desktop-e2e` を追加:
+- `.github/workflows/test.yml` の `desktop-e2e` ジョブで community-node-e2e を実行:
   ```yaml
   desktop-e2e:
-    name: Desktop E2E (Docker)
+    name: Desktop E2E (Community Node, Docker)
     runs-on: ubuntu-latest
     needs: [docker-test]
     steps:
       - uses: actions/checkout@v4
-      - name: Run desktop E2E via Docker harness
+      - name: Run community node E2E via Docker harness
         shell: pwsh
-        run: ./scripts/test-docker.ps1 e2e
-      - name: Upload E2E artefacts
+        run: ./scripts/test-docker.ps1 e2e-community-node
+      - name: Upload community node E2E artefacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: desktop-e2e-${{ github.run_id }}
           path: |
-            test-results/desktop-e2e
-            tmp/logs/desktop-e2e
+            test-results/community-node-e2e
+            tmp/logs/community-node-e2e
   ```
-- `nightly.yml` にも同じステップを追加し、artefact 名を `nightly.desktop-e2e-logs` / `nightly.desktop-e2e-reports` として `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` へ反映。
+- `nightly.yml` は従来どおり `desktop-e2e` を実行し、`nightly.desktop-e2e-logs` / `nightly.desktop-e2e-reports` を継続する。
 - テストサマリ `test-summary` には `needs: [..., desktop-e2e]` を追加し、失敗時は即座に検知できるようにする。
 
 ### 3.6 ローカル実行フロー（Windows 開発者）

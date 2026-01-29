@@ -1052,7 +1052,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
         Build-TestImage
     }
 
-    $logDir = Join-Path $repositoryRoot "tmp/logs/desktop-e2e"
+    $logDir = Join-Path $repositoryRoot "tmp/logs/community-node-e2e"
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir | Out-Null
     }
@@ -1113,7 +1113,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
         }
     }
 
-    Write-Success "Desktop E2E scenario (community node) finished. Check tmp/logs/desktop-e2e/ and test-results/desktop-e2e/ for artefacts."
+    Write-Success "Desktop E2E scenario (community node) finished. Check tmp/logs/community-node-e2e/ and test-results/community-node-e2e/ for artefacts."
 }
 
 function Invoke-TypeScriptTests {

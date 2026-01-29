@@ -84,14 +84,14 @@ jobs:
         shell: pwsh
         run: ./scripts/test-docker.ps1 e2e-community-node
 
-      - name: Upload desktop E2E artefacts
+      - name: Upload community node E2E artefacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: desktop-e2e-${{ github.run_id }}
           path: |
-            test-results/desktop-e2e
-            tmp/logs/desktop-e2e
+            test-results/community-node-e2e
+            tmp/logs/community-node-e2e
           if-no-files-found: warn
 
   # ネイティブ環境でのテスト（Linux）

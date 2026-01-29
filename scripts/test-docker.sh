@@ -912,7 +912,7 @@ run_desktop_e2e_community_node() {
     return $status
   fi
 
-  echo '[OK] Desktop E2E scenario (community node) finished. Artefacts stored in tmp/logs/desktop-e2e/ and test-results/desktop-e2e/.'
+  echo '[OK] Desktop E2E scenario (community node) finished. Artefacts stored in tmp/logs/community-node-e2e/ and test-results/community-node-e2e/.'
 }
 
 run_desktop_e2e() {

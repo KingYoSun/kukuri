@@ -3,8 +3,13 @@ set -euo pipefail
 
 APP_DIR="/app/kukuri-tauri"
 OUTPUT_DIR="$APP_DIR/tests/e2e/output"
+SCENARIO_NAME="${SCENARIO:-desktop-e2e}"
 RESULT_DIR="/app/test-results/desktop-e2e"
 LOG_DIR="/app/tmp/logs/desktop-e2e"
+if [[ "$SCENARIO_NAME" == "community-node-e2e" ]]; then
+  RESULT_DIR="/app/test-results/community-node-e2e"
+  LOG_DIR="/app/tmp/logs/community-node-e2e"
+fi
 
 mkdir -p "$RESULT_DIR" "$LOG_DIR" "$OUTPUT_DIR"
 rm -f "$OUTPUT_DIR"/*.png "$OUTPUT_DIR"/*.json 2>/dev/null || true
@@ -16,10 +21,10 @@ mkdir -p "$snapshot_dir"
 
 cd "$APP_DIR"
 
-echo "=== desktop-e2e: building debug bundle ==="
+echo "=== ${SCENARIO_NAME}: building debug bundle ==="
 pnpm e2e:build
 
-echo "=== desktop-e2e: running pnpm e2e:ci ==="
+echo "=== ${SCENARIO_NAME}: running pnpm e2e:ci ==="
 E2E_COMMAND=(pnpm e2e:ci)
 export E2E_SKIP_BUILD=1
 if command -v dbus-run-session >/dev/null 2>&1; then
@@ -36,7 +41,7 @@ if compgen -G "$OUTPUT_DIR/*" > /dev/null; then
   cp -a "$OUTPUT_DIR/." "$snapshot_dir/"
 fi
 
-echo "Desktop E2E artefacts:"
+echo "Desktop E2E artefacts (${SCENARIO_NAME}):"
 echo "  - Logs: $log_file"
 echo "  - Reports: $snapshot_dir"
 
