@@ -749,7 +749,7 @@ start_community_node() {
   local base_url="$1"
   if [[ $NO_BUILD -eq 0 ]]; then
     echo 'Building community-node-user-api image...'
-    compose_run '' build community-node-user-api
+    compose_run '' build community-node-user-api community-node-bootstrap
   fi
   echo 'Starting community-node-user-api service...'
   if ! compose_run '' up -d community-node-user-api; then
@@ -761,6 +761,12 @@ start_community_node() {
     return 1
   fi
   echo '[OK] community-node-user-api is healthy.'
+
+  echo 'Starting community-node-bootstrap service...'
+  if ! compose_run '' up -d community-node-bootstrap; then
+    echo 'Failed to start community-node-bootstrap service.' >&2
+    return 1
+  fi
 }
 
 seed_community_node() {
@@ -837,7 +843,7 @@ cleanup_community_node() {
 
 stop_community_node() {
   echo 'Stopping community-node services...'
-  compose_run '' rm -sf community-node-user-api community-node-postgres community-node-meilisearch >/dev/null 2>&1 || true
+  compose_run '' rm -sf community-node-user-api community-node-bootstrap community-node-postgres community-node-meilisearch >/dev/null 2>&1 || true
 }
 
 run_desktop_e2e_community_node() {

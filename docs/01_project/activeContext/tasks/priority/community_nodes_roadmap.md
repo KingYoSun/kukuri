@@ -30,7 +30,7 @@
 - [x] P2P-only: `access_control_issue_invite`/`access_control_request_join` を使った **invite共有→join.request→key.envelope→暗号化投稿** の E2E を追加する。
 - [x] label/attestation/trust を実ノードで発行し、PostCard のラベル/信頼バッジ表示まで検証する E2E を追加する。
 - [x] search/index の実データを投入し、検索UI（サジェスト/ページング/0件）と community node search API の連携を E2E で確認する。
-- [ ] bootstrap/relay 実ノードのエンドポイントを使った P2P 連携確認（list_bootstrap_nodes/services）を E2E に追加する。
+- [x] bootstrap/relay 実ノードのエンドポイントを使った P2P 連携確認（list_bootstrap_nodes/services）を E2E に追加する。
 - [ ] 実ノード E2E のログ/artefact を `test-results/community-node-e2e` と `tmp/logs/community-node-e2e` に集約し、Runbook/CI の artefact 収集に追加する。
 - [ ] 実ノード E2E を Nightly/CI（`test.yml`/`nightly.yml`）へ組み込み、実行条件と所要時間を明記する。
 

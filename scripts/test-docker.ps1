@@ -1396,7 +1396,7 @@ function Start-CommunityNode {
 
     if (-not $NoBuild) {
         Write-Info "Building community-node-user-api image..."
-        Invoke-DockerCompose @("build", "community-node-user-api")
+        Invoke-DockerCompose @("build", "community-node-user-api", "community-node-bootstrap")
     }
 
     Write-Info "Starting community-node-user-api service..."
@@ -1408,6 +1408,12 @@ function Start-CommunityNode {
         throw "community-node-user-api health check failed: $BaseUrl/healthz"
     }
     Write-Success "community-node-user-api is healthy"
+
+    Write-Info "Starting community-node-bootstrap service..."
+    $code = Invoke-DockerCompose @("up", "-d", "community-node-bootstrap") -IgnoreFailure
+    if ($code -ne 0) {
+        throw "Failed to start community-node-bootstrap (exit code $code)"
+    }
 }
 
 function Invoke-CommunityNodeE2ESeed {
@@ -1492,6 +1498,7 @@ function Stop-CommunityNode {
         "rm",
         "-sf",
         "community-node-user-api",
+        "community-node-bootstrap",
         "community-node-postgres",
         "community-node-meilisearch"
     ) -IgnoreFailure | Out-Null

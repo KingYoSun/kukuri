@@ -149,6 +149,8 @@ async fn seed_with_clients(
     for topic_id in SEED_TOPICS {
         upsert_topic_subscription(pool, topic_id, &ctx.subscriber.pubkey).await?;
         upsert_node_subscription(pool, topic_id).await?;
+        upsert_topic_service(pool, topic_id, "bootstrap", "public").await?;
+        upsert_topic_service(pool, topic_id, "relay", "public").await?;
     }
 
     let events = build_seed_events(ctx)?;
@@ -372,6 +374,10 @@ async fn cleanup_with_clients(
         .bind(&seed_topics)
         .execute(pool)
         .await?;
+    sqlx::query("DELETE FROM cn_admin.topic_services WHERE topic_id = ANY($1)")
+        .bind(&seed_topics)
+        .execute(pool)
+        .await?;
 
     tracing::info!("community node e2e seed cleanup completed");
     Ok(())
@@ -578,6 +584,24 @@ async fn upsert_node_subscription(pool: &Pool<Postgres>, topic_id: &str) -> Resu
         "INSERT INTO cn_admin.node_subscriptions          (topic_id, enabled, ref_count)          VALUES ($1, TRUE, 1)          ON CONFLICT (topic_id) DO UPDATE SET enabled = TRUE, ref_count = GREATEST(cn_admin.node_subscriptions.ref_count, 1), updated_at = NOW()",
     )
     .bind(topic_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn upsert_topic_service(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+    role: &str,
+    scope: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_admin.topic_services          (topic_id, role, scope, is_active, updated_by)          VALUES ($1, $2, $3, TRUE, $4)          ON CONFLICT (topic_id, role, scope) DO UPDATE SET is_active = TRUE, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+    )
+    .bind(topic_id)
+    .bind(role)
+    .bind(scope)
+    .bind(SEED_SOURCE)
     .execute(pool)
     .await?;
     Ok(())

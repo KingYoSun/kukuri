@@ -210,6 +210,10 @@ export interface E2EBridge {
   applyCliBootstrap: () => Promise<BootstrapSnapshot>;
   clearBootstrapNodes: () => Promise<BootstrapSnapshot>;
   communityNodeAuthFlow: (payload: { baseUrl: string }) => Promise<CommunityNodeAuthFlowResult>;
+  communityNodeListBootstrapNodes: () => Promise<Record<string, unknown>>;
+  communityNodeListBootstrapServices: (payload: {
+    topicId: string;
+  }) => Promise<Record<string, unknown>>;
 }
 
 declare global {
@@ -1382,6 +1386,31 @@ export function registerE2EBridge(): void {
             errorHandler.log('E2EBridge.communityNodeAuthFlowFailed', error, {
               context: 'registerE2EBridge.communityNodeAuthFlow',
               metadata: { baseUrl },
+            });
+            throw error;
+          }
+        },
+        communityNodeListBootstrapNodes: async () => {
+          try {
+            return await communityNodeApi.listBootstrapNodes();
+          } catch (error) {
+            errorHandler.log('E2EBridge.communityNodeListBootstrapNodesFailed', error, {
+              context: 'registerE2EBridge.communityNodeListBootstrapNodes',
+            });
+            throw error;
+          }
+        },
+        communityNodeListBootstrapServices: async (payload: { topicId: string }) => {
+          const topicId = payload?.topicId?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required to list bootstrap services');
+          }
+          try {
+            return await communityNodeApi.listBootstrapServices(topicId);
+          } catch (error) {
+            errorHandler.log('E2EBridge.communityNodeListBootstrapServicesFailed', error, {
+              context: 'registerE2EBridge.communityNodeListBootstrapServices',
+              metadata: { topicId },
             });
             throw error;
           }

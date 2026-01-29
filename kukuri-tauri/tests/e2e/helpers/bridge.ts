@@ -35,7 +35,9 @@ export type BridgeAction =
   | 'getBootstrapSnapshot'
   | 'applyCliBootstrap'
   | 'clearBootstrapNodes'
-  | 'communityNodeAuthFlow';
+  | 'communityNodeAuthFlow'
+  | 'communityNodeListBootstrapNodes'
+  | 'communityNodeListBootstrapServices';
 
 export interface AuthSnapshot {
   currentUser: {
@@ -242,6 +244,8 @@ type BridgeResultMap = {
   applyCliBootstrap: BootstrapSnapshot;
   clearBootstrapNodes: BootstrapSnapshot;
   communityNodeAuthFlow: CommunityNodeAuthFlowResult;
+  communityNodeListBootstrapNodes: Record<string, unknown>;
+  communityNodeListBootstrapServices: Record<string, unknown>;
 };
 
 declare global {
@@ -602,4 +606,14 @@ export async function communityNodeAuthFlow(
   baseUrl: string,
 ): Promise<CommunityNodeAuthFlowResult> {
   return await callBridge('communityNodeAuthFlow', { baseUrl });
+}
+
+export async function communityNodeListBootstrapNodes(): Promise<Record<string, unknown>> {
+  return await callBridge('communityNodeListBootstrapNodes');
+}
+
+export async function communityNodeListBootstrapServices(
+  topicId: string,
+): Promise<Record<string, unknown>> {
+  return await callBridge('communityNodeListBootstrapServices', { topicId });
 }

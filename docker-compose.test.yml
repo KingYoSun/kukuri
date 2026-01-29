@@ -76,6 +76,26 @@ services:
       - "${COMMUNITY_NODE_USER_API_PORT:-18080}:8080"
     networks:
       - community-node-network
+  community-node-bootstrap:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-community-node-bootstrap
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cn bootstrap"]
+    environment:
+      DATABASE_URL: "postgres://cn:cn_password@community-node-postgres:5432/cn"
+      BOOTSTRAP_ADDR: "0.0.0.0:8083"
+      NODE_KEY_PATH: "/data/node_key.json"
+      BOOTSTRAP_REFRESH_SECONDS: "${COMMUNITY_NODE_BOOTSTRAP_REFRESH_SECONDS:-5}"
+    depends_on:
+      community-node-postgres:
+        condition: service_healthy
+    volumes:
+      - community-node-data:/data
+    networks:
+      - community-node-network
+
 
   # テスト実行サービス
   test-runner:
