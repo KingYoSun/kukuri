@@ -42,6 +42,33 @@ export interface CommunityNodeTrustRequest {
   subject: string;
 }
 
+export interface CommunityNodeSearchRequest {
+  topic: string;
+  q?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface CommunityNodeSearchHit {
+  event_id?: string;
+  topic_id?: string;
+  kind?: number;
+  author?: string;
+  created_at?: number;
+  title?: string;
+  summary?: string;
+  content?: string;
+  tags?: string[];
+}
+
+export interface CommunityNodeSearchResponse {
+  topic: string;
+  query?: string | null;
+  items: CommunityNodeSearchHit[];
+  next_cursor: string | null;
+  total: number;
+}
+
 export interface CommunityNodeConsentRequest {
   policy_ids?: string[];
   accept_all_current?: boolean;
@@ -93,8 +120,8 @@ export const communityNodeApi = {
       request,
     }),
 
-  search: (request: Record<string, unknown>) =>
-    invokeCommand<Record<string, unknown>>('community_node_search', { request }),
+  search: (request: CommunityNodeSearchRequest) =>
+    invokeCommand<CommunityNodeSearchResponse>('community_node_search', { request }),
 
   listBootstrapNodes: () =>
     invokeCommand<Record<string, unknown>>('community_node_list_bootstrap_nodes'),

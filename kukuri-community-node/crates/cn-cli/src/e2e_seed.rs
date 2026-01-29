@@ -386,6 +386,34 @@ fn build_seed_events(ctx: &SeedContext) -> Result<Vec<SeedEvent>> {
         "E2E seed alpha post",
         base,
     )?;
+    let post_alpha_extra_one = build_post(
+        &ctx.author_b.keys,
+        SEED_TOPIC_ALPHA,
+        "Alpha Extra One",
+        "E2E seed alpha extra one",
+        base + 300,
+    )?;
+    let post_alpha_extra_two = build_post(
+        &ctx.author_a.keys,
+        SEED_TOPIC_ALPHA,
+        "Alpha Extra Two",
+        "E2E seed alpha extra two",
+        base + 420,
+    )?;
+    let post_alpha_extra_three = build_post(
+        &ctx.author_b.keys,
+        SEED_TOPIC_ALPHA,
+        "Alpha Extra Three",
+        "E2E seed alpha extra three",
+        base + 480,
+    )?;
+    let post_alpha_extra_four = build_post(
+        &ctx.author_a.keys,
+        SEED_TOPIC_ALPHA,
+        "Alpha Extra Four",
+        "E2E seed alpha extra four",
+        base + 540,
+    )?;
     let post_alpha_follow = build_post(
         &ctx.author_b.keys,
         SEED_TOPIC_ALPHA,
@@ -421,6 +449,22 @@ fn build_seed_events(ctx: &SeedContext) -> Result<Vec<SeedEvent>> {
     Ok(vec![
         SeedEvent {
             raw: post_alpha,
+            topic_id: SEED_TOPIC_ALPHA.to_string(),
+        },
+        SeedEvent {
+            raw: post_alpha_extra_one,
+            topic_id: SEED_TOPIC_ALPHA.to_string(),
+        },
+        SeedEvent {
+            raw: post_alpha_extra_two,
+            topic_id: SEED_TOPIC_ALPHA.to_string(),
+        },
+        SeedEvent {
+            raw: post_alpha_extra_three,
+            topic_id: SEED_TOPIC_ALPHA.to_string(),
+        },
+        SeedEvent {
+            raw: post_alpha_extra_four,
             topic_id: SEED_TOPIC_ALPHA.to_string(),
         },
         SeedEvent {
