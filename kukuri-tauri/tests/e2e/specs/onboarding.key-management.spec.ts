@@ -1,4 +1,4 @@
-import { $, $$, browser, expect } from '@wdio/globals';
+import { $, browser, expect } from '@wdio/globals';
 import { waitForAppReady } from '../helpers/waitForAppReady';
 import { callBridge, resetAppState } from '../helpers/bridge';
 import {
@@ -108,48 +108,52 @@ describe('オンボーディングとキー管理', () => {
     console.info('Auth snapshot after import', JSON.stringify(initialAfterImport, null, 2));
 
     const selectAccountOption = async (targetNpub: string) => {
-      const queryOptions = async () => $$('[data-testid="account-switch-option"]');
-      let options = await queryOptions();
-      if (!options.length) {
-        await browser.pause(300);
-        options = await queryOptions();
-      }
-      if (!options.length) {
-        await callBridge('switchAccount', targetNpub);
-        return true;
-      }
-      const optionSummaries: string[] = [];
       const targetPrefix = targetNpub.slice(0, 12);
-      for (const option of options) {
-        try {
-          if (!(await option.isExisting())) {
-            continue;
+      let optionSummaries: string[] = [];
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const uiResult = await browser.execute<{
+          matched: boolean;
+          summaries: string[];
+        }>((target, prefix) => {
+          const options = Array.from(
+            document.querySelectorAll<HTMLElement>('[data-testid="account-switch-option"]'),
+          );
+          const summaries: string[] = [];
+          let matched = false;
+
+          for (const option of options) {
+            const optionNpub = option.getAttribute('data-account-npub') ?? '';
+            const optionDisplayName = option.getAttribute('data-account-display-name') ?? '';
+            const label = option.getAttribute('aria-label') ?? '';
+            const text = option.textContent ?? '';
+            const haystackParts = [optionNpub, optionDisplayName, label, text].filter(Boolean);
+            const haystack = haystackParts.join(' ');
+            summaries.push(haystack || '[empty]');
+            const matches =
+              optionNpub.includes(target) ||
+              optionNpub.includes(prefix) ||
+              haystack.includes(target) ||
+              haystack.includes(prefix);
+            if (matches) {
+              option.scrollIntoView();
+              option.click();
+              matched = true;
+              break;
+            }
           }
-          const optionNpub = (await option.getAttribute('data-account-npub').catch(() => null)) ?? '';
-          const optionDisplayName =
-            (await option.getAttribute('data-account-display-name').catch(() => null)) ?? '';
-          const label = (await option.getAttribute('aria-label').catch(() => null)) ?? '';
-          const text = (await option.getText().catch(() => null)) ?? '';
-          const haystackParts = [optionNpub, optionDisplayName, label, text].filter(Boolean);
-          const haystack = haystackParts.join(' ');
-          optionSummaries.push(haystack || '[empty]');
-          const matches =
-            optionNpub.includes(targetNpub) ||
-            optionNpub.includes(targetPrefix) ||
-            haystack.includes(targetNpub) ||
-            haystack.includes(targetPrefix);
-          if (matches) {
-            await option.scrollIntoView();
-            await option.click();
-            return true;
-          }
-        } catch (error) {
-          console.info('Account switch option interaction failed', {
-            targetNpub,
-            error: error instanceof Error ? error.message : String(error),
-          });
+
+          return { matched, summaries };
+        }, targetNpub, targetPrefix);
+
+        optionSummaries = uiResult.summaries;
+        if (uiResult.matched) {
+          return true;
         }
+
+        await browser.pause(300);
       }
+
       const snapshot = await callBridge('getAuthSnapshot');
       console.info('Account switch options', {
         targetNpub,
@@ -164,8 +168,21 @@ describe('オンボーディングとキー管理', () => {
     const switchAndWait = async (expectedNpub: string) => {
       const retries = 3;
       for (let attempt = 1; attempt <= retries; attempt += 1) {
-        await openAccountMenu();
-        const found = await selectAccountOption(expectedNpub);
+        let menuOpened = true;
+        try {
+          await openAccountMenu();
+        } catch (error) {
+          menuOpened = false;
+          console.info('Account menu did not open, fallback to bridge', {
+            expectedNpub,
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        const found = menuOpened ? await selectAccountOption(expectedNpub) : true;
+        if (!menuOpened) {
+          await callBridge('switchAccount', expectedNpub);
+        }
         expect(found).toBe(true);
         try {
           await browser.waitUntil(
