@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createConnection } from 'node:net';
 import type { Options } from '@wdio/types';
 import { startDriver, stopDriver } from './helpers/tauriDriver.ts';
 import { startCommunityNodeMock, stopCommunityNodeMock } from './helpers/communityNodeMock.ts';
@@ -76,6 +77,28 @@ function pruneUnsupportedCapabilities(target: unknown): void {
   if ('desiredCapabilities' in record) {
     pruneUnsupportedCapabilities(record.desiredCapabilities);
   }
+}
+
+async function isPortInUse(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const socket = createConnection({ host: '127.0.0.1', port });
+    socket.once('connect', () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+  });
+}
+
+async function ensureDriverReady(): Promise<void> {
+  const proxyPort = Number(process.env.TAURI_DRIVER_PORT ?? '4445');
+  if (await isPortInUse(proxyPort)) {
+    return;
+  }
+  console.warn(
+    `[wdio.desktop] tauri-driver proxy not responding on ${proxyPort}; attempting restart`,
+  );
+  await startDriver();
 }
 
 function seedCliBootstrapFixture(): void {
@@ -158,6 +181,7 @@ export const config: Options.Testrunner = {
   },
   beforeSession: async function (_config, capabilities) {
     pruneUnsupportedCapabilities(capabilities);
+    await ensureDriverReady();
   },
   afterTest: async function (test, _context, { error }) {
     if (!error) {

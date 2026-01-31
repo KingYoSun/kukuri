@@ -101,11 +101,21 @@ export async function startDriver(): Promise<void> {
   }
   const driverPort = isLinux ? proxyListenPort + 1 : proxyListenPort;
 
-  if (
-    (await isPortInUse(proxyListenPort)) ||
-    (isLinux && (await isPortInUse(driverPort))) ||
-    (isLinux && (await isPortInUse(nativePort)))
-  ) {
+  const proxyInUse = await isPortInUse(proxyListenPort);
+  const driverInUse = isLinux ? await isPortInUse(driverPort) : proxyInUse;
+  const nativeInUse = isLinux ? await isPortInUse(nativePort) : false;
+
+  if (isLinux && driverInUse && !proxyInUse) {
+    console.warn(
+      `[tauriDriver] driver already listening on ${driverPort}; starting capability proxy on ${proxyListenPort}`,
+    );
+    startCapabilityProxy(proxyListenPort, driverPort);
+    await waitForPortReady(proxyListenPort, DRIVER_READY_TIMEOUT_MS);
+    await waitForDriverStatus(proxyListenPort, DRIVER_READY_TIMEOUT_MS);
+    return;
+  }
+
+  if (proxyInUse || (isLinux && driverInUse) || (isLinux && nativeInUse)) {
     console.warn(
       `tauri-driver ports already in use (proxy=${proxyListenPort}, driver=${driverPort}, native=${nativePort}); assuming existing driver`,
     );
@@ -141,6 +151,10 @@ export async function startDriver(): Promise<void> {
     }
     driverProcess = null;
   });
+  driverProcess.once('error', (error) => {
+    console.warn('[tauriDriver] failed to start driver process', error);
+    driverProcess = null;
+  });
 
   if (isLinux && nativeDriverPath) {
     await waitForPortReady(nativePort, DRIVER_READY_TIMEOUT_MS);
@@ -166,8 +180,12 @@ export async function stopDriver(): Promise<void> {
 }
 
 function startCapabilityProxy(listenPort: number, targetPort: number): void {
-  if (proxyServer) {
+  if (proxyServer?.listening) {
     return;
+  }
+  if (proxyServer) {
+    proxyServer.close();
+    proxyServer = null;
   }
 
   proxyServer = createServer((req, res) => {
@@ -217,6 +235,12 @@ function startCapabilityProxy(listenPort: number, targetPort: number): void {
     });
   });
 
+  proxyServer.on('error', (error) => {
+    console.warn(
+      `[tauriDriver] capability proxy error (listen=${listenPort}, target=${targetPort})`,
+      error,
+    );
+  });
   proxyServer.listen(listenPort, '127.0.0.1');
 }
 
