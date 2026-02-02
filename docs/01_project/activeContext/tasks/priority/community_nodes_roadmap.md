@@ -40,7 +40,7 @@
 ## 未実装/不足事項（2026年02月02日 追記）
 
 - [x] クライアントのノード採用設定を **複数ノード/role別** に拡張し、label/trust/search/bootstrap を採用ノード単位で切替できるようにする（UI/Store/DTO/Handler を含む）。
-- [ ] trust.anchor(39011) の発行/保存/適用/UI を実装し、採用attester切替で表示が変わることを確認する（M5受入条件の未達）。
+- [x] trust.anchor(39011) の発行/保存/適用/UI を実装し、採用attester切替で表示が変わることを確認する（M5受入条件の未達）。
 - [ ] Access Control の **epochローテ/追放** フローを実装する（epoch++ と残留者への key.envelope 再配布、ローテ操作の CLI/サービス化）。
 - [ ] `access_control` を P2P-only とする方針と、User API の invite/keys エンドポイント運用の矛盾を解消（どちらを正とするか決定し、実装・UI・ドキュメントを揃える）。
 - [ ] 通報 UI（reason 選択 + submit）を PostCard などに追加し、`community_node_submit_report` を利用した E2E を追加する。

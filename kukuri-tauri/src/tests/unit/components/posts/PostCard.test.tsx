@@ -581,4 +581,38 @@ describe('PostCard', () => {
       expect(toast.error).toHaveBeenCalledWith('ブックマークの操作に失敗しました');
     });
   });
+
+  it('trust anchorが設定されている場合、trust取得にbase_urlを渡す', async () => {
+    const { communityNodeApi } = await import('@/lib/api/communityNode');
+    vi.mocked(communityNodeApi.getConfig).mockResolvedValue({
+      nodes: [
+        {
+          base_url: 'https://trust.example',
+          roles: { labels: false, trust: true, search: false, bootstrap: false },
+          has_token: true,
+          token_expires_at: null,
+          pubkey: 'a'.repeat(64),
+        },
+      ],
+    });
+    vi.mocked(communityNodeApi.getTrustAnchor).mockResolvedValue({
+      attester: 'a'.repeat(64),
+      claim: null,
+      topic: null,
+      weight: 1,
+      issued_at: 0,
+      event_json: {},
+    });
+    vi.mocked(communityNodeApi.trustReportBased).mockResolvedValue({ score: 0.42 });
+    vi.mocked(communityNodeApi.trustCommunicationDensity).mockResolvedValue({ score: 0.24 });
+
+    renderWithQueryClient(<PostCard post={mockPost} />);
+
+    await waitFor(() => {
+      expect(communityNodeApi.trustReportBased).toHaveBeenCalledWith({
+        subject: `pubkey:${mockPost.author.pubkey}`,
+        base_url: 'https://trust.example',
+      });
+    });
+  });
 });

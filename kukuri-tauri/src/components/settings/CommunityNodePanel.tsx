@@ -33,6 +33,16 @@ const keyScopeOptions: Array<{ value: CommunityNodeScope; label: string }> = [
   { value: 'public', label: '公開' },
 ];
 
+const shortenPubkey = (value: string) =>
+  value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+
+const formatAttesterLabel = (node: CommunityNodeConfigNodeResponse) => {
+  if (node.pubkey) {
+    return `${node.base_url} (${shortenPubkey(node.pubkey)})`;
+  }
+  return node.base_url;
+};
+
 export function CommunityNodePanel() {
   const queryClient = useQueryClient();
   const [newBaseUrl, setNewBaseUrl] = useState('');
@@ -41,11 +51,17 @@ export function CommunityNodePanel() {
   const [syncScope, setSyncScope] = useState<CommunityNodeScope>('invite');
   const [syncAfterEpoch, setSyncAfterEpoch] = useState('');
   const [inviteJson, setInviteJson] = useState('');
+  const [trustAnchorAttester, setTrustAnchorAttester] = useState('auto');
   const { enableAccessControl, setEnableAccessControl } = useCommunityNodeStore();
 
   const configQuery = useQuery({
     queryKey: ['community-node', 'config'],
     queryFn: () => communityNodeApi.getConfig(),
+    staleTime: 1000 * 60,
+  });
+  const trustAnchorQuery = useQuery({
+    queryKey: ['community-node', 'trust-anchor'],
+    queryFn: () => communityNodeApi.getTrustAnchor(),
     staleTime: 1000 * 60,
   });
   const groupKeysQuery = useQuery({
@@ -56,6 +72,18 @@ export function CommunityNodePanel() {
   const nodes = configQuery.data?.nodes ?? [];
   const selectedNode =
     nodes.find((node) => node.base_url === actionNodeBaseUrl) ?? nodes[0] ?? null;
+  const trustNodes = nodes.filter((node) => node.roles.trust && node.has_token);
+  const trustAttesterOptions = trustNodes
+    .filter((node) => node.pubkey)
+    .map((node) => ({
+      value: node.pubkey ?? '',
+      label: formatAttesterLabel(node),
+      baseUrl: node.base_url,
+    }));
+  const trustAnchorNode =
+    trustAnchorAttester !== 'auto'
+      ? (trustNodes.find((node) => node.pubkey === trustAnchorAttester) ?? null)
+      : null;
 
   const consentsQuery = useQuery({
     queryKey: ['community-node', 'consents', selectedNode?.base_url ?? ''],
@@ -78,10 +106,29 @@ export function CommunityNodePanel() {
     }
   }, [nodes, actionNodeBaseUrl]);
 
+  useEffect(() => {
+    if (trustAnchorQuery.data?.attester) {
+      setTrustAnchorAttester(trustAnchorQuery.data.attester);
+      return;
+    }
+    setTrustAnchorAttester('auto');
+  }, [trustAnchorQuery.data?.attester]);
+
+  useEffect(() => {
+    if (trustAnchorQuery.isError) {
+      errorHandler.log('Failed to load community node trust anchor', trustAnchorQuery.error, {
+        context: 'CommunityNodePanel.trustAnchor',
+        showToast: true,
+        toastTitle: 'Trust Anchor の取得に失敗しました',
+      });
+    }
+  }, [trustAnchorQuery.isError, trustAnchorQuery.error]);
+
   const refreshCommunityData = async () => {
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'config'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'group-keys'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'consents'] });
+    await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-anchor'] });
   };
 
   const serializeNodes = (items: CommunityNodeConfigNodeResponse[]) =>
@@ -194,6 +241,25 @@ export function CommunityNodePanel() {
     }
   };
 
+  const handleTrustAnchorChange = async (value: string) => {
+    setTrustAnchorAttester(value);
+    try {
+      if (value === 'auto') {
+        await communityNodeApi.clearTrustAnchor();
+      } else {
+        await communityNodeApi.setTrustAnchor({ attester: value, weight: 1 });
+      }
+      await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-anchor'] });
+      await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust'] });
+    } catch (error) {
+      errorHandler.log('Community node trust anchor update failed', error, {
+        context: 'CommunityNodePanel.trustAnchorUpdate',
+        showToast: true,
+        toastTitle: 'Trust Anchor の更新に失敗しました',
+      });
+    }
+  };
+
   const handleSyncKeyEnvelopes = async () => {
     if (!syncTopicId.trim()) {
       toast.error('トピックIDを入力してください');
@@ -302,6 +368,48 @@ export function CommunityNodePanel() {
               全削除
             </Button>
           </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          <div>
+            <p className="font-medium">Trust Anchor (attester)</p>
+            <p className="text-sm text-muted-foreground">trust に使う attester を選択します。</p>
+          </div>
+          <Select
+            value={trustAnchorAttester}
+            onValueChange={handleTrustAnchorChange}
+            disabled={trustAttesterOptions.length === 0}
+          >
+            <SelectTrigger data-testid="community-node-trust-anchor">
+              <SelectValue placeholder="自動" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">自動 (複数ノード平均)</SelectItem>
+              {trustAttesterOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {trustAnchorAttester === 'auto' ? (
+            <p className="text-xs text-muted-foreground">
+              自動モード: trust ノードの平均値を使用します。
+            </p>
+          ) : trustAnchorNode ? (
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="community-node-trust-anchor-current"
+            >
+              attester: {formatAttesterLabel(trustAnchorNode)}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              選択中の attester が見つかりません。認証済みの trust ノードを選択してください。
+            </p>
+          )}
         </div>
 
         <Separator />

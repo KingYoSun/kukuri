@@ -7,12 +7,13 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeKeyEnvelopeRequest, CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest,
     CommunityNodeRedeemInviteRequest, CommunityNodeRedeemInviteResponse,
     CommunityNodeReportRequest, CommunityNodeRoleConfig, CommunityNodeSearchRequest,
-    CommunityNodeTokenRequest, CommunityNodeTrustRequest,
+    CommunityNodeTokenRequest, CommunityNodeTrustAnchorRequest, CommunityNodeTrustAnchorState,
+    CommunityNodeTrustRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::Utc;
 use nostr_sdk::prelude::{
-    Event as NostrEvent, EventBuilder, FromBech32, Keys, Kind, SecretKey, Tag, nip44,
+    Event as NostrEvent, EventBuilder, FromBech32, Keys, Kind, PublicKey, SecretKey, Tag, nip44,
 };
 use reqwest::{Client, Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
@@ -23,7 +24,11 @@ use std::sync::Arc;
 
 const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v2";
 const COMMUNITY_NODE_CONFIG_LEGACY_KEY: &str = "community_node_config_v1";
+const COMMUNITY_NODE_TRUST_ANCHOR_KEY: &str = "community_node_trust_anchor_v1";
 const AUTH_KIND: u16 = 22242;
+const TRUST_ANCHOR_KIND: u16 = 39011;
+const KIP_NAMESPACE: &str = "kukuri";
+const KIP_VERSION: &str = "1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CommunityNodeConfig {
@@ -59,6 +64,29 @@ struct LegacyCommunityNodeConfig {
     access_token: Option<String>,
     token_expires_at: Option<i64>,
     pubkey: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredTrustAnchor {
+    attester: String,
+    claim: Option<String>,
+    topic: Option<String>,
+    weight: f64,
+    issued_at: i64,
+    event_json: serde_json::Value,
+}
+
+impl From<StoredTrustAnchor> for CommunityNodeTrustAnchorState {
+    fn from(anchor: StoredTrustAnchor) -> Self {
+        Self {
+            attester: anchor.attester,
+            claim: anchor.claim,
+            topic: anchor.topic,
+            weight: anchor.weight,
+            issued_at: anchor.issued_at,
+            event_json: anchor.event_json,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -194,6 +222,110 @@ impl CommunityNodeHandler {
         node.token_expires_at = None;
         node.pubkey = None;
         self.save_config(&config).await
+    }
+
+    pub async fn get_trust_anchor(
+        &self,
+    ) -> Result<Option<CommunityNodeTrustAnchorState>, AppError> {
+        let raw = self
+            .secure_storage
+            .retrieve(COMMUNITY_NODE_TRUST_ANCHOR_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        let Some(raw) = raw else {
+            return Ok(None);
+        };
+        let stored: StoredTrustAnchor = serde_json::from_str(&raw)
+            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+        Ok(Some(stored.into()))
+    }
+
+    pub async fn set_trust_anchor(
+        &self,
+        request: CommunityNodeTrustAnchorRequest,
+    ) -> Result<CommunityNodeTrustAnchorState, AppError> {
+        let attester = request.attester.trim().to_string();
+        if attester.is_empty() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Attester is required",
+            ));
+        }
+        PublicKey::from_hex(&attester).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid attester pubkey: {err}"),
+            )
+        })?;
+
+        let weight = request.weight.unwrap_or(1.0);
+        if !weight.is_finite() || !(0.0..=1.0).contains(&weight) {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Weight must be between 0 and 1",
+            ));
+        }
+
+        let claim = normalize_optional_value(request.claim);
+        let topic = normalize_optional_value(request.topic);
+
+        let keypair = self.key_manager.current_keypair().await?;
+        let secret_key = SecretKey::from_bech32(&keypair.nsec)
+            .map_err(|err| AppError::Crypto(format!("Invalid nsec: {err}")))?;
+        let keys = Keys::new(secret_key);
+        let mut tags = vec![
+            Tag::parse(["k", KIP_NAMESPACE])
+                .map_err(|err| AppError::NostrError(err.to_string()))?,
+            Tag::parse(["ver", KIP_VERSION])
+                .map_err(|err| AppError::NostrError(err.to_string()))?,
+            Tag::parse(["attester", &attester])
+                .map_err(|err| AppError::NostrError(err.to_string()))?,
+            Tag::parse(["weight", &weight.to_string()])
+                .map_err(|err| AppError::NostrError(err.to_string()))?,
+        ];
+        if let Some(value) = claim.as_ref() {
+            tags.push(
+                Tag::parse(["claim", value])
+                    .map_err(|err| AppError::NostrError(err.to_string()))?,
+            );
+        }
+        if let Some(value) = topic.as_ref() {
+            tags.push(
+                Tag::parse(["t", value]).map_err(|err| AppError::NostrError(err.to_string()))?,
+            );
+        }
+
+        let event = EventBuilder::new(Kind::Custom(TRUST_ANCHOR_KIND), "")
+            .tags(tags)
+            .sign_with_keys(&keys)?;
+        let event_json = serde_json::to_value(&event)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        let issued_at = event.created_at.as_secs() as i64;
+
+        let stored = StoredTrustAnchor {
+            attester,
+            claim,
+            topic,
+            weight,
+            issued_at,
+            event_json,
+        };
+        let raw = serde_json::to_string(&stored)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        self.secure_storage
+            .store(COMMUNITY_NODE_TRUST_ANCHOR_KEY, &raw)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+
+        Ok(stored.into())
+    }
+
+    pub async fn clear_trust_anchor(&self) -> Result<(), AppError> {
+        self.secure_storage
+            .delete(COMMUNITY_NODE_TRUST_ANCHOR_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        Ok(())
     }
 
     pub async fn authenticate(
@@ -845,6 +977,12 @@ fn normalize_base_url(raw: &str) -> Result<String, AppError> {
             "URL scheme must be http or https",
         )),
     }
+}
+
+fn normalize_optional_value(value: Option<String>) -> Option<String> {
+    value
+        .map(|val| val.trim().to_string())
+        .filter(|val| !val.is_empty())
 }
 
 fn build_url(base_url: &str, path: &str) -> String {

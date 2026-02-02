@@ -5,7 +5,7 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeKeyEnvelopeRequest, CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest,
     CommunityNodeRedeemInviteRequest, CommunityNodeRedeemInviteResponse,
     CommunityNodeReportRequest, CommunityNodeSearchRequest, CommunityNodeTokenRequest,
-    CommunityNodeTrustRequest,
+    CommunityNodeTrustAnchorRequest, CommunityNodeTrustAnchorState, CommunityNodeTrustRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -51,6 +51,31 @@ pub async fn community_node_clear_token(
     request: CommunityNodeTokenRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     let result = state.community_node_handler.clear_token(request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn community_node_get_trust_anchor(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Option<CommunityNodeTrustAnchorState>>, AppError> {
+    let result = state.community_node_handler.get_trust_anchor().await;
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn community_node_set_trust_anchor(
+    state: State<'_, AppState>,
+    request: CommunityNodeTrustAnchorRequest,
+) -> Result<ApiResponse<CommunityNodeTrustAnchorState>, AppError> {
+    let result = state.community_node_handler.set_trust_anchor(request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn community_node_clear_trust_anchor(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<()>, AppError> {
+    let result = state.community_node_handler.clear_trust_anchor().await;
     Ok(ApiResponse::from_result(result))
 }
 

@@ -36,10 +36,13 @@ vi.mock('@/lib/api/nostr', () => ({
 vi.mock('@/lib/api/communityNode', () => ({
   communityNodeApi: {
     getConfig: vi.fn().mockResolvedValue(null),
+    getTrustAnchor: vi.fn().mockResolvedValue(null),
     listGroupKeys: vi.fn().mockResolvedValue([]),
     getConsentStatus: vi.fn().mockResolvedValue(null),
     setConfig: vi.fn().mockResolvedValue({ nodes: [] }),
     clearConfig: vi.fn().mockResolvedValue(undefined),
+    setTrustAnchor: vi.fn().mockResolvedValue(null),
+    clearTrustAnchor: vi.fn().mockResolvedValue(undefined),
     authenticate: vi.fn().mockResolvedValue({ expires_at: 0, pubkey: '' }),
     clearToken: vi.fn().mockResolvedValue(undefined),
     syncKeyEnvelopes: vi.fn().mockResolvedValue({ stored: [] }),

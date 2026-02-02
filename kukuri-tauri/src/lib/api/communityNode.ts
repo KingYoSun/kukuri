@@ -70,6 +70,22 @@ export interface CommunityNodeTrustRequest {
   subject: string;
 }
 
+export interface CommunityNodeTrustAnchorRequest {
+  attester: string;
+  claim?: string;
+  topic?: string;
+  weight?: number;
+}
+
+export interface CommunityNodeTrustAnchorState {
+  attester: string;
+  claim?: string;
+  topic?: string;
+  weight: number;
+  issued_at: number;
+  event_json: unknown;
+}
+
 export interface CommunityNodeSearchRequest {
   base_url?: string;
   topic: string;
@@ -175,4 +191,12 @@ export const communityNodeApi = {
 
   acceptConsents: (request: CommunityNodeConsentRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_accept_consents', { request }),
+
+  getTrustAnchor: () =>
+    invokeCommand<CommunityNodeTrustAnchorState | null>('community_node_get_trust_anchor'),
+
+  setTrustAnchor: (request: CommunityNodeTrustAnchorRequest) =>
+    invokeCommand<CommunityNodeTrustAnchorState>('community_node_set_trust_anchor', { request }),
+
+  clearTrustAnchor: () => invokeCommandVoid('community_node_clear_trust_anchor'),
 };

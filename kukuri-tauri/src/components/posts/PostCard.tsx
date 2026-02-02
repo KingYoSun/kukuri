@@ -70,6 +70,23 @@ const formatScopeLabel = (scope?: string) => {
   return scopeLabels[scope] ?? scope;
 };
 
+const shortenPubkey = (value: string) =>
+  value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+
+const formatAttesterLabel = (baseUrl?: string, pubkey?: string | null) => {
+  if (baseUrl) {
+    try {
+      return new URL(baseUrl).host;
+    } catch {
+      return baseUrl;
+    }
+  }
+  if (pubkey) {
+    return shortenPubkey(pubkey);
+  }
+  return null;
+};
+
 const extractTagValue = (event: unknown, tagName: string): string | null => {
   if (!event || typeof event !== 'object') {
     return null;
@@ -158,10 +175,21 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     queryFn: () => communityNodeApi.getConfig(),
     staleTime: 1000 * 60 * 5,
   });
+  const trustAnchorQuery = useQuery({
+    queryKey: ['community-node', 'trust-anchor'],
+    queryFn: () => communityNodeApi.getTrustAnchor(),
+    staleTime: 1000 * 60 * 5,
+  });
   const labelNodes =
     communityConfigQuery.data?.nodes?.filter((node) => node.roles.labels && node.has_token) ?? [];
   const trustNodes =
     communityConfigQuery.data?.nodes?.filter((node) => node.roles.trust && node.has_token) ?? [];
+  const trustAnchorAttester = trustAnchorQuery.data?.attester ?? null;
+  const trustAnchorNode = trustAnchorAttester
+    ? (trustNodes.find((node) => node.pubkey === trustAnchorAttester) ?? null)
+    : null;
+  const trustBaseUrl = trustAnchorNode?.base_url;
+  const trustAttesterLabel = formatAttesterLabel(trustBaseUrl, trustAnchorAttester);
   const enableLabels = labelNodes.length > 0;
   const enableTrust = trustNodes.length > 0;
   const labelQuery = useQuery({
@@ -176,20 +204,35 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   });
   const trustSubject = `pubkey:${post.author.pubkey}`;
   const trustReportQuery = useQuery({
-    queryKey: ['community-node', 'trust', 'report-based', post.author.pubkey],
-    queryFn: () => communityNodeApi.trustReportBased({ subject: trustSubject }),
+    queryKey: [
+      'community-node',
+      'trust',
+      'report-based',
+      post.author.pubkey,
+      trustAnchorAttester ?? 'auto',
+    ],
+    queryFn: () =>
+      communityNodeApi.trustReportBased({ subject: trustSubject, base_url: trustBaseUrl }),
     enabled: enableTrust,
     staleTime: 1000 * 60 * 5,
   });
   const trustDensityQuery = useQuery({
-    queryKey: ['community-node', 'trust', 'communication-density', post.author.pubkey],
-    queryFn: () => communityNodeApi.trustCommunicationDensity({ subject: trustSubject }),
+    queryKey: [
+      'community-node',
+      'trust',
+      'communication-density',
+      post.author.pubkey,
+      trustAnchorAttester ?? 'auto',
+    ],
+    queryFn: () =>
+      communityNodeApi.trustCommunicationDensity({ subject: trustSubject, base_url: trustBaseUrl }),
     enabled: enableTrust,
     staleTime: 1000 * 60 * 5,
   });
   const labelSummaries = parseLabelSummaries(labelQuery.data);
   const reportScore = toNumber(trustReportQuery.data?.score);
   const densityScore = toNumber(trustDensityQuery.data?.score);
+  const showAttesterLabel = Boolean(trustAnchorAttester && trustAttesterLabel);
   const resolvedScope = post.scope ?? 'public';
   const showScopeBadge = resolvedScope !== 'public';
   const showEncryptedBadge = post.isEncrypted === true;
@@ -218,6 +261,14 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       });
     }
   }, [labelQuery.isError, labelQuery.error, post.id]);
+
+  useEffect(() => {
+    if (trustAnchorQuery.isError) {
+      errorHandler.log('Failed to load community node trust anchor', trustAnchorQuery.error, {
+        context: 'PostCard.trustAnchor',
+      });
+    }
+  }, [trustAnchorQuery.isError, trustAnchorQuery.error]);
 
   useEffect(() => {
     if (trustReportQuery.isError) {
@@ -497,9 +548,13 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 className="flex items-center gap-1"
                 data-testid={`${baseTestId}-trust-report`}
                 data-score={reportScore.toFixed(2)}
+                data-attester={showAttesterLabel ? (trustAttesterLabel ?? '') : ''}
               >
                 <ShieldCheck className="h-3 w-3" />
                 信頼 {reportScore.toFixed(2)}
+                {showAttesterLabel && (
+                  <span className="text-[10px] text-muted-foreground">({trustAttesterLabel})</span>
+                )}
               </Badge>
             )}
             {densityScore !== null && (
@@ -508,9 +563,13 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 className="flex items-center gap-1"
                 data-testid={`${baseTestId}-trust-density`}
                 data-score={densityScore.toFixed(2)}
+                data-attester={showAttesterLabel ? (trustAttesterLabel ?? '') : ''}
               >
                 <ShieldCheck className="h-3 w-3" />
                 通信 {densityScore.toFixed(2)}
+                {showAttesterLabel && (
+                  <span className="text-[10px] text-muted-foreground">({trustAttesterLabel})</span>
+                )}
               </Badge>
             )}
           </div>

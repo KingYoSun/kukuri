@@ -93,6 +93,24 @@ pub struct CommunityNodeTrustRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeTrustAnchorRequest {
+    pub attester: String,
+    pub claim: Option<String>,
+    pub topic: Option<String>,
+    pub weight: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeTrustAnchorState {
+    pub attester: String,
+    pub claim: Option<String>,
+    pub topic: Option<String>,
+    pub weight: f64,
+    pub issued_at: i64,
+    pub event_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunityNodeSearchRequest {
     pub base_url: Option<String>,
     pub topic: String,
