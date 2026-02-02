@@ -1,7 +1,7 @@
 # DHT基盤Discovery Layerアーキテクチャ
 
 **作成日**: 2025年08月16日
-**最終更新**: 2025年09月15日
+**最終更新**: 2026年02月02日
 
 ## 概要
 
@@ -11,18 +11,35 @@ kukuriプロジェクトでは、irohのビルトインDHTディスカバリー�
 
 ### 1. irohディスカバリーメカニズム
 
-#### 利用可能なディスカバリー方法
+#### 利用可能なディスカバリー方法（現行API）
 ```rust
-Endpoint::builder()
-    .discovery_n0()      // DNSディスカバリー（Number 0）
-    .discovery_dht()     // DHTディスカバリー（BitTorrent Mainline）
-    .discovery_local()   // ローカルディスカバリー（mDNS風）
+use iroh::discovery::{
+    dns::DnsDiscovery,
+    mdns::MdnsDiscovery,
+    pkarr::{PkarrPublisher, dht::DhtDiscovery},
+};
+
+let mut builder = Endpoint::builder().clear_discovery();
+
+// DNS（n0）
+builder = builder.discovery(PkarrPublisher::n0_dns());
+builder = builder.discovery(DnsDiscovery::n0_dns());
+
+// Mainline DHT
+builder = builder.discovery(
+    DhtDiscovery::builder()
+        .include_direct_addresses(true)
+        .n0_dns_pkarr_relay(),
+);
+
+// ローカルディスカバリー（必要時のみ）
+builder = builder.discovery(MdnsDiscovery::builder());
 ```
 
 #### 現在の実装
-- **DNS**: デフォルトで有効（Number 0の公開DNSサーバー）
-- **DHT**: Cargoで提供されるDHTディスカバリーフィーチャーを有効化（現在は `discovery-pkarr-dht` として公開）
-- **ローカル**: 将来実装予定
+- **DNS**: デフォルトで有効（n0 DNS + PkarrPublisher）
+- **DHT**: `discovery-pkarr-dht` を有効化し Mainline DHT を使用
+- **ローカル**: `discovery-local-network` 有効時のみ（通常は無効）
 
 ### 2. DHT統合アーキテクチャ
 
@@ -43,12 +60,35 @@ graph TD
 
 ### 3. エンドポイント設定
 
+ユーザー向け設定は `NetworkConfig` に集約され、内部では `DiscoveryOptions` が使用されます。`enable_dht` は **Mainline DHT** を意味し、内部表現の `enable_mainline` にマップされます。
+
 ```rust
-pub struct DiscoveryConfig {
-    pub enable_dns: bool,        // DNSディスカバリー
-    pub enable_dht: bool,        // DHTディスカバリー
-    pub enable_local: bool,      // ローカルディスカバリー
-    pub bootstrap_peers: Vec<String>, // フォールバックピア
+// src-tauri/src/shared/config.rs
+pub struct NetworkConfig {
+    pub bootstrap_peers: Vec<String>,
+    pub max_peers: u32,
+    pub connection_timeout: u64,
+    pub retry_interval: u64,
+    pub enable_dht: bool,   // Mainline DHT
+    pub enable_dns: bool,
+    pub enable_local: bool,
+}
+
+// src-tauri/src/infrastructure/p2p/discovery_options.rs
+pub struct DiscoveryOptions {
+    pub enable_dns: bool,
+    pub enable_mainline: bool,
+    pub enable_local: bool,
+}
+
+impl From<&NetworkConfig> for DiscoveryOptions {
+    fn from(cfg: &NetworkConfig) -> Self {
+        Self {
+            enable_dns: cfg.enable_dns,
+            enable_mainline: cfg.enable_dht,
+            enable_local: cfg.enable_local,
+        }
+    }
 }
 ```
 
@@ -122,56 +162,19 @@ sequenceDiagram
 
 ## 実装詳細
 
-### 1. DHTディスカバリー実装
+### 1. DiscoveryOptions 適用
 ```rust
-// src-tauri/src/infrastructure/p2p/discovery.rs
-pub struct DhtDiscovery {
-    endpoint: Arc<Endpoint>,
-    config: DiscoveryConfig,
-    metrics: Arc<Mutex<DiscoveryMetrics>>,
-}
-
-impl DhtDiscovery {
-    pub async fn start(&self) -> Result<()> {
-        // DHT参加
-        self.join_dht().await?;
-        
-        // 定期的な再公開
-        self.start_republish_loop().await?;
-        
-        // メトリクス収集
-        self.start_metrics_collection().await?;
-        
-        Ok(())
-    }
-}
+// src-tauri/src/infrastructure/p2p/iroh_network_service.rs
+let static_discovery = Arc::new(StaticProvider::new());
+let builder = Endpoint::builder().secret_key(secret_key);
+let builder = discovery_options.apply_to_builder(builder);
+let builder = builder.discovery(static_discovery.clone());
+let endpoint = builder.bind().await?;
 ```
 
 ### 2. フォールバック機構とJSON仕様
-```rust
-pub async fn bootstrap_with_fallback(
-    endpoint: &Endpoint,
-    config: &DiscoveryConfig,
-) -> Result<Vec<NodeAddr>> {
-    let mut discovered_peers = Vec::new();
-    
-    // 並行ディスカバリー
-    let (dht_peers, dns_peers, fallback_peers) = tokio::join!(
-        discover_via_dht(endpoint),
-        discover_via_dns(endpoint),
-        connect_to_fallback(endpoint, &config.bootstrap_peers)
-    );
-    
-    // 結果の統合
-    discovered_peers.extend(dht_peers?);
-    discovered_peers.extend(dns_peers?);
-    discovered_peers.extend(fallback_peers?);
-    
-    // 重複排除
-    discovered_peers.dedup();
-    
-    Ok(discovered_peers)
-}
+
+フォールバックは `bootstrap_config` と `dht_bootstrap::fallback` を中心に実装されています。優先順は **環境変数 → ユーザー設定 → 同梱JSON** で、`NodeId@host:port` 形式のみ接続対象です。
 
 補足（JSON仕様）:
 - ブートストラップは `bootstrap_nodes.json` に環境別で宣言する。
@@ -179,7 +182,6 @@ pub async fn bootstrap_with_fallback(
 - 参考（採用しない）: `"<host:port>"`（NodeIdがないため接続対象外。検証時に警告）
 - Tauri: `bootstrap_config.rs` が with_id/socket_only/invalid を検証・ログ出力し、`NodeId@Addr` のみ接続に利用。
 - CLI: `--peers` 未指定時に `KUKURI_BOOTSTRAP_CONFIG` と `KUKURI_ENV|ENVIRONMENT` を参照して `NodeId@host:port` を読み込む。
-```
 
 ## 監視とメトリクス
 
