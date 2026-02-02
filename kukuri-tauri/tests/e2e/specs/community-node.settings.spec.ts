@@ -42,7 +42,7 @@ describe('Community Node settings', () => {
     await baseInput.setValue(baseUrl);
     await $('[data-testid="community-node-save-config"]').click();
 
-    const authButton = await $('[data-testid="community-node-authenticate"]');
+    const authButton = await $('[data-testid="community-node-authenticate-0"]');
     await browser.waitUntil(async () => await authButton.isEnabled(), {
       timeout: 15000,
       interval: 300,
@@ -50,7 +50,7 @@ describe('Community Node settings', () => {
     });
     await runCommunityNodeAuthFlow(baseUrl);
 
-    const status = await $('[data-testid="community-node-token-status"]');
+    const status = await $('[data-testid="community-node-token-status-0"]');
     await browser.waitUntil(
       async () => (await status.getAttribute('data-has-token')) === 'true',
       {
@@ -77,7 +77,7 @@ describe('Community Node settings', () => {
 
     await $('[data-testid="community-node-clear-config"]').click();
     await browser.waitUntil(
-      async () => (await status.getAttribute('data-has-token')) === 'false',
+      async () => (await $$('[data-testid^="community-node-node-"]')).length === 0,
       {
         timeout: 15000,
         interval: 300,

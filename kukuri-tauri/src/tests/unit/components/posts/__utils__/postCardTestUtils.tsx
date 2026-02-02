@@ -34,13 +34,7 @@ const hoisted = vi.hoisted(() => {
 
   const communityNodeState = {
     enableAccessControl: true,
-    enableLabels: true,
-    enableTrust: true,
-    enableSearch: false,
     setEnableAccessControl: vi.fn(),
-    setEnableLabels: vi.fn(),
-    setEnableTrust: vi.fn(),
-    setEnableSearch: vi.fn(),
     reset: vi.fn(),
   };
   const useCommunityNodeStore = vi.fn(() => communityNodeState);

@@ -2,11 +2,12 @@ use crate::application::ports::group_key_store::{GroupKeyEntry, GroupKeyRecord, 
 use crate::application::ports::key_manager::KeyManager;
 use crate::infrastructure::storage::SecureStorage;
 use crate::presentation::dto::community_node_dto::{
-    CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest, CommunityNodeConfigRequest,
-    CommunityNodeConfigResponse, CommunityNodeConsentRequest, CommunityNodeKeyEnvelopeRequest,
-    CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest, CommunityNodeRedeemInviteRequest,
-    CommunityNodeRedeemInviteResponse, CommunityNodeReportRequest, CommunityNodeSearchRequest,
-    CommunityNodeTrustRequest,
+    CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
+    CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
+    CommunityNodeKeyEnvelopeRequest, CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest,
+    CommunityNodeRedeemInviteRequest, CommunityNodeRedeemInviteResponse,
+    CommunityNodeReportRequest, CommunityNodeRoleConfig, CommunityNodeSearchRequest,
+    CommunityNodeTokenRequest, CommunityNodeTrustRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::Utc;
@@ -17,13 +18,43 @@ use reqwest::{Client, Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 
-const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v1";
+const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v2";
+const COMMUNITY_NODE_CONFIG_LEGACY_KEY: &str = "community_node_config_v1";
 const AUTH_KIND: u16 = 22242;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CommunityNodeConfig {
+    #[serde(default)]
+    nodes: Vec<CommunityNodeConfigNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CommunityNodeConfigNode {
+    base_url: String,
+    #[serde(default)]
+    roles: CommunityNodeRoleConfig,
+    access_token: Option<String>,
+    token_expires_at: Option<i64>,
+    pubkey: Option<String>,
+}
+
+impl CommunityNodeConfigNode {
+    fn new(base_url: String, roles: CommunityNodeRoleConfig) -> Self {
+        Self {
+            base_url,
+            roles,
+            access_token: None,
+            token_expires_at: None,
+            pubkey: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyCommunityNodeConfig {
     base_url: String,
     access_token: Option<String>,
     token_expires_at: Option<i64>,
@@ -49,6 +80,13 @@ struct AuthVerifyResponse {
 #[derive(Debug, Deserialize)]
 struct KeyEnvelopeListResponse {
     items: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommunityNodeSearchPayload {
+    items: Vec<serde_json::Value>,
+    next_cursor: Option<String>,
+    total: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,14 +132,34 @@ impl CommunityNodeHandler {
         &self,
         request: CommunityNodeConfigRequest,
     ) -> Result<CommunityNodeConfigResponse, AppError> {
-        let base_url = normalize_base_url(&request.base_url)?;
         let mut config = self.load_config().await?.unwrap_or_default();
-        if config.base_url != base_url {
-            config.access_token = None;
-            config.token_expires_at = None;
-            config.pubkey = None;
+        let mut existing = HashMap::new();
+        for node in config.nodes.drain(..) {
+            existing.insert(node.base_url.clone(), node);
         }
-        config.base_url = base_url;
+
+        let mut next_nodes = Vec::new();
+        let mut seen = HashMap::new();
+        for node_request in request.nodes {
+            let base_url = normalize_base_url(&node_request.base_url)?;
+            if seen.contains_key(&base_url) {
+                continue;
+            }
+            seen.insert(base_url.clone(), true);
+            let roles = node_request.roles.unwrap_or_default();
+            let mut node = existing
+                .remove(&base_url)
+                .unwrap_or_else(|| CommunityNodeConfigNode::new(base_url.clone(), roles.clone()));
+            if node.base_url != base_url {
+                node.access_token = None;
+                node.token_expires_at = None;
+                node.pubkey = None;
+            }
+            node.base_url = base_url;
+            node.roles = roles;
+            next_nodes.push(node);
+        }
+        config.nodes = next_nodes;
         self.save_config(&config).await?;
         Ok(config_response(&config))
     }
@@ -110,7 +168,7 @@ impl CommunityNodeHandler {
         let Some(config) = self.load_config().await? else {
             return Ok(None);
         };
-        if config.base_url.is_empty() {
+        if config.nodes.is_empty() {
             return Ok(None);
         }
         Ok(Some(config_response(&config)))
@@ -121,28 +179,39 @@ impl CommunityNodeHandler {
             .delete(COMMUNITY_NODE_CONFIG_KEY)
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_CONFIG_LEGACY_KEY)
+            .await;
         Ok(())
     }
 
-    pub async fn clear_token(&self) -> Result<(), AppError> {
+    pub async fn clear_token(&self, request: CommunityNodeTokenRequest) -> Result<(), AppError> {
+        let base_url = normalize_base_url(&request.base_url)?;
         let mut config = self.require_config().await?;
-        config.access_token = None;
-        config.token_expires_at = None;
-        config.pubkey = None;
+        let node = find_node_mut(&mut config, &base_url)?;
+        node.access_token = None;
+        node.token_expires_at = None;
+        node.pubkey = None;
         self.save_config(&config).await
     }
 
-    pub async fn authenticate(&self) -> Result<CommunityNodeAuthResponse, AppError> {
+    pub async fn authenticate(
+        &self,
+        request: CommunityNodeAuthRequest,
+    ) -> Result<CommunityNodeAuthResponse, AppError> {
+        let base_url = normalize_base_url(&request.base_url)?;
         let mut config = self.require_config().await?;
+        let node = find_node_mut(&mut config, &base_url)?;
         let keypair = self.key_manager.current_keypair().await?;
         let challenge = self
-            .request_auth_challenge(&config.base_url, &keypair.public_key)
+            .request_auth_challenge(&node.base_url, &keypair.public_key)
             .await?;
-        let auth_event = build_auth_event(&config.base_url, &challenge.challenge, &keypair.nsec)?;
-        let verified = self.verify_auth(&config.base_url, &auth_event).await?;
-        config.access_token = Some(verified.access_token.clone());
-        config.token_expires_at = Some(verified.expires_at);
-        config.pubkey = Some(verified.pubkey.clone());
+        let auth_event = build_auth_event(&node.base_url, &challenge.challenge, &keypair.nsec)?;
+        let verified = self.verify_auth(&node.base_url, &auth_event).await?;
+        node.access_token = Some(verified.access_token.clone());
+        node.token_expires_at = Some(verified.expires_at);
+        node.pubkey = Some(verified.pubkey.clone());
         self.save_config(&config).await?;
 
         Ok(CommunityNodeAuthResponse {
@@ -160,9 +229,10 @@ impl CommunityNodeHandler {
         request: CommunityNodeKeyEnvelopeRequest,
     ) -> Result<CommunityNodeKeyEnvelopeResponse, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/keys/envelopes");
+        let node = select_node(&config, request.base_url.as_deref())?;
+        let url = build_url(&node.base_url, "/v1/keys/envelopes");
         let mut builder = self
-            .authorized_request(&config, Method::GET, url, true)
+            .authorized_request(node, Method::GET, url, true)
             .await?;
         builder = builder.query(&[
             ("topic_id", request.topic_id.clone()),
@@ -191,9 +261,10 @@ impl CommunityNodeHandler {
         request: CommunityNodeRedeemInviteRequest,
     ) -> Result<CommunityNodeRedeemInviteResponse, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/invite/redeem");
+        let node = select_node(&config, request.base_url.as_deref())?;
+        let url = build_url(&node.base_url, "/v1/invite/redeem");
         let builder = self
-            .authorized_request(&config, Method::POST, url, true)
+            .authorized_request(node, Method::POST, url, true)
             .await?
             .json(&json!({ "capability_event_json": request.capability_event_json }));
         let response: InviteRedeemResponse = request_json(builder).await?;
@@ -210,21 +281,48 @@ impl CommunityNodeHandler {
         request: CommunityNodeLabelsRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/labels");
-        let mut builder = self
-            .authorized_request(&config, Method::GET, url, true)
-            .await?;
-        builder = builder.query(&[
-            ("target", request.target),
-            ("limit", request.limit.unwrap_or(50).to_string()),
-        ]);
-        if let Some(topic) = request.topic {
-            builder = builder.query(&[("topic", topic)]);
+        let nodes = select_nodes_for_role(
+            &config,
+            request.base_url.as_deref(),
+            CommunityNodeRole::Labels,
+        )?;
+        let mut items: Vec<serde_json::Value> = Vec::new();
+        let mut last_error: Option<AppError> = None;
+
+        for node in nodes {
+            let url = build_url(&node.base_url, "/v1/labels");
+            let mut builder = self
+                .authorized_request(node, Method::GET, url, true)
+                .await?;
+            builder = builder.query(&[
+                ("target", request.target.clone()),
+                ("limit", request.limit.unwrap_or(50).to_string()),
+            ]);
+            if let Some(topic) = request.topic.clone() {
+                builder = builder.query(&[("topic", topic)]);
+            }
+            if let Some(cursor) = request.cursor.clone() {
+                builder = builder.query(&[("cursor", cursor)]);
+            }
+            match request_json::<serde_json::Value>(builder).await {
+                Ok(response) => {
+                    if let Some(list) = response.get("items").and_then(|value| value.as_array()) {
+                        items.extend(list.iter().cloned());
+                    }
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                }
+            }
         }
-        if let Some(cursor) = request.cursor {
-            builder = builder.query(&[("cursor", cursor)]);
+
+        if items.is_empty() {
+            return Err(last_error.unwrap_or_else(|| {
+                AppError::NotFound("Community node labels are unavailable".to_string())
+            }));
         }
-        request_json(builder).await
+
+        Ok(json!({ "items": items }))
     }
 
     pub async fn submit_report(
@@ -232,9 +330,10 @@ impl CommunityNodeHandler {
         request: CommunityNodeReportRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/reports");
+        let node = select_node(&config, request.base_url.as_deref())?;
+        let url = build_url(&node.base_url, "/v1/reports");
         let builder = self
-            .authorized_request(&config, Method::POST, url, true)
+            .authorized_request(node, Method::POST, url, true)
             .await?
             .json(&request);
         request_json(builder).await
@@ -245,12 +344,13 @@ impl CommunityNodeHandler {
         request: CommunityNodeTrustRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/trust/report-based");
-        let builder = self
-            .authorized_request(&config, Method::GET, url, true)
-            .await?
-            .query(&[("subject", request.subject)]);
-        request_json(builder).await
+        let nodes = select_nodes_for_role(
+            &config,
+            request.base_url.as_deref(),
+            CommunityNodeRole::Trust,
+        )?;
+        self.aggregate_trust_scores(nodes, "/v1/trust/report-based", &request.subject)
+            .await
     }
 
     pub async fn trust_communication_density(
@@ -258,12 +358,13 @@ impl CommunityNodeHandler {
         request: CommunityNodeTrustRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/trust/communication-density");
-        let builder = self
-            .authorized_request(&config, Method::GET, url, true)
-            .await?
-            .query(&[("subject", request.subject)]);
-        request_json(builder).await
+        let nodes = select_nodes_for_role(
+            &config,
+            request.base_url.as_deref(),
+            CommunityNodeRole::Trust,
+        )?;
+        self.aggregate_trust_scores(nodes, "/v1/trust/communication-density", &request.subject)
+            .await
     }
 
     pub async fn search(
@@ -271,30 +372,19 @@ impl CommunityNodeHandler {
         request: CommunityNodeSearchRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/search");
-        let mut builder = self
-            .authorized_request(&config, Method::GET, url, true)
-            .await?
-            .query(&[("topic", request.topic)]);
-        if let Some(query) = request.q {
-            builder = builder.query(&[("q", query)]);
-        }
-        if let Some(limit) = request.limit {
-            builder = builder.query(&[("limit", limit.to_string())]);
-        }
-        if let Some(cursor) = request.cursor {
-            builder = builder.query(&[("cursor", cursor)]);
-        }
-        request_json(builder).await
+        let nodes = select_nodes_for_role(
+            &config,
+            request.base_url.as_deref(),
+            CommunityNodeRole::Search,
+        )?;
+        self.aggregate_search(nodes, request).await
     }
 
     pub async fn list_bootstrap_nodes(&self) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/bootstrap/nodes");
-        let builder = self
-            .authorized_request(&config, Method::GET, url, false)
-            .await?;
-        request_json(builder).await
+        let nodes = select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap)?;
+        self.aggregate_bootstrap(nodes, "/v1/bootstrap/nodes", None)
+            .await
     }
 
     pub async fn list_bootstrap_services(
@@ -302,19 +392,25 @@ impl CommunityNodeHandler {
         request: CommunityNodeBootstrapServicesRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
+        let nodes = select_nodes_for_role(
+            &config,
+            request.base_url.as_deref(),
+            CommunityNodeRole::Bootstrap,
+        )?;
         let path = format!("/v1/bootstrap/topics/{}/services", request.topic_id);
-        let url = build_url(&config.base_url, &path);
-        let builder = self
-            .authorized_request(&config, Method::GET, url, false)
-            .await?;
-        request_json(builder).await
+        self.aggregate_bootstrap(nodes, &path, Some(request.topic_id))
+            .await
     }
 
-    pub async fn get_consent_status(&self) -> Result<serde_json::Value, AppError> {
+    pub async fn get_consent_status(
+        &self,
+        request: CommunityNodeTokenRequest,
+    ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/consents/status");
+        let node = select_node(&config, Some(&request.base_url))?;
+        let url = build_url(&node.base_url, "/v1/consents/status");
         let builder = self
-            .authorized_request(&config, Method::GET, url, true)
+            .authorized_request(node, Method::GET, url, true)
             .await?;
         request_json(builder).await
     }
@@ -324,9 +420,10 @@ impl CommunityNodeHandler {
         request: CommunityNodeConsentRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let url = build_url(&config.base_url, "/v1/consents");
+        let node = select_node(&config, request.base_url.as_deref())?;
+        let url = build_url(&node.base_url, "/v1/consents");
         let builder = self
-            .authorized_request(&config, Method::POST, url, true)
+            .authorized_request(node, Method::POST, url, true)
             .await?
             .json(&request);
         request_json(builder).await
@@ -335,7 +432,7 @@ impl CommunityNodeHandler {
     async fn require_config(&self) -> Result<CommunityNodeConfig, AppError> {
         self.load_config()
             .await?
-            .filter(|cfg| !cfg.base_url.is_empty())
+            .filter(|cfg| !cfg.nodes.is_empty())
             .ok_or_else(|| AppError::NotFound("Community node is not configured".to_string()))
     }
 
@@ -346,11 +443,39 @@ impl CommunityNodeHandler {
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
         let Some(raw) = raw else {
-            return Ok(None);
+            return self.load_legacy_config().await;
         };
         let parsed = serde_json::from_str(&raw)
             .map_err(|err| AppError::DeserializationError(err.to_string()))?;
         Ok(Some(parsed))
+    }
+
+    async fn load_legacy_config(&self) -> Result<Option<CommunityNodeConfig>, AppError> {
+        let raw = self
+            .secure_storage
+            .retrieve(COMMUNITY_NODE_CONFIG_LEGACY_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        let Some(raw) = raw else {
+            return Ok(None);
+        };
+        let legacy: LegacyCommunityNodeConfig = serde_json::from_str(&raw)
+            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+        if legacy.base_url.trim().is_empty() {
+            return Ok(None);
+        }
+        let base_url = normalize_base_url(&legacy.base_url)?;
+        let mut node = CommunityNodeConfigNode::new(base_url, CommunityNodeRoleConfig::default());
+        node.access_token = legacy.access_token;
+        node.token_expires_at = legacy.token_expires_at;
+        node.pubkey = legacy.pubkey;
+        let config = CommunityNodeConfig { nodes: vec![node] };
+        self.save_config(&config).await?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_CONFIG_LEGACY_KEY)
+            .await;
+        Ok(Some(config))
     }
 
     async fn save_config(&self, config: &CommunityNodeConfig) -> Result<(), AppError> {
@@ -365,13 +490,13 @@ impl CommunityNodeHandler {
 
     async fn authorized_request(
         &self,
-        config: &CommunityNodeConfig,
+        node: &CommunityNodeConfigNode,
         method: Method,
         url: String,
         require_auth: bool,
     ) -> Result<reqwest::RequestBuilder, AppError> {
         let builder = self.client.request(method, url);
-        let Some(token) = config.access_token.as_ref() else {
+        let Some(token) = node.access_token.as_ref() else {
             if require_auth {
                 return Err(AppError::Unauthorized(
                     "Community node token is missing".to_string(),
@@ -379,14 +504,188 @@ impl CommunityNodeHandler {
             }
             return Ok(builder);
         };
-        if let Some(exp) = config.token_expires_at {
+        if let Some(exp) = node.token_expires_at {
             if exp <= Utc::now().timestamp() {
+                if !require_auth {
+                    return Ok(builder);
+                }
                 return Err(AppError::Unauthorized(
                     "Community node token has expired".to_string(),
                 ));
             }
         }
         Ok(builder.bearer_auth(token))
+    }
+
+    async fn aggregate_trust_scores(
+        &self,
+        nodes: Vec<&CommunityNodeConfigNode>,
+        path: &str,
+        subject: &str,
+    ) -> Result<serde_json::Value, AppError> {
+        let mut scores: Vec<f64> = Vec::new();
+        let mut sources: Vec<serde_json::Value> = Vec::new();
+        let mut last_error: Option<AppError> = None;
+
+        for node in nodes {
+            let url = build_url(&node.base_url, path);
+            let builder = match self.authorized_request(node, Method::GET, url, true).await {
+                Ok(builder) => builder,
+                Err(err) => {
+                    last_error = Some(err);
+                    continue;
+                }
+            };
+            let builder = builder.query(&[("subject", subject.to_string())]);
+            match request_json::<serde_json::Value>(builder).await {
+                Ok(response) => {
+                    if let Some(score) = response.get("score").and_then(|value| value.as_f64()) {
+                        scores.push(score);
+                        sources.push(json!({
+                            "base_url": node.base_url.clone(),
+                            "score": score,
+                        }));
+                    }
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        if scores.is_empty() {
+            return Err(last_error.unwrap_or_else(|| {
+                AppError::NotFound("Community node trust score is unavailable".to_string())
+            }));
+        }
+
+        let sum: f64 = scores.iter().sum();
+        let avg = sum / scores.len() as f64;
+
+        Ok(json!({
+            "score": avg,
+            "sources": sources,
+        }))
+    }
+
+    async fn aggregate_search(
+        &self,
+        nodes: Vec<&CommunityNodeConfigNode>,
+        request: CommunityNodeSearchRequest,
+    ) -> Result<serde_json::Value, AppError> {
+        let use_composite_cursor = nodes.len() > 1;
+        let cursor_map = request
+            .cursor
+            .as_ref()
+            .and_then(|raw| parse_cursor_map(raw, use_composite_cursor));
+        let mut items: Vec<serde_json::Value> = Vec::new();
+        let mut next_cursor_map: HashMap<String, String> = HashMap::new();
+        let mut total: i64 = 0;
+        let mut last_error: Option<AppError> = None;
+
+        for node in nodes {
+            let url = build_url(&node.base_url, "/v1/search");
+            let builder = match self.authorized_request(node, Method::GET, url, true).await {
+                Ok(builder) => builder,
+                Err(err) => {
+                    last_error = Some(err);
+                    continue;
+                }
+            };
+
+            let mut builder = builder.query(&[("topic", request.topic.clone())]);
+            if let Some(query) = request.q.clone() {
+                builder = builder.query(&[("q", query)]);
+            }
+            if let Some(limit) = request.limit {
+                builder = builder.query(&[("limit", limit.to_string())]);
+            }
+            let node_cursor = if use_composite_cursor {
+                cursor_map
+                    .as_ref()
+                    .and_then(|map| map.get(&node.base_url).cloned())
+            } else {
+                request.cursor.clone()
+            };
+            if let Some(cursor) = node_cursor {
+                builder = builder.query(&[("cursor", cursor)]);
+            }
+
+            match request_json::<CommunityNodeSearchPayload>(builder).await {
+                Ok(response) => {
+                    total += response.total.unwrap_or(response.items.len() as i64);
+                    if let Some(next_cursor) = response.next_cursor {
+                        next_cursor_map.insert(node.base_url.clone(), next_cursor);
+                    }
+                    items.extend(response.items);
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        if items.is_empty() {
+            return Err(last_error.unwrap_or_else(|| {
+                AppError::NotFound("Community node search is unavailable".to_string())
+            }));
+        }
+
+        let next_cursor = if next_cursor_map.is_empty() {
+            None
+        } else {
+            Some(
+                serde_json::to_string(&next_cursor_map)
+                    .map_err(|err| AppError::SerializationError(err.to_string()))?,
+            )
+        };
+
+        Ok(json!({
+            "topic": request.topic,
+            "query": request.q,
+            "items": items,
+            "next_cursor": next_cursor,
+            "total": total,
+        }))
+    }
+
+    async fn aggregate_bootstrap(
+        &self,
+        nodes: Vec<&CommunityNodeConfigNode>,
+        path: &str,
+        _topic_id: Option<String>,
+    ) -> Result<serde_json::Value, AppError> {
+        let mut items: Vec<serde_json::Value> = Vec::new();
+        let mut last_error: Option<AppError> = None;
+
+        for node in nodes {
+            let url = build_url(&node.base_url, path);
+            let builder = match self.authorized_request(node, Method::GET, url, false).await {
+                Ok(builder) => builder,
+                Err(err) => {
+                    last_error = Some(err);
+                    continue;
+                }
+            };
+            match request_json::<serde_json::Value>(builder).await {
+                Ok(response) => {
+                    if let Some(list) = response.get("items").and_then(|value| value.as_array()) {
+                        items.extend(list.iter().cloned());
+                    }
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        if items.is_empty() {
+            return Err(last_error.unwrap_or_else(|| {
+                AppError::NotFound("Community node bootstrap data is unavailable".to_string())
+            }));
+        }
+
+        Ok(json!({ "items": items }))
     }
 
     async fn request_auth_challenge(
@@ -447,6 +746,90 @@ impl CommunityNodeHandler {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum CommunityNodeRole {
+    Labels,
+    Trust,
+    Search,
+    Bootstrap,
+}
+
+fn role_enabled(roles: &CommunityNodeRoleConfig, role: CommunityNodeRole) -> bool {
+    match role {
+        CommunityNodeRole::Labels => roles.labels,
+        CommunityNodeRole::Trust => roles.trust,
+        CommunityNodeRole::Search => roles.search,
+        CommunityNodeRole::Bootstrap => roles.bootstrap,
+    }
+}
+
+fn find_node<'a>(
+    config: &'a CommunityNodeConfig,
+    base_url: &str,
+) -> Result<&'a CommunityNodeConfigNode, AppError> {
+    config
+        .nodes
+        .iter()
+        .find(|node| node.base_url == base_url)
+        .ok_or_else(|| AppError::NotFound("Community node is not configured".to_string()))
+}
+
+fn find_node_mut<'a>(
+    config: &'a mut CommunityNodeConfig,
+    base_url: &str,
+) -> Result<&'a mut CommunityNodeConfigNode, AppError> {
+    config
+        .nodes
+        .iter_mut()
+        .find(|node| node.base_url == base_url)
+        .ok_or_else(|| AppError::NotFound("Community node is not configured".to_string()))
+}
+
+fn select_node<'a>(
+    config: &'a CommunityNodeConfig,
+    base_url: Option<&str>,
+) -> Result<&'a CommunityNodeConfigNode, AppError> {
+    if let Some(raw) = base_url {
+        let base_url = normalize_base_url(raw)?;
+        return find_node(config, &base_url);
+    }
+    config
+        .nodes
+        .first()
+        .ok_or_else(|| AppError::NotFound("Community node is not configured".to_string()))
+}
+
+fn select_nodes_for_role<'a>(
+    config: &'a CommunityNodeConfig,
+    base_url: Option<&str>,
+    role: CommunityNodeRole,
+) -> Result<Vec<&'a CommunityNodeConfigNode>, AppError> {
+    if let Some(raw) = base_url {
+        let base_url = normalize_base_url(raw)?;
+        let node = find_node(config, &base_url)?;
+        return Ok(vec![node]);
+    }
+
+    let nodes: Vec<_> = config
+        .nodes
+        .iter()
+        .filter(|node| role_enabled(&node.roles, role))
+        .collect();
+    if nodes.is_empty() {
+        return Err(AppError::NotFound(
+            "Community node role is not configured".to_string(),
+        ));
+    }
+    Ok(nodes)
+}
+
+fn parse_cursor_map(raw: &str, enable: bool) -> Option<HashMap<String, String>> {
+    if !enable {
+        return None;
+    }
+    serde_json::from_str::<HashMap<String, String>>(raw).ok()
+}
+
 fn normalize_base_url(raw: &str) -> Result<String, AppError> {
     let trimmed = raw.trim().trim_end_matches('/').to_string();
     let url = Url::parse(&trimmed).map_err(|err| {
@@ -472,10 +855,19 @@ fn build_url(base_url: &str, path: &str) -> String {
 
 fn config_response(config: &CommunityNodeConfig) -> CommunityNodeConfigResponse {
     CommunityNodeConfigResponse {
-        base_url: config.base_url.clone(),
-        has_token: config.access_token.is_some(),
-        token_expires_at: config.token_expires_at,
-        pubkey: config.pubkey.clone(),
+        nodes: config
+            .nodes
+            .iter()
+            .map(|node| {
+                crate::presentation::dto::community_node_dto::CommunityNodeConfigNodeResponse {
+                    base_url: node.base_url.clone(),
+                    roles: node.roles.clone(),
+                    has_token: node.access_token.is_some(),
+                    token_expires_at: node.token_expires_at,
+                    pubkey: node.pubkey.clone(),
+                }
+            })
+            .collect(),
     }
 }
 

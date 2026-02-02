@@ -89,7 +89,7 @@ describe('Community Node search/index', () => {
     await baseInput.setValue(baseUrl);
     await $('[data-testid="community-node-save-config"]').click();
 
-    const authButton = await $('[data-testid="community-node-authenticate"]');
+    const authButton = await $('[data-testid="community-node-authenticate-0"]');
     await browser.waitUntil(async () => await authButton.isEnabled(), {
       timeout: 15000,
       interval: 300,
@@ -110,7 +110,7 @@ describe('Community Node search/index', () => {
       { timeout: 20000, interval: 500, timeoutMsg: 'Community node consents did not update' },
     );
 
-    const searchToggle = await $('#community-node-search');
+    const searchToggle = await $('[data-testid="community-node-role-search-0"]');
     await searchToggle.waitForDisplayed({ timeout: 10000 });
     const isChecked = (await searchToggle.getAttribute('aria-checked')) === 'true';
     if (!isChecked) {

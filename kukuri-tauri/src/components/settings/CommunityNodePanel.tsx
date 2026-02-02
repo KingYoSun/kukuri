@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { communityNodeApi, type CommunityNodeScope } from '@/lib/api/communityNode';
+import {
+  communityNodeApi,
+  defaultCommunityNodeRoles,
+  type CommunityNodeConfigNodeResponse,
+  type CommunityNodeRoleKey,
+  type CommunityNodeScope,
+} from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
 import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 import { toast } from 'sonner';
@@ -29,21 +35,13 @@ const keyScopeOptions: Array<{ value: CommunityNodeScope; label: string }> = [
 
 export function CommunityNodePanel() {
   const queryClient = useQueryClient();
-  const [baseUrl, setBaseUrl] = useState('');
+  const [newBaseUrl, setNewBaseUrl] = useState('');
+  const [actionNodeBaseUrl, setActionNodeBaseUrl] = useState('');
   const [syncTopicId, setSyncTopicId] = useState('');
   const [syncScope, setSyncScope] = useState<CommunityNodeScope>('invite');
   const [syncAfterEpoch, setSyncAfterEpoch] = useState('');
   const [inviteJson, setInviteJson] = useState('');
-  const {
-    enableAccessControl,
-    enableLabels,
-    enableTrust,
-    enableSearch,
-    setEnableAccessControl,
-    setEnableLabels,
-    setEnableTrust,
-    setEnableSearch,
-  } = useCommunityNodeStore();
+  const { enableAccessControl, setEnableAccessControl } = useCommunityNodeStore();
 
   const configQuery = useQuery({
     queryKey: ['community-node', 'config'],
@@ -55,26 +53,30 @@ export function CommunityNodePanel() {
     queryFn: () => communityNodeApi.listGroupKeys(),
     staleTime: 1000 * 30,
   });
+  const nodes = configQuery.data?.nodes ?? [];
+  const selectedNode =
+    nodes.find((node) => node.base_url === actionNodeBaseUrl) ?? nodes[0] ?? null;
+
   const consentsQuery = useQuery({
-    queryKey: ['community-node', 'consents'],
-    queryFn: () => communityNodeApi.getConsentStatus(),
-    enabled: Boolean(configQuery.data?.has_token),
+    queryKey: ['community-node', 'consents', selectedNode?.base_url ?? ''],
+    queryFn: () =>
+      selectedNode
+        ? communityNodeApi.getConsentStatus(selectedNode.base_url)
+        : Promise.resolve(null),
+    enabled: Boolean(selectedNode?.has_token),
     staleTime: 1000 * 30,
   });
 
   useEffect(() => {
-    if (configQuery.data?.base_url) {
-      setBaseUrl(configQuery.data.base_url);
+    if (nodes.length === 0) {
+      setActionNodeBaseUrl('');
+      return;
     }
-  }, [configQuery.data?.base_url]);
-
-  const tokenExpiresAt = useMemo(() => {
-    if (!configQuery.data?.token_expires_at) {
-      return null;
+    const exists = nodes.some((node) => node.base_url === actionNodeBaseUrl);
+    if (!exists) {
+      setActionNodeBaseUrl(nodes[0].base_url);
     }
-    const date = new Date(configQuery.data.token_expires_at * 1000);
-    return date.toLocaleString();
-  }, [configQuery.data?.token_expires_at]);
+  }, [nodes, actionNodeBaseUrl]);
 
   const refreshCommunityData = async () => {
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'config'] });
@@ -82,16 +84,37 @@ export function CommunityNodePanel() {
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'consents'] });
   };
 
-  const handleSaveConfig = async () => {
+  const serializeNodes = (items: CommunityNodeConfigNodeResponse[]) =>
+    items.map((item) => ({ base_url: item.base_url, roles: item.roles }));
+
+  const handleAddNode = async () => {
+    const trimmed = newBaseUrl.trim();
+    if (!trimmed) {
+      toast.error('Base URLを入力してください');
+      return;
+    }
+    const normalized = trimmed.replace(/\/+$/, '');
+    if (nodes.some((node) => node.base_url === normalized)) {
+      toast.error('同じBase URLのノードが既に登録されています');
+      return;
+    }
     try {
-      await communityNodeApi.setConfig(baseUrl);
+      const nextNodes = [
+        ...serializeNodes(nodes),
+        {
+          base_url: normalized,
+          roles: defaultCommunityNodeRoles,
+        },
+      ];
+      await communityNodeApi.setConfig(nextNodes);
       await refreshCommunityData();
-      toast.success('Community Node 設定を更新しました');
+      setNewBaseUrl('');
+      toast.success('Community Node を追加しました');
     } catch (error) {
       errorHandler.log('Community node config update failed', error, {
-        context: 'CommunityNodePanel.saveConfig',
+        context: 'CommunityNodePanel.addNode',
         showToast: true,
-        toastTitle: 'Community Node 設定の更新に失敗しました',
+        toastTitle: 'Community Node の追加に失敗しました',
       });
     }
   };
@@ -100,7 +123,8 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.clearConfig();
       await refreshCommunityData();
-      setBaseUrl('');
+      setNewBaseUrl('');
+      setActionNodeBaseUrl('');
       toast.success('Community Node 設定をクリアしました');
     } catch (error) {
       errorHandler.log('Community node config clear failed', error, {
@@ -111,9 +135,24 @@ export function CommunityNodePanel() {
     }
   };
 
-  const handleAuthenticate = async () => {
+  const handleRemoveNode = async (baseUrl: string) => {
     try {
-      await communityNodeApi.authenticate();
+      const nextNodes = nodes.filter((node) => node.base_url !== baseUrl);
+      await communityNodeApi.setConfig(serializeNodes(nextNodes));
+      await refreshCommunityData();
+      toast.success('Community Node を削除しました');
+    } catch (error) {
+      errorHandler.log('Community node remove failed', error, {
+        context: 'CommunityNodePanel.removeNode',
+        showToast: true,
+        toastTitle: 'Community Node の削除に失敗しました',
+      });
+    }
+  };
+
+  const handleAuthenticate = async (baseUrl: string) => {
+    try {
+      await communityNodeApi.authenticate(baseUrl);
       await refreshCommunityData();
       toast.success('Community Node 認証を更新しました');
     } catch (error) {
@@ -125,9 +164,9 @@ export function CommunityNodePanel() {
     }
   };
 
-  const handleClearToken = async () => {
+  const handleClearToken = async (baseUrl: string) => {
     try {
-      await communityNodeApi.clearToken();
+      await communityNodeApi.clearToken(baseUrl);
       await refreshCommunityData();
       toast.success('Community Node トークンを削除しました');
     } catch (error) {
@@ -139,14 +178,35 @@ export function CommunityNodePanel() {
     }
   };
 
+  const handleRoleToggle = async (baseUrl: string, role: CommunityNodeRoleKey, value: boolean) => {
+    const nextNodes = nodes.map((node) =>
+      node.base_url === baseUrl ? { ...node, roles: { ...node.roles, [role]: value } } : node,
+    );
+    try {
+      await communityNodeApi.setConfig(serializeNodes(nextNodes));
+      await refreshCommunityData();
+    } catch (error) {
+      errorHandler.log('Community node role update failed', error, {
+        context: 'CommunityNodePanel.updateRoles',
+        showToast: true,
+        toastTitle: 'Community Node ロール更新に失敗しました',
+      });
+    }
+  };
+
   const handleSyncKeyEnvelopes = async () => {
     if (!syncTopicId.trim()) {
       toast.error('トピックIDを入力してください');
       return;
     }
+    if (!selectedNode?.base_url) {
+      toast.error('操作対象のノードを選択してください');
+      return;
+    }
     try {
       const afterEpoch = syncAfterEpoch.trim() ? Number(syncAfterEpoch.trim()) : undefined;
       await communityNodeApi.syncKeyEnvelopes({
+        base_url: selectedNode.base_url,
         topic_id: syncTopicId.trim(),
         scope: syncScope,
         after_epoch: Number.isFinite(afterEpoch) ? afterEpoch : undefined,
@@ -167,9 +227,16 @@ export function CommunityNodePanel() {
       toast.error('招待イベントJSONを入力してください');
       return;
     }
+    if (!selectedNode?.base_url) {
+      toast.error('操作対象のノードを選択してください');
+      return;
+    }
     try {
       const payload = JSON.parse(inviteJson);
-      await communityNodeApi.redeemInvite(payload);
+      await communityNodeApi.redeemInvite({
+        base_url: selectedNode.base_url,
+        capability_event_json: payload,
+      });
       await refreshCommunityData();
       toast.success('招待を適用しました');
     } catch (error) {
@@ -182,8 +249,15 @@ export function CommunityNodePanel() {
   };
 
   const handleAcceptConsents = async () => {
+    if (!selectedNode?.base_url) {
+      toast.error('操作対象のノードを選択してください');
+      return;
+    }
     try {
-      await communityNodeApi.acceptConsents({ accept_all_current: true });
+      await communityNodeApi.acceptConsents({
+        base_url: selectedNode.base_url,
+        accept_all_current: true,
+      });
       await refreshCommunityData();
       toast.success('同意状況を更新しました');
     } catch (error) {
@@ -208,55 +282,24 @@ export function CommunityNodePanel() {
             id="community-node-base-url"
             data-testid="community-node-base-url"
             placeholder="https://community.example"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
+            value={newBaseUrl}
+            onChange={(e) => setNewBaseUrl(e.target.value)}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
-              onClick={handleSaveConfig}
+              onClick={handleAddNode}
               data-testid="community-node-save-config"
             >
-              保存
+              追加
             </Button>
             <Button
               variant="ghost"
               onClick={handleClearConfig}
               data-testid="community-node-clear-config"
+              disabled={nodes.length === 0}
             >
-              クリア
-            </Button>
-          </div>
-          <div
-            className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
-            data-testid="community-node-token-status"
-            data-has-token={configQuery.data?.has_token ? 'true' : 'false'}
-            data-pubkey={configQuery.data?.pubkey ?? ''}
-          >
-            <span>認証状態:</span>
-            {configQuery.data?.has_token ? (
-              <Badge variant="secondary">有効</Badge>
-            ) : (
-              <Badge variant="outline">未認証</Badge>
-            )}
-            {configQuery.data?.pubkey && <span>pubkey: {configQuery.data.pubkey}</span>}
-            {tokenExpiresAt && <span>有効期限: {tokenExpiresAt}</span>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={handleAuthenticate}
-              disabled={!baseUrl.trim()}
-              data-testid="community-node-authenticate"
-            >
-              認証
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={handleClearToken}
-              disabled={!configQuery.data?.has_token}
-              data-testid="community-node-clear-token"
-            >
-              トークン削除
+              全削除
             </Button>
           </div>
         </div>
@@ -266,46 +309,168 @@ export function CommunityNodePanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">利用機能</p>
+              <p className="font-medium">採用ノード</p>
               <p className="text-sm text-muted-foreground">
-                Community Node の機能を UI で有効化します。
+                role ごとに採用するノードを切り替えます。
               </p>
             </div>
           </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="community-node-access-control">アクセス制御 (スコープ)</Label>
-              <Switch
-                id="community-node-access-control"
-                checked={enableAccessControl}
-                onCheckedChange={setEnableAccessControl}
-              />
+          {nodes.length > 0 ? (
+            <div className="space-y-3">
+              {nodes.map((node, index) => {
+                const expiresAt = node.token_expires_at
+                  ? new Date(node.token_expires_at * 1000).toLocaleString()
+                  : null;
+                return (
+                  <div
+                    key={node.base_url}
+                    className="rounded-md border p-3 space-y-3"
+                    data-testid={`community-node-node-${index}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-medium break-all">{node.base_url}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleAuthenticate(node.base_url)}
+                          data-testid={`community-node-authenticate-${index}`}
+                        >
+                          認証
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleClearToken(node.base_url)}
+                          disabled={!node.has_token}
+                          data-testid={`community-node-clear-token-${index}`}
+                        >
+                          トークン削除
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveNode(node.base_url)}
+                          data-testid={`community-node-remove-${index}`}
+                        >
+                          削除
+                        </Button>
+                      </div>
+                    </div>
+                    <div
+                      className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+                      data-testid={`community-node-token-status-${index}`}
+                      data-has-token={node.has_token ? 'true' : 'false'}
+                      data-pubkey={node.pubkey ?? ''}
+                    >
+                      <span>認証状態:</span>
+                      {node.has_token ? (
+                        <Badge variant="secondary">有効</Badge>
+                      ) : (
+                        <Badge variant="outline">未認証</Badge>
+                      )}
+                      {node.pubkey && <span>pubkey: {node.pubkey}</span>}
+                      {expiresAt && <span>有効期限: {expiresAt}</span>}
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={`community-node-role-labels-${index}`}>
+                          ラベル/モデレーション
+                        </Label>
+                        <Switch
+                          id={`community-node-role-labels-${index}`}
+                          data-testid={`community-node-role-labels-${index}`}
+                          checked={node.roles.labels}
+                          onCheckedChange={(value) =>
+                            handleRoleToggle(node.base_url, 'labels', value)
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={`community-node-role-trust-${index}`}>信頼スコア</Label>
+                        <Switch
+                          id={`community-node-role-trust-${index}`}
+                          data-testid={`community-node-role-trust-${index}`}
+                          checked={node.roles.trust}
+                          onCheckedChange={(value) =>
+                            handleRoleToggle(node.base_url, 'trust', value)
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={`community-node-role-search-${index}`}>検索連携</Label>
+                        <Switch
+                          id={`community-node-role-search-${index}`}
+                          data-testid={`community-node-role-search-${index}`}
+                          checked={node.roles.search}
+                          onCheckedChange={(value) =>
+                            handleRoleToggle(node.base_url, 'search', value)
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={`community-node-role-bootstrap-${index}`}>
+                          ブートストラップ
+                        </Label>
+                        <Switch
+                          id={`community-node-role-bootstrap-${index}`}
+                          data-testid={`community-node-role-bootstrap-${index}`}
+                          checked={node.roles.bootstrap}
+                          onCheckedChange={(value) =>
+                            handleRoleToggle(node.base_url, 'bootstrap', value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="community-node-labels">ラベル/モデレーション</Label>
-              <Switch
-                id="community-node-labels"
-                checked={enableLabels}
-                onCheckedChange={setEnableLabels}
-              />
+          ) : (
+            <p className="text-sm text-muted-foreground">登録済みのノードはありません。</p>
+          )}
+        </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">アクセス制御 (スコープ)</p>
+              <p className="text-sm text-muted-foreground">
+                暗号化投稿のスコープ選択を有効化します。
+              </p>
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="community-node-trust">信頼スコア</Label>
-              <Switch
-                id="community-node-trust"
-                checked={enableTrust}
-                onCheckedChange={setEnableTrust}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="community-node-search">検索連携</Label>
-              <Switch
-                id="community-node-search"
-                checked={enableSearch}
-                onCheckedChange={setEnableSearch}
-              />
-            </div>
+            <Switch
+              id="community-node-access-control"
+              checked={enableAccessControl}
+              onCheckedChange={setEnableAccessControl}
+            />
           </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          <p className="font-medium">操作対象ノード</p>
+          <Select
+            value={actionNodeBaseUrl}
+            onValueChange={setActionNodeBaseUrl}
+            disabled={nodes.length === 0}
+          >
+            <SelectTrigger data-testid="community-node-action-node">
+              <SelectValue placeholder="ノードを選択" />
+            </SelectTrigger>
+            <SelectContent>
+              {nodes.map((node) => (
+                <SelectItem key={node.base_url} value={node.base_url}>
+                  {node.base_url}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!selectedNode && (
+            <p className="text-xs text-muted-foreground">操作対象のノードがありません。</p>
+          )}
         </div>
 
         <Separator />
@@ -321,7 +486,7 @@ export function CommunityNodePanel() {
           <Button
             variant="outline"
             onClick={handleAcceptConsents}
-            disabled={!configQuery.data?.has_token}
+            disabled={!selectedNode?.has_token}
             data-testid="community-node-accept-consents"
           >
             同意を更新
@@ -372,7 +537,7 @@ export function CommunityNodePanel() {
           </div>
           <Button
             onClick={handleSyncKeyEnvelopes}
-            disabled={!configQuery.data?.has_token}
+            disabled={!selectedNode?.has_token}
             data-testid="community-node-sync-keys"
           >
             同期
@@ -392,7 +557,7 @@ export function CommunityNodePanel() {
           />
           <Button
             onClick={handleRedeemInvite}
-            disabled={!configQuery.data?.has_token}
+            disabled={!selectedNode?.has_token}
             data-testid="community-node-redeem-invite"
           >
             招待を適用

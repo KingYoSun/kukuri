@@ -24,7 +24,6 @@ import { useOfflineStore } from '@/stores/offlineStore';
 import { usePostStore } from '@/stores/postStore';
 import { TauriApi } from '@/lib/api/tauri';
 import { communityNodeApi } from '@/lib/api/communityNode';
-import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 import { resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -154,15 +153,17 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const isPostPending = pendingActions.some(
     (action) => action.actionType === 'CREATE_POST' && action.localId === post.localId,
   );
-  const { enableLabels, enableTrust } = useCommunityNodeStore();
   const communityConfigQuery = useQuery({
     queryKey: ['community-node', 'config'],
     queryFn: () => communityNodeApi.getConfig(),
     staleTime: 1000 * 60 * 5,
   });
-  const hasCommunityAuth = Boolean(
-    communityConfigQuery.data?.base_url && communityConfigQuery.data?.has_token,
-  );
+  const labelNodes =
+    communityConfigQuery.data?.nodes?.filter((node) => node.roles.labels && node.has_token) ?? [];
+  const trustNodes =
+    communityConfigQuery.data?.nodes?.filter((node) => node.roles.trust && node.has_token) ?? [];
+  const enableLabels = labelNodes.length > 0;
+  const enableTrust = trustNodes.length > 0;
   const labelQuery = useQuery({
     queryKey: ['community-node', 'labels', post.id],
     queryFn: () =>
@@ -170,20 +171,20 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
         target: `event:${post.id}`,
         limit: 10,
       }),
-    enabled: enableLabels && hasCommunityAuth,
+    enabled: enableLabels,
     staleTime: 1000 * 60 * 5,
   });
   const trustSubject = `pubkey:${post.author.pubkey}`;
   const trustReportQuery = useQuery({
     queryKey: ['community-node', 'trust', 'report-based', post.author.pubkey],
     queryFn: () => communityNodeApi.trustReportBased({ subject: trustSubject }),
-    enabled: enableTrust && hasCommunityAuth,
+    enabled: enableTrust,
     staleTime: 1000 * 60 * 5,
   });
   const trustDensityQuery = useQuery({
     queryKey: ['community-node', 'trust', 'communication-density', post.author.pubkey],
     queryFn: () => communityNodeApi.trustCommunicationDensity({ subject: trustSubject }),
-    enabled: enableTrust && hasCommunityAuth,
+    enabled: enableTrust,
     staleTime: 1000 * 60 * 5,
   });
   const labelSummaries = parseLabelSummaries(labelQuery.data);

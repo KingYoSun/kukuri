@@ -1,9 +1,10 @@
 use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::community_node_dto::{
-    CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest, CommunityNodeConfigRequest,
-    CommunityNodeConfigResponse, CommunityNodeConsentRequest, CommunityNodeKeyEnvelopeRequest,
-    CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest, CommunityNodeRedeemInviteRequest,
-    CommunityNodeRedeemInviteResponse, CommunityNodeReportRequest, CommunityNodeSearchRequest,
+    CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
+    CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
+    CommunityNodeKeyEnvelopeRequest, CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest,
+    CommunityNodeRedeemInviteRequest, CommunityNodeRedeemInviteResponse,
+    CommunityNodeReportRequest, CommunityNodeSearchRequest, CommunityNodeTokenRequest,
     CommunityNodeTrustRequest,
 };
 use crate::shared::AppError;
@@ -38,16 +39,18 @@ pub async fn clear_community_node_config(
 #[tauri::command]
 pub async fn community_node_authenticate(
     state: State<'_, AppState>,
+    request: CommunityNodeAuthRequest,
 ) -> Result<ApiResponse<CommunityNodeAuthResponse>, AppError> {
-    let result = state.community_node_handler.authenticate().await;
+    let result = state.community_node_handler.authenticate(request).await;
     Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
 pub async fn community_node_clear_token(
     state: State<'_, AppState>,
+    request: CommunityNodeTokenRequest,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = state.community_node_handler.clear_token().await;
+    let result = state.community_node_handler.clear_token(request).await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -154,8 +157,12 @@ pub async fn community_node_list_bootstrap_services(
 #[tauri::command]
 pub async fn community_node_get_consent_status(
     state: State<'_, AppState>,
+    request: CommunityNodeTokenRequest,
 ) -> Result<ApiResponse<serde_json::Value>, AppError> {
-    let result = state.community_node_handler.get_consent_status().await;
+    let result = state
+        .community_node_handler
+        .get_consent_status(request)
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 

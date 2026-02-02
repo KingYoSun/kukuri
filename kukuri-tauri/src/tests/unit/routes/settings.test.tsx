@@ -38,12 +38,7 @@ vi.mock('@/lib/api/communityNode', () => ({
     getConfig: vi.fn().mockResolvedValue(null),
     listGroupKeys: vi.fn().mockResolvedValue([]),
     getConsentStatus: vi.fn().mockResolvedValue(null),
-    setConfig: vi.fn().mockResolvedValue({
-      base_url: '',
-      has_token: false,
-      token_expires_at: null,
-      pubkey: null,
-    }),
+    setConfig: vi.fn().mockResolvedValue({ nodes: [] }),
     clearConfig: vi.fn().mockResolvedValue(undefined),
     authenticate: vi.fn().mockResolvedValue({ expires_at: 0, pubkey: '' }),
     clearToken: vi.fn().mockResolvedValue(undefined),

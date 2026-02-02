@@ -85,14 +85,8 @@ export const createKeyManagementPersistConfig = <
 export const createCommunityNodePersistConfig = <
   T extends {
     enableAccessControl: boolean;
-    enableLabels: boolean;
-    enableTrust: boolean;
-    enableSearch: boolean;
   },
 >(): PersistOptions<T> => ({
   name: persistKeys.communityNode,
-  partialize: createPartializer<
-    T,
-    'enableAccessControl' | 'enableLabels' | 'enableTrust' | 'enableSearch'
-  >(['enableAccessControl', 'enableLabels', 'enableTrust', 'enableSearch']),
+  partialize: createPartializer<T, 'enableAccessControl'>(['enableAccessControl']),
 });

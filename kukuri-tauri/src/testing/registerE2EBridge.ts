@@ -8,7 +8,7 @@ import {
 } from '@/lib/api/tauri';
 import { TauriCommandError } from '@/lib/api/tauriClient';
 import { p2pApi } from '@/lib/api/p2p';
-import { communityNodeApi } from '@/lib/api/communityNode';
+import { communityNodeApi, defaultCommunityNodeRoles } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
@@ -1374,10 +1374,19 @@ export function registerE2EBridge(): void {
             throw new Error('baseUrl is required to authenticate against community node');
           }
           try {
-            await communityNodeApi.setConfig(baseUrl);
-            const auth = await communityNodeApi.authenticate();
+            const normalized = baseUrl.replace(/\/+$/, '');
+            const currentConfig = await communityNodeApi.getConfig();
+            const nodes = currentConfig?.nodes ?? [];
+            const hasNode = nodes.some((node) => node.base_url === normalized);
+            if (!hasNode) {
+              await communityNodeApi.setConfig([
+                ...nodes.map((node) => ({ base_url: node.base_url, roles: node.roles })),
+                { base_url: normalized, roles: defaultCommunityNodeRoles },
+              ]);
+            }
+            const auth = await communityNodeApi.authenticate(normalized);
             const config = await communityNodeApi.getConfig();
-            const consents = await communityNodeApi.getConsentStatus();
+            const consents = await communityNodeApi.getConsentStatus(normalized);
             await queryClient.invalidateQueries({ queryKey: ['community-node', 'config'] });
             await queryClient.invalidateQueries({ queryKey: ['community-node', 'group-keys'] });
             await queryClient.invalidateQueries({ queryKey: ['community-node', 'consents'] });

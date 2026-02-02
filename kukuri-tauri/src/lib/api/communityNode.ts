@@ -2,11 +2,37 @@ import { invokeCommand, invokeCommandVoid } from '@/lib/api/tauriClient';
 
 export type CommunityNodeScope = 'public' | 'friend_plus' | 'friend' | 'invite';
 
-export interface CommunityNodeConfigResponse {
+export type CommunityNodeRoleKey = 'labels' | 'trust' | 'search' | 'bootstrap';
+
+export interface CommunityNodeRoleConfig {
+  labels: boolean;
+  trust: boolean;
+  search: boolean;
+  bootstrap: boolean;
+}
+
+export const defaultCommunityNodeRoles: CommunityNodeRoleConfig = {
+  labels: true,
+  trust: true,
+  search: false,
+  bootstrap: true,
+};
+
+export interface CommunityNodeConfigNodeRequest {
   base_url: string;
+  roles?: CommunityNodeRoleConfig;
+}
+
+export interface CommunityNodeConfigNodeResponse {
+  base_url: string;
+  roles: CommunityNodeRoleConfig;
   has_token: boolean;
   token_expires_at: number | null;
   pubkey: string | null;
+}
+
+export interface CommunityNodeConfigResponse {
+  nodes: CommunityNodeConfigNodeResponse[];
 }
 
 export interface CommunityNodeAuthResponse {
@@ -32,6 +58,7 @@ export interface CommunityNodeRedeemInviteResponse {
 }
 
 export interface CommunityNodeLabelsRequest {
+  base_url?: string;
   target: string;
   topic?: string;
   limit?: number;
@@ -39,10 +66,12 @@ export interface CommunityNodeLabelsRequest {
 }
 
 export interface CommunityNodeTrustRequest {
+  base_url?: string;
   subject: string;
 }
 
 export interface CommunityNodeSearchRequest {
+  base_url?: string;
   topic: string;
   q?: string;
   limit?: number;
@@ -70,11 +99,13 @@ export interface CommunityNodeSearchResponse {
 }
 
 export interface CommunityNodeConsentRequest {
+  base_url?: string;
   policy_ids?: string[];
   accept_all_current?: boolean;
 }
 
 export interface CommunityNodeKeyEnvelopeRequest {
+  base_url?: string;
   topic_id: string;
   scope?: string;
   after_epoch?: number;
@@ -83,16 +114,22 @@ export interface CommunityNodeKeyEnvelopeRequest {
 export const communityNodeApi = {
   getConfig: () => invokeCommand<CommunityNodeConfigResponse | null>('get_community_node_config'),
 
-  setConfig: (baseUrl: string) =>
+  setConfig: (nodes: CommunityNodeConfigNodeRequest[]) =>
     invokeCommand<CommunityNodeConfigResponse>('set_community_node_config', {
-      request: { base_url: baseUrl },
+      request: { nodes },
     }),
 
   clearConfig: () => invokeCommandVoid('clear_community_node_config'),
 
-  authenticate: () => invokeCommand<CommunityNodeAuthResponse>('community_node_authenticate'),
+  authenticate: (baseUrl: string) =>
+    invokeCommand<CommunityNodeAuthResponse>('community_node_authenticate', {
+      request: { base_url: baseUrl },
+    }),
 
-  clearToken: () => invokeCommandVoid('community_node_clear_token'),
+  clearToken: (baseUrl: string) =>
+    invokeCommandVoid('community_node_clear_token', {
+      request: { base_url: baseUrl },
+    }),
 
   listGroupKeys: () => invokeCommand<GroupKeyEntry[]>('community_node_list_group_keys'),
 
@@ -101,9 +138,9 @@ export const communityNodeApi = {
       request,
     }),
 
-  redeemInvite: (capabilityEvent: unknown) =>
+  redeemInvite: (request: { base_url?: string; capability_event_json: unknown }) =>
     invokeCommand<CommunityNodeRedeemInviteResponse>('community_node_redeem_invite', {
-      request: { capability_event_json: capabilityEvent },
+      request,
     }),
 
   listLabels: (request: CommunityNodeLabelsRequest) =>
@@ -131,8 +168,10 @@ export const communityNodeApi = {
       request: { topic_id: topicId },
     }),
 
-  getConsentStatus: () =>
-    invokeCommand<Record<string, unknown>>('community_node_get_consent_status'),
+  getConsentStatus: (baseUrl: string) =>
+    invokeCommand<Record<string, unknown>>('community_node_get_consent_status', {
+      request: { base_url: baseUrl },
+    }),
 
   acceptConsents: (request: CommunityNodeConsentRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_accept_consents', { request }),

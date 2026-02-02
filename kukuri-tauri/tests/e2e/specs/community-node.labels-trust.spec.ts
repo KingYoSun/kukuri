@@ -81,7 +81,7 @@ describe('Community Node labels/trust badges', () => {
     await baseInput.setValue(baseUrl);
     await $('[data-testid="community-node-save-config"]').click();
 
-    const authButton = await $('[data-testid="community-node-authenticate"]');
+    const authButton = await $('[data-testid="community-node-authenticate-0"]');
     await browser.waitUntil(async () => await authButton.isEnabled(), {
       timeout: 15000,
       interval: 300,

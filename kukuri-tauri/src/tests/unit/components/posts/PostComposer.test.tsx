@@ -263,13 +263,7 @@ describe('PostComposer', () => {
 
     vi.mocked(useCommunityNodeStore).mockReturnValue({
       enableAccessControl: true,
-      enableLabels: true,
-      enableTrust: true,
-      enableSearch: false,
       setEnableAccessControl: vi.fn(),
-      setEnableLabels: vi.fn(),
-      setEnableTrust: vi.fn(),
-      setEnableSearch: vi.fn(),
       reset: vi.fn(),
     } as unknown as ReturnType<typeof useCommunityNodeStore>);
 

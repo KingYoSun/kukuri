@@ -14,7 +14,6 @@ import {
   type CommunityNodeSearchResponse,
 } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
-import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 import { useTopicStore, type Post } from '@/stores';
 
 interface PostSearchResultsProps {
@@ -72,17 +71,16 @@ async function fetchCommunityNodeSearchPage(params: {
 }
 
 export function PostSearchResults({ query }: PostSearchResultsProps) {
-  const enableSearch = useCommunityNodeStore((state) => state.enableSearch);
   const communityConfigQuery = useQuery({
     queryKey: ['community-node', 'config'],
     queryFn: () => communityNodeApi.getConfig(),
     staleTime: 1000 * 60 * 5,
   });
-  const hasCommunityAuth = Boolean(
-    communityConfigQuery.data?.base_url && communityConfigQuery.data?.has_token,
-  );
+  const searchNodes =
+    communityConfigQuery.data?.nodes?.filter((node) => node.roles.search && node.has_token) ?? [];
+  const enableSearch = searchNodes.length > 0;
 
-  if (enableSearch && hasCommunityAuth) {
+  if (enableSearch) {
     return <CommunityNodePostSearchResults query={query} />;
   }
 
