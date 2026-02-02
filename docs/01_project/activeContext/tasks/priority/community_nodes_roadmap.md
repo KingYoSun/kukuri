@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年01月29日
+最終更新日: 2026年02月02日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -36,6 +36,20 @@
   - CI: `test.yml` の `desktop-e2e`（push/pull_request: main/develop + workflow_dispatch）。`./scripts/test-docker.ps1 e2e-community-node` を使用。
   - Nightly: `nightly.yml` の `community-node-e2e`（cron: `0 15 * * *` + workflow_dispatch）。`./scripts/test-docker.sh e2e-community-node` を使用。
   - 所要時間目安: キャッシュあり 15〜25分、キャッシュなし 30〜45分（Docker build + seed + E2E 実行）。
+
+## 未実装/不足事項（2026年02月02日 追記）
+
+- [ ] クライアントのノード採用設定を **複数ノード/role別** に拡張し、label/trust/search/bootstrap を採用ノード単位で切替できるようにする（UI/Store/DTO/Handler を含む）。
+- [ ] trust.anchor(39011) の発行/保存/適用/UI を実装し、採用attester切替で表示が変わることを確認する（M5受入条件の未達）。
+- [ ] Access Control の **epochローテ/追放** フローを実装する（epoch++ と残留者への key.envelope 再配布、ローテ操作の CLI/サービス化）。
+- [ ] `access_control` を P2P-only とする方針と、User API の invite/keys エンドポイント運用の矛盾を解消（どちらを正とするか決定し、実装・UI・ドキュメントを揃える）。
+- [ ] 通報 UI（reason 選択 + submit）を PostCard などに追加し、`community_node_submit_report` を利用した E2E を追加する。
+- [ ] label/attestation のクライアント側検証（署名/exp/採用ノード）を導入し、未採用ノード由来のデータは無視する。
+- [ ] テスト不足の補完:
+  - [ ] `cn-kip-types`: 39001/39005/39010/39011/39020 の検証テスト追加。
+  - [ ] `cn-user-api`: `/v1/bootstrap/*` `/v1/reports` `/v1/search` `/v1/invite/redeem` `/v1/keys/envelopes` の契約テスト追加。
+  - [ ] `cn-admin-api`: login/logout など主要エンドポイントの契約テスト追加。
+  - [ ] `kukuri-tauri`: `CommunityNodeHandler` の単体/契約テスト追加。
 
 ## 参照（設計）
 
