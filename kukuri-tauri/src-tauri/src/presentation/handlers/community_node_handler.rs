@@ -626,9 +626,9 @@ impl CommunityNodeHandler {
         }
 
         if items.is_empty() {
-            return Err(last_error.unwrap_or_else(|| {
-                AppError::NotFound("Community node search is unavailable".to_string())
-            }));
+            if let Some(err) = last_error {
+                return Err(err);
+            }
         }
 
         let next_cursor = if next_cursor_map.is_empty() {

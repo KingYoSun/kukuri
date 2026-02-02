@@ -20,6 +20,10 @@ type FallbackAccount = {
   nsec: string;
 };
 
+type GenerateKeypairOptions = {
+  deferInitialization?: boolean;
+};
+
 const fallbackAccounts = new Map<string, FallbackAccount>();
 
 const upsertFallbackAccount = (metadata: AccountMetadata, nsec: string) => {
@@ -139,7 +143,6 @@ interface AuthStore extends AuthState {
     saveToSecureStorage?: boolean,
     metadataOverride?: Partial<User>,
   ) => Promise<void>;
-  generateNewKeypair: (saveToSecureStorage?: boolean) => Promise<{ nsec: string }>;
   logout: () => Promise<void>;
   updateUser: (user: Partial<User>) => void;
   updateRelayStatus: () => Promise<void>;
@@ -148,6 +151,10 @@ interface AuthStore extends AuthState {
   switchAccount: (npub: string) => Promise<void>;
   removeAccount: (npub: string) => Promise<void>;
   loadAccounts: () => Promise<void>;
+  generateNewKeypair: (
+    saveToSecureStorage?: boolean,
+    options?: GenerateKeypairOptions,
+  ) => Promise<{ nsec: string }>;
   get isLoggedIn(): boolean;
 }
 
@@ -197,10 +204,15 @@ export const useAuthStore = create<AuthStore>()(
           (topic) => topic.id === DEFAULT_PUBLIC_TOPIC_ID,
         );
         if (publicTopic) {
-          await topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID);
           if (!topicStore.currentTopic) {
             topicStore.setCurrentTopic(publicTopic);
           }
+          void topicStore.joinTopic(DEFAULT_PUBLIC_TOPIC_ID).catch((error) => {
+            errorHandler.log('Failed to join default topic during bootstrap', error, {
+              context: 'AuthStore.bootstrapTopics',
+              showToast: false,
+            });
+          });
         }
       } catch (error) {
         errorHandler.log('Failed to bootstrap topics', error, {
@@ -330,7 +342,7 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      generateNewKeypair: async (saveToSecureStorage = true) => {
+      generateNewKeypair: async (saveToSecureStorage = true, options) => {
         try {
           const state = get();
           if (!state.isAuthenticated && state.accounts.length === 0) {
@@ -396,34 +408,52 @@ export const useAuthStore = create<AuthStore>()(
             },
           );
 
-          // Nostrクライアントを初期化
-          try {
-            await initializeNostr();
-          } catch (nostrError) {
-            errorHandler.log('Failed to initialize Nostr', nostrError, {
-              context: 'AuthStore.generateNewKeypair.initializeNostr',
+          const runPostLoginTasks = async () => {
+            // Nostrクライアントを初期化
+            try {
+              await initializeNostr();
+            } catch (nostrError) {
+              errorHandler.log('Failed to initialize Nostr', nostrError, {
+                context: 'AuthStore.generateNewKeypair.initializeNostr',
+              });
+            }
+            // リレー状態を更新
+            try {
+              await useAuthStore.getState().updateRelayStatus();
+            } catch (relayError) {
+              errorHandler.log('Failed to update relay status', relayError, {
+                context: 'AuthStore.generateNewKeypair.updateRelayStatus',
+              });
+            }
+            // アカウントリストを更新
+            try {
+              await useAuthStore.getState().loadAccounts();
+            } catch (loadError) {
+              errorHandler.log('Failed to load accounts', loadError, {
+                context: 'AuthStore.generateNewKeypair.loadAccounts',
+              });
+            }
+
+            await bootstrapTopics();
+
+            await fetchAndApplyAvatar(response.npub);
+          };
+
+          if (options?.deferInitialization) {
+            errorHandler.info(
+              'Deferring post-login initialization after keypair generation',
+              'AuthStore.generateNewKeypair',
+              { npub: user.npub },
+            );
+            void runPostLoginTasks().catch((postLoginError) => {
+              errorHandler.log('Post-login initialization failed', postLoginError, {
+                context: 'AuthStore.generateNewKeypair.postLoginTasks',
+              });
             });
-          }
-          // リレー状態を更新
-          try {
-            await useAuthStore.getState().updateRelayStatus();
-          } catch (relayError) {
-            errorHandler.log('Failed to update relay status', relayError, {
-              context: 'AuthStore.generateNewKeypair.updateRelayStatus',
-            });
-          }
-          // アカウントリストを更新
-          try {
-            await useAuthStore.getState().loadAccounts();
-          } catch (loadError) {
-            errorHandler.log('Failed to load accounts', loadError, {
-              context: 'AuthStore.generateNewKeypair.loadAccounts',
-            });
+            return { nsec: response.nsec };
           }
 
-          await bootstrapTopics();
-
-          await fetchAndApplyAvatar(response.npub);
+          await runPostLoginTasks();
 
           return { nsec: response.nsec };
         } catch (error) {

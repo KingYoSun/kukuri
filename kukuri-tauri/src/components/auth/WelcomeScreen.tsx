@@ -12,7 +12,7 @@ export function WelcomeScreen() {
   const handleCreateAccount = async () => {
     errorHandler.info('Starting account creation...', 'WelcomeScreen.handleCreateAccount');
     try {
-      const result = await generateNewKeypair();
+      const result = await generateNewKeypair(true, { deferInitialization: true });
       const authState =
         typeof useAuthStore.getState === 'function' ? useAuthStore.getState() : null;
       errorHandler.info(

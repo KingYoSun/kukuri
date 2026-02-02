@@ -74,6 +74,7 @@ describe('WelcomeScreen', () => {
     // 鍵ペア生成が呼ばれる
     await waitFor(() => {
       expect(mockGenerateNewKeypair).toHaveBeenCalledTimes(1);
+      expect(mockGenerateNewKeypair).toHaveBeenCalledWith(true, { deferInitialization: true });
     });
 
     // プロフィール設定画面への遷移
