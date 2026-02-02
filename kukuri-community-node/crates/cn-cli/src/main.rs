@@ -48,6 +48,10 @@ enum Commands {
     Index,
     Moderation,
     Trust,
+    AccessControl {
+        #[command(subcommand)]
+        command: AccessControlCommand,
+    },
     E2e {
         #[command(subcommand)]
         command: E2eCommand,
@@ -113,6 +117,50 @@ enum NodeKeyCommand {
         #[arg(long)]
         path: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum AccessControlCommand {
+    Rotate(AccessControlRotateArgs),
+    Revoke(AccessControlRevokeArgs),
+}
+
+#[derive(Args, Clone)]
+struct AccessControlRotateArgs {
+    /// Topic name or topic id
+    #[arg(long)]
+    topic: String,
+
+    /// Scope to rotate (friend/invite/friend_plus)
+    #[arg(long, default_value = "invite")]
+    scope: String,
+
+    /// Pretty-print JSON output
+    #[arg(long, default_value_t = false)]
+    pretty: bool,
+}
+
+#[derive(Args, Clone)]
+struct AccessControlRevokeArgs {
+    /// Topic name or topic id
+    #[arg(long)]
+    topic: String,
+
+    /// Scope to revoke (friend/invite/friend_plus)
+    #[arg(long, default_value = "invite")]
+    scope: String,
+
+    /// Member pubkey to revoke
+    #[arg(long)]
+    pubkey: String,
+
+    /// Optional revoke reason
+    #[arg(long)]
+    reason: Option<String>,
+
+    /// Pretty-print JSON output
+    #[arg(long, default_value_t = false)]
+    pretty: bool,
 }
 
 #[derive(Args, Clone)]
@@ -211,6 +259,71 @@ async fn main() -> Result<()> {
         Commands::Trust => {
             let config = cn_trust::load_config()?;
             cn_trust::run(config).await?;
+        }
+        Commands::AccessControl { command } => {
+            cn_core::logging::init("cn-cli");
+            let database_url = cn_core::config::required_env("DATABASE_URL")?;
+            let pool = cn_core::db::connect(&database_url).await?;
+            let node_key_path =
+                cn_core::node_key::key_path_from_env("NODE_KEY_PATH", "data/node_key.json")?;
+            let node_keys = cn_core::node_key::load_or_generate(&node_key_path)?;
+
+            match command {
+                AccessControlCommand::Rotate(args) => {
+                    let topic_id = generate_topic_id(&args.topic)
+                        .ok_or_else(|| anyhow!("topic is empty"))?;
+                    let scope = cn_core::access_control::normalize_scope(&args.scope)?;
+                    let summary = cn_core::access_control::rotate_epoch(
+                        &pool,
+                        &node_keys,
+                        &topic_id,
+                        &scope,
+                    )
+                    .await?;
+                    let output = serde_json::json!({
+                        "topic_id": summary.topic_id,
+                        "scope": summary.scope,
+                        "previous_epoch": summary.previous_epoch,
+                        "new_epoch": summary.new_epoch,
+                        "recipients": summary.recipients
+                    });
+                    let rendered = if args.pretty {
+                        serde_json::to_string_pretty(&output)?
+                    } else {
+                        serde_json::to_string(&output)?
+                    };
+                    println!("{rendered}");
+                }
+                AccessControlCommand::Revoke(args) => {
+                    let topic_id = generate_topic_id(&args.topic)
+                        .ok_or_else(|| anyhow!("topic is empty"))?;
+                    let scope = cn_core::access_control::normalize_scope(&args.scope)?;
+                    let pubkey = cn_core::access_control::normalize_pubkey(&args.pubkey)?;
+                    let summary = cn_core::access_control::revoke_member_and_rotate(
+                        &pool,
+                        &node_keys,
+                        &topic_id,
+                        &scope,
+                        &pubkey,
+                        args.reason.as_deref(),
+                    )
+                    .await?;
+                    let output = serde_json::json!({
+                        "topic_id": summary.topic_id,
+                        "scope": summary.scope,
+                        "revoked_pubkey": summary.revoked_pubkey,
+                        "previous_epoch": summary.rotation.previous_epoch,
+                        "new_epoch": summary.rotation.new_epoch,
+                        "recipients": summary.rotation.recipients
+                    });
+                    let rendered = if args.pretty {
+                        serde_json::to_string_pretty(&output)?
+                    } else {
+                        serde_json::to_string(&output)?
+                    };
+                    println!("{rendered}");
+                }
+            }
         }
         Commands::E2e { command } => {
             match command {

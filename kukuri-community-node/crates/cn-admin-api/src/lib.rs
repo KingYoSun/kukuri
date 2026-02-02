@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 mod auth;
+mod access_control;
 mod moderation;
 mod policies;
 mod reindex;
@@ -226,6 +227,14 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         )
         .route("/v1/admin/usage", get(subscriptions::list_usage))
         .route("/v1/admin/audit-logs", get(services::list_audit_logs))
+        .route(
+            "/v1/admin/access-control/rotate",
+            post(access_control::rotate_epoch),
+        )
+        .route(
+            "/v1/admin/access-control/revoke",
+            post(access_control::revoke_member),
+        )
         .route(
             "/v1/admin/trust/jobs",
             get(trust::list_jobs).post(trust::create_job),

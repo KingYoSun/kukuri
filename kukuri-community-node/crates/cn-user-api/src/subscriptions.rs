@@ -1,14 +1,12 @@
 use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
-use cn_core::topic::normalize_topic_id;
+use cn_core::access_control;
 use cn_core::nostr;
+use cn_core::topic::normalize_topic_id;
 use cn_kip_types::{validate_kip_event, ValidationOptions};
 use chrono::TimeZone;
-use nostr_sdk::prelude::{nip44, Keys, PublicKey};
-use rand_core::{OsRng, RngCore};
+use nostr_sdk::prelude::PublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, QueryBuilder, Row};
@@ -414,8 +412,39 @@ pub async fn redeem_invite(
     }
 
     let epoch = ensure_topic_epoch(&mut tx, &topic_id, &scope).await?;
-    let key_b64 = load_or_create_group_key(&mut tx, &state.node_keys, &topic_id, &scope, epoch).await?;
-    let envelope = build_key_envelope(&state.node_keys, &auth.pubkey, &topic_id, &scope, epoch, &key_b64)?;
+    let key_b64 = access_control::load_or_create_group_key(
+        &mut tx,
+        &state.node_keys,
+        &topic_id,
+        &scope,
+        epoch,
+    )
+    .await
+    .map_err(|err| {
+        if err.downcast_ref::<sqlx::Error>().is_some() {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        } else {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string())
+        }
+    })?;
+    let recipient_pubkey = access_control::normalize_pubkey(&auth.pubkey).map_err(|err| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_PUBKEY",
+            err.to_string(),
+        )
+    })?;
+    let envelope_event = access_control::build_key_envelope_event(
+        &state.node_keys,
+        &recipient_pubkey,
+        &topic_id,
+        &scope,
+        epoch,
+        &key_b64,
+    )
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
+    let envelope = serde_json::to_value(&envelope_event)
+        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
 
     sqlx::query(
         "INSERT INTO cn_user.key_envelopes          (topic_id, scope, epoch, recipient_pubkey, key_envelope_event_json)          VALUES ($1, $2, $3, $4, $5)          ON CONFLICT (topic_id, scope, epoch, recipient_pubkey) DO UPDATE SET key_envelope_event_json = EXCLUDED.key_envelope_event_json",
@@ -1058,106 +1087,6 @@ async fn ensure_topic_epoch(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     Ok(1)
-}
-
-async fn load_or_create_group_key(
-    tx: &mut sqlx::Transaction<'_, Postgres>,
-    node_keys: &Keys,
-    topic_id: &str,
-    scope: &str,
-    epoch: i64,
-) -> ApiResult<String> {
-    let row = sqlx::query(
-        "SELECT key_ciphertext FROM cn_admin.topic_scope_keys WHERE topic_id = $1 AND scope = $2 AND epoch = $3",
-    )
-    .bind(topic_id)
-    .bind(scope)
-    .bind(epoch as i32)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
-
-    if let Some(row) = row {
-        let ciphertext: String = row.try_get("key_ciphertext")?;
-        let plain = nip44::decrypt(
-            node_keys.secret_key(),
-            &node_keys.public_key(),
-            ciphertext,
-        )
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
-        return Ok(plain);
-    }
-
-    let mut bytes = [0u8; 32];
-    let mut rng = OsRng;
-    rng.fill_bytes(&mut bytes);
-    let key_b64 = STANDARD.encode(bytes);
-    let ciphertext = nip44::encrypt(
-        node_keys.secret_key(),
-        &node_keys.public_key(),
-        &key_b64,
-        nip44::Version::V2,
-    )
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
-
-    sqlx::query(
-        "INSERT INTO cn_admin.topic_scope_keys          (topic_id, scope, epoch, key_ciphertext)          VALUES ($1, $2, $3, $4)",
-    )
-    .bind(topic_id)
-    .bind(scope)
-    .bind(epoch as i32)
-    .bind(ciphertext)
-    .execute(&mut **tx)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
-
-    Ok(key_b64)
-}
-
-fn build_key_envelope(
-    node_keys: &Keys,
-    recipient_pubkey: &str,
-    topic_id: &str,
-    scope: &str,
-    epoch: i64,
-    key_b64: &str,
-) -> ApiResult<serde_json::Value> {
-    let recipient = PublicKey::from_hex(recipient_pubkey).map_err(|_| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", "invalid pubkey")
-    })?;
-
-    let payload = json!({
-        "schema": "kukuri-key-envelope-v1",
-        "topic": topic_id,
-        "scope": scope,
-        "epoch": epoch,
-        "key_b64": key_b64,
-        "issued_at": cn_core::auth::unix_seconds().unwrap_or(0) as i64
-    });
-    let encrypted = nip44::encrypt(
-        node_keys.secret_key(),
-        &recipient,
-        payload.to_string(),
-        nip44::Version::V2,
-    )
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
-
-    let d_tag = format!(
-        "keyenv:{topic_id}:{scope}:{epoch}:{recipient_pubkey}"
-    );
-    let tags = vec![
-        vec!["p".to_string(), recipient_pubkey.to_string()],
-        vec!["t".to_string(), topic_id.to_string()],
-        vec!["scope".to_string(), scope.to_string()],
-        vec!["epoch".to_string(), epoch.to_string()],
-        vec!["k".to_string(), "kukuri".to_string()],
-        vec!["ver".to_string(), "1".to_string()],
-        vec!["d".to_string(), d_tag],
-    ];
-
-    let raw = nostr::build_signed_event(node_keys, 39020, tags, encrypted)
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "KEY_ERROR", err.to_string()))?;
-    Ok(serde_json::to_value(raw).unwrap_or(json!({})))
 }
 
 #[cfg(test)]
