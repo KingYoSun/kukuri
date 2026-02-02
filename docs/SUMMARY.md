@@ -1,260 +1,52 @@
 # kukuri ドキュメント概要
-補足: ActiveContext の最新索引は `docs/01_project/activeContext/summary.md` を参照（最終更新: 2025年09月15日）。
 
-**最終更新**: 2025年08月16日（DHT基盤Discovery Layer移行決定）
+補足: 最新の作業状況・意思決定は `docs/01_project/activeContext/summary.md` と
+`docs/01_project/activeContext/tasks/` を参照してください（最終確認: 2026年02月02日）。
+
+**最終更新**: 2026年02月02日
 
 ## プロジェクト概要
-kukuriは、Nostrプロトコルをベースとした完全分散型トピック中心ソーシャルアプリケーションです。BitTorrent Mainline DHTを基盤とした分散型ピア発見により、中央サーバー依存を完全に排除し、検閲耐性とユーザー主権を実現します。
+kukuriは、Nostrプロトコルをベースとした完全分散型トピック中心ソーシャルアプリケーションです。
+BitTorrent Mainline DHT を基盤とした分散型ピア発見により、中央サーバー依存を排除し、
+検閲耐性とユーザー主権を実現することを目指します。
 
 ## ドキュメント構成
 
 ### 01_project/ - プロジェクト管理
 - **design_doc.md**: プロジェクトの全体設計書
 - **requirements.md**: 機能要件・非機能要件定義
-- **roadmap.md**: プロジェクトロードマップ ✨新規
-- **activeContext/**: 現在の作業状況
-  - current_tasks.md: 進行中のタスク
-  - current_environment.md: 開発環境情報
-  - issuesAndNotes.md: 既知の問題と注意事項
-  - iroh-native-dht-plan.md: irohネイティブDHT実装計画 ✨最重要
-  - distributed-topic-tracker-plan.md: [DEPRECATED] 旧DHT実装計画
-  - tauri_app_experience_design.md: Tauriアプリ体験設計
-  - tauri_app_implementation_plan.md: Tauriアプリ実装計画
-  - **tasks/**: タスク管理システム
-    - priority/critical.md: 最重要タスク
-    - status/in_progress.md: 進行中タスク
-- **progressReports/**: 進捗レポート
+- **roadmap.md**: ロードマップ
+- **setup_guide.md** / **windows_setup_guide.md**: 開発環境セットアップ
+- **activeContext/**: 現在の作業状況・決定事項・タスク管理
+  - `tasks/priority/critical.md`: 最重要タスク
+  - `tasks/status/in_progress.md`: 進行中タスク
+  - `tasks/completed/YYYY-MM-DD.md`: 完了タスクの記録
+- **progressReports/**: 進捗レポート（重要な変更の記録）
+- **deprecated/**: 役目を終えた計画・設計の保管庫（参照のみ）
 
 ### 02_architecture/ - アーキテクチャ設計
-- **system_design.md**: システム設計詳細（DHT更新済み）
-  - レイヤー構成（BitTorrent DHT統合）
-  - データモデル
-  - API設計
-  - セキュリティ設計
-- **dht_discovery_architecture.md**: DHT基盤Discovery Layerアーキテクチャ ✨新規
-  - irohビルトインDHT統合
-  - セキュリティモデル
-  - パフォーマンス要件
+- **system_design.md**: システム設計詳細
+- **dht_discovery_architecture.md**: DHT基盤Discovery Layerアーキテクチャ
 - **project_structure.md**: プロジェクト構造
-  - ディレクトリ構成
-  - ファイル構造詳細
-  - 開発ワークフロー
-
-### 03_features/ - 機能仕様
-- 各機能の詳細仕様書（作成予定）
-
-### 04_data/ - データ設計
-- データベーススキーマ
-- Nostrイベント仕様（作成予定）
+- **iroh_gossip_review.md** / **storage_comparison_report.md**: 調査・比較資料
 
 ### 03_implementation/ - 実装ガイド
-- **dht_integration_guide.md**: DHT統合実装ガイド ✨最重要
-  - 依存関係とセットアップ
-  - P2Pモジュール実装
-  - イベントハンドリング
-  - テスト戦略
-- **implementation_plan.md**: 段階的実装計画
-  - Phase 1: DHT統合 (2週間) ✨更新
-  - Phase 2: ベータ版 (3ヶ月)
-  - Phase 3: 正式リリース
-- **storage_implementation_guide.md**: ストレージ実装ガイド
-- **testing_guide.md**: テスト戦略と実装ガイド
-- **e2e_test_setup.md**: E2Eテスト環境セットアップガイド（WebdriverIO + tauri-driver）
-- **e2e_test_implementation_plan.md**: E2Eテスト導入プラン（初期設計文書）
-- **iroh_gossip_integration_design.md**: iroh-gossip統合設計
-- **iroh_gossip_implementation_plan.md**: iroh-gossip実装計画
-- **iroh_gossip_test_implementation.md**: P2P機能テスト実装詳細
+- **summary.md**: 実装ドキュメントの索引
+- **dht_integration_guide.md** / **p2p_mainline_runbook.md**: P2P/DHT運用・実装
+- **testing_guide.md** / **e2e_test_setup.md**: テストガイド
+- **sqlx_* / storage_implementation_guide.md**: ストレージ関連
+- **error_handling_guidelines.md**: エラーハンドリング指針
 
-## 技術スタック
+### kips/・nips/ - 仕様・提案
+- **kips/**: Kukuri Improvement Proposals
+- **nips/**: Nostr Improvement Proposals
 
-### フロントエンド
-- React 18 + TypeScript
-- Vite (ビルドツール)
-- shadcn/ui (UIコンポーネント)
-- Zustand (状態管理)
-- Tanstack Query/Router
+### apis/ - ローカルAPI JSON
+- `docs/apis/` に iroh 系 API JSON を配置
 
-### バックエンド
-- Tauri v2 (デスクトップフレームワーク)
-- Rust (コアロジック)
-- iroh (P2P通信基盤)
-- iroh-gossip (トピックベースイベント配信)
-- nostr-sdk (Nostrプロトコル)
-- SQLite (ローカルDB)
+## 開発状況の参照先
+最新の進行状況・完了事項は、以下のドキュメントを起点に確認してください。
 
-### インフラ
-- Cloudflare Workers / Docker (ピア発見)
-- 分散マーケットプレイス (検索・推薦)
-
-## 現在の開発状況 (2025年08月14日時点)
-
-### 最新の完了項目
-- ✅ **E2Eテスト基盤構築（2025年08月14日）**
-  - WebdriverIO環境セットアップ完了
-  - tauri-driver + Microsoft Edge Driver導入
-  - 基本テストファイル作成（basic.spec.ts, nostr.spec.ts）
-  - デバッグビルド作成・テスト実行成功
-  - 実装時間: 約4時間
-
-- ✅ **Result型統一完了（2025年08月14日）**
-  - 全サービス層のResult型をAppErrorに統一
-  - インフラ層（Repository, P2P, 暗号化）の統一
-  - From実装の追加（7種類のエラー型変換）
-  - コンパイルエラー解消（22件→0件）
-  - ビルド成功達成
-
-- ✅ **v2アーキテクチャ移行 Phase 1-3（2025年08月14日）**
-  - 49コマンドのv2実装完了
-  - 5層クリーンアーキテクチャ確立
-  - 依存性逆転の原則（DIP）適用
-  - トレイトベース設計実装
-
-### 現在の状況
-- ✅ **ビルド**: 成功（警告175件、主に未使用インポート）
-- ✅ **E2Eテスト基盤**: 構築完了（2025年08月14日）
-  - WebdriverIO + tauri-driver環境構築
-  - 6/8テスト成功（基盤動作確認済み）
-  - 実行時間: 約34秒
-- 🔄 **次フェーズ**: E2Eテスト安定化とPhase 7
-  - E2Eテストの待機処理改善
-  - data-testid属性追加
-  - OfflineService詳細実装
-  - → 詳細: activeContext/current_tasks.md
-
-### 完了済み機能
-- ✅ **新アーキテクチャ（クリーンアーキテクチャ）**
-  - ドメイン層（エンティティ、値オブジェクト）
-  - インフラストラクチャ層（リポジトリ、P2P、キャッシュ）
-  - アプリケーション層（サービス実装）
-  - プレゼンテーション層（DTO、ハンドラー、コマンド）
-  - 依存性逆転の原則（DIP）適用
-
-- ✅ **パフォーマンス最適化**
-  - メモリキャッシュ層（TTLサポート、50倍高速化）
-  - バッチ処理（最大100件一括処理）
-  - 並行処理最適化（npub変換5倍高速化）
-  - ハンドラー再利用（生成コスト50倍削減）
-
-- ✅ **基盤実装**
-  - Tauri v2プロジェクト構造
-  - フロントエンド基盤（React 18 + TypeScript）
-  - Rust基盤（鍵管理、暗号化、DB）
-  - Tauriコマンドインターフェース
-  - Windows/macOS/Linuxクロスプラットフォーム対応
-
-- ✅ **Nostr統合**
-  - Nostr SDK統合（v0.42.0）
-  - イベント送受信機能
-  - リレー接続・ヘルスチェック
-  - 双方向同期（Nostr ↔ P2P）
-
-- ✅ **P2P通信実装**
-  - iroh-gossip統合（Day 1-5）
-  - トピック管理機能
-  - メッセージ署名・検証
-  - イベント変換機能（Day 6）
-  - 双方向同期機能（Day 7）
-  - ハイブリッド配信（Day 8）
-  - UI統合（Day 9）
-
-- ✅ **UI/UX**
-  - 基本レイアウト・ルーティング
-  - P2P状態表示（サイドバー）
-  - トピックメッシュ可視化
-  - P2Pデバッグパネル
-
-- ✅ **テスト・品質保証**
-  - 517個のフロントエンドテスト
-  - 156個のバックエンドテスト
-  - 型チェック・リント完全クリーン
-  - E2E/統合テスト基盤
-
-- ✅ **データ連携・機能実装（Phase 2-3完了）**
-  - 投稿の実データ取得・表示
-  - トピック管理機能（作成・編集・削除）
-  - リアルタイム更新機能
-  - 返信・引用機能（NIP-10準拠）
-  - 検索機能（投稿・トピック・ユーザー）
-  - 手動P2P接続機能
-  - リッチテキストエディタ（Markdownサポート）
-  - メディア埋め込み機能
-  - 下書き管理機能
-  - 予約投稿UI（バックエンド実装は保留）
-
-### 最近の成果
-- 🚀 **Phase 6 コマンド最適化完了（2025年08月13日）**
-  - バッチ処理による一括処理（最大100件）
-  - メモリキャッシュで50倍高速化実現
-  - 並行処理でCPU効率5倍向上
-  - パフォーマンステスト・ベンチマーク整備
-- 🏗️ **Phase 5 クリーンアーキテクチャ移行（2025年08月13日）**
-  - 5層構造による責務分離実現
-  - 44個の新規ファイル作成
-  - テスト構造の改善（unit/integration/common）
-  - 依存性逆転の原則（DIP）適用
-- 🎯 **タイムライン機能の改善（2025年08月02日）**
-  - アカウント追加時に#publicトピックへの自動参加
-  - トピック別タイムライン表示機能
-  - 未同期投稿の「未同期」バッジ表示
-  - 前回表示トピックの復元機能
-  - タイムラインへの遷移導線の追加
-- 🎆 **Windows環境アカウント永続化問題の解決（2025年08月02日）**
-  - keyringライブラリのwindows-nativeフィーチャー有効化
-  - Entry::new_with_target()からシンプルなEntry::new()に変更
-  - 全プラットフォームで統一的な実装を実現
-
-### 進行中の作業
-- ⏳ パフォーマンステスト（Day 10）
-- 🔧 Tauriアプリケーション Phase 3.3（その他のリアクション機能）
-
-## 開発フェーズ
-
-1. **Phase 1 (MVP)**: 基本機能実装 **[進行中]**
-   - ユーザー管理 ✅
-   - トピック作成・参加 ✅
-   - 基本的なP2P通信 ✅
-   - UI/UX実装 90%完了
-
-2. **Phase 2 (ベータ)**: 高度な機能
-   - 画像・動画対応
-   - 検索・サジェスト機能
-   - パフォーマンス最適化
-
-3. **Phase 3**: エンタープライズ機能
-   - トークンエコノミー
-   - 高度なプライバシー機能
-   - プラグインシステム
-
-## 主要な設計決定
-
-- **Nostr互換性**: 既存のNostrエコシステムとの相互運用性を維持
-- **ハイブリッドP2P**: 純粋なP2Pの課題を回避しつつ分散性を確保
-- **プライバシーファースト**: エンドツーエンド暗号化とローカル処理を優先
-- **開発者フレンドリー**: OSSファーストでコミュニティ駆動の開発
-
-## 更新履歴
-- 2025年08月14日: Result型統一完了、ビルドエラー解消
-- 2025年08月14日: v2アーキテクチャ移行 Phase 1-3完了（49コマンド実装）
-- 2025年08月13日: Phase 6 プレゼンテーション層への統合完了
-- 2025年08月13日: コマンド最適化実装（50倍高速化達成）
-- 2025年08月02日: Windows環境アカウント永続化問題の完全解決
-- 2025年08月01日: Phase 3.2 新規投稿機能の拡張完了 - テスト総数517件に増加
-- 2025年07月31日: Phase 3.1 トピック参加・離脱機能の改善完了
-- 2025年07月30日: Phase 2.4 追加機能の完全実装
-- 2025年07月29日: フロントエンドテストエラー完全解消 - 342件全てのテストが成功
-- 2025年07月28日: Phase 2.2完了 - トピック管理と投稿作成機能の実装
-- 2025年07月28日: Phase 2.1完了 - トピック一覧の実データ取得・表示機能実装
-- 2025年07月28日: Phase 2.1部分完了 - 投稿の実データ取得・表示機能実装
-- 2025年07月28日: Tauriアプリケーション Phase 1（認証フロー）のテスト作成完了
-- 2025年07月28日: 実装優先順位決定（Tauriアプリ優先、手動P2P接続機能追加）
-- 2025年07月28日: Tauriアプリケーション体験設計と実装計画作成
-- 2025年07月28日: ドキュメント全体の更新（最新実装状況を反映）
-- 2025年07月27日: Nostr統合 Day 9（P2P UI統合）完了
-- 2025年07月27日: フロントエンドのテスト・型・リントエラー完全解消
-- 2025年07月27日: Zustandテストのモック実装問題解決
-- 2025年07月27日: テスト・型・リント修正作業（any型警告解消、署名検証修正）
-- 2025年07月27日: P2Pトピック管理機能の包括的テスト実装
-- 2025年07月26日: Prettier導入と開発環境改善
-- 2025年07月26日: インテグレーションテスト実装、テストガイド追加
-- 2025年07月26日: iroh-gossip採用に伴う技術スタック更新
-- 2025年07月25日: 初版作成
+- `docs/01_project/activeContext/summary.md`
+- `docs/01_project/activeContext/tasks/status/in_progress.md`
+- `docs/01_project/progressReports/`

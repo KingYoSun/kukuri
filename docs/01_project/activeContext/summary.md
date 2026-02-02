@@ -1,4 +1,4 @@
-# activeContext 概要（最終確認日: 2025年09月15日）
+# activeContext 概要（最終確認日: 2026年02月02日）
 
 このディレクトリは、直近の意思決定・タスク運用・計画中/保管中の資料を集約します。参照順は以下のとおりです。
 
@@ -12,7 +12,7 @@
 - iroh-native-dht-plan.md: iroh Mainline DHT 移行計画
 - tauri_app_experience_design.md: Tauri アプリの体験設計
 - tauri_app_implementation_plan.md: 実装計画
-- artefacts/document_date_format_inventory.md: ドキュメント日付表記ルールと棚卸し（2025年10月22日更新）
+- artefacts/document_date_format_inventory.md: ドキュメント日付表記ルールと棚卸し
 - deprecation/
   - gossip_manager_deprecation.md: GossipManager 廃止の経緯
   - distributed-topic-tracker-plan.md: 旧分散トラッカー計画の保管（廃止）
@@ -24,5 +24,5 @@
 - ブロッカー: `tasks/context/blockers.md` に記録。解決後は削除
 
 補足
-- ドキュメントの日付は `YYYY年MM月DD日`（例: 2025年09月15日）表記で統一
+- ドキュメントの日付は `YYYY年MM月DD日`（例: 2026年02月02日）表記で統一
 - `docs/SUMMARY.md` から本ディレクトリへ辿れるように維持すること
