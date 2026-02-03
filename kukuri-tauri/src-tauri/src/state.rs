@@ -608,12 +608,21 @@ impl AppState {
         }
 
         // 購読開始（joinはTopicService側で行われるが、冪等joinは吸収される）
-        let (gossip, event_manager, access_control, p2p_state_arc, app_handle, topic) = {
+        let (
+            gossip,
+            event_manager,
+            access_control,
+            community_node_handler,
+            p2p_state_arc,
+            app_handle,
+            topic,
+        ) = {
             let p2p_state = self.p2p_state.read().await;
             (
                 Arc::clone(&p2p_state.gossip_service),
                 Arc::clone(&self.event_manager),
                 Arc::clone(&self.access_control_service),
+                Arc::clone(&self.community_node_handler),
                 Arc::clone(&self.p2p_state),
                 self.app_handle.clone(),
                 topic_id.to_string(),
@@ -702,6 +711,21 @@ impl AppState {
                                         error = %err,
                                         kind = event_clone.kind,
                                         "access control event handling failed"
+                                    );
+                                }
+                            });
+                        }
+
+                        if matches!(evt.kind, 39000 | 39001) {
+                            let handler = Arc::clone(&community_node_handler);
+                            let event_clone = evt.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(err) = handler.ingest_bootstrap_event(&event_clone).await
+                                {
+                                    tracing::warn!(
+                                        error = %err,
+                                        kind = event_clone.kind,
+                                        "bootstrap gossip event ingestion failed"
                                     );
                                 }
                             });

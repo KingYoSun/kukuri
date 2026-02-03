@@ -17,13 +17,17 @@ use reqwest::{Client, Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v2";
 const COMMUNITY_NODE_CONFIG_LEGACY_KEY: &str = "community_node_config_v1";
 const COMMUNITY_NODE_TRUST_ANCHOR_KEY: &str = "community_node_trust_anchor_v1";
+const COMMUNITY_NODE_BOOTSTRAP_CACHE_KEY: &str = "community_node_bootstrap_cache_v1";
 const AUTH_KIND: u16 = 22242;
+const NODE_DESCRIPTOR_KIND: u16 = 39000;
+const TOPIC_SERVICE_KIND: u16 = 39001;
 const LABEL_KIND: u16 = 39006;
 const ATTESTATION_KIND: u16 = 39010;
 const TRUST_ANCHOR_KIND: u16 = 39011;
@@ -76,6 +80,26 @@ struct StoredTrustAnchor {
     event_json: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct BootstrapCache {
+    #[serde(default)]
+    nodes: BootstrapCacheEntry,
+    #[serde(default)]
+    services: HashMap<String, BootstrapCacheEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct BootstrapCacheEntry {
+    #[serde(default)]
+    items: Vec<serde_json::Value>,
+    #[serde(default)]
+    next_refresh_at: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<i64>,
+    #[serde(default)]
+    stale: bool,
+}
+
 impl From<StoredTrustAnchor> for CommunityNodeTrustAnchorState {
     fn from(anchor: StoredTrustAnchor) -> Self {
         Self {
@@ -110,6 +134,19 @@ struct CommunityNodeSearchPayload {
     items: Vec<serde_json::Value>,
     next_cursor: Option<String>,
     total: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BootstrapHttpResponse {
+    items: Vec<serde_json::Value>,
+    #[serde(default)]
+    next_refresh_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+struct BootstrapAggregateResult {
+    items: Vec<serde_json::Value>,
+    next_refresh_at: Option<i64>,
 }
 
 pub struct CommunityNodeHandler {
@@ -454,25 +491,179 @@ impl CommunityNodeHandler {
     }
 
     pub async fn list_bootstrap_nodes(&self) -> Result<serde_json::Value, AppError> {
-        let config = self.require_config().await?;
-        let nodes = select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap)?;
-        self.aggregate_bootstrap(nodes, "/v1/bootstrap/nodes", None)
-            .await
+        let config = self.load_config().await?.unwrap_or_default();
+        let nodes =
+            select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap).unwrap_or_default();
+        let now = Utc::now().timestamp();
+        let mut cache = self.load_bootstrap_cache().await?;
+        let mut entry = cache.nodes.clone();
+        let mut items = sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &entry.items, now, None);
+        entry.items = items.clone();
+        let mut last_error: Option<AppError> = None;
+
+        if !nodes.is_empty() && (items.is_empty() || should_refresh_bootstrap(&entry, now)) {
+            match self.aggregate_bootstrap(nodes, "/v1/bootstrap/nodes").await {
+                Ok(result) => {
+                    let fetched =
+                        sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &result.items, now, None);
+                    entry.items = fetched.clone();
+                    entry.next_refresh_at = result.next_refresh_at;
+                    entry.updated_at = Some(now);
+                    entry.stale = false;
+                    items = fetched;
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        entry.updated_at = entry.updated_at.or(Some(now));
+        cache.nodes = entry;
+        self.save_bootstrap_cache(&cache).await?;
+
+        if items.is_empty() {
+            if let Some(err) = last_error {
+                return Err(err);
+            }
+            return Err(AppError::NotFound(
+                "Community node bootstrap data is unavailable".to_string(),
+            ));
+        }
+
+        Ok(json!({
+            "items": items,
+            "next_refresh_at": cache.nodes.next_refresh_at
+        }))
     }
 
     pub async fn list_bootstrap_services(
         &self,
         request: CommunityNodeBootstrapServicesRequest,
     ) -> Result<serde_json::Value, AppError> {
-        let config = self.require_config().await?;
-        let nodes = select_nodes_for_role(
-            &config,
-            request.base_url.as_deref(),
-            CommunityNodeRole::Bootstrap,
-        )?;
-        let path = format!("/v1/bootstrap/topics/{}/services", request.topic_id);
-        self.aggregate_bootstrap(nodes, &path, Some(request.topic_id))
-            .await
+        let config = self.load_config().await?.unwrap_or_default();
+        let nodes = if request.base_url.is_some() {
+            select_nodes_for_role(
+                &config,
+                request.base_url.as_deref(),
+                CommunityNodeRole::Bootstrap,
+            )?
+        } else {
+            select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap).unwrap_or_default()
+        };
+
+        let topic_id = request.topic_id;
+        let path = format!("/v1/bootstrap/topics/{}/services", topic_id);
+        let now = Utc::now().timestamp();
+        let mut cache = self.load_bootstrap_cache().await?;
+        let mut entry = cache.services.get(&topic_id).cloned().unwrap_or_default();
+        let mut items =
+            sanitize_bootstrap_items(TOPIC_SERVICE_KIND, &entry.items, now, Some(&topic_id));
+        entry.items = items.clone();
+        let mut last_error: Option<AppError> = None;
+
+        if !nodes.is_empty() && (items.is_empty() || should_refresh_bootstrap(&entry, now)) {
+            match self.aggregate_bootstrap(nodes, &path).await {
+                Ok(result) => {
+                    let fetched = sanitize_bootstrap_items(
+                        TOPIC_SERVICE_KIND,
+                        &result.items,
+                        now,
+                        Some(&topic_id),
+                    );
+                    entry.items = fetched.clone();
+                    entry.next_refresh_at = result.next_refresh_at;
+                    entry.updated_at = Some(now);
+                    entry.stale = false;
+                    items = fetched;
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        entry.updated_at = entry.updated_at.or(Some(now));
+        cache.services.insert(topic_id.clone(), entry);
+        self.save_bootstrap_cache(&cache).await?;
+
+        if items.is_empty() {
+            if let Some(err) = last_error {
+                return Err(err);
+            }
+            return Err(AppError::NotFound(
+                "Community node bootstrap data is unavailable".to_string(),
+            ));
+        }
+
+        Ok(json!({
+            "items": items,
+            "next_refresh_at": cache
+                .services
+                .get(&topic_id)
+                .and_then(|entry| entry.next_refresh_at)
+        }))
+    }
+
+    pub async fn ingest_bootstrap_event(
+        &self,
+        event: &crate::domain::entities::Event,
+    ) -> Result<(), AppError> {
+        let kind = match u16::try_from(event.kind) {
+            Ok(kind) => kind,
+            Err(_) => return Ok(()),
+        };
+        if kind != NODE_DESCRIPTOR_KIND && kind != TOPIC_SERVICE_KIND {
+            return Ok(());
+        }
+
+        let event_json = json!({
+            "id": event.id,
+            "pubkey": event.pubkey,
+            "created_at": event.created_at.timestamp(),
+            "kind": event.kind,
+            "tags": event.tags,
+            "content": event.content,
+            "sig": event.sig,
+        });
+
+        let now = Utc::now().timestamp();
+        let Some(nostr_event) = validate_kip_event_json(&event_json, kind, None, now) else {
+            return Ok(());
+        };
+
+        let mut cache = self.load_bootstrap_cache().await?;
+        let exp = event_tag_value(&nostr_event, "exp").and_then(|value| value.parse::<i64>().ok());
+
+        if kind == NODE_DESCRIPTOR_KIND {
+            merge_bootstrap_entry(
+                &mut cache.nodes,
+                kind,
+                &nostr_event,
+                event_json,
+                exp,
+                now,
+                None,
+            );
+        } else {
+            let Some(topic_id) = event_tag_value(&nostr_event, "t").map(|value| value.to_string())
+            else {
+                return Ok(());
+            };
+            let entry = cache.services.entry(topic_id.clone()).or_default();
+            merge_bootstrap_entry(
+                entry,
+                kind,
+                &nostr_event,
+                event_json,
+                exp,
+                now,
+                Some(topic_id.as_str()),
+            );
+        }
+
+        self.save_bootstrap_cache(&cache).await?;
+        Ok(())
     }
 
     pub async fn get_consent_status(
@@ -556,6 +747,28 @@ impl CommunityNodeHandler {
             .map_err(|err| AppError::SerializationError(err.to_string()))?;
         self.secure_storage
             .store(COMMUNITY_NODE_CONFIG_KEY, &json)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        Ok(())
+    }
+
+    async fn load_bootstrap_cache(&self) -> Result<BootstrapCache, AppError> {
+        let raw = self
+            .secure_storage
+            .retrieve(COMMUNITY_NODE_BOOTSTRAP_CACHE_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        let Some(raw) = raw else {
+            return Ok(BootstrapCache::default());
+        };
+        serde_json::from_str(&raw).map_err(|err| AppError::DeserializationError(err.to_string()))
+    }
+
+    async fn save_bootstrap_cache(&self, cache: &BootstrapCache) -> Result<(), AppError> {
+        let json = serde_json::to_string(cache)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        self.secure_storage
+            .store(COMMUNITY_NODE_BOOTSTRAP_CACHE_KEY, &json)
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
         Ok(())
@@ -742,9 +955,9 @@ impl CommunityNodeHandler {
         &self,
         nodes: Vec<&CommunityNodeConfigNode>,
         path: &str,
-        _topic_id: Option<String>,
-    ) -> Result<serde_json::Value, AppError> {
+    ) -> Result<BootstrapAggregateResult, AppError> {
         let mut items: Vec<serde_json::Value> = Vec::new();
+        let mut next_refresh_at: Option<i64> = None;
         let mut last_error: Option<AppError> = None;
 
         for node in nodes {
@@ -756,10 +969,14 @@ impl CommunityNodeHandler {
                     continue;
                 }
             };
-            match request_json::<serde_json::Value>(builder).await {
+            match request_json::<BootstrapHttpResponse>(builder).await {
                 Ok(response) => {
-                    if let Some(list) = response.get("items").and_then(|value| value.as_array()) {
-                        items.extend(list.iter().cloned());
+                    items.extend(response.items);
+                    if let Some(refresh) = response.next_refresh_at {
+                        next_refresh_at = Some(match next_refresh_at {
+                            Some(current) => current.min(refresh),
+                            None => refresh,
+                        });
                     }
                 }
                 Err(err) => {
@@ -774,7 +991,10 @@ impl CommunityNodeHandler {
             }));
         }
 
-        Ok(json!({ "items": items }))
+        Ok(BootstrapAggregateResult {
+            items,
+            next_refresh_at,
+        })
     }
 
     async fn request_auth_challenge(
@@ -991,6 +1211,127 @@ fn event_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
     })
 }
 
+fn should_refresh_bootstrap(entry: &BootstrapCacheEntry, now: i64) -> bool {
+    if entry.stale {
+        return true;
+    }
+    if let Some(next_refresh_at) = entry.next_refresh_at {
+        if next_refresh_at <= now {
+            return true;
+        }
+    }
+    false
+}
+
+fn sanitize_bootstrap_items(
+    expected_kind: u16,
+    items: &[serde_json::Value],
+    now: i64,
+    topic_filter: Option<&str>,
+) -> Vec<serde_json::Value> {
+    let mut map: HashMap<String, (NostrEvent, serde_json::Value)> = HashMap::new();
+
+    for item in items {
+        let Some(event) = validate_kip_event_json(item, expected_kind, None, now) else {
+            continue;
+        };
+        if let Some(topic) = topic_filter {
+            if event_tag_value(&event, "t") != Some(topic) {
+                continue;
+            }
+        }
+        let Some(key) = addressable_key(&event) else {
+            continue;
+        };
+        let replace = match map.get(&key) {
+            Some((existing, _)) => is_newer_addressable(&event, existing),
+            None => true,
+        };
+        if replace {
+            map.insert(key, (event, item.clone()));
+        }
+    }
+
+    let mut entries: Vec<(NostrEvent, serde_json::Value)> = map.into_values().collect();
+    entries.sort_by(|(left, _), (right, _)| {
+        let left_ts = left.created_at.as_secs();
+        let right_ts = right.created_at.as_secs();
+        match right_ts.cmp(&left_ts) {
+            Ordering::Equal => left.id.to_string().cmp(&right.id.to_string()),
+            other => other,
+        }
+    });
+
+    entries.into_iter().map(|(_, value)| value).collect()
+}
+
+fn merge_bootstrap_entry(
+    entry: &mut BootstrapCacheEntry,
+    expected_kind: u16,
+    event: &NostrEvent,
+    event_json: serde_json::Value,
+    exp: Option<i64>,
+    now: i64,
+    topic_filter: Option<&str>,
+) {
+    let mut items = sanitize_bootstrap_items(expected_kind, &entry.items, now, topic_filter);
+    insert_or_replace_addressable(&mut items, event, event_json);
+    entry.items = items;
+    entry.updated_at = Some(now);
+    entry.stale = true;
+    if let Some(exp) = exp {
+        entry.next_refresh_at = Some(match entry.next_refresh_at {
+            Some(current) => current.min(exp),
+            None => exp,
+        });
+    }
+}
+
+fn insert_or_replace_addressable(
+    items: &mut Vec<serde_json::Value>,
+    event: &NostrEvent,
+    event_json: serde_json::Value,
+) {
+    let Some(key) = addressable_key(event) else {
+        return;
+    };
+
+    for item in items.iter_mut() {
+        let Ok(existing) = serde_json::from_value::<NostrEvent>(item.clone()) else {
+            continue;
+        };
+        if addressable_key(&existing).as_deref() != Some(&key) {
+            continue;
+        }
+        if is_newer_addressable(event, &existing) {
+            *item = event_json;
+        }
+        return;
+    }
+
+    items.push(event_json);
+}
+
+fn addressable_key(event: &NostrEvent) -> Option<String> {
+    let d_tag = event_tag_value(event, "d")?;
+    Some(format!(
+        "{}:{}:{}",
+        event.kind.as_u16(),
+        event.pubkey,
+        d_tag
+    ))
+}
+
+fn is_newer_addressable(candidate: &NostrEvent, existing: &NostrEvent) -> bool {
+    let candidate_ts = candidate.created_at.as_secs();
+    let existing_ts = existing.created_at.as_secs();
+    match candidate_ts.cmp(&existing_ts) {
+        Ordering::Greater => true,
+        Ordering::Less => false,
+        Ordering::Equal => candidate.id.to_string() < existing.id.to_string(),
+    }
+}
+
 fn config_response(config: &CommunityNodeConfig) -> CommunityNodeConfigResponse {
     CommunityNodeConfigResponse {
         nodes: config
@@ -1122,6 +1463,7 @@ mod community_node_handler_tests {
     use crate::infrastructure::storage::{SecureGroupKeyStore, SecureStorage};
     use crate::presentation::dto::community_node_dto::CommunityNodeConfigNodeRequest;
     use async_trait::async_trait;
+    use chrono::Utc;
     use std::collections::HashMap;
     use tokio::sync::Mutex;
 
@@ -1179,6 +1521,25 @@ mod community_node_handler_tests {
         let group_key_store =
             Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
         CommunityNodeHandler::new(key_manager, secure_storage, group_key_store)
+    }
+
+    fn to_domain_event(event: &NostrEvent) -> crate::domain::entities::Event {
+        let created_at =
+            chrono::DateTime::<chrono::Utc>::from_timestamp(event.created_at.as_secs() as i64, 0)
+                .expect("timestamp");
+        crate::domain::entities::Event {
+            id: event.id.to_string(),
+            pubkey: event.pubkey.to_string(),
+            created_at,
+            kind: event.kind.as_u16() as u32,
+            tags: event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect(),
+            content: event.content.clone(),
+            sig: event.sig.to_string(),
+        }
     }
 
     #[tokio::test]
@@ -1260,5 +1621,97 @@ mod community_node_handler_tests {
             weight: Some(1.5),
         };
         assert!(handler.set_trust_anchor(request).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn ingest_bootstrap_descriptor_populates_cache() {
+        let handler = test_handler();
+        let keys = Keys::generate();
+        let now = Utc::now().timestamp();
+        let exp = now + 600;
+
+        let exp_str = exp.to_string();
+        let tags = vec![
+            Tag::parse(["d", "descriptor"]).expect("d"),
+            Tag::parse(["k", "kukuri"]).expect("k"),
+            Tag::parse(["ver", "1"]).expect("ver"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+            Tag::parse(["role", "bootstrap"]).expect("role"),
+        ];
+        let content = json!({
+            "schema": "kukuri-node-desc-v1",
+            "name": "Test Node",
+            "roles": ["bootstrap"],
+            "endpoints": { "http": "https://node.example" }
+        })
+        .to_string();
+        let event = EventBuilder::new(Kind::Custom(NODE_DESCRIPTOR_KIND), content)
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("sign");
+        let domain_event = to_domain_event(&event);
+
+        handler
+            .ingest_bootstrap_event(&domain_event)
+            .await
+            .expect("ingest");
+
+        let response = handler.list_bootstrap_nodes().await.expect("list");
+        let items = response
+            .get("items")
+            .and_then(|value| value.as_array())
+            .expect("items array");
+        assert!(!items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn ingest_bootstrap_topic_service_populates_cache() {
+        let handler = test_handler();
+        let keys = Keys::generate();
+        let now = Utc::now().timestamp();
+        let exp = now + 600;
+        let topic_id = "kukuri:topic1";
+        let d_tag = format!("topic_service:{topic_id}:bootstrap:public");
+
+        let exp_str = exp.to_string();
+        let tags = vec![
+            Tag::parse(["d", d_tag.as_str()]).expect("d"),
+            Tag::parse(["t", topic_id]).expect("t"),
+            Tag::parse(["role", "bootstrap"]).expect("role"),
+            Tag::parse(["scope", "public"]).expect("scope"),
+            Tag::parse(["k", "kukuri"]).expect("k"),
+            Tag::parse(["ver", "1"]).expect("ver"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+        ];
+        let content = json!({
+            "schema": "kukuri-topic-service-v1",
+            "topic": topic_id,
+            "role": "bootstrap",
+            "scope": "public"
+        })
+        .to_string();
+        let event = EventBuilder::new(Kind::Custom(TOPIC_SERVICE_KIND), content)
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("sign");
+        let domain_event = to_domain_event(&event);
+
+        handler
+            .ingest_bootstrap_event(&domain_event)
+            .await
+            .expect("ingest");
+
+        let response = handler
+            .list_bootstrap_services(CommunityNodeBootstrapServicesRequest {
+                base_url: None,
+                topic_id: topic_id.to_string(),
+            })
+            .await
+            .expect("list services");
+        let items = response
+            .get("items")
+            .and_then(|value| value.as_array())
+            .expect("items array");
+        assert!(!items.is_empty());
     }
 }
