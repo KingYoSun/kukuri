@@ -227,7 +227,7 @@ mod api_contract_tests {
     async fn bootstrap_services_requires_auth_when_enabled() {
         let app = Router::new()
             .route(
-                "/v1/bootstrap/topics/:topic_id/services",
+                "/v1/bootstrap/topics/{topic_id}/services",
                 get(get_bootstrap_services),
             )
             .with_state(test_state());

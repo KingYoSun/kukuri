@@ -476,9 +476,10 @@ mod tests {
 
     #[test]
     fn validate_key_envelope_accepts_valid_event() {
-        let keys = Keys::generate();
+        let signer_keys = Keys::generate();
+        let recipient_keys = Keys::generate();
         let tags = vec![
-            vec!["p".to_string(), keys.public_key().to_hex()],
+            vec!["p".to_string(), recipient_keys.public_key().to_hex()],
             vec!["t".to_string(), "kukuri:topic1".to_string()],
             vec!["scope".to_string(), "friend".to_string()],
             vec!["epoch".to_string(), "1".to_string()],
@@ -486,8 +487,9 @@ mod tests {
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
-        let event = nostr::build_signed_event(&keys, KIND_KEY_ENVELOPE as u16, tags, String::new())
-            .expect("event");
+        let event =
+            nostr::build_signed_event(&signer_keys, KIND_KEY_ENVELOPE as u16, tags, String::new())
+                .expect("event");
         let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
         assert_eq!(kind, KipKind::KeyEnvelope);
     }
