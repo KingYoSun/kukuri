@@ -56,11 +56,12 @@ describe('Community Node invite flow', () => {
     await resetAppState();
   });
 
-  it('redeems invite, syncs keys, and posts encrypted content', async function () {
+  it('sends P2P join request and posts encrypted content', async function () {
     this.timeout(240000);
 
     const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
-    if (!baseUrl || !INVITE_JSON) {
+    const p2pInviteReady = process.env.E2E_COMMUNITY_NODE_P2P_INVITE === '1';
+    if (!baseUrl || !INVITE_JSON || !p2pInviteReady) {
       this.skip();
       return;
     }
@@ -115,24 +116,13 @@ describe('Community Node invite flow', () => {
     const inviteInput = await $('[data-testid="community-node-invite-json"]');
     await inviteInput.waitForDisplayed({ timeout: 15000 });
     await inviteInput.setValue(INVITE_JSON);
-    await $('[data-testid="community-node-redeem-invite"]').click();
+    await $('[data-testid="community-node-request-join"]').click();
 
     const settingsPage = await $('[data-testid="settings-page"]');
     await browser.waitUntil(async () => (await settingsPage.getText()).includes(topicId ?? ''), {
       timeout: 30000,
       interval: 500,
-      timeoutMsg: 'Key envelope was not stored after invite redeem',
-    });
-
-    const topicInput = await $('#key-sync-topic-id');
-    await topicInput.waitForDisplayed({ timeout: 15000 });
-    await topicInput.setValue(topicId ?? '');
-    await $('[data-testid="community-node-sync-keys"]').click();
-
-    await browser.waitUntil(async () => (await settingsPage.getText()).includes(topicId ?? ''), {
-      timeout: 30000,
-      interval: 500,
-      timeoutMsg: 'Key sync did not reflect invite topic',
+      timeoutMsg: 'Key envelope was not stored after P2P join request',
     });
 
     const topic = await ensureTestTopic({ name: TOPIC_NAME, topicId });

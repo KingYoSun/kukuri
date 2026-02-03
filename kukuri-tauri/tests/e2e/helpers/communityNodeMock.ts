@@ -135,11 +135,11 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise
     return;
   }
 
-  if (method === 'GET' && path === '/v1/keys/envelopes') {
-    if (!requireAuth(req, res)) {
-      return;
-    }
-    sendJson(res, 200, { items: [] });
+  if (
+    (method === 'GET' && path === '/v1/keys/envelopes') ||
+    (method === 'POST' && path === '/v1/invite/redeem')
+  ) {
+    sendJson(res, 410, { error: 'p2p_only' });
     return;
   }
 

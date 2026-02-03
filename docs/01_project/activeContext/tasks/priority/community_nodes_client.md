@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（Client: ノード採用/鍵/暗号投稿）
 
-最終更新日: 2026年01月26日
+最終更新日: 2026年02月03日
 
 目的: Community Node 連携に必要な UI/ストア/暗号投稿/鍵管理をクライアントに実装する。
 
@@ -15,7 +15,7 @@
 
 ## Client-2 Node API 連携
 
-- [x] bootstrap/labels/trust/search/consent/invite/keys の API 呼び出しを実装する
+- [x] bootstrap/labels/trust/search/consent の API 呼び出しを実装（invite/keys は P2P-only の Access Control を使用）。
 - [x] 取得結果を設定画面に反映する
 
 ## Client-3 鍵管理と暗号投稿

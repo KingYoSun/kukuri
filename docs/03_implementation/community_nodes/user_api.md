@@ -141,6 +141,12 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 
 ## API（叩き口）案
 
+### Access Control（invite/keys）
+
+- v1 は P2P-only。User API に `/v1/invite/redeem` `/v1/keys/envelopes` は提供しない。
+- クライアントは `access_control_issue_invite` / `access_control_request_join` を利用する。
+
+
 ### 規約/プライバシー
 
 - `GET /v1/policies/current`

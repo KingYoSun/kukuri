@@ -173,8 +173,6 @@ pub fn run() {
             presentation::commands::community_node_set_trust_anchor,
             presentation::commands::community_node_clear_trust_anchor,
             presentation::commands::community_node_list_group_keys,
-            presentation::commands::community_node_sync_key_envelopes,
-            presentation::commands::community_node_redeem_invite,
             presentation::commands::community_node_list_labels,
             presentation::commands::community_node_submit_report,
             presentation::commands::community_node_trust_report_based,

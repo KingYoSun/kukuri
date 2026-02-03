@@ -253,8 +253,6 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
             "/v1/topic-subscriptions/{topic_id}",
             delete(subscriptions::delete_topic_subscription),
         )
-        .route("/v1/invite/redeem", post(subscriptions::redeem_invite))
-        .route("/v1/keys/envelopes", get(subscriptions::list_key_envelopes))
         .route("/v1/search", get(subscriptions::search))
         .route("/v1/trending", get(subscriptions::trending))
         .route("/v1/reports", post(subscriptions::submit_report))

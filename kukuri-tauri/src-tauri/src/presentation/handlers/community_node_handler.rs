@@ -1,19 +1,17 @@
-use crate::application::ports::group_key_store::{GroupKeyEntry, GroupKeyRecord, GroupKeyStore};
+use crate::application::ports::group_key_store::{GroupKeyEntry, GroupKeyStore};
 use crate::application::ports::key_manager::KeyManager;
 use crate::infrastructure::storage::SecureStorage;
 use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
     CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
-    CommunityNodeKeyEnvelopeRequest, CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest,
-    CommunityNodeRedeemInviteRequest, CommunityNodeRedeemInviteResponse,
-    CommunityNodeReportRequest, CommunityNodeRoleConfig, CommunityNodeSearchRequest,
-    CommunityNodeTokenRequest, CommunityNodeTrustAnchorRequest, CommunityNodeTrustAnchorState,
-    CommunityNodeTrustRequest,
+    CommunityNodeLabelsRequest, CommunityNodeReportRequest, CommunityNodeRoleConfig,
+    CommunityNodeSearchRequest, CommunityNodeTokenRequest, CommunityNodeTrustAnchorRequest,
+    CommunityNodeTrustAnchorState, CommunityNodeTrustRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::Utc;
 use nostr_sdk::prelude::{
-    Event as NostrEvent, EventBuilder, FromBech32, Keys, Kind, PublicKey, SecretKey, Tag, nip44,
+    Event as NostrEvent, EventBuilder, FromBech32, Keys, Kind, PublicKey, SecretKey, Tag,
 };
 use reqwest::{Client, Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
@@ -106,33 +104,10 @@ struct AuthVerifyResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct KeyEnvelopeListResponse {
-    items: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
 struct CommunityNodeSearchPayload {
     items: Vec<serde_json::Value>,
     next_cursor: Option<String>,
     total: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct InviteRedeemResponse {
-    topic_id: String,
-    scope: String,
-    epoch: i64,
-    key_envelope_event: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct KeyEnvelopePayload {
-    schema: String,
-    topic: String,
-    scope: String,
-    epoch: i64,
-    key_b64: String,
-    issued_at: Option<i64>,
 }
 
 pub struct CommunityNodeHandler {
@@ -354,58 +329,6 @@ impl CommunityNodeHandler {
 
     pub async fn list_group_keys(&self) -> Result<Vec<GroupKeyEntry>, AppError> {
         self.group_key_store.list_keys().await
-    }
-
-    pub async fn sync_key_envelopes(
-        &self,
-        request: CommunityNodeKeyEnvelopeRequest,
-    ) -> Result<CommunityNodeKeyEnvelopeResponse, AppError> {
-        let config = self.require_config().await?;
-        let node = select_node(&config, request.base_url.as_deref())?;
-        let url = build_url(&node.base_url, "/v1/keys/envelopes");
-        let mut builder = self
-            .authorized_request(node, Method::GET, url, true)
-            .await?;
-        builder = builder.query(&[
-            ("topic_id", request.topic_id.clone()),
-            (
-                "scope",
-                request
-                    .scope
-                    .clone()
-                    .unwrap_or_else(|| "invite".to_string()),
-            ),
-        ]);
-        if let Some(after_epoch) = request.after_epoch {
-            builder = builder.query(&[("after_epoch", after_epoch.to_string())]);
-        }
-        let response: KeyEnvelopeListResponse = request_json(builder).await?;
-        let mut stored = Vec::new();
-        for value in response.items {
-            let entry = self.store_key_envelope(value).await?;
-            stored.push(entry);
-        }
-        Ok(CommunityNodeKeyEnvelopeResponse { stored })
-    }
-
-    pub async fn redeem_invite(
-        &self,
-        request: CommunityNodeRedeemInviteRequest,
-    ) -> Result<CommunityNodeRedeemInviteResponse, AppError> {
-        let config = self.require_config().await?;
-        let node = select_node(&config, request.base_url.as_deref())?;
-        let url = build_url(&node.base_url, "/v1/invite/redeem");
-        let builder = self
-            .authorized_request(node, Method::POST, url, true)
-            .await?
-            .json(&json!({ "capability_event_json": request.capability_event_json }));
-        let response: InviteRedeemResponse = request_json(builder).await?;
-        let _ = self.store_key_envelope(response.key_envelope_event).await?;
-        Ok(CommunityNodeRedeemInviteResponse {
-            topic_id: response.topic_id,
-            scope: response.scope,
-            epoch: response.epoch,
-        })
     }
 
     pub async fn list_labels(
@@ -839,42 +762,6 @@ impl CommunityNodeHandler {
         let payload = json!({ "auth_event_json": auth_event });
         let builder = self.client.post(url).json(&payload);
         request_json(builder).await
-    }
-
-    async fn store_key_envelope(
-        &self,
-        value: serde_json::Value,
-    ) -> Result<GroupKeyEntry, AppError> {
-        let event: NostrEvent = serde_json::from_value(value)
-            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-        let keypair = self.key_manager.current_keypair().await?;
-        let secret_key = SecretKey::from_bech32(&keypair.nsec)
-            .map_err(|err| AppError::Crypto(format!("Invalid nsec: {err}")))?;
-        let decrypted = nip44::decrypt(&secret_key, &event.pubkey, event.content)
-            .map_err(|err| AppError::Crypto(format!("NIP-44 decrypt failed: {err}")))?;
-        let payload: KeyEnvelopePayload = serde_json::from_str(&decrypted)
-            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-        if payload.schema != "kukuri-key-envelope-v1" && payload.schema != "kukuri-keyenv-v1" {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invalid key envelope schema",
-            ));
-        }
-        let stored_at = payload.issued_at.unwrap_or_else(|| Utc::now().timestamp());
-        let record = GroupKeyRecord {
-            topic_id: payload.topic.clone(),
-            scope: payload.scope.clone(),
-            epoch: payload.epoch,
-            key_b64: payload.key_b64.clone(),
-            stored_at,
-        };
-        self.group_key_store.store_key(record).await?;
-        Ok(GroupKeyEntry {
-            topic_id: payload.topic,
-            scope: payload.scope,
-            epoch: payload.epoch,
-            stored_at,
-        })
     }
 }
 

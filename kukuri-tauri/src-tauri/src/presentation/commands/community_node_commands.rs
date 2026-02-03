@@ -2,10 +2,9 @@ use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
     CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
-    CommunityNodeKeyEnvelopeRequest, CommunityNodeKeyEnvelopeResponse, CommunityNodeLabelsRequest,
-    CommunityNodeRedeemInviteRequest, CommunityNodeRedeemInviteResponse,
-    CommunityNodeReportRequest, CommunityNodeSearchRequest, CommunityNodeTokenRequest,
-    CommunityNodeTrustAnchorRequest, CommunityNodeTrustAnchorState, CommunityNodeTrustRequest,
+    CommunityNodeLabelsRequest, CommunityNodeReportRequest, CommunityNodeSearchRequest,
+    CommunityNodeTokenRequest, CommunityNodeTrustAnchorRequest, CommunityNodeTrustAnchorState,
+    CommunityNodeTrustRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -84,27 +83,6 @@ pub async fn community_node_list_group_keys(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<crate::application::ports::group_key_store::GroupKeyEntry>>, AppError> {
     let result = state.community_node_handler.list_group_keys().await;
-    Ok(ApiResponse::from_result(result))
-}
-
-#[tauri::command]
-pub async fn community_node_sync_key_envelopes(
-    state: State<'_, AppState>,
-    request: CommunityNodeKeyEnvelopeRequest,
-) -> Result<ApiResponse<CommunityNodeKeyEnvelopeResponse>, AppError> {
-    let result = state
-        .community_node_handler
-        .sync_key_envelopes(request)
-        .await;
-    Ok(ApiResponse::from_result(result))
-}
-
-#[tauri::command]
-pub async fn community_node_redeem_invite(
-    state: State<'_, AppState>,
-    request: CommunityNodeRedeemInviteRequest,
-) -> Result<ApiResponse<CommunityNodeRedeemInviteResponse>, AppError> {
-    let result = state.community_node_handler.redeem_invite(request).await;
     Ok(ApiResponse::from_result(result))
 }
 

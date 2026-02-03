@@ -1,4 +1,3 @@
-use crate::application::ports::group_key_store::GroupKeyEntry;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,32 +48,6 @@ pub struct CommunityNodeConfigResponse {
 pub struct CommunityNodeAuthResponse {
     pub expires_at: i64,
     pub pubkey: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommunityNodeKeyEnvelopeRequest {
-    pub base_url: Option<String>,
-    pub topic_id: String,
-    pub scope: Option<String>,
-    pub after_epoch: Option<i64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommunityNodeKeyEnvelopeResponse {
-    pub stored: Vec<GroupKeyEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommunityNodeRedeemInviteRequest {
-    pub base_url: Option<String>,
-    pub capability_event_json: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommunityNodeRedeemInviteResponse {
-    pub topic_id: String,
-    pub scope: String,
-    pub epoch: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

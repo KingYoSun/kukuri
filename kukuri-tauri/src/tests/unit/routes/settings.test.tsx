@@ -33,6 +33,11 @@ vi.mock('@/lib/api/tauri', () => ({
 vi.mock('@/lib/api/nostr', () => ({
   updateNostrMetadata: vi.fn(),
 }));
+vi.mock('@/lib/api/accessControl', () => ({
+  accessControlApi: {
+    requestJoin: vi.fn().mockResolvedValue({ event_id: '', sent_topics: [] }),
+  },
+}));
 vi.mock('@/lib/api/communityNode', () => ({
   communityNodeApi: {
     getConfig: vi.fn().mockResolvedValue(null),
@@ -45,8 +50,6 @@ vi.mock('@/lib/api/communityNode', () => ({
     clearTrustAnchor: vi.fn().mockResolvedValue(undefined),
     authenticate: vi.fn().mockResolvedValue({ expires_at: 0, pubkey: '' }),
     clearToken: vi.fn().mockResolvedValue(undefined),
-    syncKeyEnvelopes: vi.fn().mockResolvedValue({ stored: [] }),
-    redeemInvite: vi.fn().mockResolvedValue({ topic_id: '', scope: 'invite', epoch: 1 }),
     acceptConsents: vi.fn().mockResolvedValue(null),
   },
 }));

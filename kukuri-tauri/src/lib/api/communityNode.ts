@@ -1,7 +1,5 @@
 import { invokeCommand, invokeCommandVoid } from '@/lib/api/tauriClient';
 
-export type CommunityNodeScope = 'public' | 'friend_plus' | 'friend' | 'invite';
-
 export type CommunityNodeRoleKey = 'labels' | 'trust' | 'search' | 'bootstrap';
 
 export interface CommunityNodeRoleConfig {
@@ -45,16 +43,6 @@ export interface GroupKeyEntry {
   scope: string;
   epoch: number;
   stored_at: number;
-}
-
-export interface CommunityNodeKeyEnvelopeResponse {
-  stored: GroupKeyEntry[];
-}
-
-export interface CommunityNodeRedeemInviteResponse {
-  topic_id: string;
-  scope: string;
-  epoch: number;
 }
 
 export interface CommunityNodeLabelsRequest {
@@ -120,13 +108,6 @@ export interface CommunityNodeConsentRequest {
   accept_all_current?: boolean;
 }
 
-export interface CommunityNodeKeyEnvelopeRequest {
-  base_url?: string;
-  topic_id: string;
-  scope?: string;
-  after_epoch?: number;
-}
-
 export const communityNodeApi = {
   getConfig: () => invokeCommand<CommunityNodeConfigResponse | null>('get_community_node_config'),
 
@@ -148,16 +129,6 @@ export const communityNodeApi = {
     }),
 
   listGroupKeys: () => invokeCommand<GroupKeyEntry[]>('community_node_list_group_keys'),
-
-  syncKeyEnvelopes: (request: CommunityNodeKeyEnvelopeRequest) =>
-    invokeCommand<CommunityNodeKeyEnvelopeResponse>('community_node_sync_key_envelopes', {
-      request,
-    }),
-
-  redeemInvite: (request: { base_url?: string; capability_event_json: unknown }) =>
-    invokeCommand<CommunityNodeRedeemInviteResponse>('community_node_redeem_invite', {
-      request,
-    }),
 
   listLabels: (request: CommunityNodeLabelsRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_list_labels', { request }),

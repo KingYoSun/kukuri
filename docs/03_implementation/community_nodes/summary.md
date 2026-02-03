@@ -18,6 +18,7 @@
 - RDB は単一の Postgres サービスに集約する
 - `./kukuri-cli` は `bootstrap` / `relay` として `./kukuri-community-node` に統合する
 - 外部公開する HTTP インターフェイスは User API に集約する（認証/課金/購読/レート制限の統一）
+- Access Control（invite/keys）は P2P-only。User API に `/v1/invite/redeem` `/v1/keys/envelopes` は提供しない。
 - 利用規約/プライバシーポリシーへの同意を必須化し、User API で同意状態を管理する
 - indexer は Meilisearch を利用する
 - moderation はルールベースのフィルタ設定 + LLM によるラベリング自動化を組み込む

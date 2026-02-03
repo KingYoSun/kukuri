@@ -15,23 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { accessControlApi } from '@/lib/api/accessControl';
 import {
   communityNodeApi,
   defaultCommunityNodeRoles,
   type CommunityNodeConfigNodeResponse,
   type CommunityNodeRoleKey,
-  type CommunityNodeScope,
 } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
 import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 import { toast } from 'sonner';
-
-const keyScopeOptions: Array<{ value: CommunityNodeScope; label: string }> = [
-  { value: 'friend_plus', label: 'フレンド+' },
-  { value: 'friend', label: 'フレンド' },
-  { value: 'invite', label: '招待' },
-  { value: 'public', label: '公開' },
-];
 
 const shortenPubkey = (value: string) =>
   value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
@@ -47,9 +40,6 @@ export function CommunityNodePanel() {
   const queryClient = useQueryClient();
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [actionNodeBaseUrl, setActionNodeBaseUrl] = useState('');
-  const [syncTopicId, setSyncTopicId] = useState('');
-  const [syncScope, setSyncScope] = useState<CommunityNodeScope>('invite');
-  const [syncAfterEpoch, setSyncAfterEpoch] = useState('');
   const [inviteJson, setInviteJson] = useState('');
   const [trustAnchorAttester, setTrustAnchorAttester] = useState('auto');
   const { enableAccessControl, setEnableAccessControl } = useCommunityNodeStore();
@@ -260,56 +250,23 @@ export function CommunityNodePanel() {
     }
   };
 
-  const handleSyncKeyEnvelopes = async () => {
-    if (!syncTopicId.trim()) {
-      toast.error('トピックIDを入力してください');
-      return;
-    }
-    if (!selectedNode?.base_url) {
-      toast.error('操作対象のノードを選択してください');
-      return;
-    }
-    try {
-      const afterEpoch = syncAfterEpoch.trim() ? Number(syncAfterEpoch.trim()) : undefined;
-      await communityNodeApi.syncKeyEnvelopes({
-        base_url: selectedNode.base_url,
-        topic_id: syncTopicId.trim(),
-        scope: syncScope,
-        after_epoch: Number.isFinite(afterEpoch) ? afterEpoch : undefined,
-      });
-      await refreshCommunityData();
-      toast.success('鍵情報を同期しました');
-    } catch (error) {
-      errorHandler.log('Community node key sync failed', error, {
-        context: 'CommunityNodePanel.syncKeyEnvelopes',
-        showToast: true,
-        toastTitle: '鍵情報の同期に失敗しました',
-      });
-    }
-  };
-
-  const handleRedeemInvite = async () => {
+  const handleRequestJoin = async () => {
     if (!inviteJson.trim()) {
       toast.error('招待イベントJSONを入力してください');
       return;
     }
-    if (!selectedNode?.base_url) {
-      toast.error('操作対象のノードを選択してください');
-      return;
-    }
     try {
       const payload = JSON.parse(inviteJson);
-      await communityNodeApi.redeemInvite({
-        base_url: selectedNode.base_url,
-        capability_event_json: payload,
+      await accessControlApi.requestJoin({
+        invite_event_json: payload,
       });
       await refreshCommunityData();
-      toast.success('招待を適用しました');
+      toast.success('P2P 参加リクエストを送信しました');
     } catch (error) {
-      errorHandler.log('Community node invite redeem failed', error, {
-        context: 'CommunityNodePanel.redeemInvite',
+      errorHandler.log('Community node join request failed', error, {
+        context: 'CommunityNodePanel.requestJoin',
         showToast: true,
-        toastTitle: '招待の適用に失敗しました',
+        toastTitle: 'P2P 参加リクエストに失敗しました',
       });
     }
   };
@@ -604,58 +561,10 @@ export function CommunityNodePanel() {
         <Separator />
 
         <div className="space-y-3">
-          <p className="font-medium">鍵エンベロープ同期</p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="key-sync-topic-id">トピックID</Label>
-              <Input
-                id="key-sync-topic-id"
-                placeholder="kukuri:topic"
-                value={syncTopicId}
-                onChange={(e) => setSyncTopicId(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>スコープ</Label>
-              <Select
-                value={syncScope}
-                onValueChange={(value) => setSyncScope(value as CommunityNodeScope)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="スコープを選択" />
-                </SelectTrigger>
-                <SelectContent>
-                  {keyScopeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="key-sync-epoch">after_epoch (任意)</Label>
-            <Input
-              id="key-sync-epoch"
-              placeholder="2"
-              value={syncAfterEpoch}
-              onChange={(e) => setSyncAfterEpoch(e.target.value)}
-            />
-          </div>
-          <Button
-            onClick={handleSyncKeyEnvelopes}
-            disabled={!selectedNode?.has_token}
-            data-testid="community-node-sync-keys"
-          >
-            同期
-          </Button>
-        </div>
-
-        <Separator />
-
-        <div className="space-y-3">
-          <p className="font-medium">招待の適用</p>
+          <p className="font-medium">招待参加（P2P）</p>
+          <p className="text-sm text-muted-foreground">
+            invite.capability を貼り付けて join.request を送信します。鍵はP2P経由で届きます。
+          </p>
           <Textarea
             placeholder="invite.capability のイベントJSON"
             rows={6}
@@ -664,11 +573,11 @@ export function CommunityNodePanel() {
             data-testid="community-node-invite-json"
           />
           <Button
-            onClick={handleRedeemInvite}
-            disabled={!selectedNode?.has_token}
-            data-testid="community-node-redeem-invite"
+            onClick={handleRequestJoin}
+            disabled={!enableAccessControl}
+            data-testid="community-node-request-join"
           >
-            招待を適用
+            参加リクエストを送信
           </Button>
         </div>
 
