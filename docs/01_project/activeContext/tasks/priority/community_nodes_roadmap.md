@@ -51,6 +51,15 @@
   - [x] `cn-admin-api`: login/logout など主要エンドポイントの契約テスト追加。
   - [x] `kukuri-tauri`: `CommunityNodeHandler` の単体/契約テスト追加。
 
+## 未実装/不足事項（2026年02月03日 追記）
+
+- [ ] Gossip/DHT 由来の 39000/39001 収集・キャッシュ・HTTP 再取得の統合フローをクライアントに実装する（plan 4.1 の未対応分）。
+- [ ] community_node_plan と KIP-0001 の仕様差分（39022/kind一覧、Topic ID 形式、NIP-44 実装方針、P2P-only と Access Control の運用範囲）を整理してドキュメント整合する。
+- [ ] `cn-admin-api`: access_control rotate/revoke と `POST /v1/reindex` の成功系契約テストを追加する。
+- [ ] `cn-user-api`: `/v1/labels` `/v1/trust/*` `/v1/trending` の成功系契約テスト（seed/fixture 含む）を追加する。
+- [ ] `cn-relay`: ingest→outbox→WS/gossip 配信の統合テストを追加する。
+- [ ] `kukuri-tauri`: `CommunityNodeHandler` の複数ノード集約（search/trust の合算 + cursor 合成）ユニットテストを追加する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
