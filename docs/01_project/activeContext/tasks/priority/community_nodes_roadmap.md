@@ -43,7 +43,7 @@
 - [x] trust.anchor(39011) の発行/保存/適用/UI を実装し、採用attester切替で表示が変わることを確認する（M5受入条件の未達）。
 - [x] Access Control の **epochローテ/追放** フローを実装する（epoch++ と残留者への key.envelope 再配布、ローテ操作の CLI/サービス化）。
 - [x] `access_control` は P2P-only を正とし、User API の invite/keys エンドポイントは廃止（実装・UI・ドキュメントを統一）。
-- [ ] 通報 UI（reason 選択 + submit）を PostCard などに追加し、`community_node_submit_report` を利用した E2E を追加する。
+- [x] 通報 UI（reason 選択 + submit）を PostCard などに追加し、`community_node_submit_report` を利用した E2E を追加する。
 - [ ] label/attestation のクライアント側検証（署名/exp/採用ノード）を導入し、未採用ノード由来のデータは無視する。
 - [ ] テスト不足の補完:
   - [ ] `cn-kip-types`: 39001/39005/39010/39011/39020 の検証テスト追加。

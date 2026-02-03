@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import {
   Bookmark,
+  Flag,
   Heart,
   Lock,
   Loader2,
@@ -46,6 +47,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ReactionPicker } from './ReactionPicker';
 import { QuoteForm } from './QuoteForm';
 import { ReplyForm } from './ReplyForm';
@@ -62,6 +79,18 @@ const scopeLabels: Record<string, string> = {
   friend: 'フレンド',
   invite: '招待',
 };
+
+const reportReasonOptions = [
+  { value: 'spam', label: 'スパム' },
+  { value: 'harassment', label: '嫌がらせ' },
+  { value: 'hate', label: 'ヘイト' },
+  { value: 'scam', label: '詐欺' },
+  { value: 'nsfw', label: 'センシティブ' },
+  { value: 'illegal', label: '違法' },
+  { value: 'other', label: 'その他' },
+];
+
+const defaultReportReason = reportReasonOptions[0]?.value ?? 'spam';
 
 const formatScopeLabel = (scope?: string) => {
   if (!scope) {
@@ -144,9 +173,11 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
   const [boostCount, setBoostCount] = useState(post.boosts ?? 0);
   const [isBookmarkedLocal, setIsBookmarkedLocal] = useState(false);
+  const [reportReason, setReportReason] = useState(defaultReportReason);
 
   const queryClient = useQueryClient();
   const { isBookmarked, toggleBookmark, fetchBookmarks } = useBookmarkStore();
@@ -184,6 +215,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     communityConfigQuery.data?.nodes?.filter((node) => node.roles.labels && node.has_token) ?? [];
   const trustNodes =
     communityConfigQuery.data?.nodes?.filter((node) => node.roles.trust && node.has_token) ?? [];
+  const reportNode = communityConfigQuery.data?.nodes?.find((node) => node.has_token) ?? null;
   const trustAnchorAttester = trustAnchorQuery.data?.attester ?? null;
   const trustAnchorNode = trustAnchorAttester
     ? (trustNodes.find((node) => node.pubkey === trustAnchorAttester) ?? null)
@@ -192,6 +224,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const trustAttesterLabel = formatAttesterLabel(trustBaseUrl, trustAnchorAttester);
   const enableLabels = labelNodes.length > 0;
   const enableTrust = trustNodes.length > 0;
+  const canReport = Boolean(reportNode);
   const labelQuery = useQuery({
     queryKey: ['community-node', 'labels', post.id],
     queryFn: () =>
@@ -203,6 +236,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     staleTime: 1000 * 60 * 5,
   });
   const trustSubject = `pubkey:${post.author.pubkey}`;
+  const reportTarget = `event:${post.id}`;
   const trustReportQuery = useQuery({
     queryKey: [
       'community-node',
@@ -236,6 +270,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const resolvedScope = post.scope ?? 'public';
   const showScopeBadge = resolvedScope !== 'public';
   const showEncryptedBadge = post.isEncrypted === true;
+  const showPostMenu = canDelete || canReport;
 
   useEffect(() => {
     setIsBookmarkedLocal(isPostBookmarked);
@@ -290,6 +325,59 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     trustDensityQuery.error,
     post.author.pubkey,
   ]);
+
+  const reportMutation = useMutation({
+    mutationFn: async () => {
+      if (!reportNode) {
+        throw new Error('Community node is not configured');
+      }
+      if (!reportReason) {
+        throw new Error('Report reason is required');
+      }
+      return await communityNodeApi.submitReport({
+        base_url: reportNode.base_url,
+        target: reportTarget,
+        reason: reportReason,
+      });
+    },
+    onSuccess: () => {
+      toast.success('通報を受け付けました');
+      setShowReportDialog(false);
+      setReportReason(defaultReportReason);
+    },
+    onError: (error) => {
+      errorHandler.log('Failed to submit community node report', error, {
+        context: 'PostCard.report',
+        showToast: true,
+        toastTitle: '通報に失敗しました',
+      });
+    },
+  });
+
+  const handleReportDialogChange = (open: boolean) => {
+    if (reportMutation.isPending) {
+      return;
+    }
+    if (!open) {
+      setReportReason(defaultReportReason);
+    }
+    setShowReportDialog(open);
+  };
+
+  const handleOpenReportDialog = () => {
+    if (!canReport) {
+      toast.error('Community Node が未設定です');
+      return;
+    }
+    setShowReportDialog(true);
+  };
+
+  const handleSubmitReport = () => {
+    if (reportMutation.isPending) {
+      return;
+    }
+    reportMutation.mutate();
+  };
 
   const likeMutation = useMutation({
     mutationFn: async () => {
@@ -480,7 +568,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               <p className="text-sm text-muted-foreground">{post.author.npub}</p>
             </div>
           </div>
-          {canDelete && (
+          {showPostMenu && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -493,14 +581,25 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setShowDeleteDialog(true)}
-                  data-testid={`${baseTestId}-delete`}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  削除
-                </DropdownMenuItem>
+                {canReport && (
+                  <DropdownMenuItem
+                    onClick={handleOpenReportDialog}
+                    data-testid={`${baseTestId}-report`}
+                  >
+                    <Flag className="mr-2 h-4 w-4" />
+                    通報
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setShowDeleteDialog(true)}
+                    data-testid={`${baseTestId}-delete`}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    削除
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -659,6 +758,70 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
+      <Dialog open={showReportDialog} onOpenChange={handleReportDialogChange}>
+        <DialogContent data-testid={`${baseTestId}-report-dialog`}>
+          <DialogHeader>
+            <DialogTitle>通報</DialogTitle>
+            <DialogDescription>Community Node に通報理由を送信します。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">
+                対象: {post.author.displayName || post.author.name || 'ユーザー'}
+              </p>
+              <p className="break-all">event: {post.id}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${baseTestId}-report-reason`}>理由</Label>
+              <Select value={reportReason} onValueChange={setReportReason}>
+                <SelectTrigger
+                  id={`${baseTestId}-report-reason`}
+                  data-testid={`${baseTestId}-report-reason`}
+                >
+                  <SelectValue placeholder="理由を選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  {reportReasonOptions.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      data-testid={`${baseTestId}-report-reason-${option.value}`}
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => handleReportDialogChange(false)}
+              disabled={reportMutation.isPending}
+              data-testid={`${baseTestId}-report-cancel`}
+            >
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSubmitReport}
+              disabled={reportMutation.isPending || !reportReason}
+              data-testid={`${baseTestId}-report-submit`}
+            >
+              {reportMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  送信中...
+                </>
+              ) : (
+                '通報する'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

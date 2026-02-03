@@ -133,6 +133,7 @@ vi.mock('@/lib/api/communityNode', () => ({
     getConfig: vi.fn().mockResolvedValue(null),
     getTrustAnchor: vi.fn().mockResolvedValue(null),
     listLabels: vi.fn(),
+    submitReport: vi.fn(),
     trustReportBased: vi.fn(),
     trustCommunicationDensity: vi.fn(),
     setTrustAnchor: vi.fn(),
@@ -213,6 +214,51 @@ vi.mock('@/components/ui/alert-dialog', () => ({
     onClick?: () => void;
   }) => (
     <button type="button" disabled={disabled} onClick={onClick} {...rest}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ children, open = true }: { children: React.ReactNode; open?: boolean }) => (
+    <div>{open ? children : null}</div>
+  ),
+  DialogContent: ({ children, ...rest }: { children: React.ReactNode; [key: string]: unknown }) => (
+    <div {...rest}>{children}</div>
+  ),
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children, ...rest }: { children: React.ReactNode; [key: string]: unknown }) => (
+    <h3 {...rest}>{children}</h3>
+  ),
+  DialogDescription: ({
+    children,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => <p {...rest}>{children}</p>,
+  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/ui/select', () => ({
+  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectTrigger: ({ children, ...rest }: { children: React.ReactNode; [key: string]: unknown }) => (
+    <button type="button" {...rest}>
+      {children}
+    </button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectItem: ({
+    children,
+    value,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    value?: string;
+    [key: string]: unknown;
+  }) => (
+    <button type="button" data-value={value} {...rest}>
       {children}
     </button>
   ),

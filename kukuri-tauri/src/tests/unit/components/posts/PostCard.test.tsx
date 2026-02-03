@@ -536,6 +536,46 @@ describe('PostCard', () => {
     });
   });
 
+  describe('通報メニュー', () => {
+    it('通報理由を選択して送信できる', async () => {
+      const { communityNodeApi } = await import('@/lib/api/communityNode');
+
+      vi.mocked(communityNodeApi.getConfig).mockResolvedValueOnce({
+        nodes: [
+          {
+            base_url: 'https://report.example',
+            roles: { labels: false, trust: false, search: false, bootstrap: false },
+            has_token: true,
+            token_expires_at: null,
+            pubkey: 'a'.repeat(64),
+          },
+        ],
+      });
+      vi.mocked(communityNodeApi.submitReport).mockResolvedValueOnce({ status: 'accepted' });
+
+      renderWithQueryClient(<PostCard post={mockPost} />);
+
+      const menu = await screen.findByTestId('post-1-menu');
+      fireEvent.click(menu);
+      const reportButton = await screen.findByTestId('post-1-report');
+      fireEvent.click(reportButton);
+
+      const dialog = await screen.findByTestId('post-1-report-dialog');
+      expect(dialog).toBeInTheDocument();
+
+      const submitButton = await screen.findByTestId('post-1-report-submit');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(communityNodeApi.submitReport).toHaveBeenCalledWith({
+          base_url: 'https://report.example',
+          target: `event:${mockPost.id}`,
+          reason: 'spam',
+        });
+      });
+    });
+  });
+
   it('マウント時にブックマーク状態を取得する', () => {
     renderWithQueryClient(<PostCard post={mockPost} />);
 

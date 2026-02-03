@@ -58,6 +58,13 @@ export interface CommunityNodeTrustRequest {
   subject: string;
 }
 
+export interface CommunityNodeReportRequest {
+  base_url?: string;
+  report_event_json?: unknown;
+  target?: string;
+  reason?: string;
+}
+
 export interface CommunityNodeTrustAnchorRequest {
   attester: string;
   claim?: string;
@@ -133,7 +140,7 @@ export const communityNodeApi = {
   listLabels: (request: CommunityNodeLabelsRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_list_labels', { request }),
 
-  submitReport: (request: Record<string, unknown>) =>
+  submitReport: (request: CommunityNodeReportRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_submit_report', { request }),
 
   trustReportBased: (request: CommunityNodeTrustRequest) =>
