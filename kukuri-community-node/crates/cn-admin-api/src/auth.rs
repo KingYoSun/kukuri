@@ -192,7 +192,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use axum::routing::get;
+    use axum::routing::{get, post};
     use axum::Router;
     use cn_core::service_config;
     use nostr_sdk::prelude::Keys;
@@ -235,5 +235,42 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn login_rejects_invalid_json() {
+        let app = Router::new()
+            .route("/v1/admin/auth/login", post(login))
+            .with_state(test_state());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/admin/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{invalid"))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn logout_without_cookie_returns_ok() {
+        let app = Router::new()
+            .route("/v1/admin/auth/logout", post(logout))
+            .with_state(test_state());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/admin/auth/logout")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

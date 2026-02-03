@@ -408,6 +408,91 @@ mod tests {
     }
 
     #[test]
+    fn validate_node_topic_service_accepts_valid_event() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["d".to_string(), "service:topic".to_string()],
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["role".to_string(), "relay".to_string()],
+            vec!["scope".to_string(), "public".to_string()],
+            vec!["exp".to_string(), (current_unix_seconds() + 60).to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let content = json!({ "schema": "kukuri-topic-service-v1" }).to_string();
+        let event =
+            nostr::build_signed_event(&keys, KIND_NODE_TOPIC_SERVICE as u16, tags, content)
+                .expect("event");
+        let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
+        assert_eq!(kind, KipKind::NodeTopicService);
+    }
+
+    #[test]
+    fn validate_report_accepts_valid_event() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+            vec!["target".to_string(), "event:abc".to_string()],
+            vec!["reason".to_string(), "spam".to_string()],
+        ];
+        let event = nostr::build_signed_event(&keys, KIND_REPORT as u16, tags, String::new())
+            .expect("event");
+        let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
+        assert_eq!(kind, KipKind::Report);
+    }
+
+    #[test]
+    fn validate_attestation_accepts_valid_event() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["sub".to_string(), "topic".to_string(), "trust".to_string()],
+            vec!["claim".to_string(), "score:0.7".to_string()],
+            vec!["exp".to_string(), (current_unix_seconds() + 60).to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let content = json!({ "schema": "kukuri-attest-v1" }).to_string();
+        let event = nostr::build_signed_event(&keys, KIND_ATTESTATION as u16, tags, content)
+            .expect("event");
+        let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
+        assert_eq!(kind, KipKind::Attestation);
+    }
+
+    #[test]
+    fn validate_trust_anchor_accepts_valid_event() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["attester".to_string(), keys.public_key().to_hex()],
+            vec!["weight".to_string(), "0.5".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let event = nostr::build_signed_event(&keys, KIND_TRUST_ANCHOR as u16, tags, String::new())
+            .expect("event");
+        let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
+        assert_eq!(kind, KipKind::TrustAnchor);
+    }
+
+    #[test]
+    fn validate_key_envelope_accepts_valid_event() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["p".to_string(), keys.public_key().to_hex()],
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["scope".to_string(), "friend".to_string()],
+            vec!["epoch".to_string(), "1".to_string()],
+            vec!["d".to_string(), "envelope:1".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let event = nostr::build_signed_event(&keys, KIND_KEY_ENVELOPE as u16, tags, String::new())
+            .expect("event");
+        let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
+        assert_eq!(kind, KipKind::KeyEnvelope);
+    }
+
+    #[test]
     fn validate_kip_event_rejects_expired_event() {
         let keys = Keys::generate();
         let now = current_unix_seconds();

@@ -151,3 +151,88 @@ async fn respond_with_events(
 
     Ok(response)
 }
+
+#[cfg(test)]
+mod api_contract_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::extract::ConnectInfo;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use axum::Router;
+    use cn_core::service_config;
+    use nostr_sdk::prelude::Keys;
+    use sqlx::postgres::PgPoolOptions;
+    use std::net::SocketAddr;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    fn test_state() -> crate::AppState {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("lazy pool");
+        let jwt_config = cn_core::auth::JwtConfig {
+            issuer: "http://localhost".to_string(),
+            audience: crate::TOKEN_AUDIENCE.to_string(),
+            secret: "test-secret".to_string(),
+            ttl_seconds: 3600,
+        };
+        let user_config = service_config::static_handle(serde_json::json!({
+            "rate_limit": { "enabled": false }
+        }));
+        let bootstrap_config = service_config::static_handle(serde_json::json!({
+            "auth": { "mode": "required" }
+        }));
+        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
+            .expect("meili");
+
+        crate::AppState {
+            pool,
+            jwt_config,
+            public_base_url: "http://localhost".to_string(),
+            user_config,
+            bootstrap_config,
+            rate_limiter: Arc::new(cn_core::rate_limit::RateLimiter::new()),
+            node_keys: Keys::generate(),
+            export_dir: PathBuf::from("tmp/test_exports"),
+            hmac_secret: b"test-secret".to_vec(),
+            meili,
+        }
+    }
+
+    async fn request_status(app: Router, uri: &str) -> StatusCode {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        response.status()
+    }
+
+    #[tokio::test]
+    async fn bootstrap_nodes_requires_auth_when_enabled() {
+        let app = Router::new()
+            .route("/v1/bootstrap/nodes", get(get_bootstrap_nodes))
+            .with_state(test_state());
+        let status = request_status(app, "/v1/bootstrap/nodes").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_services_requires_auth_when_enabled() {
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/:topic_id/services",
+                get(get_bootstrap_services),
+            )
+            .with_state(test_state());
+        let status =
+            request_status(app, "/v1/bootstrap/topics/kukuri:topic1/services").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+}

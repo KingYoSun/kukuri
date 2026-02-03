@@ -45,11 +45,11 @@
 - [x] `access_control` は P2P-only を正とし、User API の invite/keys エンドポイントは廃止（実装・UI・ドキュメントを統一）。
 - [x] 通報 UI（reason 選択 + submit）を PostCard などに追加し、`community_node_submit_report` を利用した E2E を追加する。
 - [x] label/attestation のクライアント側検証（署名/exp/採用ノード）を導入し、未採用ノード由来のデータは無視する。
-- [ ] テスト不足の補完:
-  - [ ] `cn-kip-types`: 39001/39005/39010/39011/39020 の検証テスト追加。
-  - [ ] `cn-user-api`: `/v1/bootstrap/*` `/v1/reports` `/v1/search` の契約テスト追加。
-  - [ ] `cn-admin-api`: login/logout など主要エンドポイントの契約テスト追加。
-  - [ ] `kukuri-tauri`: `CommunityNodeHandler` の単体/契約テスト追加。
+- [x] テスト不足の補完:
+  - [x] `cn-kip-types`: 39001/39005/39010/39011/39020 の検証テスト追加。
+  - [x] `cn-user-api`: `/v1/bootstrap/*` `/v1/reports` `/v1/search` の契約テスト追加。
+  - [x] `cn-admin-api`: login/logout など主要エンドポイントの契約テスト追加。
+  - [x] `kukuri-tauri`: `CommunityNodeHandler` の単体/契約テスト追加。
 
 ## 参照（設計）
 

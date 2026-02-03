@@ -750,7 +750,7 @@ mod api_contract_tests {
     use axum::body::Body;
     use axum::extract::ConnectInfo;
     use axum::http::{Request, StatusCode};
-    use axum::routing::get;
+    use axum::routing::{get, post};
     use axum::Router;
     use cn_core::service_config;
     use nostr_sdk::prelude::Keys;
@@ -806,12 +806,49 @@ mod api_contract_tests {
         response.status()
     }
 
+    async fn request_status_with_body(
+        app: Router,
+        method: &str,
+        uri: &str,
+        body: &'static str,
+    ) -> StatusCode {
+        let mut request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        response.status()
+    }
+
     #[tokio::test]
     async fn list_labels_requires_auth() {
         let app = Router::new()
             .route("/v1/labels", get(list_labels))
             .with_state(test_state());
         let status = request_status(app, "/v1/labels?target=event:abc").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn search_requires_auth() {
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(test_state());
+        let status = request_status(app, "/v1/search?topic=kukuri:topic1").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn submit_report_requires_auth() {
+        let app = Router::new()
+            .route("/v1/reports", post(submit_report))
+            .with_state(test_state());
+        let status = request_status_with_body(app, "POST", "/v1/reports", "{}").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 

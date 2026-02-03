@@ -1095,3 +1095,152 @@ mod community_node_validation_tests {
         assert!(validated.is_none());
     }
 }
+
+#[cfg(test)]
+mod community_node_handler_tests {
+    use super::*;
+    use crate::application::ports::group_key_store::GroupKeyStore;
+    use crate::infrastructure::crypto::DefaultKeyManager;
+    use crate::infrastructure::storage::{SecureGroupKeyStore, SecureStorage};
+    use crate::presentation::dto::community_node_dto::CommunityNodeConfigNodeRequest;
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+    use tokio::sync::Mutex;
+
+    #[derive(Default)]
+    struct InMemorySecureStorage {
+        entries: Mutex<HashMap<String, String>>,
+    }
+
+    #[async_trait]
+    impl SecureStorage for InMemorySecureStorage {
+        async fn store(
+            &self,
+            key: &str,
+            value: &str,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.entries
+                .lock()
+                .await
+                .insert(key.to_string(), value.to_string());
+            Ok(())
+        }
+
+        async fn retrieve(
+            &self,
+            key: &str,
+        ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.entries.lock().await.get(key).cloned())
+        }
+
+        async fn delete(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.entries.lock().await.remove(key);
+            Ok(())
+        }
+
+        async fn exists(
+            &self,
+            key: &str,
+        ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.entries.lock().await.contains_key(key))
+        }
+
+        async fn list_keys(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.entries.lock().await.keys().cloned().collect())
+        }
+
+        async fn clear(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.entries.lock().await.clear();
+            Ok(())
+        }
+    }
+
+    fn test_handler() -> CommunityNodeHandler {
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        CommunityNodeHandler::new(key_manager, secure_storage, group_key_store)
+    }
+
+    #[tokio::test]
+    async fn set_config_normalizes_and_deduplicates_nodes() {
+        let handler = test_handler();
+        let request = CommunityNodeConfigRequest {
+            nodes: vec![
+                CommunityNodeConfigNodeRequest {
+                    base_url: "https://example.com/".to_string(),
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: true,
+                        trust: false,
+                        search: true,
+                        bootstrap: false,
+                    }),
+                },
+                CommunityNodeConfigNodeRequest {
+                    base_url: "https://example.com".to_string(),
+                    roles: None,
+                },
+                CommunityNodeConfigNodeRequest {
+                    base_url: "https://node2.example.com".to_string(),
+                    roles: None,
+                },
+            ],
+        };
+
+        let response = handler.set_config(request).await.expect("set config");
+        assert_eq!(response.nodes.len(), 2);
+        assert_eq!(response.nodes[0].base_url, "https://example.com");
+        assert_eq!(response.nodes[1].base_url, "https://node2.example.com");
+        assert!(response.nodes[0].roles.search);
+        assert!(!response.nodes[0].roles.bootstrap);
+
+        let loaded = handler.get_config().await.expect("get config");
+        assert!(loaded.is_some());
+    }
+
+    #[tokio::test]
+    async fn trust_anchor_roundtrip() {
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        let keypair = key_manager.generate_keypair().await.expect("keypair");
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
+
+        let request = CommunityNodeTrustAnchorRequest {
+            attester: keypair.public_key.clone(),
+            claim: Some("trust:v1".to_string()),
+            topic: Some("kukuri:topic1".to_string()),
+            weight: Some(0.6),
+        };
+        let stored = handler.set_trust_anchor(request).await.expect("set");
+        let loaded = handler
+            .get_trust_anchor()
+            .await
+            .expect("get")
+            .expect("stored");
+        assert_eq!(loaded.attester, stored.attester);
+        assert_eq!(loaded.weight, 0.6);
+        assert_eq!(loaded.claim, Some("trust:v1".to_string()));
+        assert_eq!(loaded.topic, Some("kukuri:topic1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn trust_anchor_rejects_invalid_weight() {
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        let keypair = key_manager.generate_keypair().await.expect("keypair");
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
+
+        let request = CommunityNodeTrustAnchorRequest {
+            attester: keypair.public_key.clone(),
+            claim: None,
+            topic: None,
+            weight: Some(1.5),
+        };
+        assert!(handler.set_trust_anchor(request).await.is_err());
+    }
+}
