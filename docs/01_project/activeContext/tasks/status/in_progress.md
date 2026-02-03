@@ -1,6 +1,6 @@
 ﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2026年01月29日
+最終更新日: 2026年02月03日
 
 ## 方針（2025年09月15日 更新）
 
@@ -55,3 +55,7 @@
       - `gh act --workflows .github/workflows/test.yml --job format-check` / `--job native-test-linux` が成功し、`.act-artifacts/` に最新ログが保存される。
       - Windows ホストでは必ず `./scripts/test-docker.ps1 ts|rust|all`（必要に応じて `--scenario trending-feed` など）を経由して Vitest / Cargo / ESLint / integration を再実行し、`test-results/` ディレクトリが更新される。
       - 2026年01月28日: desktop-e2e の Meilisearch 認証ヘッダ修正。`./scripts/test-docker.ps1 e2e-community-node` 通過、`gh act` の format-check / native-test-linux 実行済み。
+      - 2026年01月29日: desktop-e2e（community node）で `onboarding.key-management.spec.ts` のアカウント切替がタイムアウトするため、DOM 直接クリック＋bridge フォールバックへ調整。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走。
+      - 2026年02月02日: `authStore.bootstrapTopics` の public topic join を非同期化（オンボーディング遅延対策）。`./scripts/test-docker.ps1 e2e` を完走（14 specs pass, 13分37秒、`tmp/logs/desktop-e2e/20260202-115045.log`）。`gh act --job format-check` / `--job native-test-linux` を完走。
+      - 2026年02月02日: `generateNewKeypair` の後段初期化（nostr/relay/accounts/topic/avatar）を defer 可能にし、`WelcomeScreen` からは defer で実行して `profile-setup` の表示を先に出す調整。`./scripts/test-docker.ps1 ts` / `./scripts/test-docker.ps1 rust` を完走（act/useRouter の警告は既知）。`gh act --job format-check` / `--job native-test-linux` を完走。
+      - 2026年02月03日: community node の labels/trust 署名検証で pubkey ミスマッチを回避する修正を反映。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走（ログは `tmp/logs/gh-act-*.log`）。

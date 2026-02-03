@@ -346,20 +346,16 @@ impl CommunityNodeHandler {
         let mut items: Vec<serde_json::Value> = Vec::new();
         let mut last_error: Option<AppError> = None;
         let now = Utc::now().timestamp();
+        let current_pubkey = self
+            .key_manager
+            .current_keypair()
+            .await
+            .ok()
+            .map(|pair| pair.public_key);
 
         for node in nodes {
-            let expected_pubkey = node
-                .pubkey
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let Some(expected_pubkey) = expected_pubkey else {
-                last_error = Some(AppError::validation(
-                    ValidationFailureKind::Generic,
-                    "Community node pubkey is missing",
-                ));
-                continue;
-            };
+            let expected_pubkey =
+                resolve_expected_pubkey(node.pubkey.as_deref(), current_pubkey.as_deref());
 
             let url = build_url(&node.base_url, "/v1/labels");
             let mut builder = self
@@ -379,7 +375,7 @@ impl CommunityNodeHandler {
                 Ok(response) => {
                     if let Some(list) = response.get("items").and_then(|value| value.as_array()) {
                         for item in list {
-                            if validate_kip_event_json(item, LABEL_KIND, Some(expected_pubkey), now)
+                            if validate_kip_event_json(item, LABEL_KIND, expected_pubkey, now)
                                 .is_some()
                             {
                                 items.push(item.clone());
@@ -604,20 +600,16 @@ impl CommunityNodeHandler {
         let mut sources: Vec<serde_json::Value> = Vec::new();
         let mut last_error: Option<AppError> = None;
         let now = Utc::now().timestamp();
+        let current_pubkey = self
+            .key_manager
+            .current_keypair()
+            .await
+            .ok()
+            .map(|pair| pair.public_key);
 
         for node in nodes {
-            let expected_pubkey = node
-                .pubkey
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let Some(expected_pubkey) = expected_pubkey else {
-                last_error = Some(AppError::validation(
-                    ValidationFailureKind::Generic,
-                    "Community node pubkey is missing",
-                ));
-                continue;
-            };
+            let expected_pubkey =
+                resolve_expected_pubkey(node.pubkey.as_deref(), current_pubkey.as_deref());
             let url = build_url(&node.base_url, path);
             let builder = match self.authorized_request(node, Method::GET, url, true).await {
                 Ok(builder) => builder,
@@ -926,16 +918,18 @@ fn validate_kip_event_json(
     expected_pubkey: Option<&str>,
     now: i64,
 ) -> Option<NostrEvent> {
-    let expected_pubkey = expected_pubkey?.trim();
-    if expected_pubkey.is_empty() {
-        return None;
-    }
     let event: NostrEvent = serde_json::from_value(event_json.clone()).ok()?;
     if event.kind.as_u16() != expected_kind {
         return None;
     }
-    if event.pubkey.to_string() != expected_pubkey {
-        return None;
+    if let Some(expected_pubkey) = expected_pubkey {
+        let expected_pubkey = expected_pubkey.trim();
+        if expected_pubkey.is_empty() {
+            return None;
+        }
+        if event.pubkey.to_string() != expected_pubkey {
+            return None;
+        }
     }
     if event.verify().is_err() {
         return None;
@@ -949,7 +943,7 @@ fn validate_kip_event_json(
 
 fn validate_attestation_payload(
     response: &serde_json::Value,
-    expected_pubkey: &str,
+    expected_pubkey: Option<&str>,
     now: i64,
 ) -> bool {
     let Some(attestation) = response.get("attestation") else {
@@ -968,7 +962,22 @@ fn validate_attestation_payload(
     let Some(event_json) = attestation.get("event_json") else {
         return false;
     };
-    validate_kip_event_json(event_json, ATTESTATION_KIND, Some(expected_pubkey), now).is_some()
+    validate_kip_event_json(event_json, ATTESTATION_KIND, expected_pubkey, now).is_some()
+}
+
+fn resolve_expected_pubkey<'a>(
+    node_pubkey: Option<&'a str>,
+    current_pubkey: Option<&str>,
+) -> Option<&'a str> {
+    let node_pubkey = node_pubkey
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    if let Some(current_pubkey) = current_pubkey {
+        if node_pubkey.eq_ignore_ascii_case(current_pubkey) {
+            return None;
+        }
+    }
+    Some(node_pubkey)
 }
 
 fn event_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
@@ -1069,6 +1078,15 @@ mod community_node_validation_tests {
         let event_json = build_event_json(&keys, LABEL_KIND, now + 60);
         let validated =
             validate_kip_event_json(&event_json, LABEL_KIND, Some(pubkey.as_str()), now);
+        assert!(validated.is_some());
+    }
+
+    #[test]
+    fn validate_kip_event_json_accepts_without_expected_pubkey() {
+        let keys = Keys::generate();
+        let now = 1000;
+        let event_json = build_event_json(&keys, LABEL_KIND, now + 60);
+        let validated = validate_kip_event_json(&event_json, LABEL_KIND, None, now);
         assert!(validated.is_some());
     }
 
