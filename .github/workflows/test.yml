@@ -204,6 +204,7 @@ jobs:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
+      DATABASE_URL: postgres://cn:cn_password@localhost:15432/cn
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -226,10 +227,37 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-community-node-cargo-
 
+      - name: Build Postgres (AGE)
+        run: |
+          docker build -t kukuri-postgres-age ./kukuri-community-node/docker/postgres-age
+
+      - name: Start Postgres (AGE)
+        run: |
+          docker run -d --name kukuri-postgres-age \
+            -e POSTGRES_USER=cn \
+            -e POSTGRES_PASSWORD=cn_password \
+            -e POSTGRES_DB=cn \
+            -p 15432:5432 \
+            kukuri-postgres-age \
+            -c shared_preload_libraries=age
+          for i in {1..30}; do
+            if docker exec kukuri-postgres-age pg_isready -U cn -d cn; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs kukuri-postgres-age
+          exit 1
+
       - name: Run community node tests
         run: |
           cd kukuri-community-node
           cargo test --workspace --all-features
+
+      - name: Stop Postgres (AGE)
+        if: always()
+        run: |
+          docker rm -f kukuri-postgres-age
 
 
   # フォーマットチェック（別ジョブ）
