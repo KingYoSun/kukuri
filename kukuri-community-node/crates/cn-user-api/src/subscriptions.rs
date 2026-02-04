@@ -1,4 +1,4 @@
-use axum::extract::{ConnectInfo, Path, Query, State};
+﻿use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use cn_core::nostr;
@@ -747,23 +747,51 @@ mod trust_subject_tests {
 #[cfg(test)]
 mod api_contract_tests {
     use super::*;
-    use axum::body::Body;
+    use axum::body::{to_bytes, Body};
     use axum::extract::ConnectInfo;
     use axum::http::{Request, StatusCode};
     use axum::routing::{get, post};
     use axum::Router;
     use cn_core::service_config;
     use nostr_sdk::prelude::Keys;
+    use serde_json::{json, Value};
     use sqlx::postgres::PgPoolOptions;
+    use sqlx::{Pool, Postgres};
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tokio::sync::OnceCell;
     use tower::ServiceExt;
+    use uuid::Uuid;
 
-    fn test_state() -> crate::AppState {
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://cn:cn_password@localhost:5432/cn".to_string()
+        })
+    }
+
+    async fn ensure_migrated(pool: &Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run migrations");
+            })
+            .await;
+    }
+
+    async fn test_state() -> crate::AppState {
         let pool = PgPoolOptions::new()
-            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
-            .expect("lazy pool");
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        crate::billing::ensure_default_plan(&pool)
+            .await
+            .expect("seed plans");
+
         let jwt_config = cn_core::auth::JwtConfig {
             issuer: "http://localhost".to_string(),
             audience: crate::TOKEN_AUDIENCE.to_string(),
@@ -791,6 +819,203 @@ mod api_contract_tests {
             hmac_secret: b"test-secret".to_vec(),
             meili,
         }
+    }
+
+    fn issue_token(config: &cn_core::auth::JwtConfig, pubkey: &str) -> String {
+        let (token, _) = cn_core::auth::issue_token(pubkey, config).expect("issue token");
+        token
+    }
+
+    async fn ensure_consents(pool: &Pool<Postgres>, pubkey: &str) {
+        let policies = sqlx::query_scalar::<_, String>(
+            "SELECT policy_id FROM cn_admin.policies WHERE is_current = TRUE AND type IN ('terms','privacy')",
+        )
+        .fetch_all(pool)
+        .await
+        .expect("fetch policies");
+        for policy_id in policies {
+            let consent_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO cn_user.policy_consents (consent_id, policy_id, accepter_pubkey) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+            )
+            .bind(consent_id)
+            .bind(policy_id)
+            .bind(pubkey)
+            .execute(pool)
+            .await
+            .expect("insert consent");
+        }
+    }
+
+    async fn insert_topic_subscription(pool: &Pool<Postgres>, topic_id: &str, pubkey: &str) {
+        sqlx::query(
+            "INSERT INTO cn_user.topic_subscriptions (topic_id, subscriber_pubkey, status) VALUES ($1, $2, 'active') ON CONFLICT DO NOTHING",
+        )
+        .bind(topic_id)
+        .bind(pubkey)
+        .execute(pool)
+        .await
+        .expect("insert subscription");
+    }
+
+    async fn insert_label(
+        pool: &Pool<Postgres>,
+        target: &str,
+        topic_id: Option<&str>,
+        issuer_pubkey: &str,
+        label_id: &str,
+    ) {
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let exp = now + 3600;
+        let label_event_json = json!({
+            "id": label_id,
+            "target": target,
+            "label": "spam"
+        });
+        sqlx::query(
+            "INSERT INTO cn_moderation.labels \
+                (label_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, source, label_event_json) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        )
+        .bind(label_id)
+        .bind(target)
+        .bind(topic_id)
+        .bind("spam")
+        .bind(0.9_f64)
+        .bind("https://example.com/policy")
+        .bind("contract-test")
+        .bind(exp)
+        .bind(issuer_pubkey)
+        .bind("contract-test")
+        .bind(label_event_json)
+        .execute(pool)
+        .await
+        .expect("insert label");
+    }
+
+    async fn insert_attestation(
+        pool: &Pool<Postgres>,
+        subject: &str,
+        claim: &str,
+        exp: i64,
+        attestation_id: &str,
+    ) -> Value {
+        let issuer_pubkey = Keys::generate().public_key().to_hex();
+        let event_json = json!({
+            "id": attestation_id,
+            "subject": subject,
+            "claim": claim,
+            "exp": exp
+        });
+        sqlx::query(
+            "INSERT INTO cn_trust.attestations \
+                (attestation_id, subject, claim, score, exp, issuer_pubkey, event_json) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        )
+        .bind(attestation_id)
+        .bind(subject)
+        .bind(claim)
+        .bind(0.82_f64)
+        .bind(exp)
+        .bind(issuer_pubkey)
+        .bind(event_json.clone())
+        .execute(pool)
+        .await
+        .expect("insert attestation");
+        event_json
+    }
+
+    async fn insert_report_score(
+        pool: &Pool<Postgres>,
+        subject_pubkey: &str,
+        attestation_id: &str,
+        attestation_exp: i64,
+    ) {
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        sqlx::query(
+            "INSERT INTO cn_trust.report_scores \
+                (subject_pubkey, score, report_count, label_count, window_start, window_end, attestation_id, attestation_exp) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(subject_pubkey)
+        .bind(0.75_f64)
+        .bind(3_i64)
+        .bind(2_i64)
+        .bind(now - 3600)
+        .bind(now)
+        .bind(attestation_id)
+        .bind(attestation_exp)
+        .execute(pool)
+        .await
+        .expect("insert report score");
+    }
+
+    async fn insert_communication_score(
+        pool: &Pool<Postgres>,
+        subject_pubkey: &str,
+        attestation_id: &str,
+        attestation_exp: i64,
+    ) {
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        sqlx::query(
+            "INSERT INTO cn_trust.communication_scores \
+                (subject_pubkey, score, interaction_count, peer_count, window_start, window_end, attestation_id, attestation_exp) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(subject_pubkey)
+        .bind(1.25_f64)
+        .bind(5_i64)
+        .bind(3_i64)
+        .bind(now - 7200)
+        .bind(now)
+        .bind(attestation_id)
+        .bind(attestation_exp)
+        .execute(pool)
+        .await
+        .expect("insert communication score");
+    }
+
+    async fn insert_relay_event(
+        pool: &Pool<Postgres>,
+        event_id: &str,
+        pubkey: &str,
+        kind: i32,
+        created_at: i64,
+        topic_id: &str,
+    ) {
+        let tags = json!([]);
+        let raw_json = json!({
+            "id": event_id,
+            "pubkey": pubkey,
+            "kind": kind,
+            "created_at": created_at,
+            "tags": tags,
+            "content": "",
+            "sig": "sig"
+        });
+        sqlx::query(
+            "INSERT INTO cn_relay.events (event_id, pubkey, kind, created_at, tags, content, sig, raw_json) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(event_id)
+        .bind(pubkey)
+        .bind(kind)
+        .bind(created_at)
+        .bind(tags)
+        .bind("")
+        .bind("sig")
+        .bind(raw_json)
+        .execute(pool)
+        .await
+        .expect("insert relay event");
+
+        sqlx::query(
+            "INSERT INTO cn_relay.event_topics (event_id, topic_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(event_id)
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("insert event topic");
     }
 
     async fn request_status(app: Router, uri: &str) -> StatusCode {
@@ -825,11 +1050,30 @@ mod api_contract_tests {
         response.status()
     }
 
+    async fn get_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, payload)
+    }
+
     #[tokio::test]
     async fn list_labels_requires_auth() {
         let app = Router::new()
             .route("/v1/labels", get(list_labels))
-            .with_state(test_state());
+            .with_state(test_state().await);
         let status = request_status(app, "/v1/labels?target=event:abc").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -838,7 +1082,7 @@ mod api_contract_tests {
     async fn search_requires_auth() {
         let app = Router::new()
             .route("/v1/search", get(search))
-            .with_state(test_state());
+            .with_state(test_state().await);
         let status = request_status(app, "/v1/search?topic=kukuri:topic1").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -847,7 +1091,7 @@ mod api_contract_tests {
     async fn submit_report_requires_auth() {
         let app = Router::new()
             .route("/v1/reports", post(submit_report))
-            .with_state(test_state());
+            .with_state(test_state().await);
         let status = request_status_with_body(app, "POST", "/v1/reports", "{}").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -856,7 +1100,7 @@ mod api_contract_tests {
     async fn trust_report_based_requires_auth() {
         let app = Router::new()
             .route("/v1/trust/report-based", get(trust_report_based))
-            .with_state(test_state());
+            .with_state(test_state().await);
         let status = request_status(
             app,
             "/v1/trust/report-based?subject=pubkey:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -869,7 +1113,7 @@ mod api_contract_tests {
     async fn trust_communication_density_requires_auth() {
         let app = Router::new()
             .route("/v1/trust/communication-density", get(trust_communication_density))
-            .with_state(test_state());
+            .with_state(test_state().await);
         let status = request_status(
             app,
             "/v1/trust/communication-density?subject=pubkey:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -877,4 +1121,249 @@ mod api_contract_tests {
         .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
+
+    #[tokio::test]
+    async fn list_labels_contract_success() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&state.pool, &pubkey).await;
+        let target = "event:contract-label";
+        let issuer_pubkey = Keys::generate().public_key().to_hex();
+        let label_id_a = Uuid::new_v4().to_string();
+        let label_id_b = Uuid::new_v4().to_string();
+        insert_label(
+            &state.pool,
+            target,
+            None,
+            &issuer_pubkey,
+            &label_id_a,
+        )
+        .await;
+        insert_label(
+            &state.pool,
+            target,
+            None,
+            &issuer_pubkey,
+            &label_id_b,
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/labels", get(list_labels))
+            .with_state(state);
+        let (status, payload) =
+            get_json(app, "/v1/labels?target=event:contract-label&limit=1", &token).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("target").and_then(Value::as_str),
+            Some(target)
+        );
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        let returned_id = items
+            .first()
+            .and_then(|value| value.get("id"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(returned_id == label_id_a || returned_id == label_id_b);
+        assert!(payload.get("next_cursor").and_then(Value::as_str).is_some());
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_success() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&state.pool, &pubkey).await;
+        let subject = format!("pubkey:{pubkey}");
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let attestation_id = Uuid::new_v4().to_string();
+        let attestation_exp = now + 3600;
+        let event_json = insert_attestation(
+            &state.pool,
+            &subject,
+            "report-based",
+            attestation_exp,
+            &attestation_id,
+        )
+        .await;
+        insert_report_score(&state.pool, &pubkey, &attestation_id, attestation_exp).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let (status, payload) = get_json(
+            app,
+            &format!("/v1/trust/report-based?subject={subject}"),
+            &token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("subject").and_then(Value::as_str),
+            Some(subject.as_str())
+        );
+        assert_eq!(
+            payload.get("method").and_then(Value::as_str),
+            Some("report-based")
+        );
+        assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.75));
+        assert_eq!(
+            payload.get("report_count").and_then(Value::as_i64),
+            Some(3)
+        );
+        assert_eq!(
+            payload.get("label_count").and_then(Value::as_i64),
+            Some(2)
+        );
+        let attestation = payload
+            .get("attestation")
+            .and_then(Value::as_object)
+            .expect("attestation");
+        assert_eq!(
+            attestation
+                .get("attestation_id")
+                .and_then(Value::as_str),
+            Some(attestation_id.as_str())
+        );
+        assert_eq!(
+            attestation.get("exp").and_then(Value::as_i64),
+            Some(attestation_exp)
+        );
+        assert_eq!(attestation.get("event_json"), Some(&event_json));
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_contract_success() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&state.pool, &pubkey).await;
+        let subject = format!("pubkey:{pubkey}");
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let attestation_id = Uuid::new_v4().to_string();
+        let attestation_exp = now + 3600;
+        let event_json = insert_attestation(
+            &state.pool,
+            &subject,
+            "communication-density",
+            attestation_exp,
+            &attestation_id,
+        )
+        .await;
+        insert_communication_score(&state.pool, &pubkey, &attestation_id, attestation_exp).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
+            .with_state(state);
+        let (status, payload) = get_json(
+            app,
+            &format!("/v1/trust/communication-density?subject={subject}"),
+            &token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("subject").and_then(Value::as_str),
+            Some(subject.as_str())
+        );
+        assert_eq!(
+            payload.get("method").and_then(Value::as_str),
+            Some("communication-density")
+        );
+        assert_eq!(payload.get("score").and_then(Value::as_f64), Some(1.25));
+        assert_eq!(
+            payload.get("interaction_count").and_then(Value::as_i64),
+            Some(5)
+        );
+        assert_eq!(payload.get("peer_count").and_then(Value::as_i64), Some(3));
+        let attestation = payload
+            .get("attestation")
+            .and_then(Value::as_object)
+            .expect("attestation");
+        assert_eq!(
+            attestation
+                .get("attestation_id")
+                .and_then(Value::as_str),
+            Some(attestation_id.as_str())
+        );
+        assert_eq!(
+            attestation.get("exp").and_then(Value::as_i64),
+            Some(attestation_exp)
+        );
+        assert_eq!(attestation.get("event_json"), Some(&event_json));
+    }
+
+    #[tokio::test]
+    async fn trending_contract_success() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&state.pool, &pubkey).await;
+        let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
+        insert_topic_subscription(&state.pool, &topic_id, &pubkey).await;
+
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        insert_relay_event(
+            &state.pool,
+            &Uuid::new_v4().to_string(),
+            &pubkey,
+            1,
+            now,
+            &topic_id,
+        )
+        .await;
+        insert_relay_event(
+            &state.pool,
+            &Uuid::new_v4().to_string(),
+            &pubkey,
+            7,
+            now,
+            &topic_id,
+        )
+        .await;
+        insert_relay_event(
+            &state.pool,
+            &Uuid::new_v4().to_string(),
+            &pubkey,
+            6,
+            now,
+            &topic_id,
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/trending", get(trending))
+            .with_state(state);
+        let (status, payload) = get_json(
+            app,
+            &format!("/v1/trending?topic={topic_id}"),
+            &token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("topic").and_then(Value::as_str),
+            Some(topic_id.as_str())
+        );
+        assert_eq!(payload.get("window_hours").and_then(Value::as_i64), Some(24));
+        let metrics = payload.get("metrics").and_then(Value::as_object).expect("metrics");
+        assert_eq!(metrics.get("posts").and_then(Value::as_i64), Some(1));
+        assert_eq!(metrics.get("reactions").and_then(Value::as_i64), Some(2));
+        assert_eq!(metrics.get("score").and_then(Value::as_i64), Some(3));
+    }
 }
+
+
