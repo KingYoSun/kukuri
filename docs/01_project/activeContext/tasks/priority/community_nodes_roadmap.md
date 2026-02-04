@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年02月03日
+最終更新日: 2026年02月04日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -55,7 +55,7 @@
 
 - [x] Gossip/DHT 由来の 39000/39001 収集・キャッシュ・HTTP 再取得の統合フローをクライアントに実装する（plan 4.1 の未対応分）。
 - [x] community_node_plan と KIP-0001 の仕様差分（39022/kind一覧、Topic ID 形式、NIP-44 実装方針、P2P-only と Access Control の運用範囲）を整理してドキュメント整合する。
-- [ ] `cn-admin-api`: access_control rotate/revoke と `POST /v1/reindex` の成功系契約テストを追加する。
+- [x] `cn-admin-api`: access_control rotate/revoke と `POST /v1/reindex` の成功系契約テストを追加する。
 - [ ] `cn-user-api`: `/v1/labels` `/v1/trust/*` `/v1/trending` の成功系契約テスト（seed/fixture 含む）を追加する。
 - [ ] `cn-relay`: ingest→outbox→WS/gossip 配信の統合テストを追加する。
 - [ ] `kukuri-tauri`: `CommunityNodeHandler` の複数ノード集約（search/trust の合算 + cursor 合成）ユニットテストを追加する。

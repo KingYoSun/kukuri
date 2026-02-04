@@ -23,6 +23,9 @@ mod services;
 mod subscriptions;
 mod trust;
 
+#[cfg(test)]
+mod contract_tests;
+
 const SERVICE_NAME: &str = "cn-admin-api";
 
 #[derive(Clone)]
