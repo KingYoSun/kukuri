@@ -1465,6 +1465,10 @@ mod community_node_handler_tests {
     use async_trait::async_trait;
     use chrono::Utc;
     use std::collections::HashMap;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+    use tiny_http::{Header, Response, Server};
     use tokio::sync::Mutex;
 
     #[derive(Default)]
@@ -1540,6 +1544,66 @@ mod community_node_handler_tests {
             content: event.content.clone(),
             sig: event.sig.to_string(),
         }
+    }
+
+    #[derive(Debug)]
+    struct CapturedRequest {
+        path: String,
+        params: HashMap<String, String>,
+    }
+
+    fn spawn_json_server(
+        response_body: serde_json::Value,
+    ) -> (
+        String,
+        mpsc::Receiver<CapturedRequest>,
+        thread::JoinHandle<()>,
+    ) {
+        let server = Server::http("127.0.0.1:0").expect("server");
+        let base_url = format!("http://{}", server.server_addr());
+        let (tx, rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            for request in server.incoming_requests().take(1) {
+                let url = request.url();
+                let parsed = Url::parse(&format!("http://localhost{url}")).expect("request url");
+                let params = parsed
+                    .query_pairs()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect();
+                let captured = CapturedRequest {
+                    path: parsed.path().to_string(),
+                    params,
+                };
+                let _ = tx.send(captured);
+
+                let mut response = Response::from_string(response_body.to_string());
+                response.add_header(
+                    Header::from_bytes("Content-Type", "application/json").expect("header"),
+                );
+                let _ = request.respond(response);
+            }
+        });
+        (base_url, rx, handle)
+    }
+
+    fn build_config_node(
+        base_url: String,
+        roles: CommunityNodeRoleConfig,
+    ) -> CommunityNodeConfigNode {
+        let mut node = CommunityNodeConfigNode::new(base_url, roles);
+        node.access_token = Some("test-token".to_string());
+        node.token_expires_at = Some(Utc::now().timestamp() + 600);
+        node
+    }
+
+    fn build_attestation_event(exp: i64) -> serde_json::Value {
+        let keys = Keys::generate();
+        let tags = vec![Tag::parse(vec!["exp".to_string(), exp.to_string()]).expect("exp")];
+        let event = EventBuilder::new(Kind::Custom(ATTESTATION_KIND), "")
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("sign");
+        serde_json::to_value(event).expect("event json")
     }
 
     #[tokio::test]
@@ -1713,5 +1777,176 @@ mod community_node_handler_tests {
             .and_then(|value| value.as_array())
             .expect("items array");
         assert!(!items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_aggregates_scores_across_nodes() {
+        let exp = Utc::now().timestamp() + 600;
+        let event_json = build_attestation_event(exp);
+        let response1 = json!({
+            "score": 0.2,
+            "attestation": { "exp": exp, "event_json": event_json.clone() }
+        });
+        let response2 = json!({
+            "score": 0.6,
+            "attestation": { "exp": exp, "event_json": event_json }
+        });
+
+        let (base_url1, rx1, handle1) = spawn_json_server(response1);
+        let (base_url2, rx2, handle2) = spawn_json_server(response2);
+
+        let handler = test_handler();
+        let roles = CommunityNodeRoleConfig {
+            labels: false,
+            trust: true,
+            search: false,
+            bootstrap: false,
+        };
+        let config = CommunityNodeConfig {
+            nodes: vec![
+                build_config_node(base_url1.clone(), roles.clone()),
+                build_config_node(base_url2.clone(), roles),
+            ],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        let response = handler
+            .trust_report_based(CommunityNodeTrustRequest {
+                base_url: None,
+                subject: "npub1testsubject".to_string(),
+            })
+            .await
+            .expect("trust response");
+
+        let score = response
+            .get("score")
+            .and_then(|value| value.as_f64())
+            .expect("score");
+        assert!((score - 0.4).abs() < 1e-9);
+
+        let sources = response
+            .get("sources")
+            .and_then(|value| value.as_array())
+            .expect("sources");
+        assert_eq!(sources.len(), 2);
+        assert!(sources.iter().any(|value| {
+            value.get("base_url") == Some(&serde_json::Value::String(base_url1.clone()))
+                && value.get("score") == Some(&serde_json::Value::from(0.2))
+        }));
+        assert!(sources.iter().any(|value| {
+            value.get("base_url") == Some(&serde_json::Value::String(base_url2.clone()))
+                && value.get("score") == Some(&serde_json::Value::from(0.6))
+        }));
+
+        let req1 = rx1.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/trust/report-based");
+        assert_eq!(
+            req1.params.get("subject"),
+            Some(&"npub1testsubject".to_string())
+        );
+
+        let req2 = rx2.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, "/v1/trust/report-based");
+        assert_eq!(
+            req2.params.get("subject"),
+            Some(&"npub1testsubject".to_string())
+        );
+
+        handle1.join().expect("server1");
+        handle2.join().expect("server2");
+    }
+
+    #[tokio::test]
+    async fn search_aggregates_items_and_composes_cursor_for_multiple_nodes() {
+        let response1 = json!({
+            "items": [ { "id": "a" } ],
+            "next_cursor": "next-1",
+            "total": 2
+        });
+        let response2 = json!({
+            "items": [ { "id": "b" }, { "id": "c" } ],
+            "next_cursor": "next-2",
+            "total": 3
+        });
+
+        let (base_url1, rx1, handle1) = spawn_json_server(response1);
+        let (base_url2, rx2, handle2) = spawn_json_server(response2);
+
+        let handler = test_handler();
+        let roles = CommunityNodeRoleConfig {
+            labels: false,
+            trust: false,
+            search: true,
+            bootstrap: false,
+        };
+        let config = CommunityNodeConfig {
+            nodes: vec![
+                build_config_node(base_url1.clone(), roles.clone()),
+                build_config_node(base_url2.clone(), roles),
+            ],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        let mut cursor_map = HashMap::new();
+        cursor_map.insert(base_url1.clone(), "cursor-1".to_string());
+        cursor_map.insert(base_url2.clone(), "cursor-2".to_string());
+        let cursor = serde_json::to_string(&cursor_map).expect("cursor map");
+        let response = handler
+            .search(CommunityNodeSearchRequest {
+                base_url: None,
+                topic: "kukuri:topic1".to_string(),
+                q: Some("rust".to_string()),
+                limit: Some(5),
+                cursor: Some(cursor),
+            })
+            .await
+            .expect("search");
+
+        let items = response
+            .get("items")
+            .and_then(|value| value.as_array())
+            .expect("items");
+        assert_eq!(items.len(), 3);
+
+        let total = response
+            .get("total")
+            .and_then(|value| value.as_i64())
+            .expect("total");
+        assert_eq!(total, 5);
+
+        assert_eq!(
+            response.get("topic"),
+            Some(&serde_json::Value::String("kukuri:topic1".to_string()))
+        );
+        assert_eq!(
+            response.get("query"),
+            Some(&serde_json::Value::String("rust".to_string()))
+        );
+
+        let next_cursor = response
+            .get("next_cursor")
+            .and_then(|value| value.as_str())
+            .expect("next_cursor");
+        let cursor_map: HashMap<String, String> =
+            serde_json::from_str(next_cursor).expect("cursor map");
+        assert_eq!(cursor_map.get(&base_url1), Some(&"next-1".to_string()));
+        assert_eq!(cursor_map.get(&base_url2), Some(&"next-2".to_string()));
+
+        let req1 = rx1.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/search");
+        assert_eq!(req1.params.get("topic"), Some(&"kukuri:topic1".to_string()));
+        assert_eq!(req1.params.get("q"), Some(&"rust".to_string()));
+        assert_eq!(req1.params.get("limit"), Some(&"5".to_string()));
+        assert_eq!(req1.params.get("cursor"), Some(&"cursor-1".to_string()));
+
+        let req2 = rx2.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, "/v1/search");
+        assert_eq!(req2.params.get("topic"), Some(&"kukuri:topic1".to_string()));
+        assert_eq!(req2.params.get("q"), Some(&"rust".to_string()));
+        assert_eq!(req2.params.get("limit"), Some(&"5".to_string()));
+        assert_eq!(req2.params.get("cursor"), Some(&"cursor-2".to_string()));
+
+        handle1.join().expect("server1");
+        handle2.join().expect("server2");
     }
 }

@@ -58,7 +58,7 @@
 - [x] `cn-admin-api`: access_control rotate/revoke と `POST /v1/reindex` の成功系契約テストを追加する。
 - [x] `cn-user-api`: `/v1/labels` `/v1/trust/*` `/v1/trending` の成功系契約テスト（seed/fixture 含む）を追加する。
 - [x] `cn-relay`: ingest→outbox→WS/gossip 配信の統合テストを追加する。
-- [ ] `kukuri-tauri`: `CommunityNodeHandler` の複数ノード集約（search/trust の合算 + cursor 合成）ユニットテストを追加する。
+- [x] `kukuri-tauri`: `CommunityNodeHandler` の複数ノード集約（search/trust の合算 + cursor 合成）ユニットテストを追加する。
 
 ## 参照（設計）
 
