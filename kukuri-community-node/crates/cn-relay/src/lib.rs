@@ -19,6 +19,8 @@ mod gossip;
 mod ingest;
 mod retention;
 mod ws;
+#[cfg(test)]
+mod integration_tests;
 
 pub(crate) const SERVICE_NAME: &str = "cn-relay";
 

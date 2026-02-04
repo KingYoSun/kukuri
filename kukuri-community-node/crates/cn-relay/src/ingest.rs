@@ -323,7 +323,7 @@ pub async fn ingest_event(
     }
 
     if let Some(max_seq) = outbox_seqs.iter().max() {
-        sqlx::query("NOTIFY cn_relay_outbox, $1")
+        sqlx::query("SELECT pg_notify('cn_relay_outbox', $1)")
             .bind(max_seq.to_string())
             .execute(&mut *tx)
             .await?;

@@ -23,3 +23,6 @@ uuid.workspace = true
 
 cn-core = { path = "../cn-core" }
 cn-kip-types = { path = "../cn-kip-types" }
+
+[dev-dependencies]
+tokio-tungstenite = "0.28.0"
