@@ -26,8 +26,9 @@
 ## 1. スコープ
 
 ### 1.1 実装対象（KIP-0001）
-- Event kinds: 39000/39001/39005/39006/39010/39011/39020/39021
-- 暗号: NIP-44方式（ライブラリ/既存実装に合わせる）
+- Event kinds: 39000/39001/39005/39006/39010/39011/39020/39021/39022
+- 暗号: NIP-44 v2（既存実装: nostr-sdk nip44::Version::V2 に合わせる）
+- Topic ID: KIP-0001 の定義に合わせ、`kukuri:<64hex>` / `kukuri:global` を正規形として扱う（タグの #t も同形式）。
 - データ検証: 署名検証、tag正当性、期限(exp)処理
 
 ### 1.2 “ノードAPI”の扱い
@@ -105,11 +106,11 @@
 - tags:
   - p(recipient), t(topic_id), scope, epoch
 - content:
-  - NIP-44暗号文（中身は {topic,scope,epoch,key_b64,...}）
+  - NIP-44 v2暗号文（中身は {topic,scope,epoch,key_b64,...}）
 
 #### 39021 invite.capability
 - content:
-  - NIP-44暗号文（中身は {topic,scope,expires,max_uses,nonce,issuer,...}）
+  - NIP-44 v2暗号文（中身は {topic,scope,expires,max_uses,nonce,issuer,...}）
 
 #### 39022 join.request
 - tags:
@@ -169,7 +170,7 @@
 
 ## 5. Node HTTP API（初期実装案）
 
-> KIP外だが実装を進めるために最小限入れる。Access Control（invite/keys）は **P2P-only** を正とする。
+> KIP外だが実装を進めるために最小限入れる。Access Control（invite/keys/epoch/加入判定）は **P2P-only** を正とし、Node HTTP API では扱わない。
 
 - `GET /v1/bootstrap/nodes` : 39000配布（node.descriptor）
 - `GET /v1/bootstrap/topics/:topic_id/services` : 39001配布（topic_service）
@@ -196,7 +197,7 @@
 
 - `docs/kips/` : KIP仕様（KIP-0001.md）
 - `/crates/kip_types/` : kind/tag/contentの型、検証、(de)serialize
-- `/crates/crypto/` : NIP-44ラッパ（既存採用に合わせる）
+- `kukuri-tauri/src-tauri` : NIP-44 v2?nostr-sdk nip44?????/??
 - `/apps/client-tauri/` : クライアント
 - `/apps/community-node/` : ノード（daemon）
 - `/apps/kukuri-cli/` : 管理用CLI（鍵ローテ/招待発行/監査）
@@ -256,7 +257,7 @@
 ## 9. コーディング指示（Codexに渡すプロンプト用要約）
 
 - KIP-0001 kindsを `kip_types` に型定義し、必須tag/exp/署名検証を実装せよ。
-- community-node は 39000/39001 を発行し、Access Control は **P2P-only** を正とする。
+- community-node は 39000/39001 を発行し、Access Control（39020/39021/39022/epoch/加入判定）は **P2P-only**。membership はローカル判断（台帳なし）。
 - client-tauri は
   - ノード採用設定（role別に複数）
   - label適用（採用ノードのみ）
@@ -266,9 +267,7 @@
 - trust はまず attestationの発行/表示/anchor採用の切替まで。集約アルゴリズムは簡易（重み平均など）でよいが、必ず“提案”として扱え。
 
 ## 10. 未決定事項（実装前に決めるチェックリスト）
-- Topic ID形式（固定長/ハッシュ/人間可読）
 - “friend / friend+” の関係定義（ローカル? ノード提案?）
-- NIP-44実装ライブラリの選定/互換性
 - gossip層とイベント保存層の境界（永続ノードの扱い）
 - 課金方式（購読トークン / APIキー / 署名付きライセンス）
 
@@ -313,6 +312,7 @@
 - `39011` **kukuri.trust.anchor** (信頼アンカー; replaceable推奨)
 - `39020` **kukuri.key.envelope** (鍵封筒; append-only)
 - `39021` **kukuri.invite.capability** (招待capability; append-only)
+- `39022` **kukuri.join.request** (append-only)
 
 共通tags（推奨）
 - `["k","kukuri"]` : kukuriイベント識別
@@ -427,7 +427,7 @@ scopeごとに共有鍵を持つ: `K_fp`, `K_f`, `K_inv`
 
 ### 6.2 kukuri.key.envelope (kind=39020)
 
-受信者ごとに暗号化して「鍵」を渡す（NIP-44推奨）。
+受信者ごとに暗号化して「鍵」を渡す（NIP-44 v2 必須）。
 
 tags（必須）:
 
