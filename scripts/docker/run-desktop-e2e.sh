@@ -27,6 +27,33 @@ pnpm e2e:build
 echo "=== ${SCENARIO_NAME}: running pnpm e2e:ci ==="
 E2E_COMMAND=(pnpm e2e:ci)
 export E2E_SKIP_BUILD=1
+if [[ -z "${TAURI_DRIVER_PORT:-}" ]]; then
+  echo "Selecting available TAURI_DRIVER_PORT..."
+  TAURI_DRIVER_PORT="$(node -e 'const net=require("net");
+const min=Number(process.env.TAURI_PORT_MIN ?? 4700);
+const max=Number(process.env.TAURI_PORT_MAX ?? 5200);
+const isFree=(port)=>new Promise((resolve)=>{
+  const server=net.createServer();
+  server.unref();
+  server.on("error",()=>resolve(false));
+  server.listen(port,"127.0.0.1",()=>server.close(()=>resolve(true)));
+});
+(async ()=>{
+  for(let port=min; port<=max; port+=1){
+    if(await isFree(port) && await isFree(port+1) && await isFree(port+100)){
+      console.log(port);
+      return;
+    }
+  }
+  process.exit(1);
+})().catch((err)=>{console.error(err);process.exit(1);});')"
+  if [[ -z "$TAURI_DRIVER_PORT" ]]; then
+    echo "Failed to resolve TAURI_DRIVER_PORT" >&2
+    exit 1
+  fi
+  export TAURI_DRIVER_PORT
+  echo "Using TAURI_DRIVER_PORT=${TAURI_DRIVER_PORT}"
+fi
 if command -v dbus-run-session >/dev/null 2>&1; then
   echo "Detected dbus-run-session; running E2E inside a dedicated DBus session"
   E2E_COMMAND=(dbus-run-session -- pnpm e2e:ci)

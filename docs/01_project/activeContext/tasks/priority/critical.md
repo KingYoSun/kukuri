@@ -9,6 +9,7 @@
 - v2 アプリ Phase 7 - Mainline DHT 統合タスク群を `tasks/status/in_progress.md` に移動（2025年10月17日）
 - MVP 残タスク棚卸しとドキュメント刷新を `tasks/status/in_progress.md` に移動（2025年11月08日着手）
 - Tauri/関連ライブラリのバージョン更新を `tasks/status/in_progress.md` に移動（2025年12月19日着手）
+- GitHub Actions Desktop E2E 失敗対応を 	asks/status/in_progress.md に移動（2026年02月04日）
 
 方針更新（2025年09月15日）
 - 当面は Nostr リレーとは接続しない。まず P2P（iroh + iroh-gossip + DHT）で完結した体験の実現を優先。
