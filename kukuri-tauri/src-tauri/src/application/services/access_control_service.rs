@@ -1,5 +1,7 @@
 use crate::application::ports::group_key_store::{GroupKeyRecord, GroupKeyStore};
-use crate::application::ports::join_request_store::{JoinRequestRecord, JoinRequestStore};
+use crate::application::ports::join_request_store::{
+    InviteUsageRecord, JoinRequestRecord, JoinRequestStore,
+};
 use crate::application::ports::key_manager::KeyManager;
 use crate::application::shared::nostr::to_nostr_event;
 use crate::domain::entities::Event;
@@ -320,6 +322,15 @@ impl AccessControlService {
             )
             .await?;
 
+        if context.scope == "invite" {
+            let invite_event_id = context.invite_event_id.as_deref().ok_or_else(|| {
+                AppError::validation(ValidationFailureKind::Generic, "Invite event_id is missing")
+            })?;
+            let max_uses = context.invite_max_uses.unwrap_or(1);
+            self.consume_invite_usage(&keypair.public_key, invite_event_id, max_uses)
+                .await?;
+        }
+
         let record = JoinRequestRecord {
             event: event.clone(),
             topic_id: context.topic_id,
@@ -415,11 +426,15 @@ impl AccessControlService {
             }
         }
 
+        let mut invite_event_id = None;
+        let mut invite_max_uses = None;
         if scope == "invite" {
             let invite_json = content.invite_event_json.clone().ok_or_else(|| {
                 AppError::validation(ValidationFailureKind::Generic, "Invite payload is missing")
             })?;
             let invite = validate_invite_event(&invite_json, Some(&topic_id))?;
+            invite_event_id = Some(invite.event_id.clone());
+            invite_max_uses = Some(invite.max_uses);
             if let Some(target) = target_pubkey.as_ref() {
                 if invite.issuer_pubkey != *target {
                     return Ok(None);
@@ -433,6 +448,8 @@ impl AccessControlService {
             target_pubkey,
             requester_pubkey: event.pubkey.clone(),
             invite_event_json: content.invite_event_json,
+            invite_event_id,
+            invite_max_uses,
             requested_at: content.requested_at,
         }))
     }
@@ -606,6 +623,46 @@ impl AccessControlService {
         Ok(())
     }
 
+    async fn consume_invite_usage(
+        &self,
+        owner_pubkey: &str,
+        invite_event_id: &str,
+        max_uses: i64,
+    ) -> Result<(), AppError> {
+        let now = Utc::now().timestamp();
+        let incoming_max = max_uses.max(1);
+        let mut record = match self
+            .join_request_store
+            .get_invite_usage(owner_pubkey, invite_event_id)
+            .await?
+        {
+            Some(record) => record,
+            None => InviteUsageRecord {
+                invite_event_id: invite_event_id.to_string(),
+                max_uses: incoming_max,
+                used_count: 0,
+                last_used_at: now,
+            },
+        };
+
+        let existing_max = record.max_uses.max(1);
+        let effective_max = existing_max.min(incoming_max);
+        if record.used_count >= effective_max {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Invite max_uses exceeded",
+            ));
+        }
+
+        record.used_count += 1;
+        record.max_uses = effective_max;
+        record.last_used_at = now;
+        self.join_request_store
+            .upsert_invite_usage(owner_pubkey, record)
+            .await?;
+        Ok(())
+    }
+
     fn resolve_join_request_input(
         &self,
         input: &JoinRequestInput,
@@ -664,6 +721,8 @@ struct JoinRequestContext {
     target_pubkey: Option<String>,
     requester_pubkey: String,
     invite_event_json: Option<serde_json::Value>,
+    invite_event_id: Option<String>,
+    invite_max_uses: Option<i64>,
     requested_at: Option<i64>,
 }
 
@@ -690,6 +749,8 @@ struct KeyEnvelopePayload {
 struct InviteValidation {
     topic_id: String,
     issuer_pubkey: String,
+    event_id: String,
+    max_uses: i64,
 }
 
 fn validate_invite_event(
@@ -773,13 +834,12 @@ fn validate_invite_event(
             ));
         }
     }
-    if let Some(max_uses) = payload.max_uses {
-        if max_uses <= 0 {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invite max_uses must be positive",
-            ));
-        }
+    let max_uses = payload.max_uses.unwrap_or(1);
+    if max_uses <= 0 {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite max_uses must be positive",
+        ));
     }
     if let Some(nonce) = payload.nonce.as_ref() {
         if nonce.trim().is_empty() {
@@ -811,6 +871,8 @@ fn validate_invite_event(
     Ok(InviteValidation {
         topic_id,
         issuer_pubkey: event.pubkey.to_string(),
+        event_id: event.id.to_string(),
+        max_uses,
     })
 }
 
@@ -863,7 +925,7 @@ fn require_tag_value(tags: &[Vec<String>], name: &str) -> Result<String, AppErro
 mod tests {
     use super::*;
     use crate::application::ports::group_key_store::GroupKeyEntry;
-    use crate::application::ports::join_request_store::JoinRequestStore;
+    use crate::application::ports::join_request_store::{InviteUsageRecord, JoinRequestStore};
     use crate::application::ports::key_manager::KeyPair;
     use crate::infrastructure::crypto::DefaultSignatureService;
     use async_trait::async_trait;
@@ -988,6 +1050,7 @@ mod tests {
     #[derive(Clone, Default)]
     struct TestJoinRequestStore {
         records: Arc<RwLock<HashMap<String, HashMap<String, JoinRequestRecord>>>>,
+        invite_usage: Arc<RwLock<HashMap<String, HashMap<String, InviteUsageRecord>>>>,
     }
 
     #[async_trait]
@@ -1030,6 +1093,28 @@ mod tests {
             if let Some(owner) = records.get_mut(owner_pubkey) {
                 owner.remove(event_id);
             }
+            Ok(())
+        }
+
+        async fn get_invite_usage(
+            &self,
+            owner_pubkey: &str,
+            invite_event_id: &str,
+        ) -> Result<Option<InviteUsageRecord>, AppError> {
+            let records = self.invite_usage.read().await;
+            Ok(records
+                .get(owner_pubkey)
+                .and_then(|owner| owner.get(invite_event_id).cloned()))
+        }
+
+        async fn upsert_invite_usage(
+            &self,
+            owner_pubkey: &str,
+            record: InviteUsageRecord,
+        ) -> Result<(), AppError> {
+            let mut records = self.invite_usage.write().await;
+            let owner = records.entry(owner_pubkey.to_string()).or_default();
+            owner.insert(record.invite_event_id.clone(), record);
             Ok(())
         }
     }
@@ -1339,6 +1424,95 @@ mod tests {
             .expect("list");
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].requester_pubkey, requester_keypair.public_key);
+    }
+
+    #[tokio::test]
+    async fn handle_join_request_rejects_invite_reuse() {
+        let (_member_keys, member_keypair) = make_keypair();
+        let (requester_keys, requester_keypair) = make_keypair();
+        let (requester_keys_2, requester_keypair_2) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(member_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            signature_service,
+            gossip_service_trait,
+        );
+
+        let topic_id = "kukuri:topic1";
+        let invite_json = service
+            .issue_invite(topic_id, Some(600), Some(1), Some("nonce-reuse".into()))
+            .await
+            .expect("invite");
+        let invite_event: nostr_sdk::Event =
+            serde_json::from_value(invite_json.clone()).expect("nostr event");
+        let invite_id = invite_event.id.to_string();
+        let issuer_pubkey = invite_event.pubkey.to_string();
+
+        let build_join_request = |keys: &Keys, requester_pubkey: &str, nonce: &str| {
+            let content = json!({
+                "schema": "kukuri-join-request-v1",
+                "topic": topic_id,
+                "scope": "invite",
+                "requester": format!("pubkey:{requester_pubkey}"),
+                "requested_at": Utc::now().timestamp(),
+                "invite_event_json": invite_json.clone(),
+            })
+            .to_string();
+
+            let d_tag = format!("join:{topic_id}:{nonce}:{requester_pubkey}");
+            let tags = vec![
+                Tag::parse(["t", topic_id]).expect("tag"),
+                Tag::parse(["scope", "invite"]).expect("tag"),
+                Tag::parse(["d", d_tag.as_str()]).expect("tag"),
+                Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+                Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+                Tag::parse(["e", invite_id.as_str()]).expect("tag"),
+                Tag::parse(["p", issuer_pubkey.as_str()]).expect("tag"),
+            ];
+
+            EventBuilder::new(Kind::from(KIND_JOIN_REQUEST as u16), content)
+                .tags(tags)
+                .sign_with_keys(keys)
+                .expect("signed")
+        };
+
+        let event_first = domain_event_from_nostr(&build_join_request(
+            &requester_keys,
+            &requester_keypair.public_key,
+            "nonce-1",
+        ));
+        service
+            .handle_incoming_event(&event_first)
+            .await
+            .expect("first join");
+
+        let event_second = domain_event_from_nostr(&build_join_request(
+            &requester_keys_2,
+            &requester_keypair_2.public_key,
+            "nonce-2",
+        ));
+        let err = service
+            .handle_incoming_event(&event_second)
+            .await
+            .expect_err("should reject reuse");
+        assert_eq!(err.validation_message(), Some("Invite max_uses exceeded"));
+
+        let pending = join_request_store
+            .list_requests(&member_keypair.public_key)
+            .await
+            .expect("list");
+        assert_eq!(pending.len(), 1);
     }
 
     #[tokio::test]

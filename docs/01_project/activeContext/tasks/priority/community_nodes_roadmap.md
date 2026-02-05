@@ -63,7 +63,7 @@
 ## 未実装/不足事項（2026年02月05日 追記）
 
 - [x] join.request 受信側の rate limit / 手動承認フローを実装し、key.envelope の自動配布を抑止する（P2P-only）
-- [ ] invite.capability の max_uses を消費管理に反映し、再利用防止のテストを追加する
+- [x] invite.capability の max_uses を消費管理に反映し、再利用防止のテストを追加する
 - [ ] クライアントの KIP 検証を強化（k/ver/必須タグ/schema）し、不正イベント拒否のテストを追加する
 - [ ] friend_plus の扱いを v2 へ明記するか、v1 実装方針を決定して計画文書と整合させる
 
