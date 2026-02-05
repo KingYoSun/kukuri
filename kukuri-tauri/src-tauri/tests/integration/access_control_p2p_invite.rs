@@ -3,6 +3,9 @@ use kukuri_lib::test_support::application::ports::cache::PostCache;
 use kukuri_lib::test_support::application::ports::group_key_store::{
     GroupKeyEntry, GroupKeyRecord, GroupKeyStore,
 };
+use kukuri_lib::test_support::application::ports::join_request_store::{
+    JoinRequestRecord, JoinRequestStore,
+};
 use kukuri_lib::test_support::application::ports::key_manager::{KeyManager, KeyPair};
 use kukuri_lib::test_support::application::ports::repositories::{
     BookmarkRepository, PostRepository,
@@ -124,6 +127,52 @@ impl GroupKeyStore for TestGroupKeyStore {
                 stored_at: entry.stored_at,
             })
             .collect())
+    }
+}
+
+#[derive(Clone, Default)]
+struct TestJoinRequestStore {
+    records: Arc<RwLock<HashMap<String, HashMap<String, JoinRequestRecord>>>>,
+}
+
+#[async_trait]
+impl JoinRequestStore for TestJoinRequestStore {
+    async fn upsert_request(
+        &self,
+        owner_pubkey: &str,
+        record: JoinRequestRecord,
+    ) -> Result<(), AppError> {
+        let mut records = self.records.write().await;
+        let owner = records.entry(owner_pubkey.to_string()).or_default();
+        owner.insert(record.event.id.clone(), record);
+        Ok(())
+    }
+
+    async fn list_requests(&self, owner_pubkey: &str) -> Result<Vec<JoinRequestRecord>, AppError> {
+        let records = self.records.read().await;
+        Ok(records
+            .get(owner_pubkey)
+            .map(|owner| owner.values().cloned().collect())
+            .unwrap_or_default())
+    }
+
+    async fn get_request(
+        &self,
+        owner_pubkey: &str,
+        event_id: &str,
+    ) -> Result<Option<JoinRequestRecord>, AppError> {
+        let records = self.records.read().await;
+        Ok(records
+            .get(owner_pubkey)
+            .and_then(|owner| owner.get(event_id).cloned()))
+    }
+
+    async fn delete_request(&self, owner_pubkey: &str, event_id: &str) -> Result<(), AppError> {
+        let mut records = self.records.write().await;
+        if let Some(owner) = records.get_mut(owner_pubkey) {
+            owner.remove(event_id);
+        }
+        Ok(())
     }
 }
 
@@ -377,6 +426,8 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
 
     let inviter_group_keys = Arc::new(TestGroupKeyStore::default());
     let requester_group_keys = Arc::new(TestGroupKeyStore::default());
+    let inviter_join_requests = Arc::new(TestJoinRequestStore::default());
+    let requester_join_requests = Arc::new(TestJoinRequestStore::default());
 
     let signature_service = Arc::new(DefaultSignatureService::new());
     let inviter_gossip = Arc::new(TestGossipService::default());
@@ -385,12 +436,14 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
     let inviter_service = AccessControlService::new(
         inviter_key_manager,
         Arc::clone(&inviter_group_keys) as Arc<dyn GroupKeyStore>,
+        Arc::clone(&inviter_join_requests) as Arc<dyn JoinRequestStore>,
         Arc::clone(&signature_service),
         inviter_gossip.clone(),
     );
     let requester_service = AccessControlService::new(
         requester_key_manager,
         Arc::clone(&requester_group_keys) as Arc<dyn GroupKeyStore>,
+        Arc::clone(&requester_join_requests) as Arc<dyn JoinRequestStore>,
         Arc::clone(&signature_service),
         requester_gossip.clone(),
     );
@@ -429,6 +482,22 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
         .handle_incoming_event(&join_event)
         .await
         .expect("inviter handles join request");
+
+    let pending = inviter_service
+        .list_pending_join_requests()
+        .await
+        .expect("pending join requests");
+    assert_eq!(pending.len(), 1);
+
+    inviter_service
+        .approve_join_request(&join_event.id)
+        .await
+        .expect("approve join request");
+    let pending_after = inviter_service
+        .list_pending_join_requests()
+        .await
+        .expect("pending cleared");
+    assert!(pending_after.is_empty());
 
     let inviter_broadcasts = inviter_gossip.broadcasts().await;
     let key_envelope_event = inviter_broadcasts

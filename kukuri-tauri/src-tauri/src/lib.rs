@@ -185,6 +185,9 @@ pub fn run() {
             // Access Control (P2P join)
             presentation::commands::access_control_issue_invite,
             presentation::commands::access_control_request_join,
+            presentation::commands::access_control_list_join_requests,
+            presentation::commands::access_control_approve_join_request,
+            presentation::commands::access_control_reject_join_request,
             // ユーティリティコマンド
             presentation::commands::pubkey_to_npub,
             presentation::commands::npub_to_pubkey,

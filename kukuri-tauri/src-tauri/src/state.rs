@@ -8,6 +8,7 @@ use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
 use crate::application::ports::cache::PostCache;
 use crate::application::ports::event_topic_store::EventTopicStore;
 use crate::application::ports::group_key_store::GroupKeyStore;
+use crate::application::ports::join_request_store::JoinRequestStore;
 use crate::application::ports::messaging_gateway::MessagingGateway;
 use crate::application::ports::offline_store::OfflinePersistence;
 use crate::application::ports::repositories::{
@@ -50,7 +51,10 @@ use crate::infrastructure::{
         bootstrap::P2PBootstrapper,
         event_distributor::{DefaultEventDistributor, EventDistributor},
     },
-    storage::{SecureGroupKeyStore, SecureStorage, secure_storage::DefaultSecureStorage},
+    storage::{
+        SecureGroupKeyStore, SecureJoinRequestStore, SecureStorage,
+        secure_storage::DefaultSecureStorage,
+    },
 };
 use crate::presentation::handlers::{
     CommunityNodeHandler, EventHandler, OfflineHandler, P2PHandler, SecureStorageHandler,
@@ -184,6 +188,8 @@ impl AppState {
         let secure_account_store: Arc<dyn SecureAccountStore> = secure_storage_impl.clone();
         let group_key_store: Arc<dyn GroupKeyStore> =
             Arc::new(SecureGroupKeyStore::new(Arc::clone(&secure_storage)));
+        let join_request_store: Arc<dyn JoinRequestStore> =
+            Arc::new(SecureJoinRequestStore::new(Arc::clone(&secure_storage)));
         let signature_service: Arc<dyn SignatureService> = Arc::new(DefaultSignatureService::new());
         let default_event_distributor = Arc::new(DefaultEventDistributor::new());
         let event_distributor: Arc<dyn EventDistributor> =
@@ -200,6 +206,7 @@ impl AppState {
         let access_control_service = Arc::new(AccessControlService::new(
             Arc::clone(&key_manager),
             Arc::clone(&group_key_store),
+            Arc::clone(&join_request_store),
             Arc::clone(&signature_service),
             Arc::clone(&gossip_service),
         ));

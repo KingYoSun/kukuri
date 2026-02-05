@@ -1,13 +1,12 @@
 use crate::application::ports::repositories::UserRepository;
 use crate::domain::entities::User;
-use crate::shared::{AppError, ValidationFailureKind};
+use crate::shared::{AppError, RateLimiter, ValidationFailureKind};
 use chrono::Utc;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
 
 pub(crate) const DEFAULT_LIMIT: usize = 20;
 pub(crate) const MAX_LIMIT: usize = 50;
@@ -78,7 +77,9 @@ impl UserSearchService {
             .viewer_pubkey
             .clone()
             .unwrap_or_else(|| format!("anon:{}", normalized_query.to_lowercase()));
-        self.rate_limiter.check_and_record(&rate_key).await?;
+        self.rate_limiter
+            .check_and_record(&rate_key, "一定時間内に繰り返し検索が実行されています")
+            .await?;
 
         let start = Instant::now();
         let fetch_limit = MAX_FETCH.min(params.limit + MAX_LIMIT);
@@ -293,41 +294,6 @@ fn parse_cursor(cursor: &str) -> Result<Cursor, AppError> {
             })
         }
         _ => Err(AppError::InvalidInput("Invalid cursor prefix".into())),
-    }
-}
-
-struct RateLimiter {
-    requests: Mutex<HashMap<String, Vec<Instant>>>,
-    max_requests: usize,
-    window: Duration,
-}
-
-impl RateLimiter {
-    fn new(max_requests: usize, window: Duration) -> Self {
-        Self {
-            requests: Mutex::new(HashMap::new()),
-            max_requests,
-            window,
-        }
-    }
-
-    async fn check_and_record(&self, key: &str) -> Result<(), AppError> {
-        let mut guard = self.requests.lock().await;
-        let now = Instant::now();
-        let entries = guard.entry(key.to_string()).or_default();
-        entries.retain(|instant| now.duration_since(*instant) < self.window);
-        if entries.len() >= self.max_requests {
-            let retry_after = self
-                .window
-                .checked_sub(now.duration_since(entries[0]))
-                .unwrap_or_default();
-            return Err(AppError::rate_limited(
-                "一定時間後に再試行してください",
-                retry_after.as_secs().max(1),
-            ));
-        }
-        entries.push(now);
-        Ok(())
     }
 }
 

@@ -54,3 +54,54 @@ pub struct AccessControlJoinResponse {
     pub event_id: String,
     pub sent_topics: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessControlPendingJoinRequest {
+    pub event_id: String,
+    pub topic_id: String,
+    pub scope: String,
+    pub requester_pubkey: String,
+    pub target_pubkey: Option<String>,
+    pub requested_at: Option<i64>,
+    pub received_at: i64,
+    pub invite_event_json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessControlListJoinRequestsResponse {
+    pub items: Vec<AccessControlPendingJoinRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessControlApproveJoinRequest {
+    pub event_id: String,
+}
+
+impl Validate for AccessControlApproveJoinRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.event_id.trim().is_empty() {
+            return Err("event_id is required".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessControlApproveJoinResponse {
+    pub event_id: String,
+    pub key_envelope_event_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessControlRejectJoinRequest {
+    pub event_id: String,
+}
+
+impl Validate for AccessControlRejectJoinRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.event_id.trim().is_empty() {
+            return Err("event_id is required".to_string());
+        }
+        Ok(())
+    }
+}

@@ -16,7 +16,9 @@ pub mod user_service;
 pub use crate::domain::value_objects::subscription::{
     SubscriptionRecord, SubscriptionStatus, SubscriptionTarget,
 };
-pub use access_control_service::{AccessControlService, JoinRequestInput, JoinRequestResult};
+pub use access_control_service::{
+    AccessControlService, JoinRequestApprovalResult, JoinRequestInput, JoinRequestResult,
+};
 pub use auth_lifecycle::DefaultAuthLifecycle;
 pub use auth_service::AuthService;
 pub use direct_message_service::{

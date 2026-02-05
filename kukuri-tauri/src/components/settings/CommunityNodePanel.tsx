@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -59,6 +59,12 @@ export function CommunityNodePanel() {
     queryFn: () => communityNodeApi.listGroupKeys(),
     staleTime: 1000 * 30,
   });
+  const pendingJoinRequestsQuery = useQuery({
+    queryKey: ['community-node', 'join-requests'],
+    queryFn: () => accessControlApi.listJoinRequests(),
+    enabled: enableAccessControl,
+    staleTime: 1000 * 15,
+  });
   const nodes = configQuery.data?.nodes ?? [];
   const selectedNode =
     nodes.find((node) => node.base_url === actionNodeBaseUrl) ?? nodes[0] ?? null;
@@ -114,11 +120,22 @@ export function CommunityNodePanel() {
     }
   }, [trustAnchorQuery.isError, trustAnchorQuery.error]);
 
+  useEffect(() => {
+    if (pendingJoinRequestsQuery.isError) {
+      errorHandler.log('Failed to load pending join requests', pendingJoinRequestsQuery.error, {
+        context: 'CommunityNodePanel.joinRequests',
+        showToast: true,
+        toastTitle: 'join.request 縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆',
+      });
+    }
+  }, [pendingJoinRequestsQuery.isError, pendingJoinRequestsQuery.error]);
+
   const refreshCommunityData = async () => {
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'config'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'group-keys'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'consents'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-anchor'] });
+    await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
   };
 
   const serializeNodes = (items: CommunityNodeConfigNodeResponse[]) =>
@@ -267,6 +284,34 @@ export function CommunityNodePanel() {
         context: 'CommunityNodePanel.requestJoin',
         showToast: true,
         toastTitle: 'P2P 参加リクエストに失敗しました',
+      });
+    }
+  };
+
+  const handleApproveJoinRequest = async (eventId: string) => {
+    try {
+      await accessControlApi.approveJoinRequest({ event_id: eventId });
+      await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
+      toast.success('join.request 繧定ｿｽ蜉縺励∪縺励◆');
+    } catch (error) {
+      errorHandler.log('Community node join approval failed', error, {
+        context: 'CommunityNodePanel.approveJoinRequest',
+        showToast: true,
+        toastTitle: 'join.request 縺ｮ險ｭ螳壹↓螟ｱ謨励＠縺ｾ縺励◆',
+      });
+    }
+  };
+
+  const handleRejectJoinRequest = async (eventId: string) => {
+    try {
+      await accessControlApi.rejectJoinRequest({ event_id: eventId });
+      await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
+      toast.success('join.request 繧定ｿｽ蜉縺励∪縺励◆');
+    } catch (error) {
+      errorHandler.log('Community node join rejection failed', error, {
+        context: 'CommunityNodePanel.rejectJoinRequest',
+        showToast: true,
+        toastTitle: 'join.request 縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
       });
     }
   };
@@ -581,6 +626,58 @@ export function CommunityNodePanel() {
           </Button>
         </div>
 
+        <Separator />
+
+        <div className="space-y-3">
+          <p className="font-medium">join.request 受信一覧</p>
+          <p className="text-sm text-muted-foreground">
+            受信した join.request を確認して、鍵配布の承認/却下を行います。
+          </p>
+          {pendingJoinRequestsQuery.data?.items &&
+          pendingJoinRequestsQuery.data.items.length > 0 ? (
+            <div className="space-y-2" data-testid="community-node-join-requests">
+              {pendingJoinRequestsQuery.data.items.map((item) => {
+                const requestedAt = item.requested_at
+                  ? new Date(item.requested_at * 1000).toLocaleString()
+                  : null;
+                const receivedAt = new Date(item.received_at * 1000).toLocaleString();
+                return (
+                  <div key={item.event_id} className="rounded-md border p-3 text-sm space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium break-all">{item.topic_id}</div>
+                      <Badge variant="outline">{item.scope}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      requester: {shortenPubkey(item.requester_pubkey)} / received: {receivedAt}
+                      {requestedAt ? ` / requested: ${requestedAt}` : ''}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveJoinRequest(item.event_id)}
+                        disabled={!enableAccessControl}
+                        data-testid={`community-node-join-approve-${item.event_id}`}
+                      >
+                        承認して鍵配布
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRejectJoinRequest(item.event_id)}
+                        disabled={!enableAccessControl}
+                        data-testid={`community-node-join-reject-${item.event_id}`}
+                      >
+                        却下
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">保留中の join.request はありません。</p>
+          )}
+        </div>
         <Separator />
 
         <div className="space-y-3">

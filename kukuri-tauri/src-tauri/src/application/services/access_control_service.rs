@@ -1,11 +1,12 @@
 use crate::application::ports::group_key_store::{GroupKeyRecord, GroupKeyStore};
+use crate::application::ports::join_request_store::{JoinRequestRecord, JoinRequestStore};
 use crate::application::ports::key_manager::KeyManager;
 use crate::application::shared::nostr::to_nostr_event;
 use crate::domain::entities::Event;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::crypto::SignatureService;
 use crate::infrastructure::p2p::GossipService;
-use crate::shared::{AppError, ValidationFailureKind};
+use crate::shared::{AppError, RateLimiter, ValidationFailureKind};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 use uuid::Uuid;
 
 const KIP_NAMESPACE: &str = "kukuri";
@@ -23,6 +25,8 @@ const KIP_VERSION: &str = "1";
 const KIND_KEY_ENVELOPE: u32 = 39020;
 const KIND_INVITE_CAPABILITY: u32 = 39021;
 const KIND_JOIN_REQUEST: u32 = 39022;
+const JOIN_REQUEST_RATE_LIMIT_MAX: usize = 3;
+const JOIN_REQUEST_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 pub struct JoinRequestInput {
@@ -39,25 +43,42 @@ pub struct JoinRequestResult {
     pub sent_topics: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JoinRequestApprovalResult {
+    pub event_id: String,
+    pub key_envelope_event_id: String,
+    pub recipient_pubkey: String,
+    pub topic_id: String,
+    pub scope: String,
+}
+
 pub struct AccessControlService {
     key_manager: Arc<dyn KeyManager>,
     group_key_store: Arc<dyn GroupKeyStore>,
+    join_request_store: Arc<dyn JoinRequestStore>,
     signature_service: Arc<dyn SignatureService>,
     gossip_service: Arc<dyn GossipService>,
+    join_request_rate_limiter: RateLimiter,
 }
 
 impl AccessControlService {
     pub fn new(
         key_manager: Arc<dyn KeyManager>,
         group_key_store: Arc<dyn GroupKeyStore>,
+        join_request_store: Arc<dyn JoinRequestStore>,
         signature_service: Arc<dyn SignatureService>,
         gossip_service: Arc<dyn GossipService>,
     ) -> Self {
         Self {
             key_manager,
             group_key_store,
+            join_request_store,
             signature_service,
             gossip_service,
+            join_request_rate_limiter: RateLimiter::new(
+                JOIN_REQUEST_RATE_LIMIT_MAX,
+                JOIN_REQUEST_RATE_LIMIT_WINDOW,
+            ),
         }
     }
 
@@ -191,6 +212,76 @@ impl AccessControlService {
         })
     }
 
+    pub async fn list_pending_join_requests(&self) -> Result<Vec<JoinRequestRecord>, AppError> {
+        let keypair = self.current_keypair().await?;
+        self.join_request_store
+            .list_requests(&keypair.public_key)
+            .await
+    }
+
+    pub async fn approve_join_request(
+        &self,
+        event_id: &str,
+    ) -> Result<JoinRequestApprovalResult, AppError> {
+        let keypair = self.current_keypair().await?;
+        if event_id.trim().is_empty() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Join request event_id is required",
+            ));
+        }
+
+        let Some(record) = self
+            .join_request_store
+            .get_request(&keypair.public_key, event_id)
+            .await?
+        else {
+            return Err(AppError::NotFound("Join request not found".to_string()));
+        };
+
+        let Some(context) = self.validate_join_request_event(&record.event, &keypair.public_key)?
+        else {
+            return Err(AppError::NotFound(
+                "Join request is not available".to_string(),
+            ));
+        };
+
+        let group_key = self
+            .ensure_group_key(&context.topic_id, &context.scope)
+            .await?;
+        let envelope_event = self
+            .build_key_envelope_event(&context.requester_pubkey, &group_key)
+            .await?;
+        let topics = vec![user_topic_id(&context.requester_pubkey)];
+        self.broadcast_event(&envelope_event, &topics).await?;
+
+        self.join_request_store
+            .delete_request(&keypair.public_key, event_id)
+            .await?;
+
+        Ok(JoinRequestApprovalResult {
+            event_id: record.event.id,
+            key_envelope_event_id: envelope_event.id,
+            recipient_pubkey: context.requester_pubkey,
+            topic_id: context.topic_id,
+            scope: context.scope,
+        })
+    }
+
+    pub async fn reject_join_request(&self, event_id: &str) -> Result<(), AppError> {
+        let keypair = self.current_keypair().await?;
+        if event_id.trim().is_empty() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Join request event_id is required",
+            ));
+        }
+        self.join_request_store
+            .delete_request(&keypair.public_key, event_id)
+            .await?;
+        Ok(())
+    }
+
     pub async fn handle_incoming_event(&self, event: &Event) -> Result<(), AppError> {
         match event.kind {
             KIND_JOIN_REQUEST => self.handle_join_request(event).await?,
@@ -205,12 +296,58 @@ impl AccessControlService {
             Ok(pair) => pair,
             Err(_) => return Ok(()),
         };
-        if event.pubkey == keypair.public_key {
+        let Some(context) = self.validate_join_request_event(event, &keypair.public_key)? else {
             return Ok(());
+        };
+
+        if self
+            .join_request_store
+            .get_request(&keypair.public_key, &event.id)
+            .await?
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        let rate_key = format!(
+            "join:{}:{}:{}",
+            context.topic_id, context.scope, context.requester_pubkey
+        );
+        self.join_request_rate_limiter
+            .check_and_record(
+                &rate_key,
+                "join.request の受信が多すぎます。しばらく待ってください",
+            )
+            .await?;
+
+        let record = JoinRequestRecord {
+            event: event.clone(),
+            topic_id: context.topic_id,
+            scope: context.scope,
+            requester_pubkey: context.requester_pubkey,
+            target_pubkey: context.target_pubkey,
+            requested_at: context.requested_at,
+            received_at: Utc::now().timestamp(),
+            invite_event_json: context.invite_event_json,
+        };
+
+        self.join_request_store
+            .upsert_request(&keypair.public_key, record)
+            .await?;
+        Ok(())
+    }
+
+    fn validate_join_request_event(
+        &self,
+        event: &Event,
+        current_pubkey: &str,
+    ) -> Result<Option<JoinRequestContext>, AppError> {
+        if event.pubkey == current_pubkey {
+            return Ok(None);
         }
         if let Ok(nostr_event) = to_nostr_event(event) {
             if nostr_event.verify().is_err() {
-                return Ok(());
+                return Ok(None);
             }
         }
 
@@ -230,8 +367,8 @@ impl AccessControlService {
         }
         let target_pubkey = tag_value(&tags, "p");
         if let Some(target) = target_pubkey.as_ref() {
-            if target != &keypair.public_key {
-                return Ok(());
+            if target != current_pubkey {
+                return Ok(None);
             }
         }
 
@@ -279,32 +416,25 @@ impl AccessControlService {
         }
 
         if scope == "invite" {
-            let invite_json = content.invite_event_json.ok_or_else(|| {
+            let invite_json = content.invite_event_json.clone().ok_or_else(|| {
                 AppError::validation(ValidationFailureKind::Generic, "Invite payload is missing")
             })?;
             let invite = validate_invite_event(&invite_json, Some(&topic_id))?;
             if let Some(target) = target_pubkey.as_ref() {
                 if invite.issuer_pubkey != *target {
-                    return Ok(());
+                    return Ok(None);
                 }
             }
         }
 
-        let Some(record) = self
-            .group_key_store
-            .get_latest_key(&topic_id, &scope)
-            .await?
-        else {
-            return Ok(());
-        };
-
-        let recipient_pubkey = event.pubkey.clone();
-        let envelope_event = self
-            .build_key_envelope_event(&recipient_pubkey, &record)
-            .await?;
-        let topics = vec![user_topic_id(&recipient_pubkey)];
-        self.broadcast_event(&envelope_event, &topics).await?;
-        Ok(())
+        Ok(Some(JoinRequestContext {
+            topic_id,
+            scope,
+            target_pubkey,
+            requester_pubkey: event.pubkey.clone(),
+            invite_event_json: content.invite_event_json,
+            requested_at: content.requested_at,
+        }))
     }
 
     async fn handle_key_envelope(&self, event: &Event) -> Result<(), AppError> {
@@ -527,6 +657,16 @@ impl AccessControlService {
     }
 }
 
+#[derive(Debug, Clone)]
+struct JoinRequestContext {
+    topic_id: String,
+    scope: String,
+    target_pubkey: Option<String>,
+    requester_pubkey: String,
+    invite_event_json: Option<serde_json::Value>,
+    requested_at: Option<i64>,
+}
+
 #[derive(Debug, Deserialize)]
 struct JoinRequestPayload {
     schema: String,
@@ -723,12 +863,14 @@ fn require_tag_value(tags: &[Vec<String>], name: &str) -> Result<String, AppErro
 mod tests {
     use super::*;
     use crate::application::ports::group_key_store::GroupKeyEntry;
+    use crate::application::ports::join_request_store::JoinRequestStore;
     use crate::application::ports::key_manager::KeyPair;
     use crate::infrastructure::crypto::DefaultSignatureService;
     use async_trait::async_trait;
     use chrono::{TimeZone, Utc};
     use nostr_sdk::ToBech32;
     use nostr_sdk::prelude::{EventBuilder, Keys, Kind, Tag};
+    use std::collections::{HashMap, HashSet};
     use tokio::sync::RwLock;
 
     #[derive(Clone)]
@@ -844,6 +986,55 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
+    struct TestJoinRequestStore {
+        records: Arc<RwLock<HashMap<String, HashMap<String, JoinRequestRecord>>>>,
+    }
+
+    #[async_trait]
+    impl JoinRequestStore for TestJoinRequestStore {
+        async fn upsert_request(
+            &self,
+            owner_pubkey: &str,
+            record: JoinRequestRecord,
+        ) -> Result<(), AppError> {
+            let mut records = self.records.write().await;
+            let owner = records.entry(owner_pubkey.to_string()).or_default();
+            owner.insert(record.event.id.clone(), record);
+            Ok(())
+        }
+
+        async fn list_requests(
+            &self,
+            owner_pubkey: &str,
+        ) -> Result<Vec<JoinRequestRecord>, AppError> {
+            let records = self.records.read().await;
+            Ok(records
+                .get(owner_pubkey)
+                .map(|owner| owner.values().cloned().collect())
+                .unwrap_or_default())
+        }
+
+        async fn get_request(
+            &self,
+            owner_pubkey: &str,
+            event_id: &str,
+        ) -> Result<Option<JoinRequestRecord>, AppError> {
+            let records = self.records.read().await;
+            Ok(records
+                .get(owner_pubkey)
+                .and_then(|owner| owner.get(event_id).cloned()))
+        }
+
+        async fn delete_request(&self, owner_pubkey: &str, event_id: &str) -> Result<(), AppError> {
+            let mut records = self.records.write().await;
+            if let Some(owner) = records.get_mut(owner_pubkey) {
+                owner.remove(event_id);
+            }
+            Ok(())
+        }
+    }
+
+    #[derive(Clone, Default)]
     struct TestGossipService {
         joined: Arc<RwLock<HashSet<String>>>,
         broadcasts: Arc<RwLock<Vec<(String, Event)>>>,
@@ -946,6 +1137,8 @@ mod tests {
         let key_manager = Arc::new(TestKeyManager::new(keypair.clone()));
         let group_key_store = Arc::new(TestGroupKeyStore::default());
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -953,6 +1146,7 @@ mod tests {
         let service = AccessControlService::new(
             key_manager,
             group_key_store_trait,
+            join_request_store_trait,
             signature_service,
             gossip_service_trait,
         );
@@ -990,6 +1184,8 @@ mod tests {
         let key_manager = Arc::new(TestKeyManager::new(keypair.clone()));
         let group_key_store = Arc::new(TestGroupKeyStore::default());
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -997,6 +1193,7 @@ mod tests {
         let service = AccessControlService::new(
             key_manager,
             group_key_store_trait,
+            join_request_store_trait,
             signature_service,
             gossip_service_trait,
         );
@@ -1071,13 +1268,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_join_request_sends_key_envelope() {
+    async fn handle_join_request_stores_pending_request() {
         let (_member_keys, member_keypair) = make_keypair();
         let (requester_keys, requester_keypair) = make_keypair();
 
         let key_manager = Arc::new(TestKeyManager::new(member_keypair.clone()));
         let group_key_store = Arc::new(TestGroupKeyStore::default());
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1097,6 +1296,7 @@ mod tests {
         let service = AccessControlService::new(
             key_manager,
             group_key_store_trait,
+            join_request_store_trait,
             signature_service,
             gossip_service_trait,
         );
@@ -1127,12 +1327,88 @@ mod tests {
         service.handle_incoming_event(&event).await.expect("handle");
 
         let broadcasts = gossip_service.broadcasts().await;
+        assert!(
+            broadcasts
+                .iter()
+                .all(|(_, event)| event.kind != KIND_KEY_ENVELOPE)
+        );
+
+        let pending = join_request_store
+            .list_requests(&member_keypair.public_key)
+            .await
+            .expect("list");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].requester_pubkey, requester_keypair.public_key);
+    }
+
+    #[tokio::test]
+    async fn approve_join_request_sends_key_envelope_and_clears_pending() {
+        let (_member_keys, member_keypair) = make_keypair();
+        let (requester_keys, requester_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(member_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+
+        let topic_id = "kukuri:topic1";
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            signature_service,
+            gossip_service_trait,
+        );
+
+        let content = json!({
+            "schema": "kukuri-join-request-v1",
+            "topic": topic_id,
+            "scope": "friend",
+            "requester": format!("pubkey:{}", requester_keypair.public_key),
+            "requested_at": Utc::now().timestamp(),
+        })
+        .to_string();
+
+        let tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "friend"]).expect("tag"),
+            Tag::parse(["d", "join:kukuri:topic1:nonce:requester"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+
+        let nostr_event = EventBuilder::new(Kind::from(KIND_JOIN_REQUEST as u16), content)
+            .tags(tags)
+            .sign_with_keys(&requester_keys)
+            .expect("signed");
+
+        let event = domain_event_from_nostr(&nostr_event);
+        service.handle_incoming_event(&event).await.expect("handle");
+
+        let approval = service
+            .approve_join_request(&event.id)
+            .await
+            .expect("approve");
+        assert_eq!(approval.event_id, event.id);
+
+        let broadcasts = gossip_service.broadcasts().await;
         let expected_topic = user_topic_id(&requester_keypair.public_key);
         assert!(
             broadcasts
                 .iter()
                 .any(|(topic, event)| *topic == expected_topic && event.kind == KIND_KEY_ENVELOPE)
         );
+
+        let pending = join_request_store
+            .list_requests(&member_keypair.public_key)
+            .await
+            .expect("list");
+        assert!(pending.is_empty());
     }
 
     #[tokio::test]
@@ -1143,6 +1419,8 @@ mod tests {
         let key_manager = Arc::new(TestKeyManager::new(member_keypair.clone()));
         let group_key_store = Arc::new(TestGroupKeyStore::default());
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1150,6 +1428,7 @@ mod tests {
         let service = AccessControlService::new(
             key_manager,
             group_key_store_trait,
+            join_request_store_trait,
             signature_service,
             gossip_service_trait,
         );
