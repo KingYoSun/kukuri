@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年02月04日
+最終更新日: 2026年02月05日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -59,6 +59,13 @@
 - [x] `cn-user-api`: `/v1/labels` `/v1/trust/*` `/v1/trending` の成功系契約テスト（seed/fixture 含む）を追加する。
 - [x] `cn-relay`: ingest→outbox→WS/gossip 配信の統合テストを追加する。
 - [x] `kukuri-tauri`: `CommunityNodeHandler` の複数ノード集約（search/trust の合算 + cursor 合成）ユニットテストを追加する。
+
+## 未実装/不足事項（2026年02月05日 追記）
+
+- [ ] join.request 受信側の rate limit / 手動承認フローを実装し、key.envelope の自動配布を抑止する（P2P-only）
+- [ ] invite.capability の max_uses を消費管理に反映し、再利用防止のテストを追加する
+- [ ] クライアントの KIP 検証を強化（k/ver/必須タグ/schema）し、不正イベント拒否のテストを追加する
+- [ ] friend_plus の扱いを v2 へ明記するか、v1 実装方針を決定して計画文書と整合させる
 
 ## 参照（設計）
 
