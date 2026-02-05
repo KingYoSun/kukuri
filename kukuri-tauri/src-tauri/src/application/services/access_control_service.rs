@@ -3,6 +3,7 @@ use crate::application::ports::join_request_store::{
     InviteUsageRecord, JoinRequestRecord, JoinRequestStore,
 };
 use crate::application::ports::key_manager::KeyManager;
+use crate::application::ports::repositories::UserRepository;
 use crate::application::shared::nostr::to_nostr_event;
 use crate::domain::entities::Event;
 use crate::domain::p2p::user_topic_id;
@@ -58,6 +59,7 @@ pub struct AccessControlService {
     key_manager: Arc<dyn KeyManager>,
     group_key_store: Arc<dyn GroupKeyStore>,
     join_request_store: Arc<dyn JoinRequestStore>,
+    user_repository: Arc<dyn UserRepository>,
     signature_service: Arc<dyn SignatureService>,
     gossip_service: Arc<dyn GossipService>,
     join_request_rate_limiter: RateLimiter,
@@ -68,6 +70,7 @@ impl AccessControlService {
         key_manager: Arc<dyn KeyManager>,
         group_key_store: Arc<dyn GroupKeyStore>,
         join_request_store: Arc<dyn JoinRequestStore>,
+        user_repository: Arc<dyn UserRepository>,
         signature_service: Arc<dyn SignatureService>,
         gossip_service: Arc<dyn GossipService>,
     ) -> Self {
@@ -75,6 +78,7 @@ impl AccessControlService {
             key_manager,
             group_key_store,
             join_request_store,
+            user_repository,
             signature_service,
             gossip_service,
             join_request_rate_limiter: RateLimiter::new(
@@ -241,7 +245,9 @@ impl AccessControlService {
             return Err(AppError::NotFound("Join request not found".to_string()));
         };
 
-        let Some(context) = self.validate_join_request_event(&record.event, &keypair.public_key)?
+        let Some(context) = self
+            .validate_join_request_event(&record.event, &keypair.public_key)
+            .await?
         else {
             return Err(AppError::NotFound(
                 "Join request is not available".to_string(),
@@ -298,7 +304,10 @@ impl AccessControlService {
             Ok(pair) => pair,
             Err(_) => return Ok(()),
         };
-        let Some(context) = self.validate_join_request_event(event, &keypair.public_key)? else {
+        let Some(context) = self
+            .validate_join_request_event(event, &keypair.public_key)
+            .await?
+        else {
             return Ok(());
         };
 
@@ -348,7 +357,7 @@ impl AccessControlService {
         Ok(())
     }
 
-    fn validate_join_request_event(
+    async fn validate_join_request_event(
         &self,
         event: &Event,
         current_pubkey: &str,
@@ -369,6 +378,7 @@ impl AccessControlService {
         validate_kip_tags(&tags)?;
         match scope.as_str() {
             "invite" | "friend" => {}
+            "friend_plus" => {}
             _ => {
                 return Err(AppError::validation(
                     ValidationFailureKind::Generic,
@@ -439,6 +449,17 @@ impl AccessControlService {
                 if invite.issuer_pubkey != *target {
                     return Ok(None);
                 }
+            }
+        }
+        if scope == "friend_plus" {
+            let is_fof = self
+                .is_friend_of_friend(current_pubkey, &event.pubkey)
+                .await?;
+            if !is_fof {
+                return Err(AppError::validation(
+                    ValidationFailureKind::Generic,
+                    "friend_plus join.request requires FoF",
+                ));
             }
         }
 
@@ -623,6 +644,44 @@ impl AccessControlService {
         Ok(())
     }
 
+    async fn collect_mutual_follow_pubkeys(
+        &self,
+        pubkey: &str,
+    ) -> Result<HashSet<String>, AppError> {
+        let following = self.user_repository.list_following_pubkeys(pubkey).await?;
+        let followers = self.user_repository.list_follower_pubkeys(pubkey).await?;
+        let following_set: HashSet<String> = following.into_iter().collect();
+        let mut mutual = HashSet::new();
+        for follower in followers {
+            if following_set.contains(&follower) {
+                mutual.insert(follower);
+            }
+        }
+        Ok(mutual)
+    }
+
+    async fn is_friend_of_friend(
+        &self,
+        current_pubkey: &str,
+        requester_pubkey: &str,
+    ) -> Result<bool, AppError> {
+        if current_pubkey == requester_pubkey {
+            return Ok(false);
+        }
+        let current_friends = self.collect_mutual_follow_pubkeys(current_pubkey).await?;
+        if current_friends.is_empty() {
+            return Ok(false);
+        }
+        let requester_friends = self.collect_mutual_follow_pubkeys(requester_pubkey).await?;
+        if requester_friends.is_empty() {
+            return Ok(false);
+        }
+        Ok(current_friends
+            .intersection(&requester_friends)
+            .next()
+            .is_some())
+    }
+
     async fn consume_invite_usage(
         &self,
         owner_pubkey: &str,
@@ -685,7 +744,7 @@ impl AccessControlService {
                 "Invite JSON is required for invite scope",
             ));
         }
-        if scope != "friend" {
+        if scope != "friend" && scope != "friend_plus" {
             return Err(AppError::validation(
                 ValidationFailureKind::Generic,
                 format!("Unsupported join scope: {scope}"),
@@ -927,6 +986,8 @@ mod tests {
     use crate::application::ports::group_key_store::GroupKeyEntry;
     use crate::application::ports::join_request_store::{InviteUsageRecord, JoinRequestStore};
     use crate::application::ports::key_manager::KeyPair;
+    use crate::application::ports::repositories::{FollowListSort, UserCursorPage, UserRepository};
+    use crate::domain::entities::User;
     use crate::infrastructure::crypto::DefaultSignatureService;
     use async_trait::async_trait;
     use chrono::{TimeZone, Utc};
@@ -1120,6 +1181,119 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
+    struct TestUserRepository {
+        follows: Arc<RwLock<HashSet<(String, String)>>>,
+    }
+
+    impl TestUserRepository {
+        async fn seed_follow(&self, follower: &str, followed: &str) {
+            let mut follows = self.follows.write().await;
+            follows.insert((follower.to_string(), followed.to_string()));
+        }
+    }
+
+    #[async_trait]
+    impl UserRepository for TestUserRepository {
+        async fn create_user(&self, _user: &User) -> Result<(), AppError> {
+            Err(AppError::NotImplemented("create_user".into()))
+        }
+
+        async fn get_user(&self, _npub: &str) -> Result<Option<User>, AppError> {
+            Err(AppError::NotImplemented("get_user".into()))
+        }
+
+        async fn get_user_by_pubkey(&self, _pubkey: &str) -> Result<Option<User>, AppError> {
+            Err(AppError::NotImplemented("get_user_by_pubkey".into()))
+        }
+
+        async fn search_users(&self, _query: &str, _limit: usize) -> Result<Vec<User>, AppError> {
+            Err(AppError::NotImplemented("search_users".into()))
+        }
+
+        async fn update_user(&self, _user: &User) -> Result<(), AppError> {
+            Err(AppError::NotImplemented("update_user".into()))
+        }
+
+        async fn delete_user(&self, _npub: &str) -> Result<(), AppError> {
+            Err(AppError::NotImplemented("delete_user".into()))
+        }
+
+        async fn get_followers_paginated(
+            &self,
+            _npub: &str,
+            _cursor: Option<&str>,
+            _limit: usize,
+            _sort: FollowListSort,
+            _search: Option<&str>,
+        ) -> Result<UserCursorPage, AppError> {
+            Err(AppError::NotImplemented("get_followers_paginated".into()))
+        }
+
+        async fn get_following_paginated(
+            &self,
+            _npub: &str,
+            _cursor: Option<&str>,
+            _limit: usize,
+            _sort: FollowListSort,
+            _search: Option<&str>,
+        ) -> Result<UserCursorPage, AppError> {
+            Err(AppError::NotImplemented("get_following_paginated".into()))
+        }
+
+        async fn add_follow_relation(
+            &self,
+            follower_pubkey: &str,
+            followed_pubkey: &str,
+        ) -> Result<bool, AppError> {
+            let mut follows = self.follows.write().await;
+            Ok(follows.insert((follower_pubkey.to_string(), followed_pubkey.to_string())))
+        }
+
+        async fn remove_follow_relation(
+            &self,
+            follower_pubkey: &str,
+            followed_pubkey: &str,
+        ) -> Result<bool, AppError> {
+            let mut follows = self.follows.write().await;
+            Ok(follows.remove(&(follower_pubkey.to_string(), followed_pubkey.to_string())))
+        }
+
+        async fn list_following_pubkeys(
+            &self,
+            follower_pubkey: &str,
+        ) -> Result<Vec<String>, AppError> {
+            let follows = self.follows.read().await;
+            Ok(follows
+                .iter()
+                .filter_map(|(follower, followed)| {
+                    if follower == follower_pubkey {
+                        Some(followed.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect())
+        }
+
+        async fn list_follower_pubkeys(
+            &self,
+            followed_pubkey: &str,
+        ) -> Result<Vec<String>, AppError> {
+            let follows = self.follows.read().await;
+            Ok(follows
+                .iter()
+                .filter_map(|(follower, followed)| {
+                    if followed == followed_pubkey {
+                        Some(follower.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect())
+        }
+    }
+
+    #[derive(Clone, Default)]
     struct TestGossipService {
         joined: Arc<RwLock<HashSet<String>>>,
         broadcasts: Arc<RwLock<Vec<(String, Event)>>>,
@@ -1224,6 +1398,7 @@ mod tests {
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
         let join_request_store = Arc::new(TestJoinRequestStore::default());
         let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1232,6 +1407,7 @@ mod tests {
             key_manager,
             group_key_store_trait,
             join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
             signature_service,
             gossip_service_trait,
         );
@@ -1271,6 +1447,7 @@ mod tests {
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
         let join_request_store = Arc::new(TestJoinRequestStore::default());
         let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1279,6 +1456,7 @@ mod tests {
             key_manager,
             group_key_store_trait,
             join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
             signature_service,
             gossip_service_trait,
         );
@@ -1362,6 +1540,7 @@ mod tests {
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
         let join_request_store = Arc::new(TestJoinRequestStore::default());
         let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1382,6 +1561,7 @@ mod tests {
             key_manager,
             group_key_store_trait,
             join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
             signature_service,
             gossip_service_trait,
         );
@@ -1427,6 +1607,120 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn friend_plus_detects_two_hop_mutual_follow() {
+        let (_keys, keypair) = make_keypair();
+        let key_manager = Arc::new(TestKeyManager::new(keypair));
+        let group_key_store: Arc<dyn GroupKeyStore> = Arc::new(TestGroupKeyStore::default());
+        let join_request_store: Arc<dyn JoinRequestStore> =
+            Arc::new(TestJoinRequestStore::default());
+        let user_repository = Arc::new(TestUserRepository::default());
+        let user_repository_trait: Arc<dyn UserRepository> = user_repository.clone();
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service: Arc<dyn GossipService> = Arc::new(TestGossipService::default());
+
+        let owner_pubkey = "owner_pubkey";
+        let friend_pubkey = "friend_pubkey";
+        let requester_pubkey = "requester_pubkey";
+
+        user_repository
+            .seed_follow(owner_pubkey, friend_pubkey)
+            .await;
+        user_repository
+            .seed_follow(friend_pubkey, owner_pubkey)
+            .await;
+        user_repository
+            .seed_follow(friend_pubkey, requester_pubkey)
+            .await;
+        user_repository
+            .seed_follow(requester_pubkey, friend_pubkey)
+            .await;
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store,
+            join_request_store,
+            user_repository_trait,
+            signature_service,
+            gossip_service,
+        );
+
+        let is_fof = service
+            .is_friend_of_friend(owner_pubkey, requester_pubkey)
+            .await
+            .expect("fof check");
+        assert!(is_fof);
+    }
+
+    #[tokio::test]
+    async fn friend_plus_rejects_direct_mutual_follow_only() {
+        let (_keys, keypair) = make_keypair();
+        let key_manager = Arc::new(TestKeyManager::new(keypair));
+        let group_key_store: Arc<dyn GroupKeyStore> = Arc::new(TestGroupKeyStore::default());
+        let join_request_store: Arc<dyn JoinRequestStore> =
+            Arc::new(TestJoinRequestStore::default());
+        let user_repository = Arc::new(TestUserRepository::default());
+        let user_repository_trait: Arc<dyn UserRepository> = user_repository.clone();
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service: Arc<dyn GossipService> = Arc::new(TestGossipService::default());
+
+        let owner_pubkey = "owner_pubkey";
+        let requester_pubkey = "requester_pubkey";
+
+        user_repository
+            .seed_follow(owner_pubkey, requester_pubkey)
+            .await;
+        user_repository
+            .seed_follow(requester_pubkey, owner_pubkey)
+            .await;
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store,
+            join_request_store,
+            user_repository_trait,
+            signature_service,
+            gossip_service,
+        );
+
+        let is_fof = service
+            .is_friend_of_friend(owner_pubkey, requester_pubkey)
+            .await
+            .expect("fof check");
+        assert!(!is_fof);
+    }
+
+    #[tokio::test]
+    async fn friend_plus_rejects_when_no_mutual_friend_exists() {
+        let (_keys, keypair) = make_keypair();
+        let key_manager = Arc::new(TestKeyManager::new(keypair));
+        let group_key_store: Arc<dyn GroupKeyStore> = Arc::new(TestGroupKeyStore::default());
+        let join_request_store: Arc<dyn JoinRequestStore> =
+            Arc::new(TestJoinRequestStore::default());
+        let user_repository = Arc::new(TestUserRepository::default());
+        let user_repository_trait: Arc<dyn UserRepository> = user_repository.clone();
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service: Arc<dyn GossipService> = Arc::new(TestGossipService::default());
+
+        let owner_pubkey = "owner_pubkey";
+        let requester_pubkey = "requester_pubkey";
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store,
+            join_request_store,
+            user_repository_trait,
+            signature_service,
+            gossip_service,
+        );
+
+        let is_fof = service
+            .is_friend_of_friend(owner_pubkey, requester_pubkey)
+            .await
+            .expect("fof check");
+        assert!(!is_fof);
+    }
+
+    #[tokio::test]
     async fn handle_join_request_rejects_invite_reuse() {
         let (_member_keys, member_keypair) = make_keypair();
         let (requester_keys, requester_keypair) = make_keypair();
@@ -1437,6 +1731,7 @@ mod tests {
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
         let join_request_store = Arc::new(TestJoinRequestStore::default());
         let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1445,6 +1740,7 @@ mod tests {
             key_manager,
             group_key_store_trait,
             join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
             signature_service,
             gossip_service_trait,
         );
@@ -1525,6 +1821,7 @@ mod tests {
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
         let join_request_store = Arc::new(TestJoinRequestStore::default());
         let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1535,6 +1832,7 @@ mod tests {
             key_manager,
             group_key_store_trait,
             join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
             signature_service,
             gossip_service_trait,
         );
@@ -1595,6 +1893,7 @@ mod tests {
         let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
         let join_request_store = Arc::new(TestJoinRequestStore::default());
         let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
         let signature_service = Arc::new(DefaultSignatureService::new());
         let gossip_service = Arc::new(TestGossipService::default());
         let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
@@ -1603,6 +1902,7 @@ mod tests {
             key_manager,
             group_key_store_trait,
             join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
             signature_service,
             gossip_service_trait,
         );

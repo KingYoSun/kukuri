@@ -207,6 +207,7 @@ impl AppState {
             Arc::clone(&key_manager),
             Arc::clone(&group_key_store),
             Arc::clone(&join_request_store),
+            Arc::clone(&repository) as Arc<dyn UserRepository>,
             Arc::clone(&signature_service),
             Arc::clone(&gossip_service),
         ));

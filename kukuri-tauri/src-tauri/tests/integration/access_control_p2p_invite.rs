@@ -4,11 +4,11 @@ use kukuri_lib::test_support::application::ports::group_key_store::{
     GroupKeyEntry, GroupKeyRecord, GroupKeyStore,
 };
 use kukuri_lib::test_support::application::ports::join_request_store::{
-    JoinRequestRecord, JoinRequestStore,
+    InviteUsageRecord, JoinRequestRecord, JoinRequestStore,
 };
 use kukuri_lib::test_support::application::ports::key_manager::{KeyManager, KeyPair};
 use kukuri_lib::test_support::application::ports::repositories::{
-    BookmarkRepository, PostRepository,
+    BookmarkRepository, FollowListSort, PostRepository, UserCursorPage, UserRepository,
 };
 use kukuri_lib::test_support::application::services::event_service::EventServiceTrait;
 use kukuri_lib::test_support::application::services::{AccessControlService, JoinRequestInput, PostService};
@@ -133,6 +133,7 @@ impl GroupKeyStore for TestGroupKeyStore {
 #[derive(Clone, Default)]
 struct TestJoinRequestStore {
     records: Arc<RwLock<HashMap<String, HashMap<String, JoinRequestRecord>>>>,
+    invite_usage: Arc<RwLock<HashMap<String, HashMap<String, InviteUsageRecord>>>>,
 }
 
 #[async_trait]
@@ -173,6 +174,147 @@ impl JoinRequestStore for TestJoinRequestStore {
             owner.remove(event_id);
         }
         Ok(())
+    }
+
+    async fn get_invite_usage(
+        &self,
+        owner_pubkey: &str,
+        invite_event_id: &str,
+    ) -> Result<Option<InviteUsageRecord>, AppError> {
+        let records = self.invite_usage.read().await;
+        Ok(records
+            .get(owner_pubkey)
+            .and_then(|owner| owner.get(invite_event_id).cloned()))
+    }
+
+    async fn upsert_invite_usage(
+        &self,
+        owner_pubkey: &str,
+        record: InviteUsageRecord,
+    ) -> Result<(), AppError> {
+        let mut records = self.invite_usage.write().await;
+        let owner = records.entry(owner_pubkey.to_string()).or_default();
+        owner.insert(record.invite_event_id.clone(), record);
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
+struct TestUserRepository {
+    follows: Arc<RwLock<HashSet<(String, String)>>>,
+}
+
+impl TestUserRepository {
+    async fn seed_follow(&self, follower: &str, followed: &str) {
+        let mut follows = self.follows.write().await;
+        follows.insert((follower.to_string(), followed.to_string()));
+    }
+}
+
+#[async_trait]
+impl UserRepository for TestUserRepository {
+    async fn create_user(&self, _user: &User) -> Result<(), AppError> {
+        Err(AppError::NotImplemented("create_user".into()))
+    }
+
+    async fn get_user(&self, _npub: &str) -> Result<Option<User>, AppError> {
+        Err(AppError::NotImplemented("get_user".into()))
+    }
+
+    async fn get_user_by_pubkey(&self, _pubkey: &str) -> Result<Option<User>, AppError> {
+        Err(AppError::NotImplemented("get_user_by_pubkey".into()))
+    }
+
+    async fn search_users(&self, _query: &str, _limit: usize) -> Result<Vec<User>, AppError> {
+        Err(AppError::NotImplemented("search_users".into()))
+    }
+
+    async fn update_user(&self, _user: &User) -> Result<(), AppError> {
+        Err(AppError::NotImplemented("update_user".into()))
+    }
+
+    async fn delete_user(&self, _npub: &str) -> Result<(), AppError> {
+        Err(AppError::NotImplemented("delete_user".into()))
+    }
+
+    async fn get_followers_paginated(
+        &self,
+        _npub: &str,
+        _cursor: Option<&str>,
+        _limit: usize,
+        _sort: FollowListSort,
+        _search: Option<&str>,
+    ) -> Result<UserCursorPage, AppError> {
+        Err(AppError::NotImplemented("get_followers_paginated".into()))
+    }
+
+    async fn get_following_paginated(
+        &self,
+        _npub: &str,
+        _cursor: Option<&str>,
+        _limit: usize,
+        _sort: FollowListSort,
+        _search: Option<&str>,
+    ) -> Result<UserCursorPage, AppError> {
+        Err(AppError::NotImplemented("get_following_paginated".into()))
+    }
+
+    async fn add_follow_relation(
+        &self,
+        follower_pubkey: &str,
+        followed_pubkey: &str,
+    ) -> Result<bool, AppError> {
+        let mut follows = self.follows.write().await;
+        Ok(follows.insert((
+            follower_pubkey.to_string(),
+            followed_pubkey.to_string(),
+        )))
+    }
+
+    async fn remove_follow_relation(
+        &self,
+        follower_pubkey: &str,
+        followed_pubkey: &str,
+    ) -> Result<bool, AppError> {
+        let mut follows = self.follows.write().await;
+        Ok(follows.remove(&(
+            follower_pubkey.to_string(),
+            followed_pubkey.to_string(),
+        )))
+    }
+
+    async fn list_following_pubkeys(
+        &self,
+        follower_pubkey: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let follows = self.follows.read().await;
+        Ok(follows
+            .iter()
+            .filter_map(|(follower, followed)| {
+                if follower == follower_pubkey {
+                    Some(followed.clone())
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
+    async fn list_follower_pubkeys(
+        &self,
+        followed_pubkey: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let follows = self.follows.read().await;
+        Ok(follows
+            .iter()
+            .filter_map(|(follower, followed)| {
+                if followed == followed_pubkey {
+                    Some(follower.clone())
+                } else {
+                    None
+                }
+            })
+            .collect())
     }
 }
 
@@ -428,6 +570,7 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
     let requester_group_keys = Arc::new(TestGroupKeyStore::default());
     let inviter_join_requests = Arc::new(TestJoinRequestStore::default());
     let requester_join_requests = Arc::new(TestJoinRequestStore::default());
+    let user_repository = Arc::new(TestUserRepository::default());
 
     let signature_service = Arc::new(DefaultSignatureService::new());
     let inviter_gossip = Arc::new(TestGossipService::default());
@@ -437,6 +580,7 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
         inviter_key_manager,
         Arc::clone(&inviter_group_keys) as Arc<dyn GroupKeyStore>,
         Arc::clone(&inviter_join_requests) as Arc<dyn JoinRequestStore>,
+        Arc::clone(&user_repository) as Arc<dyn UserRepository>,
         Arc::clone(&signature_service),
         inviter_gossip.clone(),
     );
@@ -444,6 +588,7 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
         requester_key_manager,
         Arc::clone(&requester_group_keys) as Arc<dyn GroupKeyStore>,
         Arc::clone(&requester_join_requests) as Arc<dyn JoinRequestStore>,
+        Arc::clone(&user_repository) as Arc<dyn UserRepository>,
         Arc::clone(&signature_service),
         requester_gossip.clone(),
     );
@@ -550,5 +695,151 @@ async fn p2p_only_invite_join_key_envelope_encrypted_post_flow() {
     let payload =
         EncryptedPostPayload::try_parse(&stored.content).expect("encrypted payload parse");
     assert_eq!(payload.scope, "invite");
+    assert_eq!(payload.epoch, stored_key.epoch);
+}
+
+#[tokio::test]
+async fn p2p_only_friend_plus_join_key_envelope_encrypted_post_flow() {
+    let inviter_keypair = make_keypair();
+    let requester_keypair = make_keypair();
+    let friend_keypair = make_keypair();
+
+    let inviter_key_manager = Arc::new(TestKeyManager::new(inviter_keypair.clone()));
+    let requester_key_manager = Arc::new(TestKeyManager::new(requester_keypair.clone()));
+
+    let inviter_group_keys = Arc::new(TestGroupKeyStore::default());
+    let requester_group_keys = Arc::new(TestGroupKeyStore::default());
+    let inviter_join_requests = Arc::new(TestJoinRequestStore::default());
+    let requester_join_requests = Arc::new(TestJoinRequestStore::default());
+    let user_repository = Arc::new(TestUserRepository::default());
+
+    user_repository
+        .seed_follow(&inviter_keypair.public_key, &friend_keypair.public_key)
+        .await;
+    user_repository
+        .seed_follow(&friend_keypair.public_key, &inviter_keypair.public_key)
+        .await;
+    user_repository
+        .seed_follow(&friend_keypair.public_key, &requester_keypair.public_key)
+        .await;
+    user_repository
+        .seed_follow(&requester_keypair.public_key, &friend_keypair.public_key)
+        .await;
+
+    let signature_service = Arc::new(DefaultSignatureService::new());
+    let inviter_gossip = Arc::new(TestGossipService::default());
+    let requester_gossip = Arc::new(TestGossipService::default());
+
+    let inviter_service = AccessControlService::new(
+        inviter_key_manager,
+        Arc::clone(&inviter_group_keys) as Arc<dyn GroupKeyStore>,
+        Arc::clone(&inviter_join_requests) as Arc<dyn JoinRequestStore>,
+        Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+        Arc::clone(&signature_service),
+        inviter_gossip.clone(),
+    );
+    let requester_service = AccessControlService::new(
+        requester_key_manager,
+        Arc::clone(&requester_group_keys) as Arc<dyn GroupKeyStore>,
+        Arc::clone(&requester_join_requests) as Arc<dyn JoinRequestStore>,
+        Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+        Arc::clone(&signature_service),
+        requester_gossip.clone(),
+    );
+
+    let topic_id = "kukuri:topic-friend-plus";
+
+    let join_result = requester_service
+        .request_join(JoinRequestInput {
+            topic_id: Some(topic_id.to_string()),
+            scope: Some("friend_plus".into()),
+            invite_event_json: None,
+            target_pubkey: Some(inviter_keypair.public_key.clone()),
+            broadcast_to_topic: false,
+        })
+        .await
+        .expect("request join");
+
+    let inviter_topic = user_topic_id(&inviter_keypair.public_key);
+    assert!(
+        join_result.sent_topics.contains(&inviter_topic),
+        "join request should target inviter topic"
+    );
+
+    let requester_broadcasts = requester_gossip.broadcasts().await;
+    let join_event = requester_broadcasts
+        .iter()
+        .find(|(_, event)| event.kind == 39022)
+        .map(|(_, event)| event.clone())
+        .expect("join request event broadcasted");
+
+    inviter_service
+        .handle_incoming_event(&join_event)
+        .await
+        .expect("inviter handles join request");
+
+    let pending = inviter_service
+        .list_pending_join_requests()
+        .await
+        .expect("pending join requests");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].scope, "friend_plus");
+
+    inviter_service
+        .approve_join_request(&join_event.id)
+        .await
+        .expect("approve join request");
+
+    let inviter_broadcasts = inviter_gossip.broadcasts().await;
+    let key_envelope_event = inviter_broadcasts
+        .iter()
+        .find(|(_, event)| event.kind == 39020)
+        .map(|(_, event)| event.clone())
+        .expect("key envelope broadcasted");
+
+    requester_service
+        .handle_incoming_event(&key_envelope_event)
+        .await
+        .expect("requester stores key envelope");
+
+    let stored_key = requester_group_keys
+        .get_latest_key(topic_id, "friend_plus")
+        .await
+        .expect("load key")
+        .expect("friend_plus key stored");
+    assert_eq!(stored_key.scope, "friend_plus");
+
+    let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+    let (post_service, repository) = setup_post_service_with_group_store(
+        Arc::clone(&requester_group_keys) as Arc<dyn GroupKeyStore>,
+        event_service,
+    )
+    .await;
+
+    let author = User::new(requester_keypair.npub.clone(), requester_keypair.public_key.clone());
+    let created = post_service
+        .create_post(
+            "p2p friend_plus encrypted post".into(),
+            author,
+            topic_id.to_string(),
+            Some("friend_plus".into()),
+        )
+        .await
+        .expect("create encrypted post");
+
+    assert!(created.is_encrypted);
+    assert_eq!(created.scope.as_deref(), Some("friend_plus"));
+    assert_eq!(created.epoch, Some(stored_key.epoch));
+    assert_eq!(created.content, "p2p friend_plus encrypted post");
+
+    let stored = repository
+        .get_post(&created.id)
+        .await
+        .expect("fetch stored post")
+        .expect("stored post exists");
+    assert_ne!(stored.content, "p2p friend_plus encrypted post");
+    let payload =
+        EncryptedPostPayload::try_parse(&stored.content).expect("encrypted payload parse");
+    assert_eq!(payload.scope, "friend_plus");
     assert_eq!(payload.epoch, stored_key.epoch);
 }
