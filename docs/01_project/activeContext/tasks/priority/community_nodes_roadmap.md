@@ -64,7 +64,7 @@
 
 - [x] join.request 受信側の rate limit / 手動承認フローを実装し、key.envelope の自動配布を抑止する（P2P-only）
 - [x] invite.capability の max_uses を消費管理に反映し、再利用防止のテストを追加する
-- [ ] クライアントの KIP 検証を強化（k/ver/必須タグ/schema）し、不正イベント拒否のテストを追加する
+- [x] クライアントの KIP 検証を強化（k/ver/必須タグ/schema）し、不正イベント拒否のテストを追加する
 - [ ] friend_plus の扱いを v2 へ明記するか、v1 実装方針を決定して計画文書と整合させる
 
 ## 参照（設計）
@@ -72,4 +72,3 @@
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
 - `docs/03_implementation/community_nodes/architecture_overview.md`（責務分割/データフロー）
 - `docs/03_implementation/community_nodes/repository_structure.md`（構成案）
-

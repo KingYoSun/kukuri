@@ -33,6 +33,9 @@ const ATTESTATION_KIND: u16 = 39010;
 const TRUST_ANCHOR_KIND: u16 = 39011;
 const KIP_NAMESPACE: &str = "kukuri";
 const KIP_VERSION: &str = "1";
+const KIP_NODE_DESCRIPTOR_SCHEMA: &str = "kukuri-node-desc-v1";
+const KIP_TOPIC_SERVICE_SCHEMA: &str = "kukuri-topic-service-v1";
+const KIP_ATTESTATION_SCHEMA: &str = "kukuri-attest-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CommunityNodeConfig {
@@ -1154,8 +1157,10 @@ fn validate_kip_event_json(
     if event.verify().is_err() {
         return None;
     }
-    let exp = event_tag_value(&event, "exp")?.parse::<i64>().ok()?;
-    if exp <= now {
+    if !validate_kip_tags(&event) {
+        return None;
+    }
+    if !validate_kip_requirements(&event, expected_kind, now) {
         return None;
     }
     Some(event)
@@ -1209,6 +1214,180 @@ fn event_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
             None
         }
     })
+}
+
+fn event_tag(event: &NostrEvent, name: &str) -> Option<Vec<String>> {
+    event.tags.iter().find_map(|tag| {
+        let values = tag.as_slice();
+        if values.first().map(|value| value.as_str()) == Some(name) {
+            Some(values.to_vec())
+        } else {
+            None
+        }
+    })
+}
+
+fn has_tag(event: &NostrEvent, name: &str) -> bool {
+    event
+        .tags
+        .iter()
+        .any(|tag| tag.as_slice().first().map(|value| value.as_str()) == Some(name))
+}
+
+fn require_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
+    let value = event_tag_value(event, name)?;
+    if value.trim().is_empty() {
+        return None;
+    }
+    Some(value)
+}
+
+fn require_exp_tag(event: &NostrEvent, now: i64) -> Option<i64> {
+    let exp = require_tag_value(event, "exp")?
+        .trim()
+        .parse::<i64>()
+        .ok()?;
+    if exp <= now {
+        return None;
+    }
+    Some(exp)
+}
+
+fn validate_schema(event: &NostrEvent, expected: &str) -> bool {
+    let content = event.content.trim();
+    let parsed: serde_json::Value = match serde_json::from_str(content) {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    let schema = match parsed.get("schema").and_then(|value| value.as_str()) {
+        Some(value) => value,
+        None => return false,
+    };
+    schema == expected
+}
+
+fn validate_scope(scope: &str, allow_public: bool) -> bool {
+    match scope {
+        "friend_plus" | "friend" | "invite" => true,
+        "public" => allow_public,
+        _ => false,
+    }
+}
+
+fn validate_kip_tags(event: &NostrEvent) -> bool {
+    let namespace = match require_tag_value(event, "k") {
+        Some(value) => value.trim(),
+        None => return false,
+    };
+    if namespace != KIP_NAMESPACE {
+        return false;
+    }
+    let version = match require_tag_value(event, "ver") {
+        Some(value) => value.trim(),
+        None => return false,
+    };
+    if version != KIP_VERSION {
+        return false;
+    }
+    true
+}
+
+fn validate_kip_requirements(event: &NostrEvent, expected_kind: u16, now: i64) -> bool {
+    match expected_kind {
+        NODE_DESCRIPTOR_KIND => {
+            if require_tag_value(event, "d").is_none() {
+                return false;
+            }
+            if require_exp_tag(event, now).is_none() {
+                return false;
+            }
+            if !validate_schema(event, KIP_NODE_DESCRIPTOR_SCHEMA) {
+                return false;
+            }
+        }
+        TOPIC_SERVICE_KIND => {
+            if require_tag_value(event, "d").is_none() {
+                return false;
+            }
+            if require_tag_value(event, "t").is_none() {
+                return false;
+            }
+            if require_tag_value(event, "role").is_none() {
+                return false;
+            }
+            let scope = match require_tag_value(event, "scope") {
+                Some(value) => value.trim(),
+                None => return false,
+            };
+            if !validate_scope(scope.trim(), true) {
+                return false;
+            }
+            if require_exp_tag(event, now).is_none() {
+                return false;
+            }
+            if !validate_schema(event, KIP_TOPIC_SERVICE_SCHEMA) {
+                return false;
+            }
+        }
+        LABEL_KIND => {
+            if require_tag_value(event, "target").is_none() {
+                return false;
+            }
+            if require_tag_value(event, "label").is_none() {
+                return false;
+            }
+            if require_exp_tag(event, now).is_none() {
+                return false;
+            }
+            if require_tag_value(event, "policy_url").is_none()
+                && require_tag_value(event, "policy").is_none()
+            {
+                return false;
+            }
+            if has_tag(event, "policy_ref") && require_tag_value(event, "policy_ref").is_none() {
+                return false;
+            }
+        }
+        ATTESTATION_KIND => {
+            let sub_tag = match event_tag(event, "sub") {
+                Some(tag) => tag,
+                None => return false,
+            };
+            if sub_tag.len() < 3 {
+                return false;
+            }
+            if sub_tag
+                .get(1)
+                .map(|value| value.trim().is_empty())
+                .unwrap_or(true)
+                || sub_tag
+                    .get(2)
+                    .map(|value| value.trim().is_empty())
+                    .unwrap_or(true)
+            {
+                return false;
+            }
+            if require_tag_value(event, "claim").is_none() {
+                return false;
+            }
+            if require_exp_tag(event, now).is_none() {
+                return false;
+            }
+            if !validate_schema(event, KIP_ATTESTATION_SCHEMA) {
+                return false;
+            }
+        }
+        TRUST_ANCHOR_KIND => {
+            if require_tag_value(event, "attester").is_none() {
+                return false;
+            }
+            if require_tag_value(event, "weight").is_none() {
+                return false;
+            }
+        }
+        _ => return false,
+    }
+    true
 }
 
 fn should_refresh_bootstrap(entry: &BootstrapCacheEntry, now: i64) -> bool {
@@ -1402,13 +1581,45 @@ mod community_node_validation_tests {
     use super::*;
     use nostr_sdk::prelude::{EventBuilder, Keys, Kind, Tag};
 
-    fn build_event_json(keys: &Keys, kind: u16, exp: i64) -> serde_json::Value {
-        let tags = vec![Tag::parse(vec!["exp".to_string(), exp.to_string()]).expect("tag")];
-        let event = EventBuilder::new(Kind::Custom(kind), "")
+    fn build_event_json(
+        keys: &Keys,
+        kind: u16,
+        tags: Vec<Tag>,
+        content: &str,
+    ) -> serde_json::Value {
+        let event = EventBuilder::new(Kind::Custom(kind), content)
             .tags(tags)
             .sign_with_keys(keys)
             .expect("signed");
         serde_json::to_value(event).expect("event json")
+    }
+
+    fn build_label_tags(exp: i64) -> Vec<Tag> {
+        let exp_str = exp.to_string();
+        vec![
+            Tag::parse(["k", KIP_NAMESPACE]).expect("k"),
+            Tag::parse(["ver", KIP_VERSION]).expect("ver"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+            Tag::parse(["target", "event:deadbeef"]).expect("target"),
+            Tag::parse(["label", "spam"]).expect("label"),
+            Tag::parse(["policy_url", "https://example.com/policy"]).expect("policy_url"),
+        ]
+    }
+
+    fn build_label_event_json(keys: &Keys, exp: i64) -> serde_json::Value {
+        build_event_json(keys, LABEL_KIND, build_label_tags(exp), "")
+    }
+
+    fn build_node_descriptor_event_json(keys: &Keys, exp: i64, schema: &str) -> serde_json::Value {
+        let exp_str = exp.to_string();
+        let tags = vec![
+            Tag::parse(["k", KIP_NAMESPACE]).expect("k"),
+            Tag::parse(["ver", KIP_VERSION]).expect("ver"),
+            Tag::parse(["d", "descriptor"]).expect("d"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+        ];
+        let content = json!({ "schema": schema }).to_string();
+        build_event_json(keys, NODE_DESCRIPTOR_KIND, tags, content.as_str())
     }
 
     #[test]
@@ -1416,7 +1627,7 @@ mod community_node_validation_tests {
         let keys = Keys::generate();
         let pubkey = keys.public_key().to_string();
         let now = 1000;
-        let event_json = build_event_json(&keys, LABEL_KIND, now + 60);
+        let event_json = build_label_event_json(&keys, now + 60);
         let validated =
             validate_kip_event_json(&event_json, LABEL_KIND, Some(pubkey.as_str()), now);
         assert!(validated.is_some());
@@ -1426,7 +1637,7 @@ mod community_node_validation_tests {
     fn validate_kip_event_json_accepts_without_expected_pubkey() {
         let keys = Keys::generate();
         let now = 1000;
-        let event_json = build_event_json(&keys, LABEL_KIND, now + 60);
+        let event_json = build_label_event_json(&keys, now + 60);
         let validated = validate_kip_event_json(&event_json, LABEL_KIND, None, now);
         assert!(validated.is_some());
     }
@@ -1436,7 +1647,7 @@ mod community_node_validation_tests {
         let keys = Keys::generate();
         let pubkey = keys.public_key().to_string();
         let now = 1000;
-        let event_json = build_event_json(&keys, LABEL_KIND, now - 1);
+        let event_json = build_label_event_json(&keys, now - 1);
         let validated =
             validate_kip_event_json(&event_json, LABEL_KIND, Some(pubkey.as_str()), now);
         assert!(validated.is_none());
@@ -1448,9 +1659,51 @@ mod community_node_validation_tests {
         let other_keys = Keys::generate();
         let other_pubkey = other_keys.public_key().to_string();
         let now = 1000;
-        let event_json = build_event_json(&keys, LABEL_KIND, now + 60);
+        let event_json = build_label_event_json(&keys, now + 60);
         let validated =
             validate_kip_event_json(&event_json, LABEL_KIND, Some(other_pubkey.as_str()), now);
+        assert!(validated.is_none());
+    }
+
+    #[test]
+    fn validate_kip_event_json_rejects_missing_k_tag() {
+        let keys = Keys::generate();
+        let now = 1000;
+        let mut tags = build_label_tags(now + 60);
+        tags.retain(|tag| tag.as_slice().first().map(|value| value.as_str()) != Some("k"));
+        let event_json = build_event_json(&keys, LABEL_KIND, tags, "");
+        let validated = validate_kip_event_json(&event_json, LABEL_KIND, None, now);
+        assert!(validated.is_none());
+    }
+
+    #[test]
+    fn validate_kip_event_json_rejects_missing_ver_tag() {
+        let keys = Keys::generate();
+        let now = 1000;
+        let mut tags = build_label_tags(now + 60);
+        tags.retain(|tag| tag.as_slice().first().map(|value| value.as_str()) != Some("ver"));
+        let event_json = build_event_json(&keys, LABEL_KIND, tags, "");
+        let validated = validate_kip_event_json(&event_json, LABEL_KIND, None, now);
+        assert!(validated.is_none());
+    }
+
+    #[test]
+    fn validate_kip_event_json_rejects_missing_policy_tag() {
+        let keys = Keys::generate();
+        let now = 1000;
+        let mut tags = build_label_tags(now + 60);
+        tags.retain(|tag| tag.as_slice().first().map(|value| value.as_str()) != Some("policy_url"));
+        let event_json = build_event_json(&keys, LABEL_KIND, tags, "");
+        let validated = validate_kip_event_json(&event_json, LABEL_KIND, None, now);
+        assert!(validated.is_none());
+    }
+
+    #[test]
+    fn validate_kip_event_json_rejects_invalid_schema() {
+        let keys = Keys::generate();
+        let now = 1000;
+        let event_json = build_node_descriptor_event_json(&keys, now + 60, "invalid-schema");
+        let validated = validate_kip_event_json(&event_json, NODE_DESCRIPTOR_KIND, None, now);
         assert!(validated.is_none());
     }
 }
@@ -1598,8 +1851,24 @@ mod community_node_handler_tests {
 
     fn build_attestation_event(exp: i64) -> serde_json::Value {
         let keys = Keys::generate();
-        let tags = vec![Tag::parse(vec!["exp".to_string(), exp.to_string()]).expect("exp")];
-        let event = EventBuilder::new(Kind::Custom(ATTESTATION_KIND), "")
+        let exp_str = exp.to_string();
+        let subject = keys.public_key().to_string();
+        let tags = vec![
+            Tag::parse(["k", KIP_NAMESPACE]).expect("k"),
+            Tag::parse(["ver", KIP_VERSION]).expect("ver"),
+            Tag::parse(["sub", "pubkey", subject.as_str()]).expect("sub"),
+            Tag::parse(["claim", "reputation"]).expect("claim"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+        ];
+        let content = json!({
+            "schema": KIP_ATTESTATION_SCHEMA,
+            "subject": format!("pubkey:{subject}"),
+            "claim": "reputation",
+            "value": { "score": 0.5 },
+            "expires": exp
+        })
+        .to_string();
+        let event = EventBuilder::new(Kind::Custom(ATTESTATION_KIND), content)
             .tags(tags)
             .sign_with_keys(&keys)
             .expect("sign");
