@@ -65,7 +65,13 @@
 - [x] join.request 受信側の rate limit / 手動承認フローを実装し、key.envelope の自動配布を抑止する（P2P-only）
 - [x] invite.capability の max_uses を消費管理に反映し、再利用防止のテストを追加する
 - [x] クライアントの KIP 検証を強化（k/ver/必須タグ/schema）し、不正イベント拒否のテストを追加する
-- [ ] friend_plus の扱いを v2 へ明記するか、v1 実装方針を決定して計画文書と整合させる
+- [x] friend_plus を v1 で扱う方針を確定（friend=相互フォロー(kind=3)、friend_plus=FoF(2-hop)の pull join.request。Key Steward自動配布なし）
+- [ ] friend_plus（FoF + pull join.request）の実装:
+  - [ ] AccessControlService に FoF(2-hop) 判定（kind=3 相互フォロー）を追加し、scope=friend_plus の join.request を判定できるようにする
+  - [ ] scope=friend_plus の join.request を承認/却下するコマンドと UI を整備し、key.envelope 配布まで通す
+- [ ] friend_plus（FoF + pull join.request）のテスト:
+  - [ ] FoF 判定（相互フォロー/2-hop/非該当）の unit テストを追加する
+  - [ ] join.request(friend_plus) → 承認 → key.envelope → 復号表示の統合/E2E テストを追加する
 
 ## 参照（設計）
 

@@ -114,7 +114,7 @@
 
 #### 39022 join.request
 - tags:
-  - t(topic_id), scope, d(join:...)
+  - t(topic_id), scope(invite|friend|friend_plus), d(join:...)
 - content:
   - {topic, scope, invite_event_json?, requester, requested_at}
 
@@ -151,9 +151,12 @@
 - 集約ロジックは差別化ポイントなのでノードごとに違ってよい（ただしスキーマは共通）
 
 ### 4.4 公開度（鍵管理）
-- friend/friend+:
+- friend:
   - 投稿contentを共有鍵で暗号化
   - 鍵は受信者ごとに key.envelope(39020) を送付
+- friend_plus:
+  - FoF（相互フォロー 2-hop）を **pull join.request** で受理
+  - 承認後に key.envelope(39020) を配布（Key Steward 自動配布なし）
 - invite:
   - invite.capability(39021) を送る
   - join.request(39022) で参加希望を通知し、承認後に key.envelope を配る（P2P-only）
@@ -166,7 +169,9 @@
 実装要点:
 - 鍵の保存は OS keychain推奨（Tauri連携）
 - epoch管理は topic+scope単位
-- “friend+（FoF）”対象集合は trustノードが提供してもよい（低スペック対策）
+- friend は kind=3 の相互フォローを正とする
+- friend_plus 判定はローカルの相互フォローグラフでベストエフォート（不足時は手動承認）
+- trustノードによる FoF 候補提案は任意（v1 はローカル判定が正）
 
 ## 5. Node HTTP API（初期実装案）
 
@@ -267,9 +272,9 @@
 - trust はまず attestationの発行/表示/anchor採用の切替まで。集約アルゴリズムは簡易（重み平均など）でよいが、必ず“提案”として扱え。
 
 ## 10. 未決定事項（実装前に決めるチェックリスト）
-- “friend / friend+” の関係定義（ローカル? ノード提案?）
-- gossip層とイベント保存層の境界（永続ノードの扱い）
-- 課金方式（購読トークン / APIキー / 署名付きライセンス）
+- [x] “friend / friend+” の関係定義: friend=kind=3相互フォロー、friend+=FoF(2-hop)の pull join.request
+- [ ] gossip層とイベント保存層の境界（永続ノードの扱い）
+- [ ] 課金方式（購読トークン / APIキー / 署名付きライセンス）
 
 ---
 
@@ -298,6 +303,8 @@
 - **Topic ID**: kukuriトピック識別子（正規形文字列。例: `kukuri:<64hex>` / `kukuri:global`）
 - **Role**: `bootstrap | relay | index | moderation | trust`
 - **Scope**（公開度）: `public | friend_plus | friend | invite`
+- **Friend**: kind=3 の相互フォロー（contact list）で定義する友達関係
+- **Friend Plus**: Friend グラフの 2-hop（FoF）。判定はローカル/ベストエフォート
 - **Epoch**: 鍵世代番号（追放/漏洩時に増える）
 
 ## 2. Event Kind Allocation (reserved for kukuri)
@@ -471,7 +478,8 @@ content（暗号化前のJSON例）:
 ### 6.4 Recommended Flows
 
 - public: 平文 or 最小限のフィルタのみ
-- friend / friend+: 投稿contentを共有鍵で暗号化、鍵は key.envelope で配布
+- friend: 投稿contentを共有鍵で暗号化、鍵は key.envelope で配布
+- friend_plus: FoF 判定の **pull join.request** → key.envelope 配布
 - invite: capability → join.request（39022）→ key.envelope 配布
 - ban/追放: epoch++ → 残留者へ新 key.envelope 配布（過去暗号文は回収しない）
 

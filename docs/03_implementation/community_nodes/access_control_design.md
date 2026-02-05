@@ -25,13 +25,15 @@
 
 - `topic_id`: `docs/03_implementation/community_nodes/topic_subscription_design.md` の正規形
 - `scope`: `public | friend | invite | friend_plus`
+- `friend`: kind=3 の相互フォロー（contact list）を友達関係とする（ローカル/ベストエフォート）
+- `friend_plus`: friend グラフの 2-hop（FoF）。判定は受信側のローカル情報でベストエフォート
 - `epoch`: `topic_id + scope` 単位の単調増加カウンタ（追放/漏洩時に `epoch++`）
 - `K(topic_id, scope, epoch)`: `scope!=public` の暗号化に使う共有鍵（群鍵）
 - **重要**: この Access Control は「暗号化 + 鍵配布 + epoch ローテ」により未来閲覧を止める。過去暗号文は原理的に回収できない。
 
 ## v1 スコープ（提案）
 
-- 実装優先度: `invite` と `friend` を先に実装し、`friend_plus` は v2（集合計算/鍵配布負荷が大きい）
+- `friend_plus` は v1 で扱い、**FoF 判定 + pull join.request** を正とする（Key Steward 自動配布はしない）
 - join/鍵配布/ローテは **P2P-only**（クライアントが正）とする
 - `kind=39020/39021/39022` はイベント表現を持つが、**配布経路は direct P2P / out-of-band を正**とする
   - 理由: `p` タグ等のメタデータでメンバーシップが漏れやすく、gossip/relay 配信に不向き
@@ -78,18 +80,18 @@
 
 ### 39022 `kukuri.join.request`（join申請）
 
-目的: invite/friend の参加希望を通知する。
+目的: invite/friend/friend_plus の参加希望を通知する。
 
 - tags（必須）
   - `["t","<topic_id>"]`
-  - `["scope","invite|friend"]`
+  - `["scope","invite|friend|friend_plus"]`
   - `["ver","1"]`
   - `["d","join:<topic_id>:<nonce>:<requester_pubkey_hex>"]`
 - tags（任意）
   - `["e","<invite_event_id>"]`（invite 利用時）
   - `["p","<issuer_pubkey_hex>"]`（招待発行者/鍵配布先の目安）
 - content（暗号化前の JSON 例）
-  - `{ schema, topic, scope, invite_event_json, requester, requested_at }`
+  - `{ schema, topic, scope, invite_event_json, requester, requested_at }`（invite 以外は省略可）
 
 配布経路（v1）:
 - 招待者/既存メンバーへの **direct P2P** が基本（プライバシーを優先）
@@ -97,15 +99,17 @@
 
 ## P2P join フロー（v1）
 
-1. **招待発行**: 既存メンバーが `invite.capability` を生成し、対象者へ共有
-2. **参加要求**: 参加希望者が `join.request` を送信
-3. **検証**: 受信側が invite の署名/期限/スコープを検証（`max_uses` は best-effort）
+1. **招待発行（invite）**: 既存メンバーが `invite.capability` を生成し、対象者へ共有
+2. **参加要求**: 参加希望者が `join.request` を送信（`scope=invite|friend|friend_plus`）
+3. **検証**:
+   - invite: 署名/期限/スコープを検証（`max_uses` は best-effort）
+   - friend_plus: **FoF 判定**（相互フォロー 2-hop）をローカル情報で確認
 4. **鍵配布**: 承認したメンバーが `key.envelope` を送付（recipient 宛 NIP-44）
 5. **ローカル反映**: 受信側はローカルに membership/鍵を保存し、以後の復号に利用
 
 補足:
 - `friend` スコープは **招待不要**で join.request を送ることを許容（承認は各メンバーの裁量）。
-- `friend_plus` は v2 に回す（対象集合のプライバシー/計算負荷が大きい）。
+- `friend_plus` は **pull join.request** を正とし、受信側が FoF 判定で承認した場合のみ `key.envelope` を配布する。
 
 ## 鍵運用（epoch ローテ/追放）
 
@@ -147,6 +151,6 @@ v1 の Access Control は **P2P-only** のため、コミュニティノード�
 
 ## 未決定（v2 以降の検討）
 
-- `friend_plus` の対象集合の決め方（trust 連携/クライアント計算/プライバシー）
+- FoF 判定の高度化（trust 連携、2-hop 以上、閾値/重み付け）
 - private scope のイベントを node の `index/moderation/trust` が扱うか（復号の是非、ポリシー/同意/ログ方針）
 - 群鍵の保管方式（KMS/OS keychain/HSM、ローテ手順、バックアップ/復旧）
