@@ -7,8 +7,8 @@ use cn_core::rate_limit::RateLimiter;
 use cn_core::service_config;
 use futures_util::{SinkExt, StreamExt};
 use iroh::discovery::static_provider::StaticProvider;
-use iroh::protocol::Router as IrohRouter;
 use iroh::endpoint::Connection;
+use iroh::protocol::Router as IrohRouter;
 use iroh::Endpoint;
 use iroh_gossip::api::{Event as GossipEvent, GossipReceiver, GossipSender};
 use iroh_gossip::{Gossip, TopicId};
@@ -26,9 +26,8 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-type WsStream = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
 const WAIT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -145,20 +144,14 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
     .await
     .expect("connect a->b timeout")
     .expect("connect a->b");
-    timeout(
-        WAIT_TIMEOUT,
-        sender_a.join_peers(vec![endpoint_b.id()]),
-    )
-    .await
-    .expect("join peers a timeout")
-    .expect("join peers a");
-    timeout(
-        WAIT_TIMEOUT,
-        sender_b.join_peers(vec![endpoint_a.id()]),
-    )
-    .await
-    .expect("join peers b timeout")
-    .expect("join peers b");
+    timeout(WAIT_TIMEOUT, sender_a.join_peers(vec![endpoint_b.id()]))
+        .await
+        .expect("join peers a timeout")
+        .expect("join peers a");
+    timeout(WAIT_TIMEOUT, sender_b.join_peers(vec![endpoint_a.id()]))
+        .await
+        .expect("join peers b timeout")
+        .expect("join peers b");
 
     let _ = timeout(WAIT_TIMEOUT, receiver_b.joined()).await;
 
@@ -193,8 +186,7 @@ where
         while let Some(message) = ws.next().await {
             let message = message.expect("ws message");
             if let Message::Text(text) = message {
-                let value: serde_json::Value =
-                    serde_json::from_str(&text).expect("ws json");
+                let value: serde_json::Value = serde_json::from_str(&text).expect("ws json");
                 if matches!(
                     value.get(0).and_then(|v| v.as_str()),
                     Some("NOTICE") | Some("CLOSED")
@@ -215,16 +207,13 @@ where
         panic!(
             "websocket timeout ({}): last={}",
             label,
-            last.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string())
+            last.map(|v| v.to_string())
+                .unwrap_or_else(|| "null".to_string())
         )
     })
 }
 
-async fn wait_for_gossip_event(
-    receiver: &mut GossipReceiver,
-    wait: Duration,
-    expected_id: &str,
-) {
+async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, expected_id: &str) {
     let result = timeout(wait, async {
         while let Some(event) = receiver.next().await {
             let event = event.expect("gossip event");
@@ -284,7 +273,10 @@ async fn ingest_outbox_ws_gossip_integration() {
         .with_state(state);
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("local addr");
-    let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>());
+    let server = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    );
     let server_handle = tokio::spawn(async move {
         server.await.expect("server");
     });
@@ -345,13 +337,11 @@ async fn ingest_outbox_ws_gossip_integration() {
     })
     .await;
 
-    let row = sqlx::query(
-        "SELECT op, topic_id FROM cn_relay.events_outbox WHERE event_id = $1",
-    )
-    .bind(&raw.id)
-    .fetch_one(&pool)
-    .await
-    .expect("outbox row");
+    let row = sqlx::query("SELECT op, topic_id FROM cn_relay.events_outbox WHERE event_id = $1")
+        .bind(&raw.id)
+        .fetch_one(&pool)
+        .await
+        .expect("outbox row");
     let op: String = row.try_get("op").expect("op");
     let outbox_topic: String = row.try_get("topic_id").expect("topic_id");
     assert_eq!(op, "upsert");

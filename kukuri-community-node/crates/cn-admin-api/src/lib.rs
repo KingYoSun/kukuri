@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::extract::State;
-use axum::http::StatusCode;
 use axum::http::HeaderMap;
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
@@ -16,8 +16,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use utoipa::ToSchema;
 
-mod auth;
 mod access_control;
+mod auth;
 mod moderation;
 pub mod openapi;
 mod policies;
@@ -73,7 +73,11 @@ impl ApiError {
 
 impl From<sqlx::Error> for ApiError {
     fn from(err: sqlx::Error) -> Self {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
     }
 }
 
@@ -155,7 +159,10 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         node_keys,
     };
 
-    services::spawn_health_poll(state.clone(), Duration::from_secs(config.health_poll_seconds));
+    services::spawn_health_poll(
+        state.clone(),
+        Duration::from_secs(config.health_poll_seconds),
+    );
 
     let router = Router::new()
         .route("/healthz", get(healthz))
@@ -169,7 +176,10 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/admin/services/:service/config",
             get(services::get_service_config).put(services::update_service_config),
         )
-        .route("/v1/admin/policies", get(policies::list_policies).post(policies::create_policy))
+        .route(
+            "/v1/admin/policies",
+            get(policies::list_policies).post(policies::create_policy),
+        )
         .route(
             "/v1/admin/policies/:policy_id",
             put(policies::update_policy),
@@ -218,11 +228,11 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/admin/node-subscriptions/:topic_id",
             put(subscriptions::update_node_subscription),
         )
-        .route("/v1/admin/plans", get(subscriptions::list_plans).post(subscriptions::create_plan))
         .route(
-            "/v1/admin/plans/:plan_id",
-            put(subscriptions::update_plan),
+            "/v1/admin/plans",
+            get(subscriptions::list_plans).post(subscriptions::create_plan),
         )
+        .route("/v1/admin/plans/:plan_id", put(subscriptions::update_plan))
         .route(
             "/v1/admin/subscriptions",
             get(subscriptions::list_subscriptions),
@@ -245,10 +255,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/admin/trust/jobs",
             get(trust::list_jobs).post(trust::create_job),
         )
-        .route(
-            "/v1/admin/trust/schedules",
-            get(trust::list_schedules),
-        )
+        .route("/v1/admin/trust/schedules", get(trust::list_schedules))
         .route(
             "/v1/admin/trust/schedules/:job_type",
             put(trust::update_schedule),
@@ -262,7 +269,12 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {
@@ -294,9 +306,17 @@ fn parse_health_targets() -> HashMap<String, String> {
     }
 
     let fallback = [
-        ("user-api", "USER_API_HEALTH_URL", "http://user-api:8080/healthz"),
+        (
+            "user-api",
+            "USER_API_HEALTH_URL",
+            "http://user-api:8080/healthz",
+        ),
         ("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz"),
-        ("bootstrap", "BOOTSTRAP_HEALTH_URL", "http://bootstrap:8083/healthz"),
+        (
+            "bootstrap",
+            "BOOTSTRAP_HEALTH_URL",
+            "http://bootstrap:8083/healthz",
+        ),
         ("index", "INDEX_HEALTH_URL", "http://index:8084/healthz"),
         (
             "moderation",

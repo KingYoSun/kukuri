@@ -109,12 +109,8 @@ pub async fn load_or_create_group_key(
 
     if let Some(row) = row {
         let ciphertext: String = row.try_get("key_ciphertext")?;
-        let plain = nip44::decrypt(
-            node_keys.secret_key(),
-            &node_keys.public_key(),
-            ciphertext,
-        )
-        .map_err(|err| anyhow!("key decrypt failed: {err}"))?;
+        let plain = nip44::decrypt(node_keys.secret_key(), &node_keys.public_key(), ciphertext)
+            .map_err(|err| anyhow!("key decrypt failed: {err}"))?;
         return Ok(plain);
     }
 
@@ -234,14 +230,8 @@ async fn rotate_epoch_tx(
     .await?;
 
     for recipient in &recipients {
-        let envelope = build_key_envelope_event(
-            node_keys,
-            recipient,
-            topic_id,
-            scope,
-            new_epoch,
-            &key_b64,
-        )?;
+        let envelope =
+            build_key_envelope_event(node_keys, recipient, topic_id, scope, new_epoch, &key_b64)?;
         let envelope_json = serde_json::to_value(&envelope)?;
         sqlx::query(
             "INSERT INTO cn_user.key_envelopes              (topic_id, scope, epoch, recipient_pubkey, key_envelope_event_json)              VALUES ($1, $2, $3, $4, $5)              ON CONFLICT (topic_id, scope, epoch, recipient_pubkey) DO UPDATE SET key_envelope_event_json = EXCLUDED.key_envelope_event_json",
@@ -279,20 +269,15 @@ mod tests {
     fn build_key_envelope_event_sets_required_tags() {
         let keys = Keys::generate();
         let recipient = Keys::generate().public_key().to_hex();
-        let event = build_key_envelope_event(
-            &keys,
-            &recipient,
-            "kukuri:topic1",
-            "invite",
-            1,
-            "aGVsbG8=",
-        )
-        .expect("build event");
+        let event =
+            build_key_envelope_event(&keys, &recipient, "kukuri:topic1", "invite", 1, "aGVsbG8=")
+                .expect("build event");
 
         assert_eq!(event.kind, KIND_KEY_ENVELOPE);
-        assert!(event.tags.iter().any(|tag| {
-            tag == &vec!["p".to_string(), recipient.clone()]
-        }));
+        assert!(event
+            .tags
+            .iter()
+            .any(|tag| { tag == &vec!["p".to_string(), recipient.clone()] }));
         assert!(event
             .tags
             .iter()

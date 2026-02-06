@@ -60,7 +60,11 @@ pub fn parse_filters(values: &[Value]) -> Result<Vec<RelayFilter>> {
             tags.insert(tag, values);
         }
 
-        if tags.get("t").map(|values| values.is_empty()).unwrap_or(true) {
+        if tags
+            .get("t")
+            .map(|values| values.is_empty())
+            .unwrap_or(true)
+        {
             return Err(anyhow!("missing #t filter"));
         }
 
@@ -117,7 +121,10 @@ pub fn matches_filter(filter: &RelayFilter, event: &cn_core::nostr::RawEvent) ->
         }
     }
     if let Some(authors) = &filter.authors {
-        if !authors.iter().any(|author| event.pubkey.starts_with(author)) {
+        if !authors
+            .iter()
+            .any(|author| event.pubkey.starts_with(author))
+        {
             return false;
         }
     }

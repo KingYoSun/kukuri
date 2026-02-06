@@ -63,7 +63,9 @@ pub fn parse_event(value: &Value) -> Result<RawEvent> {
 
 pub fn verify_event(raw: &RawEvent) -> Result<()> {
     let event = to_nostr_event(raw)?;
-    event.verify().map_err(|err| anyhow!("event verify failed: {err}"))?;
+    event
+        .verify()
+        .map_err(|err| anyhow!("event verify failed: {err}"))?;
     Ok(())
 }
 
@@ -84,7 +86,11 @@ pub fn build_signed_event(
             continue;
         }
         let kind = TagKind::from(tag[0].as_str());
-        let values = if tag.len() > 1 { tag[1..].to_vec() } else { Vec::new() };
+        let values = if tag.len() > 1 {
+            tag[1..].to_vec()
+        } else {
+            Vec::new()
+        };
         builder = builder.tag(Tag::custom(kind, values));
     }
     let signed = builder.sign_with_keys(keys)?;

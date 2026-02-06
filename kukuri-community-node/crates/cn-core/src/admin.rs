@@ -20,11 +20,10 @@ pub async fn bootstrap_admin(
     }
 
     let mut tx = pool.begin().await?;
-    let existing = sqlx::query_scalar::<_, String>(
-        "SELECT admin_user_id FROM cn_admin.admin_users LIMIT 1",
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
+    let existing =
+        sqlx::query_scalar::<_, String>("SELECT admin_user_id FROM cn_admin.admin_users LIMIT 1")
+            .fetch_optional(&mut *tx)
+            .await?;
 
     if existing.is_some() {
         tx.rollback().await?;
@@ -73,13 +72,12 @@ pub async fn reset_admin_password(
 
     let password_hash = hash_password(password)?;
 
-    let result = sqlx::query(
-        "UPDATE cn_admin.admin_users SET password_hash = $1 WHERE username = $2",
-    )
-    .bind(password_hash)
-    .bind(username)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE cn_admin.admin_users SET password_hash = $1 WHERE username = $2")
+            .bind(password_hash)
+            .bind(username)
+            .execute(pool)
+            .await?;
 
     if result.rows_affected() == 0 {
         return Err(anyhow!("admin user not found"));
@@ -168,7 +166,10 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
                 }
             }),
         ),
-        ("admin-api", json!({"session_cookie": true, "session_ttl_seconds": 86400})),
+        (
+            "admin-api",
+            json!({"session_cookie": true, "session_ttl_seconds": 86400}),
+        ),
         (
             "index",
             json!({
@@ -256,7 +257,8 @@ pub fn hash_password(password: &str) -> Result<String> {
 }
 
 pub fn verify_password(password: &str, hashed: &str) -> Result<bool> {
-    let parsed = PasswordHash::new(hashed).map_err(|err| anyhow!("invalid password hash: {err}"))?;
+    let parsed =
+        PasswordHash::new(hashed).map_err(|err| anyhow!("invalid password hash: {err}"))?;
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
         .is_ok())

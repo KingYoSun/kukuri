@@ -6,12 +6,12 @@ use axum::response::IntoResponse;
 use cn_core::{auth, metrics, nostr};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
+use sqlx::{Postgres, QueryBuilder, Row};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::{interval, Instant};
 use uuid::Uuid;
-use sqlx::{Postgres, QueryBuilder, Row};
 
 use crate::config::RelayRuntimeConfig;
 use crate::filters::{matches_filter, parse_filters, RelayFilter};
@@ -31,7 +31,11 @@ pub async fn ws_handler(
         let key = format!("conn:{}", addr.ip());
         let outcome = state
             .rate_limiter
-            .check(&key, runtime.rate_limit.ws_conns_per_minute, Duration::from_secs(60))
+            .check(
+                &key,
+                runtime.rate_limit.ws_conns_per_minute,
+                Duration::from_secs(60),
+            )
             .await;
         if !outcome.allowed {
             metrics::inc_ingest_rejected(super::SERVICE_NAME, "ratelimit");
@@ -61,9 +65,10 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
         if runtime.auth.requires_auth(now) {
             let challenge = Uuid::new_v4().to_string();
             auth_challenge = Some(challenge.clone());
-            auth_deadline = Some(Instant::now() + Duration::from_secs(
-                runtime.auth.ws_auth_timeout_seconds.max(1) as u64,
-            ));
+            auth_deadline = Some(
+                Instant::now()
+                    + Duration::from_secs(runtime.auth.ws_auth_timeout_seconds.max(1) as u64),
+            );
             let _ = send_json(&mut sender, json!(["AUTH", challenge])).await;
         }
     }
@@ -157,8 +162,15 @@ async fn handle_text_message(
         }
         "REQ" => {
             metrics::inc_ws_req_total(super::SERVICE_NAME);
-            handle_req_message(state, addr, sender, subscriptions, auth_pubkey.as_deref(), arr)
-                .await?;
+            handle_req_message(
+                state,
+                addr,
+                sender,
+                subscriptions,
+                auth_pubkey.as_deref(),
+                arr,
+            )
+            .await?;
         }
         "CLOSE" => {
             if let Some(sub_id) = arr.get(1).and_then(|v| v.as_str()) {
@@ -191,7 +203,11 @@ async fn handle_event_message(
         let key = rate_limit_key(addr, auth_pubkey.as_deref());
         let outcome = state
             .rate_limiter
-            .check(&key, runtime.rate_limit.ws_events_per_minute, Duration::from_secs(60))
+            .check(
+                &key,
+                runtime.rate_limit.ws_events_per_minute,
+                Duration::from_secs(60),
+            )
             .await;
         if !outcome.allowed {
             metrics::inc_ingest_rejected(super::SERVICE_NAME, "ratelimit");
@@ -217,7 +233,13 @@ async fn handle_event_message(
                     broadcast_to_gossip(state, &event).await;
                 }
             }
-            send_ok(sender, &raw.id, true, if duplicate { "duplicate" } else { "" }).await?;
+            send_ok(
+                sender,
+                &raw.id,
+                true,
+                if duplicate { "duplicate" } else { "" },
+            )
+            .await?;
         }
         IngestOutcome::Rejected { reason } => {
             send_ok(sender, &raw.id, false, &reason).await?;
@@ -263,7 +285,11 @@ async fn handle_req_message(
         let key = rate_limit_key(addr, auth_pubkey);
         let outcome = state
             .rate_limiter
-            .check(&key, runtime.rate_limit.ws_reqs_per_minute, Duration::from_secs(60))
+            .check(
+                &key,
+                runtime.rate_limit.ws_reqs_per_minute,
+                Duration::from_secs(60),
+            )
             .await;
         if !outcome.allowed {
             metrics::inc_ingest_rejected(super::SERVICE_NAME, "ratelimit");
@@ -354,8 +380,10 @@ async fn fetch_events(state: &AppState, filter: &RelayFilter) -> Result<Vec<nost
          WHERE t.topic_id = ANY(",
     );
     builder.push_bind(&topics);
-    builder.push(") AND e.is_deleted = FALSE AND e.is_current = TRUE \
-        AND (e.expires_at IS NULL OR e.expires_at > ");
+    builder.push(
+        ") AND e.is_deleted = FALSE AND e.is_current = TRUE \
+        AND (e.expires_at IS NULL OR e.expires_at > ",
+    );
     builder.push_bind(now);
     builder.push(")");
 
@@ -409,7 +437,10 @@ async fn dispatch_event(
         return Ok(());
     }
     for (sub_id, filters) in subscriptions {
-        if filters.iter().any(|filter| matches_filter(filter, &event.raw)) {
+        if filters
+            .iter()
+            .any(|filter| matches_filter(filter, &event.raw))
+        {
             send_event(sender, sub_id, &event.raw).await?;
         }
     }
@@ -417,7 +448,9 @@ async fn dispatch_event(
 }
 
 async fn is_allowed_event(auth_pubkey: Option<&str>, event: &nostr::RawEvent) -> Result<bool> {
-    let scope = event.first_tag_value("scope").unwrap_or_else(|| "public".into());
+    let scope = event
+        .first_tag_value("scope")
+        .unwrap_or_else(|| "public".into());
     if scope == "public" {
         return Ok(true);
     }

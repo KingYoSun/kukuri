@@ -23,6 +23,9 @@ mod llm;
 const SERVICE_NAME: &str = "cn-moderation";
 const CONSUMER_NAME: &str = "moderation-v1";
 const OUTBOX_CHANNEL: &str = "cn_relay_outbox";
+const LLM_POLICY_URL: &str = "https://example.com/policies/llm-moderation-v1";
+const LLM_POLICY_REF: &str = "moderation-llm-v1";
+const LLM_LABEL_EXP_SECONDS: i64 = 24 * 60 * 60;
 
 #[derive(Clone)]
 struct AppState {
@@ -136,7 +139,12 @@ pub async fn run(config: ModerationConfig) -> Result<()> {
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {
@@ -147,11 +155,10 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
-    if let Ok(max_seq) = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox",
-    )
-    .fetch_one(&state.pool)
-    .await
+    if let Ok(max_seq) =
+        sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(&state.pool)
+            .await
     {
         if let Ok(last_seq) = sqlx::query_scalar::<_, i64>(
             "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
@@ -192,8 +199,7 @@ fn spawn_outbox_consumer(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::ModerationRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5))).await;
                 continue;
             }
 
@@ -253,8 +259,7 @@ fn spawn_job_worker(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::ModerationRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5))).await;
                 continue;
             }
 
@@ -314,12 +319,10 @@ async fn load_last_seq(pool: &Pool<Postgres>) -> Result<i64> {
         return Ok(last_seq);
     }
 
-    sqlx::query(
-        "INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)",
-    )
-    .bind(CONSUMER_NAME)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)")
+        .bind(CONSUMER_NAME)
+        .execute(pool)
+        .await?;
 
     Ok(0)
 }
@@ -468,9 +471,6 @@ async fn process_job(
     }
 
     let rules = load_active_rules(&state.pool).await?;
-    if rules.is_empty() {
-        return Ok(0);
-    }
 
     let mut issued = 0usize;
     for rule in rules {
@@ -511,7 +511,37 @@ async fn process_job(
             event_id: event.raw.id.clone(),
             content: prepare_llm_input(&event.raw.content, &runtime.llm),
         };
-        let _ = provider.classify(&request).await?;
+        if !request.content.trim().is_empty() {
+            match provider.classify(&request).await {
+                Ok(Some(prediction)) => {
+                    match apply_llm_label(state, job, &event.raw.id, &provider, &prediction, now)
+                        .await
+                    {
+                        Ok(true) => issued += 1,
+                        Ok(false) => {}
+                        Err(err) => {
+                            tracing::warn!(
+                                error = %err,
+                                job_id = %job.job_id,
+                                event_id = %event.raw.id,
+                                provider = provider.source(),
+                                "failed to apply llm label"
+                            );
+                        }
+                    }
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        job_id = %job.job_id,
+                        event_id = %event.raw.id,
+                        provider = provider.source(),
+                        "llm classification failed"
+                    );
+                }
+            }
+        }
     }
 
     Ok(issued)
@@ -538,9 +568,7 @@ async fn load_event(pool: &Pool<Postgres>, event_id: &str) -> Result<Option<Mode
     }))
 }
 
-async fn load_active_rules(
-    pool: &Pool<Postgres>,
-) -> Result<Vec<moderation_core::ModerationRule>> {
+async fn load_active_rules(pool: &Pool<Postgres>) -> Result<Vec<moderation_core::ModerationRule>> {
     let rows = sqlx::query(
         "SELECT rule_id, name, description, is_enabled, priority, conditions_json, action_json          FROM cn_moderation.rules          WHERE is_enabled = TRUE          ORDER BY priority DESC, updated_at DESC",
     )
@@ -551,8 +579,7 @@ async fn load_active_rules(
     for row in rows {
         let conditions_json: serde_json::Value = row.try_get("conditions_json")?;
         let action_json: serde_json::Value = row.try_get("action_json")?;
-        let conditions: moderation_core::RuleCondition =
-            serde_json::from_value(conditions_json)?;
+        let conditions: moderation_core::RuleCondition = serde_json::from_value(conditions_json)?;
         let action: moderation_core::RuleAction = serde_json::from_value(action_json)?;
         if conditions.validate().is_err() || action.validate().is_err() {
             tracing::warn!(
@@ -595,10 +622,7 @@ fn rule_matches(condition: &moderation_core::RuleCondition, raw: &nostr::RawEven
         }
     }
     if let Some(pattern) = &condition.content_regex {
-        let Ok(regex) = RegexBuilder::new(pattern)
-            .case_insensitive(true)
-            .build()
-        else {
+        let Ok(regex) = RegexBuilder::new(pattern).case_insensitive(true).build() else {
             tracing::warn!(pattern = pattern.as_str(), "invalid content regex");
             return false;
         };
@@ -612,9 +636,7 @@ fn rule_matches(condition: &moderation_core::RuleCondition, raw: &nostr::RawEven
             if tag_values.is_empty() {
                 return false;
             }
-            if !values.is_empty()
-                && !tag_values.iter().any(|value| values.contains(value))
-            {
+            if !values.is_empty() && !tag_values.iter().any(|value| values.contains(value)) {
                 return false;
             }
         }
@@ -650,6 +672,66 @@ async fn insert_label(
     .execute(pool)
     .await?;
     Ok(result.rows_affected() > 0)
+}
+
+async fn llm_label_exists(
+    pool: &Pool<Postgres>,
+    source_event_id: &str,
+    source: &str,
+    label: &str,
+    now: i64,
+) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM cn_moderation.labels          WHERE source_event_id = $1            AND source = $2            AND label = $3            AND exp > $4          LIMIT 1",
+    )
+    .bind(source_event_id)
+    .bind(source)
+    .bind(label)
+    .bind(now)
+    .fetch_optional(pool)
+    .await?;
+    Ok(exists.is_some())
+}
+
+async fn apply_llm_label(
+    state: &AppState,
+    job: &ModerationJob,
+    event_id: &str,
+    provider: &llm::LlmProviderKind,
+    prediction: &llm::LlmLabel,
+    now: i64,
+) -> Result<bool> {
+    if llm_label_exists(
+        &state.pool,
+        event_id,
+        provider.source(),
+        &prediction.label,
+        now,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+
+    let input = moderation_core::LabelInput {
+        target: format!("event:{event_id}"),
+        label: prediction.label.clone(),
+        confidence: prediction.confidence,
+        exp: now.saturating_add(LLM_LABEL_EXP_SECONDS),
+        policy_url: LLM_POLICY_URL.to_string(),
+        policy_ref: LLM_POLICY_REF.to_string(),
+        topic_id: Some(job.topic_id.clone()),
+    };
+    let label_event = moderation_core::build_label_event(&state.node_keys, &input)?;
+    insert_label(
+        &state.pool,
+        &label_event,
+        &input,
+        Some(event_id),
+        None,
+        provider.source(),
+    )
+    .await
 }
 
 fn prepare_llm_input(content: &str, config: &config::LlmRuntimeConfig) -> String {
@@ -693,7 +775,16 @@ fn mask_pii(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{extract::Json as AxumJson, routing::post, Router};
     use cn_core::moderation::RuleCondition;
+    use serde_json::json;
+    use sqlx::postgres::PgPoolOptions;
+    use std::sync::{Mutex, OnceLock};
+    use tokio::net::TcpListener;
+    use tokio::sync::OnceCell;
+    use uuid::Uuid;
+
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
 
     fn sample_event(content: &str, kind: u32, tags: Vec<Vec<String>>) -> nostr::RawEvent {
         nostr::RawEvent {
@@ -749,5 +840,179 @@ mod tests {
         };
         let event = sample_event("content", 1, tags);
         assert!(rule_matches(&condition, &event));
+    }
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:15432/cn".to_string())
+    }
+
+    async fn ensure_migrated(pool: &Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run migrations");
+            })
+            .await;
+    }
+
+    async fn insert_event(pool: &Pool<Postgres>, event: &nostr::RawEvent, topic_id: &str) {
+        sqlx::query(
+            "INSERT INTO cn_relay.events              (event_id, pubkey, kind, created_at, tags, content, sig, raw_json, ingested_at, is_deleted, is_ephemeral, is_current, replaceable_key, addressable_key, expires_at)              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), FALSE, FALSE, TRUE, NULL, NULL, NULL)              ON CONFLICT (event_id) DO NOTHING",
+        )
+        .bind(&event.id)
+        .bind(&event.pubkey)
+        .bind(event.kind as i32)
+        .bind(event.created_at)
+        .bind(serde_json::to_value(&event.tags).expect("serialize tags"))
+        .bind(&event.content)
+        .bind(&event.sig)
+        .bind(serde_json::to_value(event).expect("serialize event"))
+        .execute(pool)
+        .await
+        .expect("insert relay event");
+
+        sqlx::query(
+            "INSERT INTO cn_relay.event_topics (event_id, topic_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(&event.id)
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("insert event topic");
+    }
+
+    async fn delete_event_artifacts(pool: &Pool<Postgres>, event_id: &str) {
+        sqlx::query("DELETE FROM cn_moderation.labels WHERE source_event_id = $1")
+            .bind(event_id)
+            .execute(pool)
+            .await
+            .expect("delete labels");
+        sqlx::query("DELETE FROM cn_relay.event_topics WHERE event_id = $1")
+            .bind(event_id)
+            .execute(pool)
+            .await
+            .expect("delete event topics");
+        sqlx::query("DELETE FROM cn_relay.events WHERE event_id = $1")
+            .bind(event_id)
+            .execute(pool)
+            .await
+            .expect("delete events");
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn set_env_var(key: &str, value: &str) {
+        unsafe { std::env::set_var(key, value) };
+    }
+
+    fn remove_env_var(key: &str) {
+        unsafe { std::env::remove_var(key) };
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn process_job_applies_llm_label_with_local_provider() {
+        let _guard = env_lock().lock().expect("env lock");
+
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+
+        let topic_id = format!("kukuri:moderation-llm-{}", Uuid::new_v4());
+        let author = Keys::generate();
+        let event = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "Contact spammer@example.com at https://malicious.test".to_string(),
+        )
+        .expect("build test event");
+        delete_event_artifacts(&pool, &event.id).await;
+        insert_event(&pool, &event, &topic_id).await;
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind llm mock");
+        let addr = listener.local_addr().expect("mock addr");
+        let app = Router::new().route(
+            "/classify",
+            post(|| async { AxumJson(json!({ "label": "spam", "confidence": 0.93 })) }),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve llm mock");
+        });
+
+        let endpoint = format!("http://{addr}/classify");
+        set_env_var("LLM_LOCAL_ENDPOINT", &endpoint);
+
+        let state = AppState {
+            pool: pool.clone(),
+            config: service_config::static_handle(json!({})),
+            node_keys: Keys::generate(),
+        };
+        let runtime = config::ModerationRuntimeConfig {
+            enabled: true,
+            consumer_batch_size: 1,
+            consumer_poll_seconds: 1,
+            queue_max_attempts: 3,
+            queue_retry_delay_seconds: 1,
+            rules_max_labels_per_event: 5,
+            llm: config::LlmRuntimeConfig {
+                enabled: true,
+                provider: "local".to_string(),
+                external_send_enabled: false,
+                truncate_chars: 2000,
+                mask_pii: true,
+                max_requests_per_day: 0,
+                max_cost_per_day: 0.0,
+                max_concurrency: 1,
+            },
+        };
+        let job = ModerationJob {
+            job_id: Uuid::new_v4().to_string(),
+            event_id: event.id.clone(),
+            topic_id: topic_id.clone(),
+            attempts: 1,
+            max_attempts: 3,
+        };
+
+        let issued_first = process_job(&state, &runtime, &job)
+            .await
+            .expect("first process job");
+        let issued_second = process_job(&state, &runtime, &job)
+            .await
+            .expect("second process job");
+
+        assert_eq!(issued_first, 1);
+        assert_eq!(issued_second, 0);
+
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM cn_moderation.labels WHERE source_event_id = $1 AND source = 'llm:local'",
+        )
+        .bind(&event.id)
+        .fetch_one(&pool)
+        .await
+        .expect("count llm labels");
+        assert_eq!(count, 1);
+
+        let label: String = sqlx::query_scalar(
+            "SELECT label FROM cn_moderation.labels WHERE source_event_id = $1 AND source = 'llm:local' ORDER BY issued_at DESC LIMIT 1",
+        )
+        .bind(&event.id)
+        .fetch_one(&pool)
+        .await
+        .expect("select llm label");
+        assert_eq!(label, "spam");
+
+        remove_env_var("LLM_LOCAL_ENDPOINT");
+        server.abort();
+        let _ = server.await;
+        delete_event_artifacts(&pool, &event.id).await;
     }
 }

@@ -9,6 +9,7 @@ anyhow.workspace = true
 axum.workspace = true
 nostr-sdk.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

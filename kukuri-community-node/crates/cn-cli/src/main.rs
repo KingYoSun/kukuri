@@ -1,4 +1,4 @@
-﻿use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use iroh::{
@@ -301,16 +301,12 @@ async fn main() -> Result<()> {
 
             match command {
                 AccessControlCommand::Rotate(args) => {
-                    let topic_id = generate_topic_id(&args.topic)
-                        .ok_or_else(|| anyhow!("topic is empty"))?;
+                    let topic_id =
+                        generate_topic_id(&args.topic).ok_or_else(|| anyhow!("topic is empty"))?;
                     let scope = cn_core::access_control::normalize_scope(&args.scope)?;
-                    let summary = cn_core::access_control::rotate_epoch(
-                        &pool,
-                        &node_keys,
-                        &topic_id,
-                        &scope,
-                    )
-                    .await?;
+                    let summary =
+                        cn_core::access_control::rotate_epoch(&pool, &node_keys, &topic_id, &scope)
+                            .await?;
                     let output = serde_json::json!({
                         "topic_id": summary.topic_id,
                         "scope": summary.scope,
@@ -326,8 +322,8 @@ async fn main() -> Result<()> {
                     println!("{rendered}");
                 }
                 AccessControlCommand::Revoke(args) => {
-                    let topic_id = generate_topic_id(&args.topic)
-                        .ok_or_else(|| anyhow!("topic is empty"))?;
+                    let topic_id =
+                        generate_topic_id(&args.topic).ok_or_else(|| anyhow!("topic is empty"))?;
                     let scope = cn_core::access_control::normalize_scope(&args.scope)?;
                     let pubkey = cn_core::access_control::normalize_pubkey(&args.pubkey)?;
                     let summary = cn_core::access_control::revoke_member_and_rotate(
@@ -356,23 +352,21 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::E2e { command } => {
-            match command {
-                E2eCommand::Seed => {
-                    cn_core::logging::init("cn-cli");
-                    let summary = e2e_seed::seed().await?;
-                    let summary_json = serde_json::to_string(&summary)?;
-                    println!("E2E_SEED_JSON={summary_json}");
-                }
-                E2eCommand::Cleanup => {
-                    cn_core::logging::init("cn-cli");
-                    e2e_seed::cleanup().await?;
-                }
-                E2eCommand::Invite(args) => {
-                    e2e_invite::issue_invite(args)?;
-                }
+        Commands::E2e { command } => match command {
+            E2eCommand::Seed => {
+                cn_core::logging::init("cn-cli");
+                let summary = e2e_seed::seed().await?;
+                let summary_json = serde_json::to_string(&summary)?;
+                println!("E2E_SEED_JSON={summary_json}");
             }
-        }
+            E2eCommand::Cleanup => {
+                cn_core::logging::init("cn-cli");
+                e2e_seed::cleanup().await?;
+            }
+            E2eCommand::Invite(args) => {
+                e2e_invite::issue_invite(args)?;
+            }
+        },
         Commands::Migrate => {
             cn_core::logging::init("cn-cli");
             let database_url = cn_core::config::required_env("DATABASE_URL")?;
@@ -401,8 +395,8 @@ async fn main() -> Result<()> {
             let pool = cn_core::db::connect(&database_url).await?;
             match command {
                 AdminCommand::Bootstrap { username, password } => {
-                    let created = cn_core::admin::bootstrap_admin(&pool, &username, &password)
-                        .await?;
+                    let created =
+                        cn_core::admin::bootstrap_admin(&pool, &username, &password).await?;
                     if created {
                         tracing::info!("admin user created");
                     } else {
@@ -493,15 +487,7 @@ async fn audit_node_key(action: &str, keys: &nostr_sdk::Keys) -> Result<()> {
     let diff = serde_json::json!({
         "public_key": cn_core::node_key::public_key_hex(keys)
     });
-    cn_core::admin::log_audit(
-        &pool,
-        "system",
-        action,
-        "node_key",
-        Some(diff),
-        None,
-    )
-    .await?;
+    cn_core::admin::log_audit(&pool, "system", action, "node_key", Some(diff), None).await?;
     Ok(())
 }
 
@@ -699,7 +685,10 @@ fn export_bootstrap_list(
 }
 
 async fn run_relay_node(args: &P2pArgs, topics: &str) -> Result<()> {
-    info!("Starting relay node on {} for topics: {}", args.bind, topics);
+    info!(
+        "Starting relay node on {} for topics: {}",
+        args.bind, topics
+    );
 
     let bind_addr = SocketAddr::from_str(&args.bind)?;
     let static_discovery = Arc::new(StaticProvider::new());
@@ -727,7 +716,11 @@ async fn run_relay_node(args: &P2pArgs, topics: &str) -> Result<()> {
         };
         let topic_bytes = cn_core::topic::topic_id_to_gossip_bytes(&canonical_topic)?;
 
-        info!("Subscribing to topic: {} -> {}", topic.trim(), canonical_topic);
+        info!(
+            "Subscribing to topic: {} -> {}",
+            topic.trim(),
+            canonical_topic
+        );
         gossip.subscribe(topic_bytes.into(), vec![]).await?;
         subscribed += 1;
     }
@@ -753,7 +746,10 @@ async fn run_connectivity_probe(
     enable_mdns: bool,
     timeout_secs: u64,
 ) -> Result<()> {
-    info!("Connectivity probe using bind {} -> peer {}", args.bind, peer);
+    info!(
+        "Connectivity probe using bind {} -> peer {}",
+        args.bind, peer
+    );
 
     let bind_addr = SocketAddr::from_str(&args.bind)?;
     let static_discovery = Arc::new(StaticProvider::new());
@@ -896,7 +892,11 @@ fn load_bootstrap_peers_from_json() -> Vec<String> {
 pub(crate) fn hash_topic_id(base: &str) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(base.as_bytes());
-    format!("{}{}", TOPIC_NAMESPACE, hex::encode(hasher.finalize().as_bytes()))
+    format!(
+        "{}{}",
+        TOPIC_NAMESPACE,
+        hex::encode(hasher.finalize().as_bytes())
+    )
 }
 
 fn generate_topic_id(input: &str) -> Option<String> {

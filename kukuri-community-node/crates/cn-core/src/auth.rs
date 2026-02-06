@@ -70,4 +70,3 @@ pub fn seconds_from_now(seconds: u64) -> Result<SystemTime> {
     let now = SystemTime::now();
     Ok(now + Duration::from_secs(seconds))
 }
-

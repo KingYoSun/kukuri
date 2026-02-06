@@ -32,7 +32,9 @@ pub enum IngestOutcome {
         duplicate: bool,
         broadcast_gossip: bool,
     },
-    Rejected { reason: String },
+    Rejected {
+        reason: String,
+    },
 }
 
 pub async fn ingest_event(
@@ -93,7 +95,10 @@ pub async fn ingest_event(
     }
 
     if let Some(expected) = context.source_topic.as_ref() {
-        if !normalized_topics.iter().any(|topic_id| topic_id == expected) {
+        if !normalized_topics
+            .iter()
+            .any(|topic_id| topic_id == expected)
+        {
             metrics::inc_ingest_rejected(super::SERVICE_NAME, "invalid");
             return Ok(IngestOutcome::Rejected {
                 reason: "invalid: topic mismatch".into(),
@@ -103,7 +108,10 @@ pub async fn ingest_event(
 
     if source == IngestSource::Ws {
         let allowed = state.node_topics.read().await;
-        if normalized_topics.iter().any(|topic_id| !allowed.contains(topic_id)) {
+        if normalized_topics
+            .iter()
+            .any(|topic_id| !allowed.contains(topic_id))
+        {
             metrics::inc_ingest_rejected(super::SERVICE_NAME, "restricted");
             return Ok(IngestOutcome::Rejected {
                 reason: "restricted: topic not enabled".into(),
@@ -121,7 +129,9 @@ pub async fn ingest_event(
         }
     }
 
-    let scope = raw.first_tag_value("scope").unwrap_or_else(|| "public".into());
+    let scope = raw
+        .first_tag_value("scope")
+        .unwrap_or_else(|| "public".into());
     if scope != "public" {
         let Some(epoch_value) = raw.first_tag_value("epoch") else {
             metrics::inc_ingest_rejected(super::SERVICE_NAME, "invalid");
@@ -307,18 +317,15 @@ pub async fn ingest_event(
                     topic_id,
                     kind,
                     raw.created_at,
-                    replaceable_key
-                        .as_deref()
-                        .or(addressable_key.as_deref()),
+                    replaceable_key.as_deref().or(addressable_key.as_deref()),
                     None,
                 )
                 .await?,
             );
         }
     } else if tombstoned {
-        outbox_seqs.extend(
-            insert_delete_outbox(&mut tx, &raw.id, kind, raw.created_at, "nip09").await?,
-        );
+        outbox_seqs
+            .extend(insert_delete_outbox(&mut tx, &raw.id, kind, raw.created_at, "nip09").await?);
     }
 
     if raw.kind == 5 {
@@ -354,10 +361,7 @@ fn is_ephemeral_kind(kind: u32) -> bool {
     kind >= 20000 && kind < 30000
 }
 
-async fn insert_dedupe(
-    tx: &mut Transaction<'_, Postgres>,
-    event_id: &str,
-) -> Result<bool> {
+async fn insert_dedupe(tx: &mut Transaction<'_, Postgres>, event_id: &str) -> Result<bool> {
     let result = sqlx::query(
         "INSERT INTO cn_relay.event_dedupe (event_id, first_seen_at, last_seen_at, seen_count) VALUES ($1, NOW(), NOW(), 1) ON CONFLICT DO NOTHING",
     )
@@ -508,9 +512,7 @@ async fn apply_deletions(
                 .execute(&mut **tx)
                 .await?;
         }
-        outbox_seqs.extend(
-            insert_delete_outbox(tx, &event_id, kind, created_at, "nip09").await?,
-        );
+        outbox_seqs.extend(insert_delete_outbox(tx, &event_id, kind, created_at, "nip09").await?);
     }
 
     for target in deletion.tag_values("a") {
@@ -538,23 +540,20 @@ async fn apply_addressable_delete(
     }
     let d_tag = parts[2..].join(":");
     let key = format!("{kind}:{pubkey}:{d_tag}");
-    let row = sqlx::query(
-        "SELECT event_id FROM cn_relay.addressable_current WHERE addressable_key = $1",
-    )
-    .bind(&key)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let row =
+        sqlx::query("SELECT event_id FROM cn_relay.addressable_current WHERE addressable_key = $1")
+            .bind(&key)
+            .fetch_optional(&mut **tx)
+            .await?;
     let Some(row) = row else {
         insert_tombstone_addressable(tx, &key, &deletion.id, deletion.created_at).await?;
         return Ok(None);
     };
     let event_id: String = row.try_get("event_id")?;
-    let event_row = sqlx::query(
-        "SELECT kind, created_at FROM cn_relay.events WHERE event_id = $1",
-    )
-    .bind(&event_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let event_row = sqlx::query("SELECT kind, created_at FROM cn_relay.events WHERE event_id = $1")
+        .bind(&event_id)
+        .fetch_one(&mut **tx)
+        .await?;
     let kind: i32 = event_row.try_get("kind")?;
     let created_at: i64 = event_row.try_get("created_at")?;
     mark_deleted(tx, &event_id).await?;
@@ -822,7 +821,10 @@ mod tests {
         let keys = Keys::generate();
         let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
         let tags = vec![
-            vec!["d".to_string(), "topic_service:kukuri:topic1:index:private".to_string()],
+            vec![
+                "d".to_string(),
+                "topic_service:kukuri:topic1:index:private".to_string(),
+            ],
             vec!["t".to_string(), "kukuri:topic1".to_string()],
             vec!["role".to_string(), "index".to_string()],
             vec!["scope".to_string(), "private".to_string()],

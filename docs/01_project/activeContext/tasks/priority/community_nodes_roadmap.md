@@ -80,7 +80,7 @@
 - [x] 削除要求: Meilisearch/AGE/モデレーションの派生データを削除・再計算するフローを実装し、削除要求が仕様通りに反映されることを確認する
 - [x] OpenAPI: `utoipa` で User/Admin API の spec を生成し `/v1/openapi.json` を実データで返す。Admin Console で OpenAPI 由来の型/クライアント生成を導入し契約テストへ反映する
 - [x] Admin Console: Privacy/Data・Index・Access Control のページを追加し、Vitest + Testing Library の UI テスト基盤を整備する
-- [ ] Moderation LLM: OpenAI/Local provider を実装（または無効化の明示）し、LLM ラベリングの統合/E2E テストを追加する
+- [x] Moderation LLM: OpenAI/Local provider を実装（または無効化の明示）し、LLM ラベリングの統合/E2E テストを追加する
 
 ## 参照（設計）
 

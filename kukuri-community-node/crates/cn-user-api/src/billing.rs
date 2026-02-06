@@ -41,10 +41,7 @@ pub async fn ensure_default_plan(pool: &Pool<Postgres>) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn check_topic_limit(
-    pool: &Pool<Postgres>,
-    pubkey: &str,
-) -> ApiResult<()> {
+pub(crate) async fn check_topic_limit(pool: &Pool<Postgres>, pubkey: &str) -> ApiResult<()> {
     let plan_id = active_plan_id(pool, pubkey).await?;
     let limit = sqlx::query_scalar::<_, i64>(
         "SELECT \"limit\" FROM cn_user.plan_limits WHERE plan_id = $1 AND metric = 'max_topics' AND \"window\" = 'limit'",
@@ -68,14 +65,16 @@ pub(crate) async fn check_topic_limit(
 
     if current >= limit {
         metrics::inc_quota_exceeded(crate::SERVICE_NAME, "max_topics");
-        return Err(
-            ApiError::new(StatusCode::PAYMENT_REQUIRED, "QUOTA_EXCEEDED", "topic limit reached")
-                .with_details(json!({
-                    "metric": "max_topics",
-                    "current": current,
-                    "limit": limit,
-                })),
-        );
+        return Err(ApiError::new(
+            StatusCode::PAYMENT_REQUIRED,
+            "QUOTA_EXCEEDED",
+            "topic limit reached",
+        )
+        .with_details(json!({
+            "metric": "max_topics",
+            "current": current,
+            "limit": limit,
+        })));
     }
 
     Ok(())
@@ -99,10 +98,13 @@ pub(crate) async fn consume_quota(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     let day = chrono::Utc::now().date_naive();
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     if let Some(request_id) = request_id {
         let outcome = sqlx::query_scalar::<_, String>(
@@ -159,18 +161,25 @@ pub(crate) async fn consume_quota(
             .succ_opt()
             .unwrap_or(day)
             .and_hms_opt(0, 0, 0)
-            .unwrap_or_else(|| chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap())
+            .unwrap_or_else(|| {
+                chrono::Utc::now()
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+            })
             .and_utc()
             .timestamp();
-        return Err(
-            ApiError::new(StatusCode::PAYMENT_REQUIRED, "QUOTA_EXCEEDED", "quota exceeded")
-                .with_details(json!({
-                    "metric": metric,
-                    "current": current,
-                    "limit": limit,
-                    "reset_at": reset_at
-                })),
-        );
+        return Err(ApiError::new(
+            StatusCode::PAYMENT_REQUIRED,
+            "QUOTA_EXCEEDED",
+            "quota exceeded",
+        )
+        .with_details(json!({
+            "metric": metric,
+            "current": current,
+            "limit": limit,
+            "reset_at": reset_at
+        })));
     }
 
     sqlx::query(

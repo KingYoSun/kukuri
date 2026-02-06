@@ -122,10 +122,7 @@ pub fn build_label_event(keys: &Keys, input: &LabelInput) -> Result<nostr::RawEv
         vec!["policy_ref".to_string(), input.policy_ref.clone()],
     ];
     if let Some(confidence) = input.confidence {
-        tags.push(vec![
-            "confidence".to_string(),
-            format!("{:.3}", confidence),
-        ]);
+        tags.push(vec!["confidence".to_string(), format!("{:.3}", confidence)]);
     }
     if let Some(topic_id) = &input.topic_id {
         tags.push(vec!["t".to_string(), topic_id.clone()]);
@@ -158,10 +155,11 @@ mod tests {
             .tags
             .iter()
             .any(|tag| tag == &vec!["target".to_string(), "event:abc123".to_string()]));
-        assert!(event
-            .tags
-            .iter()
-            .any(|tag| tag == &vec!["policy_url".to_string(), "https://example.com/policy".to_string()]));
+        assert!(event.tags.iter().any(|tag| tag
+            == &vec![
+                "policy_url".to_string(),
+                "https://example.com/policy".to_string()
+            ]));
         assert!(event
             .tags
             .iter()

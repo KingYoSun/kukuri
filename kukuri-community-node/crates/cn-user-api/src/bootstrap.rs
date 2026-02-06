@@ -100,11 +100,9 @@ async fn respond_with_events(
 
     if let Some(value) = headers.get("if-none-match").and_then(|v| v.to_str().ok()) {
         if value == etag {
-            return Ok((
-                StatusCode::NOT_MODIFIED,
-                [(axum::http::header::ETAG, etag)],
-            )
-                .into_response());
+            return Ok(
+                (StatusCode::NOT_MODIFIED, [(axum::http::header::ETAG, etag)]).into_response(),
+            );
         }
     }
 
@@ -116,11 +114,10 @@ async fn respond_with_events(
             if let Ok(parsed) = httpdate::parse_http_date(value) {
                 let parsed = chrono::DateTime::<chrono::Utc>::from(parsed);
                 if last_modified <= parsed {
-                    return Ok((
-                        StatusCode::NOT_MODIFIED,
-                        [(axum::http::header::ETAG, etag)],
-                    )
-                        .into_response());
+                    return Ok(
+                        (StatusCode::NOT_MODIFIED, [(axum::http::header::ETAG, etag)])
+                            .into_response(),
+                    );
                 }
             }
         }
@@ -136,16 +133,16 @@ async fn respond_with_events(
         axum::http::header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=300"),
     );
-    response
-        .headers_mut()
-        .insert(axum::http::header::ETAG, HeaderValue::from_str(&etag).unwrap());
+    response.headers_mut().insert(
+        axum::http::header::ETAG,
+        HeaderValue::from_str(&etag).unwrap(),
+    );
     if let Some(last_modified) = latest {
         let value = httpdate::fmt_http_date(last_modified.into());
         if let Ok(header) = HeaderValue::from_str(&value) {
-            response.headers_mut().insert(
-                axum::http::header::LAST_MODIFIED,
-                header,
-            );
+            response
+                .headers_mut()
+                .insert(axum::http::header::LAST_MODIFIED, header);
         }
     }
 
@@ -231,8 +228,7 @@ mod api_contract_tests {
                 get(get_bootstrap_services),
             )
             .with_state(test_state());
-        let status =
-            request_status(app, "/v1/bootstrap/topics/kukuri:topic1/services").await;
+        let status = request_status(app, "/v1/bootstrap/topics/kukuri:topic1/services").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }

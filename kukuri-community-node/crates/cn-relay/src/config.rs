@@ -56,10 +56,7 @@ impl RelayLimits {
                 .as_ref()
                 .and_then(|l| l.max_event_bytes)
                 .unwrap_or(32 * 1024),
-            max_tags: limits
-                .as_ref()
-                .and_then(|l| l.max_tags)
-                .unwrap_or(200),
+            max_tags: limits.as_ref().and_then(|l| l.max_tags).unwrap_or(200),
         }
     }
 }
@@ -92,14 +89,10 @@ impl RelayRateLimit {
         let gossip = section.as_ref().and_then(|s| s.gossip.as_ref());
         RelayRateLimit {
             enabled: section.as_ref().and_then(|s| s.enabled).unwrap_or(true),
-            ws_events_per_minute: ws
-                .and_then(|w| w.events_per_minute)
-                .unwrap_or(120),
+            ws_events_per_minute: ws.and_then(|w| w.events_per_minute).unwrap_or(120),
             ws_reqs_per_minute: ws.and_then(|w| w.reqs_per_minute).unwrap_or(60),
             ws_conns_per_minute: ws.and_then(|w| w.conns_per_minute).unwrap_or(30),
-            gossip_msgs_per_minute: gossip
-                .and_then(|g| g.msgs_per_minute)
-                .unwrap_or(600),
+            gossip_msgs_per_minute: gossip.and_then(|g| g.msgs_per_minute).unwrap_or(600),
         }
     }
 }
@@ -128,22 +121,13 @@ impl RelayRetention {
             .get("retention")
             .and_then(|v| serde_json::from_value::<RetentionSection>(v.clone()).ok());
         RelayRetention {
-            events_days: section
-                .as_ref()
-                .and_then(|s| s.events_days)
-                .unwrap_or(30),
+            events_days: section.as_ref().and_then(|s| s.events_days).unwrap_or(30),
             tombstone_days: section
                 .as_ref()
                 .and_then(|s| s.tombstone_days)
                 .unwrap_or(180),
-            dedupe_days: section
-                .as_ref()
-                .and_then(|s| s.dedupe_days)
-                .unwrap_or(180),
-            outbox_days: section
-                .as_ref()
-                .and_then(|s| s.outbox_days)
-                .unwrap_or(30),
+            dedupe_days: section.as_ref().and_then(|s| s.dedupe_days).unwrap_or(180),
+            outbox_days: section.as_ref().and_then(|s| s.outbox_days).unwrap_or(30),
             cleanup_interval_seconds: section
                 .as_ref()
                 .and_then(|s| s.cleanup_interval_seconds)

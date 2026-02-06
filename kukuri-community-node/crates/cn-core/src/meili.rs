@@ -29,7 +29,10 @@ impl MeiliClient {
         primary_key: &str,
         settings: Option<Value>,
     ) -> Result<()> {
-        let resp = self.request(Method::GET, &format!("/indexes/{uid}")).send().await?;
+        let resp = self
+            .request(Method::GET, &format!("/indexes/{uid}"))
+            .send()
+            .await?;
         if resp.status() == StatusCode::NOT_FOUND {
             let create_resp = self
                 .request(Method::POST, "/indexes")
@@ -73,7 +76,10 @@ impl MeiliClient {
             return Ok(());
         }
         let resp = self
-            .request(Method::POST, &format!("/indexes/{uid}/documents/delete-batch"))
+            .request(
+                Method::POST,
+                &format!("/indexes/{uid}/documents/delete-batch"),
+            )
             .json(ids)
             .send()
             .await?;
@@ -93,7 +99,10 @@ impl MeiliClient {
 
     pub async fn delete_all_documents(&self, uid: &str) -> Result<()> {
         let resp = self
-            .request(Method::POST, &format!("/indexes/{uid}/documents/delete-all"))
+            .request(
+                Method::POST,
+                &format!("/indexes/{uid}/documents/delete-all"),
+            )
             .send()
             .await?;
         ensure_success(resp).await
@@ -169,6 +178,9 @@ mod tests {
     #[test]
     fn topic_index_uid_sanitizes_characters() {
         assert_eq!(topic_index_uid("kukuri:abcDEF"), "topic_kukuri_abcdef");
-        assert_eq!(topic_index_uid("kukuri:topic/one"), "topic_kukuri_topic_one");
+        assert_eq!(
+            topic_index_uid("kukuri:topic/one"),
+            "topic_kukuri_topic_one"
+        );
     }
 }

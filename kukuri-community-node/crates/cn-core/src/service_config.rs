@@ -60,9 +60,7 @@ impl AuthConfig {
     pub fn requires_auth(&self, now: i64) -> bool {
         match self.mode {
             AuthMode::Off => false,
-            AuthMode::Required => {
-                self.enforce_at.map(|ts| now >= ts).unwrap_or(true)
-            }
+            AuthMode::Required => self.enforce_at.map(|ts| now >= ts).unwrap_or(true),
         }
     }
 
@@ -105,7 +103,9 @@ pub fn auth_config_from_json(value: &Value) -> AuthConfig {
         })
         .unwrap_or(AuthMode::Off);
 
-    let enforce_at = auth.and_then(|auth| auth.get("enforce_at")).and_then(|v| v.as_i64());
+    let enforce_at = auth
+        .and_then(|auth| auth.get("enforce_at"))
+        .and_then(|v| v.as_i64());
     let grace_seconds = auth
         .and_then(|auth| auth.get("grace_seconds"))
         .and_then(|v| v.as_i64())
@@ -132,9 +132,7 @@ pub async fn watch_service_config(
     let initial = load_service_config(&pool, service).await?;
     let snapshot = ServiceConfigSnapshot {
         version: initial.as_ref().map(|cfg| cfg.version).unwrap_or(0),
-        config_json: initial
-            .map(|cfg| cfg.config_json)
-            .unwrap_or(default_config),
+        config_json: initial.map(|cfg| cfg.config_json).unwrap_or(default_config),
     };
 
     let state = Arc::new(RwLock::new(snapshot));
@@ -149,7 +147,11 @@ pub async fn watch_service_config(
                             version: cfg.version,
                             config_json: cfg.config_json,
                         };
-                        tracing::info!(service = service, version = guard.version, "service config updated");
+                        tracing::info!(
+                            service = service,
+                            version = guard.version,
+                            "service config updated"
+                        );
                     }
                 }
                 Ok(None) => {}

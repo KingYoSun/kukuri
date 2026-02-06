@@ -100,11 +100,9 @@ fn metrics() -> &'static Metrics {
         )
         .expect("gossip_sent_total metric");
 
-        let dedupe_hits_total = IntCounterVec::new(
-            Opts::new("dedupe_hits_total", "Dedupe hits"),
-            &["service"],
-        )
-        .expect("dedupe_hits_total metric");
+        let dedupe_hits_total =
+            IntCounterVec::new(Opts::new("dedupe_hits_total", "Dedupe hits"), &["service"])
+                .expect("dedupe_hits_total metric");
 
         let dedupe_misses_total = IntCounterVec::new(
             Opts::new("dedupe_misses_total", "Dedupe misses"),
@@ -125,13 +123,19 @@ fn metrics() -> &'static Metrics {
         .expect("auth_failure_total metric");
 
         let consent_required_total = IntCounterVec::new(
-            Opts::new("consent_required_total", "Requests rejected due to missing consent"),
+            Opts::new(
+                "consent_required_total",
+                "Requests rejected due to missing consent",
+            ),
             &["service"],
         )
         .expect("consent_required_total metric");
 
         let quota_exceeded_total = IntCounterVec::new(
-            Opts::new("quota_exceeded_total", "Requests rejected due to quota exceeded"),
+            Opts::new(
+                "quota_exceeded_total",
+                "Requests rejected due to quota exceeded",
+            ),
             &["service", "metric"],
         )
         .expect("quota_exceeded_total metric");
@@ -218,10 +222,7 @@ fn metrics() -> &'static Metrics {
 }
 
 pub fn init(service_name: &'static str) {
-    metrics()
-        .cn_up
-        .with_label_values(&[service_name])
-        .set(1);
+    metrics().cn_up.with_label_values(&[service_name]).set(1);
 }
 
 pub fn record_http_request(
@@ -234,10 +235,7 @@ pub fn record_http_request(
     let status_str = status.to_string();
     let labels = &[service_name, route, method, status_str.as_str()];
     let metrics = metrics();
-    metrics
-        .http_requests_total
-        .with_label_values(labels)
-        .inc();
+    metrics.http_requests_total.with_label_values(labels).inc();
     metrics
         .http_request_duration_seconds
         .with_label_values(labels)
@@ -259,7 +257,10 @@ pub fn dec_ws_connections(service_name: &'static str) {
 }
 
 pub fn inc_ws_req_total(service_name: &'static str) {
-    metrics().ws_req_total.with_label_values(&[service_name]).inc();
+    metrics()
+        .ws_req_total
+        .with_label_values(&[service_name])
+        .inc();
 }
 
 pub fn inc_ws_event_total(service_name: &'static str) {
@@ -365,7 +366,11 @@ pub fn metrics_response(service_name: &'static str) -> impl IntoResponse {
         header::CONTENT_TYPE,
         "text/plain; version=0.0.4".parse().unwrap(),
     );
-    (StatusCode::OK, headers, String::from_utf8_lossy(&buffer).to_string())
+    (
+        StatusCode::OK,
+        headers,
+        String::from_utf8_lossy(&buffer).to_string(),
+    )
 }
 
 #[derive(Clone)]

@@ -71,12 +71,11 @@ async fn cleanup_once(state: &AppState, retention: &RelayRetention) -> Result<()
     if retention.tombstone_days > 0 {
         let now = auth::unix_seconds()? as i64;
         let cutoff = now.saturating_sub(retention.tombstone_days.saturating_mul(86400));
-        let result = sqlx::query(
-            "DELETE FROM cn_relay.deletion_tombstones WHERE requested_at < $1",
-        )
-        .bind(cutoff)
-        .execute(&state.pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM cn_relay.deletion_tombstones WHERE requested_at < $1")
+                .bind(cutoff)
+                .execute(&state.pool)
+                .await?;
         tracing::info!(
             removed_tombstones = result.rows_affected(),
             "relay retention cleanup: tombstones"

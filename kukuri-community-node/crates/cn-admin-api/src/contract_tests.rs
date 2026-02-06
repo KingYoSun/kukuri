@@ -55,8 +55,7 @@ async fn test_state() -> AppState {
 async fn insert_admin_session(pool: &Pool<Postgres>) -> String {
     let admin_user_id = Uuid::new_v4().to_string();
     let username = format!("admin-{}", &admin_user_id[..8]);
-    let password_hash =
-        cn_core::admin::hash_password("test-password").expect("hash password");
+    let password_hash = cn_core::admin::hash_password("test-password").expect("hash password");
 
     sqlx::query(
         "INSERT INTO cn_admin.admin_users          (admin_user_id, username, password_hash, is_active)          VALUES ($1, $2, $3, TRUE)",
@@ -167,7 +166,10 @@ async fn access_control_rotate_contract_success() {
     );
     assert_eq!(payload.get("scope").and_then(Value::as_str), Some(scope));
     assert_eq!(payload.get("recipients").and_then(Value::as_u64), Some(1));
-    assert_eq!(payload.get("previous_epoch").and_then(Value::as_i64), Some(0));
+    assert_eq!(
+        payload.get("previous_epoch").and_then(Value::as_i64),
+        Some(0)
+    );
     assert_eq!(payload.get("new_epoch").and_then(Value::as_i64), Some(1));
 }
 
@@ -211,7 +213,10 @@ async fn access_control_revoke_contract_success() {
         Some(member_pubkey.as_str())
     );
     assert_eq!(payload.get("recipients").and_then(Value::as_u64), Some(0));
-    assert_eq!(payload.get("previous_epoch").and_then(Value::as_i64), Some(0));
+    assert_eq!(
+        payload.get("previous_epoch").and_then(Value::as_i64),
+        Some(0)
+    );
     assert_eq!(payload.get("new_epoch").and_then(Value::as_i64), Some(1));
 }
 
@@ -239,7 +244,10 @@ async fn reindex_contract_success() {
         .and_then(Value::as_str)
         .expect("job_id");
     assert!(Uuid::parse_str(job_id).is_ok());
-    assert_eq!(payload.get("status").and_then(Value::as_str), Some("pending"));
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("pending")
+    );
 }
 
 #[tokio::test]
@@ -248,36 +256,25 @@ async fn openapi_contract_contains_admin_paths() {
     let (status, payload) = get_json(app, "/v1/openapi.json").await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(payload.get("openapi").and_then(Value::as_str), Some("3.0.3"));
-    assert!(
-        payload
-            .pointer("/paths/~1v1~1admin~1auth~1login/post")
-            .is_some()
+    assert_eq!(
+        payload.get("openapi").and_then(Value::as_str),
+        Some("3.0.3")
     );
-    assert!(
-        payload
-            .pointer("/paths/~1v1~1admin~1services/get")
-            .is_some()
-    );
-    assert!(
-        payload
-            .pointer("/paths/~1v1~1admin~1moderation~1rules/get")
-            .is_some()
-    );
-    assert!(
-        payload
-            .pointer("/paths/~1v1~1admin~1trust~1schedules/get")
-            .is_some()
-    );
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1auth~1login/post")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1services/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1moderation~1rules/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1trust~1schedules/get")
+        .is_some());
     assert!(payload.pointer("/paths/~1v1~1reindex/post").is_some());
-    assert!(
-        payload
-            .pointer("/components/schemas/ServiceInfo")
-            .is_some()
-    );
-    assert!(
-        payload
-            .pointer("/components/schemas/TrustScheduleRow")
-            .is_some()
-    );
+    assert!(payload.pointer("/components/schemas/ServiceInfo").is_some());
+    assert!(payload
+        .pointer("/components/schemas/TrustScheduleRow")
+        .is_some());
 }

@@ -152,11 +152,13 @@ pub async fn approve_subscription_request(
 ) -> ApiResult<Json<serde_json::Value>> {
     let admin = require_admin(&state, &jar).await?;
 
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     let row = sqlx::query(
         "SELECT requester_pubkey, topic_id FROM cn_user.topic_subscription_requests WHERE request_id = $1",
@@ -166,7 +168,11 @@ pub async fn approve_subscription_request(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     let Some(row) = row else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "request not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "request not found",
+        ));
     };
     let requester_pubkey: String = row.try_get("requester_pubkey")?;
     let topic_id: String = row.try_get("topic_id")?;
@@ -229,7 +235,11 @@ pub async fn reject_subscription_request(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     if result.rows_affected() == 0 {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "request not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "request not found",
+        ));
     }
 
     cn_core::admin::log_audit(
@@ -292,7 +302,11 @@ pub async fn update_node_subscription(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     let Some(row) = row else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "topic not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "topic not found",
+        ));
     };
 
     cn_core::admin::log_audit(
@@ -324,24 +338,34 @@ pub async fn list_plans(
     let rows = sqlx::query("SELECT plan_id, name, is_active FROM cn_user.plans")
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let limit_rows =
         sqlx::query("SELECT plan_id, metric, \"window\", \"limit\" FROM cn_user.plan_limits")
-        .fetch_all(&state.pool)
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
-    let mut limit_map: std::collections::HashMap<String, Vec<PlanLimit>> = std::collections::HashMap::new();
+            .fetch_all(&state.pool)
+            .await
+            .map_err(|err| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                )
+            })?;
+    let mut limit_map: std::collections::HashMap<String, Vec<PlanLimit>> =
+        std::collections::HashMap::new();
     for row in limit_rows {
         let plan_id: String = row.try_get("plan_id")?;
-        limit_map
-            .entry(plan_id)
-            .or_default()
-            .push(PlanLimit {
-                metric: row.try_get("metric")?,
-                window: row.try_get("window")?,
-                limit: row.try_get("limit")?,
-            });
+        limit_map.entry(plan_id).or_default().push(PlanLimit {
+            metric: row.try_get("metric")?,
+            window: row.try_get("window")?,
+            limit: row.try_get("limit")?,
+        });
     }
 
     let mut plans = Vec::new();
@@ -364,21 +388,27 @@ pub async fn create_plan(
     Json(payload): Json<PlanRequest>,
 ) -> ApiResult<Json<Plan>> {
     let admin = require_admin(&state, &jar).await?;
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
-    sqlx::query(
-        "INSERT INTO cn_user.plans (plan_id, name, is_active) VALUES ($1, $2, $3)",
-    )
-    .bind(&payload.plan_id)
-    .bind(&payload.name)
-    .bind(payload.is_active)
-    .execute(&mut *tx)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    sqlx::query("INSERT INTO cn_user.plans (plan_id, name, is_active) VALUES ($1, $2, $3)")
+        .bind(&payload.plan_id)
+        .bind(&payload.name)
+        .bind(payload.is_active)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     for limit in payload.limits.iter() {
         sqlx::query(
@@ -421,27 +451,39 @@ pub async fn update_plan(
     Json(payload): Json<PlanRequest>,
 ) -> ApiResult<Json<Plan>> {
     let admin = require_admin(&state, &jar).await?;
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
-    sqlx::query(
-        "UPDATE cn_user.plans SET name = $1, is_active = $2 WHERE plan_id = $3",
-    )
-    .bind(&payload.name)
-    .bind(payload.is_active)
-    .bind(&plan_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    sqlx::query("UPDATE cn_user.plans SET name = $1, is_active = $2 WHERE plan_id = $3")
+        .bind(&payload.name)
+        .bind(payload.is_active)
+        .bind(&plan_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     sqlx::query("DELETE FROM cn_user.plan_limits WHERE plan_id = $1")
         .bind(&plan_id)
         .execute(&mut *tx)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     for limit in payload.limits.iter() {
         sqlx::query(

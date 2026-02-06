@@ -26,11 +26,9 @@ pub async fn enqueue_reindex(
 ) -> ApiResult<Json<ReindexResponse>> {
     let admin = require_admin(&state, &jar).await?;
     let topic_id = if let Some(topic_id) = payload.topic_id.as_ref() {
-        Some(
-            cn_core::topic::normalize_topic_id(topic_id).map_err(|err| {
-                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string())
-            })?,
-        )
+        Some(cn_core::topic::normalize_topic_id(topic_id).map_err(|err| {
+            ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string())
+        })?)
     } else {
         None
     };

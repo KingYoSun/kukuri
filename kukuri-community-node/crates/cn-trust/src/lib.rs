@@ -162,7 +162,12 @@ pub async fn run(config: TrustConfig) -> Result<()> {
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {
@@ -173,11 +178,10 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
-    if let Ok(max_seq) = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox",
-    )
-    .fetch_one(&state.pool)
-    .await
+    if let Ok(max_seq) =
+        sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(&state.pool)
+            .await
     {
         if let Ok(last_seq) = sqlx::query_scalar::<_, i64>(
             "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
@@ -218,8 +222,7 @@ fn spawn_outbox_consumer(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::TrustRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5))).await;
                 continue;
             }
 
@@ -278,8 +281,7 @@ fn spawn_job_worker(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::TrustRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5))).await;
                 continue;
             }
 
@@ -316,8 +318,7 @@ fn spawn_schedule_worker(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::TrustRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.schedule_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.schedule_poll_seconds.max(5))).await;
                 continue;
             }
 
@@ -342,8 +343,7 @@ fn spawn_schedule_worker(state: AppState) {
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(runtime.schedule_poll_seconds.max(5)))
-                .await;
+            tokio::time::sleep(Duration::from_secs(runtime.schedule_poll_seconds.max(5))).await;
         }
     });
 }
@@ -376,12 +376,10 @@ async fn load_last_seq(pool: &Pool<Postgres>) -> Result<i64> {
         return Ok(last_seq);
     }
 
-    sqlx::query(
-        "INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)",
-    )
-    .bind(CONSUMER_NAME)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)")
+        .bind(CONSUMER_NAME)
+        .execute(pool)
+        .await?;
 
     Ok(0)
 }
@@ -481,8 +479,7 @@ async fn handle_report_event(
     let Some(subject_pubkey) = subject_pubkey else {
         return Ok(());
     };
-    if !is_hex_64(&subject_pubkey) || !is_hex_64(&event.raw.pubkey) || !is_hex_64(&event.raw.id)
-    {
+    if !is_hex_64(&subject_pubkey) || !is_hex_64(&event.raw.pubkey) || !is_hex_64(&event.raw.id) {
         return Ok(());
     }
 
@@ -550,8 +547,7 @@ async fn handle_label_event(
     let Some(subject_pubkey) = subject_pubkey else {
         return Ok(());
     };
-    if !is_hex_64(&subject_pubkey) || !is_hex_64(&event.raw.pubkey) || !is_hex_64(&event.raw.id)
-    {
+    if !is_hex_64(&subject_pubkey) || !is_hex_64(&event.raw.pubkey) || !is_hex_64(&event.raw.id) {
         return Ok(());
     }
 
@@ -597,7 +593,10 @@ async fn handle_interaction_event(
     event: &TrustEvent,
     now: i64,
 ) -> Result<()> {
-    let scope = event.raw.first_tag_value("scope").unwrap_or_else(|| "public".into());
+    let scope = event
+        .raw
+        .first_tag_value("scope")
+        .unwrap_or_else(|| "public".into());
     if scope != "public" {
         return Ok(());
     }
@@ -776,8 +775,8 @@ async fn update_report_score(
     let report_count = age_report_count(tx, subject_pubkey, since, 39005).await?;
     let label_count = age_report_count(tx, subject_pubkey, since, 39006).await?;
 
-    let weighted = report_count as f64 * runtime.report_weight
-        + label_count as f64 * runtime.label_weight;
+    let weighted =
+        report_count as f64 * runtime.report_weight + label_count as f64 * runtime.label_weight;
     let score = (weighted / runtime.report_score_normalization).min(1.0);
 
     let mut attestation_id: Option<String> = None;
@@ -934,13 +933,11 @@ async fn ensure_graph(pool: &Pool<Postgres>) -> Result<()> {
     let mut tx = pool.begin().await?;
     init_age_session(&mut tx).await?;
 
-    let exists = sqlx::query_scalar::<_, i64>(
-        "SELECT 1 FROM ag_catalog.ag_graph WHERE name = $1",
-    )
-    .bind(GRAPH_NAME)
-    .fetch_optional(&mut *tx)
-    .await?
-    .is_some();
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM ag_catalog.ag_graph WHERE name = $1")
+        .bind(GRAPH_NAME)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
 
     if !exists {
         sqlx::query("SELECT ag_catalog.create_graph($1)")
@@ -978,9 +975,7 @@ async fn ensure_graph(pool: &Pool<Postgres>) -> Result<()> {
 }
 
 async fn init_age_session(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-    sqlx::query("LOAD 'age'")
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query("LOAD 'age'").execute(&mut **tx).await?;
     sqlx::query(r#"SET search_path = ag_catalog, "$user", public"#)
         .execute(&mut **tx)
         .await?;
@@ -1180,8 +1175,7 @@ async fn process_job(
                 update_report_score(&mut tx, &state.node_keys, &pubkey, runtime, now).await?
             }
             JOB_COMMUNICATION => {
-                update_communication_score(&mut tx, &state.node_keys, &pubkey, runtime, now)
-                    .await?
+                update_communication_score(&mut tx, &state.node_keys, &pubkey, runtime, now).await?
             }
             _ => return Err(anyhow!("unknown trust job type: {}", job.job_type)),
         }
@@ -1242,7 +1236,12 @@ async fn ensure_job_schedules(
     pool: &Pool<Postgres>,
     runtime: &config::TrustRuntimeConfig,
 ) -> Result<()> {
-    ensure_job_schedule(pool, JOB_REPORT_BASED, runtime.report_schedule_interval_seconds).await?;
+    ensure_job_schedule(
+        pool,
+        JOB_REPORT_BASED,
+        runtime.report_schedule_interval_seconds,
+    )
+    .await?;
     ensure_job_schedule(
         pool,
         JOB_COMMUNICATION,

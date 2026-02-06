@@ -112,7 +112,11 @@ pub async fn get_policy_by_version(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     let Some(row) = row else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "policy not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "policy not found",
+        ));
     };
 
     Ok(Json(PolicyDetail {
@@ -171,13 +175,21 @@ pub async fn accept_consents(
 ) -> ApiResult<Json<serde_json::Value>> {
     let auth = require_auth(&state, &headers).await?;
     let policy_ids = if payload.accept_all_current.unwrap_or(false)
-        || payload.policy_ids.as_ref().map(|list| list.is_empty()).unwrap_or(true)
+        || payload
+            .policy_ids
+            .as_ref()
+            .map(|list| list.is_empty())
+            .unwrap_or(true)
     {
         let rows = sqlx::query("SELECT policy_id FROM cn_admin.policies WHERE is_current = TRUE")
             .fetch_all(&state.pool)
             .await
             .map_err(|err| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                )
             })?;
         rows.into_iter()
             .filter_map(|row| row.try_get::<String, _>("policy_id").ok())

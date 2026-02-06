@@ -26,4 +26,3 @@ pub fn topic_id_to_gossip_bytes(topic_id: &str) -> Result<[u8; 32]> {
     hasher.update(normalized.as_bytes());
     Ok(*hasher.finalize().as_bytes())
 }
-

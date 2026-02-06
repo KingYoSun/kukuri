@@ -32,12 +32,8 @@ pub fn rotate_keys(path: impl AsRef<Path>) -> Result<Keys> {
 }
 
 pub fn read_keys(path: impl AsRef<Path>) -> Result<Keys> {
-    let contents = fs::read_to_string(&path).with_context(|| {
-        format!(
-            "failed to read node key file: {}",
-            path.as_ref().display()
-        )
-    })?;
+    let contents = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read node key file: {}", path.as_ref().display()))?;
     let file: NodeKeyFile = serde_json::from_str(&contents).context("invalid node key file")?;
     let secret = SecretKey::from_hex(&file.secret_key).context("invalid node secret key")?;
     Ok(Keys::new(secret))
@@ -60,12 +56,8 @@ fn write_keys(path: impl AsRef<Path>, keys: &Keys) -> Result<()> {
         public_key: keys.public_key().to_hex(),
     };
     let json = serde_json::to_string_pretty(&file)?;
-    fs::write(&path, json).with_context(|| {
-        format!(
-            "failed to write node key file: {}",
-            path.as_ref().display()
-        )
-    })?;
+    fs::write(&path, json)
+        .with_context(|| format!("failed to write node key file: {}", path.as_ref().display()))?;
     Ok(())
 }
 

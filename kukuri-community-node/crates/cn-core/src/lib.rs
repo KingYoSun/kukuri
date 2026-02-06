@@ -1,5 +1,5 @@
-pub mod admin;
 pub mod access_control;
+pub mod admin;
 pub mod auth;
 pub mod config;
 pub mod db;

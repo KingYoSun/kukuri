@@ -22,8 +22,7 @@ const SEED_AUTHOR_A_SECRET: &str =
     "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100";
 const SEED_AUTHOR_B_SECRET: &str =
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const SEED_NODE_SECRET: &str =
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const SEED_NODE_SECRET: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 #[derive(Clone)]
 struct SeedActor {
@@ -108,10 +107,15 @@ pub struct SeedSummary {
     pub label_target_event_id: String,
     pub label: String,
     pub label_confidence: f64,
+    pub llm_label_target: String,
+    pub llm_label_event_id: String,
+    pub llm_label: String,
+    pub llm_label_confidence: f64,
     pub trust_subject_pubkey: String,
     pub trust_report_score: f64,
     pub trust_density_score: f64,
     pub post: SeedPostSummary,
+    pub llm_post: SeedPostSummary,
 }
 
 pub async fn seed() -> Result<SeedSummary> {
@@ -161,7 +165,14 @@ async fn seed_with_clients(
 
     seed_meili_documents(meili, &events).await?;
 
-    let label_target = format!("event:{}", events[0].raw.id);
+    let primary_event = events
+        .first()
+        .ok_or_else(|| anyhow!("seed events are empty"))?;
+    let llm_event = events
+        .get(1)
+        .ok_or_else(|| anyhow!("seed llm target event is missing"))?;
+
+    let label_target = format!("event:{}", primary_event.raw.id);
     let label_input = moderation::LabelInput {
         target: label_target.clone(),
         label: "safe".to_string(),
@@ -172,7 +183,27 @@ async fn seed_with_clients(
         topic_id: Some(SEED_TOPIC_ALPHA.to_string()),
     };
     let label_event = moderation::build_label_event(&ctx.node.keys, &label_input)?;
-    insert_label(pool, &label_event, &label_input, ctx.now).await?;
+    insert_label(pool, &label_event, &label_input, ctx.now, SEED_SOURCE).await?;
+
+    let llm_label_target = format!("event:{}", llm_event.raw.id);
+    let llm_label_input = moderation::LabelInput {
+        target: llm_label_target.clone(),
+        label: "spam".to_string(),
+        confidence: Some(0.93),
+        exp: ctx.now + 2 * 86400,
+        policy_url: "https://example.com/policy/llm".to_string(),
+        policy_ref: "moderation-llm-v1".to_string(),
+        topic_id: Some(llm_event.topic_id.clone()),
+    };
+    let llm_label_event = moderation::build_label_event(&ctx.node.keys, &llm_label_input)?;
+    insert_label(
+        pool,
+        &llm_label_event,
+        &llm_label_input,
+        ctx.now,
+        "llm:local",
+    )
+    .await?;
 
     let subject_pubkey = ctx.author_a.pubkey.clone();
     let subject = format!("pubkey:{subject_pubkey}");
@@ -212,7 +243,13 @@ async fn seed_with_clients(
         Some(SEED_TOPIC_ALPHA),
     )
     .await?;
-    upsert_report_score(pool, &subject_pubkey, report_attestation.id.clone(), report_exp).await?;
+    upsert_report_score(
+        pool,
+        &subject_pubkey,
+        report_attestation.id.clone(),
+        report_exp,
+    )
+    .await?;
 
     let comm_exp = ctx.now + 86400;
     let comm_score = 0.78_f64;
@@ -250,16 +287,18 @@ async fn seed_with_clients(
         None,
     )
     .await?;
-    upsert_communication_score(pool, &subject_pubkey, comm_attestation.id.clone(), comm_exp).await?;
+    upsert_communication_score(pool, &subject_pubkey, comm_attestation.id.clone(), comm_exp)
+        .await?;
 
-    let primary_event = events
-        .first()
-        .ok_or_else(|| anyhow!("seed events are empty"))?;
     let summary = SeedSummary {
         label_target: label_target.clone(),
         label_target_event_id: primary_event.raw.id.clone(),
         label: label_input.label.clone(),
         label_confidence: label_input.confidence.unwrap_or_default(),
+        llm_label_target: llm_label_target.clone(),
+        llm_label_event_id: llm_event.raw.id.clone(),
+        llm_label: llm_label_input.label.clone(),
+        llm_label_confidence: llm_label_input.confidence.unwrap_or_default(),
         trust_subject_pubkey: subject_pubkey.clone(),
         trust_report_score: report_score,
         trust_density_score: comm_score,
@@ -269,6 +308,13 @@ async fn seed_with_clients(
             topic_id: primary_event.topic_id.clone(),
             content: primary_event.raw.content.clone(),
             created_at: primary_event.raw.created_at,
+        },
+        llm_post: SeedPostSummary {
+            event_id: llm_event.raw.id.clone(),
+            author_pubkey: llm_event.raw.pubkey.clone(),
+            topic_id: llm_event.topic_id.clone(),
+            content: llm_event.raw.content.clone(),
+            created_at: llm_event.raw.created_at,
         },
     };
 
@@ -336,7 +382,7 @@ async fn cleanup_with_clients(
             .await?;
     }
 
-    sqlx::query("DELETE FROM cn_moderation.labels WHERE source = $1")
+    sqlx::query("DELETE FROM cn_moderation.labels WHERE source = $1 OR source = 'llm:local'")
         .bind(SEED_SOURCE)
         .execute(pool)
         .await?;
@@ -358,7 +404,10 @@ async fn cleanup_with_clients(
         .await?;
 
     let seed_users = ctx.seed_users();
-    let seed_topics = SEED_TOPICS.iter().map(|topic| topic.to_string()).collect::<Vec<_>>();
+    let seed_topics = SEED_TOPICS
+        .iter()
+        .map(|topic| topic.to_string())
+        .collect::<Vec<_>>();
     sqlx::query(
         "DELETE FROM cn_user.topic_subscriptions WHERE subscriber_pubkey = ANY($1) AND topic_id = ANY($2)",
     )
@@ -542,7 +591,11 @@ fn build_event_at(
             continue;
         }
         let kind = TagKind::from(tag[0].as_str());
-        let values = if tag.len() > 1 { tag[1..].to_vec() } else { Vec::new() };
+        let values = if tag.len() > 1 {
+            tag[1..].to_vec()
+        } else {
+            Vec::new()
+        };
         builder = builder.tag(Tag::custom(kind, values));
     }
     let signed = builder.sign_with_keys(keys)?;
@@ -635,10 +688,7 @@ async fn insert_event_topic(pool: &Pool<Postgres>, event_id: &str, topic_id: &st
     Ok(())
 }
 
-async fn seed_meili_documents(
-    meili: &meili::MeiliClient,
-    events: &[SeedEvent],
-) -> Result<()> {
+async fn seed_meili_documents(meili: &meili::MeiliClient, events: &[SeedEvent]) -> Result<()> {
     let mut docs_by_topic: BTreeMap<String, Vec<IndexDocument>> = BTreeMap::new();
     for event in events {
         if event.raw.kind != 1 {
@@ -666,6 +716,7 @@ async fn insert_label(
     label_event: &nostr::RawEvent,
     input: &moderation::LabelInput,
     now: i64,
+    source: &str,
 ) -> Result<()> {
     let issued_at = chrono::Utc
         .timestamp_opt(now, 0)
@@ -684,7 +735,7 @@ async fn insert_label(
     .bind(&input.policy_ref)
     .bind(input.exp)
     .bind(&label_event.pubkey)
-    .bind(SEED_SOURCE)
+    .bind(source)
     .bind(serde_json::to_value(label_event)?)
     .bind(issued_at)
     .execute(pool)

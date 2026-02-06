@@ -126,9 +126,13 @@ pub async fn auth_verify(
         ));
     }
 
-    let challenge = raw
-        .first_tag_value("challenge")
-        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing challenge"))?;
+    let challenge = raw.first_tag_value("challenge").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_EVENT",
+            "missing challenge",
+        )
+    })?;
 
     let row = sqlx::query(
         "SELECT pubkey, expires_at, used_at FROM cn_user.auth_challenges WHERE challenge = $1",
@@ -136,7 +140,13 @@ pub async fn auth_verify(
     .bind(&challenge)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     let Some(row) = row else {
         metrics::inc_auth_failure(crate::SERVICE_NAME);
@@ -149,10 +159,18 @@ pub async fn auth_verify(
 
     let stored_pubkey: String = row.try_get("pubkey").unwrap_or_default();
     let expires_at: chrono::DateTime<chrono::Utc> = row.try_get("expires_at").map_err(|err| {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
     })?;
     let used_at: Option<chrono::DateTime<chrono::Utc>> = row.try_get("used_at").map_err(|err| {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
     })?;
 
     if used_at.is_some() || chrono::Utc::now() > expires_at {
@@ -176,8 +194,13 @@ pub async fn auth_verify(
     mark_challenge_used(&state.pool, &challenge).await?;
     ensure_active_subscriber(&state.pool, &raw.pubkey).await?;
 
-    let (token, claims) = auth::issue_token(&raw.pubkey, &state.jwt_config)
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "AUTH_ERROR", err.to_string()))?;
+    let (token, claims) = auth::issue_token(&raw.pubkey, &state.jwt_config).map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AUTH_ERROR",
+            err.to_string(),
+        )
+    })?;
     metrics::inc_auth_success(crate::SERVICE_NAME);
 
     Ok(Json(AuthVerifyResponse {
@@ -196,22 +219,25 @@ pub(crate) async fn require_auth(state: &AppState, headers: &HeaderMap) -> ApiRe
     let token = header
         .strip_prefix("Bearer ")
         .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", "invalid token"))?;
-    let claims = auth::verify_token(token, &state.jwt_config).map_err(|err| {
-        ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", err.to_string())
-    })?;
+    let claims = auth::verify_token(token, &state.jwt_config)
+        .map_err(|err| ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", err.to_string()))?;
     let pubkey = claims.sub;
     ensure_active_subscriber(&state.pool, &pubkey).await?;
     Ok(AuthContext { pubkey })
 }
 
 async fn mark_challenge_used(pool: &sqlx::Pool<Postgres>, challenge: &str) -> ApiResult<()> {
-    sqlx::query(
-        "UPDATE cn_user.auth_challenges SET used_at = NOW() WHERE challenge = $1",
-    )
-    .bind(challenge)
-    .execute(pool)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    sqlx::query("UPDATE cn_user.auth_challenges SET used_at = NOW() WHERE challenge = $1")
+        .bind(challenge)
+        .execute(pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
     Ok(())
 }
 
@@ -222,7 +248,13 @@ async fn ensure_active_subscriber(pool: &sqlx::Pool<Postgres>, pubkey: &str) -> 
     .bind(pubkey)
     .fetch_optional(pool)
     .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     match existing.as_deref() {
         Some("active") => {}
@@ -285,11 +317,7 @@ pub(crate) async fn current_rate_limit(state: &AppState) -> UserRateLimitConfig 
     }
 }
 
-pub(crate) async fn enforce_rate_limit(
-    state: &AppState,
-    key: &str,
-    limit: u64,
-) -> ApiResult<()> {
+pub(crate) async fn enforce_rate_limit(state: &AppState, key: &str, limit: u64) -> ApiResult<()> {
     let outcome = state
         .rate_limiter
         .check(key, limit, Duration::from_secs(60))
@@ -299,17 +327,18 @@ pub(crate) async fn enforce_rate_limit(
             .retry_after
             .map(|dur| dur.as_secs().max(1))
             .unwrap_or(60);
-        return Err(
-            ApiError::new(StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED", "rate limited")
-                .with_header("Retry-After", retry_after.to_string()),
-        );
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "RATE_LIMITED",
+            "rate limited",
+        )
+        .with_header("Retry-After", retry_after.to_string()));
     }
     Ok(())
 }
 
 fn normalize_pubkey(pubkey: &str) -> ApiResult<String> {
-    let parsed = nostr_sdk::prelude::PublicKey::parse(pubkey).map_err(|_| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", "invalid pubkey")
-    })?;
+    let parsed = nostr_sdk::prelude::PublicKey::parse(pubkey)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", "invalid pubkey"))?;
     Ok(parsed.to_hex())
 }

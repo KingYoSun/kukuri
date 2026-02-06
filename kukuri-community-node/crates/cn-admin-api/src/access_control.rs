@@ -48,21 +48,21 @@ pub async fn rotate_epoch(
     Json(payload): Json<RotateRequest>,
 ) -> ApiResult<Json<RotateResponse>> {
     let admin = require_admin(&state, &jar).await?;
-    let topic_id = cn_core::topic::normalize_topic_id(&payload.topic_id).map_err(|err| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string())
-    })?;
-    let scope = cn_core::access_control::normalize_scope(&payload.scope).map_err(|err| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string())
-    })?;
+    let topic_id = cn_core::topic::normalize_topic_id(&payload.topic_id)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string()))?;
+    let scope = cn_core::access_control::normalize_scope(&payload.scope)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string()))?;
 
-    let summary = cn_core::access_control::rotate_epoch(
-        &state.pool,
-        &state.node_keys,
-        &topic_id,
-        &scope,
-    )
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "ROTATE_ERROR", err.to_string()))?;
+    let summary =
+        cn_core::access_control::rotate_epoch(&state.pool, &state.node_keys, &topic_id, &scope)
+            .await
+            .map_err(|err| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ROTATE_ERROR",
+                    err.to_string(),
+                )
+            })?;
 
     cn_core::admin::log_audit(
         &state.pool,
@@ -94,15 +94,12 @@ pub async fn revoke_member(
     Json(payload): Json<RevokeRequest>,
 ) -> ApiResult<Json<RevokeResponse>> {
     let admin = require_admin(&state, &jar).await?;
-    let topic_id = cn_core::topic::normalize_topic_id(&payload.topic_id).map_err(|err| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string())
-    })?;
-    let scope = cn_core::access_control::normalize_scope(&payload.scope).map_err(|err| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string())
-    })?;
-    let pubkey = cn_core::access_control::normalize_pubkey(&payload.pubkey).map_err(|err| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", err.to_string())
-    })?;
+    let topic_id = cn_core::topic::normalize_topic_id(&payload.topic_id)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string()))?;
+    let scope = cn_core::access_control::normalize_scope(&payload.scope)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string()))?;
+    let pubkey = cn_core::access_control::normalize_pubkey(&payload.pubkey)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", err.to_string()))?;
 
     let result = cn_core::access_control::revoke_member_and_rotate(
         &state.pool,

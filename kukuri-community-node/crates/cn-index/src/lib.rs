@@ -127,7 +127,12 @@ pub async fn run(config: IndexConfig) -> Result<()> {
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {
@@ -138,11 +143,10 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
-    if let Ok(max_seq) = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox",
-    )
-    .fetch_one(&state.pool)
-    .await
+    if let Ok(max_seq) =
+        sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(&state.pool)
+            .await
     {
         if let Ok(last_seq) = sqlx::query_scalar::<_, i64>(
             "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
@@ -183,14 +187,16 @@ fn spawn_outbox_consumer(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::IndexRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.consumer_poll_seconds.max(5))).await;
                 continue;
             }
 
             match fetch_outbox_batch(&state.pool, last_seq, runtime.consumer_batch_size).await {
                 Ok(batch) if batch.is_empty() => {
-                    if wait_for_notify(&mut listener, runtime.consumer_poll_seconds).await.is_err() {
+                    if wait_for_notify(&mut listener, runtime.consumer_poll_seconds)
+                        .await
+                        .is_err()
+                    {
                         match connect_listener(&state.pool, OUTBOX_CHANNEL).await {
                             Ok(new_listener) => listener = new_listener,
                             Err(err) => {
@@ -245,8 +251,7 @@ fn spawn_reindex_worker(state: AppState) {
             let snapshot = state.config.get().await;
             let runtime = config::IndexRuntimeConfig::from_json(&snapshot.config_json);
             if !runtime.enabled {
-                tokio::time::sleep(Duration::from_secs(runtime.reindex_poll_seconds.max(5)))
-                    .await;
+                tokio::time::sleep(Duration::from_secs(runtime.reindex_poll_seconds.max(5))).await;
                 continue;
             }
 
@@ -306,10 +311,7 @@ async fn connect_listener(pool: &Pool<Postgres>, channel: &str) -> Result<PgList
     Ok(listener)
 }
 
-async fn wait_for_notify(
-    listener: &mut PgListener,
-    poll_seconds: u64,
-) -> Result<()> {
+async fn wait_for_notify(listener: &mut PgListener, poll_seconds: u64) -> Result<()> {
     tokio::select! {
         notification = listener.recv() => {
             notification?;
@@ -331,12 +333,10 @@ async fn load_last_seq(pool: &Pool<Postgres>) -> Result<i64> {
         return Ok(last_seq);
     }
 
-    sqlx::query(
-        "INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)",
-    )
-    .bind(CONSUMER_NAME)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)")
+        .bind(CONSUMER_NAME)
+        .execute(pool)
+        .await?;
 
     Ok(0)
 }
@@ -411,8 +411,7 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
     state.meili.upsert_documents(&uid, &[doc]).await?;
 
     if let Some(key) = row.effective_key.as_deref() {
-        let stale_ids =
-            find_stale_versions(&state.pool, &row.topic_id, key, &row.event_id).await?;
+        let stale_ids = find_stale_versions(&state.pool, &row.topic_id, key, &row.event_id).await?;
         if !stale_ids.is_empty() {
             state.meili.delete_documents(&uid, &stale_ids).await?;
         }
@@ -576,11 +575,10 @@ async fn claim_reindex_job(pool: &Pool<Postgres>) -> Result<Option<ReindexJob>> 
     };
     let job_id: String = row.try_get("job_id")?;
     let topic_id: Option<String> = row.try_get("topic_id")?;
-    let cutoff_seq = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox",
-    )
-    .fetch_one(&mut *tx)
-    .await?;
+    let cutoff_seq =
+        sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(&mut *tx)
+            .await?;
     sqlx::query(
         "UPDATE cn_index.reindex_jobs          SET status = 'running', started_at = NOW(), cutoff_seq = $1, updated_at = NOW()          WHERE job_id = $2",
     )
@@ -783,7 +781,6 @@ async fn record_expired_event(
     .await?;
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

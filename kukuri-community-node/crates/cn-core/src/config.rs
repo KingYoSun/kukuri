@@ -9,8 +9,7 @@ pub fn required_env(name: &str) -> Result<String> {
 
 pub fn socket_addr_from_env(name: &str, default: &str) -> Result<SocketAddr> {
     let value = env::var(name).unwrap_or_else(|_| default.to_string());
-    SocketAddr::from_str(&value)
-        .map_err(|err| anyhow!("invalid socket addr for {}: {}", name, err))
+    SocketAddr::from_str(&value).map_err(|err| anyhow!("invalid socket addr for {}: {}", name, err))
 }
 
 #[cfg(test)]

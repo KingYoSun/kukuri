@@ -1,4 +1,4 @@
-﻿use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result};
 use clap::Args;
 use cn_core::{auth, node_key, nostr};
 use cn_kip_types::{KIND_INVITE_CAPABILITY, KIP_NAMESPACE, KIP_VERSION};
@@ -44,9 +44,7 @@ pub fn issue_invite(args: E2eInviteArgs) -> Result<()> {
     let expires_at = now.saturating_add(expires_in);
     let max_uses = args.max_uses.max(1);
 
-    let nonce = args
-        .nonce
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let nonce = args.nonce.unwrap_or_else(|| Uuid::new_v4().to_string());
     let d_tag = format!("invite:{nonce}");
 
     let content = json!({
@@ -67,12 +65,8 @@ pub fn issue_invite(args: E2eInviteArgs) -> Result<()> {
 
     let node_key_path = node_key::key_path_from_env("NODE_KEY_PATH", "data/node_key.json")?;
     let node_keys = node_key::load_or_generate(&node_key_path)?;
-    let event = nostr::build_signed_event(
-        &node_keys,
-        KIND_INVITE_CAPABILITY as u16,
-        tags,
-        content,
-    )?;
+    let event =
+        nostr::build_signed_event(&node_keys, KIND_INVITE_CAPABILITY as u16, tags, content)?;
 
     let output = if args.pretty {
         serde_json::to_string_pretty(&event)?

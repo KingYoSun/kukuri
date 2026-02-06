@@ -80,7 +80,13 @@ pub async fn list_services(
     )
     .fetch_all(&state.pool)
     .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
     let mut health_map = HashMap::new();
     for row in health_rows {
         let checked_at: chrono::DateTime<chrono::Utc> = row.try_get("checked_at")?;
@@ -126,7 +132,11 @@ pub async fn get_service_config(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     let Some(row) = row else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "service not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "service not found",
+        ));
     };
 
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
@@ -147,19 +157,25 @@ pub async fn update_service_config(
 ) -> ApiResult<Json<ServiceConfigResponse>> {
     let admin = require_admin(&state, &jar).await?;
 
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
-    let row = sqlx::query(
-        "SELECT version FROM cn_admin.service_configs WHERE service = $1",
-    )
-    .bind(&service)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let row = sqlx::query("SELECT version FROM cn_admin.service_configs WHERE service = $1")
+        .bind(&service)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut next_version = 1_i64;
     if let Some(row) = row {
@@ -265,7 +281,13 @@ pub async fn list_audit_logs(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut logs = Vec::new();
     for row in rows {
@@ -299,9 +321,15 @@ async fn poll_health_once(state: &AppState) {
         let (status, details) = match result {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    ("healthy".to_string(), Some(serde_json::json!({ "status": resp.status().as_u16() })))
+                    (
+                        "healthy".to_string(),
+                        Some(serde_json::json!({ "status": resp.status().as_u16() })),
+                    )
                 } else {
-                    ("degraded".to_string(), Some(serde_json::json!({ "status": resp.status().as_u16() })))
+                    (
+                        "degraded".to_string(),
+                        Some(serde_json::json!({ "status": resp.status().as_u16() })),
+                    )
                 }
             }
             Err(err) => (

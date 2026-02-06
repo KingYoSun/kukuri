@@ -1,12 +1,10 @@
-﻿use anyhow::Result;
+use anyhow::Result;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
-use cn_core::{
-    config, db, http, logging, metrics, node_key, nostr, service_config, server,
-};
+use cn_core::{config, db, http, logging, metrics, node_key, nostr, server, service_config};
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::json;
@@ -126,14 +124,8 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
 
     for (topic_id, role, scope) in topic_services {
         let d_tag = format!("topic_service:{topic_id}:{role}:{scope}");
-        let event = build_topic_service_event(
-            &state.keys,
-            &topic_id,
-            &role,
-            &scope,
-            &d_tag,
-            topic_exp,
-        )?;
+        let event =
+            build_topic_service_event(&state.keys, &topic_id, &role, &scope, &d_tag, topic_exp)?;
         upsert_bootstrap_event(
             &mut tx,
             &event,
@@ -149,12 +141,10 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
     }
 
     if !active_tags.is_empty() {
-        sqlx::query(
-            "DELETE FROM cn_bootstrap.events WHERE kind = 39001 AND d_tag <> ALL($1)",
-        )
-        .bind(&active_tags)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = 39001 AND d_tag <> ALL($1)")
+            .bind(&active_tags)
+            .execute(&mut *tx)
+            .await?;
     }
 
     sqlx::query("DELETE FROM cn_bootstrap.events WHERE expires_at <= $1")
@@ -221,7 +211,11 @@ async fn upsert_bootstrap_event(
     Ok(())
 }
 
-fn build_descriptor_event(keys: &Keys, descriptor: &serde_json::Value, exp: i64) -> Result<nostr::RawEvent> {
+fn build_descriptor_event(
+    keys: &Keys,
+    descriptor: &serde_json::Value,
+    exp: i64,
+) -> Result<nostr::RawEvent> {
     let roles = descriptor
         .get("roles")
         .and_then(|v| v.as_array())
@@ -229,7 +223,10 @@ fn build_descriptor_event(keys: &Keys, descriptor: &serde_json::Value, exp: i64)
         .unwrap_or_default();
     let role_tags: Vec<Vec<String>> = roles
         .iter()
-        .filter_map(|role| role.as_str().map(|r| vec!["role".to_string(), r.to_string()]))
+        .filter_map(|role| {
+            role.as_str()
+                .map(|r| vec!["role".to_string(), r.to_string()])
+        })
         .collect();
 
     let policy_url = descriptor
@@ -300,7 +297,12 @@ fn build_topic_service_event(
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {
@@ -346,7 +348,11 @@ mod tests {
         assert!(has_tag(&event.tags, "k", "kukuri"));
         assert!(has_tag(&event.tags, "ver", "1"));
         assert!(has_tag(&event.tags, "exp", &exp.to_string()));
-        assert!(has_tag(&event.tags, "policy", "https://node.example/policy"));
+        assert!(has_tag(
+            &event.tags,
+            "policy",
+            "https://node.example/policy"
+        ));
         assert!(has_tag(&event.tags, "jurisdiction", "JP"));
         assert!(has_tag(&event.tags, "role", "bootstrap"));
         assert!(has_tag(&event.tags, "role", "index"));
@@ -373,7 +379,11 @@ mod tests {
         )
         .expect("event");
 
-        assert!(has_tag(&event.tags, "d", "topic_service:kukuri:topic1:index:public"));
+        assert!(has_tag(
+            &event.tags,
+            "d",
+            "topic_service:kukuri:topic1:index:public"
+        ));
         assert!(has_tag(&event.tags, "t", "kukuri:topic1"));
         assert!(has_tag(&event.tags, "role", "index"));
         assert!(has_tag(&event.tags, "scope", "public"));

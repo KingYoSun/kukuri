@@ -18,7 +18,9 @@ use crate::{AppState, RelayConfig};
 pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
     let endpoint = build_endpoint(&config).await?;
     let gossip = Gossip::builder().spawn(endpoint.clone());
-    let _router = Router::builder(endpoint).accept(iroh_gossip::ALPN, gossip.clone()).spawn();
+    let _router = Router::builder(endpoint)
+        .accept(iroh_gossip::ALPN, gossip.clone())
+        .spawn();
 
     let senders = Arc::clone(&state.gossip_senders);
     let node_topics = Arc::clone(&state.node_topics);
@@ -111,9 +113,9 @@ async fn sync_topics(
                                     continue;
                                 }
                             }
-                            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(
-                                &message.content,
-                            ) {
+                            if let Ok(value) =
+                                serde_json::from_slice::<serde_json::Value>(&message.content)
+                            {
                                 if let Ok(raw) = cn_core::nostr::parse_event(&value) {
                                     let context = IngestContext {
                                         auth_pubkey: None,
@@ -128,7 +130,11 @@ async fn sync_topics(
                                     )
                                     .await
                                     {
-                                        if let crate::ingest::IngestOutcome::Accepted { event, duplicate, .. } = ingest
+                                        if let crate::ingest::IngestOutcome::Accepted {
+                                            event,
+                                            duplicate,
+                                            ..
+                                        } = ingest
                                         {
                                             if !duplicate {
                                                 let _ = ingest_state.realtime_tx.send(event);
@@ -174,11 +180,9 @@ async fn sync_topics(
 }
 
 async fn load_node_topics(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<HashSet<String>> {
-    let rows = sqlx::query(
-        "SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query("SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE")
+        .fetch_all(pool)
+        .await?;
     let mut topics = HashSet::new();
     for row in rows {
         let topic_id: String = row.try_get("topic_id")?;

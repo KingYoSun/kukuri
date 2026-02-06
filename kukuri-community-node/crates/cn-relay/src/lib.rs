@@ -4,7 +4,9 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
-use cn_core::{config as core_config, db, http, logging, metrics, rate_limit, server, service_config};
+use cn_core::{
+    config as core_config, db, http, logging, metrics, rate_limit, server, service_config,
+};
 use serde::Serialize;
 use sqlx::{Pool, Postgres, Row};
 use std::collections::{HashMap, HashSet};
@@ -17,10 +19,10 @@ mod config;
 mod filters;
 mod gossip;
 mod ingest;
-mod retention;
-mod ws;
 #[cfg(test)]
 mod integration_tests;
+mod retention;
+mod ws;
 
 pub(crate) const SERVICE_NAME: &str = "cn-relay";
 
@@ -146,7 +148,12 @@ pub async fn run(config: RelayConfig) -> Result<()> {
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {
@@ -157,11 +164,10 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
-    if let Ok(max_seq) = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox",
-    )
-    .fetch_one(&state.pool)
-    .await
+    if let Ok(max_seq) =
+        sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(&state.pool)
+            .await
     {
         if let Ok(rows) = sqlx::query("SELECT consumer, last_seq FROM cn_relay.consumer_offsets")
             .fetch_all(&state.pool)

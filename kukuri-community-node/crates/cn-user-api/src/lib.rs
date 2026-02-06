@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use cn_core::{config, db, http, logging, meili, metrics, node_key, server, service_config};
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 use sqlx::{Pool, Postgres};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -89,7 +89,11 @@ impl ApiError {
 
 impl From<sqlx::Error> for ApiError {
     fn from(err: sqlx::Error) -> Self {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
     }
 }
 
@@ -298,7 +302,12 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     match db::check_ready(&state.pool).await {
-        Ok(_) => (StatusCode::OK, Json(HealthStatus { status: "ok".into() })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(HealthStatus {
+                status: "ok".into(),
+            }),
+        ),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(HealthStatus {

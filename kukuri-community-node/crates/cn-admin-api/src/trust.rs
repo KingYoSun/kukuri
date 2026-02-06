@@ -94,7 +94,13 @@ pub async fn list_jobs(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut jobs = Vec::new();
     for row in rows {

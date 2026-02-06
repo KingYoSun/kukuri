@@ -1,4 +1,4 @@
-﻿use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use cn_core::nostr;
@@ -160,11 +160,13 @@ pub async fn delete_topic_subscription(
     let topic_id = normalize_topic_id(&topic_id)
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string()))?;
 
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     let status = sqlx::query_scalar::<_, String>(
         "SELECT status FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
@@ -176,7 +178,11 @@ pub async fn delete_topic_subscription(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     if status.as_deref() != Some("active") {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "subscription not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "subscription not found",
+        ));
     }
 
     sqlx::query(
@@ -387,7 +393,11 @@ pub async fn trust_report_based(
             .fetch_optional(&state.pool)
             .await
             .map_err(|err| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                )
             })?;
             Some(json!({
                 "attestation_id": attestation_id,
@@ -473,7 +483,11 @@ pub async fn trust_communication_density(
             .fetch_optional(&state.pool)
             .await
             .map_err(|err| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                )
             })?;
             Some(json!({
                 "attestation_id": attestation_id,
@@ -532,7 +546,11 @@ pub async fn list_labels(
     apply_protected_rate_limit(&state, &auth, addr).await?;
 
     let target = query.target.ok_or_else(|| {
-        ApiError::new(StatusCode::BAD_REQUEST, "INVALID_REQUEST", "target is required")
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_REQUEST",
+            "target is required",
+        )
     })?;
 
     let limit = query.limit.unwrap_or(50).clamp(1, 200) as i64;
@@ -566,7 +584,13 @@ pub async fn list_labels(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let items: Vec<serde_json::Value> = rows
         .into_iter()
@@ -605,8 +629,9 @@ pub async fn submit_report(
 
     let (report_id, target, reason, report_event_json) =
         if let Some(event_json) = payload.report_event_json {
-            let raw = nostr::parse_event(&event_json)
-                .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
+            let raw = nostr::parse_event(&event_json).map_err(|err| {
+                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string())
+            })?;
             if raw.kind != 39005 {
                 return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
@@ -614,8 +639,9 @@ pub async fn submit_report(
                     "invalid report kind",
                 ));
             }
-            nostr::verify_event(&raw)
-                .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string()))?;
+            nostr::verify_event(&raw).map_err(|err| {
+                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", err.to_string())
+            })?;
             let options = ValidationOptions {
                 now: cn_core::auth::unix_seconds().unwrap_or(0) as i64,
                 verify_signature: false,
@@ -635,22 +661,30 @@ pub async fn submit_report(
                     "reporter pubkey mismatch",
                 ));
             }
-            let target = raw
-                .first_tag_value("target")
-                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing target"))?;
-            let reason = raw
-                .first_tag_value("reason")
-                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing reason"))?;
+            let target = raw.first_tag_value("target").ok_or_else(|| {
+                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing target")
+            })?;
+            let reason = raw.first_tag_value("reason").ok_or_else(|| {
+                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_EVENT", "missing reason")
+            })?;
             let report_id = raw.id.clone();
             let normalized = serde_json::to_value(&raw).unwrap_or(json!({}));
             (report_id, target, reason, normalized)
         } else {
-            let target = payload
-                .target
-                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_REQUEST", "target is required"))?;
-            let reason = payload
-                .reason
-                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_REQUEST", "reason is required"))?;
+            let target = payload.target.ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_REQUEST",
+                    "target is required",
+                )
+            })?;
+            let reason = payload.reason.ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_REQUEST",
+                    "reason is required",
+                )
+            })?;
             let tags = vec![
                 vec!["k".to_string(), "kukuri".to_string()],
                 vec!["ver".to_string(), "1".to_string()],
@@ -658,7 +692,13 @@ pub async fn submit_report(
                 vec!["reason".to_string(), reason.clone()],
             ];
             let event = nostr::build_signed_event(&state.node_keys, 39005, tags, String::new())
-                .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "REPORT_ERROR", err.to_string()))?;
+                .map_err(|err| {
+                    ApiError::new(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "REPORT_ERROR",
+                        err.to_string(),
+                    )
+                })?;
             let event_json = serde_json::to_value(&event).unwrap_or(json!({}));
             (event.id, target, reason, event_json)
         };
@@ -675,7 +715,9 @@ pub async fn submit_report(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    Ok(Json(json!({ "status": "accepted", "report_id": report_id })))
+    Ok(Json(
+        json!({ "status": "accepted", "report_id": report_id }),
+    ))
 }
 
 fn request_id(headers: &axum::http::HeaderMap) -> Option<&str> {
@@ -767,9 +809,8 @@ mod api_contract_tests {
     static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
 
     fn database_url() -> String {
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-            "postgres://cn:cn_password@localhost:5432/cn".to_string()
-        })
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:5432/cn".to_string())
     }
 
     async fn ensure_migrated(pool: &Pool<Postgres>) {
@@ -1112,7 +1153,10 @@ mod api_contract_tests {
     #[tokio::test]
     async fn trust_communication_density_requires_auth() {
         let app = Router::new()
-            .route("/v1/trust/communication-density", get(trust_communication_density))
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
             .with_state(test_state().await);
         let status = request_status(
             app,
@@ -1131,35 +1175,22 @@ mod api_contract_tests {
         let issuer_pubkey = Keys::generate().public_key().to_hex();
         let label_id_a = Uuid::new_v4().to_string();
         let label_id_b = Uuid::new_v4().to_string();
-        insert_label(
-            &state.pool,
-            target,
-            None,
-            &issuer_pubkey,
-            &label_id_a,
-        )
-        .await;
-        insert_label(
-            &state.pool,
-            target,
-            None,
-            &issuer_pubkey,
-            &label_id_b,
-        )
-        .await;
+        insert_label(&state.pool, target, None, &issuer_pubkey, &label_id_a).await;
+        insert_label(&state.pool, target, None, &issuer_pubkey, &label_id_b).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
             .route("/v1/labels", get(list_labels))
             .with_state(state);
-        let (status, payload) =
-            get_json(app, "/v1/labels?target=event:contract-label&limit=1", &token).await;
+        let (status, payload) = get_json(
+            app,
+            "/v1/labels?target=event:contract-label&limit=1",
+            &token,
+        )
+        .await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(
-            payload.get("target").and_then(Value::as_str),
-            Some(target)
-        );
+        assert_eq!(payload.get("target").and_then(Value::as_str), Some(target));
         let items = payload
             .get("items")
             .and_then(Value::as_array)
@@ -1215,22 +1246,14 @@ mod api_contract_tests {
             Some("report-based")
         );
         assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.75));
-        assert_eq!(
-            payload.get("report_count").and_then(Value::as_i64),
-            Some(3)
-        );
-        assert_eq!(
-            payload.get("label_count").and_then(Value::as_i64),
-            Some(2)
-        );
+        assert_eq!(payload.get("report_count").and_then(Value::as_i64), Some(3));
+        assert_eq!(payload.get("label_count").and_then(Value::as_i64), Some(2));
         let attestation = payload
             .get("attestation")
             .and_then(Value::as_object)
             .expect("attestation");
         assert_eq!(
-            attestation
-                .get("attestation_id")
-                .and_then(Value::as_str),
+            attestation.get("attestation_id").and_then(Value::as_str),
             Some(attestation_id.as_str())
         );
         assert_eq!(
@@ -1293,9 +1316,7 @@ mod api_contract_tests {
             .and_then(Value::as_object)
             .expect("attestation");
         assert_eq!(
-            attestation
-                .get("attestation_id")
-                .and_then(Value::as_str),
+            attestation.get("attestation_id").and_then(Value::as_str),
             Some(attestation_id.as_str())
         );
         assert_eq!(
@@ -1346,24 +1367,24 @@ mod api_contract_tests {
         let app = Router::new()
             .route("/v1/trending", get(trending))
             .with_state(state);
-        let (status, payload) = get_json(
-            app,
-            &format!("/v1/trending?topic={topic_id}"),
-            &token,
-        )
-        .await;
+        let (status, payload) =
+            get_json(app, &format!("/v1/trending?topic={topic_id}"), &token).await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             payload.get("topic").and_then(Value::as_str),
             Some(topic_id.as_str())
         );
-        assert_eq!(payload.get("window_hours").and_then(Value::as_i64), Some(24));
-        let metrics = payload.get("metrics").and_then(Value::as_object).expect("metrics");
+        assert_eq!(
+            payload.get("window_hours").and_then(Value::as_i64),
+            Some(24)
+        );
+        let metrics = payload
+            .get("metrics")
+            .and_then(Value::as_object)
+            .expect("metrics");
         assert_eq!(metrics.get("posts").and_then(Value::as_i64), Some(1));
         assert_eq!(metrics.get("reactions").and_then(Value::as_i64), Some(2));
         assert_eq!(metrics.get("score").and_then(Value::as_i64), Some(3));
     }
 }
-
-

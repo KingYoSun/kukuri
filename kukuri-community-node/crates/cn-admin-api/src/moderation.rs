@@ -124,7 +124,13 @@ pub async fn list_rules(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut rules = Vec::new();
     for row in rows {
@@ -231,7 +237,11 @@ pub async fn update_rule(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     if result.rows_affected() == 0 {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "rule not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "rule not found",
+        ));
     }
 
     cn_core::admin::log_audit(
@@ -266,10 +276,20 @@ pub async fn delete_rule(
         .bind(&rule_id)
         .execute(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     if result.rows_affected() == 0 {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "rule not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "rule not found",
+        ));
     }
 
     cn_core::admin::log_audit(
@@ -318,7 +338,13 @@ pub async fn list_reports(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut reports = Vec::new();
     for row in rows {
@@ -367,7 +393,13 @@ pub async fn list_labels(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut labels = Vec::new();
     for row in rows {
@@ -428,11 +460,22 @@ pub async fn create_label(
         .validate()
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_LABEL", err.to_string()))?;
 
-    let label_event = cn_core::moderation::build_label_event(&state.node_keys, &input)
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "LABEL_ERROR", err.to_string()))?;
+    let label_event =
+        cn_core::moderation::build_label_event(&state.node_keys, &input).map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "LABEL_ERROR",
+                err.to_string(),
+            )
+        })?;
 
-    let label_json = serde_json::to_value(&label_event)
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "LABEL_ERROR", err.to_string()))?;
+    let label_json = serde_json::to_value(&label_event).map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "LABEL_ERROR",
+            err.to_string(),
+        )
+    })?;
     let source_event_id = payload
         .target
         .strip_prefix("event:")
@@ -476,7 +519,9 @@ pub async fn create_label(
     .await
     .ok();
 
-    Ok(Json(json!({ "label_id": label_event.id, "status": "created" })))
+    Ok(Json(
+        json!({ "label_id": label_event.id, "status": "created" }),
+    ))
 }
 
 fn validate_rule_payload(payload: &RulePayload) -> ApiResult<()> {
@@ -508,7 +553,11 @@ async fn fetch_rule(pool: &sqlx::Pool<Postgres>, rule_id: &str) -> ApiResult<Rul
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     let Some(row) = row else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "rule not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "rule not found",
+        ));
     };
 
     let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;

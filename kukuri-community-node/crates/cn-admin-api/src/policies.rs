@@ -1,8 +1,8 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use serde::{Deserialize, Serialize};
 use chrono::TimeZone;
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use utoipa::ToSchema;
 
@@ -73,7 +73,13 @@ pub async fn list_policies(
         .build()
         .fetch_all(&state.pool)
         .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let mut policies = Vec::new();
     for row in rows {
@@ -90,7 +96,9 @@ pub async fn create_policy(
 ) -> ApiResult<Json<PolicyResponse>> {
     let admin = require_admin(&state, &jar).await?;
     let policy_id = policy_id(&payload.policy_type, &payload.version, &payload.locale);
-    let content_hash = blake3::hash(payload.content_md.as_bytes()).to_hex().to_string();
+    let content_hash = blake3::hash(payload.content_md.as_bytes())
+        .to_hex()
+        .to_string();
 
     sqlx::query(
         "INSERT INTO cn_admin.policies          (policy_id, type, version, locale, title, content_md, content_hash)          VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -135,7 +143,9 @@ pub async fn update_policy(
     Json(payload): Json<PolicyUpdateRequest>,
 ) -> ApiResult<Json<PolicyResponse>> {
     let admin = require_admin(&state, &jar).await?;
-    let content_hash = blake3::hash(payload.content_md.as_bytes()).to_hex().to_string();
+    let content_hash = blake3::hash(payload.content_md.as_bytes())
+        .to_hex()
+        .to_string();
 
     let result = sqlx::query(
         "UPDATE cn_admin.policies          SET title = $1, content_md = $2, content_hash = $3, updated_at = NOW()          WHERE policy_id = $4",
@@ -149,7 +159,11 @@ pub async fn update_policy(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     if result.rows_affected() == 0 {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "policy not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "policy not found",
+        ));
     }
 
     cn_core::admin::log_audit(
@@ -197,7 +211,11 @@ pub async fn publish_policy(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     if result.rows_affected() == 0 {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "policy not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "policy not found",
+        ));
     }
 
     cn_core::admin::log_audit(
@@ -229,33 +247,47 @@ pub async fn make_current_policy(
 ) -> ApiResult<Json<PolicyResponse>> {
     let admin = require_admin(&state, &jar).await?;
 
-    let row = sqlx::query(
-        "SELECT type, locale FROM cn_admin.policies WHERE policy_id = $1",
-    )
-    .bind(&policy_id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let row = sqlx::query("SELECT type, locale FROM cn_admin.policies WHERE policy_id = $1")
+        .bind(&policy_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
     let Some(row) = row else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "NOT_FOUND", "policy not found"));
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "policy not found",
+        ));
     };
     let policy_type: String = row.try_get("type")?;
     let locale: String = row.try_get("locale")?;
 
-    let mut tx = state
-        .pool
-        .begin()
-        .await
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
-    sqlx::query(
-        "UPDATE cn_admin.policies SET is_current = FALSE WHERE type = $1 AND locale = $2",
-    )
-    .bind(&policy_type)
-    .bind(&locale)
-    .execute(&mut *tx)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    sqlx::query("UPDATE cn_admin.policies SET is_current = FALSE WHERE type = $1 AND locale = $2")
+        .bind(&policy_type)
+        .bind(&locale)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     sqlx::query(
         "UPDATE cn_admin.policies          SET is_current = TRUE, published_at = COALESCE(published_at, NOW()), effective_at = COALESCE(effective_at, NOW())          WHERE policy_id = $1",

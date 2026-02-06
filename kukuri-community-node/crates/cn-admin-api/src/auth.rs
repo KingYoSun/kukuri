@@ -61,8 +61,14 @@ pub async fn login(
         ));
     }
 
-    let verified = cn_core::admin::verify_password(&payload.password, &password_hash)
-        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "AUTH_ERROR", err.to_string()))?;
+    let verified =
+        cn_core::admin::verify_password(&payload.password, &password_hash).map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AUTH_ERROR",
+                err.to_string(),
+            )
+        })?;
     if !verified {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -131,10 +137,7 @@ pub async fn logout(
     Ok((jar, Json(serde_json::json!({ "status": "ok" }))))
 }
 
-pub async fn me(
-    State(state): State<AppState>,
-    jar: CookieJar,
-) -> ApiResult<Json<AdminUser>> {
+pub async fn me(State(state): State<AppState>, jar: CookieJar) -> ApiResult<Json<AdminUser>> {
     let admin = require_admin(&state, &jar).await?;
     Ok(Json(admin))
 }

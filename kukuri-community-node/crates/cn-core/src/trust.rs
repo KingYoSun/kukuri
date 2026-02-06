@@ -81,11 +81,7 @@ fn build_subject_tag(subject: &str) -> Result<Vec<String>> {
     if kind.is_empty() || value.is_empty() {
         return Err(anyhow!("invalid subject"));
     }
-    Ok(vec![
-        "sub".to_string(),
-        kind.to_string(),
-        value.to_string(),
-    ])
+    Ok(vec!["sub".to_string(), kind.to_string(), value.to_string()])
 }
 
 #[cfg(test)]

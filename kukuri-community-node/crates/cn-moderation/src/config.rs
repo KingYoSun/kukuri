@@ -71,7 +71,10 @@ impl ModerationRuntimeConfig {
         let queue = value.get("queue").and_then(|v| v.as_object());
         let rules = value.get("rules").and_then(|v| v.as_object());
         Self {
-            enabled: value.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false),
+            enabled: value
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
             consumer_batch_size: consumer
                 .and_then(|map| map.get("batch_size"))
                 .and_then(|v| v.as_i64())

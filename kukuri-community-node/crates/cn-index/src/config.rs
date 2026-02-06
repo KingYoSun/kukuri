@@ -28,7 +28,10 @@ struct ExpirationSection {
 
 impl IndexRuntimeConfig {
     pub fn from_json(value: &Value) -> Self {
-        let enabled = value.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+        let enabled = value
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
         let consumer = value
             .get("consumer")
             .and_then(|v| serde_json::from_value::<ConsumerSection>(v.clone()).ok());
@@ -40,10 +43,7 @@ impl IndexRuntimeConfig {
             .and_then(|v| serde_json::from_value::<ExpirationSection>(v.clone()).ok());
         Self {
             enabled,
-            consumer_batch_size: consumer
-                .as_ref()
-                .and_then(|c| c.batch_size)
-                .unwrap_or(200),
+            consumer_batch_size: consumer.as_ref().and_then(|c| c.batch_size).unwrap_or(200),
             consumer_poll_seconds: consumer
                 .as_ref()
                 .and_then(|c| c.poll_interval_seconds)

@@ -7,12 +7,8 @@ use utoipa::{OpenApi, ToSchema};
 
 use crate::access_control::{RevokeRequest, RevokeResponse, RotateRequest, RotateResponse};
 use crate::auth::{AdminUser, LoginRequest, LoginResponse};
-use crate::moderation::{
-    LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse,
-};
-use crate::policies::{
-    PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest,
-};
+use crate::moderation::{LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse};
+use crate::policies::{PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest};
 use crate::reindex::{ReindexRequest, ReindexResponse};
 use crate::services::{
     AuditLog, ServiceConfigResponse, ServiceHealth, ServiceInfo, UpdateServiceConfigRequest,
