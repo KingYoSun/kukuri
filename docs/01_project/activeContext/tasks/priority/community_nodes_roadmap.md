@@ -84,7 +84,7 @@
 
 ## 未実装/不足事項（2026年02月07日 調査追記）
 
-- [ ] Moderation LLM: `max_requests_per_day` / `max_cost_per_day` / `max_concurrency` を実行時に強制する予算・同時実行制御を実装し、上限到達時のスキップ理由を監査可能な形で記録する
+- [x] Moderation LLM: `max_requests_per_day` / `max_cost_per_day` / `max_concurrency` を実行時に強制する予算・同時実行制御を実装し、上限到達時のスキップ理由を監査可能な形で記録する
 - [ ] Compose: `docs/03_implementation/community_nodes/docker_compose_profiles.md` と整合するように `llm-local` プロファイル（必要に応じて local LLM サービス定義を含む）を `kukuri-community-node/docker-compose.yml` に追加する
 - [ ] Admin Console: LLM 連携設定（OpenAI/Local、外部送信ON/OFF、送信範囲、保存/保持、予算上限）とメンバーシップ一覧/検索（topic+scope+pubkey）を専用 UI として実装する
 - [ ] `cn-user-api` 契約テスト: `/v1/bootstrap/*` `/v1/search` `/v1/reports` の成功系（200/201）とレスポンス shape の互換性を検証するテストを追加する

@@ -26,6 +26,9 @@ const OUTBOX_CHANNEL: &str = "cn_relay_outbox";
 const LLM_POLICY_URL: &str = "https://example.com/policies/llm-moderation-v1";
 const LLM_POLICY_REF: &str = "moderation-llm-v1";
 const LLM_LABEL_EXP_SECONDS: i64 = 24 * 60 * 60;
+const LLM_BUDGET_LOCK_KEY: i64 = 3900601;
+const LLM_INFLIGHT_TTL_SECONDS: i64 = 60;
+const LLM_COST_PER_1K_CHARS: f64 = 0.0001;
 
 #[derive(Clone)]
 struct AppState {
@@ -70,6 +73,46 @@ struct ModerationEvent {
     is_current: bool,
     is_ephemeral: bool,
     expires_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LlmSkipReason {
+    MaxRequestsPerDay,
+    MaxCostPerDay,
+    MaxConcurrency,
+}
+
+impl LlmSkipReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            LlmSkipReason::MaxRequestsPerDay => "max_requests_per_day",
+            LlmSkipReason::MaxCostPerDay => "max_cost_per_day",
+            LlmSkipReason::MaxConcurrency => "max_concurrency",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LlmUsageSnapshot {
+    usage_day: String,
+    requests_today: i64,
+    cost_today: f64,
+    inflight_requests: i64,
+}
+
+#[derive(Debug)]
+struct LlmExecutionPermit {
+    request_id: String,
+}
+
+#[derive(Debug)]
+enum LlmExecutionGate {
+    Acquired(LlmExecutionPermit),
+    Skipped {
+        reason: LlmSkipReason,
+        usage: LlmUsageSnapshot,
+        estimated_cost: f64,
+    },
 }
 
 pub fn load_config() -> Result<ModerationConfig> {
@@ -511,33 +554,114 @@ async fn process_job(
             event_id: event.raw.id.clone(),
             content: prepare_llm_input(&event.raw.content, &runtime.llm),
         };
-        if !request.content.trim().is_empty() {
-            match provider.classify(&request).await {
-                Ok(Some(prediction)) => {
-                    match apply_llm_label(state, job, &event.raw.id, &provider, &prediction, now)
-                        .await
-                    {
-                        Ok(true) => issued += 1,
-                        Ok(false) => {}
+        if !request.content.trim().is_empty()
+            && !matches!(&provider, llm::LlmProviderKind::Disabled)
+        {
+            match acquire_llm_execution_gate(
+                &state.pool,
+                &runtime.llm,
+                job,
+                &event.raw.id,
+                provider.source(),
+                &request.content,
+            )
+            .await
+            {
+                Ok(LlmExecutionGate::Acquired(permit)) => {
+                    let classification = provider.classify(&request).await;
+                    if let Err(err) = release_llm_execution_gate(&state.pool, &permit).await {
+                        tracing::warn!(
+                            error = %err,
+                            request_id = %permit.request_id,
+                            job_id = %job.job_id,
+                            event_id = %event.raw.id,
+                            provider = provider.source(),
+                            "failed to release llm execution gate"
+                        );
+                    }
+
+                    match classification {
+                        Ok(Some(prediction)) => {
+                            match apply_llm_label(
+                                state,
+                                job,
+                                &event.raw.id,
+                                &provider,
+                                &prediction,
+                                now,
+                            )
+                            .await
+                            {
+                                Ok(true) => issued += 1,
+                                Ok(false) => {}
+                                Err(err) => {
+                                    tracing::warn!(
+                                        error = %err,
+                                        job_id = %job.job_id,
+                                        event_id = %event.raw.id,
+                                        provider = provider.source(),
+                                        "failed to apply llm label"
+                                    );
+                                }
+                            }
+                        }
+                        Ok(None) => {}
                         Err(err) => {
                             tracing::warn!(
                                 error = %err,
                                 job_id = %job.job_id,
                                 event_id = %event.raw.id,
                                 provider = provider.source(),
-                                "failed to apply llm label"
+                                "llm classification failed"
                             );
                         }
                     }
                 }
-                Ok(None) => {}
+                Ok(LlmExecutionGate::Skipped {
+                    reason,
+                    usage,
+                    estimated_cost,
+                }) => {
+                    tracing::info!(
+                        job_id = %job.job_id,
+                        event_id = %event.raw.id,
+                        provider = provider.source(),
+                        skip_reason = reason.as_str(),
+                        usage_day = usage.usage_day,
+                        requests_today = usage.requests_today,
+                        cost_today = usage.cost_today,
+                        inflight_requests = usage.inflight_requests,
+                        estimated_cost,
+                        "llm classification skipped by runtime limits"
+                    );
+                    if let Err(err) = log_llm_skip_audit(
+                        state,
+                        job,
+                        &event.raw.id,
+                        provider.source(),
+                        reason,
+                        &usage,
+                        estimated_cost,
+                        &runtime.llm,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            error = %err,
+                            job_id = %job.job_id,
+                            event_id = %event.raw.id,
+                            provider = provider.source(),
+                            "failed to record llm skip audit log"
+                        );
+                    }
+                }
                 Err(err) => {
                     tracing::warn!(
                         error = %err,
                         job_id = %job.job_id,
                         event_id = %event.raw.id,
                         provider = provider.source(),
-                        "llm classification failed"
+                        "failed to evaluate llm runtime limits; skipping llm classification"
                     );
                 }
             }
@@ -734,6 +858,174 @@ async fn apply_llm_label(
     .await
 }
 
+async fn acquire_llm_execution_gate(
+    pool: &Pool<Postgres>,
+    runtime: &config::LlmRuntimeConfig,
+    job: &ModerationJob,
+    event_id: &str,
+    provider: &str,
+    content: &str,
+) -> Result<LlmExecutionGate> {
+    let estimated_cost = estimate_llm_cost(content);
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(LLM_BUDGET_LOCK_KEY)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM cn_moderation.llm_inflight WHERE expires_at <= NOW()")
+        .execute(&mut *tx)
+        .await?;
+
+    let usage_day: String =
+        sqlx::query_scalar("SELECT (NOW() AT TIME ZONE 'UTC')::date::text AS usage_day")
+            .fetch_one(&mut *tx)
+            .await?;
+
+    let usage_row = sqlx::query(
+        "SELECT requests_count, estimated_cost          FROM cn_moderation.llm_daily_usage          WHERE usage_day = (NOW() AT TIME ZONE 'UTC')::date          FOR UPDATE",
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (requests_today, cost_today) = if let Some(row) = usage_row {
+        (
+            row.try_get("requests_count")?,
+            row.try_get("estimated_cost")?,
+        )
+    } else {
+        (0_i64, 0.0_f64)
+    };
+
+    let inflight_requests =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_moderation.llm_inflight")
+            .fetch_one(&mut *tx)
+            .await?;
+
+    let usage = LlmUsageSnapshot {
+        usage_day,
+        requests_today,
+        cost_today,
+        inflight_requests,
+    };
+
+    if runtime.max_requests_per_day > 0 && usage.requests_today >= runtime.max_requests_per_day {
+        tx.rollback().await?;
+        return Ok(LlmExecutionGate::Skipped {
+            reason: LlmSkipReason::MaxRequestsPerDay,
+            usage,
+            estimated_cost,
+        });
+    }
+
+    if runtime.max_cost_per_day > 0.0
+        && estimated_cost > 0.0
+        && usage.cost_today + estimated_cost > runtime.max_cost_per_day
+    {
+        tx.rollback().await?;
+        return Ok(LlmExecutionGate::Skipped {
+            reason: LlmSkipReason::MaxCostPerDay,
+            usage,
+            estimated_cost,
+        });
+    }
+
+    let max_concurrency = i64::try_from(runtime.max_concurrency.max(1)).unwrap_or(i64::MAX);
+    if usage.inflight_requests >= max_concurrency {
+        tx.rollback().await?;
+        return Ok(LlmExecutionGate::Skipped {
+            reason: LlmSkipReason::MaxConcurrency,
+            usage,
+            estimated_cost,
+        });
+    }
+
+    sqlx::query(
+        "INSERT INTO cn_moderation.llm_daily_usage (usage_day, requests_count, estimated_cost, updated_at)          VALUES ((NOW() AT TIME ZONE 'UTC')::date, 1, $1, NOW())          ON CONFLICT (usage_day)          DO UPDATE SET requests_count = cn_moderation.llm_daily_usage.requests_count + 1,              estimated_cost = cn_moderation.llm_daily_usage.estimated_cost + EXCLUDED.estimated_cost,              updated_at = NOW()",
+    )
+    .bind(estimated_cost)
+    .execute(&mut *tx)
+    .await?;
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO cn_moderation.llm_inflight          (request_id, job_id, event_id, provider, estimated_cost, started_at, expires_at)          VALUES ($1, $2, $3, $4, $5, NOW(), NOW() + ($6 * INTERVAL '1 second'))",
+    )
+    .bind(&request_id)
+    .bind(&job.job_id)
+    .bind(event_id)
+    .bind(provider)
+    .bind(estimated_cost)
+    .bind(LLM_INFLIGHT_TTL_SECONDS)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(LlmExecutionGate::Acquired(LlmExecutionPermit {
+        request_id,
+    }))
+}
+
+async fn release_llm_execution_gate(
+    pool: &Pool<Postgres>,
+    permit: &LlmExecutionPermit,
+) -> Result<()> {
+    sqlx::query("DELETE FROM cn_moderation.llm_inflight WHERE request_id = $1")
+        .bind(&permit.request_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+async fn log_llm_skip_audit(
+    state: &AppState,
+    job: &ModerationJob,
+    event_id: &str,
+    provider: &str,
+    reason: LlmSkipReason,
+    usage: &LlmUsageSnapshot,
+    estimated_cost: f64,
+    runtime: &config::LlmRuntimeConfig,
+) -> Result<()> {
+    cn_core::admin::log_audit(
+        &state.pool,
+        "system",
+        "moderation.llm.skip",
+        &format!("event:{event_id}"),
+        Some(json!({
+            "job_id": job.job_id,
+            "topic_id": job.topic_id,
+            "event_id": event_id,
+            "provider": provider,
+            "skip_reason": reason.as_str(),
+            "estimated_cost": estimated_cost,
+            "usage": {
+                "usage_day": usage.usage_day,
+                "requests_today": usage.requests_today,
+                "cost_today": usage.cost_today,
+                "inflight_requests": usage.inflight_requests
+            },
+            "limits": {
+                "max_requests_per_day": runtime.max_requests_per_day,
+                "max_cost_per_day": runtime.max_cost_per_day,
+                "max_concurrency": runtime.max_concurrency.max(1)
+            }
+        })),
+        Some(&job.job_id),
+    )
+    .await
+}
+
+fn estimate_llm_cost(content: &str) -> f64 {
+    let chars = content.chars().count();
+    if chars == 0 {
+        return 0.0;
+    }
+    let blocks = ((chars as f64) / 1000.0).ceil();
+    blocks * LLM_COST_PER_1K_CHARS
+}
+
 fn prepare_llm_input(content: &str, config: &config::LlmRuntimeConfig) -> String {
     let mut result = if config.truncate_chars == 0 {
         String::new()
@@ -779,7 +1071,8 @@ mod tests {
     use cn_core::moderation::RuleCondition;
     use serde_json::json;
     use sqlx::postgres::PgPoolOptions;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex, OnceLock};
     use tokio::net::TcpListener;
     use tokio::sync::OnceCell;
     use uuid::Uuid;
@@ -884,6 +1177,11 @@ mod tests {
     }
 
     async fn delete_event_artifacts(pool: &Pool<Postgres>, event_id: &str) {
+        sqlx::query("DELETE FROM cn_moderation.llm_inflight WHERE event_id = $1")
+            .bind(event_id)
+            .execute(pool)
+            .await
+            .expect("delete llm inflight");
         sqlx::query("DELETE FROM cn_moderation.labels WHERE source_event_id = $1")
             .bind(event_id)
             .execute(pool)
@@ -901,6 +1199,34 @@ mod tests {
             .expect("delete events");
     }
 
+    async fn reset_llm_budget_state(pool: &Pool<Postgres>) {
+        sqlx::query("DELETE FROM cn_moderation.llm_inflight")
+            .execute(pool)
+            .await
+            .expect("delete llm inflight");
+        sqlx::query("DELETE FROM cn_moderation.llm_daily_usage")
+            .execute(pool)
+            .await
+            .expect("delete llm usage");
+    }
+
+    async fn latest_llm_skip_reason(pool: &Pool<Postgres>, event_id: &str) -> Option<String> {
+        let target = format!("event:{event_id}");
+        let diff = sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT diff_json          FROM cn_admin.audit_logs          WHERE action = 'moderation.llm.skip'            AND target = $1          ORDER BY created_at DESC          LIMIT 1",
+        )
+        .bind(target)
+        .fetch_optional(pool)
+        .await
+        .expect("query llm skip audit");
+        diff.and_then(|value| {
+            value
+                .get("skip_reason")
+                .and_then(|reason| reason.as_str())
+                .map(ToString::to_string)
+        })
+    }
+
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -914,6 +1240,31 @@ mod tests {
         unsafe { std::env::remove_var(key) };
     }
 
+    fn llm_runtime(
+        max_requests_per_day: i64,
+        max_cost_per_day: f64,
+        max_concurrency: usize,
+    ) -> config::ModerationRuntimeConfig {
+        config::ModerationRuntimeConfig {
+            enabled: true,
+            consumer_batch_size: 1,
+            consumer_poll_seconds: 1,
+            queue_max_attempts: 3,
+            queue_retry_delay_seconds: 1,
+            rules_max_labels_per_event: 5,
+            llm: config::LlmRuntimeConfig {
+                enabled: true,
+                provider: "local".to_string(),
+                external_send_enabled: false,
+                truncate_chars: 2000,
+                mask_pii: true,
+                max_requests_per_day,
+                max_cost_per_day,
+                max_concurrency,
+            },
+        }
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn process_job_applies_llm_label_with_local_provider() {
         let _guard = env_lock().lock().expect("env lock");
@@ -923,6 +1274,7 @@ mod tests {
             .await
             .expect("connect database");
         ensure_migrated(&pool).await;
+        reset_llm_budget_state(&pool).await;
 
         let topic_id = format!("kukuri:moderation-llm-{}", Uuid::new_v4());
         let author = Keys::generate();
@@ -956,24 +1308,7 @@ mod tests {
             config: service_config::static_handle(json!({})),
             node_keys: Keys::generate(),
         };
-        let runtime = config::ModerationRuntimeConfig {
-            enabled: true,
-            consumer_batch_size: 1,
-            consumer_poll_seconds: 1,
-            queue_max_attempts: 3,
-            queue_retry_delay_seconds: 1,
-            rules_max_labels_per_event: 5,
-            llm: config::LlmRuntimeConfig {
-                enabled: true,
-                provider: "local".to_string(),
-                external_send_enabled: false,
-                truncate_chars: 2000,
-                mask_pii: true,
-                max_requests_per_day: 0,
-                max_cost_per_day: 0.0,
-                max_concurrency: 1,
-            },
-        };
+        let runtime = llm_runtime(0, 0.0, 1);
         let job = ModerationJob {
             job_id: Uuid::new_v4().to_string(),
             event_id: event.id.clone(),
@@ -1013,6 +1348,281 @@ mod tests {
         remove_env_var("LLM_LOCAL_ENDPOINT");
         server.abort();
         let _ = server.await;
+        reset_llm_budget_state(&pool).await;
+        delete_event_artifacts(&pool, &event.id).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn process_job_skips_llm_when_max_requests_per_day_reached() {
+        let _guard = env_lock().lock().expect("env lock");
+
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        reset_llm_budget_state(&pool).await;
+
+        let topic_id = format!("kukuri:moderation-llm-{}", Uuid::new_v4());
+        let author = Keys::generate();
+        let event_first = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "first llm target".to_string(),
+        )
+        .expect("build first event");
+        let event_second = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "second llm target".to_string(),
+        )
+        .expect("build second event");
+        delete_event_artifacts(&pool, &event_first.id).await;
+        delete_event_artifacts(&pool, &event_second.id).await;
+        insert_event(&pool, &event_first, &topic_id).await;
+        insert_event(&pool, &event_second, &topic_id).await;
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind llm mock");
+        let addr = listener.local_addr().expect("mock addr");
+        let app = Router::new().route(
+            "/classify",
+            post({
+                let call_count = Arc::clone(&call_count);
+                move || {
+                    let call_count = Arc::clone(&call_count);
+                    async move {
+                        call_count.fetch_add(1, Ordering::SeqCst);
+                        AxumJson(json!({ "label": "spam", "confidence": 0.93 }))
+                    }
+                }
+            }),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve llm mock");
+        });
+
+        let endpoint = format!("http://{addr}/classify");
+        set_env_var("LLM_LOCAL_ENDPOINT", &endpoint);
+
+        let state = AppState {
+            pool: pool.clone(),
+            config: service_config::static_handle(json!({})),
+            node_keys: Keys::generate(),
+        };
+        let runtime = llm_runtime(1, 0.0, 4);
+        let job_first = ModerationJob {
+            job_id: Uuid::new_v4().to_string(),
+            event_id: event_first.id.clone(),
+            topic_id: topic_id.clone(),
+            attempts: 1,
+            max_attempts: 3,
+        };
+        let job_second = ModerationJob {
+            job_id: Uuid::new_v4().to_string(),
+            event_id: event_second.id.clone(),
+            topic_id: topic_id.clone(),
+            attempts: 1,
+            max_attempts: 3,
+        };
+
+        let issued_first = process_job(&state, &runtime, &job_first)
+            .await
+            .expect("first process job");
+        let issued_second = process_job(&state, &runtime, &job_second)
+            .await
+            .expect("second process job");
+
+        assert_eq!(issued_first, 1);
+        assert_eq!(issued_second, 0);
+        assert_eq!(call_count.load(Ordering::SeqCst), 1);
+        let skip_reason = latest_llm_skip_reason(&pool, &event_second.id).await;
+        assert_eq!(skip_reason.as_deref(), Some("max_requests_per_day"));
+
+        remove_env_var("LLM_LOCAL_ENDPOINT");
+        server.abort();
+        let _ = server.await;
+        reset_llm_budget_state(&pool).await;
+        delete_event_artifacts(&pool, &event_first.id).await;
+        delete_event_artifacts(&pool, &event_second.id).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn process_job_skips_llm_when_max_cost_per_day_reached() {
+        let _guard = env_lock().lock().expect("env lock");
+
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        reset_llm_budget_state(&pool).await;
+
+        let topic_id = format!("kukuri:moderation-llm-{}", Uuid::new_v4());
+        let author = Keys::generate();
+        let event = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "cost limit target".to_string(),
+        )
+        .expect("build test event");
+        delete_event_artifacts(&pool, &event.id).await;
+        insert_event(&pool, &event, &topic_id).await;
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind llm mock");
+        let addr = listener.local_addr().expect("mock addr");
+        let app = Router::new().route(
+            "/classify",
+            post({
+                let call_count = Arc::clone(&call_count);
+                move || {
+                    let call_count = Arc::clone(&call_count);
+                    async move {
+                        call_count.fetch_add(1, Ordering::SeqCst);
+                        AxumJson(json!({ "label": "spam", "confidence": 0.93 }))
+                    }
+                }
+            }),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve llm mock");
+        });
+
+        let endpoint = format!("http://{addr}/classify");
+        set_env_var("LLM_LOCAL_ENDPOINT", &endpoint);
+
+        let state = AppState {
+            pool: pool.clone(),
+            config: service_config::static_handle(json!({})),
+            node_keys: Keys::generate(),
+        };
+        let runtime = llm_runtime(0, 0.00001, 4);
+        let job = ModerationJob {
+            job_id: Uuid::new_v4().to_string(),
+            event_id: event.id.clone(),
+            topic_id: topic_id.clone(),
+            attempts: 1,
+            max_attempts: 3,
+        };
+
+        let issued = process_job(&state, &runtime, &job)
+            .await
+            .expect("process job");
+        assert_eq!(issued, 0);
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        let skip_reason = latest_llm_skip_reason(&pool, &event.id).await;
+        assert_eq!(skip_reason.as_deref(), Some("max_cost_per_day"));
+
+        let label_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM cn_moderation.labels WHERE source_event_id = $1 AND source = 'llm:local'",
+        )
+        .bind(&event.id)
+        .fetch_one(&pool)
+        .await
+        .expect("count labels");
+        assert_eq!(label_count, 0);
+
+        remove_env_var("LLM_LOCAL_ENDPOINT");
+        server.abort();
+        let _ = server.await;
+        reset_llm_budget_state(&pool).await;
+        delete_event_artifacts(&pool, &event.id).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn process_job_skips_llm_when_max_concurrency_reached() {
+        let _guard = env_lock().lock().expect("env lock");
+
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        reset_llm_budget_state(&pool).await;
+
+        let topic_id = format!("kukuri:moderation-llm-{}", Uuid::new_v4());
+        let author = Keys::generate();
+        let event = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "concurrency limit target".to_string(),
+        )
+        .expect("build test event");
+        delete_event_artifacts(&pool, &event.id).await;
+        insert_event(&pool, &event, &topic_id).await;
+
+        sqlx::query(
+            "INSERT INTO cn_moderation.llm_inflight          (request_id, job_id, event_id, provider, estimated_cost, started_at, expires_at)          VALUES ($1, $2, $3, $4, $5, NOW(), NOW() + INTERVAL '5 minutes')",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(Uuid::new_v4().to_string())
+        .bind("busy-event")
+        .bind("llm:local")
+        .bind(0.0_f64)
+        .execute(&pool)
+        .await
+        .expect("insert inflight");
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind llm mock");
+        let addr = listener.local_addr().expect("mock addr");
+        let app = Router::new().route(
+            "/classify",
+            post({
+                let call_count = Arc::clone(&call_count);
+                move || {
+                    let call_count = Arc::clone(&call_count);
+                    async move {
+                        call_count.fetch_add(1, Ordering::SeqCst);
+                        AxumJson(json!({ "label": "spam", "confidence": 0.93 }))
+                    }
+                }
+            }),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve llm mock");
+        });
+
+        let endpoint = format!("http://{addr}/classify");
+        set_env_var("LLM_LOCAL_ENDPOINT", &endpoint);
+
+        let state = AppState {
+            pool: pool.clone(),
+            config: service_config::static_handle(json!({})),
+            node_keys: Keys::generate(),
+        };
+        let runtime = llm_runtime(0, 0.0, 1);
+        let job = ModerationJob {
+            job_id: Uuid::new_v4().to_string(),
+            event_id: event.id.clone(),
+            topic_id: topic_id.clone(),
+            attempts: 1,
+            max_attempts: 3,
+        };
+
+        let issued = process_job(&state, &runtime, &job)
+            .await
+            .expect("process job");
+        assert_eq!(issued, 0);
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        let skip_reason = latest_llm_skip_reason(&pool, &event.id).await;
+        assert_eq!(skip_reason.as_deref(), Some("max_concurrency"));
+
+        remove_env_var("LLM_LOCAL_ENDPOINT");
+        server.abort();
+        let _ = server.await;
+        reset_llm_budget_state(&pool).await;
         delete_event_artifacts(&pool, &event.id).await;
     }
 }

@@ -49,7 +49,8 @@ impl LlmRuntimeConfig {
             max_concurrency: value
                 .and_then(|map| map.get("max_concurrency"))
                 .and_then(|v| v.as_u64())
-                .unwrap_or(1) as usize,
+                .unwrap_or(1)
+                .max(1) as usize,
         }
     }
 }
