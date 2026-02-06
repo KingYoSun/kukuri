@@ -5,6 +5,7 @@ use axum_extra::extract::cookie::CookieJar;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder, Row};
+use utoipa::ToSchema;
 
 use cn_core::moderation::{LabelInput, RuleAction, RuleCondition};
 
@@ -18,7 +19,7 @@ pub struct RuleQuery {
     pub offset: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RuleResponse {
     pub rule_id: String,
     pub name: String,
@@ -32,13 +33,15 @@ pub struct RuleResponse {
     pub updated_by: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RulePayload {
     pub name: String,
     pub description: Option<String>,
     pub is_enabled: Option<bool>,
     pub priority: Option<i32>,
+    #[schema(value_type = serde_json::Value)]
     pub conditions: RuleCondition,
+    #[schema(value_type = serde_json::Value)]
     pub action: RuleAction,
 }
 
@@ -50,7 +53,7 @@ pub struct ReportQuery {
     pub limit: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ReportRow {
     pub report_id: String,
     pub reporter_pubkey: String,
@@ -67,7 +70,7 @@ pub struct LabelQuery {
     pub limit: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct LabelRow {
     pub label_id: String,
     pub target: String,
@@ -83,7 +86,7 @@ pub struct LabelRow {
     pub issued_at: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ManualLabelRequest {
     pub target: String,
     pub label: String,

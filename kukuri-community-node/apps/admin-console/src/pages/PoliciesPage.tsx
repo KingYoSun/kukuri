@@ -16,6 +16,8 @@ const policySchema = z.object({
   content_md: z.string().min(1, 'Content is required')
 });
 
+type PolicyForm = z.infer<typeof policySchema>;
+
 export const PoliciesPage = () => {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<'create' | 'edit'>('create');
@@ -35,7 +37,7 @@ export const PoliciesPage = () => {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (payload: Policy) => {
+    mutationFn: (payload: PolicyForm) => {
       if (mode === 'edit' && editingPolicyId) {
         return api.updatePolicy(editingPolicyId, {
           title: payload.title,

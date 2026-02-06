@@ -1,0 +1,2697 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "cn-admin-api",
+    "description": "",
+    "license": {
+      "name": "Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "healthz_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "metrics_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/access-control/revoke": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "access_control_revoke_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/access-control/rotate": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "access_control_rotate_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/audit-logs": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "audit_logs_list_doc",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Action filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "description": "Target filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "UNIX seconds lower bound",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditLog"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/auth/login": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "auth_login_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/auth/logout": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "auth_logout_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/auth/me": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "auth_me_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/moderation/labels": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_labels_list_doc",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "description": "Target filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "description": "Topic filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "UNIX seconds lower bound",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LabelRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_labels_create_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualLabelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualLabelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/moderation/reports": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_reports_list_doc",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "description": "Target filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "reporter_pubkey",
+            "in": "query",
+            "description": "Reporter pubkey filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "UNIX seconds lower bound",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/moderation/rules": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_rules_list_doc",
+        "parameters": [
+          {
+            "name": "enabled",
+            "in": "query",
+            "description": "Enabled flag filter",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_rules_create_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RulePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/moderation/rules/{rule_id}": {
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_rules_update_doc",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "description": "Rule identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RulePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_rules_delete_doc",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "description": "Rule identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/node-subscriptions": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "node_subscriptions_list_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NodeSubscription"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/node-subscriptions/{topic_id}": {
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "node_subscriptions_update_doc",
+        "parameters": [
+          {
+            "name": "topic_id",
+            "in": "path",
+            "description": "Topic identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeSubscriptionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSubscription"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/plans": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "plans_list_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Plan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "plans_create_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/plans/{plan_id}": {
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "plans_update_doc",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "description": "Plan identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/policies": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "policies_list_doc",
+        "parameters": [
+          {
+            "name": "policy_type",
+            "in": "query",
+            "description": "Filter by policy type",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "description": "Filter by locale",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "policies_create_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/policies/{policy_id}": {
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "policies_update_doc",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "description": "Policy identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/policies/{policy_id}/make-current": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "policies_make_current_doc",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "description": "Policy identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/policies/{policy_id}/publish": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "policies_publish_doc",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "description": "Policy identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/services": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "services_list_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServiceInfo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/services/{service}/config": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "services_get_config_doc",
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "description": "Service name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceConfigResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "services_update_config_doc",
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "description": "Service name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServiceConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceConfigResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/subscription-requests": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "subscription_requests_list_doc",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Request status filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubscriptionRequestRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/subscription-requests/{request_id}/approve": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "subscription_requests_approve_doc",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "description": "Subscription request identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/subscription-requests/{request_id}/reject": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "subscription_requests_reject_doc",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "description": "Subscription request identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/subscriptions": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "subscriptions_list_doc",
+        "parameters": [
+          {
+            "name": "pubkey",
+            "in": "query",
+            "description": "Subscriber pubkey filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubscriptionRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/subscriptions/{subscriber_pubkey}": {
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "subscriptions_upsert_doc",
+        "parameters": [
+          {
+            "name": "subscriber_pubkey",
+            "in": "path",
+            "description": "Subscriber pubkey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/trust/jobs": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "trust_jobs_list_doc",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Job status filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "job_type",
+            "in": "query",
+            "description": "Job type filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "subject_pubkey",
+            "in": "query",
+            "description": "Subject pubkey filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrustJobRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "trust_jobs_create_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrustJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustJobRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/trust/schedules": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "trust_schedules_list_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrustScheduleRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/trust/schedules/{job_type}": {
+      "put": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "trust_schedules_update_doc",
+        "parameters": [
+          {
+            "name": "job_type",
+            "in": "path",
+            "description": "Job type",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrustScheduleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustScheduleRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/usage": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "usage_list_doc",
+        "parameters": [
+          {
+            "name": "pubkey",
+            "in": "query",
+            "description": "Subscriber pubkey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "description": "Metric filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Range in days",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsageRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "openapi_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reindex": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "reindex_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReindexRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReindexResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminUser": {
+        "type": "object",
+        "required": [
+          "admin_user_id",
+          "username"
+        ],
+        "properties": {
+          "admin_user_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "required": [
+          "audit_id",
+          "actor_admin_user_id",
+          "action",
+          "target",
+          "created_at"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor_admin_user_id": {
+            "type": "string"
+          },
+          "audit_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "diff_json": {
+            "nullable": true
+          },
+          "request_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "target": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "nullable": true
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthStatus": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LabelRow": {
+        "type": "object",
+        "required": [
+          "label_id",
+          "target",
+          "label",
+          "policy_url",
+          "policy_ref",
+          "exp",
+          "issuer_pubkey",
+          "source",
+          "issued_at"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "exp": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "issued_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "issuer_pubkey": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "label_id": {
+            "type": "string"
+          },
+          "policy_ref": {
+            "type": "string"
+          },
+          "policy_url": {
+            "type": "string"
+          },
+          "rule_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "admin_user_id",
+          "username",
+          "expires_at"
+        ],
+        "properties": {
+          "admin_user_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "ManualLabelRequest": {
+        "type": "object",
+        "required": [
+          "target",
+          "label",
+          "exp",
+          "policy_url",
+          "policy_ref"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "exp": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string"
+          },
+          "policy_ref": {
+            "type": "string"
+          },
+          "policy_url": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ManualLabelResponse": {
+        "type": "object",
+        "required": [
+          "label_id",
+          "status"
+        ],
+        "properties": {
+          "label_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "NodeSubscription": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "enabled",
+          "ref_count",
+          "updated_at"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "ref_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "topic_id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "NodeSubscriptionUpdate": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Plan": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "name",
+          "is_active",
+          "limits"
+        ],
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanLimit"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          }
+        }
+      },
+      "PlanLimit": {
+        "type": "object",
+        "required": [
+          "metric",
+          "window",
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        }
+      },
+      "PlanRequest": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "name",
+          "is_active",
+          "limits"
+        ],
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanLimit"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicyRequest": {
+        "type": "object",
+        "required": [
+          "policy_type",
+          "version",
+          "locale",
+          "title",
+          "content_md"
+        ],
+        "properties": {
+          "content_md": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "policy_type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicyResponse": {
+        "type": "object",
+        "required": [
+          "policy_id",
+          "policy_type",
+          "version",
+          "locale",
+          "title",
+          "content_md",
+          "content_hash",
+          "is_current"
+        ],
+        "properties": {
+          "content_hash": {
+            "type": "string"
+          },
+          "content_md": {
+            "type": "string"
+          },
+          "effective_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "is_current": {
+            "type": "boolean"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "policy_id": {
+            "type": "string"
+          },
+          "policy_type": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicyUpdateRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "content_md"
+        ],
+        "properties": {
+          "content_md": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "PublishRequest": {
+        "type": "object",
+        "properties": {
+          "effective_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "ReindexRequest": {
+        "type": "object",
+        "properties": {
+          "topic_id": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ReindexResponse": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ReportRow": {
+        "type": "object",
+        "required": [
+          "report_id",
+          "reporter_pubkey",
+          "target",
+          "reason",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "report_id": {
+            "type": "string"
+          },
+          "reporter_pubkey": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewRequest": {
+        "type": "object",
+        "properties": {
+          "review_note": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "RevokeRequest": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope",
+          "pubkey"
+        ],
+        "properties": {
+          "pubkey": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RevokeResponse": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope",
+          "revoked_pubkey",
+          "previous_epoch",
+          "new_epoch",
+          "recipients"
+        ],
+        "properties": {
+          "new_epoch": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previous_epoch": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "recipients": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revoked_pubkey": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RotateRequest": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RotateResponse": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope",
+          "previous_epoch",
+          "new_epoch",
+          "recipients"
+        ],
+        "properties": {
+          "new_epoch": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previous_epoch": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "recipients": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scope": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RulePayload": {
+        "type": "object",
+        "required": [
+          "name",
+          "conditions",
+          "action"
+        ],
+        "properties": {
+          "action": {},
+          "conditions": {},
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "RuleResponse": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "name",
+          "is_enabled",
+          "priority",
+          "conditions",
+          "action",
+          "created_at",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "action": {},
+          "conditions": {},
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rule_id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_by": {
+            "type": "string"
+          }
+        }
+      },
+      "ServiceConfigResponse": {
+        "type": "object",
+        "required": [
+          "service",
+          "version",
+          "config_json",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "config_json": {},
+          "service": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ServiceHealth": {
+        "type": "object",
+        "required": [
+          "status",
+          "checked_at"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "details": {
+            "nullable": true
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ServiceInfo": {
+        "type": "object",
+        "required": [
+          "service",
+          "version",
+          "config_json",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "config_json": {},
+          "health": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ServiceHealth"
+              }
+            ],
+            "nullable": true
+          },
+          "service": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "SubscriptionRequestRow": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "requester_pubkey",
+          "topic_id",
+          "requested_services",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "requested_services": {},
+          "requester_pubkey": {
+            "type": "string"
+          },
+          "review_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "reviewed_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SubscriptionRow": {
+        "type": "object",
+        "required": [
+          "subscription_id",
+          "subscriber_pubkey",
+          "plan_id",
+          "status",
+          "started_at"
+        ],
+        "properties": {
+          "ended_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subscriber_pubkey": {
+            "type": "string"
+          },
+          "subscription_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SubscriptionUpdate": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "status"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "TrustJobRequest": {
+        "type": "object",
+        "required": [
+          "job_type"
+        ],
+        "properties": {
+          "job_type": {
+            "type": "string"
+          },
+          "subject_pubkey": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "TrustJobRow": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "job_type",
+          "status",
+          "processed_targets",
+          "requested_by",
+          "requested_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "error_message": {
+            "type": "string",
+            "nullable": true
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "job_type": {
+            "type": "string"
+          },
+          "processed_targets": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "requested_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "requested_by": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject_pubkey": {
+            "type": "string",
+            "nullable": true
+          },
+          "total_targets": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "TrustScheduleRow": {
+        "type": "object",
+        "required": [
+          "job_type",
+          "interval_seconds",
+          "next_run_at",
+          "is_enabled",
+          "updated_at"
+        ],
+        "properties": {
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "job_type": {
+            "type": "string"
+          },
+          "next_run_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TrustScheduleUpdate": {
+        "type": "object",
+        "required": [
+          "interval_seconds",
+          "is_enabled"
+        ],
+        "properties": {
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateServiceConfigRequest": {
+        "type": "object",
+        "required": [
+          "config_json"
+        ],
+        "properties": {
+          "config_json": {},
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "UsageRow": {
+        "type": "object",
+        "required": [
+          "metric",
+          "day",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "day": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "admin-api",
+      "description": "Kukuri community node admin API"
+    }
+  ]
+}

@@ -6,11 +6,12 @@ use serde_json::Value;
 use sqlx::{Postgres, QueryBuilder, Row};
 use std::collections::HashMap;
 use std::time::Duration;
+use utoipa::ToSchema;
 
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ServiceInfo {
     pub service: String,
     pub version: i64,
@@ -20,14 +21,14 @@ pub struct ServiceInfo {
     pub health: Option<ServiceHealth>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ServiceHealth {
     pub status: String,
     pub checked_at: i64,
     pub details: Option<Value>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ServiceConfigResponse {
     pub service: String,
     pub version: i64,
@@ -36,7 +37,7 @@ pub struct ServiceConfigResponse {
     pub updated_by: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct UpdateServiceConfigRequest {
     pub config_json: Value,
     pub expected_version: Option<i64>,
@@ -50,7 +51,7 @@ pub struct AuditQuery {
     pub limit: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuditLog {
     pub audit_id: i64,
     pub actor_admin_user_id: String,

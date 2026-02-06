@@ -1,7 +1,7 @@
 use crate::{access_control, reindex, AppState};
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::Router;
 use cn_core::service_config;
 use nostr_sdk::prelude::Keys;
@@ -107,6 +107,22 @@ async fn post_json(
         .header("content-type", "application/json")
         .header("cookie", format!("cn_admin_session={session_id}"))
         .body(Body::from(payload.to_string()))
+        .expect("request");
+    let response = app.oneshot(request).await.expect("response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: Value = serde_json::from_slice(&body).expect("json body");
+    (status, payload)
+}
+
+async fn get_json(app: Router, uri: &str) -> (StatusCode, Value) {
+    let request = Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("host", "localhost:8081")
+        .body(Body::empty())
         .expect("request");
     let response = app.oneshot(request).await.expect("response");
     let status = response.status();
@@ -224,4 +240,44 @@ async fn reindex_contract_success() {
         .expect("job_id");
     assert!(Uuid::parse_str(job_id).is_ok());
     assert_eq!(payload.get("status").and_then(Value::as_str), Some("pending"));
+}
+
+#[tokio::test]
+async fn openapi_contract_contains_admin_paths() {
+    let app = Router::new().route("/v1/openapi.json", get(crate::openapi_json));
+    let (status, payload) = get_json(app, "/v1/openapi.json").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload.get("openapi").and_then(Value::as_str), Some("3.0.3"));
+    assert!(
+        payload
+            .pointer("/paths/~1v1~1admin~1auth~1login/post")
+            .is_some()
+    );
+    assert!(
+        payload
+            .pointer("/paths/~1v1~1admin~1services/get")
+            .is_some()
+    );
+    assert!(
+        payload
+            .pointer("/paths/~1v1~1admin~1moderation~1rules/get")
+            .is_some()
+    );
+    assert!(
+        payload
+            .pointer("/paths/~1v1~1admin~1trust~1schedules/get")
+            .is_some()
+    );
+    assert!(payload.pointer("/paths/~1v1~1reindex/post").is_some());
+    assert!(
+        payload
+            .pointer("/components/schemas/ServiceInfo")
+            .is_some()
+    );
+    assert!(
+        payload
+            .pointer("/components/schemas/TrustScheduleRow")
+            .is_some()
+    );
 }

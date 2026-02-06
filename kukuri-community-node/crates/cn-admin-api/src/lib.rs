@@ -1,6 +1,7 @@
 use anyhow::Result;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
@@ -13,10 +14,12 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use utoipa::ToSchema;
 
 mod auth;
 mod access_control;
 mod moderation;
+pub mod openapi;
 mod policies;
 mod reindex;
 mod services;
@@ -37,8 +40,8 @@ pub(crate) struct AppState {
     node_keys: Keys,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
+#[derive(Debug, Serialize, ToSchema)]
+pub(crate) struct ErrorResponse {
     code: &'static str,
     message: String,
     details: Option<Value>,
@@ -87,8 +90,8 @@ impl IntoResponse for ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
-#[derive(Serialize)]
-struct HealthStatus {
+#[derive(Serialize, ToSchema)]
+pub(crate) struct HealthStatus {
     status: String,
 }
 
@@ -273,12 +276,9 @@ async fn metrics_endpoint() -> impl IntoResponse {
     metrics::metrics_response(SERVICE_NAME)
 }
 
-async fn openapi_json() -> impl IntoResponse {
-    Json(serde_json::json!({
-        "openapi": "3.0.0",
-        "info": { "title": "cn-admin-api", "version": "0.1.0" },
-        "paths": {}
-    }))
+async fn openapi_json(headers: HeaderMap) -> impl IntoResponse {
+    let server_url = openapi::infer_server_url(&headers);
+    Json(openapi::document(server_url.as_deref()))
 }
 
 fn parse_health_targets() -> HashMap<String, String> {

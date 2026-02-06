@@ -15,13 +15,18 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use utoipa::ToSchema;
 
 mod auth;
 mod billing;
 mod bootstrap;
+pub mod openapi;
 mod personal_data;
 mod policies;
 mod subscriptions;
+
+#[cfg(test)]
+mod openapi_contract_tests;
 
 const SERVICE_NAME: &str = "cn-user-api";
 const TOKEN_AUDIENCE: &str = "kukuri-community-node:user-api";
@@ -40,8 +45,8 @@ pub(crate) struct AppState {
     meili: meili::MeiliClient,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
+#[derive(Debug, Serialize, ToSchema)]
+pub(crate) struct ErrorResponse {
     code: &'static str,
     message: String,
     details: Option<Value>,
@@ -105,8 +110,8 @@ impl IntoResponse for ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
-#[derive(Serialize)]
-struct HealthStatus {
+#[derive(Serialize, ToSchema)]
+pub(crate) struct HealthStatus {
     status: String,
 }
 
@@ -307,10 +312,7 @@ async fn metrics_endpoint() -> impl IntoResponse {
     metrics::metrics_response(SERVICE_NAME)
 }
 
-async fn openapi_json() -> impl IntoResponse {
-    Json(serde_json::json!({
-        "openapi": "3.0.0",
-        "info": { "title": "cn-user-api", "version": "0.1.0" },
-        "paths": {}
-    }))
+async fn openapi_json(headers: HeaderMap) -> impl IntoResponse {
+    let server_url = openapi::infer_server_url(&headers);
+    Json(openapi::document(server_url.as_deref()))
 }

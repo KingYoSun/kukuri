@@ -4,17 +4,18 @@ use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RotateRequest {
     pub topic_id: String,
     pub scope: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RotateResponse {
     pub topic_id: String,
     pub scope: String,
@@ -23,7 +24,7 @@ pub struct RotateResponse {
     pub recipients: usize,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RevokeRequest {
     pub topic_id: String,
     pub scope: String,
@@ -31,7 +32,7 @@ pub struct RevokeRequest {
     pub reason: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RevokeResponse {
     pub topic_id: String,
     pub scope: String,

@@ -51,7 +51,7 @@ export const AuditPage = () => {
               <div className="muted">
                 Checked {formatTimestamp(service.health?.checked_at ?? null)}
               </div>
-              {service.health?.details && (
+              {service.health?.details != null && (
                 <pre className="code-block">{formatJson(service.health.details)}</pre>
               )}
             </div>

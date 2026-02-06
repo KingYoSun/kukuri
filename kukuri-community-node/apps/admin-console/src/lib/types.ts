@@ -1,146 +1,36 @@
-export type AdminUser = {
-  admin_user_id: string;
-  username: string;
-};
+import type { paths } from '../generated/admin-api';
 
-export type ServiceHealth = {
-  status: string;
-  checked_at: number;
-  details?: unknown | null;
-};
+type JsonBody<T> = T extends { content: { 'application/json': infer U } } ? U : never;
+type ResponseBody<
+  Path extends keyof paths,
+  Method extends keyof paths[Path],
+  Status extends number
+> = paths[Path][Method] extends { responses: infer Responses }
+  ? Status extends keyof Responses
+    ? JsonBody<Responses[Status]>
+    : never
+  : never;
+type SuccessBody<
+  Path extends keyof paths,
+  Method extends keyof paths[Path]
+> = ResponseBody<Path, Method, 200> | ResponseBody<Path, Method, 201>;
+type ArrayItem<T> = T extends Array<infer U> ? U : never;
 
-export type ServiceInfo = {
-  service: string;
-  version: number;
-  config_json: unknown;
-  updated_at: number;
-  updated_by: string;
-  health?: ServiceHealth | null;
-};
-
-export type Policy = {
-  policy_id: string;
-  policy_type: string;
-  version: string;
-  locale: string;
-  title: string;
-  content_md: string;
-  content_hash: string;
-  published_at?: number | null;
-  effective_at?: number | null;
-  is_current: boolean;
-};
-
-export type SubscriptionRequest = {
-  request_id: string;
-  requester_pubkey: string;
-  topic_id: string;
-  requested_services: unknown;
-  status: string;
-  review_note?: string | null;
-  created_at: number;
-  reviewed_at?: number | null;
-};
-
-export type NodeSubscription = {
-  topic_id: string;
-  enabled: boolean;
-  ref_count: number;
-  updated_at: number;
-};
-
-export type PlanLimit = {
-  metric: string;
-  window: string;
-  limit: number;
-};
-
-export type Plan = {
-  plan_id: string;
-  name: string;
-  is_active: boolean;
-  limits: PlanLimit[];
-};
-
-export type SubscriptionRow = {
-  subscription_id: string;
-  subscriber_pubkey: string;
-  plan_id: string;
-  status: string;
-  started_at: number;
-  ended_at?: number | null;
-};
-
-export type UsageRow = {
-  metric: string;
-  day: string;
-  count: number;
-};
-
-export type AuditLog = {
-  audit_id: number;
-  actor_admin_user_id: string;
-  action: string;
-  target: string;
-  diff_json?: unknown | null;
-  request_id?: string | null;
-  created_at: number;
-};
-
-export type ModerationRule = {
-  rule_id: string;
-  name: string;
-  description?: string | null;
-  is_enabled: boolean;
-  priority: number;
-  conditions: unknown;
-  action: unknown;
-  created_at: number;
-  updated_at: number;
-  updated_by: string;
-};
-
-export type ModerationReport = {
-  report_id: string;
-  reporter_pubkey: string;
-  target: string;
-  reason: string;
-  created_at: number;
-};
-
-export type ModerationLabel = {
-  label_id: string;
-  target: string;
-  topic_id?: string | null;
-  label: string;
-  confidence?: number | null;
-  policy_url: string;
-  policy_ref: string;
-  exp: number;
-  issuer_pubkey: string;
-  rule_id?: string | null;
-  source: string;
-  issued_at: number;
-};
-
-export type TrustJob = {
-  job_id: string;
-  job_type: string;
-  subject_pubkey?: string | null;
-  status: string;
-  total_targets?: number | null;
-  processed_targets: number;
-  requested_by: string;
-  requested_at: number;
-  started_at?: number | null;
-  completed_at?: number | null;
-  error_message?: string | null;
-};
-
-export type TrustSchedule = {
-  job_type: string;
-  interval_seconds: number;
-  next_run_at: number;
-  is_enabled: boolean;
-  updated_at: number;
-};
+export type AdminUser = SuccessBody<'/v1/admin/auth/me', 'get'>;
+export type ServiceInfo = ArrayItem<SuccessBody<'/v1/admin/services', 'get'>>;
+export type ServiceHealth = NonNullable<ServiceInfo['health']>;
+export type Policy = ArrayItem<SuccessBody<'/v1/admin/policies', 'get'>>;
+export type SubscriptionRequest = ArrayItem<
+  SuccessBody<'/v1/admin/subscription-requests', 'get'>
+>;
+export type NodeSubscription = ArrayItem<SuccessBody<'/v1/admin/node-subscriptions', 'get'>>;
+export type Plan = ArrayItem<SuccessBody<'/v1/admin/plans', 'get'>>;
+export type PlanLimit = ArrayItem<Plan['limits']>;
+export type SubscriptionRow = ArrayItem<SuccessBody<'/v1/admin/subscriptions', 'get'>>;
+export type UsageRow = ArrayItem<SuccessBody<'/v1/admin/usage', 'get'>>;
+export type AuditLog = ArrayItem<SuccessBody<'/v1/admin/audit-logs', 'get'>>;
+export type ModerationRule = ArrayItem<SuccessBody<'/v1/admin/moderation/rules', 'get'>>;
+export type ModerationReport = ArrayItem<SuccessBody<'/v1/admin/moderation/reports', 'get'>>;
+export type ModerationLabel = ArrayItem<SuccessBody<'/v1/admin/moderation/labels', 'get'>>;
+export type TrustJob = ArrayItem<SuccessBody<'/v1/admin/trust/jobs', 'get'>>;
+export type TrustSchedule = ArrayItem<SuccessBody<'/v1/admin/trust/schedules', 'get'>>;

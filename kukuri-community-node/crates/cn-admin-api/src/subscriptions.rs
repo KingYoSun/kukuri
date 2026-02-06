@@ -4,6 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
+use utoipa::ToSchema;
 
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
@@ -13,7 +14,7 @@ pub struct SubscriptionRequestQuery {
     pub status: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct SubscriptionRequestRow {
     pub request_id: String,
     pub requester_pubkey: String,
@@ -25,12 +26,12 @@ pub struct SubscriptionRequestRow {
     pub reviewed_at: Option<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ReviewRequest {
     pub review_note: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct NodeSubscription {
     pub topic_id: String,
     pub enabled: bool,
@@ -38,12 +39,12 @@ pub struct NodeSubscription {
     pub updated_at: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct NodeSubscriptionUpdate {
     pub enabled: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct Plan {
     pub plan_id: String,
     pub name: String,
@@ -51,14 +52,14 @@ pub struct Plan {
     pub limits: Vec<PlanLimit>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct PlanLimit {
     pub metric: String,
     pub window: String,
     pub limit: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct PlanRequest {
     pub plan_id: String,
     pub name: String,
@@ -66,7 +67,7 @@ pub struct PlanRequest {
     pub limits: Vec<PlanLimit>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct SubscriptionRow {
     pub subscription_id: String,
     pub subscriber_pubkey: String,
@@ -81,7 +82,7 @@ pub struct SubscriptionQuery {
     pub pubkey: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct SubscriptionUpdate {
     pub plan_id: String,
     pub status: String,
@@ -94,7 +95,7 @@ pub struct UsageQuery {
     pub days: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct UsageRow {
     pub metric: String,
     pub day: String,

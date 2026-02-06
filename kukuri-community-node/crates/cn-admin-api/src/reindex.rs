@@ -3,16 +3,17 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ReindexRequest {
     pub topic_id: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ReindexResponse {
     pub job_id: String,
     pub status: String,

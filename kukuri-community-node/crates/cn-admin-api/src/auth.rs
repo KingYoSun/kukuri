@@ -4,25 +4,26 @@ use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use utoipa::ToSchema;
 
 use crate::{ApiError, ApiResult, AppState};
 
 const SESSION_COOKIE: &str = "cn_admin_session";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct LoginResponse {
     pub admin_user_id: String,
     pub username: String,
     pub expires_at: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AdminUser {
     pub admin_user_id: String,
     pub username: String,

@@ -4,6 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, QueryBuilder, Row};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::auth::require_admin;
@@ -20,13 +21,13 @@ pub struct TrustJobQuery {
     pub limit: Option<i64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct TrustJobRequest {
     pub job_type: String,
     pub subject_pubkey: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct TrustJobRow {
     pub job_id: String,
     pub job_type: String,
@@ -41,7 +42,7 @@ pub struct TrustJobRow {
     pub error_message: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct TrustScheduleRow {
     pub job_type: String,
     pub interval_seconds: i64,
@@ -50,7 +51,7 @@ pub struct TrustScheduleRow {
     pub updated_at: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct TrustScheduleUpdate {
     pub interval_seconds: i64,
     pub is_enabled: bool,

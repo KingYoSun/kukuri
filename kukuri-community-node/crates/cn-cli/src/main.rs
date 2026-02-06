@@ -1,6 +1,6 @@
 ﻿use anyhow::{anyhow, Result};
 use base64::prelude::*;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use iroh::{
     discovery::{
         dns::DnsDiscovery,
@@ -72,6 +72,11 @@ enum Commands {
     P2p {
         #[command(subcommand)]
         command: P2pCommand,
+    },
+    #[command(name = "openapi")]
+    OpenApi {
+        #[command(subcommand)]
+        command: OpenApiCommand,
     },
 }
 
@@ -225,6 +230,32 @@ enum P2pCommand {
         #[arg(long, default_value_t = 15)]
         timeout: u64,
     },
+}
+
+#[derive(Subcommand)]
+enum OpenApiCommand {
+    Export(OpenApiExportArgs),
+}
+
+#[derive(Clone, ValueEnum)]
+enum OpenApiService {
+    UserApi,
+    AdminApi,
+}
+
+#[derive(Args, Clone)]
+struct OpenApiExportArgs {
+    /// API service target
+    #[arg(long, value_enum)]
+    service: OpenApiService,
+
+    /// Output file path (stdout when omitted)
+    #[arg(long)]
+    output: Option<PathBuf>,
+
+    /// Pretty-print JSON output
+    #[arg(long, default_value_t = false)]
+    pretty: bool,
 }
 
 #[tokio::main]
@@ -390,6 +421,36 @@ async fn main() -> Result<()> {
         Commands::P2p { command } => {
             handle_p2p(command).await?;
         }
+        Commands::OpenApi { command } => match command {
+            OpenApiCommand::Export(args) => export_openapi(args)?,
+        },
+    }
+
+    Ok(())
+}
+
+fn export_openapi(args: OpenApiExportArgs) -> Result<()> {
+    let document = match args.service {
+        OpenApiService::UserApi => cn_user_api::openapi::document(None),
+        OpenApiService::AdminApi => cn_admin_api::openapi::document(None),
+    };
+
+    let rendered = if args.pretty {
+        serde_json::to_string_pretty(&document)?
+    } else {
+        serde_json::to_string(&document)?
+    };
+
+    if let Some(path) = args.output {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        fs::write(&path, rendered)?;
+        println!("wrote OpenAPI spec: {}", path.display());
+    } else {
+        println!("{rendered}");
     }
 
     Ok(())

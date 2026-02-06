@@ -4,6 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use chrono::TimeZone;
 use sqlx::Row;
+use utoipa::ToSchema;
 
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
@@ -14,7 +15,7 @@ pub struct PolicyQuery {
     pub locale: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct PolicyRequest {
     pub policy_type: String,
     pub version: String,
@@ -23,18 +24,18 @@ pub struct PolicyRequest {
     pub content_md: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct PolicyUpdateRequest {
     pub title: String,
     pub content_md: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct PublishRequest {
     pub effective_at: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct PolicyResponse {
     pub policy_id: String,
     pub policy_type: String,

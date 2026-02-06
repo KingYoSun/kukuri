@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "cn-admin-console",
   "private": true,
   "version": "0.1.0",
@@ -7,11 +7,13 @@
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "generate:api": "openapi-typescript ./openapi/admin-api.json --output ./src/generated/admin-api.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.23",
     "@tanstack/react-router": "^1.77.2",
+    "openapi-fetch": "^0.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.4",
@@ -21,7 +23,9 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
+    "openapi-typescript": "^7.10.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.3"
-  }
+  },
+  "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706"
 }
