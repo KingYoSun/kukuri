@@ -10,8 +10,11 @@ const navItems = [
   { to: '/services', label: 'Services' },
   { to: '/subscriptions', label: 'Subscriptions' },
   { to: '/policies', label: 'Policies' },
+  { to: '/privacy-data', label: 'Privacy / Data' },
+  { to: '/index', label: 'Index' },
   { to: '/moderation', label: 'Moderation' },
   { to: '/trust', label: 'Trust' },
+  { to: '/access-control', label: 'Access Control' },
   { to: '/audit', label: 'Audit & Health' }
 ];
 

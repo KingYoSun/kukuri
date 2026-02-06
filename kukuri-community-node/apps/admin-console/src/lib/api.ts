@@ -263,6 +263,23 @@ export const api = {
         body: payload
       })
     ),
+  rotateAccessControl: (payload: { topic_id: string; scope: string }) =>
+    unwrap(client.POST('/v1/admin/access-control/rotate', { body: payload })),
+  revokeAccessControl: (payload: {
+    topic_id: string;
+    scope: string;
+    pubkey: string;
+    reason?: string | null;
+  }) => unwrap(client.POST('/v1/admin/access-control/revoke', { body: payload })),
+  reindex: (topicId?: string | null) => {
+    const body: { topic_id?: string | null } = {};
+    if (typeof topicId === 'string' && topicId.trim() !== '') {
+      body.topic_id = topicId.trim();
+    } else if (topicId === null) {
+      body.topic_id = null;
+    }
+    return unwrap(client.POST('/v1/reindex', { body }));
+  },
   createManualLabel: (payload: {
     target: string;
     label: string;

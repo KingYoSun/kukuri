@@ -1,10 +1,13 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 
 import App from './App';
+import { AccessControlPage } from './pages/AccessControlPage';
 import { AuditPage } from './pages/AuditPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { IndexPage } from './pages/IndexPage';
 import { ModerationPage } from './pages/ModerationPage';
 import { PoliciesPage } from './pages/PoliciesPage';
+import { PrivacyDataPage } from './pages/PrivacyDataPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { TrustPage } from './pages/TrustPage';
@@ -37,10 +40,22 @@ const policiesRoute = createRoute({
   component: PoliciesPage
 });
 
+const privacyDataRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/privacy-data',
+  component: PrivacyDataPage
+});
+
 const moderationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/moderation',
   component: ModerationPage
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/index',
+  component: IndexPage
 });
 
 const auditRoute = createRoute({
@@ -55,12 +70,21 @@ const trustRoute = createRoute({
   component: TrustPage
 });
 
+const accessControlRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/access-control',
+  component: AccessControlPage
+});
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   servicesRoute,
   subscriptionsRoute,
   policiesRoute,
+  privacyDataRoute,
   moderationRoute,
+  indexRoute,
+  accessControlRoute,
   auditRoute,
   trustRoute
 ]);

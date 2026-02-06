@@ -34,3 +34,6 @@ export type ModerationReport = ArrayItem<SuccessBody<'/v1/admin/moderation/repor
 export type ModerationLabel = ArrayItem<SuccessBody<'/v1/admin/moderation/labels', 'get'>>;
 export type TrustJob = ArrayItem<SuccessBody<'/v1/admin/trust/jobs', 'get'>>;
 export type TrustSchedule = ArrayItem<SuccessBody<'/v1/admin/trust/schedules', 'get'>>;
+export type ReindexResponse = SuccessBody<'/v1/reindex', 'post'>;
+export type RotateAccessControlResponse = SuccessBody<'/v1/admin/access-control/rotate', 'post'>;
+export type RevokeAccessControlResponse = SuccessBody<'/v1/admin/access-control/revoke', 'post'>;
