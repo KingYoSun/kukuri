@@ -16,6 +16,13 @@ pub const KIND_KEY_ENVELOPE: u32 = 39020;
 pub const KIND_INVITE_CAPABILITY: u32 = 39021;
 pub const KIND_JOIN_REQUEST: u32 = 39022;
 
+pub const SCHEMA_NODE_DESCRIPTOR: &str = "kukuri-node-desc-v1";
+pub const SCHEMA_NODE_TOPIC_SERVICE: &str = "kukuri-topic-service-v1";
+pub const SCHEMA_ATTESTATION: &str = "kukuri-attest-v1";
+pub const SCHEMA_KEY_ENVELOPE: &str = "kukuri-key-envelope-v1";
+pub const SCHEMA_INVITE_CAPABILITY: &str = "kukuri-invite-v1";
+pub const SCHEMA_JOIN_REQUEST: &str = "kukuri-join-request-v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KipKind {
     NodeDescriptor,
@@ -95,7 +102,7 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
         KipKind::NodeDescriptor => {
             require_tag_value(raw, "d")?;
             require_exp_tag(raw, options.now)?;
-            validate_schema(raw, "kukuri-node-desc-v1")?;
+            validate_schema(raw, SCHEMA_NODE_DESCRIPTOR)?;
         }
         KipKind::NodeTopicService => {
             require_tag_value(raw, "d")?;
@@ -104,7 +111,7 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
             let scope = require_tag_value(raw, "scope")?;
             validate_scope(&scope, true)?;
             require_exp_tag(raw, options.now)?;
-            validate_schema(raw, "kukuri-topic-service-v1")?;
+            validate_schema(raw, SCHEMA_NODE_TOPIC_SERVICE)?;
         }
         KipKind::Report => {
             require_tag_value(raw, "target")?;
@@ -132,7 +139,7 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
             }
             require_tag_value(raw, "claim")?;
             require_exp_tag(raw, options.now)?;
-            validate_schema(raw, "kukuri-attest-v1")?;
+            validate_schema(raw, SCHEMA_ATTESTATION)?;
         }
         KipKind::TrustAnchor => {
             require_tag_value(raw, "attester")?;
@@ -158,16 +165,17 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
                 return Err(anyhow!("invalid scope: {scope}"));
             }
             require_tag_value(raw, "d")?;
+            validate_schema(raw, SCHEMA_INVITE_CAPABILITY)?;
         }
         KipKind::JoinRequest => {
             require_tag_value(raw, "t")?;
             let scope = require_tag_value(raw, "scope")?;
             match scope.as_str() {
-                "invite" | "friend" => {}
+                "invite" | "friend" | "friend_plus" => {}
                 _ => return Err(anyhow!("invalid scope: {scope}")),
             }
             require_tag_value(raw, "d")?;
-            validate_schema(raw, "kukuri-join-request-v1")?;
+            validate_schema(raw, SCHEMA_JOIN_REQUEST)?;
         }
     }
 
@@ -257,7 +265,7 @@ mod tests {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
             vec!["exp".to_string(), (current_unix_seconds() + 60).to_string()],
         ];
-        let content = json!({ "schema": "kukuri-node-desc-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_NODE_DESCRIPTOR }).to_string();
         let event = nostr::build_signed_event(&keys, KIND_NODE_DESCRIPTOR as u16, tags, content)
             .expect("event");
         let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
@@ -289,7 +297,7 @@ mod tests {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
             vec!["exp".to_string(), (current_unix_seconds() + 60).to_string()],
         ];
-        let content = json!({ "schema": "kukuri-node-desc-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_NODE_DESCRIPTOR }).to_string();
         let mut event = nostr::build_signed_event(&keys, KIND_NODE_DESCRIPTOR as u16, tags, content)
             .expect("event");
         event.sig = "00".repeat(64);
@@ -314,7 +322,7 @@ mod tests {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
             vec!["exp".to_string(), (now + 60).to_string()],
         ];
-        let content = json!({ "schema": "kukuri-node-desc-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_NODE_DESCRIPTOR }).to_string();
         let event = nostr::build_signed_event(&keys, KIND_NODE_DESCRIPTOR as u16, tags, content)
             .expect("event");
 
@@ -341,7 +349,7 @@ mod tests {
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
-        let content = json!({ "schema": "kukuri-invite-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_INVITE_CAPABILITY }).to_string();
         let event =
             nostr::build_signed_event(&keys, KIND_INVITE_CAPABILITY as u16, tags, content)
                 .expect("event");
@@ -367,7 +375,32 @@ mod tests {
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
-        let content = json!({ "schema": "kukuri-join-request-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_JOIN_REQUEST }).to_string();
+        let event = nostr::build_signed_event(&keys, KIND_JOIN_REQUEST as u16, tags, content)
+            .expect("event");
+
+        let kind = validate_kip_event(
+            &event,
+            ValidationOptions {
+                verify_signature: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect("valid");
+        assert_eq!(kind, KipKind::JoinRequest);
+    }
+
+    #[test]
+    fn validate_join_request_accepts_friend_plus_scope() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["scope".to_string(), "friend_plus".to_string()],
+            vec!["d".to_string(), "join:kukuri:topic1:nonce:requester".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let content = json!({ "schema": SCHEMA_JOIN_REQUEST }).to_string();
         let event = nostr::build_signed_event(&keys, KIND_JOIN_REQUEST as u16, tags, content)
             .expect("event");
 
@@ -387,12 +420,12 @@ mod tests {
         let keys = Keys::generate();
         let tags = vec![
             vec!["t".to_string(), "kukuri:topic1".to_string()],
-            vec!["scope".to_string(), "friend_plus".to_string()],
+            vec!["scope".to_string(), "public".to_string()],
             vec!["d".to_string(), "join:kukuri:topic1:nonce:requester".to_string()],
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
-        let content = json!({ "schema": "kukuri-join-request-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_JOIN_REQUEST }).to_string();
         let event = nostr::build_signed_event(&keys, KIND_JOIN_REQUEST as u16, tags, content)
             .expect("event");
 
@@ -408,6 +441,32 @@ mod tests {
     }
 
     #[test]
+    fn validate_invite_capability_rejects_invalid_schema() {
+        let keys = Keys::generate();
+        let tags = vec![
+            vec!["t".to_string(), "kukuri:topic1".to_string()],
+            vec!["scope".to_string(), "invite".to_string()],
+            vec!["d".to_string(), "invite:nonce".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+        ];
+        let content = json!({ "schema": "kukuri-invite-legacy-v1" }).to_string();
+        let event =
+            nostr::build_signed_event(&keys, KIND_INVITE_CAPABILITY as u16, tags, content)
+                .expect("event");
+
+        let err = validate_kip_event(
+            &event,
+            ValidationOptions {
+                verify_signature: false,
+                ..ValidationOptions::default()
+            },
+        )
+        .expect_err("invalid schema");
+        assert!(err.to_string().contains("invalid schema"));
+    }
+
+    #[test]
     fn validate_node_topic_service_accepts_valid_event() {
         let keys = Keys::generate();
         let tags = vec![
@@ -419,7 +478,7 @@ mod tests {
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
-        let content = json!({ "schema": "kukuri-topic-service-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_NODE_TOPIC_SERVICE }).to_string();
         let event =
             nostr::build_signed_event(&keys, KIND_NODE_TOPIC_SERVICE as u16, tags, content)
                 .expect("event");
@@ -452,7 +511,7 @@ mod tests {
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
-        let content = json!({ "schema": "kukuri-attest-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_ATTESTATION }).to_string();
         let event = nostr::build_signed_event(&keys, KIND_ATTESTATION as u16, tags, content)
             .expect("event");
         let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
@@ -504,7 +563,7 @@ mod tests {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
             vec!["exp".to_string(), (now - 10).to_string()],
         ];
-        let content = json!({ "schema": "kukuri-node-desc-v1" }).to_string();
+        let content = json!({ "schema": SCHEMA_NODE_DESCRIPTOR }).to_string();
         let event = nostr::build_signed_event(&keys, KIND_NODE_DESCRIPTOR as u16, tags, content)
             .expect("event");
 

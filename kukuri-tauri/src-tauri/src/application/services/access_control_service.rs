@@ -28,6 +28,9 @@ const KIP_VERSION: &str = "1";
 const KIND_KEY_ENVELOPE: u32 = 39020;
 const KIND_INVITE_CAPABILITY: u32 = 39021;
 const KIND_JOIN_REQUEST: u32 = 39022;
+const SCHEMA_KEY_ENVELOPE: &str = "kukuri-key-envelope-v1";
+const SCHEMA_INVITE_CAPABILITY: &str = "kukuri-invite-v1";
+const SCHEMA_JOIN_REQUEST: &str = "kukuri-join-request-v1";
 const JOIN_REQUEST_RATE_LIMIT_MAX: usize = 3;
 const JOIN_REQUEST_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
@@ -112,7 +115,7 @@ impl AccessControlService {
         let _ = self.ensure_group_key(topic_id, "invite").await?;
 
         let content = json!({
-            "schema": "kukuri-invite-v1",
+            "schema": SCHEMA_INVITE_CAPABILITY,
             "topic": topic_id,
             "scope": "invite",
             "expires": expires_at,
@@ -180,7 +183,7 @@ impl AccessControlService {
         }
 
         let mut content = json!({
-            "schema": "kukuri-join-request-v1",
+            "schema": SCHEMA_JOIN_REQUEST,
             "topic": topic_id,
             "scope": scope,
             "requester": format!("pubkey:{requester_pubkey}"),
@@ -395,7 +398,7 @@ impl AccessControlService {
 
         let content: JoinRequestPayload = serde_json::from_str(&event.content)
             .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-        if content.schema != "kukuri-join-request-v1" {
+        if content.schema != SCHEMA_JOIN_REQUEST {
             return Err(AppError::validation(
                 ValidationFailureKind::Generic,
                 "Invalid join.request schema",
@@ -515,7 +518,7 @@ impl AccessControlService {
         let payload: KeyEnvelopePayload = serde_json::from_str(&decrypted)
             .map_err(|err| AppError::DeserializationError(err.to_string()))?;
 
-        if payload.schema != "kukuri-key-envelope-v1" && payload.schema != "kukuri-keyenv-v1" {
+        if payload.schema != SCHEMA_KEY_ENVELOPE {
             return Err(AppError::validation(
                 ValidationFailureKind::Generic,
                 "Invalid key envelope schema",
@@ -577,7 +580,7 @@ impl AccessControlService {
             .map_err(|err| AppError::Crypto(format!("Invalid recipient pubkey: {err}")))?;
 
         let payload = json!({
-            "schema": "kukuri-key-envelope-v1",
+            "schema": SCHEMA_KEY_ENVELOPE,
             "topic": record.topic_id.clone(),
             "scope": record.scope.clone(),
             "epoch": record.epoch,
@@ -863,7 +866,7 @@ fn validate_invite_event(
 
     let payload: InvitePayload = serde_json::from_str(&event.content)
         .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-    if payload.schema != "kukuri-invite-v1" {
+    if payload.schema != SCHEMA_INVITE_CAPABILITY {
         return Err(AppError::validation(
             ValidationFailureKind::Generic,
             "Invalid invite schema",
@@ -1499,7 +1502,7 @@ mod tests {
         let topic_id = "kukuri:topic1";
 
         let content = json!({
-            "schema": "kukuri-invite-v1",
+            "schema": SCHEMA_INVITE_CAPABILITY,
             "topic": topic_id,
             "scope": "invite",
             "expires": Utc::now().timestamp() + 600,
@@ -1528,6 +1531,43 @@ mod tests {
             Err(err) => err,
         };
         assert_eq!(err.validation_message(), Some("Invite nonce mismatch"));
+    }
+
+    #[tokio::test]
+    async fn validate_invite_event_rejects_invalid_schema() {
+        let (keys, keypair) = make_keypair();
+        let topic_id = "kukuri:topic1";
+
+        let content = json!({
+            "schema": "kukuri-invite-legacy-v1",
+            "topic": topic_id,
+            "scope": "invite",
+            "expires": Utc::now().timestamp() + 600,
+            "max_uses": 1,
+            "nonce": "nonce-1",
+            "issuer": format!("pubkey:{}", keypair.public_key),
+        })
+        .to_string();
+
+        let tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "invite"]).expect("tag"),
+            Tag::parse(["d", "invite:nonce-1"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+
+        let nostr_event = EventBuilder::new(Kind::from(KIND_INVITE_CAPABILITY as u16), content)
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("signed");
+
+        let value = serde_json::to_value(nostr_event).expect("value");
+        let err = match validate_invite_event(&value, Some(topic_id)) {
+            Ok(_) => panic!("should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.validation_message(), Some("Invalid invite schema"));
     }
 
     #[tokio::test]
@@ -1567,7 +1607,7 @@ mod tests {
         );
 
         let content = json!({
-            "schema": "kukuri-join-request-v1",
+            "schema": SCHEMA_JOIN_REQUEST,
             "topic": topic_id,
             "scope": "friend",
             "requester": format!("pubkey:{}", requester_keypair.public_key),
@@ -1604,6 +1644,76 @@ mod tests {
             .expect("list");
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].requester_pubkey, requester_keypair.public_key);
+    }
+
+    #[tokio::test]
+    async fn handle_join_request_accepts_friend_plus_with_fof() {
+        let (_member_keys, member_keypair) = make_keypair();
+        let (_friend_keys, friend_keypair) = make_keypair();
+        let (requester_keys, requester_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(member_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
+        user_repository
+            .seed_follow(&member_keypair.public_key, &friend_keypair.public_key)
+            .await;
+        user_repository
+            .seed_follow(&friend_keypair.public_key, &member_keypair.public_key)
+            .await;
+        user_repository
+            .seed_follow(&friend_keypair.public_key, &requester_keypair.public_key)
+            .await;
+        user_repository
+            .seed_follow(&requester_keypair.public_key, &friend_keypair.public_key)
+            .await;
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+            signature_service,
+            gossip_service_trait,
+        );
+
+        let topic_id = "kukuri:topic1";
+        let content = json!({
+            "schema": SCHEMA_JOIN_REQUEST,
+            "topic": topic_id,
+            "scope": "friend_plus",
+            "requester": format!("pubkey:{}", requester_keypair.public_key),
+            "requested_at": Utc::now().timestamp(),
+        })
+        .to_string();
+        let tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "friend_plus"]).expect("tag"),
+            Tag::parse(["d", "join:kukuri:topic1:nonce:requester"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+
+        let nostr_event = EventBuilder::new(Kind::from(KIND_JOIN_REQUEST as u16), content)
+            .tags(tags)
+            .sign_with_keys(&requester_keys)
+            .expect("signed");
+
+        let event = domain_event_from_nostr(&nostr_event);
+        service.handle_incoming_event(&event).await.expect("handle");
+
+        let pending = join_request_store
+            .list_requests(&member_keypair.public_key)
+            .await
+            .expect("list");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].scope, "friend_plus");
     }
 
     #[tokio::test]
@@ -1757,7 +1867,7 @@ mod tests {
 
         let build_join_request = |keys: &Keys, requester_pubkey: &str, nonce: &str| {
             let content = json!({
-                "schema": "kukuri-join-request-v1",
+                "schema": SCHEMA_JOIN_REQUEST,
                 "topic": topic_id,
                 "scope": "invite",
                 "requester": format!("pubkey:{requester_pubkey}"),
@@ -1838,7 +1948,7 @@ mod tests {
         );
 
         let content = json!({
-            "schema": "kukuri-join-request-v1",
+            "schema": SCHEMA_JOIN_REQUEST,
             "topic": topic_id,
             "scope": "friend",
             "requester": format!("pubkey:{}", requester_keypair.public_key),
@@ -1884,6 +1994,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handle_key_envelope_rejects_legacy_schema_name() {
+        let (_recipient_keys, recipient_keypair) = make_keypair();
+        let (sender_keys, sender_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(recipient_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+            signature_service,
+            gossip_service_trait,
+        );
+
+        let payload = json!({
+            "schema": "kukuri-keyenv-v1",
+            "topic": "kukuri:topic1",
+            "scope": "friend",
+            "epoch": 1,
+            "key_b64": "aGVsbG8=",
+            "issued_at": Utc::now().timestamp(),
+        });
+        let sender_secret = SecretKey::from_hex(&sender_keypair.private_key).expect("secret");
+        let recipient_pubkey = PublicKey::from_hex(&recipient_keypair.public_key).expect("pubkey");
+        let encrypted = nip44::encrypt(
+            &sender_secret,
+            &recipient_pubkey,
+            payload.to_string(),
+            nip44::Version::V2,
+        )
+        .expect("encrypt");
+        let tags = vec![
+            Tag::parse(["p", recipient_keypair.public_key.as_str()]).expect("tag"),
+            Tag::parse(["t", "kukuri:topic1"]).expect("tag"),
+            Tag::parse(["scope", "friend"]).expect("tag"),
+            Tag::parse(["epoch", "1"]).expect("tag"),
+            Tag::parse(["d", "keyenv:kukuri:topic1:friend:1:legacy"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+        let nostr_event = EventBuilder::new(Kind::from(KIND_KEY_ENVELOPE as u16), encrypted)
+            .tags(tags)
+            .sign_with_keys(&sender_keys)
+            .expect("signed");
+
+        let event = domain_event_from_nostr(&nostr_event);
+        let err = service
+            .handle_incoming_event(&event)
+            .await
+            .expect_err("should reject legacy schema");
+        assert_eq!(
+            err.validation_message(),
+            Some("Invalid key envelope schema")
+        );
+
+        let keys = group_key_store.list_keys().await.expect("keys");
+        assert!(keys.is_empty());
+    }
+
+    #[tokio::test]
     async fn handle_join_request_rejects_negative_requested_at() {
         let (_member_keys, member_keypair) = make_keypair();
         let (requester_keys, requester_keypair) = make_keypair();
@@ -1908,7 +2087,7 @@ mod tests {
         );
 
         let content = json!({
-            "schema": "kukuri-join-request-v1",
+            "schema": SCHEMA_JOIN_REQUEST,
             "topic": "kukuri:topic1",
             "scope": "friend",
             "requester": format!("pubkey:{}", requester_keypair.public_key),
