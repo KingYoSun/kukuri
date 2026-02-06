@@ -154,3 +154,9 @@ v1 の Access Control は **P2P-only** のため、コミュニティノード�
 - FoF 判定の高度化（trust 連携、2-hop 以上、閾値/重み付け）
 - private scope のイベントを node の `index/moderation/trust` が扱うか（復号の是非、ポリシー/同意/ログ方針）
 - 群鍵の保管方式（KMS/OS keychain/HSM、ローテ手順、バックアップ/復旧）
+
+
+## P2P-only 整合メモ（2026年02月06日）
+- relay は `scope!=public` の投稿に対して `scope` / `epoch` タグの検証のみを行い、membership/epoch の DB 照合は行わない。
+- membership/epoch の正当性はクライアントのローカル判定に委ねる（P2P-only）。
+- node 側の membership/epoch 保持は v1 の必須要件ではなく、運用で保持する場合は別設計で扱う。

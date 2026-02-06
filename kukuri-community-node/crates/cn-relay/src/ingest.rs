@@ -123,24 +123,28 @@ pub async fn ingest_event(
 
     let scope = raw.first_tag_value("scope").unwrap_or_else(|| "public".into());
     if scope != "public" {
-        let epoch = raw
-            .first_tag_value("epoch")
-            .and_then(|value| value.parse::<i64>().ok())
-            .ok_or_else(|| anyhow!("invalid: missing epoch"))?;
-        for topic_id in &normalized_topics {
-            if !has_membership(&state.pool, &raw.pubkey, topic_id, &scope).await? {
-                metrics::inc_ingest_rejected(super::SERVICE_NAME, "restricted");
+        let Some(epoch_value) = raw.first_tag_value("epoch") else {
+            metrics::inc_ingest_rejected(super::SERVICE_NAME, "invalid");
+            return Ok(IngestOutcome::Rejected {
+                reason: "invalid: missing epoch".into(),
+            });
+        };
+        let epoch: i64 = match epoch_value.parse() {
+            Ok(value) => value,
+            Err(_) => {
+                metrics::inc_ingest_rejected(super::SERVICE_NAME, "invalid");
                 return Ok(IngestOutcome::Rejected {
-                    reason: "restricted: membership required".into(),
+                    reason: "invalid: epoch must be integer".into(),
                 });
             }
-            if !epoch_valid(&state.pool, topic_id, &scope, epoch).await? {
-                metrics::inc_ingest_rejected(super::SERVICE_NAME, "restricted");
-                return Ok(IngestOutcome::Rejected {
-                    reason: "restricted: epoch mismatch".into(),
-                });
-            }
+        };
+        if epoch <= 0 {
+            metrics::inc_ingest_rejected(super::SERVICE_NAME, "invalid");
+            return Ok(IngestOutcome::Rejected {
+                reason: "invalid: epoch must be positive".into(),
+            });
         }
+        // P2P-only: relay does not validate membership/epoch against node DB.
     }
 
     if runtime.auth.requires_auth(now) && source == IngestSource::Ws {
@@ -745,40 +749,6 @@ async fn apply_tombstones(
     Ok(deleted)
 }
 
-pub(crate) async fn has_membership(
-    pool: &sqlx::Pool<Postgres>,
-    pubkey: &str,
-    topic_id: &str,
-    scope: &str,
-) -> Result<bool> {
-    let status = sqlx::query_scalar::<_, String>(
-        "SELECT status FROM cn_user.topic_memberships WHERE topic_id = $1 AND scope = $2 AND pubkey = $3",
-    )
-    .bind(topic_id)
-    .bind(scope)
-    .bind(pubkey)
-    .fetch_optional(pool)
-    .await?;
-    Ok(status.map(|s| s == "active").unwrap_or(false))
-}
-
-pub(crate) async fn epoch_valid(
-    pool: &sqlx::Pool<Postgres>,
-    topic_id: &str,
-    scope: &str,
-    epoch: i64,
-) -> Result<bool> {
-    let current = sqlx::query_scalar::<_, i32>(
-        "SELECT current_epoch FROM cn_admin.topic_scope_state WHERE topic_id = $1 AND scope = $2",
-    )
-    .bind(topic_id)
-    .bind(scope)
-    .fetch_optional(pool)
-    .await?
-    .unwrap_or(0);
-    Ok(epoch >= current as i64)
-}
-
 pub(crate) async fn has_current_consents(
     pool: &sqlx::Pool<Postgres>,
     pubkey: &str,
@@ -871,6 +841,16 @@ mod tests {
             .expect("event")
     }
 
+    fn build_ephemeral_event(scope: &str, epoch: Option<&str>) -> nostr::RawEvent {
+        let keys = Keys::generate();
+        let mut tags = vec![vec!["t".to_string(), "kukuri:topic1".to_string()]];
+        tags.push(vec!["scope".to_string(), scope.to_string()]);
+        if let Some(epoch) = epoch {
+            tags.push(vec!["epoch".to_string(), epoch.to_string()]);
+        }
+        nostr::build_signed_event(&keys, 20001, tags, "hello".to_string()).expect("event")
+    }
+
     #[tokio::test]
     async fn ingest_event_rejects_invalid_kip_event() {
         let state = test_state();
@@ -885,6 +865,55 @@ mod tests {
                 assert!(reason.contains("kip validation failed"));
             }
             _ => panic!("expected rejection for invalid kip event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ingest_event_accepts_private_scope_without_membership() {
+        let state = test_state();
+        let raw = build_ephemeral_event("friend", Some("1"));
+
+        let outcome = ingest_event(&state, raw, IngestSource::Gossip, IngestContext::default())
+            .await
+            .expect("ingest result");
+
+        match outcome {
+            IngestOutcome::Accepted { .. } => {}
+            _ => panic!("expected acceptance for private scope event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ingest_event_rejects_private_scope_missing_epoch() {
+        let state = test_state();
+        let raw = build_ephemeral_event("friend", None);
+
+        let outcome = ingest_event(&state, raw, IngestSource::Gossip, IngestContext::default())
+            .await
+            .expect("ingest result");
+
+        match outcome {
+            IngestOutcome::Rejected { reason } => {
+                assert!(reason.contains("missing epoch"));
+            }
+            _ => panic!("expected rejection for missing epoch"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ingest_event_rejects_private_scope_invalid_epoch() {
+        let state = test_state();
+        let raw = build_ephemeral_event("friend", Some("nope"));
+
+        let outcome = ingest_event(&state, raw, IngestSource::Gossip, IngestContext::default())
+            .await
+            .expect("ingest result");
+
+        match outcome {
+            IngestOutcome::Rejected { reason } => {
+                assert!(reason.contains("epoch must be integer"));
+            }
+            _ => panic!("expected rejection for invalid epoch"),
         }
     }
 }

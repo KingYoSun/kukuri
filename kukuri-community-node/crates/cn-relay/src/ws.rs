@@ -123,7 +123,7 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
             }
             recv = broadcast_rx.recv() => {
                 if let Ok(event) = recv {
-                    if let Err(err) = dispatch_event(&state, &mut sender, &subscriptions, auth_pubkey.as_deref(), &event).await {
+                    if let Err(err) = dispatch_event(&mut sender, &subscriptions, auth_pubkey.as_deref(), &event).await {
                         let _ = send_json(&mut sender, json!(["NOTICE", err.to_string()])).await;
                     }
                 }
@@ -280,7 +280,7 @@ async fn handle_req_message(
             if !seen.insert(raw.id.clone()) {
                 continue;
             }
-            if !is_allowed_event(state, auth_pubkey, &raw).await? {
+            if !is_allowed_event(auth_pubkey, &raw).await? {
                 continue;
             }
             send_event(sender, &sub_id, &raw).await?;
@@ -400,13 +400,12 @@ async fn fetch_events(state: &AppState, filter: &RelayFilter) -> Result<Vec<nost
 }
 
 async fn dispatch_event(
-    state: &AppState,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     subscriptions: &HashMap<String, Vec<RelayFilter>>,
     auth_pubkey: Option<&str>,
     event: &RelayEvent,
 ) -> Result<()> {
-    if !is_allowed_event(state, auth_pubkey, &event.raw).await? {
+    if !is_allowed_event(auth_pubkey, &event.raw).await? {
         return Ok(());
     }
     for (sub_id, filters) in subscriptions {
@@ -417,48 +416,26 @@ async fn dispatch_event(
     Ok(())
 }
 
-async fn is_allowed_event(
-    state: &AppState,
-    auth_pubkey: Option<&str>,
-    event: &nostr::RawEvent,
-) -> Result<bool> {
+async fn is_allowed_event(auth_pubkey: Option<&str>, event: &nostr::RawEvent) -> Result<bool> {
     let scope = event.first_tag_value("scope").unwrap_or_else(|| "public".into());
     if scope == "public" {
         return Ok(true);
     }
-    let Some(pubkey) = auth_pubkey else {
+    if auth_pubkey.is_none() {
         return Ok(false);
     };
-    let epoch = event
-        .first_tag_value("epoch")
-        .and_then(|value| value.parse::<i64>().ok())
-        .unwrap_or(0);
-    for topic_id in event.topic_ids() {
-        if !has_membership(state, pubkey, &topic_id, &scope).await? {
-            return Ok(false);
-        }
-        if !epoch_valid(state, &topic_id, &scope, epoch).await? {
-            return Ok(false);
-        }
+    let Some(epoch_value) = event.first_tag_value("epoch") else {
+        return Ok(false);
+    };
+    let epoch = epoch_value.parse::<i64>().unwrap_or(0);
+    if epoch <= 0 {
+        return Ok(false);
     }
     Ok(true)
 }
 
 async fn has_current_consents(state: &AppState, pubkey: &str) -> Result<bool> {
     crate::ingest::has_current_consents(&state.pool, pubkey).await
-}
-
-async fn has_membership(
-    state: &AppState,
-    pubkey: &str,
-    topic_id: &str,
-    scope: &str,
-) -> Result<bool> {
-    crate::ingest::has_membership(&state.pool, pubkey, topic_id, scope).await
-}
-
-async fn epoch_valid(state: &AppState, topic_id: &str, scope: &str, epoch: i64) -> Result<bool> {
-    crate::ingest::epoch_valid(&state.pool, topic_id, scope, epoch).await
 }
 
 fn rate_limit_key(addr: &SocketAddr, pubkey: Option<&str>) -> String {
