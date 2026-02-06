@@ -1,6 +1,6 @@
 ﻿# Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年02月05日
+最終更新日: 2026年02月06日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -72,6 +72,15 @@
 - [x] friend_plus（FoF + pull join.request）のテスト:
   - [x] FoF 判定（相互フォロー/2-hop/非該当）の unit テストを追加する
   - [x] join.request(friend_plus) → 承認 → key.envelope → 復号表示の統合/E2E テストを追加する
+
+## 未実装/不足事項（2026年02月06日 追記）
+
+- [ ] Access Control: P2P-only 方針と relay/DB 実装の整合を取り、membership/epoch 検証やノード側保持の是非を設計・実装・ドキュメントで統一する
+- [ ] Access Control: KIP 検証の不足を補完する（join.request の friend_plus 対応、key.envelope/invite の schema 検証、schema 名の統一）+ テスト追加
+- [ ] 削除要求: Meilisearch/AGE/モデレーションの派生データを削除・再計算するフローを実装し、削除要求が仕様通りに反映されることを確認する
+- [ ] OpenAPI: `utoipa` で User/Admin API の spec を生成し `/v1/openapi.json` を実データで返す。Admin Console で OpenAPI 由来の型/クライアント生成を導入し契約テストへ反映する
+- [ ] Admin Console: Privacy/Data・Index・Access Control のページを追加し、Vitest + Testing Library の UI テスト基盤を整備する
+- [ ] Moderation LLM: OpenAI/Local provider を実装（または無効化の明示）し、LLM ラベリングの統合/E2E テストを追加する
 
 ## 参照（設計）
 
