@@ -1,7 +1,9 @@
-use crate::{access_control, auth, reindex, AppState};
+use crate::{
+    access_control, auth, moderation, policies, reindex, services, subscriptions, trust, AppState,
+};
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::Router;
 use cn_core::service_config;
 use nostr_sdk::prelude::Keys;
@@ -121,6 +123,23 @@ async fn post_json(
     (status, payload)
 }
 
+async fn put_json(app: Router, uri: &str, payload: Value, session_id: &str) -> (StatusCode, Value) {
+    let request = Request::builder()
+        .method("PUT")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .header("cookie", format!("cn_admin_session={session_id}"))
+        .body(Body::from(payload.to_string()))
+        .expect("request");
+    let response = app.oneshot(request).await.expect("response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: Value = serde_json::from_slice(&body).expect("json body");
+    (status, payload)
+}
+
 async fn get_json(app: Router, uri: &str) -> (StatusCode, Value) {
     let request = Request::builder()
         .method("GET")
@@ -152,6 +171,91 @@ async fn get_json_with_session(app: Router, uri: &str, session_id: &str) -> (Sta
         .expect("response body");
     let payload: Value = serde_json::from_slice(&body).expect("json body");
     (status, payload)
+}
+
+async fn insert_service_health(pool: &Pool<Postgres>, service: &str, status: &str, details: Value) {
+    sqlx::query(
+        "INSERT INTO cn_admin.service_health          (service, status, checked_at, details_json)          VALUES ($1, $2, NOW(), $3)          ON CONFLICT (service) DO UPDATE SET status = EXCLUDED.status, checked_at = EXCLUDED.checked_at, details_json = EXCLUDED.details_json",
+    )
+    .bind(service)
+    .bind(status)
+    .bind(details)
+    .execute(pool)
+    .await
+    .expect("insert service health");
+}
+
+async fn insert_report(pool: &Pool<Postgres>, reporter_pubkey: &str, target: &str, reason: &str) {
+    let report_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO cn_user.reports          (report_id, reporter_pubkey, target, reason, report_event_json)          VALUES ($1, $2, $3, $4, NULL)",
+    )
+    .bind(report_id)
+    .bind(reporter_pubkey)
+    .bind(target)
+    .bind(reason)
+    .execute(pool)
+    .await
+    .expect("insert report");
+}
+
+async fn insert_subscription_request(
+    pool: &Pool<Postgres>,
+    requester_pubkey: &str,
+    topic_id: &str,
+    requested_services: Value,
+) -> String {
+    let request_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO cn_user.topic_subscription_requests          (request_id, requester_pubkey, topic_id, requested_services, status)          VALUES ($1, $2, $3, $4, 'pending')",
+    )
+    .bind(&request_id)
+    .bind(requester_pubkey)
+    .bind(topic_id)
+    .bind(requested_services)
+    .execute(pool)
+    .await
+    .expect("insert subscription request");
+    request_id
+}
+
+async fn insert_usage_counter(
+    pool: &Pool<Postgres>,
+    subscriber_pubkey: &str,
+    metric: &str,
+    count: i64,
+) {
+    sqlx::query(
+        "INSERT INTO cn_user.usage_counters_daily          (subscriber_pubkey, metric, day, count)          VALUES ($1, $2, $3, $4)          ON CONFLICT (subscriber_pubkey, metric, day) DO UPDATE SET count = EXCLUDED.count",
+    )
+    .bind(subscriber_pubkey)
+    .bind(metric)
+    .bind(chrono::Utc::now().date_naive())
+    .bind(count)
+    .execute(pool)
+    .await
+    .expect("insert usage counter");
+}
+
+async fn insert_audit_log(
+    pool: &Pool<Postgres>,
+    actor_admin_user_id: &str,
+    action: &str,
+    target: &str,
+    diff_json: Value,
+    request_id: &str,
+) {
+    sqlx::query(
+        "INSERT INTO cn_admin.audit_logs          (actor_admin_user_id, action, target, diff_json, request_id)          VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(actor_admin_user_id)
+    .bind(action)
+    .bind(target)
+    .bind(diff_json)
+    .bind(request_id)
+    .execute(pool)
+    .await
+    .expect("insert audit log");
 }
 
 #[tokio::test]
@@ -276,7 +380,10 @@ async fn access_control_memberships_contract_search_success() {
         rows[0].get("pubkey").and_then(Value::as_str),
         Some(invite_pubkey.as_str())
     );
-    assert_eq!(rows[0].get("status").and_then(Value::as_str), Some("active"));
+    assert_eq!(
+        rows[0].get("status").and_then(Value::as_str),
+        Some("active")
+    );
 }
 
 #[tokio::test]
@@ -443,4 +550,861 @@ async fn auth_contract_login_me_logout_success() {
         .await
         .expect("response");
     assert_eq!(me_after_logout_response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn services_contract_success_and_shape() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let service = format!("service-{}", Uuid::new_v4());
+    let service_config = json!({
+        "enabled": true,
+        "refresh_seconds": 30
+    });
+
+    let app = Router::new()
+        .route("/v1/admin/services", get(services::list_services))
+        .route(
+            "/v1/admin/services/{service}/config",
+            get(services::get_service_config).put(services::update_service_config),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/services/{service}/config"),
+        json!({
+            "config_json": service_config,
+            "expected_version": null
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("service").and_then(Value::as_str),
+        Some(service.as_str())
+    );
+    assert_eq!(payload.get("version").and_then(Value::as_i64), Some(1));
+    assert_eq!(payload.get("config_json"), Some(&service_config));
+    assert!(payload.get("updated_at").and_then(Value::as_i64).is_some());
+    assert!(payload.get("updated_by").and_then(Value::as_str).is_some());
+
+    insert_service_health(
+        &state.pool,
+        &service,
+        "healthy",
+        json!({ "status": 200, "source": "contract-test" }),
+    )
+    .await;
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!("/v1/admin/services/{service}/config"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("service").and_then(Value::as_str),
+        Some(service.as_str())
+    );
+    assert_eq!(payload.get("version").and_then(Value::as_i64), Some(1));
+    assert_eq!(payload.get("config_json"), Some(&service_config));
+
+    let (status, payload) = get_json_with_session(app, "/v1/admin/services", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    let service_row = rows
+        .iter()
+        .find(|row| row.get("service").and_then(Value::as_str) == Some(service.as_str()))
+        .expect("service row");
+    assert_eq!(service_row.get("version").and_then(Value::as_i64), Some(1));
+    assert_eq!(service_row.get("config_json"), Some(&service_config));
+    let health = service_row
+        .get("health")
+        .and_then(Value::as_object)
+        .expect("health object");
+    assert_eq!(
+        health.get("status").and_then(Value::as_str),
+        Some("healthy")
+    );
+    assert!(health.get("checked_at").and_then(Value::as_i64).is_some());
+}
+
+#[tokio::test]
+async fn policies_contract_lifecycle_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let policy_type = format!("terms-{}", &Uuid::new_v4().to_string()[..8]);
+    let locale = "ja-JP";
+    let version = "v1";
+    let policy_id = format!("{policy_type}:{version}:{locale}");
+    let effective_at = chrono::Utc::now().timestamp() + 3600;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/policies",
+            get(policies::list_policies).post(policies::create_policy),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}",
+            put(policies::update_policy),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}/publish",
+            post(policies::publish_policy),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}/make-current",
+            post(policies::make_current_policy),
+        )
+        .with_state(state);
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/policies",
+        json!({
+            "policy_type": policy_type,
+            "version": version,
+            "locale": locale,
+            "title": "利用規約",
+            "content_md": "初版"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("policy_id").and_then(Value::as_str),
+        Some(policy_id.as_str())
+    );
+    assert_eq!(payload.get("published_at").and_then(Value::as_i64), None);
+    assert_eq!(payload.get("effective_at").and_then(Value::as_i64), None);
+    assert_eq!(
+        payload.get("is_current").and_then(Value::as_bool),
+        Some(false)
+    );
+    let created_hash = payload
+        .get("content_hash")
+        .and_then(Value::as_str)
+        .expect("content hash")
+        .to_string();
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/policies/{policy_id}"),
+        json!({
+            "title": "利用規約 改訂版",
+            "content_md": "更新後"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("title").and_then(Value::as_str),
+        Some("利用規約 改訂版")
+    );
+    let updated_hash = payload
+        .get("content_hash")
+        .and_then(Value::as_str)
+        .expect("updated content hash");
+    assert_ne!(updated_hash, created_hash);
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/policies/{policy_id}/publish"),
+        json!({
+            "effective_at": effective_at
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(payload
+        .get("published_at")
+        .and_then(Value::as_i64)
+        .is_some());
+    assert_eq!(
+        payload.get("effective_at").and_then(Value::as_i64),
+        Some(effective_at)
+    );
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/policies/{policy_id}/make-current"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("is_current").and_then(Value::as_bool),
+        Some(true)
+    );
+
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!("/v1/admin/policies?policy_type={policy_type}&locale={locale}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    let row = rows
+        .iter()
+        .find(|row| row.get("policy_id").and_then(Value::as_str) == Some(policy_id.as_str()))
+        .expect("policy row");
+    assert_eq!(
+        row.get("policy_type").and_then(Value::as_str),
+        Some(policy_type.as_str())
+    );
+    assert_eq!(row.get("version").and_then(Value::as_str), Some(version));
+    assert_eq!(row.get("locale").and_then(Value::as_str), Some(locale));
+    assert_eq!(row.get("is_current").and_then(Value::as_bool), Some(true));
+}
+
+#[tokio::test]
+async fn moderation_contract_success_and_shape() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let reporter_pubkey = Keys::generate().public_key().to_hex();
+    let target = format!("event:{}", Uuid::new_v4().simple());
+    insert_report(&state.pool, &reporter_pubkey, &target, "spam").await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/moderation/rules",
+            get(moderation::list_rules).post(moderation::create_rule),
+        )
+        .route(
+            "/v1/admin/moderation/rules/{rule_id}",
+            put(moderation::update_rule),
+        )
+        .route(
+            "/v1/admin/moderation/reports",
+            get(moderation::list_reports),
+        )
+        .route(
+            "/v1/admin/moderation/labels",
+            get(moderation::list_labels).post(moderation::create_label),
+        )
+        .with_state(state);
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/moderation/rules",
+        json!({
+            "name": "spam-rule",
+            "description": "contract test rule",
+            "is_enabled": true,
+            "priority": 10,
+            "conditions": {
+                "content_keywords": ["spam"]
+            },
+            "action": {
+                "label": "spam",
+                "confidence": 0.9,
+                "exp_seconds": 3600,
+                "policy_url": "https://example.com/policy",
+                "policy_ref": "policy:spam:v1"
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rule_id = payload
+        .get("rule_id")
+        .and_then(Value::as_str)
+        .expect("rule_id")
+        .to_string();
+    assert_eq!(
+        payload.get("name").and_then(Value::as_str),
+        Some("spam-rule")
+    );
+    assert_eq!(
+        payload.get("is_enabled").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(payload.get("priority").and_then(Value::as_i64), Some(10));
+    assert!(payload
+        .get("conditions")
+        .and_then(Value::as_object)
+        .is_some());
+    assert!(payload.get("action").and_then(Value::as_object).is_some());
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        "/v1/admin/moderation/rules?enabled=true&limit=10",
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rules = payload.as_array().expect("array payload");
+    assert!(rules.iter().any(|row| {
+        row.get("rule_id").and_then(Value::as_str) == Some(rule_id.as_str())
+            && row.get("name").and_then(Value::as_str) == Some("spam-rule")
+    }));
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/moderation/rules/{rule_id}"),
+        json!({
+            "name": "spam-rule-updated",
+            "description": "updated",
+            "is_enabled": true,
+            "priority": 20,
+            "conditions": {
+                "content_keywords": ["spam", "scam"]
+            },
+            "action": {
+                "label": "spam",
+                "confidence": 0.95,
+                "exp_seconds": 7200,
+                "policy_url": "https://example.com/policy/v2",
+                "policy_ref": "policy:spam:v2"
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("name").and_then(Value::as_str),
+        Some("spam-rule-updated")
+    );
+    assert_eq!(payload.get("priority").and_then(Value::as_i64), Some(20));
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!("/v1/admin/moderation/reports?target={target}&limit=10"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let reports = payload.as_array().expect("array payload");
+    let report = reports.first().expect("report row");
+    assert_eq!(
+        report.get("target").and_then(Value::as_str),
+        Some(target.as_str())
+    );
+    assert_eq!(
+        report.get("reporter_pubkey").and_then(Value::as_str),
+        Some(reporter_pubkey.as_str())
+    );
+    assert_eq!(report.get("reason").and_then(Value::as_str), Some("spam"));
+    assert!(report.get("created_at").and_then(Value::as_i64).is_some());
+
+    let exp = chrono::Utc::now().timestamp() + 3600;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/moderation/labels",
+        json!({
+            "target": target,
+            "label": "manual-spam",
+            "confidence": 0.8,
+            "exp": exp,
+            "policy_url": "https://example.com/policy/manual",
+            "policy_ref": "manual-v1",
+            "topic_id": "kukuri:topic:contract"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let label_id = payload
+        .get("label_id")
+        .and_then(Value::as_str)
+        .expect("label_id")
+        .to_string();
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("created")
+    );
+
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!("/v1/admin/moderation/labels?target={target}&limit=10"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let labels = payload.as_array().expect("array payload");
+    let label = labels
+        .iter()
+        .find(|row| row.get("label_id").and_then(Value::as_str) == Some(label_id.as_str()))
+        .expect("label row");
+    assert_eq!(
+        label.get("target").and_then(Value::as_str),
+        Some(target.as_str())
+    );
+    assert_eq!(
+        label.get("label").and_then(Value::as_str),
+        Some("manual-spam")
+    );
+    assert_eq!(label.get("source").and_then(Value::as_str), Some("manual"));
+    assert!(label.get("issuer_pubkey").and_then(Value::as_str).is_some());
+}
+
+#[tokio::test]
+async fn subscription_requests_and_node_subscriptions_contract_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let requester_approve = Keys::generate().public_key().to_hex();
+    let requester_reject = Keys::generate().public_key().to_hex();
+    let approve_topic_id = format!("kukuri:topic:approve:{}", Uuid::new_v4());
+    let reject_topic_id = format!("kukuri:topic:reject:{}", Uuid::new_v4());
+    let approve_request_id = insert_subscription_request(
+        &state.pool,
+        &requester_approve,
+        &approve_topic_id,
+        json!(["search", "trust"]),
+    )
+    .await;
+    let reject_request_id = insert_subscription_request(
+        &state.pool,
+        &requester_reject,
+        &reject_topic_id,
+        json!(["bootstrap"]),
+    )
+    .await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/subscription-requests",
+            get(subscriptions::list_subscription_requests),
+        )
+        .route(
+            "/v1/admin/subscription-requests/{request_id}/approve",
+            post(subscriptions::approve_subscription_request),
+        )
+        .route(
+            "/v1/admin/subscription-requests/{request_id}/reject",
+            post(subscriptions::reject_subscription_request),
+        )
+        .route(
+            "/v1/admin/node-subscriptions",
+            get(subscriptions::list_node_subscriptions),
+        )
+        .route(
+            "/v1/admin/node-subscriptions/{topic_id}",
+            put(subscriptions::update_node_subscription),
+        )
+        .with_state(state);
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        "/v1/admin/subscription-requests?status=pending",
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let pending_rows = payload.as_array().expect("array payload");
+    assert!(pending_rows.iter().any(|row| {
+        row.get("request_id").and_then(Value::as_str) == Some(approve_request_id.as_str())
+            && row.get("status").and_then(Value::as_str) == Some("pending")
+    }));
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/subscription-requests/{approve_request_id}/approve"),
+        json!({ "review_note": "approved in contract test" }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("approved")
+    );
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/subscription-requests/{reject_request_id}/reject"),
+        json!({ "review_note": "rejected in contract test" }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("rejected")
+    );
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        "/v1/admin/subscription-requests?status=approved",
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let approved_rows = payload.as_array().expect("array payload");
+    let approved_row = approved_rows
+        .iter()
+        .find(|row| {
+            row.get("request_id").and_then(Value::as_str) == Some(approve_request_id.as_str())
+        })
+        .expect("approved row");
+    assert_eq!(
+        approved_row.get("topic_id").and_then(Value::as_str),
+        Some(approve_topic_id.as_str())
+    );
+    assert_eq!(
+        approved_row.get("requester_pubkey").and_then(Value::as_str),
+        Some(requester_approve.as_str())
+    );
+    assert!(approved_row
+        .get("requested_services")
+        .and_then(Value::as_array)
+        .is_some());
+    assert!(approved_row
+        .get("reviewed_at")
+        .and_then(Value::as_i64)
+        .is_some());
+
+    let (status, payload) =
+        get_json_with_session(app.clone(), "/v1/admin/node-subscriptions", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let node_rows = payload.as_array().expect("array payload");
+    let node_row = node_rows
+        .iter()
+        .find(|row| row.get("topic_id").and_then(Value::as_str) == Some(approve_topic_id.as_str()))
+        .expect("node subscription row");
+    assert_eq!(node_row.get("enabled").and_then(Value::as_bool), Some(true));
+    assert!(node_row.get("ref_count").and_then(Value::as_i64).is_some());
+    assert!(node_row.get("updated_at").and_then(Value::as_i64).is_some());
+
+    let (status, payload) = put_json(
+        app,
+        &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
+        json!({ "enabled": false }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("topic_id").and_then(Value::as_str),
+        Some(approve_topic_id.as_str())
+    );
+    assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(false));
+    assert!(payload.get("ref_count").and_then(Value::as_i64).is_some());
+}
+
+#[tokio::test]
+async fn plans_subscriptions_usage_contract_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let plan_id = format!("plan-{}", &Uuid::new_v4().to_string()[..8]);
+    let subscriber_pubkey = Keys::generate().public_key().to_hex();
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/plans",
+            get(subscriptions::list_plans).post(subscriptions::create_plan),
+        )
+        .route("/v1/admin/plans/{plan_id}", put(subscriptions::update_plan))
+        .route(
+            "/v1/admin/subscriptions",
+            get(subscriptions::list_subscriptions),
+        )
+        .route(
+            "/v1/admin/subscriptions/{subscriber_pubkey}",
+            put(subscriptions::upsert_subscription),
+        )
+        .route("/v1/admin/usage", get(subscriptions::list_usage))
+        .with_state(state.clone());
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/plans",
+        json!({
+            "plan_id": plan_id,
+            "name": "Starter",
+            "is_active": true,
+            "limits": [
+                { "metric": "search", "window": "day", "limit": 100 },
+                { "metric": "labels", "window": "day", "limit": 50 }
+            ]
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("plan_id").and_then(Value::as_str),
+        Some(plan_id.as_str())
+    );
+    assert_eq!(payload.get("name").and_then(Value::as_str), Some("Starter"));
+    assert_eq!(
+        payload.get("is_active").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        payload
+            .get("limits")
+            .and_then(Value::as_array)
+            .map(std::vec::Vec::len),
+        Some(2)
+    );
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/plans/{plan_id}"),
+        json!({
+            "plan_id": plan_id,
+            "name": "Starter Plus",
+            "is_active": true,
+            "limits": [
+                { "metric": "search", "window": "day", "limit": 200 }
+            ]
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("name").and_then(Value::as_str),
+        Some("Starter Plus")
+    );
+    assert_eq!(
+        payload
+            .get("limits")
+            .and_then(Value::as_array)
+            .map(std::vec::Vec::len),
+        Some(1)
+    );
+
+    let (status, payload) =
+        get_json_with_session(app.clone(), "/v1/admin/plans", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let plans = payload.as_array().expect("array payload");
+    let plan = plans
+        .iter()
+        .find(|row| row.get("plan_id").and_then(Value::as_str) == Some(plan_id.as_str()))
+        .expect("plan row");
+    assert_eq!(
+        plan.get("name").and_then(Value::as_str),
+        Some("Starter Plus")
+    );
+    assert!(plan.get("limits").and_then(Value::as_array).is_some());
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/subscriptions/{subscriber_pubkey}"),
+        json!({
+            "plan_id": plan_id,
+            "status": "active"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload.get("status").and_then(Value::as_str), Some("ok"));
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!("/v1/admin/subscriptions?pubkey={subscriber_pubkey}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let subscriptions = payload.as_array().expect("array payload");
+    let subscription = subscriptions.first().expect("subscription row");
+    assert_eq!(
+        subscription
+            .get("subscriber_pubkey")
+            .and_then(Value::as_str),
+        Some(subscriber_pubkey.as_str())
+    );
+    assert_eq!(
+        subscription.get("plan_id").and_then(Value::as_str),
+        Some(plan_id.as_str())
+    );
+    assert_eq!(
+        subscription.get("status").and_then(Value::as_str),
+        Some("active")
+    );
+    assert!(subscription
+        .get("started_at")
+        .and_then(Value::as_i64)
+        .is_some());
+
+    insert_usage_counter(&state.pool, &subscriber_pubkey, "search", 42).await;
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!("/v1/admin/usage?pubkey={subscriber_pubkey}&metric=search&days=30"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let usage = payload.as_array().expect("array payload");
+    let usage_row = usage.first().expect("usage row");
+    assert_eq!(
+        usage_row.get("metric").and_then(Value::as_str),
+        Some("search")
+    );
+    assert!(usage_row.get("day").and_then(Value::as_str).is_some());
+    assert_eq!(usage_row.get("count").and_then(Value::as_i64), Some(42));
+}
+
+#[tokio::test]
+async fn audit_logs_contract_success_and_shape() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let action = format!("contract.action.{}", &Uuid::new_v4().to_string()[..8]);
+    let target = format!("contract-target:{}", Uuid::new_v4());
+    let actor = format!("admin-{}", Uuid::new_v4());
+    let request_id = format!("req-{}", Uuid::new_v4());
+    insert_audit_log(
+        &state.pool,
+        &actor,
+        &action,
+        &target,
+        json!({ "diff": "ok" }),
+        &request_id,
+    )
+    .await;
+
+    let app = Router::new()
+        .route("/v1/admin/audit-logs", get(services::list_audit_logs))
+        .with_state(state);
+
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!("/v1/admin/audit-logs?action={action}&target={target}&limit=10"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    let row = rows.first().expect("audit log row");
+    assert!(row.get("audit_id").and_then(Value::as_i64).is_some());
+    assert_eq!(
+        row.get("actor_admin_user_id").and_then(Value::as_str),
+        Some(actor.as_str())
+    );
+    assert_eq!(
+        row.get("action").and_then(Value::as_str),
+        Some(action.as_str())
+    );
+    assert_eq!(
+        row.get("target").and_then(Value::as_str),
+        Some(target.as_str())
+    );
+    assert!(row.get("diff_json").and_then(Value::as_object).is_some());
+    assert_eq!(
+        row.get("request_id").and_then(Value::as_str),
+        Some(request_id.as_str())
+    );
+    assert!(row.get("created_at").and_then(Value::as_i64).is_some());
+}
+
+#[tokio::test]
+async fn trust_contract_success_and_shape() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let subject_pubkey = Keys::generate().public_key().to_hex();
+    let job_type = "report_based";
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/trust/jobs",
+            get(trust::list_jobs).post(trust::create_job),
+        )
+        .route("/v1/admin/trust/schedules", get(trust::list_schedules))
+        .route(
+            "/v1/admin/trust/schedules/{job_type}",
+            put(trust::update_schedule),
+        )
+        .with_state(state);
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/trust/jobs",
+        json!({
+            "job_type": job_type,
+            "subject_pubkey": subject_pubkey
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let job_id = payload
+        .get("job_id")
+        .and_then(Value::as_str)
+        .expect("job_id")
+        .to_string();
+    assert!(Uuid::parse_str(&job_id).is_ok());
+    assert_eq!(
+        payload.get("job_type").and_then(Value::as_str),
+        Some(job_type)
+    );
+    assert_eq!(
+        payload.get("subject_pubkey").and_then(Value::as_str),
+        Some(subject_pubkey.as_str())
+    );
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("pending")
+    );
+    assert!(payload
+        .get("requested_by")
+        .and_then(Value::as_str)
+        .is_some());
+    assert!(payload
+        .get("requested_at")
+        .and_then(Value::as_i64)
+        .is_some());
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!(
+            "/v1/admin/trust/jobs?status=pending&job_type={job_type}&subject_pubkey={subject_pubkey}&limit=10"
+        ),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = payload.as_array().expect("array payload");
+    assert!(jobs.iter().any(|row| {
+        row.get("job_id").and_then(Value::as_str) == Some(job_id.as_str())
+            && row.get("job_type").and_then(Value::as_str) == Some(job_type)
+    }));
+
+    let (status, payload) = put_json(
+        app.clone(),
+        "/v1/admin/trust/schedules/report_based",
+        json!({
+            "interval_seconds": 1800,
+            "is_enabled": true
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("job_type").and_then(Value::as_str),
+        Some(job_type)
+    );
+    assert_eq!(
+        payload.get("interval_seconds").and_then(Value::as_i64),
+        Some(1800)
+    );
+    assert_eq!(
+        payload.get("is_enabled").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert!(payload.get("next_run_at").and_then(Value::as_i64).is_some());
+    assert!(payload.get("updated_at").and_then(Value::as_i64).is_some());
+
+    let (status, payload) =
+        get_json_with_session(app, "/v1/admin/trust/schedules", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert!(rows.iter().any(|row| {
+        row.get("job_type").and_then(Value::as_str) == Some(job_type)
+            && row.get("interval_seconds").and_then(Value::as_i64) == Some(1800)
+    }));
 }

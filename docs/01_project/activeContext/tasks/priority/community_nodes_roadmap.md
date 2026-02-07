@@ -93,7 +93,7 @@
 
 ## 未実装/不足事項（2026年02月07日 監査追記）
 
-- [ ] `cn-admin-api` 契約テストを拡充し、`services` / `policies` / `moderation` / `subscription-requests` / `node-subscriptions` / `plans` / `subscriptions` / `usage` / `audit-logs` / `trust` の主要エンドポイント成功系とレスポンス互換を検証する
+- [x] `cn-admin-api` 契約テストを拡充し、`services` / `policies` / `moderation` / `subscription-requests` / `node-subscriptions` / `plans` / `subscriptions` / `usage` / `audit-logs` / `trust` の主要エンドポイント成功系とレスポンス互換を検証する
 - [ ] `cn-user-api` 契約テストを拡充し、`/v1/auth/*` `/v1/policies/*` `/v1/consents*` `/v1/topic-subscription*` `/v1/personal-data-*` の成功系とレスポンス shape の互換を検証する
 - [ ] Admin Console の UI テストを拡充し、`Dashboard` `Services` `Subscriptions` `Policies` `Trust` `Audit Logs` のページで主要操作と表示崩れ防止を検証する
 - [ ] `cn-relay` 統合テストを拡充し、認証 OFF→ON 切替（`enforce_at` / `ws_auth_timeout_seconds`）と rate limit 境界（接続/REQ/EVENT）で期待する `NOTICE` / `CLOSED` / reject を検証する

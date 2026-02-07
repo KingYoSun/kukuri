@@ -223,7 +223,7 @@ pub async fn update_service_config(
     .await
     .ok();
 
-    sqlx::query("NOTIFY cn_admin_config, $1")
+    sqlx::query("SELECT pg_notify('cn_admin_config', $1)")
         .bind(format!("{service}:{next_version}"))
         .execute(&mut *tx)
         .await
