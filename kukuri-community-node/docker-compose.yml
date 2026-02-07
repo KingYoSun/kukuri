@@ -114,6 +114,17 @@ services:
     expose:
       - "8085"
 
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - llm-local
+    volumes:
+      - ollama_data:/root/.ollama
+    expose:
+      - "11434"
+    networks:
+      - cn
+
   trust:
     <<: *cn-service
     command: ["trust"]
@@ -201,6 +212,7 @@ volumes:
   caddy_config:
   cn_data:
   meili_data:
+  ollama_data:
 
 networks:
   cn:
