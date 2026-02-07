@@ -792,7 +792,7 @@ mod api_contract_tests {
     use axum::body::{to_bytes, Body};
     use axum::extract::ConnectInfo;
     use axum::http::{Request, StatusCode};
-    use axum::routing::{get, post};
+    use axum::routing::{delete, get, post};
     use axum::Router;
     use cn_core::service_config;
     use nostr_sdk::prelude::Keys;
@@ -846,6 +846,8 @@ mod api_contract_tests {
             "auth": { "mode": "off" }
         }));
         let meili = cn_core::meili::MeiliClient::new(meili_url.to_string(), None).expect("meili");
+        let export_dir = PathBuf::from(format!("tmp/test_exports/{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&export_dir).expect("create test export dir");
 
         crate::AppState {
             pool,
@@ -855,7 +857,7 @@ mod api_contract_tests {
             bootstrap_config,
             rate_limiter: Arc::new(cn_core::rate_limit::RateLimiter::new()),
             node_keys: Keys::generate(),
-            export_dir: PathBuf::from("tmp/test_exports"),
+            export_dir,
             hmac_secret: b"test-secret".to_vec(),
             meili,
         }
@@ -900,6 +902,53 @@ mod api_contract_tests {
         .execute(pool)
         .await
         .expect("insert subscription");
+    }
+
+    async fn ensure_active_subscriber(pool: &Pool<Postgres>, pubkey: &str) {
+        sqlx::query(
+            "INSERT INTO cn_user.subscriber_accounts \
+                (subscriber_pubkey, status) \
+             VALUES ($1, 'active') \
+             ON CONFLICT (subscriber_pubkey) DO UPDATE \
+             SET status = 'active', updated_at = NOW()",
+        )
+        .bind(pubkey)
+        .execute(pool)
+        .await
+        .expect("upsert active subscriber");
+    }
+
+    async fn insert_current_policy(
+        pool: &Pool<Postgres>,
+        policy_type: &str,
+        version: &str,
+        locale: &str,
+        title: &str,
+    ) -> String {
+        let policy_id = format!("{policy_type}-{}", Uuid::new_v4());
+        let now = chrono::Utc::now();
+        let content_md = format!("# {title}\n\ncontract test policy.");
+        let content_hash = format!("sha256:{policy_id}");
+
+        sqlx::query(
+            "INSERT INTO cn_admin.policies \
+                (policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)",
+        )
+        .bind(&policy_id)
+        .bind(policy_type)
+        .bind(version)
+        .bind(locale)
+        .bind(title)
+        .bind(content_md)
+        .bind(content_hash)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .expect("insert policy");
+
+        policy_id
     }
 
     async fn insert_bootstrap_event(
@@ -1179,6 +1228,44 @@ mod api_contract_tests {
         (status, payload)
     }
 
+    async fn post_json_public(app: Router, uri: &str, payload: Value) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, payload)
+    }
+
+    async fn delete_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("DELETE")
+            .uri(uri)
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, payload)
+    }
+
     async fn spawn_mock_meili(search_response: Value) -> (String, tokio::task::JoinHandle<()>) {
         let response = Arc::new(search_response);
         let app = Router::new().route(
@@ -1256,6 +1343,509 @@ mod api_contract_tests {
         )
         .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn auth_contract_challenge_verify_success_shape_compatible() {
+        let state = test_state().await;
+        let keys = Keys::generate();
+        let pubkey = keys.public_key().to_hex();
+        let app = Router::new()
+            .route("/v1/auth/challenge", post(crate::auth::auth_challenge))
+            .route("/v1/auth/verify", post(crate::auth::auth_verify))
+            .with_state(state);
+
+        let (status, challenge_payload) = post_json_public(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "pubkey": pubkey }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let challenge = challenge_payload
+            .get("challenge")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(!challenge.is_empty());
+        assert!(challenge_payload
+            .get("expires_at")
+            .and_then(Value::as_i64)
+            .is_some());
+
+        let auth_event = cn_core::nostr::build_signed_event(
+            &keys,
+            22242,
+            vec![
+                vec!["relay".to_string(), "http://localhost".to_string()],
+                vec!["challenge".to_string(), challenge.to_string()],
+            ],
+            String::new(),
+        )
+        .expect("build auth event");
+
+        let (status, verify_payload) = post_json_public(
+            app,
+            "/v1/auth/verify",
+            json!({ "auth_event_json": auth_event }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let access_token = verify_payload
+            .get("access_token")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(!access_token.is_empty());
+        assert_eq!(
+            verify_payload.get("token_type").and_then(Value::as_str),
+            Some("Bearer")
+        );
+        assert!(verify_payload
+            .get("expires_at")
+            .and_then(Value::as_i64)
+            .is_some());
+        assert_eq!(
+            verify_payload.get("pubkey").and_then(Value::as_str),
+            Some(pubkey.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn policies_consents_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let locale = "ja-JP";
+        let terms_version = format!("contract-terms-{}", Uuid::new_v4().simple());
+        let privacy_version = format!("contract-privacy-{}", Uuid::new_v4().simple());
+        let terms_policy_id = insert_current_policy(
+            &state.pool,
+            "terms",
+            &terms_version,
+            locale,
+            "Contract Terms",
+        )
+        .await;
+        let privacy_policy_id = insert_current_policy(
+            &state.pool,
+            "privacy",
+            &privacy_version,
+            locale,
+            "Contract Privacy",
+        )
+        .await;
+
+        let pubkey = Keys::generate().public_key().to_hex();
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/policies/current", get(crate::policies::get_current_policies))
+            .route(
+                "/v1/policies/{policy_type}/{version}",
+                get(crate::policies::get_policy_by_version),
+            )
+            .route("/v1/consents/status", get(crate::policies::get_consent_status))
+            .route("/v1/consents", post(crate::policies::accept_consents))
+            .with_state(state);
+
+        let (status, current_payload) = get_json_public(app.clone(), "/v1/policies/current").await;
+        assert_eq!(status, StatusCode::OK);
+        let policies = current_payload.as_array().expect("policies array");
+        assert!(policies.iter().any(|policy| {
+            policy.get("policy_id").and_then(Value::as_str) == Some(terms_policy_id.as_str())
+        }));
+        assert!(policies.iter().any(|policy| {
+            policy.get("policy_id").and_then(Value::as_str) == Some(privacy_policy_id.as_str())
+        }));
+        assert!(policies.iter().all(|policy| {
+            policy.get("policy_type").and_then(Value::as_str).is_some()
+                && policy.get("version").and_then(Value::as_str).is_some()
+                && policy.get("locale").and_then(Value::as_str).is_some()
+                && policy.get("title").and_then(Value::as_str).is_some()
+                && policy.get("content_hash").and_then(Value::as_str).is_some()
+                && policy.get("url").and_then(Value::as_str).is_some()
+        }));
+
+        let (status, detail_payload) = get_json_public(
+            app.clone(),
+            &format!("/v1/policies/terms/{terms_version}?locale={locale}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            detail_payload.get("policy_id").and_then(Value::as_str),
+            Some(terms_policy_id.as_str())
+        );
+        assert_eq!(
+            detail_payload.get("policy_type").and_then(Value::as_str),
+            Some("terms")
+        );
+        assert_eq!(
+            detail_payload.get("version").and_then(Value::as_str),
+            Some(terms_version.as_str())
+        );
+        assert_eq!(
+            detail_payload.get("locale").and_then(Value::as_str),
+            Some(locale)
+        );
+        assert!(detail_payload
+            .get("content_md")
+            .and_then(Value::as_str)
+            .is_some());
+        assert!(detail_payload
+            .get("content_hash")
+            .and_then(Value::as_str)
+            .is_some());
+
+        let (status, consent_before_payload) = get_json(app.clone(), "/v1/consents/status", &token).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            consent_before_payload.get("pubkey").and_then(Value::as_str),
+            Some(pubkey.as_str())
+        );
+        assert!(consent_before_payload
+            .get("consents")
+            .and_then(Value::as_array)
+            .is_some());
+        assert!(consent_before_payload
+            .get("missing")
+            .and_then(Value::as_array)
+            .is_some());
+
+        let (status, accept_payload) = post_json(
+            app.clone(),
+            "/v1/consents",
+            &token,
+            json!({ "accept_all_current": true }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            accept_payload.get("status").and_then(Value::as_str),
+            Some("ok")
+        );
+
+        let (status, consent_after_payload) = get_json(app, "/v1/consents/status", &token).await;
+        assert_eq!(status, StatusCode::OK);
+        let consents = consent_after_payload
+            .get("consents")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(consents.iter().any(|consent| {
+            consent.get("policy_id").and_then(Value::as_str) == Some(terms_policy_id.as_str())
+        }));
+        assert!(consents.iter().any(|consent| {
+            consent.get("policy_id").and_then(Value::as_str) == Some(privacy_policy_id.as_str())
+        }));
+        let missing = consent_after_payload
+            .get("missing")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(missing.is_empty());
+    }
+
+    #[tokio::test]
+    async fn topic_subscription_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&state.pool, &pubkey).await;
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let pool = state.pool.clone();
+
+        let request_topic_id = format!("kukuri:req-{}", Uuid::new_v4().simple());
+        let active_topic_id = format!("kukuri:active-{}", Uuid::new_v4().simple());
+
+        let app = Router::new()
+            .route(
+                "/v1/topic-subscription-requests",
+                post(create_subscription_request),
+            )
+            .route("/v1/topic-subscriptions", get(list_topic_subscriptions))
+            .route(
+                "/v1/topic-subscriptions/{topic_id}",
+                delete(delete_topic_subscription),
+            )
+            .with_state(state);
+
+        let (status, create_payload) = post_json(
+            app.clone(),
+            "/v1/topic-subscription-requests",
+            &token,
+            json!({
+                "topic_id": request_topic_id,
+                "requested_services": ["relay", "index"]
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(create_payload
+            .get("request_id")
+            .and_then(Value::as_str)
+            .is_some());
+        assert_eq!(
+            create_payload.get("status").and_then(Value::as_str),
+            Some("pending")
+        );
+
+        insert_topic_subscription(&pool, &active_topic_id, &pubkey).await;
+        let (status, list_payload) = get_json(app.clone(), "/v1/topic-subscriptions", &token).await;
+        assert_eq!(status, StatusCode::OK);
+        let list = list_payload.as_array().cloned().unwrap_or_default();
+        let active_row = list
+            .iter()
+            .find(|row| {
+                row.get("topic_id").and_then(Value::as_str) == Some(active_topic_id.as_str())
+            })
+            .expect("active subscription row");
+        assert_eq!(active_row.get("status").and_then(Value::as_str), Some("active"));
+        assert!(active_row.get("started_at").and_then(Value::as_i64).is_some());
+        assert!(active_row
+            .get("ended_at")
+            .is_some_and(serde_json::Value::is_null));
+
+        let (status, delete_payload) = delete_json(
+            app.clone(),
+            &format!("/v1/topic-subscriptions/{active_topic_id}"),
+            &token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            delete_payload.get("status").and_then(Value::as_str),
+            Some("ended")
+        );
+
+        let (status, list_after_payload) = get_json(app, "/v1/topic-subscriptions", &token).await;
+        assert_eq!(status, StatusCode::OK);
+        let list_after = list_after_payload.as_array().cloned().unwrap_or_default();
+        let ended_row = list_after
+            .iter()
+            .find(|row| {
+                row.get("topic_id").and_then(Value::as_str) == Some(active_topic_id.as_str())
+            })
+            .expect("ended subscription row");
+        assert_eq!(ended_row.get("status").and_then(Value::as_str), Some("ended"));
+        assert!(ended_row.get("ended_at").and_then(Value::as_i64).is_some());
+    }
+
+    #[tokio::test]
+    async fn personal_data_export_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_active_subscriber(&state.pool, &pubkey).await;
+        ensure_consents(&state.pool, &pubkey).await;
+        let token = issue_token(&state.jwt_config, &pubkey);
+
+        let app = Router::new()
+            .route(
+                "/v1/personal-data-export-requests",
+                post(crate::personal_data::create_export_request),
+            )
+            .route(
+                "/v1/personal-data-export-requests/{export_request_id}",
+                get(crate::personal_data::get_export_request),
+            )
+            .route(
+                "/v1/personal-data-export-requests/{export_request_id}/download",
+                get(crate::personal_data::download_export),
+            )
+            .with_state(state);
+
+        let (status, create_payload) = post_json(
+            app.clone(),
+            "/v1/personal-data-export-requests",
+            &token,
+            json!({}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let export_request_id = create_payload
+            .get("export_request_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(!export_request_id.is_empty());
+        assert_eq!(
+            create_payload.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+        let download_token = create_payload
+            .get("download_token")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(!download_token.is_empty());
+        assert!(create_payload
+            .get("download_expires_at")
+            .and_then(Value::as_i64)
+            .is_some());
+
+        let (status, get_payload) = get_json(
+            app.clone(),
+            &format!("/v1/personal-data-export-requests/{export_request_id}"),
+            &token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            get_payload.get("export_request_id").and_then(Value::as_str),
+            Some(export_request_id.as_str())
+        );
+        assert_eq!(
+            get_payload.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+        assert!(get_payload
+            .get("download_token")
+            .and_then(Value::as_str)
+            .is_some());
+        assert!(get_payload
+            .get("download_expires_at")
+            .and_then(Value::as_i64)
+            .is_some());
+
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(format!(
+                "/v1/personal-data-export-requests/{export_request_id}/download?token={download_token}"
+            ))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get("content-type")
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json")
+        );
+        assert!(headers
+            .get("content-disposition")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.contains(export_request_id.as_str())));
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let download_payload: Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(
+            download_payload.get("pubkey").and_then(Value::as_str),
+            Some(pubkey.as_str())
+        );
+        assert!(download_payload
+            .get("generated_at")
+            .and_then(Value::as_i64)
+            .is_some());
+        assert!(download_payload
+            .get("consents")
+            .and_then(Value::as_array)
+            .is_some());
+        assert!(download_payload
+            .get("subscriptions")
+            .and_then(Value::as_array)
+            .is_some());
+        assert!(download_payload
+            .get("usage_events")
+            .and_then(Value::as_array)
+            .is_some());
+        assert!(download_payload
+            .get("reports")
+            .and_then(Value::as_array)
+            .is_some());
+        assert!(download_payload
+            .get("memberships")
+            .and_then(Value::as_array)
+            .is_some());
+        assert!(download_payload
+            .get("events")
+            .and_then(Value::as_array)
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn personal_data_deletion_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_active_subscriber(&state.pool, &pubkey).await;
+        ensure_consents(&state.pool, &pubkey).await;
+        let jwt_config = state.jwt_config.clone();
+        let token = issue_token(&jwt_config, &pubkey);
+        let pool = state.pool.clone();
+
+        let app = Router::new()
+            .route(
+                "/v1/personal-data-deletion-requests",
+                post(crate::personal_data::create_deletion_request),
+            )
+            .route(
+                "/v1/personal-data-deletion-requests/{deletion_request_id}",
+                get(crate::personal_data::get_deletion_request),
+            )
+            .with_state(state);
+
+        let (status, create_payload) = post_json(
+            app.clone(),
+            "/v1/personal-data-deletion-requests",
+            &token,
+            json!({}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let deletion_request_id = create_payload
+            .get("deletion_request_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(!deletion_request_id.is_empty());
+        assert_eq!(
+            create_payload.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+
+        let lookup_pubkey = Keys::generate().public_key().to_hex();
+        ensure_active_subscriber(&pool, &lookup_pubkey).await;
+        let lookup_token = issue_token(&jwt_config, &lookup_pubkey);
+        let lookup_request_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO cn_user.personal_data_deletion_requests \
+                (deletion_request_id, requester_pubkey, status) \
+             VALUES ($1, $2, 'queued')",
+        )
+        .bind(&lookup_request_id)
+        .bind(&lookup_pubkey)
+        .execute(&pool)
+        .await
+        .expect("insert lookup deletion request");
+
+        let (status, get_payload) = get_json(
+            app,
+            &format!("/v1/personal-data-deletion-requests/{lookup_request_id}"),
+            &lookup_token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            get_payload
+                .get("deletion_request_id")
+                .and_then(Value::as_str),
+            Some(lookup_request_id.as_str())
+        );
+        assert_eq!(
+            get_payload.get("status").and_then(Value::as_str),
+            Some("queued")
+        );
+
+        let account_status = sqlx::query_scalar::<_, String>(
+            "SELECT status FROM cn_user.subscriber_accounts WHERE subscriber_pubkey = $1",
+        )
+        .bind(&pubkey)
+        .fetch_optional(&pool)
+        .await
+        .expect("select subscriber status");
+        assert_eq!(account_status.as_deref(), Some("deleted"));
     }
 
     #[tokio::test]
