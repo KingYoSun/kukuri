@@ -7,11 +7,7 @@ import {
   openSettings,
   type ProfileInfo,
 } from '../helpers/appActions';
-import {
-  getAuthSnapshot,
-  getOfflineSnapshot,
-  resetAppState,
-} from '../helpers/bridge';
+import { getAuthSnapshot, getOfflineSnapshot, resetAppState } from '../helpers/bridge';
 
 const AVATAR_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAtEB/QZWS+sAAAAASUVORK5CYII=';
@@ -24,6 +20,54 @@ async function safeClick(element: WebdriverIO.Element): Promise<void> {
   } catch {
     await browser.execute((target) => (target as HTMLElement | null)?.click(), element);
   }
+}
+
+async function getSwitchState(selector: string): Promise<string | null> {
+  const element = await $(selector);
+  await element.waitForDisplayed({ timeout: 10000 });
+  return await element.getAttribute('data-state');
+}
+
+async function toggleSwitchToState(
+  selector: string,
+  expectedState: 'checked' | 'unchecked',
+  timeoutMsg: string,
+): Promise<void> {
+  await browser.waitUntil(
+    async () => {
+      const currentState = await getSwitchState(selector);
+      if (currentState === expectedState) {
+        return true;
+      }
+
+      const element = await $(selector);
+      try {
+        await safeClick(element);
+      } catch {
+        // Fallback click is handled below.
+      }
+
+      await browser.pause(120);
+      const afterNativeClick = await getSwitchState(selector);
+      if (afterNativeClick === expectedState) {
+        return true;
+      }
+
+      await browser.execute((cssSelector: string) => {
+        const target = document.querySelector(cssSelector) as HTMLElement | null;
+        target?.click();
+      }, selector);
+      await browser.pause(120);
+
+      const afterFallbackClick = await getSwitchState(selector);
+      return afterFallbackClick === expectedState;
+    },
+    {
+      timeout: 12000,
+      interval: 250,
+      timeoutMsg,
+    },
+  );
 }
 
 describe('プロフィール/プライバシー/アバター同期', () => {
@@ -48,16 +92,13 @@ describe('プロフィール/プライバシー/アバター同期', () => {
 
     await openSettings();
 
-    const publicSwitch = await $('#public-profile');
-    const onlineSwitch = await $('#show-online');
+    await expect(await getSwitchState('#public-profile')).toBe('checked');
+    await expect(await getSwitchState('#show-online')).toBe('unchecked');
 
-    await expect(await publicSwitch.getAttribute('data-state')).toBe('checked');
-    await expect(await onlineSwitch.getAttribute('data-state')).toBe('unchecked');
-
-    await safeClick(publicSwitch);
-    await browser.waitUntil(
-      async () => (await publicSwitch.getAttribute('data-state')) === 'unchecked',
-      { timeout: 10000, timeoutMsg: '公開プロフィールの状態が変わりませんでした' },
+    await toggleSwitchToState(
+      '#public-profile',
+      'unchecked',
+      '公開プロフィールの状態が変わりませんでした',
     );
     await browser.waitUntil(
       async () => {
@@ -67,10 +108,10 @@ describe('プロフィール/プライバシー/アバター同期', () => {
       { timeout: 15000, timeoutMsg: 'Authストアに非公開設定が反映されませんでした' },
     );
 
-    await safeClick(onlineSwitch);
-    await browser.waitUntil(
-      async () => (await onlineSwitch.getAttribute('data-state')) === 'checked',
-      { timeout: 10000, timeoutMsg: 'オンライン表示の状態が変わりませんでした' },
+    await toggleSwitchToState(
+      '#show-online',
+      'checked',
+      'オンライン表示の状態が変わりませんでした',
     );
     await browser.waitUntil(
       async () => {
@@ -137,7 +178,10 @@ describe('プロフィール/プライバシー/アバター同期', () => {
           snapshot.lastSyncedAt > (offlineBefore.lastSyncedAt ?? 0)
         );
       },
-      { timeout: 20000, timeoutMsg: 'プロフィールアバター同期の完了がOfflineストアに反映されませんでした' },
+      {
+        timeout: 20000,
+        timeoutMsg: 'プロフィールアバター同期の完了がOfflineストアに反映されませんでした',
+      },
     );
 
     const indicator = await $('[data-testid="offline-indicator-pill"]');
