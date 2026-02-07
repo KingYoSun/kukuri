@@ -823,7 +823,7 @@ mod api_contract_tests {
             .await;
     }
 
-    async fn test_state() -> crate::AppState {
+    async fn test_state_with_meili_url(meili_url: &str) -> crate::AppState {
         let pool = PgPoolOptions::new()
             .connect(&database_url())
             .await
@@ -845,8 +845,7 @@ mod api_contract_tests {
         let bootstrap_config = service_config::static_handle(serde_json::json!({
             "auth": { "mode": "off" }
         }));
-        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
-            .expect("meili");
+        let meili = cn_core::meili::MeiliClient::new(meili_url.to_string(), None).expect("meili");
 
         crate::AppState {
             pool,
@@ -860,6 +859,10 @@ mod api_contract_tests {
             hmac_secret: b"test-secret".to_vec(),
             meili,
         }
+    }
+
+    async fn test_state() -> crate::AppState {
+        test_state_with_meili_url("http://localhost:7700").await
     }
 
     fn issue_token(config: &cn_core::auth::JwtConfig, pubkey: &str) -> String {
@@ -897,6 +900,34 @@ mod api_contract_tests {
         .execute(pool)
         .await
         .expect("insert subscription");
+    }
+
+    async fn insert_bootstrap_event(
+        pool: &Pool<Postgres>,
+        event_id: &str,
+        kind: i32,
+        topic_id: Option<&str>,
+        expires_at: i64,
+        event_json: Value,
+    ) {
+        let created_at = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        sqlx::query(
+            "INSERT INTO cn_bootstrap.events \
+                (event_id, kind, d_tag, topic_id, role, scope, event_json, created_at, expires_at, is_active) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)",
+        )
+        .bind(event_id)
+        .bind(kind)
+        .bind(event_id)
+        .bind(topic_id)
+        .bind(Option::<String>::None)
+        .bind(Option::<String>::None)
+        .bind(event_json)
+        .bind(created_at)
+        .bind(expires_at)
+        .execute(pool)
+        .await
+        .expect("insert bootstrap event");
     }
 
     async fn insert_label(
@@ -1091,6 +1122,24 @@ mod api_contract_tests {
         response.status()
     }
 
+    async fn get_json_public(app: Router, uri: &str) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, payload)
+    }
+
     async fn get_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
         let mut request = Request::builder()
             .method("GET")
@@ -1108,6 +1157,49 @@ mod api_contract_tests {
             .expect("body");
         let payload: Value = serde_json::from_slice(&body).expect("json body");
         (status, payload)
+    }
+
+    async fn post_json(app: Router, uri: &str, token: &str, payload: Value) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, payload)
+    }
+
+    async fn spawn_mock_meili(search_response: Value) -> (String, tokio::task::JoinHandle<()>) {
+        let response = Arc::new(search_response);
+        let app = Router::new().route(
+            "/indexes/{uid}/search",
+            post({
+                let response = Arc::clone(&response);
+                move |_path: axum::extract::Path<String>, _payload: axum::Json<Value>| {
+                    let response = Arc::clone(&response);
+                    async move { (StatusCode::OK, axum::Json((*response).clone())) }
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock meili");
+        let addr = listener.local_addr().expect("mock meili addr");
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve mock meili");
+        });
+        (format!("http://{addr}"), handle)
     }
 
     #[tokio::test]
@@ -1164,6 +1256,206 @@ mod api_contract_tests {
         )
         .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_nodes_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let event_id = Uuid::new_v4().to_string();
+        let expires_at = cn_core::auth::unix_seconds().unwrap_or(0) as i64 + 1800;
+        let event_json = json!({
+            "id": event_id,
+            "kind": 39000,
+            "pubkey": Keys::generate().public_key().to_hex(),
+            "tags": [["k", "kukuri"], ["ver", "1"]],
+            "content": "",
+            "sig": "signature"
+        });
+        insert_bootstrap_event(
+            &state.pool,
+            &event_id,
+            39000,
+            None,
+            expires_at,
+            event_json.clone(),
+        )
+        .await;
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/nodes",
+                get(crate::bootstrap::get_bootstrap_nodes),
+            )
+            .with_state(state);
+        let (status, payload) = get_json_public(app, "/v1/bootstrap/nodes").await;
+
+        assert_eq!(status, StatusCode::OK);
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(!items.is_empty());
+        assert!(items.iter().any(|value| value == &event_json));
+        assert!(payload
+            .get("next_refresh_at")
+            .and_then(Value::as_i64)
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn bootstrap_services_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let topic_id = format!("kukuri:bootstrap-{}", Uuid::new_v4());
+        let event_id = Uuid::new_v4().to_string();
+        let expires_at = cn_core::auth::unix_seconds().unwrap_or(0) as i64 + 3600;
+        let event_json = json!({
+            "id": event_id,
+            "kind": 39001,
+            "pubkey": Keys::generate().public_key().to_hex(),
+            "tags": [["k", "kukuri"], ["ver", "1"], ["topic", topic_id.clone()]],
+            "content": "",
+            "sig": "signature"
+        });
+        insert_bootstrap_event(
+            &state.pool,
+            &event_id,
+            39001,
+            Some(topic_id.as_str()),
+            expires_at,
+            event_json.clone(),
+        )
+        .await;
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(crate::bootstrap::get_bootstrap_services),
+            )
+            .with_state(state);
+        let (status, payload) =
+            get_json_public(app, &format!("/v1/bootstrap/topics/{topic_id}/services")).await;
+
+        assert_eq!(status, StatusCode::OK);
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items.first(), Some(&event_json));
+        assert_eq!(
+            payload.get("next_refresh_at").and_then(Value::as_i64),
+            Some(expires_at)
+        );
+    }
+
+    #[tokio::test]
+    async fn search_contract_success_shape_compatible() {
+        let topic_id = format!("kukuri:search-{}", Uuid::new_v4());
+        let (meili_url, meili_handle) = spawn_mock_meili(json!({
+            "hits": [
+                {
+                    "event_id": Uuid::new_v4().to_string(),
+                    "topic_id": topic_id.clone(),
+                    "content": "hello contract"
+                }
+            ],
+            "estimatedTotalHits": 2
+        }))
+        .await;
+
+        let state = test_state_with_meili_url(&meili_url).await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&state.pool, &pubkey).await;
+        insert_topic_subscription(&state.pool, &topic_id, &pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let (status, payload) = get_json(
+            app,
+            &format!("/v1/search?topic={topic_id}&q=hello&limit=1"),
+            &token,
+        )
+        .await;
+        meili_handle.abort();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("topic").and_then(Value::as_str),
+            Some(topic_id.as_str())
+        );
+        assert_eq!(payload.get("query").and_then(Value::as_str), Some("hello"));
+        assert_eq!(payload.get("total").and_then(Value::as_u64), Some(2));
+        assert_eq!(
+            payload.get("next_cursor").and_then(Value::as_str),
+            Some("1")
+        );
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        assert!(items
+            .first()
+            .and_then(|item| item.get("event_id"))
+            .and_then(Value::as_str)
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn submit_report_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/reports", post(submit_report))
+            .with_state(state);
+        let (status, payload) = post_json(
+            app,
+            "/v1/reports",
+            &token,
+            json!({
+                "target": "event:report-contract-target",
+                "reason": "spam"
+            }),
+        )
+        .await;
+
+        assert!(
+            status == StatusCode::OK || status == StatusCode::CREATED,
+            "unexpected status: {status}"
+        );
+        assert_eq!(
+            payload.get("status").and_then(Value::as_str),
+            Some("accepted")
+        );
+        let report_id = payload
+            .get("report_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(!report_id.is_empty());
+
+        let row = sqlx::query("SELECT target, reason FROM cn_user.reports WHERE report_id = $1")
+            .bind(report_id)
+            .fetch_optional(&pool)
+            .await
+            .expect("select report row");
+        let row = row.expect("report row exists");
+        assert_eq!(
+            row.try_get::<String, _>("target").unwrap_or_default(),
+            "event:report-contract-target"
+        );
+        assert_eq!(
+            row.try_get::<String, _>("reason").unwrap_or_default(),
+            "spam"
+        );
     }
 
     #[tokio::test]
