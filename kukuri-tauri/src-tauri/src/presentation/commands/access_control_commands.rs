@@ -1,12 +1,14 @@
 use crate::application::ports::join_request_store::JoinRequestRecord;
 use crate::application::services::JoinRequestInput;
+use crate::application::shared::mappers::nostr_event_to_domain_event;
 use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::Validate;
 use crate::presentation::dto::access_control_dto::{
     AccessControlApproveJoinRequest, AccessControlApproveJoinResponse,
-    AccessControlIssueInviteRequest, AccessControlIssueInviteResponse, AccessControlJoinRequest,
-    AccessControlJoinResponse, AccessControlListJoinRequestsResponse,
-    AccessControlPendingJoinRequest, AccessControlRejectJoinRequest,
+    AccessControlIngestEventRequest, AccessControlIssueInviteRequest,
+    AccessControlIssueInviteResponse, AccessControlJoinRequest, AccessControlJoinResponse,
+    AccessControlListJoinRequestsResponse, AccessControlPendingJoinRequest,
+    AccessControlRejectJoinRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -59,6 +61,7 @@ pub async fn access_control_request_join(
     Ok(ApiResponse::success(AccessControlJoinResponse {
         event_id: result.event_id,
         sent_topics: result.sent_topics,
+        event_json: result.event_json,
     }))
 }
 
@@ -96,6 +99,7 @@ pub async fn access_control_approve_join_request(
     Ok(ApiResponse::success(AccessControlApproveJoinResponse {
         event_id: result.event_id,
         key_envelope_event_id: result.key_envelope_event_id,
+        key_envelope_event_json: result.key_envelope_event_json,
     }))
 }
 
@@ -110,6 +114,25 @@ pub async fn access_control_reject_join_request(
     state
         .access_control_service
         .reject_join_request(&request.event_id)
+        .await?;
+    Ok(ApiResponse::success(()))
+}
+
+#[tauri::command]
+pub async fn access_control_ingest_event_json(
+    state: State<'_, AppState>,
+    request: AccessControlIngestEventRequest,
+) -> Result<ApiResponse<()>, AppError> {
+    request
+        .validate()
+        .map_err(|err| AppError::validation(crate::shared::ValidationFailureKind::Generic, err))?;
+
+    let event: nostr_sdk::Event = serde_json::from_value(request.event_json)
+        .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+    let domain_event = nostr_event_to_domain_event(&event)?;
+    state
+        .access_control_service
+        .handle_incoming_event(&domain_event)
         .await?;
     Ok(ApiResponse::success(()))
 }

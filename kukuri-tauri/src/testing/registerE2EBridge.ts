@@ -8,7 +8,12 @@ import {
 } from '@/lib/api/tauri';
 import { TauriCommandError } from '@/lib/api/tauriClient';
 import { p2pApi } from '@/lib/api/p2p';
-import { communityNodeApi, defaultCommunityNodeRoles } from '@/lib/api/communityNode';
+import { accessControlApi } from '@/lib/api/accessControl';
+import {
+  communityNodeApi,
+  defaultCommunityNodeRoles,
+  type GroupKeyEntry,
+} from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
@@ -145,6 +150,29 @@ interface CommunityNodeAuthFlowResult {
   consents: CommunityNodeConsents;
 }
 
+interface FriendPlusActor {
+  npub: string;
+  pubkey: string;
+}
+
+interface SeedFriendPlusAccountsResult {
+  requester: FriendPlusActor;
+  inviter: FriendPlusActor;
+  friend: FriendPlusActor;
+}
+
+interface AccessControlRequestJoinPayload {
+  topic_id?: string;
+  scope?: string;
+  invite_event_json?: unknown;
+  target_pubkey?: string;
+  broadcast_to_topic?: boolean;
+}
+
+interface AccessControlIngestEventPayload {
+  event_json: unknown;
+}
+
 export interface E2EBridge {
   resetAppState: () => Promise<void>;
   getAuthSnapshot: () => AuthSnapshot;
@@ -209,7 +237,19 @@ export interface E2EBridge {
   getBootstrapSnapshot: () => Promise<BootstrapSnapshot>;
   applyCliBootstrap: () => Promise<BootstrapSnapshot>;
   clearBootstrapNodes: () => Promise<BootstrapSnapshot>;
+  seedFriendPlusAccounts: () => Promise<SeedFriendPlusAccountsResult>;
+  accessControlRequestJoin: (
+    payload: AccessControlRequestJoinPayload,
+  ) => Promise<Awaited<ReturnType<typeof accessControlApi.requestJoin>>>;
+  accessControlListJoinRequests: () => Promise<
+    Awaited<ReturnType<typeof accessControlApi.listJoinRequests>>
+  >;
+  accessControlApproveJoinRequest: (payload: {
+    event_id: string;
+  }) => Promise<Awaited<ReturnType<typeof accessControlApi.approveJoinRequest>>>;
+  accessControlIngestEventJson: (payload: AccessControlIngestEventPayload) => Promise<void>;
   communityNodeAuthFlow: (payload: { baseUrl: string }) => Promise<CommunityNodeAuthFlowResult>;
+  communityNodeListGroupKeys: () => Promise<GroupKeyEntry[]>;
   communityNodeListBootstrapNodes: () => Promise<Record<string, unknown>>;
   communityNodeListBootstrapServices: (payload: {
     topicId: string;
@@ -343,6 +383,17 @@ export function registerE2EBridge(): void {
         },
         switchAccount: async (npub: string) => {
           await useAuthStore.getState().switchAccount(npub);
+          const switchedState = useAuthStore.getState();
+          if (switchedState.currentUser?.npub !== npub) {
+            throw new Error(`Failed to switch account to ${npub}`);
+          }
+
+          // Fallback 経路の switchAccount はフロント状態のみ切り替えるため、
+          // privateKey が残っている場合は Rust 側のアクティブ鍵も同期する。
+          const nsec = switchedState.privateKey;
+          if (typeof nsec === 'string' && nsec.trim().length > 0) {
+            await TauriApi.login({ nsec });
+          }
         },
         getOfflineSnapshot: () => {
           const offlineState = useOfflineStore.getState();
@@ -1368,6 +1419,145 @@ export function registerE2EBridge(): void {
           const config = await p2pApi.getBootstrapConfig();
           return bootstrapSnapshotFromConfig(config);
         },
+        seedFriendPlusAccounts: async () => {
+          const authState = useAuthStore.getState();
+          const requesterUser = authState.currentUser;
+          const requesterNsec = authState.privateKey;
+          if (!requesterUser?.npub || !requesterUser.pubkey || !requesterNsec) {
+            throw new Error('Authenticated requester account is required');
+          }
+
+          const runId = Date.now().toString(36);
+          const requesterEntry = {
+            npub: requesterUser.npub,
+            pubkey: requesterUser.pubkey,
+            nsec: requesterNsec,
+            name:
+              requesterUser.displayName ?? requesterUser.name ?? `friend-plus-requester-${runId}`,
+            about: requesterUser.about ?? '',
+            picture: requesterUser.picture ?? undefined,
+            publicProfile: requesterUser.publicProfile ?? true,
+            showOnlineStatus: requesterUser.showOnlineStatus ?? true,
+          };
+
+          const createGeneratedAccount = async (label: string, suffix: string) => {
+            await useAuthStore.getState().generateNewKeypair(false);
+            const current = useAuthStore.getState().currentUser;
+            const nsec = useAuthStore.getState().privateKey;
+            if (!current?.npub || !current.pubkey || !nsec) {
+              throw new Error(`Failed to generate ${label} account`);
+            }
+            const profileName = `${label}-${runId}-${suffix}`;
+            useAuthStore.getState().updateUser({
+              name: profileName,
+              displayName: profileName,
+              about: `E2E friend_plus ${label}`,
+              publicProfile: true,
+              showOnlineStatus: true,
+            });
+            return {
+              npub: current.npub,
+              pubkey: current.pubkey,
+              nsec,
+              name: profileName,
+              about: `E2E friend_plus ${label}`,
+              picture: current.picture ?? undefined,
+              publicProfile: true,
+              showOnlineStatus: true,
+            };
+          };
+
+          const inviterEntry = await createGeneratedAccount('friend-plus-inviter', '1');
+          const friendEntry = await createGeneratedAccount('friend-plus-friend', '2');
+
+          const restoreAccount = async (entry: {
+            npub: string;
+            nsec: string;
+            name: string;
+            about: string;
+            picture?: string;
+            publicProfile: boolean;
+            showOnlineStatus: boolean;
+          }) => {
+            await useAuthStore.getState().loginWithNsec(entry.nsec, false, {
+              name: entry.name,
+              displayName: entry.name,
+              about: entry.about,
+              picture: entry.picture,
+              publicProfile: entry.publicProfile,
+              showOnlineStatus: entry.showOnlineStatus,
+            });
+            try {
+              await SecureStorageApi.secureLogin(entry.npub);
+            } catch (error) {
+              errorHandler.log('E2EBridge.seedFriendPlusAccounts.secureLoginFailed', error, {
+                context: 'registerE2EBridge.seedFriendPlusAccounts.restoreAccount',
+                metadata: { npub: entry.npub },
+              });
+            }
+          };
+
+          const follow = async (follower: typeof requesterEntry, target: typeof requesterEntry) => {
+            await restoreAccount(follower);
+            await TauriApi.followUser(follower.npub, target.npub);
+          };
+
+          await follow(inviterEntry, friendEntry);
+          await follow(friendEntry, inviterEntry);
+          await follow(requesterEntry, friendEntry);
+          await follow(friendEntry, requesterEntry);
+
+          await restoreAccount(requesterEntry);
+          try {
+            await useAuthStore.getState().loadAccounts();
+          } catch (error) {
+            errorHandler.log('E2EBridge.seedFriendPlusAccounts.loadAccountsFailed', error, {
+              context: 'registerE2EBridge.seedFriendPlusAccounts',
+            });
+          }
+
+          return {
+            requester: {
+              npub: requesterEntry.npub,
+              pubkey: requesterEntry.pubkey,
+            },
+            inviter: {
+              npub: inviterEntry.npub,
+              pubkey: inviterEntry.pubkey,
+            },
+            friend: {
+              npub: friendEntry.npub,
+              pubkey: friendEntry.pubkey,
+            },
+          };
+        },
+        accessControlRequestJoin: async (payload: AccessControlRequestJoinPayload) => {
+          return await accessControlApi.requestJoin({
+            topic_id: payload?.topic_id,
+            scope: payload?.scope,
+            invite_event_json: payload?.invite_event_json,
+            target_pubkey: payload?.target_pubkey,
+            broadcast_to_topic: payload?.broadcast_to_topic,
+          });
+        },
+        accessControlListJoinRequests: async () => {
+          return await accessControlApi.listJoinRequests();
+        },
+        accessControlApproveJoinRequest: async (payload: { event_id: string }) => {
+          const eventId = payload?.event_id?.trim();
+          if (!eventId) {
+            throw new Error('event_id is required to approve join.request');
+          }
+          return await accessControlApi.approveJoinRequest({ event_id: eventId });
+        },
+        accessControlIngestEventJson: async (payload: AccessControlIngestEventPayload) => {
+          if (!payload || payload.event_json === null || payload.event_json === undefined) {
+            throw new Error('event_json is required');
+          }
+          await accessControlApi.ingestEventJson({
+            event_json: payload.event_json,
+          });
+        },
         communityNodeAuthFlow: async (payload: { baseUrl: string }) => {
           const baseUrl = payload?.baseUrl?.trim();
           if (!baseUrl) {
@@ -1395,6 +1585,16 @@ export function registerE2EBridge(): void {
             errorHandler.log('E2EBridge.communityNodeAuthFlowFailed', error, {
               context: 'registerE2EBridge.communityNodeAuthFlow',
               metadata: { baseUrl },
+            });
+            throw error;
+          }
+        },
+        communityNodeListGroupKeys: async () => {
+          try {
+            return await communityNodeApi.listGroupKeys();
+          } catch (error) {
+            errorHandler.log('E2EBridge.communityNodeListGroupKeysFailed', error, {
+              context: 'registerE2EBridge.communityNodeListGroupKeys',
             });
             throw error;
           }

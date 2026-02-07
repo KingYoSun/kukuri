@@ -89,7 +89,7 @@
 - [x] Admin Console: LLM 連携設定（OpenAI/Local、外部送信ON/OFF、送信範囲、保存/保持、予算上限）とメンバーシップ一覧/検索（topic+scope+pubkey）を専用 UI として実装する
 - [x] `cn-user-api` 契約テスト: `/v1/bootstrap/*` `/v1/search` `/v1/reports` の成功系（200/201）とレスポンス shape の互換性を検証するテストを追加する
 - [x] `cn-admin-api` 契約テスト: `login -> session cookie -> /v1/admin/auth/me -> logout` の成功系フローを追加し、認証契約の後方互換を担保する
-- [ ] friend_plus 統合/E2E: `join.request(friend_plus) -> 承認 -> key.envelope -> 復号表示` を実ノード経路で検証するシナリオを追加する
+- [x] friend_plus 統合/E2E: `join.request(friend_plus) -> 承認 -> key.envelope -> 復号表示` を実ノード経路で検証するシナリオを追加する
 
 ## 参照（設計）
 

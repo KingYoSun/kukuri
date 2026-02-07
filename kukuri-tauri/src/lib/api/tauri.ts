@@ -781,15 +781,15 @@ export class TauriApi {
 
   static async followUser(followerNpub: string, targetNpub: string): Promise<void> {
     await invokeCommandVoid('follow_user', {
-      follower_npub: followerNpub,
-      target_npub: targetNpub,
+      followerNpub,
+      targetNpub,
     });
   }
 
   static async unfollowUser(followerNpub: string, targetNpub: string): Promise<void> {
     await invokeCommandVoid('unfollow_user', {
-      follower_npub: followerNpub,
-      target_npub: targetNpub,
+      followerNpub,
+      targetNpub,
     });
   }
 

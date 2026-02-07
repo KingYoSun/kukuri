@@ -47,12 +47,14 @@ pub struct JoinRequestInput {
 pub struct JoinRequestResult {
     pub event_id: String,
     pub sent_topics: Vec<String>,
+    pub event_json: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRequestApprovalResult {
     pub event_id: String,
     pub key_envelope_event_id: String,
+    pub key_envelope_event_json: serde_json::Value,
     pub recipient_pubkey: String,
     pub topic_id: String,
     pub scope: String,
@@ -196,6 +198,8 @@ impl AccessControlService {
         let event = self
             .build_signed_event(KIND_JOIN_REQUEST, content.to_string(), tags)
             .await?;
+        let event_json = serde_json::to_value(to_nostr_event(&event)?)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
 
         let mut topics = HashSet::new();
         if let Some(issuer) = issuer_pubkey {
@@ -218,6 +222,7 @@ impl AccessControlService {
         Ok(JoinRequestResult {
             event_id: event.id.clone(),
             sent_topics,
+            event_json,
         })
     }
 
@@ -263,6 +268,8 @@ impl AccessControlService {
         let envelope_event = self
             .build_key_envelope_event(&context.requester_pubkey, &group_key)
             .await?;
+        let key_envelope_event_json = serde_json::to_value(to_nostr_event(&envelope_event)?)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
         let topics = vec![user_topic_id(&context.requester_pubkey)];
         self.broadcast_event(&envelope_event, &topics).await?;
 
@@ -273,6 +280,7 @@ impl AccessControlService {
         Ok(JoinRequestApprovalResult {
             event_id: record.event.id,
             key_envelope_event_id: envelope_event.id,
+            key_envelope_event_json,
             recipient_pubkey: context.requester_pubkey,
             topic_id: context.topic_id,
             scope: context.scope,

@@ -188,6 +188,7 @@ pub fn run() {
             presentation::commands::access_control_list_join_requests,
             presentation::commands::access_control_approve_join_request,
             presentation::commands::access_control_reject_join_request,
+            presentation::commands::access_control_ingest_event_json,
             // ユーティリティコマンド
             presentation::commands::pubkey_to_npub,
             presentation::commands::npub_to_pubkey,

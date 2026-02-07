@@ -53,6 +53,7 @@ impl Validate for AccessControlJoinRequest {
 pub struct AccessControlJoinResponse {
     pub event_id: String,
     pub sent_topics: Vec<String>,
+    pub event_json: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +91,7 @@ impl Validate for AccessControlApproveJoinRequest {
 pub struct AccessControlApproveJoinResponse {
     pub event_id: String,
     pub key_envelope_event_id: String,
+    pub key_envelope_event_json: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +103,20 @@ impl Validate for AccessControlRejectJoinRequest {
     fn validate(&self) -> Result<(), String> {
         if self.event_id.trim().is_empty() {
             return Err("event_id is required".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessControlIngestEventRequest {
+    pub event_json: serde_json::Value,
+}
+
+impl Validate for AccessControlIngestEventRequest {
+    fn validate(&self) -> Result<(), String> {
+        if !self.event_json.is_object() {
+            return Err("event_json must be an object".to_string());
         }
         Ok(())
     }

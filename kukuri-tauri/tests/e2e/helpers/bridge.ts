@@ -35,7 +35,13 @@ export type BridgeAction =
   | 'getBootstrapSnapshot'
   | 'applyCliBootstrap'
   | 'clearBootstrapNodes'
+  | 'seedFriendPlusAccounts'
+  | 'accessControlRequestJoin'
+  | 'accessControlListJoinRequests'
+  | 'accessControlApproveJoinRequest'
+  | 'accessControlIngestEventJson'
   | 'communityNodeAuthFlow'
+  | 'communityNodeListGroupKeys'
   | 'communityNodeListBootstrapNodes'
   | 'communityNodeListBootstrapServices';
 
@@ -222,6 +228,59 @@ export interface CommunityNodeAuthFlowResult {
   consents: Record<string, unknown>;
 }
 
+export interface CommunityNodeGroupKeyEntry {
+  topic_id: string;
+  scope: string;
+  epoch: number;
+  stored_at: number;
+}
+
+export interface FriendPlusActor {
+  npub: string;
+  pubkey: string;
+}
+
+export interface SeedFriendPlusAccountsResult {
+  requester: FriendPlusActor;
+  inviter: FriendPlusActor;
+  friend: FriendPlusActor;
+}
+
+export interface AccessControlRequestJoinPayload {
+  topic_id?: string;
+  scope?: string;
+  invite_event_json?: unknown;
+  target_pubkey?: string;
+  broadcast_to_topic?: boolean;
+}
+
+export interface AccessControlRequestJoinResult {
+  event_id: string;
+  sent_topics: string[];
+  event_json: unknown;
+}
+
+export interface AccessControlPendingJoinItem {
+  event_id: string;
+  topic_id: string;
+  scope: string;
+  requester_pubkey: string;
+  target_pubkey?: string | null;
+  requested_at?: number | null;
+  received_at: number;
+  invite_event_json?: unknown;
+}
+
+export interface AccessControlListJoinRequestsResult {
+  items: AccessControlPendingJoinItem[];
+}
+
+export interface AccessControlApproveJoinRequestResult {
+  event_id: string;
+  key_envelope_event_id: string;
+  key_envelope_event_json: unknown;
+}
+
 type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
@@ -243,7 +302,13 @@ type BridgeResultMap = {
   getBootstrapSnapshot: BootstrapSnapshot;
   applyCliBootstrap: BootstrapSnapshot;
   clearBootstrapNodes: BootstrapSnapshot;
+  seedFriendPlusAccounts: SeedFriendPlusAccountsResult;
+  accessControlRequestJoin: AccessControlRequestJoinResult;
+  accessControlListJoinRequests: AccessControlListJoinRequestsResult;
+  accessControlApproveJoinRequest: AccessControlApproveJoinRequestResult;
+  accessControlIngestEventJson: null;
   communityNodeAuthFlow: CommunityNodeAuthFlowResult;
+  communityNodeListGroupKeys: CommunityNodeGroupKeyEntry[];
   communityNodeListBootstrapNodes: Record<string, unknown>;
   communityNodeListBootstrapServices: Record<string, unknown>;
 };
@@ -504,6 +569,10 @@ export async function clearOfflineState(): Promise<ClearOfflineStateResult> {
   return await callBridge('clearOfflineState');
 }
 
+export async function switchAccount(npub: string): Promise<void> {
+  await callBridge('switchAccount', npub);
+}
+
 export async function getDirectMessageSnapshot(): Promise<DirectMessageSnapshot> {
   return await callBridge('getDirectMessageSnapshot');
 }
@@ -602,10 +671,38 @@ export async function clearBootstrapNodes(): Promise<BootstrapSnapshot> {
   return await callBridge('clearBootstrapNodes');
 }
 
+export async function seedFriendPlusAccounts(): Promise<SeedFriendPlusAccountsResult> {
+  return await callBridge('seedFriendPlusAccounts');
+}
+
+export async function accessControlRequestJoin(
+  payload: AccessControlRequestJoinPayload,
+): Promise<AccessControlRequestJoinResult> {
+  return await callBridge('accessControlRequestJoin', payload);
+}
+
+export async function accessControlListJoinRequests(): Promise<AccessControlListJoinRequestsResult> {
+  return await callBridge('accessControlListJoinRequests');
+}
+
+export async function accessControlApproveJoinRequest(
+  eventId: string,
+): Promise<AccessControlApproveJoinRequestResult> {
+  return await callBridge('accessControlApproveJoinRequest', { event_id: eventId });
+}
+
+export async function accessControlIngestEventJson(eventJson: unknown): Promise<void> {
+  await callBridge('accessControlIngestEventJson', { event_json: eventJson });
+}
+
 export async function communityNodeAuthFlow(
   baseUrl: string,
 ): Promise<CommunityNodeAuthFlowResult> {
   return await callBridge('communityNodeAuthFlow', { baseUrl });
+}
+
+export async function communityNodeListGroupKeys(): Promise<CommunityNodeGroupKeyEntry[]> {
+  return await callBridge('communityNodeListGroupKeys');
 }
 
 export async function communityNodeListBootstrapNodes(): Promise<Record<string, unknown>> {

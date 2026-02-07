@@ -22,6 +22,7 @@ export interface AccessControlJoinRequest {
 export interface AccessControlJoinResponse {
   event_id: string;
   sent_topics: string[];
+  event_json: unknown;
 }
 
 export interface AccessControlPendingJoinRequest {
@@ -46,10 +47,15 @@ export interface AccessControlApproveJoinRequest {
 export interface AccessControlApproveJoinResponse {
   event_id: string;
   key_envelope_event_id: string;
+  key_envelope_event_json: unknown;
 }
 
 export interface AccessControlRejectJoinRequest {
   event_id: string;
+}
+
+export interface AccessControlIngestEventRequest {
+  event_json: unknown;
 }
 
 export const accessControlApi = {
@@ -65,4 +71,6 @@ export const accessControlApi = {
     }),
   rejectJoinRequest: (request: AccessControlRejectJoinRequest) =>
     invokeCommandVoid('access_control_reject_join_request', { request }),
+  ingestEventJson: (request: AccessControlIngestEventRequest) =>
+    invokeCommandVoid('access_control_ingest_event_json', { request }),
 };
