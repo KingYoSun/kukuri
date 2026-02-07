@@ -132,6 +132,23 @@ async fn get_json(app: Router, uri: &str) -> (StatusCode, Value) {
     (status, payload)
 }
 
+async fn get_json_with_session(app: Router, uri: &str, session_id: &str) -> (StatusCode, Value) {
+    let request = Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("host", "localhost:8081")
+        .header("cookie", format!("cn_admin_session={session_id}"))
+        .body(Body::empty())
+        .expect("request");
+    let response = app.oneshot(request).await.expect("response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: Value = serde_json::from_slice(&body).expect("json body");
+    (status, payload)
+}
+
 #[tokio::test]
 async fn access_control_rotate_contract_success() {
     let state = test_state().await;
@@ -221,6 +238,43 @@ async fn access_control_revoke_contract_success() {
 }
 
 #[tokio::test]
+async fn access_control_memberships_contract_search_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
+    let invite_pubkey = Keys::generate().public_key().to_hex();
+    let friend_pubkey = Keys::generate().public_key().to_hex();
+    insert_membership(&state.pool, &topic_id, "invite", &invite_pubkey).await;
+    insert_membership(&state.pool, &topic_id, "friend", &friend_pubkey).await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/access-control/memberships",
+            get(access_control::list_memberships),
+        )
+        .with_state(state);
+
+    let uri = format!(
+        "/v1/admin/access-control/memberships?topic_id={topic_id}&scope=invite&pubkey={invite_pubkey}&limit=10"
+    );
+    let (status, payload) = get_json_with_session(app, &uri, &session_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].get("topic_id").and_then(Value::as_str),
+        Some(topic_id.as_str())
+    );
+    assert_eq!(rows[0].get("scope").and_then(Value::as_str), Some("invite"));
+    assert_eq!(
+        rows[0].get("pubkey").and_then(Value::as_str),
+        Some(invite_pubkey.as_str())
+    );
+    assert_eq!(rows[0].get("status").and_then(Value::as_str), Some("active"));
+}
+
+#[tokio::test]
 async fn reindex_contract_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
@@ -268,6 +322,9 @@ async fn openapi_contract_contains_admin_paths() {
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1moderation~1rules/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1access-control~1memberships/get")
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1trust~1schedules/get")

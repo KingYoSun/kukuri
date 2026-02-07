@@ -5,13 +5,19 @@ import { StatusBadge } from '../components/StatusBadge';
 import { api } from '../lib/api';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatTimestamp } from '../lib/format';
-import type { AuditLog, RevokeAccessControlResponse, RotateAccessControlResponse } from '../lib/types';
+import type {
+  AccessControlMembership,
+  AuditLog,
+  RevokeAccessControlResponse,
+  RotateAccessControlResponse
+} from '../lib/types';
 
 const scopeOptions = [
   { value: 'invite', label: 'invite' },
   { value: 'friend', label: 'friend' },
   { value: 'friend_plus', label: 'friend_plus' }
 ];
+const scopeFilterOptions = [{ value: '', label: 'all' }, ...scopeOptions];
 
 const pubkeyPattern = /^[0-9a-f]{64}$/i;
 
@@ -28,10 +34,33 @@ export const AccessControlPage = () => {
   const [revokeMessage, setRevokeMessage] = useState<string | null>(null);
   const [rotateResult, setRotateResult] = useState<RotateAccessControlResponse | null>(null);
   const [revokeResult, setRevokeResult] = useState<RevokeAccessControlResponse | null>(null);
+  const [membershipForm, setMembershipForm] = useState({
+    topic_id: '',
+    scope: '',
+    pubkey: '',
+    status: 'active'
+  });
+  const [membershipFilters, setMembershipFilters] = useState({
+    topic_id: '',
+    scope: '',
+    pubkey: '',
+    status: 'active'
+  });
 
   const auditQuery = useQuery<AuditLog[]>({
     queryKey: ['auditLogs', 'access-control'],
     queryFn: () => api.auditLogs({ limit: 200 })
+  });
+  const membershipsQuery = useQuery<AccessControlMembership[]>({
+    queryKey: ['access-control-memberships', membershipFilters],
+    queryFn: () =>
+      api.accessControlMemberships({
+        topic_id: membershipFilters.topic_id || undefined,
+        scope: membershipFilters.scope || undefined,
+        pubkey: membershipFilters.pubkey || undefined,
+        status: membershipFilters.status || undefined,
+        limit: 200
+      })
   });
 
   const rotateMutation = useMutation({
@@ -40,6 +69,7 @@ export const AccessControlPage = () => {
       setRotateResult(result);
       setRotateMessage('Epoch rotation completed.');
       queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['access-control-memberships'] });
     },
     onError: (error) => setRotateMessage(errorToMessage(error))
   });
@@ -51,6 +81,7 @@ export const AccessControlPage = () => {
       setRevokeResult(result);
       setRevokeMessage('Membership revoked and epoch rotated.');
       queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['access-control-memberships'] });
     },
     onError: (error) => setRevokeMessage(errorToMessage(error))
   });
@@ -69,6 +100,15 @@ export const AccessControlPage = () => {
       return;
     }
     rotateMutation.mutate({ topic_id: topicId, scope: rotateForm.scope });
+  };
+
+  const submitMembershipSearch = () => {
+    setMembershipFilters({
+      topic_id: membershipForm.topic_id.trim(),
+      scope: membershipForm.scope,
+      pubkey: membershipForm.pubkey.trim(),
+      status: membershipForm.status
+    });
   };
 
   const submitRevoke = () => {
@@ -100,12 +140,122 @@ export const AccessControlPage = () => {
           <h1>Access Control</h1>
           <p>Rotate epochs and revoke memberships for private topic scopes.</p>
         </div>
-        <button className="button" onClick={() => void auditQuery.refetch()}>
+        <button
+          className="button"
+          onClick={() => {
+            void membershipsQuery.refetch();
+            void auditQuery.refetch();
+          }}
+        >
           Refresh
         </button>
       </div>
 
       <div className="grid">
+        <div className="card">
+          <h3>Memberships</h3>
+          <p>Search topic memberships by topic, scope, and pubkey.</p>
+          <div className="field">
+            <label htmlFor="membership-topic-id">Topic ID filter</label>
+            <input
+              id="membership-topic-id"
+              value={membershipForm.topic_id}
+              onChange={(event) =>
+                setMembershipForm((prev) => ({ ...prev, topic_id: event.target.value }))
+              }
+              placeholder="kukuri:topic:example"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="membership-scope">Scope filter</label>
+            <select
+              id="membership-scope"
+              value={membershipForm.scope}
+              onChange={(event) =>
+                setMembershipForm((prev) => ({ ...prev, scope: event.target.value }))
+              }
+            >
+              {scopeFilterOptions.map((scope) => (
+                <option key={scope.value || 'all'} value={scope.value}>
+                  {scope.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="membership-pubkey">Pubkey filter</label>
+            <input
+              id="membership-pubkey"
+              value={membershipForm.pubkey}
+              onChange={(event) =>
+                setMembershipForm((prev) => ({ ...prev, pubkey: event.target.value }))
+              }
+              placeholder="pubkey prefix or 64-char hex"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="membership-status">Status filter</label>
+            <select
+              id="membership-status"
+              value={membershipForm.status}
+              onChange={(event) =>
+                setMembershipForm((prev) => ({ ...prev, status: event.target.value }))
+              }
+            >
+              <option value="">all</option>
+              <option value="active">active</option>
+              <option value="revoked">revoked</option>
+            </select>
+          </div>
+          <div className="row">
+            <button className="button" onClick={submitMembershipSearch}>
+              Search memberships
+            </button>
+            <button className="button secondary" onClick={() => void membershipsQuery.refetch()}>
+              Reload
+            </button>
+          </div>
+          {membershipsQuery.isLoading && <div className="notice">Loading memberships...</div>}
+          {membershipsQuery.error && (
+            <div className="notice">{errorToMessage(membershipsQuery.error)}</div>
+          )}
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th>Scope</th>
+                <th>Pubkey</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th>Revoked</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(membershipsQuery.data ?? []).map((membership) => (
+                <tr
+                  key={`${membership.topic_id}:${membership.scope}:${membership.pubkey}`}
+                >
+                  <td>{membership.topic_id}</td>
+                  <td>{membership.scope}</td>
+                  <td>{membership.pubkey}</td>
+                  <td>{membership.status}</td>
+                  <td>{formatTimestamp(membership.joined_at)}</td>
+                  <td>
+                    {membership.revoked_at
+                      ? `${formatTimestamp(membership.revoked_at)} (${membership.revoked_reason ?? 'n/a'})`
+                      : '-'}
+                  </td>
+                </tr>
+              ))}
+              {(membershipsQuery.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={6}>No memberships found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
         <div className="card">
           <h3>Rotate Epoch</h3>
           <p>Re-issue group keys for active members in the selected topic/scope.</p>

@@ -5,7 +5,9 @@ use serde::Serialize;
 use utoipa::openapi::server::ServerBuilder;
 use utoipa::{OpenApi, ToSchema};
 
-use crate::access_control::{RevokeRequest, RevokeResponse, RotateRequest, RotateResponse};
+use crate::access_control::{
+    MembershipRow, RevokeRequest, RevokeResponse, RotateRequest, RotateResponse,
+};
 use crate::auth::{AdminUser, LoginRequest, LoginResponse};
 use crate::moderation::{LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse};
 use crate::policies::{PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest};
@@ -67,6 +69,7 @@ pub struct ManualLabelResponse {
         subscriptions_upsert_doc,
         usage_list_doc,
         audit_logs_list_doc,
+        access_control_memberships_doc,
         access_control_rotate_doc,
         access_control_revoke_doc,
         trust_jobs_list_doc,
@@ -108,6 +111,7 @@ pub struct ManualLabelResponse {
             SubscriptionRow,
             SubscriptionUpdate,
             UsageRow,
+            MembershipRow,
             RotateRequest,
             RotateResponse,
             RevokeRequest,
@@ -440,6 +444,20 @@ fn usage_list_doc() {}
     responses((status = 200, body = [AuditLog]))
 )]
 fn audit_logs_list_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/admin/access-control/memberships",
+    params(
+        ("topic_id" = Option<String>, Query, description = "Topic filter"),
+        ("scope" = Option<String>, Query, description = "Scope filter"),
+        ("pubkey" = Option<String>, Query, description = "Member pubkey filter"),
+        ("status" = Option<String>, Query, description = "Membership status filter"),
+        ("limit" = Option<i64>, Query, description = "Max rows")
+    ),
+    responses((status = 200, body = [MembershipRow]), (status = 400, body = ErrorResponse))
+)]
+fn access_control_memberships_doc() {}
 
 #[utoipa::path(
     post,

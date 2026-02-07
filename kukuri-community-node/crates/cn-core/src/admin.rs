@@ -190,6 +190,20 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
                     "enabled": false,
                     "provider": "disabled",
                     "external_send_enabled": false,
+                    "send_scope": {
+                        "public": true,
+                        "invite": false,
+                        "friend": false,
+                        "friend_plus": false
+                    },
+                    "storage": {
+                        "persist_decisions": true,
+                        "persist_request_snapshots": false
+                    },
+                    "retention": {
+                        "decision_days": 90,
+                        "snapshot_days": 7
+                    },
                     "truncate_chars": 2000,
                     "mask_pii": true,
                     "max_requests_per_day": 0,

@@ -265,6 +265,26 @@ export const api = {
     ),
   rotateAccessControl: (payload: { topic_id: string; scope: string }) =>
     unwrap(client.POST('/v1/admin/access-control/rotate', { body: payload })),
+  accessControlMemberships: (query?: {
+    topic_id?: string;
+    scope?: string;
+    pubkey?: string;
+    status?: string;
+    limit?: number;
+  }) =>
+    unwrap(
+      client.GET('/v1/admin/access-control/memberships', {
+        params: {
+          query: {
+            topic_id: query?.topic_id,
+            scope: query?.scope,
+            pubkey: query?.pubkey,
+            status: query?.status,
+            limit: query?.limit
+          }
+        }
+      })
+    ),
   revokeAccessControl: (payload: {
     topic_id: string;
     scope: string;

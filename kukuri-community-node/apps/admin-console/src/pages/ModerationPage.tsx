@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '../lib/api';
+import { asRecord, findServiceByName } from '../lib/config';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatJson, formatTimestamp } from '../lib/format';
-import type { ModerationLabel, ModerationReport, ModerationRule } from '../lib/types';
+import type {
+  AuditLog,
+  ModerationLabel,
+  ModerationReport,
+  ModerationRule,
+  ServiceInfo
+} from '../lib/types';
 import { StatusBadge } from '../components/StatusBadge';
 
 const defaultConditions = JSON.stringify({ kinds: [1], content_keywords: ['spam'] }, null, 2);
@@ -19,6 +26,101 @@ const defaultAction = JSON.stringify(
   null,
   2
 );
+
+type ModerationLlmProvider = 'disabled' | 'openai' | 'local';
+
+type LlmSettingsForm = {
+  enabled: boolean;
+  provider: ModerationLlmProvider;
+  externalSendEnabled: boolean;
+  sendPublic: boolean;
+  sendInvite: boolean;
+  sendFriend: boolean;
+  sendFriendPlus: boolean;
+  persistDecisions: boolean;
+  persistRequestSnapshots: boolean;
+  decisionRetentionDays: string;
+  snapshotRetentionDays: string;
+  maxRequestsPerDay: string;
+  maxCostPerDay: string;
+  maxConcurrency: string;
+  truncateChars: string;
+  maskPii: boolean;
+};
+
+const asBoolean = (value: unknown, fallback: boolean): boolean =>
+  typeof value === 'boolean' ? value : fallback;
+
+const asFiniteNumber = (value: unknown, fallback: number): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  return fallback;
+};
+
+const asProvider = (value: unknown): ModerationLlmProvider => {
+  if (value === 'openai' || value === 'local' || value === 'disabled') {
+    return value;
+  }
+  return 'disabled';
+};
+
+const defaultLlmSettingsForm = (): LlmSettingsForm => ({
+  enabled: false,
+  provider: 'disabled',
+  externalSendEnabled: false,
+  sendPublic: true,
+  sendInvite: false,
+  sendFriend: false,
+  sendFriendPlus: false,
+  persistDecisions: true,
+  persistRequestSnapshots: false,
+  decisionRetentionDays: '90',
+  snapshotRetentionDays: '7',
+  maxRequestsPerDay: '0',
+  maxCostPerDay: '0',
+  maxConcurrency: '1',
+  truncateChars: '2000',
+  maskPii: true
+});
+
+const buildLlmSettingsForm = (configJson: unknown): LlmSettingsForm => {
+  const defaults = defaultLlmSettingsForm();
+  const moderationConfig = asRecord(configJson);
+  const llm = asRecord(moderationConfig?.llm);
+  const sendScope = asRecord(llm?.send_scope);
+  const storage = asRecord(llm?.storage);
+  const retention = asRecord(llm?.retention);
+
+  const maxRequestsPerDay = Math.max(0, asFiniteNumber(llm?.max_requests_per_day, 0));
+  const maxCostPerDay = Math.max(0, asFiniteNumber(llm?.max_cost_per_day, 0));
+  const maxConcurrency = Math.max(1, asFiniteNumber(llm?.max_concurrency, 1));
+  const truncateChars = Math.max(1, asFiniteNumber(llm?.truncate_chars, 2000));
+  const decisionDays = Math.max(0, asFiniteNumber(retention?.decision_days, 90));
+  const snapshotDays = Math.max(0, asFiniteNumber(retention?.snapshot_days, 7));
+
+  return {
+    enabled: asBoolean(llm?.enabled, defaults.enabled),
+    provider: asProvider(llm?.provider),
+    externalSendEnabled: asBoolean(llm?.external_send_enabled, defaults.externalSendEnabled),
+    sendPublic: asBoolean(sendScope?.public, defaults.sendPublic),
+    sendInvite: asBoolean(sendScope?.invite, defaults.sendInvite),
+    sendFriend: asBoolean(sendScope?.friend, defaults.sendFriend),
+    sendFriendPlus: asBoolean(sendScope?.friend_plus, defaults.sendFriendPlus),
+    persistDecisions: asBoolean(storage?.persist_decisions, defaults.persistDecisions),
+    persistRequestSnapshots: asBoolean(
+      storage?.persist_request_snapshots,
+      defaults.persistRequestSnapshots
+    ),
+    decisionRetentionDays: String(decisionDays),
+    snapshotRetentionDays: String(snapshotDays),
+    maxRequestsPerDay: String(maxRequestsPerDay),
+    maxCostPerDay: String(maxCostPerDay),
+    maxConcurrency: String(maxConcurrency),
+    truncateChars: String(truncateChars),
+    maskPii: asBoolean(llm?.mask_pii, defaults.maskPii)
+  };
+};
 
 export const ModerationPage = () => {
   const queryClient = useQueryClient();
@@ -45,6 +147,13 @@ export const ModerationPage = () => {
     policy_ref: '',
     topic_id: ''
   });
+  const [llmForm, setLlmForm] = useState<LlmSettingsForm>(defaultLlmSettingsForm());
+  const [llmMessage, setLlmMessage] = useState<string | null>(null);
+
+  const servicesQuery = useQuery<ServiceInfo[]>({
+    queryKey: ['services'],
+    queryFn: api.services
+  });
 
   const rulesQuery = useQuery<ModerationRule[]>({
     queryKey: ['moderation-rules'],
@@ -63,6 +172,40 @@ export const ModerationPage = () => {
         limit: 50,
         target: labelTarget.trim() !== '' ? labelTarget.trim() : undefined
       })
+  });
+
+  const llmAuditQuery = useQuery<AuditLog[]>({
+    queryKey: ['auditLogs', 'moderation-llm'],
+    queryFn: () =>
+      api.auditLogs({
+        action: 'service_config.update',
+        target: 'service:moderation',
+        limit: 50
+      })
+  });
+
+  const moderationService = useMemo(
+    () => findServiceByName(servicesQuery.data, 'moderation'),
+    [servicesQuery.data]
+  );
+
+  useEffect(() => {
+    if (moderationService) {
+      setLlmForm(buildLlmSettingsForm(moderationService.config_json));
+    } else {
+      setLlmForm(defaultLlmSettingsForm());
+    }
+  }, [moderationService?.version, moderationService?.config_json]);
+
+  const saveLlmMutation = useMutation({
+    mutationFn: (payload: unknown) =>
+      api.updateServiceConfig('moderation', payload, moderationService?.version),
+    onSuccess: () => {
+      setLlmMessage('LLM settings saved.');
+      queryClient.invalidateQueries({ queryKey: ['services'] });
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+    },
+    onError: (error) => setLlmMessage(errorToMessage(error))
   });
 
   const saveRuleMutation = useMutation({
@@ -108,6 +251,84 @@ export const ModerationPage = () => {
     },
     onError: (err) => setLabelError(errorToMessage(err))
   });
+
+  const handleLlmSave = () => {
+    setLlmMessage(null);
+    if (!moderationService) {
+      setLlmMessage('Moderation service config is unavailable.');
+      return;
+    }
+
+    const maxRequestsPerDay = Number(llmForm.maxRequestsPerDay);
+    const maxCostPerDay = Number(llmForm.maxCostPerDay);
+    const maxConcurrency = Number(llmForm.maxConcurrency);
+    const truncateChars = Number(llmForm.truncateChars);
+    const decisionRetentionDays = Number(llmForm.decisionRetentionDays);
+    const snapshotRetentionDays = Number(llmForm.snapshotRetentionDays);
+
+    if (Number.isNaN(maxRequestsPerDay) || maxRequestsPerDay < 0) {
+      setLlmMessage('Max requests/day must be 0 or greater.');
+      return;
+    }
+    if (Number.isNaN(maxCostPerDay) || maxCostPerDay < 0) {
+      setLlmMessage('Max cost/day must be 0 or greater.');
+      return;
+    }
+    if (Number.isNaN(maxConcurrency) || maxConcurrency < 1) {
+      setLlmMessage('Max concurrency must be 1 or greater.');
+      return;
+    }
+    if (Number.isNaN(truncateChars) || truncateChars < 1) {
+      setLlmMessage('Truncate chars must be 1 or greater.');
+      return;
+    }
+    if (Number.isNaN(decisionRetentionDays) || decisionRetentionDays < 0) {
+      setLlmMessage('Decision retention days must be 0 or greater.');
+      return;
+    }
+    if (Number.isNaN(snapshotRetentionDays) || snapshotRetentionDays < 0) {
+      setLlmMessage('Snapshot retention days must be 0 or greater.');
+      return;
+    }
+
+    const currentConfig = asRecord(moderationService.config_json) ?? {};
+    const currentLlm = asRecord(currentConfig.llm) ?? {};
+    const currentSendScope = asRecord(currentLlm.send_scope) ?? {};
+    const currentStorage = asRecord(currentLlm.storage) ?? {};
+    const currentRetention = asRecord(currentLlm.retention) ?? {};
+
+    saveLlmMutation.mutate({
+      ...currentConfig,
+      llm: {
+        ...currentLlm,
+        enabled: llmForm.enabled,
+        provider: llmForm.provider,
+        external_send_enabled: llmForm.provider === 'openai' ? llmForm.externalSendEnabled : false,
+        send_scope: {
+          ...currentSendScope,
+          public: llmForm.sendPublic,
+          invite: llmForm.sendInvite,
+          friend: llmForm.sendFriend,
+          friend_plus: llmForm.sendFriendPlus
+        },
+        storage: {
+          ...currentStorage,
+          persist_decisions: llmForm.persistDecisions,
+          persist_request_snapshots: llmForm.persistRequestSnapshots
+        },
+        retention: {
+          ...currentRetention,
+          decision_days: Math.floor(decisionRetentionDays),
+          snapshot_days: Math.floor(snapshotRetentionDays)
+        },
+        truncate_chars: Math.floor(truncateChars),
+        mask_pii: llmForm.maskPii,
+        max_requests_per_day: Math.floor(maxRequestsPerDay),
+        max_cost_per_day: maxCostPerDay,
+        max_concurrency: Math.floor(maxConcurrency)
+      }
+    });
+  };
 
   const handleRuleSubmit = () => {
     setRuleError(null);
@@ -218,6 +439,8 @@ export const ModerationPage = () => {
         <button
           className="button"
           onClick={() => {
+            void servicesQuery.refetch();
+            void llmAuditQuery.refetch();
             void rulesQuery.refetch();
             void reportsQuery.refetch();
             void labelsQuery.refetch();
@@ -225,6 +448,303 @@ export const ModerationPage = () => {
         >
           Refresh
         </button>
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <div>
+            <h3>LLM Integration Settings</h3>
+            <p>Configure provider, sending scope, storage/retention, and runtime budgets.</p>
+          </div>
+          {moderationService && (
+            <StatusBadge status={moderationService.health?.status ?? 'unknown'} />
+          )}
+        </div>
+        {!moderationService && (
+          <div className="notice">Moderation service config is unavailable.</div>
+        )}
+        {moderationService && (
+          <>
+            <div className="muted">
+              Version {moderationService.version} | Updated{' '}
+              {formatTimestamp(moderationService.updated_at)} by {moderationService.updated_by}
+            </div>
+
+            <div className="grid">
+              <div className="card sub-card">
+                <h3>Provider</h3>
+                <div className="field">
+                  <label htmlFor="llm-enabled">LLM enabled</label>
+                  <select
+                    id="llm-enabled"
+                    value={llmForm.enabled ? 'true' : 'false'}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({ ...prev, enabled: event.target.value === 'true' }))
+                    }
+                  >
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-provider">Provider</label>
+                  <select
+                    id="llm-provider"
+                    value={llmForm.provider}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({
+                        ...prev,
+                        provider: event.target.value as ModerationLlmProvider
+                      }))
+                    }
+                  >
+                    <option value="disabled">disabled</option>
+                    <option value="openai">openai</option>
+                    <option value="local">local</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-external-send">External send (OpenAI only)</label>
+                  <select
+                    id="llm-external-send"
+                    value={llmForm.externalSendEnabled ? 'true' : 'false'}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({
+                        ...prev,
+                        externalSendEnabled: event.target.value === 'true'
+                      }))
+                    }
+                    disabled={llmForm.provider !== 'openai'}
+                  >
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="card sub-card">
+                <h3>Send Scope</h3>
+                <div className="field">
+                  <label htmlFor="llm-scope-public">
+                    <input
+                      id="llm-scope-public"
+                      type="checkbox"
+                      checked={llmForm.sendPublic}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({ ...prev, sendPublic: event.target.checked }))
+                      }
+                    />
+                    {' '}public
+                  </label>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-scope-invite">
+                    <input
+                      id="llm-scope-invite"
+                      type="checkbox"
+                      checked={llmForm.sendInvite}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({ ...prev, sendInvite: event.target.checked }))
+                      }
+                    />
+                    {' '}invite
+                  </label>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-scope-friend">
+                    <input
+                      id="llm-scope-friend"
+                      type="checkbox"
+                      checked={llmForm.sendFriend}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({ ...prev, sendFriend: event.target.checked }))
+                      }
+                    />
+                    {' '}friend
+                  </label>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-scope-friend-plus">
+                    <input
+                      id="llm-scope-friend-plus"
+                      type="checkbox"
+                      checked={llmForm.sendFriendPlus}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({ ...prev, sendFriendPlus: event.target.checked }))
+                      }
+                    />
+                    {' '}friend_plus
+                  </label>
+                </div>
+              </div>
+
+              <div className="card sub-card">
+                <h3>Storage / Retention</h3>
+                <div className="field">
+                  <label htmlFor="llm-persist-decisions">
+                    <input
+                      id="llm-persist-decisions"
+                      type="checkbox"
+                      checked={llmForm.persistDecisions}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({ ...prev, persistDecisions: event.target.checked }))
+                      }
+                    />
+                    {' '}Persist decisions
+                  </label>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-persist-snapshots">
+                    <input
+                      id="llm-persist-snapshots"
+                      type="checkbox"
+                      checked={llmForm.persistRequestSnapshots}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({
+                          ...prev,
+                          persistRequestSnapshots: event.target.checked
+                        }))
+                      }
+                    />
+                    {' '}Persist request snapshots
+                  </label>
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-decision-retention">Decision retention days</label>
+                  <input
+                    id="llm-decision-retention"
+                    type="number"
+                    min={0}
+                    value={llmForm.decisionRetentionDays}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({
+                        ...prev,
+                        decisionRetentionDays: event.target.value
+                      }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-snapshot-retention">Snapshot retention days</label>
+                  <input
+                    id="llm-snapshot-retention"
+                    type="number"
+                    min={0}
+                    value={llmForm.snapshotRetentionDays}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({
+                        ...prev,
+                        snapshotRetentionDays: event.target.value
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="card sub-card">
+                <h3>Budget / Runtime</h3>
+                <div className="field">
+                  <label htmlFor="llm-max-requests">Max requests per day</label>
+                  <input
+                    id="llm-max-requests"
+                    type="number"
+                    min={0}
+                    value={llmForm.maxRequestsPerDay}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({ ...prev, maxRequestsPerDay: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-max-cost">Max cost per day</label>
+                  <input
+                    id="llm-max-cost"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    value={llmForm.maxCostPerDay}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({ ...prev, maxCostPerDay: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-max-concurrency">Max concurrency</label>
+                  <input
+                    id="llm-max-concurrency"
+                    type="number"
+                    min={1}
+                    value={llmForm.maxConcurrency}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({ ...prev, maxConcurrency: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-truncate-chars">Truncate chars</label>
+                  <input
+                    id="llm-truncate-chars"
+                    type="number"
+                    min={1}
+                    value={llmForm.truncateChars}
+                    onChange={(event) =>
+                      setLlmForm((prev) => ({ ...prev, truncateChars: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="llm-mask-pii">
+                    <input
+                      id="llm-mask-pii"
+                      type="checkbox"
+                      checked={llmForm.maskPii}
+                      onChange={(event) =>
+                        setLlmForm((prev) => ({ ...prev, maskPii: event.target.checked }))
+                      }
+                    />
+                    {' '}Mask PII before send
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {llmMessage && <div className="notice">{llmMessage}</div>}
+            <button className="button" onClick={handleLlmSave} disabled={saveLlmMutation.isPending}>
+              {saveLlmMutation.isPending ? 'Saving...' : 'Save LLM settings'}
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Recent LLM Config Audits</h3>
+        {llmAuditQuery.isLoading && <div className="notice">Loading audit logs...</div>}
+        {llmAuditQuery.error && <div className="notice">{errorToMessage(llmAuditQuery.error)}</div>}
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Action</th>
+              <th>Target</th>
+              <th>Actor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(llmAuditQuery.data ?? []).map((log) => (
+              <tr key={log.audit_id}>
+                <td>{formatTimestamp(log.created_at)}</td>
+                <td>{log.action}</td>
+                <td>{log.target}</td>
+                <td>{log.actor_admin_user_id}</td>
+              </tr>
+            ))}
+            {(llmAuditQuery.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={4}>No moderation config audit logs found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div className="grid">

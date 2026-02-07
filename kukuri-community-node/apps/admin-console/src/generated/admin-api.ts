@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/access-control/memberships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_control_memberships_doc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/access-control/revoke": {
         parameters: {
             query?: never;
@@ -601,6 +617,17 @@ export interface components {
             label_id: string;
             status: string;
         };
+        MembershipRow: {
+            /** Format: int64 */
+            joined_at: number;
+            pubkey: string;
+            /** Format: int64 */
+            revoked_at?: number | null;
+            revoked_reason?: string | null;
+            scope: string;
+            status: string;
+            topic_id: string;
+        };
         NodeSubscription: {
             enabled: boolean;
             /** Format: int64 */
@@ -883,6 +910,44 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    access_control_memberships_doc: {
+        parameters: {
+            query?: {
+                /** @description Topic filter */
+                topic_id?: string | null;
+                /** @description Scope filter */
+                scope?: string | null;
+                /** @description Member pubkey filter */
+                pubkey?: string | null;
+                /** @description Membership status filter */
+                status?: string | null;
+                /** @description Max rows */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipRow"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

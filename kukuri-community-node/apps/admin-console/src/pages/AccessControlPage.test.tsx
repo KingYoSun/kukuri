@@ -9,6 +9,7 @@ import { renderWithQueryClient } from '../test/renderWithQueryClient';
 vi.mock('../lib/api', () => ({
   api: {
     auditLogs: vi.fn(),
+    accessControlMemberships: vi.fn(),
     rotateAccessControl: vi.fn(),
     revokeAccessControl: vi.fn()
   }
@@ -18,6 +19,17 @@ describe('AccessControlPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.auditLogs).mockResolvedValue([]);
+    vi.mocked(api.accessControlMemberships).mockResolvedValue([
+      {
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        pubkey: 'a'.repeat(64),
+        status: 'active',
+        joined_at: 1738809600,
+        revoked_at: null,
+        revoked_reason: null
+      }
+    ]);
     vi.mocked(api.rotateAccessControl).mockResolvedValue({
       topic_id: 'kukuri:topic:test',
       scope: 'invite',
@@ -41,6 +53,21 @@ describe('AccessControlPage', () => {
     expect(await screen.findByRole('heading', { name: 'Access Control' })).toBeInTheDocument();
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Topic ID filter'), 'kukuri:topic:test');
+    await user.selectOptions(screen.getByLabelText('Scope filter'), 'invite');
+    await user.type(screen.getByLabelText('Pubkey filter'), 'a'.repeat(16));
+    await user.click(screen.getByRole('button', { name: 'Search memberships' }));
+
+    await waitFor(() => {
+      expect(api.accessControlMemberships).toHaveBeenLastCalledWith({
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        pubkey: 'a'.repeat(16),
+        status: 'active',
+        limit: 200
+      });
+    });
+
     const topicInputs = screen.getAllByLabelText('Topic ID');
     await user.type(topicInputs[0], 'kukuri:topic:test');
     await user.click(screen.getByRole('button', { name: 'Rotate epoch' }));
