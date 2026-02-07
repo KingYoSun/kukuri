@@ -1072,7 +1072,7 @@ mod tests {
     use serde_json::json;
     use sqlx::postgres::PgPoolOptions;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
     use tokio::net::TcpListener;
     use tokio::sync::OnceCell;
     use uuid::Uuid;
@@ -1232,6 +1232,12 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    fn lock_env() -> MutexGuard<'static, ()> {
+        env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     fn set_env_var(key: &str, value: &str) {
         unsafe { std::env::set_var(key, value) };
     }
@@ -1251,7 +1257,7 @@ mod tests {
             consumer_poll_seconds: 1,
             queue_max_attempts: 3,
             queue_retry_delay_seconds: 1,
-            rules_max_labels_per_event: 5,
+            rules_max_labels_per_event: 0,
             llm: config::LlmRuntimeConfig {
                 enabled: true,
                 provider: "local".to_string(),
@@ -1267,7 +1273,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn process_job_applies_llm_label_with_local_provider() {
-        let _guard = env_lock().lock().expect("env lock");
+        let _guard = lock_env();
 
         let pool = PgPoolOptions::new()
             .connect(&database_url())
@@ -1354,7 +1360,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn process_job_skips_llm_when_max_requests_per_day_reached() {
-        let _guard = env_lock().lock().expect("env lock");
+        let _guard = lock_env();
 
         let pool = PgPoolOptions::new()
             .connect(&database_url())
@@ -1453,7 +1459,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn process_job_skips_llm_when_max_cost_per_day_reached() {
-        let _guard = env_lock().lock().expect("env lock");
+        let _guard = lock_env();
 
         let pool = PgPoolOptions::new()
             .connect(&database_url())
@@ -1539,7 +1545,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn process_job_skips_llm_when_max_concurrency_reached() {
-        let _guard = env_lock().lock().expect("env lock");
+        let _guard = lock_env();
 
         let pool = PgPoolOptions::new()
             .connect(&database_url())
