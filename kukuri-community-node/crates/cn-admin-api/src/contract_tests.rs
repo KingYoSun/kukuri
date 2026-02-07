@@ -1,4 +1,4 @@
-use crate::{access_control, reindex, AppState};
+use crate::{access_control, auth, reindex, AppState};
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
@@ -53,20 +53,7 @@ async fn test_state() -> AppState {
 }
 
 async fn insert_admin_session(pool: &Pool<Postgres>) -> String {
-    let admin_user_id = Uuid::new_v4().to_string();
-    let username = format!("admin-{}", &admin_user_id[..8]);
-    let password_hash = cn_core::admin::hash_password("test-password").expect("hash password");
-
-    sqlx::query(
-        "INSERT INTO cn_admin.admin_users          (admin_user_id, username, password_hash, is_active)          VALUES ($1, $2, $3, TRUE)",
-    )
-    .bind(&admin_user_id)
-    .bind(&username)
-    .bind(&password_hash)
-    .execute(pool)
-    .await
-    .expect("insert admin user");
-
+    let (admin_user_id, _) = insert_admin_user(pool, "test-password").await;
     let session_id = Uuid::new_v4().to_string();
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
     sqlx::query(
@@ -80,6 +67,24 @@ async fn insert_admin_session(pool: &Pool<Postgres>) -> String {
     .expect("insert admin session");
 
     session_id
+}
+
+async fn insert_admin_user(pool: &Pool<Postgres>, password: &str) -> (String, String) {
+    let admin_user_id = Uuid::new_v4().to_string();
+    let username = format!("admin-{}", &admin_user_id[..8]);
+    let password_hash = cn_core::admin::hash_password(password).expect("hash password");
+
+    sqlx::query(
+        "INSERT INTO cn_admin.admin_users          (admin_user_id, username, password_hash, is_active)          VALUES ($1, $2, $3, TRUE)",
+    )
+    .bind(&admin_user_id)
+    .bind(&username)
+    .bind(&password_hash)
+    .execute(pool)
+    .await
+    .expect("insert admin user");
+
+    (admin_user_id, username)
 }
 
 async fn insert_membership(pool: &Pool<Postgres>, topic_id: &str, scope: &str, pubkey: &str) {
@@ -334,4 +339,108 @@ async fn openapi_contract_contains_admin_paths() {
     assert!(payload
         .pointer("/components/schemas/TrustScheduleRow")
         .is_some());
+}
+
+#[tokio::test]
+async fn auth_contract_login_me_logout_success() {
+    let state = test_state().await;
+    let password = "test-password";
+    let (admin_user_id, username) = insert_admin_user(&state.pool, password).await;
+
+    let app = Router::new()
+        .route("/v1/admin/auth/login", post(auth::login))
+        .route("/v1/admin/auth/me", get(auth::me))
+        .route("/v1/admin/auth/logout", post(auth::logout))
+        .with_state(state);
+
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/v1/admin/auth/login")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "username": username,
+                "password": password
+            })
+            .to_string(),
+        ))
+        .expect("request");
+    let login_response = app.clone().oneshot(login_request).await.expect("response");
+    assert_eq!(login_response.status(), StatusCode::OK);
+    let session_cookie = login_response
+        .headers()
+        .get("set-cookie")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .expect("set-cookie")
+        .to_string();
+    assert!(session_cookie.starts_with("cn_admin_session="));
+
+    let login_body = to_bytes(login_response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let login_payload: Value = serde_json::from_slice(&login_body).expect("json body");
+    assert_eq!(
+        login_payload.get("admin_user_id").and_then(Value::as_str),
+        Some(admin_user_id.as_str())
+    );
+    assert_eq!(
+        login_payload.get("username").and_then(Value::as_str),
+        Some(username.as_str())
+    );
+    assert!(login_payload
+        .get("expires_at")
+        .and_then(Value::as_i64)
+        .is_some());
+
+    let me_request = Request::builder()
+        .method("GET")
+        .uri("/v1/admin/auth/me")
+        .header("cookie", &session_cookie)
+        .body(Body::empty())
+        .expect("request");
+    let me_response = app.clone().oneshot(me_request).await.expect("response");
+    assert_eq!(me_response.status(), StatusCode::OK);
+    let me_body = to_bytes(me_response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let me_payload: Value = serde_json::from_slice(&me_body).expect("json body");
+    assert_eq!(
+        me_payload.get("admin_user_id").and_then(Value::as_str),
+        Some(admin_user_id.as_str())
+    );
+    assert_eq!(
+        me_payload.get("username").and_then(Value::as_str),
+        Some(username.as_str())
+    );
+
+    let logout_request = Request::builder()
+        .method("POST")
+        .uri("/v1/admin/auth/logout")
+        .header("cookie", &session_cookie)
+        .body(Body::empty())
+        .expect("request");
+    let logout_response = app.clone().oneshot(logout_request).await.expect("response");
+    assert_eq!(logout_response.status(), StatusCode::OK);
+    let logout_body = to_bytes(logout_response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let logout_payload: Value = serde_json::from_slice(&logout_body).expect("json body");
+    assert_eq!(
+        logout_payload.get("status").and_then(Value::as_str),
+        Some("ok")
+    );
+
+    let me_after_logout_request = Request::builder()
+        .method("GET")
+        .uri("/v1/admin/auth/me")
+        .header("cookie", &session_cookie)
+        .body(Body::empty())
+        .expect("request");
+    let me_after_logout_response = app
+        .clone()
+        .oneshot(me_after_logout_request)
+        .await
+        .expect("response");
+    assert_eq!(me_after_logout_response.status(), StatusCode::UNAUTHORIZED);
 }
