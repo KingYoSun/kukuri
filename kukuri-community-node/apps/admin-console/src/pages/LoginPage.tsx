@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { z } from 'zod';
 
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Notice } from '../components/ui';
 import { errorToMessage } from '../lib/errorHandler';
 import { useAuthStore } from '../store/authStore';
 
@@ -39,36 +40,38 @@ export const LoginPage = () => {
           <p>Sign in to manage services, policies, and subscriptions.</p>
         </div>
       </div>
-      <div className="card login-panel">
-        <h3>Admin Login</h3>
-        <form onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-            />
-          </div>
-          {(localError || error) && (
-            <div className="notice">{localError ?? error}</div>
-          )}
-          <button className="button" type="submit" disabled={status === 'checking'}>
-            {status === 'checking' ? 'Signing in...' : 'Sign in'}
-          </button>
-        </form>
-      </div>
+      <Card className="login-panel">
+        <CardHeader>
+          <CardTitle>Admin Login</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submit}>
+            <div className="field">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+              />
+            </div>
+            <div className="field">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+            {(localError || error) && <Notice tone="error">{localError ?? error}</Notice>}
+            <Button type="submit" disabled={status === 'checking'}>
+              {status === 'checking' ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -13,11 +13,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.1.2",
     "@tanstack/react-query": "^5.51.23",
     "@tanstack/react-router": "^1.77.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "openapi-fetch": "^0.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.3.1",
     "zustand": "^4.5.4",
     "zod": "^3.23.8"
   },

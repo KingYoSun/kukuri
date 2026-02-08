@@ -131,6 +131,33 @@ body {
   color: var(--muted);
 }
 
+.card-header {
+  margin-bottom: 10px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.card-description {
+  margin-top: 4px;
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-footer {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -177,6 +204,13 @@ body {
   box-shadow: 0 8px 18px rgba(255, 122, 89, 0.25);
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -189,9 +223,24 @@ body {
   color: var(--muted);
 }
 
+.label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .field input,
 .field textarea,
 .field select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-family: inherit;
+  width: 100%;
+}
+
+.input,
+.textarea,
+.select {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 10px;
@@ -217,6 +266,16 @@ body {
   border-radius: 12px;
   background: rgba(31, 37, 50, 0.08);
   color: var(--muted);
+}
+
+.notice-success {
+  background: rgba(29, 138, 100, 0.12);
+  color: var(--good);
+}
+
+.notice-error {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--bad);
 }
 
 .stack {

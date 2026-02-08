@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
+import { Button, Card, CardContent, CardHeader, CardTitle, Notice } from '../components/ui';
+import { StatusBadge } from '../components/StatusBadge';
 import { api } from '../lib/api';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatTimestamp, formatJson } from '../lib/format';
 import type { ServiceInfo } from '../lib/types';
-import { StatusBadge } from '../components/StatusBadge';
 
 export const DashboardPage = () => {
   const { data, isLoading, error, refetch } = useQuery<ServiceInfo[]>({
@@ -33,34 +34,50 @@ export const DashboardPage = () => {
           <h1>Dashboard</h1>
           <p>Health overview for community node services.</p>
         </div>
-        <button className="button" onClick={() => refetch()}>
+        <Button onClick={() => refetch()}>
           Refresh
-        </button>
+        </Button>
       </div>
       <div className="grid">
-        <div className="card">
-          <h3>Healthy</h3>
-          <p>{summary.healthy}</p>
-        </div>
-        <div className="card">
-          <h3>Degraded</h3>
-          <p>{summary.degraded}</p>
-        </div>
-        <div className="card">
-          <h3>Unreachable</h3>
-          <p>{summary.unreachable}</p>
-        </div>
-        <div className="card">
-          <h3>Unknown</h3>
-          <p>{summary.unknown}</p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Healthy</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{summary.healthy}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Degraded</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{summary.degraded}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Unreachable</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{summary.unreachable}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Unknown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{summary.unknown}</p>
+          </CardContent>
+        </Card>
       </div>
-      {isLoading && <div className="notice">Loading services...</div>}
-      {error && <div className="notice">{errorToMessage(error)}</div>}
+      {isLoading && <Notice>Loading services...</Notice>}
+      {error && <Notice tone="error">{errorToMessage(error)}</Notice>}
       <div className="grid">
         {(data ?? []).map((service) => (
-          <div key={service.service} className="card">
-            <div className="stack">
+          <Card key={service.service}>
+            <CardContent className="stack">
               <div className="row">
                 <div>
                   <h3>{service.service}</h3>
@@ -77,8 +94,8 @@ export const DashboardPage = () => {
               {service.health?.details != null && (
                 <pre className="code-block">{formatJson(service.health.details)}</pre>
               )}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </>

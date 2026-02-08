@@ -1,9 +1,11 @@
+import { Badge } from './ui';
+
 type StatusBadgeProps = {
   status?: string | null;
   label?: string;
 };
 
-const toneForStatus = (status: string) => {
+const toneForStatus = (status: string): 'default' | 'good' | 'warn' | 'bad' => {
   const normalized = status.toLowerCase();
   const good = ['healthy', 'ok', 'active', 'approved', 'enabled', 'current'];
   const warn = ['pending', 'queued', 'degraded', 'inactive', 'disabled'];
@@ -17,12 +19,10 @@ const toneForStatus = (status: string) => {
   if (bad.includes(normalized)) {
     return 'bad';
   }
-  return '';
+  return 'default';
 };
 
 export const StatusBadge = ({ status, label }: StatusBadgeProps) => {
   const safeStatus = status ?? 'unknown';
-  const tone = toneForStatus(safeStatus);
-  const className = `badge${tone ? ` ${tone}` : ''}`;
-  return <span className={className}>{label ?? safeStatus}</span>;
+  return <Badge tone={toneForStatus(safeStatus)}>{label ?? safeStatus}</Badge>;
 };

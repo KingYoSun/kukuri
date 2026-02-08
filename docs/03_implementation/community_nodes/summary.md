@@ -9,6 +9,7 @@
 
 - 実装は `./kukuri-community-node` 配下に追加する
 - 管理画面（React + TypeScript + Vite + shadcn/ui + zod + zustand + TanStack Query/Router）を持つ
+  - `kukuri-community-node/apps/admin-console/src/components/ui/` の共通 UI（shadcn/ui 構成）を利用する
 - 管理画面で `bootstrap` / `relay` / `index` / `moderation` / `trust` を一元管理する（ただし各サービスは分離可能）
 - relay は取込・配信・永続化の必須コンポーネントとして扱い、取込経路を一本化する
   - 取込/再配信のP2Pプロトコルは iroh-gossip（現 `kukuri-cli` 準拠）とする

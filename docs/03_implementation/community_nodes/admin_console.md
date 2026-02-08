@@ -1,7 +1,14 @@
 # 管理画面（Admin Console）実装計画
 
 **作成日**: 2026年01月22日  
+**最終更新日**: 2026年02月08日  
 **技術スタック（要件）**: React / TypeScript / Vite / shadcn/ui / zod / zustand / TanStack Query / TanStack Router
+
+## 実装整合メモ（2026年02月08日）
+
+- `kukuri-community-node/apps/admin-console` で shadcn/ui 構成を採用済み。
+- 依存: `@radix-ui/react-slot` / `class-variance-authority` / `clsx` / `tailwind-merge`
+- 共通 UI: `src/components/ui/` に `Button` / `Card` / `Badge` / `Input` / `Textarea` / `Select` / `Label` / `Notice` を実装し、`App` / `LoginPage` / `DashboardPage` / `ServicesPage` / `StatusBadge` に適用。
 
 ## ゴール
 

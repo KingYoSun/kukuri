@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Label,
+  Notice,
+  Textarea
+} from '../components/ui';
+import { StatusBadge } from '../components/StatusBadge';
 import { api } from '../lib/api';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatJson, formatTimestamp } from '../lib/format';
 import type { ServiceInfo } from '../lib/types';
-import { StatusBadge } from '../components/StatusBadge';
 
 const ServiceCard = ({ service }: { service: ServiceInfo }) => {
   const queryClient = useQueryClient();
@@ -39,31 +49,33 @@ const ServiceCard = ({ service }: { service: ServiceInfo }) => {
   };
 
   return (
-    <div className="card">
-      <div className="row">
+    <Card>
+      <CardHeader className="row">
         <div>
-          <h3>{service.service}</h3>
+          <CardTitle>{service.service}</CardTitle>
           <p>Version {service.version}</p>
         </div>
         <StatusBadge status={service.health?.status ?? 'unknown'} />
-      </div>
-      <div className="muted">
-        Updated {formatTimestamp(service.updated_at)} by {service.updated_by}
-      </div>
-      <div className="field">
-        <label htmlFor={`${service.service}-config`}>Config JSON</label>
-        <textarea
-          id={`${service.service}-config`}
-          rows={10}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-      </div>
-      {message && <div className="notice">{message}</div>}
-      <button className="button" onClick={save} disabled={mutation.isPending}>
-        {mutation.isPending ? 'Saving...' : 'Save config'}
-      </button>
-    </div>
+      </CardHeader>
+      <CardContent>
+        <div className="muted">
+          Updated {formatTimestamp(service.updated_at)} by {service.updated_by}
+        </div>
+        <div className="field">
+          <Label htmlFor={`${service.service}-config`}>Config JSON</Label>
+          <Textarea
+            id={`${service.service}-config`}
+            rows={10}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </div>
+        {message && <Notice tone={message === 'Saved.' ? 'success' : 'error'}>{message}</Notice>}
+        <Button onClick={save} disabled={mutation.isPending}>
+          {mutation.isPending ? 'Saving...' : 'Save config'}
+        </Button>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -81,8 +93,8 @@ export const ServicesPage = () => {
           <p>Update runtime configuration and monitor status.</p>
         </div>
       </div>
-      {isLoading && <div className="notice">Loading services...</div>}
-      {error && <div className="notice">{errorToMessage(error)}</div>}
+      {isLoading && <Notice>Loading services...</Notice>}
+      {error && <Notice tone="error">{errorToMessage(error)}</Notice>}
       <div className="grid">
         {(data ?? []).map((service) => (
           <ServiceCard key={service.service} service={service} />

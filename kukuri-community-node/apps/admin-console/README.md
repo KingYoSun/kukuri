@@ -1,6 +1,11 @@
 # cn-admin-console
 
-Community Node の運用管理向け Admin Console（React + TypeScript + Vite）。
+Community Node の運用管理向け Admin Console（React + TypeScript + Vite + shadcn/ui）。
+
+## UI 方針
+
+- `src/components/ui/` に shadcn/ui 構成の共通コンポーネントを配置
+- 基本要素は `Button` / `Card` / `Badge` / `Input` / `Textarea` / `Select` / `Label` / `Notice` を利用
 
 ## 開発
 

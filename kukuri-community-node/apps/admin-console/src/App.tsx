@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link, Outlet } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { Button, Card, CardContent, CardHeader, CardTitle, Notice } from './components/ui';
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/authStore';
 
@@ -53,7 +54,7 @@ const App = () => {
       <aside className="sidebar">
         <div>
           <div className="brand">Kukuri Node</div>
-          <p className="notice">Community Node Admin</p>
+          <Notice>Community Node Admin</Notice>
         </div>
         <nav className="nav">
           {navItems.map((item) => (
@@ -62,13 +63,17 @@ const App = () => {
             </Link>
           ))}
         </nav>
-        <div className="card">
-          <h3>Session</h3>
-          <p>{user.username}</p>
-          <button className="button secondary" onClick={handleLogout}>
-            Sign out
-          </button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Session</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{user.username}</p>
+            <Button variant="secondary" onClick={handleLogout}>
+              Sign out
+            </Button>
+          </CardContent>
+        </Card>
       </aside>
       <main className="content">
         <Outlet />
