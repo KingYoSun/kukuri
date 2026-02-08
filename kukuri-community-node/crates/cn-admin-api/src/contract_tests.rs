@@ -9,8 +9,9 @@ use cn_core::service_config;
 use nostr_sdk::prelude::Keys;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Postgres, Row};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tower::ServiceExt;
@@ -34,6 +35,10 @@ async fn ensure_migrated(pool: &Pool<Postgres>) {
 }
 
 async fn test_state() -> AppState {
+    test_state_with_health_targets(HashMap::new()).await
+}
+
+async fn test_state_with_health_targets(health_targets: HashMap<String, String>) -> AppState {
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
@@ -48,8 +53,11 @@ async fn test_state() -> AppState {
     AppState {
         pool,
         admin_config,
-        health_targets: Arc::new(HashMap::new()),
-        health_client: reqwest::Client::new(),
+        health_targets: Arc::new(health_targets),
+        health_client: reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(1))
+            .build()
+            .expect("build health client"),
         node_keys: Keys::generate(),
     }
 }
@@ -183,6 +191,58 @@ async fn insert_service_health(pool: &Pool<Postgres>, service: &str, status: &st
     .execute(pool)
     .await
     .expect("insert service health");
+}
+
+async fn upsert_service_config(pool: &Pool<Postgres>, service: &str, config_json: Value) {
+    sqlx::query(
+        "INSERT INTO cn_admin.service_configs          (service, version, config_json, updated_by)          VALUES ($1, 1, $2, 'contract-test')          ON CONFLICT (service) DO UPDATE SET config_json = EXCLUDED.config_json, version = cn_admin.service_configs.version + 1, updated_by = EXCLUDED.updated_by, updated_at = NOW()",
+    )
+    .bind(service)
+    .bind(config_json)
+    .execute(pool)
+    .await
+    .expect("upsert service config");
+}
+
+async fn fetch_service_health_row(pool: &Pool<Postgres>, service: &str) -> (String, Value) {
+    let row = sqlx::query("SELECT status, details_json FROM cn_admin.service_health WHERE service = $1")
+        .bind(service)
+        .fetch_one(pool)
+        .await
+        .expect("fetch service health row");
+    let status: String = row.try_get("status").expect("status");
+    let details: Value = row
+        .try_get::<Option<Value>, _>("details_json")
+        .expect("details_json")
+        .expect("details_json should not be null");
+    (status, details)
+}
+
+async fn spawn_healthz_mock(status_code: Arc<AtomicU16>) -> (String, tokio::task::JoinHandle<()>) {
+    let app = Router::new().route(
+        "/healthz",
+        get({
+            let status_code = Arc::clone(&status_code);
+            move || {
+                let status_code = Arc::clone(&status_code);
+                async move {
+                    let status = StatusCode::from_u16(status_code.load(Ordering::Relaxed))
+                        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                    (status, axum::Json(json!({ "status": "mock" })))
+                }
+            }
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind health mock");
+    let addr = listener.local_addr().expect("health mock addr");
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve health mock");
+    });
+
+    (format!("http://{addr}/healthz"), handle)
 }
 
 async fn insert_report(pool: &Pool<Postgres>, reporter_pubkey: &str, target: &str, reason: &str) {
@@ -630,6 +690,138 @@ async fn services_contract_success_and_shape() {
         Some("healthy")
     );
     assert!(health.get("checked_at").and_then(Value::as_i64).is_some());
+}
+
+#[tokio::test]
+async fn services_health_poll_contract_status_matrix_backward_compatible() {
+    let healthy_status = Arc::new(AtomicU16::new(200));
+    let degraded_status = Arc::new(AtomicU16::new(503));
+    let (healthy_url, healthy_server) = spawn_healthz_mock(Arc::clone(&healthy_status)).await;
+    let (degraded_url, degraded_server) = spawn_healthz_mock(Arc::clone(&degraded_status)).await;
+
+    let healthy_service = format!("healthy-{}", Uuid::new_v4());
+    let degraded_service = format!("degraded-{}", Uuid::new_v4());
+    let unreachable_service = format!("unreachable-{}", Uuid::new_v4());
+    let mut health_targets = HashMap::new();
+    health_targets.insert(healthy_service.clone(), healthy_url);
+    health_targets.insert(degraded_service.clone(), degraded_url);
+    health_targets.insert(
+        unreachable_service.clone(),
+        "http://127.0.0.1:1/healthz".to_string(),
+    );
+
+    let state = test_state_with_health_targets(health_targets).await;
+    let session_id = insert_admin_session(&state.pool).await;
+
+    upsert_service_config(&state.pool, &healthy_service, json!({ "enabled": true })).await;
+    upsert_service_config(&state.pool, &degraded_service, json!({ "enabled": true })).await;
+    upsert_service_config(&state.pool, &unreachable_service, json!({ "enabled": true })).await;
+
+    services::poll_health_once(&state).await;
+
+    let app = Router::new()
+        .route("/v1/admin/services", get(services::list_services))
+        .with_state(state);
+    let (status, payload) = get_json_with_session(app, "/v1/admin/services", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let rows = payload.as_array().expect("array payload");
+    let healthy = rows
+        .iter()
+        .find(|row| row.get("service").and_then(Value::as_str) == Some(healthy_service.as_str()))
+        .expect("healthy service row");
+    let healthy_health = healthy
+        .get("health")
+        .and_then(Value::as_object)
+        .expect("healthy health");
+    assert_eq!(
+        healthy_health.get("status").and_then(Value::as_str),
+        Some("healthy")
+    );
+    assert_eq!(
+        healthy_health
+            .get("details")
+            .and_then(|details| details.get("status"))
+            .and_then(Value::as_u64),
+        Some(200)
+    );
+
+    let degraded = rows
+        .iter()
+        .find(|row| row.get("service").and_then(Value::as_str) == Some(degraded_service.as_str()))
+        .expect("degraded service row");
+    let degraded_health = degraded
+        .get("health")
+        .and_then(Value::as_object)
+        .expect("degraded health");
+    assert_eq!(
+        degraded_health.get("status").and_then(Value::as_str),
+        Some("degraded")
+    );
+    assert_eq!(
+        degraded_health
+            .get("details")
+            .and_then(|details| details.get("status"))
+            .and_then(Value::as_u64),
+        Some(503)
+    );
+
+    let unreachable = rows
+        .iter()
+        .find(|row| {
+            row.get("service").and_then(Value::as_str) == Some(unreachable_service.as_str())
+        })
+        .expect("unreachable service row");
+    let unreachable_health = unreachable
+        .get("health")
+        .and_then(Value::as_object)
+        .expect("unreachable health");
+    assert_eq!(
+        unreachable_health.get("status").and_then(Value::as_str),
+        Some("unreachable")
+    );
+    assert!(
+        unreachable_health
+            .get("details")
+            .and_then(|details| details.get("error"))
+            .and_then(Value::as_str)
+            .is_some()
+    );
+
+    healthy_server.abort();
+    let _ = healthy_server.await;
+    degraded_server.abort();
+    let _ = degraded_server.await;
+}
+
+#[tokio::test]
+async fn services_health_poll_updates_details_json_on_status_change() {
+    let health_status = Arc::new(AtomicU16::new(200));
+    let (health_url, health_server) = spawn_healthz_mock(Arc::clone(&health_status)).await;
+
+    let service = format!("poll-update-{}", Uuid::new_v4());
+    let mut health_targets = HashMap::new();
+    health_targets.insert(service.clone(), health_url);
+    let state = test_state_with_health_targets(health_targets).await;
+
+    services::poll_health_once(&state).await;
+    let (status, details) = fetch_service_health_row(&state.pool, &service).await;
+    assert_eq!(status, "healthy");
+    assert_eq!(details.get("status").and_then(Value::as_u64), Some(200));
+
+    health_status.store(503, Ordering::Relaxed);
+    services::poll_health_once(&state).await;
+    let (status, details) = fetch_service_health_row(&state.pool, &service).await;
+    assert_eq!(status, "degraded");
+    assert_eq!(details.get("status").and_then(Value::as_u64), Some(503));
+
+    health_server.abort();
+    let _ = health_server.await;
+    services::poll_health_once(&state).await;
+    let (status, details) = fetch_service_health_row(&state.pool, &service).await;
+    assert_eq!(status, "unreachable");
+    assert!(details.get("status").is_none());
+    assert!(details.get("error").and_then(Value::as_str).is_some());
 }
 
 #[tokio::test]

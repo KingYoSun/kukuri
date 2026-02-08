@@ -315,7 +315,7 @@ pub fn spawn_health_poll(state: AppState, interval: Duration) {
     });
 }
 
-async fn poll_health_once(state: &AppState) {
+pub(crate) async fn poll_health_once(state: &AppState) {
     for (service, url) in state.health_targets.iter() {
         let result = state.health_client.get(url).send().await;
         let (status, details) = match result {
