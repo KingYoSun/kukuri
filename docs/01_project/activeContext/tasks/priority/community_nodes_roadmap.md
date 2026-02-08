@@ -1,6 +1,6 @@
 ﻿# Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年02月08日
+最終更新日: 2026年02月09日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -103,7 +103,7 @@
 
 - [x] Runbook 要件（`GET /healthz` は依存関係込みの ready 判定）に合わせ、`cn-user-api` / `cn-admin-api` / `cn-index` / `cn-moderation` / `cn-trust` / `cn-bootstrap` の health 判定を DB 単体から拡張する（少なくとも Meilisearch・外部LLM・内部依存サービスの疎通を反映）。
 - [x] `cn-admin-api` の health 集約ポーリング（`services::poll_health_once`）を契約/統合テストで検証し、`cn_admin.service_health` の `healthy|degraded|unreachable` と `details_json` 更新の後方互換を担保する。
-- [ ] `cn-user-api` / `cn-admin-api` の `/healthz` `/metrics` 契約テストを追加し、status code とレスポンス shape（`status`、Prometheus content-type）を固定する。
+- [x] `cn-user-api` / `cn-admin-api` の `/healthz` `/metrics` 契約テストを追加し、status code とレスポンス shape（`status`、Prometheus content-type）を固定する。
 - [ ] `cn-user-api` bootstrap 配布の条件付き GET（`If-None-Match` / `If-Modified-Since`）と `ETag` / `Last-Modified` / `Cache-Control` / `next_refresh_at` を検証するテストを追加する。
 - [ ] `cn-index` の統合テストを追加し、outbox `upsert/delete`・期限切れ削除・`reindex_jobs` の状態遷移（pending/running/succeeded/failed）までを Meilisearch 反映込みで検証する。
 - [ ] `cn-trust` の統合テストを追加し、`report/interactions` 取込 -> score 算出 -> `attestation(kind=39010)` 発行 -> `jobs/job_schedules` 更新までの一連フローを検証する。

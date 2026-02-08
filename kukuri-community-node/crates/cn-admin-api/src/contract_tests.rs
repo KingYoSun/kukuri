@@ -2,7 +2,7 @@ use crate::{
     access_control, auth, moderation, policies, reindex, services, subscriptions, trust, AppState,
 };
 use axum::body::{to_bytes, Body};
-use axum::http::{Request, StatusCode};
+use axum::http::{header, Request, StatusCode};
 use axum::routing::{get, post, put};
 use axum::Router;
 use cn_core::service_config;
@@ -179,6 +179,26 @@ async fn get_json_with_session(app: Router, uri: &str, session_id: &str) -> (Sta
         .expect("response body");
     let payload: Value = serde_json::from_slice(&body).expect("json body");
     (status, payload)
+}
+
+async fn get_text(app: Router, uri: &str) -> (StatusCode, Option<String>, String) {
+    let request = Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("host", "localhost:8081")
+        .body(Body::empty())
+        .expect("request");
+    let response = app.oneshot(request).await.expect("response");
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(std::string::ToString::to_string);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    (status, content_type, String::from_utf8_lossy(&body).to_string())
 }
 
 async fn insert_service_health(pool: &Pool<Postgres>, service: &str, status: &str, details: Value) {
@@ -506,6 +526,49 @@ async fn openapi_contract_contains_admin_paths() {
     assert!(payload
         .pointer("/components/schemas/TrustScheduleRow")
         .is_some());
+}
+
+#[tokio::test]
+async fn healthz_contract_success_shape_compatible() {
+    let state = test_state().await;
+    let app = Router::new()
+        .route("/healthz", get(crate::healthz))
+        .with_state(state);
+    let (status, payload) = get_json(app, "/healthz").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload.get("status").and_then(Value::as_str), Some("ok"));
+}
+
+#[tokio::test]
+async fn healthz_contract_dependency_unavailable_shape_compatible() {
+    let mut health_targets = HashMap::new();
+    health_targets.insert("relay".to_string(), "http://127.0.0.1:1/healthz".to_string());
+    let state = test_state_with_health_targets(health_targets).await;
+
+    let app = Router::new()
+        .route("/healthz", get(crate::healthz))
+        .with_state(state);
+    let (status, payload) = get_json(app, "/healthz").await;
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("unavailable")
+    );
+}
+
+#[tokio::test]
+async fn metrics_contract_prometheus_content_type_shape_compatible() {
+    let app = Router::new().route("/metrics", get(crate::metrics_endpoint));
+    let (status, content_type, body) = get_text(app, "/metrics").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(content_type.as_deref(), Some("text/plain; version=0.0.4"));
+    assert!(
+        body.contains("cn_up{service=\"cn-admin-api\"} 1"),
+        "metrics body did not contain cn_up for cn-admin-api: {body}"
+    );
 }
 
 #[tokio::test]

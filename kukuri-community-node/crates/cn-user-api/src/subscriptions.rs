@@ -791,7 +791,7 @@ mod api_contract_tests {
     use super::*;
     use axum::body::{to_bytes, Body};
     use axum::extract::ConnectInfo;
-    use axum::http::{Request, StatusCode};
+    use axum::http::{header, Request, StatusCode};
     use axum::routing::{delete, get, post};
     use axum::Router;
     use cn_core::service_config;
@@ -800,6 +800,7 @@ mod api_contract_tests {
     use sqlx::postgres::PgPoolOptions;
     use sqlx::{Pool, Postgres};
     use std::net::SocketAddr;
+    use std::sync::atomic::{AtomicU16, Ordering};
     use std::path::PathBuf;
     use std::sync::Arc;
     use tokio::sync::OnceCell;
@@ -1189,6 +1190,28 @@ mod api_contract_tests {
         (status, payload)
     }
 
+    async fn get_text_public(app: Router, uri: &str) -> (StatusCode, Option<String>, String) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(std::string::ToString::to_string);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (status, content_type, String::from_utf8_lossy(&body).to_string())
+    }
+
     async fn get_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
         let mut request = Request::builder()
             .method("GET")
@@ -1287,6 +1310,87 @@ mod api_contract_tests {
             axum::serve(listener, app).await.expect("serve mock meili");
         });
         (format!("http://{addr}"), handle)
+    }
+
+    async fn spawn_mock_meili_health(status_code: Arc<AtomicU16>) -> (String, tokio::task::JoinHandle<()>) {
+        let app = Router::new().route(
+            "/health",
+            get({
+                let status_code = Arc::clone(&status_code);
+                move || {
+                    let status_code = Arc::clone(&status_code);
+                    async move {
+                        let status = StatusCode::from_u16(status_code.load(Ordering::Relaxed))
+                            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                        (status, axum::Json(json!({ "status": "mock" })))
+                    }
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock meili health");
+        let addr = listener.local_addr().expect("mock meili health addr");
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("serve mock meili health");
+        });
+
+        (format!("http://{addr}"), handle)
+    }
+
+    #[tokio::test]
+    async fn healthz_contract_success_shape_compatible() {
+        let meili_status = Arc::new(AtomicU16::new(200));
+        let (meili_url, meili_server) = spawn_mock_meili_health(Arc::clone(&meili_status)).await;
+        let state = test_state_with_meili_url(&meili_url).await;
+
+        let app = Router::new()
+            .route("/healthz", get(crate::healthz))
+            .with_state(state);
+        let (status, payload) = get_json_public(app, "/healthz").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload.get("status").and_then(Value::as_str), Some("ok"));
+
+        meili_server.abort();
+        let _ = meili_server.await;
+    }
+
+    #[tokio::test]
+    async fn healthz_contract_unavailable_shape_compatible() {
+        let meili_status = Arc::new(AtomicU16::new(503));
+        let (meili_url, meili_server) = spawn_mock_meili_health(Arc::clone(&meili_status)).await;
+        let state = test_state_with_meili_url(&meili_url).await;
+
+        let app = Router::new()
+            .route("/healthz", get(crate::healthz))
+            .with_state(state);
+        let (status, payload) = get_json_public(app, "/healthz").await;
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            payload.get("status").and_then(Value::as_str),
+            Some("unavailable")
+        );
+
+        meili_server.abort();
+        let _ = meili_server.await;
+    }
+
+    #[tokio::test]
+    async fn metrics_contract_prometheus_content_type_shape_compatible() {
+        let app = Router::new().route("/metrics", get(crate::metrics_endpoint));
+        let (status, content_type, body) = get_text_public(app, "/metrics").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(content_type.as_deref(), Some("text/plain; version=0.0.4"));
+        assert!(
+            body.contains("cn_up{service=\"cn-user-api\"} 1"),
+            "metrics body did not contain cn_up for cn-user-api: {body}"
+        );
     }
 
     #[tokio::test]
