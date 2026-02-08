@@ -173,7 +173,7 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
         .subscribe(TopicId::from(topic_bytes.clone()), vec![peer_b])
         .await
         .expect("subscribe a");
-    let (sender_a, receiver_a) = topic_a.split();
+    let (sender_a, mut receiver_a) = topic_a.split();
 
     let topic_b = gossip_b
         .subscribe(TopicId::from(topic_bytes), vec![peer_a])
@@ -204,7 +204,14 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
         .expect("join peers b timeout")
         .expect("join peers b");
 
-    let _ = timeout(WAIT_TIMEOUT, receiver_b.joined()).await;
+    timeout(WAIT_TIMEOUT, receiver_a.joined())
+        .await
+        .expect("join confirm a timeout")
+        .expect("join confirm a");
+    timeout(WAIT_TIMEOUT, receiver_b.joined())
+        .await
+        .expect("join confirm b timeout")
+        .expect("join confirm b");
 
     (
         sender_a,
@@ -300,6 +307,7 @@ where
 }
 
 async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, expected_id: &str) {
+    let mut last_received_id: Option<String> = None;
     let result = timeout(wait, async {
         while let Some(event) = receiver.next().await {
             let event = event.expect("gossip event");
@@ -308,6 +316,7 @@ async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, ex
                     let value: serde_json::Value =
                         serde_json::from_slice(&message.content).expect("gossip json");
                     let raw = nostr::parse_event(&value).expect("gossip event");
+                    last_received_id = Some(raw.id.to_string());
                     if raw.id == expected_id {
                         return;
                     }
@@ -320,7 +329,15 @@ async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, ex
     })
     .await;
 
-    result.expect("gossip timeout");
+    result.unwrap_or_else(|_| {
+        panic!(
+            "gossip timeout: expected_id={}, last_received_id={}",
+            expected_id,
+            last_received_id
+                .as_deref()
+                .unwrap_or("<none>")
+        )
+    });
 }
 
 #[tokio::test]
