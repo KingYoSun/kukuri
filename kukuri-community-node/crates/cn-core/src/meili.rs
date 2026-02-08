@@ -133,6 +133,11 @@ impl MeiliClient {
         Ok(parsed)
     }
 
+    pub async fn check_ready(&self) -> Result<()> {
+        let response = self.request(Method::GET, "/health").send().await?;
+        ensure_success(response).await
+    }
+
     fn request(&self, method: Method, path: &str) -> reqwest::RequestBuilder {
         let url = format!("{}/{}", self.base_url, path.trim_start_matches('/'));
         let builder = self.http.request(method, url);

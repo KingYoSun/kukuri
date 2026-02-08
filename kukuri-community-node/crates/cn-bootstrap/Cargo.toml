@@ -13,5 +13,6 @@ sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 nostr-sdk.workspace = true
+reqwest.workspace = true
 
 cn-core = { path = "../cn-core" }

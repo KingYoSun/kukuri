@@ -101,7 +101,7 @@
 
 ## 未実装/不足事項（2026年02月08日 監査追記）
 
-- [ ] Runbook 要件（`GET /healthz` は依存関係込みの ready 判定）に合わせ、`cn-user-api` / `cn-admin-api` / `cn-index` / `cn-moderation` / `cn-trust` / `cn-bootstrap` の health 判定を DB 単体から拡張する（少なくとも Meilisearch・外部LLM・内部依存サービスの疎通を反映）。
+- [x] Runbook 要件（`GET /healthz` は依存関係込みの ready 判定）に合わせ、`cn-user-api` / `cn-admin-api` / `cn-index` / `cn-moderation` / `cn-trust` / `cn-bootstrap` の health 判定を DB 単体から拡張する（少なくとも Meilisearch・外部LLM・内部依存サービスの疎通を反映）。
 - [ ] `cn-admin-api` の health 集約ポーリング（`services::poll_health_once`）を契約/統合テストで検証し、`cn_admin.service_health` の `healthy|degraded|unreachable` と `details_json` 更新の後方互換を担保する。
 - [ ] `cn-user-api` / `cn-admin-api` の `/healthz` `/metrics` 契約テストを追加し、status code とレスポンス shape（`status`、Prometheus content-type）を固定する。
 - [ ] `cn-user-api` bootstrap 配布の条件付き GET（`If-None-Match` / `If-Modified-Since`）と `ETag` / `Last-Modified` / `Cache-Control` / `next_refresh_at` を検証するテストを追加する。

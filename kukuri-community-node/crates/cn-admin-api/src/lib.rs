@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use cn_core::{config, db, http, logging, metrics, node_key, server, service_config};
+use cn_core::{config, db, health, http, logging, metrics, node_key, server, service_config};
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::Value;
@@ -272,19 +272,29 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    match db::check_ready(&state.pool).await {
+    let ready = async {
+        db::check_ready(&state.pool).await?;
+        health::ensure_health_targets_ready(&state.health_client, &state.health_targets).await?;
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    match ready {
         Ok(_) => (
             StatusCode::OK,
             Json(HealthStatus {
                 status: "ok".into(),
             }),
         ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthStatus {
-                status: "unavailable".into(),
-            }),
-        ),
+        Err(err) => {
+            tracing::warn!(error = %err, "health check failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(HealthStatus {
+                    status: "unavailable".into(),
+                }),
+            )
+        }
     }
 }
 
@@ -298,43 +308,27 @@ async fn openapi_json(headers: HeaderMap) -> impl IntoResponse {
 }
 
 fn parse_health_targets() -> HashMap<String, String> {
-    let mut targets = HashMap::new();
-    if let Ok(raw) = std::env::var("ADMIN_HEALTH_TARGETS") {
-        for entry in raw.split(',') {
-            if let Some((name, url)) = entry.split_once('=') {
-                if !name.trim().is_empty() && !url.trim().is_empty() {
-                    targets.insert(name.trim().to_string(), url.trim().to_string());
-                }
-            }
-        }
-    }
-
-    let fallback = [
-        (
-            "user-api",
-            "USER_API_HEALTH_URL",
-            "http://user-api:8080/healthz",
-        ),
-        ("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz"),
-        (
-            "bootstrap",
-            "BOOTSTRAP_HEALTH_URL",
-            "http://bootstrap:8083/healthz",
-        ),
-        ("index", "INDEX_HEALTH_URL", "http://index:8084/healthz"),
-        (
-            "moderation",
-            "MODERATION_HEALTH_URL",
-            "http://moderation:8085/healthz",
-        ),
-    ];
-    for (name, env, default_url) in fallback {
-        if targets.contains_key(name) {
-            continue;
-        }
-        let value = std::env::var(env).unwrap_or_else(|_| default_url.to_string());
-        targets.insert(name.to_string(), value);
-    }
-
-    targets
+    health::parse_health_targets(
+        "ADMIN_HEALTH_TARGETS",
+        &[
+            (
+                "user-api",
+                "USER_API_HEALTH_URL",
+                "http://user-api:8080/healthz",
+            ),
+            ("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz"),
+            (
+                "bootstrap",
+                "BOOTSTRAP_HEALTH_URL",
+                "http://bootstrap:8083/healthz",
+            ),
+            ("index", "INDEX_HEALTH_URL", "http://index:8084/healthz"),
+            (
+                "moderation",
+                "MODERATION_HEALTH_URL",
+                "http://moderation:8085/healthz",
+            ),
+            ("trust", "TRUST_HEALTH_URL", "http://trust:8086/healthz"),
+        ],
+    )
 }

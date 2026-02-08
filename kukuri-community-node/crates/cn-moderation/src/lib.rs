@@ -1,20 +1,22 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    config as env_config, db, http, logging, metrics, moderation as moderation_core, node_key,
-    nostr, server, service_config,
+    config as env_config, db, health, http, logging, metrics, moderation as moderation_core,
+    node_key, nostr, server, service_config,
 };
 use nostr_sdk::prelude::Keys;
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{postgres::PgListener, Pool, Postgres, Row};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 mod config;
@@ -35,6 +37,8 @@ struct AppState {
     pool: Pool<Postgres>,
     config: service_config::ServiceConfigHandle,
     node_keys: Keys,
+    health_targets: Arc<HashMap<String, String>>,
+    health_client: reqwest::Client,
 }
 
 #[derive(Serialize)]
@@ -161,11 +165,20 @@ pub async fn run(config: ModerationConfig) -> Result<()> {
         Duration::from_secs(config.config_poll_seconds),
     )
     .await?;
+    let health_targets = Arc::new(health::parse_health_targets(
+        "MODERATION_HEALTH_TARGETS",
+        &[("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz")],
+    ));
+    let health_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()?;
 
     let state = AppState {
         pool: pool.clone(),
         config: config_handle,
         node_keys,
+        health_targets,
+        health_client,
     };
 
     spawn_outbox_consumer(state.clone());
@@ -181,19 +194,68 @@ pub async fn run(config: ModerationConfig) -> Result<()> {
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    match db::check_ready(&state.pool).await {
+    let ready = async {
+        db::check_ready(&state.pool).await?;
+        health::ensure_health_targets_ready(&state.health_client, &state.health_targets).await?;
+        let snapshot = state.config.get().await;
+        let runtime = config::ModerationRuntimeConfig::from_json(&snapshot.config_json);
+        ensure_llm_dependency_ready(&state.health_client, &runtime.llm).await?;
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    match ready {
         Ok(_) => (
             StatusCode::OK,
             Json(HealthStatus {
                 status: "ok".into(),
             }),
         ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthStatus {
-                status: "unavailable".into(),
-            }),
-        ),
+        Err(err) => {
+            tracing::warn!(error = %err, "health check failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(HealthStatus {
+                    status: "unavailable".into(),
+                }),
+            )
+        }
+    }
+}
+
+async fn ensure_llm_dependency_ready(
+    client: &reqwest::Client,
+    llm: &config::LlmRuntimeConfig,
+) -> Result<()> {
+    if !llm.enabled || llm.provider == "disabled" {
+        return Ok(());
+    }
+
+    match llm.provider.as_str() {
+        "openai" => {
+            if !llm.external_send_enabled {
+                return Ok(());
+            }
+            let api_key = std::env::var("OPENAI_API_KEY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| anyhow!("OPENAI_API_KEY is required when provider=openai"))?;
+            let endpoint = std::env::var("OPENAI_MODERATION_ENDPOINT")
+                .unwrap_or_else(|_| "https://api.openai.com/v1/moderations".to_string());
+            health::ensure_endpoint_reachable(client, "llm:openai", &endpoint).await?;
+            if api_key.len() < 10 {
+                return Err(anyhow!("OPENAI_API_KEY appears invalid"));
+            }
+            Ok(())
+        }
+        "local" => {
+            let endpoint = std::env::var("LLM_LOCAL_ENDPOINT")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| anyhow!("LLM_LOCAL_ENDPOINT is required when provider=local"))?;
+            health::ensure_endpoint_reachable(client, "llm:local", &endpoint).await
+        }
+        other => Err(anyhow!("unsupported llm provider `{other}`")),
     }
 }
 
@@ -1313,6 +1375,8 @@ mod tests {
             pool: pool.clone(),
             config: service_config::static_handle(json!({})),
             node_keys: Keys::generate(),
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
         };
         let runtime = llm_runtime(0, 0.0, 1);
         let job = ModerationJob {
@@ -1419,6 +1483,8 @@ mod tests {
             pool: pool.clone(),
             config: service_config::static_handle(json!({})),
             node_keys: Keys::generate(),
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
         };
         let runtime = llm_runtime(1, 0.0, 4);
         let job_first = ModerationJob {
@@ -1509,6 +1575,8 @@ mod tests {
             pool: pool.clone(),
             config: service_config::static_handle(json!({})),
             node_keys: Keys::generate(),
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
         };
         let runtime = llm_runtime(0, 0.00001, 4);
         let job = ModerationJob {
@@ -1607,6 +1675,8 @@ mod tests {
             pool: pool.clone(),
             config: service_config::static_handle(json!({})),
             node_keys: Keys::generate(),
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
         };
         let runtime = llm_runtime(0, 0.0, 1);
         let job = ModerationJob {

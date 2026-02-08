@@ -5,12 +5,12 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    config as env_config, db, http, logging, meili, metrics, nostr, server, service_config,
+    config as env_config, db, health, http, logging, meili, metrics, nostr, server, service_config,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{postgres::PgListener, Pool, Postgres, Row};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -29,6 +29,8 @@ struct AppState {
     config: service_config::ServiceConfigHandle,
     meili: meili::MeiliClient,
     index_cache: Arc<RwLock<HashSet<String>>>,
+    health_targets: Arc<HashMap<String, String>>,
+    health_client: reqwest::Client,
 }
 
 #[derive(Serialize)]
@@ -104,12 +106,21 @@ pub async fn run(config: IndexConfig) -> Result<()> {
         Duration::from_secs(config.config_poll_seconds),
     )
     .await?;
+    let health_targets = Arc::new(health::parse_health_targets(
+        "INDEX_HEALTH_TARGETS",
+        &[("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz")],
+    ));
+    let health_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()?;
 
     let state = AppState {
         pool: pool.clone(),
         config: config_handle,
         meili: meili_client,
         index_cache: Arc::new(RwLock::new(HashSet::new())),
+        health_targets,
+        health_client,
     };
 
     spawn_outbox_consumer(state.clone());
@@ -126,19 +137,30 @@ pub async fn run(config: IndexConfig) -> Result<()> {
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    match db::check_ready(&state.pool).await {
+    let ready = async {
+        db::check_ready(&state.pool).await?;
+        state.meili.check_ready().await?;
+        health::ensure_health_targets_ready(&state.health_client, &state.health_targets).await?;
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    match ready {
         Ok(_) => (
             StatusCode::OK,
             Json(HealthStatus {
                 status: "ok".into(),
             }),
         ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthStatus {
-                status: "unavailable".into(),
-            }),
-        ),
+        Err(err) => {
+            tracing::warn!(error = %err, "health check failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(HealthStatus {
+                    status: "unavailable".into(),
+                }),
+            )
+        }
     }
 }
 

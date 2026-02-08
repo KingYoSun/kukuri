@@ -12,5 +12,6 @@ serde_json.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+reqwest.workspace = true
 
 cn-core = { path = "../cn-core" }

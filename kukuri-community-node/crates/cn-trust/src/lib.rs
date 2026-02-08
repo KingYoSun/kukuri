@@ -5,16 +5,17 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    config as env_config, db, http, logging, metrics, node_key, nostr, server, service_config,
-    trust as trust_core,
+    config as env_config, db, health, http, logging, metrics, node_key, nostr, server,
+    service_config, trust as trust_core,
 };
 use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{postgres::PgListener, Pool, Postgres, Row, Transaction};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -33,6 +34,8 @@ struct AppState {
     pool: Pool<Postgres>,
     config: service_config::ServiceConfigHandle,
     node_keys: Keys,
+    health_targets: Arc<HashMap<String, String>>,
+    health_client: reqwest::Client,
 }
 
 #[derive(Serialize)]
@@ -134,11 +137,27 @@ pub async fn run(config: TrustConfig) -> Result<()> {
         Duration::from_secs(config.config_poll_seconds),
     )
     .await?;
+    let health_targets = Arc::new(health::parse_health_targets(
+        "TRUST_HEALTH_TARGETS",
+        &[
+            ("relay", "RELAY_HEALTH_URL", "http://relay:8082/healthz"),
+            (
+                "moderation",
+                "MODERATION_HEALTH_URL",
+                "http://moderation:8085/healthz",
+            ),
+        ],
+    ));
+    let health_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()?;
 
     let state = AppState {
         pool: pool.clone(),
         config: config_handle,
         node_keys,
+        health_targets,
+        health_client,
     };
 
     ensure_graph(&state.pool).await?;
@@ -161,19 +180,29 @@ pub async fn run(config: TrustConfig) -> Result<()> {
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    match db::check_ready(&state.pool).await {
+    let ready = async {
+        db::check_ready(&state.pool).await?;
+        health::ensure_health_targets_ready(&state.health_client, &state.health_targets).await?;
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    match ready {
         Ok(_) => (
             StatusCode::OK,
             Json(HealthStatus {
                 status: "ok".into(),
             }),
         ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthStatus {
-                status: "unavailable".into(),
-            }),
-        ),
+        Err(err) => {
+            tracing::warn!(error = %err, "health check failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(HealthStatus {
+                    status: "unavailable".into(),
+                }),
+            )
+        }
     }
 }
 
