@@ -1,5 +1,6 @@
 use super::AppState;
 use crate::ws;
+use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
 use cn_core::nostr;
@@ -47,8 +48,8 @@ async fn ensure_migrated(pool: &Pool<Postgres>) {
         .await;
 }
 
-fn build_state(pool: Pool<Postgres>) -> AppState {
-    let config = service_config::static_handle(json!({
+fn default_runtime_config() -> serde_json::Value {
+    json!({
         "auth": {
             "mode": "off",
             "enforce_at": null,
@@ -62,7 +63,15 @@ fn build_state(pool: Pool<Postgres>) -> AppState {
         "rate_limit": {
             "enabled": false
         }
-    }));
+    })
+}
+
+fn build_state(pool: Pool<Postgres>) -> AppState {
+    build_state_with_config(pool, default_runtime_config())
+}
+
+fn build_state_with_config(pool: Pool<Postgres>, config_json: serde_json::Value) -> AppState {
+    let config = service_config::static_handle(config_json);
     let (realtime_tx, _) = broadcast::channel(64);
     AppState {
         pool,
@@ -73,6 +82,48 @@ fn build_state(pool: Pool<Postgres>) -> AppState {
         node_topics: Arc::new(RwLock::new(HashSet::new())),
         relay_public_url: None,
     }
+}
+
+async fn enable_topic(pool: &Pool<Postgres>, state: &AppState, topic_id: &str) {
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count) \
+         VALUES ($1, TRUE, 1) \
+         ON CONFLICT (topic_id) DO UPDATE SET enabled = TRUE, updated_at = NOW()",
+    )
+    .bind(topic_id)
+    .execute(pool)
+    .await
+    .expect("insert node subscription");
+
+    let mut topics = state.node_topics.write().await;
+    topics.insert(topic_id.to_string());
+}
+
+async fn spawn_relay_server(state: AppState) -> (SocketAddr, tokio::task::JoinHandle<()>) {
+    let app = Router::new()
+        .route("/relay", get(ws::ws_handler))
+        .with_state(state);
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let addr = listener.local_addr().expect("local addr");
+    let server = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    );
+    let server_handle = tokio::spawn(async move {
+        server.await.expect("server");
+    });
+    (addr, server_handle)
+}
+
+async fn connect_ws(addr: SocketAddr) -> WsStream {
+    timeout(
+        WAIT_TIMEOUT,
+        tokio_tungstenite::connect_async(format!("ws://{}/relay", addr)),
+    )
+    .await
+    .expect("connect timeout")
+    .expect("connect")
+    .0
 }
 
 struct GossipHarness {
@@ -213,6 +264,41 @@ where
     })
 }
 
+async fn wait_for_ws_json_any<F>(
+    ws: &mut WsStream,
+    wait: Duration,
+    label: &str,
+    predicate: F,
+) -> serde_json::Value
+where
+    F: Fn(&serde_json::Value) -> bool,
+{
+    let mut last: Option<serde_json::Value> = None;
+    let result = timeout(wait, async {
+        while let Some(message) = ws.next().await {
+            let message = message.expect("ws message");
+            if let Message::Text(text) = message {
+                let value: serde_json::Value = serde_json::from_str(&text).expect("ws json");
+                if predicate(&value) {
+                    return value;
+                }
+                last = Some(value);
+            }
+        }
+        panic!("websocket closed");
+    })
+    .await;
+
+    result.unwrap_or_else(|_| {
+        panic!(
+            "websocket timeout ({}): last={}",
+            label,
+            last.map(|v| v.to_string())
+                .unwrap_or_else(|| "null".to_string())
+        )
+    })
+}
+
 async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, expected_id: &str) {
     let result = timeout(wait, async {
         while let Some(event) = receiver.next().await {
@@ -246,21 +332,8 @@ async fn ingest_outbox_ws_gossip_integration() {
     ensure_migrated(&pool).await;
 
     let topic_id = format!("kukuri:relay-it-{}", Uuid::new_v4());
-    sqlx::query(
-        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count) \
-         VALUES ($1, TRUE, 1) \
-         ON CONFLICT (topic_id) DO UPDATE SET enabled = TRUE, updated_at = NOW()",
-    )
-    .bind(&topic_id)
-    .execute(&pool)
-    .await
-    .expect("insert node subscription");
-
     let state = build_state(pool.clone());
-    {
-        let mut topics = state.node_topics.write().await;
-        topics.insert(topic_id.clone());
-    }
+    enable_topic(&pool, &state, &topic_id).await;
 
     let (gossip_sender, mut gossip) = setup_gossip(&topic_id).await;
     {
@@ -268,26 +341,9 @@ async fn ingest_outbox_ws_gossip_integration() {
         senders.insert(topic_id.clone(), gossip_sender);
     }
 
-    let app = Router::new()
-        .route("/relay", get(ws::ws_handler))
-        .with_state(state);
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let addr = listener.local_addr().expect("local addr");
-    let server = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    );
-    let server_handle = tokio::spawn(async move {
-        server.await.expect("server");
-    });
+    let (addr, server_handle) = spawn_relay_server(state).await;
 
-    let (mut subscriber, _) = timeout(
-        WAIT_TIMEOUT,
-        tokio_tungstenite::connect_async(format!("ws://{}/relay", addr)),
-    )
-    .await
-    .expect("subscriber connect timeout")
-    .expect("subscriber connect");
+    let mut subscriber = connect_ws(addr).await;
     let sub_id = "sub-1";
     let req = json!(["REQ", sub_id, { "kinds": [1], "#t": [topic_id.clone()] }]);
     subscriber
@@ -300,13 +356,7 @@ async fn ingest_outbox_ws_gossip_integration() {
     })
     .await;
 
-    let (mut publisher, _) = timeout(
-        WAIT_TIMEOUT,
-        tokio_tungstenite::connect_async(format!("ws://{}/relay", addr)),
-    )
-    .await
-    .expect("publisher connect timeout")
-    .expect("publisher connect");
+    let mut publisher = connect_ws(addr).await;
     let keys = Keys::generate();
     let raw = nostr::build_signed_event(
         &keys,
@@ -352,4 +402,314 @@ async fn ingest_outbox_ws_gossip_integration() {
     server_handle.abort();
     let _ = timeout(WAIT_TIMEOUT, gossip.router_a.shutdown()).await;
     let _ = timeout(WAIT_TIMEOUT, gossip.router_b.shutdown()).await;
+}
+
+#[tokio::test]
+async fn auth_enforce_switches_from_off_to_on_and_times_out() {
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-auth-it-{}", Uuid::new_v4());
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let state = build_state_with_config(
+        pool.clone(),
+        json!({
+            "auth": {
+                "mode": "required",
+                "enforce_at": now + 1,
+                "grace_seconds": 600,
+                "ws_auth_timeout_seconds": 1
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            },
+            "rate_limit": {
+                "enabled": false
+            }
+        }),
+    );
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut ws = connect_ws(addr).await;
+
+    let sub_before_auth = "sub-before-auth";
+    ws.send(Message::Text(
+        json!(["REQ", sub_before_auth, { "kinds": [1], "#t": [topic_id.clone()] }])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send req before auth");
+    let _ = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "pre-enforce eose", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("EOSE")
+            && value.get(1).and_then(|v| v.as_str()) == Some(sub_before_auth)
+    })
+    .await;
+
+    let auth = wait_for_ws_json_any(
+        &mut ws,
+        Duration::from_secs(20),
+        "auth challenge",
+        |value| value.get(0).and_then(|v| v.as_str()) == Some("AUTH"),
+    )
+    .await;
+    let challenge = auth
+        .get(1)
+        .and_then(|v| v.as_str())
+        .expect("auth challenge");
+    assert!(!challenge.is_empty(), "AUTH challenge should not be empty");
+
+    let sub_after_auth = "sub-after-auth";
+    ws.send(Message::Text(
+        json!(["REQ", sub_after_auth, { "kinds": [1], "#t": [topic_id.clone()] }])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send req after auth enforced");
+    let closed = wait_for_ws_json_any(&mut ws, WAIT_TIMEOUT, "post-enforce closed", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("CLOSED")
+            && value.get(1).and_then(|v| v.as_str()) == Some(sub_after_auth)
+    })
+    .await;
+    assert_eq!(
+        closed.get(2).and_then(|v| v.as_str()),
+        Some("auth-required: missing auth")
+    );
+
+    let notice = wait_for_ws_json_any(
+        &mut ws,
+        Duration::from_secs(20),
+        "auth timeout notice",
+        |value| value.get(0).and_then(|v| v.as_str()) == Some("NOTICE"),
+    )
+    .await;
+    assert_eq!(
+        notice.get(1).and_then(|v| v.as_str()),
+        Some("auth-required: timeout")
+    );
+
+    let close = timeout(Duration::from_secs(10), ws.next())
+        .await
+        .expect("connection close timeout");
+    assert!(
+        close.is_none()
+            || matches!(
+                close,
+                Some(Ok(Message::Close(_)))
+                    | Some(Err(tokio_tungstenite::tungstenite::Error::Protocol(_)))
+            ),
+        "expected websocket termination after timeout, got: {close:?}"
+    );
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn rate_limit_rejects_second_connection_at_boundary() {
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let state = build_state_with_config(
+        pool,
+        json!({
+            "auth": {
+                "mode": "off",
+                "enforce_at": null,
+                "grace_seconds": 900,
+                "ws_auth_timeout_seconds": 10
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            },
+            "rate_limit": {
+                "enabled": true,
+                "ws": {
+                    "events_per_minute": 100,
+                    "reqs_per_minute": 100,
+                    "conns_per_minute": 1
+                }
+            }
+        }),
+    );
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let _first = connect_ws(addr).await;
+
+    let second = timeout(
+        WAIT_TIMEOUT,
+        tokio_tungstenite::connect_async(format!("ws://{}/relay", addr)),
+    )
+    .await
+    .expect("second connection timeout");
+    let err = second.expect_err("second connection should be rejected");
+    match err {
+        tokio_tungstenite::tungstenite::Error::Http(response) => {
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+        other => panic!("expected HTTP 429 reject, got {other:?}"),
+    }
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn rate_limit_closes_second_req_at_boundary() {
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-req-limit-it-{}", Uuid::new_v4());
+    let state = build_state_with_config(
+        pool.clone(),
+        json!({
+            "auth": {
+                "mode": "off",
+                "enforce_at": null,
+                "grace_seconds": 900,
+                "ws_auth_timeout_seconds": 10
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            },
+            "rate_limit": {
+                "enabled": true,
+                "ws": {
+                    "events_per_minute": 100,
+                    "reqs_per_minute": 1,
+                    "conns_per_minute": 100
+                }
+            }
+        }),
+    );
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut ws = connect_ws(addr).await;
+
+    let first_sub = "sub-1";
+    ws.send(Message::Text(
+        json!(["REQ", first_sub, { "kinds": [1], "#t": [topic_id.clone()] }])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send first req");
+    let _ = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "first req eose", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("EOSE")
+            && value.get(1).and_then(|v| v.as_str()) == Some(first_sub)
+    })
+    .await;
+
+    let second_sub = "sub-2";
+    ws.send(Message::Text(
+        json!(["REQ", second_sub, { "kinds": [1], "#t": [topic_id.clone()] }])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send second req");
+    let closed = wait_for_ws_json_any(&mut ws, WAIT_TIMEOUT, "second req closed", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("CLOSED")
+            && value.get(1).and_then(|v| v.as_str()) == Some(second_sub)
+    })
+    .await;
+    assert_eq!(closed.get(2).and_then(|v| v.as_str()), Some("rate-limited"));
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn rate_limit_rejects_second_event_at_boundary() {
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-event-limit-it-{}", Uuid::new_v4());
+    let state = build_state_with_config(
+        pool.clone(),
+        json!({
+            "auth": {
+                "mode": "off",
+                "enforce_at": null,
+                "grace_seconds": 900,
+                "ws_auth_timeout_seconds": 10
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            },
+            "rate_limit": {
+                "enabled": true,
+                "ws": {
+                    "events_per_minute": 1,
+                    "reqs_per_minute": 100,
+                    "conns_per_minute": 100
+                }
+            }
+        }),
+    );
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut ws = connect_ws(addr).await;
+    let keys = Keys::generate();
+
+    let first = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "event-1".to_string(),
+    )
+    .expect("build first event");
+    ws.send(Message::Text(
+        json!(["EVENT", first.clone()]).to_string().into(),
+    ))
+    .await
+    .expect("send first event");
+    let first_ok = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "first event ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(first.id.as_str())
+    })
+    .await;
+    assert_eq!(first_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let second = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id]],
+        "event-2".to_string(),
+    )
+    .expect("build second event");
+    ws.send(Message::Text(
+        json!(["EVENT", second.clone()]).to_string().into(),
+    ))
+    .await
+    .expect("send second event");
+    let second_ok = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "second event reject", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(second.id.as_str())
+    })
+    .await;
+    assert_eq!(second_ok.get(2).and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        second_ok.get(3).and_then(|v| v.as_str()),
+        Some("rate-limited")
+    );
+
+    server_handle.abort();
 }
