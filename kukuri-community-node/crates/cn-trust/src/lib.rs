@@ -962,7 +962,7 @@ async fn ensure_graph(pool: &Pool<Postgres>) -> Result<()> {
     let mut tx = pool.begin().await?;
     init_age_session(&mut tx).await?;
 
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM ag_catalog.ag_graph WHERE name = $1")
+    let exists = sqlx::query_scalar::<_, i32>("SELECT 1 FROM ag_catalog.ag_graph WHERE name = $1")
         .bind(GRAPH_NAME)
         .fetch_optional(&mut *tx)
         .await?
@@ -1023,7 +1023,7 @@ async fn upsert_report_edge(
         return Ok(());
     }
     let query = format!(
-        "MERGE (reporter:User {{pubkey: '{reporter_pubkey}'}}) MERGE (subject:User {{pubkey: '{subject_pubkey}'}}) MERGE (reporter)-[e:REPORTED {{event_id: '{event_id}'}}]->(subject) ON CREATE SET e.kind = {kind}, e.created_at = {created_at}"
+        "MERGE (reporter:User {{pubkey: '{reporter_pubkey}'}}) MERGE (subject:User {{pubkey: '{subject_pubkey}'}}) MERGE (reporter)-[:REPORTED {{event_id: '{event_id}', kind: {kind}, created_at: {created_at}}}]->(subject)"
     );
     cypher_execute(tx, &query).await?;
     Ok(())
@@ -1041,18 +1041,16 @@ async fn upsert_interaction_edge(
         return Ok(());
     }
     let query = format!(
-        "MERGE (actor:User {{pubkey: '{actor_pubkey}'}}) MERGE (target:User {{pubkey: '{target_pubkey}'}}) MERGE (actor)-[e:INTERACTED {{event_id: '{event_id}'}}]->(target) ON CREATE SET e.weight = {weight}, e.created_at = {created_at}"
+        "MERGE (actor:User {{pubkey: '{actor_pubkey}'}}) MERGE (target:User {{pubkey: '{target_pubkey}'}}) MERGE (actor)-[:INTERACTED {{event_id: '{event_id}', weight: {weight}, created_at: {created_at}}}]->(target)"
     );
     cypher_execute(tx, &query).await?;
     Ok(())
 }
 
 async fn cypher_execute(tx: &mut Transaction<'_, Postgres>, query: &str) -> Result<()> {
-    let _ = sqlx::query("SELECT * FROM cypher($1, $2) AS (v agtype)")
-        .bind(GRAPH_NAME)
-        .bind(query)
-        .fetch_all(&mut **tx)
-        .await?;
+    let statement =
+        format!("SELECT * FROM cypher('{GRAPH_NAME}', $cypher${query}$cypher$) AS (v agtype)");
+    let _ = sqlx::query(&statement).fetch_all(&mut **tx).await?;
     Ok(())
 }
 
@@ -1068,13 +1066,10 @@ async fn age_report_count(
     let query = format!(
         "MATCH (:User)-[e:REPORTED]->(:User {{pubkey: '{subject_pubkey}'}}) WHERE e.created_at >= {since} AND e.kind = {kind} RETURN count(e) AS count_value"
     );
-    let row = sqlx::query(
-        "SELECT count_value::text AS count_value FROM cypher($1, $2) AS (count_value agtype)",
-    )
-    .bind(GRAPH_NAME)
-    .bind(query)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let statement = format!(
+        "SELECT count_value::text AS count_value FROM cypher('{GRAPH_NAME}', $cypher${query}$cypher$) AS (count_value agtype)"
+    );
+    let row = sqlx::query(&statement).fetch_optional(&mut **tx).await?;
 
     let Some(row) = row else {
         return Ok(0);
@@ -1098,13 +1093,10 @@ async fn age_interaction_stats(
     let query = format!(
         "MATCH (a:User {{pubkey: '{subject_pubkey}'}})-[e:INTERACTED]-(b:User) WHERE e.created_at >= {since} RETURN count(e) AS edge_count, count(DISTINCT b) AS peer_count, coalesce(sum(e.weight), 0.0) AS weight_sum"
     );
-    let row = sqlx::query(
-        "SELECT edge_count::text AS edge_count, peer_count::text AS peer_count, weight_sum::text AS weight_sum FROM cypher($1, $2) AS (edge_count agtype, peer_count agtype, weight_sum agtype)",
-    )
-    .bind(GRAPH_NAME)
-    .bind(query)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let statement = format!(
+        "SELECT edge_count::text AS edge_count, peer_count::text AS peer_count, weight_sum::text AS weight_sum FROM cypher('{GRAPH_NAME}', $cypher${query}$cypher$) AS (edge_count agtype, peer_count agtype, weight_sum agtype)"
+    );
+    let row = sqlx::query(&statement).fetch_optional(&mut **tx).await?;
 
     let Some(row) = row else {
         return Ok(InteractionStats {
@@ -1383,6 +1375,9 @@ fn parse_agtype_f64(value: &str) -> Result<f64> {
         .parse::<f64>()
         .map_err(|err| anyhow!("invalid agtype float: {err}"))
 }
+
+#[cfg(test)]
+mod integration_tests;
 
 #[cfg(test)]
 mod tests {
