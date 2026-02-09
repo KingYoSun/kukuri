@@ -791,7 +791,7 @@ mod api_contract_tests {
     use super::*;
     use axum::body::{to_bytes, Body};
     use axum::extract::ConnectInfo;
-    use axum::http::{header, Request, StatusCode};
+    use axum::http::{header, HeaderMap, Request, StatusCode};
     use axum::routing::{delete, get, post};
     use axum::Router;
     use cn_core::service_config;
@@ -1173,21 +1173,54 @@ mod api_contract_tests {
     }
 
     async fn get_json_public(app: Router, uri: &str) -> (StatusCode, Value) {
+        let (status, _, payload) = get_json_public_with_headers(app, uri, &[]).await;
+        (status, payload)
+    }
+
+    async fn get_json_public_with_headers(
+        app: Router,
+        uri: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> (StatusCode, HeaderMap, Value) {
+        let response = get_response_public_with_headers(app, uri, extra_headers).await;
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, headers, payload)
+    }
+
+    async fn get_status_public_with_headers(
+        app: Router,
+        uri: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> (StatusCode, HeaderMap) {
+        let response = get_response_public_with_headers(app, uri, extra_headers).await;
+        (response.status(), response.headers().clone())
+    }
+
+    async fn get_response_public_with_headers(
+        app: Router,
+        uri: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> axum::response::Response {
         let mut request = Request::builder()
             .method("GET")
             .uri(uri)
             .body(Body::empty())
             .expect("request");
+        for (name, value) in extra_headers {
+            request.headers_mut().insert(
+                axum::http::HeaderName::from_bytes(name.as_bytes()).expect("header name"),
+                axum::http::HeaderValue::from_str(value).expect("header value"),
+            );
+        }
         request
             .extensions_mut()
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
-        let response = app.oneshot(request).await.expect("response");
-        let status = response.status();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body");
-        let payload: Value = serde_json::from_slice(&body).expect("json body");
-        (status, payload)
+        app.oneshot(request).await.expect("response")
     }
 
     async fn get_text_public(app: Router, uri: &str) -> (StatusCode, Option<String>, String) {
@@ -2041,6 +2074,123 @@ mod api_contract_tests {
         assert_eq!(
             payload.get("next_refresh_at").and_then(Value::as_i64),
             Some(expires_at)
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_services_conditional_get_and_cache_headers_contract_compatible() {
+        let state = test_state().await;
+        let topic_id = format!("kukuri:bootstrap-cache-{}", Uuid::new_v4());
+        let event_id_one = Uuid::new_v4().to_string();
+        let event_id_two = Uuid::new_v4().to_string();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let first_expires_at = now + 600;
+        let second_expires_at = now + 1200;
+
+        let event_one = json!({
+            "id": event_id_one,
+            "kind": 39001,
+            "pubkey": Keys::generate().public_key().to_hex(),
+            "tags": [["k", "kukuri"], ["ver", "1"], ["topic", topic_id.clone()], ["service", "relay"]],
+            "content": "",
+            "sig": "signature"
+        });
+        let event_two = json!({
+            "id": event_id_two,
+            "kind": 39001,
+            "pubkey": Keys::generate().public_key().to_hex(),
+            "tags": [["k", "kukuri"], ["ver", "1"], ["topic", topic_id.clone()], ["service", "bootstrap"]],
+            "content": "",
+            "sig": "signature"
+        });
+
+        insert_bootstrap_event(
+            &state.pool,
+            &event_id_one,
+            39001,
+            Some(topic_id.as_str()),
+            first_expires_at,
+            event_one.clone(),
+        )
+        .await;
+        insert_bootstrap_event(
+            &state.pool,
+            &event_id_two,
+            39001,
+            Some(topic_id.as_str()),
+            second_expires_at,
+            event_two.clone(),
+        )
+        .await;
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(crate::bootstrap::get_bootstrap_services),
+            )
+            .with_state(state);
+        let path = format!("/v1/bootstrap/topics/{topic_id}/services");
+
+        let (status, headers, payload) = get_json_public_with_headers(app.clone(), &path, &[]).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().any(|value| value == &event_one));
+        assert!(items.iter().any(|value| value == &event_two));
+        assert_eq!(
+            payload.get("next_refresh_at").and_then(Value::as_i64),
+            Some(first_expires_at)
+        );
+
+        let cache_control = headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert_eq!(cache_control, "public, max-age=300");
+
+        let etag = headers
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(!etag.is_empty());
+
+        let last_modified = headers
+            .get(header::LAST_MODIFIED)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(!last_modified.is_empty());
+        assert!(httpdate::parse_http_date(&last_modified).is_ok());
+
+        let (etag_status, etag_headers) =
+            get_status_public_with_headers(app.clone(), &path, &[("if-none-match", &etag)]).await;
+        assert_eq!(etag_status, StatusCode::NOT_MODIFIED);
+        assert_eq!(
+            etag_headers
+                .get(header::ETAG)
+                .and_then(|value| value.to_str().ok()),
+            Some(etag.as_str())
+        );
+
+        let (modified_status, modified_headers) = get_status_public_with_headers(
+            app,
+            &path,
+            &[("if-modified-since", &last_modified)],
+        )
+        .await;
+        assert_eq!(modified_status, StatusCode::NOT_MODIFIED);
+        assert_eq!(
+            modified_headers
+                .get(header::ETAG)
+                .and_then(|value| value.to_str().ok()),
+            Some(etag.as_str())
         );
     }
 

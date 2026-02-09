@@ -113,7 +113,7 @@ async fn respond_with_events(
         {
             if let Ok(parsed) = httpdate::parse_http_date(value) {
                 let parsed = chrono::DateTime::<chrono::Utc>::from(parsed);
-                if last_modified <= parsed {
+                if last_modified.timestamp() <= parsed.timestamp() {
                     return Ok(
                         (StatusCode::NOT_MODIFIED, [(axum::http::header::ETAG, etag)])
                             .into_response(),
