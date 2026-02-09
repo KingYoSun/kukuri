@@ -16,3 +16,6 @@ nostr-sdk.workspace = true
 reqwest.workspace = true
 
 cn-core = { path = "../cn-core" }
+
+[dev-dependencies]
+uuid.workspace = true

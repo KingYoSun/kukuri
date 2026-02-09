@@ -474,8 +474,184 @@ async fn metrics_endpoint() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{anyhow, bail};
+    use axum::body::to_bytes;
+    use axum::http::header;
+    use axum::response::IntoResponse;
     use nostr_sdk::prelude::Keys;
     use serde_json::json;
+    use sqlx::postgres::PgPoolOptions;
+    use sqlx::{Pool, Postgres};
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU16, Ordering};
+    use std::sync::{Arc, OnceLock};
+    use std::time::Duration;
+    use tokio::sync::{Mutex, OnceCell};
+    use uuid::Uuid;
+
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+    fn db_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:5432/cn".to_string())
+    }
+
+    async fn ensure_migrated(pool: &Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run community-node migrations");
+            })
+            .await;
+    }
+
+    async fn test_state(health_targets: HashMap<String, String>) -> AppState {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+
+        AppState {
+            pool,
+            keys: Keys::generate(),
+            refresh_interval: Duration::from_secs(1),
+            health_targets: Arc::new(health_targets),
+            health_client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(5))
+                .build()
+                .expect("build health client"),
+        }
+    }
+
+    async fn upsert_topic_service(
+        pool: &Pool<Postgres>,
+        topic_id: &str,
+        role: &str,
+        scope: &str,
+        is_active: bool,
+    ) {
+        sqlx::query(
+            "INSERT INTO cn_admin.topic_services \
+             (topic_id, role, scope, is_active, updated_by) \
+             VALUES ($1, $2, $3, $4, $5) \
+             ON CONFLICT (topic_id, role, scope) \
+             DO UPDATE SET is_active = EXCLUDED.is_active, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(topic_id)
+        .bind(role)
+        .bind(scope)
+        .bind(is_active)
+        .bind("cn-bootstrap-test")
+        .execute(pool)
+        .await
+        .expect("upsert topic service");
+    }
+
+    async fn remove_topic_service(pool: &Pool<Postgres>, topic_id: &str, role: &str, scope: &str) {
+        sqlx::query(
+            "DELETE FROM cn_admin.topic_services WHERE topic_id = $1 AND role = $2 AND scope = $3",
+        )
+        .bind(topic_id)
+        .bind(role)
+        .bind(scope)
+        .execute(pool)
+        .await
+        .expect("remove topic service");
+    }
+
+    async fn deactivate_all_active_topic_services(
+        pool: &Pool<Postgres>,
+    ) -> Vec<(String, String, String)> {
+        let rows = sqlx::query(
+            "SELECT topic_id, role, scope FROM cn_admin.topic_services WHERE is_active = TRUE",
+        )
+        .fetch_all(pool)
+        .await
+        .expect("load active topic services");
+
+        sqlx::query("UPDATE cn_admin.topic_services SET is_active = FALSE WHERE is_active = TRUE")
+            .execute(pool)
+            .await
+            .expect("deactivate active topic services");
+
+        rows.into_iter()
+            .map(|row| {
+                (
+                    row.try_get("topic_id").expect("topic_id"),
+                    row.try_get("role").expect("role"),
+                    row.try_get("scope").expect("scope"),
+                )
+            })
+            .collect()
+    }
+
+    async fn restore_active_topic_services(
+        pool: &Pool<Postgres>,
+        active_rows: &[(String, String, String)],
+    ) {
+        for (topic_id, role, scope) in active_rows {
+            upsert_topic_service(pool, topic_id, role, scope, true).await;
+        }
+    }
+
+    async fn response_json(response: axum::response::Response) -> serde_json::Value {
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        serde_json::from_slice(&body).expect("response body as json")
+    }
+
+    async fn response_text(response: axum::response::Response) -> String {
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        String::from_utf8(body.to_vec()).expect("response body as utf-8")
+    }
+
+    async fn spawn_dependency_health_server(
+        dependency_status: Arc<AtomicU16>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        let app = Router::new().route(
+            "/healthz",
+            get({
+                let dependency_status = Arc::clone(&dependency_status);
+                move || {
+                    let dependency_status = Arc::clone(&dependency_status);
+                    async move {
+                        let status_code =
+                            StatusCode::from_u16(dependency_status.load(Ordering::Relaxed))
+                                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                        let body_status = if status_code.is_success() {
+                            "ok"
+                        } else {
+                            "unavailable"
+                        };
+                        (status_code, Json(json!({ "status": body_status })))
+                    }
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind dependency server");
+        let addr = listener
+            .local_addr()
+            .expect("resolve dependency server address");
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        (format!("http://{addr}/healthz"), handle)
+    }
 
     fn has_tag(tags: &[Vec<String>], name: &str, value: &str) -> bool {
         tags.iter().any(|tag| {
@@ -581,5 +757,173 @@ mod tests {
             topic_service_cleanup_mode(&active_tags),
             TopicServiceCleanupMode::DeleteStale
         );
+    }
+
+    #[tokio::test]
+    async fn refresh_bootstrap_events_reflects_topic_services_into_db() {
+        let _guard = db_test_lock().lock().await;
+        let state = test_state(HashMap::new()).await;
+        let topic_id = format!("kukuri:bootstrap-refresh-{}", Uuid::new_v4());
+        let role = "index";
+        let scope = "public";
+        let d_tag = format!("topic_service:{topic_id}:{role}:{scope}");
+
+        upsert_topic_service(&state.pool, &topic_id, role, scope, true).await;
+        refresh_bootstrap_events(&state)
+            .await
+            .expect("refresh bootstrap events");
+
+        let descriptor_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM cn_bootstrap.events WHERE kind = 39000 AND d_tag = 'descriptor'",
+        )
+        .fetch_one(&state.pool)
+        .await
+        .expect("count descriptor events");
+        assert_eq!(descriptor_count, 1);
+
+        let row = sqlx::query(
+            "SELECT topic_id, role, scope, event_json FROM cn_bootstrap.events \
+             WHERE kind = 39001 AND d_tag = $1",
+        )
+        .bind(&d_tag)
+        .fetch_optional(&state.pool)
+        .await
+        .expect("load topic service bootstrap event")
+        .expect("topic service bootstrap event");
+
+        let row_topic_id: String = row.try_get("topic_id").expect("topic_id");
+        let row_role: String = row.try_get("role").expect("role");
+        let row_scope: String = row.try_get("scope").expect("scope");
+        let event_json: serde_json::Value = row.try_get("event_json").expect("event_json");
+
+        assert_eq!(row_topic_id, topic_id);
+        assert_eq!(row_role, role);
+        assert_eq!(row_scope, scope);
+        assert_eq!(event_json.get("kind").and_then(|v| v.as_i64()), Some(39001));
+
+        remove_topic_service(&state.pool, &topic_id, role, scope).await;
+        sqlx::query("DELETE FROM cn_bootstrap.events WHERE d_tag = $1")
+            .bind(&d_tag)
+            .execute(&state.pool)
+            .await
+            .expect("cleanup bootstrap event");
+    }
+
+    #[tokio::test]
+    async fn refresh_bootstrap_events_deletes_stale_39001_when_topic_services_empty() {
+        let _guard = db_test_lock().lock().await;
+        let state = test_state(HashMap::new()).await;
+        let active_rows = deactivate_all_active_topic_services(&state.pool).await;
+
+        let stale_topic_id = format!("kukuri:bootstrap-stale-{}", Uuid::new_v4());
+        let stale_d_tag = format!("topic_service:{stale_topic_id}:index:public");
+        let expires_at = cn_core::auth::unix_seconds().expect("unix time") as i64 + 3600;
+        let stale_event = build_topic_service_event(
+            &state.keys,
+            &stale_topic_id,
+            "index",
+            "public",
+            &stale_d_tag,
+            expires_at,
+        )
+        .expect("build stale topic service event");
+
+        let mut tx = state.pool.begin().await.expect("begin transaction");
+        upsert_bootstrap_event(
+            &mut tx,
+            &stale_event,
+            39001,
+            &stale_d_tag,
+            Some(&stale_topic_id),
+            Some("index"),
+            Some("public"),
+            expires_at,
+        )
+        .await
+        .expect("insert stale bootstrap event");
+        tx.commit().await.expect("commit stale event insert");
+
+        let test_result: anyhow::Result<()> = async {
+            let stale_before: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM cn_bootstrap.events WHERE d_tag = $1")
+                    .bind(&stale_d_tag)
+                    .fetch_one(&state.pool)
+                    .await
+                    .expect("count stale event before refresh");
+            if stale_before != 1 {
+                bail!("unexpected stale row count before refresh: {stale_before}");
+            }
+
+            refresh_bootstrap_events(&state)
+                .await
+                .expect("refresh bootstrap events");
+
+            let stale_after: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM cn_bootstrap.events WHERE d_tag = $1")
+                    .bind(&stale_d_tag)
+                    .fetch_one(&state.pool)
+                    .await
+                    .expect("count stale event after refresh");
+            if stale_after != 0 {
+                bail!("stale 39001 rows still remain after refresh: {stale_after}");
+            }
+
+            Ok(())
+        }
+        .await;
+
+        restore_active_topic_services(&state.pool, &active_rows).await;
+        refresh_bootstrap_events(&state)
+            .await
+            .expect("refresh bootstrap events after restore");
+
+        if let Err(err) = test_result {
+            panic!("topic_services empty cleanup assertion failed: {err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn healthz_contract_status_transitions_when_dependency_fails() {
+        let _guard = db_test_lock().lock().await;
+        let dependency_status = Arc::new(AtomicU16::new(StatusCode::OK.as_u16()));
+        let (health_url, server_handle) =
+            spawn_dependency_health_server(Arc::clone(&dependency_status)).await;
+        let mut targets = HashMap::new();
+        targets.insert("relay".to_string(), health_url);
+
+        let state = test_state(targets).await;
+
+        let ok_response = healthz(State(state.clone())).await.into_response();
+        assert_eq!(ok_response.status(), StatusCode::OK);
+        let ok_payload = response_json(ok_response).await;
+        assert_eq!(ok_payload.get("status"), Some(&json!("ok")));
+
+        dependency_status.store(StatusCode::SERVICE_UNAVAILABLE.as_u16(), Ordering::Relaxed);
+        let failed_response = healthz(State(state)).await.into_response();
+        assert_eq!(failed_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let failed_payload = response_json(failed_response).await;
+        assert_eq!(failed_payload.get("status"), Some(&json!("unavailable")));
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn metrics_contract_prometheus_content_type_shape_compatible() {
+        let response = metrics_endpoint().await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok());
+        assert_eq!(content_type, Some("text/plain; version=0.0.4"));
+
+        let body = response_text(response).await;
+        if !body.contains("cn_up{service=\"cn-bootstrap\"}") {
+            let preview = body.lines().take(10).collect::<Vec<_>>().join("\n");
+            panic!(
+                "{}",
+                anyhow!("metrics payload does not contain cn-bootstrap service gauge:\n{preview}")
+            );
+        }
     }
 }
