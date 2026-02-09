@@ -434,7 +434,9 @@ async fn auth_enforce_switches_from_off_to_on_and_times_out() {
         json!({
             "auth": {
                 "mode": "required",
-                "enforce_at": now + 1,
+                // CI startup/connection jitter can cross `now + 1` and make this flaky.
+                // Keep a wider pre-enforce window so the initial REQ reliably gets EOSE.
+                "enforce_at": now + 10,
                 "grace_seconds": 600,
                 "ws_auth_timeout_seconds": 1
             },
