@@ -17,6 +17,8 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 
 mod config;
+#[cfg(test)]
+mod integration_tests;
 
 const SERVICE_NAME: &str = "cn-index";
 const CONSUMER_NAME: &str = "index-v1";

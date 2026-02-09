@@ -800,8 +800,8 @@ mod api_contract_tests {
     use sqlx::postgres::PgPoolOptions;
     use sqlx::{Pool, Postgres};
     use std::net::SocketAddr;
-    use std::sync::atomic::{AtomicU16, Ordering};
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU16, Ordering};
     use std::sync::Arc;
     use tokio::sync::OnceCell;
     use tower::ServiceExt;
@@ -1259,7 +1259,11 @@ mod api_contract_tests {
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body");
-        (status, content_type, String::from_utf8_lossy(&body).to_string())
+        (
+            status,
+            content_type,
+            String::from_utf8_lossy(&body).to_string(),
+        )
     }
 
     async fn get_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
@@ -1408,7 +1412,9 @@ mod api_contract_tests {
         (format!("http://{addr}"), handle)
     }
 
-    async fn spawn_mock_meili_health(status_code: Arc<AtomicU16>) -> (String, tokio::task::JoinHandle<()>) {
+    async fn spawn_mock_meili_health(
+        status_code: Arc<AtomicU16>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
         let app = Router::new().route(
             "/health",
             get({
@@ -1635,12 +1641,18 @@ mod api_contract_tests {
         let pubkey = Keys::generate().public_key().to_hex();
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
-            .route("/v1/policies/current", get(crate::policies::get_current_policies))
+            .route(
+                "/v1/policies/current",
+                get(crate::policies::get_current_policies),
+            )
             .route(
                 "/v1/policies/{policy_type}/{version}",
                 get(crate::policies::get_policy_by_version),
             )
-            .route("/v1/consents/status", get(crate::policies::get_consent_status))
+            .route(
+                "/v1/consents/status",
+                get(crate::policies::get_consent_status),
+            )
             .route("/v1/consents", post(crate::policies::accept_consents))
             .with_state(state);
 
@@ -1693,7 +1705,8 @@ mod api_contract_tests {
             .and_then(Value::as_str)
             .is_some());
 
-        let (status, consent_before_payload) = get_json(app.clone(), "/v1/consents/status", &token).await;
+        let (status, consent_before_payload) =
+            get_json(app.clone(), "/v1/consents/status", &token).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             consent_before_payload.get("pubkey").and_then(Value::as_str),
@@ -1804,8 +1817,14 @@ mod api_contract_tests {
                 row.get("topic_id").and_then(Value::as_str) == Some(active_topic_id.as_str())
             })
             .expect("active subscription row");
-        assert_eq!(active_row.get("status").and_then(Value::as_str), Some("active"));
-        assert!(active_row.get("started_at").and_then(Value::as_i64).is_some());
+        assert_eq!(
+            active_row.get("status").and_then(Value::as_str),
+            Some("active")
+        );
+        assert!(active_row
+            .get("started_at")
+            .and_then(Value::as_i64)
+            .is_some());
         assert!(active_row
             .get("ended_at")
             .is_some_and(serde_json::Value::is_null));
@@ -1835,7 +1854,10 @@ mod api_contract_tests {
                 row.get("topic_id").and_then(Value::as_str) == Some(active_topic_id.as_str())
             })
             .expect("ended subscription row");
-        assert_eq!(ended_row.get("status").and_then(Value::as_str), Some("ended"));
+        assert_eq!(
+            ended_row.get("status").and_then(Value::as_str),
+            Some("ended")
+        );
         assert!(ended_row.get("ended_at").and_then(Value::as_i64).is_some());
     }
 
@@ -2212,7 +2234,8 @@ mod api_contract_tests {
             .with_state(state);
         let path = format!("/v1/bootstrap/topics/{topic_id}/services");
 
-        let (status, headers, payload) = get_json_public_with_headers(app.clone(), &path, &[]).await;
+        let (status, headers, payload) =
+            get_json_public_with_headers(app.clone(), &path, &[]).await;
         assert_eq!(status, StatusCode::OK);
 
         let items = payload
@@ -2260,12 +2283,9 @@ mod api_contract_tests {
             Some(etag.as_str())
         );
 
-        let (modified_status, modified_headers) = get_status_public_with_headers(
-            app,
-            &path,
-            &[("if-modified-since", &last_modified)],
-        )
-        .await;
+        let (modified_status, modified_headers) =
+            get_status_public_with_headers(app, &path, &[("if-modified-since", &last_modified)])
+                .await;
         assert_eq!(modified_status, StatusCode::NOT_MODIFIED);
         assert_eq!(
             modified_headers

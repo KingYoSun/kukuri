@@ -198,7 +198,11 @@ async fn get_text(app: Router, uri: &str) -> (StatusCode, Option<String>, String
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("response body");
-    (status, content_type, String::from_utf8_lossy(&body).to_string())
+    (
+        status,
+        content_type,
+        String::from_utf8_lossy(&body).to_string(),
+    )
 }
 
 async fn insert_service_health(pool: &Pool<Postgres>, service: &str, status: &str, details: Value) {
@@ -225,11 +229,12 @@ async fn upsert_service_config(pool: &Pool<Postgres>, service: &str, config_json
 }
 
 async fn fetch_service_health_row(pool: &Pool<Postgres>, service: &str) -> (String, Value) {
-    let row = sqlx::query("SELECT status, details_json FROM cn_admin.service_health WHERE service = $1")
-        .bind(service)
-        .fetch_one(pool)
-        .await
-        .expect("fetch service health row");
+    let row =
+        sqlx::query("SELECT status, details_json FROM cn_admin.service_health WHERE service = $1")
+            .bind(service)
+            .fetch_one(pool)
+            .await
+            .expect("fetch service health row");
     let status: String = row.try_get("status").expect("status");
     let details: Value = row
         .try_get::<Option<Value>, _>("details_json")
@@ -543,7 +548,10 @@ async fn healthz_contract_success_shape_compatible() {
 #[tokio::test]
 async fn healthz_contract_dependency_unavailable_shape_compatible() {
     let mut health_targets = HashMap::new();
-    health_targets.insert("relay".to_string(), "http://127.0.0.1:1/healthz".to_string());
+    health_targets.insert(
+        "relay".to_string(),
+        "http://127.0.0.1:1/healthz".to_string(),
+    );
     let state = test_state_with_health_targets(health_targets).await;
 
     let app = Router::new()
@@ -778,7 +786,12 @@ async fn services_health_poll_contract_status_matrix_backward_compatible() {
 
     upsert_service_config(&state.pool, &healthy_service, json!({ "enabled": true })).await;
     upsert_service_config(&state.pool, &degraded_service, json!({ "enabled": true })).await;
-    upsert_service_config(&state.pool, &unreachable_service, json!({ "enabled": true })).await;
+    upsert_service_config(
+        &state.pool,
+        &unreachable_service,
+        json!({ "enabled": true }),
+    )
+    .await;
 
     services::poll_health_once(&state).await;
 
@@ -843,13 +856,11 @@ async fn services_health_poll_contract_status_matrix_backward_compatible() {
         unreachable_health.get("status").and_then(Value::as_str),
         Some("unreachable")
     );
-    assert!(
-        unreachable_health
-            .get("details")
-            .and_then(|details| details.get("error"))
-            .and_then(Value::as_str)
-            .is_some()
-    );
+    assert!(unreachable_health
+        .get("details")
+        .and_then(|details| details.get("error"))
+        .and_then(Value::as_str)
+        .is_some());
 
     healthy_server.abort();
     let _ = healthy_server.await;

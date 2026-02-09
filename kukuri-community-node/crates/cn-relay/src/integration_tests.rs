@@ -333,9 +333,7 @@ async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, ex
         panic!(
             "gossip timeout: expected_id={}, last_received_id={}",
             expected_id,
-            last_received_id
-                .as_deref()
-                .unwrap_or("<none>")
+            last_received_id.as_deref().unwrap_or("<none>")
         )
     });
 }

@@ -105,7 +105,7 @@
 - [x] `cn-admin-api` の health 集約ポーリング（`services::poll_health_once`）を契約/統合テストで検証し、`cn_admin.service_health` の `healthy|degraded|unreachable` と `details_json` 更新の後方互換を担保する。
 - [x] `cn-user-api` / `cn-admin-api` の `/healthz` `/metrics` 契約テストを追加し、status code とレスポンス shape（`status`、Prometheus content-type）を固定する。
 - [x] `cn-user-api` bootstrap 配布の条件付き GET（`If-None-Match` / `If-Modified-Since`）と `ETag` / `Last-Modified` / `Cache-Control` / `next_refresh_at` を検証するテストを追加する。
-- [ ] `cn-index` の統合テストを追加し、outbox `upsert/delete`・期限切れ削除・`reindex_jobs` の状態遷移（pending/running/succeeded/failed）までを Meilisearch 反映込みで検証する。
+- [x] `cn-index` の統合テストを追加し、outbox `upsert/delete`・期限切れ削除・`reindex_jobs` の状態遷移（pending/running/succeeded/failed）までを Meilisearch 反映込みで検証する。
 - [ ] `cn-trust` の統合テストを追加し、`report/interactions` 取込 -> score 算出 -> `attestation(kind=39010)` 発行 -> `jobs/job_schedules` 更新までの一連フローを検証する。
 
 ## 参照（設計）

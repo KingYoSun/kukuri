@@ -90,8 +90,9 @@ pub async fn list_memberships(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        let scope = cn_core::access_control::normalize_scope(scope_raw)
-            .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string()))?;
+        let scope = cn_core::access_control::normalize_scope(scope_raw).map_err(|err| {
+            ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string())
+        })?;
         builder.push(" AND scope = ");
         builder.push_bind(scope);
     }
