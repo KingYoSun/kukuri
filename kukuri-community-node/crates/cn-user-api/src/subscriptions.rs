@@ -874,23 +874,40 @@ mod api_contract_tests {
     }
 
     async fn ensure_consents(pool: &Pool<Postgres>, pubkey: &str) {
-        let policies = sqlx::query_scalar::<_, String>(
-            "SELECT policy_id FROM cn_admin.policies WHERE is_current = TRUE AND type IN ('terms','privacy')",
-        )
-        .fetch_all(pool)
-        .await
-        .expect("fetch policies");
-        for policy_id in policies {
-            let consent_id = Uuid::new_v4().to_string();
-            sqlx::query(
-                "INSERT INTO cn_user.policy_consents (consent_id, policy_id, accepter_pubkey) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        // 別テストが同時に current policy を追加しても取りこぼさないように短い再試行を行う。
+        for _ in 0..5 {
+            let missing_policies = sqlx::query_scalar::<_, String>(
+                "SELECT p.policy_id \
+                 FROM cn_admin.policies p \
+                 LEFT JOIN cn_user.policy_consents c \
+                   ON c.policy_id = p.policy_id AND c.accepter_pubkey = $1 \
+                 WHERE p.is_current = TRUE \
+                   AND p.type IN ('terms', 'privacy') \
+                   AND c.policy_id IS NULL",
             )
-            .bind(consent_id)
-            .bind(policy_id)
             .bind(pubkey)
-            .execute(pool)
+            .fetch_all(pool)
             .await
-            .expect("insert consent");
+            .expect("fetch missing policies");
+
+            if missing_policies.is_empty() {
+                return;
+            }
+
+            for policy_id in missing_policies {
+                let consent_id = Uuid::new_v4().to_string();
+                sqlx::query(
+                    "INSERT INTO cn_user.policy_consents (consent_id, policy_id, accepter_pubkey) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                )
+                .bind(consent_id)
+                .bind(policy_id)
+                .bind(pubkey)
+                .execute(pool)
+                .await
+                .expect("insert consent");
+            }
+
+            tokio::task::yield_now().await;
         }
     }
 
@@ -1282,6 +1299,52 @@ mod api_contract_tests {
             .expect("body");
         let payload: Value = serde_json::from_slice(&body).expect("json body");
         (status, payload)
+    }
+
+    async fn get_json_with_consent_retry(
+        app: Router,
+        uri: &str,
+        token: &str,
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+    ) -> (StatusCode, Value) {
+        let (status, payload) = get_json(app.clone(), uri, token).await;
+        if status == StatusCode::PRECONDITION_REQUIRED {
+            ensure_consents(pool, pubkey).await;
+            return get_json(app, uri, token).await;
+        }
+        (status, payload)
+    }
+
+    async fn post_json_with_consent_retry(
+        app: Router,
+        uri: &str,
+        token: &str,
+        payload: Value,
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+    ) -> (StatusCode, Value) {
+        let (status, body) = post_json(app.clone(), uri, token, payload.clone()).await;
+        if status == StatusCode::PRECONDITION_REQUIRED {
+            ensure_consents(pool, pubkey).await;
+            return post_json(app, uri, token, payload).await;
+        }
+        (status, body)
+    }
+
+    async fn delete_json_with_consent_retry(
+        app: Router,
+        uri: &str,
+        token: &str,
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+    ) -> (StatusCode, Value) {
+        let (status, body) = delete_json(app.clone(), uri, token).await;
+        if status == StatusCode::PRECONDITION_REQUIRED {
+            ensure_consents(pool, pubkey).await;
+            return delete_json(app, uri, token).await;
+        }
+        (status, body)
     }
 
     async fn post_json_public(app: Router, uri: &str, payload: Value) -> (StatusCode, Value) {
@@ -1702,7 +1765,7 @@ mod api_contract_tests {
             )
             .with_state(state);
 
-        let (status, create_payload) = post_json(
+        let (status, create_payload) = post_json_with_consent_retry(
             app.clone(),
             "/v1/topic-subscription-requests",
             &token,
@@ -1710,6 +1773,8 @@ mod api_contract_tests {
                 "topic_id": request_topic_id,
                 "requested_services": ["relay", "index"]
             }),
+            &pool,
+            &pubkey,
         )
         .await;
         assert_eq!(status, StatusCode::OK);
@@ -1723,7 +1788,14 @@ mod api_contract_tests {
         );
 
         insert_topic_subscription(&pool, &active_topic_id, &pubkey).await;
-        let (status, list_payload) = get_json(app.clone(), "/v1/topic-subscriptions", &token).await;
+        let (status, list_payload) = get_json_with_consent_retry(
+            app.clone(),
+            "/v1/topic-subscriptions",
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let list = list_payload.as_array().cloned().unwrap_or_default();
         let active_row = list
@@ -1738,10 +1810,12 @@ mod api_contract_tests {
             .get("ended_at")
             .is_some_and(serde_json::Value::is_null));
 
-        let (status, delete_payload) = delete_json(
+        let (status, delete_payload) = delete_json_with_consent_retry(
             app.clone(),
             &format!("/v1/topic-subscriptions/{active_topic_id}"),
             &token,
+            &pool,
+            &pubkey,
         )
         .await;
         assert_eq!(status, StatusCode::OK);
@@ -1750,7 +1824,9 @@ mod api_contract_tests {
             Some("ended")
         );
 
-        let (status, list_after_payload) = get_json(app, "/v1/topic-subscriptions", &token).await;
+        let (status, list_after_payload) =
+            get_json_with_consent_retry(app, "/v1/topic-subscriptions", &token, &pool, &pubkey)
+                .await;
         assert_eq!(status, StatusCode::OK);
         let list_after = list_after_payload.as_array().cloned().unwrap_or_default();
         let ended_row = list_after
@@ -1770,6 +1846,7 @@ mod api_contract_tests {
         ensure_active_subscriber(&state.pool, &pubkey).await;
         ensure_consents(&state.pool, &pubkey).await;
         let token = issue_token(&state.jwt_config, &pubkey);
+        let pool = state.pool.clone();
 
         let app = Router::new()
             .route(
@@ -1786,11 +1863,13 @@ mod api_contract_tests {
             )
             .with_state(state);
 
-        let (status, create_payload) = post_json(
+        let (status, create_payload) = post_json_with_consent_retry(
             app.clone(),
             "/v1/personal-data-export-requests",
             &token,
             json!({}),
+            &pool,
+            &pubkey,
         )
         .await;
         assert_eq!(status, StatusCode::OK);
@@ -1923,11 +2002,13 @@ mod api_contract_tests {
             )
             .with_state(state);
 
-        let (status, create_payload) = post_json(
+        let (status, create_payload) = post_json_with_consent_retry(
             app.clone(),
             "/v1/personal-data-deletion-requests",
             &token,
             json!({}),
+            &pool,
+            &pubkey,
         )
         .await;
         assert_eq!(status, StatusCode::OK);
@@ -2210,18 +2291,21 @@ mod api_contract_tests {
         .await;
 
         let state = test_state_with_meili_url(&meili_url).await;
+        let pool = state.pool.clone();
         let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&state.pool, &pubkey).await;
-        insert_topic_subscription(&state.pool, &topic_id, &pubkey).await;
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
             .route("/v1/search", get(search))
             .with_state(state);
-        let (status, payload) = get_json(
+        let (status, payload) = get_json_with_consent_retry(
             app,
             &format!("/v1/search?topic={topic_id}&q=hello&limit=1"),
             &token,
+            &pool,
+            &pubkey,
         )
         .await;
         meili_handle.abort();
@@ -2261,7 +2345,7 @@ mod api_contract_tests {
         let app = Router::new()
             .route("/v1/reports", post(submit_report))
             .with_state(state);
-        let (status, payload) = post_json(
+        let (status, payload) = post_json_with_consent_retry(
             app,
             "/v1/reports",
             &token,
@@ -2269,6 +2353,8 @@ mod api_contract_tests {
                 "target": "event:report-contract-target",
                 "reason": "spam"
             }),
+            &pool,
+            &pubkey,
         )
         .await;
 
@@ -2305,23 +2391,26 @@ mod api_contract_tests {
     #[tokio::test]
     async fn list_labels_contract_success() {
         let state = test_state().await;
+        let pool = state.pool.clone();
         let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&state.pool, &pubkey).await;
+        ensure_consents(&pool, &pubkey).await;
         let target = "event:contract-label";
         let issuer_pubkey = Keys::generate().public_key().to_hex();
         let label_id_a = Uuid::new_v4().to_string();
         let label_id_b = Uuid::new_v4().to_string();
-        insert_label(&state.pool, target, None, &issuer_pubkey, &label_id_a).await;
-        insert_label(&state.pool, target, None, &issuer_pubkey, &label_id_b).await;
+        insert_label(&pool, target, None, &issuer_pubkey, &label_id_a).await;
+        insert_label(&pool, target, None, &issuer_pubkey, &label_id_b).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
             .route("/v1/labels", get(list_labels))
             .with_state(state);
-        let (status, payload) = get_json(
+        let (status, payload) = get_json_with_consent_retry(
             app,
             "/v1/labels?target=event:contract-label&limit=1",
             &token,
+            &pool,
+            &pubkey,
         )
         .await;
 
@@ -2345,30 +2434,33 @@ mod api_contract_tests {
     #[tokio::test]
     async fn trust_report_based_contract_success() {
         let state = test_state().await;
+        let pool = state.pool.clone();
         let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&state.pool, &pubkey).await;
+        ensure_consents(&pool, &pubkey).await;
         let subject = format!("pubkey:{pubkey}");
         let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
         let attestation_id = Uuid::new_v4().to_string();
         let attestation_exp = now + 3600;
         let event_json = insert_attestation(
-            &state.pool,
+            &pool,
             &subject,
             "report-based",
             attestation_exp,
             &attestation_id,
         )
         .await;
-        insert_report_score(&state.pool, &pubkey, &attestation_id, attestation_exp).await;
+        insert_report_score(&pool, &pubkey, &attestation_id, attestation_exp).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
             .route("/v1/trust/report-based", get(trust_report_based))
             .with_state(state);
-        let (status, payload) = get_json(
+        let (status, payload) = get_json_with_consent_retry(
             app,
             &format!("/v1/trust/report-based?subject={subject}"),
             &token,
+            &pool,
+            &pubkey,
         )
         .await;
 
@@ -2402,21 +2494,22 @@ mod api_contract_tests {
     #[tokio::test]
     async fn trust_communication_density_contract_success() {
         let state = test_state().await;
+        let pool = state.pool.clone();
         let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&state.pool, &pubkey).await;
+        ensure_consents(&pool, &pubkey).await;
         let subject = format!("pubkey:{pubkey}");
         let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
         let attestation_id = Uuid::new_v4().to_string();
         let attestation_exp = now + 3600;
         let event_json = insert_attestation(
-            &state.pool,
+            &pool,
             &subject,
             "communication-density",
             attestation_exp,
             &attestation_id,
         )
         .await;
-        insert_communication_score(&state.pool, &pubkey, &attestation_id, attestation_exp).await;
+        insert_communication_score(&pool, &pubkey, &attestation_id, attestation_exp).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
@@ -2425,10 +2518,12 @@ mod api_contract_tests {
                 get(trust_communication_density),
             )
             .with_state(state);
-        let (status, payload) = get_json(
+        let (status, payload) = get_json_with_consent_retry(
             app,
             &format!("/v1/trust/communication-density?subject={subject}"),
             &token,
+            &pool,
+            &pubkey,
         )
         .await;
 
@@ -2465,14 +2560,15 @@ mod api_contract_tests {
     #[tokio::test]
     async fn trending_contract_success() {
         let state = test_state().await;
+        let pool = state.pool.clone();
         let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&state.pool, &pubkey).await;
+        ensure_consents(&pool, &pubkey).await;
         let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
-        insert_topic_subscription(&state.pool, &topic_id, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
 
         let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
         insert_relay_event(
-            &state.pool,
+            &pool,
             &Uuid::new_v4().to_string(),
             &pubkey,
             1,
@@ -2481,7 +2577,7 @@ mod api_contract_tests {
         )
         .await;
         insert_relay_event(
-            &state.pool,
+            &pool,
             &Uuid::new_v4().to_string(),
             &pubkey,
             7,
@@ -2490,7 +2586,7 @@ mod api_contract_tests {
         )
         .await;
         insert_relay_event(
-            &state.pool,
+            &pool,
             &Uuid::new_v4().to_string(),
             &pubkey,
             6,
@@ -2503,8 +2599,14 @@ mod api_contract_tests {
         let app = Router::new()
             .route("/v1/trending", get(trending))
             .with_state(state);
-        let (status, payload) =
-            get_json(app, &format!("/v1/trending?topic={topic_id}"), &token).await;
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trending?topic={topic_id}"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(

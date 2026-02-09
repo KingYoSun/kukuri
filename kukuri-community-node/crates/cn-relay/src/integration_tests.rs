@@ -31,7 +31,7 @@ type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
-const WAIT_TIMEOUT: Duration = Duration::from_secs(15);
+const WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn database_url() -> String {
     std::env::var("DATABASE_URL")

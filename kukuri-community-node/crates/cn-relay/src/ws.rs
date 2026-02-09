@@ -10,7 +10,7 @@ use sqlx::{Postgres, QueryBuilder, Row};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
-use tokio::time::{interval, Instant};
+use tokio::time::{interval, sleep, Instant};
 use uuid::Uuid;
 
 use crate::config::RelayRuntimeConfig;
@@ -19,6 +19,8 @@ use crate::ingest::{ingest_event, IngestContext, IngestOutcome, IngestSource, Re
 use crate::AppState;
 
 const AUTH_EVENT_KIND: u32 = 22242;
+const GOSSIP_BROADCAST_MAX_RETRIES: usize = 3;
+const GOSSIP_BROADCAST_RETRY_BASE_DELAY_MS: u64 = 50;
 
 pub async fn ws_handler(
     State(state): State<AppState>,
@@ -525,11 +527,30 @@ async fn broadcast_to_gossip(state: &AppState, event: &RelayEvent) {
         Ok(payload) => payload,
         Err(_) => return,
     };
-    let senders = state.gossip_senders.read().await;
-    for topic_id in &event.topic_ids {
-        if let Some(sender) = senders.get(topic_id) {
-            let _ = sender.broadcast(payload.clone().into()).await;
+    let senders = {
+        let guard = state.gossip_senders.read().await;
+        event
+            .topic_ids
+            .iter()
+            .filter_map(|topic_id| guard.get(topic_id).cloned())
+            .collect::<Vec<_>>()
+    };
+    for sender in senders {
+        if broadcast_with_retry(&sender, payload.clone()).await {
             metrics::inc_gossip_sent(super::SERVICE_NAME);
         }
     }
+}
+
+async fn broadcast_with_retry(sender: &iroh_gossip::api::GossipSender, payload: Vec<u8>) -> bool {
+    for attempt in 0..GOSSIP_BROADCAST_MAX_RETRIES {
+        if sender.broadcast(payload.clone().into()).await.is_ok() {
+            return true;
+        }
+        if attempt + 1 < GOSSIP_BROADCAST_MAX_RETRIES {
+            let delay_ms = GOSSIP_BROADCAST_RETRY_BASE_DELAY_MS * (attempt as u64 + 1);
+            sleep(Duration::from_millis(delay_ms)).await;
+        }
+    }
+    false
 }
