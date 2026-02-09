@@ -10,13 +10,16 @@ use cn_core::{
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::json;
-use sqlx::{Pool, Postgres, Row};
+use sqlx::postgres::PgListener;
+use sqlx::{Pool, Postgres, Row, Transaction};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 const SERVICE_NAME: &str = "cn-bootstrap";
+const ADMIN_CONFIG_CHANNEL: &str = "cn_admin_config";
+const LISTENER_RETRY_INTERVAL_SECONDS: u64 = 5;
 
 #[derive(Clone)]
 struct AppState {
@@ -93,12 +96,137 @@ pub async fn run(config: BootstrapConfig) -> Result<()> {
 }
 
 async fn refresh_loop(state: AppState) {
+    refresh_once_with_log(&state, "startup").await;
+    let mut refresh_interval = tokio::time::interval(state.refresh_interval);
+    refresh_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    refresh_interval.tick().await;
+
+    let listener_retry = Duration::from_secs(LISTENER_RETRY_INTERVAL_SECONDS);
+    let mut listener = connect_admin_config_listener(&state.pool).await;
+
     loop {
-        if let Err(err) = refresh_bootstrap_events(&state).await {
-            tracing::error!(error = %err, "bootstrap refresh failed");
+        if let Some(active_listener) = listener.as_mut() {
+            let mut listener_failed = false;
+            tokio::select! {
+                _ = refresh_interval.tick() => {
+                    refresh_once_with_log(&state, "interval").await;
+                }
+                notification = active_listener.recv() => {
+                    match notification {
+                        Ok(notification) => {
+                            let payload = notification.payload();
+                            if should_refresh_on_admin_config_notification(payload) {
+                                tracing::info!(
+                                    payload = payload,
+                                    channel = ADMIN_CONFIG_CHANNEL,
+                                    "bootstrap refresh triggered by admin config notification"
+                                );
+                                refresh_once_with_log(&state, "notify").await;
+                            }
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                error = %err,
+                                channel = ADMIN_CONFIG_CHANNEL,
+                                "admin config listener disconnected; will reconnect"
+                            );
+                            listener_failed = true;
+                        }
+                    }
+                }
+            }
+
+            if listener_failed {
+                listener = None;
+            }
+        } else {
+            tokio::select! {
+                _ = refresh_interval.tick() => {
+                    refresh_once_with_log(&state, "interval").await;
+                }
+                _ = tokio::time::sleep(listener_retry) => {
+                    listener = connect_admin_config_listener(&state.pool).await;
+                }
+            }
         }
-        tokio::time::sleep(state.refresh_interval).await;
     }
+}
+
+async fn refresh_once_with_log(state: &AppState, trigger: &str) {
+    if let Err(err) = refresh_bootstrap_events(state).await {
+        tracing::error!(error = %err, trigger = trigger, "bootstrap refresh failed");
+    }
+}
+
+async fn connect_admin_config_listener(pool: &Pool<Postgres>) -> Option<PgListener> {
+    let mut listener = match PgListener::connect_with(pool).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                channel = ADMIN_CONFIG_CHANNEL,
+                "failed to connect admin config listener"
+            );
+            return None;
+        }
+    };
+
+    if let Err(err) = listener.listen(ADMIN_CONFIG_CHANNEL).await {
+        tracing::warn!(
+            error = %err,
+            channel = ADMIN_CONFIG_CHANNEL,
+            "failed to subscribe admin config listener"
+        );
+        return None;
+    }
+
+    tracing::info!(
+        channel = ADMIN_CONFIG_CHANNEL,
+        "admin config listener subscribed"
+    );
+    Some(listener)
+}
+
+fn should_refresh_on_admin_config_notification(payload: &str) -> bool {
+    let service = payload.split(':').next().unwrap_or_default().trim();
+    service.is_empty()
+        || service.eq_ignore_ascii_case("bootstrap")
+        || service.eq_ignore_ascii_case("topic_services")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TopicServiceCleanupMode {
+    DeleteAll,
+    DeleteStale,
+}
+
+fn topic_service_cleanup_mode(active_tags: &[String]) -> TopicServiceCleanupMode {
+    if active_tags.is_empty() {
+        TopicServiceCleanupMode::DeleteAll
+    } else {
+        TopicServiceCleanupMode::DeleteStale
+    }
+}
+
+async fn cleanup_stale_topic_service_events(
+    tx: &mut Transaction<'_, Postgres>,
+    active_tags: &[String],
+) -> Result<()> {
+    match topic_service_cleanup_mode(active_tags) {
+        TopicServiceCleanupMode::DeleteAll => {
+            sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = 39001")
+                .execute(&mut **tx)
+                .await?;
+        }
+        TopicServiceCleanupMode::DeleteStale => {
+            sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = 39001 AND d_tag <> ALL($1)")
+                .bind(active_tags)
+                .execute(&mut **tx)
+                .await?;
+        }
+    }
+
+    Ok(())
 }
 
 async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
@@ -162,12 +290,7 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
         active_tags.push(d_tag);
     }
 
-    if !active_tags.is_empty() {
-        sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = 39001 AND d_tag <> ALL($1)")
-            .bind(&active_tags)
-            .execute(&mut *tx)
-            .await?;
-    }
+    cleanup_stale_topic_service_events(&mut tx, &active_tags).await?;
 
     sqlx::query("DELETE FROM cn_bootstrap.events WHERE expires_at <= $1")
         .bind(now)
@@ -428,6 +551,35 @@ mod tests {
         assert_eq!(
             content.get("schema").and_then(|v| v.as_str()),
             Some("kukuri-topic-service-v1")
+        );
+    }
+
+    #[test]
+    fn should_refresh_on_admin_config_notification_handles_payloads() {
+        assert!(should_refresh_on_admin_config_notification(""));
+        assert!(should_refresh_on_admin_config_notification("bootstrap"));
+        assert!(should_refresh_on_admin_config_notification("bootstrap:42"));
+        assert!(should_refresh_on_admin_config_notification(
+            "topic_services:7"
+        ));
+        assert!(!should_refresh_on_admin_config_notification("index:12"));
+    }
+
+    #[test]
+    fn topic_service_cleanup_mode_uses_delete_all_when_no_active_tags() {
+        let active_tags: Vec<String> = Vec::new();
+        assert_eq!(
+            topic_service_cleanup_mode(&active_tags),
+            TopicServiceCleanupMode::DeleteAll
+        );
+    }
+
+    #[test]
+    fn topic_service_cleanup_mode_uses_delete_stale_when_active_tags_exist() {
+        let active_tags = vec!["topic_service:kukuri:topic1:index:public".to_string()];
+        assert_eq!(
+            topic_service_cleanup_mode(&active_tags),
+            TopicServiceCleanupMode::DeleteStale
         );
     }
 }
