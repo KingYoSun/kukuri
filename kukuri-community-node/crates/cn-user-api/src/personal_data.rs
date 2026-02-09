@@ -712,9 +712,10 @@ async fn remove_subject_from_age_graph(
         })?;
 
     let query = format!("MATCH (u:User {{pubkey: '{pubkey}'}}) DETACH DELETE u");
-    sqlx::query("SELECT * FROM cypher($1::name, $2::cstring) AS (v agtype)")
-        .bind(TRUST_GRAPH_NAME)
-        .bind(query)
+    let statement = format!(
+        "SELECT * FROM cypher('{TRUST_GRAPH_NAME}', $cypher${query}$cypher$) AS (v agtype)"
+    );
+    sqlx::query(&statement)
         .fetch_all(&mut **tx)
         .await
         .map_err(|err| {
@@ -1148,13 +1149,10 @@ mod tests {
         let query = format!(
             "MERGE (a:User {{pubkey: '{actor_pubkey}'}}) MERGE (b:User {{pubkey: '{target_pubkey}'}}) MERGE (a)-[:REPORTED {{event_id: '{event_id}', kind: 39005, created_at: 1}}]->(b)"
         );
-        if sqlx::query("SELECT * FROM cypher($1::name, $2::cstring) AS (v agtype)")
-            .bind(TRUST_GRAPH_NAME)
-            .bind(query)
-            .fetch_all(&mut *tx)
-            .await
-            .is_err()
-        {
+        let statement = format!(
+            "SELECT * FROM cypher('{TRUST_GRAPH_NAME}', $cypher${query}$cypher$) AS (v agtype)"
+        );
+        if sqlx::query(&statement).fetch_all(&mut *tx).await.is_err() {
             tx.rollback().await.ok();
             return false;
         }
@@ -1196,14 +1194,10 @@ mod tests {
             .ok()?;
         let cypher =
             format!("MATCH (u:User {{pubkey: '{pubkey}'}}) RETURN count(u) AS count_value");
-        let row = sqlx::query(
-            "SELECT count_value::text AS count_value FROM cypher($1::name, $2::cstring) AS (count_value agtype)",
-        )
-        .bind(TRUST_GRAPH_NAME)
-        .bind(cypher)
-        .fetch_one(&mut *tx)
-        .await
-        .ok()?;
+        let statement = format!(
+            "SELECT count_value::text AS count_value FROM cypher('{TRUST_GRAPH_NAME}', $cypher${cypher}$cypher$) AS (count_value agtype)"
+        );
+        let row = sqlx::query(&statement).fetch_one(&mut *tx).await.ok()?;
         let raw: String = row.try_get("count_value").ok()?;
         tx.rollback().await.ok();
         raw.trim_matches('"').parse::<i64>().ok()
