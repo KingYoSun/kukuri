@@ -1,8 +1,10 @@
 import createClient from 'openapi-fetch';
 
 import type { paths } from '../generated/admin-api';
+import type { DashboardSnapshot } from './types';
 
 const baseUrl = import.meta.env.VITE_ADMIN_API_BASE ?? '/admin-api';
+const joinedBaseUrl = baseUrl.replace(/\/$/, '');
 
 type ApiError = Error & { status?: number; payload?: unknown };
 
@@ -40,11 +42,38 @@ const unwrap = async <T>(
   return data as T;
 };
 
+const buildApiUrl = (path: string) =>
+  `${joinedBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+
+const parseFetchPayload = async (response: Response): Promise<unknown> => {
+  const raw = await response.text();
+  if (raw.trim() === '') {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+};
+
 export const api = {
   login: (username: string, password: string) =>
     unwrap(client.POST('/v1/admin/auth/login', { body: { username, password } })),
   logout: () => unwrap(client.POST('/v1/admin/auth/logout')),
   me: () => unwrap(client.GET('/v1/admin/auth/me')),
+  dashboard: async () => {
+    const response = await fetch(buildApiUrl('/v1/admin/dashboard'), {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as DashboardSnapshot;
+  },
   services: () => unwrap(client.GET('/v1/admin/services')),
   updateServiceConfig: (service: string, configJson: unknown, expectedVersion?: number) => {
     const body: { config_json: unknown; expected_version?: number } = { config_json: configJson };

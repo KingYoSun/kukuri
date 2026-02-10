@@ -9,6 +9,10 @@ use crate::access_control::{
     MembershipRow, RevokeRequest, RevokeResponse, RotateRequest, RotateResponse,
 };
 use crate::auth::{AdminUser, LoginRequest, LoginResponse};
+use crate::dashboard::{
+    DashboardSnapshot, DbPressureSignal, OutboxBacklogSignal, OutboxConsumerBacklog,
+    RejectSurgeSignal,
+};
 use crate::moderation::{LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse};
 use crate::policies::{PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest};
 use crate::reindex::{ReindexRequest, ReindexResponse};
@@ -42,6 +46,7 @@ pub struct ManualLabelResponse {
         auth_login_doc,
         auth_logout_doc,
         auth_me_doc,
+        dashboard_doc,
         services_list_doc,
         services_get_config_doc,
         services_update_config_doc,
@@ -87,6 +92,11 @@ pub struct ManualLabelResponse {
             LoginRequest,
             LoginResponse,
             AdminUser,
+            DashboardSnapshot,
+            OutboxBacklogSignal,
+            OutboxConsumerBacklog,
+            RejectSurgeSignal,
+            DbPressureSignal,
             ServiceInfo,
             ServiceHealth,
             ServiceConfigResponse,
@@ -192,6 +202,13 @@ fn auth_logout_doc() {}
     responses((status = 200, body = AdminUser), (status = 401, body = ErrorResponse))
 )]
 fn auth_me_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/admin/dashboard",
+    responses((status = 200, body = DashboardSnapshot), (status = 401, body = ErrorResponse))
+)]
+fn dashboard_doc() {}
 
 #[utoipa::path(
     get,

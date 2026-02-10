@@ -1,5 +1,6 @@
 use crate::{
-    access_control, auth, moderation, policies, reindex, services, subscriptions, trust, AppState,
+    access_control, auth, dashboard, moderation, policies, reindex, services, subscriptions, trust,
+    AppState,
 };
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
@@ -58,6 +59,7 @@ async fn test_state_with_health_targets(health_targets: HashMap<String, String>)
             .timeout(std::time::Duration::from_secs(1))
             .build()
             .expect("build health client"),
+        dashboard_cache: Arc::new(tokio::sync::Mutex::new(dashboard::DashboardCache::default())),
         node_keys: Keys::generate(),
     }
 }
@@ -265,6 +267,39 @@ async fn spawn_healthz_mock(status_code: Arc<AtomicU16>) -> (String, tokio::task
     let addr = listener.local_addr().expect("health mock addr");
     let handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("serve health mock");
+    });
+
+    (format!("http://{addr}/healthz"), handle)
+}
+
+async fn spawn_relay_metrics_mock(metrics_body: String) -> (String, tokio::task::JoinHandle<()>) {
+    let app = Router::new()
+        .route(
+            "/healthz",
+            get(|| async { (StatusCode::OK, axum::Json(json!({ "status": "ok" }))) }),
+        )
+        .route(
+            "/metrics",
+            get(move || {
+                let metrics_body = metrics_body.clone();
+                async move {
+                    (
+                        StatusCode::OK,
+                        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+                        metrics_body,
+                    )
+                }
+            }),
+        );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind relay metrics mock");
+    let addr = listener.local_addr().expect("relay metrics mock addr");
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("serve relay metrics mock");
     });
 
     (format!("http://{addr}/healthz"), handle)
@@ -521,6 +556,9 @@ async fn openapi_contract_contains_admin_paths() {
         .pointer("/paths/~1v1~1admin~1moderation~1rules/get")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1admin~1dashboard/get")
+        .is_some());
+    assert!(payload
         .pointer("/paths/~1v1~1admin~1access-control~1memberships/get")
         .is_some());
     assert!(payload
@@ -528,6 +566,9 @@ async fn openapi_contract_contains_admin_paths() {
         .is_some());
     assert!(payload.pointer("/paths/~1v1~1reindex/post").is_some());
     assert!(payload.pointer("/components/schemas/ServiceInfo").is_some());
+    assert!(payload
+        .pointer("/components/schemas/DashboardSnapshot")
+        .is_some());
     assert!(payload
         .pointer("/components/schemas/TrustScheduleRow")
         .is_some());
@@ -577,6 +618,114 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
         body.contains("cn_up{service=\"cn-admin-api\"} 1"),
         "metrics body did not contain cn_up for cn-admin-api: {body}"
     );
+}
+
+#[tokio::test]
+async fn dashboard_contract_runbook_signals_shape_compatible() {
+    let (relay_health_url, relay_server) = spawn_relay_metrics_mock(
+        r#"
+# HELP ingest_rejected_total Total ingest messages rejected
+# TYPE ingest_rejected_total counter
+ingest_rejected_total{service="cn-relay",reason="auth"} 5
+ingest_rejected_total{service="cn-relay",reason="ratelimit"} 9
+"#
+        .to_string(),
+    )
+    .await;
+
+    let mut health_targets = HashMap::new();
+    health_targets.insert("relay".to_string(), relay_health_url);
+    let state = test_state_with_health_targets(health_targets).await;
+    let session_id = insert_admin_session(&state.pool).await;
+
+    let event_id = format!("evt-{}", Uuid::new_v4());
+    let topic_id = format!("kukuri:dashboard:{}", Uuid::new_v4());
+    let consumer_name = format!("contract-dashboard-{}", Uuid::new_v4());
+    sqlx::query(
+        "INSERT INTO cn_relay.events_outbox          (op, event_id, topic_id, kind, created_at, ingested_at, effective_key, reason)          VALUES ('upsert', $1, $2, 1, $3, NOW(), NULL, NULL)",
+    )
+    .bind(&event_id)
+    .bind(&topic_id)
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool)
+    .await
+    .expect("insert outbox row for dashboard");
+    sqlx::query(
+        "INSERT INTO cn_relay.consumer_offsets (consumer, last_seq) VALUES ($1, 0)          ON CONFLICT (consumer) DO UPDATE SET last_seq = EXCLUDED.last_seq, updated_at = NOW()",
+    )
+    .bind(&consumer_name)
+    .execute(&state.pool)
+    .await
+    .expect("upsert consumer offset for dashboard");
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/dashboard",
+            get(dashboard::get_dashboard_snapshot),
+        )
+        .with_state(state.clone());
+    let (status, payload) = get_json_with_session(app, "/v1/admin/dashboard", &session_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(payload
+        .get("collected_at")
+        .and_then(Value::as_i64)
+        .is_some());
+    assert!(payload
+        .pointer("/outbox_backlog/max_backlog")
+        .and_then(Value::as_i64)
+        .is_some());
+
+    let consumers = payload
+        .pointer("/outbox_backlog/consumers")
+        .and_then(Value::as_array)
+        .expect("outbox consumers");
+    let consumer_row = consumers
+        .iter()
+        .find(|row| row.get("consumer").and_then(Value::as_str) == Some(consumer_name.as_str()))
+        .expect("consumer backlog row");
+    assert!(
+        consumer_row
+            .get("backlog")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            >= 1
+    );
+
+    assert_eq!(
+        payload
+            .pointer("/reject_surge/current_total")
+            .and_then(Value::as_i64),
+        Some(14)
+    );
+    assert_eq!(
+        payload
+            .pointer("/reject_surge/source_status")
+            .and_then(Value::as_str),
+        Some("ok")
+    );
+    assert!(payload
+        .pointer("/db_pressure/db_size_bytes")
+        .and_then(Value::as_i64)
+        .is_some());
+    assert!(payload
+        .pointer("/db_pressure/connection_utilization")
+        .and_then(Value::as_f64)
+        .is_some());
+
+    sqlx::query("DELETE FROM cn_relay.consumer_offsets WHERE consumer = $1")
+        .bind(&consumer_name)
+        .execute(&state.pool)
+        .await
+        .expect("cleanup consumer offset");
+    sqlx::query("DELETE FROM cn_relay.events_outbox WHERE event_id = $1")
+        .bind(&event_id)
+        .execute(&state.pool)
+        .await
+        .expect("cleanup outbox row");
+
+    relay_server.abort();
+    let _ = relay_server.await;
 }
 
 #[tokio::test]

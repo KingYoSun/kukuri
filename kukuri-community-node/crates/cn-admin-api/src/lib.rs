@@ -18,6 +18,7 @@ use utoipa::ToSchema;
 
 mod access_control;
 mod auth;
+mod dashboard;
 mod moderation;
 pub mod openapi;
 mod policies;
@@ -37,6 +38,7 @@ pub(crate) struct AppState {
     admin_config: service_config::ServiceConfigHandle,
     health_targets: Arc<HashMap<String, String>>,
     health_client: reqwest::Client,
+    dashboard_cache: Arc<tokio::sync::Mutex<dashboard::DashboardCache>>,
     node_keys: Keys,
 }
 
@@ -156,6 +158,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         admin_config,
         health_targets: Arc::clone(&health_targets),
         health_client,
+        dashboard_cache: Arc::new(tokio::sync::Mutex::new(dashboard::DashboardCache::default())),
         node_keys,
     };
 
@@ -171,6 +174,10 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         .route("/v1/admin/auth/login", post(auth::login))
         .route("/v1/admin/auth/logout", post(auth::logout))
         .route("/v1/admin/auth/me", get(auth::me))
+        .route(
+            "/v1/admin/dashboard",
+            get(dashboard::get_dashboard_snapshot),
+        )
         .route("/v1/admin/services", get(services::list_services))
         .route(
             "/v1/admin/services/:service/config",

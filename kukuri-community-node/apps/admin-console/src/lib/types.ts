@@ -40,3 +40,50 @@ export type AccessControlMembership = ArrayItem<
 >;
 export type RotateAccessControlResponse = SuccessBody<'/v1/admin/access-control/rotate', 'post'>;
 export type RevokeAccessControlResponse = SuccessBody<'/v1/admin/access-control/revoke', 'post'>;
+
+export type DashboardOutboxConsumer = {
+  consumer: string;
+  last_seq: number;
+  backlog: number;
+};
+
+export type DashboardOutboxBacklog = {
+  max_seq: number;
+  total_backlog: number;
+  max_backlog: number;
+  threshold: number;
+  alert: boolean;
+  consumers: DashboardOutboxConsumer[];
+};
+
+export type DashboardRejectSurge = {
+  source_status: string;
+  source_error: string | null;
+  current_total: number | null;
+  previous_total: number | null;
+  delta: number | null;
+  per_minute: number | null;
+  threshold_per_minute: number;
+  alert: boolean;
+};
+
+export type DashboardDbPressure = {
+  db_size_bytes: number;
+  disk_soft_limit_bytes: number;
+  disk_utilization: number;
+  active_connections: number;
+  max_connections: number;
+  connection_utilization: number;
+  lock_waiters: number;
+  connection_threshold: number;
+  lock_waiter_threshold: number;
+  alert: boolean;
+  alerts: string[];
+};
+
+export type DashboardSnapshot = {
+  collected_at: number;
+  outbox_backlog: DashboardOutboxBacklog;
+  reject_surge: DashboardRejectSurge;
+  db_pressure: DashboardDbPressure;
+};

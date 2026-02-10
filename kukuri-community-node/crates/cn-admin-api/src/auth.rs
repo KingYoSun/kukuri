@@ -218,6 +218,9 @@ mod tests {
             admin_config,
             health_targets: Arc::new(HashMap::new()),
             health_client: reqwest::Client::new(),
+            dashboard_cache: Arc::new(tokio::sync::Mutex::new(
+                crate::dashboard::DashboardCache::default(),
+            )),
             node_keys: Keys::generate(),
         }
     }
