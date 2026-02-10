@@ -1032,6 +1032,203 @@ async fn policies_contract_lifecycle_success() {
 }
 
 #[tokio::test]
+async fn legacy_admin_path_aliases_contract_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let policy_type = format!("terms-legacy-{}", &Uuid::new_v4().to_string()[..8]);
+    let locale = "ja-JP";
+    let version = "v1";
+    let policy_id = format!("{policy_type}:{version}:{locale}");
+    let target = format!("event:{}", Uuid::new_v4().simple());
+    let subject_pubkey = Keys::generate().public_key().to_hex();
+    let effective_at = chrono::Utc::now().timestamp() + 1800;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/policies",
+            get(policies::list_policies).post(policies::create_policy),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}",
+            put(policies::update_policy),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}/publish",
+            post(policies::publish_policy),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}/make-current",
+            post(policies::make_current_policy),
+        )
+        .route(
+            "/v1/policies",
+            get(policies::list_policies).post(policies::create_policy),
+        )
+        .route("/v1/policies/{policy_id}", put(policies::update_policy))
+        .route(
+            "/v1/policies/{policy_id}/publish",
+            post(policies::publish_policy),
+        )
+        .route(
+            "/v1/policies/{policy_id}/make-current",
+            post(policies::make_current_policy),
+        )
+        .route(
+            "/v1/admin/moderation/labels",
+            get(moderation::list_labels).post(moderation::create_label),
+        )
+        .route("/v1/labels", post(moderation::create_label))
+        .route(
+            "/v1/admin/trust/jobs",
+            get(trust::list_jobs).post(trust::create_job),
+        )
+        .route("/v1/attestations", post(trust::create_job))
+        .with_state(state);
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/policies",
+        json!({
+            "policy_type": policy_type,
+            "version": version,
+            "locale": locale,
+            "title": "Legacy Policy",
+            "content_md": "legacy-create"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("policy_id").and_then(Value::as_str),
+        Some(policy_id.as_str())
+    );
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/policies/{policy_id}"),
+        json!({
+            "title": "Legacy Policy Updated",
+            "content_md": "legacy-update"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("title").and_then(Value::as_str),
+        Some("Legacy Policy Updated")
+    );
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/policies/{policy_id}/publish"),
+        json!({
+            "effective_at": effective_at
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("effective_at").and_then(Value::as_i64),
+        Some(effective_at)
+    );
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/policies/{policy_id}/make-current"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("is_current").and_then(Value::as_bool),
+        Some(true)
+    );
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!("/v1/admin/policies?policy_type={policy_type}&locale={locale}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert!(rows.iter().any(|row| {
+        row.get("policy_id").and_then(Value::as_str) == Some(policy_id.as_str())
+            && row.get("is_current").and_then(Value::as_bool) == Some(true)
+    }));
+
+    let exp = chrono::Utc::now().timestamp() + 3600;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/labels",
+        json!({
+            "target": target,
+            "label": "legacy-manual",
+            "confidence": 0.7,
+            "exp": exp,
+            "policy_url": "https://example.com/policy/legacy",
+            "policy_ref": "legacy-policy-v1",
+            "topic_id": "kukuri:topic:legacy"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let label_id = payload
+        .get("label_id")
+        .and_then(Value::as_str)
+        .expect("label_id")
+        .to_string();
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!("/v1/admin/moderation/labels?target={target}&limit=10"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let labels = payload.as_array().expect("array payload");
+    assert!(labels.iter().any(|row| {
+        row.get("label_id").and_then(Value::as_str) == Some(label_id.as_str())
+            && row.get("source").and_then(Value::as_str) == Some("manual")
+    }));
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/attestations",
+        json!({
+            "job_type": "report_based",
+            "subject_pubkey": subject_pubkey
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let job_id = payload
+        .get("job_id")
+        .and_then(Value::as_str)
+        .expect("job_id")
+        .to_string();
+
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!("/v1/admin/trust/jobs?subject_pubkey={subject_pubkey}&limit=10"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = payload.as_array().expect("array payload");
+    assert!(jobs.iter().any(|row| {
+        row.get("job_id").and_then(Value::as_str) == Some(job_id.as_str())
+            && row.get("job_type").and_then(Value::as_str) == Some("report_based")
+    }));
+}
+
+#[tokio::test]
 async fn moderation_contract_success_and_shape() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;

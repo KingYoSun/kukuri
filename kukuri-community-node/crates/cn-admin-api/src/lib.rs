@@ -192,6 +192,20 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/admin/policies/:policy_id/make-current",
             post(policies::make_current_policy),
         )
+        // Backward-compatible aliases for legacy Admin API documentation.
+        .route(
+            "/v1/policies",
+            get(policies::list_policies).post(policies::create_policy),
+        )
+        .route("/v1/policies/:policy_id", put(policies::update_policy))
+        .route(
+            "/v1/policies/:policy_id/publish",
+            post(policies::publish_policy),
+        )
+        .route(
+            "/v1/policies/:policy_id/make-current",
+            post(policies::make_current_policy),
+        )
         .route(
             "/v1/admin/moderation/rules",
             get(moderation::list_rules).post(moderation::create_rule),
@@ -208,6 +222,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/admin/moderation/labels",
             get(moderation::list_labels).post(moderation::create_label),
         )
+        .route("/v1/labels", post(moderation::create_label))
         .route(
             "/v1/admin/subscription-requests",
             get(subscriptions::list_subscription_requests),
@@ -259,6 +274,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/admin/trust/jobs",
             get(trust::list_jobs).post(trust::create_job),
         )
+        .route("/v1/attestations", post(trust::create_job))
         .route("/v1/admin/trust/schedules", get(trust::list_schedules))
         .route(
             "/v1/admin/trust/schedules/:job_type",

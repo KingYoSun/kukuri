@@ -58,7 +58,8 @@ LLM の外部送信/保存/開示/予算（コスト上限）は v1 で先に方
   - `POST /v1/reports`（受理）
   - `GET /v1/labels?target=...`（配布/参照）
 - 管理者操作は Admin API 経由
-  - `POST /v1/labels`（手動発行）
+  - `POST /v1/admin/moderation/labels`（手動発行）
+  - 互換エイリアス: `POST /v1/labels`（非推奨。既存クライアント移行期間のみ）
 
 ## 重要な非機能要件（補完）
 

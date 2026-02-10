@@ -89,10 +89,11 @@
 
 ### 管理 API（例）
 
-- `POST /v1/policies`（作成）
-- `PUT /v1/policies/:policy_id`（更新）
-- `POST /v1/policies/:policy_id/publish`（公開）
-- `POST /v1/policies/:policy_id/make-current`（current 切替）
+- `POST /v1/admin/policies`（作成）
+- `PUT /v1/admin/policies/:policy_id`（更新）
+- `POST /v1/admin/policies/:policy_id/publish`（公開）
+- `POST /v1/admin/policies/:policy_id/make-current`（current 切替）
+- 互換エイリアス（非推奨）: `/v1/policies*`
 
 ## User API での同意管理（計画）
 

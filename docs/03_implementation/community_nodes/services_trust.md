@@ -54,7 +54,8 @@
   - `GET /v1/trust/report-based?subject=pubkey:...`
   - `GET /v1/trust/communication-density?subject=pubkey:...`
 - 管理者操作は Admin API 経由
-  - `POST /v1/attestations`（手動/再計算/再発行）
+  - `POST /v1/admin/trust/jobs`（手動/再計算ジョブ投入）
+  - 互換エイリアス: `POST /v1/attestations`（非推奨。既存クライアント移行期間のみ）
 
 ## 実装手順（v1）
 
