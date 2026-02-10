@@ -6,7 +6,7 @@ Nostr と iroh-gossip、BitTorrent Mainline DHT を基盤にした、完全分�
 
 ## これは何か
 
-kukuri は Tauri デスクトップアプリと周辺サービスで構成され、中央サーバーに依存しないトピック共有体験を提供します。イベント配信は iroh-gossip、ピア発見は DHT、データモデルは Nostr 互換イベントを採用しています。【F:docs/SUMMARY.md†L5-L12】【F:docs/02_architecture/system_design.md†L12-L68】
+kukuri は Tauri デスクトップアプリと周辺サービスで構成され、中央サーバーに依存しないトピック共有体験を提供します。イベント配信は iroh-gossip、ピア発見は DHT、データモデルは Nostr 互換イベントを採用しています。
 
 ## クイックスタート
 
@@ -16,8 +16,6 @@ kukuri は Tauri デスクトップアプリと周辺サービスで構成され
 - pnpm（Corepack 経由）
 - Rust toolchain
 - Docker（Docker テストランナーと community node 用）
-
-【F:docs/01_project/setup_guide.md†L18-L83】【F:docs/01_project/setup_guide.md†L168-L204】
 
 ### インストール
 
@@ -30,16 +28,12 @@ cd kukuri-tauri
 corepack pnpm install --frozen-lockfile
 ```
 
-【F:docs/01_project/setup_guide.md†L32-L47】【F:docs/01_project/setup_guide.md†L74-L118】【F:kukuri-tauri/package.json†L6-L23】
-
 ### 起動（デスクトップアプリ）
 
 ```bash
 cd kukuri-tauri
 corepack pnpm tauri dev
 ```
-
-【F:AGENTS.md†L12-L18】
 
 ### テスト / Lint（最小）
 
@@ -56,9 +50,7 @@ cd kukuri-tauri/src-tauri
 cargo test
 ```
 
-【F:scripts/test-docker.sh†L1-L81】【F:kukuri-tauri/package.json†L9-L23】【F:AGENTS.md†L15-L21】
-
-> **Windows**: `pnpm test` / `cargo test` をホストで直接実行せず、`./scripts/test-docker.ps1 <suite>` を使ってください。【F:AGENTS.md†L17-L21】
+> **Windows**: `pnpm test` / `cargo test` をホストで直接実行せず、`./scripts/test-docker.ps1 <suite>` を使ってください。
 
 ## モノレポ構成
 
@@ -72,14 +64,12 @@ cargo test
 └── docker/                 # Docker 関連
 ```
 
-【F:AGENTS.md†L1-L8】
-
 | 名称 | パス | 役割 | 起動 / テスト |
 | --- | --- | --- | --- |
-| デスクトップアプリ | `kukuri-tauri/` | Tauri + React クライアント | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test`【F:AGENTS.md†L12-L18】【F:kukuri-tauri/package.json†L6-L23】 |
-| Rust コア（Tauri） | `kukuri-tauri/src-tauri/` | Rust バックエンド + SQLite | `cd kukuri-tauri/src-tauri && cargo test`【F:AGENTS.md†L15-L21】 |
-| CLI ノード | `kukuri-cli/` | DHT ブートストラップ/リレー CLI | `cd kukuri-cli && cargo build --release` / `cargo test`【F:kukuri-cli/README.md†L23-L44】【F:AGENTS.md†L15-L17】 |
-| Community node | `kukuri-community-node/` | Community node サービス群 | `cd kukuri-community-node && docker compose up -d` / `cargo test --workspace --all-features`【F:kukuri-community-node/README.md†L5-L14】【F:.github/workflows/test.yml†L178-L205】 |
+| デスクトップアプリ | `kukuri-tauri/` | Tauri + React クライアント | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test` |
+| Rust コア（Tauri） | `kukuri-tauri/src-tauri/` | Rust バックエンド + SQLite | `cd kukuri-tauri/src-tauri && cargo test` |
+| CLI ノード | `kukuri-cli/` | DHT ブートストラップ/リレー CLI | `cd kukuri-cli && cargo build --release` / `cargo test` |
+| Community node | `kukuri-community-node/` | Community node サービス群 | `cd kukuri-community-node && docker compose up -d` / `cargo test --workspace --all-features` |
 
 ## 開発フロー
 
@@ -106,8 +96,6 @@ cargo test
 cargo build --release
 ```
 
-【F:AGENTS.md†L12-L25】
-
 ### Docker テストランナー
 
 ```bash
@@ -118,8 +106,6 @@ cargo build --release
 ./scripts/test-docker.ps1 all
 ```
 
-【F:scripts/test-docker.sh†L1-L81】【F:AGENTS.md†L17-L21】
-
 ## 設定
 
 ### 環境変数ファイル
@@ -128,16 +114,12 @@ cargo build --release
 - `./kukuri-cli/.env.example`（CLI のログ/ネットワーク設定）
 - `./kukuri-community-node/.env.example`（community node サービス設定）
 
-【F:.env.example†L1-L15】【F:kukuri-cli/.env.example†L1-L11】【F:kukuri-community-node/.env.example†L1-L46】
-
 #### Community node のセットアップ
 
 ```bash
 cd kukuri-community-node
 cp .env.example .env
 ```
-
-【F:kukuri-community-node/README.md†L5-L10】
 
 #### 手動検証用 P2P ブートストラップ（任意）
 
@@ -146,8 +128,6 @@ docker compose -f docker-compose.test.yml up -d p2p-bootstrap
 # ...検証後...
 docker compose -f docker-compose.test.yml down --remove-orphans
 ```
-
-【F:docs/01_project/setup_guide.md†L124-L141】
 
 ## アーキテクチャ（概要）
 
@@ -158,11 +138,9 @@ graph TD
   C --> D[Marketplace: Search/Suggestion Nodes]
 ```
 
-【F:docs/02_architecture/system_design.md†L12-L40】
-
 ## CI
 
-CI は `./.github/workflows/test.yml` で定義されており、Docker テスト、Linux ネイティブテスト（Rust + TS）、community node テスト、フォーマットチェック、Windows ビルドチェック、デスクトップ E2E を含みます。【F:.github/workflows/test.yml†L1-L233】
+CI は `./.github/workflows/test.yml` で定義されており、Docker テスト、Linux ネイティブテスト（Rust + TS）、community node テスト、フォーマットチェック、Windows ビルドチェック、デスクトップ E2E を含みます。
 
 ## 貢献・サポート
 
