@@ -32,6 +32,7 @@ type WsStream =
 
 static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
 const WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+const AUTH_EVENT_KIND: u16 = 22242;
 
 fn database_url() -> String {
     std::env::var("DATABASE_URL")
@@ -338,6 +339,122 @@ async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, ex
     });
 }
 
+async fn ensure_required_policies(pool: &Pool<Postgres>) {
+    for policy_type in ["terms", "privacy"] {
+        let current_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_admin.policies WHERE type = $1 AND is_current = TRUE",
+        )
+        .bind(policy_type)
+        .fetch_one(pool)
+        .await
+        .expect("count current policies");
+        if current_count > 0 {
+            continue;
+        }
+
+        let policy_id = format!("relay-it-{}-{}", policy_type, Uuid::new_v4());
+        let title = format!("Relay Integration Test {policy_type}");
+        let content_hash = format!("sha256:{policy_id}");
+        sqlx::query(
+            "INSERT INTO cn_admin.policies \
+             (policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current) \
+             VALUES ($1, $2, '1.0.0', 'ja-JP', $3, '# relay integration test policy', $4, NOW(), NOW(), TRUE)",
+        )
+        .bind(&policy_id)
+        .bind(policy_type)
+        .bind(title)
+        .bind(content_hash)
+        .execute(pool)
+        .await
+        .expect("insert current policy");
+    }
+}
+
+async fn ensure_consents(pool: &Pool<Postgres>, pubkey: &str) {
+    for _ in 0..5 {
+        let missing_policies = sqlx::query_scalar::<_, String>(
+            "SELECT p.policy_id \
+             FROM cn_admin.policies p \
+             LEFT JOIN cn_user.policy_consents c \
+               ON c.policy_id = p.policy_id AND c.accepter_pubkey = $1 \
+             WHERE p.is_current = TRUE \
+               AND p.type IN ('terms', 'privacy') \
+               AND c.policy_id IS NULL",
+        )
+        .bind(pubkey)
+        .fetch_all(pool)
+        .await
+        .expect("fetch missing policies");
+
+        if missing_policies.is_empty() {
+            return;
+        }
+
+        for policy_id in missing_policies {
+            let consent_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO cn_user.policy_consents \
+                 (consent_id, policy_id, accepter_pubkey) \
+                 VALUES ($1, $2, $3) \
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(consent_id)
+            .bind(policy_id)
+            .bind(pubkey)
+            .execute(pool)
+            .await
+            .expect("insert consent");
+        }
+
+        tokio::task::yield_now().await;
+    }
+}
+
+async fn insert_topic_subscription(pool: &Pool<Postgres>, topic_id: &str, pubkey: &str) {
+    sqlx::query(
+        "INSERT INTO cn_user.topic_subscriptions \
+         (topic_id, subscriber_pubkey, status) \
+         VALUES ($1, $2, 'active') \
+         ON CONFLICT (topic_id, subscriber_pubkey) \
+         DO UPDATE SET status = 'active', ended_at = NULL",
+    )
+    .bind(topic_id)
+    .bind(pubkey)
+    .execute(pool)
+    .await
+    .expect("insert topic subscription");
+}
+
+async fn wait_for_auth_challenge(ws: &mut WsStream, label: &str) -> String {
+    let auth = wait_for_ws_json_any(ws, WAIT_TIMEOUT, label, |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("AUTH")
+    })
+    .await;
+    let challenge = auth
+        .get(1)
+        .and_then(|v| v.as_str())
+        .expect("auth challenge");
+    assert!(!challenge.is_empty(), "AUTH challenge should not be empty");
+    challenge.to_string()
+}
+
+async fn send_auth(ws: &mut WsStream, keys: &Keys, challenge: &str) -> String {
+    let auth_event = nostr::build_signed_event(
+        keys,
+        AUTH_EVENT_KIND,
+        vec![vec!["challenge".to_string(), challenge.to_string()]],
+        String::new(),
+    )
+    .expect("build auth event");
+    let auth_event_id = auth_event.id.clone();
+    ws.send(Message::Text(
+        json!(["AUTH", auth_event]).to_string().into(),
+    ))
+    .await
+    .expect("send auth");
+    auth_event_id
+}
+
 #[tokio::test]
 async fn ingest_outbox_ws_gossip_integration() {
     let pool = PgPoolOptions::new()
@@ -523,6 +640,184 @@ async fn auth_enforce_switches_from_off_to_on_and_times_out() {
             ),
         "expected websocket termination after timeout, got: {close:?}"
     );
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn auth_required_enforces_consent_and_subscription() {
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    ensure_required_policies(&pool).await;
+
+    let topic_id = format!("kukuri:relay-authz-it-{}", Uuid::new_v4());
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let state = build_state_with_config(
+        pool.clone(),
+        json!({
+            "auth": {
+                "mode": "required",
+                "enforce_at": now - 1,
+                "grace_seconds": 600,
+                "ws_auth_timeout_seconds": 10
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            },
+            "rate_limit": {
+                "enabled": false
+            }
+        }),
+    );
+    enable_topic(&pool, &state, &topic_id).await;
+    let (addr, server_handle) = spawn_relay_server(state).await;
+
+    // AUTH succeeds structurally, but consent is missing.
+    let mut ws_missing_consent = connect_ws(addr).await;
+    let challenge_missing_consent =
+        wait_for_auth_challenge(&mut ws_missing_consent, "missing consent auth challenge").await;
+    let keys_missing_consent = Keys::generate();
+    let auth_missing_consent_id = send_auth(
+        &mut ws_missing_consent,
+        &keys_missing_consent,
+        &challenge_missing_consent,
+    )
+    .await;
+    let auth_missing_consent = wait_for_ws_json_any(
+        &mut ws_missing_consent,
+        WAIT_TIMEOUT,
+        "missing consent auth response",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(auth_missing_consent_id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(
+        auth_missing_consent.get(2).and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        auth_missing_consent.get(3).and_then(|v| v.as_str()),
+        Some("consent-required")
+    );
+
+    // Consent accepted, but no active topic subscription.
+    let mut ws_missing_subscription = connect_ws(addr).await;
+    let challenge_missing_subscription = wait_for_auth_challenge(
+        &mut ws_missing_subscription,
+        "missing subscription auth challenge",
+    )
+    .await;
+    let keys_missing_subscription = Keys::generate();
+    let pubkey_missing_subscription = keys_missing_subscription.public_key().to_string();
+    ensure_consents(&pool, &pubkey_missing_subscription).await;
+    let auth_missing_subscription_id = send_auth(
+        &mut ws_missing_subscription,
+        &keys_missing_subscription,
+        &challenge_missing_subscription,
+    )
+    .await;
+    let auth_missing_subscription = wait_for_ws_json_any(
+        &mut ws_missing_subscription,
+        WAIT_TIMEOUT,
+        "missing subscription auth response",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str())
+                    == Some(auth_missing_subscription_id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(
+        auth_missing_subscription.get(2).and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let event_missing_subscription = nostr::build_signed_event(
+        &keys_missing_subscription,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "missing-subscription".to_string(),
+    )
+    .expect("build event without subscription");
+    ws_missing_subscription
+        .send(Message::Text(
+            json!(["EVENT", event_missing_subscription.clone()])
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("send event without subscription");
+    let event_rejected = wait_for_ws_json(
+        &mut ws_missing_subscription,
+        WAIT_TIMEOUT,
+        "missing subscription reject",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str())
+                    == Some(event_missing_subscription.id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(event_rejected.get(2).and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        event_rejected.get(3).and_then(|v| v.as_str()),
+        Some("restricted: subscription required")
+    );
+
+    // Consent accepted + active topic subscription.
+    let mut ws_subscribed = connect_ws(addr).await;
+    let challenge_subscribed =
+        wait_for_auth_challenge(&mut ws_subscribed, "subscribed auth challenge").await;
+    let keys_subscribed = Keys::generate();
+    let pubkey_subscribed = keys_subscribed.public_key().to_string();
+    ensure_consents(&pool, &pubkey_subscribed).await;
+    insert_topic_subscription(&pool, &topic_id, &pubkey_subscribed).await;
+    let auth_subscribed_id =
+        send_auth(&mut ws_subscribed, &keys_subscribed, &challenge_subscribed).await;
+    let auth_subscribed = wait_for_ws_json_any(
+        &mut ws_subscribed,
+        WAIT_TIMEOUT,
+        "subscribed auth response",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(auth_subscribed_id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(auth_subscribed.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let event_subscribed = nostr::build_signed_event(
+        &keys_subscribed,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "subscribed".to_string(),
+    )
+    .expect("build event with subscription");
+    ws_subscribed
+        .send(Message::Text(
+            json!(["EVENT", event_subscribed.clone()])
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("send event with subscription");
+    let event_accepted = wait_for_ws_json(
+        &mut ws_subscribed,
+        WAIT_TIMEOUT,
+        "subscribed event accepted",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(event_subscribed.id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(event_accepted.get(2).and_then(|v| v.as_bool()), Some(true));
 
     server_handle.abort();
 }
