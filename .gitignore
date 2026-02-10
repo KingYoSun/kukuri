@@ -53,6 +53,7 @@ release/
 Cargo.lock
 !kukuri-tauri/src-tauri/Cargo.lock
 !kukuri-cli/Cargo.lock
+!kukuri-community-node/Cargo.lock
 
 # SQLite
 *.db
