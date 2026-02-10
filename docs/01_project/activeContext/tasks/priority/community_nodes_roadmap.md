@@ -125,6 +125,13 @@
 - [x] `cn-user-api`: Billing/quota の 402 契約テストを追加する（search/trending/report/topic-subscription の上限超過、`QUOTA_EXCEEDED` details/reset_at、同一 `request_id` 再送時の冪等挙動）。
 - [x] `cn-index` / `cn-moderation` / `cn-trust`: `/healthz` `/metrics` 契約テストを追加し、依存障害時の `503` 遷移と Prometheus content-type の互換を固定する。
 
+## 未実装/不足事項（2026年02月10日 再監査追記）
+
+- [ ] `cn-relay`: WS バックフィルの初期取得順序を `created_at` 降順（同値は `event.id` 辞書順）へ修正し、`limit` 適用時の並び順と `EOSE` 遷移を統合テストで固定する（`services_relay.md` の NIP-01 整合要件に合わせる）。
+- [ ] `cn-user-api`: bootstrap 認証必須時の `401 + WWW-Authenticate` 契約を実装し、`/v1/bootstrap/nodes` `/v1/bootstrap/topics/{topic_id}/services` の契約テストでヘッダ互換を検証する。
+- [ ] Runbook 必須メトリクス（outbox consumer別エラー率/処理レイテンシ/batch size）を `cn-index` / `cn-moderation` / `cn-trust` に追加し、`/metrics` 契約テストでメトリクス名とラベル互換を固定する。
+- [ ] `admin_console.md` の未充足要件（Moderation のルールテスト実行、Trust のパラメータ/対象検索、Access Control の invite.capability 運用）について、実装するか要件更新でスコープを縮退するかを確定し、選択した方針に対する API/UI テストを追加する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
