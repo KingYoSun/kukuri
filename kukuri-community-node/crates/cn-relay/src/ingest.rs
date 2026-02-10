@@ -22,6 +22,7 @@ pub enum IngestSource {
 pub struct IngestContext {
     pub auth_pubkey: Option<String>,
     pub source_topic: Option<String>,
+    #[allow(dead_code)]
     pub peer_id: Option<String>,
 }
 
@@ -350,15 +351,15 @@ pub async fn ingest_event(
 }
 
 fn is_replaceable_kind(kind: u32) -> bool {
-    kind == 0 || kind == 3 || (kind >= 10000 && kind < 20000)
+    kind == 0 || kind == 3 || (10000..20000).contains(&kind)
 }
 
 fn is_addressable_kind(kind: u32) -> bool {
-    kind >= 30000 && kind < 40000
+    (30000..40000).contains(&kind)
 }
 
 fn is_ephemeral_kind(kind: u32) -> bool {
-    kind >= 20000 && kind < 30000
+    (20000..30000).contains(&kind)
 }
 
 async fn insert_dedupe(tx: &mut Transaction<'_, Postgres>, event_id: &str) -> Result<bool> {
@@ -606,6 +607,7 @@ async fn insert_delete_outbox(
     Ok(seqs)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn insert_outbox(
     tx: &mut Transaction<'_, Postgres>,
     op: &str,

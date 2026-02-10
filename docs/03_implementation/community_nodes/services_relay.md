@@ -13,7 +13,7 @@
 
 ## 取込プロトコル（確定）
 
-- relay の取込（P2P）は **iroh-gossip**（現 `kukuri-cli` 準拠）とする
+- relay の取込（P2P）は **iroh-gossip**（旧CLI互換）とする
   - node-level subscription（購読 topic）に応じて、iroh-gossip の topic を subscribe/unsubscribe する
   - 受信したメッセージは Nostr event（JSON）として扱い、検証・永続化・下流通知へ流す
 - relay の配信（P2P）も **iroh-gossip へ再配信**する（relayの橋渡し）
@@ -103,3 +103,4 @@
   - IP/鍵（AUTH後は pubkey）/peer 単位の rate limit、接続数上限、巨大イベント拒否、購読フィルタの上限（v1は in-mem。設定の正は cn_admin。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
   - `#t` 無し REQ の拒否、フィルタ数/値数/`limit`/時間範囲（`since/until`）の上限、バックフィル要求頻度の制限
 - 運用要件（監視/メトリクス/ログ、バックアップ/リストア、マイグレーション、違法/通報対応 Runbook）: `docs/03_implementation/community_nodes/ops_runbook.md`
+

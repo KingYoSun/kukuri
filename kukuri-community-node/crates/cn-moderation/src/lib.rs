@@ -81,17 +81,17 @@ struct ModerationEvent {
 
 #[derive(Debug, Clone, Copy)]
 enum LlmSkipReason {
-    MaxRequestsPerDay,
-    MaxCostPerDay,
-    MaxConcurrency,
+    RequestsPerDay,
+    CostPerDay,
+    Concurrency,
 }
 
 impl LlmSkipReason {
     fn as_str(self) -> &'static str {
         match self {
-            LlmSkipReason::MaxRequestsPerDay => "max_requests_per_day",
-            LlmSkipReason::MaxCostPerDay => "max_cost_per_day",
-            LlmSkipReason::MaxConcurrency => "max_concurrency",
+            LlmSkipReason::RequestsPerDay => "max_requests_per_day",
+            LlmSkipReason::CostPerDay => "max_cost_per_day",
+            LlmSkipReason::Concurrency => "max_concurrency",
         }
     }
 }
@@ -265,17 +265,15 @@ async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
             .fetch_one(&state.pool)
             .await
     {
-        if let Ok(last_seq) = sqlx::query_scalar::<_, i64>(
+        if let Ok(Some(last_seq)) = sqlx::query_scalar::<_, i64>(
             "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
         )
         .bind(CONSUMER_NAME)
         .fetch_optional(&state.pool)
         .await
         {
-            if let Some(last_seq) = last_seq {
-                let backlog = max_seq.saturating_sub(last_seq);
-                metrics::set_outbox_backlog(SERVICE_NAME, CONSUMER_NAME, backlog);
-            }
+            let backlog = max_seq.saturating_sub(last_seq);
+            metrics::set_outbox_backlog(SERVICE_NAME, CONSUMER_NAME, backlog);
         }
     }
 
@@ -700,7 +698,6 @@ async fn process_job(
                         state,
                         job,
                         &event.raw.id,
-                        provider.source(),
                         reason,
                         &usage,
                         estimated_cost,
@@ -974,7 +971,7 @@ async fn acquire_llm_execution_gate(
     if runtime.max_requests_per_day > 0 && usage.requests_today >= runtime.max_requests_per_day {
         tx.rollback().await?;
         return Ok(LlmExecutionGate::Skipped {
-            reason: LlmSkipReason::MaxRequestsPerDay,
+            reason: LlmSkipReason::RequestsPerDay,
             usage,
             estimated_cost,
         });
@@ -986,7 +983,7 @@ async fn acquire_llm_execution_gate(
     {
         tx.rollback().await?;
         return Ok(LlmExecutionGate::Skipped {
-            reason: LlmSkipReason::MaxCostPerDay,
+            reason: LlmSkipReason::CostPerDay,
             usage,
             estimated_cost,
         });
@@ -996,7 +993,7 @@ async fn acquire_llm_execution_gate(
     if usage.inflight_requests >= max_concurrency {
         tx.rollback().await?;
         return Ok(LlmExecutionGate::Skipped {
-            reason: LlmSkipReason::MaxConcurrency,
+            reason: LlmSkipReason::Concurrency,
             usage,
             estimated_cost,
         });
@@ -1044,7 +1041,6 @@ async fn log_llm_skip_audit(
     state: &AppState,
     job: &ModerationJob,
     event_id: &str,
-    provider: &str,
     reason: LlmSkipReason,
     usage: &LlmUsageSnapshot,
     estimated_cost: f64,
@@ -1059,7 +1055,7 @@ async fn log_llm_skip_audit(
             "job_id": job.job_id,
             "topic_id": job.topic_id,
             "event_id": event_id,
-            "provider": provider,
+            "provider": runtime.provider,
             "skip_reason": reason.as_str(),
             "estimated_cost": estimated_cost,
             "usage": {

@@ -224,7 +224,7 @@ pub async fn update_schedule(
     let row = sqlx::query(
         "INSERT INTO cn_trust.job_schedules          (job_type, interval_seconds, next_run_at, is_enabled)          VALUES ($1, $2, NOW() + ($2 * INTERVAL '1 second'), $3)          ON CONFLICT (job_type) DO UPDATE SET interval_seconds = EXCLUDED.interval_seconds,              is_enabled = EXCLUDED.is_enabled,              next_run_at = LEAST(cn_trust.job_schedules.next_run_at, NOW() + (EXCLUDED.interval_seconds * INTERVAL '1 second')),              updated_at = NOW()          RETURNING job_type, interval_seconds, next_run_at, is_enabled, updated_at",
     )
-    .bind(&job_type)
+    .bind(job_type)
     .bind(payload.interval_seconds)
     .bind(payload.is_enabled)
     .fetch_one(&state.pool)

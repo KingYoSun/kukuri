@@ -337,6 +337,7 @@ pub(crate) async fn enforce_rate_limit(state: &AppState, key: &str, limit: u64) 
     Ok(())
 }
 
+#[allow(clippy::result_large_err)]
 fn normalize_pubkey(pubkey: &str) -> ApiResult<String> {
     let parsed = nostr_sdk::prelude::PublicKey::parse(pubkey)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", "invalid pubkey"))?;

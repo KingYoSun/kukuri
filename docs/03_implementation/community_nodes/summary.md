@@ -12,12 +12,12 @@
   - `kukuri-community-node/apps/admin-console/src/components/ui/` の共通 UI（shadcn/ui 構成）を利用する
 - 管理画面で `bootstrap` / `relay` / `index` / `moderation` / `trust` を一元管理する（ただし各サービスは分離可能）
 - relay は取込・配信・永続化の必須コンポーネントとして扱い、取込経路を一本化する
-  - 取込/再配信のP2Pプロトコルは iroh-gossip（現 `kukuri-cli` 準拠）とする
+  - 取込/再配信のP2Pプロトコルは iroh-gossip（旧CLI互換）とする
 - relay と bootstrap はデフォルト認証OFFで起動し、管理画面から後から認証必須化できる
 - relay/bootstrap は認証OFFの間は同意（ToS/Privacy）も不要として扱い、後から認証必須化した場合に同意チェックを有効化できる
 - 起動は Docker Compose（profiles でサービス出し分け）
 - RDB は単一の Postgres サービスに集約する
-- `./kukuri-cli` は `bootstrap` / `relay` として `./kukuri-community-node` に統合する
+- 旧CLI は `bootstrap` / `relay` として `./kukuri-community-node` に統合する
 - 外部公開する HTTP インターフェイスは User API に集約する（認証/課金/購読/レート制限の統一）
 - Access Control（invite/keys）は P2P-only。User API に `/v1/invite/redeem` `/v1/keys/envelopes` は提供しない。
 - 利用規約/プライバシーポリシーへの同意を必須化し、User API で同意状態を管理する
@@ -54,7 +54,7 @@
 - `docs/03_implementation/community_nodes/services_index.md`: index サービス（Meilisearch）実装計画
 - `docs/03_implementation/community_nodes/services_moderation.md`: moderation サービス（ルール + LLM）実装計画
 - `docs/03_implementation/community_nodes/services_trust.md`: trust サービス（Apache AGE）実装計画
-- `docs/03_implementation/community_nodes/kukuri_cli_migration.md`: `kukuri-cli` 統合方針（bootstrap/relay）
+- `docs/03_implementation/community_nodes/kukuri_cli_migration.md`: 旧CLI統合方針（bootstrap/relay）
 
 ## 全体マイルストーン（推奨）
 
@@ -65,7 +65,7 @@
 2. **M1: リポジトリ雛形 + Compose**
    - `postgres(+age)` / `relay` / `user-api` / `admin-api` / `admin-console` を `docker compose up` で起動
 3. **M2: bootstrap/relay 統合**
-   - `kukuri-cli` を `kukuri-community-node` に統合し、Compose サービス化（profile 対応）
+   - 旧CLIを `kukuri-community-node` に統合し、Compose サービス化（profile 対応）
 4. **M3: Index v1（Meilisearch）**
    - relay取込レコード → 正規化 → Meilisearch 反映 → 検索 API
 5. **M4: Moderation v1/v2**
@@ -91,7 +91,7 @@ v2/後回し事項（RBAC、決済連携、NIP-98互換、bytes課金、分散ra
 実装に着手する前に、少なくとも以下を確定する。
 
 - [x] relay の取込/配信の役割分担（iroh-gossip + WS）と topic→購読フィルタの写像、バックフィル/再接続時の整合性を v1 方針として決定
-- [x] relay の取込プロトコルは iroh-gossip（現 `kukuri-cli` 準拠）に確定
+- [x] relay の取込プロトコルは iroh-gossip（旧CLI互換）に確定
 - [x] topic→iroh-gossip topic の写像、バックフィル/再接続時の整合性（EOSE 等の扱い）を v1 方針として決定（`docs/03_implementation/community_nodes/services_relay.md` / `docs/03_implementation/community_nodes/topic_subscription_design.md`）
 - [x] topic→iroh-gossip topic の写像の安定性（正規化/環境分離/バージョニング/移行）を v1 方針として決定
 - [x] バックフィルの提供元と保証範囲（relay DB を正とし、P2P 側の履歴同期は v2 で検討）を決定

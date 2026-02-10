@@ -101,9 +101,9 @@ pub fn auth_config_from_json(value: &Value) -> AuthConfig {
     let mode = auth
         .and_then(|auth| auth.get("mode"))
         .and_then(|v| v.as_str())
-        .and_then(|v| match v {
-            "required" => Some(AuthMode::Required),
-            _ => Some(AuthMode::Off),
+        .map(|v| match v {
+            "required" => AuthMode::Required,
+            _ => AuthMode::Off,
         })
         .unwrap_or(AuthMode::Off);
 

@@ -3,7 +3,7 @@ services:
     env_file:
       - .env
     build:
-      context: ./kukuri-cli
+      context: ./kukuri-community-node
       dockerfile: Dockerfile
     container_name: kukuri-bootstrap-dev
     environment:
@@ -15,13 +15,13 @@ services:
     volumes:
       - bootstrap-data:/home/kukuri/data
     restart: unless-stopped
-    command: ["bootstrap"]
+    command: ["p2p", "bootstrap"]
 
   kukuri-relay:
     env_file:
       - .env
     build:
-      context: ./kukuri-cli
+      context: ./kukuri-community-node
       dockerfile: Dockerfile
     container_name: kukuri-relay-dev
     depends_on:
@@ -36,14 +36,14 @@ services:
     volumes:
       - relay-data:/home/kukuri/data
     restart: unless-stopped
-    command: ["relay"]
+    command: ["p2p", "relay"]
 
   # Relay using n0 bootstrap discovery (no local bootstrap dependency)
   kukuri-relay-n0:
     env_file:
       - .env
     build:
-      context: ./kukuri-cli
+      context: ./kukuri-community-node
       dockerfile: Dockerfile
     container_name: kukuri-relay-n0
     environment:
@@ -56,7 +56,7 @@ services:
     volumes:
       - relay-n0-data:/home/kukuri/data
     restart: unless-stopped
-    command: ["relay"]
+    command: ["p2p", "relay"]
 
 volumes:
   bootstrap-data:

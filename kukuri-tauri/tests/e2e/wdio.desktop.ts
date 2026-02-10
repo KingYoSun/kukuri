@@ -11,8 +11,10 @@ import { startCommunityNodeMock, stopCommunityNodeMock } from './helpers/communi
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
 const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
-const CLI_BOOTSTRAP_PATH =
-  process.env.KUKURI_CLI_BOOTSTRAP_PATH ?? join(OUTPUT_DIR, 'cli_bootstrap_nodes.json');
+const P2P_BOOTSTRAP_PATH =
+  process.env.KUKURI_P2P_BOOTSTRAP_PATH ??
+  process.env.KUKURI_CLI_BOOTSTRAP_PATH ??
+  join(OUTPUT_DIR, 'p2p_bootstrap_nodes.json');
 
 let shouldStopCommunityNodeMock = false;
 
@@ -20,12 +22,13 @@ process.env.KUKURI_BOOTSTRAP_PEERS = '';
 process.env.WDIO_WORKERS ??= '1';
 process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
 process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
-process.env.KUKURI_CLI_BOOTSTRAP_PATH = CLI_BOOTSTRAP_PATH;
+process.env.KUKURI_P2P_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
+process.env.KUKURI_CLI_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
 
 const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
 console.info(`[wdio.desktop] driver port resolved to ${process.env.TAURI_DRIVER_PORT}`);
-console.info(`[wdio.desktop] cli bootstrap path resolved to ${CLI_BOOTSTRAP_PATH}`);
+console.info(`[wdio.desktop] p2p bootstrap path resolved to ${P2P_BOOTSTRAP_PATH}`);
 
 function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
@@ -106,9 +109,9 @@ function seedCliBootstrapFixture(): void {
     nodes: ['node1@127.0.0.1:11223', 'node2@127.0.0.1:11224'],
     updated_at_ms: Date.now(),
   };
-  mkdirSync(dirname(CLI_BOOTSTRAP_PATH), { recursive: true });
-  writeFileSync(CLI_BOOTSTRAP_PATH, JSON.stringify(payload, null, 2), 'utf-8');
-  console.info(`[wdio.desktop] wrote CLI bootstrap fixture to ${CLI_BOOTSTRAP_PATH}`);
+  mkdirSync(dirname(P2P_BOOTSTRAP_PATH), { recursive: true });
+  writeFileSync(P2P_BOOTSTRAP_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+  console.info(`[wdio.desktop] wrote CLI bootstrap fixture to ${P2P_BOOTSTRAP_PATH}`);
 }
 
 export const config: Options.Testrunner = {

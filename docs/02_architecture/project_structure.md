@@ -2,7 +2,7 @@
 
 ## ドキュメント情報
 - **作成日**: 2025年07月26日
-- **最終更新**: 2026年02月02日
+- **最終更新**: 2026年02月10日
 - **目的**: kukuriプロジェクトのディレクトリ構造とファイル構成の説明
 
 ## プロジェクト全体構成
@@ -10,7 +10,6 @@
 ```
 kukuri/
 ├── kukuri-tauri/             # デスクトップアプリ（React + TypeScript + Tauri）
-├── kukuri-cli/               # DHTブートストラップ/リレー用CLI
 ├── kukuri-community-node/    # Community Node（サーバー/運用コンポーネント）
 ├── docs/                     # プロジェクトドキュメント
 ├── scripts/                  # セットアップ・テスト・起動用スクリプト
@@ -92,13 +91,12 @@ src-tauri/src/
 └── state.rs            # 状態初期化
 ```
 
-## kukuri-cli ディレクトリ構造（概要）
+## cn-cli（kukuri-community-node 内）ディレクトリ構造（概要）
 
 ```
-kukuri-cli/
+kukuri-community-node/crates/cn-cli/
 ├── Cargo.toml
-├── src/                # CLI本体
-└── README.md
+└── src/                # bootstrap/relay/p2p 管理CLI
 ```
 
 ## kukuri-community-node ディレクトリ構造（概要）

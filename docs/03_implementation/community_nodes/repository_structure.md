@@ -8,7 +8,7 @@
 
 - サービスごとに分離・単独起動できる（Docker Compose profiles で切替）
 - 共通の Postgres を使い、設定・監査・ジョブ状態を一元管理できる
-- `kukuri-cli` を統合し、`bootstrap` / `relay` をサービスとして起動可能にする
+- 旧CLIを統合し、`bootstrap` / `relay` をサービスとして起動可能にする
 - 管理画面（Web）と管理 API（control plane）を持つ
 - 外部公開する HTTP API は User API に集約し、認証/課金/購読/レート制限を統一できる
 
@@ -32,7 +32,7 @@ kukuri-community-node/
     cn-index/                      # index（daemon: Meilisearch同期）
     cn-moderation/                 # moderation（daemon）
     cn-trust/                      # trust（daemon: AGE計算）
-    cn-cli/                        # 管理CLI（既存kukuri-cliの統合先）
+    cn-cli/                        # 管理CLI（旧CLIの統合先）
   migrations/                      # Postgres用（sqlx）
   docker/
     postgres-age/                  # Apache AGE入りPostgresイメージ（Dockerfile）
@@ -57,7 +57,7 @@ kukuri-community-node/
 - `admin-console` は `Admin API` の OpenAPI（`utoipa` で生成）に沿って API クライアントを生成/実装する
   - 実装スタックの決定: `docs/03_implementation/community_nodes/api_server_stack.md`
 
-## `kukuri-cli` 統合（要件）
+## `cn-cli` 統合（要件）
 
 詳細は `docs/03_implementation/community_nodes/kukuri_cli_migration.md` を参照。
 

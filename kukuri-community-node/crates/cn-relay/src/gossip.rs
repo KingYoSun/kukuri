@@ -58,7 +58,7 @@ async fn build_endpoint(config: &RelayConfig) -> Result<Endpoint> {
     Ok(endpoint)
 }
 
-fn apply_bind(mut builder: iroh::endpoint::Builder, addr: SocketAddr) -> iroh::endpoint::Builder {
+fn apply_bind(builder: iroh::endpoint::Builder, addr: SocketAddr) -> iroh::endpoint::Builder {
     match addr {
         SocketAddr::V4(v4) => builder.bind_addr_v4(v4),
         SocketAddr::V6(v6) => builder.bind_addr_v6(v6),
@@ -87,7 +87,7 @@ async fn sync_topics(
     for topic_id in to_add {
         let sender_handle = {
             let topic_bytes = topic::topic_id_to_gossip_bytes(&topic_id)?;
-            let mut topic = gossip.subscribe(TopicId::from(topic_bytes), vec![]).await?;
+            let topic = gossip.subscribe(TopicId::from(topic_bytes), vec![]).await?;
             let (sender, mut receiver) = topic.split();
             let ingest_state = state.clone();
             let topic_clone = topic_id.clone();
@@ -122,7 +122,11 @@ async fn sync_topics(
                                         source_topic: Some(topic_clone.clone()),
                                         peer_id: Some(message.delivered_from.to_string()),
                                     };
-                                    if let Ok(ingest) = ingest_event(
+                                    if let Ok(crate::ingest::IngestOutcome::Accepted {
+                                        event,
+                                        duplicate,
+                                        ..
+                                    }) = ingest_event(
                                         &ingest_state,
                                         raw,
                                         IngestSource::Gossip,
@@ -130,15 +134,8 @@ async fn sync_topics(
                                     )
                                     .await
                                     {
-                                        if let crate::ingest::IngestOutcome::Accepted {
-                                            event,
-                                            duplicate,
-                                            ..
-                                        } = ingest
-                                        {
-                                            if !duplicate {
-                                                let _ = ingest_state.realtime_tx.send(event);
-                                            }
+                                        if !duplicate {
+                                            let _ = ingest_state.realtime_tx.send(event);
                                         }
                                     }
                                 }

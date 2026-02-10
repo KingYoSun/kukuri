@@ -48,7 +48,7 @@ pub async fn bootstrap_admin(
     )
     .bind("system")
     .bind("admin.bootstrap")
-    .bind(format!("admin_user:{}", username))
+    .bind(format!("admin_user:{username}"))
     .bind(Json(diff))
     .bind("bootstrap")
     .execute(&mut *tx)
@@ -89,7 +89,7 @@ pub async fn reset_admin_password(
     )
     .bind("system")
     .bind("admin.reset_password")
-    .bind(format!("admin_user:{}", username))
+    .bind(format!("admin_user:{username}"))
     .bind(Json(diff))
     .bind("reset")
     .execute(pool)
@@ -265,7 +265,7 @@ pub fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|err| anyhow!("argon2 hash failed: {}", err))?
+        .map_err(|err| anyhow!("argon2 hash failed: {err}"))?
         .to_string();
     Ok(hash)
 }

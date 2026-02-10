@@ -67,11 +67,6 @@ impl ApiError {
             details: None,
         }
     }
-
-    fn with_details(mut self, details: Value) -> Self {
-        self.details = Some(details);
-        self
-    }
 }
 
 impl From<sqlx::Error> for ApiError {

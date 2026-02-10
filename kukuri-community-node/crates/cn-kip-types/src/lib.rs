@@ -77,8 +77,9 @@ pub fn is_kip_kind(kind: u32) -> bool {
 }
 
 pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<KipKind> {
+    let raw_kind = raw.kind;
     let kind =
-        KipKind::from_kind(raw.kind).ok_or_else(|| anyhow!("unsupported kind: {}", raw.kind))?;
+        KipKind::from_kind(raw_kind).ok_or_else(|| anyhow!("unsupported kind: {raw_kind}"))?;
 
     if options.verify_signature {
         cn_core::nostr::verify_event(raw)?;
@@ -87,14 +88,14 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
     if options.require_k_tag {
         let value = require_tag_value(raw, "k")?;
         if value != KIP_NAMESPACE {
-            return Err(anyhow!("invalid k tag: {}", value));
+            return Err(anyhow!("invalid k tag: {value}"));
         }
     }
 
     if options.require_ver_tag {
         let value = require_tag_value(raw, "ver")?;
         if value != KIP_VERSION {
-            return Err(anyhow!("invalid ver tag: {}", value));
+            return Err(anyhow!("invalid ver tag: {value}"));
         }
     }
 
@@ -184,7 +185,7 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
 
 fn require_tag_value(raw: &RawEvent, name: &str) -> Result<String> {
     raw.first_tag_value(name)
-        .ok_or_else(|| anyhow!("missing {} tag", name))
+        .ok_or_else(|| anyhow!("missing {name} tag"))
 }
 
 fn require_tag(raw: &RawEvent, name: &str) -> Result<Vec<String>> {
@@ -192,7 +193,7 @@ fn require_tag(raw: &RawEvent, name: &str) -> Result<Vec<String>> {
         .iter()
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(name))
         .cloned()
-        .ok_or_else(|| anyhow!("missing {} tag", name))
+        .ok_or_else(|| anyhow!("missing {name} tag"))
 }
 
 fn has_tag(raw: &RawEvent, name: &str) -> bool {
@@ -225,7 +226,7 @@ fn validate_schema(raw: &RawEvent, expected: &str) -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("missing schema field"))?;
     if schema != expected {
-        return Err(anyhow!("invalid schema: {}", schema));
+        return Err(anyhow!("invalid schema: {schema}"));
     }
     Ok(())
 }

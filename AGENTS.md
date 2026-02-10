@@ -4,7 +4,7 @@
 - `kukuri-tauri/`: デスクトップアプリ（React + TypeScript + Tauri）
   - `src/` UI・hooks・stores・`__tests__/`
   - `src-tauri/` Rust・`migrations/`・`tauri.conf.json`・`.sqlx/`
-- `kukuri-cli/`: DHTブートストラップ/リレー用Rust CLI
+- `kukuri-community-node/`: Community Node サービス群（`cn` CLI を含む）
 - `docs/`: 設計・実装ガイド、API JSONは`docs/apis/`
 - `scripts/`: セットアップ・テスト・起動用スクリプト
 
@@ -13,7 +13,7 @@
 - アプリビルド: `pnpm tauri build`（Windowsクロス: `--runner cargo-xwin`）
 - TypeScript: `pnpm test` / `pnpm test:coverage` / `pnpm lint` / `pnpm format`
 - Rust(kukuri-tauri): `cd kukuri-tauri/src-tauri && cargo test && cargo clippy -D warnings`
-- Rust(kukuri-cli): `cd kukuri-cli && cargo test && cargo build --release`
+- Rust(kukuri-community-node): `cd kukuri-community-node && cargo test --workspace --all-features && cargo build --release -p cn-cli`
 - Dockerテスト: `docker compose -f docker-compose.test.yml up --build test-runner`
 - Windows必須: `./scripts/test-docker.ps1 all|rust|ts|lint|integration|e2e`（PowerShell から Docker 内で実行する。ホスト上で `cargo test` / `pnpm test` を直接叩くのは厳禁）
 
@@ -28,7 +28,7 @@
 ## テスト指針
 - 単体・結合: Vitest + Testing Library（`*.test.ts(x)` または `__tests__/`）
 - 統合: `kukuri-tauri/src/test/integration` は `pnpm test:integration`
-- Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）
+- Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-community-node`）
 - 変更時は必ずテスト追加/更新とカバレッジ確認
 - Windows 環境は `./scripts/test-docker.ps1 <suite>` を必ず使用する。`STATUS_ENTRYPOINT_NOT_FOUND` / DLL ロードエラー回避のため、`pnpm test` や `cargo test` をホストで直接実行することは禁止（Docker 経由のみ許可）。
 
@@ -51,7 +51,7 @@
 - ただし `./docs` 配下のみの更新ではテスト実行・`gh act` 実行は不要（テスト影響なし）。
 - ファイル編集時は既存ファイルのエンコーディング（UTF-8/LF）を必ず維持し、スクリプトでのバイト列操作でも UTF-8 を明示して読み書きすること（Shift_JIS など別エンコーディングでの保存禁止）。
 - 検証必須: テスト・型・リント修正タスクは、実際にコマンドを実行しエラーが出ないことを確認してから完了とする。
-- Rustテスト実行方針: Rust（`kukuri-tauri/src-tauri` と `kukuri-cli`）の `cargo test` は所要時間が長くても必ず実行し、完了まで待つ。必要に応じてタイムアウトを延長してでもテスト結果を確認する。
+- Rustテスト実行方針: Rust（`kukuri-tauri/src-tauri` と `kukuri-community-node`）の `cargo test` は所要時間が長くても必ず実行し、完了まで待つ。必要に応じてタイムアウトを延長してでもテスト結果を確認する。
 - 日付記法: ドキュメント内の日付は `date "+%Y年%m月%d日"` の出力を使用。
 
 ## タスク管理ルール

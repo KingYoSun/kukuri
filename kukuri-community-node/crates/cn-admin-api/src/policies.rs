@@ -197,8 +197,7 @@ pub async fn publish_policy(
     let admin = require_admin(&state, &jar).await?;
     let effective_at = payload
         .effective_at
-        .map(|ts| chrono::Utc.timestamp_opt(ts, 0).single())
-        .flatten()
+        .and_then(|ts| chrono::Utc.timestamp_opt(ts, 0).single())
         .unwrap_or_else(chrono::Utc::now);
 
     let result = sqlx::query(

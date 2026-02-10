@@ -516,6 +516,7 @@ pub async fn trust_communication_density(
     })))
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_trust_subject(subject: &str) -> ApiResult<String> {
     let subject = subject.trim();
     let pubkey = subject.strip_prefix("pubkey:").ok_or_else(|| {

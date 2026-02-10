@@ -322,6 +322,7 @@ async fn load_topic_services(
     Ok(services)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn upsert_bootstrap_event(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     event: &nostr::RawEvent,

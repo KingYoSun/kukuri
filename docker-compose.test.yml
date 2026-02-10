@@ -2,7 +2,7 @@ services:
   # P2P統合テスト用 ブートストラップノード
   p2p-bootstrap:
     build:
-      context: ./kukuri-cli
+      context: ./kukuri-community-node
       dockerfile: Dockerfile
     container_name: kukuri-p2p-bootstrap
     network_mode: host
@@ -11,12 +11,12 @@ services:
       BIND_ADDRESS: 0.0.0.0:11233
       KUKURI_SECRET_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
     healthcheck:
-      test: ["CMD", "pidof", "kukuri-cli"]
+      test: ["CMD-SHELL", "kill -0 1"]
       interval: 5s
       timeout: 3s
       start_period: 5s
       retries: 10
-    command: ["bootstrap"]
+    command: ["p2p", "bootstrap"]
 
   # Community node user API (E2E)
   community-node-postgres:

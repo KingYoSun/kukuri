@@ -153,7 +153,7 @@ docker compose -f docker-compose.test.yml down --rmi local --volumes
 
 ### docker-compose.test.yml
 以下のサービスを定義：
-- `p2p-bootstrap`: iroh DHT ブートストラップノード（`kukuri-cli` を使用）
+- `p2p-bootstrap`: iroh DHT ブートストラップノード（`kukuri-community-node` の `cn p2p bootstrap` を使用）
 - `test-runner`: 既定では `run-smoke-tests.sh` で Rust P2P + TypeScript 統合スモークを実行。フルスイートは `/app/run-tests.sh` を明示的に指定して実行する。
 - `rust-test`: Rustテストのみ実行
 - `ts-test`: TypeScriptテストのみ実行

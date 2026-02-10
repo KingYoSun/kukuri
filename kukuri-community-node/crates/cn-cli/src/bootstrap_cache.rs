@@ -4,7 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const DEFAULT_RELATIVE_PATH: &str = "kukuri/cli_bootstrap_nodes.json";
+const P2P_BOOTSTRAP_PATH_ENV: &str = "KUKURI_P2P_BOOTSTRAP_PATH";
+const LEGACY_CLI_BOOTSTRAP_PATH_ENV: &str = "KUKURI_CLI_BOOTSTRAP_PATH";
+const DEFAULT_RELATIVE_PATH: &str = "kukuri/p2p_bootstrap_nodes.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliBootstrapCache {
@@ -34,7 +36,10 @@ pub fn resolve_export_path(explicit: Option<String>) -> Option<PathBuf> {
     if let Some(path) = explicit {
         return Some(PathBuf::from(path));
     }
-    if let Ok(env_path) = std::env::var("KUKURI_CLI_BOOTSTRAP_PATH") {
+    if let Ok(env_path) = std::env::var(P2P_BOOTSTRAP_PATH_ENV) {
+        return Some(PathBuf::from(env_path));
+    }
+    if let Ok(env_path) = std::env::var(LEGACY_CLI_BOOTSTRAP_PATH_ENV) {
         return Some(PathBuf::from(env_path));
     }
     default_export_path()
@@ -48,7 +53,6 @@ pub fn write_cache(cache: CliBootstrapCache, path: &Path) -> Result<()> {
 
     let mut nodes = cache.nodes;
     nodes.retain(|entry| !entry.trim().is_empty());
-    nodes.sort();
     nodes.dedup();
 
     if nodes.is_empty() {

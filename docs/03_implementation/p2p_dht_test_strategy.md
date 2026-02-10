@@ -18,7 +18,7 @@
 5. 失敗した場合は `docker logs kukuri-p2p-bootstrap` や `docker inspect kukuri-p2p-bootstrap --format '{{.State.Health}}'` を確認し、NodeId や Discovery 初期化に問題がないか調査する。
 ## 変更案概要
 - `docker-compose.test.yml`
-  - `p2p-bootstrap` サービスを追加し、`kukuri-cli` イメージを利用した DHT ブートストラップノードを常時起動。
+  - `p2p-bootstrap` サービスを追加し、`kukuri-community-node` イメージ（`cn p2p bootstrap`）を利用した DHT ブートストラップノードを常時起動。
   - `network_mode: host` で 11233/TCP を露出し、`KUKURI_SECRET_KEY` を固定化して決定論的な NodeId (`03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8`) を生成。
   - `test-runner` サービスの既定コマンドを `run-smoke-tests.sh` に変更し、Rust P2P 統合テスト (`cargo test --package kukuri-tauri --test p2p_gossip_smoke -- --nocapture --test-threads=1` / `cargo test --package kukuri-tauri --test p2p_mainline_smoke -- --nocapture --test-threads=1`) と TypeScript 統合テスト (`pnpm test:integration`) のみを実行してスモークを最小化。
   - `p2p-bootstrap` の `healthcheck` 成功を待ってから開始するよう `depends_on` を追加し、`docker compose up` 実行時にブートストラップ起動待ちが保証されるようにした。

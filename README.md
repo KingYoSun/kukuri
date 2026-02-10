@@ -57,7 +57,6 @@ cargo test
 ```
 .
 ├── kukuri-tauri/           # Desktop app (React + Tauri)
-├── kukuri-cli/             # Bootstrap/relay CLI for DHT
 ├── kukuri-community-node/  # Community node services
 ├── docs/                   # Design, implementation, and runbooks
 ├── scripts/                # Dev/test automation
@@ -68,8 +67,7 @@ cargo test
 | --- | --- | --- | --- |
 | Desktop app | `kukuri-tauri/` | Tauri + React client | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test` |
 | Rust core (Tauri) | `kukuri-tauri/src-tauri/` | Rust backend, migrations, SQLite | `cd kukuri-tauri/src-tauri && cargo test` |
-| CLI node | `kukuri-cli/` | DHT bootstrap + relay CLI | `cd kukuri-cli && cargo build --release` / `cargo test` |
-| Community node | `kukuri-community-node/` | Minimal community node services | `cd kukuri-community-node && docker compose up -d` / `cargo test --workspace --all-features` |
+| Community node | `kukuri-community-node/` | Community node services + `cn` CLI (`p2p bootstrap/relay`) | `cd kukuri-community-node && docker compose up -d` / `cargo test --workspace --all-features` |
 
 ## Development workflow
 
@@ -90,10 +88,10 @@ cd kukuri-tauri/src-tauri
 cargo test
 cargo clippy -D warnings
 
-# CLI
-cd kukuri-cli
-cargo test
-cargo build --release
+# Community node / cn-cli
+cd kukuri-community-node
+cargo test --workspace --all-features
+cargo build --release -p cn-cli
 ```
 
 ### Docker test runner
@@ -111,7 +109,6 @@ cargo build --release
 ### Environment files
 
 - `./.env.example` (bootstrap/relay secrets and defaults)
-- `./kukuri-cli/.env.example` (CLI logging/network defaults)
 - `./kukuri-community-node/.env.example` (community node services)
 
 #### Community node setup

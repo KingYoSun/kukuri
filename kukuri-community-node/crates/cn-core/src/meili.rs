@@ -127,7 +127,7 @@ impl MeiliClient {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
         if !is_success(status) {
-            return Err(anyhow!("meilisearch error: {} - {}", status, body));
+            return Err(anyhow!("meilisearch error: {status} - {body}"));
         }
         let parsed: Value = serde_json::from_str(&body)?;
         Ok(parsed)
@@ -169,7 +169,7 @@ async fn ensure_success(resp: reqwest::Response) -> Result<()> {
         return Ok(());
     }
     let body = resp.text().await.unwrap_or_default();
-    Err(anyhow!("meilisearch error: {} - {}", status, body))
+    Err(anyhow!("meilisearch error: {status} - {body}"))
 }
 
 fn is_success(status: StatusCode) -> bool {

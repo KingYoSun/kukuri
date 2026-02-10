@@ -141,7 +141,6 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             kukuri-tauri/src-tauri/target/
-            kukuri-cli/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
@@ -170,16 +169,6 @@ jobs:
         run: |
           cd kukuri-tauri/src-tauri
           cargo clippy --locked --workspace --all-features -- -D warnings -A dead_code -A unused_variables
-
-      - name: Run CLI tests
-        run: |
-          cd kukuri-cli
-          cargo test --locked --workspace --all-features
-
-      - name: Run CLI clippy
-        run: |
-          cd kukuri-cli
-          cargo clippy --locked --workspace --all-features -- -D warnings
 
       - name: Run TypeScript tests
         run: |
@@ -213,6 +202,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
+          components: clippy
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -253,6 +243,11 @@ jobs:
         run: |
           cd kukuri-community-node
           cargo test --workspace --all-features
+
+      - name: Run community node clippy
+        run: |
+          cd kukuri-community-node
+          cargo clippy --workspace --all-features -- -D warnings
 
       - name: Stop Postgres (AGE)
         if: always()
@@ -298,10 +293,10 @@ jobs:
           cd kukuri-tauri/src-tauri
           cargo fmt -- --check
 
-      - name: Check CLI formatting
+      - name: Check community node formatting
         run: |
-          cd kukuri-cli
-          cargo fmt -- --check
+          cd kukuri-community-node
+          cargo fmt --all -- --check
 
       - name: Check TypeScript formatting
         run: |
@@ -345,10 +340,10 @@ jobs:
           cd kukuri-tauri/src-tauri
           cargo check --locked --workspace --all-features
 
-      - name: Build check (CLI)
+      - name: Build check (Community Node CLI)
         run: |
-          cd kukuri-cli
-          cargo check --locked --workspace --all-features
+          cd kukuri-community-node
+          cargo check --locked -p cn-cli --all-features
 
       - name: Build check (TypeScript)
         run: |

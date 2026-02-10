@@ -55,7 +55,7 @@ pub fn parse_filters(values: &[Value]) -> Result<Vec<RelayFilter>> {
             let tag = key.trim_start_matches('#').to_string();
             let values = parse_string_list(Some(value))?.unwrap_or_default();
             if values.len() > MAX_FILTER_VALUES {
-                return Err(anyhow!("too many values for tag {}", tag));
+                return Err(anyhow!("too many values for tag {tag}"));
             }
             tags.insert(tag, values);
         }
@@ -129,7 +129,7 @@ pub fn matches_filter(filter: &RelayFilter, event: &cn_core::nostr::RawEvent) ->
         }
     }
     if let Some(kinds) = &filter.kinds {
-        if !kinds.iter().any(|kind| *kind == event.kind) {
+        if !kinds.contains(&event.kind) {
             return false;
         }
     }

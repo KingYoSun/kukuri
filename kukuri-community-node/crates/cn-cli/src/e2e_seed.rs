@@ -26,7 +26,6 @@ const SEED_NODE_SECRET: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 #[derive(Clone)]
 struct SeedActor {
-    name: &'static str,
     keys: Keys,
     pubkey: String,
 }
@@ -37,7 +36,6 @@ impl SeedActor {
             .map_err(|err| anyhow!("invalid seed secret for {name}: {err}"))?;
         let keys = Keys::new(secret);
         Ok(Self {
-            name,
             pubkey: keys.public_key().to_hex(),
             keys,
         })
@@ -721,7 +719,7 @@ async fn insert_label(
     let issued_at = chrono::Utc
         .timestamp_opt(now, 0)
         .single()
-        .unwrap_or_else(|| chrono::Utc::now());
+        .unwrap_or_else(chrono::Utc::now);
     sqlx::query(
         "INSERT INTO cn_moderation.labels          (label_id, source_event_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, label_event_json, issued_at)          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13)          ON CONFLICT (label_id) DO NOTHING",
     )
@@ -743,6 +741,7 @@ async fn insert_label(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn insert_attestation(
     pool: &Pool<Postgres>,
     event: &nostr::RawEvent,

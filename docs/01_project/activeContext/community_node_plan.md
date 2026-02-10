@@ -205,7 +205,7 @@
 - `kukuri-tauri/src-tauri` : NIP-44 v2?nostr-sdk nip44?????/??
 - `/apps/client-tauri/` : クライアント
 - `/apps/community-node/` : ノード（daemon）
-- `/apps/kukuri-cli/` : 管理用CLI（鍵ローテ/招待発行/監査）
+- `/crates/cn-cli/` : 管理用CLI（鍵ローテ/招待発行/監査）
 
 ## 8. 実装マイルストーン（最短で価値が出る順）
 

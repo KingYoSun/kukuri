@@ -151,8 +151,8 @@ cd ..
 # Docker でブートストラップノードを起動
 docker compose -f docker-compose.test.yml up -d p2p-bootstrap
 
-# 既存ノード一覧を `kukuri-cli` から適用する場合
-kukuri-cli bootstrap --export-path tmp/bootstrap-nodes.json
+# 既存ノード一覧を `cn p2p bootstrap` から適用する場合
+cn p2p bootstrap --export-path tmp/p2p_bootstrap_nodes.json
 ```
 検証後は `docker compose -f docker-compose.test.yml down --remove-orphans` で停止する。
 

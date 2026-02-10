@@ -57,13 +57,11 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
     let mut auth_pubkey: Option<String> = None;
     let mut auth_challenge: Option<String> = None;
     let mut auth_deadline: Option<Instant> = None;
-    let mut disconnect_at: Option<i64> = None;
 
     let mut tick = interval(Duration::from_secs(5));
 
     if let Ok(runtime) = current_runtime(&state).await {
         let now = auth::unix_seconds().unwrap_or(0) as i64;
-        disconnect_at = runtime.auth.disconnect_deadline();
         if runtime.auth.requires_auth(now) {
             let challenge = Uuid::new_v4().to_string();
             auth_challenge = Some(challenge.clone());
@@ -80,18 +78,15 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
             _ = tick.tick() => {
                 if let Ok(runtime) = current_runtime(&state).await {
                     let now = auth::unix_seconds().unwrap_or(0) as i64;
-                    if runtime.auth.requires_auth(now) && auth_pubkey.is_none() {
-                        if auth_deadline.is_none() {
-                            let challenge = Uuid::new_v4().to_string();
-                            auth_challenge = Some(challenge.clone());
-                            auth_deadline = Some(Instant::now() + Duration::from_secs(
-                                runtime.auth.ws_auth_timeout_seconds.max(1) as u64,
-                            ));
-                            let _ = send_json(&mut sender, json!(["AUTH", challenge])).await;
-                        }
+                    if runtime.auth.requires_auth(now) && auth_pubkey.is_none() && auth_deadline.is_none() {
+                        let challenge = Uuid::new_v4().to_string();
+                        auth_challenge = Some(challenge.clone());
+                        auth_deadline = Some(Instant::now() + Duration::from_secs(
+                            runtime.auth.ws_auth_timeout_seconds.max(1) as u64,
+                        ));
+                        let _ = send_json(&mut sender, json!(["AUTH", challenge])).await;
                     }
-                    disconnect_at = runtime.auth.disconnect_deadline();
-                    if let Some(deadline) = disconnect_at {
+                    if let Some(deadline) = runtime.auth.disconnect_deadline() {
                         if now >= deadline && auth_pubkey.is_none() {
                             let _ = send_json(&mut sender, json!(["NOTICE", "auth-required: deadline reached"])).await;
                             break;
@@ -475,7 +470,7 @@ async fn has_current_consents(state: &AppState, pubkey: &str) -> Result<bool> {
 
 fn rate_limit_key(addr: &SocketAddr, pubkey: Option<&str>) -> String {
     if let Some(pubkey) = pubkey {
-        format!("pubkey:{}", pubkey)
+        format!("pubkey:{pubkey}")
     } else {
         format!("ip:{}", addr.ip())
     }

@@ -5,6 +5,8 @@ use cn_kip_types::{KIND_INVITE_CAPABILITY, KIP_NAMESPACE, KIP_VERSION};
 use serde_json::json;
 use uuid::Uuid;
 
+const LEGACY_TOPIC_PREFIX: &str = "kukuri:";
+
 #[derive(Args, Clone, Debug)]
 pub struct E2eInviteArgs {
     /// Topic name or topic id used for the invite capability
@@ -85,11 +87,11 @@ fn canonical_topic_id(input: &str) -> Result<String> {
     }
 
     let normalized = trimmed.to_lowercase();
-    let base = if normalized.starts_with(crate::TOPIC_NAMESPACE) {
-        normalized
-    } else {
-        format!("{}{}", crate::TOPIC_NAMESPACE, normalized)
-    };
+    let topic_body = normalized
+        .strip_prefix(crate::TOPIC_NAMESPACE)
+        .or_else(|| normalized.strip_prefix(LEGACY_TOPIC_PREFIX))
+        .unwrap_or(&normalized);
+    let base = format!("{}{}", crate::TOPIC_NAMESPACE, topic_body);
 
     if is_hashed_topic_id(&base) {
         Ok(base)

@@ -7,7 +7,7 @@ use serde_json::json;
 use sqlx::{Postgres, Row, Transaction};
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 
 use crate::auth::require_auth;
 use crate::policies::require_consents;
@@ -186,7 +186,7 @@ pub async fn download_export(
     );
     response.headers_mut().insert(
         axum::http::header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"{}.json\"", export_request_id)
+        format!("attachment; filename=\"{export_request_id}.json\"")
             .parse()
             .unwrap(),
     );
@@ -254,8 +254,8 @@ pub async fn get_deletion_request(
     }))
 }
 
-fn build_export_path(base: &PathBuf, export_request_id: &str) -> PathBuf {
-    let mut path = base.clone();
+fn build_export_path(base: &FsPath, export_request_id: &str) -> PathBuf {
+    let mut path = base.to_path_buf();
     path.push(format!("{export_request_id}.json"));
     path
 }

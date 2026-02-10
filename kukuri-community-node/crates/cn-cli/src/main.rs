@@ -29,8 +29,10 @@ mod e2e_seed;
 
 use bootstrap_cache::{resolve_export_path, write_cache, CliBootstrapCache};
 
-pub(crate) const TOPIC_NAMESPACE: &str = "kukuri:";
-const DEFAULT_PUBLIC_TOPIC_ID: &str = "kukuri:global";
+pub(crate) const TOPIC_NAMESPACE: &str = "kukuri:tauri:";
+const LEGACY_TOPIC_PREFIX: &str = "kukuri:";
+const DEFAULT_PUBLIC_TOPIC_ID: &str =
+    "kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0";
 
 #[derive(Parser)]
 #[command(name = "cn", version, about = "Kukuri community node CLI")]
@@ -666,22 +668,29 @@ fn export_bootstrap_list(
 ) -> Result<()> {
     let export_addr = if bind_addr.ip().is_unspecified() {
         let mut addr = *bind_addr;
-        if addr.is_ipv4() {
-            addr.set_ip(Ipv4Addr::LOCALHOST.into());
-        } else {
-            addr.set_ip(Ipv6Addr::LOCALHOST.into());
+        match addr {
+            SocketAddr::V4(ref mut v4) => v4.set_ip(Ipv4Addr::LOCALHOST),
+            SocketAddr::V6(ref mut v6) => v6.set_ip(Ipv6Addr::LOCALHOST),
         }
+        warn!(
+            original = %bind_addr,
+            normalized = %addr,
+            "Bootstrap bind address is unspecified; exporting loopback for clients"
+        );
         addr
     } else {
         *bind_addr
     };
 
-    let mut nodes = peers.to_vec();
-    nodes.push(format!("{}@{}", node_id, export_addr));
-
-    let cache = CliBootstrapCache::new(nodes);
-    write_cache(cache, path)?;
-    Ok(())
+    let mut entries = Vec::new();
+    entries.push(format!("{node_id}@{export_addr}"));
+    for peer in peers {
+        if !entries.iter().any(|existing| existing == peer) {
+            entries.push(peer.clone());
+        }
+    }
+    let cache = CliBootstrapCache::new(entries);
+    write_cache(cache, path)
 }
 
 async fn run_relay_node(args: &P2pArgs, topics: &str) -> Result<()> {
@@ -714,7 +723,7 @@ async fn run_relay_node(args: &P2pArgs, topics: &str) -> Result<()> {
         let Some(canonical_topic) = generate_topic_id(topic) else {
             continue;
         };
-        let topic_bytes = cn_core::topic::topic_id_to_gossip_bytes(&canonical_topic)?;
+        let topic_bytes = topic_bytes(&canonical_topic);
 
         info!(
             "Subscribing to topic: {} -> {}",
@@ -778,8 +787,7 @@ async fn run_connectivity_probe(
         }
         Err(_) => {
             return Err(anyhow!(
-                "Connection attempt timed out after {:?}",
-                timeout_duration
+                "Connection attempt timed out after {timeout_duration:?}"
             ));
         }
     }
@@ -842,18 +850,17 @@ fn parse_node_addr(s: &str) -> Result<EndpointAddr> {
         .ok_or_else(|| anyhow!("Invalid format. Expected: node_id@host:port"))?;
     let port: u16 = port_str
         .parse()
-        .map_err(|e| anyhow!("Invalid port `{}`: {}", port_str, e))?;
+        .map_err(|e| anyhow!("Invalid port `{port_str}`: {e}"))?;
 
     let mut addrs_iter = (host, port)
         .to_socket_addrs()
-        .map_err(|e| anyhow!("Failed to resolve host `{}`: {}", host, e))?;
+        .map_err(|e| anyhow!("Failed to resolve host `{host}`: {e}"))?;
 
     if let Some(addr) = addrs_iter.next() {
         Ok(EndpointAddr::new(node_id).with_ip_addr(addr))
     } else {
         Err(anyhow!(
-            "Resolved host `{}` but no socket addresses were returned",
-            host
+            "Resolved host `{host}` but no socket addresses were returned"
         ))
     }
 }
@@ -893,27 +900,48 @@ pub(crate) fn hash_topic_id(base: &str) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(base.as_bytes());
     format!(
-        "{}{}",
-        TOPIC_NAMESPACE,
+        "{TOPIC_NAMESPACE}{}",
         hex::encode(hasher.finalize().as_bytes())
     )
 }
 
-fn generate_topic_id(input: &str) -> Option<String> {
-    let trimmed = input.trim();
+fn generate_topic_id(topic: &str) -> Option<String> {
+    let trimmed = topic.trim();
     if trimmed.is_empty() {
         return None;
     }
+    let normalized = trimmed.to_lowercase();
+    let topic_body = normalized
+        .strip_prefix(TOPIC_NAMESPACE)
+        .or_else(|| normalized.strip_prefix(LEGACY_TOPIC_PREFIX))
+        .unwrap_or(&normalized);
+    let base = format!("{TOPIC_NAMESPACE}{topic_body}");
+    if is_hashed_topic_id(&base) {
+        return Some(base);
+    }
+    Some(hash_topic_id(&base))
+}
 
-    if trimmed.starts_with(TOPIC_NAMESPACE) {
-        return Some(trimmed.to_string());
+fn topic_bytes(canonical: &str) -> [u8; 32] {
+    if let Some(tail) = canonical.strip_prefix(TOPIC_NAMESPACE) {
+        if tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()) {
+            if let Ok(decoded) = hex::decode(tail) {
+                if decoded.len() >= 32 {
+                    let mut out = [0u8; 32];
+                    out.copy_from_slice(&decoded[..32]);
+                    return out;
+                }
+            }
+        }
     }
 
-    if trimmed.eq_ignore_ascii_case("public") {
-        return Some(DEFAULT_PUBLIC_TOPIC_ID.to_string());
-    }
+    *blake3::hash(canonical.as_bytes()).as_bytes()
+}
 
-    Some(hash_topic_id(trimmed))
+fn is_hashed_topic_id(topic_id: &str) -> bool {
+    topic_id
+        .strip_prefix(TOPIC_NAMESPACE)
+        .is_some_and(|tail| tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 #[cfg(test)]
@@ -953,13 +981,35 @@ mod tests {
 
     #[test]
     fn generate_topic_id_normalizes_topics() {
+        let public_base = format!("{TOPIC_NAMESPACE}public");
+        let custom_base = format!("{TOPIC_NAMESPACE}custom");
+        assert_eq!(
+            super::hash_topic_id(&public_base),
+            super::DEFAULT_PUBLIC_TOPIC_ID
+        );
         assert_eq!(
             super::generate_topic_id("Public"),
             Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
         );
         assert_eq!(
+            super::generate_topic_id("kukuri:tauri:custom"),
+            Some(super::hash_topic_id(&custom_base))
+        );
+        assert_eq!(
             super::generate_topic_id("kukuri:custom"),
-            Some("kukuri:custom".to_string())
+            Some(super::hash_topic_id(&custom_base))
+        );
+        assert_eq!(
+            super::generate_topic_id("public"),
+            Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
+        );
+        assert_eq!(
+            super::generate_topic_id("kukuri:tauri:public"),
+            Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
+        );
+        assert_eq!(
+            super::generate_topic_id("kukuri:public"),
+            Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
         );
         assert!(super::generate_topic_id("   ").is_none());
     }
@@ -1052,6 +1102,10 @@ mod tests {
     fn resolve_export_path_prefers_explicit_values() {
         let _guard = env_lock().lock().unwrap();
         set_env_var(
+            "KUKURI_P2P_BOOTSTRAP_PATH",
+            "ignored_p2p_bootstrap_nodes.json",
+        );
+        set_env_var(
             "KUKURI_CLI_BOOTSTRAP_PATH",
             "ignored_env_bootstrap_nodes.json",
         );
@@ -1061,15 +1115,26 @@ mod tests {
             .expect("explicit path available");
         assert_eq!(resolved, explicit);
 
+        remove_env_var("KUKURI_P2P_BOOTSTRAP_PATH");
         remove_env_var("KUKURI_CLI_BOOTSTRAP_PATH");
     }
 
     #[test]
     fn resolve_export_path_uses_env_when_missing_explicit() {
         let _guard = env_lock().lock().unwrap();
-        set_env_var("KUKURI_CLI_BOOTSTRAP_PATH", "env_bootstrap_nodes.json");
+        set_env_var("KUKURI_P2P_BOOTSTRAP_PATH", "env_bootstrap_nodes.json");
         let resolved = resolve_export_path(None).expect("env path available");
         assert!(resolved.ends_with("env_bootstrap_nodes.json"));
+        remove_env_var("KUKURI_P2P_BOOTSTRAP_PATH");
+    }
+
+    #[test]
+    fn resolve_export_path_supports_legacy_env() {
+        let _guard = env_lock().lock().unwrap();
+        remove_env_var("KUKURI_P2P_BOOTSTRAP_PATH");
+        set_env_var("KUKURI_CLI_BOOTSTRAP_PATH", "legacy_bootstrap_nodes.json");
+        let resolved = resolve_export_path(None).expect("legacy env path available");
+        assert!(resolved.ends_with("legacy_bootstrap_nodes.json"));
         remove_env_var("KUKURI_CLI_BOOTSTRAP_PATH");
     }
 }

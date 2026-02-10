@@ -475,48 +475,85 @@ pub fn load_user_bootstrap_node_addrs() -> Vec<EndpointAddr> {
     out
 }
 
-fn cli_bootstrap_path() -> PathBuf {
-    if let Ok(custom) = std::env::var("KUKURI_CLI_BOOTSTRAP_PATH") {
-        return PathBuf::from(custom);
-    }
+const P2P_BOOTSTRAP_PATH_ENV: &str = "KUKURI_P2P_BOOTSTRAP_PATH";
+const LEGACY_CLI_BOOTSTRAP_PATH_ENV: &str = "KUKURI_CLI_BOOTSTRAP_PATH";
+
+fn default_bootstrap_export_path(file_name: &str) -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("kukuri")
-        .join("cli_bootstrap_nodes.json")
+        .join(file_name)
+}
+
+fn bootstrap_candidate_paths() -> Vec<PathBuf> {
+    if let Ok(custom) = std::env::var(P2P_BOOTSTRAP_PATH_ENV) {
+        return vec![PathBuf::from(custom)];
+    }
+    if let Ok(legacy) = std::env::var(LEGACY_CLI_BOOTSTRAP_PATH_ENV) {
+        return vec![PathBuf::from(legacy)];
+    }
+
+    vec![
+        default_bootstrap_export_path("p2p_bootstrap_nodes.json"),
+        default_bootstrap_export_path("cli_bootstrap_nodes.json"),
+    ]
 }
 
 pub fn load_cli_bootstrap_nodes() -> Option<CliBootstrapInfo> {
-    let path = cli_bootstrap_path();
-    if !path.exists() {
-        return None;
+    for path in bootstrap_candidate_paths() {
+        if !path.exists() {
+            continue;
+        }
+
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(err) => {
+                warn!(
+                    path = %path.display(),
+                    error = %err,
+                    "failed to read CLI bootstrap cache"
+                );
+                continue;
+            }
+        };
+
+        let cache: CliBootstrapCacheFile = match serde_json::from_str(&content) {
+            Ok(cache) => cache,
+            Err(err) => {
+                warn!(
+                    path = %path.display(),
+                    error = %err,
+                    "failed to parse CLI bootstrap cache"
+                );
+                continue;
+            }
+        };
+
+        let nodes = sanitize_bootstrap_nodes(
+            &cache
+                .nodes
+                .into_iter()
+                .map(|entry| entry.trim().to_string())
+                .collect::<Vec<_>>(),
+        );
+
+        if nodes.is_empty() {
+            continue;
+        }
+
+        return Some(CliBootstrapInfo {
+            nodes,
+            updated_at_ms: cache.updated_at_ms,
+            path,
+        });
     }
-
-    let content = fs::read_to_string(&path).ok()?;
-    let cache: CliBootstrapCacheFile = serde_json::from_str(&content).ok()?;
-
-    let nodes = sanitize_bootstrap_nodes(
-        &cache
-            .nodes
-            .into_iter()
-            .map(|entry| entry.trim().to_string())
-            .collect::<Vec<_>>(),
-    );
-
-    if nodes.is_empty() {
-        return None;
-    }
-
-    Some(CliBootstrapInfo {
-        nodes,
-        updated_at_ms: cache.updated_at_ms,
-        path,
-    })
+    None
 }
 
 pub fn apply_cli_bootstrap_nodes() -> Result<Vec<String>, AppError> {
     let info = load_cli_bootstrap_nodes().ok_or_else(|| {
         AppError::ConfigurationError(
-            "CLI bootstrap list is not available. Run kukuri-cli to export nodes.".to_string(),
+            "CLI bootstrap list is not available. Run `cn p2p bootstrap --export-path <path>` to export nodes.".to_string(),
         )
     })?;
     let normalized = sanitize_bootstrap_nodes(&info.nodes);
@@ -571,7 +608,7 @@ mod tests {
         let _guard = lock_cli_bootstrap_env();
         let path = temp_cli_path("load");
         unsafe {
-            std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
+            std::env::set_var(P2P_BOOTSTRAP_PATH_ENV, &path);
         }
         let payload = r#"{"nodes":["node1@127.0.0.1:1234","node1@127.0.0.1:1234","node2@[::1]:5678"],"updated_at_ms":12345}"#;
         fs::write(&path, payload).expect("write cli bootstrap cache");
@@ -582,7 +619,7 @@ mod tests {
         assert_eq!(info.path, path);
 
         unsafe {
-            std::env::remove_var("KUKURI_CLI_BOOTSTRAP_PATH");
+            std::env::remove_var(P2P_BOOTSTRAP_PATH_ENV);
         }
         let _ = fs::remove_file(&info.path);
     }
@@ -592,11 +629,32 @@ mod tests {
         let _guard = lock_cli_bootstrap_env();
         let path = temp_cli_path("missing");
         unsafe {
-            std::env::set_var("KUKURI_CLI_BOOTSTRAP_PATH", &path);
+            std::env::set_var(P2P_BOOTSTRAP_PATH_ENV, &path);
         }
         assert!(load_cli_bootstrap_nodes().is_none());
         unsafe {
-            std::env::remove_var("KUKURI_CLI_BOOTSTRAP_PATH");
+            std::env::remove_var(P2P_BOOTSTRAP_PATH_ENV);
         }
+    }
+
+    #[test]
+    fn load_cli_bootstrap_nodes_supports_legacy_env_var() {
+        let _guard = lock_cli_bootstrap_env();
+        let path = temp_cli_path("legacy-env");
+        unsafe {
+            std::env::set_var(LEGACY_CLI_BOOTSTRAP_PATH_ENV, &path);
+        }
+        let payload = r#"{"nodes":["node-legacy@127.0.0.1:4321"],"updated_at_ms":45678}"#;
+        fs::write(&path, payload).expect("write legacy cli bootstrap cache");
+
+        let info = load_cli_bootstrap_nodes().expect("legacy cli bootstrap info");
+        assert_eq!(info.nodes, vec!["node-legacy@127.0.0.1:4321".to_string()]);
+        assert_eq!(info.updated_at_ms, Some(45678));
+        assert_eq!(info.path, path);
+
+        unsafe {
+            std::env::remove_var(LEGACY_CLI_BOOTSTRAP_PATH_ENV);
+        }
+        let _ = fs::remove_file(&info.path);
     }
 }

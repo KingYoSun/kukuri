@@ -76,9 +76,7 @@ impl LlmProviderKind {
                 if !status.is_success() {
                     let body = response.text().await.unwrap_or_default();
                     return Err(anyhow!(
-                        "OpenAI moderation request failed (status={}): {}",
-                        status,
-                        body
+                        "OpenAI moderation request failed (status={status}): {body}"
                     ));
                 }
                 let parsed: OpenAiModerationResponse = response.json().await?;
@@ -100,9 +98,7 @@ impl LlmProviderKind {
                 if !status.is_success() {
                     let body = response.text().await.unwrap_or_default();
                     return Err(anyhow!(
-                        "Local moderation request failed (status={}): {}",
-                        status,
-                        body
+                        "Local moderation request failed (status={status}): {body}"
                     ));
                 }
                 let payload: Value = response.json().await?;
@@ -191,11 +187,6 @@ fn map_openai_category(category: &str) -> String {
         "nsfw".to_string()
     } else if normalized.starts_with("harassment") || normalized.starts_with("hate") {
         "harassment".to_string()
-    } else if normalized.starts_with("violence")
-        || normalized.starts_with("self-harm")
-        || normalized.starts_with("illicit")
-    {
-        "illegal".to_string()
     } else {
         "illegal".to_string()
     }

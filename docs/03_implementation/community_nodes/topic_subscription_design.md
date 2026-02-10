@@ -28,7 +28,7 @@
 
 ## relay の取込プロトコル（確定）
 
-- relay の取込（P2P）は **iroh-gossip**（現 `kukuri-cli` 準拠）とする
+- relay の取込（P2P）は **iroh-gossip**（旧CLI互換）とする
   - node-level subscription = iroh-gossip の subscribe 対象 topic の集合
 - relay の配信（P2P）も iroh-gossip へ broadcast する
   - WS 等で受け付けたイベントを、対応する topic へ再配信（橋渡し）する
@@ -157,3 +157,4 @@
 - 申請の同時保留数上限（per pubkey）
 - node-level の同時取込 topic 数上限（ノード運用者の資源制約）
 - 自動承認する場合は、支払い/クレジット/招待capability等の担保が必要
+
