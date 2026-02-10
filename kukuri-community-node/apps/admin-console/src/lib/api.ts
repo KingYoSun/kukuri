@@ -1,7 +1,7 @@
 import createClient from 'openapi-fetch';
 
 import type { paths } from '../generated/admin-api';
-import type { DashboardSnapshot } from './types';
+import type { DashboardSnapshot, DsarJob, DsarJobType } from './types';
 
 const baseUrl = import.meta.env.VITE_ADMIN_API_BASE ?? '/admin-api';
 const joinedBaseUrl = baseUrl.replace(/\/$/, '');
@@ -156,6 +156,74 @@ export const api = {
         }
       })
     ),
+  dsarJobs: async (query?: {
+    status?: string;
+    request_type?: DsarJobType;
+    requester_pubkey?: string;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query?.status) {
+      params.set('status', query.status);
+    }
+    if (query?.request_type) {
+      params.set('request_type', query.request_type);
+    }
+    if (query?.requester_pubkey) {
+      params.set('requester_pubkey', query.requester_pubkey);
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const search = params.toString();
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/personal-data-jobs${search === '' ? '' : `?${search}`}`),
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as DsarJob[];
+  },
+  retryDsarJob: async (jobType: DsarJobType, jobId: string) => {
+    const response = await fetch(
+      buildApiUrl(
+        `/v1/admin/personal-data-jobs/${encodeURIComponent(jobType)}/${encodeURIComponent(jobId)}/retry`
+      ),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as DsarJob;
+  },
+  cancelDsarJob: async (jobType: DsarJobType, jobId: string) => {
+    const response = await fetch(
+      buildApiUrl(
+        `/v1/admin/personal-data-jobs/${encodeURIComponent(jobType)}/${encodeURIComponent(jobId)}/cancel`
+      ),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as DsarJob;
+  },
   plans: () => unwrap(client.GET('/v1/admin/plans')),
   createPlan: (payload: {
     plan_id: string;

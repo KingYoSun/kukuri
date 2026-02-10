@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,7 +11,10 @@ vi.mock('../lib/api', () => ({
     services: vi.fn(),
     policies: vi.fn(),
     auditLogs: vi.fn(),
-    updateServiceConfig: vi.fn()
+    updateServiceConfig: vi.fn(),
+    dsarJobs: vi.fn(),
+    retryDsarJob: vi.fn(),
+    cancelDsarJob: vi.fn()
   }
 }));
 
@@ -77,6 +80,44 @@ describe('PrivacyDataPage', () => {
       }
     ]);
     vi.mocked(api.auditLogs).mockResolvedValue([]);
+    vi.mocked(api.dsarJobs).mockResolvedValue([
+      {
+        job_id: 'export-1',
+        request_type: 'export',
+        requester_pubkey: 'a'.repeat(64),
+        status: 'failed',
+        created_at: 1738809600,
+        completed_at: 1738809700,
+        error_message: 'timeout'
+      },
+      {
+        job_id: 'deletion-1',
+        request_type: 'deletion',
+        requester_pubkey: 'b'.repeat(64),
+        status: 'running',
+        created_at: 1738809800,
+        completed_at: null,
+        error_message: null
+      }
+    ]);
+    vi.mocked(api.retryDsarJob).mockResolvedValue({
+      job_id: 'export-1',
+      request_type: 'export',
+      requester_pubkey: 'a'.repeat(64),
+      status: 'queued',
+      created_at: 1738809600,
+      completed_at: null,
+      error_message: null
+    });
+    vi.mocked(api.cancelDsarJob).mockResolvedValue({
+      job_id: 'deletion-1',
+      request_type: 'deletion',
+      requester_pubkey: 'b'.repeat(64),
+      status: 'failed',
+      created_at: 1738809800,
+      completed_at: 1738809900,
+      error_message: 'canceled by admin'
+    });
     vi.mocked(api.updateServiceConfig).mockResolvedValue({
       service: 'relay',
       version: 4,
@@ -96,6 +137,8 @@ describe('PrivacyDataPage', () => {
     });
     expect(screen.getByText('Current Policies')).toBeInTheDocument();
     expect(screen.getAllByText('2026-01 (ja-JP)')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: 'DSAR Operations' })).toBeInTheDocument();
+    expect(await screen.findByText('export-1')).toBeInTheDocument();
 
     const user = userEvent.setup();
     const configEditors = screen.getAllByLabelText('Config JSON');
@@ -111,6 +154,25 @@ describe('PrivacyDataPage', () => {
         { retention: { events_days: 14 } },
         3
       );
+    });
+
+    const exportRow = screen.getByText('export-1').closest('tr');
+    expect(exportRow).not.toBeNull();
+    await user.click(within(exportRow as HTMLElement).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => {
+      expect(api.retryDsarJob).toHaveBeenCalledWith('export', 'export-1');
+    });
+
+    const deletionRow = screen.getByText('deletion-1').closest('tr');
+    expect(deletionRow).not.toBeNull();
+    await user.click(within(deletionRow as HTMLElement).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => {
+      expect(api.cancelDsarJob).toHaveBeenCalledWith('deletion', 'deletion-1');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => {
+      expect(vi.mocked(api.dsarJobs).mock.calls.length).toBeGreaterThan(1);
     });
   });
 });

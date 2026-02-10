@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { asRecord, findServiceByName } from '../lib/config';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatJson, formatTimestamp } from '../lib/format';
-import type { AuditLog, Policy, ServiceInfo } from '../lib/types';
+import type { AuditLog, DsarJob, DsarJobType, Policy, ServiceInfo } from '../lib/types';
 
 const policyBadge = (policy: Policy | null) => {
   if (!policy) {
@@ -27,6 +27,11 @@ const asNumber = (value: unknown): number | null => {
   }
   return null;
 };
+
+const isDsarJobType = (value: string): value is DsarJobType =>
+  value === 'export' || value === 'deletion';
+
+const dsarTypeLabel = (value: DsarJobType) => (value === 'export' ? 'Export' : 'Deletion');
 
 type ConfigEditorProps = {
   title: string;
@@ -97,6 +102,7 @@ export const PrivacyDataPage = () => {
   const [userApiDraft, setUserApiDraft] = useState('{}');
   const [relayMessage, setRelayMessage] = useState<string | null>(null);
   const [userApiMessage, setUserApiMessage] = useState<string | null>(null);
+  const [dsarMessage, setDsarMessage] = useState<string | null>(null);
 
   const servicesQuery = useQuery<ServiceInfo[]>({
     queryKey: ['services'],
@@ -111,6 +117,11 @@ export const PrivacyDataPage = () => {
   const auditQuery = useQuery<AuditLog[]>({
     queryKey: ['auditLogs', 'privacy-data'],
     queryFn: () => api.auditLogs({ limit: 200 })
+  });
+
+  const dsarJobsQuery = useQuery<DsarJob[]>({
+    queryKey: ['dsar-jobs'],
+    queryFn: () => api.dsarJobs({ limit: 200 })
   });
 
   const relayService = useMemo(
@@ -156,6 +167,28 @@ export const PrivacyDataPage = () => {
     onError: (error) => setUserApiMessage(errorToMessage(error))
   });
 
+  const retryDsarJobMutation = useMutation({
+    mutationFn: (payload: { requestType: DsarJobType; jobId: string }) =>
+      api.retryDsarJob(payload.requestType, payload.jobId),
+    onSuccess: (job) => {
+      setDsarMessage(`Retry queued for ${job.request_type} job ${job.job_id}.`);
+      queryClient.invalidateQueries({ queryKey: ['dsar-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+    },
+    onError: (error) => setDsarMessage(errorToMessage(error))
+  });
+
+  const cancelDsarJobMutation = useMutation({
+    mutationFn: (payload: { requestType: DsarJobType; jobId: string }) =>
+      api.cancelDsarJob(payload.requestType, payload.jobId),
+    onSuccess: (job) => {
+      setDsarMessage(`Job ${job.job_id} canceled.`);
+      queryClient.invalidateQueries({ queryKey: ['dsar-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+    },
+    onError: (error) => setDsarMessage(errorToMessage(error))
+  });
+
   const currentTerms = useMemo(
     () => (policiesQuery.data ?? []).find((policy) => policy.policy_type === 'terms' && policy.is_current) ?? null,
     [policiesQuery.data]
@@ -189,6 +222,9 @@ export const PrivacyDataPage = () => {
         if (log.action.startsWith('policy.')) {
           return true;
         }
+        if (log.action.startsWith('dsar.job.')) {
+          return true;
+        }
         if (log.action !== 'service_config.update') {
           return false;
         }
@@ -196,6 +232,41 @@ export const PrivacyDataPage = () => {
       }),
     [auditQuery.data]
   );
+
+  const dsarSummary = useMemo(() => {
+    const jobs = dsarJobsQuery.data ?? [];
+    return {
+      total: jobs.length,
+      queued: jobs.filter((job) => job.status === 'queued').length,
+      running: jobs.filter((job) => job.status === 'running').length,
+      completed: jobs.filter((job) => job.status === 'completed').length,
+      failed: jobs.filter((job) => job.status === 'failed').length
+    };
+  }, [dsarJobsQuery.data]);
+
+  const handleRetryJob = (job: DsarJob) => {
+    setDsarMessage(null);
+    if (!isDsarJobType(job.request_type)) {
+      setDsarMessage(`Unsupported request type: ${job.request_type}`);
+      return;
+    }
+    retryDsarJobMutation.mutate({
+      requestType: job.request_type,
+      jobId: job.job_id
+    });
+  };
+
+  const handleCancelJob = (job: DsarJob) => {
+    setDsarMessage(null);
+    if (!isDsarJobType(job.request_type)) {
+      setDsarMessage(`Unsupported request type: ${job.request_type}`);
+      return;
+    }
+    cancelDsarJobMutation.mutate({
+      requestType: job.request_type,
+      jobId: job.job_id
+    });
+  };
 
   const saveRelay = () => {
     setRelayMessage(null);
@@ -229,6 +300,7 @@ export const PrivacyDataPage = () => {
           onClick={() => {
             void policiesQuery.refetch();
             void servicesQuery.refetch();
+            void dsarJobsQuery.refetch();
             void auditQuery.refetch();
           }}
         >
@@ -338,6 +410,79 @@ export const PrivacyDataPage = () => {
             </table>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <div>
+            <h3>DSAR Operations</h3>
+            <p className="muted">
+              Total {dsarSummary.total} | Queued {dsarSummary.queued} | Running {dsarSummary.running} |
+              Completed {dsarSummary.completed} | Failed {dsarSummary.failed}
+            </p>
+          </div>
+        </div>
+        {dsarMessage && <div className="notice">{dsarMessage}</div>}
+        {dsarJobsQuery.isLoading && <div className="notice">Loading DSAR jobs...</div>}
+        {dsarJobsQuery.error && <div className="notice">{errorToMessage(dsarJobsQuery.error)}</div>}
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Request ID</th>
+              <th>Requester</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Completed</th>
+              <th>Error</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(dsarJobsQuery.data ?? []).map((job) => {
+              const canRetry = job.status === 'failed' || job.status === 'completed';
+              const canCancel = job.status === 'queued' || job.status === 'running';
+              const retryLabel = retryDsarJobMutation.isPending ? 'Retrying...' : 'Retry';
+              const cancelLabel = cancelDsarJobMutation.isPending ? 'Canceling...' : 'Cancel';
+              return (
+                <tr key={`${job.request_type}-${job.job_id}`}>
+                  <td>{isDsarJobType(job.request_type) ? dsarTypeLabel(job.request_type) : job.request_type}</td>
+                  <td>{job.job_id}</td>
+                  <td>{job.requester_pubkey}</td>
+                  <td>
+                    <StatusBadge status={job.status} />
+                  </td>
+                  <td>{formatTimestamp(job.created_at)}</td>
+                  <td>{formatTimestamp(job.completed_at)}</td>
+                  <td>{job.error_message ?? '—'}</td>
+                  <td>
+                    <div className="row">
+                      <button
+                        className="button secondary"
+                        onClick={() => handleRetryJob(job)}
+                        disabled={!canRetry || retryDsarJobMutation.isPending}
+                      >
+                        {retryLabel}
+                      </button>
+                      <button
+                        className="button"
+                        onClick={() => handleCancelJob(job)}
+                        disabled={!canCancel || cancelDsarJobMutation.isPending}
+                      >
+                        {cancelLabel}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {(dsarJobsQuery.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={8}>No DSAR jobs found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div className="grid">

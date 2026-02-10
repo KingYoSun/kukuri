@@ -1,6 +1,6 @@
 use crate::{
-    access_control, auth, dashboard, moderation, policies, reindex, services, subscriptions, trust,
-    AppState,
+    access_control, auth, dashboard, dsar, moderation, policies, reindex, services, subscriptions,
+    trust, AppState,
 };
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
@@ -378,6 +378,60 @@ async fn insert_audit_log(
     .expect("insert audit log");
 }
 
+async fn insert_export_request(
+    pool: &Pool<Postgres>,
+    export_request_id: &str,
+    requester_pubkey: &str,
+    status: &str,
+    error_message: Option<&str>,
+) {
+    let completed_at = if status == "completed" || status == "failed" {
+        Some(chrono::Utc::now())
+    } else {
+        None
+    };
+    sqlx::query(
+        "INSERT INTO cn_user.personal_data_export_requests \
+         (export_request_id, requester_pubkey, status, completed_at, error_message) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(export_request_id)
+    .bind(requester_pubkey)
+    .bind(status)
+    .bind(completed_at)
+    .bind(error_message)
+    .execute(pool)
+    .await
+    .expect("insert export request");
+}
+
+async fn insert_deletion_request(
+    pool: &Pool<Postgres>,
+    deletion_request_id: &str,
+    requester_pubkey: &str,
+    status: &str,
+    error_message: Option<&str>,
+) {
+    let completed_at = if status == "completed" || status == "failed" {
+        Some(chrono::Utc::now())
+    } else {
+        None
+    };
+    sqlx::query(
+        "INSERT INTO cn_user.personal_data_deletion_requests \
+         (deletion_request_id, requester_pubkey, status, completed_at, error_message) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(deletion_request_id)
+    .bind(requester_pubkey)
+    .bind(status)
+    .bind(completed_at)
+    .bind(error_message)
+    .execute(pool)
+    .await
+    .expect("insert deletion request");
+}
+
 #[tokio::test]
 async fn access_control_rotate_contract_success() {
     let state = test_state().await;
@@ -562,6 +616,15 @@ async fn openapi_contract_contains_admin_paths() {
         .pointer("/paths/~1v1~1admin~1access-control~1memberships/get")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1admin~1personal-data-jobs/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1personal-data-jobs~1{job_type}~1{job_id}~1retry/post")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1personal-data-jobs~1{job_type}~1{job_id}~1cancel/post")
+        .is_some());
+    assert!(payload
         .pointer("/paths/~1v1~1admin~1trust~1schedules/get")
         .is_some());
     assert!(payload.pointer("/paths/~1v1~1reindex/post").is_some());
@@ -572,6 +635,7 @@ async fn openapi_contract_contains_admin_paths() {
     assert!(payload
         .pointer("/components/schemas/TrustScheduleRow")
         .is_some());
+    assert!(payload.pointer("/components/schemas/DsarJobRow").is_some());
 }
 
 #[tokio::test]
@@ -1911,6 +1975,178 @@ async fn audit_logs_contract_success_and_shape() {
         Some(request_id.as_str())
     );
     assert!(row.get("created_at").and_then(Value::as_i64).is_some());
+}
+
+#[tokio::test]
+async fn dsar_jobs_contract_list_retry_cancel_and_audit_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let export_request_id = Uuid::new_v4().to_string();
+    let deletion_request_id = Uuid::new_v4().to_string();
+    let export_requester = Keys::generate().public_key().to_hex();
+    let deletion_requester = Keys::generate().public_key().to_hex();
+    insert_export_request(
+        &state.pool,
+        &export_request_id,
+        &export_requester,
+        "failed",
+        Some("timeout"),
+    )
+    .await;
+    insert_deletion_request(
+        &state.pool,
+        &deletion_request_id,
+        &deletion_requester,
+        "running",
+        None,
+    )
+    .await;
+
+    let app = Router::new()
+        .route("/v1/admin/personal-data-jobs", get(dsar::list_jobs))
+        .route(
+            "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry",
+            post(dsar::retry_job),
+        )
+        .route(
+            "/v1/admin/personal-data-jobs/{job_type}/{job_id}/cancel",
+            post(dsar::cancel_job),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        "/v1/admin/personal-data-jobs?limit=10",
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert!(rows.iter().any(|row| {
+        row.get("job_id").and_then(Value::as_str) == Some(export_request_id.as_str())
+            && row.get("request_type").and_then(Value::as_str) == Some("export")
+            && row.get("status").and_then(Value::as_str) == Some("failed")
+    }));
+    assert!(rows.iter().any(|row| {
+        row.get("job_id").and_then(Value::as_str) == Some(deletion_request_id.as_str())
+            && row.get("request_type").and_then(Value::as_str) == Some("deletion")
+            && row.get("status").and_then(Value::as_str) == Some("running")
+    }));
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/personal-data-jobs/export/{export_request_id}/retry"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("job_id").and_then(Value::as_str),
+        Some(export_request_id.as_str())
+    );
+    assert_eq!(
+        payload.get("request_type").and_then(Value::as_str),
+        Some("export")
+    );
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("queued")
+    );
+    assert!(payload.get("completed_at").is_some_and(Value::is_null));
+    assert!(payload.get("error_message").is_some_and(Value::is_null));
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/personal-data-jobs/deletion/{deletion_request_id}/cancel"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("job_id").and_then(Value::as_str),
+        Some(deletion_request_id.as_str())
+    );
+    assert_eq!(
+        payload.get("request_type").and_then(Value::as_str),
+        Some("deletion")
+    );
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("failed")
+    );
+    assert!(payload
+        .get("completed_at")
+        .and_then(Value::as_i64)
+        .is_some());
+    assert_eq!(
+        payload.get("error_message").and_then(Value::as_str),
+        Some("canceled by admin")
+    );
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        "/v1/admin/personal-data-jobs?status=queued&request_type=export&limit=10",
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert!(rows.iter().any(|row| {
+        row.get("job_id").and_then(Value::as_str) == Some(export_request_id.as_str())
+            && row.get("status").and_then(Value::as_str) == Some("queued")
+    }));
+
+    let (status, payload) = get_json_with_session(
+        app,
+        "/v1/admin/personal-data-jobs?status=invalid",
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("INVALID_STATUS")
+    );
+
+    let retry_target = format!("dsar:export:{export_request_id}");
+    let cancel_target = format!("dsar:deletion:{deletion_request_id}");
+    let audit_rows = sqlx::query(
+        "SELECT action, target, diff_json \
+         FROM cn_admin.audit_logs \
+         WHERE target = $1 OR target = $2 \
+         ORDER BY audit_id DESC",
+    )
+    .bind(&retry_target)
+    .bind(&cancel_target)
+    .fetch_all(&state.pool)
+    .await
+    .expect("fetch dsar audit rows");
+    assert!(audit_rows.iter().any(|row| {
+        let action: String = row.try_get("action").expect("action");
+        let target: String = row.try_get("target").expect("target");
+        let diff: Value = row
+            .try_get::<Option<Value>, _>("diff_json")
+            .expect("diff_json")
+            .expect("diff_json");
+        action == "dsar.job.retry"
+            && target == retry_target
+            && diff.get("previous_status").and_then(Value::as_str) == Some("failed")
+            && diff.get("next_status").and_then(Value::as_str) == Some("queued")
+    }));
+    assert!(audit_rows.iter().any(|row| {
+        let action: String = row.try_get("action").expect("action");
+        let target: String = row.try_get("target").expect("target");
+        let diff: Value = row
+            .try_get::<Option<Value>, _>("diff_json")
+            .expect("diff_json")
+            .expect("diff_json");
+        action == "dsar.job.cancel"
+            && target == cancel_target
+            && diff.get("previous_status").and_then(Value::as_str) == Some("running")
+            && diff.get("next_status").and_then(Value::as_str) == Some("failed")
+    }));
 }
 
 #[tokio::test]

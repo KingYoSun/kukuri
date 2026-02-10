@@ -13,6 +13,7 @@ use crate::dashboard::{
     DashboardSnapshot, DbPressureSignal, OutboxBacklogSignal, OutboxConsumerBacklog,
     RejectSurgeSignal,
 };
+use crate::dsar::DsarJobRow;
 use crate::moderation::{LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse};
 use crate::policies::{PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest};
 use crate::reindex::{ReindexRequest, ReindexResponse};
@@ -74,6 +75,9 @@ pub struct ManualLabelResponse {
         subscriptions_upsert_doc,
         usage_list_doc,
         audit_logs_list_doc,
+        dsar_jobs_list_doc,
+        dsar_jobs_retry_doc,
+        dsar_jobs_cancel_doc,
         access_control_memberships_doc,
         access_control_rotate_doc,
         access_control_revoke_doc,
@@ -121,6 +125,7 @@ pub struct ManualLabelResponse {
             SubscriptionRow,
             SubscriptionUpdate,
             UsageRow,
+            DsarJobRow,
             MembershipRow,
             RotateRequest,
             RotateResponse,
@@ -461,6 +466,51 @@ fn usage_list_doc() {}
     responses((status = 200, body = [AuditLog]))
 )]
 fn audit_logs_list_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/admin/personal-data-jobs",
+    params(
+        ("status" = Option<String>, Query, description = "Job status filter (queued|running|completed|failed)"),
+        ("request_type" = Option<String>, Query, description = "Request type filter (export|deletion)"),
+        ("requester_pubkey" = Option<String>, Query, description = "Requester pubkey filter"),
+        ("limit" = Option<i64>, Query, description = "Max rows")
+    ),
+    responses((status = 200, body = [DsarJobRow]), (status = 400, body = ErrorResponse))
+)]
+fn dsar_jobs_list_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry",
+    params(
+        ("job_type" = String, Path, description = "Request type (export|deletion)"),
+        ("job_id" = String, Path, description = "Request identifier")
+    ),
+    responses(
+        (status = 200, body = DsarJobRow),
+        (status = 400, body = ErrorResponse),
+        (status = 404, body = ErrorResponse),
+        (status = 409, body = ErrorResponse)
+    )
+)]
+fn dsar_jobs_retry_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/personal-data-jobs/{job_type}/{job_id}/cancel",
+    params(
+        ("job_type" = String, Path, description = "Request type (export|deletion)"),
+        ("job_id" = String, Path, description = "Request identifier")
+    ),
+    responses(
+        (status = 200, body = DsarJobRow),
+        (status = 400, body = ErrorResponse),
+        (status = 404, body = ErrorResponse),
+        (status = 409, body = ErrorResponse)
+    )
+)]
+fn dsar_jobs_cancel_doc() {}
 
 #[utoipa::path(
     get,

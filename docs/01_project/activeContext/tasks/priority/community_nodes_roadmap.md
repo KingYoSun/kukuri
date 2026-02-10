@@ -115,7 +115,7 @@
 - [x] `cn_core::service_config::watch_service_config` に `LISTEN cn_admin_config` を実装し、`poll` フォールバックとのハイブリッド反映へ拡張する（`cn-admin-api` の `pg_notify` を実際に反映経路として使えるようにする）+ テスト追加。
 - [x] Admin API パス設計の不整合を解消する（`services_trust.md` の `POST /v1/attestations`、`services_moderation.md` の `POST /v1/labels`、`policy_consent_management.md` の `/v1/policies*` を実装系の `/v1/admin/*` と統一。互換エイリアス実装 + 契約テスト追加済み）。
 - [x] Admin Console `Dashboard` を Runbook 要件に追従させる（`outbox backlog` / `reject` 急増 / DB 逼迫の主要指標表示を追加）+ UI テスト追加。
-- [ ] Admin Console `Privacy/Data` に DSAR 運用ビューを追加する（削除/エクスポート要求ジョブの `queued|running|completed|failed` 一覧、再実行/中止操作、監査ログ連携）+ Admin API/フロント双方のテスト追加。
+- [x] Admin Console `Privacy/Data` に DSAR 運用ビューを追加する（削除/エクスポート要求ジョブの `queued|running|completed|failed` 一覧、再実行/中止操作、監査ログ連携）+ Admin API/フロント双方のテスト追加。
 
 ## 参照（設計）
 

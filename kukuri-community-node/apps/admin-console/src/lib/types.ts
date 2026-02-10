@@ -40,6 +40,16 @@ export type AccessControlMembership = ArrayItem<
 >;
 export type RotateAccessControlResponse = SuccessBody<'/v1/admin/access-control/rotate', 'post'>;
 export type RevokeAccessControlResponse = SuccessBody<'/v1/admin/access-control/revoke', 'post'>;
+export type DsarJobType = 'export' | 'deletion';
+export type DsarJob = {
+  job_id: string;
+  request_type: DsarJobType;
+  requester_pubkey: string;
+  status: string;
+  created_at: number;
+  completed_at: number | null;
+  error_message: string | null;
+};
 
 export type DashboardOutboxConsumer = {
   consumer: string;

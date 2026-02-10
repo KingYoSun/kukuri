@@ -19,6 +19,7 @@ use utoipa::ToSchema;
 mod access_control;
 mod auth;
 mod dashboard;
+mod dsar;
 mod moderation;
 pub mod openapi;
 mod policies;
@@ -265,6 +266,15 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         )
         .route("/v1/admin/usage", get(subscriptions::list_usage))
         .route("/v1/admin/audit-logs", get(services::list_audit_logs))
+        .route("/v1/admin/personal-data-jobs", get(dsar::list_jobs))
+        .route(
+            "/v1/admin/personal-data-jobs/:job_type/:job_id/retry",
+            post(dsar::retry_job),
+        )
+        .route(
+            "/v1/admin/personal-data-jobs/:job_type/:job_id/cancel",
+            post(dsar::cancel_job),
+        )
         .route(
             "/v1/admin/access-control/memberships",
             get(access_control::list_memberships),
