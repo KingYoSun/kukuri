@@ -22,7 +22,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::{broadcast, OnceCell, RwLock};
+use tokio::sync::{broadcast, Mutex, OnceCell, RwLock};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
@@ -31,6 +31,7 @@ type WsStream =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+static INTEGRATION_TEST_LOCK: OnceCell<Arc<Mutex<()>>> = OnceCell::const_new();
 const WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 const AUTH_EVENT_KIND: u16 = 22242;
 
@@ -47,6 +48,14 @@ async fn ensure_migrated(pool: &Pool<Postgres>) {
                 .expect("run migrations");
         })
         .await;
+}
+
+async fn acquire_integration_test_lock() -> tokio::sync::OwnedMutexGuard<()> {
+    let lock = INTEGRATION_TEST_LOCK
+        .get_or_init(|| async { Arc::new(Mutex::new(())) })
+        .await
+        .clone();
+    lock.lock_owned().await
 }
 
 fn default_runtime_config() -> serde_json::Value {
@@ -457,6 +466,8 @@ async fn send_auth(ws: &mut WsStream, keys: &Keys, challenge: &str) -> String {
 
 #[tokio::test]
 async fn ingest_outbox_ws_gossip_integration() {
+    let _guard = acquire_integration_test_lock().await;
+
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
@@ -538,6 +549,8 @@ async fn ingest_outbox_ws_gossip_integration() {
 
 #[tokio::test]
 async fn auth_enforce_switches_from_off_to_on_and_times_out() {
+    let _guard = acquire_integration_test_lock().await;
+
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
@@ -646,6 +659,8 @@ async fn auth_enforce_switches_from_off_to_on_and_times_out() {
 
 #[tokio::test]
 async fn auth_required_enforces_consent_and_subscription() {
+    let _guard = acquire_integration_test_lock().await;
+
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
@@ -824,6 +839,8 @@ async fn auth_required_enforces_consent_and_subscription() {
 
 #[tokio::test]
 async fn rate_limit_rejects_second_connection_at_boundary() {
+    let _guard = acquire_integration_test_lock().await;
+
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
@@ -876,6 +893,8 @@ async fn rate_limit_rejects_second_connection_at_boundary() {
 
 #[tokio::test]
 async fn rate_limit_closes_second_req_at_boundary() {
+    let _guard = acquire_integration_test_lock().await;
+
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
@@ -945,6 +964,8 @@ async fn rate_limit_closes_second_req_at_boundary() {
 
 #[tokio::test]
 async fn rate_limit_rejects_second_event_at_boundary() {
+    let _guard = acquire_integration_test_lock().await;
+
     let pool = PgPoolOptions::new()
         .connect(&database_url())
         .await
