@@ -10,11 +10,6 @@
 
 ## 現在のタスク
 
-### 2026年02月10日 README 日英刷新
-
-- 目的: 日英両対応の README を最新構成・コマンドに合わせて刷新する。
-- 状態: 完了（README.md / README.ja.md を更新し、completed に記録）
-
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。
