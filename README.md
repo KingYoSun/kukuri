@@ -1,127 +1,175 @@
+English | [日本語](./README.ja.md)
+
 # kukuri
 
-Nostrプロトコルを基盤とした完全分散型トピック指向ソーシャルアプリケーションです。BitTorrent Mainline DHT を用いたピア発見と iroh-gossip による高速配信により、中央サーバーに依存しないエクスペリエンスを提供します。
+A fully decentralized, topic-first social app built on Nostr, iroh-gossip, and BitTorrent Mainline DHT.
 
-## 概要
-- 完全分散型: DHT によるサーバーレス構成で検閲耐性を確保
-- 暗号化通信: エンドツーエンド暗号化でプライバシーを保護
-- トピックベース: 興味のあるトピック単位で情報を共有
-- 高速同期: iroh-gossip による効率的なイベント配信
-- デスクトップアプリ: Tauri v2 による軽量・高速なネイティブ体験
-- 複数アカウント: セキュアストレージで安全に切り替え
+## What it is
 
-## 技術スタック
-- フロントエンド: React 18 / TypeScript / Vite / shadcn/ui
-- デスクトップ: Tauri v2 (Rust)
-- 状態管理: Zustand
-- P2P 通信: iroh + iroh-gossip
-- ピア発見: iroh 内蔵 DHT (BitTorrent Mainline DHT)
-- プロトコル: Nostr (NIP 準拠)
-- データベース: SQLite
+kukuri is a Tauri desktop application and supporting services that enable topic-based social sharing without relying on central servers. It uses iroh-gossip for fast event distribution and DHT-based discovery for peer connectivity, with Nostr-compatible events as the data model.【F:docs/SUMMARY.md†L5-L12】【F:docs/02_architecture/system_design.md†L12-L68】
 
-## クイックスタート
-### 前提条件
-- Node.js v20 以上
-- pnpm
-- Rust 1.70 以上
-- Git
+## Quickstart
 
-### インストール & 起動
+### Prerequisites
+
+- Node.js 20+
+- pnpm (via Corepack)
+- Rust toolchain
+- Docker (for the Docker test runner and community node)
+
+【F:docs/01_project/setup_guide.md†L18-L83】【F:docs/01_project/setup_guide.md†L168-L204】
+
+### Install
+
 ```bash
-# リポジトリのクローン
-git clone https://github.com/yourusername/kukuri.git
-cd kukuri
-
-# 開発ツールのセットアップ（初回のみ）
+chmod +x scripts/install-dev-tools.sh
 ./scripts/install-dev-tools.sh
 
-# 依存関係のインストール
-pnpm install
-
-# 開発サーバーの起動
-pnpm tauri dev
+corepack enable pnpm
+cd kukuri-tauri
+corepack pnpm install --frozen-lockfile
 ```
 
-#### 手動検証時の P2P セットアップ
-`pnpm tauri dev` で手動検証を行う場合は、アプリ起動前に以下を準備してください。
+【F:docs/01_project/setup_guide.md†L32-L47】【F:docs/01_project/setup_guide.md†L74-L118】【F:kukuri-tauri/package.json†L6-L23】
 
-1. DHT ブートストラップノードを起動する  
-   例: `docker compose -f docker-compose.test.yml up -d p2p-bootstrap` または `./scripts/test-docker.ps1 integration -NoBuild`。
-2. 接続確認用の別ノードを少なくとも 1 つ用意する  
-   例: `kukuri-cli bootstrap` / `kukuri-cli relay` を利用する、もしくは別の Tauri インスタンスを起動して送受信相手を用意する。
+### Run (desktop app)
 
-ブートストラップが存在しない、または単独ノードのみの状態では接続成立を確認できません。検証完了後は `docker compose -f docker-compose.test.yml down --remove-orphans` などでクリーンアップしてください。
-
-## 開発
-### 主なコマンド
 ```bash
-# 開発サーバー
+cd kukuri-tauri
+corepack pnpm tauri dev
+```
+
+【F:AGENTS.md†L12-L18】
+
+### Test / Lint (short list)
+
+```bash
+# Full test suite in Docker
+./scripts/test-docker.sh all
+
+# Frontend tests (Linux/macOS/WSL2)
+cd kukuri-tauri
+pnpm test
+
+# Rust tests (Linux/macOS/WSL2)
+cd kukuri-tauri/src-tauri
+cargo test
+```
+
+【F:scripts/test-docker.sh†L1-L81】【F:kukuri-tauri/package.json†L9-L23】【F:AGENTS.md†L15-L21】
+
+> **Windows**: Use `./scripts/test-docker.ps1 <suite>` instead of running `pnpm test` / `cargo test` directly on the host.【F:AGENTS.md†L17-L21】
+
+## Monorepo layout
+
+```
+.
+├── kukuri-tauri/           # Desktop app (React + Tauri)
+├── kukuri-cli/             # Bootstrap/relay CLI for DHT
+├── kukuri-community-node/  # Community node services
+├── docs/                   # Design, implementation, and runbooks
+├── scripts/                # Dev/test automation
+└── docker/                 # Docker assets
+```
+
+【F:AGENTS.md†L1-L8】
+
+| Name | Path | What it does | How to run / test |
+| --- | --- | --- | --- |
+| Desktop app | `kukuri-tauri/` | Tauri + React client | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test`【F:AGENTS.md†L12-L18】【F:kukuri-tauri/package.json†L6-L23】 |
+| Rust core (Tauri) | `kukuri-tauri/src-tauri/` | Rust backend, migrations, SQLite | `cd kukuri-tauri/src-tauri && cargo test`【F:AGENTS.md†L15-L21】 |
+| CLI node | `kukuri-cli/` | DHT bootstrap + relay CLI | `cd kukuri-cli && cargo build --release` / `cargo test`【F:kukuri-cli/README.md†L23-L44】【F:AGENTS.md†L15-L17】 |
+| Community node | `kukuri-community-node/` | Minimal community node services | `cd kukuri-community-node && docker compose up -d` / `cargo test --workspace --all-features`【F:kukuri-community-node/README.md†L5-L14】【F:.github/workflows/test.yml†L178-L205】 |
+
+## Development workflow
+
+### Common commands
+
+```bash
+# Desktop app
+cd kukuri-tauri
 pnpm tauri dev
-
-# ビルド
 pnpm tauri build
-pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc  # Windows 向け
-pnpm tauri android build                                              # Android 向け
-
-# 品質チェック
 pnpm lint
 pnpm format
-
-# テスト
+pnpm type-check
 pnpm test
+
+# Rust (Tauri)
+cd kukuri-tauri/src-tauri
 cargo test
+cargo clippy -D warnings
 
-# Windows（PowerShell）でのテスト実行
-./scripts/test-docker.ps1 all               # すべてのスイート
-./scripts/test-docker.ps1 rust              # Rust（kukuri-tauri/kukuri-cli）
-./scripts/test-docker.ps1 ts                # TypeScript（Vitest/TanStack）
-./scripts/test-docker.ps1 lint              # ESLint + フォーマット確認
-./scripts/test-docker.ps1 all -Scenario trending-feed   # シナリオ指定の統合テスト
+# CLI
+cd kukuri-cli
+cargo test
+cargo build --release
 ```
-> **Windows 注意**: `pnpm test` や `cargo test` をホスト（PowerShell）で直接実行すると `STATUS_ENTRYPOINT_NOT_FOUND` や DLL ロードエラーでほぼ確実に失敗します。Windows では必ず `./scripts/test-docker.ps1 <suite>` を使い、Docker 内でテストを実行してください。Linux/macOS または Docker / WSL2 内では従来どおり `pnpm test` や `cargo test` を利用できます。
 
-### プロジェクト構造
-`
-kukuri/
-├── src/                    # React フロントエンド
-│   ├── components/         # UI コンポーネント
-│   ├── hooks/              # カスタムフック
-│   ├── stores/             # Zustand ストア
-│   └── pages/              # ページコンポーネント
-├── src-tauri/              # Rust バックエンド
-│   ├── src/
-│   │   ├── commands/
-│   │   ├── nostr/
-│   │   ├── p2p/
-│   │   └── db/
-│   └── Cargo.toml
-├── docs/                   # ドキュメント
-├── scripts/                # ユーティリティスクリプト
-└── test-results/           # Nightly/CI ログ・アーティファクト
-`
+【F:AGENTS.md†L12-L25】
 
-## ドキュメント
-- [プロジェクト設計書](docs/01_project/design_doc.md)
-- [システム設計書](docs/02_architecture/system_design.md)
-- [実装計画](docs/03_implementation/implementation_plan.md)
-- [開発環境セットアップガイド](docs/01_project/setup_guide.md)
+### Docker test runner
 
-## コントリビューション
-1. Issue を作成して変更内容を共有
-2. フィーチャーブランチ作成: `git checkout -b feature/amazing-feature`
-3. 変更をコミット: `git commit -m 'Add amazing feature'`
-4. ブランチをプッシュ: `git push origin feature/amazing-feature`
-5. プルリクエストを作成
+```bash
+# Run everything in Docker
+./scripts/test-docker.sh all
 
-## ライセンス
-MIT License。詳細は [LICENSE](LICENSE) を参照してください。
+# Windows (PowerShell)
+./scripts/test-docker.ps1 all
+```
 
-## 外部リソース
-- [iroh ドキュメント](https://docs.rs/iroh/latest/iroh/)
-- [iroh-gossip ドキュメント](https://docs.rs/iroh-gossip/latest/iroh_gossip/)
-- [Nostr NIPs](https://github.com/nostr-protocol/nips)
-- [Tauri ドキュメント](https://tauri.app/)
+【F:scripts/test-docker.sh†L1-L81】【F:AGENTS.md†L17-L21】
 
-## お問い合わせ
-- Issue: [GitHub Issues](https://github.com/yourusername/kukuri/issues)
-- Discussion: [GitHub Discussions](https://github.com/yourusername/kukuri/discussions)
+## Configuration
+
+### Environment files
+
+- `./.env.example` (bootstrap/relay secrets and defaults)
+- `./kukuri-cli/.env.example` (CLI logging/network defaults)
+- `./kukuri-community-node/.env.example` (community node services)
+
+【F:.env.example†L1-L15】【F:kukuri-cli/.env.example†L1-L11】【F:kukuri-community-node/.env.example†L1-L46】
+
+#### Community node setup
+
+```bash
+cd kukuri-community-node
+cp .env.example .env
+```
+
+【F:kukuri-community-node/README.md†L5-L10】
+
+#### P2P bootstrap for manual validation (optional)
+
+```bash
+docker compose -f docker-compose.test.yml up -d p2p-bootstrap
+# ...run your checks...
+docker compose -f docker-compose.test.yml down --remove-orphans
+```
+
+【F:docs/01_project/setup_guide.md†L124-L141】
+
+## Architecture (high-level)
+
+```mermaid
+graph TD
+  A[Client: Tauri App] --> B[Discovery: BitTorrent DHT]
+  A --> C[P2P Network: iroh-gossip]
+  C --> D[Marketplace: Search/Suggestion Nodes]
+```
+
+【F:docs/02_architecture/system_design.md†L12-L40】
+
+## CI
+
+CI is defined in `./.github/workflows/test.yml` and includes Docker test suites, native Linux tests (Rust + TS), community node tests, format checks, Windows build checks, and desktop E2E scenarios.【F:.github/workflows/test.yml†L1-L233】
+
+## Contributing & Support
+
+- Open an issue to discuss changes before large work.
+- Keep changes scoped and aligned with the existing docs under `./docs/`.
+- Run the relevant tests for the area you touched (see Quickstart and Development workflow).
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
