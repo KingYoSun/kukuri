@@ -10,6 +10,24 @@
 
 ## 現在のタスク
 
+### 2026年02月10日 `kukuri-cli` 削除移行タスク
+
+- 目的: `kukuri-cli` を `kukuri-community-node`（`cn-cli`）へ安全に統合し、既存の P2P/CI/Runbook 導線を壊さずに削除可能な状態にする。
+- 状態: 着手（影響調査完了。次は互換レイヤー実装と CI/ドキュメント更新を順に実施）。
+- 完了条件:
+  1. `kukuri-cli` ディレクトリ削除後も Docker テスト・GitHub Actions・Tauri の RelayStatus/Bootstrap 適用が同等動作する。
+  2. `docs/01_project/requirements.md` / `docs/01_project/roadmap.md` / Runbook の記述が実装と一致する。
+  3. `rg -n "kukuri-cli"` が意図した履歴参照（完了ログ等）以外で 0 件になる。
+- 実施タスク:
+  - [ ] `cn-cli p2p bootstrap|relay|connect|node-id` を `kukuri-cli` 運用相当で使えるように互換差分を解消する（特に topic namespace と export 形式）。
+  - [ ] `kukuri-tauri/src-tauri/src/infrastructure/p2p/bootstrap_config.rs` の CLI 前提文言/導線を `cn-cli` 前提へ置換し、必要なら後方互換（旧 env 名/旧ファイル名）を維持する。
+  - [ ] `docker-compose.yml` / `docker-compose.test.yml` の `./kukuri-cli` build 依存を `kukuri-community-node`（`cn` 実行）へ移行する。
+  - [ ] `scripts/start-bootstrap-nodes.ps1` / `scripts/test-docker.ps1` / `scripts/test-docker.sh` の `p2p-bootstrap` 起動経路を `cn-cli` ベースへ移行する。
+  - [ ] `.github/workflows/test.yml` と関連 workflow から `kukuri-cli` 専用ジョブ/キャッシュパスを削除し、`cn-cli` 側の検証へ統合する。
+  - [ ] `README.md` / `README.ja.md` / `AGENTS.md` / `docs/03_implementation/p2p_mainline_runbook.md` / `docs/03_implementation/docker_test_environment.md` のコマンド例と運用手順を `cn-cli` に更新する。
+  - [ ] `docs/01_project/requirements.md`（FR-031/NFR-031）と `docs/01_project/roadmap.md` の Discovery 記述を `kukuri-community-node` ベースへ改訂する。
+  - [ ] 最終段階で `kukuri-cli/` を削除し、参照残存を全件確認して必要テスト（`scripts/test-docker.ps1 rust|integration|e2e-community-node`、`gh act` 3ジョブ）を通す。
+
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。
