@@ -119,8 +119,8 @@
 
 ## 未実装/不足事項（2026年02月10日 監査追記）
 
-- [ ] `cn-admin-api`: Axum 0.8 のルーティング規則に合わせ、`/v1/admin/*/:param` と `/v1/policies/:policy_id*` を `{param}` 形式へ統一する（Router 初期化時の panic 回避）。
-- [ ] `cn-admin-api`: ルータ初期化のスモークテストを追加し、パス定義不正（`:` 形式など）を CI で即検知できるようにする。
+- [x] `cn-admin-api`: Axum 0.8 のルーティング規則に合わせ、`/v1/admin/*/:param` と `/v1/policies/:policy_id*` を `{param}` 形式へ統一する（Router 初期化時の panic 回避）。
+- [x] `cn-admin-api`: ルータ初期化のスモークテストを追加し、パス定義不正（`:` 形式など）を CI で即検知できるようにする。
 - [ ] `cn-relay`: 認証必須モードの consent/subscription 強制を統合テストで検証する（AUTH 成功 + 未同意 => `consent-required`、同意済み未購読 => `restricted: subscription required`、同意済み購読済み => 受理）。
 - [ ] `cn-user-api`: Billing/quota の 402 契約テストを追加する（search/trending/report/topic-subscription の上限超過、`QUOTA_EXCEEDED` details/reset_at、同一 `request_id` 再送時の冪等挙動）。
 - [ ] `cn-index` / `cn-moderation` / `cn-trust`: `/healthz` `/metrics` 契約テストを追加し、依存障害時の `503` 遷移と Prometheus content-type の互換を固定する。

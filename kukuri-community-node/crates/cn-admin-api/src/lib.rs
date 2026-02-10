@@ -168,7 +168,13 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         Duration::from_secs(config.health_poll_seconds),
     );
 
-    let router = Router::new()
+    let router = build_router(state);
+    let router = http::apply_standard_layers(router, SERVICE_NAME);
+    server::serve(config.addr, router).await
+}
+
+fn build_router(state: AppState) -> Router {
+    Router::new()
         .route("/healthz", get(healthz))
         .route("/metrics", get(metrics_endpoint))
         .route("/v1/openapi.json", get(openapi_json))
@@ -181,7 +187,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         )
         .route("/v1/admin/services", get(services::list_services))
         .route(
-            "/v1/admin/services/:service/config",
+            "/v1/admin/services/{service}/config",
             get(services::get_service_config).put(services::update_service_config),
         )
         .route(
@@ -189,15 +195,15 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             get(policies::list_policies).post(policies::create_policy),
         )
         .route(
-            "/v1/admin/policies/:policy_id",
+            "/v1/admin/policies/{policy_id}",
             put(policies::update_policy),
         )
         .route(
-            "/v1/admin/policies/:policy_id/publish",
+            "/v1/admin/policies/{policy_id}/publish",
             post(policies::publish_policy),
         )
         .route(
-            "/v1/admin/policies/:policy_id/make-current",
+            "/v1/admin/policies/{policy_id}/make-current",
             post(policies::make_current_policy),
         )
         // Backward-compatible aliases for legacy Admin API documentation.
@@ -205,13 +211,13 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             "/v1/policies",
             get(policies::list_policies).post(policies::create_policy),
         )
-        .route("/v1/policies/:policy_id", put(policies::update_policy))
+        .route("/v1/policies/{policy_id}", put(policies::update_policy))
         .route(
-            "/v1/policies/:policy_id/publish",
+            "/v1/policies/{policy_id}/publish",
             post(policies::publish_policy),
         )
         .route(
-            "/v1/policies/:policy_id/make-current",
+            "/v1/policies/{policy_id}/make-current",
             post(policies::make_current_policy),
         )
         .route(
@@ -219,7 +225,7 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             get(moderation::list_rules).post(moderation::create_rule),
         )
         .route(
-            "/v1/admin/moderation/rules/:rule_id",
+            "/v1/admin/moderation/rules/{rule_id}",
             put(moderation::update_rule).delete(moderation::delete_rule),
         )
         .route(
@@ -236,11 +242,11 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             get(subscriptions::list_subscription_requests),
         )
         .route(
-            "/v1/admin/subscription-requests/:request_id/approve",
+            "/v1/admin/subscription-requests/{request_id}/approve",
             post(subscriptions::approve_subscription_request),
         )
         .route(
-            "/v1/admin/subscription-requests/:request_id/reject",
+            "/v1/admin/subscription-requests/{request_id}/reject",
             post(subscriptions::reject_subscription_request),
         )
         .route(
@@ -248,31 +254,31 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
             get(subscriptions::list_node_subscriptions),
         )
         .route(
-            "/v1/admin/node-subscriptions/:topic_id",
+            "/v1/admin/node-subscriptions/{topic_id}",
             put(subscriptions::update_node_subscription),
         )
         .route(
             "/v1/admin/plans",
             get(subscriptions::list_plans).post(subscriptions::create_plan),
         )
-        .route("/v1/admin/plans/:plan_id", put(subscriptions::update_plan))
+        .route("/v1/admin/plans/{plan_id}", put(subscriptions::update_plan))
         .route(
             "/v1/admin/subscriptions",
             get(subscriptions::list_subscriptions),
         )
         .route(
-            "/v1/admin/subscriptions/:subscriber_pubkey",
+            "/v1/admin/subscriptions/{subscriber_pubkey}",
             put(subscriptions::upsert_subscription),
         )
         .route("/v1/admin/usage", get(subscriptions::list_usage))
         .route("/v1/admin/audit-logs", get(services::list_audit_logs))
         .route("/v1/admin/personal-data-jobs", get(dsar::list_jobs))
         .route(
-            "/v1/admin/personal-data-jobs/:job_type/:job_id/retry",
+            "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry",
             post(dsar::retry_job),
         )
         .route(
-            "/v1/admin/personal-data-jobs/:job_type/:job_id/cancel",
+            "/v1/admin/personal-data-jobs/{job_type}/{job_id}/cancel",
             post(dsar::cancel_job),
         )
         .route(
@@ -294,14 +300,11 @@ pub async fn run(config: AdminApiConfig) -> Result<()> {
         .route("/v1/attestations", post(trust::create_job))
         .route("/v1/admin/trust/schedules", get(trust::list_schedules))
         .route(
-            "/v1/admin/trust/schedules/:job_type",
+            "/v1/admin/trust/schedules/{job_type}",
             put(trust::update_schedule),
         )
         .route("/v1/reindex", post(reindex::enqueue_reindex))
-        .with_state(state);
-
-    let router = http::apply_standard_layers(router, SERVICE_NAME);
-    server::serve(config.addr, router).await
+        .with_state(state)
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
@@ -364,4 +367,34 @@ fn parse_health_targets() -> HashMap<String, String> {
             ("trust", "TRUST_HEALTH_URL", "http://trust:8086/healthz"),
         ],
     )
+}
+
+#[cfg(test)]
+mod router_smoke_tests {
+    use super::*;
+    use cn_core::service_config;
+    use sqlx::postgres::PgPoolOptions;
+
+    #[tokio::test]
+    async fn router_initializes_with_axum_08_paths() {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("create lazy pool");
+        let admin_config = service_config::static_handle(serde_json::json!({
+            "session_cookie": true,
+            "session_ttl_seconds": 86400
+        }));
+        let state = AppState {
+            pool,
+            admin_config,
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
+            dashboard_cache: Arc::new(
+                tokio::sync::Mutex::new(dashboard::DashboardCache::default()),
+            ),
+            node_keys: Keys::generate(),
+        };
+
+        let _router = build_router(state);
+    }
 }
