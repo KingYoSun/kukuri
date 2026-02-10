@@ -937,6 +937,99 @@ mod api_contract_tests {
         .expect("upsert active subscriber");
     }
 
+    async fn assign_active_plan_limit(
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+        metric: &str,
+        window: &str,
+        limit: i64,
+    ) {
+        let plan_id = format!("contract-plan-{}", Uuid::new_v4());
+        let subscription_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO cn_user.plans (plan_id, name, is_active) VALUES ($1, $2, TRUE) ON CONFLICT (plan_id) DO NOTHING",
+        )
+        .bind(&plan_id)
+        .bind("Contract Test Plan")
+        .execute(pool)
+        .await
+        .expect("insert contract plan");
+        sqlx::query(
+            "INSERT INTO cn_user.plan_limits (plan_id, metric, \"window\", \"limit\") VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&plan_id)
+        .bind(metric)
+        .bind(window)
+        .bind(limit)
+        .execute(pool)
+        .await
+        .expect("insert contract plan limit");
+        sqlx::query(
+            "UPDATE cn_user.subscriptions SET status = 'ended', ended_at = NOW() WHERE subscriber_pubkey = $1 AND status = 'active'",
+        )
+        .bind(pubkey)
+        .execute(pool)
+        .await
+        .expect("deactivate existing subscriptions");
+        sqlx::query(
+            "INSERT INTO cn_user.subscriptions (subscription_id, subscriber_pubkey, plan_id, status) VALUES ($1, $2, $3, 'active')",
+        )
+        .bind(subscription_id)
+        .bind(pubkey)
+        .bind(plan_id)
+        .execute(pool)
+        .await
+        .expect("insert active subscription");
+    }
+
+    async fn usage_event_count_for_request_id(
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+        metric: &str,
+        request_id: &str,
+    ) -> i64 {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_user.usage_events WHERE subscriber_pubkey = $1 AND metric = $2 AND request_id = $3",
+        )
+        .bind(pubkey)
+        .bind(metric)
+        .bind(request_id)
+        .fetch_one(pool)
+        .await
+        .expect("count usage_events")
+    }
+
+    fn assert_quota_exceeded_response(
+        payload: &Value,
+        metric: &str,
+        expected_current: i64,
+        expected_limit: i64,
+        expect_reset_at: bool,
+    ) {
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("QUOTA_EXCEEDED")
+        );
+        let details = payload
+            .get("details")
+            .and_then(Value::as_object)
+            .expect("quota details");
+        assert_eq!(details.get("metric").and_then(Value::as_str), Some(metric));
+        assert_eq!(
+            details.get("current").and_then(Value::as_i64),
+            Some(expected_current)
+        );
+        assert_eq!(
+            details.get("limit").and_then(Value::as_i64),
+            Some(expected_limit)
+        );
+        if expect_reset_at {
+            assert!(details.get("reset_at").and_then(Value::as_i64).is_some());
+        } else {
+            assert!(details.get("reset_at").is_none());
+        }
+    }
+
     async fn insert_current_policy(
         pool: &Pool<Postgres>,
         policy_type: &str,
@@ -1268,12 +1361,27 @@ mod api_contract_tests {
     }
 
     async fn get_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
+        get_json_with_headers(app, uri, token, &[]).await
+    }
+
+    async fn get_json_with_headers(
+        app: Router,
+        uri: &str,
+        token: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> (StatusCode, Value) {
         let mut request = Request::builder()
             .method("GET")
             .uri(uri)
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .expect("request");
+        for (name, value) in extra_headers {
+            request.headers_mut().insert(
+                axum::http::HeaderName::from_bytes(name.as_bytes()).expect("header name"),
+                axum::http::HeaderValue::from_str(value).expect("header value"),
+            );
+        }
         request
             .extensions_mut()
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
@@ -1287,6 +1395,16 @@ mod api_contract_tests {
     }
 
     async fn post_json(app: Router, uri: &str, token: &str, payload: Value) -> (StatusCode, Value) {
+        post_json_with_headers(app, uri, token, payload, &[]).await
+    }
+
+    async fn post_json_with_headers(
+        app: Router,
+        uri: &str,
+        token: &str,
+        payload: Value,
+        extra_headers: &[(&str, &str)],
+    ) -> (StatusCode, Value) {
         let mut request = Request::builder()
             .method("POST")
             .uri(uri)
@@ -1294,6 +1412,12 @@ mod api_contract_tests {
             .header("content-type", "application/json")
             .body(Body::from(payload.to_string()))
             .expect("request");
+        for (name, value) in extra_headers {
+            request.headers_mut().insert(
+                axum::http::HeaderName::from_bytes(name.as_bytes()).expect("header name"),
+                axum::http::HeaderValue::from_str(value).expect("header value"),
+            );
+        }
         request
             .extensions_mut()
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
@@ -1521,6 +1645,221 @@ mod api_contract_tests {
             .with_state(test_state().await);
         let status = request_status_with_body(app, "POST", "/v1/reports", "{}").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn search_quota_contract_payment_required_with_request_id_idempotent() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = format!("kukuri:search-quota-{}", Uuid::new_v4().simple());
+        let request_id = format!("search-quota-{}", Uuid::new_v4());
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "index.search_requests", "day", 0).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let path = format!("/v1/search?topic={topic_id}&q=quota");
+
+        let (status, payload) = get_json_with_headers(
+            app.clone(),
+            &path,
+            &token,
+            &[("x-request-id", request_id.as_str())],
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "index.search_requests", 0, 0, true);
+        let first_reset_at = payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("first reset_at");
+
+        let (retry_status, retry_payload) =
+            get_json_with_headers(app, &path, &token, &[("x-request-id", request_id.as_str())])
+                .await;
+        assert_eq!(retry_status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&retry_payload, "index.search_requests", 0, 0, true);
+        let retry_reset_at = retry_payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("retry reset_at");
+        assert_eq!(retry_reset_at, first_reset_at);
+        assert_eq!(
+            usage_event_count_for_request_id(&pool, &pubkey, "index.search_requests", &request_id)
+                .await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn trending_quota_contract_payment_required_with_request_id_idempotent() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = format!("kukuri:trending-quota-{}", Uuid::new_v4().simple());
+        let request_id = format!("trending-quota-{}", Uuid::new_v4());
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "index.trending_requests", "day", 0).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/trending", get(trending))
+            .with_state(state);
+        let path = format!("/v1/trending?topic={topic_id}");
+
+        let (status, payload) = get_json_with_headers(
+            app.clone(),
+            &path,
+            &token,
+            &[("x-request-id", request_id.as_str())],
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "index.trending_requests", 0, 0, true);
+        let first_reset_at = payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("first reset_at");
+
+        let (retry_status, retry_payload) =
+            get_json_with_headers(app, &path, &token, &[("x-request-id", request_id.as_str())])
+                .await;
+        assert_eq!(retry_status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&retry_payload, "index.trending_requests", 0, 0, true);
+        let retry_reset_at = retry_payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("retry reset_at");
+        assert_eq!(retry_reset_at, first_reset_at);
+        assert_eq!(
+            usage_event_count_for_request_id(
+                &pool,
+                &pubkey,
+                "index.trending_requests",
+                &request_id
+            )
+            .await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_report_quota_contract_payment_required_with_request_id_idempotent() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let request_id = format!("report-quota-{}", Uuid::new_v4());
+        let target = format!("event:report-quota-{}", Uuid::new_v4());
+        ensure_consents(&pool, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "moderation.report_submits", "day", 0).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/reports", post(submit_report))
+            .with_state(state);
+        let body = json!({
+            "target": target,
+            "reason": "spam"
+        });
+
+        let (status, payload) = post_json_with_headers(
+            app.clone(),
+            "/v1/reports",
+            &token,
+            body.clone(),
+            &[("x-request-id", request_id.as_str())],
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "moderation.report_submits", 0, 0, true);
+        let first_reset_at = payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("first reset_at");
+
+        let (retry_status, retry_payload) = post_json_with_headers(
+            app,
+            "/v1/reports",
+            &token,
+            body,
+            &[("x-request-id", request_id.as_str())],
+        )
+        .await;
+        assert_eq!(retry_status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&retry_payload, "moderation.report_submits", 0, 0, true);
+        let retry_reset_at = retry_payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("retry reset_at");
+        assert_eq!(retry_reset_at, first_reset_at);
+        assert_eq!(
+            usage_event_count_for_request_id(
+                &pool,
+                &pubkey,
+                "moderation.report_submits",
+                &request_id
+            )
+            .await,
+            1
+        );
+
+        let report_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_user.reports WHERE reporter_pubkey = $1 AND target = $2",
+        )
+        .bind(&pubkey)
+        .bind(&target)
+        .fetch_one(&pool)
+        .await
+        .expect("count reports");
+        assert_eq!(report_count, 0);
+    }
+
+    #[tokio::test]
+    async fn topic_subscription_quota_contract_payment_required() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let existing_topic_id = format!("kukuri:max-topics-{}", Uuid::new_v4().simple());
+        let request_topic_id = format!("kukuri:quota-request-{}", Uuid::new_v4().simple());
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &existing_topic_id, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "max_topics", "limit", 1).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/topic-subscription-requests",
+                post(create_subscription_request),
+            )
+            .with_state(state);
+
+        let (status, payload) = post_json(
+            app,
+            "/v1/topic-subscription-requests",
+            &token,
+            json!({
+                "topic_id": request_topic_id,
+                "requested_services": ["relay", "index"]
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "max_topics", 1, 1, false);
+
+        let request_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_user.topic_subscription_requests WHERE requester_pubkey = $1 AND topic_id = $2",
+        )
+        .bind(&pubkey)
+        .bind(&request_topic_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count topic subscription requests");
+        assert_eq!(request_count, 0);
     }
 
     #[tokio::test]
