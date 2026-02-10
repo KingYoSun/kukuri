@@ -12,7 +12,7 @@
 
 ### 1. 新規クレート作成
 
-- **kukuri-cli**: スタンドアロンのCLIバイナリ
+- **cn-cli**: スタンドアロンのCLIバイナリ
 - kukuri-tauriと同じバージョンの依存関係を使用
 - iroh 0.91.1とiroh-gossip 0.91.0を採用
 
@@ -20,14 +20,14 @@
 
 #### ブートストラップモード
 ```bash
-kukuri-cli bootstrap [--peers <PEERS>]
+cn-cli bootstrap [--peers <PEERS>]
 ```
 - DHTの初期接続ポイントとして動作
 - 他のノードが接続してネットワークに参加できる
 
 #### リレーモード
 ```bash
-kukuri-cli relay --topics <TOPICS>
+cn-cli relay --topics <TOPICS>
 ```
 - トピックベースのメッセージ配信
 - Gossipプロトコルを使用した効率的な配信
@@ -91,7 +91,7 @@ services:
 ### Docker Composeを直接使用
 
 ```bash
-cd kukuri-cli
+cd kukuri-community-node
 docker-compose up -d
 docker-compose logs -f
 ```
@@ -122,8 +122,8 @@ const BOOTSTRAP_NODES: &[&str] = &[
 
 ## 関連ファイル
 
-- `/kukuri-cli/` - CLIノード実装
-- `/kukuri-cli/docker-compose.yml` - Docker構成
+- `/kukuri-community-node/crates/cn-cli/` - CLIノード実装
+- `/kukuri-community-node/crates/cn-cli/docker-compose.yml` - Docker構成
 - `/scripts/start-bootstrap-nodes.ps1` - 起動スクリプト
 - `/kukuri-tauri/src-tauri/bootstrap_nodes.json` - 設定ファイル
 - `/kukuri-tauri/src-tauri/src/infrastructure/p2p/bootstrap_config.rs` - 設定管理

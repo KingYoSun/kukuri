@@ -5,12 +5,12 @@
 **カテゴリ**: 依存更新/CI
 
 ## 概要
-kukuri-cli / kukuri-tauri の依存ライブラリを最新安定版へ更新し、API 変更に合わせたコード調整と CI の Rust バージョン更新を行いました。
+cn-cli / kukuri-tauri の依存ライブラリを最新安定版へ更新し、API 変更に合わせたコード調整と CI の Rust バージョン更新を行いました。
 
 ## 実施内容
 
 ### 1. Cargo.toml の依存更新
-- kukuri-cli / kukuri-tauri の依存を最新安定版へ更新。
+- cn-cli / kukuri-tauri の依存を最新安定版へ更新。
 - `bincode` は 3.0.0 が `compile_error!` のため 2.0.1 を維持。
 
 ### 2. API 変更対応

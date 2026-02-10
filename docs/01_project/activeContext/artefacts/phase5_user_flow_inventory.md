@@ -12,7 +12,7 @@
 | カテゴリ | カバレッジ対象セクション | 現状サマリー | 次アクション |
 | --- | --- | --- | --- |
 | UX/体験導線 | Sec.1.2（グローバル要素）、Sec.2（検索）、Sec.5.1（プロフィール/設定）、5.4（DM/プロフィール導線）、5.7（トレンド/フォロー）、5.9（TopicSelectorショートカット）、5.10（投稿削除） | Stage3（Doc/Blob + privacy）完了。`TopicSelector`・`PostCard`・`TrendingSummaryPanel` の UI 実装も完了済みで、2025年11月12日に `corepack enable pnpm` → `pnpm install --frozen-lockfile` を通し、`pnpm vitest` と Docker シナリオをホストで再実行（`tmp/logs/topic_create_20251112-125226.log` / `post_delete_cache_20251112-125301.log` / `vitest_direct_message_20251112-124608.log` / `user_search_pagination_20251112-125208.log` / `trending-feed_20251110020528.log` を採取）。`trending_metrics_job` 常駐フックや DM 既読共有/会話検索・`search_users` 拡張は引き続き backlog。 | 5.1 に `scripts/test-docker.{ps1,sh} ts -Scenario profile-avatar-sync` / `rust -Test profile_avatar_sync` を、5.4/5.7/5.9/5.10 に再実行ログと Docker 経由の検証手順を追記し、MVP Exit 未達項目を `tauri_app_implementation_plan.md` Phase3 と同期。 |
-| P2P & Discovery | Sec.1.6（ステータスカード）、5.6（Mainline DHT/RelayStatus）、5.12（ヘッダーメッセージ/Runbookリンク） | RelayStatus から Runbook Chapter10 へ遷移後、2025年11月11日に `get_relay_status` / `apply_cli_bootstrap_nodes` を実装して `kukuri-cli --export-path` のリストを UI から適用できるようになった。Gateway mapper/DI のログは `phase5_event_gateway_design.md` でトラッキング継続。 | 5.6 に CLI リスト検知 UI と Runbook 連携の検証手順を追記し、`phase5_dependency_inventory_template.md` の P2P 行と同じ観点で整合を確認する。 |
+| P2P & Discovery | Sec.1.6（ステータスカード）、5.6（Mainline DHT/RelayStatus）、5.12（ヘッダーメッセージ/Runbookリンク） | RelayStatus から Runbook Chapter10 へ遷移後、2025年11月11日に `get_relay_status` / `apply_cli_bootstrap_nodes` を実装して `cn-cli --export-path` のリストを UI から適用できるようになった。Gateway mapper/DI のログは `phase5_event_gateway_design.md` でトラッキング継続。 | 5.6 に CLI リスト検知 UI と Runbook 連携の検証手順を追記し、`phase5_dependency_inventory_template.md` の P2P 行と同じ観点で整合を確認する。 |
 | データ/同期 & メトリクス | Sec.5.5（SyncStatusIndicator & offline）、5.11（SyncStatusIndicator詳細） | `list_sync_queue_items` 履歴表示と 60 秒ポーリング/手動更新は実装済みだが、Doc/Blob 対応 `cache_metadata` マイグレーションや conflict バナー / Service Worker（Phase4）、`trending_metrics_job` AppState フック + Docker `trending-feed` シナリオが未記述。 | 5.5/5.11 に Stage3/4 のマイグレーション一覧・`tmp/logs/profile_avatar_sync_<timestamp>.log`・`scripts/test-docker --scenario trending-feed` を追記し、`phase5_ci_path_audit.md` のテスト ID へリンクする。 |
 | Ops / CI | Sec.1.6（ステータスカードテスト）、Sec.5.5/5.7（Nightlyテスト項目）、付録（テスト計画） | `pnpm` 未インストールにより `TopicSelector` / `useDeletePost` / `TrendingSummaryPanel` のユニットテストをローカル再現できず、Docker `trending-feed` も権限不足で停止。Rust は `./scripts/test-docker.ps1 rust -NoBuild` で代替運用中。 | 付録と 5.7 に `corepack` 構築手順と `tmp/logs/gh_act_*` `tmp/logs/docker_*` の参照を追加し、Nightly `profile-avatar-sync` / `trending-feed` ジョブの成果物を `phase5_ci_path_audit.md` と Runbookへリンクする。 |
 
@@ -66,7 +66,7 @@
 - サイドバー参加中トピックリスト: `topicStore` の `topicUnreadCounts` と `handleIncomingTopicMessage` で未読数と最終活動時刻を更新し、P2Pメッセージのタイムスタンプを秒換算して降順表示。
 - `PostComposer` / `DraftManager`: シンプル/Markdown 切替と 2 秒デバウンスの自動保存で下書きを保持し、一覧から再開・削除が可能。
 - `RelayStatus`（サイドバー下部）: `get_relay_status` を 30 秒ごとにポーリングし接続状態を表示。
-- 2025年11月11日: `kukuri-cli bootstrap --export-path "%LocalAppData%\\kukuri\\cli_bootstrap_nodes.json"` で出力される CLI リストを検知し、RelayStatus 下部に「CLI 提供: n件 / 更新: ○分前」と「最新リストを適用」ボタンを追加。適用時は `apply_cli_bootstrap_nodes` → `updateRelayStatus` → `get_bootstrap_config` を連続実行する。`env_locked`（`KUKURI_BOOTSTRAP_PEERS` 設定時）はボタンを無効化。2025年11月12日: PoC 実行ログ `tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を取得し、Runbook Chapter10/`phase5_ci_path_audit.md` とリンクした。
+- 2025年11月11日: `cn-cli bootstrap --export-path "%LocalAppData%\\kukuri\\cli_bootstrap_nodes.json"` で出力される CLI リストを検知し、RelayStatus 下部に「CLI 提供: n件 / 更新: ○分前」と「最新リストを適用」ボタンを追加。適用時は `apply_cli_bootstrap_nodes` → `updateRelayStatus` → `get_bootstrap_config` を連続実行する。`env_locked`（`KUKURI_BOOTSTRAP_PEERS` 設定時）はボタンを無効化。2025年11月12日: PoC 実行ログ `tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を取得し、Runbook Chapter10/`phase5_ci_path_audit.md` とリンクした。
 - `P2PStatus`（サイドバー下部）: `useP2P` からの接続状態・メトリクス要約を表示し、接続時のみ 30 秒間隔で `refreshStatus` を実行。手動更新ボタンで `get_p2p_metrics` を再取得し、参加トピックとピア数を可視化。
 - `SyncStatusIndicator`: `useSyncManager` の `syncStatus`/`pendingActionsCount` を参照し、Popover 内で同期進捗・競合・手動同期ボタンを表示。手動同期は `triggerManualSync` を通じて `syncEngine` の再実行を要求する。
 - `RealtimeIndicator`: ブラウザの `online`/`offline` イベントと `realtime-update` カスタムイベント（`useP2PEventListener` が投稿受信時に発火）を監視し、最後の更新からの経過時間をバッジ表示する。
@@ -317,7 +317,7 @@
 - **テスト / フォローアップ**
   - 2025年11月03日: `src/tests/unit/components/RelayStatus.test.tsx` / `src/tests/unit/components/P2PStatus.test.tsx` を更新し、バックオフ・手動リトライ・エラー表示をフェイクタイマーで検証。`npx vitest run src/tests/unit/components/RelayStatus.test.tsx src/tests/unit/components/P2PStatus.test.tsx` を実行し成功。
   - 同日、`src/tests/unit/stores/authStore.test.ts` / `src/tests/unit/stores/p2pStore.test.ts` / `src/tests/unit/hooks/useP2P.test.tsx` を拡張し、バックオフ遷移・エラー保持・`isRefreshingStatus` 排他制御を検証。
-  - Rust 側では `cargo test`（`kukuri-tauri/src-tauri` / `kukuri-cli`）を実行し、`application::services::p2p_service::tests` における `connection_status` / `peers` の復帰とフォールバック動作を確認。Runbook 9章に新フィールドと検証手順を追記済み。
+  - Rust 側では `cargo test`（`kukuri-tauri/src-tauri` / `cn-cli`）を実行し、`application::services::p2p_service::tests` における `connection_status` / `peers` の復帰とフォールバック動作を確認。Runbook 9章に新フィールドと検証手順を追記済み。
 
 #### MVP Exit（2025年11月10日更新）
 - **ゴール**: Relay/P2P カードで接続状態・失敗履歴・Runbook CTA を提示し、ネットワーク異常時に UI から復旧手順へ誘導できること。
@@ -357,7 +357,7 @@
   - `useDirectMessageStore` が既読カウントと会話ログを保持し、`dedupeMessages` で `eventId` / `clientMessageId` をキーに重複排除。
   - `DirectMessageInbox` は `useInfiniteQuery(['direct-message-conversations'])` + TanStack Virtualizer でカーソルごとのページングを実装し、npub/本文検索・Enter 補完・多端末既読バッジと併せて `fetchNextPage` / 「さらに表示」ボタンで 50 件超の会話を段階的に表示する。`markConversationAsRead(conversationNpub, lastReadAt?)` でストアと SQLite の既読状態を同期し、`nightly.direct-message` artefact（`tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json`）から UI 回帰をトレースできる。`useDirectMessageBootstrap` も 50 件単位でページを巡回し、ヘッダー/Summary CTA と同じストアをハイドレートする。
 - **テスト / 検証**
-  - Rust: `cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-cli`）で Direct Message サービスとリポジトリのユニットテストを実行済み。
+  - Rust: `cargo sqlx prepare` → `cargo test`（`kukuri-tauri/src-tauri` と `cn-cli`）で Direct Message サービスとリポジトリのユニットテストを実行済み。
   - 2025年11月05日: `pnpm vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx` を実行し、履歴ロード・送信フローが回帰しないことを確認。
   - TypeScript: `DirectMessageDialog.test.tsx` で Optimistic Update・エラーハンドリング・トースト表示・初期履歴の描画を検証し、Vitest 結果を記録。
   - 2025年11月13日: Windows ネイティブの `cargo test` が `STATUS_ENTRYPOINT_NOT_FOUND` で停止するため、`./scripts/test-docker.ps1 rust` を再実行し、`tmp/logs/rust_docker_20251113-141846.log` に `tests/contract/direct_messages.rs` を含む Docker Rust テスト結果を保存。
@@ -375,7 +375,7 @@
   - **テスト / 検証**
     - `pnpm vitest run src/tests/unit/routes/profile.$userId.test.tsx`
     - `cargo fmt`
-    - `cargo test`（`kukuri-tauri/src-tauri` は Windows 環境で `STATUS_ENTRYPOINT_NOT_FOUND` により実行時エラー、`kukuri-cli` は成功）
+    - `cargo test`（`kukuri-tauri/src-tauri` は Windows 環境で `STATUS_ENTRYPOINT_NOT_FOUND` により実行時エラー、`cn-cli` は成功）
   - **残課題**
     - Windows 環境での `cargo test` 実行時エラー（`STATUS_ENTRYPOINT_NOT_FOUND`）の原因調査と解消。
     - 2 ページ目以降を自動補充する際のキャッシュ整合性（`FOLLOW_PAGE_SIZE` 超過時の繰り上げ）と E2E カバレッジの整備。
@@ -742,4 +742,4 @@
 | プロフィール/設定モーダル統合 | 1.1, 5.1, 6 | `ProfileForm` を Welcome/Settings で共通化し、プライバシー設定が `usePrivacySettingsStore` + `update_nostr_metadata` で永続化。設定モーダルからの保存が `authStore.updateUser` に即時反映。 | `pnpm vitest src/tests/unit/routes/settings.test.tsx`, `pnpm vitest src/tests/unit/components/profile/ProfileForm.test.tsx` | ✅ 2025年11月09日: `update_privacy_settings` コマンド/DB マイグレーションと `ProfileSetup`/`ProfileEditDialog`/`SettingsPage` テストを更新し、Stage2（プライバシー永続化）完了。 |
 | ユーザー検索UI/API | 1.4, 5.4 | `search_users` API が cursor/sort/allow_incomplete/429 を返し、UI が idle→typing→ready→loading→success/rateLimited/error の状態を持つ。 | `pnpm vitest src/tests/unit/components/search/UserSearchResults.test.tsx`, 新規 `pnpm vitest src/tests/unit/hooks/useUserSearchQuery.test.ts`, `cargo test user_search_service` | ✅ 2025年11月09日: `errorHandler` に `UserSearch.*` 系キーを追加し、DM Inbox の候補検索でも同 API を再利用。 |
 | Offline sync_queue | 1.2 (SyncStatusIndicator), 5.5 | `sync_queue`/`offline_actions`/`cache_metadata` migration、`sync_offline_actions` API、`useSyncManager` 競合バナーに加え、`cache_types.metadata` で要求者/要求時刻/Queue ID/発行元を表示し、`OfflineIndicator` からヘッダーの SyncStatusIndicator へ誘導できる。 | `pnpm vitest src/tests/unit/stores/offlineStore.test.ts`, `npx vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`, `cargo test offline_handler::tests::add_to_sync_queue_records_metadata_entry`（Windows では `./scripts/test-docker.ps1 rust -NoBuild` で代替実行） | Stage3（Queue 履歴 UI + `list_sync_queue_items`）を 2025年11月09日に完了。Queue ID フィルタ/ハイライト/再送結果表示を実装し、TypeScript テストと Docker Rust テストで回帰確認済み。 |
-| Mainline DHT Runbook | 1.2 (Relay/P2P Status), 5.6 | `docs/03_implementation/p2p_mainline_runbook.md` Chapter9/10 に P2P ステータスと `kukuri-cli` ブートストラップ手順/Settings 連携を記載し、Sidebar `RelayStatus` カードから Runbook を開ける。`KUKURI_BOOTSTRAP_PEERS` の動的更新 PoC（UI/環境変数）を Runbook と `scripts/test-docker.*` に反映。 | `cargo test --package kukuri-cli -- test_bootstrap_runbook`, `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` | ✅ 2025年11月09日: RelayStatus カードから Runbook を起動し、CLI 手順と Windows/Docker での検証フローを Chapter10 に追記。`phase5_dependency_inventory_template.md` P2PService 行とも整合。 |
+| Mainline DHT Runbook | 1.2 (Relay/P2P Status), 5.6 | `docs/03_implementation/p2p_mainline_runbook.md` Chapter9/10 に P2P ステータスと `cn-cli` ブートストラップ手順/Settings 連携を記載し、Sidebar `RelayStatus` カードから Runbook を開ける。`KUKURI_BOOTSTRAP_PEERS` の動的更新 PoC（UI/環境変数）を Runbook と `scripts/test-docker.*` に反映。 | `cargo test -p cn-cli -- test_bootstrap_runbook`, `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` | ✅ 2025年11月09日: RelayStatus カードから Runbook を起動し、CLI 手順と Windows/Docker での検証フローを Chapter10 に追記。`phase5_dependency_inventory_template.md` P2PService 行とも整合。 |

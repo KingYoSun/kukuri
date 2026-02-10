@@ -23,9 +23,9 @@
 - `docs/03_implementation/community_nodes/billing_usage_metering.md`
 - `docs/03_implementation/community_nodes/rate_limit_design.md`
 
-## M2-1 `kukuri-cli` 統合（bootstrap/relay の基盤）
+## M2-1 `cn-cli` 統合（bootstrap/relay の基盤）
 
-- [x] `kukuri_cli_migration.md` に沿って `kukuri-cli` を `kukuri-community-node` 側へ統合する
+- [x] `cn_cli_migration.md` に沿って `cn-cli` を `kukuri-community-node` 側へ統合する
   - [x] `cn-cli`（または `cn`）に `bootstrap` / `relay` の daemon 起動を追加
   - [x] 既存 CLI の有用コマンド（鍵生成/表示等）を維持しつつ、サービス起動に必要な設定I/Fを揃える
 

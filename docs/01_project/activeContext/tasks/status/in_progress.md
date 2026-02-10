@@ -1,4 +1,4 @@
-﻿[title] 作業中タスク（in_progress）
+[title] 作業中タスク（in_progress）
 
 最終更新日: 2026年02月10日
 
@@ -46,7 +46,7 @@
      - `SyncStatusIndicator` が Online/Syncing/Attention Required/Offline の各状態を通知し、Runbook Chapter5 のチェックリストと一致する。
   8. **P2P / RelayStatus / CLI ブートストラップ**
      - RelayStatus カードで `get_relay_status` により Mainline DHT ノード/Peer 数/Bootstrap 情報が表示され、Runbook Chapter10 への導線が機能する。
-     - `apply_cli_bootstrap_nodes` で `kukuri-cli --export-path` のリストを UI から適用し、`P2PStack` が `ENABLE_P2P_INTEGRATION=1` で再初期化される。
+     - `apply_cli_bootstrap_nodes` で `cn-cli --export-path` のリストを UI から適用し、`P2PStack` が `ENABLE_P2P_INTEGRATION=1` で再初期化される。
      - `scripts/test-docker.ps1 integration -NoBuild`（または `./scripts/test-docker.ps1 rust` 内の `p2p_mainline_smoke.rs`）で Mainline DHT 接続ヘルスチェックが再現できる。
   9. **バックグラウンドジョブ / Runbook 連携**
      - `trending_metrics_job` / `nightly.topic-create` / `nightly.post-delete-cache` / `nightly.profile-avatar-sync` / `nightly.sync-status-indicator` の artefact が `.act-artifacts/` と `tmp/logs/*` に揃い、Runbook Chapter4/5/10 の参照先が欠落していない。

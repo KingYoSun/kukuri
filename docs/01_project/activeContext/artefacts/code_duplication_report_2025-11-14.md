@@ -6,7 +6,7 @@
 ## 測定条件
 - ツール: `jscpd 4.0.5`
 - 最低検出サイズ: 5行（既定値）、50トークン
-- 対象: フロントエンド `kukuri-tauri/src`、Rust バックエンド `kukuri-tauri/src-tauri/src`、CLI `kukuri-cli/src`
+- 対象: フロントエンド `kukuri-tauri/src`、Rust バックエンド `kukuri-tauri/src-tauri/src`、CLI `kukuri-community-node/crates/cn-cli/src`
 - レポート: `tmp/jscpd/{frontend,rust}/jscpd-report.json`（Git管理外。再計測時は以下コマンドを実行）
 
 ```bash
@@ -15,10 +15,10 @@ npx jscpd --format typescript,tsx,javascript --min-lines 5 \
   --reporters json --gitignore --absolute --silent \
   --output tmp/jscpd/frontend kukuri-tauri/src
 
-# Rust（kukuri-tauri + kukuri-cli）
+# Rust（kukuri-tauri + cn-cli）
 npx jscpd --format rust --min-lines 5 \
   --reporters json --gitignore --absolute --silent \
-  --output tmp/jscpd/rust kukuri-tauri/src-tauri/src kukuri-cli/src
+  --output tmp/jscpd/rust kukuri-tauri/src-tauri/src kukuri-community-node/crates/cn-cli/src
 ```
 
 ## 計測結果サマリー
@@ -46,10 +46,10 @@ npx jscpd --format rust --min-lines 5 \
 | 4 | `src/lib/api/tauri.ts` | 70 | Tauri Invoke ラッパーで同種のエラーハンドリングを都度記述 |
 | 5 | `src/components/posts/ReplyForm.tsx` / `QuoteForm.tsx` | 70 / 57 | 各フォームで入力部品とsubmitロジックが二重化 |
 
-### Rust（kukuri-tauri/src-tauri + kukuri-cli/src）
+### Rust（kukuri-tauri/src-tauri + kukuri-community-node/crates/cn-cli/src）
 - 解析対象 251ファイル / 34,447行
 - 重複行数 1,555行（4.51%）、クローン 135件
-- `kukuri-tauri/src-tauri` が 1,533行（99%）を占め、`kukuri-cli` 側の重複は 22行のみ
+- `kukuri-tauri/src-tauri` が 1,533行（99%）を占め、`cn-cli` 側の重複は 22行のみ
 - アプリケーションサービスとプレゼンテーション層の Tauri コマンドに同型の処理が散在
 
 | # | ファイル | 重複行数 | メモ |

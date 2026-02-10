@@ -59,7 +59,7 @@ kukuri-community-node/
 
 ## `cn-cli` 統合（要件）
 
-詳細は `docs/03_implementation/community_nodes/kukuri_cli_migration.md` を参照。
+詳細は `docs/03_implementation/community_nodes/cn_cli_migration.md` を参照。
 
 ## テスト方針（補完）
 

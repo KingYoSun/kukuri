@@ -1,17 +1,17 @@
-# `kukuri-cli` 削除移行タスク完了レポート
+# 旧CLI削除移行タスク完了レポート
 
 作成日: 2026年02月10日
 
 ## 概要
 
-`kukuri-cli` の機能を `kukuri-community-node` の `cn-cli` へ統合する移行タスクを完了した。  
-`kukuri-cli/` ディレクトリは削除済みで、非 `docs` 配下の参照は 0 件を確認した。
+旧CLI の機能を `kukuri-community-node` の `cn-cli` へ統合する移行タスクを完了した。  
+旧CLI専用ディレクトリは削除済みで、非 `docs` 配下の参照は 0 件を確認した。
 
 ## 実施内容
 
 1. 参照・導線の移行状態を確認
    - `cn-cli` ベースの P2P/bootstrap 導線へ統合済みであることを確認
-   - `rg -n "kukuri-cli" --glob '!docs/**' -S` でヒットなしを確認
+   - 非 `docs` 配下で旧CLI参照がヒットしないことを確認
 2. `community-node-tests` 非グリーン要因を解消
    - 原因: `Run community node clippy` の `-D warnings` で複数クレートが連鎖失敗
    - 対応クレート:
@@ -33,11 +33,11 @@
 ## 検証結果
 
 - `gh act --workflows .github/workflows/test.yml --job community-node-tests`  
-  成功。ログ: `tmp/logs/gh-act-community-node-tests-kukuri-cli-removal-20260210-193617.log`
+  成功。ログ: `tmp/logs/gh-act-community-node-tests-cn-cli-removal-20260210-193617.log`
 - `gh act --workflows .github/workflows/test.yml --job format-check`  
-  成功。ログ: `tmp/logs/gh-act-format-check-kukuri-cli-removal-20260210-194030.log`
+  成功。ログ: `tmp/logs/gh-act-format-check-cn-cli-removal-20260210-194030.log`
 - `gh act --workflows .github/workflows/test.yml --job native-test-linux`  
-  成功。ログ: `tmp/logs/gh-act-native-test-linux-kukuri-cli-removal-20260210-194145.log`
+  成功。ログ: `tmp/logs/gh-act-native-test-linux-cn-cli-removal-20260210-194145.log`
 
 ## 補足
 

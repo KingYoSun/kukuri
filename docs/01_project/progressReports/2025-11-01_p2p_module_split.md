@@ -24,7 +24,7 @@ Phase 5 で継続していた巨大ファイル分割タスクを完了するた
 
 ## テスト
 - `./scripts/test-docker.ps1 rust`（Windows 環境依存の DLL 問題を回避するため Docker で実行。ログ上は全テスト成功）
-- `cargo test`（`kukuri-cli` をローカルで実行）
+- `cargo test`（`cn-cli` をローカルで実行）
 - `pnpm test`（フロントエンドのユニット/結合テストを再実行）
 - `cargo fmt` により Rust コードを整形
 

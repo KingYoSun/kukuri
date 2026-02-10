@@ -54,7 +54,7 @@
 - `docs/03_implementation/community_nodes/services_index.md`: index サービス（Meilisearch）実装計画
 - `docs/03_implementation/community_nodes/services_moderation.md`: moderation サービス（ルール + LLM）実装計画
 - `docs/03_implementation/community_nodes/services_trust.md`: trust サービス（Apache AGE）実装計画
-- `docs/03_implementation/community_nodes/kukuri_cli_migration.md`: 旧CLI統合方針（bootstrap/relay）
+- `docs/03_implementation/community_nodes/cn_cli_migration.md`: 旧CLI統合方針（bootstrap/relay）
 
 ## 全体マイルストーン（推奨）
 

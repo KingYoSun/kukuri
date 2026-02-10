@@ -28,7 +28,7 @@
 - `docker compose -f docker-compose.test.yml up -d community-node-postgres`
 - `docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -v "${PWD}/kukuri-community-node:/app" -w /app rust:1.88-bookworm bash -c "cargo test -p cn-moderation -- --nocapture"` 成功
 - `./scripts/test-docker.ps1 rust -NoBuild` 成功
-- `docker run --rm -v "${PWD}/kukuri-cli:/app" -w /app rust:1.88-bookworm cargo test -- --nocapture` 成功
+- `docker run --rm -v "${PWD}/kukuri-community-node:/app" -w /app rust:1.88-bookworm cargo test -- --nocapture` 成功
 - `gh act --workflows .github/workflows/test.yml --job format-check` 成功
 - `gh act --workflows .github/workflows/test.yml --job native-test-linux` 成功
 

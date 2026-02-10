@@ -13,6 +13,6 @@
 
 ## 実施テスト
 - `cd kukuri-tauri/src-tauri && cargo test`
-- `cd kukuri-cli && cargo test`
+- `cd kukuri-community-node && cargo test`
 - `cd kukuri-tauri && powershell -Command "pnpm install"`
 - `cd kukuri-tauri && powershell -Command "pnpm exec vitest run src/tests/unit/components/RelayStatus.test.tsx"`

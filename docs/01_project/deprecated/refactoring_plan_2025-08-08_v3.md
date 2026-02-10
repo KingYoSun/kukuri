@@ -65,11 +65,11 @@ connection.rs           - 3箇所
 
 #### 2.3 Clippyエラー（0件／2025年10月31日確認）
 
-2025年10月31日: `kukuri-tauri/src-tauri` と `kukuri-cli` の両ディレクトリで `cargo clippy --workspace --all-features -- -D warnings` を実行し、警告ゼロで完走したことを確認。共通ワークスペースは存在しないため、CI では同コマンドをそれぞれのディレクトリから呼び出す運用に更新する。
+2025年10月31日: `kukuri-tauri/src-tauri` と `cn-cli` の両ディレクトリで `cargo clippy --workspace --all-features -- -D warnings` を実行し、警告ゼロで完走したことを確認。共通ワークスペースは存在しないため、CI では同コマンドをそれぞれのディレクトリから呼び出す運用に更新する。
 2025年11月01日: 指定の 2 ディレクトリで `cargo clippy --all-features -- -D warnings` を再実行し、警告ゼロ継続を確認。実行ログは `docs/01_project/activeContext/artefacts/phase5_ci_path_audit.md` に追記済み。
 
 **再発防止タスク（2025年11月01日追加）:**
-- [x] `.github/workflows/test.yml` の lint 系ジョブに kukuri-cli の `cargo clippy --all-features -- -D warnings` を組み込み、Tauri 側と同等の自動チェックを保証する。（2025年11月01日 完了）
+- [x] `.github/workflows/test.yml` の lint 系ジョブに cn-cli の `cargo clippy --all-features -- -D warnings` を組み込み、Tauri 側と同等の自動チェックを保証する。（2025年11月01日 完了）
 - [x] 週次レビューのチェックリストに `phase5_ci_path_audit.md` の lint ログ確認を追加し、記録の欠落を防ぐ運用手順を整備する。（2025年11月01日 完了）
 
 **過去の検出内容（2025年08月時点）:**
@@ -116,7 +116,7 @@ Phase 5 で残っているタスクを MVP 観点で再優先付けした。詳�
 | --- | --- | --- | --- | --- |
 | ユーザーフロー / UX | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` の導線を「稼働中」に統一 | Summary Panel・DM Inbox・ユーザー検索・設定モーダル（Stage4：プロフィール Service Worker + Offline ログ、Topic/Post Offline Stage4、`trending_metrics_job` 監視）は ✅。`phase5_user_flow_summary.md` で残る未完チェックは DM 既読共有 contract テストと `/search` レートリミット UI（5.4/5.6/5.7/5.10/5.11）。 | `tauri_app_implementation_plan.md` Phase3 の「MVP残タスク」に沿って、`nightly.topic-create` / `nightly.post-delete-cache` / `nightly.profile-avatar-sync` / `nightly.user-search-pagination` artefact を登録済み。引き続き DM/Search backlog をクロージングし、3.3 (リアクション) は Post-MVP として維持。 | `phase5_user_flow_inventory.md`, `phase5_user_flow_summary.md` |
 | sync_queue / Offline | 楽観更新＋競合解決で多端末利用時のデータ整合性を確保 | Stage4（2025年11月11日）で `cache_metadata` Doc/Blob 拡張・Service Worker・Docker `offline-sync`（`tmp/logs/sync_status_indicator_stage4_<timestamp>.log`, `test-results/offline-sync/*.json`）を完了し、`nightly.topic-create` / `nightly.post-delete-cache` artefact を追加。`list_sync_queue_items` UI や再送履歴/競合バナー/`OfflineActionType::CREATE_TOPIC` も Runbook Chapter5/`phase5_ci_path_audit.md` に連携済み。 | `tauri_app_implementation_plan.md` Phase4 に従い、残タスクは `sync_engine` 再送メトリクスの可視化と Runbook KPI 化、および `nightly.user-search-pagination` artefact との整合を取るのみ。 | `tauri_app_implementation_plan.md` Phase4 |
-| P2P / EventGateway | Application 層から Legacy EventManager を切り離し、Mainline DHT Runbook を整備 | `phase5_event_gateway_design.md` でポート定義済み。2025年11月12日に Runbook Chapter10＋RelayStatus 連携と `kukuri-cli` 動的更新 PoC を完了し、`tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を Runbook 10.3/10.4 へ記録。 | EventGateway 実装＋`EventService` の依存置換と `P2PService` trait 化に注力。Runbook は保守フェーズに移行したため、High 優先タスクは Gateway 実装／メトリクス監視へリダイレクト。 | `phase5_event_gateway_design.md` |
+| P2P / EventGateway | Application 層から Legacy EventManager を切り離し、Mainline DHT Runbook を整備 | `phase5_event_gateway_design.md` でポート定義済み。2025年11月12日に Runbook Chapter10＋RelayStatus 連携と `cn-cli` 動的更新 PoC を完了し、`tmp/logs/relay_status_cli_bootstrap_20251112-094500.log` を Runbook 10.3/10.4 へ記録。 | EventGateway 実装＋`EventService` の依存置換と `P2PService` trait 化に注力。Runbook は保守フェーズに移行したため、High 優先タスクは Gateway 実装／メトリクス監視へリダイレクト。 | `phase5_event_gateway_design.md` |
 | テレメトリ/CI | Nightly + Docker でトレンド/フォロー体験を再現し、失敗時にRunbookで復旧 | `trending_feed (Docker)` の`pnpm vitest` 呼び出しとアーティファクト権限調整が継続課題。 | `scripts/test-docker.sh ts --scenario trending-feed` の fixture 分割、`nightly.yml` の権限エラー通知、`docs/01_project/roadmap.md` KPI を更新し、CI 成果物の保存先をS3互換に切替。 | `tasks/status/in_progress.md`, `docs/01_project/roadmap.md` |
 
 ## 改善計画
@@ -135,7 +135,7 @@ println!("SecureStorage: Private key saved successfully for npub={npub}");
 #### 0.2 Rustテストエラーの修正
 - Docker環境のSQLiteファイルパーミッション修正
 - テスト用データベースの適切な初期化
-- 2025年11月14日: Windowsネイティブの `STATUS_ENTRYPOINT_NOT_FOUND` を回避するため `./scripts/test-docker.ps1 rust` を実行し、`kukuri-tauri/src-tauri` 配下の 195 件（lib + integration + contract + performance）を Docker 上で完走（ログ: `tmp/logs/rust_docker_20251114.log`）。同日にネイティブで `cd kukuri-cli && cargo test` を実行し CLI 側 8 件も成功し、両プロジェクトの Rust テストが全てグリーンであることを確認。
+- 2025年11月14日: Windowsネイティブの `STATUS_ENTRYPOINT_NOT_FOUND` を回避するため `./scripts/test-docker.ps1 rust` を実行し、`kukuri-tauri/src-tauri` 配下の 195 件（lib + integration + contract + performance）を Docker 上で完走（ログ: `tmp/logs/rust_docker_20251114.log`）。同日にネイティブで `cd kukuri-community-node && cargo test` を実行し CLI 側 8 件も成功し、両プロジェクトの Rust テストが全てグリーンであることを確認。
 
 ### Phase 1: Dead Code削除（2-3日）
 
@@ -434,7 +434,7 @@ tests/
 - [x] #[allow(dead_code)]を50%削減（97件→50件以下）
 - [x] 700行超のファイル0件（現在0件を維持） — 2025年11月01日: `infrastructure/p2p/event_distributor` を責務別モジュールへ分割し、`application/services/p2p_service` を `core` / `bootstrap` / `metrics` 構成に再編。
 - [x] manager_old.rsの削除
-- [x] すべてのRustテスト成功（2025年11月14日: `./scripts/test-docker.ps1 rust` / `cd kukuri-cli && cargo test` 成功）
+- [x] すべてのRustテスト成功（2025年11月14日: `./scripts/test-docker.ps1 rust` / `cd kukuri-community-node && cargo test` 成功）
 - [x] コード重複率30%削減（2025年11月18日: `pnpm dlx jscpd` で 54,709 行中 1,523 行 = 2.78% / 旧 2,231 行 = 4.16% ・ `tmp/jscpd/frontend/jscpd-report.json`）
 
 ### ユーザー導線指標【新規追加】
@@ -443,7 +443,7 @@ tests/
   - 2025年11月04日: 同ドキュメント 1.4/1.7/5.6 にユーザー検索の実装状況、`/profile/$userId` 導線、フォロー体験の優先課題を追記。
   - 2025年11月06日: 同ドキュメント 5.7-5.10 と `phase5_user_flow_summary.md` の 1.2/2/3 にトレンド/フォロー導線、DM 未読バッジ、投稿削除後のキャッシュ整合性、Docker シナリオを追記し、CI 監査・実装計画とのリンクを同期。
   - 2025年11月06日: `useOfflineStore` / `useSyncManager` から `update_cache_metadata` と `update_sync_status` を呼び出す実装を追加し、バックエンドの同期メタデータと SyncStatusIndicator の表示が連動することを確認。`offlineStore.test.ts` にメタデータ更新ケースを追加。
-  - 2025年11月07日: Inventory 5.6.1/5.6.2 と Summary 2章に `/profile/$userId` の DM 起点導線・フォロー/フォロワー一覧のソート/検索/件数表示、`DirectMessageDialog` の Kind4 IPC・未読バッジ・再送ボタン実装状況を反映。`profile.$userId.test.tsx` を Nightly に追加し、Rust（`kukuri-cli`）と TypeScript のテスト結果を記録。
+  - 2025年11月07日: Inventory 5.6.1/5.6.2 と Summary 2章に `/profile/$userId` の DM 起点導線・フォロー/フォロワー一覧のソート/検索/件数表示、`DirectMessageDialog` の Kind4 IPC・未読バッジ・再送ボタン実装状況を反映。`profile.$userId.test.tsx` を Nightly に追加し、Rust（`cn-cli`）と TypeScript のテスト結果を記録。
   - 2025年11月07日: Inventory 5.11 と Summary Quick View に `SyncStatusIndicator` / `OfflineIndicator` の役割分担、`useSyncManager` + `offlineStore` + `offlineApi.update_cache_metadata/update_sync_status` の流れ、`get_cache_status` / `add_to_sync_queue` 連携、Vitest (`useSyncManager.test.tsx`, `SyncStatusIndicator.test.tsx`) を追記し、同期導線の不足を可視化。
   - 2025年11月09日: Summary に「MVP Exit Checklist（2025年11月09日版）」、Inventory に Sec.0「MVP Exit クロスウォーク」を追加。4カテゴリ（UX/体験 / P2P & Discovery / データ・同期 / Ops・CI）の担当セクションとテストログ（`tmp/logs/*.log`）の参照先を明示し、`tauri_app_implementation_plan.md` のステータス欄と連携させた。
 - [x] 未使用APIエンドポイント0件
@@ -501,7 +501,7 @@ tests/
    cd kukuri-tauri/src-tauri
    cargo clippy --fix --workspace --all-features
    cargo clippy --workspace --all-features -- -D warnings
-   cd ../../kukuri-cli
+   cd ../../kukuri-community-node
    cargo clippy --workspace --all-features -- -D warnings
    ```
    - 共通ワークスペースは存在しないため、Tauri アプリと CLI の両方で `cargo clippy --workspace --all-features -- -D warnings` を実行し、警告ゼロを確認する。

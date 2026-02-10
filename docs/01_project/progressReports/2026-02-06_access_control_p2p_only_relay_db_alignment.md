@@ -14,7 +14,7 @@
 ## 検証
 - `./scripts/test-docker.ps1 rust`
 - `docker run --rm --network kukuri-community-node_cn -e DATABASE_URL=postgres://cn:cn_password@postgres:5432/cn -v C:\Users\kgm11\kukuri:/app -w /app/kukuri-community-node rust:1.86-bookworm bash -c "cargo test --locked -p cn-relay"`
-- `docker run --rm -v C:\Users\kgm11\kukuri\kukuri-cli:/app -w /app rust:1.86-bookworm cargo test --locked`
+- `docker run --rm -v C:\Users\kgm11\kukuri\kukuri-community-node:/app -w /app rust:1.86-bookworm cargo test --locked`
 - `gh act --workflows .github/workflows/test.yml --job format-check`（ログ: `tmp/logs/gh-act-format-check-20260206-122344.log` / 警告: some refs were not updated / pnpm approve-builds）
 - `gh act --workflows .github/workflows/test.yml --job native-test-linux`（ログ: `tmp/logs/gh-act-native-test-linux-20260206-122517.log` / 警告: some refs were not updated / pnpm approve-builds / useRouter 警告）
 

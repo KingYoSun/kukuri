@@ -1,4 +1,4 @@
-kukuri-cli v0.1.0 (/mnt/c/Users/kgm11/kukuri/kukuri-cli)
+cn-cli v0.1.0 (/mnt/c/Users/kgm11/kukuri/kukuri-community-node/crates/cn-cli)
 ├── anyhow feature "default"
 │   ├── anyhow v1.0.99
 │   │   └── backtrace feature "default"
