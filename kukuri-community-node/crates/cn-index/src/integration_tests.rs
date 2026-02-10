@@ -1,6 +1,8 @@
 use super::*;
+use axum::body::to_bytes;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{header, StatusCode};
+use axum::response::IntoResponse;
 use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -8,7 +10,7 @@ use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres, Row};
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use tokio::net::TcpListener;
 use tokio::sync::{OnceCell, RwLock};
@@ -402,6 +404,50 @@ async fn spawn_failing_meili() -> (String, tokio::task::JoinHandle<()>) {
     (format!("http://{addr}"), handle)
 }
 
+async fn spawn_dependency_health_server(
+    status_code: Arc<AtomicU16>,
+) -> (String, tokio::task::JoinHandle<()>) {
+    let app = Router::new().route(
+        "/healthz",
+        get({
+            let status_code = Arc::clone(&status_code);
+            move || {
+                let status_code = Arc::clone(&status_code);
+                async move {
+                    let status = StatusCode::from_u16(status_code.load(Ordering::Relaxed))
+                        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                    (status, Json(json!({ "status": "mock" })))
+                }
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind dependency health mock");
+    let addr = listener.local_addr().expect("dependency health mock addr");
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("serve dependency health mock");
+    });
+
+    (format!("http://{addr}/healthz"), handle)
+}
+
+async fn response_json(response: axum::http::Response<axum::body::Body>) -> Value {
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read response body");
+    serde_json::from_slice(&bytes).expect("parse json response")
+}
+
+async fn response_text(response: axum::http::Response<axum::body::Body>) -> String {
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read response body");
+    String::from_utf8(bytes.to_vec()).expect("metrics response is utf-8")
+}
+
 async fn index_document_ids(state: &MockMeiliState, uid: &str) -> Vec<String> {
     let indexes = state.indexes.read().await;
     let mut ids = indexes
@@ -665,4 +711,72 @@ async fn reindex_job_transitions_pending_running_failed_on_meili_error() {
 
     failing_meili_handle.abort();
     let _ = failing_meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn healthz_contract_status_transitions_when_dependency_fails() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let (meili_url, _meili_state, meili_handle) = spawn_mock_meili().await;
+    let dependency_status = Arc::new(AtomicU16::new(StatusCode::OK.as_u16()));
+    let (relay_health_url, relay_handle) =
+        spawn_dependency_health_server(Arc::clone(&dependency_status)).await;
+    let mut health_targets = HashMap::new();
+    health_targets.insert("relay".to_string(), relay_health_url);
+
+    let mut state = build_state(pool, &meili_url);
+    state.health_targets = Arc::new(health_targets);
+
+    let ok_response = healthz(State(state.clone())).await.into_response();
+    assert_eq!(ok_response.status(), StatusCode::OK);
+    let ok_payload = response_json(ok_response).await;
+    assert_eq!(ok_payload.get("status"), Some(&json!("ok")));
+
+    dependency_status.store(StatusCode::SERVICE_UNAVAILABLE.as_u16(), Ordering::Relaxed);
+    let failed_response = healthz(State(state)).await.into_response();
+    assert_eq!(failed_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let failed_payload = response_json(failed_response).await;
+    assert_eq!(failed_payload.get("status"), Some(&json!("unavailable")));
+
+    relay_handle.abort();
+    let _ = relay_handle.await;
+    meili_handle.abort();
+    let _ = meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn metrics_contract_prometheus_content_type_shape_compatible() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let (meili_url, _meili_state, meili_handle) = spawn_mock_meili().await;
+    let state = build_state(pool, &meili_url);
+
+    let response = metrics_endpoint(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok());
+    assert_eq!(content_type, Some("text/plain; version=0.0.4"));
+
+    let body = response_text(response).await;
+    assert!(
+        body.contains("cn_up{service=\"cn-index\"} 1"),
+        "metrics body did not contain cn_up for cn-index: {body}"
+    );
+
+    meili_handle.abort();
+    let _ = meili_handle.await;
 }

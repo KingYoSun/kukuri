@@ -1125,11 +1125,18 @@ fn mask_pii(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{extract::Json as AxumJson, routing::post, Router};
+    use axum::body::to_bytes;
+    use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
+    use axum::{
+        extract::Json as AxumJson,
+        routing::{get, post},
+        Router,
+    };
     use cn_core::moderation::RuleCondition;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use sqlx::postgres::PgPoolOptions;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
     use tokio::net::TcpListener;
     use tokio::sync::OnceCell;
@@ -1206,6 +1213,51 @@ mod tests {
                     .expect("run migrations");
             })
             .await;
+    }
+
+    async fn spawn_dependency_health_server(
+        status_code: Arc<AtomicU16>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        let app = Router::new().route(
+            "/healthz",
+            get({
+                let status_code = Arc::clone(&status_code);
+                move || {
+                    let status_code = Arc::clone(&status_code);
+                    async move {
+                        let status = StatusCode::from_u16(status_code.load(Ordering::Relaxed))
+                            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                        (status, AxumJson(json!({ "status": "mock" })))
+                    }
+                }
+            }),
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind dependency health mock");
+        let addr = listener.local_addr().expect("dependency health mock addr");
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("serve dependency health mock");
+        });
+
+        (format!("http://{addr}/healthz"), handle)
+    }
+
+    async fn response_json(response: axum::http::Response<axum::body::Body>) -> Value {
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        serde_json::from_slice(&bytes).expect("parse json response")
+    }
+
+    async fn response_text(response: axum::http::Response<axum::body::Body>) -> String {
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        String::from_utf8(bytes.to_vec()).expect("metrics response is utf-8")
     }
 
     async fn insert_event(pool: &Pool<Postgres>, event: &nostr::RawEvent, topic_id: &str) {
@@ -1696,5 +1748,71 @@ mod tests {
         let _ = server.await;
         reset_llm_budget_state(&pool).await;
         delete_event_artifacts(&pool, &event.id).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn healthz_contract_status_transitions_when_dependency_fails() {
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+
+        let dependency_status = Arc::new(AtomicU16::new(StatusCode::OK.as_u16()));
+        let (health_url, server_handle) =
+            spawn_dependency_health_server(Arc::clone(&dependency_status)).await;
+        let mut health_targets = HashMap::new();
+        health_targets.insert("relay".to_string(), health_url);
+        let state = AppState {
+            pool,
+            config: service_config::static_handle(json!({})),
+            node_keys: Keys::generate(),
+            health_targets: Arc::new(health_targets),
+            health_client: reqwest::Client::new(),
+        };
+
+        let ok_response = healthz(State(state.clone())).await.into_response();
+        assert_eq!(ok_response.status(), StatusCode::OK);
+        let ok_payload = response_json(ok_response).await;
+        assert_eq!(ok_payload.get("status"), Some(&json!("ok")));
+
+        dependency_status.store(StatusCode::SERVICE_UNAVAILABLE.as_u16(), Ordering::Relaxed);
+        let failed_response = healthz(State(state)).await.into_response();
+        assert_eq!(failed_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let failed_payload = response_json(failed_response).await;
+        assert_eq!(failed_payload.get("status"), Some(&json!("unavailable")));
+
+        server_handle.abort();
+        let _ = server_handle.await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn metrics_contract_prometheus_content_type_shape_compatible() {
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+
+        let state = AppState {
+            pool,
+            config: service_config::static_handle(json!({})),
+            node_keys: Keys::generate(),
+            health_targets: Arc::new(HashMap::new()),
+            health_client: reqwest::Client::new(),
+        };
+        let response = metrics_endpoint(State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok());
+        assert_eq!(content_type, Some("text/plain; version=0.0.4"));
+
+        let body = response_text(response).await;
+        assert!(
+            body.contains("cn_up{service=\"cn-moderation\"} 1"),
+            "metrics body did not contain cn_up for cn-moderation: {body}"
+        );
     }
 }

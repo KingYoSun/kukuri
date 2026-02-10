@@ -123,7 +123,7 @@
 - [x] `cn-admin-api`: ルータ初期化のスモークテストを追加し、パス定義不正（`:` 形式など）を CI で即検知できるようにする。
 - [x] `cn-relay`: 認証必須モードの consent/subscription 強制を統合テストで検証する（AUTH 成功 + 未同意 => `consent-required`、同意済み未購読 => `restricted: subscription required`、同意済み購読済み => 受理）。
 - [x] `cn-user-api`: Billing/quota の 402 契約テストを追加する（search/trending/report/topic-subscription の上限超過、`QUOTA_EXCEEDED` details/reset_at、同一 `request_id` 再送時の冪等挙動）。
-- [ ] `cn-index` / `cn-moderation` / `cn-trust`: `/healthz` `/metrics` 契約テストを追加し、依存障害時の `503` 遷移と Prometheus content-type の互換を固定する。
+- [x] `cn-index` / `cn-moderation` / `cn-trust`: `/healthz` `/metrics` 契約テストを追加し、依存障害時の `503` 遷移と Prometheus content-type の互換を固定する。
 
 ## 参照（設計）
 
