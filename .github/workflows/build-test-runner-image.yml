@@ -1,0 +1,69 @@
+name: Build Test Runner Image
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Dockerfile.test'
+      - 'docker-compose.test.yml'
+      - 'scripts/docker/**'
+      - 'scripts/test-docker.sh'
+      - 'scripts/test-docker.ps1'
+      - 'kukuri-tauri/package.json'
+      - 'kukuri-tauri/pnpm-lock.yaml'
+      - 'kukuri-tauri/src-tauri/Cargo.toml'
+      - 'kukuri-tauri/src-tauri/Cargo.lock'
+      - '.github/workflows/build-test-runner-image.yml'
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-test-runner-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and Push Dockerfile.test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image metadata
+        id: meta
+        shell: bash
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          ref_name="$(echo '${{ github.ref_name }}' | tr '[:upper:]' '[:lower:]' | tr '/_' '--')"
+          image="ghcr.io/${owner}/kukuri-test-runner"
+          echo "image=${image}" >>"$GITHUB_OUTPUT"
+          echo "ref_tag=${ref_name}" >>"$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.test
+          pull: true
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.ref_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

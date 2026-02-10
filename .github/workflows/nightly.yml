@@ -5,6 +5,14 @@ on:
     - cron: '0 15 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: 20
 
@@ -49,6 +57,8 @@ jobs:
   desktop-e2e:
     name: Desktop E2E (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -82,6 +92,8 @@ jobs:
   community-node-e2e:
     name: Community Node E2E (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -117,6 +129,8 @@ jobs:
   trending-feed:
     name: Trending Feed (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -172,6 +186,8 @@ jobs:
   profile-avatar-sync:
     name: Profile Avatar Sync (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -191,6 +207,8 @@ jobs:
   sync-status-indicator:
     name: Sync Status Indicator (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -254,6 +272,8 @@ jobs:
   user-search-pagination:
     name: User Search (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -294,6 +314,8 @@ jobs:
   direct-message:
     name: Direct Message (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -320,6 +342,8 @@ jobs:
   topic-create:
     name: Topic Create (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -346,6 +370,8 @@ jobs:
   post-delete-cache:
     name: Post Delete Cache (Docker)
     runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

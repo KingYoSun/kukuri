@@ -179,9 +179,70 @@ function Invoke-DockerCompose {
 
 # Docker�C���[�W�̑��݊m�F
 function Test-DockerImageExists {
-    $runnerImage = docker images -q "kukuri_test-runner" 2>$null
-    $tsImage = docker images -q "kukuri_ts-test" 2>$null
+    $imageNames = Get-TestComposeImageNames
+    $runnerImage = docker images -q $imageNames.Runner 2>$null
+    $tsImage = docker images -q $imageNames.Ts 2>$null
     return (![string]::IsNullOrEmpty($runnerImage) -and -not [string]::IsNullOrEmpty($tsImage))
+}
+
+function Get-TestComposeImageNames {
+    $names = @{
+        Runner = "kukuri-test-runner"
+        Ts = "kukuri-ts-test"
+    }
+
+    $images = & docker compose -f docker-compose.test.yml config --images 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $images) {
+        return $names
+    }
+
+    $runner = $images | Where-Object { $_ -match "test-runner$" } | Select-Object -First 1
+    $ts = $images | Where-Object { $_ -match "ts-test$" } | Select-Object -First 1
+
+    if (-not [string]::IsNullOrWhiteSpace($runner)) {
+        $names.Runner = $runner
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ts)) {
+        $names.Ts = $ts
+    }
+
+    return $names
+}
+
+function Use-PrebuiltTestImage {
+    $prebuiltImage = $env:KUKURI_TEST_RUNNER_IMAGE
+    if ([string]::IsNullOrWhiteSpace($prebuiltImage)) {
+        return $false
+    }
+
+    Write-Info "Trying prebuilt Docker test image: $prebuiltImage"
+
+    & docker image inspect $prebuiltImage *> $null
+    if ($LASTEXITCODE -ne 0) {
+        & docker pull $prebuiltImage 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to pull prebuilt image ($prebuiltImage). Falling back to local build."
+            return $false
+        }
+    }
+
+    $imageNames = Get-TestComposeImageNames
+
+    & docker tag $prebuiltImage $imageNames.Runner *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Failed to tag prebuilt image to $($imageNames.Runner). Falling back to local build."
+        return $false
+    }
+
+    & docker tag $prebuiltImage $imageNames.Ts *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Failed to tag prebuilt image to $($imageNames.Ts). Falling back to local build."
+        return $false
+    }
+
+    Write-Success "Using prebuilt image via $($imageNames.Runner) and $($imageNames.Ts)"
+    return $true
 }
 
 # Docker�C���[�W�̃r���h
@@ -190,6 +251,10 @@ function Build-TestImage {
     
     if (-not $Force -and (Test-DockerImageExists)) {
         Write-Info "Docker image already exists. Use 'build' command to rebuild."
+        return
+    }
+
+    if (-not $Force -and (Use-PrebuiltTestImage)) {
         return
     }
     

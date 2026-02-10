@@ -1,6 +1,6 @@
 [title] 作業中タスク（in_progress）
 
-最終更新日: 2026年02月10日
+最終更新日: 2026年02月11日
 
 ## 方針（2025年09月15日 更新）
 
@@ -63,17 +63,23 @@
 ### 2026年02月10日 GitHub Actions 実行時間短縮（全方針一括対応）
 
 - 目的: GitHub Actions `test.yml` の実行時間を短縮し、開発ループを高速化する（目安: 通常変更で 40 分未満、docs-only 変更では重いジョブをスキップ）。
-- 状態: 着手（起票のみ。実装これから）。
+- 状態: 実装完了（計測フェーズ）。
 - 対象: `.github/workflows/test.yml` / `.github/workflows/smoke-tests.yml` / `.github/workflows/nightly.yml` / `scripts/test-docker.ps1` / `scripts/test-docker.sh` / `Dockerfile.test`。
 - 実施チェックリスト:
-  - [ ] `desktop-e2e` の `needs: docker-test` を解消して `docker-test` と並列実行にする。
-  - [ ] docs-only 変更時に重いジョブ（`docker-test` / `desktop-e2e` / `smoke-tests`）をスキップする条件分岐を追加する。
-  - [ ] `concurrency` を導入して同一ブランチの古い workflow 実行を自動キャンセルする。
-  - [ ] PR 必須チェックを「高速セット」と「重厚セット」に分離する。
-  - [ ] 高速セットを `format-check` / `native-test-linux` / `community-node-tests` / `build-test-windows` として定義する。
-  - [ ] 重厚セット（`desktop-e2e` / `docker-test` / `smoke-tests`）を `push(main/develop)` と `nightly` 中心へ移行する。
-  - [ ] `Dockerfile.test` のプリビルドイメージ（GHCR）活用を導入し、E2E の毎回フルビルド時間を削減する。
+  - [x] `desktop-e2e` の `needs: docker-test` を解消して `docker-test` と並列実行にする。
+  - [x] docs-only 変更時に重いジョブ（`docker-test` / `desktop-e2e` / `smoke-tests`）をスキップする条件分岐を追加する。
+  - [x] `concurrency` を導入して同一ブランチの古い workflow 実行を自動キャンセルする。
+  - [x] PR 必須チェックを「高速セット」と「重厚セット」に分離する。
+  - [x] 高速セットを `format-check` / `native-test-linux` / `community-node-tests` / `build-test-windows` として定義する。
+  - [x] 重厚セット（`desktop-e2e` / `docker-test` / `smoke-tests`）を `push(main/develop)` と `nightly` 中心へ移行する。
+  - [x] `Dockerfile.test` のプリビルドイメージ（GHCR）活用を導入し、E2E の毎回フルビルド時間を削減する。
+- 進捗メモ（2026年02月11日）:
+  - `.github/workflows/build-test-runner-image.yml` を追加し、`Dockerfile.test` を GHCR へ定期/差分ビルド配信するようにした。
+  - `scripts/test-docker.sh` / `scripts/test-docker.ps1` に `KUKURI_TEST_RUNNER_IMAGE` 優先利用（pull/tag 成功時はビルド省略、失敗時フォールバック）を実装。
+  - `test.yml` は `PR Required Checks`（高速セット）と `Push Heavy Checks`（重厚セット）へ分離し、重厚ジョブを push 専用化した。
+  - `smoke-tests.yml` は push + docs-ignore に変更し、nightly/smoke/test すべてに `concurrency` を導入した。
+  - `gh act` 検証: `format-check` / `native-test-linux` / `community-node-tests` は成功（ログ: `tmp/logs/gh-act-*-ci-optimization-20260211-*.log`）。
 - 受け入れ条件:
   - [ ] `test.yml` の直近 5 実行平均が 40 分未満になっている。
   - [ ] docs-only 変更の PR で重いジョブが起動しないことを確認する。
-  - [ ] required checks の運用方針（高速セット/重厚セット）がドキュメント化されている。
+  - [x] required checks の運用方針（高速セット/重厚セット）がドキュメント化されている。

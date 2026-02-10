@@ -77,7 +77,56 @@ compose_run() {
   return $code
 }
 
+resolve_compose_image_name() {
+  local suffix="$1"
+  local images
+  images=$(docker compose --project-name "$PROJECT_NAME" -f "$COMPOSE_FILE" config --images 2>/dev/null || true)
+  local resolved
+  resolved=$(printf '%s\n' "$images" | grep -E "${suffix}$" | head -n1 || true)
+  if [[ -n "$resolved" ]]; then
+    printf '%s\n' "$resolved"
+    return
+  fi
+  printf '%s-%s\n' "$PROJECT_NAME" "$suffix"
+}
+
+use_prebuilt_test_image() {
+  local prebuilt_image="${KUKURI_TEST_RUNNER_IMAGE:-}"
+  if [[ -z "$prebuilt_image" ]]; then
+    return 1
+  fi
+
+  echo "Trying prebuilt Docker test image: ${prebuilt_image}"
+  if ! docker image inspect "$prebuilt_image" >/dev/null 2>&1; then
+    if ! docker pull "$prebuilt_image"; then
+      echo "[WARN] Failed to pull prebuilt image (${prebuilt_image}). Falling back to local build." >&2
+      return 1
+    fi
+  fi
+
+  local runner_image
+  local ts_image
+  runner_image="$(resolve_compose_image_name test-runner)"
+  ts_image="$(resolve_compose_image_name ts-test)"
+
+  if ! docker tag "$prebuilt_image" "$runner_image"; then
+    echo "[WARN] Failed to tag prebuilt image to ${runner_image}. Falling back to local build." >&2
+    return 1
+  fi
+
+  if ! docker tag "$prebuilt_image" "$ts_image"; then
+    echo "[WARN] Failed to tag prebuilt image to ${ts_image}. Falling back to local build." >&2
+    return 1
+  fi
+
+  echo "[OK] Using prebuilt image via ${runner_image} and ${ts_image}"
+  return 0
+}
+
 build_image() {
+  if use_prebuilt_test_image; then
+    return
+  fi
   echo 'Building Docker test image (with cache optimization)...'
   DOCKER_BUILDKIT=1 compose_run '' build test-runner ts-test
   echo '[OK] Docker image built successfully'

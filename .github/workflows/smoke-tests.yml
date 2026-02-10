@@ -2,9 +2,18 @@ name: Smoke Tests (Docker)
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+    paths-ignore:
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: smoke-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   smoke:
@@ -14,6 +23,26 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Resolve prebuilt test image
+        id: image
+        shell: bash
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "ref=ghcr.io/${owner}/kukuri-test-runner:latest" >>"$GITHUB_OUTPUT"
+
+      - name: Warm Docker image from GHCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_ref="${{ steps.image.outputs.ref }}"
+          if docker pull "$image_ref"; then
+            docker tag "$image_ref" kukuri-test-runner
+            docker tag "$image_ref" kukuri-ts-test
+            echo "Using prebuilt image: $image_ref"
+          else
+            echo "[WARN] Failed to pull prebuilt image ($image_ref). Falling back to local build."
+          fi
 
       - name: Cleanup Docker disk usage
         run: |
@@ -28,4 +57,4 @@ jobs:
 
       - name: Docker Compose Smoke (test-runner)
         run: |
-          docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner p2p-bootstrap test-runner
+          docker compose -f docker-compose.test.yml up --exit-code-from test-runner p2p-bootstrap test-runner

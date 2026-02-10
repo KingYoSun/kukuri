@@ -1,6 +1,6 @@
 # 実装ドキュメント概要
 
-**最終更新**: 2026年02月02日
+**最終更新**: 2026年02月11日
 
 このディレクトリには、Kukuriプロジェクトの実装に関する詳細なドキュメントを集約しています。
 最新の実装状況は `docs/01_project/activeContext/tasks/` と進捗レポートを参照してください。
@@ -33,6 +33,7 @@
 
 ### テスト / QA
 - [testing_guide.md](./testing_guide.md) - テスト戦略
+- [ci_required_checks_policy.md](./ci_required_checks_policy.md) - PR必須チェック/重厚チェックの運用
 - [docker_test_environment.md](./docker_test_environment.md) - Dockerテスト環境
 - [e2e_test_setup.md](./e2e_test_setup.md) - E2Eテスト環境セットアップ
 - [e2e_test_implementation_plan.md](./e2e_test_implementation_plan.md) - E2E導入計画
