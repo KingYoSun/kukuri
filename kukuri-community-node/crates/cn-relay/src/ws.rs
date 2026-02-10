@@ -297,6 +297,7 @@ async fn handle_req_message(
 
     subscriptions.insert(sub_id.clone(), filters.clone());
     let mut seen = std::collections::HashSet::new();
+    let mut backfill_events = Vec::new();
     for filter in &filters {
         let events = fetch_events(state, filter).await?;
         for raw in events {
@@ -306,8 +307,12 @@ async fn handle_req_message(
             if !is_allowed_event(auth_pubkey, &raw).await? {
                 continue;
             }
-            send_event(sender, &sub_id, &raw).await?;
+            backfill_events.push(raw);
         }
+    }
+    backfill_events.sort_unstable_by(compare_backfill_events);
+    for raw in &backfill_events {
+        send_event(sender, &sub_id, raw).await?;
     }
     send_eose(sender, &sub_id).await?;
     Ok(())
@@ -408,7 +413,7 @@ async fn fetch_events(state: &AppState, filter: &RelayFilter) -> Result<Vec<nost
         builder.push(" AND e.created_at <= ");
         builder.push_bind(until);
     }
-    builder.push(" ORDER BY e.created_at ASC, e.event_id ASC");
+    builder.push(" ORDER BY e.created_at DESC, e.event_id ASC");
     if let Some(limit) = filter.limit {
         builder.push(" LIMIT ");
         builder.push(limit.to_string());
@@ -422,6 +427,12 @@ async fn fetch_events(state: &AppState, filter: &RelayFilter) -> Result<Vec<nost
         events.push(raw);
     }
     Ok(events)
+}
+
+fn compare_backfill_events(a: &nostr::RawEvent, b: &nostr::RawEvent) -> std::cmp::Ordering {
+    b.created_at
+        .cmp(&a.created_at)
+        .then_with(|| a.id.cmp(&b.id))
 }
 
 async fn dispatch_event(

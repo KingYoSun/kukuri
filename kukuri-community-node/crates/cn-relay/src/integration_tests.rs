@@ -434,6 +434,50 @@ async fn insert_topic_subscription(pool: &Pool<Postgres>, topic_id: &str, pubkey
     .expect("insert topic subscription");
 }
 
+async fn insert_backfill_event(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+    event_id: &str,
+    created_at: i64,
+    content: &str,
+) {
+    let tags = json!([["t", topic_id]]);
+    let raw_json = json!({
+        "id": event_id,
+        "pubkey": "1".repeat(64),
+        "created_at": created_at,
+        "kind": 1,
+        "tags": tags.clone(),
+        "content": content,
+        "sig": "2".repeat(128)
+    });
+    sqlx::query(
+        "INSERT INTO cn_relay.events \
+         (event_id, pubkey, kind, created_at, tags, content, sig, raw_json, ingested_at, is_deleted, is_ephemeral, is_current, replaceable_key, addressable_key, expires_at) \
+         VALUES ($1, $2, 1, $3, $4, $5, $6, $7, NOW(), FALSE, FALSE, TRUE, NULL, NULL, NULL)",
+    )
+    .bind(event_id)
+    .bind("1".repeat(64))
+    .bind(created_at)
+    .bind(tags)
+    .bind(content)
+    .bind("2".repeat(128))
+    .bind(raw_json)
+    .execute(pool)
+    .await
+    .expect("insert relay event");
+
+    sqlx::query(
+        "INSERT INTO cn_relay.event_topics (event_id, topic_id) VALUES ($1, $2) \
+         ON CONFLICT (event_id, topic_id) DO NOTHING",
+    )
+    .bind(event_id)
+    .bind(topic_id)
+    .execute(pool)
+    .await
+    .expect("insert relay event topic");
+}
+
 async fn wait_for_auth_challenge(ws: &mut WsStream, label: &str) -> String {
     let auth = wait_for_ws_json_any(ws, WAIT_TIMEOUT, label, |value| {
         value.get(0).and_then(|v| v.as_str()) == Some("AUTH")
@@ -545,6 +589,122 @@ async fn ingest_outbox_ws_gossip_integration() {
     server_handle.abort();
     let _ = timeout(WAIT_TIMEOUT, gossip.router_a.shutdown()).await;
     let _ = timeout(WAIT_TIMEOUT, gossip.router_b.shutdown()).await;
+}
+
+#[tokio::test]
+async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after_eose() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-backfill-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let newest_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let tie_low_id = "1111111111111111111111111111111111111111111111111111111111111111";
+    let tie_high_id = "9999999999999999999999999999999999999999999999999999999999999999";
+    let oldest_id = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    insert_backfill_event(&pool, &topic_id, newest_id, 1_700_000_300, "newest").await;
+    insert_backfill_event(&pool, &topic_id, tie_high_id, 1_700_000_200, "tie-high").await;
+    insert_backfill_event(&pool, &topic_id, tie_low_id, 1_700_000_200, "tie-low").await;
+    insert_backfill_event(&pool, &topic_id, oldest_id, 1_700_000_100, "oldest").await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut subscriber = connect_ws(addr).await;
+    let sub_id = "sub-backfill-limit";
+    subscriber
+        .send(Message::Text(
+            json!(["REQ", sub_id, { "kinds": [1], "#t": [topic_id.clone()], "limit": 2 }])
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("send req with limit");
+
+    let first = wait_for_ws_json(
+        &mut subscriber,
+        WAIT_TIMEOUT,
+        "first backfill message",
+        |_| true,
+    )
+    .await;
+    assert_eq!(first.get(0).and_then(|v| v.as_str()), Some("EVENT"));
+    assert_eq!(first.get(1).and_then(|v| v.as_str()), Some(sub_id));
+    assert_eq!(
+        first
+            .get(2)
+            .and_then(|event| event.get("id"))
+            .and_then(|id| id.as_str()),
+        Some(newest_id)
+    );
+
+    let second = wait_for_ws_json(
+        &mut subscriber,
+        WAIT_TIMEOUT,
+        "second backfill message",
+        |_| true,
+    )
+    .await;
+    assert_eq!(second.get(0).and_then(|v| v.as_str()), Some("EVENT"));
+    assert_eq!(second.get(1).and_then(|v| v.as_str()), Some(sub_id));
+    assert_eq!(
+        second
+            .get(2)
+            .and_then(|event| event.get("id"))
+            .and_then(|id| id.as_str()),
+        Some(tie_low_id)
+    );
+
+    let third = wait_for_ws_json(&mut subscriber, WAIT_TIMEOUT, "backfill eose", |_| true).await;
+    assert_eq!(third.get(0).and_then(|v| v.as_str()), Some("EOSE"));
+    assert_eq!(third.get(1).and_then(|v| v.as_str()), Some(sub_id));
+
+    let mut publisher = connect_ws(addr).await;
+    let keys = Keys::generate();
+    let realtime = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "realtime-after-eose".to_string(),
+    )
+    .expect("build realtime event");
+    publisher
+        .send(Message::Text(
+            json!(["EVENT", realtime.clone()]).to_string().into(),
+        ))
+        .await
+        .expect("send realtime event");
+
+    let publish_ok = wait_for_ws_json(&mut publisher, WAIT_TIMEOUT, "publisher ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(realtime.id.as_str())
+    })
+    .await;
+    assert_eq!(publish_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let delivered = wait_for_ws_json(
+        &mut subscriber,
+        WAIT_TIMEOUT,
+        "realtime event after eose",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("EVENT")
+                && value
+                    .get(2)
+                    .and_then(|event| event.get("id"))
+                    .and_then(|id| id.as_str())
+                    == Some(realtime.id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(delivered.get(1).and_then(|v| v.as_str()), Some(sub_id));
+
+    server_handle.abort();
 }
 
 #[tokio::test]
