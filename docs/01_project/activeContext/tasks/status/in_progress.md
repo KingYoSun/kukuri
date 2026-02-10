@@ -59,3 +59,21 @@
       - 2026年02月02日: `authStore.bootstrapTopics` の public topic join を非同期化（オンボーディング遅延対策）。`./scripts/test-docker.ps1 e2e` を完走（14 specs pass, 13分37秒、`tmp/logs/desktop-e2e/20260202-115045.log`）。`gh act --job format-check` / `--job native-test-linux` を完走。
       - 2026年02月02日: `generateNewKeypair` の後段初期化（nostr/relay/accounts/topic/avatar）を defer 可能にし、`WelcomeScreen` からは defer で実行して `profile-setup` の表示を先に出す調整。`./scripts/test-docker.ps1 ts` / `./scripts/test-docker.ps1 rust` を完走（act/useRouter の警告は既知）。`gh act --job format-check` / `--job native-test-linux` を完走。
       - 2026年02月03日: community node の labels/trust 署名検証で pubkey ミスマッチを回避する修正を反映。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走（ログは `tmp/logs/gh-act-*.log`）。
+
+### 2026年02月10日 GitHub Actions 実行時間短縮（全方針一括対応）
+
+- 目的: GitHub Actions `test.yml` の実行時間を短縮し、開発ループを高速化する（目安: 通常変更で 40 分未満、docs-only 変更では重いジョブをスキップ）。
+- 状態: 着手（起票のみ。実装これから）。
+- 対象: `.github/workflows/test.yml` / `.github/workflows/smoke-tests.yml` / `.github/workflows/nightly.yml` / `scripts/test-docker.ps1` / `scripts/test-docker.sh` / `Dockerfile.test`。
+- 実施チェックリスト:
+  - [ ] `desktop-e2e` の `needs: docker-test` を解消して `docker-test` と並列実行にする。
+  - [ ] docs-only 変更時に重いジョブ（`docker-test` / `desktop-e2e` / `smoke-tests`）をスキップする条件分岐を追加する。
+  - [ ] `concurrency` を導入して同一ブランチの古い workflow 実行を自動キャンセルする。
+  - [ ] PR 必須チェックを「高速セット」と「重厚セット」に分離する。
+  - [ ] 高速セットを `format-check` / `native-test-linux` / `community-node-tests` / `build-test-windows` として定義する。
+  - [ ] 重厚セット（`desktop-e2e` / `docker-test` / `smoke-tests`）を `push(main/develop)` と `nightly` 中心へ移行する。
+  - [ ] `Dockerfile.test` のプリビルドイメージ（GHCR）活用を導入し、E2E の毎回フルビルド時間を削減する。
+- 受け入れ条件:
+  - [ ] `test.yml` の直近 5 実行平均が 40 分未満になっている。
+  - [ ] docs-only 変更の PR で重いジョブが起動しないことを確認する。
+  - [ ] required checks の運用方針（高速セット/重厚セット）がドキュメント化されている。
