@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::{ApiError, ApiResult, AppState};
 
 const AUTH_KIND: u32 = 22242;
+const AUTHENTICATE_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
 
 #[derive(Deserialize)]
 pub struct AuthChallengeRequest {
@@ -215,15 +216,22 @@ pub(crate) async fn require_auth(state: &AppState, headers: &HeaderMap) -> ApiRe
     let header = headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", "missing token"))?;
+        .ok_or_else(|| auth_required_error("missing token"))?;
     let token = header
         .strip_prefix("Bearer ")
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", "invalid token"))?;
+        .ok_or_else(|| auth_required_error("invalid token"))?;
     let claims = auth::verify_token(token, &state.jwt_config)
-        .map_err(|err| ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", err.to_string()))?;
+        .map_err(|err| auth_required_error(err.to_string()))?;
     let pubkey = claims.sub;
     ensure_active_subscriber(&state.pool, &pubkey).await?;
     Ok(AuthContext { pubkey })
+}
+
+fn auth_required_error(message: impl Into<String>) -> ApiError {
+    ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", message).with_header(
+        "WWW-Authenticate",
+        AUTHENTICATE_BEARER_CHALLENGE.to_string(),
+    )
 }
 
 async fn mark_challenge_used(pool: &sqlx::Pool<Postgres>, challenge: &str) -> ApiResult<()> {

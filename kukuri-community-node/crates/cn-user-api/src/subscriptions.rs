@@ -825,7 +825,10 @@ mod api_contract_tests {
             .await;
     }
 
-    async fn test_state_with_meili_url(meili_url: &str) -> crate::AppState {
+    async fn test_state_with_meili_url_and_bootstrap_auth_mode(
+        meili_url: &str,
+        bootstrap_auth_mode: &str,
+    ) -> crate::AppState {
         let pool = PgPoolOptions::new()
             .connect(&database_url())
             .await
@@ -845,7 +848,7 @@ mod api_contract_tests {
             "rate_limit": { "enabled": false }
         }));
         let bootstrap_config = service_config::static_handle(serde_json::json!({
-            "auth": { "mode": "off" }
+            "auth": { "mode": bootstrap_auth_mode }
         }));
         let meili = cn_core::meili::MeiliClient::new(meili_url.to_string(), None).expect("meili");
         let export_dir = PathBuf::from(format!("tmp/test_exports/{}", Uuid::new_v4()));
@@ -865,8 +868,16 @@ mod api_contract_tests {
         }
     }
 
+    async fn test_state_with_meili_url(meili_url: &str) -> crate::AppState {
+        test_state_with_meili_url_and_bootstrap_auth_mode(meili_url, "off").await
+    }
+
     async fn test_state() -> crate::AppState {
         test_state_with_meili_url("http://localhost:7700").await
+    }
+
+    async fn test_state_with_bootstrap_auth_required() -> crate::AppState {
+        test_state_with_meili_url_and_bootstrap_auth_mode("http://localhost:7700", "required").await
     }
 
     fn issue_token(config: &cn_core::auth::JwtConfig, pubkey: &str) -> String {
@@ -2517,6 +2528,59 @@ mod api_contract_tests {
         assert_eq!(
             payload.get("next_refresh_at").and_then(Value::as_i64),
             Some(expires_at)
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_nodes_contract_requires_www_authenticate_header() {
+        let state = test_state_with_bootstrap_auth_required().await;
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/nodes",
+                get(crate::bootstrap::get_bootstrap_nodes),
+            )
+            .with_state(state);
+        let (status, headers, payload) =
+            get_json_public_with_headers(app, "/v1/bootstrap/nodes", &[]).await;
+
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("AUTH_REQUIRED")
+        );
+        assert_eq!(
+            headers
+                .get(header::WWW_AUTHENTICATE)
+                .and_then(|value| value.to_str().ok()),
+            Some(r#"Bearer realm="cn-user-api""#)
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_services_contract_requires_www_authenticate_header() {
+        let state = test_state_with_bootstrap_auth_required().await;
+        let topic_id = format!("kukuri:bootstrap-auth-{}", Uuid::new_v4());
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(crate::bootstrap::get_bootstrap_services),
+            )
+            .with_state(state);
+        let path = format!("/v1/bootstrap/topics/{topic_id}/services");
+        let (status, headers, payload) = get_json_public_with_headers(app, &path, &[]).await;
+
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("AUTH_REQUIRED")
+        );
+        assert_eq!(
+            headers
+                .get(header::WWW_AUTHENTICATE)
+                .and_then(|value| value.to_str().ok()),
+            Some(r#"Bearer realm="cn-user-api""#)
         );
     }
 

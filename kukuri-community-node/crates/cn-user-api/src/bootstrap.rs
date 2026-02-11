@@ -154,7 +154,7 @@ mod api_contract_tests {
     use super::*;
     use axum::body::Body;
     use axum::extract::ConnectInfo;
-    use axum::http::{Request, StatusCode};
+    use axum::http::{header, HeaderMap, Request, StatusCode};
     use axum::routing::get;
     use axum::Router;
     use cn_core::service_config;
@@ -198,7 +198,7 @@ mod api_contract_tests {
         }
     }
 
-    async fn request_status(app: Router, uri: &str) -> StatusCode {
+    async fn request_status_and_headers(app: Router, uri: &str) -> (StatusCode, HeaderMap) {
         let mut request = Request::builder()
             .method("GET")
             .uri(uri)
@@ -208,7 +208,7 @@ mod api_contract_tests {
             .extensions_mut()
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
         let response = app.oneshot(request).await.expect("response");
-        response.status()
+        (response.status(), response.headers().clone())
     }
 
     #[tokio::test]
@@ -216,8 +216,14 @@ mod api_contract_tests {
         let app = Router::new()
             .route("/v1/bootstrap/nodes", get(get_bootstrap_nodes))
             .with_state(test_state());
-        let status = request_status(app, "/v1/bootstrap/nodes").await;
+        let (status, headers) = request_status_and_headers(app, "/v1/bootstrap/nodes").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            headers
+                .get(header::WWW_AUTHENTICATE)
+                .and_then(|value| value.to_str().ok()),
+            Some(r#"Bearer realm="cn-user-api""#)
+        );
     }
 
     #[tokio::test]
@@ -228,7 +234,14 @@ mod api_contract_tests {
                 get(get_bootstrap_services),
             )
             .with_state(test_state());
-        let status = request_status(app, "/v1/bootstrap/topics/kukuri:topic1/services").await;
+        let (status, headers) =
+            request_status_and_headers(app, "/v1/bootstrap/topics/kukuri:topic1/services").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            headers
+                .get(header::WWW_AUTHENTICATE)
+                .and_then(|value| value.to_str().ok()),
+            Some(r#"Bearer realm="cn-user-api""#)
+        );
     }
 }
