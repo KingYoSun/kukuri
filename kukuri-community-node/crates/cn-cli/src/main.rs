@@ -309,6 +309,7 @@ async fn main() -> Result<()> {
                     let summary =
                         cn_core::access_control::rotate_epoch(&pool, &node_keys, &topic_id, &scope)
                             .await?;
+                    audit_access_control_rotate(&pool, &summary).await?;
                     let output = serde_json::json!({
                         "topic_id": summary.topic_id,
                         "scope": summary.scope,
@@ -337,6 +338,7 @@ async fn main() -> Result<()> {
                         args.reason.as_deref(),
                     )
                     .await?;
+                    audit_access_control_revoke(&pool, &summary, args.reason.as_deref()).await?;
                     let output = serde_json::json!({
                         "topic_id": summary.topic_id,
                         "scope": summary.scope,
@@ -490,6 +492,51 @@ async fn audit_node_key(action: &str, keys: &nostr_sdk::Keys) -> Result<()> {
         "public_key": cn_core::node_key::public_key_hex(keys)
     });
     cn_core::admin::log_audit(&pool, "system", action, "node_key", Some(diff), None).await?;
+    Ok(())
+}
+
+async fn audit_access_control_rotate(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    summary: &cn_core::access_control::RotateSummary,
+) -> Result<()> {
+    cn_core::admin::log_audit(
+        pool,
+        "system",
+        "access_control.rotate",
+        &format!("access_control:{}:{}", summary.topic_id, summary.scope),
+        Some(serde_json::json!({
+            "previous_epoch": summary.previous_epoch,
+            "new_epoch": summary.new_epoch,
+            "recipients": summary.recipients
+        })),
+        None,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn audit_access_control_revoke(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    summary: &cn_core::access_control::RevokeSummary,
+    reason: Option<&str>,
+) -> Result<()> {
+    cn_core::admin::log_audit(
+        pool,
+        "system",
+        "access_control.revoke",
+        &format!(
+            "access_control:{}:{}:{}",
+            summary.topic_id, summary.scope, summary.revoked_pubkey
+        ),
+        Some(serde_json::json!({
+            "reason": reason,
+            "previous_epoch": summary.rotation.previous_epoch,
+            "new_epoch": summary.rotation.new_epoch,
+            "recipients": summary.rotation.recipients
+        })),
+        None,
+    )
+    .await?;
     Ok(())
 }
 
