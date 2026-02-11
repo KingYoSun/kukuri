@@ -184,11 +184,28 @@ jobs:
             librsvg2-dev \
             libsqlite3-dev
 
-      - name: Setup Rust
+      - name: Setup Rust (attempt 1)
+        id: setup_rust_attempt_1
+        continue-on-error: true
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt, clippy
+
+      - name: Setup Rust (attempt 2)
+        id: setup_rust_attempt_2
+        if: steps.setup_rust_attempt_1.outcome == 'failure'
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
+
+      - name: Fail if Rust setup did not recover
+        if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure'
+        run: |
+          echo "Rust toolchain setup failed after two attempts."
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -265,11 +282,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust
+      - name: Setup Rust (attempt 1)
+        id: setup_rust_attempt_1
+        continue-on-error: true
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
           components: clippy
+
+      - name: Setup Rust (attempt 2)
+        id: setup_rust_attempt_2
+        if: steps.setup_rust_attempt_1.outcome == 'failure'
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: clippy
+
+      - name: Fail if Rust setup did not recover
+        if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure'
+        run: |
+          echo "Rust toolchain setup failed after two attempts."
+          exit 1
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -328,11 +362,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust
+      - name: Setup Rust (attempt 1)
+        id: setup_rust_attempt_1
+        continue-on-error: true
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt
+
+      - name: Setup Rust (attempt 2)
+        id: setup_rust_attempt_2
+        if: steps.setup_rust_attempt_1.outcome == 'failure'
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+
+      - name: Fail if Rust setup did not recover
+        if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure'
+        run: |
+          echo "Rust toolchain setup failed after two attempts."
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
