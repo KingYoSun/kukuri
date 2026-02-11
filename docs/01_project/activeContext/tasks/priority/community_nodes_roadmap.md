@@ -132,6 +132,13 @@
 - [x] Runbook 必須メトリクス（outbox consumer別エラー率/処理レイテンシ/batch size）を `cn-index` / `cn-moderation` / `cn-trust` に追加し、`/metrics` 契約テストでメトリクス名とラベル互換を固定する。
 - [x] `admin_console.md` の未充足要件（Moderation のルールテスト実行、Trust のパラメータ/対象検索、Access Control の invite.capability 運用）について、実装するか要件更新でスコープを縮退するかを確定し、選択した方針に対する API/UI テストを追加する。
 
+## 未実装/不足事項（2026年02月11日 監査追記）
+
+- [ ] `cn-relay`: `/healthz` `/metrics` の契約テストを追加し、Runbook 必須メトリクス（`ws_connections` / `ws_req_total` / `ws_event_total` / `ingest_received_total` / `ingest_rejected_total` / `gossip_received_total` / `gossip_sent_total` / `dedupe_hits_total` / `dedupe_misses_total`）の公開互換を固定する。
+- [ ] `cn-user-api`: 認証/同意/課金メータの回帰テストを追加し、API 実行で `auth_success_total` / `auth_failure_total` / `consent_required_total` / `quota_exceeded_total` の増分を検証する。
+- [ ] `ops_runbook.md` のバックアップ/リストア要件（`pg_dump` 世代管理・`pg_restore` 復旧手順）を運用スクリプト化し、`scripts/test-docker.ps1` から実行できる復旧ドリルを整備する。
+- [ ] `cn-cli`: Node Key 生成/ローテーションと Access Control rotate/revoke の統合テストを追加し、監査ログ記録・DB 反映・CLI 出力の後方互換を担保する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
