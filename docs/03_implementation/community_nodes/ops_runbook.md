@@ -66,6 +66,9 @@
   - `backlog = max(seq) - consumer_offsets.last_seq`
   - 詳細: `docs/03_implementation/community_nodes/outbox_notify_semantics.md`
 - consumer別エラー率、処理レイテンシ、batch size
+  - `outbox_consumer_batches_total{service,consumer,result}`（`result=success|error`）
+  - `outbox_consumer_processing_duration_seconds{service,consumer,result}`
+  - `outbox_consumer_batch_size{service,consumer}`
 
 #### user-api（認証/同意/課金）
 - `auth_success_total`, `auth_failure_total`

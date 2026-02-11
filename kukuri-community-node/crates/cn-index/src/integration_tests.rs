@@ -763,6 +763,24 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
     let (meili_url, _meili_state, meili_handle) = spawn_mock_meili().await;
     let state = build_state(pool, &meili_url);
 
+    metrics::observe_outbox_consumer_batch_size(SERVICE_NAME, CONSUMER_NAME, 3);
+    metrics::inc_outbox_consumer_batch_total(
+        SERVICE_NAME,
+        CONSUMER_NAME,
+        metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+    );
+    metrics::inc_outbox_consumer_batch_total(
+        SERVICE_NAME,
+        CONSUMER_NAME,
+        metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+    );
+    metrics::observe_outbox_consumer_processing_duration(
+        SERVICE_NAME,
+        CONSUMER_NAME,
+        metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+        std::time::Duration::from_millis(10),
+    );
+
     let response = metrics_endpoint(State(state)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
     let content_type = response
@@ -775,6 +793,30 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
     assert!(
         body.contains("cn_up{service=\"cn-index\"} 1"),
         "metrics body did not contain cn_up for cn-index: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_batches_total{consumer=\"index-v1\",result=\"success\",service=\"cn-index\"} "
+        ),
+        "metrics body did not contain outbox_consumer_batches_total success labels for cn-index: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_batches_total{consumer=\"index-v1\",result=\"error\",service=\"cn-index\"} "
+        ),
+        "metrics body did not contain outbox_consumer_batches_total error labels for cn-index: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_processing_duration_seconds_count{consumer=\"index-v1\",result=\"success\",service=\"cn-index\"} "
+        ),
+        "metrics body did not contain outbox_consumer_processing_duration_seconds labels for cn-index: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_batch_size_count{consumer=\"index-v1\",service=\"cn-index\"} "
+        ),
+        "metrics body did not contain outbox_consumer_batch_size labels for cn-index: {body}"
     );
 
     meili_handle.abort();

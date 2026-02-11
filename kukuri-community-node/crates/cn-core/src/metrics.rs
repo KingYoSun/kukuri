@@ -29,7 +29,13 @@ struct Metrics {
     consent_required_total: IntCounterVec,
     quota_exceeded_total: IntCounterVec,
     outbox_backlog: IntGaugeVec,
+    outbox_consumer_batches_total: IntCounterVec,
+    outbox_consumer_processing_duration_seconds: HistogramVec,
+    outbox_consumer_batch_size: HistogramVec,
 }
+
+pub const OUTBOX_CONSUMER_RESULT_SUCCESS: &str = "success";
+pub const OUTBOX_CONSUMER_RESULT_ERROR: &str = "error";
 
 static METRICS: OnceLock<Metrics> = OnceLock::new();
 
@@ -146,6 +152,35 @@ fn metrics() -> &'static Metrics {
         )
         .expect("outbox_backlog metric");
 
+        let outbox_consumer_batches_total = IntCounterVec::new(
+            Opts::new(
+                "outbox_consumer_batches_total",
+                "Total outbox consumer batch outcomes",
+            ),
+            &["service", "consumer", "result"],
+        )
+        .expect("outbox_consumer_batches_total metric");
+
+        let outbox_consumer_processing_duration_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "outbox_consumer_processing_duration_seconds",
+                "Outbox consumer processing duration in seconds",
+            )
+            .buckets(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
+            &["service", "consumer", "result"],
+        )
+        .expect("outbox_consumer_processing_duration_seconds metric");
+
+        let outbox_consumer_batch_size = HistogramVec::new(
+            HistogramOpts::new("outbox_consumer_batch_size", "Outbox consumer batch size").buckets(
+                vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 200.0, 500.0, 1000.0],
+            ),
+            &["service", "consumer"],
+        )
+        .expect("outbox_consumer_batch_size metric");
+
         registry
             .register(Box::new(cn_up.clone()))
             .expect("register cn_up");
@@ -197,6 +232,17 @@ fn metrics() -> &'static Metrics {
         registry
             .register(Box::new(outbox_backlog.clone()))
             .expect("register outbox_backlog");
+        registry
+            .register(Box::new(outbox_consumer_batches_total.clone()))
+            .expect("register outbox_consumer_batches_total");
+        registry
+            .register(Box::new(
+                outbox_consumer_processing_duration_seconds.clone(),
+            ))
+            .expect("register outbox_consumer_processing_duration_seconds");
+        registry
+            .register(Box::new(outbox_consumer_batch_size.clone()))
+            .expect("register outbox_consumer_batch_size");
 
         Metrics {
             registry,
@@ -217,6 +263,9 @@ fn metrics() -> &'static Metrics {
             consent_required_total,
             quota_exceeded_total,
             outbox_backlog,
+            outbox_consumer_batches_total,
+            outbox_consumer_processing_duration_seconds,
+            outbox_consumer_batch_size,
         }
     })
 }
@@ -345,6 +394,36 @@ pub fn set_outbox_backlog(service_name: &'static str, consumer: &str, backlog: i
         .outbox_backlog
         .with_label_values(&[service_name, consumer])
         .set(backlog);
+}
+
+pub fn inc_outbox_consumer_batch_total(service_name: &'static str, consumer: &str, result: &str) {
+    metrics()
+        .outbox_consumer_batches_total
+        .with_label_values(&[service_name, consumer, result])
+        .inc();
+}
+
+pub fn observe_outbox_consumer_processing_duration(
+    service_name: &'static str,
+    consumer: &str,
+    result: &str,
+    duration: Duration,
+) {
+    metrics()
+        .outbox_consumer_processing_duration_seconds
+        .with_label_values(&[service_name, consumer, result])
+        .observe(duration.as_secs_f64());
+}
+
+pub fn observe_outbox_consumer_batch_size(
+    service_name: &'static str,
+    consumer: &str,
+    batch_size: usize,
+) {
+    metrics()
+        .outbox_consumer_batch_size
+        .with_label_values(&[service_name, consumer])
+        .observe(batch_size as f64);
 }
 
 pub fn metrics_response(service_name: &'static str) -> impl IntoResponse {

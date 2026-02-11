@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 mod config;
@@ -273,6 +273,13 @@ fn spawn_outbox_consumer(state: AppState) {
                     }
                 }
                 Ok(batch) => {
+                    let batch_started_at = Instant::now();
+                    let batch_size = batch.len();
+                    metrics::observe_outbox_consumer_batch_size(
+                        SERVICE_NAME,
+                        CONSUMER_NAME,
+                        batch_size,
+                    );
                     let mut failed = false;
                     for row in &batch {
                         if let Err(err) = handle_outbox_row(&state, &runtime, row).await {
@@ -287,15 +294,54 @@ fn spawn_outbox_consumer(state: AppState) {
                         last_seq = row.seq;
                     }
                     if failed {
+                        metrics::inc_outbox_consumer_batch_total(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                        );
+                        metrics::observe_outbox_consumer_processing_duration(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                            batch_started_at.elapsed(),
+                        );
                         tokio::time::sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                     if let Err(err) = commit_last_seq(&state.pool, last_seq).await {
                         tracing::warn!(error = %err, "failed to commit consumer offset");
+                        metrics::inc_outbox_consumer_batch_total(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                        );
+                        metrics::observe_outbox_consumer_processing_duration(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                            batch_started_at.elapsed(),
+                        );
+                    } else {
+                        metrics::inc_outbox_consumer_batch_total(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+                        );
+                        metrics::observe_outbox_consumer_processing_duration(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+                            batch_started_at.elapsed(),
+                        );
                     }
                 }
                 Err(err) => {
                     tracing::warn!(error = %err, "outbox fetch failed");
+                    metrics::inc_outbox_consumer_batch_total(
+                        SERVICE_NAME,
+                        CONSUMER_NAME,
+                        metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                    );
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             }

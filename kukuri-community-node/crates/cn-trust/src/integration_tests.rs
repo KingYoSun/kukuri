@@ -614,6 +614,24 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
     ensure_migrated(&pool).await;
 
     let state = build_state(pool, Keys::generate(), runtime_config_json());
+    metrics::observe_outbox_consumer_batch_size(SERVICE_NAME, CONSUMER_NAME, 2);
+    metrics::inc_outbox_consumer_batch_total(
+        SERVICE_NAME,
+        CONSUMER_NAME,
+        metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+    );
+    metrics::inc_outbox_consumer_batch_total(
+        SERVICE_NAME,
+        CONSUMER_NAME,
+        metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+    );
+    metrics::observe_outbox_consumer_processing_duration(
+        SERVICE_NAME,
+        CONSUMER_NAME,
+        metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+        std::time::Duration::from_millis(10),
+    );
+
     let response = metrics_endpoint(State(state)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
     let content_type = response
@@ -626,5 +644,29 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
     assert!(
         body.contains("cn_up{service=\"cn-trust\"} 1"),
         "metrics body did not contain cn_up for cn-trust: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_batches_total{consumer=\"trust-v1\",result=\"success\",service=\"cn-trust\"} "
+        ),
+        "metrics body did not contain outbox_consumer_batches_total success labels for cn-trust: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_batches_total{consumer=\"trust-v1\",result=\"error\",service=\"cn-trust\"} "
+        ),
+        "metrics body did not contain outbox_consumer_batches_total error labels for cn-trust: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_processing_duration_seconds_count{consumer=\"trust-v1\",result=\"success\",service=\"cn-trust\"} "
+        ),
+        "metrics body did not contain outbox_consumer_processing_duration_seconds labels for cn-trust: {body}"
+    );
+    assert!(
+        body.contains(
+            "outbox_consumer_batch_size_count{consumer=\"trust-v1\",service=\"cn-trust\"} "
+        ),
+        "metrics body did not contain outbox_consumer_batch_size labels for cn-trust: {body}"
     );
 }

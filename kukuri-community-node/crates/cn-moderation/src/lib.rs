@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod config;
 mod llm;
@@ -322,6 +322,13 @@ fn spawn_outbox_consumer(state: AppState) {
                     }
                 }
                 Ok(batch) => {
+                    let batch_started_at = Instant::now();
+                    let batch_size = batch.len();
+                    metrics::observe_outbox_consumer_batch_size(
+                        SERVICE_NAME,
+                        CONSUMER_NAME,
+                        batch_size,
+                    );
                     let mut failed = false;
                     for row in &batch {
                         if row.op == "upsert" {
@@ -340,15 +347,54 @@ fn spawn_outbox_consumer(state: AppState) {
                         last_seq = row.seq;
                     }
                     if failed {
+                        metrics::inc_outbox_consumer_batch_total(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                        );
+                        metrics::observe_outbox_consumer_processing_duration(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                            batch_started_at.elapsed(),
+                        );
                         tokio::time::sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                     if let Err(err) = commit_last_seq(&state.pool, last_seq).await {
                         tracing::warn!(error = %err, "failed to commit consumer offset");
+                        metrics::inc_outbox_consumer_batch_total(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                        );
+                        metrics::observe_outbox_consumer_processing_duration(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                            batch_started_at.elapsed(),
+                        );
+                    } else {
+                        metrics::inc_outbox_consumer_batch_total(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+                        );
+                        metrics::observe_outbox_consumer_processing_duration(
+                            SERVICE_NAME,
+                            CONSUMER_NAME,
+                            metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+                            batch_started_at.elapsed(),
+                        );
                     }
                 }
                 Err(err) => {
                     tracing::warn!(error = %err, "outbox fetch failed");
+                    metrics::inc_outbox_consumer_batch_total(
+                        SERVICE_NAME,
+                        CONSUMER_NAME,
+                        metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+                    );
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             }
@@ -1801,6 +1847,25 @@ mod tests {
             health_targets: Arc::new(HashMap::new()),
             health_client: reqwest::Client::new(),
         };
+
+        metrics::observe_outbox_consumer_batch_size(SERVICE_NAME, CONSUMER_NAME, 2);
+        metrics::inc_outbox_consumer_batch_total(
+            SERVICE_NAME,
+            CONSUMER_NAME,
+            metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+        );
+        metrics::inc_outbox_consumer_batch_total(
+            SERVICE_NAME,
+            CONSUMER_NAME,
+            metrics::OUTBOX_CONSUMER_RESULT_ERROR,
+        );
+        metrics::observe_outbox_consumer_processing_duration(
+            SERVICE_NAME,
+            CONSUMER_NAME,
+            metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
+            std::time::Duration::from_millis(10),
+        );
+
         let response = metrics_endpoint(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
         let content_type = response
@@ -1813,6 +1878,30 @@ mod tests {
         assert!(
             body.contains("cn_up{service=\"cn-moderation\"} 1"),
             "metrics body did not contain cn_up for cn-moderation: {body}"
+        );
+        assert!(
+            body.contains(
+                "outbox_consumer_batches_total{consumer=\"moderation-v1\",result=\"success\",service=\"cn-moderation\"} "
+            ),
+            "metrics body did not contain outbox_consumer_batches_total success labels for cn-moderation: {body}"
+        );
+        assert!(
+            body.contains(
+                "outbox_consumer_batches_total{consumer=\"moderation-v1\",result=\"error\",service=\"cn-moderation\"} "
+            ),
+            "metrics body did not contain outbox_consumer_batches_total error labels for cn-moderation: {body}"
+        );
+        assert!(
+            body.contains(
+                "outbox_consumer_processing_duration_seconds_count{consumer=\"moderation-v1\",result=\"success\",service=\"cn-moderation\"} "
+            ),
+            "metrics body did not contain outbox_consumer_processing_duration_seconds labels for cn-moderation: {body}"
+        );
+        assert!(
+            body.contains(
+                "outbox_consumer_batch_size_count{consumer=\"moderation-v1\",service=\"cn-moderation\"} "
+            ),
+            "metrics body did not contain outbox_consumer_batch_size labels for cn-moderation: {body}"
         );
     }
 }
