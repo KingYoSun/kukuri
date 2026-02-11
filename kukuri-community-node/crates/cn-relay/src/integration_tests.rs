@@ -1,11 +1,15 @@
 use super::AppState;
 use crate::ws;
+use axum::body::to_bytes;
+use axum::extract::State;
+use axum::http::header;
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
-use cn_core::nostr;
 use cn_core::rate_limit::RateLimiter;
 use cn_core::service_config;
+use cn_core::{metrics, nostr};
 use futures_util::{SinkExt, StreamExt};
 use iroh::discovery::static_provider::StaticProvider;
 use iroh::endpoint::Connection;
@@ -506,6 +510,143 @@ async fn send_auth(ws: &mut WsStream, keys: &Keys, challenge: &str) -> String {
     .await
     .expect("send auth");
     auth_event_id
+}
+
+async fn response_json(response: axum::response::Response) -> serde_json::Value {
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    serde_json::from_slice(&body).expect("json body")
+}
+
+async fn response_text(response: axum::response::Response) -> String {
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    String::from_utf8_lossy(&body).to_string()
+}
+
+fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
+    let found = body.lines().any(|line| {
+        if !line.starts_with(metric_name) {
+            return false;
+        }
+        labels.iter().all(|(key, value)| {
+            let token = format!("{key}=\"{value}\"");
+            line.contains(&token)
+        })
+    });
+
+    assert!(
+        found,
+        "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
+    );
+}
+
+#[tokio::test]
+async fn healthz_contract_success_shape_compatible() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    let state = build_state(pool);
+
+    let response = super::healthz(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(
+        payload.get("status").and_then(|value| value.as_str()),
+        Some("ok")
+    );
+}
+
+#[tokio::test]
+async fn healthz_contract_dependency_unavailable_shape_compatible() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    pool.close().await;
+    let state = build_state(pool);
+
+    let response = super::healthz(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = response_json(response).await;
+    assert_eq!(
+        payload.get("status").and_then(|value| value.as_str()),
+        Some("unavailable")
+    );
+}
+
+#[tokio::test]
+async fn metrics_contract_required_metrics_shape_compatible() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    metrics::inc_ws_connections(super::SERVICE_NAME);
+    metrics::dec_ws_connections(super::SERVICE_NAME);
+    metrics::inc_ws_req_total(super::SERVICE_NAME);
+    metrics::inc_ws_event_total(super::SERVICE_NAME);
+    metrics::inc_ingest_received(super::SERVICE_NAME, "contract");
+    metrics::inc_ingest_rejected(super::SERVICE_NAME, "contract");
+    metrics::inc_gossip_received(super::SERVICE_NAME);
+    metrics::inc_gossip_sent(super::SERVICE_NAME);
+    metrics::inc_dedupe_hit(super::SERVICE_NAME);
+    metrics::inc_dedupe_miss(super::SERVICE_NAME);
+
+    let state = build_state(pool);
+    let response = super::metrics_endpoint(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok());
+    assert_eq!(content_type, Some("text/plain; version=0.0.4"));
+
+    let body = response_text(response).await;
+    assert_metric_line(&body, "ws_connections", &[("service", super::SERVICE_NAME)]);
+    assert_metric_line(&body, "ws_req_total", &[("service", super::SERVICE_NAME)]);
+    assert_metric_line(&body, "ws_event_total", &[("service", super::SERVICE_NAME)]);
+    assert_metric_line(
+        &body,
+        "ingest_received_total",
+        &[("service", super::SERVICE_NAME), ("source", "contract")],
+    );
+    assert_metric_line(
+        &body,
+        "ingest_rejected_total",
+        &[("service", super::SERVICE_NAME), ("reason", "contract")],
+    );
+    assert_metric_line(
+        &body,
+        "gossip_received_total",
+        &[("service", super::SERVICE_NAME)],
+    );
+    assert_metric_line(
+        &body,
+        "gossip_sent_total",
+        &[("service", super::SERVICE_NAME)],
+    );
+    assert_metric_line(
+        &body,
+        "dedupe_hits_total",
+        &[("service", super::SERVICE_NAME)],
+    );
+    assert_metric_line(
+        &body,
+        "dedupe_misses_total",
+        &[("service", super::SERVICE_NAME)],
+    );
 }
 
 #[tokio::test]
