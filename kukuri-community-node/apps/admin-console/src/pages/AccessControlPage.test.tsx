@@ -10,6 +10,9 @@ vi.mock('../lib/api', () => ({
   api: {
     auditLogs: vi.fn(),
     accessControlMemberships: vi.fn(),
+    accessControlInvites: vi.fn(),
+    issueAccessControlInvite: vi.fn(),
+    revokeAccessControlInvite: vi.fn(),
     rotateAccessControl: vi.fn(),
     revokeAccessControl: vi.fn()
   }
@@ -30,6 +33,50 @@ describe('AccessControlPage', () => {
         revoked_reason: null
       }
     ]);
+    vi.mocked(api.accessControlInvites).mockResolvedValue([
+      {
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        issuer_pubkey: 'f'.repeat(64),
+        nonce: 'invite-nonce-1',
+        event_id: 'event-1',
+        expires_at: 1738896000,
+        max_uses: 2,
+        used_count: 0,
+        status: 'active',
+        revoked_at: null,
+        created_at: 1738809600,
+        capability_event_json: {}
+      }
+    ]);
+    vi.mocked(api.issueAccessControlInvite).mockResolvedValue({
+      topic_id: 'kukuri:topic:test',
+      scope: 'invite',
+      issuer_pubkey: 'f'.repeat(64),
+      nonce: 'invite-issued',
+      event_id: 'event-issued',
+      expires_at: 1738896000,
+      max_uses: 3,
+      used_count: 0,
+      status: 'active',
+      revoked_at: null,
+      created_at: 1738809600,
+      capability_event_json: {}
+    });
+    vi.mocked(api.revokeAccessControlInvite).mockResolvedValue({
+      topic_id: 'kukuri:topic:test',
+      scope: 'invite',
+      issuer_pubkey: 'f'.repeat(64),
+      nonce: 'invite-nonce-1',
+      event_id: 'event-1',
+      expires_at: 1738896000,
+      max_uses: 2,
+      used_count: 0,
+      status: 'revoked',
+      revoked_at: 1738813200,
+      created_at: 1738809600,
+      capability_event_json: {}
+    });
     vi.mocked(api.rotateAccessControl).mockResolvedValue({
       topic_id: 'kukuri:topic:test',
       scope: 'invite',
@@ -91,6 +138,39 @@ describe('AccessControlPage', () => {
         pubkey: 'a'.repeat(64),
         reason: 'abuse'
       });
+    });
+
+    await user.type(screen.getByLabelText('Invite topic ID'), 'kukuri:topic:test');
+    await user.clear(screen.getByLabelText('Expires in hours'));
+    await user.type(screen.getByLabelText('Expires in hours'), '6');
+    await user.clear(screen.getByLabelText('Max uses'));
+    await user.type(screen.getByLabelText('Max uses'), '3');
+    await user.type(screen.getByLabelText('Nonce (optional)'), 'invite-issued');
+    await user.click(screen.getByRole('button', { name: 'Issue invite' }));
+    await waitFor(() => {
+      expect(api.issueAccessControlInvite).toHaveBeenCalledWith({
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        expires_in_seconds: 21600,
+        max_uses: 3,
+        nonce: 'invite-issued'
+      });
+    });
+
+    await user.type(screen.getByLabelText('Invite topic filter'), 'kukuri:topic:test');
+    await user.selectOptions(screen.getByLabelText('Invite status filter'), 'active');
+    await user.click(screen.getByRole('button', { name: 'Search invites' }));
+    await waitFor(() => {
+      expect(api.accessControlInvites).toHaveBeenLastCalledWith({
+        topic_id: 'kukuri:topic:test',
+        status: 'active',
+        limit: 200
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Revoke invite' }));
+    await waitFor(() => {
+      expect(api.revokeAccessControlInvite).toHaveBeenCalledWith('invite-nonce-1');
     });
   });
 });

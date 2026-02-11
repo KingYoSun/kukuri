@@ -40,6 +40,45 @@ export type AccessControlMembership = ArrayItem<
 >;
 export type RotateAccessControlResponse = SuccessBody<'/v1/admin/access-control/rotate', 'post'>;
 export type RevokeAccessControlResponse = SuccessBody<'/v1/admin/access-control/revoke', 'post'>;
+export type ModerationRuleTestResult = {
+  matched: boolean;
+  reasons: string[];
+  preview?: {
+    target: string;
+    label: string;
+    confidence: number | null;
+    exp: number;
+    policy_url: string;
+    policy_ref: string;
+  } | null;
+};
+export type TrustTarget = {
+  subject_pubkey: string;
+  report_score: number | null;
+  report_count: number | null;
+  report_window_start: number | null;
+  report_window_end: number | null;
+  communication_score: number | null;
+  interaction_count: number | null;
+  peer_count: number | null;
+  communication_window_start: number | null;
+  communication_window_end: number | null;
+  updated_at: number;
+};
+export type AccessControlInvite = {
+  topic_id: string;
+  scope: string;
+  issuer_pubkey: string;
+  nonce: string;
+  event_id: string;
+  expires_at: number;
+  max_uses: number;
+  used_count: number;
+  status: string;
+  revoked_at: number | null;
+  created_at: number;
+  capability_event_json: unknown;
+};
 export type DsarJobType = 'export' | 'deletion';
 export type DsarJob = {
   job_id: string;

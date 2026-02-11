@@ -111,6 +111,29 @@ async fn insert_membership(pool: &Pool<Postgres>, topic_id: &str, scope: &str, p
     .expect("insert membership");
 }
 
+async fn insert_trust_scores(pool: &Pool<Postgres>, subject_pubkey: &str) {
+    let now = chrono::Utc::now().timestamp();
+    sqlx::query(
+        "INSERT INTO cn_trust.report_scores          (subject_pubkey, score, report_count, label_count, window_start, window_end, attestation_id, attestation_exp)          VALUES ($1, 0.85, 4, 2, $2, $3, NULL, NULL)          ON CONFLICT (subject_pubkey) DO UPDATE SET score = EXCLUDED.score, report_count = EXCLUDED.report_count, label_count = EXCLUDED.label_count, window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end, updated_at = NOW()",
+    )
+    .bind(subject_pubkey)
+    .bind(now - 86400)
+    .bind(now)
+    .execute(pool)
+    .await
+    .expect("insert trust report score");
+
+    sqlx::query(
+        "INSERT INTO cn_trust.communication_scores          (subject_pubkey, score, interaction_count, peer_count, window_start, window_end, attestation_id, attestation_exp)          VALUES ($1, 0.65, 8, 3, $2, $3, NULL, NULL)          ON CONFLICT (subject_pubkey) DO UPDATE SET score = EXCLUDED.score, interaction_count = EXCLUDED.interaction_count, peer_count = EXCLUDED.peer_count, window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end, updated_at = NOW()",
+    )
+    .bind(subject_pubkey)
+    .bind(now - 86400)
+    .bind(now)
+    .execute(pool)
+    .await
+    .expect("insert trust communication score");
+}
+
 async fn post_json(
     app: Router,
     uri: &str,
@@ -561,6 +584,91 @@ async fn access_control_memberships_contract_search_success() {
 }
 
 #[tokio::test]
+async fn access_control_invite_contract_issue_list_revoke_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let topic_id = format!("kukuri:invite-contract:{}", Uuid::new_v4());
+    let nonce = format!("invite-{}", Uuid::new_v4().simple());
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/access-control/invites",
+            get(access_control::list_invites).post(access_control::issue_invite),
+        )
+        .route(
+            "/v1/admin/access-control/invites/{nonce}/revoke",
+            post(access_control::revoke_invite),
+        )
+        .with_state(state);
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/access-control/invites",
+        json!({
+            "topic_id": topic_id,
+            "scope": "invite",
+            "expires_in_seconds": 3600,
+            "max_uses": 2,
+            "nonce": nonce
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload.get("scope").and_then(Value::as_str), Some("invite"));
+    assert_eq!(payload.get("max_uses").and_then(Value::as_i64), Some(2));
+    assert_eq!(payload.get("used_count").and_then(Value::as_i64), Some(0));
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("active")
+    );
+    let issued_nonce = payload
+        .get("nonce")
+        .and_then(Value::as_str)
+        .expect("nonce")
+        .to_string();
+
+    let (status, payload) = get_json_with_session(
+        app.clone(),
+        &format!("/v1/admin/access-control/invites?status=active&topic_id={topic_id}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert!(rows.iter().any(|row| {
+        row.get("nonce").and_then(Value::as_str) == Some(issued_nonce.as_str())
+            && row.get("status").and_then(Value::as_str) == Some("active")
+    }));
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/access-control/invites/{issued_nonce}/revoke"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("revoked")
+    );
+
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!("/v1/admin/access-control/invites?status=revoked&topic_id={topic_id}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert!(rows.iter().any(|row| {
+        row.get("nonce").and_then(Value::as_str) == Some(issued_nonce.as_str())
+            && row.get("status").and_then(Value::as_str) == Some("revoked")
+    }));
+}
+
+#[tokio::test]
 async fn reindex_contract_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
@@ -610,10 +718,22 @@ async fn openapi_contract_contains_admin_paths() {
         .pointer("/paths/~1v1~1admin~1moderation~1rules/get")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1admin~1moderation~1rules~1test/post")
+        .is_some());
+    assert!(payload
         .pointer("/paths/~1v1~1admin~1dashboard/get")
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1access-control~1memberships/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1access-control~1invites/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1access-control~1invites/post")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1access-control~1invites~1{nonce}~1revoke/post")
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1personal-data-jobs/get")
@@ -626,6 +746,9 @@ async fn openapi_contract_contains_admin_paths() {
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1trust~1schedules/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1trust~1targets/get")
         .is_some());
     assert!(payload.pointer("/paths/~1v1~1reindex/post").is_some());
     assert!(payload.pointer("/components/schemas/ServiceInfo").is_some());
@@ -1625,6 +1748,63 @@ async fn moderation_contract_success_and_shape() {
 }
 
 #[tokio::test]
+async fn moderation_rule_test_contract_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let sample_pubkey = Keys::generate().public_key().to_hex();
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/moderation/rules/test",
+            post(moderation::test_rule),
+        )
+        .with_state(state);
+
+    let (status, payload) = post_json(
+        app,
+        "/v1/admin/moderation/rules/test",
+        json!({
+            "conditions": {
+                "kinds": [1],
+                "content_keywords": ["spam"],
+                "tag_filters": { "t": ["kukuri:topic:contract"] }
+            },
+            "action": {
+                "label": "spam",
+                "confidence": 0.9,
+                "exp_seconds": 3600,
+                "policy_url": "https://example.com/policy",
+                "policy_ref": "policy:spam:v1"
+            },
+            "sample": {
+                "event_id": "event-123",
+                "pubkey": sample_pubkey,
+                "kind": 1,
+                "content": "this message looks like spam",
+                "tags": [["t", "kukuri:topic:contract"]]
+            }
+        }),
+        &session_id,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload.get("matched").and_then(Value::as_bool), Some(true));
+    assert!(payload
+        .get("reasons")
+        .and_then(Value::as_array)
+        .is_some_and(|rows| !rows.is_empty()));
+    assert_eq!(
+        payload.pointer("/preview/label").and_then(Value::as_str),
+        Some("spam")
+    );
+    assert_eq!(
+        payload.pointer("/preview/target").and_then(Value::as_str),
+        Some("event:event-123")
+    );
+}
+
+#[tokio::test]
 async fn subscription_requests_and_node_subscriptions_contract_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
@@ -2147,6 +2327,43 @@ async fn dsar_jobs_contract_list_retry_cancel_and_audit_success() {
             && diff.get("previous_status").and_then(Value::as_str) == Some("running")
             && diff.get("next_status").and_then(Value::as_str) == Some("failed")
     }));
+}
+
+#[tokio::test]
+async fn trust_targets_contract_search_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let subject_pubkey = Keys::generate().public_key().to_hex();
+    insert_trust_scores(&state.pool, &subject_pubkey).await;
+
+    let app = Router::new()
+        .route("/v1/admin/trust/targets", get(trust::list_targets))
+        .with_state(state);
+
+    let (status, payload) = get_json_with_session(
+        app,
+        &format!(
+            "/v1/admin/trust/targets?pubkey={}&limit=10",
+            &subject_pubkey[..16]
+        ),
+        &session_id,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    let row = rows
+        .iter()
+        .find(|row| {
+            row.get("subject_pubkey").and_then(Value::as_str) == Some(subject_pubkey.as_str())
+        })
+        .expect("target row");
+    assert_eq!(row.get("report_score").and_then(Value::as_f64), Some(0.85));
+    assert_eq!(
+        row.get("communication_score").and_then(Value::as_f64),
+        Some(0.65)
+    );
+    assert!(row.get("updated_at").and_then(Value::as_i64).is_some());
 }
 
 #[tokio::test]

@@ -8,16 +8,43 @@ import { renderWithQueryClient } from '../test/renderWithQueryClient';
 
 vi.mock('../lib/api', () => ({
   api: {
+    services: vi.fn(),
+    updateServiceConfig: vi.fn(),
     trustJobs: vi.fn(),
     trustSchedules: vi.fn(),
     createTrustJob: vi.fn(),
-    updateTrustSchedule: vi.fn()
+    updateTrustSchedule: vi.fn(),
+    trustTargets: vi.fn()
   }
 }));
 
 describe('TrustPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.services).mockResolvedValue([
+      {
+        service: 'trust',
+        version: 3,
+        config_json: {
+          enabled: true,
+          report_based: {
+            window_days: 30,
+            report_weight: 1,
+            label_weight: 1,
+            score_normalization: 10
+          },
+          communication_density: {
+            window_days: 30,
+            score_normalization: 20,
+            interaction_weights: { '1': 1, '6': 0.5, '7': 0.3 }
+          },
+          attestation: { exp_seconds: 86400 }
+        },
+        updated_at: 1738809600,
+        updated_by: 'admin',
+        health: { status: 'healthy', checked_at: 1738809600, details: null }
+      }
+    ]);
     vi.mocked(api.trustJobs).mockResolvedValue([
       {
         job_id: 'job-1',
@@ -41,6 +68,21 @@ describe('TrustPage', () => {
         updated_at: 1738809600
       }
     ]);
+    vi.mocked(api.trustTargets).mockResolvedValue([
+      {
+        subject_pubkey: 'd'.repeat(64),
+        report_score: 0.8,
+        report_count: 3,
+        report_window_start: 1738723200,
+        report_window_end: 1738809600,
+        communication_score: 0.6,
+        interaction_count: 7,
+        peer_count: 2,
+        communication_window_start: 1738723200,
+        communication_window_end: 1738809600,
+        updated_at: 1738809600
+      }
+    ]);
     vi.mocked(api.createTrustJob).mockResolvedValue({
       job_id: 'job-2',
       status: 'pending'
@@ -52,15 +94,25 @@ describe('TrustPage', () => {
       next_run_at: 1738816800,
       updated_at: 1738810000
     });
+    vi.mocked(api.updateServiceConfig).mockResolvedValue({
+      service: 'trust',
+      version: 4,
+      config_json: { enabled: true },
+      updated_at: 1738810000,
+      updated_by: 'admin'
+    });
   });
 
   it('主要操作を送信し、ジョブ/スケジュール表示を維持できる', async () => {
     renderWithQueryClient(<TrustPage />);
+    const user = userEvent.setup();
 
     expect(await screen.findByRole('heading', { name: 'Trust' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Trust Parameters' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Run Job' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Schedules' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recent Jobs' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Target Search' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Interval (sec)' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Progress' })).toBeInTheDocument();
     await screen.findByRole('button', { name: 'Save' });
@@ -73,7 +125,21 @@ describe('TrustPage', () => {
     expect(summaryText).toHaveTextContent('Running 0');
     expect(summaryText).toHaveTextContent('Failed 0');
 
-    const user = userEvent.setup();
+    await user.clear(screen.getByLabelText('Report window days'));
+    await user.type(screen.getByLabelText('Report window days'), '45');
+    await user.click(screen.getByRole('button', { name: 'Save trust parameters' }));
+    await waitFor(() => {
+      expect(api.updateServiceConfig).toHaveBeenCalledWith(
+        'trust',
+        expect.objectContaining({
+          report_based: expect.objectContaining({
+            window_days: 45
+          })
+        }),
+        3
+      );
+    });
+
     const runJobCard = screen.getByRole('heading', { name: 'Run Job' }).closest('.card');
     expect(runJobCard).not.toBeNull();
     const runJobSelect = (runJobCard as HTMLElement).querySelector('select');
@@ -112,10 +178,21 @@ describe('TrustPage', () => {
       });
     });
 
+    await user.type(screen.getByLabelText('Pubkey filter (exact/prefix)'), 'd'.repeat(16));
+    await user.click(screen.getByRole('button', { name: 'Search targets' }));
+    await waitFor(() => {
+      expect(api.trustTargets).toHaveBeenLastCalledWith({
+        pubkey: 'd'.repeat(16),
+        limit: 100
+      });
+    });
+
     await user.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => {
+      expect(vi.mocked(api.services).mock.calls.length).toBeGreaterThan(1);
       expect(vi.mocked(api.trustJobs).mock.calls.length).toBeGreaterThan(1);
       expect(vi.mocked(api.trustSchedules).mock.calls.length).toBeGreaterThan(1);
+      expect(vi.mocked(api.trustTargets).mock.calls.length).toBeGreaterThan(1);
     });
   });
 });

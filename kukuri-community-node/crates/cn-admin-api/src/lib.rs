@@ -220,6 +220,10 @@ fn build_router(state: AppState) -> Router {
             get(moderation::list_rules).post(moderation::create_rule),
         )
         .route(
+            "/v1/admin/moderation/rules/test",
+            post(moderation::test_rule),
+        )
+        .route(
             "/v1/admin/moderation/rules/{rule_id}",
             put(moderation::update_rule).delete(moderation::delete_rule),
         )
@@ -281,6 +285,14 @@ fn build_router(state: AppState) -> Router {
             get(access_control::list_memberships),
         )
         .route(
+            "/v1/admin/access-control/invites",
+            get(access_control::list_invites).post(access_control::issue_invite),
+        )
+        .route(
+            "/v1/admin/access-control/invites/{nonce}/revoke",
+            post(access_control::revoke_invite),
+        )
+        .route(
             "/v1/admin/access-control/rotate",
             post(access_control::rotate_epoch),
         )
@@ -294,6 +306,7 @@ fn build_router(state: AppState) -> Router {
         )
         .route("/v1/attestations", post(trust::create_job))
         .route("/v1/admin/trust/schedules", get(trust::list_schedules))
+        .route("/v1/admin/trust/targets", get(trust::list_targets))
         .route(
             "/v1/admin/trust/schedules/{job_type}",
             put(trust::update_schedule),

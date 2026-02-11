@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatTimestamp } from '../lib/format';
 import type {
+  AccessControlInvite,
   AccessControlMembership,
   AuditLog,
   RevokeAccessControlResponse,
@@ -46,6 +47,22 @@ export const AccessControlPage = () => {
     pubkey: '',
     status: 'active'
   });
+  const [inviteIssueForm, setInviteIssueForm] = useState({
+    topic_id: '',
+    expiresInHours: '24',
+    maxUses: '1',
+    nonce: ''
+  });
+  const [inviteSearchForm, setInviteSearchForm] = useState({
+    topic_id: '',
+    status: 'active'
+  });
+  const [inviteFilters, setInviteFilters] = useState({
+    topic_id: '',
+    status: 'active'
+  });
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteResult, setInviteResult] = useState<AccessControlInvite | null>(null);
 
   const auditQuery = useQuery<AuditLog[]>({
     queryKey: ['auditLogs', 'access-control'],
@@ -59,6 +76,15 @@ export const AccessControlPage = () => {
         scope: membershipFilters.scope || undefined,
         pubkey: membershipFilters.pubkey || undefined,
         status: membershipFilters.status || undefined,
+        limit: 200
+      })
+  });
+  const invitesQuery = useQuery<AccessControlInvite[]>({
+    queryKey: ['access-control-invites', inviteFilters],
+    queryFn: () =>
+      api.accessControlInvites({
+        topic_id: inviteFilters.topic_id || undefined,
+        status: inviteFilters.status || undefined,
         limit: 200
       })
   });
@@ -84,6 +110,32 @@ export const AccessControlPage = () => {
       queryClient.invalidateQueries({ queryKey: ['access-control-memberships'] });
     },
     onError: (error) => setRevokeMessage(errorToMessage(error))
+  });
+  const issueInviteMutation = useMutation({
+    mutationFn: (payload: {
+      topic_id: string;
+      scope: string;
+      expires_in_seconds?: number | null;
+      max_uses?: number | null;
+      nonce?: string | null;
+    }) => api.issueAccessControlInvite(payload),
+    onSuccess: (result) => {
+      setInviteResult(result);
+      setInviteMessage('Invite capability issued.');
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['access-control-invites'] });
+    },
+    onError: (error) => setInviteMessage(errorToMessage(error))
+  });
+  const revokeInviteMutation = useMutation({
+    mutationFn: (nonce: string) => api.revokeAccessControlInvite(nonce),
+    onSuccess: (result) => {
+      setInviteResult(result);
+      setInviteMessage('Invite capability revoked.');
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['access-control-invites'] });
+    },
+    onError: (error) => setInviteMessage(errorToMessage(error))
   });
 
   const accessControlAudits = useMemo(
@@ -111,6 +163,42 @@ export const AccessControlPage = () => {
     });
   };
 
+  const submitInviteSearch = () => {
+    setInviteFilters({
+      topic_id: inviteSearchForm.topic_id.trim(),
+      status: inviteSearchForm.status
+    });
+  };
+
+  const submitIssueInvite = () => {
+    const topicId = inviteIssueForm.topic_id.trim();
+    const hours = Number(inviteIssueForm.expiresInHours);
+    const maxUses = Number(inviteIssueForm.maxUses);
+    setInviteMessage(null);
+    setInviteResult(null);
+    if (topicId === '') {
+      setInviteMessage('Topic ID is required.');
+      return;
+    }
+    if (Number.isNaN(hours) || hours <= 0) {
+      setInviteMessage('Expires in hours must be positive.');
+      return;
+    }
+    if (Number.isNaN(maxUses) || maxUses <= 0) {
+      setInviteMessage('Max uses must be positive.');
+      return;
+    }
+
+    issueInviteMutation.mutate({
+      topic_id: topicId,
+      scope: 'invite',
+      expires_in_seconds: Math.floor(hours * 3600),
+      max_uses: Math.floor(maxUses),
+      nonce:
+        inviteIssueForm.nonce.trim() === '' ? null : inviteIssueForm.nonce.trim()
+    });
+  };
+
   const submitRevoke = () => {
     const topicId = revokeForm.topic_id.trim();
     const pubkey = revokeForm.pubkey.trim();
@@ -133,6 +221,10 @@ export const AccessControlPage = () => {
     });
   };
 
+  const submitInviteRevoke = (nonce: string) => {
+    revokeInviteMutation.mutate(nonce);
+  };
+
   return (
     <>
       <div className="hero">
@@ -144,6 +236,7 @@ export const AccessControlPage = () => {
           className="button"
           onClick={() => {
             void membershipsQuery.refetch();
+            void invitesQuery.refetch();
             void auditQuery.refetch();
           }}
         >
@@ -250,6 +343,159 @@ export const AccessControlPage = () => {
               {(membershipsQuery.data ?? []).length === 0 && (
                 <tr>
                   <td colSpan={6}>No memberships found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="card">
+          <h3>Invite Capability</h3>
+          <p>Issue, search, and revoke invite.capability events.</p>
+          <div className="field">
+            <label htmlFor="invite-topic-id">Invite topic ID</label>
+            <input
+              id="invite-topic-id"
+              value={inviteIssueForm.topic_id}
+              onChange={(event) =>
+                setInviteIssueForm((prev) => ({ ...prev, topic_id: event.target.value }))
+              }
+              placeholder="kukuri:topic:example"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="invite-expires-hours">Expires in hours</label>
+            <input
+              id="invite-expires-hours"
+              type="number"
+              min={1}
+              value={inviteIssueForm.expiresInHours}
+              onChange={(event) =>
+                setInviteIssueForm((prev) => ({ ...prev, expiresInHours: event.target.value }))
+              }
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="invite-max-uses">Max uses</label>
+            <input
+              id="invite-max-uses"
+              type="number"
+              min={1}
+              value={inviteIssueForm.maxUses}
+              onChange={(event) =>
+                setInviteIssueForm((prev) => ({ ...prev, maxUses: event.target.value }))
+              }
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="invite-nonce">Nonce (optional)</label>
+            <input
+              id="invite-nonce"
+              value={inviteIssueForm.nonce}
+              onChange={(event) =>
+                setInviteIssueForm((prev) => ({ ...prev, nonce: event.target.value }))
+              }
+              placeholder="invite-nonce"
+            />
+          </div>
+          {inviteMessage && <div className="notice">{inviteMessage}</div>}
+          {inviteResult && (
+            <div className="card sub-card">
+              <div className="row">
+                <div>
+                  <strong>{inviteResult.nonce}</strong>
+                  <div className="muted">
+                    {inviteResult.topic_id} | {inviteResult.scope}
+                  </div>
+                </div>
+                <StatusBadge status={inviteResult.status} />
+              </div>
+              <div className="muted">
+                Uses {inviteResult.used_count}/{inviteResult.max_uses} | Expires{' '}
+                {formatTimestamp(inviteResult.expires_at)}
+              </div>
+            </div>
+          )}
+          <div className="row">
+            <button
+              className="button"
+              onClick={submitIssueInvite}
+              disabled={issueInviteMutation.isPending}
+            >
+              {issueInviteMutation.isPending ? 'Issuing...' : 'Issue invite'}
+            </button>
+          </div>
+
+          <div className="field">
+            <label htmlFor="invite-search-topic">Invite topic filter</label>
+            <input
+              id="invite-search-topic"
+              value={inviteSearchForm.topic_id}
+              onChange={(event) =>
+                setInviteSearchForm((prev) => ({ ...prev, topic_id: event.target.value }))
+              }
+              placeholder="kukuri:topic:example"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="invite-search-status">Invite status filter</label>
+            <select
+              id="invite-search-status"
+              value={inviteSearchForm.status}
+              onChange={(event) =>
+                setInviteSearchForm((prev) => ({ ...prev, status: event.target.value }))
+              }
+            >
+              <option value="">all</option>
+              <option value="active">active</option>
+              <option value="revoked">revoked</option>
+              <option value="expired">expired</option>
+              <option value="exhausted">exhausted</option>
+            </select>
+          </div>
+          <div className="row">
+            <button className="button secondary" onClick={submitInviteSearch}>
+              Search invites
+            </button>
+            <button className="button secondary" onClick={() => void invitesQuery.refetch()}>
+              Reload invites
+            </button>
+          </div>
+          {invitesQuery.isLoading && <div className="notice">Loading invites...</div>}
+          {invitesQuery.error && <div className="notice">{errorToMessage(invitesQuery.error)}</div>}
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nonce</th>
+                <th>Status</th>
+                <th>Uses</th>
+                <th>Expires</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(invitesQuery.data ?? []).map((invite) => (
+                <tr key={invite.nonce}>
+                  <td>{invite.nonce}</td>
+                  <td>{invite.status}</td>
+                  <td>
+                    {invite.used_count}/{invite.max_uses}
+                  </td>
+                  <td>{formatTimestamp(invite.expires_at)}</td>
+                  <td>
+                    <button
+                      className="button secondary"
+                      onClick={() => submitInviteRevoke(invite.nonce)}
+                      disabled={revokeInviteMutation.isPending || invite.status === 'revoked'}
+                    >
+                      Revoke invite
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {(invitesQuery.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={5}>No invites found.</td>
                 </tr>
               )}
             </tbody>

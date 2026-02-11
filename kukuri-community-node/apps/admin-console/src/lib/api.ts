@@ -301,6 +301,40 @@ export const api = {
         params: { path: { rule_id: ruleId } }
       })
     ),
+  testModerationRule: async (payload: {
+    conditions: unknown;
+    action: unknown;
+    sample: {
+      event_id?: string | null;
+      pubkey: string;
+      kind: number;
+      content: string;
+      tags: string[][];
+    };
+  }) => {
+    const response = await fetch(buildApiUrl('/v1/admin/moderation/rules/test'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const responsePayload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, responsePayload);
+    }
+    return responsePayload as {
+      matched: boolean;
+      reasons: string[];
+      preview?: {
+        target: string;
+        label: string;
+        confidence: number | null;
+        exp: number;
+        policy_url: string;
+        policy_ref: string;
+      } | null;
+    };
+  },
   moderationReports: (query?: {
     target?: string;
     reporter_pubkey?: string;
@@ -360,6 +394,41 @@ export const api = {
         body: payload
       })
     ),
+  trustTargets: async (query?: { pubkey?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.pubkey) {
+      params.set('pubkey', query.pubkey);
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const search = params.toString();
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/trust/targets${search === '' ? '' : `?${search}`}`),
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as Array<{
+      subject_pubkey: string;
+      report_score: number | null;
+      report_count: number | null;
+      report_window_start: number | null;
+      report_window_end: number | null;
+      communication_score: number | null;
+      interaction_count: number | null;
+      peer_count: number | null;
+      communication_window_start: number | null;
+      communication_window_end: number | null;
+      updated_at: number;
+    }>;
+  },
   rotateAccessControl: (payload: { topic_id: string; scope: string }) =>
     unwrap(client.POST('/v1/admin/access-control/rotate', { body: payload })),
   accessControlMemberships: (query?: {
@@ -382,6 +451,109 @@ export const api = {
         }
       })
     ),
+  accessControlInvites: async (query?: {
+    topic_id?: string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query?.topic_id) {
+      params.set('topic_id', query.topic_id);
+    }
+    if (query?.status) {
+      params.set('status', query.status);
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const search = params.toString();
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/access-control/invites${search === '' ? '' : `?${search}`}`),
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as Array<{
+      topic_id: string;
+      scope: string;
+      issuer_pubkey: string;
+      nonce: string;
+      event_id: string;
+      expires_at: number;
+      max_uses: number;
+      used_count: number;
+      status: string;
+      revoked_at: number | null;
+      created_at: number;
+      capability_event_json: unknown;
+    }>;
+  },
+  issueAccessControlInvite: async (payload: {
+    topic_id: string;
+    scope: string;
+    expires_in_seconds?: number | null;
+    max_uses?: number | null;
+    nonce?: string | null;
+  }) => {
+    const response = await fetch(buildApiUrl('/v1/admin/access-control/invites'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const responsePayload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, responsePayload);
+    }
+    return responsePayload as {
+      topic_id: string;
+      scope: string;
+      issuer_pubkey: string;
+      nonce: string;
+      event_id: string;
+      expires_at: number;
+      max_uses: number;
+      used_count: number;
+      status: string;
+      revoked_at: number | null;
+      created_at: number;
+      capability_event_json: unknown;
+    };
+  },
+  revokeAccessControlInvite: async (nonce: string) => {
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/access-control/invites/${encodeURIComponent(nonce)}/revoke`),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as {
+      topic_id: string;
+      scope: string;
+      issuer_pubkey: string;
+      nonce: string;
+      event_id: string;
+      expires_at: number;
+      max_uses: number;
+      used_count: number;
+      status: string;
+      revoked_at: number | null;
+      created_at: number;
+      capability_event_json: unknown;
+    };
+  },
   revokeAccessControl: (payload: {
     topic_id: string;
     scope: string;

@@ -21,6 +21,12 @@ pub struct TrustJobQuery {
     pub limit: Option<i64>,
 }
 
+#[derive(Deserialize)]
+pub struct TrustTargetQuery {
+    pub pubkey: Option<String>,
+    pub limit: Option<i64>,
+}
+
 #[derive(Deserialize, ToSchema)]
 pub struct TrustJobRequest {
     pub job_type: String,
@@ -55,6 +61,21 @@ pub struct TrustScheduleRow {
 pub struct TrustScheduleUpdate {
     pub interval_seconds: i64,
     pub is_enabled: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TrustTargetRow {
+    pub subject_pubkey: String,
+    pub report_score: Option<f64>,
+    pub report_count: Option<i64>,
+    pub report_window_start: Option<i64>,
+    pub report_window_end: Option<i64>,
+    pub communication_score: Option<f64>,
+    pub interaction_count: Option<i64>,
+    pub peer_count: Option<i64>,
+    pub communication_window_start: Option<i64>,
+    pub communication_window_end: Option<i64>,
+    pub updated_at: i64,
 }
 
 pub async fn list_jobs(
@@ -123,6 +144,73 @@ pub async fn list_jobs(
     }
 
     Ok(Json(jobs))
+}
+
+pub async fn list_targets(
+    State(state): State<AppState>,
+    jar: axum_extra::extract::cookie::CookieJar,
+    Query(query): Query<TrustTargetQuery>,
+) -> ApiResult<Json<Vec<TrustTargetRow>>> {
+    require_admin(&state, &jar).await?;
+
+    let mut builder = QueryBuilder::<Postgres>::new(
+        "SELECT COALESCE(report.subject_pubkey, communication.subject_pubkey) AS subject_pubkey,          report.score AS report_score,          report.report_count AS report_count,          report.window_start AS report_window_start,          report.window_end AS report_window_end,          communication.score AS communication_score,          communication.interaction_count AS interaction_count,          communication.peer_count AS peer_count,          communication.window_start AS communication_window_start,          communication.window_end AS communication_window_end,          GREATEST(              COALESCE(report.updated_at, to_timestamp(0)),              COALESCE(communication.updated_at, to_timestamp(0))          ) AS updated_at          FROM cn_trust.report_scores report          FULL OUTER JOIN cn_trust.communication_scores communication            ON communication.subject_pubkey = report.subject_pubkey          WHERE 1=1",
+    );
+
+    if let Some(pubkey_raw) = query
+        .pubkey
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if is_hex_64(pubkey_raw) {
+            builder.push(" AND COALESCE(report.subject_pubkey, communication.subject_pubkey) = ");
+            builder.push_bind(pubkey_raw.to_lowercase());
+        } else {
+            builder
+                .push(" AND COALESCE(report.subject_pubkey, communication.subject_pubkey) ILIKE ");
+            builder.push_bind(format!("%{pubkey_raw}%"));
+        }
+    }
+
+    builder.push(
+        " ORDER BY GREATEST(COALESCE(report.updated_at, to_timestamp(0)), COALESCE(communication.updated_at, to_timestamp(0))) DESC, COALESCE(report.subject_pubkey, communication.subject_pubkey) ASC",
+    );
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    builder.push(" LIMIT ");
+    builder.push(limit.to_string());
+
+    let rows = builder
+        .build()
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
+    let mut targets = Vec::new();
+    for row in rows {
+        let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+        targets.push(TrustTargetRow {
+            subject_pubkey: row.try_get("subject_pubkey")?,
+            report_score: row.try_get("report_score")?,
+            report_count: row.try_get("report_count")?,
+            report_window_start: row.try_get("report_window_start")?,
+            report_window_end: row.try_get("report_window_end")?,
+            communication_score: row.try_get("communication_score")?,
+            interaction_count: row.try_get("interaction_count")?,
+            peer_count: row.try_get("peer_count")?,
+            communication_window_start: row.try_get("communication_window_start")?,
+            communication_window_end: row.try_get("communication_window_end")?,
+            updated_at: updated_at.timestamp(),
+        });
+    }
+
+    Ok(Json(targets))
 }
 
 pub async fn create_job(

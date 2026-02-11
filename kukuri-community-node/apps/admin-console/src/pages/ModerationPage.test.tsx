@@ -15,6 +15,7 @@ vi.mock('../lib/api', () => ({
     createModerationRule: vi.fn(),
     updateModerationRule: vi.fn(),
     deleteModerationRule: vi.fn(),
+    testModerationRule: vi.fn(),
     moderationReports: vi.fn(),
     moderationLabels: vi.fn(),
     createManualLabel: vi.fn()
@@ -96,6 +97,18 @@ describe('ModerationPage', () => {
       updated_by: 'admin'
     });
     vi.mocked(api.deleteModerationRule).mockResolvedValue({ status: 'deleted' });
+    vi.mocked(api.testModerationRule).mockResolvedValue({
+      matched: true,
+      reasons: ['content keyword matched'],
+      preview: {
+        target: 'event:event-123',
+        label: 'spam',
+        confidence: 0.9,
+        exp: 1738813200,
+        policy_url: 'https://example.com/policy',
+        policy_ref: 'moderation-v1'
+      }
+    });
     vi.mocked(api.createManualLabel).mockResolvedValue({ label_id: 'label-1', status: 'created' });
   });
 
@@ -137,6 +150,32 @@ describe('ModerationPage', () => {
           })
         }),
         4
+      );
+    });
+  });
+
+  it('ルールテスト実行を送信できる', async () => {
+    renderWithQueryClient(<ModerationPage />);
+    await screen.findByRole('button', { name: 'Run rule test' });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Sample event id (optional)'), 'event-123');
+    await user.type(screen.getByLabelText('Sample pubkey'), 'a'.repeat(64));
+    await user.clear(screen.getByLabelText('Sample content'));
+    await user.type(screen.getByLabelText('Sample content'), 'contains spam keyword');
+    await user.click(screen.getByRole('button', { name: 'Run rule test' }));
+
+    await waitFor(() => {
+      expect(api.testModerationRule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conditions: expect.any(Object),
+          action: expect.any(Object),
+          sample: expect.objectContaining({
+            event_id: 'event-123',
+            pubkey: 'a'.repeat(64),
+            kind: 1
+          })
+        })
       );
     });
   });

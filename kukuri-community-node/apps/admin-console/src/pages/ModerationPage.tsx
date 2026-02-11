@@ -9,6 +9,7 @@ import type {
   AuditLog,
   ModerationLabel,
   ModerationReport,
+  ModerationRuleTestResult,
   ModerationRule,
   ServiceInfo
 } from '../lib/types';
@@ -135,6 +136,15 @@ export const ModerationPage = () => {
     conditions: defaultConditions,
     action: defaultAction
   });
+  const [ruleTestForm, setRuleTestForm] = useState({
+    event_id: '',
+    pubkey: '',
+    kind: '1',
+    content: '',
+    tags: JSON.stringify([['t', 'kukuri:topic:example']], null, 2)
+  });
+  const [ruleTestError, setRuleTestError] = useState<string | null>(null);
+  const [ruleTestResult, setRuleTestResult] = useState<ModerationRuleTestResult | null>(null);
 
   const [labelError, setLabelError] = useState<string | null>(null);
   const [labelTarget, setLabelTarget] = useState('');
@@ -233,6 +243,25 @@ export const ModerationPage = () => {
   const deleteRuleMutation = useMutation({
     mutationFn: (ruleId: string) => api.deleteModerationRule(ruleId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['moderation-rules'] })
+  });
+
+  const testRuleMutation = useMutation({
+    mutationFn: (payload: {
+      conditions: unknown;
+      action: unknown;
+      sample: {
+        event_id?: string | null;
+        pubkey: string;
+        kind: number;
+        content: string;
+        tags: string[][];
+      };
+    }) => api.testModerationRule(payload),
+    onSuccess: (result) => {
+      setRuleTestResult(result);
+      setRuleTestError(null);
+    },
+    onError: (err) => setRuleTestError(errorToMessage(err))
   });
 
   const manualLabelMutation = useMutation({
@@ -359,6 +388,59 @@ export const ModerationPage = () => {
       priority: priorityValue,
       conditions,
       action
+    });
+  };
+
+  const handleRuleTest = () => {
+    setRuleTestError(null);
+    setRuleTestResult(null);
+
+    let conditions: unknown;
+    let action: unknown;
+    try {
+      conditions = JSON.parse(ruleForm.conditions);
+      action = JSON.parse(ruleForm.action);
+    } catch (err) {
+      setRuleTestError(errorToMessage(err));
+      return;
+    }
+
+    const pubkey = ruleTestForm.pubkey.trim();
+    if (pubkey.length !== 64 || !/^[0-9a-f]+$/i.test(pubkey)) {
+      setRuleTestError('Sample pubkey must be a 64-char hex string.');
+      return;
+    }
+    const kind = Number(ruleTestForm.kind);
+    if (Number.isNaN(kind) || kind < 0) {
+      setRuleTestError('Sample kind must be 0 or greater.');
+      return;
+    }
+    let tags: string[][];
+    try {
+      const parsed = JSON.parse(ruleTestForm.tags);
+      if (!Array.isArray(parsed) || parsed.some((tag) => !Array.isArray(tag))) {
+        setRuleTestError('Tags must be a JSON array of string arrays.');
+        return;
+      }
+      tags = parsed.map((tag) =>
+        tag.map((entry) => (typeof entry === 'string' ? entry : String(entry)))
+      );
+    } catch (err) {
+      setRuleTestError(errorToMessage(err));
+      return;
+    }
+
+    testRuleMutation.mutate({
+      conditions,
+      action,
+      sample: {
+        event_id:
+          ruleTestForm.event_id.trim() === '' ? null : ruleTestForm.event_id.trim(),
+        pubkey,
+        kind,
+        content: ruleTestForm.content,
+        tags
+      }
     });
   };
 
@@ -862,6 +944,88 @@ export const ModerationPage = () => {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>Rule Test Runner</h3>
+        <p>Run current rule JSON against a sample event without storing labels.</p>
+        <div className="field">
+          <label htmlFor="rule-test-event-id">Sample event id (optional)</label>
+          <input
+            id="rule-test-event-id"
+            value={ruleTestForm.event_id}
+            onChange={(event) =>
+              setRuleTestForm((prev) => ({ ...prev, event_id: event.target.value }))
+            }
+            placeholder="event-123"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="rule-test-pubkey">Sample pubkey</label>
+          <input
+            id="rule-test-pubkey"
+            value={ruleTestForm.pubkey}
+            onChange={(event) =>
+              setRuleTestForm((prev) => ({ ...prev, pubkey: event.target.value }))
+            }
+            placeholder="64-char hex pubkey"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="rule-test-kind">Sample kind</label>
+          <input
+            id="rule-test-kind"
+            type="number"
+            min={0}
+            value={ruleTestForm.kind}
+            onChange={(event) =>
+              setRuleTestForm((prev) => ({ ...prev, kind: event.target.value }))
+            }
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="rule-test-content">Sample content</label>
+          <textarea
+            id="rule-test-content"
+            rows={4}
+            value={ruleTestForm.content}
+            onChange={(event) =>
+              setRuleTestForm((prev) => ({ ...prev, content: event.target.value }))
+            }
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="rule-test-tags">Sample tags (JSON)</label>
+          <textarea
+            id="rule-test-tags"
+            rows={4}
+            value={ruleTestForm.tags}
+            onChange={(event) =>
+              setRuleTestForm((prev) => ({ ...prev, tags: event.target.value }))
+            }
+          />
+        </div>
+        {ruleTestError && <div className="notice">{ruleTestError}</div>}
+        <button className="button" onClick={handleRuleTest} disabled={testRuleMutation.isPending}>
+          {testRuleMutation.isPending ? 'Testing...' : 'Run rule test'}
+        </button>
+        {ruleTestResult && (
+          <div className="card sub-card">
+            <div className="row">
+              <strong>{ruleTestResult.matched ? 'Matched' : 'Not matched'}</strong>
+              <StatusBadge
+                status={ruleTestResult.matched ? 'healthy' : 'inactive'}
+                label={ruleTestResult.matched ? 'match' : 'no-match'}
+              />
+            </div>
+            <div className="muted">{ruleTestResult.reasons.join(' | ')}</div>
+            {ruleTestResult.preview && (
+              <div className="muted">
+                Preview: {ruleTestResult.preview.label} ({ruleTestResult.preview.target})
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid">

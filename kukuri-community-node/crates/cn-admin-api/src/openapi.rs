@@ -6,7 +6,8 @@ use utoipa::openapi::server::ServerBuilder;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::access_control::{
-    MembershipRow, RevokeRequest, RevokeResponse, RotateRequest, RotateResponse,
+    InviteCapabilityRow, IssueInviteCapabilityRequest, MembershipRow, RevokeRequest,
+    RevokeResponse, RotateRequest, RotateResponse,
 };
 use crate::auth::{AdminUser, LoginRequest, LoginResponse};
 use crate::dashboard::{
@@ -14,7 +15,10 @@ use crate::dashboard::{
     RejectSurgeSignal,
 };
 use crate::dsar::DsarJobRow;
-use crate::moderation::{LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse};
+use crate::moderation::{
+    LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse, RuleTestLabelPreview,
+    RuleTestRequest, RuleTestResponse, RuleTestSampleEvent,
+};
 use crate::policies::{PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest};
 use crate::reindex::{ReindexRequest, ReindexResponse};
 use crate::services::{
@@ -24,7 +28,9 @@ use crate::subscriptions::{
     NodeSubscription, NodeSubscriptionUpdate, Plan, PlanLimit, PlanRequest, ReviewRequest,
     SubscriptionRequestRow, SubscriptionRow, SubscriptionUpdate, UsageRow,
 };
-use crate::trust::{TrustJobRequest, TrustJobRow, TrustScheduleRow, TrustScheduleUpdate};
+use crate::trust::{
+    TrustJobRequest, TrustJobRow, TrustScheduleRow, TrustScheduleUpdate, TrustTargetRow,
+};
 use crate::{ErrorResponse, HealthStatus};
 
 #[derive(Serialize, ToSchema)]
@@ -58,6 +64,7 @@ pub struct ManualLabelResponse {
         policies_make_current_doc,
         moderation_rules_list_doc,
         moderation_rules_create_doc,
+        moderation_rules_test_doc,
         moderation_rules_update_doc,
         moderation_rules_delete_doc,
         moderation_reports_list_doc,
@@ -79,12 +86,16 @@ pub struct ManualLabelResponse {
         dsar_jobs_retry_doc,
         dsar_jobs_cancel_doc,
         access_control_memberships_doc,
+        access_control_invites_list_doc,
+        access_control_invites_issue_doc,
+        access_control_invites_revoke_doc,
         access_control_rotate_doc,
         access_control_revoke_doc,
         trust_jobs_list_doc,
         trust_jobs_create_doc,
         trust_schedules_list_doc,
         trust_schedules_update_doc,
+        trust_targets_list_doc,
         reindex_doc
     ),
     components(
@@ -127,6 +138,8 @@ pub struct ManualLabelResponse {
             UsageRow,
             DsarJobRow,
             MembershipRow,
+            InviteCapabilityRow,
+            IssueInviteCapabilityRequest,
             RotateRequest,
             RotateResponse,
             RevokeRequest,
@@ -135,6 +148,11 @@ pub struct ManualLabelResponse {
             TrustJobRow,
             TrustScheduleRow,
             TrustScheduleUpdate,
+            TrustTargetRow,
+            RuleTestSampleEvent,
+            RuleTestLabelPreview,
+            RuleTestRequest,
+            RuleTestResponse,
             ReindexRequest,
             ReindexResponse
         )
@@ -307,6 +325,14 @@ fn moderation_rules_list_doc() {}
     responses((status = 200, body = RuleResponse), (status = 400, body = ErrorResponse))
 )]
 fn moderation_rules_create_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/moderation/rules/test",
+    request_body = RuleTestRequest,
+    responses((status = 200, body = RuleTestResponse), (status = 400, body = ErrorResponse))
+)]
+fn moderation_rules_test_doc() {}
 
 #[utoipa::path(
     put,
@@ -527,6 +553,38 @@ fn dsar_jobs_cancel_doc() {}
 fn access_control_memberships_doc() {}
 
 #[utoipa::path(
+    get,
+    path = "/v1/admin/access-control/invites",
+    params(
+        ("topic_id" = Option<String>, Query, description = "Topic filter"),
+        ("status" = Option<String>, Query, description = "Status filter (active|revoked|expired|exhausted)"),
+        ("limit" = Option<i64>, Query, description = "Max rows")
+    ),
+    responses((status = 200, body = [InviteCapabilityRow]), (status = 400, body = ErrorResponse))
+)]
+fn access_control_invites_list_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/access-control/invites",
+    request_body = IssueInviteCapabilityRequest,
+    responses(
+        (status = 200, body = InviteCapabilityRow),
+        (status = 400, body = ErrorResponse),
+        (status = 409, body = ErrorResponse)
+    )
+)]
+fn access_control_invites_issue_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/access-control/invites/{nonce}/revoke",
+    params(("nonce" = String, Path, description = "Invite nonce")),
+    responses((status = 200, body = InviteCapabilityRow), (status = 404, body = ErrorResponse))
+)]
+fn access_control_invites_revoke_doc() {}
+
+#[utoipa::path(
     post,
     path = "/v1/admin/access-control/rotate",
     request_body = RotateRequest,
@@ -582,6 +640,17 @@ fn trust_schedules_list_doc() {}
     responses((status = 200, body = TrustScheduleRow), (status = 400, body = ErrorResponse))
 )]
 fn trust_schedules_update_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/admin/trust/targets",
+    params(
+        ("pubkey" = Option<String>, Query, description = "Subject pubkey filter (exact or partial)"),
+        ("limit" = Option<i64>, Query, description = "Max rows")
+    ),
+    responses((status = 200, body = [TrustTargetRow]))
+)]
+fn trust_targets_list_doc() {}
 
 #[utoipa::path(
     post,

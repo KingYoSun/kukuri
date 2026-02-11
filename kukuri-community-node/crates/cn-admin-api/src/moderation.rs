@@ -2,6 +2,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
+use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder, Row};
@@ -43,6 +44,41 @@ pub struct RulePayload {
     pub conditions: RuleCondition,
     #[schema(value_type = serde_json::Value)]
     pub action: RuleAction,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct RuleTestSampleEvent {
+    pub event_id: Option<String>,
+    pub pubkey: String,
+    pub kind: i32,
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct RuleTestRequest {
+    #[schema(value_type = serde_json::Value)]
+    pub conditions: RuleCondition,
+    #[schema(value_type = serde_json::Value)]
+    pub action: RuleAction,
+    pub sample: RuleTestSampleEvent,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RuleTestLabelPreview {
+    pub target: String,
+    pub label: String,
+    pub confidence: Option<f64>,
+    pub exp: i64,
+    pub policy_url: String,
+    pub policy_ref: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RuleTestResponse {
+    pub matched: bool,
+    pub reasons: Vec<String>,
+    pub preview: Option<RuleTestLabelPreview>,
 }
 
 #[derive(Deserialize)]
@@ -306,6 +342,67 @@ pub async fn delete_rule(
     Ok(Json(json!({ "status": "deleted" })))
 }
 
+pub async fn test_rule(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Json(payload): Json<RuleTestRequest>,
+) -> ApiResult<Json<RuleTestResponse>> {
+    let admin = require_admin(&state, &jar).await?;
+    payload
+        .conditions
+        .validate()
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_RULE", err.to_string()))?;
+    payload
+        .action
+        .validate()
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_RULE", err.to_string()))?;
+    validate_test_sample(&payload.sample)?;
+
+    let (matched, reasons) = evaluate_rule_test(&payload.conditions, &payload.sample)?;
+    let preview = if matched {
+        Some(RuleTestLabelPreview {
+            target: sample_target(&payload.sample),
+            label: payload.action.label.clone(),
+            confidence: payload.action.confidence,
+            exp: chrono::Utc::now()
+                .timestamp()
+                .saturating_add(payload.action.exp_seconds),
+            policy_url: payload.action.policy_url.clone(),
+            policy_ref: payload.action.policy_ref.clone(),
+        })
+    } else {
+        None
+    };
+
+    cn_core::admin::log_audit(
+        &state.pool,
+        &admin.admin_user_id,
+        "moderation_rule.test",
+        &format!(
+            "rule-test:{}",
+            payload
+                .sample
+                .event_id
+                .as_deref()
+                .unwrap_or("manual-sample")
+        ),
+        Some(json!({
+            "kind": payload.sample.kind,
+            "matched": matched,
+            "label": payload.action.label
+        })),
+        None,
+    )
+    .await
+    .ok();
+
+    Ok(Json(RuleTestResponse {
+        matched,
+        reasons,
+        preview,
+    }))
+}
+
 pub async fn list_reports(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -541,6 +638,141 @@ fn validate_rule_payload(payload: &RulePayload) -> ApiResult<()> {
         .validate()
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_RULE", err.to_string()))?;
     Ok(())
+}
+
+fn validate_test_sample(sample: &RuleTestSampleEvent) -> ApiResult<()> {
+    let pubkey = sample.pubkey.trim();
+    if pubkey.len() != 64 || !pubkey.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_SAMPLE",
+            "sample pubkey must be a 64-char hex string",
+        ));
+    }
+    if sample.kind < 0 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_SAMPLE",
+            "sample kind must be 0 or greater",
+        ));
+    }
+    for tag in &sample.tags {
+        if tag.is_empty() || tag[0].trim().is_empty() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_SAMPLE",
+                "sample tags must have a non-empty tag name",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_rule_test(
+    condition: &RuleCondition,
+    sample: &RuleTestSampleEvent,
+) -> ApiResult<(bool, Vec<String>)> {
+    let mut reasons = Vec::new();
+
+    if let Some(kinds) = &condition.kinds {
+        if kinds.contains(&sample.kind) {
+            reasons.push(format!("kind={} matched", sample.kind));
+        } else {
+            reasons.push(format!("kind={} did not match allowed kinds", sample.kind));
+            return Ok((false, reasons));
+        }
+    }
+
+    if let Some(authors) = &condition.author_pubkeys {
+        if authors
+            .iter()
+            .any(|author| author.eq_ignore_ascii_case(sample.pubkey.trim()))
+        {
+            reasons.push("author pubkey matched".to_string());
+        } else {
+            reasons.push("author pubkey did not match".to_string());
+            return Ok((false, reasons));
+        }
+    }
+
+    if let Some(keywords) = &condition.content_keywords {
+        let content = sample.content.to_lowercase();
+        if keywords
+            .iter()
+            .any(|keyword| content.contains(&keyword.to_lowercase()))
+        {
+            reasons.push("content keyword matched".to_string());
+        } else {
+            reasons.push("content keyword did not match".to_string());
+            return Ok((false, reasons));
+        }
+    }
+
+    if let Some(pattern) = &condition.content_regex {
+        let regex = RegexBuilder::new(pattern)
+            .case_insensitive(true)
+            .build()
+            .map_err(|err| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_RULE",
+                    format!("invalid content_regex: {err}"),
+                )
+            })?;
+        if regex.is_match(&sample.content) {
+            reasons.push("content regex matched".to_string());
+        } else {
+            reasons.push("content regex did not match".to_string());
+            return Ok((false, reasons));
+        }
+    }
+
+    if let Some(filters) = &condition.tag_filters {
+        for (tag, values) in filters {
+            let tag_values = sample_tag_values(&sample.tags, tag);
+            if tag_values.is_empty() {
+                reasons.push(format!("tag '{tag}' was not present"));
+                return Ok((false, reasons));
+            }
+            if !values.is_empty()
+                && !tag_values
+                    .iter()
+                    .any(|actual| values.iter().any(|expected| expected == actual))
+            {
+                reasons.push(format!("tag '{tag}' values did not match expected values"));
+                return Ok((false, reasons));
+            }
+            reasons.push(format!("tag '{tag}' matched"));
+        }
+    }
+
+    if reasons.is_empty() {
+        reasons.push("no rule conditions configured; treated as match".to_string());
+    }
+
+    Ok((true, reasons))
+}
+
+fn sample_tag_values(tags: &[Vec<String>], name: &str) -> Vec<String> {
+    tags.iter()
+        .filter_map(|tag| {
+            if tag.first().map(String::as_str) == Some(name) {
+                tag.get(1).cloned()
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn sample_target(sample: &RuleTestSampleEvent) -> String {
+    sample
+        .event_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|event_id| format!("event:{event_id}"))
+        .unwrap_or_else(|| format!("pubkey:{}", sample.pubkey.trim()))
 }
 
 async fn fetch_rule(pool: &sqlx::Pool<Postgres>, rule_id: &str) -> ApiResult<RuleResponse> {
