@@ -26,6 +26,7 @@ pub struct RotateResponse {
     pub previous_epoch: i64,
     pub new_epoch: i64,
     pub recipients: usize,
+    pub distribution_results: Vec<DistributionResult>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -44,6 +45,14 @@ pub struct RevokeResponse {
     pub previous_epoch: i64,
     pub new_epoch: i64,
     pub recipients: usize,
+    pub distribution_results: Vec<DistributionResult>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct DistributionResult {
+    pub recipient_pubkey: String,
+    pub status: String,
+    pub reason: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -71,6 +80,27 @@ pub struct InviteCapabilityQuery {
     pub topic_id: Option<String>,
     pub status: Option<String>,
     pub limit: Option<i64>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct DistributionResultQuery {
+    pub topic_id: Option<String>,
+    pub scope: Option<String>,
+    pub pubkey: Option<String>,
+    pub epoch: Option<i64>,
+    pub status: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct DistributionResultRow {
+    pub topic_id: String,
+    pub scope: String,
+    pub epoch: i64,
+    pub recipient_pubkey: String,
+    pub status: String,
+    pub reason: Option<String>,
+    pub updated_at: i64,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -193,6 +223,118 @@ pub async fn list_memberships(
     }
 
     Ok(Json(memberships))
+}
+
+pub async fn list_distribution_results(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Query(query): Query<DistributionResultQuery>,
+) -> ApiResult<Json<Vec<DistributionResultRow>>> {
+    require_admin(&state, &jar).await?;
+
+    let mut builder = QueryBuilder::<Postgres>::new(
+        "SELECT topic_id, scope, epoch, recipient_pubkey, status, reason, updated_at FROM cn_user.key_envelope_distribution_results WHERE 1=1",
+    );
+
+    if let Some(topic_id) = query
+        .topic_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        builder.push(" AND topic_id ILIKE ");
+        builder.push_bind(format!("%{topic_id}%"));
+    }
+
+    if let Some(scope_raw) = query
+        .scope
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let scope = cn_core::access_control::normalize_scope(scope_raw).map_err(|err| {
+            ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SCOPE", err.to_string())
+        })?;
+        builder.push(" AND scope = ");
+        builder.push_bind(scope);
+    }
+
+    if let Some(pubkey_raw) = query
+        .pubkey
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if pubkey_raw.len() == 64 && pubkey_raw.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            let pubkey = cn_core::access_control::normalize_pubkey(pubkey_raw).map_err(|err| {
+                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", err.to_string())
+            })?;
+            builder.push(" AND recipient_pubkey = ");
+            builder.push_bind(pubkey);
+        } else {
+            builder.push(" AND recipient_pubkey ILIKE ");
+            builder.push_bind(format!("%{pubkey_raw}%"));
+        }
+    }
+
+    if let Some(epoch) = query.epoch {
+        if epoch <= 0 {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_EPOCH",
+                "epoch must be positive",
+            ));
+        }
+        builder.push(" AND epoch = ");
+        builder.push_bind(epoch as i32);
+    }
+
+    if let Some(status_raw) = query
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let status =
+            cn_core::access_control::normalize_distribution_status(status_raw).map_err(|err| {
+                ApiError::new(StatusCode::BAD_REQUEST, "INVALID_STATUS", err.to_string())
+            })?;
+        builder.push(" AND status = ");
+        builder.push_bind(status);
+    }
+
+    builder.push(" ORDER BY epoch DESC, updated_at DESC, recipient_pubkey ASC");
+    let limit = query.limit.unwrap_or(200).clamp(1, 1000);
+    builder.push(" LIMIT ");
+    builder.push(limit.to_string());
+
+    let rows = builder
+        .build()
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
+    let mut distribution_results = Vec::new();
+    for row in rows {
+        let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+        distribution_results.push(DistributionResultRow {
+            topic_id: row.try_get("topic_id")?,
+            scope: row.try_get("scope")?,
+            epoch: i64::from(row.try_get::<i32, _>("epoch")?),
+            recipient_pubkey: row.try_get("recipient_pubkey")?,
+            status: row.try_get("status")?,
+            reason: row.try_get("reason")?,
+            updated_at: updated_at.timestamp(),
+        });
+    }
+
+    Ok(Json(distribution_results))
 }
 
 pub async fn list_invites(
@@ -506,6 +648,7 @@ pub async fn rotate_epoch(
         previous_epoch: summary.previous_epoch,
         new_epoch: summary.new_epoch,
         recipients: summary.recipients,
+        distribution_results: map_distribution_results(summary.distribution_results),
     }))
 }
 
@@ -565,6 +708,7 @@ pub async fn revoke_member(
         previous_epoch: result.rotation.previous_epoch,
         new_epoch: result.rotation.new_epoch,
         recipients: result.rotation.recipients,
+        distribution_results: map_distribution_results(result.rotation.distribution_results),
     }))
 }
 
@@ -632,4 +776,16 @@ fn invite_event_id(event_json: &Value) -> String {
         .and_then(Value::as_str)
         .map(ToString::to_string)
         .unwrap_or_default()
+}
+
+fn map_distribution_results(
+    rows: Vec<cn_core::access_control::DistributionResult>,
+) -> Vec<DistributionResult> {
+    rows.into_iter()
+        .map(|row| DistributionResult {
+            recipient_pubkey: row.recipient_pubkey,
+            status: row.status,
+            reason: row.reason,
+        })
+        .collect()
 }

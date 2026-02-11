@@ -1,7 +1,14 @@
 import createClient from 'openapi-fetch';
 
 import type { paths } from '../generated/admin-api';
-import type { DashboardSnapshot, DsarJob, DsarJobType } from './types';
+import type {
+  AccessControlDistributionResultRow,
+  DashboardSnapshot,
+  DsarJob,
+  DsarJobType,
+  RevokeAccessControlResponse,
+  RotateAccessControlResponse
+} from './types';
 
 const baseUrl = import.meta.env.VITE_ADMIN_API_BASE ?? '/admin-api';
 const joinedBaseUrl = baseUrl.replace(/\/$/, '');
@@ -429,8 +436,54 @@ export const api = {
       updated_at: number;
     }>;
   },
-  rotateAccessControl: (payload: { topic_id: string; scope: string }) =>
-    unwrap(client.POST('/v1/admin/access-control/rotate', { body: payload })),
+  rotateAccessControl: async (
+    payload: { topic_id: string; scope: string }
+  ): Promise<RotateAccessControlResponse> =>
+    (await unwrap(client.POST('/v1/admin/access-control/rotate', { body: payload }))) as RotateAccessControlResponse,
+  accessControlDistributionResults: async (query?: {
+    topic_id?: string;
+    scope?: string;
+    pubkey?: string;
+    epoch?: number;
+    status?: 'pending' | 'success' | 'failed';
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query?.topic_id) {
+      params.set('topic_id', query.topic_id);
+    }
+    if (query?.scope) {
+      params.set('scope', query.scope);
+    }
+    if (query?.pubkey) {
+      params.set('pubkey', query.pubkey);
+    }
+    if (typeof query?.epoch === 'number') {
+      params.set('epoch', String(query.epoch));
+    }
+    if (query?.status) {
+      params.set('status', query.status);
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    const search = params.toString();
+    const response = await fetch(
+      buildApiUrl(
+        `/v1/admin/access-control/distribution-results${search === '' ? '' : `?${search}`}`
+      ),
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as AccessControlDistributionResultRow[];
+  },
   accessControlMemberships: (query?: {
     topic_id?: string;
     scope?: string;
@@ -554,12 +607,13 @@ export const api = {
       capability_event_json: unknown;
     };
   },
-  revokeAccessControl: (payload: {
+  revokeAccessControl: async (payload: {
     topic_id: string;
     scope: string;
     pubkey: string;
     reason?: string | null;
-  }) => unwrap(client.POST('/v1/admin/access-control/revoke', { body: payload })),
+  }): Promise<RevokeAccessControlResponse> =>
+    (await unwrap(client.POST('/v1/admin/access-control/revoke', { body: payload }))) as RevokeAccessControlResponse,
   reindex: (topicId?: string | null) => {
     const body: { topic_id?: string | null } = {};
     if (typeof topicId === 'string' && topicId.trim() !== '') {

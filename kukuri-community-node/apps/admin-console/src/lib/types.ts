@@ -38,8 +38,28 @@ export type ReindexResponse = SuccessBody<'/v1/reindex', 'post'>;
 export type AccessControlMembership = ArrayItem<
   SuccessBody<'/v1/admin/access-control/memberships', 'get'>
 >;
-export type RotateAccessControlResponse = SuccessBody<'/v1/admin/access-control/rotate', 'post'>;
-export type RevokeAccessControlResponse = SuccessBody<'/v1/admin/access-control/revoke', 'post'>;
+export type AccessControlDistributionResult = {
+  recipient_pubkey: string;
+  status: 'pending' | 'success' | 'failed';
+  reason: string | null;
+};
+export type AccessControlDistributionResultRow = {
+  topic_id: string;
+  scope: string;
+  epoch: number;
+  recipient_pubkey: string;
+  status: 'pending' | 'success' | 'failed';
+  reason: string | null;
+  updated_at: number;
+};
+export type RotateAccessControlResponse =
+  SuccessBody<'/v1/admin/access-control/rotate', 'post'> & {
+    distribution_results: AccessControlDistributionResult[];
+  };
+export type RevokeAccessControlResponse =
+  SuccessBody<'/v1/admin/access-control/revoke', 'post'> & {
+    distribution_results: AccessControlDistributionResult[];
+  };
 export type ModerationRuleTestResult = {
   matched: boolean;
   reasons: string[];

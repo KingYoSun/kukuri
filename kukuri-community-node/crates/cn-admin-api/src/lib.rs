@@ -285,6 +285,10 @@ fn build_router(state: AppState) -> Router {
             get(access_control::list_memberships),
         )
         .route(
+            "/v1/admin/access-control/distribution-results",
+            get(access_control::list_distribution_results),
+        )
+        .route(
             "/v1/admin/access-control/invites",
             get(access_control::list_invites).post(access_control::issue_invite),
         )

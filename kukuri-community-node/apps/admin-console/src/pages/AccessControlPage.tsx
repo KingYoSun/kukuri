@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatTimestamp } from '../lib/format';
 import type {
+  AccessControlDistributionResult,
+  AccessControlDistributionResultRow,
   AccessControlInvite,
   AccessControlMembership,
   AuditLog,
@@ -21,6 +23,27 @@ const scopeOptions = [
 const scopeFilterOptions = [{ value: '', label: 'all' }, ...scopeOptions];
 
 const pubkeyPattern = /^[0-9a-f]{64}$/i;
+const distributionStatusOptions = [
+  { value: '', label: 'all' },
+  { value: 'success', label: 'success' },
+  { value: 'failed', label: 'failed' },
+  { value: 'pending', label: 'pending' }
+] as const;
+
+const summarizeDistribution = (rows: AccessControlDistributionResult[]) =>
+  rows.reduce(
+    (summary, row) => {
+      if (row.status === 'success') {
+        summary.success += 1;
+      } else if (row.status === 'failed') {
+        summary.failed += 1;
+      } else {
+        summary.pending += 1;
+      }
+      return summary;
+    },
+    { success: 0, failed: 0, pending: 0 }
+  );
 
 export const AccessControlPage = () => {
   const queryClient = useQueryClient();
@@ -61,6 +84,21 @@ export const AccessControlPage = () => {
     topic_id: '',
     status: 'active'
   });
+  const [distributionForm, setDistributionForm] = useState({
+    topic_id: '',
+    scope: '',
+    pubkey: '',
+    epoch: '',
+    status: ''
+  });
+  const [distributionFilters, setDistributionFilters] = useState({
+    topic_id: '',
+    scope: '',
+    pubkey: '',
+    epoch: '',
+    status: ''
+  });
+  const [distributionMessage, setDistributionMessage] = useState<string | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [inviteResult, setInviteResult] = useState<AccessControlInvite | null>(null);
 
@@ -88,6 +126,22 @@ export const AccessControlPage = () => {
         limit: 200
       })
   });
+  const distributionResultsQuery = useQuery<AccessControlDistributionResultRow[]>({
+    queryKey: ['access-control-distribution-results', distributionFilters],
+    queryFn: () =>
+      api.accessControlDistributionResults({
+        topic_id: distributionFilters.topic_id || undefined,
+        scope: distributionFilters.scope || undefined,
+        pubkey: distributionFilters.pubkey || undefined,
+        epoch:
+          distributionFilters.epoch === '' ? undefined : Number.parseInt(distributionFilters.epoch, 10),
+        status:
+          distributionFilters.status === ''
+            ? undefined
+            : (distributionFilters.status as 'pending' | 'success' | 'failed'),
+        limit: 200
+      })
+  });
 
   const rotateMutation = useMutation({
     mutationFn: (payload: { topic_id: string; scope: string }) => api.rotateAccessControl(payload),
@@ -96,6 +150,7 @@ export const AccessControlPage = () => {
       setRotateMessage('Epoch rotation completed.');
       queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
       queryClient.invalidateQueries({ queryKey: ['access-control-memberships'] });
+      queryClient.invalidateQueries({ queryKey: ['access-control-distribution-results'] });
     },
     onError: (error) => setRotateMessage(errorToMessage(error))
   });
@@ -108,6 +163,7 @@ export const AccessControlPage = () => {
       setRevokeMessage('Membership revoked and epoch rotated.');
       queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
       queryClient.invalidateQueries({ queryKey: ['access-control-memberships'] });
+      queryClient.invalidateQueries({ queryKey: ['access-control-distribution-results'] });
     },
     onError: (error) => setRevokeMessage(errorToMessage(error))
   });
@@ -142,6 +198,41 @@ export const AccessControlPage = () => {
     () => (auditQuery.data ?? []).filter((log) => log.action.startsWith('access_control.')),
     [auditQuery.data]
   );
+  const renderDistributionSummary = (rows: AccessControlDistributionResult[]) => {
+    const summary = summarizeDistribution(rows);
+    const alerts = rows.filter((row) => row.status !== 'success');
+    return (
+      <>
+        <div className="muted">
+          Delivered success {summary.success} / failed {summary.failed} / pending {summary.pending}
+        </div>
+        {alerts.length > 0 ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Recipient</th>
+                <th>Status</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alerts.map((row) => (
+                <tr key={`${row.recipient_pubkey}:${row.status}`}>
+                  <td>{row.recipient_pubkey}</td>
+                  <td>
+                    <StatusBadge status={row.status} />
+                  </td>
+                  <td>{row.reason ?? '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="muted">No failed or pending recipients.</div>
+        )}
+      </>
+    );
+  };
 
   const submitRotate = () => {
     const topicId = rotateForm.topic_id.trim();
@@ -167,6 +258,25 @@ export const AccessControlPage = () => {
     setInviteFilters({
       topic_id: inviteSearchForm.topic_id.trim(),
       status: inviteSearchForm.status
+    });
+  };
+
+  const submitDistributionSearch = () => {
+    const epoch = distributionForm.epoch.trim();
+    if (epoch !== '') {
+      const parsed = Number.parseInt(epoch, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setDistributionMessage('Epoch must be a positive integer.');
+        return;
+      }
+    }
+    setDistributionMessage(null);
+    setDistributionFilters({
+      topic_id: distributionForm.topic_id.trim(),
+      scope: distributionForm.scope,
+      pubkey: distributionForm.pubkey.trim(),
+      epoch,
+      status: distributionForm.status
     });
   };
 
@@ -237,6 +347,7 @@ export const AccessControlPage = () => {
           onClick={() => {
             void membershipsQuery.refetch();
             void invitesQuery.refetch();
+            void distributionResultsQuery.refetch();
             void auditQuery.refetch();
           }}
         >
@@ -546,6 +657,7 @@ export const AccessControlPage = () => {
                 Epoch {rotateResult.previous_epoch} → {rotateResult.new_epoch} / recipients{' '}
                 {rotateResult.recipients}
               </div>
+              {renderDistributionSummary(rotateResult.distribution_results)}
             </div>
           )}
           <button className="button" onClick={submitRotate} disabled={rotateMutation.isPending}>
@@ -621,11 +733,135 @@ export const AccessControlPage = () => {
                 Epoch {revokeResult.previous_epoch} → {revokeResult.new_epoch} / recipients{' '}
                 {revokeResult.recipients}
               </div>
+              {renderDistributionSummary(revokeResult.distribution_results)}
             </div>
           )}
           <button className="button" onClick={submitRevoke} disabled={revokeMutation.isPending}>
             {revokeMutation.isPending ? 'Revoking...' : 'Revoke + rotate'}
           </button>
+        </div>
+
+        <div className="card">
+          <h3>Redistribution Results</h3>
+          <p>Inspect per-recipient results recorded for each epoch rotation.</p>
+          <div className="field">
+            <label htmlFor="distribution-topic-id">Distribution topic filter</label>
+            <input
+              id="distribution-topic-id"
+              value={distributionForm.topic_id}
+              onChange={(event) =>
+                setDistributionForm((prev) => ({ ...prev, topic_id: event.target.value }))
+              }
+              placeholder="kukuri:topic:example"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="distribution-scope">Distribution scope filter</label>
+            <select
+              id="distribution-scope"
+              value={distributionForm.scope}
+              onChange={(event) =>
+                setDistributionForm((prev) => ({ ...prev, scope: event.target.value }))
+              }
+            >
+              {scopeFilterOptions.map((scope) => (
+                <option key={`distribution:${scope.value || 'all'}`} value={scope.value}>
+                  {scope.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="distribution-status">Distribution status filter</label>
+            <select
+              id="distribution-status"
+              value={distributionForm.status}
+              onChange={(event) =>
+                setDistributionForm((prev) => ({ ...prev, status: event.target.value }))
+              }
+            >
+              {distributionStatusOptions.map((status) => (
+                <option key={`distribution-status:${status.value || 'all'}`} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="distribution-pubkey">Distribution pubkey filter</label>
+            <input
+              id="distribution-pubkey"
+              value={distributionForm.pubkey}
+              onChange={(event) =>
+                setDistributionForm((prev) => ({ ...prev, pubkey: event.target.value }))
+              }
+              placeholder="pubkey prefix or exact value"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="distribution-epoch">Distribution epoch filter</label>
+            <input
+              id="distribution-epoch"
+              value={distributionForm.epoch}
+              onChange={(event) =>
+                setDistributionForm((prev) => ({ ...prev, epoch: event.target.value }))
+              }
+              placeholder="e.g. 3"
+            />
+          </div>
+          <div className="row">
+            <button className="button secondary" onClick={submitDistributionSearch}>
+              Search results
+            </button>
+            <button
+              className="button secondary"
+              onClick={() => void distributionResultsQuery.refetch()}
+            >
+              Reload results
+            </button>
+          </div>
+          {distributionMessage && <div className="notice">{distributionMessage}</div>}
+          {distributionResultsQuery.isLoading && (
+            <div className="notice">Loading distribution results...</div>
+          )}
+          {distributionResultsQuery.error && (
+            <div className="notice">{errorToMessage(distributionResultsQuery.error)}</div>
+          )}
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Updated</th>
+                <th>Topic</th>
+                <th>Scope</th>
+                <th>Epoch</th>
+                <th>Recipient</th>
+                <th>Status</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(distributionResultsQuery.data ?? []).map((result) => (
+                <tr
+                  key={`${result.topic_id}:${result.scope}:${result.epoch}:${result.recipient_pubkey}`}
+                >
+                  <td>{formatTimestamp(result.updated_at)}</td>
+                  <td>{result.topic_id}</td>
+                  <td>{result.scope}</td>
+                  <td>{result.epoch}</td>
+                  <td>{result.recipient_pubkey}</td>
+                  <td>
+                    <StatusBadge status={result.status} />
+                  </td>
+                  <td>{result.reason ?? '-'}</td>
+                </tr>
+              ))}
+              {(distributionResultsQuery.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={7}>No distribution results found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

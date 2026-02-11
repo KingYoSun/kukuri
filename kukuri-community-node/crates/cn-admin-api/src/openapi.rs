@@ -6,8 +6,9 @@ use utoipa::openapi::server::ServerBuilder;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::access_control::{
-    InviteCapabilityRow, IssueInviteCapabilityRequest, MembershipRow, RevokeRequest,
-    RevokeResponse, RotateRequest, RotateResponse,
+    DistributionResult, DistributionResultQuery, DistributionResultRow, InviteCapabilityRow,
+    IssueInviteCapabilityRequest, MembershipRow, RevokeRequest, RevokeResponse, RotateRequest,
+    RotateResponse,
 };
 use crate::auth::{AdminUser, LoginRequest, LoginResponse};
 use crate::dashboard::{
@@ -86,6 +87,7 @@ pub struct ManualLabelResponse {
         dsar_jobs_retry_doc,
         dsar_jobs_cancel_doc,
         access_control_memberships_doc,
+        access_control_distribution_results_doc,
         access_control_invites_list_doc,
         access_control_invites_issue_doc,
         access_control_invites_revoke_doc,
@@ -138,6 +140,9 @@ pub struct ManualLabelResponse {
             UsageRow,
             DsarJobRow,
             MembershipRow,
+            DistributionResult,
+            DistributionResultQuery,
+            DistributionResultRow,
             InviteCapabilityRow,
             IssueInviteCapabilityRequest,
             RotateRequest,
@@ -551,6 +556,21 @@ fn dsar_jobs_cancel_doc() {}
     responses((status = 200, body = [MembershipRow]), (status = 400, body = ErrorResponse))
 )]
 fn access_control_memberships_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/admin/access-control/distribution-results",
+    params(
+        ("topic_id" = Option<String>, Query, description = "Topic filter"),
+        ("scope" = Option<String>, Query, description = "Scope filter"),
+        ("pubkey" = Option<String>, Query, description = "Recipient pubkey filter"),
+        ("epoch" = Option<i64>, Query, description = "Epoch filter"),
+        ("status" = Option<String>, Query, description = "Status filter (pending|success|failed)"),
+        ("limit" = Option<i64>, Query, description = "Max rows")
+    ),
+    responses((status = 200, body = [DistributionResultRow]), (status = 400, body = ErrorResponse))
+)]
+fn access_control_distribution_results_doc() {}
 
 #[utoipa::path(
     get,

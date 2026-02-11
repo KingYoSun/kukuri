@@ -120,6 +120,11 @@ async fn cleanup_access_control_rows(pool: &Pool<Postgres>, topic_id: &str) {
         .execute(pool)
         .await
         .expect("cleanup key envelopes");
+    sqlx::query("DELETE FROM cn_user.key_envelope_distribution_results WHERE topic_id = $1")
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("cleanup key envelope distribution results");
     sqlx::query("DELETE FROM cn_user.topic_memberships WHERE topic_id = $1")
         .bind(topic_id)
         .execute(pool)

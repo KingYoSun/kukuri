@@ -494,6 +494,29 @@ async fn access_control_rotate_contract_success() {
         Some(0)
     );
     assert_eq!(payload.get("new_epoch").and_then(Value::as_i64), Some(1));
+    let distribution_results = payload
+        .get("distribution_results")
+        .and_then(Value::as_array)
+        .expect("distribution_results array");
+    assert_eq!(distribution_results.len(), 1);
+    assert_eq!(
+        distribution_results[0]
+            .get("recipient_pubkey")
+            .and_then(Value::as_str),
+        Some(member_pubkey.as_str())
+    );
+    assert_eq!(
+        distribution_results[0]
+            .get("status")
+            .and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        distribution_results[0]
+            .get("reason")
+            .and_then(Value::as_str),
+        None
+    );
 }
 
 #[tokio::test]
@@ -541,6 +564,11 @@ async fn access_control_revoke_contract_success() {
         Some(0)
     );
     assert_eq!(payload.get("new_epoch").and_then(Value::as_i64), Some(1));
+    let distribution_results = payload
+        .get("distribution_results")
+        .and_then(Value::as_array)
+        .expect("distribution_results array");
+    assert!(distribution_results.is_empty());
 }
 
 #[tokio::test]
@@ -580,6 +608,61 @@ async fn access_control_memberships_contract_search_success() {
     assert_eq!(
         rows[0].get("status").and_then(Value::as_str),
         Some("active")
+    );
+}
+
+#[tokio::test]
+async fn access_control_distribution_results_contract_search_success() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
+    let scope = "invite";
+    let success_pubkey = Keys::generate().public_key().to_hex();
+    let failed_pubkey = "failed-recipient";
+
+    sqlx::query(
+        "INSERT INTO cn_user.key_envelope_distribution_results          (topic_id, scope, epoch, recipient_pubkey, status, reason)          VALUES ($1, $2, 3, $3, 'success', NULL),                 ($1, $2, 3, $4, 'failed', 'invalid pubkey')",
+    )
+    .bind(&topic_id)
+    .bind(scope)
+    .bind(&success_pubkey)
+    .bind(failed_pubkey)
+    .execute(&state.pool)
+    .await
+    .expect("insert distribution rows");
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/access-control/distribution-results",
+            get(access_control::list_distribution_results),
+        )
+        .with_state(state);
+
+    let uri = format!(
+        "/v1/admin/access-control/distribution-results?topic_id={topic_id}&scope={scope}&status=failed&limit=10"
+    );
+    let (status, payload) = get_json_with_session(app, &uri, &session_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("array payload");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].get("topic_id").and_then(Value::as_str),
+        Some(topic_id.as_str())
+    );
+    assert_eq!(rows[0].get("scope").and_then(Value::as_str), Some(scope));
+    assert_eq!(rows[0].get("epoch").and_then(Value::as_i64), Some(3));
+    assert_eq!(
+        rows[0].get("recipient_pubkey").and_then(Value::as_str),
+        Some(failed_pubkey)
+    );
+    assert_eq!(
+        rows[0].get("status").and_then(Value::as_str),
+        Some("failed")
+    );
+    assert_eq!(
+        rows[0].get("reason").and_then(Value::as_str),
+        Some("invalid pubkey")
     );
 }
 
@@ -725,6 +808,9 @@ async fn openapi_contract_contains_admin_paths() {
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1access-control~1memberships/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1access-control~1distribution-results/get")
         .is_some());
     assert!(payload
         .pointer("/paths/~1v1~1admin~1access-control~1invites/get")

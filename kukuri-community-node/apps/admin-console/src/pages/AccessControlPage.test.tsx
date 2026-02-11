@@ -11,6 +11,7 @@ vi.mock('../lib/api', () => ({
     auditLogs: vi.fn(),
     accessControlMemberships: vi.fn(),
     accessControlInvites: vi.fn(),
+    accessControlDistributionResults: vi.fn(),
     issueAccessControlInvite: vi.fn(),
     revokeAccessControlInvite: vi.fn(),
     rotateAccessControl: vi.fn(),
@@ -49,6 +50,26 @@ describe('AccessControlPage', () => {
         capability_event_json: {}
       }
     ]);
+    vi.mocked(api.accessControlDistributionResults).mockResolvedValue([
+      {
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        epoch: 2,
+        recipient_pubkey: 'a'.repeat(64),
+        status: 'failed',
+        reason: 'invalid pubkey',
+        updated_at: 1738813200
+      },
+      {
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        epoch: 2,
+        recipient_pubkey: 'b'.repeat(64),
+        status: 'pending',
+        reason: 'retry queued',
+        updated_at: 1738813201
+      }
+    ]);
     vi.mocked(api.issueAccessControlInvite).mockResolvedValue({
       topic_id: 'kukuri:topic:test',
       scope: 'invite',
@@ -82,7 +103,19 @@ describe('AccessControlPage', () => {
       scope: 'invite',
       previous_epoch: 1,
       new_epoch: 2,
-      recipients: 5
+      recipients: 5,
+      distribution_results: [
+        {
+          recipient_pubkey: 'a'.repeat(64),
+          status: 'failed',
+          reason: 'invalid pubkey'
+        },
+        {
+          recipient_pubkey: 'b'.repeat(64),
+          status: 'pending',
+          reason: 'retry queued'
+        }
+      ]
     });
     vi.mocked(api.revokeAccessControl).mockResolvedValue({
       topic_id: 'kukuri:topic:test',
@@ -90,7 +123,8 @@ describe('AccessControlPage', () => {
       revoked_pubkey: 'a'.repeat(64),
       previous_epoch: 2,
       new_epoch: 3,
-      recipients: 4
+      recipients: 4,
+      distribution_results: []
     });
   });
 
@@ -167,6 +201,25 @@ describe('AccessControlPage', () => {
         limit: 200
       });
     });
+
+    await user.type(screen.getByLabelText('Distribution topic filter'), 'kukuri:topic:test');
+    await user.selectOptions(screen.getByLabelText('Distribution scope filter'), 'invite');
+    await user.selectOptions(screen.getByLabelText('Distribution status filter'), 'failed');
+    await user.type(screen.getByLabelText('Distribution epoch filter'), '2');
+    await user.click(screen.getByRole('button', { name: 'Search results' }));
+    await waitFor(() => {
+      expect(api.accessControlDistributionResults).toHaveBeenLastCalledWith({
+        topic_id: 'kukuri:topic:test',
+        scope: 'invite',
+        pubkey: undefined,
+        epoch: 2,
+        status: 'failed',
+        limit: 200
+      });
+    });
+
+    expect(screen.getAllByText('invalid pubkey').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('retry queued').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: 'Revoke invite' }));
     await waitFor(() => {

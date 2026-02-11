@@ -1,6 +1,6 @@
 # Community Nodes 実装タスク（ロードマップ）
 
-最終更新日: 2026年02月11日
+最終更新日: 2026年02月12日
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、M0-M5 とクライアント実装のタスクを段階的に進められるように整理する。
 
@@ -141,8 +141,8 @@
 
 ## 未実装/不足事項（2026年02月11日 再監査追記）
 
-- [ ] `admin_console.md` の Access Control 要件（epoch ローテ時の再配布「失敗/未配布」検知）に合わせ、`cn-core`/`cn-admin-api`/Admin Console で配布結果（success/failed/pending + reason）を記録・参照できるようにする。
-- [ ] Access Control 再配布結果のテストを補完する（`cn-core` 統合テスト: 配布失敗記録、`cn-admin-api` 契約テスト: rotate/revoke のレスポンス shape、Admin Console UI テスト: 失敗/未配布の可視化）。
+- [x] `admin_console.md` の Access Control 要件（epoch ローテ時の再配布「失敗/未配布」検知）に合わせ、`cn-core`/`cn-admin-api`/Admin Console で配布結果（success/failed/pending + reason）を記録・参照できるようにする。
+- [x] Access Control 再配布結果のテストを補完する（`cn-core` 統合テスト: 配布失敗記録、`cn-admin-api` 契約テスト: rotate/revoke のレスポンス shape、Admin Console UI テスト: 失敗/未配布の可視化）。
 - [ ] `ops_runbook.md` の「月1リストア演習」要件に合わせ、`recovery-drill` を定期 CI ジョブへ組み込み（`nightly.yml` など）、`test-results/community-node-recovery/latest-summary.json` を artefact 収集・検証できるようにする。
 - [ ] Runbook の共通必須メトリクス（`http_requests_total` / `http_request_duration_seconds_bucket`）を各サービスの `/metrics` 契約テストで固定し、`service,route,method,status` ラベル互換を保証する。
 - [ ] `access_control_design.md` の「v1 はノード側に専用DBを持たない」記述と現行実装（membership/invite 管理 API + Admin Console）の整合を取り、P2P-only と運用補助データの境界（正とする SoT）を明文化する。
