@@ -135,7 +135,7 @@
 ## 未実装/不足事項（2026年02月11日 監査追記）
 
 - [x] `cn-relay`: `/healthz` `/metrics` の契約テストを追加し、Runbook 必須メトリクス（`ws_connections` / `ws_req_total` / `ws_event_total` / `ingest_received_total` / `ingest_rejected_total` / `gossip_received_total` / `gossip_sent_total` / `dedupe_hits_total` / `dedupe_misses_total`）の公開互換を固定する。
-- [ ] `cn-user-api`: 認証/同意/課金メータの回帰テストを追加し、API 実行で `auth_success_total` / `auth_failure_total` / `consent_required_total` / `quota_exceeded_total` の増分を検証する。
+- [x] `cn-user-api`: 認証/同意/課金メータの回帰テストを追加し、API 実行で `auth_success_total` / `auth_failure_total` / `consent_required_total` / `quota_exceeded_total` の増分を検証する。
 - [ ] `ops_runbook.md` のバックアップ/リストア要件（`pg_dump` 世代管理・`pg_restore` 復旧手順）を運用スクリプト化し、`scripts/test-docker.ps1` から実行できる復旧ドリルを整備する。
 - [ ] `cn-cli`: Node Key 生成/ローテーションと Access Control rotate/revoke の統合テストを追加し、監査ログ記録・DB 反映・CLI 出力の後方互換を担保する。
 

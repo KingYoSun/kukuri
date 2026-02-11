@@ -1041,6 +1041,39 @@ mod api_contract_tests {
         }
     }
 
+    fn prometheus_counter_value(body: &str, metric: &str, required_labels: &[(&str, &str)]) -> f64 {
+        for line in body.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            let mut parts = line.split_whitespace();
+            let Some(sample) = parts.next() else {
+                continue;
+            };
+            let Some(value_text) = parts.next() else {
+                continue;
+            };
+
+            let (name, labels) = if let Some((name, rest)) = sample.split_once('{') {
+                (name, rest.strip_suffix('}').unwrap_or(rest))
+            } else {
+                (sample, "")
+            };
+            if name != metric {
+                continue;
+            }
+
+            let matched = required_labels
+                .iter()
+                .all(|(label, value)| labels.contains(&format!(r#"{label}="{value}""#)));
+            if matched {
+                return value_text.parse::<f64>().unwrap_or(0.0);
+            }
+        }
+        0.0
+    }
+
     async fn insert_current_policy(
         pool: &Pool<Postgres>,
         policy_type: &str,
@@ -1628,6 +1661,174 @@ mod api_contract_tests {
         assert!(
             body.contains("cn_up{service=\"cn-user-api\"} 1"),
             "metrics body did not contain cn_up for cn-user-api: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn auth_consent_quota_metrics_regression_counters_increment() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let auth_keys = Keys::generate();
+        let auth_pubkey = auth_keys.public_key().to_hex();
+        let subscriber_pubkey = Keys::generate().public_key().to_hex();
+        let token = issue_token(&state.jwt_config, &subscriber_pubkey);
+        let consent_topic_id = format!("kukuri:consent-required-{}", Uuid::new_v4().simple());
+        let existing_topic_id = format!("kukuri:quota-existing-{}", Uuid::new_v4().simple());
+        let quota_topic_id = format!("kukuri:quota-exceeded-{}", Uuid::new_v4().simple());
+        insert_current_policy(&pool, "terms", "v1.0.0", "ja-JP", "Terms").await;
+        insert_current_policy(&pool, "privacy", "v1.0.0", "ja-JP", "Privacy").await;
+
+        let app = Router::new()
+            .route("/metrics", get(crate::metrics_endpoint))
+            .route("/v1/auth/challenge", post(crate::auth::auth_challenge))
+            .route("/v1/auth/verify", post(crate::auth::auth_verify))
+            .route(
+                "/v1/topic-subscription-requests",
+                post(create_subscription_request),
+            )
+            .with_state(state);
+
+        let (status, content_type, before_body) = get_text_public(app.clone(), "/metrics").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(content_type.as_deref(), Some("text/plain; version=0.0.4"));
+        let auth_success_before = prometheus_counter_value(
+            &before_body,
+            "auth_success_total",
+            &[("service", "cn-user-api")],
+        );
+        let auth_failure_before = prometheus_counter_value(
+            &before_body,
+            "auth_failure_total",
+            &[("service", "cn-user-api")],
+        );
+        let consent_required_before = prometheus_counter_value(
+            &before_body,
+            "consent_required_total",
+            &[("service", "cn-user-api")],
+        );
+        let quota_exceeded_before = prometheus_counter_value(
+            &before_body,
+            "quota_exceeded_total",
+            &[("service", "cn-user-api"), ("metric", "max_topics")],
+        );
+
+        let (status, challenge_payload) = post_json_public(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "pubkey": auth_pubkey }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let challenge = challenge_payload
+            .get("challenge")
+            .and_then(Value::as_str)
+            .expect("challenge");
+
+        let auth_event = nostr::build_signed_event(
+            &auth_keys,
+            22242,
+            vec![
+                vec!["relay".to_string(), "http://localhost".to_string()],
+                vec!["challenge".to_string(), challenge.to_string()],
+            ],
+            String::new(),
+        )
+        .expect("build auth event");
+        let (status, _) = post_json_public(
+            app.clone(),
+            "/v1/auth/verify",
+            json!({ "auth_event_json": auth_event }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let invalid_auth_event =
+            nostr::build_signed_event(&auth_keys, 1, Vec::new(), String::new())
+                .expect("build invalid auth event");
+        let (status, payload) = post_json_public(
+            app.clone(),
+            "/v1/auth/verify",
+            json!({ "auth_event_json": invalid_auth_event }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("INVALID_EVENT")
+        );
+
+        let (status, payload) = post_json(
+            app.clone(),
+            "/v1/topic-subscription-requests",
+            &token,
+            json!({
+                "topic_id": consent_topic_id,
+                "requested_services": ["relay", "index"]
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::PRECONDITION_REQUIRED);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("CONSENT_REQUIRED")
+        );
+
+        ensure_consents(&pool, &subscriber_pubkey).await;
+        insert_topic_subscription(&pool, &existing_topic_id, &subscriber_pubkey).await;
+        assign_active_plan_limit(&pool, &subscriber_pubkey, "max_topics", "limit", 1).await;
+
+        let (status, payload) = post_json(
+            app.clone(),
+            "/v1/topic-subscription-requests",
+            &token,
+            json!({
+                "topic_id": quota_topic_id,
+                "requested_services": ["relay", "index"]
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "max_topics", 1, 1, false);
+
+        let (status, content_type, after_body) = get_text_public(app, "/metrics").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(content_type.as_deref(), Some("text/plain; version=0.0.4"));
+        let auth_success_after = prometheus_counter_value(
+            &after_body,
+            "auth_success_total",
+            &[("service", "cn-user-api")],
+        );
+        let auth_failure_after = prometheus_counter_value(
+            &after_body,
+            "auth_failure_total",
+            &[("service", "cn-user-api")],
+        );
+        let consent_required_after = prometheus_counter_value(
+            &after_body,
+            "consent_required_total",
+            &[("service", "cn-user-api")],
+        );
+        let quota_exceeded_after = prometheus_counter_value(
+            &after_body,
+            "quota_exceeded_total",
+            &[("service", "cn-user-api"), ("metric", "max_topics")],
+        );
+
+        assert!(
+            auth_success_after >= auth_success_before + 1.0,
+            "auth_success_total did not increase: before={auth_success_before}, after={auth_success_after}"
+        );
+        assert!(
+            auth_failure_after >= auth_failure_before + 1.0,
+            "auth_failure_total did not increase: before={auth_failure_before}, after={auth_failure_after}"
+        );
+        assert!(
+            consent_required_after >= consent_required_before + 1.0,
+            "consent_required_total did not increase: before={consent_required_before}, after={consent_required_after}"
+        );
+        assert!(
+            quota_exceeded_after >= quota_exceeded_before + 1.0,
+            "quota_exceeded_total{{metric=\"max_topics\"}} did not increase: before={quota_exceeded_before}, after={quota_exceeded_after}"
         );
     }
 
