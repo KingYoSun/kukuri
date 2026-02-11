@@ -121,6 +121,22 @@ v2（必要なら）:
 5. services 起動（`relay`→`user-api`→各worker）
 6. Meilisearch は必要なら reindex（index ジョブ）
 
+### 2.4 運用スクリプト（`pg_dump` 世代管理 + `pg_restore` 復旧ドリル）
+
+- 実行コマンド: `./scripts/test-docker.ps1 recovery-drill`
+- 世代管理: `COMMUNITY_NODE_BACKUP_GENERATIONS`（既定: `30`）
+- バックアップ出力: `test-results/community-node-recovery/backups/community-node-pgdump-<timestamp>.dump`
+- 復旧ドリルログ: `tmp/logs/community-node-recovery/<timestamp>.log`
+- 復旧ドリル結果: `test-results/community-node-recovery/<timestamp>-summary.json` と `test-results/community-node-recovery/latest-summary.json`
+
+ドリル内容:
+1. `community-node-user-api` を起動し E2E seed を投入
+2. `cn_relay.events` 件数を基準値として記録
+3. `pg_dump`（custom format + 圧縮）でバックアップ作成し、古い世代を自動削除
+4. `user-api/bootstrap` を停止して書き込みを止め、`TRUNCATE` で障害を模擬
+5. `pg_restore` で DB を再作成して復旧
+6. サービス再起動後に `cn_relay.events` 件数が基準値へ戻ることを検証
+
 ## 3. マイグレーション手順（v1）
 
 - マイグレーションは `kukuri-community-node/migrations/` に集約し、**単一の migrate ジョブ**で実行する

@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e", "e2e-community-node")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e", "e2e-community-node", "recovery-drill")]
     [string]$Command = "all",
 
     [switch]$Integration,            # Rust�e�X�g����P2P�����e�X�g�݂̂���s
@@ -90,6 +90,7 @@ Commands:
   contracts    - �_��e�X�g�iNIP-10���E�P�[�X�j����s
   e2e          - Desktop E2E テスト（tauri-driver + WebDriverIO）を実行
   e2e-community-node - Desktop E2E テスト（community node 実体起動）
+  recovery-drill - Community Node の Postgres バックアップ/復旧ドリルを実行
   build        - Docker�C���[�W�̃r���h�̂ݎ��s
   clean        - Docker�R���e�i�ƃC���[�W��N���[���A�b�v
   cache-clean  - �L���b�V���{�����[����܂߂Ċ��S�N���[���A�b�v
@@ -106,6 +107,7 @@ Options:
   -IntegrationLog <level> - �����e�X�g���� RUST_LOG �ݒ�i����: info,iroh_tests=debug�j
   -NoBuild     - Docker�C���[�W�̃r���h��X�L�b�v
   -Help        - ���̃w���v��\��
+  (env) COMMUNITY_NODE_BACKUP_GENERATIONS - recovery-drill で保持する backup 世代数（既定: 30）
   �� P2P�����e�X�g�� `p2p_gossip_smoke` / `p2p_mainline_smoke` ��������s���܂��B`P2P_GOSSIP_TEST_TARGET` �� `P2P_MAINLINE_TEST_TARGET` �ŔC�ӂ̃^�[�Q�b�g�ɏ㏑���\�ł��B
 
 Examples:
@@ -119,6 +121,7 @@ Examples:
   .\test-docker.ps1 ts -Scenario user-search-pagination
   .\test-docker.ps1 e2e
   .\test-docker.ps1 e2e-community-node
+  .\test-docker.ps1 recovery-drill
   .\test-docker.ps1 performance    # �p�t�H�[�}���X�v���p�e�X�g�o�C�i������s
   .\test-docker.ps1 cache-clean    # �L���b�V����܂߂Ċ��S�N���[���A�b�v
   .\test-docker.ps1 -Help          # �w���v��\��
@@ -1569,6 +1572,267 @@ function Stop-CommunityNode {
     ) -IgnoreFailure | Out-Null
 }
 
+function Get-CommunityNodeBackupMaxGenerations {
+    $defaultGenerations = 30
+    $configuredGenerations = $env:COMMUNITY_NODE_BACKUP_GENERATIONS
+    if ([string]::IsNullOrWhiteSpace($configuredGenerations)) {
+        return $defaultGenerations
+    }
+
+    $parsedGenerations = 0
+    if (-not [int]::TryParse($configuredGenerations, [ref]$parsedGenerations) -or $parsedGenerations -lt 1) {
+        Write-Warning "COMMUNITY_NODE_BACKUP_GENERATIONS must be an integer >= 1. Falling back to $defaultGenerations."
+        return $defaultGenerations
+    }
+    return $parsedGenerations
+}
+
+function Invoke-CommunityNodePostgresCapture {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Script
+    )
+
+    $output = & docker compose -f docker-compose.test.yml exec -T community-node-postgres sh -lc $Script 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($output) {
+            $output | ForEach-Object { Write-Host $_ }
+        }
+        throw "community-node-postgres command failed (exit code $LASTEXITCODE)"
+    }
+    return ,$output
+}
+
+function Get-CommunityNodeRelayEventCount {
+    $queryScript = "set -eu; export PGPASSWORD=cn_password; psql -qtAX -U cn -d cn -c 'SELECT COUNT(*) FROM cn_relay.events;'"
+    $output = Invoke-CommunityNodePostgresCapture -Script $queryScript
+    $countText = $output |
+        ForEach-Object { $_.ToString().Trim() } |
+        Where-Object { $_ -match '^\d+$' } |
+        Select-Object -Last 1
+
+    if ([string]::IsNullOrWhiteSpace($countText)) {
+        throw "Failed to parse cn_relay.events count from postgres output."
+    }
+    return [int]$countText
+}
+
+function Invoke-CommunityNodeBackupRetention {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackupDir,
+        [Parameter(Mandatory = $true)]
+        [int]$MaxGenerations
+    )
+
+    if (-not (Test-Path $BackupDir)) {
+        return
+    }
+
+    $backupFiles = Get-ChildItem -Path $BackupDir -File -Filter "community-node-pgdump-*.dump" | Sort-Object Name -Descending
+    if ($backupFiles.Count -le $MaxGenerations) {
+        return
+    }
+
+    $staleBackups = $backupFiles | Select-Object -Skip $MaxGenerations
+    foreach ($stale in $staleBackups) {
+        Remove-Item -Path $stale.FullName -Force
+        Write-Info "Pruned old backup generation: $($stale.Name)"
+    }
+}
+
+function New-CommunityNodePostgresBackup {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$MaxGenerations
+    )
+
+    $backupDir = Join-Path $repositoryRoot "test-results/community-node-recovery/backups"
+    if (-not (Test-Path $backupDir)) {
+        New-Item -ItemType Directory -Path $backupDir | Out-Null
+    }
+
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $backupName = "community-node-pgdump-$timestamp.dump"
+    $hostBackupPath = Join-Path $backupDir $backupName
+    $containerBackupPath = "/tmp/$backupName"
+    $dumpScript = "set -eu; export PGPASSWORD=cn_password; pg_dump --format=custom --compress=9 --no-owner --no-acl --dbname='postgresql://cn:cn_password@localhost:5432/cn' --file '$containerBackupPath'"
+
+    $dumpExitCode = Invoke-DockerCompose @("exec", "-T", "community-node-postgres", "sh", "-lc", $dumpScript) -IgnoreFailure
+    if ($dumpExitCode -ne 0) {
+        throw "pg_dump failed (exit code $dumpExitCode)"
+    }
+
+    $copyOutput = & docker cp "kukuri-community-node-postgres:$containerBackupPath" $hostBackupPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($copyOutput) {
+            $copyOutput | ForEach-Object { Write-Host $_ }
+        }
+        throw "Failed to copy backup file from community-node-postgres container."
+    }
+
+    Invoke-DockerCompose @("exec", "-T", "community-node-postgres", "rm", "-f", $containerBackupPath) -IgnoreFailure | Out-Null
+    Invoke-CommunityNodeBackupRetention -BackupDir $backupDir -MaxGenerations $MaxGenerations
+    Write-Success "Postgres backup created: $hostBackupPath"
+    return $hostBackupPath
+}
+
+function Invoke-CommunityNodePostgresRestore {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackupPath
+    )
+
+    if (-not (Test-Path $BackupPath)) {
+        throw "Backup file does not exist: $BackupPath"
+    }
+
+    $restoreFileName = [System.IO.Path]::GetFileName($BackupPath)
+    $containerRestorePath = "/tmp/$restoreFileName"
+    $copyOutput = & docker cp $BackupPath "kukuri-community-node-postgres:$containerRestorePath" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($copyOutput) {
+            $copyOutput | ForEach-Object { Write-Host $_ }
+        }
+        throw "Failed to copy restore dump into community-node-postgres container."
+    }
+
+    try {
+        $restoreScript = @"
+set -eu
+export PGPASSWORD=cn_password
+dropdb --if-exists --force -U cn cn
+createdb -U cn cn
+pg_restore -U cn --clean --if-exists --no-owner --no-acl --dbname=cn '$containerRestorePath'
+"@
+        $restoreExitCode = Invoke-DockerCompose @("exec", "-T", "community-node-postgres", "sh", "-lc", $restoreScript) -IgnoreFailure
+        if ($restoreExitCode -ne 0) {
+            throw "pg_restore failed (exit code $restoreExitCode)"
+        }
+    }
+    finally {
+        Invoke-DockerCompose @("exec", "-T", "community-node-postgres", "rm", "-f", $containerRestorePath) -IgnoreFailure | Out-Null
+    }
+
+    Write-Success "Postgres restore completed from: $BackupPath"
+}
+
+function Invoke-CommunityNodeRecoveryDrillScenario {
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $logDir = Join-Path $repositoryRoot "tmp/logs/community-node-recovery"
+    $resultDir = Join-Path $repositoryRoot "test-results/community-node-recovery"
+    $logPath = Join-Path $logDir "$timestamp.log"
+    $summaryPath = Join-Path $resultDir "$timestamp-summary.json"
+    $latestSummaryPath = Join-Path $resultDir "latest-summary.json"
+    $baseUrl = if ([string]::IsNullOrWhiteSpace($env:COMMUNITY_NODE_BASE_URL)) {
+        "http://127.0.0.1:18080"
+    } else {
+        $env:COMMUNITY_NODE_BASE_URL
+    }
+
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+    if (-not (Test-Path $resultDir)) {
+        New-Item -ItemType Directory -Path $resultDir | Out-Null
+    }
+
+    $maxGenerations = Get-CommunityNodeBackupMaxGenerations
+    $backupPath = $null
+    $baselineCount = 0
+    $corruptedCount = 0
+    $restoredCount = 0
+    $status = "failed"
+    $transcriptStarted = $false
+
+    try {
+        Start-Transcript -Path $logPath -Force | Out-Null
+        $transcriptStarted = $true
+
+        Write-Host "Running community node backup/restore recovery drill via Docker..."
+        Write-Info "Backup generations to keep: $maxGenerations"
+        Start-CommunityNode -BaseUrl $baseUrl
+        Invoke-CommunityNodeE2ESeed
+
+        $baselineCount = Get-CommunityNodeRelayEventCount
+        if ($baselineCount -lt 1) {
+            throw "Expected seeded relay events, but cn_relay.events count is $baselineCount."
+        }
+        Write-Info "Baseline relay event count: $baselineCount"
+
+        $backupPath = New-CommunityNodePostgresBackup -MaxGenerations $maxGenerations
+
+        Write-Info "Stopping write services before restore drill..."
+        Invoke-DockerCompose @("rm", "-sf", "community-node-user-api", "community-node-bootstrap") -IgnoreFailure | Out-Null
+
+        $truncateScript = "set -eu; export PGPASSWORD=cn_password; psql -U cn -d cn -c 'TRUNCATE TABLE cn_relay.events_outbox, cn_relay.event_topics, cn_relay.events CASCADE;'"
+        $truncateExitCode = Invoke-DockerCompose @("exec", "-T", "community-node-postgres", "sh", "-lc", $truncateScript) -IgnoreFailure
+        if ($truncateExitCode -ne 0) {
+            throw "Failed to simulate DB data loss before restore (exit code $truncateExitCode)."
+        }
+
+        $corruptedCount = Get-CommunityNodeRelayEventCount
+        if ($corruptedCount -ne 0) {
+            throw "Expected cn_relay.events count to become 0 after truncate, got $corruptedCount."
+        }
+        Write-Info "Corrupted relay event count: $corruptedCount"
+
+        Invoke-CommunityNodePostgresRestore -BackupPath $backupPath
+
+        Write-Info "Restarting community node services after restore..."
+        $upExitCode = Invoke-DockerCompose @("up", "-d", "community-node-user-api", "community-node-bootstrap") -IgnoreFailure
+        if ($upExitCode -ne 0) {
+            throw "Failed to restart community node services after restore (exit code $upExitCode)."
+        }
+        if (-not (Wait-CommunityNodeHealthy -BaseUrl $baseUrl)) {
+            throw "community-node-user-api health check failed after restore: $baseUrl/healthz"
+        }
+
+        $restoredCount = Get-CommunityNodeRelayEventCount
+        if ($restoredCount -ne $baselineCount) {
+            throw "Restored relay event count mismatch. expected=$baselineCount actual=$restoredCount"
+        }
+        Write-Success "Recovery drill verified relay event count restoration ($restoredCount)."
+        $status = "passed"
+    }
+    finally {
+        if ($status -eq "passed") {
+            Invoke-CommunityNodeE2ECleanup
+        } else {
+            Invoke-DockerCompose @("run", "--rm", "--entrypoint", "cn", "community-node-user-api", "e2e", "cleanup") -IgnoreFailure | Out-Null
+        }
+        Stop-CommunityNode
+
+        $summary = [ordered]@{
+            executed_at = Get-Date -Format "yyyy-MM-ddTHH:mm:ssK"
+            status = $status
+            base_url = $baseUrl
+            backup_file = if ($backupPath) { [System.IO.Path]::GetFullPath($backupPath) } else { $null }
+            backup_generations = $maxGenerations
+            baseline_event_count = $baselineCount
+            after_corruption_event_count = $corruptedCount
+            after_restore_event_count = $restoredCount
+            log_path = [System.IO.Path]::GetFullPath($logPath)
+        }
+        $summaryJson = $summary | ConvertTo-Json -Depth 4
+        Set-Content -Path $summaryPath -Value $summaryJson -Encoding UTF8
+        Set-Content -Path $latestSummaryPath -Value $summaryJson -Encoding UTF8
+
+        if ($transcriptStarted) {
+            Stop-Transcript | Out-Null
+        }
+
+        if ($status -eq "passed") {
+            Write-Success "Recovery drill log saved: $logPath"
+            Write-Success "Recovery drill summary saved: $summaryPath"
+            Write-Success "Latest recovery drill summary updated: $latestSummaryPath"
+        } else {
+            Write-Warning "Recovery drill failed. Log: $logPath"
+            Write-Warning "Recovery drill summary saved: $summaryPath"
+        }
+    }
+}
+
 # ���C������
 if ($Help) {
     Show-Help
@@ -1634,6 +1898,10 @@ switch ($Command) {
     }
     "e2e-community-node" {
         Invoke-DesktopE2ECommunityNodeScenario
+        Show-CacheStatus
+    }
+    "recovery-drill" {
+        Invoke-CommunityNodeRecoveryDrillScenario
         Show-CacheStatus
     }
     "build" {
