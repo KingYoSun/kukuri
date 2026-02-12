@@ -13,6 +13,12 @@ use cn_core::moderation::{LabelInput, RuleAction, RuleCondition};
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
+const LABEL_REVIEW_STATUS_ACTIVE: &str = "active";
+const LABEL_REVIEW_STATUS_DISABLED: &str = "disabled";
+const MANUAL_LABEL_REVIEW_REASON: &str = "manual-label-issued";
+const REJUDGE_SOURCE: &str = "manual-rejudge";
+const DEFAULT_REJUDGE_MAX_ATTEMPTS: i32 = 3;
+
 #[derive(Deserialize)]
 pub struct RuleQuery {
     pub enabled: Option<bool>,
@@ -104,6 +110,7 @@ pub struct LabelQuery {
     pub topic: Option<String>,
     pub since: Option<i64>,
     pub limit: Option<i64>,
+    pub review_status: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -120,6 +127,10 @@ pub struct LabelRow {
     pub rule_id: Option<String>,
     pub source: String,
     pub issued_at: i64,
+    pub review_status: String,
+    pub review_reason: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<i64>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -131,6 +142,34 @@ pub struct ManualLabelRequest {
     pub policy_url: String,
     pub policy_ref: String,
     pub topic_id: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct LabelReviewRequest {
+    pub enabled: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct LabelReviewResponse {
+    pub label_id: String,
+    pub review_status: String,
+    pub review_reason: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<i64>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct LabelRejudgeRequest {
+    pub reason: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct LabelRejudgeResponse {
+    pub label_id: String,
+    pub event_id: String,
+    pub enqueued_jobs: i64,
+    pub status: String,
 }
 
 pub async fn list_rules(
@@ -462,7 +501,7 @@ pub async fn list_labels(
     require_admin(&state, &jar).await?;
 
     let mut builder = QueryBuilder::<Postgres>::new(
-        "SELECT label_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, issued_at FROM cn_moderation.labels WHERE 1=1",
+        "SELECT label_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, issued_at, review_status, review_reason, reviewed_by, reviewed_at FROM cn_moderation.labels WHERE 1=1",
     );
     if let Some(target) = query.target {
         builder.push(" AND target = ");
@@ -476,6 +515,11 @@ pub async fn list_labels(
         builder.push(" AND issued_at >= to_timestamp(");
         builder.push_bind(since);
         builder.push(")");
+    }
+    if let Some(review_status) = query.review_status {
+        let normalized = parse_review_status(&review_status)?;
+        builder.push(" AND review_status = ");
+        builder.push_bind(normalized);
     }
     builder.push(" ORDER BY issued_at DESC");
     let limit = query.limit.unwrap_or(200).clamp(1, 1000);
@@ -497,6 +541,7 @@ pub async fn list_labels(
     let mut labels = Vec::new();
     for row in rows {
         let issued_at: chrono::DateTime<chrono::Utc> = row.try_get("issued_at")?;
+        let reviewed_at: Option<chrono::DateTime<chrono::Utc>> = row.try_get("reviewed_at")?;
         labels.push(LabelRow {
             label_id: row.try_get("label_id")?,
             target: row.try_get("target")?,
@@ -510,6 +555,10 @@ pub async fn list_labels(
             rule_id: row.try_get("rule_id")?,
             source: row.try_get("source")?,
             issued_at: issued_at.timestamp(),
+            review_status: row.try_get("review_status")?,
+            review_reason: row.try_get("review_reason")?,
+            reviewed_by: row.try_get("reviewed_by")?,
+            reviewed_at: reviewed_at.map(|value| value.timestamp()),
         });
     }
 
@@ -575,7 +624,7 @@ pub async fn create_label(
         .map(|value| value.to_string());
 
     sqlx::query(
-        "INSERT INTO cn_moderation.labels          (label_id, source_event_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, label_event_json)          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12)          ON CONFLICT (label_id) DO NOTHING",
+        "INSERT INTO cn_moderation.labels          (label_id, source_event_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, label_event_json, review_status, review_reason, reviewed_by, reviewed_at)          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14, $15, NOW())          ON CONFLICT (label_id) DO NOTHING",
     )
     .bind(&label_event.id)
     .bind(source_event_id)
@@ -589,6 +638,9 @@ pub async fn create_label(
     .bind(&label_event.pubkey)
     .bind("manual")
     .bind(label_json)
+    .bind(LABEL_REVIEW_STATUS_ACTIVE)
+    .bind(MANUAL_LABEL_REVIEW_REASON)
+    .bind(&admin.admin_user_id)
     .execute(&state.pool)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
@@ -605,7 +657,10 @@ pub async fn create_label(
             "exp": input.exp,
             "policy_url": input.policy_url,
             "policy_ref": input.policy_ref,
-            "topic_id": input.topic_id
+            "topic_id": input.topic_id,
+            "review_status": LABEL_REVIEW_STATUS_ACTIVE,
+            "review_reason": MANUAL_LABEL_REVIEW_REASON,
+            "reviewed_by": admin.admin_user_id
         })),
         None,
     )
@@ -614,6 +669,288 @@ pub async fn create_label(
     Ok(Json(
         json!({ "label_id": label_event.id, "status": "created" }),
     ))
+}
+
+pub async fn review_label(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(label_id): Path<String>,
+    Json(payload): Json<LabelReviewRequest>,
+) -> ApiResult<Json<LabelReviewResponse>> {
+    let admin = require_admin(&state, &jar).await?;
+    let review_status = review_status_from_enabled(payload.enabled);
+    let review_reason = normalize_review_reason(payload.reason);
+    if review_status == LABEL_REVIEW_STATUS_DISABLED && review_reason.is_none() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_REVIEW",
+            "reason is required when disabling a label",
+        ));
+    }
+
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let previous_row = sqlx::query(
+        "SELECT review_status, review_reason, reviewed_by, reviewed_at          FROM cn_moderation.labels          WHERE label_id = $1          FOR UPDATE",
+    )
+    .bind(&label_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let Some(previous_row) = previous_row else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "label not found",
+        ));
+    };
+
+    let previous_review_status: String = previous_row.try_get("review_status")?;
+    let previous_review_reason: Option<String> = previous_row.try_get("review_reason")?;
+    let previous_reviewed_by: Option<String> = previous_row.try_get("reviewed_by")?;
+    let previous_reviewed_at: Option<chrono::DateTime<chrono::Utc>> =
+        previous_row.try_get("reviewed_at")?;
+
+    let updated_row = sqlx::query(
+        "UPDATE cn_moderation.labels          SET review_status = $1,              review_reason = $2,              reviewed_by = $3,              reviewed_at = NOW()          WHERE label_id = $4          RETURNING label_id, review_status, review_reason, reviewed_by, reviewed_at",
+    )
+    .bind(review_status)
+    .bind(&review_reason)
+    .bind(&admin.admin_user_id)
+    .bind(&label_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    crate::log_admin_audit_tx(
+        &mut tx,
+        &admin.admin_user_id,
+        "moderation_label.review",
+        &format!("label:{label_id}"),
+        Some(json!({
+            "previous": {
+                "review_status": previous_review_status,
+                "review_reason": previous_review_reason,
+                "reviewed_by": previous_reviewed_by,
+                "reviewed_at": previous_reviewed_at.map(|value| value.timestamp()),
+            },
+            "next": {
+                "review_status": review_status,
+                "review_reason": review_reason,
+                "reviewed_by": admin.admin_user_id,
+            }
+        })),
+        None,
+    )
+    .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let reviewed_at: chrono::DateTime<chrono::Utc> = updated_row.try_get("reviewed_at")?;
+    Ok(Json(LabelReviewResponse {
+        label_id: updated_row.try_get("label_id")?,
+        review_status: updated_row.try_get("review_status")?,
+        review_reason: updated_row.try_get("review_reason")?,
+        reviewed_by: updated_row.try_get("reviewed_by")?,
+        reviewed_at: Some(reviewed_at.timestamp()),
+    }))
+}
+
+pub async fn rejudge_label(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(label_id): Path<String>,
+    Json(payload): Json<LabelRejudgeRequest>,
+) -> ApiResult<Json<LabelRejudgeResponse>> {
+    let admin = require_admin(&state, &jar).await?;
+    let request_reason = normalize_review_reason(payload.reason);
+
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let row = sqlx::query(
+        "SELECT source_event_id, target, topic_id          FROM cn_moderation.labels          WHERE label_id = $1          FOR UPDATE",
+    )
+    .bind(&label_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let Some(row) = row else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "label not found",
+        ));
+    };
+
+    let source_event_id: Option<String> = row.try_get("source_event_id")?;
+    let target: String = row.try_get("target")?;
+    let fallback_event_id = target
+        .strip_prefix("event:")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+    let event_id = source_event_id.or(fallback_event_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_TARGET",
+            "label target does not reference an event",
+        )
+    })?;
+
+    let mut topics: Vec<String> = Vec::new();
+    if let Some(topic_id) = row
+        .try_get::<Option<String>, _>("topic_id")?
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        topics.push(topic_id);
+    }
+
+    let topic_rows = sqlx::query(
+        "SELECT topic_id FROM cn_relay.event_topics WHERE event_id = $1 ORDER BY topic_id ASC",
+    )
+    .bind(&event_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    for topic_row in topic_rows {
+        let topic_id: String = topic_row.try_get("topic_id")?;
+        if !topics.iter().any(|existing| existing == &topic_id) {
+            topics.push(topic_id);
+        }
+    }
+
+    if topics.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_TARGET",
+            "topic_id is required for rejudge target event",
+        ));
+    }
+
+    let max_attempts = load_rejudge_max_attempts(&mut tx).await?;
+    let mut enqueued_jobs = 0_i64;
+    for topic_id in &topics {
+        sqlx::query(
+            "INSERT INTO cn_moderation.jobs          (job_id, event_id, topic_id, source, status, max_attempts, next_run_at)          VALUES ($1, $2, $3, $4, 'pending', $5, NOW())          ON CONFLICT (event_id, topic_id) DO UPDATE          SET status = 'pending',              source = EXCLUDED.source,              max_attempts = EXCLUDED.max_attempts,              attempts = 0,              next_run_at = NOW(),              started_at = NULL,              completed_at = NULL,              last_error = NULL,              updated_at = NOW()",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&event_id)
+        .bind(topic_id)
+        .bind(REJUDGE_SOURCE)
+        .bind(max_attempts)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+        enqueued_jobs += 1;
+    }
+
+    crate::log_admin_audit_tx(
+        &mut tx,
+        &admin.admin_user_id,
+        "moderation_label.rejudge",
+        &format!("label:{label_id}"),
+        Some(json!({
+            "event_id": event_id,
+            "topic_ids": topics,
+            "enqueued_jobs": enqueued_jobs,
+            "reason": request_reason,
+            "source": REJUDGE_SOURCE
+        })),
+        None,
+    )
+    .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    Ok(Json(LabelRejudgeResponse {
+        label_id,
+        event_id,
+        enqueued_jobs,
+        status: "queued".to_string(),
+    }))
+}
+
+fn parse_review_status(review_status: &str) -> ApiResult<&'static str> {
+    let normalized = review_status.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        LABEL_REVIEW_STATUS_ACTIVE => Ok(LABEL_REVIEW_STATUS_ACTIVE),
+        LABEL_REVIEW_STATUS_DISABLED => Ok(LABEL_REVIEW_STATUS_DISABLED),
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_REVIEW_STATUS",
+            "review_status must be active or disabled",
+        )),
+    }
+}
+
+fn review_status_from_enabled(enabled: bool) -> &'static str {
+    if enabled {
+        LABEL_REVIEW_STATUS_ACTIVE
+    } else {
+        LABEL_REVIEW_STATUS_DISABLED
+    }
+}
+
+fn normalize_review_reason(reason: Option<String>) -> Option<String> {
+    reason
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+async fn load_rejudge_max_attempts(tx: &mut sqlx::Transaction<'_, Postgres>) -> ApiResult<i32> {
+    let config_json = sqlx::query_scalar::<_, Value>(
+        "SELECT config_json FROM cn_admin.service_configs WHERE service = 'moderation'",
+    )
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let max_attempts = config_json
+        .as_ref()
+        .and_then(|value| value.get("queue"))
+        .and_then(|value| value.get("max_attempts"))
+        .and_then(Value::as_i64)
+        .unwrap_or(DEFAULT_REJUDGE_MAX_ATTEMPTS as i64)
+        .clamp(1, 100);
+
+    Ok(max_attempts as i32)
 }
 
 fn validate_rule_payload(payload: &RulePayload) -> ApiResult<()> {

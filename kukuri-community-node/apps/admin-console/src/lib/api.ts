@@ -360,19 +360,62 @@ export const api = {
         }
       })
     ),
-  moderationLabels: (query?: { target?: string; topic?: string; since?: number; limit?: number }) =>
-    unwrap(
-      client.GET('/v1/admin/moderation/labels', {
-        params: {
-          query: {
-            target: query?.target,
-            topic: query?.topic,
-            since: query?.since,
-            limit: query?.limit
-          }
-        }
-      })
-    ),
+  moderationLabels: async (query?: {
+    target?: string;
+    topic?: string;
+    since?: number;
+    limit?: number;
+    review_status?: 'active' | 'disabled';
+  }) => {
+    const params = new URLSearchParams();
+    if (query?.target) {
+      params.set('target', query.target);
+    }
+    if (query?.topic) {
+      params.set('topic', query.topic);
+    }
+    if (typeof query?.since === 'number') {
+      params.set('since', String(query.since));
+    }
+    if (typeof query?.limit === 'number') {
+      params.set('limit', String(query.limit));
+    }
+    if (query?.review_status) {
+      params.set('review_status', query.review_status);
+    }
+
+    const search = params.toString();
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/moderation/labels${search === '' ? '' : `?${search}`}`),
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    const payload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, payload);
+    }
+    return payload as Array<{
+      label_id: string;
+      target: string;
+      topic_id: string | null;
+      label: string;
+      confidence: number | null;
+      policy_url: string;
+      policy_ref: string;
+      exp: number;
+      issuer_pubkey: string;
+      rule_id: string | null;
+      source: string;
+      issued_at: number;
+      review_status?: 'active' | 'disabled';
+      review_reason?: string | null;
+      reviewed_by?: string | null;
+      reviewed_at?: number | null;
+    }>;
+  },
   trustJobs: (query?: {
     status?: string;
     job_type?: string;
@@ -631,5 +674,51 @@ export const api = {
     policy_url: string;
     policy_ref: string;
     topic_id?: string | null;
-  }) => unwrap(client.POST('/v1/admin/moderation/labels', { body: payload }))
+  }) => unwrap(client.POST('/v1/admin/moderation/labels', { body: payload })),
+  reviewModerationLabel: async (
+    labelId: string,
+    payload: { enabled: boolean; reason?: string | null }
+  ) => {
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/moderation/labels/${encodeURIComponent(labelId)}/review`),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }
+    );
+    const responsePayload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, responsePayload);
+    }
+    return responsePayload as {
+      label_id: string;
+      review_status: 'active' | 'disabled';
+      review_reason: string | null;
+      reviewed_by: string | null;
+      reviewed_at: number | null;
+    };
+  },
+  rejudgeModerationLabel: async (labelId: string, payload?: { reason?: string | null }) => {
+    const response = await fetch(
+      buildApiUrl(`/v1/admin/moderation/labels/${encodeURIComponent(labelId)}/rejudge`),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload ?? {})
+      }
+    );
+    const responsePayload = await parseFetchPayload(response);
+    if (!response.ok) {
+      throw toError(response, responsePayload);
+    }
+    return responsePayload as {
+      label_id: string;
+      event_id: string;
+      enqueued_jobs: number;
+      status: string;
+    };
+  }
 };

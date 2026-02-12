@@ -883,7 +883,7 @@ async fn insert_label(
 ) -> Result<bool> {
     let label_json = serde_json::to_value(label_event)?;
     let result = sqlx::query(
-        "INSERT INTO cn_moderation.labels          (label_id, source_event_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, label_event_json)          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)          ON CONFLICT (source_event_id, rule_id)          WHERE source_event_id IS NOT NULL AND rule_id IS NOT NULL          DO NOTHING",
+        "INSERT INTO cn_moderation.labels          (label_id, source_event_id, target, topic_id, label, confidence, policy_url, policy_ref, exp, issuer_pubkey, rule_id, source, label_event_json, review_status)          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active')          ON CONFLICT (source_event_id, rule_id)          WHERE source_event_id IS NOT NULL AND rule_id IS NOT NULL AND review_status = 'active'          DO NOTHING",
     )
     .bind(&label_event.id)
     .bind(source_event_id)
@@ -911,7 +911,7 @@ async fn llm_label_exists(
     now: i64,
 ) -> Result<bool> {
     let exists = sqlx::query_scalar::<_, i64>(
-        "SELECT 1 FROM cn_moderation.labels          WHERE source_event_id = $1            AND source = $2            AND label = $3            AND exp > $4          LIMIT 1",
+        "SELECT 1 FROM cn_moderation.labels          WHERE source_event_id = $1            AND source = $2            AND label = $3            AND review_status = 'active'            AND exp > $4          LIMIT 1",
     )
     .bind(source_event_id)
     .bind(source)

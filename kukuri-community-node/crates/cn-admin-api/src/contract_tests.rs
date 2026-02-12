@@ -996,6 +996,12 @@ async fn openapi_contract_contains_admin_paths() {
         .pointer("/paths/~1v1~1admin~1moderation~1rules~1test/post")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1admin~1moderation~1labels~1{label_id}~1review/post")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1admin~1moderation~1labels~1{label_id}~1rejudge/post")
+        .is_some());
+    assert!(payload
         .pointer("/paths/~1v1~1admin~1dashboard/get")
         .is_some());
     assert!(payload
@@ -1349,6 +1355,18 @@ async fn admin_mutations_fail_when_audit_log_write_fails() {
             post(moderation::test_rule),
         )
         .route(
+            "/v1/admin/moderation/labels",
+            post(moderation::create_label),
+        )
+        .route(
+            "/v1/admin/moderation/labels/{label_id}/review",
+            post(moderation::review_label),
+        )
+        .route(
+            "/v1/admin/moderation/labels/{label_id}/rejudge",
+            post(moderation::rejudge_label),
+        )
+        .route(
             "/v1/admin/trust/schedules/{job_type}",
             put(trust::update_schedule),
         )
@@ -1489,6 +1507,67 @@ async fn admin_mutations_fail_when_audit_log_write_fails() {
                 "content": "spam sample",
                 "tags": []
             }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let review_target = format!("event:{}", Uuid::new_v4().simple());
+    let review_topic_id = format!("kukuri:topic:review-audit-fail:{}", Uuid::new_v4());
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/moderation/labels",
+        json!({
+            "target": review_target,
+            "label": "manual-spam",
+            "confidence": 0.8,
+            "exp": chrono::Utc::now().timestamp() + 3600,
+            "policy_url": "https://example.com/policy/manual",
+            "policy_ref": "manual-v1",
+            "topic_id": review_topic_id
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let review_label_id = payload
+        .get("label_id")
+        .and_then(Value::as_str)
+        .expect("review label id")
+        .to_string();
+
+    register_audit_failure(
+        &state.pool,
+        "moderation_label.review",
+        &format!("label:{review_label_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/moderation/labels/{review_label_id}/review"),
+        json!({
+            "enabled": false,
+            "reason": "false positive"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    register_audit_failure(
+        &state.pool,
+        "moderation_label.rejudge",
+        &format!("label:{review_label_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/moderation/labels/{review_label_id}/rejudge"),
+        json!({
+            "reason": "manual override"
         }),
         &session_id,
     )
@@ -2835,6 +2914,7 @@ async fn legacy_admin_path_aliases_contract_success() {
 #[tokio::test]
 async fn moderation_contract_success_and_shape() {
     let state = test_state().await;
+    let pool = state.pool.clone();
     let session_id = insert_admin_session(&state.pool).await;
     let reporter_pubkey = Keys::generate().public_key().to_hex();
     let target = format!("event:{}", Uuid::new_v4().simple());
@@ -2856,6 +2936,14 @@ async fn moderation_contract_success_and_shape() {
         .route(
             "/v1/admin/moderation/labels",
             get(moderation::list_labels).post(moderation::create_label),
+        )
+        .route(
+            "/v1/admin/moderation/labels/{label_id}/review",
+            post(moderation::review_label),
+        )
+        .route(
+            "/v1/admin/moderation/labels/{label_id}/rejudge",
+            post(moderation::rejudge_label),
         )
         .with_state(state);
 
@@ -2992,7 +3080,7 @@ async fn moderation_contract_success_and_shape() {
     );
 
     let (status, payload) = get_json_with_session(
-        app,
+        app.clone(),
         &format!("/v1/admin/moderation/labels?target={target}&limit=10"),
         &session_id,
     )
@@ -3013,6 +3101,75 @@ async fn moderation_contract_success_and_shape() {
     );
     assert_eq!(label.get("source").and_then(Value::as_str), Some("manual"));
     assert!(label.get("issuer_pubkey").and_then(Value::as_str).is_some());
+    assert_eq!(
+        label.get("review_status").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        label.get("review_reason").and_then(Value::as_str),
+        Some("manual-label-issued")
+    );
+    assert!(label.get("reviewed_by").and_then(Value::as_str).is_some());
+    assert!(label.get("reviewed_at").and_then(Value::as_i64).is_some());
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/moderation/labels/{label_id}/review"),
+        json!({
+            "enabled": false,
+            "reason": "false positive"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("review_status").and_then(Value::as_str),
+        Some("disabled")
+    );
+    assert_eq!(
+        payload.get("review_reason").and_then(Value::as_str),
+        Some("false positive")
+    );
+    assert!(payload.get("reviewed_by").and_then(Value::as_str).is_some());
+    assert!(payload.get("reviewed_at").and_then(Value::as_i64).is_some());
+
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/moderation/labels/{label_id}/rejudge"),
+        json!({
+            "reason": "manual rejudge"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("label_id").and_then(Value::as_str),
+        Some(label_id.as_str())
+    );
+    assert_eq!(
+        payload.get("event_id").and_then(Value::as_str),
+        target.strip_prefix("event:")
+    );
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("queued")
+    );
+    assert_eq!(
+        payload.get("enqueued_jobs").and_then(Value::as_i64),
+        Some(1)
+    );
+
+    let queued_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_moderation.jobs WHERE event_id = $1 AND topic_id = $2 AND source = 'manual-rejudge' AND status = 'pending'",
+    )
+    .bind(target.strip_prefix("event:").expect("event target"))
+    .bind("kukuri:topic:contract")
+    .fetch_one(&pool)
+    .await
+    .expect("count rejudge jobs");
+    assert_eq!(queued_count, 1);
 }
 
 #[tokio::test]

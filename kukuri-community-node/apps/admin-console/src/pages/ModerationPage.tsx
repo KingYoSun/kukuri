@@ -148,6 +148,10 @@ export const ModerationPage = () => {
 
   const [labelError, setLabelError] = useState<string | null>(null);
   const [labelTarget, setLabelTarget] = useState('');
+  const [labelReviewFilter, setLabelReviewFilter] = useState<'all' | 'active' | 'disabled'>(
+    'all'
+  );
+  const [labelActionNotes, setLabelActionNotes] = useState<Record<string, string>>({});
   const [labelForm, setLabelForm] = useState({
     target: '',
     label: '',
@@ -176,11 +180,12 @@ export const ModerationPage = () => {
   });
 
   const labelsQuery = useQuery<ModerationLabel[]>({
-    queryKey: ['moderation-labels', labelTarget],
+    queryKey: ['moderation-labels', labelTarget, labelReviewFilter],
     queryFn: () =>
       api.moderationLabels({
         limit: 50,
-        target: labelTarget.trim() !== '' ? labelTarget.trim() : undefined
+        target: labelTarget.trim() !== '' ? labelTarget.trim() : undefined,
+        review_status: labelReviewFilter === 'all' ? undefined : labelReviewFilter
       })
   });
 
@@ -276,6 +281,33 @@ export const ModerationPage = () => {
     }) => api.createManualLabel(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['moderation-labels'] });
+      setLabelError(null);
+    },
+    onError: (err) => setLabelError(errorToMessage(err))
+  });
+
+  const reviewLabelMutation = useMutation({
+    mutationFn: (payload: { labelId: string; enabled: boolean; reason?: string | null }) =>
+      api.reviewModerationLabel(payload.labelId, {
+        enabled: payload.enabled,
+        reason: payload.reason ?? null
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['moderation-labels'] });
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
+      setLabelError(null);
+    },
+    onError: (err) => setLabelError(errorToMessage(err))
+  });
+
+  const rejudgeLabelMutation = useMutation({
+    mutationFn: (payload: { labelId: string; reason?: string | null }) =>
+      api.rejudgeModerationLabel(payload.labelId, {
+        reason: payload.reason ?? null
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['moderation-labels'] });
+      queryClient.invalidateQueries({ queryKey: ['auditLogs'] });
       setLabelError(null);
     },
     onError: (err) => setLabelError(errorToMessage(err))
@@ -477,6 +509,39 @@ export const ModerationPage = () => {
       policy_url: labelForm.policy_url.trim(),
       policy_ref: labelForm.policy_ref.trim(),
       topic_id: labelForm.topic_id.trim() || null
+    });
+  };
+
+  const labelReviewStatus = (label: ModerationLabel): 'active' | 'disabled' =>
+    label.review_status === 'disabled' ? 'disabled' : 'active';
+
+  const labelActionNote = (labelId: string): string => labelActionNotes[labelId] ?? '';
+
+  const setLabelActionNote = (labelId: string, note: string) => {
+    setLabelActionNotes((previous) => ({ ...previous, [labelId]: note }));
+  };
+
+  const handleReviewAction = (label: ModerationLabel, enabled: boolean) => {
+    setLabelError(null);
+    const note = labelActionNote(label.label_id).trim();
+    if (!enabled && note === '') {
+      setLabelError('Reason is required when disabling a label.');
+      return;
+    }
+
+    reviewLabelMutation.mutate({
+      labelId: label.label_id,
+      enabled,
+      reason: note === '' ? null : note
+    });
+  };
+
+  const handleRejudgeAction = (label: ModerationLabel) => {
+    setLabelError(null);
+    const note = labelActionNote(label.label_id).trim();
+    rejudgeLabelMutation.mutate({
+      labelId: label.label_id,
+      reason: note === '' ? null : note
     });
   };
 
@@ -1103,13 +1168,28 @@ export const ModerationPage = () => {
         <div className="card">
           <div className="row">
             <h3>Recent Labels</h3>
-            <div className="field">
-              <label>Target filter</label>
-              <input
-                value={labelTarget}
-                onChange={(event) => setLabelTarget(event.target.value)}
-                placeholder="event:<id> or pubkey:<hex>"
-              />
+            <div className="row">
+              <div className="field">
+                <label>Target filter</label>
+                <input
+                  value={labelTarget}
+                  onChange={(event) => setLabelTarget(event.target.value)}
+                  placeholder="event:<id> or pubkey:<hex>"
+                />
+              </div>
+              <div className="field">
+                <label>Review status</label>
+                <select
+                  value={labelReviewFilter}
+                  onChange={(event) =>
+                    setLabelReviewFilter(event.target.value as 'all' | 'active' | 'disabled')
+                  }
+                >
+                  <option value="all">all</option>
+                  <option value="active">active</option>
+                  <option value="disabled">disabled</option>
+                </select>
+              </div>
             </div>
           </div>
           {labelsQuery.isLoading && <div className="notice">Loading labels...</div>}
@@ -1122,7 +1202,10 @@ export const ModerationPage = () => {
                     <strong>{label.label}</strong>
                     <div className="muted">{label.target}</div>
                   </div>
-                  <StatusBadge status={label.source === 'manual' ? 'active' : 'current'} label={label.source} />
+                  <StatusBadge
+                    status={labelReviewStatus(label)}
+                    label={`review:${labelReviewStatus(label)}`}
+                  />
                 </div>
                 <div className="muted">
                   Confidence {label.confidence ?? 'n/a'} | Expires {formatTimestamp(label.exp)}
@@ -1130,7 +1213,48 @@ export const ModerationPage = () => {
                 <div className="muted">
                   Policy {label.policy_ref} | {label.policy_url}
                 </div>
+                <div className="muted">Source {label.source}</div>
+                <div className="muted">
+                  Review by {label.reviewed_by ?? 'n/a'} |{' '}
+                  {label.reviewed_at ? formatTimestamp(label.reviewed_at) : 'n/a'}
+                </div>
+                <div className="muted">Review reason: {label.review_reason ?? 'n/a'}</div>
                 <div className="muted">Issued {formatTimestamp(label.issued_at)}</div>
+                <div className="field">
+                  <label htmlFor={`label-action-note-${label.label_id}`}>Operator note</label>
+                  <input
+                    id={`label-action-note-${label.label_id}`}
+                    value={labelActionNote(label.label_id)}
+                    onChange={(event) => setLabelActionNote(label.label_id, event.target.value)}
+                    placeholder="reason for disable/rejudge"
+                  />
+                </div>
+                <div className="row">
+                  {labelReviewStatus(label) === 'active' ? (
+                    <button
+                      className="button secondary"
+                      onClick={() => handleReviewAction(label, false)}
+                      disabled={reviewLabelMutation.isPending}
+                    >
+                      {reviewLabelMutation.isPending ? 'Updating...' : 'Disable label'}
+                    </button>
+                  ) : (
+                    <button
+                      className="button secondary"
+                      onClick={() => handleReviewAction(label, true)}
+                      disabled={reviewLabelMutation.isPending}
+                    >
+                      {reviewLabelMutation.isPending ? 'Updating...' : 'Enable label'}
+                    </button>
+                  )}
+                  <button
+                    className="button secondary"
+                    onClick={() => handleRejudgeAction(label)}
+                    disabled={rejudgeLabelMutation.isPending}
+                  >
+                    {rejudgeLabelMutation.isPending ? 'Queueing...' : 'Trigger rejudge'}
+                  </button>
+                </div>
               </div>
             ))}
             {(labelsQuery.data ?? []).length === 0 && (

@@ -17,7 +17,8 @@ use crate::dashboard::{
 };
 use crate::dsar::DsarJobRow;
 use crate::moderation::{
-    LabelRow, ManualLabelRequest, ReportRow, RulePayload, RuleResponse, RuleTestLabelPreview,
+    LabelRejudgeRequest, LabelRejudgeResponse, LabelReviewRequest, LabelReviewResponse, LabelRow,
+    ManualLabelRequest, ReportRow, RulePayload, RuleResponse, RuleTestLabelPreview,
     RuleTestRequest, RuleTestResponse, RuleTestSampleEvent,
 };
 use crate::policies::{PolicyRequest, PolicyResponse, PolicyUpdateRequest, PublishRequest};
@@ -71,6 +72,8 @@ pub struct ManualLabelResponse {
         moderation_reports_list_doc,
         moderation_labels_list_doc,
         moderation_labels_create_doc,
+        moderation_label_review_doc,
+        moderation_label_rejudge_doc,
         subscription_requests_list_doc,
         subscription_requests_approve_doc,
         subscription_requests_reject_doc,
@@ -128,6 +131,10 @@ pub struct ManualLabelResponse {
             ReportRow,
             LabelRow,
             ManualLabelRequest,
+            LabelReviewRequest,
+            LabelReviewResponse,
+            LabelRejudgeRequest,
+            LabelRejudgeResponse,
             SubscriptionRequestRow,
             ReviewRequest,
             NodeSubscription,
@@ -377,6 +384,7 @@ fn moderation_reports_list_doc() {}
         ("target" = Option<String>, Query, description = "Target filter"),
         ("topic" = Option<String>, Query, description = "Topic filter"),
         ("since" = Option<i64>, Query, description = "UNIX seconds lower bound"),
+        ("review_status" = Option<String>, Query, description = "Review status filter (active|disabled)"),
         ("limit" = Option<i64>, Query, description = "Max rows")
     ),
     responses((status = 200, body = [LabelRow]))
@@ -390,6 +398,32 @@ fn moderation_labels_list_doc() {}
     responses((status = 200, body = ManualLabelResponse), (status = 400, body = ErrorResponse))
 )]
 fn moderation_labels_create_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/moderation/labels/{label_id}/review",
+    params(("label_id" = String, Path, description = "Label identifier")),
+    request_body = LabelReviewRequest,
+    responses(
+        (status = 200, body = LabelReviewResponse),
+        (status = 400, body = ErrorResponse),
+        (status = 404, body = ErrorResponse)
+    )
+)]
+fn moderation_label_review_doc() {}
+
+#[utoipa::path(
+    post,
+    path = "/v1/admin/moderation/labels/{label_id}/rejudge",
+    params(("label_id" = String, Path, description = "Label identifier")),
+    request_body = LabelRejudgeRequest,
+    responses(
+        (status = 200, body = LabelRejudgeResponse),
+        (status = 400, body = ErrorResponse),
+        (status = 404, body = ErrorResponse)
+    )
+)]
+fn moderation_label_rejudge_doc() {}
 
 #[utoipa::path(
     get,

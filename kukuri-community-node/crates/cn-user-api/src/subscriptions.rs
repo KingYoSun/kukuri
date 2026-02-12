@@ -567,6 +567,8 @@ pub async fn list_labels(
         "SELECT label_event_json FROM cn_moderation.labels WHERE target = ",
     );
     builder.push_bind(&target);
+    builder.push(" AND review_status = ");
+    builder.push_bind("active");
     builder.push(" AND exp > ");
     builder.push_bind(now);
     if let Some(topic) = query.topic {
@@ -1185,6 +1187,19 @@ mod api_contract_tests {
         .execute(pool)
         .await
         .expect("insert label");
+    }
+
+    async fn set_label_review_status(pool: &Pool<Postgres>, label_id: &str, review_status: &str) {
+        sqlx::query(
+            "UPDATE cn_moderation.labels \
+             SET review_status = $1, reviewed_by = 'contract-test', reviewed_at = NOW() \
+             WHERE label_id = $2",
+        )
+        .bind(review_status)
+        .bind(label_id)
+        .execute(pool)
+        .await
+        .expect("update label review status");
     }
 
     async fn insert_attestation(
@@ -3071,6 +3086,7 @@ mod api_contract_tests {
         let label_id_b = Uuid::new_v4().to_string();
         insert_label(&pool, target, None, &issuer_pubkey, &label_id_a).await;
         insert_label(&pool, target, None, &issuer_pubkey, &label_id_b).await;
+        set_label_review_status(&pool, &label_id_b, "disabled").await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
@@ -3098,7 +3114,7 @@ mod api_contract_tests {
             .and_then(|value| value.get("id"))
             .and_then(Value::as_str)
             .unwrap_or_default();
-        assert!(returned_id == label_id_a || returned_id == label_id_b);
+        assert_eq!(returned_id, label_id_a);
         assert!(payload.get("next_cursor").and_then(Value::as_str).is_some());
     }
 

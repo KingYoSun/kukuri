@@ -283,6 +283,14 @@ fn build_router(state: AppState) -> Router {
             "/v1/admin/moderation/labels",
             get(moderation::list_labels).post(moderation::create_label),
         )
+        .route(
+            "/v1/admin/moderation/labels/{label_id}/review",
+            post(moderation::review_label),
+        )
+        .route(
+            "/v1/admin/moderation/labels/{label_id}/rejudge",
+            post(moderation::rejudge_label),
+        )
         .route("/v1/labels", post(moderation::create_label))
         .route(
             "/v1/admin/subscription-requests",

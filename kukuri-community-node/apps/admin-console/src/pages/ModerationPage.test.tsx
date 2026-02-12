@@ -18,7 +18,9 @@ vi.mock('../lib/api', () => ({
     testModerationRule: vi.fn(),
     moderationReports: vi.fn(),
     moderationLabels: vi.fn(),
-    createManualLabel: vi.fn()
+    createManualLabel: vi.fn(),
+    reviewModerationLabel: vi.fn(),
+    rejudgeModerationLabel: vi.fn()
   }
 }));
 
@@ -64,7 +66,26 @@ describe('ModerationPage', () => {
     vi.mocked(api.auditLogs).mockResolvedValue([]);
     vi.mocked(api.moderationRules).mockResolvedValue([]);
     vi.mocked(api.moderationReports).mockResolvedValue([]);
-    vi.mocked(api.moderationLabels).mockResolvedValue([]);
+    vi.mocked(api.moderationLabels).mockResolvedValue([
+      {
+        label_id: 'label-1',
+        target: 'event:test-target',
+        topic_id: 'kukuri:topic:test',
+        label: 'spam',
+        confidence: 0.8,
+        policy_url: 'https://example.com/policy/manual',
+        policy_ref: 'manual-v1',
+        exp: 1738813200,
+        issuer_pubkey: 'a'.repeat(64),
+        rule_id: null,
+        source: 'manual',
+        issued_at: 1738809600,
+        review_status: 'active',
+        review_reason: 'manual-label-issued',
+        reviewed_by: 'admin',
+        reviewed_at: 1738809600
+      }
+    ]);
     vi.mocked(api.updateServiceConfig).mockResolvedValue({
       service: 'moderation',
       version: 5,
@@ -110,6 +131,19 @@ describe('ModerationPage', () => {
       }
     });
     vi.mocked(api.createManualLabel).mockResolvedValue({ label_id: 'label-1', status: 'created' });
+    vi.mocked(api.reviewModerationLabel).mockResolvedValue({
+      label_id: 'label-1',
+      review_status: 'disabled',
+      review_reason: 'false positive',
+      reviewed_by: 'admin',
+      reviewed_at: 1738809602
+    });
+    vi.mocked(api.rejudgeModerationLabel).mockResolvedValue({
+      label_id: 'label-1',
+      event_id: 'test-target',
+      enqueued_jobs: 1,
+      status: 'queued'
+    });
   });
 
   it('LLM 設定を専用フォームから保存できる', async () => {
@@ -177,6 +211,32 @@ describe('ModerationPage', () => {
           })
         })
       );
+    });
+  });
+
+  it('ラベルの無効化と再判定トリガを送信できる', async () => {
+    renderWithQueryClient(<ModerationPage />);
+    await screen.findByText('Recent Labels');
+    await screen.findByRole('button', { name: 'Disable label' });
+
+    const user = userEvent.setup();
+    const noteInput = screen.getByLabelText('Operator note');
+    await user.clear(noteInput);
+    await user.type(noteInput, 'false positive');
+    await user.click(screen.getByRole('button', { name: 'Disable label' }));
+
+    await waitFor(() => {
+      expect(api.reviewModerationLabel).toHaveBeenCalledWith('label-1', {
+        enabled: false,
+        reason: 'false positive'
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Trigger rejudge' }));
+    await waitFor(() => {
+      expect(api.rejudgeModerationLabel).toHaveBeenCalledWith('label-1', {
+        reason: 'false positive'
+      });
     });
   });
 });

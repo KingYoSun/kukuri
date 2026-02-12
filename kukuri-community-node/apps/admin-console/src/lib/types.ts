@@ -31,7 +31,12 @@ export type UsageRow = ArrayItem<SuccessBody<'/v1/admin/usage', 'get'>>;
 export type AuditLog = ArrayItem<SuccessBody<'/v1/admin/audit-logs', 'get'>>;
 export type ModerationRule = ArrayItem<SuccessBody<'/v1/admin/moderation/rules', 'get'>>;
 export type ModerationReport = ArrayItem<SuccessBody<'/v1/admin/moderation/reports', 'get'>>;
-export type ModerationLabel = ArrayItem<SuccessBody<'/v1/admin/moderation/labels', 'get'>>;
+export type ModerationLabel = ArrayItem<SuccessBody<'/v1/admin/moderation/labels', 'get'>> & {
+  review_status?: 'active' | 'disabled';
+  review_reason?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: number | null;
+};
 export type TrustJob = ArrayItem<SuccessBody<'/v1/admin/trust/jobs', 'get'>>;
 export type TrustSchedule = ArrayItem<SuccessBody<'/v1/admin/trust/schedules', 'get'>>;
 export type ReindexResponse = SuccessBody<'/v1/reindex', 'post'>;

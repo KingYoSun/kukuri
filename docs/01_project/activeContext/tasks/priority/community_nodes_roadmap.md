@@ -159,7 +159,7 @@
 
 ## 未実装/不足事項（2026年02月12日 再監査追記）
 
-- [ ] `cn-admin-api` + Admin Console: `services_moderation.md` の「human review / 再判定 / 無効化」要件を満たすため、ラベルのレビュー状態管理（有効/無効・理由・実施者・実施時刻）と再判定トリガ（対象イベント再評価）を実装し、監査ログ（append-only）まで一連で整備する。
+- [x] `cn-admin-api` + Admin Console: `services_moderation.md` の「human review / 再判定 / 無効化」要件を満たすため、ラベルのレビュー状態管理（有効/無効・理由・実施者・実施時刻）と再判定トリガ（対象イベント再評価）を実装し、監査ログ（append-only）まで一連で整備する。
 - [ ] `cn-user-api`: `billing_usage_metering.md` の `trust.requests` クォータ要件に対し、`/v1/trust/report-based` と `/v1/trust/communication-density` の `402 QUOTA_EXCEEDED` + `X-Request-Id` 冪等挙動の契約テストを追加する（既存の search/trending/report と同等粒度）。
 - [ ] Admin Console: 認証導線の回帰を防ぐため、`LoginPage` / `App` のセッションブートストラップ（`/v1/admin/auth/me`）・ログイン成功/失敗・ログアウト後遷移の UI テストを追加する。
 
