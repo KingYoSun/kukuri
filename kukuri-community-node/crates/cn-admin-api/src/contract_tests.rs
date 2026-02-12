@@ -999,6 +999,9 @@ async fn openapi_contract_contains_admin_paths() {
         .pointer("/paths/~1v1~1admin~1dashboard/get")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1admin~1services~1{service}~1config/put/responses/400")
+        .is_some());
+    assert!(payload
         .pointer("/paths/~1v1~1admin~1access-control~1memberships/get")
         .is_some());
     assert!(payload
@@ -2230,6 +2233,68 @@ async fn services_contract_success_and_shape() {
         Some("healthy")
     );
     assert!(health.get("checked_at").and_then(Value::as_i64).is_some());
+}
+
+#[tokio::test]
+async fn services_update_contract_rejects_secret_keys_and_preserves_storage() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let service = format!("secret-reject-{}", Uuid::new_v4().simple());
+    let target = format!("service:{service}");
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/services/{service}/config",
+            put(services::update_service_config),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) = put_json(
+        app,
+        &format!("/v1/admin/services/{service}/config"),
+        json!({
+            "config_json": {
+                "llm": {
+                    "provider": "openai",
+                    "OPENAI_API_KEY": "sk-test"
+                }
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("SECRET_CONFIG_FORBIDDEN")
+    );
+    let message = payload
+        .get("message")
+        .and_then(Value::as_str)
+        .expect("error message");
+    assert!(
+        message.contains("/llm/OPENAI_API_KEY"),
+        "unexpected reject message: {message}"
+    );
+
+    let service_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.service_configs WHERE service = $1",
+    )
+    .bind(&service)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count service config after secret reject");
+    assert_eq!(service_count, 0);
+
+    let audit_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.audit_logs WHERE action = $1 AND target = $2",
+    )
+    .bind("service_config.update")
+    .bind(target)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count audit logs after secret reject");
+    assert_eq!(audit_count, 0);
 }
 
 #[tokio::test]

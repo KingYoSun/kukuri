@@ -260,6 +260,7 @@ fn services_get_config_doc() {}
     request_body = UpdateServiceConfigRequest,
     responses(
         (status = 200, body = ServiceConfigResponse),
+        (status = 400, body = ErrorResponse),
         (status = 404, body = ErrorResponse),
         (status = 409, body = ErrorResponse)
     )

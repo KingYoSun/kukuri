@@ -72,4 +72,23 @@ describe('ServicesPage', () => {
       );
     });
   });
+
+  it('秘匿キーを含む設定は保存前に拒否する', async () => {
+    renderWithQueryClient(<ServicesPage />);
+
+    const configEditor = await screen.findByLabelText('Config JSON');
+    fireEvent.change(configEditor, {
+      target: {
+        value: '{"llm":{"provider":"openai","OPENAI_API_KEY":"sk-test"}}'
+      }
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Save config' }));
+
+    expect(
+      await screen.findByText(/Secret keys are not allowed in service config:/)
+    ).toBeInTheDocument();
+    expect(api.updateServiceConfig).not.toHaveBeenCalled();
+  });
 });

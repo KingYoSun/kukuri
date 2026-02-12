@@ -11,6 +11,8 @@ use utoipa::ToSchema;
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
+const SECRET_CONFIG_PREVIEW_LIMIT: usize = 3;
+
 #[derive(Serialize, ToSchema)]
 pub struct ServiceInfo {
     pub service: String,
@@ -60,6 +62,149 @@ pub struct AuditLog {
     pub diff_json: Option<Value>,
     pub request_id: Option<String>,
     pub created_at: i64,
+}
+
+fn find_secret_config_paths(config_json: &Value) -> Vec<String> {
+    let mut paths = Vec::new();
+    collect_secret_config_paths(config_json, "", &mut paths);
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+fn collect_secret_config_paths(config_json: &Value, current_path: &str, paths: &mut Vec<String>) {
+    match config_json {
+        Value::Object(map) => {
+            for (key, nested) in map {
+                let escaped_key = escape_json_pointer_token(key);
+                let next_path = if current_path.is_empty() {
+                    format!("/{escaped_key}")
+                } else {
+                    format!("{current_path}/{escaped_key}")
+                };
+
+                if is_secret_like_key(key) {
+                    paths.push(next_path.clone());
+                }
+
+                collect_secret_config_paths(nested, &next_path, paths);
+            }
+        }
+        Value::Array(items) => {
+            for (index, nested) in items.iter().enumerate() {
+                let next_path = if current_path.is_empty() {
+                    format!("/{index}")
+                } else {
+                    format!("{current_path}/{index}")
+                };
+                collect_secret_config_paths(nested, &next_path, paths);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn escape_json_pointer_token(token: &str) -> String {
+    token.replace('~', "~0").replace('/', "~1")
+}
+
+fn is_secret_like_key(key: &str) -> bool {
+    let tokens = tokenize_key(key);
+    if tokens.is_empty() {
+        return false;
+    }
+
+    if tokens.iter().any(|token| {
+        matches!(
+            token.as_str(),
+            "secret"
+                | "password"
+                | "passwd"
+                | "pwd"
+                | "apikey"
+                | "secretkey"
+                | "privatekey"
+                | "masterkey"
+                | "accesskey"
+                | "clientsecret"
+                | "jwtsecret"
+                | "authsecret"
+                | "signingkey"
+                | "encryptionkey"
+                | "hmacsecret"
+        )
+    }) {
+        return true;
+    }
+
+    contains_token_pair(&tokens, "api", "key")
+        || contains_token_pair(&tokens, "private", "key")
+        || contains_token_pair(&tokens, "master", "key")
+        || contains_token_pair(&tokens, "access", "key")
+        || contains_token_pair(&tokens, "client", "secret")
+        || contains_token_pair(&tokens, "jwt", "secret")
+        || contains_token_pair(&tokens, "auth", "secret")
+        || contains_token_pair(&tokens, "signing", "key")
+        || contains_token_pair(&tokens, "encryption", "key")
+        || contains_token_pair(&tokens, "hmac", "secret")
+}
+
+fn tokenize_key(key: &str) -> Vec<String> {
+    let chars: Vec<char> = key.chars().collect();
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+
+    for (index, ch) in chars.iter().enumerate() {
+        if ch.is_ascii_alphanumeric() {
+            let prev = index.checked_sub(1).and_then(|idx| chars.get(idx));
+            let next = chars.get(index + 1);
+            let boundary = ch.is_ascii_uppercase()
+                && !current.is_empty()
+                && (prev.is_some_and(|c| c.is_ascii_lowercase())
+                    || (prev.is_some_and(|c| c.is_ascii_uppercase())
+                        && next.is_some_and(|c| c.is_ascii_lowercase())));
+
+            if boundary {
+                tokens.push(std::mem::take(&mut current));
+            }
+
+            current.push(ch.to_ascii_lowercase());
+        } else if !current.is_empty() {
+            tokens.push(std::mem::take(&mut current));
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
+}
+
+fn contains_token_pair(tokens: &[String], left: &str, right: &str) -> bool {
+    let has_left = tokens.iter().any(|token| token == left);
+    let has_right = tokens.iter().any(|token| token == right);
+    has_left && has_right
+}
+
+fn build_secret_config_error_message(paths: &[String]) -> String {
+    let preview = paths
+        .iter()
+        .take(SECRET_CONFIG_PREVIEW_LIMIT)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if paths.len() > SECRET_CONFIG_PREVIEW_LIMIT {
+        format!(
+            "service config contains secret-like keys at {preview} and {} more. Use environment secrets instead.",
+            paths.len() - SECRET_CONFIG_PREVIEW_LIMIT
+        )
+    } else {
+        format!(
+            "service config contains secret-like keys at {preview}. Use environment secrets instead."
+        )
+    }
 }
 
 pub async fn list_services(
@@ -156,6 +301,14 @@ pub async fn update_service_config(
     Json(payload): Json<UpdateServiceConfigRequest>,
 ) -> ApiResult<Json<ServiceConfigResponse>> {
     let admin = require_admin(&state, &jar).await?;
+    let secret_paths = find_secret_config_paths(&payload.config_json);
+    if !secret_paths.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "SECRET_CONFIG_FORBIDDEN",
+            build_secret_config_error_message(&secret_paths),
+        ));
+    }
 
     let mut tx = state.pool.begin().await.map_err(|err| {
         ApiError::new(
@@ -357,5 +510,53 @@ pub(crate) async fn poll_health_once(state: &AppState) {
         .bind(details)
         .execute(&state.pool)
         .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn find_secret_config_paths_detects_env_style_secret_keys() {
+        let paths = find_secret_config_paths(&json!({
+            "llm": {
+                "OPENAI_API_KEY": "sk-test",
+                "provider": "openai"
+            }
+        }));
+
+        assert_eq!(paths, vec!["/llm/OPENAI_API_KEY"]);
+    }
+
+    #[test]
+    fn find_secret_config_paths_detects_nested_camel_case_secret_keys() {
+        let paths = find_secret_config_paths(&json!({
+            "provider": [
+                {
+                    "credentials": {
+                        "clientSecret": "top-secret"
+                    }
+                }
+            ]
+        }));
+
+        assert_eq!(paths, vec!["/provider/0/credentials/clientSecret"]);
+    }
+
+    #[test]
+    fn find_secret_config_paths_ignores_non_secret_keys() {
+        let paths = find_secret_config_paths(&json!({
+            "llm": {
+                "max_tokens": 1024,
+                "provider": "openai"
+            },
+            "retention": {
+                "events_days": 30
+            }
+        }));
+
+        assert!(paths.is_empty());
     }
 }
