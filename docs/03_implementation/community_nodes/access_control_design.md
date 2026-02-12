@@ -1,6 +1,7 @@
 # Access Control（KIP-0001: 39020/39021/39022）設計
 
 **作成日**: 2026年01月22日  
+**最終更新日**: 2026年02月12日  
 **対象**: クライアント（P2P）/ `./kukuri-community-node`（任意の補助ノード）
 
 ## ゴール
@@ -37,7 +38,8 @@
 - join/鍵配布/ローテは **P2P-only**（クライアントが正）とする
 - `kind=39020/39021/39022` はイベント表現を持つが、**配布経路は direct P2P / out-of-band を正**とする
   - 理由: `p` タグ等のメタデータでメンバーシップが漏れやすく、gossip/relay 配信に不向き
-- コミュニティノードは **Access Control に関与しない**（P2P-only を正とする）
+- コミュニティノードは **Access Control の正判定には関与しない**（P2P-only を正とする）
+  - 現行実装の `cn-admin-api` / Admin Console は、membership/invite/rotate/revoke の**運用補助**として扱う
 
 ## イベント設計（提案）
 
@@ -144,10 +146,29 @@
   - v1 は **relay で private scope を扱わない**（配信/バックフィルはオフ）ことを推奨
   - 例外として扱う場合は、**NIP-42（AUTH）必須 + allowlist** を導入する
 
-## DB データモデル（v1）
+## DB データモデル（v1）と SoT 境界
 
-v1 の Access Control は **P2P-only** のため、コミュニティノード側に専用DBを持たない。
-（後日、運用方針を変える場合は別途設計する。）
+v1 の Access Control は **P2P-only** を正とする。  
+一方で現行実装（`cn-admin-api` + Admin Console）では、運用補助のために node 側 `cn_user` に Access Control 関連テーブルを持つ。
+
+### P2P-only の正（Access Control SoT）
+
+- 正判定（invite の有効性、join 承認、epoch の採用、復号可否）は **クライアントのローカル状態 + 署名済み KIP イベント（39020/39021/39022）** を正とする。
+- relay は `scope` / `epoch` タグの構文検証のみを行い、membership/epoch の DB 照合で read/write 可否を決めない。
+- private scope の厳密制御は、v1 では relay 側 SoT にしない（必要時は AUTH + allowlist を運用オプションとして追加）。
+
+### node 側の運用補助データ（運用 SoT / 非正判定）
+
+- `cn_user.invite_capabilities`: invite 発行/失効/消費状況の運用管理。
+- `cn_user.topic_memberships`: membership 一覧・検索・手動 revoke 操作用の管理ビュー。
+- `cn_user.key_envelope_distribution_results`: rotate/revoke 時の再配布結果（`pending|success|failed`）の追跡。
+- `cn_user.key_envelopes`: 再配布/復旧時に参照する保管用イベント。
+- これらの **運用上の SoT は node DB（`cn_user`）** だが、Access Control の正判定 SoT ではない。
+
+### 差分が出た場合の優先順位
+
+1. Access Control の正判定は P2P-only SoT（クライアント + KIP イベント）を優先する。
+2. node 側データは監査/可視化/運用補助として扱い、必要に応じて再取り込み・再配布で整合を回復する。
 
 ## 未決定（v2 以降の検討）
 
@@ -156,7 +177,8 @@ v1 の Access Control は **P2P-only** のため、コミュニティノード�
 - 群鍵の保管方式（KMS/OS keychain/HSM、ローテ手順、バックアップ/復旧）
 
 
-## P2P-only 整合メモ（2026年02月06日）
+## P2P-only 整合メモ（2026年02月12日）
 - relay は `scope!=public` の投稿に対して `scope` / `epoch` タグの検証のみを行い、membership/epoch の DB 照合は行わない。
 - membership/epoch の正当性はクライアントのローカル判定に委ねる（P2P-only）。
-- node 側の membership/epoch 保持は v1 の必須要件ではなく、運用で保持する場合は別設計で扱う。
+- node 側では運用補助として membership/invite/distribution 結果を保持し、Admin API / Admin Console の SoT は `cn_user` DB とする。
+- ただし Access Control の正判定 SoT は P2P-only 側に固定し、node DB は判定根拠として扱わない。
