@@ -497,11 +497,99 @@ async fn register_audit_failure(
     .expect("insert test audit failure");
 }
 
+async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS cn_admin.test_commit_failures (
+            failure_id BIGSERIAL PRIMARY KEY,
+            action TEXT NOT NULL,
+            target TEXT NOT NULL,
+            diff_filter JSONB NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create test_commit_failures table");
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE FUNCTION cn_admin.fail_commit_for_test()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                  FROM cn_admin.test_commit_failures fail
+                 WHERE fail.action = NEW.action
+                   AND fail.target = NEW.target
+                   AND (
+                       fail.diff_filter IS NULL
+                       OR COALESCE(NEW.diff_json, '{}'::jsonb) @> fail.diff_filter
+                   )
+            ) THEN
+                RAISE EXCEPTION 'forced commit failure for contract test';
+            END IF;
+            RETURN NEW;
+        END;
+        $$;
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create fail_commit_for_test function");
+
+    sqlx::query("DROP TRIGGER IF EXISTS test_commit_failures_trigger ON cn_admin.audit_logs")
+        .execute(pool)
+        .await
+        .expect("drop test_commit_failures_trigger");
+    sqlx::query(
+        r#"
+        CREATE CONSTRAINT TRIGGER test_commit_failures_trigger
+        AFTER INSERT ON cn_admin.audit_logs
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW
+        EXECUTE FUNCTION cn_admin.fail_commit_for_test()
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create test_commit_failures_trigger");
+}
+
+async fn register_commit_failure(
+    pool: &Pool<Postgres>,
+    action: &str,
+    target: &str,
+    diff_filter: Option<Value>,
+) {
+    ensure_commit_failure_trigger(pool).await;
+    sqlx::query(
+        "INSERT INTO cn_admin.test_commit_failures (action, target, diff_filter) VALUES ($1, $2, $3)",
+    )
+    .bind(action)
+    .bind(target)
+    .bind(diff_filter)
+    .execute(pool)
+    .await
+    .expect("insert test commit failure");
+}
+
 fn assert_audit_log_required(status: StatusCode, payload: &Value) {
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(
         payload.get("code").and_then(Value::as_str),
         Some("AUDIT_LOG_ERROR")
+    );
+}
+
+fn assert_db_error(status: StatusCode, payload: &Value) {
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("DB_ERROR")
     );
 }
 
@@ -1492,6 +1580,576 @@ async fn admin_mutations_fail_when_audit_log_write_fails() {
     )
     .await;
     assert_audit_log_required(status, &payload);
+}
+
+#[tokio::test]
+async fn transactional_admin_mutations_rollback_when_audit_log_write_fails() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let app = Router::new()
+        .route(
+            "/v1/admin/services/{service}/config",
+            put(services::update_service_config),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}/make-current",
+            post(policies::make_current_policy),
+        )
+        .route(
+            "/v1/admin/subscription-requests/{request_id}/approve",
+            post(subscriptions::approve_subscription_request),
+        )
+        .route("/v1/admin/plans", post(subscriptions::create_plan))
+        .route("/v1/admin/plans/{plan_id}", put(subscriptions::update_plan))
+        .with_state(state.clone());
+
+    let service = format!("rollback-audit-service-{}", Uuid::new_v4().simple());
+    register_audit_failure(
+        &state.pool,
+        "service_config.update",
+        &format!("service:{service}"),
+        None,
+    )
+    .await;
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/services/{service}/config"),
+        json!({
+            "config_json": {
+                "enabled": true
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+    let service_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.service_configs WHERE service = $1",
+    )
+    .bind(&service)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count service config after failed audit");
+    assert_eq!(service_count, 0);
+
+    let policy_type = format!("rollback-audit-policy-{}", Uuid::new_v4().simple());
+    let policy_locale = "ja-JP";
+    let current_policy_id = format!("{policy_type}:v1:{policy_locale}");
+    let target_policy_id = format!("{policy_type}:v2:{policy_locale}");
+    sqlx::query(
+        "INSERT INTO cn_admin.policies          (policy_id, type, version, locale, title, content_md, content_hash, is_current)          VALUES ($1, $2, 'v1', $3, 'current', 'current', 'hash-current', TRUE),                 ($4, $2, 'v2', $3, 'target', 'target', 'hash-target', FALSE)",
+    )
+    .bind(&current_policy_id)
+    .bind(&policy_type)
+    .bind(policy_locale)
+    .bind(&target_policy_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert policies for audit rollback test");
+    register_audit_failure(
+        &state.pool,
+        "policy.make_current",
+        &format!("policy:{target_policy_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/policies/{target_policy_id}/make-current"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+    let current_is_current = sqlx::query_scalar::<_, bool>(
+        "SELECT is_current FROM cn_admin.policies WHERE policy_id = $1",
+    )
+    .bind(&current_policy_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch current policy after failed audit");
+    let target_is_current = sqlx::query_scalar::<_, bool>(
+        "SELECT is_current FROM cn_admin.policies WHERE policy_id = $1",
+    )
+    .bind(&target_policy_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch target policy after failed audit");
+    assert!(current_is_current);
+    assert!(!target_is_current);
+
+    let requester_pubkey = Keys::generate().public_key().to_hex();
+    let approve_topic_id = format!("kukuri:topic:rollback-audit:{}", Uuid::new_v4());
+    let request_id = insert_subscription_request(
+        &state.pool,
+        &requester_pubkey,
+        &approve_topic_id,
+        json!({ "search": true }),
+    )
+    .await;
+    register_audit_failure(
+        &state.pool,
+        "subscription_request.approve",
+        &format!("subscription_request:{request_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/subscription-requests/{request_id}/approve"),
+        json!({ "review_note": "approve should rollback on audit failure" }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+    let request_status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM cn_user.topic_subscription_requests WHERE request_id = $1",
+    )
+    .bind(&request_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch request status after failed audit");
+    assert_eq!(request_status, "pending");
+    let topic_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
+    )
+    .bind(&approve_topic_id)
+    .bind(&requester_pubkey)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count topic subscriptions after failed audit");
+    assert_eq!(topic_subscription_count, 0);
+    let node_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&approve_topic_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count node subscriptions after failed audit");
+    assert_eq!(node_subscription_count, 0);
+
+    let create_plan_id = format!("rollback-audit-plan-create-{}", Uuid::new_v4().simple());
+    register_audit_failure(
+        &state.pool,
+        "plan.create",
+        &format!("plan:{create_plan_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/plans",
+        json!({
+            "plan_id": create_plan_id.clone(),
+            "name": "Rollback audit create",
+            "is_active": true,
+            "limits": [
+                {
+                    "metric": "search_query",
+                    "window": "day",
+                    "limit": 120
+                }
+            ]
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+    let created_plan_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_user.plans WHERE plan_id = $1")
+            .bind(&create_plan_id)
+            .fetch_one(&state.pool)
+            .await
+            .expect("count created plan after failed audit");
+    assert_eq!(created_plan_count, 0);
+    let created_plan_limit_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_user.plan_limits WHERE plan_id = $1")
+            .bind(&create_plan_id)
+            .fetch_one(&state.pool)
+            .await
+            .expect("count created plan limits after failed audit");
+    assert_eq!(created_plan_limit_count, 0);
+
+    let update_plan_id = format!("rollback-audit-plan-update-{}", Uuid::new_v4().simple());
+    sqlx::query("INSERT INTO cn_user.plans (plan_id, name, is_active) VALUES ($1, $2, TRUE)")
+        .bind(&update_plan_id)
+        .bind("Before rollback audit update")
+        .execute(&state.pool)
+        .await
+        .expect("insert plan for update rollback test");
+    sqlx::query(
+        "INSERT INTO cn_user.plan_limits (plan_id, metric, \"window\", \"limit\") VALUES ($1, 'search_query', 'day', 40)",
+    )
+    .bind(&update_plan_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert plan limit for update rollback test");
+    register_audit_failure(
+        &state.pool,
+        "plan.update",
+        &format!("plan:{update_plan_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = put_json(
+        app,
+        &format!("/v1/admin/plans/{update_plan_id}"),
+        json!({
+            "plan_id": update_plan_id.clone(),
+            "name": "After rollback audit update",
+            "is_active": false,
+            "limits": [
+                {
+                    "metric": "search_query",
+                    "window": "day",
+                    "limit": 10
+                },
+                {
+                    "metric": "report_submit",
+                    "window": "day",
+                    "limit": 1
+                }
+            ]
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+    let row = sqlx::query("SELECT name, is_active FROM cn_user.plans WHERE plan_id = $1")
+        .bind(&update_plan_id)
+        .fetch_one(&state.pool)
+        .await
+        .expect("fetch plan after failed audit update");
+    assert_eq!(
+        row.try_get::<String, _>("name")
+            .expect("plan name after failed audit"),
+        "Before rollback audit update"
+    );
+    assert!(row
+        .try_get::<bool, _>("is_active")
+        .expect("plan is_active after failed audit"));
+    let limit_rows = sqlx::query(
+        "SELECT metric, \"window\", \"limit\" FROM cn_user.plan_limits WHERE plan_id = $1 ORDER BY metric",
+    )
+    .bind(&update_plan_id)
+    .fetch_all(&state.pool)
+    .await
+    .expect("fetch plan limits after failed audit update");
+    assert_eq!(limit_rows.len(), 1);
+    assert_eq!(
+        limit_rows[0]
+            .try_get::<String, _>("metric")
+            .expect("metric"),
+        "search_query"
+    );
+    assert_eq!(
+        limit_rows[0]
+            .try_get::<String, _>("window")
+            .expect("window"),
+        "day"
+    );
+    assert_eq!(limit_rows[0].try_get::<i64, _>("limit").expect("limit"), 40);
+}
+
+#[tokio::test]
+async fn transactional_admin_mutations_rollback_when_commit_fails() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let app = Router::new()
+        .route(
+            "/v1/admin/services/{service}/config",
+            put(services::update_service_config),
+        )
+        .route(
+            "/v1/admin/policies/{policy_id}/make-current",
+            post(policies::make_current_policy),
+        )
+        .route(
+            "/v1/admin/subscription-requests/{request_id}/approve",
+            post(subscriptions::approve_subscription_request),
+        )
+        .route("/v1/admin/plans", post(subscriptions::create_plan))
+        .route("/v1/admin/plans/{plan_id}", put(subscriptions::update_plan))
+        .with_state(state.clone());
+
+    let service = format!("rollback-commit-service-{}", Uuid::new_v4().simple());
+    let service_target = format!("service:{service}");
+    register_commit_failure(&state.pool, "service_config.update", &service_target, None).await;
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/services/{service}/config"),
+        json!({
+            "config_json": {
+                "enabled": true
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_db_error(status, &payload);
+    let service_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.service_configs WHERE service = $1",
+    )
+    .bind(&service)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count service config after commit failure");
+    assert_eq!(service_count, 0);
+    let service_audit_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.audit_logs WHERE action = $1 AND target = $2",
+    )
+    .bind("service_config.update")
+    .bind(&service_target)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count service audit logs after commit failure");
+    assert_eq!(service_audit_count, 0);
+
+    let policy_type = format!("rollback-commit-policy-{}", Uuid::new_v4().simple());
+    let policy_locale = "ja-JP";
+    let current_policy_id = format!("{policy_type}:v1:{policy_locale}");
+    let target_policy_id = format!("{policy_type}:v2:{policy_locale}");
+    sqlx::query(
+        "INSERT INTO cn_admin.policies          (policy_id, type, version, locale, title, content_md, content_hash, is_current)          VALUES ($1, $2, 'v1', $3, 'current', 'current', 'hash-current', TRUE),                 ($4, $2, 'v2', $3, 'target', 'target', 'hash-target', FALSE)",
+    )
+    .bind(&current_policy_id)
+    .bind(&policy_type)
+    .bind(policy_locale)
+    .bind(&target_policy_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert policies for commit rollback test");
+    let make_current_target = format!("policy:{target_policy_id}");
+    register_commit_failure(
+        &state.pool,
+        "policy.make_current",
+        &make_current_target,
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/policies/{target_policy_id}/make-current"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_db_error(status, &payload);
+    let current_is_current = sqlx::query_scalar::<_, bool>(
+        "SELECT is_current FROM cn_admin.policies WHERE policy_id = $1",
+    )
+    .bind(&current_policy_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch current policy after commit failure");
+    let target_is_current = sqlx::query_scalar::<_, bool>(
+        "SELECT is_current FROM cn_admin.policies WHERE policy_id = $1",
+    )
+    .bind(&target_policy_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch target policy after commit failure");
+    assert!(current_is_current);
+    assert!(!target_is_current);
+    let policy_audit_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.audit_logs WHERE action = $1 AND target = $2",
+    )
+    .bind("policy.make_current")
+    .bind(&make_current_target)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count make_current audit logs after commit failure");
+    assert_eq!(policy_audit_count, 0);
+
+    let requester_pubkey = Keys::generate().public_key().to_hex();
+    let approve_topic_id = format!("kukuri:topic:rollback-commit:{}", Uuid::new_v4());
+    let request_id = insert_subscription_request(
+        &state.pool,
+        &requester_pubkey,
+        &approve_topic_id,
+        json!({ "search": true }),
+    )
+    .await;
+    let approve_target = format!("subscription_request:{request_id}");
+    register_commit_failure(
+        &state.pool,
+        "subscription_request.approve",
+        &approve_target,
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/subscription-requests/{request_id}/approve"),
+        json!({ "review_note": "approve should rollback on commit failure" }),
+        &session_id,
+    )
+    .await;
+    assert_db_error(status, &payload);
+    let request_status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM cn_user.topic_subscription_requests WHERE request_id = $1",
+    )
+    .bind(&request_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch request status after commit failure");
+    assert_eq!(request_status, "pending");
+    let topic_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
+    )
+    .bind(&approve_topic_id)
+    .bind(&requester_pubkey)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count topic subscriptions after commit failure");
+    assert_eq!(topic_subscription_count, 0);
+    let node_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&approve_topic_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count node subscriptions after commit failure");
+    assert_eq!(node_subscription_count, 0);
+    let approve_audit_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.audit_logs WHERE action = $1 AND target = $2",
+    )
+    .bind("subscription_request.approve")
+    .bind(&approve_target)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count approve audit logs after commit failure");
+    assert_eq!(approve_audit_count, 0);
+
+    let create_plan_id = format!("rollback-commit-plan-create-{}", Uuid::new_v4().simple());
+    let create_plan_target = format!("plan:{create_plan_id}");
+    register_commit_failure(&state.pool, "plan.create", &create_plan_target, None).await;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/plans",
+        json!({
+            "plan_id": create_plan_id.clone(),
+            "name": "Rollback commit create",
+            "is_active": true,
+            "limits": [
+                {
+                    "metric": "search_query",
+                    "window": "day",
+                    "limit": 120
+                }
+            ]
+        }),
+        &session_id,
+    )
+    .await;
+    assert_db_error(status, &payload);
+    let created_plan_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_user.plans WHERE plan_id = $1")
+            .bind(&create_plan_id)
+            .fetch_one(&state.pool)
+            .await
+            .expect("count created plan after commit failure");
+    assert_eq!(created_plan_count, 0);
+    let created_plan_limit_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_user.plan_limits WHERE plan_id = $1")
+            .bind(&create_plan_id)
+            .fetch_one(&state.pool)
+            .await
+            .expect("count created plan limits after commit failure");
+    assert_eq!(created_plan_limit_count, 0);
+    let create_plan_audit_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.audit_logs WHERE action = $1 AND target = $2",
+    )
+    .bind("plan.create")
+    .bind(&create_plan_target)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count create plan audit logs after commit failure");
+    assert_eq!(create_plan_audit_count, 0);
+
+    let update_plan_id = format!("rollback-commit-plan-update-{}", Uuid::new_v4().simple());
+    sqlx::query("INSERT INTO cn_user.plans (plan_id, name, is_active) VALUES ($1, $2, TRUE)")
+        .bind(&update_plan_id)
+        .bind("Before rollback commit update")
+        .execute(&state.pool)
+        .await
+        .expect("insert plan for commit failure update test");
+    sqlx::query(
+        "INSERT INTO cn_user.plan_limits (plan_id, metric, \"window\", \"limit\") VALUES ($1, 'search_query', 'day', 40)",
+    )
+    .bind(&update_plan_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert plan limit for commit failure update test");
+    let update_plan_target = format!("plan:{update_plan_id}");
+    register_commit_failure(&state.pool, "plan.update", &update_plan_target, None).await;
+    let (status, payload) = put_json(
+        app,
+        &format!("/v1/admin/plans/{update_plan_id}"),
+        json!({
+            "plan_id": update_plan_id.clone(),
+            "name": "After rollback commit update",
+            "is_active": false,
+            "limits": [
+                {
+                    "metric": "search_query",
+                    "window": "day",
+                    "limit": 10
+                },
+                {
+                    "metric": "report_submit",
+                    "window": "day",
+                    "limit": 1
+                }
+            ]
+        }),
+        &session_id,
+    )
+    .await;
+    assert_db_error(status, &payload);
+    let row = sqlx::query("SELECT name, is_active FROM cn_user.plans WHERE plan_id = $1")
+        .bind(&update_plan_id)
+        .fetch_one(&state.pool)
+        .await
+        .expect("fetch plan after commit failure update");
+    assert_eq!(
+        row.try_get::<String, _>("name")
+            .expect("plan name after commit failure"),
+        "Before rollback commit update"
+    );
+    assert!(row
+        .try_get::<bool, _>("is_active")
+        .expect("plan is_active after commit failure"));
+    let limit_rows = sqlx::query(
+        "SELECT metric, \"window\", \"limit\" FROM cn_user.plan_limits WHERE plan_id = $1 ORDER BY metric",
+    )
+    .bind(&update_plan_id)
+    .fetch_all(&state.pool)
+    .await
+    .expect("fetch plan limits after commit failure update");
+    assert_eq!(limit_rows.len(), 1);
+    assert_eq!(
+        limit_rows[0]
+            .try_get::<String, _>("metric")
+            .expect("metric"),
+        "search_query"
+    );
+    assert_eq!(
+        limit_rows[0]
+            .try_get::<String, _>("window")
+            .expect("window"),
+        "day"
+    );
+    assert_eq!(limit_rows[0].try_get::<i64, _>("limit").expect("limit"), 40);
+    let update_plan_audit_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.audit_logs WHERE action = $1 AND target = $2",
+    )
+    .bind("plan.update")
+    .bind(&update_plan_target)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count update plan audit logs after commit failure");
+    assert_eq!(update_plan_audit_count, 0);
 }
 
 #[tokio::test]

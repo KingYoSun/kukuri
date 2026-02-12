@@ -9,6 +9,7 @@ use cn_core::{config, db, health, http, logging, metrics, node_key, server, serv
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::types::Json as SqlxJson;
 use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -109,6 +110,34 @@ pub(crate) async fn log_admin_audit(
                 err.to_string(),
             )
         })
+}
+
+pub(crate) async fn log_admin_audit_tx(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    actor: &str,
+    action: &str,
+    target: &str,
+    diff: Option<Value>,
+    request_id: Option<&str>,
+) -> ApiResult<()> {
+    sqlx::query(
+        "INSERT INTO cn_admin.audit_logs          (actor_admin_user_id, action, target, diff_json, request_id)          VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(actor)
+    .bind(action)
+    .bind(target)
+    .bind(diff.map(SqlxJson))
+    .bind(request_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AUDIT_LOG_ERROR",
+            err.to_string(),
+        )
+    })?;
+    Ok(())
 }
 
 #[derive(Serialize, ToSchema)]

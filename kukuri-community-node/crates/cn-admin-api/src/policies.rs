@@ -293,10 +293,8 @@ pub async fn make_current_policy(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    tx.commit().await.ok();
-
-    crate::log_admin_audit(
-        &state.pool,
+    crate::log_admin_audit_tx(
+        &mut tx,
         &admin.admin_user_id,
         "policy.make_current",
         &format!("policy:{policy_id}"),
@@ -309,9 +307,17 @@ pub async fn make_current_policy(
         "SELECT policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current          FROM cn_admin.policies WHERE policy_id = $1",
     )
     .bind(&policy_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(row_to_policy(row)?))
 }

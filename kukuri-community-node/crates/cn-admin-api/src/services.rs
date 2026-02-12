@@ -212,8 +212,8 @@ pub async fn update_service_config(
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     }
 
-    crate::log_admin_audit(
-        &state.pool,
+    crate::log_admin_audit_tx(
+        &mut tx,
         &admin.admin_user_id,
         "service_config.update",
         &format!("service:{service}"),
@@ -226,7 +226,13 @@ pub async fn update_service_config(
         .bind(format!("{service}:{next_version}"))
         .execute(&mut *tx)
         .await
-        .ok();
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
     let row = sqlx::query(
         "SELECT service, version, config_json, updated_at, updated_by FROM cn_admin.service_configs WHERE service = $1",
@@ -237,7 +243,13 @@ pub async fn update_service_config(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
-    tx.commit().await.ok();
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(ServiceConfigResponse {
         service: row.try_get("service")?,

@@ -153,7 +153,7 @@
 ## 未実装/不足事項（2026年02月12日 監査追記）
 
 - [x] `cn-admin-api`: 監査ログ要件（append-only / 必須）に合わせ、管理操作で `cn_core::admin::log_audit(...).await.ok()` を廃止し、監査ログ書き込み失敗時は API を失敗として返す（少なくとも `services` / `policies` / `subscriptions` / `moderation` / `trust` / `access_control` / `dsar` / `reindex` / `auth` を対象に統一）。
-- [ ] `cn-admin-api`: 管理更新系で `tx.commit().await.ok()` を廃止し、commit 失敗を呼び出し元へ伝播する。あわせて契約/統合テストを追加し、監査ログ書き込み失敗・commit 失敗時に `5xx` とロールバック（副作用なし）を保証する。
+- [x] `cn-admin-api`: 管理更新系で `tx.commit().await.ok()` を廃止し、commit 失敗を呼び出し元へ伝播する。あわせて契約/統合テストを追加し、監査ログ書き込み失敗・commit 失敗時に `5xx` とロールバック（副作用なし）を保証する。
 - [ ] `cn-admin-api` + Admin Console: `service_configs` に secrets を保存しない要件を実装で強制する（`OPENAI_API_KEY` など秘匿キーの reject または redaction）。`PUT /v1/admin/services/{service}/config` の契約テストと UI テストを追加して後方互換を固定する。
 - [ ] Admin Console: `auth_transition_design.md` の運用要件に合わせ、relay/bootstrap の `auth_mode` / `enforce_at` / `grace_seconds` / `ws_auth_timeout_seconds` を専用フォームで編集できる UI を追加する（現行の生 JSON 編集依存を解消）。未AUTH接続残数・拒否数など施行状態の表示を追加し、Vitest + Testing Library の回帰テストを追加する。
 

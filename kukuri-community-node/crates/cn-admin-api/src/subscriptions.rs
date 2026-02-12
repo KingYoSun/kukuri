@@ -203,10 +203,8 @@ pub async fn approve_subscription_request(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    tx.commit().await.ok();
-
-    crate::log_admin_audit(
-        &state.pool,
+    crate::log_admin_audit_tx(
+        &mut tx,
         &admin.admin_user_id,
         "subscription_request.approve",
         &format!("subscription_request:{request_id}"),
@@ -214,6 +212,14 @@ pub async fn approve_subscription_request(
         None,
     )
     .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(serde_json::json!({ "status": "approved" })))
 }
@@ -420,10 +426,8 @@ pub async fn create_plan(
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     }
 
-    tx.commit().await.ok();
-
-    crate::log_admin_audit(
-        &state.pool,
+    crate::log_admin_audit_tx(
+        &mut tx,
         &admin.admin_user_id,
         "plan.create",
         &format!("plan:{}", payload.plan_id),
@@ -431,6 +435,14 @@ pub async fn create_plan(
         None,
     )
     .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(Plan {
         plan_id: payload.plan_id,
@@ -494,10 +506,8 @@ pub async fn update_plan(
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     }
 
-    tx.commit().await.ok();
-
-    crate::log_admin_audit(
-        &state.pool,
+    crate::log_admin_audit_tx(
+        &mut tx,
         &admin.admin_user_id,
         "plan.update",
         &format!("plan:{plan_id}"),
@@ -505,6 +515,14 @@ pub async fn update_plan(
         None,
     )
     .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(Plan {
         plan_id,
