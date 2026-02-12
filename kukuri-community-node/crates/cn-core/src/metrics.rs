@@ -24,6 +24,7 @@ struct Metrics {
     ingest_rejected_total: IntCounterVec,
     gossip_received_total: IntCounterVec,
     gossip_sent_total: IntCounterVec,
+    bootstrap_hint_publish_total: IntCounterVec,
     dedupe_hits_total: IntCounterVec,
     dedupe_misses_total: IntCounterVec,
     auth_success_total: IntCounterVec,
@@ -125,6 +126,15 @@ fn metrics() -> &'static Metrics {
             &["service"],
         )
         .expect("gossip_sent_total metric");
+
+        let bootstrap_hint_publish_total = IntCounterVec::new(
+            Opts::new(
+                "bootstrap_hint_publish_total",
+                "Total bootstrap update hint publish outcomes",
+            ),
+            &["service", "channel", "result"],
+        )
+        .expect("bootstrap_hint_publish_total metric");
 
         let dedupe_hits_total =
             IntCounterVec::new(Opts::new("dedupe_hits_total", "Dedupe hits"), &["service"])
@@ -238,6 +248,9 @@ fn metrics() -> &'static Metrics {
             .register(Box::new(gossip_sent_total.clone()))
             .expect("register gossip_sent_total");
         registry
+            .register(Box::new(bootstrap_hint_publish_total.clone()))
+            .expect("register bootstrap_hint_publish_total");
+        registry
             .register(Box::new(dedupe_hits_total.clone()))
             .expect("register dedupe_hits_total");
         registry
@@ -284,6 +297,7 @@ fn metrics() -> &'static Metrics {
             ingest_rejected_total,
             gossip_received_total,
             gossip_sent_total,
+            bootstrap_hint_publish_total,
             dedupe_hits_total,
             dedupe_misses_total,
             auth_success_total,
@@ -393,6 +407,13 @@ pub fn inc_gossip_sent(service_name: &'static str) {
     metrics()
         .gossip_sent_total
         .with_label_values(&[service_name])
+        .inc();
+}
+
+pub fn inc_bootstrap_hint_publish(service_name: &'static str, channel: &str, result: &str) {
+    metrics()
+        .bootstrap_hint_publish_total
+        .with_label_values(&[service_name, channel, result])
         .inc();
 }
 

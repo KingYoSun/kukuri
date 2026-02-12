@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::json;
 use sqlx::postgres::PgListener;
 use sqlx::{Pool, Postgres, Row, Transaction};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,6 +20,10 @@ use std::time::Duration;
 const SERVICE_NAME: &str = "cn-bootstrap";
 const ADMIN_CONFIG_CHANNEL: &str = "cn_admin_config";
 const LISTENER_RETRY_INTERVAL_SECONDS: u64 = 5;
+const DEFAULT_HINT_NOTIFY_CHANNEL: &str = "cn_bootstrap_hint";
+const HINT_PUBLISH_RESULT_SUCCESS: &str = "success";
+const HINT_PUBLISH_RESULT_FAILURE: &str = "failure";
+const BOOTSTRAP_HINT_SCHEMA: &str = "kukuri-bootstrap-update-hint-v1";
 
 #[derive(Clone)]
 struct AppState {
@@ -33,6 +37,53 @@ struct AppState {
 #[derive(Serialize)]
 struct HealthStatus {
     status: String,
+}
+
+#[derive(Debug, Clone)]
+struct BootstrapHintConfig {
+    enabled: bool,
+    notify_channel: String,
+}
+
+impl Default for BootstrapHintConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            notify_channel: DEFAULT_HINT_NOTIFY_CHANNEL.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct BootstrapRefreshDelta {
+    descriptor_changed: bool,
+    topic_service_upserts: u64,
+    topic_service_deletes: u64,
+    expired_event_deletes: u64,
+    changed_topic_ids: BTreeSet<String>,
+}
+
+impl BootstrapRefreshDelta {
+    fn has_updates(&self) -> bool {
+        self.descriptor_changed
+            || self.topic_service_upserts > 0
+            || self.topic_service_deletes > 0
+            || self.expired_event_deletes > 0
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct BootstrapUpdateHintPayload {
+    schema: &'static str,
+    source: &'static str,
+    published_at: i64,
+    descriptor_changed: bool,
+    topic_service_upserts: u64,
+    topic_service_deletes: u64,
+    expired_event_deletes: u64,
+    changed_topic_ids: Vec<String>,
+    refresh_paths: [&'static str; 2],
+    hint_channels: [&'static str; 2],
 }
 
 pub struct BootstrapConfig {
@@ -194,6 +245,30 @@ fn should_refresh_on_admin_config_notification(payload: &str) -> bool {
         || service.eq_ignore_ascii_case("topic_services")
 }
 
+fn bootstrap_hint_config_from_json(config: &serde_json::Value) -> BootstrapHintConfig {
+    let mut hint_config = BootstrapHintConfig::default();
+    let publish = config.pointer("/hints/publish");
+
+    if let Some(enabled) = publish
+        .and_then(|value| value.get("enabled"))
+        .and_then(|value| value.as_bool())
+    {
+        hint_config.enabled = enabled;
+    }
+
+    if let Some(channel) = publish
+        .and_then(|value| value.get("notify_channel"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+    {
+        if !channel.is_empty() {
+            hint_config.notify_channel = channel.to_string();
+        }
+    }
+
+    hint_config
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TopicServiceCleanupMode {
     DeleteAll,
@@ -211,22 +286,24 @@ fn topic_service_cleanup_mode(active_tags: &[String]) -> TopicServiceCleanupMode
 async fn cleanup_stale_topic_service_events(
     tx: &mut Transaction<'_, Postgres>,
     active_tags: &[String],
-) -> Result<()> {
-    match topic_service_cleanup_mode(active_tags) {
+) -> Result<u64> {
+    let affected = match topic_service_cleanup_mode(active_tags) {
         TopicServiceCleanupMode::DeleteAll => {
             sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = 39001")
                 .execute(&mut **tx)
-                .await?;
+                .await?
+                .rows_affected()
         }
         TopicServiceCleanupMode::DeleteStale => {
             sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = 39001 AND d_tag <> ALL($1)")
                 .bind(active_tags)
                 .execute(&mut **tx)
-                .await?;
+                .await?
+                .rows_affected()
         }
-    }
+    };
 
-    Ok(())
+    Ok(affected)
 }
 
 async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
@@ -234,6 +311,7 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
         .await?
         .map(|cfg| cfg.config_json)
         .unwrap_or_else(|| json!({}));
+    let hint_config = bootstrap_hint_config_from_json(&config);
 
     let descriptor = config
         .get("descriptor")
@@ -255,9 +333,10 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
     let topic_exp = now + topic_exp_hours * 3600;
 
     let descriptor_event = build_descriptor_event(&state.keys, &descriptor, descriptor_exp)?;
+    let mut refresh_delta = BootstrapRefreshDelta::default();
 
     let mut tx = state.pool.begin().await?;
-    upsert_bootstrap_event(
+    refresh_delta.descriptor_changed = upsert_bootstrap_event(
         &mut tx,
         &descriptor_event,
         39000,
@@ -276,7 +355,7 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
         let d_tag = format!("topic_service:{topic_id}:{role}:{scope}");
         let event =
             build_topic_service_event(&state.keys, &topic_id, &role, &scope, &d_tag, topic_exp)?;
-        upsert_bootstrap_event(
+        if upsert_bootstrap_event(
             &mut tx,
             &event,
             39001,
@@ -286,18 +365,26 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
             Some(&scope),
             topic_exp,
         )
-        .await?;
+        .await?
+        {
+            refresh_delta.topic_service_upserts += 1;
+            refresh_delta.changed_topic_ids.insert(topic_id.clone());
+        }
         active_tags.push(d_tag);
     }
 
-    cleanup_stale_topic_service_events(&mut tx, &active_tags).await?;
+    refresh_delta.topic_service_deletes =
+        cleanup_stale_topic_service_events(&mut tx, &active_tags).await?;
 
-    sqlx::query("DELETE FROM cn_bootstrap.events WHERE expires_at <= $1")
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
+    refresh_delta.expired_event_deletes =
+        sqlx::query("DELETE FROM cn_bootstrap.events WHERE expires_at <= $1")
+            .bind(now)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
 
     tx.commit().await?;
+    publish_bootstrap_update_hint(&state.pool, &hint_config, &refresh_delta).await;
 
     Ok(())
 }
@@ -332,7 +419,19 @@ async fn upsert_bootstrap_event(
     role: Option<&str>,
     scope: Option<&str>,
     expires_at: i64,
-) -> Result<()> {
+) -> Result<bool> {
+    let existing_event_id: Option<String> = sqlx::query_scalar(
+        "SELECT event_id FROM cn_bootstrap.events WHERE kind = $1 AND d_tag = $2",
+    )
+    .bind(kind)
+    .bind(d_tag)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    if existing_event_id.as_deref() == Some(event.id.as_str()) {
+        return Ok(false);
+    }
+
     sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind = $1 AND d_tag = $2")
         .bind(kind)
         .bind(d_tag)
@@ -354,7 +453,75 @@ async fn upsert_bootstrap_event(
     .execute(&mut **tx)
     .await?;
 
-    Ok(())
+    Ok(true)
+}
+
+async fn publish_bootstrap_update_hint(
+    pool: &Pool<Postgres>,
+    hint_config: &BootstrapHintConfig,
+    refresh_delta: &BootstrapRefreshDelta,
+) {
+    if !hint_config.enabled || !refresh_delta.has_updates() {
+        return;
+    }
+
+    let payload = BootstrapUpdateHintPayload {
+        schema: BOOTSTRAP_HINT_SCHEMA,
+        source: SERVICE_NAME,
+        published_at: cn_core::auth::unix_seconds().unwrap_or(0) as i64,
+        descriptor_changed: refresh_delta.descriptor_changed,
+        topic_service_upserts: refresh_delta.topic_service_upserts,
+        topic_service_deletes: refresh_delta.topic_service_deletes,
+        expired_event_deletes: refresh_delta.expired_event_deletes,
+        changed_topic_ids: refresh_delta.changed_topic_ids.iter().cloned().collect(),
+        refresh_paths: [
+            "/v1/bootstrap/nodes",
+            "/v1/bootstrap/topics/{topic_id}/services",
+        ],
+        hint_channels: ["gossip", "dht"],
+    };
+
+    let payload = match serde_json::to_string(&payload) {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "failed to serialize bootstrap update hint payload"
+            );
+            metrics::inc_bootstrap_hint_publish(
+                SERVICE_NAME,
+                &hint_config.notify_channel,
+                HINT_PUBLISH_RESULT_FAILURE,
+            );
+            return;
+        }
+    };
+
+    let publish_result = sqlx::query("SELECT pg_notify($1, $2)")
+        .bind(&hint_config.notify_channel)
+        .bind(payload)
+        .execute(pool)
+        .await;
+
+    match publish_result {
+        Ok(_) => metrics::inc_bootstrap_hint_publish(
+            SERVICE_NAME,
+            &hint_config.notify_channel,
+            HINT_PUBLISH_RESULT_SUCCESS,
+        ),
+        Err(err) => {
+            metrics::inc_bootstrap_hint_publish(
+                SERVICE_NAME,
+                &hint_config.notify_channel,
+                HINT_PUBLISH_RESULT_FAILURE,
+            );
+            tracing::warn!(
+                error = %err,
+                channel = %hint_config.notify_channel,
+                "bootstrap update hint publish failed"
+            );
+        }
+    }
 }
 
 fn build_descriptor_event(
@@ -476,9 +643,12 @@ async fn metrics_endpoint() -> impl IntoResponse {
 mod tests {
     use super::*;
     use anyhow::{anyhow, bail};
-    use axum::body::to_bytes;
-    use axum::http::header;
+    use axum::body::{to_bytes, Body};
+    use axum::extract::{Path, State};
+    use axum::http::{header, Request};
     use axum::response::IntoResponse;
+    use axum::routing::get;
+    use axum::{Json, Router};
     use nostr_sdk::prelude::Keys;
     use serde_json::json;
     use sqlx::postgres::PgPoolOptions;
@@ -488,6 +658,8 @@ mod tests {
     use std::sync::{Arc, OnceLock};
     use std::time::Duration;
     use tokio::sync::{Mutex, OnceCell};
+    use tokio::time::timeout;
+    use tower::ServiceExt;
     use uuid::Uuid;
 
     static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
@@ -632,6 +804,61 @@ mod tests {
             found,
             "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
         );
+    }
+
+    fn metric_value(body: &str, metric_name: &str, labels: &[(&str, &str)]) -> Option<f64> {
+        body.lines()
+            .find(|line| {
+                line.starts_with(metric_name)
+                    && labels
+                        .iter()
+                        .all(|(key, value)| line.contains(&format!("{key}=\"{value}\"")))
+            })
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|value| value.parse::<f64>().ok())
+    }
+
+    async fn bootstrap_topic_services_http(
+        State(pool): State<Pool<Postgres>>,
+        Path(topic_id): Path<String>,
+    ) -> impl IntoResponse {
+        let rows = sqlx::query(
+            "SELECT event_json FROM cn_bootstrap.events \
+             WHERE kind = 39001 AND topic_id = $1 AND is_active = TRUE \
+             ORDER BY updated_at DESC",
+        )
+        .bind(topic_id)
+        .fetch_all(&pool)
+        .await
+        .expect("load bootstrap topic services");
+
+        let mut items = Vec::new();
+        for row in rows {
+            let event_json: serde_json::Value = row.try_get("event_json").expect("event_json");
+            items.push(event_json);
+        }
+
+        Json(json!({ "items": items }))
+    }
+
+    async fn fetch_bootstrap_topic_services_via_http(
+        pool: Pool<Postgres>,
+        topic_id: &str,
+    ) -> serde_json::Value {
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(bootstrap_topic_services_http),
+            )
+            .with_state(pool);
+        let request = Request::builder()
+            .method("GET")
+            .uri(format!("/v1/bootstrap/topics/{topic_id}/services"))
+            .body(Body::empty())
+            .expect("request");
+        let response = app.oneshot(request).await.expect("http response");
+        assert_eq!(response.status(), StatusCode::OK);
+        response_json(response).await
     }
 
     async fn spawn_dependency_health_server(
@@ -901,6 +1128,95 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refresh_bootstrap_events_publish_hint_then_http_refetch() {
+        let _guard = db_test_lock().lock().await;
+        let state = test_state(HashMap::new()).await;
+        let topic_id = format!("kukuri:bootstrap-hint-{}", Uuid::new_v4());
+        let role = "index";
+        let scope = "public";
+        let d_tag = format!("topic_service:{topic_id}:{role}:{scope}");
+
+        let mut listener = PgListener::connect_with(&state.pool)
+            .await
+            .expect("connect pg listener");
+        listener
+            .listen(DEFAULT_HINT_NOTIFY_CHANNEL)
+            .await
+            .expect("listen bootstrap hint channel");
+
+        upsert_topic_service(&state.pool, &topic_id, role, scope, true).await;
+        refresh_bootstrap_events(&state)
+            .await
+            .expect("refresh bootstrap events");
+
+        let notification = timeout(Duration::from_secs(5), listener.recv())
+            .await
+            .expect("wait bootstrap hint notification timeout")
+            .expect("receive bootstrap hint notification");
+        let payload: serde_json::Value =
+            serde_json::from_str(notification.payload()).expect("bootstrap hint payload json");
+        assert_eq!(
+            payload.get("schema").and_then(|v| v.as_str()),
+            Some(BOOTSTRAP_HINT_SCHEMA)
+        );
+        assert_eq!(
+            payload.get("source").and_then(|v| v.as_str()),
+            Some(SERVICE_NAME)
+        );
+        assert_eq!(
+            payload
+                .get("hint_channels")
+                .and_then(|v| v.as_array())
+                .map(|channels| channels
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .collect::<Vec<_>>()),
+            Some(vec!["gossip", "dht"])
+        );
+        assert!(
+            payload
+                .get("topic_service_upserts")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 1
+        );
+
+        let response = fetch_bootstrap_topic_services_via_http(state.pool.clone(), &topic_id).await;
+        let items = response
+            .get("items")
+            .and_then(|v| v.as_array())
+            .expect("items array");
+        assert!(
+            items.iter().any(|item| {
+                item.get("kind").and_then(|value| value.as_i64()) == Some(39001)
+                    && item
+                        .get("tags")
+                        .and_then(|value| value.as_array())
+                        .map(|tags| {
+                            tags.iter().any(|tag| {
+                                tag.as_array()
+                                    .map(|parts| {
+                                        parts.first().and_then(|value| value.as_str()) == Some("t")
+                                            && parts.get(1).and_then(|value| value.as_str())
+                                                == Some(topic_id.as_str())
+                                    })
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(false)
+            }),
+            "http refetch did not return refreshed 39001 for topic {topic_id}: {response}"
+        );
+
+        remove_topic_service(&state.pool, &topic_id, role, scope).await;
+        sqlx::query("DELETE FROM cn_bootstrap.events WHERE d_tag = $1")
+            .bind(&d_tag)
+            .execute(&state.pool)
+            .await
+            .expect("cleanup bootstrap event");
+    }
+
+    #[tokio::test]
     async fn healthz_contract_status_transitions_when_dependency_fails() {
         let _guard = db_test_lock().lock().await;
         let dependency_status = Arc::new(AtomicU16::new(StatusCode::OK.as_u16()));
@@ -971,6 +1287,55 @@ mod tests {
                 ("method", "GET"),
                 ("status", "200"),
             ],
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_hint_publish_metrics_track_success_and_failure() {
+        let _guard = db_test_lock().lock().await;
+        let state = test_state(HashMap::new()).await;
+        let hint_config = BootstrapHintConfig::default();
+        let refresh_delta = BootstrapRefreshDelta {
+            descriptor_changed: true,
+            ..BootstrapRefreshDelta::default()
+        };
+
+        publish_bootstrap_update_hint(&state.pool, &hint_config, &refresh_delta).await;
+        state.pool.close().await;
+        publish_bootstrap_update_hint(&state.pool, &hint_config, &refresh_delta).await;
+
+        let response = metrics_endpoint().await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_text(response).await;
+
+        let success = metric_value(
+            &body,
+            "bootstrap_hint_publish_total",
+            &[
+                ("service", SERVICE_NAME),
+                ("channel", DEFAULT_HINT_NOTIFY_CHANNEL),
+                ("result", HINT_PUBLISH_RESULT_SUCCESS),
+            ],
+        )
+        .unwrap_or(0.0);
+        let failure = metric_value(
+            &body,
+            "bootstrap_hint_publish_total",
+            &[
+                ("service", SERVICE_NAME),
+                ("channel", DEFAULT_HINT_NOTIFY_CHANNEL),
+                ("result", HINT_PUBLISH_RESULT_FAILURE),
+            ],
+        )
+        .unwrap_or(0.0);
+
+        assert!(
+            success >= 1.0,
+            "expected bootstrap hint publish success metric, body: {body}"
+        );
+        assert!(
+            failure >= 1.0,
+            "expected bootstrap hint publish failure metric, body: {body}"
         );
     }
 }

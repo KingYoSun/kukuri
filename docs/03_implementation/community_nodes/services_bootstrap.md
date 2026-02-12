@@ -87,6 +87,11 @@ v1 では「**DB上の広告設定**」を入力として `bootstrap` が 39000/
   - v1 は **endpoint discovery** に寄せる（例: `node_pubkey -> https://node.example`）
   - TTL は `exp` より短く（例: 6h）して定期的に再公告する（停波したノードが残りにくい）
 
+実装メモ（2026-02）:
+- `cn-bootstrap` は DB更新後に `pg_notify('cn_bootstrap_hint', <payload>)` を publish し、gossip/DHT ブリッジやクライアント側ヒント受信経路の起点として使えるようにする。
+- hint payload には `refresh_paths`（`/v1/bootstrap/nodes` / `/v1/bootstrap/topics/{topic_id}/services`）と変更概要（descriptor/topic_service）を含め、受信側は「通知受信→HTTP再取得」で最終整合する。
+- publish 成功/失敗は `bootstrap_hint_publish_total{service,channel,result}` で観測する（`result=success|failure`）。
+
 ## 認証（デフォルトOFF / 後から必須化）
 
 - デフォルトでは bootstrap の取得は **認証OFF**（public）とし、初回接続・発見の導線を壊さない
