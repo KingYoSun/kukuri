@@ -2093,6 +2093,102 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn trust_report_based_quota_contract_payment_required_with_request_id_idempotent() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let request_id = format!("trust-report-based-quota-{}", Uuid::new_v4());
+        let subject = format!("pubkey:{}", Keys::generate().public_key().to_hex());
+        ensure_consents(&pool, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "trust.requests", "day", 0).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let path = format!("/v1/trust/report-based?subject={subject}");
+
+        let (status, payload) = get_json_with_headers(
+            app.clone(),
+            &path,
+            &token,
+            &[("x-request-id", request_id.as_str())],
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "trust.requests", 0, 0, true);
+        let first_reset_at = payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("first reset_at");
+
+        let (retry_status, retry_payload) =
+            get_json_with_headers(app, &path, &token, &[("x-request-id", request_id.as_str())])
+                .await;
+        assert_eq!(retry_status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&retry_payload, "trust.requests", 0, 0, true);
+        let retry_reset_at = retry_payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("retry reset_at");
+        assert_eq!(retry_reset_at, first_reset_at);
+        assert_eq!(
+            usage_event_count_for_request_id(&pool, &pubkey, "trust.requests", &request_id).await,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_quota_contract_payment_required_with_request_id_idempotent(
+    ) {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let request_id = format!("trust-communication-density-quota-{}", Uuid::new_v4());
+        let subject = format!("pubkey:{}", Keys::generate().public_key().to_hex());
+        ensure_consents(&pool, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "trust.requests", "day", 0).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
+            .with_state(state);
+        let path = format!("/v1/trust/communication-density?subject={subject}");
+
+        let (status, payload) = get_json_with_headers(
+            app.clone(),
+            &path,
+            &token,
+            &[("x-request-id", request_id.as_str())],
+        )
+        .await;
+        assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&payload, "trust.requests", 0, 0, true);
+        let first_reset_at = payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("first reset_at");
+
+        let (retry_status, retry_payload) =
+            get_json_with_headers(app, &path, &token, &[("x-request-id", request_id.as_str())])
+                .await;
+        assert_eq!(retry_status, StatusCode::PAYMENT_REQUIRED);
+        assert_quota_exceeded_response(&retry_payload, "trust.requests", 0, 0, true);
+        let retry_reset_at = retry_payload
+            .pointer("/details/reset_at")
+            .and_then(Value::as_i64)
+            .expect("retry reset_at");
+        assert_eq!(retry_reset_at, first_reset_at);
+        assert_eq!(
+            usage_event_count_for_request_id(&pool, &pubkey, "trust.requests", &request_id).await,
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn topic_subscription_quota_contract_payment_required() {
         let state = test_state().await;
         let pool = state.pool.clone();
