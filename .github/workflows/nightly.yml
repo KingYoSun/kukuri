@@ -126,6 +126,88 @@ jobs:
           path: test-results/community-node-e2e
           if-no-files-found: warn
 
+  community-node-recovery-drill:
+    name: Community Node Recovery Drill (Monthly)
+    runs-on: ubuntu-latest
+    env:
+      KUKURI_TEST_RUNNER_IMAGE: ghcr.io/kingyosun/kukuri-test-runner:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine recovery drill execution
+        id: run-gate
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            echo "[INFO] workflow_dispatch detected. Running recovery drill."
+            exit 0
+          fi
+
+          day_of_month="$(date -u +%d)"
+          if [[ "$day_of_month" == "01" ]]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            echo "[INFO] Monthly run day detected (${day_of_month}). Running recovery drill."
+          else
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            echo "[INFO] Skip recovery drill on day ${day_of_month}; monthly run executes on UTC day 01."
+          fi
+
+      - name: Cleanup Docker disk usage
+        if: steps.run-gate.outputs.run == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          docker system df
+          docker builder prune -af || true
+          docker system prune -af || true
+          df -h
+
+      - name: Run recovery drill scenario (Docker)
+        if: steps.run-gate.outputs.run == 'true'
+        shell: pwsh
+        run: ./scripts/test-docker.ps1 recovery-drill
+
+      - name: Verify recovery drill summary
+        if: steps.run-gate.outputs.run == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          summary_path="test-results/community-node-recovery/latest-summary.json"
+          if [[ ! -f "$summary_path" ]]; then
+            echo "[ERROR] Missing recovery drill summary: $summary_path" >&2
+            exit 1
+          fi
+
+          jq -e '
+            .status == "passed" and
+            (.baseline_event_count | type == "number") and
+            (.baseline_event_count > 0) and
+            (.after_corruption_event_count == 0) and
+            (.after_restore_event_count == .baseline_event_count) and
+            (.backup_file | type == "string" and length > 0) and
+            (.log_path | type == "string" and length > 0)
+          ' "$summary_path" >/dev/null
+
+          jq -r '"[OK] recovery summary: status=\(.status) baseline=\(.baseline_event_count) restore=\(.after_restore_event_count)"' "$summary_path"
+
+      - name: Upload recovery drill logs
+        if: always() && steps.run-gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.community-node-recovery-logs
+          path: tmp/logs/community-node-recovery
+          if-no-files-found: warn
+
+      - name: Upload recovery drill artefacts
+        if: always() && steps.run-gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly.community-node-recovery-reports
+          path: test-results/community-node-recovery
+          if-no-files-found: warn
+
   trending-feed:
     name: Trending Feed (Docker)
     runs-on: ubuntu-latest

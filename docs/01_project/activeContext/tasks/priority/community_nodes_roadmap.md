@@ -143,7 +143,10 @@
 
 - [x] `admin_console.md` の Access Control 要件（epoch ローテ時の再配布「失敗/未配布」検知）に合わせ、`cn-core`/`cn-admin-api`/Admin Console で配布結果（success/failed/pending + reason）を記録・参照できるようにする。
 - [x] Access Control 再配布結果のテストを補完する（`cn-core` 統合テスト: 配布失敗記録、`cn-admin-api` 契約テスト: rotate/revoke のレスポンス shape、Admin Console UI テスト: 失敗/未配布の可視化）。
-- [ ] `ops_runbook.md` の「月1リストア演習」要件に合わせ、`recovery-drill` を定期 CI ジョブへ組み込み（`nightly.yml` など）、`test-results/community-node-recovery/latest-summary.json` を artefact 収集・検証できるようにする。
+- [x] `ops_runbook.md` の「月1リストア演習」要件に合わせ、`recovery-drill` を定期 CI ジョブへ組み込み（`nightly.yml` など）、`test-results/community-node-recovery/latest-summary.json` を artefact 収集・検証できるようにする。
+  - CI: `.github/workflows/nightly.yml` に `community-node-recovery-drill`（UTC 毎月1日実行ガード + `workflow_dispatch` 手動実行）を追加。
+  - 検証: `latest-summary.json` の `status=passed`、`baseline_event_count > 0`、`after_corruption_event_count == 0`、`after_restore_event_count == baseline_event_count` を `jq` で検証。
+  - artefact: `nightly.community-node-recovery-logs`（`tmp/logs/community-node-recovery`）と `nightly.community-node-recovery-reports`（`test-results/community-node-recovery`）を収集。
 - [ ] Runbook の共通必須メトリクス（`http_requests_total` / `http_request_duration_seconds_bucket`）を各サービスの `/metrics` 契約テストで固定し、`service,route,method,status` ラベル互換を保証する。
 - [ ] `access_control_design.md` の「v1 はノード側に専用DBを持たない」記述と現行実装（membership/invite 管理 API + Admin Console）の整合を取り、P2P-only と運用補助データの境界（正とする SoT）を明文化する。
 

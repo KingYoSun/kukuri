@@ -128,6 +128,7 @@ v2（必要なら）:
 - バックアップ出力: `test-results/community-node-recovery/backups/community-node-pgdump-<timestamp>.dump`
 - 復旧ドリルログ: `tmp/logs/community-node-recovery/<timestamp>.log`
 - 復旧ドリル結果: `test-results/community-node-recovery/<timestamp>-summary.json` と `test-results/community-node-recovery/latest-summary.json`
+- 定期CI（2026年02月11日反映）: `.github/workflows/nightly.yml` の `community-node-recovery-drill` が UTC 毎月1日（または `workflow_dispatch`）に `./scripts/test-docker.ps1 recovery-drill` を実行し、`latest-summary.json` の整合を検証した上で artefact を収集する
 
 ドリル内容:
 1. `community-node-user-api` を起動し E2E seed を投入
