@@ -595,8 +595,11 @@ async fn metrics_contract_required_metrics_shape_compatible() {
 
     metrics::inc_ws_connections(super::SERVICE_NAME);
     metrics::dec_ws_connections(super::SERVICE_NAME);
+    metrics::inc_ws_unauthenticated_connections(super::SERVICE_NAME);
+    metrics::dec_ws_unauthenticated_connections(super::SERVICE_NAME);
     metrics::inc_ws_req_total(super::SERVICE_NAME);
     metrics::inc_ws_event_total(super::SERVICE_NAME);
+    metrics::inc_ws_auth_disconnect(super::SERVICE_NAME, "timeout");
     metrics::inc_ingest_received(super::SERVICE_NAME, "contract");
     metrics::inc_ingest_rejected(super::SERVICE_NAME, "contract");
     metrics::inc_gossip_received(super::SERVICE_NAME);
@@ -623,8 +626,18 @@ async fn metrics_contract_required_metrics_shape_compatible() {
 
     let body = response_text(response).await;
     assert_metric_line(&body, "ws_connections", &[("service", super::SERVICE_NAME)]);
+    assert_metric_line(
+        &body,
+        "ws_unauthenticated_connections",
+        &[("service", super::SERVICE_NAME)],
+    );
     assert_metric_line(&body, "ws_req_total", &[("service", super::SERVICE_NAME)]);
     assert_metric_line(&body, "ws_event_total", &[("service", super::SERVICE_NAME)]);
+    assert_metric_line(
+        &body,
+        "ws_auth_disconnect_total",
+        &[("service", super::SERVICE_NAME), ("reason", "timeout")],
+    );
     assert_metric_line(
         &body,
         "ingest_received_total",

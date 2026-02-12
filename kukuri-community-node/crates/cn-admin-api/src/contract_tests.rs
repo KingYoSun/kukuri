@@ -2433,6 +2433,76 @@ async fn services_health_poll_updates_details_json_on_status_change() {
 }
 
 #[tokio::test]
+async fn services_health_poll_collects_relay_auth_transition_metrics() {
+    let metrics_body = r#"
+# HELP ws_connections Active websocket connections
+# TYPE ws_connections gauge
+ws_connections{service="cn-relay"} 4
+# HELP ws_unauthenticated_connections Active websocket connections without successful AUTH
+# TYPE ws_unauthenticated_connections gauge
+ws_unauthenticated_connections{service="cn-relay"} 2
+# HELP ingest_rejected_total Total ingest messages rejected
+# TYPE ingest_rejected_total counter
+ingest_rejected_total{service="cn-relay",reason="auth"} 8
+ingest_rejected_total{service="cn-relay",reason="ratelimit"} 3
+# HELP ws_auth_disconnect_total Total websocket disconnects caused by auth transition enforcement
+# TYPE ws_auth_disconnect_total counter
+ws_auth_disconnect_total{service="cn-relay",reason="timeout"} 5
+ws_auth_disconnect_total{service="cn-relay",reason="deadline"} 1
+"#
+    .to_string();
+    let (relay_url, relay_server) = spawn_relay_metrics_mock(metrics_body).await;
+
+    let mut health_targets = HashMap::new();
+    health_targets.insert("relay".to_string(), relay_url);
+    let state = test_state_with_health_targets(health_targets).await;
+
+    services::poll_health_once(&state).await;
+    let (status, details) = fetch_service_health_row(&state.pool, "relay").await;
+    assert_eq!(status, "healthy");
+    assert_eq!(details.get("status").and_then(Value::as_u64), Some(200));
+    assert_eq!(
+        details
+            .pointer("/auth_transition/metrics_status")
+            .and_then(Value::as_u64),
+        Some(200)
+    );
+    assert_eq!(
+        details
+            .pointer("/auth_transition/ws_connections")
+            .and_then(Value::as_i64),
+        Some(4)
+    );
+    assert_eq!(
+        details
+            .pointer("/auth_transition/ws_unauthenticated_connections")
+            .and_then(Value::as_i64),
+        Some(2)
+    );
+    assert_eq!(
+        details
+            .pointer("/auth_transition/ingest_rejected_auth_total")
+            .and_then(Value::as_i64),
+        Some(8)
+    );
+    assert_eq!(
+        details
+            .pointer("/auth_transition/ws_auth_disconnect_timeout_total")
+            .and_then(Value::as_i64),
+        Some(5)
+    );
+    assert_eq!(
+        details
+            .pointer("/auth_transition/ws_auth_disconnect_deadline_total")
+            .and_then(Value::as_i64),
+        Some(1)
+    );
+
+    relay_server.abort();
+    let _ = relay_server.await;
+}
+
+#[tokio::test]
 async fn policies_contract_lifecycle_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;

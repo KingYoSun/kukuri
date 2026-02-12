@@ -16,8 +16,10 @@ struct Metrics {
     http_requests_total: IntCounterVec,
     http_request_duration_seconds: HistogramVec,
     ws_connections: IntGaugeVec,
+    ws_unauthenticated_connections: IntGaugeVec,
     ws_req_total: IntCounterVec,
     ws_event_total: IntCounterVec,
+    ws_auth_disconnect_total: IntCounterVec,
     ingest_received_total: IntCounterVec,
     ingest_rejected_total: IntCounterVec,
     gossip_received_total: IntCounterVec,
@@ -70,6 +72,15 @@ fn metrics() -> &'static Metrics {
         )
         .expect("ws_connections metric");
 
+        let ws_unauthenticated_connections = IntGaugeVec::new(
+            Opts::new(
+                "ws_unauthenticated_connections",
+                "Active websocket connections without successful AUTH",
+            ),
+            &["service"],
+        )
+        .expect("ws_unauthenticated_connections metric");
+
         let ws_req_total = IntCounterVec::new(
             Opts::new("ws_req_total", "Total websocket REQ messages"),
             &["service"],
@@ -81,6 +92,15 @@ fn metrics() -> &'static Metrics {
             &["service"],
         )
         .expect("ws_event_total metric");
+
+        let ws_auth_disconnect_total = IntCounterVec::new(
+            Opts::new(
+                "ws_auth_disconnect_total",
+                "Total websocket disconnects caused by auth transition enforcement",
+            ),
+            &["service", "reason"],
+        )
+        .expect("ws_auth_disconnect_total metric");
 
         let ingest_received_total = IntCounterVec::new(
             Opts::new("ingest_received_total", "Total ingest messages received"),
@@ -194,11 +214,17 @@ fn metrics() -> &'static Metrics {
             .register(Box::new(ws_connections.clone()))
             .expect("register ws_connections");
         registry
+            .register(Box::new(ws_unauthenticated_connections.clone()))
+            .expect("register ws_unauthenticated_connections");
+        registry
             .register(Box::new(ws_req_total.clone()))
             .expect("register ws_req_total");
         registry
             .register(Box::new(ws_event_total.clone()))
             .expect("register ws_event_total");
+        registry
+            .register(Box::new(ws_auth_disconnect_total.clone()))
+            .expect("register ws_auth_disconnect_total");
         registry
             .register(Box::new(ingest_received_total.clone()))
             .expect("register ingest_received_total");
@@ -250,8 +276,10 @@ fn metrics() -> &'static Metrics {
             http_requests_total,
             http_request_duration_seconds,
             ws_connections,
+            ws_unauthenticated_connections,
             ws_req_total,
             ws_event_total,
+            ws_auth_disconnect_total,
             ingest_received_total,
             ingest_rejected_total,
             gossip_received_total,
@@ -305,6 +333,20 @@ pub fn dec_ws_connections(service_name: &'static str) {
         .dec();
 }
 
+pub fn inc_ws_unauthenticated_connections(service_name: &'static str) {
+    metrics()
+        .ws_unauthenticated_connections
+        .with_label_values(&[service_name])
+        .inc();
+}
+
+pub fn dec_ws_unauthenticated_connections(service_name: &'static str) {
+    metrics()
+        .ws_unauthenticated_connections
+        .with_label_values(&[service_name])
+        .dec();
+}
+
 pub fn inc_ws_req_total(service_name: &'static str) {
     metrics()
         .ws_req_total
@@ -316,6 +358,13 @@ pub fn inc_ws_event_total(service_name: &'static str) {
     metrics()
         .ws_event_total
         .with_label_values(&[service_name])
+        .inc();
+}
+
+pub fn inc_ws_auth_disconnect(service_name: &'static str, reason: &'static str) {
+    metrics()
+        .ws_auth_disconnect_total
+        .with_label_values(&[service_name, reason])
         .inc();
 }
 

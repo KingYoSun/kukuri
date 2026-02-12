@@ -22,6 +22,22 @@ const AUTH_EVENT_KIND: u32 = 22242;
 const GOSSIP_BROADCAST_MAX_RETRIES: usize = 3;
 const GOSSIP_BROADCAST_RETRY_BASE_DELAY_MS: u64 = 50;
 
+struct AuthSessionState {
+    pubkey: Option<String>,
+    challenge: Option<String>,
+    is_unauthenticated_connection: bool,
+}
+
+impl Default for AuthSessionState {
+    fn default() -> Self {
+        Self {
+            pubkey: None,
+            challenge: None,
+            is_unauthenticated_connection: true,
+        }
+    }
+}
+
 pub async fn ws_handler(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -50,12 +66,12 @@ pub async fn ws_handler(
 
 async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
     metrics::inc_ws_connections(super::SERVICE_NAME);
+    metrics::inc_ws_unauthenticated_connections(super::SERVICE_NAME);
     let (mut sender, mut receiver) = socket.split();
     let mut broadcast_rx = state.realtime_tx.subscribe();
 
     let mut subscriptions: HashMap<String, Vec<RelayFilter>> = HashMap::new();
-    let mut auth_pubkey: Option<String> = None;
-    let mut auth_challenge: Option<String> = None;
+    let mut auth_state = AuthSessionState::default();
     let mut auth_deadline: Option<Instant> = None;
 
     let mut tick = interval(Duration::from_secs(5));
@@ -64,7 +80,7 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
         let now = auth::unix_seconds().unwrap_or(0) as i64;
         if runtime.auth.requires_auth(now) {
             let challenge = Uuid::new_v4().to_string();
-            auth_challenge = Some(challenge.clone());
+            auth_state.challenge = Some(challenge.clone());
             auth_deadline = Some(
                 Instant::now()
                     + Duration::from_secs(runtime.auth.ws_auth_timeout_seconds.max(1) as u64),
@@ -78,23 +94,27 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
             _ = tick.tick() => {
                 if let Ok(runtime) = current_runtime(&state).await {
                     let now = auth::unix_seconds().unwrap_or(0) as i64;
-                    if runtime.auth.requires_auth(now) && auth_pubkey.is_none() && auth_deadline.is_none() {
+                    if runtime.auth.requires_auth(now) && auth_state.pubkey.is_none() && auth_deadline.is_none() {
                         let challenge = Uuid::new_v4().to_string();
-                        auth_challenge = Some(challenge.clone());
+                        auth_state.challenge = Some(challenge.clone());
                         auth_deadline = Some(Instant::now() + Duration::from_secs(
                             runtime.auth.ws_auth_timeout_seconds.max(1) as u64,
                         ));
                         let _ = send_json(&mut sender, json!(["AUTH", challenge])).await;
                     }
                     if let Some(deadline) = runtime.auth.disconnect_deadline() {
-                        if now >= deadline && auth_pubkey.is_none() {
+                        if now >= deadline && auth_state.pubkey.is_none() {
+                            metrics::inc_ingest_rejected(super::SERVICE_NAME, "auth");
+                            metrics::inc_ws_auth_disconnect(super::SERVICE_NAME, "deadline");
                             let _ = send_json(&mut sender, json!(["NOTICE", "auth-required: deadline reached"])).await;
                             break;
                         }
                     }
                 }
                 if let Some(deadline) = auth_deadline {
-                    if Instant::now() >= deadline && auth_pubkey.is_none() {
+                    if Instant::now() >= deadline && auth_state.pubkey.is_none() {
+                        metrics::inc_ingest_rejected(super::SERVICE_NAME, "auth");
+                        metrics::inc_ws_auth_disconnect(super::SERVICE_NAME, "timeout");
                         let _ = send_json(&mut sender, json!(["NOTICE", "auth-required: timeout"])).await;
                         break;
                     }
@@ -108,8 +128,7 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
                             &addr,
                             &mut sender,
                             &mut subscriptions,
-                            &mut auth_pubkey,
-                            &mut auth_challenge,
+                            &mut auth_state,
                             text.to_string(),
                         ).await {
                             let _ = send_json(&mut sender, json!(["NOTICE", err.to_string()])).await;
@@ -125,7 +144,7 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
             }
             recv = broadcast_rx.recv() => {
                 if let Ok(event) = recv {
-                    if let Err(err) = dispatch_event(&mut sender, &subscriptions, auth_pubkey.as_deref(), &event).await {
+                    if let Err(err) = dispatch_event(&mut sender, &subscriptions, auth_state.pubkey.as_deref(), &event).await {
                         let _ = send_json(&mut sender, json!(["NOTICE", err.to_string()])).await;
                     }
                 }
@@ -133,6 +152,9 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
         }
     }
 
+    if auth_state.is_unauthenticated_connection {
+        metrics::dec_ws_unauthenticated_connections(super::SERVICE_NAME);
+    }
     metrics::dec_ws_connections(super::SERVICE_NAME);
 }
 
@@ -141,8 +163,7 @@ async fn handle_text_message(
     addr: &SocketAddr,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     subscriptions: &mut HashMap<String, Vec<RelayFilter>>,
-    auth_pubkey: &mut Option<String>,
-    auth_challenge: &mut Option<String>,
+    auth_state: &mut AuthSessionState,
     text: String,
 ) -> Result<()> {
     let value: serde_json::Value = serde_json::from_str(&text)?;
@@ -155,7 +176,7 @@ async fn handle_text_message(
     match msg_type {
         "EVENT" => {
             metrics::inc_ws_event_total(super::SERVICE_NAME);
-            handle_event_message(state, addr, sender, auth_pubkey, arr).await?;
+            handle_event_message(state, addr, sender, &mut auth_state.pubkey, arr).await?;
         }
         "REQ" => {
             metrics::inc_ws_req_total(super::SERVICE_NAME);
@@ -164,7 +185,7 @@ async fn handle_text_message(
                 addr,
                 sender,
                 subscriptions,
-                auth_pubkey.as_deref(),
+                auth_state.pubkey.as_deref(),
                 arr,
             )
             .await?;
@@ -175,7 +196,7 @@ async fn handle_text_message(
             }
         }
         "AUTH" => {
-            handle_auth_message(state, sender, auth_pubkey, auth_challenge, arr).await?;
+            handle_auth_message(state, sender, auth_state, arr).await?;
         }
         _ => {
             let _ = send_json(sender, json!(["NOTICE", "unsupported: message type"])).await;
@@ -275,6 +296,7 @@ async fn handle_req_message(
     let runtime = current_runtime(state).await?;
     let now = auth::unix_seconds().unwrap_or(0) as i64;
     if runtime.auth.requires_auth(now) && auth_pubkey.is_none() {
+        metrics::inc_ingest_rejected(super::SERVICE_NAME, "auth");
         send_closed(sender, &sub_id, "auth-required: missing auth").await?;
         return Ok(());
     }
@@ -321,8 +343,7 @@ async fn handle_req_message(
 async fn handle_auth_message(
     state: &AppState,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
-    auth_pubkey: &mut Option<String>,
-    auth_challenge: &mut Option<String>,
+    auth_state: &mut AuthSessionState,
     arr: &[serde_json::Value],
 ) -> Result<()> {
     let event_value = arr.get(1).ok_or_else(|| anyhow!("missing auth event"))?;
@@ -341,7 +362,7 @@ async fn handle_auth_message(
     }
     let challenge = raw.first_tag_value("challenge");
     let relay_tag = raw.first_tag_value("relay");
-    if auth_challenge.as_deref() != challenge.as_deref() {
+    if auth_state.challenge.as_deref() != challenge.as_deref() {
         send_ok(sender, &raw.id, false, "auth-required: challenge mismatch").await?;
         metrics::inc_auth_failure(super::SERVICE_NAME);
         return Ok(());
@@ -360,8 +381,12 @@ async fn handle_auth_message(
         return Ok(());
     }
 
-    *auth_pubkey = Some(raw.pubkey.clone());
-    *auth_challenge = None;
+    auth_state.pubkey = Some(raw.pubkey.clone());
+    auth_state.challenge = None;
+    if auth_state.is_unauthenticated_connection {
+        metrics::dec_ws_unauthenticated_connections(super::SERVICE_NAME);
+        auth_state.is_unauthenticated_connection = false;
+    }
     send_ok(sender, &raw.id, true, "").await?;
     metrics::inc_auth_success(super::SERVICE_NAME);
     Ok(())

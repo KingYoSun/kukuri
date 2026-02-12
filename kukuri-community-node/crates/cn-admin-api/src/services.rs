@@ -12,6 +12,7 @@ use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
 const SECRET_CONFIG_PREVIEW_LIMIT: usize = 3;
+const RELAY_SERVICE_KEY: &str = "relay";
 
 #[derive(Serialize, ToSchema)]
 pub struct ServiceInfo {
@@ -484,16 +485,20 @@ pub(crate) async fn poll_health_once(state: &AppState) {
         let result = state.health_client.get(url).send().await;
         let (status, details) = match result {
             Ok(resp) => {
+                let mut details = serde_json::json!({ "status": resp.status().as_u16() });
+                if service.eq_ignore_ascii_case(RELAY_SERVICE_KEY) {
+                    if let Value::Object(details_map) = &mut details {
+                        details_map.insert(
+                            "auth_transition".to_string(),
+                            collect_relay_auth_transition_details(&state.health_client, url).await,
+                        );
+                    }
+                }
+
                 if resp.status().is_success() {
-                    (
-                        "healthy".to_string(),
-                        Some(serde_json::json!({ "status": resp.status().as_u16() })),
-                    )
+                    ("healthy".to_string(), Some(details))
                 } else {
-                    (
-                        "degraded".to_string(),
-                        Some(serde_json::json!({ "status": resp.status().as_u16() })),
-                    )
+                    ("degraded".to_string(), Some(details))
                 }
             }
             Err(err) => (
@@ -511,6 +516,148 @@ pub(crate) async fn poll_health_once(state: &AppState) {
         .execute(&state.pool)
         .await;
     }
+}
+
+async fn collect_relay_auth_transition_details(
+    health_client: &reqwest::Client,
+    health_url: &str,
+) -> Value {
+    let metrics_url = metrics_url_from_health_url(health_url);
+    let response = match health_client.get(&metrics_url).send().await {
+        Ok(response) => response,
+        Err(err) => {
+            return serde_json::json!({
+                "metrics_url": metrics_url,
+                "metrics_error": err.to_string(),
+            });
+        }
+    };
+
+    let metrics_status = response.status().as_u16();
+    if !response.status().is_success() {
+        return serde_json::json!({
+            "metrics_url": metrics_url,
+            "metrics_status": metrics_status,
+            "metrics_error": format!("relay metrics status {}", metrics_status),
+        });
+    }
+
+    let payload = match response.text().await {
+        Ok(payload) => payload,
+        Err(err) => {
+            return serde_json::json!({
+                "metrics_url": metrics_url,
+                "metrics_status": metrics_status,
+                "metrics_error": err.to_string(),
+            });
+        }
+    };
+
+    let ws_connections = parse_prometheus_metric_sum(&payload, "ws_connections", &[])
+        .map(|value| value.round() as i64);
+    let ws_unauthenticated_connections =
+        parse_prometheus_metric_sum(&payload, "ws_unauthenticated_connections", &[])
+            .map(|value| value.round() as i64);
+    let ingest_rejected_auth_total =
+        parse_prometheus_metric_sum(&payload, "ingest_rejected_total", &[("reason", "auth")])
+            .map(|value| value.round() as i64);
+    let ws_auth_disconnect_timeout_total = parse_prometheus_metric_sum(
+        &payload,
+        "ws_auth_disconnect_total",
+        &[("reason", "timeout")],
+    )
+    .map(|value| value.round() as i64);
+    let ws_auth_disconnect_deadline_total = parse_prometheus_metric_sum(
+        &payload,
+        "ws_auth_disconnect_total",
+        &[("reason", "deadline")],
+    )
+    .map(|value| value.round() as i64);
+
+    serde_json::json!({
+        "metrics_url": metrics_url,
+        "metrics_status": metrics_status,
+        "ws_connections": ws_connections,
+        "ws_unauthenticated_connections": ws_unauthenticated_connections,
+        "ingest_rejected_auth_total": ingest_rejected_auth_total,
+        "ws_auth_disconnect_timeout_total": ws_auth_disconnect_timeout_total,
+        "ws_auth_disconnect_deadline_total": ws_auth_disconnect_deadline_total,
+    })
+}
+
+fn metrics_url_from_health_url(health_url: &str) -> String {
+    if let Some(prefix) = health_url.strip_suffix("/healthz") {
+        return format!("{prefix}/metrics");
+    }
+    let trimmed = health_url.trim_end_matches('/');
+    format!("{trimmed}/metrics")
+}
+
+fn parse_prometheus_metric_sum(
+    payload: &str,
+    metric_name: &str,
+    required_labels: &[(&str, &str)],
+) -> Option<f64> {
+    let mut total = 0.0_f64;
+    let mut found = false;
+
+    for line in payload.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || !trimmed.starts_with(metric_name) {
+            continue;
+        }
+
+        let boundary = trimmed.as_bytes().get(metric_name.len()).copied();
+        if boundary != Some(b'{') && boundary != Some(b' ') {
+            continue;
+        }
+
+        let (labels_section, value_section) = if boundary == Some(b'{') {
+            let Some(end_index) = trimmed.find('}') else {
+                continue;
+            };
+            let labels = &trimmed[metric_name.len() + 1..end_index];
+            let value = trimmed[end_index + 1..].trim_start();
+            (Some(labels), value)
+        } else {
+            (None, trimmed[metric_name.len()..].trim_start())
+        };
+
+        if !metric_line_matches_labels(labels_section, required_labels) {
+            continue;
+        }
+
+        if let Some(value_token) = value_section.split_ascii_whitespace().next() {
+            if let Ok(value) = value_token.parse::<f64>() {
+                total += value;
+                found = true;
+            }
+        }
+    }
+
+    if found {
+        Some(total)
+    } else {
+        None
+    }
+}
+
+fn metric_line_matches_labels(
+    labels_section: Option<&str>,
+    required_labels: &[(&str, &str)],
+) -> bool {
+    if required_labels.is_empty() {
+        return true;
+    }
+
+    let Some(labels_section) = labels_section else {
+        return false;
+    };
+
+    required_labels.iter().all(|(key, value)| {
+        let token = format!("{key}=\"{value}\"");
+        labels_section.contains(&token)
+    })
 }
 
 #[cfg(test)]
@@ -558,5 +705,33 @@ mod tests {
         }));
 
         assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn parse_prometheus_metric_sum_filters_labels_and_ignores_created_suffix() {
+        let payload = r#"
+# HELP ingest_rejected_total Total ingest messages rejected
+# TYPE ingest_rejected_total counter
+ingest_rejected_total{service="cn-relay",reason="auth"} 5
+ingest_rejected_total{service="cn-relay",reason="ratelimit"} 7
+ingest_rejected_total_created{service="cn-relay",reason="auth"} 1738809600
+"#;
+
+        let auth_total =
+            parse_prometheus_metric_sum(payload, "ingest_rejected_total", &[("reason", "auth")]);
+        let all_total = parse_prometheus_metric_sum(payload, "ingest_rejected_total", &[]);
+
+        assert_eq!(auth_total, Some(5.0));
+        assert_eq!(all_total, Some(12.0));
+    }
+
+    #[test]
+    fn parse_prometheus_metric_sum_handles_metrics_without_labels() {
+        let payload = r#"
+ws_connections{service="cn-relay"} 3
+ws_connections{service="cn-relay"} 4
+"#;
+        let total = parse_prometheus_metric_sum(payload, "ws_connections", &[]);
+        assert_eq!(total, Some(7.0));
     }
 }
