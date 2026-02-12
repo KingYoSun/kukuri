@@ -163,6 +163,14 @@
 - [x] `cn-user-api`: `billing_usage_metering.md` の `trust.requests` クォータ要件に対し、`/v1/trust/report-based` と `/v1/trust/communication-density` の `402 QUOTA_EXCEEDED` + `X-Request-Id` 冪等挙動の契約テストを追加する（既存の search/trending/report と同等粒度）。
 - [x] Admin Console: 認証導線の回帰を防ぐため、`LoginPage` / `App` のセッションブートストラップ（`/v1/admin/auth/me`）・ログイン成功/失敗・ログアウト後遷移の UI テストを追加する。
 
+## 未実装/不足事項（2026年02月12日 追加監査追記）
+
+- [ ] `cn-bootstrap`: `services_bootstrap.md` の 39000/39001 配布経路要件（gossip/DHT を発見ヒントとして併用）に合わせ、HTTP配布（DB正）に加えて「更新ヒントの publish 経路」を実装する。少なくとも publish 成功/失敗時のメトリクスと統合テスト（通知受信→HTTP再取得）を追加する。
+- [ ] `cn-relay`: `ops_runbook.md` の `/healthz` ready 要件に合わせ、DB到達性だけでなく relay 依存（gossip 参加状態・topic購読同期状態）の劣化を `degraded/unavailable` として返せるようにする。あわせて `/healthz` 契約テストを拡張する。
+- [ ] `cn-relay`: `services_relay.md` / `topic_subscription_design.md` の REQ 制約（`#t` 必須・filter上限・limit上限）に対して、`filters.rs` の単体テストを追加し、拒否理由（`missing #t filter` / `too many filters` / `too many filter values`）の互換を固定する。
+- [ ] `cn-user-api`: `rate_limit_design.md` の 429 契約（`RATE_LIMITED` + `Retry-After`）に対する回帰テストが不足しているため、`/v1/auth/challenge` `/v1/auth/verify` `/v1/bootstrap/*` と protected API の境界テストを追加する。
+- [ ] OpenAPI運用: `api_server_stack.md` の「OpenAPI 生成物を CI で差分検知」要件に合わせ、`apps/admin-console/openapi/*.json` と `src/generated/admin-api.ts` の更新漏れを検知する CI ジョブ（生成→`git diff --exit-code`）を追加する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
