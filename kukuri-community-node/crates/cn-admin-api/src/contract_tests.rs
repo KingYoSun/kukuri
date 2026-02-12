@@ -418,6 +418,93 @@ async fn insert_audit_log(
     .expect("insert audit log");
 }
 
+async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS cn_admin.test_audit_failures (
+            failure_id BIGSERIAL PRIMARY KEY,
+            action TEXT NOT NULL,
+            target TEXT NOT NULL,
+            diff_filter JSONB NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create test_audit_failures table");
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE FUNCTION cn_admin.fail_audit_for_test()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                  FROM cn_admin.test_audit_failures fail
+                 WHERE fail.action = NEW.action
+                   AND fail.target = NEW.target
+                   AND (
+                       fail.diff_filter IS NULL
+                       OR COALESCE(NEW.diff_json, '{}'::jsonb) @> fail.diff_filter
+                   )
+            ) THEN
+                RAISE EXCEPTION 'forced audit failure for contract test';
+            END IF;
+            RETURN NEW;
+        END;
+        $$;
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create fail_audit_for_test function");
+
+    sqlx::query("DROP TRIGGER IF EXISTS test_audit_failures_trigger ON cn_admin.audit_logs")
+        .execute(pool)
+        .await
+        .expect("drop test_audit_failures_trigger");
+    sqlx::query(
+        r#"
+        CREATE TRIGGER test_audit_failures_trigger
+        BEFORE INSERT ON cn_admin.audit_logs
+        FOR EACH ROW
+        EXECUTE FUNCTION cn_admin.fail_audit_for_test()
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create test_audit_failures_trigger");
+}
+
+async fn register_audit_failure(
+    pool: &Pool<Postgres>,
+    action: &str,
+    target: &str,
+    diff_filter: Option<Value>,
+) {
+    ensure_audit_failure_trigger(pool).await;
+    sqlx::query(
+        "INSERT INTO cn_admin.test_audit_failures (action, target, diff_filter) VALUES ($1, $2, $3)",
+    )
+    .bind(action)
+    .bind(target)
+    .bind(diff_filter)
+    .execute(pool)
+    .await
+    .expect("insert test audit failure");
+}
+
+fn assert_audit_log_required(status: StatusCode, payload: &Value) {
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("AUDIT_LOG_ERROR")
+    );
+}
+
 async fn insert_export_request(
     pool: &Pool<Postgres>,
     export_request_id: &str,
@@ -1149,6 +1236,262 @@ async fn auth_contract_login_me_logout_success() {
         .await
         .expect("response");
     assert_eq!(me_after_logout_response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn admin_mutations_fail_when_audit_log_write_fails() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let app = Router::new()
+        .route("/v1/admin/auth/login", post(auth::login))
+        .route(
+            "/v1/admin/services/{service}/config",
+            put(services::update_service_config),
+        )
+        .route("/v1/admin/policies", post(policies::create_policy))
+        .route(
+            "/v1/admin/subscriptions/{subscriber_pubkey}",
+            put(subscriptions::upsert_subscription),
+        )
+        .route(
+            "/v1/admin/moderation/rules/test",
+            post(moderation::test_rule),
+        )
+        .route(
+            "/v1/admin/trust/schedules/{job_type}",
+            put(trust::update_schedule),
+        )
+        .route(
+            "/v1/admin/access-control/invites",
+            post(access_control::issue_invite),
+        )
+        .route(
+            "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry",
+            post(dsar::retry_job),
+        )
+        .route("/v1/reindex", post(reindex::enqueue_reindex))
+        .with_state(state.clone());
+
+    let (login_admin_user_id, login_username) =
+        insert_admin_user(&state.pool, "audit-required").await;
+    register_audit_failure(
+        &state.pool,
+        "admin.login",
+        &format!("admin_user:{login_admin_user_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/auth/login",
+        json!({
+            "username": login_username,
+            "password": "audit-required"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let service = format!("contract-service-{}", Uuid::new_v4().simple());
+    register_audit_failure(
+        &state.pool,
+        "service_config.update",
+        &format!("service:{service}"),
+        None,
+    )
+    .await;
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/services/{service}/config"),
+        json!({
+            "config_json": {
+                "enabled": true,
+                "token": format!("token-{}", Uuid::new_v4().simple())
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let policy_type = format!("terms-{}", Uuid::new_v4().simple());
+    let policy_version = "v-audit-fail";
+    let policy_locale = "ja-JP";
+    register_audit_failure(
+        &state.pool,
+        "policy.create",
+        &format!("policy:{policy_type}:{policy_version}:{policy_locale}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/policies",
+        json!({
+            "policy_type": policy_type,
+            "version": policy_version,
+            "locale": policy_locale,
+            "title": "監査ログ必須テスト",
+            "content_md": "must fail when audit write fails"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let plan_id = format!("audit-plan-{}", Uuid::new_v4().simple());
+    sqlx::query("INSERT INTO cn_user.plans (plan_id, name, is_active) VALUES ($1, $2, TRUE)")
+        .bind(&plan_id)
+        .bind("Audit Plan")
+        .execute(&state.pool)
+        .await
+        .expect("insert plan");
+    let subscriber_pubkey = Keys::generate().public_key().to_hex();
+    register_audit_failure(
+        &state.pool,
+        "subscription.update",
+        &format!("subscription:{subscriber_pubkey}"),
+        None,
+    )
+    .await;
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/subscriptions/{subscriber_pubkey}"),
+        json!({
+            "plan_id": plan_id,
+            "status": "active"
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let sample_pubkey = Keys::generate().public_key().to_hex();
+    let sample_event_id = format!("event-{}", Uuid::new_v4().simple());
+    register_audit_failure(
+        &state.pool,
+        "moderation_rule.test",
+        &format!("rule-test:{sample_event_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/moderation/rules/test",
+        json!({
+            "conditions": {
+                "kinds": [1],
+                "content_keywords": ["spam"]
+            },
+            "action": {
+                "label": "spam",
+                "confidence": 0.9,
+                "exp_seconds": 3600,
+                "policy_url": "https://example.com/policy",
+                "policy_ref": "policy:spam:v1"
+            },
+            "sample": {
+                "event_id": sample_event_id,
+                "pubkey": sample_pubkey,
+                "kind": 1,
+                "content": "spam sample",
+                "tags": []
+            }
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let trust_interval = 7777_i64;
+    register_audit_failure(
+        &state.pool,
+        "trust.schedule.update",
+        "trust:schedule:report_based",
+        Some(json!({
+            "interval_seconds": trust_interval,
+            "is_enabled": true
+        })),
+    )
+    .await;
+    let (status, payload) = put_json(
+        app.clone(),
+        "/v1/admin/trust/schedules/report_based",
+        json!({
+            "interval_seconds": trust_interval,
+            "is_enabled": true
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let invite_nonce = format!("invite-{}", Uuid::new_v4().simple());
+    register_audit_failure(
+        &state.pool,
+        "access_control.invite.issue",
+        &format!("invite:{invite_nonce}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/access-control/invites",
+        json!({
+            "topic_id": format!("kukuri:topic:audit-fail:{}", Uuid::new_v4()),
+            "scope": "invite",
+            "expires_in_seconds": 3600,
+            "max_uses": 1,
+            "nonce": invite_nonce
+        }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let export_request_id = Uuid::new_v4().to_string();
+    let exporter_pubkey = Keys::generate().public_key().to_hex();
+    insert_export_request(
+        &state.pool,
+        &export_request_id,
+        &exporter_pubkey,
+        "failed",
+        Some("initial failure"),
+    )
+    .await;
+    register_audit_failure(
+        &state.pool,
+        "dsar.job.retry",
+        &format!("dsar:export:{export_request_id}"),
+        None,
+    )
+    .await;
+    let (status, payload) = post_json(
+        app.clone(),
+        &format!("/v1/admin/personal-data-jobs/export/{export_request_id}/retry"),
+        json!({}),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
+
+    let reindex_topic_id = format!("kukuri:topic:reindex-audit-fail:{}", Uuid::new_v4());
+    register_audit_failure(
+        &state.pool,
+        "index.reindex.request",
+        "index:reindex",
+        Some(json!({ "topic_id": reindex_topic_id })),
+    )
+    .await;
+    let (status, payload) = post_json(
+        app,
+        "/v1/reindex",
+        json!({ "topic_id": reindex_topic_id }),
+        &session_id,
+    )
+    .await;
+    assert_audit_log_required(status, &payload);
 }
 
 #[tokio::test]

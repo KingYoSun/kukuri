@@ -45,7 +45,7 @@ pub async fn enqueue_reindex(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     let diff = json!({ "topic_id": topic_id });
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "index.reindex.request",
@@ -53,8 +53,7 @@ pub async fn enqueue_reindex(
         Some(diff),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     sqlx::query("NOTIFY cn_index_reindex, $1")
         .bind(&job_id)

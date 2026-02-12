@@ -91,7 +91,7 @@ pub async fn login(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin_user_id,
         "admin.login",
@@ -99,8 +99,7 @@ pub async fn login(
         None,
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
         .http_only(true)

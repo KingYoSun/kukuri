@@ -114,7 +114,7 @@ pub async fn create_policy(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "policy.create",
@@ -122,8 +122,7 @@ pub async fn create_policy(
         Some(serde_json::json!({ "title": payload.title })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     let row = sqlx::query(
         "SELECT policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current          FROM cn_admin.policies WHERE policy_id = $1",
@@ -166,7 +165,7 @@ pub async fn update_policy(
         ));
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "policy.update",
@@ -174,8 +173,7 @@ pub async fn update_policy(
         Some(serde_json::json!({ "title": payload.title })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     let row = sqlx::query(
         "SELECT policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current          FROM cn_admin.policies WHERE policy_id = $1",
@@ -217,7 +215,7 @@ pub async fn publish_policy(
         ));
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "policy.publish",
@@ -225,8 +223,7 @@ pub async fn publish_policy(
         None,
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     let row = sqlx::query(
         "SELECT policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current          FROM cn_admin.policies WHERE policy_id = $1",
@@ -298,7 +295,7 @@ pub async fn make_current_policy(
 
     tx.commit().await.ok();
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "policy.make_current",
@@ -306,8 +303,7 @@ pub async fn make_current_policy(
         None,
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     let row = sqlx::query(
         "SELECT policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current          FROM cn_admin.policies WHERE policy_id = $1",

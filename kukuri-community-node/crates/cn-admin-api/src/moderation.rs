@@ -220,7 +220,7 @@ pub async fn create_rule(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "moderation_rule.create",
@@ -235,8 +235,7 @@ pub async fn create_rule(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     fetch_rule(&state.pool, &rule_id).await.map(Json)
 }
@@ -280,7 +279,7 @@ pub async fn update_rule(
         ));
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "moderation_rule.update",
@@ -295,8 +294,7 @@ pub async fn update_rule(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     fetch_rule(&state.pool, &rule_id).await.map(Json)
 }
@@ -328,7 +326,7 @@ pub async fn delete_rule(
         ));
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "moderation_rule.delete",
@@ -336,8 +334,7 @@ pub async fn delete_rule(
         None,
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(json!({ "status": "deleted" })))
 }
@@ -374,7 +371,7 @@ pub async fn test_rule(
         None
     };
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "moderation_rule.test",
@@ -393,8 +390,7 @@ pub async fn test_rule(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(RuleTestResponse {
         matched,
@@ -597,7 +593,7 @@ pub async fn create_label(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "moderation_label.manual",
@@ -613,8 +609,7 @@ pub async fn create_label(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(
         json!({ "label_id": label_event.id, "status": "created" }),

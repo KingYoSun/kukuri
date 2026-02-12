@@ -205,7 +205,7 @@ pub async fn approve_subscription_request(
 
     tx.commit().await.ok();
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "subscription_request.approve",
@@ -213,8 +213,7 @@ pub async fn approve_subscription_request(
         Some(serde_json::json!({ "topic_id": topic_id })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(serde_json::json!({ "status": "approved" })))
 }
@@ -242,7 +241,7 @@ pub async fn reject_subscription_request(
         ));
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "subscription_request.reject",
@@ -253,8 +252,7 @@ pub async fn reject_subscription_request(
             .map(|note| serde_json::json!({ "note": note })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(serde_json::json!({ "status": "rejected" })))
 }
@@ -309,7 +307,7 @@ pub async fn update_node_subscription(
         ));
     };
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "node_subscription.update",
@@ -317,8 +315,7 @@ pub async fn update_node_subscription(
         Some(serde_json::json!({ "enabled": payload.enabled })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
@@ -425,7 +422,7 @@ pub async fn create_plan(
 
     tx.commit().await.ok();
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "plan.create",
@@ -433,8 +430,7 @@ pub async fn create_plan(
         Some(serde_json::json!({ "name": payload.name })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(Plan {
         plan_id: payload.plan_id,
@@ -500,7 +496,7 @@ pub async fn update_plan(
 
     tx.commit().await.ok();
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "plan.update",
@@ -508,8 +504,7 @@ pub async fn update_plan(
         Some(serde_json::json!({ "name": payload.name })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(Plan {
         plan_id,
@@ -599,7 +594,7 @@ pub async fn upsert_subscription(
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "subscription.update",
@@ -607,8 +602,7 @@ pub async fn upsert_subscription(
         Some(serde_json::json!({ "plan_id": payload.plan_id, "status": payload.status })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }

@@ -252,7 +252,7 @@ pub async fn create_job(
         "job_type": job_type,
         "subject_pubkey": subject_pubkey
     });
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "trust.job.enqueue",
@@ -260,8 +260,7 @@ pub async fn create_job(
         Some(diff),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(map_job_row(row)?))
 }
@@ -324,7 +323,7 @@ pub async fn update_schedule(
         "interval_seconds": payload.interval_seconds,
         "is_enabled": payload.is_enabled
     });
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "trust.schedule.update",
@@ -332,8 +331,7 @@ pub async fn update_schedule(
         Some(diff),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(map_schedule_row(row)?))
 }

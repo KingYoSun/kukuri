@@ -121,7 +121,7 @@ pub async fn retry_job(
 
     let updated = update_job_status(&state, job_type, &job_id, STATUS_QUEUED, None).await?;
     let target = format!("dsar:{}:{}", job_type.as_str(), job_id);
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "dsar.job.retry",
@@ -132,8 +132,7 @@ pub async fn retry_job(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(updated))
 }
@@ -164,7 +163,7 @@ pub async fn cancel_job(
     )
     .await?;
     let target = format!("dsar:{}:{}", job_type.as_str(), job_id);
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "dsar.job.cancel",
@@ -176,8 +175,7 @@ pub async fn cancel_job(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(updated))
 }

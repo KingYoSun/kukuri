@@ -541,7 +541,7 @@ pub async fn issue_invite(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "access_control.invite.issue",
@@ -554,8 +554,7 @@ pub async fn issue_invite(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(map_invite_row(row)?))
 }
@@ -591,7 +590,7 @@ pub async fn revoke_invite(
         ));
     };
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "access_control.invite.revoke",
@@ -599,8 +598,7 @@ pub async fn revoke_invite(
         None,
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(map_invite_row(row)?))
 }
@@ -627,7 +625,7 @@ pub async fn rotate_epoch(
                 )
             })?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "access_control.rotate",
@@ -639,8 +637,7 @@ pub async fn rotate_epoch(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(RotateResponse {
         topic_id: summary.topic_id,
@@ -685,7 +682,7 @@ pub async fn revoke_member(
         }
     })?;
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "access_control.revoke",
@@ -698,8 +695,7 @@ pub async fn revoke_member(
         })),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     Ok(Json(RevokeResponse {
         topic_id: result.topic_id,

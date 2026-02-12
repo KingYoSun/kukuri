@@ -212,7 +212,7 @@ pub async fn update_service_config(
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
     }
 
-    cn_core::admin::log_audit(
+    crate::log_admin_audit(
         &state.pool,
         &admin.admin_user_id,
         "service_config.update",
@@ -220,8 +220,7 @@ pub async fn update_service_config(
         Some(payload.config_json.clone()),
         None,
     )
-    .await
-    .ok();
+    .await?;
 
     sqlx::query("SELECT pg_notify('cn_admin_config', $1)")
         .bind(format!("{service}:{next_version}"))

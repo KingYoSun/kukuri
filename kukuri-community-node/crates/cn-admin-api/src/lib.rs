@@ -92,6 +92,25 @@ impl IntoResponse for ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
+pub(crate) async fn log_admin_audit(
+    pool: &Pool<Postgres>,
+    actor: &str,
+    action: &str,
+    target: &str,
+    diff: Option<Value>,
+    request_id: Option<&str>,
+) -> ApiResult<()> {
+    cn_core::admin::log_audit(pool, actor, action, target, diff, request_id)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AUDIT_LOG_ERROR",
+                err.to_string(),
+            )
+        })
+}
+
 #[derive(Serialize, ToSchema)]
 pub(crate) struct HealthStatus {
     status: String,
