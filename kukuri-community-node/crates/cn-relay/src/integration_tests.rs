@@ -113,6 +113,16 @@ async fn enable_topic(pool: &Pool<Postgres>, state: &AppState, topic_id: &str) {
     topics.insert(topic_id.to_string());
 }
 
+async fn reset_topic_health_state(pool: &Pool<Postgres>, state: &AppState) {
+    sqlx::query("UPDATE cn_admin.node_subscriptions SET enabled = FALSE")
+        .execute(pool)
+        .await
+        .expect("disable node subscriptions");
+
+    state.node_topics.write().await.clear();
+    state.gossip_senders.write().await.clear();
+}
+
 async fn spawn_relay_server(state: AppState) -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let app = Router::new()
         .route("/relay", get(ws::ws_handler))
@@ -552,7 +562,8 @@ async fn healthz_contract_success_shape_compatible() {
         .await
         .expect("connect database");
     ensure_migrated(&pool).await;
-    let state = build_state(pool);
+    let state = build_state(pool.clone());
+    reset_topic_health_state(&pool, &state).await;
 
     let response = super::healthz(State(state)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
@@ -580,6 +591,56 @@ async fn healthz_contract_dependency_unavailable_shape_compatible() {
     assert_eq!(
         payload.get("status").and_then(|value| value.as_str()),
         Some("unavailable")
+    );
+}
+
+#[tokio::test]
+async fn healthz_contract_gossip_dependency_unavailable_shape_compatible() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    let state = build_state(pool.clone());
+    reset_topic_health_state(&pool, &state).await;
+
+    let topic_id = format!("kukuri:relay-healthz-gossip-it-{}", Uuid::new_v4());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let response = super::healthz(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = response_json(response).await;
+    assert_eq!(
+        payload.get("status").and_then(|value| value.as_str()),
+        Some("unavailable")
+    );
+}
+
+#[tokio::test]
+async fn healthz_contract_topic_sync_degraded_shape_compatible() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    let state = build_state(pool.clone());
+    reset_topic_health_state(&pool, &state).await;
+
+    {
+        let mut topics = state.node_topics.write().await;
+        topics.insert(format!("kukuri:relay-healthz-stale-it-{}", Uuid::new_v4()));
+    }
+
+    let response = super::healthz(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = response_json(response).await;
+    assert_eq!(
+        payload.get("status").and_then(|value| value.as_str()),
+        Some("degraded")
     );
 }
 

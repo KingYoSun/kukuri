@@ -42,6 +42,34 @@ struct HealthStatus {
     status: String,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+enum ReadyStatus {
+    Ok,
+    Degraded,
+    Unavailable,
+}
+
+impl ReadyStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Degraded => "degraded",
+            Self::Unavailable => "unavailable",
+        }
+    }
+
+    fn http_status(self) -> StatusCode {
+        match self {
+            Self::Ok => StatusCode::OK,
+            Self::Degraded | Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+        }
+    }
+
+    fn merge(self, other: Self) -> Self {
+        std::cmp::max(self, other)
+    }
+}
+
 #[derive(Clone)]
 pub struct RelayConfig {
     pub addr: SocketAddr,
@@ -147,20 +175,101 @@ pub async fn run(config: RelayConfig) -> Result<()> {
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    match db::check_ready(&state.pool).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(HealthStatus {
-                status: "ok".into(),
-            }),
-        ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthStatus {
-                status: "unavailable".into(),
-            }),
-        ),
+    let status = evaluate_relay_ready_status(&state).await;
+    (
+        status.http_status(),
+        Json(HealthStatus {
+            status: status.as_str().into(),
+        }),
+    )
+}
+
+async fn evaluate_relay_ready_status(state: &AppState) -> ReadyStatus {
+    if db::check_ready(&state.pool).await.is_err() {
+        return ReadyStatus::Unavailable;
     }
+
+    let desired_topics = match load_enabled_topics(&state.pool).await {
+        Ok(topics) => topics,
+        Err(err) => {
+            tracing::warn!(error = %err, "healthz failed to load enabled topics");
+            return ReadyStatus::Unavailable;
+        }
+    };
+
+    let node_topics = state.node_topics.read().await.clone();
+    let gossip_topics = {
+        let senders = state.gossip_senders.read().await;
+        senders.keys().cloned().collect::<HashSet<_>>()
+    };
+
+    ReadyStatus::Ok
+        .merge(evaluate_gossip_participation(
+            &desired_topics,
+            &gossip_topics,
+        ))
+        .merge(evaluate_topic_sync(
+            &desired_topics,
+            &node_topics,
+            &gossip_topics,
+        ))
+}
+
+fn evaluate_gossip_participation(
+    desired_topics: &HashSet<String>,
+    gossip_topics: &HashSet<String>,
+) -> ReadyStatus {
+    if desired_topics.is_empty() {
+        return if gossip_topics.is_empty() {
+            ReadyStatus::Ok
+        } else {
+            ReadyStatus::Degraded
+        };
+    }
+
+    let matched_topics = desired_topics.intersection(gossip_topics).count();
+    if matched_topics == 0 {
+        ReadyStatus::Unavailable
+    } else if matched_topics < desired_topics.len() || gossip_topics.len() != desired_topics.len() {
+        ReadyStatus::Degraded
+    } else {
+        ReadyStatus::Ok
+    }
+}
+
+fn evaluate_topic_sync(
+    desired_topics: &HashSet<String>,
+    node_topics: &HashSet<String>,
+    gossip_topics: &HashSet<String>,
+) -> ReadyStatus {
+    if desired_topics == node_topics && desired_topics == gossip_topics {
+        return ReadyStatus::Ok;
+    }
+
+    if desired_topics.is_empty() {
+        return ReadyStatus::Degraded;
+    }
+
+    let synced_node_topics = desired_topics.intersection(node_topics).count();
+    let synced_gossip_topics = desired_topics.intersection(gossip_topics).count();
+    if synced_node_topics == 0 || synced_gossip_topics == 0 {
+        ReadyStatus::Unavailable
+    } else {
+        ReadyStatus::Degraded
+    }
+}
+
+async fn load_enabled_topics(pool: &Pool<Postgres>) -> Result<HashSet<String>, sqlx::Error> {
+    let rows = sqlx::query("SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE")
+        .fetch_all(pool)
+        .await?;
+
+    let mut topics = HashSet::new();
+    for row in rows {
+        let topic_id: String = row.try_get("topic_id")?;
+        topics.insert(topic_id);
+    }
+    Ok(topics)
 }
 
 async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
