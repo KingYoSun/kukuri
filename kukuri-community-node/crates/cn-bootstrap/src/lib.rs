@@ -617,6 +617,23 @@ mod tests {
         String::from_utf8(body.to_vec()).expect("response body as utf-8")
     }
 
+    fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
+        let found = body.lines().any(|line| {
+            if !line.starts_with(metric_name) {
+                return false;
+            }
+            labels.iter().all(|(key, value)| {
+                let token = format!("{key}=\"{value}\"");
+                line.contains(&token)
+            })
+        });
+
+        assert!(
+            found,
+            "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
+        );
+    }
+
     async fn spawn_dependency_health_server(
         dependency_status: Arc<AtomicU16>,
     ) -> (String, tokio::task::JoinHandle<()>) {
@@ -910,6 +927,15 @@ mod tests {
 
     #[tokio::test]
     async fn metrics_contract_prometheus_content_type_shape_compatible() {
+        let route = "/metrics-contract";
+        metrics::record_http_request(
+            SERVICE_NAME,
+            "GET",
+            route,
+            200,
+            std::time::Duration::from_millis(5),
+        );
+
         let response = metrics_endpoint().await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
         let content_type = response
@@ -926,5 +952,25 @@ mod tests {
                 anyhow!("metrics payload does not contain cn-bootstrap service gauge:\n{preview}")
             );
         }
+        assert_metric_line(
+            &body,
+            "http_requests_total",
+            &[
+                ("service", SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
+        );
+        assert_metric_line(
+            &body,
+            "http_request_duration_seconds_bucket",
+            &[
+                ("service", SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
+        );
     }
 }

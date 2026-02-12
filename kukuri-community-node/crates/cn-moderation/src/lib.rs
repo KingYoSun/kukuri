@@ -1306,6 +1306,23 @@ mod tests {
         String::from_utf8(bytes.to_vec()).expect("metrics response is utf-8")
     }
 
+    fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
+        let found = body.lines().any(|line| {
+            if !line.starts_with(metric_name) {
+                return false;
+            }
+            labels.iter().all(|(key, value)| {
+                let token = format!("{key}=\"{value}\"");
+                line.contains(&token)
+            })
+        });
+
+        assert!(
+            found,
+            "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
+        );
+    }
+
     async fn insert_event(pool: &Pool<Postgres>, event: &nostr::RawEvent, topic_id: &str) {
         sqlx::query(
             "INSERT INTO cn_relay.events              (event_id, pubkey, kind, created_at, tags, content, sig, raw_json, ingested_at, is_deleted, is_ephemeral, is_current, replaceable_key, addressable_key, expires_at)              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), FALSE, FALSE, TRUE, NULL, NULL, NULL)              ON CONFLICT (event_id) DO NOTHING",
@@ -1865,6 +1882,14 @@ mod tests {
             metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
             std::time::Duration::from_millis(10),
         );
+        let route = "/metrics-contract";
+        metrics::record_http_request(
+            SERVICE_NAME,
+            "GET",
+            route,
+            200,
+            std::time::Duration::from_millis(5),
+        );
 
         let response = metrics_endpoint(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1902,6 +1927,26 @@ mod tests {
                 "outbox_consumer_batch_size_count{consumer=\"moderation-v1\",service=\"cn-moderation\"} "
             ),
             "metrics body did not contain outbox_consumer_batch_size labels for cn-moderation: {body}"
+        );
+        assert_metric_line(
+            &body,
+            "http_requests_total",
+            &[
+                ("service", SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
+        );
+        assert_metric_line(
+            &body,
+            "http_request_duration_seconds_bucket",
+            &[
+                ("service", SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
         );
     }
 }

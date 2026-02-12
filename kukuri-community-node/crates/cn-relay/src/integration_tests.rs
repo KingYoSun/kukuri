@@ -603,6 +603,14 @@ async fn metrics_contract_required_metrics_shape_compatible() {
     metrics::inc_gossip_sent(super::SERVICE_NAME);
     metrics::inc_dedupe_hit(super::SERVICE_NAME);
     metrics::inc_dedupe_miss(super::SERVICE_NAME);
+    let route = "/metrics-contract";
+    metrics::record_http_request(
+        super::SERVICE_NAME,
+        "GET",
+        route,
+        200,
+        std::time::Duration::from_millis(5),
+    );
 
     let state = build_state(pool);
     let response = super::metrics_endpoint(State(state)).await.into_response();
@@ -646,6 +654,26 @@ async fn metrics_contract_required_metrics_shape_compatible() {
         &body,
         "dedupe_misses_total",
         &[("service", super::SERVICE_NAME)],
+    );
+    assert_metric_line(
+        &body,
+        "http_requests_total",
+        &[
+            ("service", super::SERVICE_NAME),
+            ("route", route),
+            ("method", "GET"),
+            ("status", "200"),
+        ],
+    );
+    assert_metric_line(
+        &body,
+        "http_request_duration_seconds_bucket",
+        &[
+            ("service", super::SERVICE_NAME),
+            ("route", route),
+            ("method", "GET"),
+            ("status", "200"),
+        ],
     );
 }
 

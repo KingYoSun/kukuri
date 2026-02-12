@@ -98,6 +98,23 @@ async fn response_text(response: axum::http::Response<axum::body::Body>) -> Stri
     String::from_utf8(bytes.to_vec()).expect("metrics response is utf-8")
 }
 
+fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
+    let found = body.lines().any(|line| {
+        if !line.starts_with(metric_name) {
+            return false;
+        }
+        labels.iter().all(|(key, value)| {
+            let token = format!("{key}=\"{value}\"");
+            line.contains(&token)
+        })
+    });
+
+    assert!(
+        found,
+        "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
+    );
+}
+
 fn runtime_config_json() -> serde_json::Value {
     json!({
         "enabled": true,
@@ -631,6 +648,14 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
         metrics::OUTBOX_CONSUMER_RESULT_SUCCESS,
         std::time::Duration::from_millis(10),
     );
+    let route = "/metrics-contract";
+    metrics::record_http_request(
+        SERVICE_NAME,
+        "GET",
+        route,
+        200,
+        std::time::Duration::from_millis(5),
+    );
 
     let response = metrics_endpoint(State(state)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
@@ -668,5 +693,25 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
             "outbox_consumer_batch_size_count{consumer=\"trust-v1\",service=\"cn-trust\"} "
         ),
         "metrics body did not contain outbox_consumer_batch_size labels for cn-trust: {body}"
+    );
+    assert_metric_line(
+        &body,
+        "http_requests_total",
+        &[
+            ("service", SERVICE_NAME),
+            ("route", route),
+            ("method", "GET"),
+            ("status", "200"),
+        ],
+    );
+    assert_metric_line(
+        &body,
+        "http_request_duration_seconds_bucket",
+        &[
+            ("service", SERVICE_NAME),
+            ("route", route),
+            ("method", "GET"),
+            ("status", "200"),
+        ],
     );
 }

@@ -147,7 +147,7 @@
   - CI: `.github/workflows/nightly.yml` に `community-node-recovery-drill`（UTC 毎月1日実行ガード + `workflow_dispatch` 手動実行）を追加。
   - 検証: `latest-summary.json` の `status=passed`、`baseline_event_count > 0`、`after_corruption_event_count == 0`、`after_restore_event_count == baseline_event_count` を `jq` で検証。
   - artefact: `nightly.community-node-recovery-logs`（`tmp/logs/community-node-recovery`）と `nightly.community-node-recovery-reports`（`test-results/community-node-recovery`）を収集。
-- [ ] Runbook の共通必須メトリクス（`http_requests_total` / `http_request_duration_seconds_bucket`）を各サービスの `/metrics` 契約テストで固定し、`service,route,method,status` ラベル互換を保証する。
+- [x] Runbook の共通必須メトリクス（`http_requests_total` / `http_request_duration_seconds_bucket`）を各サービスの `/metrics` 契約テストで固定し、`service,route,method,status` ラベル互換を保証する。
 - [ ] `access_control_design.md` の「v1 はノード側に専用DBを持たない」記述と現行実装（membership/invite 管理 API + Admin Console）の整合を取り、P2P-only と運用補助データの境界（正とする SoT）を明文化する。
 
 ## 参照（設計）

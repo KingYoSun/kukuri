@@ -1074,6 +1074,23 @@ mod api_contract_tests {
         0.0
     }
 
+    fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
+        let found = body.lines().any(|line| {
+            if !line.starts_with(metric_name) {
+                return false;
+            }
+            labels.iter().all(|(key, value)| {
+                let token = format!("{key}=\"{value}\"");
+                line.contains(&token)
+            })
+        });
+
+        assert!(
+            found,
+            "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
+        );
+    }
+
     async fn insert_current_policy(
         pool: &Pool<Postgres>,
         policy_type: &str,
@@ -1653,6 +1670,15 @@ mod api_contract_tests {
 
     #[tokio::test]
     async fn metrics_contract_prometheus_content_type_shape_compatible() {
+        let route = "/metrics-contract";
+        cn_core::metrics::record_http_request(
+            crate::SERVICE_NAME,
+            "GET",
+            route,
+            200,
+            std::time::Duration::from_millis(5),
+        );
+
         let app = Router::new().route("/metrics", get(crate::metrics_endpoint));
         let (status, content_type, body) = get_text_public(app, "/metrics").await;
 
@@ -1661,6 +1687,26 @@ mod api_contract_tests {
         assert!(
             body.contains("cn_up{service=\"cn-user-api\"} 1"),
             "metrics body did not contain cn_up for cn-user-api: {body}"
+        );
+        assert_metric_line(
+            &body,
+            "http_requests_total",
+            &[
+                ("service", crate::SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
+        );
+        assert_metric_line(
+            &body,
+            "http_request_duration_seconds_bucket",
+            &[
+                ("service", crate::SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
         );
     }
 
