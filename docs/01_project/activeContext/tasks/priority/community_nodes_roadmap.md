@@ -192,6 +192,12 @@
 - [x] `cn-user-api` 契約テスト: `auth_transition_design.md` / `user_api.md` の要件に合わせ、bootstrap 認証必須モードで「認証済みだが未同意」の場合に `428 CONSENT_REQUIRED` を返すことを `GET /v1/bootstrap/nodes` と `GET /v1/bootstrap/topics/{topic_id}/services` で検証する（既存の `401 + WWW-Authenticate` テストとの境界を固定）。
 - [x] `cn-cli`: `cn_cli_migration.md` の「有用サブコマンド維持 + daemon 起動対応」に対する回帰防止として、`migrate` / `config seed` / `admin bootstrap|reset-password` / `openapi export` / `p2p` 系の統合スモークテストを追加する。あわせて `cn bootstrap daemon` / `cn relay daemon` 形式をサポートするか、現行コマンド（`cn bootstrap` / `cn relay`）を正とするよう設計ドキュメントを更新して整合を取る。
 
+## 未実装/不足事項（2026年02月13日 監査追記・追加）
+
+- [ ] `cn-relay`: `services_relay.md` の REQ 制約にある `since/until` 時間範囲の上限を実装する（`filters.rs` は現状 `#t`/filter数/値数/`limit` のみ制約し、時間範囲は未制約）。`since > until`・過大lookback・過大window の拒否理由を固定し、unit/integration テストを追加する。
+- [ ] `cn-moderation`: `outbox_notify_semantics.md` の consumer 要件（起動時catch-up、NOTIFY起床、offsetコミット、リプレイ）に対する統合テストを追加する。`load_last_seq`/`commit_last_seq`/`fetch_outbox_batch` 経路の回帰を検知できるようにし、at-least-once 前提の冪等性を検証する。
+- [ ] `cn-bootstrap` + クライアント経路: `services_bootstrap.md` の「通知受信→HTTP再取得」運用を実装側で閉じる。`pg_notify('cn_bootstrap_hint')` publish のみで止まっているため、受信側（bridge または client）の再取得トリガ実装と E2E テスト（hint受信で `/v1/bootstrap/*` キャッシュ更新）を追加する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
