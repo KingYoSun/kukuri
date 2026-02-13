@@ -171,6 +171,13 @@
 - [x] `cn-user-api`: `rate_limit_design.md` の 429 契約（`RATE_LIMITED` + `Retry-After`）に対する回帰テストが不足しているため、`/v1/auth/challenge` `/v1/auth/verify` `/v1/bootstrap/*` と protected API の境界テストを追加する。
 - [x] OpenAPI運用: `api_server_stack.md` の「OpenAPI 生成物を CI で差分検知」要件に合わせ、`apps/admin-console/openapi/*.json` と `src/generated/admin-api.ts` の更新漏れを検知する CI ジョブ（生成→`git diff --exit-code`）を追加する。
 
+## 未実装/不足事項（2026年02月13日 監査追記）
+
+- [ ] `cn-user-api`: `billing_usage_metering.md` の「メータリング/監査の整合」を満たすため、`billing::consume_quota` の `tx.commit().await.ok()` を廃止し、commit 失敗を `5xx(DB_ERROR)` として返却する（成功/超過レスポンスの誤返却を防止）。
+- [ ] `cn-user-api`: `topic_subscription_design.md` の user-level subscription 停止フローに合わせ、`delete_topic_subscription` の `tx.commit().await.ok()` を廃止し、commit 失敗時は `5xx` を返して `status=ended` を返さないようにする。
+- [ ] `cn-user-api`: 上記2件の異常系回帰テストを追加する（commit 失敗時に `200`/`402` を返さないこと、`usage_events`/`usage_counters_daily`/`topic_subscriptions`/`node_subscriptions` の副作用が残らないこと）。
+- [ ] `cn-admin-api`: `auth::logout` のセッション削除失敗を握り潰さないようにし（`DELETE cn_admin.admin_sessions ... .await.ok()` の廃止）、失敗時のレスポンス契約（`5xx`）を明文化して契約テストを追加する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
