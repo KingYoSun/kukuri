@@ -202,7 +202,13 @@ pub async fn delete_topic_subscription(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    tx.commit().await.ok();
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(json!({ "status": "ended" })))
 }
@@ -1115,6 +1121,64 @@ mod api_contract_tests {
             .execute(pool)
             .await
             .expect("drop usage_events commit failure function");
+    }
+
+    async fn install_topic_subscription_commit_failure_trigger(
+        pool: &Pool<Postgres>,
+        topic_id: &str,
+    ) -> (String, String) {
+        let suffix = Uuid::new_v4().simple().to_string();
+        let function_name = format!("force_topic_subscriptions_commit_fail_{suffix}");
+        let trigger_name = format!("force_topic_subscriptions_commit_fail_trigger_{suffix}");
+        let escaped_topic_id = topic_id.replace('\'', "''");
+
+        let create_function_sql = format!(
+            "CREATE OR REPLACE FUNCTION cn_user.{function_name}() \
+             RETURNS trigger LANGUAGE plpgsql AS $$ \
+             BEGIN \
+                 IF NEW.topic_id = '{escaped_topic_id}' AND NEW.status = 'ended' THEN \
+                     RAISE EXCEPTION 'forced topic_subscriptions commit failure for topic_id={escaped_topic_id}'; \
+                 END IF; \
+                 RETURN NULL; \
+             END; \
+             $$"
+        );
+        sqlx::query(&create_function_sql)
+            .execute(pool)
+            .await
+            .expect("create topic_subscriptions commit failure function");
+
+        let create_trigger_sql = format!(
+            "CREATE CONSTRAINT TRIGGER {trigger_name} \
+             AFTER UPDATE ON cn_user.topic_subscriptions \
+             DEFERRABLE INITIALLY DEFERRED \
+             FOR EACH ROW EXECUTE FUNCTION cn_user.{function_name}()"
+        );
+        sqlx::query(&create_trigger_sql)
+            .execute(pool)
+            .await
+            .expect("create topic_subscriptions commit failure trigger");
+
+        (trigger_name, function_name)
+    }
+
+    async fn remove_topic_subscription_commit_failure_trigger(
+        pool: &Pool<Postgres>,
+        trigger_name: &str,
+        function_name: &str,
+    ) {
+        let drop_trigger_sql =
+            format!("DROP TRIGGER IF EXISTS {trigger_name} ON cn_user.topic_subscriptions");
+        sqlx::query(&drop_trigger_sql)
+            .execute(pool)
+            .await
+            .expect("drop topic_subscriptions commit failure trigger");
+
+        let drop_function_sql = format!("DROP FUNCTION IF EXISTS cn_user.{function_name}()");
+        sqlx::query(&drop_function_sql)
+            .execute(pool)
+            .await
+            .expect("drop topic_subscriptions commit failure function");
     }
 
     fn assert_quota_exceeded_response(
@@ -2835,6 +2899,82 @@ mod api_contract_tests {
             Some("ended")
         );
         assert!(ended_row.get("ended_at").and_then(Value::as_i64).is_some());
+    }
+
+    #[tokio::test]
+    async fn topic_subscription_delete_commit_failure_returns_db_error_and_rolls_back() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = format!("kukuri:delete-commit-failure-{}", Uuid::new_v4().simple());
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        sqlx::query(
+            "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count) \
+             VALUES ($1, TRUE, 1) \
+             ON CONFLICT (topic_id) DO UPDATE \
+             SET enabled = TRUE, ref_count = 1, updated_at = NOW()",
+        )
+        .bind(&topic_id)
+        .execute(&pool)
+        .await
+        .expect("insert node subscription");
+        let (trigger_name, function_name) =
+            install_topic_subscription_commit_failure_trigger(&pool, &topic_id).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/topic-subscriptions/{topic_id}",
+                delete(delete_topic_subscription),
+            )
+            .with_state(state);
+        let (status, payload) = delete_json_with_consent_retry(
+            app,
+            &format!("/v1/topic-subscriptions/{topic_id}"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+
+        remove_topic_subscription_commit_failure_trigger(&pool, &trigger_name, &function_name)
+            .await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("DB_ERROR")
+        );
+        assert!(payload.get("status").is_none());
+
+        let subscription_row = sqlx::query(
+            "SELECT status, ended_at \
+             FROM cn_user.topic_subscriptions \
+             WHERE topic_id = $1 AND subscriber_pubkey = $2",
+        )
+        .bind(&topic_id)
+        .bind(&pubkey)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch topic subscription");
+        let status_after: String = subscription_row.get("status");
+        let ended_at_after: Option<chrono::DateTime<chrono::Utc>> =
+            subscription_row.get("ended_at");
+        assert_eq!(status_after, "active");
+        assert!(ended_at_after.is_none());
+
+        let node_row = sqlx::query(
+            "SELECT ref_count, enabled FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+        )
+        .bind(&topic_id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch node subscription");
+        let ref_count_after: i64 = node_row.get("ref_count");
+        let enabled_after: bool = node_row.get("enabled");
+        assert_eq!(ref_count_after, 1);
+        assert!(enabled_after);
     }
 
     #[tokio::test]
