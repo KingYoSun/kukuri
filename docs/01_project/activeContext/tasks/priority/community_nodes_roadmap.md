@@ -186,6 +186,12 @@
 - [x] `cn-admin-api` + `cn-relay` + Admin Console: `node_subscriptions.ingest_policy`（保持期間/容量上限/バックフィル可否）を編集・保存・反映できるように実装し、`topic_subscription_design.md` / `ingested_record_persistence_policy.md` の node-level 制御要件に合わせる（契約テスト + 統合テスト）。
 - [x] `cn-relay`: `retention` クリーンアップ（`events/event_topics`、`event_dedupe`、`events_outbox`、`deletion_tombstones`）の統合テストを追加し、保持期間ポリシーの後方互換を固定する。
 
+## 未実装/不足事項（2026年02月13日 調査追記）
+
+- [ ] `cn-user-api`: `services_bootstrap.md` の HTTP キャッシュ要件（`ETag` は event JSON/レスポンスボディのハッシュ）に合わせ、`bootstrap::respond_with_events` の `ETag` 生成を `updated_at+件数` 方式からハッシュ方式へ変更する。あわせて「件数不変・同秒更新でも `ETag` が変化する」契約テストを追加する。
+- [ ] `cn-user-api` 契約テスト: `auth_transition_design.md` / `user_api.md` の要件に合わせ、bootstrap 認証必須モードで「認証済みだが未同意」の場合に `428 CONSENT_REQUIRED` を返すことを `GET /v1/bootstrap/nodes` と `GET /v1/bootstrap/topics/{topic_id}/services` で検証する（既存の `401 + WWW-Authenticate` テストとの境界を固定）。
+- [ ] `cn-cli`: `cn_cli_migration.md` の「有用サブコマンド維持 + daemon 起動対応」に対する回帰防止として、`migrate` / `config seed` / `admin bootstrap|reset-password` / `openapi export` / `p2p` 系の統合スモークテストを追加する。あわせて `cn bootstrap daemon` / `cn relay daemon` 形式をサポートするか、現行コマンド（`cn bootstrap` / `cn relay`）を正とするよう設計ドキュメントを更新して整合を取る。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
