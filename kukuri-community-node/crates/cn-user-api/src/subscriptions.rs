@@ -3350,6 +3350,79 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn bootstrap_nodes_contract_requires_consent_when_authenticated() {
+        let state = test_state_with_bootstrap_auth_required().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let token = issue_token(&state.jwt_config, &pubkey);
+        insert_current_policy(&pool, "terms", "v1.0.0", "ja-JP", "Terms").await;
+        insert_current_policy(&pool, "privacy", "v1.0.0", "ja-JP", "Privacy").await;
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/nodes",
+                get(crate::bootstrap::get_bootstrap_nodes),
+            )
+            .with_state(state);
+        let (status, headers, payload) =
+            get_json_with_headers_and_response_headers(app, "/v1/bootstrap/nodes", &token, &[])
+                .await;
+
+        assert_eq!(status, StatusCode::PRECONDITION_REQUIRED);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("CONSENT_REQUIRED")
+        );
+        assert!(payload
+            .get("details")
+            .and_then(|details| details.get("required"))
+            .and_then(Value::as_array)
+            .map(|required| !required.is_empty())
+            .unwrap_or(false));
+        assert!(
+            headers.get(header::WWW_AUTHENTICATE).is_none(),
+            "consent-required response must not include WWW-Authenticate"
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_services_contract_requires_consent_when_authenticated() {
+        let state = test_state_with_bootstrap_auth_required().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let topic_id = format!("kukuri:bootstrap-consent-{}", Uuid::new_v4());
+        insert_current_policy(&pool, "terms", "v1.0.0", "ja-JP", "Terms").await;
+        insert_current_policy(&pool, "privacy", "v1.0.0", "ja-JP", "Privacy").await;
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(crate::bootstrap::get_bootstrap_services),
+            )
+            .with_state(state);
+        let path = format!("/v1/bootstrap/topics/{topic_id}/services");
+        let (status, headers, payload) =
+            get_json_with_headers_and_response_headers(app, &path, &token, &[]).await;
+
+        assert_eq!(status, StatusCode::PRECONDITION_REQUIRED);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("CONSENT_REQUIRED")
+        );
+        assert!(payload
+            .get("details")
+            .and_then(|details| details.get("required"))
+            .and_then(Value::as_array)
+            .map(|required| !required.is_empty())
+            .unwrap_or(false));
+        assert!(
+            headers.get(header::WWW_AUTHENTICATE).is_none(),
+            "consent-required response must not include WWW-Authenticate"
+        );
+    }
+
+    #[tokio::test]
     async fn bootstrap_services_conditional_get_and_cache_headers_contract_compatible() {
         let state = test_state().await;
         let topic_id = format!("kukuri:bootstrap-cache-{}", Uuid::new_v4());
