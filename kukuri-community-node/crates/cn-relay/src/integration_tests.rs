@@ -22,7 +22,7 @@ use iroh::protocol::Router as IrohRouter;
 use iroh::Endpoint;
 use iroh_gossip::api::{Event as GossipEvent, GossipReceiver, GossipSender};
 use iroh_gossip::{Gossip, TopicId};
-use nostr_sdk::prelude::Keys;
+use nostr_sdk::prelude::{EventBuilder, Keys, Kind, Tag, TagKind, Timestamp};
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres, Row};
@@ -528,6 +528,32 @@ async fn insert_backfill_event(
     .expect("insert relay event topic");
 }
 
+fn build_event_at(
+    keys: &Keys,
+    kind: u16,
+    tags: Vec<Vec<String>>,
+    content: String,
+    created_at: i64,
+) -> nostr::RawEvent {
+    let mut builder = EventBuilder::new(Kind::Custom(kind), content)
+        .custom_created_at(Timestamp::from_secs(created_at.max(0) as u64));
+    for tag in tags {
+        if tag.is_empty() {
+            continue;
+        }
+        let kind = TagKind::from(tag[0].as_str());
+        let values = if tag.len() > 1 {
+            tag[1..].to_vec()
+        } else {
+            Vec::new()
+        };
+        builder = builder.tag(Tag::custom(kind, values));
+    }
+    let signed = builder.sign_with_keys(keys).expect("sign event");
+    let value = serde_json::to_value(&signed).expect("event json");
+    nostr::parse_event(&value).expect("parse event")
+}
+
 fn build_access_control_event(keys: &Keys, kind: u32, topic_id: &str) -> nostr::RawEvent {
     match kind {
         KIND_KEY_ENVELOPE => {
@@ -930,6 +956,516 @@ async fn ingest_outbox_ws_gossip_integration() {
     assert_eq!(outbox_topic, topic_id);
 
     wait_for_gossip_event(&mut gossip.receiver, WAIT_TIMEOUT, &raw.id).await;
+
+    server_handle.abort();
+    let _ = timeout(WAIT_TIMEOUT, gossip.router_a.shutdown()).await;
+    let _ = timeout(WAIT_TIMEOUT, gossip.router_b.shutdown()).await;
+}
+
+#[tokio::test]
+async fn replaceable_and_addressable_tiebreak_prefers_lexicographically_smaller_event_id() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-tiebreak-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+    let (addr, server_handle) = spawn_relay_server(state).await;
+
+    let mut ws = connect_ws(addr).await;
+    let keys = Keys::generate();
+    let pubkey = keys.public_key().to_string();
+    let created_at = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+
+    let replaceable_a = build_event_at(
+        &keys,
+        10002,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        format!("replaceable-a-{}", Uuid::new_v4()),
+        created_at,
+    );
+    let replaceable_b = build_event_at(
+        &keys,
+        10002,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        format!("replaceable-b-{}", Uuid::new_v4()),
+        created_at,
+    );
+    let (replaceable_first, replaceable_second) = if replaceable_a.id > replaceable_b.id {
+        (replaceable_a, replaceable_b)
+    } else {
+        (replaceable_b, replaceable_a)
+    };
+
+    ws.send(Message::Text(
+        json!(["EVENT", replaceable_first.clone()])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send first replaceable");
+    let first_replaceable_ok =
+        wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "first replaceable ok", |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(replaceable_first.id.as_str())
+        })
+        .await;
+    assert_eq!(
+        first_replaceable_ok.get(2).and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    ws.send(Message::Text(
+        json!(["EVENT", replaceable_second.clone()])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send second replaceable");
+    let second_replaceable_ok =
+        wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "second replaceable ok", |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(replaceable_second.id.as_str())
+        })
+        .await;
+    assert_eq!(
+        second_replaceable_ok.get(2).and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let replaceable_key = format!("{pubkey}:10002");
+    let replaceable_current: String = sqlx::query_scalar(
+        "SELECT event_id FROM cn_relay.replaceable_current WHERE replaceable_key = $1",
+    )
+    .bind(&replaceable_key)
+    .fetch_one(&pool)
+    .await
+    .expect("replaceable current event");
+    assert_eq!(replaceable_current, replaceable_second.id);
+    let replaceable_first_current: bool =
+        sqlx::query_scalar("SELECT is_current FROM cn_relay.events WHERE event_id = $1")
+            .bind(&replaceable_first.id)
+            .fetch_one(&pool)
+            .await
+            .expect("first replaceable current flag");
+    assert!(!replaceable_first_current);
+    let replaceable_second_current: bool =
+        sqlx::query_scalar("SELECT is_current FROM cn_relay.events WHERE event_id = $1")
+            .bind(&replaceable_second.id)
+            .fetch_one(&pool)
+            .await
+            .expect("second replaceable current flag");
+    assert!(replaceable_second_current);
+
+    let d_tag = "profile";
+    let addressable_a = build_event_at(
+        &keys,
+        30023,
+        vec![
+            vec!["t".to_string(), topic_id.clone()],
+            vec!["d".to_string(), d_tag.to_string()],
+        ],
+        format!("addressable-a-{}", Uuid::new_v4()),
+        created_at,
+    );
+    let addressable_b = build_event_at(
+        &keys,
+        30023,
+        vec![
+            vec!["t".to_string(), topic_id.clone()],
+            vec!["d".to_string(), d_tag.to_string()],
+        ],
+        format!("addressable-b-{}", Uuid::new_v4()),
+        created_at,
+    );
+    let (addressable_first, addressable_second) = if addressable_a.id > addressable_b.id {
+        (addressable_a, addressable_b)
+    } else {
+        (addressable_b, addressable_a)
+    };
+
+    ws.send(Message::Text(
+        json!(["EVENT", addressable_first.clone()])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send first addressable");
+    let first_addressable_ok =
+        wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "first addressable ok", |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(addressable_first.id.as_str())
+        })
+        .await;
+    assert_eq!(
+        first_addressable_ok.get(2).and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    ws.send(Message::Text(
+        json!(["EVENT", addressable_second.clone()])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send second addressable");
+    let second_addressable_ok =
+        wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "second addressable ok", |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(addressable_second.id.as_str())
+        })
+        .await;
+    assert_eq!(
+        second_addressable_ok.get(2).and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    let addressable_key = format!("30023:{pubkey}:{d_tag}");
+    let addressable_current: String = sqlx::query_scalar(
+        "SELECT event_id FROM cn_relay.addressable_current WHERE addressable_key = $1",
+    )
+    .bind(&addressable_key)
+    .fetch_one(&pool)
+    .await
+    .expect("addressable current event");
+    assert_eq!(addressable_current, addressable_second.id);
+    let addressable_first_current: bool =
+        sqlx::query_scalar("SELECT is_current FROM cn_relay.events WHERE event_id = $1")
+            .bind(&addressable_first.id)
+            .fetch_one(&pool)
+            .await
+            .expect("first addressable current flag");
+    assert!(!addressable_first_current);
+    let addressable_second_current: bool =
+        sqlx::query_scalar("SELECT is_current FROM cn_relay.events WHERE event_id = $1")
+            .bind(&addressable_second.id)
+            .fetch_one(&pool)
+            .await
+            .expect("second addressable current flag");
+    assert!(addressable_second_current);
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn kind5_deletion_applies_e_and_a_targets() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-kind5-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+    let (addr, server_handle) = spawn_relay_server(state).await;
+
+    let mut ws = connect_ws(addr).await;
+    let keys = Keys::generate();
+    let pubkey = keys.public_key().to_string();
+
+    let regular = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "kind5-target-e".to_string(),
+    )
+    .expect("build regular target");
+    ws.send(Message::Text(
+        json!(["EVENT", regular.clone()]).to_string().into(),
+    ))
+    .await
+    .expect("send regular target");
+    let regular_ok = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "regular target ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(regular.id.as_str())
+    })
+    .await;
+    assert_eq!(regular_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let d_tag = "profile";
+    let addressable = nostr::build_signed_event(
+        &keys,
+        30023,
+        vec![
+            vec!["t".to_string(), topic_id.clone()],
+            vec!["d".to_string(), d_tag.to_string()],
+        ],
+        "kind5-target-a".to_string(),
+    )
+    .expect("build addressable target");
+    ws.send(Message::Text(
+        json!(["EVENT", addressable.clone()]).to_string().into(),
+    ))
+    .await
+    .expect("send addressable target");
+    let addressable_ok =
+        wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "addressable target ok", |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(addressable.id.as_str())
+        })
+        .await;
+    assert_eq!(addressable_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let deletion = nostr::build_signed_event(
+        &keys,
+        5,
+        vec![
+            vec!["t".to_string(), topic_id.clone()],
+            vec!["e".to_string(), regular.id.clone()],
+            vec!["a".to_string(), format!("30023:{pubkey}:{d_tag}")],
+        ],
+        "kind5-delete".to_string(),
+    )
+    .expect("build deletion event");
+    ws.send(Message::Text(
+        json!(["EVENT", deletion.clone()]).to_string().into(),
+    ))
+    .await
+    .expect("send deletion event");
+    let deletion_ok = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "deletion ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(deletion.id.as_str())
+    })
+    .await;
+    assert_eq!(deletion_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let deletion_event_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&deletion.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count deletion event");
+    assert_eq!(deletion_event_count, 1);
+
+    let regular_deleted: bool =
+        sqlx::query_scalar("SELECT is_deleted FROM cn_relay.events WHERE event_id = $1")
+            .bind(&regular.id)
+            .fetch_one(&pool)
+            .await
+            .expect("regular deleted flag");
+    assert!(regular_deleted);
+    let addressable_deleted: bool =
+        sqlx::query_scalar("SELECT is_deleted FROM cn_relay.events WHERE event_id = $1")
+            .bind(&addressable.id)
+            .fetch_one(&pool)
+            .await
+            .expect("addressable deleted flag");
+    assert!(addressable_deleted);
+
+    let addressable_current_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cn_relay.addressable_current WHERE addressable_key = $1",
+    )
+    .bind(format!("30023:{pubkey}:{d_tag}"))
+    .fetch_one(&pool)
+    .await
+    .expect("count addressable current rows");
+    assert_eq!(addressable_current_count, 0);
+
+    let regular_delete_reason: String = sqlx::query_scalar(
+        "SELECT reason FROM cn_relay.events_outbox WHERE event_id = $1 AND op = 'delete' ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(&regular.id)
+    .fetch_one(&pool)
+    .await
+    .expect("regular delete outbox reason");
+    assert_eq!(regular_delete_reason, "nip09");
+
+    let addressable_delete_reason: String = sqlx::query_scalar(
+        "SELECT reason FROM cn_relay.events_outbox WHERE event_id = $1 AND op = 'delete' ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(&addressable.id)
+    .fetch_one(&pool)
+    .await
+    .expect("addressable delete outbox reason");
+    assert_eq!(addressable_delete_reason, "nip09");
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn expiration_reaches_and_enqueues_delete_outbox_notification() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-expiration-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+    let cleanup_state = state.clone();
+    let (addr, server_handle) = spawn_relay_server(state).await;
+
+    let mut ws = connect_ws(addr).await;
+    let keys = Keys::generate();
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let expires_at = now + 2;
+    let raw = build_event_at(
+        &keys,
+        1,
+        vec![
+            vec!["t".to_string(), topic_id.clone()],
+            vec!["expiration".to_string(), expires_at.to_string()],
+        ],
+        "expires-soon".to_string(),
+        now,
+    );
+    ws.send(Message::Text(
+        json!(["EVENT", raw.clone()]).to_string().into(),
+    ))
+    .await
+    .expect("send expiration event");
+    let publish_ok = wait_for_ws_json(&mut ws, WAIT_TIMEOUT, "expiration event ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(raw.id.as_str())
+    })
+    .await;
+    assert_eq!(publish_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    crate::retention::cleanup_once(
+        &cleanup_state,
+        &crate::config::RelayRetention {
+            events_days: 0,
+            tombstone_days: 0,
+            dedupe_days: 0,
+            outbox_days: 0,
+            cleanup_interval_seconds: 60,
+        },
+    )
+    .await
+    .expect("run relay cleanup once");
+
+    let deleted: bool =
+        sqlx::query_scalar("SELECT is_deleted FROM cn_relay.events WHERE event_id = $1")
+            .bind(&raw.id)
+            .fetch_one(&pool)
+            .await
+            .expect("expired event deleted flag");
+    assert!(deleted);
+    let delete_reason: String = sqlx::query_scalar(
+        "SELECT reason FROM cn_relay.events_outbox WHERE event_id = $1 AND op = 'delete' ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(&raw.id)
+    .fetch_one(&pool)
+    .await
+    .expect("expiration delete reason");
+    assert_eq!(delete_reason, "expiration");
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn ephemeral_event_is_not_persisted_but_is_delivered_in_realtime() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-ephemeral-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (gossip_sender, mut gossip) = setup_gossip(&topic_id).await;
+    {
+        let mut senders = state.gossip_senders.write().await;
+        senders.insert(topic_id.clone(), gossip_sender);
+    }
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+
+    let mut subscriber = connect_ws(addr).await;
+    let sub_id = "sub-ephemeral";
+    subscriber
+        .send(Message::Text(
+            json!(["REQ", sub_id, { "kinds": [20001], "#t": [topic_id.clone()] }])
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("send ephemeral req");
+    let _ = wait_for_ws_json(&mut subscriber, WAIT_TIMEOUT, "ephemeral eose", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("EOSE")
+            && value.get(1).and_then(|v| v.as_str()) == Some(sub_id)
+    })
+    .await;
+
+    let mut publisher = connect_ws(addr).await;
+    let keys = Keys::generate();
+    let raw = nostr::build_signed_event(
+        &keys,
+        20001,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "ephemeral".to_string(),
+    )
+    .expect("build ephemeral event");
+    publisher
+        .send(Message::Text(
+            json!(["EVENT", raw.clone()]).to_string().into(),
+        ))
+        .await
+        .expect("send ephemeral event");
+
+    let publish_ok = wait_for_ws_json(&mut publisher, WAIT_TIMEOUT, "ephemeral ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(raw.id.as_str())
+    })
+    .await;
+    assert_eq!(publish_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let _ = wait_for_ws_json(&mut subscriber, WAIT_TIMEOUT, "ephemeral event", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("EVENT")
+            && value
+                .get(2)
+                .and_then(|event| event.get("id"))
+                .and_then(|id| id.as_str())
+                == Some(raw.id.as_str())
+    })
+    .await;
+    wait_for_gossip_event(&mut gossip.receiver, WAIT_TIMEOUT, &raw.id).await;
+
+    let event_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&raw.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count relay events");
+    assert_eq!(event_count, 0);
+    let topic_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_topics WHERE event_id = $1")
+            .bind(&raw.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count relay event topics");
+    assert_eq!(topic_count, 0);
+    let outbox_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events_outbox WHERE event_id = $1")
+            .bind(&raw.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count relay outbox");
+    assert_eq!(outbox_count, 0);
+    let dedupe_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_dedupe WHERE event_id = $1")
+            .bind(&raw.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count relay dedupe");
+    assert_eq!(dedupe_count, 0);
 
     server_handle.abort();
     let _ = timeout(WAIT_TIMEOUT, gossip.router_a.shutdown()).await;

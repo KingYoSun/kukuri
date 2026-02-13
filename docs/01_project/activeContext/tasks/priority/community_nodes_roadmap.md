@@ -182,7 +182,7 @@
 
 - [x] `cn-relay`: `auth_transition_design.md` の既存接続要件（`disconnect_unauthenticated_at = enforce_at + grace_seconds`）と実装を一致させる。`ws_auth_timeout_seconds` との責務分離を明確化し、既存接続が猶予期間を満たしてから切断されることを統合テストで固定する。
 - [x] `cn-relay`: `event_treatment_policy.md` の P2P-only 要件に合わせ、`39020/39021/39022`（Access Control）を relay の保存/outbox/WS/gossip 配布対象から除外する（拒否理由の互換を含む）。統合テストを追加する。
-- [ ] `cn-relay`: `event_treatment_policy.md` の回帰テストを補完する（replaceable/addressable の `created_at` 同値タイブレーク、`kind=5` の `e/a` 削除、`expiration` 到来後の `delete` 通知、ephemeral 非永続化）。
+- [x] `cn-relay`: `event_treatment_policy.md` の回帰テストを補完する（replaceable/addressable の `created_at` 同値タイブレーク、`kind=5` の `e/a` 削除、`expiration` 到来後の `delete` 通知、ephemeral 非永続化）。
 - [ ] `cn-admin-api` + `cn-relay` + Admin Console: `node_subscriptions.ingest_policy`（保持期間/容量上限/バックフィル可否）を編集・保存・反映できるように実装し、`topic_subscription_design.md` / `ingested_record_persistence_policy.md` の node-level 制御要件に合わせる（契約テスト + 統合テスト）。
 - [ ] `cn-relay`: `retention` クリーンアップ（`events/event_topics`、`event_dedupe`、`events_outbox`、`deletion_tombstones`）の統合テストを追加し、保持期間ポリシーの後方互換を固定する。
 
