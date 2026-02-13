@@ -129,7 +129,13 @@ pub async fn logout(
             .bind(&session_id)
             .execute(&state.pool)
             .await
-            .ok();
+            .map_err(|err| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                )
+            })?;
         jar = jar.remove(Cookie::from(SESSION_COOKIE));
     }
 

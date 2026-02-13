@@ -227,7 +227,10 @@ fn auth_login_doc() {}
 #[utoipa::path(
     post,
     path = "/v1/admin/auth/logout",
-    responses((status = 200, body = StatusResponse))
+    responses(
+        (status = 200, body = StatusResponse),
+        (status = 500, body = ErrorResponse)
+    )
 )]
 fn auth_logout_doc() {}
 

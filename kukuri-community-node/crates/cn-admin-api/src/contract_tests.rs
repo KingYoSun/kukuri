@@ -577,6 +577,69 @@ async fn register_commit_failure(
     .expect("insert test commit failure");
 }
 
+async fn ensure_logout_failure_trigger(pool: &Pool<Postgres>) {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS cn_admin.test_logout_failures (
+            failure_id BIGSERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create test_logout_failures table");
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE FUNCTION cn_admin.fail_logout_delete_for_test()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                  FROM cn_admin.test_logout_failures fail
+                 WHERE fail.session_id = OLD.session_id
+            ) THEN
+                RAISE EXCEPTION 'forced logout delete failure for contract test';
+            END IF;
+            RETURN OLD;
+        END;
+        $$;
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create fail_logout_delete_for_test function");
+
+    sqlx::query("DROP TRIGGER IF EXISTS test_logout_failures_trigger ON cn_admin.admin_sessions")
+        .execute(pool)
+        .await
+        .expect("drop test_logout_failures_trigger");
+    sqlx::query(
+        r#"
+        CREATE TRIGGER test_logout_failures_trigger
+        BEFORE DELETE ON cn_admin.admin_sessions
+        FOR EACH ROW
+        EXECUTE FUNCTION cn_admin.fail_logout_delete_for_test()
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("create test_logout_failures_trigger");
+}
+
+async fn register_logout_failure(pool: &Pool<Postgres>, session_id: &str) {
+    ensure_logout_failure_trigger(pool).await;
+    sqlx::query("INSERT INTO cn_admin.test_logout_failures (session_id) VALUES ($1)")
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .expect("insert test logout failure");
+}
+
 fn assert_audit_log_required(status: StatusCode, payload: &Value) {
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(
@@ -1005,6 +1068,9 @@ async fn openapi_contract_contains_admin_paths() {
         .pointer("/paths/~1v1~1admin~1dashboard/get")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1admin~1auth~1logout/post/responses/500")
+        .is_some());
+    assert!(payload
         .pointer("/paths/~1v1~1admin~1services~1{service}~1config/put/responses/400")
         .is_some());
     assert!(payload
@@ -1333,6 +1399,43 @@ async fn auth_contract_login_me_logout_success() {
         .await
         .expect("response");
     assert_eq!(me_after_logout_response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn auth_contract_logout_returns_500_when_session_delete_fails() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    register_logout_failure(&state.pool, &session_id).await;
+
+    let app = Router::new()
+        .route("/v1/admin/auth/logout", post(auth::logout))
+        .with_state(state.clone());
+
+    let logout_request = Request::builder()
+        .method("POST")
+        .uri("/v1/admin/auth/logout")
+        .header("cookie", format!("cn_admin_session={session_id}"))
+        .body(Body::empty())
+        .expect("request");
+    let logout_response = app.clone().oneshot(logout_request).await.expect("response");
+    assert_eq!(logout_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let logout_body = to_bytes(logout_response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let logout_payload: Value = serde_json::from_slice(&logout_body).expect("json body");
+    assert_eq!(
+        logout_payload.get("code").and_then(Value::as_str),
+        Some("DB_ERROR")
+    );
+
+    let session_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM cn_admin.admin_sessions WHERE session_id = $1)",
+    )
+    .bind(&session_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("session exists");
+    assert!(session_exists);
 }
 
 #[tokio::test]
