@@ -1349,6 +1349,50 @@ mod tests {
         .expect("insert event topic");
     }
 
+    async fn insert_outbox_row(
+        pool: &Pool<Postgres>,
+        op: &str,
+        event: &nostr::RawEvent,
+        topic_id: &str,
+    ) -> i64 {
+        sqlx::query_scalar::<_, i64>(
+            "INSERT INTO cn_relay.events_outbox              (op, event_id, topic_id, kind, created_at, ingested_at, effective_key, reason)              VALUES ($1, $2, $3, $4, $5, NOW(), NULL, 'integration-test')              RETURNING seq",
+        )
+        .bind(op)
+        .bind(&event.id)
+        .bind(topic_id)
+        .bind(event.kind as i32)
+        .bind(event.created_at)
+        .fetch_one(pool)
+        .await
+        .expect("insert outbox row")
+    }
+
+    async fn cleanup_outbox_consumer_artifacts(pool: &Pool<Postgres>, event_ids: &[String]) {
+        if !event_ids.is_empty() {
+            let event_refs: Vec<&str> = event_ids.iter().map(String::as_str).collect();
+            sqlx::query("DELETE FROM cn_moderation.jobs WHERE event_id = ANY($1)")
+                .bind(&event_refs)
+                .execute(pool)
+                .await
+                .expect("delete moderation jobs");
+            sqlx::query("DELETE FROM cn_relay.events_outbox WHERE event_id = ANY($1)")
+                .bind(&event_refs)
+                .execute(pool)
+                .await
+                .expect("delete outbox rows");
+            for event_id in event_ids {
+                delete_event_artifacts(pool, event_id).await;
+            }
+        }
+
+        sqlx::query("DELETE FROM cn_relay.consumer_offsets WHERE consumer = $1")
+            .bind(CONSUMER_NAME)
+            .execute(pool)
+            .await
+            .expect("delete consumer offset");
+    }
+
     async fn delete_event_artifacts(pool: &Pool<Postgres>, event_id: &str) {
         sqlx::query("DELETE FROM cn_moderation.llm_inflight WHERE event_id = $1")
             .bind(event_id)
@@ -1442,6 +1486,178 @@ mod tests {
                 max_concurrency,
             },
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn outbox_consumer_semantics_cover_catch_up_notify_commit_and_replay_idempotency() {
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+
+        let topic_id = format!("kukuri:moderation-outbox-{}", Uuid::new_v4());
+        let author = Keys::generate();
+        let event_a = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "outbox-catchup-a".to_string(),
+        )
+        .expect("build event a");
+        let event_b = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "outbox-catchup-b".to_string(),
+        )
+        .expect("build event b");
+        let event_c = nostr::build_signed_event(
+            &author,
+            1,
+            vec![vec!["t".to_string(), topic_id.clone()]],
+            "outbox-notify-c".to_string(),
+        )
+        .expect("build event c");
+        let event_ids = vec![event_a.id.clone(), event_b.id.clone(), event_c.id.clone()];
+
+        cleanup_outbox_consumer_artifacts(&pool, &event_ids).await;
+
+        insert_event(&pool, &event_a, &topic_id).await;
+        insert_event(&pool, &event_b, &topic_id).await;
+        insert_event(&pool, &event_c, &topic_id).await;
+
+        // 起動時 catch-up: offset 初期化→未処理 outbox を順序どおり取得できること。
+        let initial_last_seq = load_last_seq(&pool).await.expect("initialize offset");
+        assert_eq!(initial_last_seq, 0);
+        let first_offset: i64 = sqlx::query_scalar(
+            "SELECT last_seq FROM cn_relay.consumer_offsets WHERE consumer = $1",
+        )
+        .bind(CONSUMER_NAME)
+        .fetch_one(&pool)
+        .await
+        .expect("read initialized offset");
+        assert_eq!(first_offset, 0);
+
+        let baseline_last_seq: i64 =
+            sqlx::query_scalar("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+                .fetch_one(&pool)
+                .await
+                .expect("load baseline outbox seq");
+        commit_last_seq(&pool, baseline_last_seq)
+            .await
+            .expect("commit baseline offset");
+
+        let seq_a = insert_outbox_row(&pool, "upsert", &event_a, &topic_id).await;
+        let seq_b = insert_outbox_row(&pool, "upsert", &event_b, &topic_id).await;
+        let catch_up_batch = fetch_outbox_batch(&pool, baseline_last_seq, 10)
+            .await
+            .expect("fetch catch-up batch");
+        assert_eq!(catch_up_batch.len(), 2);
+        assert_eq!(
+            catch_up_batch.iter().map(|row| row.seq).collect::<Vec<_>>(),
+            vec![seq_a, seq_b]
+        );
+
+        for row in &catch_up_batch {
+            enqueue_job(&pool, row, 3)
+                .await
+                .expect("enqueue catch-up row");
+        }
+        let catch_up_committed = catch_up_batch.last().expect("catch-up row").seq;
+        commit_last_seq(&pool, catch_up_committed)
+            .await
+            .expect("commit catch-up offset");
+        let committed_after_catch_up = load_last_seq(&pool).await.expect("load committed offset");
+        assert_eq!(committed_after_catch_up, seq_b);
+
+        let empty_after_commit = fetch_outbox_batch(&pool, committed_after_catch_up, 10)
+            .await
+            .expect("fetch after commit");
+        assert!(
+            empty_after_commit.is_empty(),
+            "no pending rows should remain after commit"
+        );
+
+        // NOTIFY 起床: 通知が来たら poll interval を待たずに起床できること。
+        let mut listener = connect_listener(&pool, OUTBOX_CHANNEL)
+            .await
+            .expect("listen outbox channel");
+        let seq_c = insert_outbox_row(&pool, "upsert", &event_c, &topic_id).await;
+        let pool_for_notify = pool.clone();
+        let notify_payload = seq_c.to_string();
+        let notifier = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            sqlx::query("SELECT pg_notify($1, $2)")
+                .bind(OUTBOX_CHANNEL)
+                .bind(notify_payload)
+                .execute(&pool_for_notify)
+                .await
+                .expect("notify outbox channel");
+        });
+
+        let woke =
+            tokio::time::timeout(Duration::from_secs(2), wait_for_notify(&mut listener, 30)).await;
+        assert!(woke.is_ok(), "listener did not wake on NOTIFY");
+        woke.expect("timeout").expect("wait for notify");
+        notifier.await.expect("join notifier");
+
+        let notify_batch = fetch_outbox_batch(&pool, committed_after_catch_up, 10)
+            .await
+            .expect("fetch notify batch");
+        assert_eq!(notify_batch.len(), 1);
+        assert_eq!(notify_batch[0].seq, seq_c);
+        enqueue_job(&pool, &notify_batch[0], 3)
+            .await
+            .expect("enqueue notify row");
+        commit_last_seq(&pool, seq_c)
+            .await
+            .expect("commit notify offset");
+        let committed_after_notify = load_last_seq(&pool).await.expect("load notify committed");
+        assert_eq!(committed_after_notify, seq_c);
+
+        let event_refs: Vec<&str> = event_ids.iter().map(String::as_str).collect();
+        let jobs_after_first_pass: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_moderation.jobs WHERE event_id = ANY($1)")
+                .bind(&event_refs)
+                .fetch_one(&pool)
+                .await
+                .expect("count jobs after first pass");
+        assert_eq!(jobs_after_first_pass, 3);
+
+        // replay + at-least-once 冪等性: offset を巻き戻して再処理しても重複ジョブを作らないこと。
+        commit_last_seq(&pool, seq_a - 1)
+            .await
+            .expect("rewind offset for replay");
+        let replay_batch = fetch_outbox_batch(&pool, seq_a - 1, 10)
+            .await
+            .expect("fetch replay batch");
+        assert_eq!(replay_batch.len(), 3);
+        assert_eq!(
+            replay_batch.iter().map(|row| row.seq).collect::<Vec<_>>(),
+            vec![seq_a, seq_b, seq_c]
+        );
+        for row in &replay_batch {
+            enqueue_job(&pool, row, 3).await.expect("replay enqueue");
+        }
+        commit_last_seq(&pool, replay_batch.last().expect("replay row").seq)
+            .await
+            .expect("commit replay offset");
+        let replay_committed = load_last_seq(&pool).await.expect("load replay committed");
+        assert_eq!(replay_committed, seq_c);
+
+        let jobs_after_replay: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_moderation.jobs WHERE event_id = ANY($1)")
+                .bind(&event_refs)
+                .fetch_one(&pool)
+                .await
+                .expect("count jobs after replay");
+        assert_eq!(
+            jobs_after_replay, 3,
+            "at-least-once replay should remain idempotent"
+        );
+
+        cleanup_outbox_consumer_artifacts(&pool, &event_ids).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
