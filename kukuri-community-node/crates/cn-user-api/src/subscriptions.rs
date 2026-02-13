@@ -3465,6 +3465,125 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn bootstrap_services_etag_changes_when_body_changes_with_same_count_and_second() {
+        let state = test_state().await;
+        let topic_id = format!("kukuri:bootstrap-etag-same-second-{}", Uuid::new_v4());
+        let event_id = Uuid::new_v4().to_string();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let expires_at = now + 600;
+
+        let event_before = json!({
+            "id": event_id,
+            "kind": 39001,
+            "pubkey": Keys::generate().public_key().to_hex(),
+            "tags": [["k", "kukuri"], ["ver", "1"], ["topic", topic_id.clone()], ["service", "relay"]],
+            "content": "before",
+            "sig": "signature"
+        });
+        let event_after = json!({
+            "id": event_id,
+            "kind": 39001,
+            "pubkey": Keys::generate().public_key().to_hex(),
+            "tags": [["k", "kukuri"], ["ver", "1"], ["topic", topic_id.clone()], ["service", "relay"]],
+            "content": "after",
+            "sig": "signature"
+        });
+
+        insert_bootstrap_event(
+            &state.pool,
+            &event_id,
+            39001,
+            Some(topic_id.as_str()),
+            expires_at,
+            event_before,
+        )
+        .await;
+
+        let updated_at_before: chrono::DateTime<chrono::Utc> =
+            sqlx::query("SELECT updated_at FROM cn_bootstrap.events WHERE event_id = $1")
+                .bind(&event_id)
+                .fetch_one(&state.pool)
+                .await
+                .expect("fetch bootstrap event before update")
+                .get("updated_at");
+        let pool = state.pool.clone();
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(crate::bootstrap::get_bootstrap_services),
+            )
+            .with_state(state);
+        let path = format!("/v1/bootstrap/topics/{topic_id}/services");
+
+        let (status_before, headers_before, _) =
+            get_json_public_with_headers(app.clone(), &path, &[]).await;
+        assert_eq!(status_before, StatusCode::OK);
+
+        let etag_before = headers_before
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(!etag_before.is_empty());
+
+        sqlx::query(
+            "UPDATE cn_bootstrap.events \
+             SET event_json = $2, updated_at = date_trunc('second', updated_at) \
+             WHERE event_id = $1",
+        )
+        .bind(&event_id)
+        .bind(event_after.clone())
+        .execute(&pool)
+        .await
+        .expect("update bootstrap event json");
+
+        let updated_at_after: chrono::DateTime<chrono::Utc> =
+            sqlx::query("SELECT updated_at FROM cn_bootstrap.events WHERE event_id = $1")
+                .bind(&event_id)
+                .fetch_one(&pool)
+                .await
+                .expect("fetch bootstrap event after update")
+                .get("updated_at");
+        assert_eq!(updated_at_before.timestamp(), updated_at_after.timestamp());
+
+        let (status_after, headers_after, payload_after) =
+            get_json_public_with_headers(app.clone(), &path, &[]).await;
+        assert_eq!(status_after, StatusCode::OK);
+
+        let items_after = payload_after
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items_after.len(), 1);
+        assert_eq!(items_after.first(), Some(&event_after));
+
+        let etag_after = headers_after
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(!etag_after.is_empty());
+        assert_ne!(etag_before, etag_after);
+
+        let (stale_status, _) =
+            get_status_public_with_headers(app.clone(), &path, &[("if-none-match", &etag_before)])
+                .await;
+        assert_eq!(stale_status, StatusCode::OK);
+
+        let (fresh_status, fresh_headers) =
+            get_status_public_with_headers(app, &path, &[("if-none-match", &etag_after)]).await;
+        assert_eq!(fresh_status, StatusCode::NOT_MODIFIED);
+        assert_eq!(
+            fresh_headers
+                .get(header::ETAG)
+                .and_then(|value| value.to_str().ok()),
+            Some(etag_after.as_str())
+        );
+    }
+
+    #[tokio::test]
     async fn bootstrap_nodes_and_services_rate_limit_boundary_contract() {
         let state = test_state_with_rate_limits(120, 1, 120).await;
         let topic_id = format!("kukuri:bootstrap-rate-limit-{}", Uuid::new_v4());

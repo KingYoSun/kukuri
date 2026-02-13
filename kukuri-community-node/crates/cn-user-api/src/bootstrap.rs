@@ -92,11 +92,18 @@ async fn respond_with_events(
         events.push(event_json);
     }
 
-    let etag = format!(
-        "W/\"{}-{}\"",
-        latest.map(|value| value.timestamp()).unwrap_or(0),
-        events.len()
-    );
+    let payload = json!({
+        "items": events,
+        "next_refresh_at": next_refresh
+    });
+    let payload_bytes = serde_json::to_vec(&payload).map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "SERIALIZATION_ERROR",
+            err.to_string(),
+        )
+    })?;
+    let etag = format!("W/\"{}\"", blake3::hash(&payload_bytes).to_hex());
 
     if let Some(value) = headers.get("if-none-match").and_then(|v| v.to_str().ok()) {
         if value == etag {
@@ -123,11 +130,7 @@ async fn respond_with_events(
         }
     }
 
-    let mut response = Json(json!({
-        "items": events,
-        "next_refresh_at": next_refresh
-    }))
-    .into_response();
+    let mut response = Json(payload).into_response();
 
     response.headers_mut().insert(
         axum::http::header::CACHE_CONTROL,
