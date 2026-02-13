@@ -194,7 +194,7 @@
 
 ## 未実装/不足事項（2026年02月13日 監査追記・追加）
 
-- [ ] `cn-relay`: `services_relay.md` の REQ 制約にある `since/until` 時間範囲の上限を実装する（`filters.rs` は現状 `#t`/filter数/値数/`limit` のみ制約し、時間範囲は未制約）。`since > until`・過大lookback・過大window の拒否理由を固定し、unit/integration テストを追加する。
+- [x] `cn-relay`: `services_relay.md` の REQ 制約にある `since/until` 時間範囲の上限を実装する（`filters.rs` は現状 `#t`/filter数/値数/`limit` のみ制約し、時間範囲は未制約）。`since > until`・過大lookback・過大window の拒否理由を固定し、unit/integration テストを追加する。
 - [ ] `cn-moderation`: `outbox_notify_semantics.md` の consumer 要件（起動時catch-up、NOTIFY起床、offsetコミット、リプレイ）に対する統合テストを追加する。`load_last_seq`/`commit_last_seq`/`fetch_outbox_batch` 経路の回帰を検知できるようにし、at-least-once 前提の冪等性を検証する。
 - [ ] `cn-bootstrap` + クライアント経路: `services_bootstrap.md` の「通知受信→HTTP再取得」運用を実装側で閉じる。`pg_notify('cn_bootstrap_hint')` publish のみで止まっているため、受信側（bridge または client）の再取得トリガ実装と E2E テスト（hint受信で `/v1/bootstrap/*` キャッシュ更新）を追加する。
 

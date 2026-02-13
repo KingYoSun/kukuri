@@ -1,10 +1,17 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_FILTERS: usize = 10;
 const MAX_FILTER_VALUES: usize = 200;
 const MAX_LIMIT: i64 = 1000;
+const MAX_LOOKBACK_SECONDS: i64 = 30 * 24 * 60 * 60;
+const MAX_WINDOW_SECONDS: i64 = 7 * 24 * 60 * 60;
+
+const REJECT_REASON_INVALID_TIME_RANGE: &str = "invalid since/until range";
+const REJECT_REASON_LOOKBACK_TOO_LARGE: &str = "lookback too large";
+const REJECT_REASON_WINDOW_TOO_LARGE: &str = "time window too large";
 
 #[derive(Clone, Debug)]
 pub struct RelayFilter {
@@ -24,6 +31,10 @@ impl RelayFilter {
 }
 
 pub fn parse_filters(values: &[Value]) -> Result<Vec<RelayFilter>> {
+    parse_filters_with_now(values, current_unix_seconds())
+}
+
+fn parse_filters_with_now(values: &[Value], now: i64) -> Result<Vec<RelayFilter>> {
     if values.is_empty() {
         return Err(anyhow!("missing filters"));
     }
@@ -42,6 +53,7 @@ pub fn parse_filters(values: &[Value]) -> Result<Vec<RelayFilter>> {
         let kinds = parse_u32_list(map.get("kinds"))?;
         let since = map.get("since").and_then(|v| v.as_i64());
         let until = map.get("until").and_then(|v| v.as_i64());
+        validate_time_range(since, until, now)?;
         let limit = map
             .get("limit")
             .and_then(|v| v.as_i64())
@@ -80,6 +92,32 @@ pub fn parse_filters(values: &[Value]) -> Result<Vec<RelayFilter>> {
     }
 
     Ok(filters)
+}
+
+fn current_unix_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn validate_time_range(since: Option<i64>, until: Option<i64>, now: i64) -> Result<()> {
+    if let (Some(since), Some(until)) = (since, until) {
+        if since > until {
+            return Err(anyhow!(REJECT_REASON_INVALID_TIME_RANGE));
+        }
+        if until - since > MAX_WINDOW_SECONDS {
+            return Err(anyhow!(REJECT_REASON_WINDOW_TOO_LARGE));
+        }
+    }
+
+    if let Some(reference_time) = since.or(until) {
+        if now.saturating_sub(reference_time) > MAX_LOOKBACK_SECONDS {
+            return Err(anyhow!(REJECT_REASON_LOOKBACK_TOO_LARGE));
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_string_list(value: Option<&Value>) -> Result<Option<Vec<String>>> {
@@ -196,5 +234,50 @@ mod tests {
         .expect("filter should parse");
         assert_eq!(filters.len(), 1);
         assert_eq!(filters[0].limit, Some(MAX_LIMIT));
+    }
+
+    #[test]
+    fn parse_filters_rejects_since_greater_than_until_with_stable_reason() {
+        let now = 2_000_000_000;
+        let err = parse_filters_with_now(
+            &[json!({
+                "#t": ["kukuri:global"],
+                "since": now,
+                "until": now - 1
+            })],
+            now,
+        )
+        .expect_err("must reject since > until");
+        assert_eq!(err.to_string(), REJECT_REASON_INVALID_TIME_RANGE);
+    }
+
+    #[test]
+    fn parse_filters_rejects_lookback_too_large_with_stable_reason() {
+        let now = 2_000_000_000;
+        let err = parse_filters_with_now(
+            &[json!({
+                "#t": ["kukuri:global"],
+                "since": now - MAX_LOOKBACK_SECONDS - 1
+            })],
+            now,
+        )
+        .expect_err("must reject over lookback");
+        assert_eq!(err.to_string(), REJECT_REASON_LOOKBACK_TOO_LARGE);
+    }
+
+    #[test]
+    fn parse_filters_rejects_time_window_too_large_with_stable_reason() {
+        let now = 2_000_000_000;
+        let since = now - 60;
+        let err = parse_filters_with_now(
+            &[json!({
+                "#t": ["kukuri:global"],
+                "since": since,
+                "until": since + MAX_WINDOW_SECONDS + 1
+            })],
+            now,
+        )
+        .expect_err("must reject over window");
+        assert_eq!(err.to_string(), REJECT_REASON_WINDOW_TOO_LARGE);
     }
 }

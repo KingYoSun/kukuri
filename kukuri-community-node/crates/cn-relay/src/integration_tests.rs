@@ -352,6 +352,26 @@ where
     })
 }
 
+async fn assert_req_notice_reason(
+    ws: &mut WsStream,
+    req: serde_json::Value,
+    expected_reason: &str,
+    label: &str,
+) {
+    ws.send(Message::Text(req.to_string().into()))
+        .await
+        .expect("send req");
+    let notice = wait_for_ws_json_any(ws, WAIT_TIMEOUT, label, |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("NOTICE")
+            && value.get(1).and_then(|v| v.as_str()) == Some(expected_reason)
+    })
+    .await;
+    assert_eq!(
+        notice.get(1).and_then(|v| v.as_str()),
+        Some(expected_reason)
+    );
+}
+
 async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, expected_id: &str) {
     let mut last_received_id: Option<String> = None;
     let result = timeout(wait, async {
@@ -1768,6 +1788,62 @@ async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after
     )
     .await;
     assert_eq!(delivered.get(1).and_then(|v| v.as_str()), Some(sub_id));
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn req_filter_time_range_rejections_use_stable_notice_reasons() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-req-time-range-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut ws = connect_ws(addr).await;
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+
+    assert_req_notice_reason(
+        &mut ws,
+        json!(["REQ", "sub-invalid-order", {
+            "#t": [topic_id.clone()],
+            "since": now,
+            "until": now - 1
+        }]),
+        "invalid since/until range",
+        "reject since > until",
+    )
+    .await;
+
+    assert_req_notice_reason(
+        &mut ws,
+        json!(["REQ", "sub-over-lookback", {
+            "#t": [topic_id.clone()],
+            "since": 0
+        }]),
+        "lookback too large",
+        "reject over lookback",
+    )
+    .await;
+
+    assert_req_notice_reason(
+        &mut ws,
+        json!(["REQ", "sub-over-window", {
+            "#t": [topic_id],
+            "since": now - 10,
+            "until": now + 31_536_000
+        }]),
+        "time window too large",
+        "reject over window",
+    )
+    .await;
 
     server_handle.abort();
 }
