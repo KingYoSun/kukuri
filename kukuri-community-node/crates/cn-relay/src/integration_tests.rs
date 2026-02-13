@@ -2033,6 +2033,203 @@ async fn cleanup_applies_topic_retention_override_from_ingest_policy() {
 }
 
 #[tokio::test]
+async fn cleanup_cleans_all_retention_targets_and_preserves_policy_backcompat() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let fallback_topic = format!("kukuri:relay-retention-fallback-it-{}", Uuid::new_v4());
+    let override_topic = format!("kukuri:relay-retention-override2-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &fallback_topic).await;
+    enable_topic(&pool, &state, &override_topic).await;
+
+    update_topic_ingest_policy(
+        &pool,
+        &fallback_topic,
+        json!({
+            "retention_days": 0
+        }),
+    )
+    .await;
+    update_topic_ingest_policy(
+        &pool,
+        &override_topic,
+        json!({
+            "retention_days": 5
+        }),
+    )
+    .await;
+
+    let fallback_event_id = unique_hex_event_id('a');
+    let override_event_id = unique_hex_event_id('b');
+    insert_non_current_event(&pool, &fallback_topic, &fallback_event_id, 1_700_003_000, 2).await;
+    insert_non_current_event(&pool, &override_topic, &override_event_id, 1_700_003_100, 2).await;
+
+    let dedupe_old_event_id = unique_hex_event_id('c');
+    let dedupe_recent_event_id = unique_hex_event_id('d');
+    sqlx::query(
+        "INSERT INTO cn_relay.event_dedupe (event_id, first_seen_at, last_seen_at, seen_count) \
+         VALUES ($1, NOW() - (2 * INTERVAL '1 day'), NOW() - (2 * INTERVAL '1 day'), 1)",
+    )
+    .bind(&dedupe_old_event_id)
+    .execute(&pool)
+    .await
+    .expect("insert old dedupe row");
+    sqlx::query(
+        "INSERT INTO cn_relay.event_dedupe (event_id, first_seen_at, last_seen_at, seen_count) \
+         VALUES ($1, NOW() - INTERVAL '12 hours', NOW() - INTERVAL '12 hours', 1)",
+    )
+    .bind(&dedupe_recent_event_id)
+    .execute(&pool)
+    .await
+    .expect("insert recent dedupe row");
+
+    let outbox_old_event_id = unique_hex_event_id('e');
+    let outbox_recent_event_id = unique_hex_event_id('f');
+    sqlx::query(
+        "INSERT INTO cn_relay.events_outbox \
+         (op, event_id, topic_id, kind, created_at, ingested_at, effective_key, reason) \
+         VALUES ('upsert', $1, $2, 1, $3, NOW() - (2 * INTERVAL '1 day'), NULL, 'retention-it')",
+    )
+    .bind(&outbox_old_event_id)
+    .bind(&fallback_topic)
+    .bind(1_700_003_200_i64)
+    .execute(&pool)
+    .await
+    .expect("insert old outbox row");
+    sqlx::query(
+        "INSERT INTO cn_relay.events_outbox \
+         (op, event_id, topic_id, kind, created_at, ingested_at, effective_key, reason) \
+         VALUES ('upsert', $1, $2, 1, $3, NOW(), NULL, 'retention-it')",
+    )
+    .bind(&outbox_recent_event_id)
+    .bind(&fallback_topic)
+    .bind(1_700_003_300_i64)
+    .execute(&pool)
+    .await
+    .expect("insert recent outbox row");
+
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let tombstone_old_id = unique_hex_event_id('1');
+    let tombstone_recent_id = unique_hex_event_id('2');
+    sqlx::query(
+        "INSERT INTO cn_relay.deletion_tombstones (target_event_id, deletion_event_id, requested_at) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(&fallback_event_id)
+    .bind(&tombstone_old_id)
+    .bind(now.saturating_sub(2 * 86_400))
+    .execute(&pool)
+    .await
+    .expect("insert old tombstone row");
+    sqlx::query(
+        "INSERT INTO cn_relay.deletion_tombstones (target_event_id, deletion_event_id, requested_at) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(&override_event_id)
+    .bind(&tombstone_recent_id)
+    .bind(now.saturating_sub(60))
+    .execute(&pool)
+    .await
+    .expect("insert recent tombstone row");
+
+    crate::retention::cleanup_once(
+        &state,
+        &crate::config::RelayRetention {
+            events_days: 1,
+            tombstone_days: 1,
+            dedupe_days: 1,
+            outbox_days: 1,
+            cleanup_interval_seconds: 60,
+        },
+    )
+    .await
+    .expect("run retention cleanup");
+
+    let fallback_event_topics: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_topics WHERE event_id = $1")
+            .bind(&fallback_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count fallback event_topics");
+    let fallback_events: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&fallback_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count fallback events");
+    assert_eq!(fallback_event_topics, 0);
+    assert_eq!(fallback_events, 0);
+
+    let override_event_topics: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_topics WHERE event_id = $1")
+            .bind(&override_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count override event_topics");
+    let override_events: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&override_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count override events");
+    assert_eq!(override_event_topics, 1);
+    assert_eq!(override_events, 1);
+
+    let dedupe_old_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_dedupe WHERE event_id = $1")
+            .bind(&dedupe_old_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count old dedupe row");
+    let dedupe_recent_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_dedupe WHERE event_id = $1")
+            .bind(&dedupe_recent_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count recent dedupe row");
+    assert_eq!(dedupe_old_count, 0);
+    assert_eq!(dedupe_recent_count, 1);
+
+    let outbox_old_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events_outbox WHERE event_id = $1")
+            .bind(&outbox_old_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count old outbox row");
+    let outbox_recent_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events_outbox WHERE event_id = $1")
+            .bind(&outbox_recent_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count recent outbox row");
+    assert_eq!(outbox_old_count, 0);
+    assert_eq!(outbox_recent_count, 1);
+
+    let tombstone_old_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cn_relay.deletion_tombstones WHERE deletion_event_id = $1",
+    )
+    .bind(&tombstone_old_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count old tombstone row");
+    let tombstone_recent_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cn_relay.deletion_tombstones WHERE deletion_event_id = $1",
+    )
+    .bind(&tombstone_recent_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count recent tombstone row");
+    assert_eq!(tombstone_old_count, 0);
+    assert_eq!(tombstone_recent_count, 1);
+}
+
+#[tokio::test]
 async fn auth_enforce_existing_connection_disconnects_after_grace_period() {
     let _guard = acquire_integration_test_lock().await;
 
