@@ -4,6 +4,7 @@ use axum::extract::{ConnectInfo, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use cn_core::{auth, metrics, nostr};
+use cn_kip_types::{KIND_INVITE_CAPABILITY, KIND_JOIN_REQUEST, KIND_KEY_ENVELOPE};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use sqlx::{Postgres, QueryBuilder, Row};
@@ -513,6 +514,12 @@ async fn dispatch_event(
 }
 
 async fn is_allowed_event(auth_pubkey: Option<&str>, event: &nostr::RawEvent) -> Result<bool> {
+    if matches!(
+        event.kind,
+        KIND_KEY_ENVELOPE | KIND_INVITE_CAPABILITY | KIND_JOIN_REQUEST
+    ) {
+        return Ok(false);
+    }
     let scope = event
         .first_tag_value("scope")
         .unwrap_or_else(|| "public".into());

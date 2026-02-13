@@ -1,10 +1,15 @@
 use anyhow::{anyhow, Result};
 use cn_core::{auth, metrics, nostr, topic};
-use cn_kip_types::{is_kip_kind, validate_kip_event, ValidationOptions};
+use cn_kip_types::{
+    is_kip_kind, validate_kip_event, ValidationOptions, KIND_INVITE_CAPABILITY, KIND_JOIN_REQUEST,
+    KIND_KEY_ENVELOPE,
+};
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::config::RelayRuntimeConfig;
 use crate::AppState;
+
+pub(crate) const ACCESS_CONTROL_P2P_ONLY_REASON: &str = "restricted: access control p2p-only";
 
 #[derive(Clone, Debug)]
 pub struct RelayEvent {
@@ -128,6 +133,13 @@ pub async fn ingest_event(
                 reason: "invalid: expired".into(),
             });
         }
+    }
+
+    if is_access_control_kind(raw.kind) {
+        metrics::inc_ingest_rejected(super::SERVICE_NAME, "restricted");
+        return Ok(IngestOutcome::Rejected {
+            reason: ACCESS_CONTROL_P2P_ONLY_REASON.into(),
+        });
     }
 
     let scope = raw
@@ -360,6 +372,13 @@ fn is_addressable_kind(kind: u32) -> bool {
 
 fn is_ephemeral_kind(kind: u32) -> bool {
     (20000..30000).contains(&kind)
+}
+
+fn is_access_control_kind(kind: u32) -> bool {
+    matches!(
+        kind,
+        KIND_KEY_ENVELOPE | KIND_INVITE_CAPABILITY | KIND_JOIN_REQUEST
+    )
 }
 
 async fn insert_dedupe(tx: &mut Transaction<'_, Postgres>, event_id: &str) -> Result<bool> {

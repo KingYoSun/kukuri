@@ -1,4 +1,5 @@
 use super::AppState;
+use crate::ingest::ACCESS_CONTROL_P2P_ONLY_REASON;
 use crate::ws;
 use axum::body::to_bytes;
 use axum::extract::State;
@@ -10,6 +11,10 @@ use axum::Router;
 use cn_core::rate_limit::RateLimiter;
 use cn_core::service_config;
 use cn_core::{metrics, nostr};
+use cn_kip_types::{
+    KIND_INVITE_CAPABILITY, KIND_JOIN_REQUEST, KIND_KEY_ENVELOPE, KIP_NAMESPACE, KIP_VERSION,
+    SCHEMA_INVITE_CAPABILITY, SCHEMA_JOIN_REQUEST, SCHEMA_KEY_ENVELOPE,
+};
 use futures_util::{SinkExt, StreamExt};
 use iroh::discovery::static_provider::StaticProvider;
 use iroh::endpoint::Connection;
@@ -362,6 +367,37 @@ async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, ex
     });
 }
 
+async fn assert_no_ws_event(ws: &mut WsStream, wait: Duration, label: &str) {
+    let _ = timeout(wait, async {
+        while let Some(message) = ws.next().await {
+            let message = message.expect("ws message");
+            if let Message::Text(text) = message {
+                let value: serde_json::Value = serde_json::from_str(&text).expect("ws json");
+                if value.get(0).and_then(|v| v.as_str()) == Some("EVENT") {
+                    panic!("unexpected websocket EVENT ({}): {}", label, value);
+                }
+            }
+        }
+        panic!("websocket closed");
+    })
+    .await;
+}
+
+async fn assert_no_gossip_received(receiver: &mut GossipReceiver, wait: Duration, label: &str) {
+    let _ = timeout(wait, async {
+        while let Some(event) = receiver.next().await {
+            let event = event.expect("gossip event");
+            if let GossipEvent::Received(message) = event {
+                let payload = String::from_utf8(message.content.to_vec())
+                    .unwrap_or_else(|_| "<binary>".into());
+                panic!("unexpected gossip message ({}): {}", label, payload);
+            }
+        }
+        panic!("gossip receiver closed");
+    })
+    .await;
+}
+
 async fn ensure_required_policies(pool: &Pool<Postgres>) {
     for policy_type in ["terms", "privacy"] {
         let current_count = sqlx::query_scalar::<_, i64>(
@@ -490,6 +526,72 @@ async fn insert_backfill_event(
     .execute(pool)
     .await
     .expect("insert relay event topic");
+}
+
+fn build_access_control_event(keys: &Keys, kind: u32, topic_id: &str) -> nostr::RawEvent {
+    match kind {
+        KIND_KEY_ENVELOPE => {
+            let recipient = Keys::generate().public_key().to_string();
+            let tags = vec![
+                vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+                vec!["ver".to_string(), KIP_VERSION.to_string()],
+                vec!["p".to_string(), recipient.clone()],
+                vec!["t".to_string(), topic_id.to_string()],
+                vec!["scope".to_string(), "invite".to_string()],
+                vec!["epoch".to_string(), "1".to_string()],
+                vec![
+                    "d".to_string(),
+                    format!("keyenv:{topic_id}:invite:1:{recipient}"),
+                ],
+            ];
+            let content = json!({
+                "schema": SCHEMA_KEY_ENVELOPE,
+                "topic": topic_id,
+                "scope": "invite",
+                "epoch": 1,
+            })
+            .to_string();
+            nostr::build_signed_event(keys, KIND_KEY_ENVELOPE as u16, tags, content)
+                .expect("build key.envelope")
+        }
+        KIND_INVITE_CAPABILITY => {
+            let nonce = Uuid::new_v4().to_string();
+            let tags = vec![
+                vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+                vec!["ver".to_string(), KIP_VERSION.to_string()],
+                vec!["t".to_string(), topic_id.to_string()],
+                vec!["scope".to_string(), "invite".to_string()],
+                vec!["d".to_string(), format!("invite:{nonce}")],
+            ];
+            let content = json!({
+                "schema": SCHEMA_INVITE_CAPABILITY,
+            })
+            .to_string();
+            nostr::build_signed_event(keys, KIND_INVITE_CAPABILITY as u16, tags, content)
+                .expect("build invite.capability")
+        }
+        KIND_JOIN_REQUEST => {
+            let nonce = Uuid::new_v4().to_string();
+            let requester = keys.public_key().to_string();
+            let tags = vec![
+                vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+                vec!["ver".to_string(), KIP_VERSION.to_string()],
+                vec!["t".to_string(), topic_id.to_string()],
+                vec!["scope".to_string(), "invite".to_string()],
+                vec![
+                    "d".to_string(),
+                    format!("join:{topic_id}:{nonce}:{requester}"),
+                ],
+            ];
+            let content = json!({
+                "schema": SCHEMA_JOIN_REQUEST,
+            })
+            .to_string();
+            nostr::build_signed_event(keys, KIND_JOIN_REQUEST as u16, tags, content)
+                .expect("build join.request")
+        }
+        _ => panic!("unsupported access control kind: {kind}"),
+    }
 }
 
 async fn wait_for_auth_challenge(ws: &mut WsStream, label: &str) -> String {
@@ -828,6 +930,116 @@ async fn ingest_outbox_ws_gossip_integration() {
     assert_eq!(outbox_topic, topic_id);
 
     wait_for_gossip_event(&mut gossip.receiver, WAIT_TIMEOUT, &raw.id).await;
+
+    server_handle.abort();
+    let _ = timeout(WAIT_TIMEOUT, gossip.router_a.shutdown()).await;
+    let _ = timeout(WAIT_TIMEOUT, gossip.router_b.shutdown()).await;
+}
+
+#[tokio::test]
+async fn access_control_events_are_rejected_and_not_distributed() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-access-control-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (gossip_sender, mut gossip) = setup_gossip(&topic_id).await;
+    {
+        let mut senders = state.gossip_senders.write().await;
+        senders.insert(topic_id.clone(), gossip_sender);
+    }
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+
+    let mut subscriber = connect_ws(addr).await;
+    let sub_id = "sub-access-control";
+    subscriber
+        .send(Message::Text(
+            json!(["REQ", sub_id, { "kinds": [KIND_KEY_ENVELOPE, KIND_INVITE_CAPABILITY, KIND_JOIN_REQUEST], "#t": [topic_id.clone()] }])
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("send subscriber req");
+    let _ = wait_for_ws_json(&mut subscriber, WAIT_TIMEOUT, "subscriber eose", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("EOSE")
+            && value.get(1).and_then(|v| v.as_str()) == Some(sub_id)
+    })
+    .await;
+
+    let mut publisher = connect_ws(addr).await;
+    let keys = Keys::generate();
+    for kind in [KIND_KEY_ENVELOPE, KIND_INVITE_CAPABILITY, KIND_JOIN_REQUEST] {
+        let raw = build_access_control_event(&keys, kind, &topic_id);
+        publisher
+            .send(Message::Text(
+                json!(["EVENT", raw.clone()]).to_string().into(),
+            ))
+            .await
+            .expect("send access control event");
+
+        let rejected =
+            wait_for_ws_json(&mut publisher, WAIT_TIMEOUT, "publisher reject", |value| {
+                value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                    && value.get(1).and_then(|v| v.as_str()) == Some(raw.id.as_str())
+            })
+            .await;
+        assert_eq!(rejected.get(2).and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(
+            rejected.get(3).and_then(|v| v.as_str()),
+            Some(ACCESS_CONTROL_P2P_ONLY_REASON)
+        );
+
+        let event_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+                .bind(&raw.id)
+                .fetch_one(&pool)
+                .await
+                .expect("count relay events");
+        assert_eq!(event_count, 0, "event should not be stored for kind={kind}");
+
+        let topic_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_topics WHERE event_id = $1")
+                .bind(&raw.id)
+                .fetch_one(&pool)
+                .await
+                .expect("count relay event topics");
+        assert_eq!(
+            topic_count, 0,
+            "event_topics should remain empty for kind={kind}"
+        );
+
+        let outbox_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events_outbox WHERE event_id = $1")
+                .bind(&raw.id)
+                .fetch_one(&pool)
+                .await
+                .expect("count relay outbox events");
+        assert_eq!(
+            outbox_count, 0,
+            "outbox should remain empty for kind={kind}"
+        );
+
+        assert_no_ws_event(
+            &mut subscriber,
+            Duration::from_millis(500),
+            &format!("access control kind={kind}"),
+        )
+        .await;
+        assert_no_gossip_received(
+            &mut gossip.receiver,
+            Duration::from_millis(500),
+            &format!("access control kind={kind}"),
+        )
+        .await;
+    }
 
     server_handle.abort();
     let _ = timeout(WAIT_TIMEOUT, gossip.router_a.shutdown()).await;
