@@ -21,6 +21,7 @@ mod gossip;
 mod ingest;
 #[cfg(test)]
 mod integration_tests;
+mod policy;
 mod retention;
 mod ws;
 

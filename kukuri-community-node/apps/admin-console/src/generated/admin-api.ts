@@ -927,14 +927,25 @@ export interface components {
         };
         NodeSubscription: {
             enabled: boolean;
+            ingest_policy?: components["schemas"]["NodeSubscriptionIngestPolicy"] | null;
             /** Format: int64 */
             ref_count: number;
             topic_id: string;
             /** Format: int64 */
             updated_at: number;
         };
+        NodeSubscriptionIngestPolicy: {
+            allow_backfill?: boolean | null;
+            /** Format: int64 */
+            max_bytes?: number | null;
+            /** Format: int64 */
+            max_events?: number | null;
+            /** Format: int64 */
+            retention_days?: number | null;
+        };
         NodeSubscriptionUpdate: {
             enabled: boolean;
+            ingest_policy?: components["schemas"]["NodeSubscriptionIngestPolicy"] | null;
         };
         OutboxBacklogSignal: {
             alert: boolean;
@@ -2055,6 +2066,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodeSubscription"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             404: {

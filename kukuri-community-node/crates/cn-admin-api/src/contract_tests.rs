@@ -3376,7 +3376,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
             "/v1/admin/node-subscriptions/{topic_id}",
             put(subscriptions::update_node_subscription),
         )
-        .with_state(state);
+        .with_state(state.clone());
 
     let (status, payload) = get_json_with_session(
         app.clone(),
@@ -3458,12 +3458,21 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         .expect("node subscription row");
     assert_eq!(node_row.get("enabled").and_then(Value::as_bool), Some(true));
     assert!(node_row.get("ref_count").and_then(Value::as_i64).is_some());
+    assert!(node_row.get("ingest_policy").is_some_and(Value::is_null));
     assert!(node_row.get("updated_at").and_then(Value::as_i64).is_some());
 
     let (status, payload) = put_json(
-        app,
+        app.clone(),
         &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
-        json!({ "enabled": false }),
+        json!({
+            "enabled": false,
+            "ingest_policy": {
+                "retention_days": 7,
+                "max_events": 50,
+                "max_bytes": 1024,
+                "allow_backfill": false
+            }
+        }),
         &session_id,
     )
     .await;
@@ -3474,6 +3483,58 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     );
     assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(false));
     assert!(payload.get("ref_count").and_then(Value::as_i64).is_some());
+    let ingest_policy = payload
+        .get("ingest_policy")
+        .and_then(Value::as_object)
+        .expect("ingest_policy object");
+    assert_eq!(
+        ingest_policy.get("retention_days").and_then(Value::as_i64),
+        Some(7)
+    );
+    assert_eq!(
+        ingest_policy.get("max_events").and_then(Value::as_i64),
+        Some(50)
+    );
+    assert_eq!(
+        ingest_policy.get("max_bytes").and_then(Value::as_i64),
+        Some(1024)
+    );
+    assert_eq!(
+        ingest_policy.get("allow_backfill").and_then(Value::as_bool),
+        Some(false)
+    );
+
+    let (status, payload) = put_json(
+        app.clone(),
+        &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
+        json!({ "enabled": true }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(true));
+    let preserved_policy = payload
+        .get("ingest_policy")
+        .and_then(Value::as_object)
+        .expect("preserved ingest_policy object");
+    assert_eq!(
+        preserved_policy
+            .get("allow_backfill")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+
+    let stored_policy: Value = sqlx::query_scalar(
+        "SELECT ingest_policy FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&approve_topic_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("load stored ingest policy");
+    assert_eq!(
+        stored_policy.get("retention_days").and_then(Value::as_i64),
+        Some(7)
+    );
 }
 
 #[tokio::test]

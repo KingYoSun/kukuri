@@ -43,6 +43,12 @@ describe('SubscriptionsPage', () => {
         topic_id: 'kukuri:topic:1',
         enabled: true,
         ref_count: 2,
+        ingest_policy: {
+          retention_days: 7,
+          max_events: 100,
+          max_bytes: 2048,
+          allow_backfill: true
+        },
         updated_at: 1738809601
       }
     ]);
@@ -50,6 +56,12 @@ describe('SubscriptionsPage', () => {
       topic_id: 'kukuri:topic:1',
       enabled: false,
       ref_count: 1,
+      ingest_policy: {
+        retention_days: 7,
+        max_events: 100,
+        max_bytes: 2048,
+        allow_backfill: true
+      },
       updated_at: 1738809602
     });
     vi.mocked(api.plans).mockResolvedValue([
@@ -100,11 +112,13 @@ describe('SubscriptionsPage', () => {
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Topic' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Retention Days' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Subscriber' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
     const topicLabels = await screen.findAllByText('kukuri:topic:1');
     expect(topicLabels.length).toBeGreaterThanOrEqual(2);
     await screen.findByRole('button', { name: 'Toggle' });
+    await screen.findByRole('button', { name: 'Save policy' });
     await screen.findByRole('button', { name: 'Edit' });
 
     const user = userEvent.setup();
@@ -125,7 +139,40 @@ describe('SubscriptionsPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Toggle' }));
     await waitFor(() => {
-      expect(api.updateNodeSubscription).toHaveBeenCalledWith('kukuri:topic:1', false);
+      expect(api.updateNodeSubscription).toHaveBeenCalledWith('kukuri:topic:1', {
+        enabled: false,
+        ingest_policy: {
+          retention_days: 7,
+          max_events: 100,
+          max_bytes: 2048,
+          allow_backfill: true
+        }
+      });
+    });
+
+    fireEvent.change(screen.getByLabelText('Retention days kukuri:topic:1'), {
+      target: { value: '14' }
+    });
+    fireEvent.change(screen.getByLabelText('Max events kukuri:topic:1'), {
+      target: { value: '200' }
+    });
+    fireEvent.change(screen.getByLabelText('Max bytes kukuri:topic:1'), {
+      target: { value: '4096' }
+    });
+    fireEvent.change(screen.getByLabelText('Backfill kukuri:topic:1'), {
+      target: { value: 'disabled' }
+    });
+    await user.click(screen.getByRole('button', { name: 'Save policy' }));
+    await waitFor(() => {
+      expect(api.updateNodeSubscription).toHaveBeenLastCalledWith('kukuri:topic:1', {
+        enabled: true,
+        ingest_policy: {
+          retention_days: 14,
+          max_events: 200,
+          max_bytes: 4096,
+          allow_backfill: false
+        }
+      });
     });
 
     const createPlanButton = screen.getByRole('button', { name: 'Create plan' });

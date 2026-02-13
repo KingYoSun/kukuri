@@ -1274,6 +1274,16 @@
               }
             }
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -3172,6 +3182,14 @@
           "enabled": {
             "type": "boolean"
           },
+          "ingest_policy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NodeSubscriptionIngestPolicy"
+              }
+            ],
+            "nullable": true
+          },
           "ref_count": {
             "type": "integer",
             "format": "int64"
@@ -3185,6 +3203,30 @@
           }
         }
       },
+      "NodeSubscriptionIngestPolicy": {
+        "type": "object",
+        "properties": {
+          "allow_backfill": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_events": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "retention_days": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
       "NodeSubscriptionUpdate": {
         "type": "object",
         "required": [
@@ -3193,6 +3235,14 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          },
+          "ingest_policy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NodeSubscriptionIngestPolicy"
+              }
+            ],
+            "nullable": true
           }
         }
       },

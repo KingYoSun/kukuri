@@ -1,9 +1,11 @@
 use anyhow::Result;
 use cn_core::auth;
 use sqlx::Row;
+use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::config::{RelayRetention, RelayRuntimeConfig};
+use crate::policy::TopicIngestPolicy;
 use crate::AppState;
 
 pub fn spawn_cleanup_loop(state: AppState) {
@@ -23,23 +25,50 @@ pub fn spawn_cleanup_loop(state: AppState) {
 pub(crate) async fn cleanup_once(state: &AppState, retention: &RelayRetention) -> Result<()> {
     expire_events(state).await?;
 
-    if retention.events_days > 0 {
+    let topic_policies = crate::policy::load_all_topic_ingest_policies(&state.pool).await?;
+    if retention.events_days > 0 || has_topic_retention_overrides(&topic_policies) {
+        let topic_rows = sqlx::query("SELECT DISTINCT topic_id FROM cn_relay.event_topics")
+            .fetch_all(&state.pool)
+            .await?;
         let mut tx = state.pool.begin().await?;
-        let topic_result = sqlx::query(
-            "DELETE FROM cn_relay.event_topics          WHERE event_id IN (              SELECT event_id FROM cn_relay.events              WHERE is_current = FALSE                AND ingested_at < NOW() - ($1 * INTERVAL '1 day')          )",
-        )
-        .bind(retention.events_days)
-        .execute(&mut *tx)
-        .await?;
+        let mut removed_event_topics: u64 = 0;
+        for row in topic_rows {
+            let topic_id: String = row.try_get("topic_id")?;
+            let retention_days = topic_policies
+                .get(&topic_id)
+                .and_then(TopicIngestPolicy::effective_retention_days)
+                .unwrap_or(retention.events_days);
+            if retention_days <= 0 {
+                continue;
+            }
+            let result = sqlx::query(
+                "DELETE FROM cn_relay.event_topics \
+                 WHERE topic_id = $1 \
+                   AND event_id IN ( \
+                       SELECT event_id FROM cn_relay.events \
+                       WHERE is_current = FALSE \
+                         AND ingested_at < NOW() - ($2 * INTERVAL '1 day') \
+                   )",
+            )
+            .bind(&topic_id)
+            .bind(retention_days)
+            .execute(&mut *tx)
+            .await?;
+            removed_event_topics = removed_event_topics.saturating_add(result.rows_affected());
+        }
         let event_result = sqlx::query(
-            "DELETE FROM cn_relay.events          WHERE is_current = FALSE            AND ingested_at < NOW() - ($1 * INTERVAL '1 day')",
+            "DELETE FROM cn_relay.events e \
+             WHERE e.is_current = FALSE \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM cn_relay.event_topics t \
+                   WHERE t.event_id = e.event_id \
+               )",
         )
-        .bind(retention.events_days)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
         tracing::info!(
-            removed_event_topics = topic_result.rows_affected(),
+            removed_event_topics,
             removed_events = event_result.rows_affected(),
             "relay retention cleanup: events"
         );
@@ -86,6 +115,12 @@ pub(crate) async fn cleanup_once(state: &AppState, retention: &RelayRetention) -
     }
 
     Ok(())
+}
+
+fn has_topic_retention_overrides(policies: &HashMap<String, TopicIngestPolicy>) -> bool {
+    policies
+        .values()
+        .any(|policy| policy.effective_retention_days().is_some())
 }
 
 async fn expire_events(state: &AppState) -> Result<()> {

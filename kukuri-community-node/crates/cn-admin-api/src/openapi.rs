@@ -27,8 +27,9 @@ use crate::services::{
     AuditLog, ServiceConfigResponse, ServiceHealth, ServiceInfo, UpdateServiceConfigRequest,
 };
 use crate::subscriptions::{
-    NodeSubscription, NodeSubscriptionUpdate, Plan, PlanLimit, PlanRequest, ReviewRequest,
-    SubscriptionRequestRow, SubscriptionRow, SubscriptionUpdate, UsageRow,
+    NodeSubscription, NodeSubscriptionIngestPolicy, NodeSubscriptionUpdate, Plan, PlanLimit,
+    PlanRequest, ReviewRequest, SubscriptionRequestRow, SubscriptionRow, SubscriptionUpdate,
+    UsageRow,
 };
 use crate::trust::{
     TrustJobRequest, TrustJobRow, TrustScheduleRow, TrustScheduleUpdate, TrustTargetRow,
@@ -138,6 +139,7 @@ pub struct ManualLabelResponse {
             SubscriptionRequestRow,
             ReviewRequest,
             NodeSubscription,
+            NodeSubscriptionIngestPolicy,
             NodeSubscriptionUpdate,
             Plan,
             PlanLimit,
@@ -466,7 +468,11 @@ fn node_subscriptions_list_doc() {}
     path = "/v1/admin/node-subscriptions/{topic_id}",
     params(("topic_id" = String, Path, description = "Topic identifier")),
     request_body = NodeSubscriptionUpdate,
-    responses((status = 200, body = NodeSubscription), (status = 404, body = ErrorResponse))
+    responses(
+        (status = 200, body = NodeSubscription),
+        (status = 400, body = ErrorResponse),
+        (status = 404, body = ErrorResponse)
+    )
 )]
 fn node_subscriptions_update_doc() {}
 

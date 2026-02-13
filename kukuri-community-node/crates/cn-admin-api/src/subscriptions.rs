@@ -36,12 +36,22 @@ pub struct NodeSubscription {
     pub topic_id: String,
     pub enabled: bool,
     pub ref_count: i64,
+    pub ingest_policy: Option<NodeSubscriptionIngestPolicy>,
     pub updated_at: i64,
 }
 
 #[derive(Deserialize, ToSchema)]
 pub struct NodeSubscriptionUpdate {
     pub enabled: bool,
+    pub ingest_policy: Option<NodeSubscriptionIngestPolicy>,
+}
+
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
+pub struct NodeSubscriptionIngestPolicy {
+    pub retention_days: Option<i64>,
+    pub max_events: Option<i64>,
+    pub max_bytes: Option<i64>,
+    pub allow_backfill: Option<bool>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -270,11 +280,19 @@ pub async fn list_node_subscriptions(
     require_admin(&state, &jar).await?;
 
     let rows = sqlx::query(
-        "SELECT topic_id, enabled, ref_count, updated_at FROM cn_admin.node_subscriptions ORDER BY updated_at DESC",
+        "SELECT topic_id, enabled, ref_count, ingest_policy, updated_at \
+         FROM cn_admin.node_subscriptions \
+         ORDER BY updated_at DESC",
     )
     .fetch_all(&state.pool)
     .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     let mut subscriptions = Vec::new();
     for row in rows {
@@ -283,6 +301,7 @@ pub async fn list_node_subscriptions(
             topic_id: row.try_get("topic_id")?,
             enabled: row.try_get("enabled")?,
             ref_count: row.try_get("ref_count")?,
+            ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
             updated_at: updated_at.timestamp(),
         });
     }
@@ -297,14 +316,31 @@ pub async fn update_node_subscription(
     Json(payload): Json<NodeSubscriptionUpdate>,
 ) -> ApiResult<Json<NodeSubscription>> {
     let admin = require_admin(&state, &jar).await?;
+    let ingest_policy_json = payload
+        .ingest_policy
+        .as_ref()
+        .map(validate_and_normalize_ingest_policy)
+        .transpose()?;
     let row = sqlx::query(
-        "UPDATE cn_admin.node_subscriptions          SET enabled = $1, updated_at = NOW()          WHERE topic_id = $2          RETURNING topic_id, enabled, ref_count, updated_at",
+        "UPDATE cn_admin.node_subscriptions \
+         SET enabled = $1, \
+             ingest_policy = COALESCE($2::jsonb, ingest_policy), \
+             updated_at = NOW() \
+         WHERE topic_id = $3 \
+         RETURNING topic_id, enabled, ref_count, ingest_policy, updated_at",
     )
     .bind(payload.enabled)
+    .bind(ingest_policy_json.clone())
     .bind(&topic_id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
     let Some(row) = row else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
@@ -318,7 +354,10 @@ pub async fn update_node_subscription(
         &admin.admin_user_id,
         "node_subscription.update",
         &format!("topic:{topic_id}"),
-        Some(serde_json::json!({ "enabled": payload.enabled })),
+        Some(serde_json::json!({
+            "enabled": payload.enabled,
+            "ingest_policy": ingest_policy_json
+        })),
         None,
     )
     .await?;
@@ -328,7 +367,60 @@ pub async fn update_node_subscription(
         topic_id: row.try_get("topic_id")?,
         enabled: row.try_get("enabled")?,
         ref_count: row.try_get("ref_count")?,
+        ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
         updated_at: updated_at.timestamp(),
+    }))
+}
+
+fn parse_node_ingest_policy(raw: Option<Value>) -> ApiResult<Option<NodeSubscriptionIngestPolicy>> {
+    match raw {
+        None => Ok(None),
+        Some(value) => serde_json::from_value::<NodeSubscriptionIngestPolicy>(value)
+            .map(Some)
+            .map_err(|err| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    format!("invalid ingest_policy payload: {err}"),
+                )
+            }),
+    }
+}
+
+fn validate_and_normalize_ingest_policy(policy: &NodeSubscriptionIngestPolicy) -> ApiResult<Value> {
+    if let Some(retention_days) = policy.retention_days {
+        if retention_days < 0 {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_INGEST_POLICY",
+                "retention_days must be 0 or greater",
+            ));
+        }
+    }
+    if let Some(max_events) = policy.max_events {
+        if max_events < 1 {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_INGEST_POLICY",
+                "max_events must be 1 or greater",
+            ));
+        }
+    }
+    if let Some(max_bytes) = policy.max_bytes {
+        if max_bytes < 1 {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_INGEST_POLICY",
+                "max_bytes must be 1 or greater",
+            ));
+        }
+    }
+
+    Ok(serde_json::json!({
+        "retention_days": policy.retention_days,
+        "max_events": policy.max_events,
+        "max_bytes": policy.max_bytes,
+        "allow_backfill": policy.allow_backfill.unwrap_or(true),
     }))
 }
 

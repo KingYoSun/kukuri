@@ -5,8 +5,10 @@ use cn_kip_types::{
     KIND_KEY_ENVELOPE,
 };
 use sqlx::{Postgres, Row, Transaction};
+use std::collections::{HashMap, HashSet};
 
 use crate::config::RelayRuntimeConfig;
+use crate::policy::TopicIngestPolicy;
 use crate::AppState;
 
 pub(crate) const ACCESS_CONTROL_P2P_ONLY_REASON: &str = "restricted: access control p2p-only";
@@ -124,7 +126,6 @@ pub async fn ingest_event(
             });
         }
     }
-
     let expires_at = raw.exp_tag().or(raw.expiration_tag());
     if let Some(exp) = expires_at {
         if exp <= now {
@@ -233,6 +234,22 @@ pub async fn ingest_event(
         });
     }
     metrics::inc_dedupe_miss(super::SERVICE_NAME);
+
+    let topic_ingest_policies =
+        crate::policy::load_topic_ingest_policies(&state.pool, &normalized_topics).await?;
+    let incoming_bytes = i64::try_from(raw_size).unwrap_or(i64::MAX);
+    if let Some(reason) = enforce_topic_capacity(
+        &mut tx,
+        &normalized_topics,
+        &topic_ingest_policies,
+        incoming_bytes,
+    )
+    .await?
+    {
+        metrics::inc_ingest_rejected(super::SERVICE_NAME, "restricted");
+        tx.rollback().await?;
+        return Ok(IngestOutcome::Rejected { reason });
+    }
 
     let kind = raw.kind as i32;
     let replaceable_key = if is_replaceable_kind(raw.kind) {
@@ -379,6 +396,59 @@ fn is_access_control_kind(kind: u32) -> bool {
         kind,
         KIND_KEY_ENVELOPE | KIND_INVITE_CAPABILITY | KIND_JOIN_REQUEST
     )
+}
+
+async fn enforce_topic_capacity(
+    tx: &mut Transaction<'_, Postgres>,
+    topic_ids: &[String],
+    policies: &HashMap<String, TopicIngestPolicy>,
+    incoming_bytes: i64,
+) -> Result<Option<String>> {
+    let mut checked_topics = HashSet::new();
+    for topic_id in topic_ids {
+        if !checked_topics.insert(topic_id.clone()) {
+            continue;
+        }
+        let Some(policy) = policies.get(topic_id) else {
+            continue;
+        };
+        let max_events = policy.effective_max_events();
+        let max_bytes = policy.effective_max_bytes();
+        if max_events.is_none() && max_bytes.is_none() {
+            continue;
+        }
+
+        let row = sqlx::query(
+            "SELECT COUNT(*)::BIGINT AS event_count, \
+                    COALESCE(SUM(octet_length(e.raw_json::text)), 0)::BIGINT AS total_bytes \
+             FROM cn_relay.event_topics t \
+             JOIN cn_relay.events e ON e.event_id = t.event_id \
+             WHERE t.topic_id = $1 \
+               AND e.is_ephemeral = FALSE",
+        )
+        .bind(topic_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        let event_count: i64 = row.try_get("event_count")?;
+        let total_bytes: i64 = row.try_get("total_bytes")?;
+
+        if let Some(limit) = max_events {
+            if event_count >= limit {
+                return Ok(Some(format!(
+                    "restricted: ingest capacity exceeded ({topic_id})"
+                )));
+            }
+        }
+        if let Some(limit) = max_bytes {
+            if total_bytes.saturating_add(incoming_bytes) > limit {
+                return Ok(Some(format!(
+                    "restricted: ingest capacity exceeded ({topic_id})"
+                )));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 async fn insert_dedupe(tx: &mut Transaction<'_, Postgres>, event_id: &str) -> Result<bool> {

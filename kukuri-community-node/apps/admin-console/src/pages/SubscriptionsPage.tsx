@@ -34,6 +34,79 @@ const subscriptionUpdateSchema = z.object({
   status: z.enum(['active', 'paused', 'cancelled', 'disabled'])
 });
 
+type NodePolicyDraft = {
+  retentionDays: string;
+  maxEvents: string;
+  maxBytes: string;
+  allowBackfill: boolean;
+};
+
+type NodeIngestPolicyPayload = {
+  retention_days: number | null;
+  max_events: number | null;
+  max_bytes: number | null;
+  allow_backfill: boolean;
+};
+
+const toNodePolicyDraft = (policy: NodeSubscription['ingest_policy']): NodePolicyDraft => ({
+  retentionDays:
+    typeof policy?.retention_days === 'number' && Number.isFinite(policy.retention_days)
+      ? String(policy.retention_days)
+      : '',
+  maxEvents:
+    typeof policy?.max_events === 'number' && Number.isFinite(policy.max_events)
+      ? String(policy.max_events)
+      : '',
+  maxBytes:
+    typeof policy?.max_bytes === 'number' && Number.isFinite(policy.max_bytes)
+      ? String(policy.max_bytes)
+      : '',
+  allowBackfill: policy?.allow_backfill ?? true
+});
+
+const parseNodePolicyDraft = (
+  draft: NodePolicyDraft
+): { payload: NodeIngestPolicyPayload; error: string | null } => {
+  const parseInteger = (
+    raw: string,
+    label: string,
+    min: number
+  ): { value: number | null; error: string | null } => {
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      return { value: null, error: null };
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || !Number.isFinite(parsed) || parsed < min) {
+      return { value: null, error: `${label} must be an integer >= ${min}.` };
+    }
+    return { value: parsed, error: null };
+  };
+
+  const retention = parseInteger(draft.retentionDays, 'Retention days', 0);
+  if (retention.error) {
+    return { payload: { retention_days: null, max_events: null, max_bytes: null, allow_backfill: draft.allowBackfill }, error: retention.error };
+  }
+  const maxEvents = parseInteger(draft.maxEvents, 'Max events', 1);
+  if (maxEvents.error) {
+    return { payload: { retention_days: retention.value, max_events: null, max_bytes: null, allow_backfill: draft.allowBackfill }, error: maxEvents.error };
+  }
+  const maxBytes = parseInteger(draft.maxBytes, 'Max bytes', 1);
+  if (maxBytes.error) {
+    return { payload: { retention_days: retention.value, max_events: maxEvents.value, max_bytes: null, allow_backfill: draft.allowBackfill }, error: maxBytes.error };
+  }
+
+  return {
+    payload: {
+      retention_days: retention.value,
+      max_events: maxEvents.value,
+      max_bytes: maxBytes.value,
+      allow_backfill: draft.allowBackfill
+    },
+    error: null
+  };
+};
+
 export const SubscriptionsPage = () => {
   const queryClient = useQueryClient();
   const [requestFilter, setRequestFilter] = useState('pending');
@@ -55,6 +128,8 @@ export const SubscriptionsPage = () => {
   const [subscriptionFilter, setSubscriptionFilter] = useState('');
   const [usageForm, setUsageForm] = useState({ pubkey: '', metric: '', days: '30' });
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [nodePolicyDrafts, setNodePolicyDrafts] = useState<Record<string, NodePolicyDraft>>({});
+  const [nodePolicyErrors, setNodePolicyErrors] = useState<Record<string, string | null>>({});
 
   const requestsQuery = useQuery<SubscriptionRequest[]>({
     queryKey: ['subscriptionRequests', requestFilter],
@@ -105,11 +180,28 @@ export const SubscriptionsPage = () => {
     }
   });
 
-  const nodeToggleMutation = useMutation({
-    mutationFn: ({ topicId, enabled }: { topicId: string; enabled: boolean }) =>
-      api.updateNodeSubscription(topicId, enabled),
+  const nodeSubscriptionMutation = useMutation({
+    mutationFn: ({
+      topicId,
+      enabled,
+      ingestPolicy
+    }: {
+      topicId: string;
+      enabled: boolean;
+      ingestPolicy?: NodeIngestPolicyPayload;
+    }) =>
+      api.updateNodeSubscription(topicId, {
+        enabled,
+        ingest_policy: ingestPolicy
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodeSubscriptions'] });
+    },
+    onError: (err, variables) => {
+      setNodePolicyErrors((prev) => ({
+        ...prev,
+        [variables.topicId]: errorToMessage(err)
+      }));
     }
   });
 
@@ -247,6 +339,38 @@ export const SubscriptionsPage = () => {
     return counts;
   }, [requestList]);
 
+  const nodeSubscriptions = nodeSubsQuery.data ?? [];
+
+  const saveNodePolicy = (subscription: NodeSubscription) => {
+    const draft = nodePolicyDrafts[subscription.topic_id] ?? toNodePolicyDraft(subscription.ingest_policy);
+    const parsed = parseNodePolicyDraft(draft);
+    if (parsed.error) {
+      setNodePolicyErrors((prev) => ({
+        ...prev,
+        [subscription.topic_id]: parsed.error
+      }));
+      return;
+    }
+    setNodePolicyErrors((prev) => ({
+      ...prev,
+      [subscription.topic_id]: null
+    }));
+    nodeSubscriptionMutation.mutate({
+      topicId: subscription.topic_id,
+      enabled: subscription.enabled,
+      ingestPolicy: parsed.payload
+    });
+  };
+
+  const toggleNodeSubscription = (subscription: NodeSubscription) => {
+    const parsed = parseNodePolicyDraft(toNodePolicyDraft(subscription.ingest_policy));
+    nodeSubscriptionMutation.mutate({
+      topicId: subscription.topic_id,
+      enabled: !subscription.enabled,
+      ingestPolicy: parsed.payload
+    });
+  };
+
   return (
     <>
       <div className="hero">
@@ -350,37 +474,117 @@ export const SubscriptionsPage = () => {
               <th>Topic</th>
               <th>Status</th>
               <th>Ref Count</th>
+              <th>Retention Days</th>
+              <th>Max Events</th>
+              <th>Max Bytes</th>
+              <th>Backfill</th>
               <th>Updated</th>
-              <th />
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(nodeSubsQuery.data ?? []).map((sub) => (
-              <tr key={sub.topic_id}>
-                <td>{sub.topic_id}</td>
-                <td>
-                  <StatusBadge status={sub.enabled ? 'enabled' : 'disabled'} />
-                </td>
-                <td>{sub.ref_count}</td>
-                <td>{formatTimestamp(sub.updated_at)}</td>
-                <td>
-                  <button
-                    className="button secondary"
-                    onClick={() =>
-                      nodeToggleMutation.mutate({
-                        topicId: sub.topic_id,
-                        enabled: !sub.enabled
-                      })
-                    }
-                  >
-                    Toggle
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {(nodeSubsQuery.data ?? []).length === 0 && (
+            {nodeSubscriptions.map((sub) => {
+              const draft = nodePolicyDrafts[sub.topic_id] ?? toNodePolicyDraft(sub.ingest_policy);
+              const rowError = nodePolicyErrors[sub.topic_id];
+              return (
+                <tr key={sub.topic_id}>
+                  <td>{sub.topic_id}</td>
+                  <td>
+                    <StatusBadge status={sub.enabled ? 'enabled' : 'disabled'} />
+                  </td>
+                  <td>{sub.ref_count}</td>
+                  <td>
+                    <input
+                      aria-label={`Retention days ${sub.topic_id}`}
+                      value={draft.retentionDays}
+                      onChange={(event) =>
+                        setNodePolicyDrafts((prev) => ({
+                          ...prev,
+                          [sub.topic_id]: {
+                            ...draft,
+                            retentionDays: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="global"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      aria-label={`Max events ${sub.topic_id}`}
+                      value={draft.maxEvents}
+                      onChange={(event) =>
+                        setNodePolicyDrafts((prev) => ({
+                          ...prev,
+                          [sub.topic_id]: {
+                            ...draft,
+                            maxEvents: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="unlimited"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      aria-label={`Max bytes ${sub.topic_id}`}
+                      value={draft.maxBytes}
+                      onChange={(event) =>
+                        setNodePolicyDrafts((prev) => ({
+                          ...prev,
+                          [sub.topic_id]: {
+                            ...draft,
+                            maxBytes: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="unlimited"
+                    />
+                  </td>
+                  <td>
+                    <select
+                      aria-label={`Backfill ${sub.topic_id}`}
+                      value={draft.allowBackfill ? 'enabled' : 'disabled'}
+                      onChange={(event) =>
+                        setNodePolicyDrafts((prev) => ({
+                          ...prev,
+                          [sub.topic_id]: {
+                            ...draft,
+                            allowBackfill: event.target.value === 'enabled'
+                          }
+                        }))
+                      }
+                    >
+                      <option value="enabled">enabled</option>
+                      <option value="disabled">disabled</option>
+                    </select>
+                  </td>
+                  <td>{formatTimestamp(sub.updated_at)}</td>
+                  <td>
+                    <div className="row">
+                      <button
+                        className="button secondary"
+                        onClick={() => toggleNodeSubscription(sub)}
+                        disabled={nodeSubscriptionMutation.isPending}
+                      >
+                        Toggle
+                      </button>
+                      <button
+                        className="button"
+                        onClick={() => saveNodePolicy(sub)}
+                        disabled={nodeSubscriptionMutation.isPending}
+                      >
+                        Save policy
+                      </button>
+                    </div>
+                    {rowError && <div className="notice">{rowError}</div>}
+                  </td>
+                </tr>
+              );
+            })}
+            {nodeSubscriptions.length === 0 && (
               <tr>
-                <td colSpan={5}>No node subscriptions configured.</td>
+                <td colSpan={9}>No node subscriptions configured.</td>
               </tr>
             )}
           </tbody>

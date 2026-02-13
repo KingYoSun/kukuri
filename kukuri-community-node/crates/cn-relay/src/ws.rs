@@ -8,7 +8,7 @@ use cn_kip_types::{KIND_INVITE_CAPABILITY, KIND_JOIN_REQUEST, KIND_KEY_ENVELOPE}
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use sqlx::{Postgres, QueryBuilder, Row};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::{interval, sleep, Instant};
@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::config::RelayRuntimeConfig;
 use crate::filters::{matches_filter, parse_filters, RelayFilter};
 use crate::ingest::{ingest_event, IngestContext, IngestOutcome, IngestSource, RelayEvent};
+use crate::policy::TopicIngestPolicy;
 use crate::AppState;
 
 const AUTH_EVENT_KIND: u32 = 22242;
@@ -325,6 +326,11 @@ async fn handle_req_message(
             }
         }
     }
+    let requested_topics = collect_requested_topics(&filters);
+    let ingest_policies = crate::policy::load_topic_ingest_policies(&state.pool, &requested_topics)
+        .await
+        .map_err(|err| anyhow!("failed to load ingest policy: {err}"))?;
+    let backfill_filters = build_backfill_filters(&filters, &ingest_policies);
 
     let runtime = current_runtime(state).await?;
     let now = auth::unix_seconds().unwrap_or(0) as i64;
@@ -353,7 +359,7 @@ async fn handle_req_message(
     subscriptions.insert(sub_id.clone(), filters.clone());
     let mut seen = std::collections::HashSet::new();
     let mut backfill_events = Vec::new();
-    for filter in &filters {
+    for filter in &backfill_filters {
         let events = fetch_events(state, filter).await?;
         for raw in events {
             if !seen.insert(raw.id.clone()) {
@@ -371,6 +377,46 @@ async fn handle_req_message(
     }
     send_eose(sender, &sub_id).await?;
     Ok(())
+}
+
+fn collect_requested_topics(filters: &[RelayFilter]) -> Vec<String> {
+    let mut topics = HashSet::new();
+    for filter in filters {
+        if let Some(topic_values) = filter.topic_ids() {
+            for topic_id in topic_values {
+                topics.insert(topic_id.clone());
+            }
+        }
+    }
+    topics.into_iter().collect()
+}
+
+fn build_backfill_filters(
+    filters: &[RelayFilter],
+    ingest_policies: &HashMap<String, TopicIngestPolicy>,
+) -> Vec<RelayFilter> {
+    let mut backfill_filters = Vec::new();
+    for filter in filters {
+        let mut backfill_filter = filter.clone();
+        if let Some(topic_ids) = filter.topic_ids() {
+            let allowed_topics = topic_ids
+                .iter()
+                .filter(|topic_id| {
+                    ingest_policies
+                        .get(*topic_id)
+                        .map(|policy| policy.allows_backfill())
+                        .unwrap_or(true)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if allowed_topics.is_empty() {
+                continue;
+            }
+            backfill_filter.tags.insert("t".to_string(), allowed_topics);
+        }
+        backfill_filters.push(backfill_filter);
+    }
+    backfill_filters
 }
 
 async fn handle_auth_message(

@@ -115,11 +115,22 @@ export const api = {
       })
     ),
   nodeSubscriptions: () => unwrap(client.GET('/v1/admin/node-subscriptions')),
-  updateNodeSubscription: (topicId: string, enabled: boolean) =>
+  updateNodeSubscription: (
+    topicId: string,
+    payload: {
+      enabled: boolean;
+      ingest_policy?: {
+        retention_days?: number | null;
+        max_events?: number | null;
+        max_bytes?: number | null;
+        allow_backfill?: boolean | null;
+      };
+    }
+  ) =>
     unwrap(
       client.PUT('/v1/admin/node-subscriptions/{topic_id}', {
         params: { path: { topic_id: topicId } },
-        body: { enabled }
+        body: payload
       })
     ),
   policies: () => unwrap(client.GET('/v1/admin/policies')),

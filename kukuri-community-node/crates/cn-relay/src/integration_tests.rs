@@ -118,6 +118,23 @@ async fn enable_topic(pool: &Pool<Postgres>, state: &AppState, topic_id: &str) {
     topics.insert(topic_id.to_string());
 }
 
+async fn update_topic_ingest_policy(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+    policy: serde_json::Value,
+) {
+    sqlx::query(
+        "UPDATE cn_admin.node_subscriptions \
+         SET ingest_policy = $1, updated_at = NOW() \
+         WHERE topic_id = $2",
+    )
+    .bind(policy)
+    .bind(topic_id)
+    .execute(pool)
+    .await
+    .expect("update topic ingest policy");
+}
+
 async fn reset_topic_health_state(pool: &Pool<Postgres>, state: &AppState) {
     sqlx::query("UPDATE cn_admin.node_subscriptions SET enabled = FALSE")
         .execute(pool)
@@ -526,6 +543,63 @@ async fn insert_backfill_event(
     .execute(pool)
     .await
     .expect("insert relay event topic");
+}
+
+async fn insert_non_current_event(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+    event_id: &str,
+    created_at: i64,
+    ingested_days_ago: i64,
+) {
+    let tags = json!([["t", topic_id]]);
+    let raw_json = json!({
+        "id": event_id,
+        "pubkey": "1".repeat(64),
+        "created_at": created_at,
+        "kind": 1,
+        "tags": tags.clone(),
+        "content": "stale",
+        "sig": "2".repeat(128)
+    });
+    sqlx::query(
+        "INSERT INTO cn_relay.events \
+         (event_id, pubkey, kind, created_at, tags, content, sig, raw_json, ingested_at, is_deleted, is_ephemeral, is_current, replaceable_key, addressable_key, expires_at) \
+         VALUES ($1, $2, 1, $3, $4, $5, $6, $7, NOW() - ($8 * INTERVAL '1 day'), FALSE, FALSE, FALSE, NULL, NULL, NULL)",
+    )
+    .bind(event_id)
+    .bind("1".repeat(64))
+    .bind(created_at)
+    .bind(tags)
+    .bind("stale")
+    .bind("2".repeat(128))
+    .bind(raw_json)
+    .bind(ingested_days_ago)
+    .execute(pool)
+    .await
+    .expect("insert non-current relay event");
+
+    sqlx::query(
+        "INSERT INTO cn_relay.event_topics (event_id, topic_id) VALUES ($1, $2) \
+         ON CONFLICT (event_id, topic_id) DO NOTHING",
+    )
+    .bind(event_id)
+    .bind(topic_id)
+    .execute(pool)
+    .await
+    .expect("insert non-current relay event topic");
+}
+
+fn unique_hex_event_id(prefix: char) -> String {
+    let mut normalized = prefix.to_ascii_lowercase();
+    if !normalized.is_ascii_hexdigit() {
+        normalized = 'a';
+    }
+    let mut id = String::with_capacity(64);
+    id.push(normalized);
+    id.push_str(&Uuid::new_v4().simple().to_string());
+    id.push_str(&"0".repeat(31));
+    id
 }
 
 fn build_event_at(
@@ -1596,15 +1670,15 @@ async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after
     let state = build_state(pool.clone());
     enable_topic(&pool, &state, &topic_id).await;
 
-    let newest_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    let tie_low_id = "1111111111111111111111111111111111111111111111111111111111111111";
-    let tie_high_id = "9999999999999999999999999999999999999999999999999999999999999999";
-    let oldest_id = "0000000000000000000000000000000000000000000000000000000000000000";
+    let newest_id = unique_hex_event_id('a');
+    let tie_low_id = unique_hex_event_id('1');
+    let tie_high_id = unique_hex_event_id('9');
+    let oldest_id = unique_hex_event_id('0');
 
-    insert_backfill_event(&pool, &topic_id, newest_id, 1_700_000_300, "newest").await;
-    insert_backfill_event(&pool, &topic_id, tie_high_id, 1_700_000_200, "tie-high").await;
-    insert_backfill_event(&pool, &topic_id, tie_low_id, 1_700_000_200, "tie-low").await;
-    insert_backfill_event(&pool, &topic_id, oldest_id, 1_700_000_100, "oldest").await;
+    insert_backfill_event(&pool, &topic_id, &newest_id, 1_700_000_300, "newest").await;
+    insert_backfill_event(&pool, &topic_id, &tie_high_id, 1_700_000_200, "tie-high").await;
+    insert_backfill_event(&pool, &topic_id, &tie_low_id, 1_700_000_200, "tie-low").await;
+    insert_backfill_event(&pool, &topic_id, &oldest_id, 1_700_000_100, "oldest").await;
 
     let (addr, server_handle) = spawn_relay_server(state).await;
     let mut subscriber = connect_ws(addr).await;
@@ -1632,7 +1706,7 @@ async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after
             .get(2)
             .and_then(|event| event.get("id"))
             .and_then(|id| id.as_str()),
-        Some(newest_id)
+        Some(newest_id.as_str())
     );
 
     let second = wait_for_ws_json(
@@ -1649,7 +1723,7 @@ async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after
             .get(2)
             .and_then(|event| event.get("id"))
             .and_then(|id| id.as_str()),
-        Some(tie_low_id)
+        Some(tie_low_id.as_str())
     );
 
     let third = wait_for_ws_json(&mut subscriber, WAIT_TIMEOUT, "backfill eose", |_| true).await;
@@ -1696,6 +1770,266 @@ async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after
     assert_eq!(delivered.get(1).and_then(|v| v.as_str()), Some(sub_id));
 
     server_handle.abort();
+}
+
+#[tokio::test]
+async fn ws_backfill_skips_history_when_topic_policy_disables_backfill() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-backfill-policy-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+    update_topic_ingest_policy(
+        &pool,
+        &topic_id,
+        json!({
+            "allow_backfill": false
+        }),
+    )
+    .await;
+    let historical_event_id = unique_hex_event_id('b');
+    insert_backfill_event(
+        &pool,
+        &topic_id,
+        &historical_event_id,
+        1_700_001_000,
+        "historical",
+    )
+    .await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut subscriber = connect_ws(addr).await;
+    let sub_id = "sub-no-backfill";
+    subscriber
+        .send(Message::Text(
+            json!(["REQ", sub_id, { "kinds": [1], "#t": [topic_id.clone()], "limit": 10 }])
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("send req");
+
+    let first = wait_for_ws_json(
+        &mut subscriber,
+        WAIT_TIMEOUT,
+        "eose without backfill",
+        |_| true,
+    )
+    .await;
+    assert_eq!(first.get(0).and_then(|v| v.as_str()), Some("EOSE"));
+    assert_eq!(first.get(1).and_then(|v| v.as_str()), Some(sub_id));
+
+    let mut publisher = connect_ws(addr).await;
+    let keys = Keys::generate();
+    let realtime = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "realtime-only".to_string(),
+    )
+    .expect("build realtime event");
+    publisher
+        .send(Message::Text(
+            json!(["EVENT", realtime.clone()]).to_string().into(),
+        ))
+        .await
+        .expect("send realtime event");
+    let publish_ok = wait_for_ws_json(&mut publisher, WAIT_TIMEOUT, "publisher ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(realtime.id.as_str())
+    })
+    .await;
+    assert_eq!(publish_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let delivered = wait_for_ws_json(
+        &mut subscriber,
+        WAIT_TIMEOUT,
+        "realtime after no-backfill eose",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("EVENT")
+                && value
+                    .get(2)
+                    .and_then(|event| event.get("id"))
+                    .and_then(|id| id.as_str())
+                    == Some(realtime.id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(delivered.get(1).and_then(|v| v.as_str()), Some(sub_id));
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn ingest_rejects_when_topic_max_events_capacity_is_reached() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-capacity-events-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+    update_topic_ingest_policy(
+        &pool,
+        &topic_id,
+        json!({
+            "max_events": 1
+        }),
+    )
+    .await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut publisher = connect_ws(addr).await;
+    let keys = Keys::generate();
+
+    let first = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "capacity-first".to_string(),
+    )
+    .expect("build first event");
+    publisher
+        .send(Message::Text(
+            json!(["EVENT", first.clone()]).to_string().into(),
+        ))
+        .await
+        .expect("send first event");
+    let first_ok = wait_for_ws_json(&mut publisher, WAIT_TIMEOUT, "first event ok", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("OK")
+            && value.get(1).and_then(|v| v.as_str()) == Some(first.id.as_str())
+    })
+    .await;
+    assert_eq!(first_ok.get(2).and_then(|v| v.as_bool()), Some(true));
+
+    let second = nostr::build_signed_event(
+        &keys,
+        1,
+        vec![vec!["t".to_string(), topic_id.clone()]],
+        "capacity-second".to_string(),
+    )
+    .expect("build second event");
+    publisher
+        .send(Message::Text(
+            json!(["EVENT", second.clone()]).to_string().into(),
+        ))
+        .await
+        .expect("send second event");
+    let second_rejected = wait_for_ws_json(
+        &mut publisher,
+        WAIT_TIMEOUT,
+        "second event capacity reject",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("OK")
+                && value.get(1).and_then(|v| v.as_str()) == Some(second.id.as_str())
+        },
+    )
+    .await;
+    assert_eq!(
+        second_rejected.get(2).and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    let reason = second_rejected
+        .get(3)
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    assert!(
+        reason.starts_with("restricted: ingest capacity exceeded"),
+        "unexpected capacity reject reason: {reason}"
+    );
+
+    let second_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&second.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count second event");
+    assert_eq!(second_count, 0);
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn cleanup_applies_topic_retention_override_from_ingest_policy() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let override_topic = format!("kukuri:relay-retention-override-it-{}", Uuid::new_v4());
+    let default_topic = format!("kukuri:relay-retention-default-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &override_topic).await;
+    enable_topic(&pool, &state, &default_topic).await;
+    update_topic_ingest_policy(
+        &pool,
+        &override_topic,
+        json!({
+            "retention_days": 1
+        }),
+    )
+    .await;
+
+    let override_event_id = format!("retention-override-{}", Uuid::new_v4().simple());
+    let default_event_id = format!("retention-default-{}", Uuid::new_v4().simple());
+    insert_non_current_event(&pool, &override_topic, &override_event_id, 1_700_002_000, 2).await;
+    insert_non_current_event(&pool, &default_topic, &default_event_id, 1_700_002_100, 2).await;
+
+    crate::retention::cleanup_once(
+        &state,
+        &crate::config::RelayRetention {
+            events_days: 30,
+            tombstone_days: 0,
+            dedupe_days: 0,
+            outbox_days: 0,
+            cleanup_interval_seconds: 60,
+        },
+    )
+    .await
+    .expect("run retention cleanup");
+
+    let override_event_topics: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_topics WHERE event_id = $1")
+            .bind(&override_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count override event_topics");
+    let override_events: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&override_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count override events");
+    assert_eq!(override_event_topics, 0);
+    assert_eq!(override_events, 0);
+
+    let default_event_topics: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.event_topics WHERE event_id = $1")
+            .bind(&default_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count default event_topics");
+    let default_events: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_relay.events WHERE event_id = $1")
+            .bind(&default_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count default events");
+    assert_eq!(default_event_topics, 1);
+    assert_eq!(default_events, 1);
 }
 
 #[tokio::test]
