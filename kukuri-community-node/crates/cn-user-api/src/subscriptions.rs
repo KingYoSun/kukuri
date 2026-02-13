@@ -827,9 +827,10 @@ mod api_contract_tests {
             .await;
     }
 
-    async fn test_state_with_meili_url_and_bootstrap_auth_mode(
+    async fn test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
         meili_url: &str,
         bootstrap_auth_mode: &str,
+        user_config_json: Value,
     ) -> crate::AppState {
         let pool = PgPoolOptions::new()
             .connect(&database_url())
@@ -846,9 +847,7 @@ mod api_contract_tests {
             secret: "test-secret".to_string(),
             ttl_seconds: 3600,
         };
-        let user_config = service_config::static_handle(serde_json::json!({
-            "rate_limit": { "enabled": false }
-        }));
+        let user_config = service_config::static_handle(user_config_json);
         let bootstrap_config = service_config::static_handle(serde_json::json!({
             "auth": { "mode": bootstrap_auth_mode }
         }));
@@ -870,6 +869,20 @@ mod api_contract_tests {
         }
     }
 
+    async fn test_state_with_meili_url_and_bootstrap_auth_mode(
+        meili_url: &str,
+        bootstrap_auth_mode: &str,
+    ) -> crate::AppState {
+        test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
+            meili_url,
+            bootstrap_auth_mode,
+            serde_json::json!({
+                "rate_limit": { "enabled": false }
+            }),
+        )
+        .await
+    }
+
     async fn test_state_with_meili_url(meili_url: &str) -> crate::AppState {
         test_state_with_meili_url_and_bootstrap_auth_mode(meili_url, "off").await
     }
@@ -880,6 +893,26 @@ mod api_contract_tests {
 
     async fn test_state_with_bootstrap_auth_required() -> crate::AppState {
         test_state_with_meili_url_and_bootstrap_auth_mode("http://localhost:7700", "required").await
+    }
+
+    async fn test_state_with_rate_limits(
+        auth_per_minute: u64,
+        public_per_minute: u64,
+        protected_per_minute: u64,
+    ) -> crate::AppState {
+        test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
+            "http://localhost:7700",
+            "off",
+            serde_json::json!({
+                "rate_limit": {
+                    "enabled": true,
+                    "auth_per_minute": auth_per_minute,
+                    "public_per_minute": public_per_minute,
+                    "protected_per_minute": protected_per_minute
+                }
+            }),
+        )
+        .await
     }
 
     fn issue_token(config: &cn_core::auth::JwtConfig, pubkey: &str) -> String {
@@ -1041,6 +1074,20 @@ mod api_contract_tests {
         } else {
             assert!(details.get("reset_at").is_none());
         }
+    }
+
+    fn assert_rate_limited_contract(status: StatusCode, headers: &HeaderMap, payload: &Value) {
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("RATE_LIMITED")
+        );
+        let retry_after = headers
+            .get(header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(0);
+        assert!(retry_after >= 1, "Retry-After must be >= 1: {retry_after}");
     }
 
     fn prometheus_counter_value(body: &str, metric: &str, required_labels: &[(&str, &str)]) -> f64 {
@@ -1446,6 +1493,17 @@ mod api_contract_tests {
         token: &str,
         extra_headers: &[(&str, &str)],
     ) -> (StatusCode, Value) {
+        let (status, _, payload) =
+            get_json_with_headers_and_response_headers(app, uri, token, extra_headers).await;
+        (status, payload)
+    }
+
+    async fn get_json_with_headers_and_response_headers(
+        app: Router,
+        uri: &str,
+        token: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> (StatusCode, HeaderMap, Value) {
         let mut request = Request::builder()
             .method("GET")
             .uri(uri)
@@ -1463,11 +1521,12 @@ mod api_contract_tests {
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
         let response = app.oneshot(request).await.expect("response");
         let status = response.status();
+        let headers = response.headers().clone();
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body");
         let payload: Value = serde_json::from_slice(&body).expect("json body");
-        (status, payload)
+        (status, headers, payload)
     }
 
     async fn post_json(app: Router, uri: &str, token: &str, payload: Value) -> (StatusCode, Value) {
@@ -1521,6 +1580,25 @@ mod api_contract_tests {
         (status, payload)
     }
 
+    async fn get_json_with_headers_and_consent_retry(
+        app: Router,
+        uri: &str,
+        token: &str,
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+    ) -> (StatusCode, HeaderMap, Value) {
+        for _ in 0..5 {
+            let (status, headers, payload) =
+                get_json_with_headers_and_response_headers(app.clone(), uri, token, &[]).await;
+            if status != StatusCode::PRECONDITION_REQUIRED {
+                return (status, headers, payload);
+            }
+            ensure_consents(pool, pubkey).await;
+        }
+
+        get_json_with_headers_and_response_headers(app, uri, token, &[]).await
+    }
+
     async fn post_json_with_consent_retry(
         app: Router,
         uri: &str,
@@ -1553,6 +1631,15 @@ mod api_contract_tests {
     }
 
     async fn post_json_public(app: Router, uri: &str, payload: Value) -> (StatusCode, Value) {
+        let (status, _, body) = post_json_public_with_headers(app, uri, payload).await;
+        (status, body)
+    }
+
+    async fn post_json_public_with_headers(
+        app: Router,
+        uri: &str,
+        payload: Value,
+    ) -> (StatusCode, HeaderMap, Value) {
         let mut request = Request::builder()
             .method("POST")
             .uri(uri)
@@ -1564,11 +1651,12 @@ mod api_contract_tests {
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
         let response = app.oneshot(request).await.expect("response");
         let status = response.status();
+        let headers = response.headers().clone();
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body");
         let payload: Value = serde_json::from_slice(&body).expect("json body");
-        (status, payload)
+        (status, headers, payload)
     }
 
     async fn delete_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
@@ -2325,6 +2413,31 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn auth_challenge_and_verify_rate_limit_boundary_contract() {
+        let state = test_state_with_rate_limits(1, 120, 120).await;
+        let app = Router::new()
+            .route("/v1/auth/challenge", post(crate::auth::auth_challenge))
+            .route("/v1/auth/verify", post(crate::auth::auth_verify))
+            .with_state(state);
+
+        let (challenge_status, _, _) = post_json_public_with_headers(
+            app.clone(),
+            "/v1/auth/challenge",
+            json!({ "pubkey": "invalid-pubkey" }),
+        )
+        .await;
+        assert_ne!(challenge_status, StatusCode::TOO_MANY_REQUESTS);
+
+        let (verify_status, verify_headers, verify_payload) = post_json_public_with_headers(
+            app,
+            "/v1/auth/verify",
+            json!({ "auth_event_json": { "kind": 1 } }),
+        )
+        .await;
+        assert_rate_limited_contract(verify_status, &verify_headers, &verify_payload);
+    }
+
+    #[tokio::test]
     async fn policies_consents_contract_success_shape_compatible() {
         let state = test_state().await;
         let locale = "ja-JP";
@@ -3055,6 +3168,65 @@ mod api_contract_tests {
                 .and_then(|value| value.to_str().ok()),
             Some(etag.as_str())
         );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_nodes_and_services_rate_limit_boundary_contract() {
+        let state = test_state_with_rate_limits(120, 1, 120).await;
+        let topic_id = format!("kukuri:bootstrap-rate-limit-{}", Uuid::new_v4());
+
+        let app = Router::new()
+            .route(
+                "/v1/bootstrap/nodes",
+                get(crate::bootstrap::get_bootstrap_nodes),
+            )
+            .route(
+                "/v1/bootstrap/topics/{topic_id}/services",
+                get(crate::bootstrap::get_bootstrap_services),
+            )
+            .with_state(state);
+
+        let (nodes_status, _, _) =
+            get_json_public_with_headers(app.clone(), "/v1/bootstrap/nodes", &[]).await;
+        assert_ne!(nodes_status, StatusCode::TOO_MANY_REQUESTS);
+
+        let services_path = format!("/v1/bootstrap/topics/{topic_id}/services");
+        let (services_status, services_headers, services_payload) =
+            get_json_public_with_headers(app, &services_path, &[]).await;
+        assert_rate_limited_contract(services_status, &services_headers, &services_payload);
+    }
+
+    #[tokio::test]
+    async fn protected_search_and_trending_rate_limit_boundary_contract() {
+        let state = test_state_with_rate_limits(120, 120, 1).await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = format!("kukuri:rate-limit-protected-{}", Uuid::new_v4().simple());
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        ensure_consents(&pool, &pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .route("/v1/trending", get(trending))
+            .with_state(state);
+
+        let search_path = format!("/v1/search?topic={topic_id}&q=rate-limit");
+        let (search_status, _, _) = get_json_with_headers_and_consent_retry(
+            app.clone(),
+            &search_path,
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_ne!(search_status, StatusCode::TOO_MANY_REQUESTS);
+
+        let trending_path = format!("/v1/trending?topic={topic_id}");
+        let (trending_status, trending_headers, trending_payload) =
+            get_json_with_headers_and_consent_retry(app, &trending_path, &token, &pool, &pubkey)
+                .await;
+        assert_rate_limited_contract(trending_status, &trending_headers, &trending_payload);
     }
 
     #[tokio::test]
