@@ -59,6 +59,258 @@
         }
       }
     },
+    "/v1/admin/access-control/distribution-results": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "access_control_distribution_results_doc",
+        "parameters": [
+          {
+            "name": "topic_id",
+            "in": "query",
+            "description": "Topic filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "Scope filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "pubkey",
+            "in": "query",
+            "description": "Recipient pubkey filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "epoch",
+            "in": "query",
+            "description": "Epoch filter",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Status filter (pending|success|failed)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DistributionResultRow"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/access-control/invites": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "access_control_invites_list_doc",
+        "parameters": [
+          {
+            "name": "topic_id",
+            "in": "query",
+            "description": "Topic filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Status filter (active|revoked|expired|exhausted)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InviteCapabilityRow"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "access_control_invites_issue_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueInviteCapabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCapabilityRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/access-control/invites/{nonce}/revoke": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "access_control_invites_revoke_doc",
+        "parameters": [
+          {
+            "name": "nonce",
+            "in": "path",
+            "description": "Invite nonce",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCapabilityRow"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/access-control/memberships": {
       "get": {
         "tags": [
@@ -392,6 +644,36 @@
         }
       }
     },
+    "/v1/admin/dashboard": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "dashboard_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/moderation/labels": {
       "get": {
         "tags": [
@@ -427,6 +709,16 @@
             "schema": {
               "type": "integer",
               "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "review_status",
+            "in": "query",
+            "description": "Review status filter (active|disabled)",
+            "required": false,
+            "schema": {
+              "type": "string",
               "nullable": true
             }
           },
@@ -485,6 +777,128 @@
             }
           },
           "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/moderation/labels/{label_id}/rejudge": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_label_rejudge_doc",
+        "parameters": [
+          {
+            "name": "label_id",
+            "in": "path",
+            "description": "Label identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelRejudgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelRejudgeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/moderation/labels/{label_id}/review": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_label_review_doc",
+        "parameters": [
+          {
+            "name": "label_id",
+            "in": "path",
+            "description": "Label identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -659,6 +1073,46 @@
         }
       }
     },
+    "/v1/admin/moderation/rules/test": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "moderation_rules_test_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleTestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/moderation/rules/{rule_id}": {
       "put": {
         "tags": [
@@ -811,6 +1265,222 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/personal-data-jobs": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "dsar_jobs_list_doc",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Job status filter (queued|running|completed|failed)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "request_type",
+            "in": "query",
+            "description": "Request type filter (export|deletion)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "requester_pubkey",
+            "in": "query",
+            "description": "Requester pubkey filter",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DsarJobRow"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/personal-data-jobs/{job_type}/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "dsar_jobs_cancel_doc",
+        "parameters": [
+          {
+            "name": "job_type",
+            "in": "path",
+            "description": "Request type (export|deletion)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "description": "Request identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DsarJobRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry": {
+      "post": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "dsar_jobs_retry_doc",
+        "parameters": [
+          {
+            "name": "job_type",
+            "in": "path",
+            "description": "Request type (export|deletion)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "description": "Request identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DsarJobRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -1241,6 +1911,16 @@
               }
             }
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -1655,6 +2335,52 @@
         }
       }
     },
+    "/v1/admin/trust/targets": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "trust_targets_list_doc",
+        "parameters": [
+          {
+            "name": "pubkey",
+            "in": "query",
+            "description": "Subject pubkey filter (exact or partial)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max rows",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrustTargetRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/usage": {
       "get": {
         "tags": [
@@ -1822,6 +2548,217 @@
           }
         }
       },
+      "DashboardSnapshot": {
+        "type": "object",
+        "required": [
+          "collected_at",
+          "outbox_backlog",
+          "reject_surge",
+          "db_pressure"
+        ],
+        "properties": {
+          "collected_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "db_pressure": {
+            "$ref": "#/components/schemas/DbPressureSignal"
+          },
+          "outbox_backlog": {
+            "$ref": "#/components/schemas/OutboxBacklogSignal"
+          },
+          "reject_surge": {
+            "$ref": "#/components/schemas/RejectSurgeSignal"
+          }
+        }
+      },
+      "DbPressureSignal": {
+        "type": "object",
+        "required": [
+          "db_size_bytes",
+          "disk_soft_limit_bytes",
+          "disk_utilization",
+          "active_connections",
+          "max_connections",
+          "connection_utilization",
+          "lock_waiters",
+          "connection_threshold",
+          "lock_waiter_threshold",
+          "alert",
+          "alerts"
+        ],
+        "properties": {
+          "active_connections": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "alert": {
+            "type": "boolean"
+          },
+          "alerts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connection_threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "connection_utilization": {
+            "type": "number",
+            "format": "double"
+          },
+          "db_size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "disk_soft_limit_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "disk_utilization": {
+            "type": "number",
+            "format": "double"
+          },
+          "lock_waiter_threshold": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lock_waiters": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "max_connections": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DistributionResult": {
+        "type": "object",
+        "required": [
+          "recipient_pubkey",
+          "status"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "recipient_pubkey": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DistributionResultQuery": {
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "pubkey": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic_id": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "DistributionResultRow": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope",
+          "epoch",
+          "recipient_pubkey",
+          "status",
+          "updated_at"
+        ],
+        "properties": {
+          "epoch": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "recipient_pubkey": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DsarJobRow": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "request_type",
+          "requester_pubkey",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error_message": {
+            "type": "string",
+            "nullable": true
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "request_type": {
+            "type": "string"
+          },
+          "requester_pubkey": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
@@ -1851,6 +2788,169 @@
           }
         }
       },
+      "InviteCapabilityRow": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope",
+          "issuer_pubkey",
+          "nonce",
+          "event_id",
+          "expires_at",
+          "max_uses",
+          "used_count",
+          "status",
+          "created_at",
+          "capability_event_json"
+        ],
+        "properties": {
+          "capability_event_json": {},
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "issuer_pubkey": {
+            "type": "string"
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          },
+          "used_count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "IssueInviteCapabilityRequest": {
+        "type": "object",
+        "required": [
+          "topic_id",
+          "scope"
+        ],
+        "properties": {
+          "expires_in_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "nonce": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string"
+          },
+          "topic_id": {
+            "type": "string"
+          }
+        }
+      },
+      "LabelRejudgeRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "LabelRejudgeResponse": {
+        "type": "object",
+        "required": [
+          "label_id",
+          "event_id",
+          "enqueued_jobs",
+          "status"
+        ],
+        "properties": {
+          "enqueued_jobs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "label_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LabelReviewRequest": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "LabelReviewResponse": {
+        "type": "object",
+        "required": [
+          "label_id",
+          "review_status"
+        ],
+        "properties": {
+          "label_id": {
+            "type": "string"
+          },
+          "review_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "review_status": {
+            "type": "string"
+          },
+          "reviewed_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "reviewed_by": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "LabelRow": {
         "type": "object",
         "required": [
@@ -1862,7 +2962,8 @@
           "exp",
           "issuer_pubkey",
           "source",
-          "issued_at"
+          "issued_at",
+          "review_status"
         ],
         "properties": {
           "confidence": {
@@ -1892,6 +2993,22 @@
           },
           "policy_url": {
             "type": "string"
+          },
+          "review_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "review_status": {
+            "type": "string"
+          },
+          "reviewed_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "reviewed_by": {
+            "type": "string",
+            "nullable": true
           },
           "rule_id": {
             "type": "string",
@@ -2066,6 +3183,65 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "OutboxBacklogSignal": {
+        "type": "object",
+        "required": [
+          "max_seq",
+          "total_backlog",
+          "max_backlog",
+          "threshold",
+          "alert",
+          "consumers"
+        ],
+        "properties": {
+          "alert": {
+            "type": "boolean"
+          },
+          "consumers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutboxConsumerBacklog"
+            }
+          },
+          "max_backlog": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "max_seq": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "threshold": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_backlog": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "OutboxConsumerBacklog": {
+        "type": "object",
+        "required": [
+          "consumer",
+          "last_seq",
+          "backlog"
+        ],
+        "properties": {
+          "backlog": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "consumer": {
+            "type": "string"
+          },
+          "last_seq": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -2266,6 +3442,50 @@
           }
         }
       },
+      "RejectSurgeSignal": {
+        "type": "object",
+        "required": [
+          "source_status",
+          "threshold_per_minute",
+          "alert"
+        ],
+        "properties": {
+          "alert": {
+            "type": "boolean"
+          },
+          "current_total": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "delta": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "per_minute": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "previous_total": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source_error": {
+            "type": "string",
+            "nullable": true
+          },
+          "source_status": {
+            "type": "string"
+          },
+          "threshold_per_minute": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "ReportRow": {
         "type": "object",
         "required": [
@@ -2334,9 +3554,16 @@
           "revoked_pubkey",
           "previous_epoch",
           "new_epoch",
-          "recipients"
+          "recipients",
+          "distribution_results"
         ],
         "properties": {
+          "distribution_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DistributionResult"
+            }
+          },
           "new_epoch": {
             "type": "integer",
             "format": "int64"
@@ -2382,9 +3609,16 @@
           "scope",
           "previous_epoch",
           "new_epoch",
-          "recipients"
+          "recipients",
+          "distribution_results"
         ],
         "properties": {
+          "distribution_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DistributionResult"
+            }
+          },
           "new_epoch": {
             "type": "integer",
             "format": "int64"
@@ -2476,6 +3710,114 @@
           },
           "updated_by": {
             "type": "string"
+          }
+        }
+      },
+      "RuleTestLabelPreview": {
+        "type": "object",
+        "required": [
+          "target",
+          "label",
+          "exp",
+          "policy_url",
+          "policy_ref"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "exp": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string"
+          },
+          "policy_ref": {
+            "type": "string"
+          },
+          "policy_url": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        }
+      },
+      "RuleTestRequest": {
+        "type": "object",
+        "required": [
+          "conditions",
+          "action",
+          "sample"
+        ],
+        "properties": {
+          "action": {},
+          "conditions": {},
+          "sample": {
+            "$ref": "#/components/schemas/RuleTestSampleEvent"
+          }
+        }
+      },
+      "RuleTestResponse": {
+        "type": "object",
+        "required": [
+          "matched",
+          "reasons"
+        ],
+        "properties": {
+          "matched": {
+            "type": "boolean"
+          },
+          "preview": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RuleTestLabelPreview"
+              }
+            ],
+            "nullable": true
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RuleTestSampleEvent": {
+        "type": "object",
+        "required": [
+          "pubkey",
+          "kind",
+          "content",
+          "tags"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pubkey": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -2772,6 +4114,67 @@
           },
           "is_enabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "TrustTargetRow": {
+        "type": "object",
+        "required": [
+          "subject_pubkey",
+          "updated_at"
+        ],
+        "properties": {
+          "communication_score": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "communication_window_end": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "communication_window_start": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "interaction_count": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "peer_count": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "report_count": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "report_score": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "report_window_end": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "report_window_start": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "subject_pubkey": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

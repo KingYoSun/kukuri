@@ -355,6 +355,70 @@ jobs:
         run: |
           docker rm -f kukuri-postgres-age
 
+  openapi-artifacts-check:
+    name: OpenAPI Artifacts Check
+    runs-on: ubuntu-latest
+    needs: [change-scope]
+    if: needs.change-scope.outputs.docs_only != 'true'
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (attempt 1)
+        id: setup_rust_attempt_1
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Setup Rust (attempt 2)
+        id: setup_rust_attempt_2
+        if: steps.setup_rust_attempt_1.outcome == 'failure'
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Fail if Rust setup did not recover
+        if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure'
+        run: |
+          echo "Rust toolchain setup failed after two attempts."
+          exit 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm
+        run: |
+          corepack enable pnpm
+          corepack prepare pnpm@10.16.1 --activate
+
+      - name: Install admin-console dependencies
+        run: |
+          cd kukuri-community-node/apps/admin-console
+          pnpm install --frozen-lockfile
+
+      - name: Regenerate OpenAPI JSON snapshots
+        run: |
+          cd kukuri-community-node
+          cargo run --locked -p cn-cli -- openapi export --service user-api --output apps/admin-console/openapi/user-api.json --pretty
+          cargo run --locked -p cn-cli -- openapi export --service admin-api --output apps/admin-console/openapi/admin-api.json --pretty
+
+      - name: Regenerate Admin API TypeScript client
+        run: |
+          cd kukuri-community-node/apps/admin-console
+          pnpm generate:api
+
+      - name: Verify generated artifacts are up-to-date
+        run: |
+          git diff --exit-code -- kukuri-community-node/apps/admin-console/openapi/*.json kukuri-community-node/apps/admin-console/src/generated/admin-api.ts
+
   format-check:
     name: Format Check
     runs-on: ubuntu-latest
@@ -467,7 +531,7 @@ jobs:
 
   pr-required-checks:
     name: PR Required Checks
-    needs: [format-check, native-test-linux, community-node-tests, build-test-windows]
+    needs: [format-check, native-test-linux, community-node-tests, openapi-artifacts-check, build-test-windows]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -476,6 +540,7 @@ jobs:
           if [[ "${{ needs.format-check.result }}" != "success" ]] || \
              [[ "${{ needs.native-test-linux.result }}" != "success" ]] || \
              [[ "${{ needs.community-node-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.openapi-artifacts-check.result }}" != "success" && "${{ needs.openapi-artifacts-check.result }}" != "skipped" ]] || \
              [[ "${{ needs.build-test-windows.result }}" != "success" ]]; then
             echo "Fast-lane checks failed."
             exit 1

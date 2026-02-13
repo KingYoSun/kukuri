@@ -36,6 +36,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/access-control/distribution-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_control_distribution_results_doc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/access-control/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_control_invites_list_doc"];
+        put?: never;
+        post: operations["access_control_invites_issue_doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/access-control/invites/{nonce}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["access_control_invites_revoke_doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/access-control/memberships": {
         parameters: {
             query?: never;
@@ -148,6 +196,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["dashboard_doc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/moderation/labels": {
         parameters: {
             query?: never;
@@ -158,6 +222,38 @@ export interface paths {
         get: operations["moderation_labels_list_doc"];
         put?: never;
         post: operations["moderation_labels_create_doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/labels/{label_id}/rejudge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["moderation_label_rejudge_doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/labels/{label_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["moderation_label_review_doc"];
         delete?: never;
         options?: never;
         head?: never;
@@ -190,6 +286,22 @@ export interface paths {
         get: operations["moderation_rules_list_doc"];
         put?: never;
         post: operations["moderation_rules_create_doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/rules/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["moderation_rules_test_doc"];
         delete?: never;
         options?: never;
         head?: never;
@@ -238,6 +350,54 @@ export interface paths {
         get?: never;
         put: operations["node_subscriptions_update_doc"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/personal-data-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["dsar_jobs_list_doc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/personal-data-jobs/{job_type}/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dsar_jobs_cancel_doc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dsar_jobs_retry_doc"];
         delete?: never;
         options?: never;
         head?: never;
@@ -500,6 +660,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/trust/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["trust_targets_list_doc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/usage": {
         parameters: {
             query?: never;
@@ -567,6 +743,72 @@ export interface components {
             request_id?: string | null;
             target: string;
         };
+        DashboardSnapshot: {
+            /** Format: int64 */
+            collected_at: number;
+            db_pressure: components["schemas"]["DbPressureSignal"];
+            outbox_backlog: components["schemas"]["OutboxBacklogSignal"];
+            reject_surge: components["schemas"]["RejectSurgeSignal"];
+        };
+        DbPressureSignal: {
+            /** Format: int64 */
+            active_connections: number;
+            alert: boolean;
+            alerts: string[];
+            /** Format: double */
+            connection_threshold: number;
+            /** Format: double */
+            connection_utilization: number;
+            /** Format: int64 */
+            db_size_bytes: number;
+            /** Format: int64 */
+            disk_soft_limit_bytes: number;
+            /** Format: double */
+            disk_utilization: number;
+            /** Format: int64 */
+            lock_waiter_threshold: number;
+            /** Format: int64 */
+            lock_waiters: number;
+            /** Format: int64 */
+            max_connections: number;
+        };
+        DistributionResult: {
+            reason?: string | null;
+            recipient_pubkey: string;
+            status: string;
+        };
+        DistributionResultQuery: {
+            /** Format: int64 */
+            epoch?: number | null;
+            /** Format: int64 */
+            limit?: number | null;
+            pubkey?: string | null;
+            scope?: string | null;
+            status?: string | null;
+            topic_id?: string | null;
+        };
+        DistributionResultRow: {
+            /** Format: int64 */
+            epoch: number;
+            reason?: string | null;
+            recipient_pubkey: string;
+            scope: string;
+            status: string;
+            topic_id: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        DsarJobRow: {
+            /** Format: int64 */
+            completed_at?: number | null;
+            /** Format: int64 */
+            created_at: number;
+            error_message?: string | null;
+            job_id: string;
+            request_type: string;
+            requester_pubkey: string;
+            status: string;
+        };
         ErrorResponse: {
             code: string;
             details?: unknown;
@@ -574,6 +816,56 @@ export interface components {
         };
         HealthStatus: {
             status: string;
+        };
+        InviteCapabilityRow: {
+            capability_event_json: unknown;
+            /** Format: int64 */
+            created_at: number;
+            event_id: string;
+            /** Format: int64 */
+            expires_at: number;
+            issuer_pubkey: string;
+            /** Format: int32 */
+            max_uses: number;
+            nonce: string;
+            /** Format: int64 */
+            revoked_at?: number | null;
+            scope: string;
+            status: string;
+            topic_id: string;
+            /** Format: int32 */
+            used_count: number;
+        };
+        IssueInviteCapabilityRequest: {
+            /** Format: int64 */
+            expires_in_seconds?: number | null;
+            /** Format: int32 */
+            max_uses?: number | null;
+            nonce?: string | null;
+            scope: string;
+            topic_id: string;
+        };
+        LabelRejudgeRequest: {
+            reason?: string | null;
+        };
+        LabelRejudgeResponse: {
+            /** Format: int64 */
+            enqueued_jobs: number;
+            event_id: string;
+            label_id: string;
+            status: string;
+        };
+        LabelReviewRequest: {
+            enabled: boolean;
+            reason?: string | null;
+        };
+        LabelReviewResponse: {
+            label_id: string;
+            review_reason?: string | null;
+            review_status: string;
+            /** Format: int64 */
+            reviewed_at?: number | null;
+            reviewed_by?: string | null;
         };
         LabelRow: {
             /** Format: double */
@@ -587,6 +879,11 @@ export interface components {
             label_id: string;
             policy_ref: string;
             policy_url: string;
+            review_reason?: string | null;
+            review_status: string;
+            /** Format: int64 */
+            reviewed_at?: number | null;
+            reviewed_by?: string | null;
             rule_id?: string | null;
             source: string;
             target: string;
@@ -638,6 +935,25 @@ export interface components {
         };
         NodeSubscriptionUpdate: {
             enabled: boolean;
+        };
+        OutboxBacklogSignal: {
+            alert: boolean;
+            consumers: components["schemas"]["OutboxConsumerBacklog"][];
+            /** Format: int64 */
+            max_backlog: number;
+            /** Format: int64 */
+            max_seq: number;
+            /** Format: int64 */
+            threshold: number;
+            /** Format: int64 */
+            total_backlog: number;
+        };
+        OutboxConsumerBacklog: {
+            /** Format: int64 */
+            backlog: number;
+            consumer: string;
+            /** Format: int64 */
+            last_seq: number;
         };
         Plan: {
             is_active: boolean;
@@ -693,6 +1009,21 @@ export interface components {
             job_id: string;
             status: string;
         };
+        RejectSurgeSignal: {
+            alert: boolean;
+            /** Format: int64 */
+            current_total?: number | null;
+            /** Format: int64 */
+            delta?: number | null;
+            /** Format: double */
+            per_minute?: number | null;
+            /** Format: int64 */
+            previous_total?: number | null;
+            source_error?: string | null;
+            source_status: string;
+            /** Format: double */
+            threshold_per_minute: number;
+        };
         ReportRow: {
             /** Format: int64 */
             created_at: number;
@@ -711,6 +1042,7 @@ export interface components {
             topic_id: string;
         };
         RevokeResponse: {
+            distribution_results: components["schemas"]["DistributionResult"][];
             /** Format: int64 */
             new_epoch: number;
             /** Format: int64 */
@@ -725,6 +1057,7 @@ export interface components {
             topic_id: string;
         };
         RotateResponse: {
+            distribution_results: components["schemas"]["DistributionResult"][];
             /** Format: int64 */
             new_epoch: number;
             /** Format: int64 */
@@ -756,6 +1089,34 @@ export interface components {
             /** Format: int64 */
             updated_at: number;
             updated_by: string;
+        };
+        RuleTestLabelPreview: {
+            /** Format: double */
+            confidence?: number | null;
+            /** Format: int64 */
+            exp: number;
+            label: string;
+            policy_ref: string;
+            policy_url: string;
+            target: string;
+        };
+        RuleTestRequest: {
+            action: unknown;
+            conditions: unknown;
+            sample: components["schemas"]["RuleTestSampleEvent"];
+        };
+        RuleTestResponse: {
+            matched: boolean;
+            preview?: components["schemas"]["RuleTestLabelPreview"] | null;
+            reasons: string[];
+        };
+        RuleTestSampleEvent: {
+            content: string;
+            event_id?: string | null;
+            /** Format: int32 */
+            kind: number;
+            pubkey: string;
+            tags: string[][];
         };
         ServiceConfigResponse: {
             config_json: unknown;
@@ -848,6 +1209,29 @@ export interface components {
             interval_seconds: number;
             is_enabled: boolean;
         };
+        TrustTargetRow: {
+            /** Format: double */
+            communication_score?: number | null;
+            /** Format: int64 */
+            communication_window_end?: number | null;
+            /** Format: int64 */
+            communication_window_start?: number | null;
+            /** Format: int64 */
+            interaction_count?: number | null;
+            /** Format: int64 */
+            peer_count?: number | null;
+            /** Format: int64 */
+            report_count?: number | null;
+            /** Format: double */
+            report_score?: number | null;
+            /** Format: int64 */
+            report_window_end?: number | null;
+            /** Format: int64 */
+            report_window_start?: number | null;
+            subject_pubkey: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
         UpdateServiceConfigRequest: {
             config_json: unknown;
             /** Format: int64 */
@@ -910,6 +1294,149 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    access_control_distribution_results_doc: {
+        parameters: {
+            query?: {
+                /** @description Topic filter */
+                topic_id?: string | null;
+                /** @description Scope filter */
+                scope?: string | null;
+                /** @description Recipient pubkey filter */
+                pubkey?: string | null;
+                /** @description Epoch filter */
+                epoch?: number | null;
+                /** @description Status filter (pending|success|failed) */
+                status?: string | null;
+                /** @description Max rows */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DistributionResultRow"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    access_control_invites_list_doc: {
+        parameters: {
+            query?: {
+                /** @description Topic filter */
+                topic_id?: string | null;
+                /** @description Status filter (active|revoked|expired|exhausted) */
+                status?: string | null;
+                /** @description Max rows */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteCapabilityRow"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    access_control_invites_issue_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueInviteCapabilityRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteCapabilityRow"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    access_control_invites_revoke_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Invite nonce */
+                nonce: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteCapabilityRow"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1127,6 +1654,33 @@ export interface operations {
             };
         };
     };
+    dashboard_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardSnapshot"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     moderation_labels_list_doc: {
         parameters: {
             query?: {
@@ -1136,6 +1690,8 @@ export interface operations {
                 topic?: string | null;
                 /** @description UNIX seconds lower bound */
                 since?: number | null;
+                /** @description Review status filter (active|disabled) */
+                review_status?: string | null;
                 /** @description Max rows */
                 limit?: number | null;
             };
@@ -1177,6 +1733,90 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    moderation_label_rejudge_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Label identifier */
+                label_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelRejudgeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelRejudgeResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    moderation_label_review_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Label identifier */
+                label_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelReviewRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelReviewResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1259,6 +1899,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuleResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    moderation_rules_test_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleTestRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleTestResponse"];
                 };
             };
             400: {
@@ -1379,6 +2050,138 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dsar_jobs_list_doc: {
+        parameters: {
+            query?: {
+                /** @description Job status filter (queued|running|completed|failed) */
+                status?: string | null;
+                /** @description Request type filter (export|deletion) */
+                request_type?: string | null;
+                /** @description Requester pubkey filter */
+                requester_pubkey?: string | null;
+                /** @description Max rows */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DsarJobRow"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dsar_jobs_cancel_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request type (export|deletion) */
+                job_type: string;
+                /** @description Request identifier */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DsarJobRow"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dsar_jobs_retry_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request type (export|deletion) */
+                job_type: string;
+                /** @description Request identifier */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DsarJobRow"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1682,6 +2485,14 @@ export interface operations {
                     "application/json": components["schemas"]["ServiceConfigResponse"];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -1946,6 +2757,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trust_targets_list_doc: {
+        parameters: {
+            query?: {
+                /** @description Subject pubkey filter (exact or partial) */
+                pubkey?: string | null;
+                /** @description Max rows */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustTargetRow"][];
                 };
             };
         };

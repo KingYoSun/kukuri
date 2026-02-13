@@ -169,7 +169,7 @@
 - [x] `cn-relay`: `ops_runbook.md` の `/healthz` ready 要件に合わせ、DB到達性だけでなく relay 依存（gossip 参加状態・topic購読同期状態）の劣化を `degraded/unavailable` として返せるようにする。あわせて `/healthz` 契約テストを拡張する。
 - [x] `cn-relay`: `services_relay.md` / `topic_subscription_design.md` の REQ 制約（`#t` 必須・filter上限・limit上限）に対して、`filters.rs` の単体テストを追加し、拒否理由（`missing #t filter` / `too many filters` / `too many filter values`）の互換を固定する。
 - [x] `cn-user-api`: `rate_limit_design.md` の 429 契約（`RATE_LIMITED` + `Retry-After`）に対する回帰テストが不足しているため、`/v1/auth/challenge` `/v1/auth/verify` `/v1/bootstrap/*` と protected API の境界テストを追加する。
-- [ ] OpenAPI運用: `api_server_stack.md` の「OpenAPI 生成物を CI で差分検知」要件に合わせ、`apps/admin-console/openapi/*.json` と `src/generated/admin-api.ts` の更新漏れを検知する CI ジョブ（生成→`git diff --exit-code`）を追加する。
+- [x] OpenAPI運用: `api_server_stack.md` の「OpenAPI 生成物を CI で差分検知」要件に合わせ、`apps/admin-console/openapi/*.json` と `src/generated/admin-api.ts` の更新漏れを検知する CI ジョブ（生成→`git diff --exit-code`）を追加する。
 
 ## 参照（設計）
 
