@@ -951,7 +951,7 @@ async fn ws_backfill_orders_desc_applies_limit_and_transitions_to_realtime_after
 }
 
 #[tokio::test]
-async fn auth_enforce_switches_from_off_to_on_and_times_out() {
+async fn auth_enforce_existing_connection_disconnects_after_grace_period() {
     let _guard = acquire_integration_test_lock().await;
 
     let pool = PgPoolOptions::new()
@@ -967,10 +967,9 @@ async fn auth_enforce_switches_from_off_to_on_and_times_out() {
         json!({
             "auth": {
                 "mode": "required",
-                // CI startup/connection jitter can cross `now + 1` and make this flaky.
-                // Keep a wider pre-enforce window so the initial REQ reliably gets EOSE.
-                "enforce_at": now + 10,
-                "grace_seconds": 600,
+                // Keep enough room for one pre-enforce tick and one post-enforce grace window.
+                "enforce_at": now + 2,
+                "grace_seconds": 7,
                 "ws_auth_timeout_seconds": 1
             },
             "limits": {
@@ -1001,18 +1000,7 @@ async fn auth_enforce_switches_from_off_to_on_and_times_out() {
     })
     .await;
 
-    let auth = wait_for_ws_json_any(
-        &mut ws,
-        Duration::from_secs(20),
-        "auth challenge",
-        |value| value.get(0).and_then(|v| v.as_str()) == Some("AUTH"),
-    )
-    .await;
-    let challenge = auth
-        .get(1)
-        .and_then(|v| v.as_str())
-        .expect("auth challenge");
-    assert!(!challenge.is_empty(), "AUTH challenge should not be empty");
+    let _challenge = wait_for_auth_challenge(&mut ws, "auth challenge").await;
 
     let sub_after_auth = "sub-after-auth";
     ws.send(Message::Text(
@@ -1032,11 +1020,117 @@ async fn auth_enforce_switches_from_off_to_on_and_times_out() {
         Some("auth-required: missing auth")
     );
 
+    // Existing pre-enforce connections must not be disconnected by ws_auth_timeout_seconds.
+    match timeout(Duration::from_secs(3), ws.next()).await {
+        Err(_) => {}
+        Ok(None) => panic!("connection closed before grace deadline"),
+        Ok(Some(Ok(Message::Ping(_)))) | Ok(Some(Ok(Message::Pong(_)))) => {}
+        Ok(Some(Ok(Message::Text(text)))) => {
+            let value: serde_json::Value =
+                serde_json::from_str(&text).expect("parse early ws message");
+            panic!("unexpected ws message before grace deadline: {value}");
+        }
+        Ok(Some(Ok(Message::Close(frame)))) => {
+            panic!("connection closed before grace deadline: {frame:?}");
+        }
+        Ok(Some(Ok(other))) => panic!("unexpected ws frame before grace deadline: {other:?}"),
+        Ok(Some(Err(err))) => panic!("websocket error before grace deadline: {err:?}"),
+    }
+
+    let notice = wait_for_ws_json_any(
+        &mut ws,
+        Duration::from_secs(20),
+        "auth grace deadline notice",
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("NOTICE")
+                && value.get(1).and_then(|v| v.as_str()) == Some("auth-required: deadline reached")
+        },
+    )
+    .await;
+    assert_eq!(
+        notice.get(1).and_then(|v| v.as_str()),
+        Some("auth-required: deadline reached")
+    );
+
+    let close = timeout(Duration::from_secs(10), ws.next())
+        .await
+        .expect("connection close timeout");
+    assert!(
+        close.is_none()
+            || matches!(
+                close,
+                Some(Ok(Message::Close(_)))
+                    | Some(Err(tokio_tungstenite::tungstenite::Error::Protocol(_)))
+            ),
+        "expected websocket termination after grace deadline, got: {close:?}"
+    );
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn auth_required_new_connection_times_out_without_auth() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-auth-timeout-it-{}", Uuid::new_v4());
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let state = build_state_with_config(
+        pool.clone(),
+        json!({
+            "auth": {
+                "mode": "required",
+                "enforce_at": now - 1,
+                "grace_seconds": 600,
+                "ws_auth_timeout_seconds": 1
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            },
+            "rate_limit": {
+                "enabled": false
+            }
+        }),
+    );
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (addr, server_handle) = spawn_relay_server(state).await;
+    let mut ws = connect_ws(addr).await;
+
+    let _challenge = wait_for_auth_challenge(&mut ws, "auth challenge").await;
+
+    let sub_without_auth = "sub-without-auth";
+    ws.send(Message::Text(
+        json!(["REQ", sub_without_auth, { "kinds": [1], "#t": [topic_id.clone()] }])
+            .to_string()
+            .into(),
+    ))
+    .await
+    .expect("send req without auth");
+    let closed = wait_for_ws_json_any(&mut ws, WAIT_TIMEOUT, "missing auth closed", |value| {
+        value.get(0).and_then(|v| v.as_str()) == Some("CLOSED")
+            && value.get(1).and_then(|v| v.as_str()) == Some(sub_without_auth)
+    })
+    .await;
+    assert_eq!(
+        closed.get(2).and_then(|v| v.as_str()),
+        Some("auth-required: missing auth")
+    );
+
     let notice = wait_for_ws_json_any(
         &mut ws,
         Duration::from_secs(20),
         "auth timeout notice",
-        |value| value.get(0).and_then(|v| v.as_str()) == Some("NOTICE"),
+        |value| {
+            value.get(0).and_then(|v| v.as_str()) == Some("NOTICE")
+                && value.get(1).and_then(|v| v.as_str()) == Some("auth-required: timeout")
+        },
     )
     .await;
     assert_eq!(

@@ -73,19 +73,18 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
     let mut subscriptions: HashMap<String, Vec<RelayFilter>> = HashMap::new();
     let mut auth_state = AuthSessionState::default();
     let mut auth_deadline: Option<Instant> = None;
+    let mut auth_timeout_applies = false;
 
     let mut tick = interval(Duration::from_secs(5));
 
     if let Ok(runtime) = current_runtime(&state).await {
         let now = auth::unix_seconds().unwrap_or(0) as i64;
         if runtime.auth.requires_auth(now) {
-            let challenge = Uuid::new_v4().to_string();
-            auth_state.challenge = Some(challenge.clone());
+            auth_timeout_applies = true;
             auth_deadline = Some(
-                Instant::now()
-                    + Duration::from_secs(runtime.auth.ws_auth_timeout_seconds.max(1) as u64),
+                Instant::now() + ws_auth_timeout_duration(runtime.auth.ws_auth_timeout_seconds),
             );
-            let _ = send_json(&mut sender, json!(["AUTH", challenge])).await;
+            let _ = send_auth_challenge(&mut sender, &mut auth_state).await;
         }
     }
 
@@ -94,21 +93,41 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
             _ = tick.tick() => {
                 if let Ok(runtime) = current_runtime(&state).await {
                     let now = auth::unix_seconds().unwrap_or(0) as i64;
-                    if runtime.auth.requires_auth(now) && auth_state.pubkey.is_none() && auth_deadline.is_none() {
-                        let challenge = Uuid::new_v4().to_string();
-                        auth_state.challenge = Some(challenge.clone());
-                        auth_deadline = Some(Instant::now() + Duration::from_secs(
-                            runtime.auth.ws_auth_timeout_seconds.max(1) as u64,
-                        ));
-                        let _ = send_json(&mut sender, json!(["AUTH", challenge])).await;
-                    }
-                    if let Some(deadline) = runtime.auth.disconnect_deadline() {
-                        if now >= deadline && auth_state.pubkey.is_none() {
-                            metrics::inc_ingest_rejected(super::SERVICE_NAME, "auth");
-                            metrics::inc_ws_auth_disconnect(super::SERVICE_NAME, "deadline");
-                            let _ = send_json(&mut sender, json!(["NOTICE", "auth-required: deadline reached"])).await;
-                            break;
+                    let auth_required = runtime.auth.requires_auth(now);
+                    if !auth_required {
+                        auth_state.challenge = None;
+                        auth_deadline = None;
+                        auth_timeout_applies = false;
+                    } else if auth_state.pubkey.is_none() {
+                        let disconnect_deadline = runtime.auth.disconnect_deadline();
+                        let should_apply_timeout =
+                            auth_timeout_applies || disconnect_deadline.is_none();
+                        if should_apply_timeout {
+                            auth_timeout_applies = true;
+                            if auth_deadline.is_none() {
+                                auth_deadline = Some(
+                                    Instant::now()
+                                        + ws_auth_timeout_duration(
+                                            runtime.auth.ws_auth_timeout_seconds,
+                                        ),
+                                );
+                            }
+                        } else {
+                            auth_deadline = None;
                         }
+                        if auth_state.challenge.is_none() {
+                            let _ = send_auth_challenge(&mut sender, &mut auth_state).await;
+                        }
+                        if let Some(deadline) = disconnect_deadline {
+                            if now >= deadline {
+                                metrics::inc_ingest_rejected(super::SERVICE_NAME, "auth");
+                                metrics::inc_ws_auth_disconnect(super::SERVICE_NAME, "deadline");
+                                let _ = send_json(&mut sender, json!(["NOTICE", "auth-required: deadline reached"])).await;
+                                break;
+                            }
+                        }
+                    } else {
+                        auth_deadline = None;
                     }
                 }
                 if let Some(deadline) = auth_deadline {
@@ -156,6 +175,19 @@ async fn handle_socket(state: AppState, addr: SocketAddr, socket: WebSocket) {
         metrics::dec_ws_unauthenticated_connections(super::SERVICE_NAME);
     }
     metrics::dec_ws_connections(super::SERVICE_NAME);
+}
+
+fn ws_auth_timeout_duration(seconds: i64) -> Duration {
+    Duration::from_secs(seconds.max(1) as u64)
+}
+
+async fn send_auth_challenge(
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    auth_state: &mut AuthSessionState,
+) -> Result<()> {
+    let challenge = Uuid::new_v4().to_string();
+    auth_state.challenge = Some(challenge.clone());
+    send_json(sender, json!(["AUTH", challenge])).await
 }
 
 async fn handle_text_message(

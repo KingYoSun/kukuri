@@ -68,6 +68,7 @@
 - 認証OFF→ON 切替の運用（既存接続・猶予・互換性）は `docs/03_implementation/community_nodes/auth_transition_design.md` に従う
   - 新規接続: 接続後 `ws_auth_timeout_seconds` 以内に AUTH が無ければ切断
   - 既存接続: `disconnect_unauthenticated_at` 到来で未AUTHを `NOTICE` → close する（購読継続の穴を残さない）
+  - 役割分離: `ws_auth_timeout_seconds` は新規接続（または猶予なし必須化）専用。既存接続の切断判定は `disconnect_unauthenticated_at` のみで行う
 
 ## データ/運用（補完）
 
@@ -103,4 +104,3 @@
   - IP/鍵（AUTH後は pubkey）/peer 単位の rate limit、接続数上限、巨大イベント拒否、購読フィルタの上限（v1は in-mem。設定の正は cn_admin。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
   - `#t` 無し REQ の拒否、フィルタ数/値数/`limit`/時間範囲（`since/until`）の上限、バックフィル要求頻度の制限
 - 運用要件（監視/メトリクス/ログ、バックアップ/リストア、マイグレーション、違法/通報対応 Runbook）: `docs/03_implementation/community_nodes/ops_runbook.md`
-

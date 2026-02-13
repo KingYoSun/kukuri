@@ -69,6 +69,9 @@ impl AuthConfig {
     }
 
     pub fn disconnect_deadline(&self) -> Option<i64> {
+        if self.mode != AuthMode::Required {
+            return None;
+        }
         self.enforce_at
             .and_then(|ts| ts.checked_add(self.grace_seconds.max(0)))
     }
@@ -411,6 +414,25 @@ mod tests {
         assert!(!should_refresh_on_admin_config_notification(
             "trust:7", "relay"
         ));
+    }
+
+    #[test]
+    fn auth_disconnect_deadline_is_only_enabled_for_required_mode() {
+        let off = AuthConfig {
+            mode: AuthMode::Off,
+            enforce_at: Some(1_700_000_000),
+            grace_seconds: 900,
+            ws_auth_timeout_seconds: 10,
+        };
+        assert_eq!(off.disconnect_deadline(), None);
+
+        let required = AuthConfig {
+            mode: AuthMode::Required,
+            enforce_at: Some(1_700_000_000),
+            grace_seconds: 900,
+            ws_auth_timeout_seconds: 10,
+        };
+        assert_eq!(required.disconnect_deadline(), Some(1_700_000_900));
     }
 
     #[tokio::test]

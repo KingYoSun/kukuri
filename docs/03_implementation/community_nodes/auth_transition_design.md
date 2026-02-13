@@ -30,6 +30,8 @@ OFF→ON は「設定変更の瞬間にいきなり締める」とクライア�
 - `grace_seconds`: 既存接続が認証へ移行するための猶予（例: 15分）
   - `disconnect_unauthenticated_at = enforce_at + grace_seconds`
 - `ws_auth_timeout_seconds`: relay WS で、接続後に AUTH を待つ最大秒数（例: 10秒）
+  - 適用対象は「AUTH 必須状態で開始した接続（新規接続）」または「猶予なしで必須化された接続」
+  - `enforce_at` 前から継続している既存接続は `disconnect_unauthenticated_at` を優先し、猶予中に `ws_auth_timeout_seconds` で切断しない
 
 ### 保管場所
 
@@ -58,6 +60,7 @@ OFF→ON は「設定変更の瞬間にいきなり締める」とクライア�
 - `enforce_at` までは現状維持（anonymous のままでも可）
 - `disconnect_unauthenticated_at` 到来時点で「未AUTHの接続」は `NOTICE` を送って切断する
   - 目的: “購読だけ継続できてしまう穴”を残さない
+- `ws_auth_timeout_seconds` は既存接続の猶予タイマーとしては使わない（責務分離）
 
 #### 代表的な拒否シグナル（互換性）
 
@@ -104,4 +107,3 @@ bootstrap を完全に閉じると「初回導線」が壊れやすい。運用�
 - `docs/03_implementation/community_nodes/user_api.md`
 - `docs/03_implementation/community_nodes/policy_consent_management.md`
 - `docs/03_implementation/community_nodes/access_control_design.md`
-
