@@ -1045,6 +1045,78 @@ mod api_contract_tests {
         .expect("count usage_events")
     }
 
+    async fn usage_counter_daily_count(pool: &Pool<Postgres>, pubkey: &str, metric: &str) -> i64 {
+        let day = chrono::Utc::now().date_naive();
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count FROM cn_user.usage_counters_daily WHERE subscriber_pubkey = $1 AND metric = $2 AND day = $3",
+        )
+        .bind(pubkey)
+        .bind(metric)
+        .bind(day)
+        .fetch_optional(pool)
+        .await
+        .expect("fetch usage counter daily")
+        .unwrap_or(0)
+    }
+
+    async fn install_usage_events_commit_failure_trigger(
+        pool: &Pool<Postgres>,
+        request_id: &str,
+    ) -> (String, String) {
+        let suffix = Uuid::new_v4().simple().to_string();
+        let function_name = format!("force_usage_events_commit_fail_{suffix}");
+        let trigger_name = format!("force_usage_events_commit_fail_trigger_{suffix}");
+        let escaped_request_id = request_id.replace('\'', "''");
+
+        let create_function_sql = format!(
+            "CREATE OR REPLACE FUNCTION cn_user.{function_name}() \
+             RETURNS trigger LANGUAGE plpgsql AS $$ \
+             BEGIN \
+                 IF NEW.request_id = '{escaped_request_id}' THEN \
+                     RAISE EXCEPTION 'forced usage_events commit failure for request_id={escaped_request_id}'; \
+                 END IF; \
+                 RETURN NULL; \
+             END; \
+             $$"
+        );
+        sqlx::query(&create_function_sql)
+            .execute(pool)
+            .await
+            .expect("create usage_events commit failure function");
+
+        let create_trigger_sql = format!(
+            "CREATE CONSTRAINT TRIGGER {trigger_name} \
+             AFTER INSERT ON cn_user.usage_events \
+             DEFERRABLE INITIALLY DEFERRED \
+             FOR EACH ROW EXECUTE FUNCTION cn_user.{function_name}()"
+        );
+        sqlx::query(&create_trigger_sql)
+            .execute(pool)
+            .await
+            .expect("create usage_events commit failure trigger");
+
+        (trigger_name, function_name)
+    }
+
+    async fn remove_usage_events_commit_failure_trigger(
+        pool: &Pool<Postgres>,
+        trigger_name: &str,
+        function_name: &str,
+    ) {
+        let drop_trigger_sql =
+            format!("DROP TRIGGER IF EXISTS {trigger_name} ON cn_user.usage_events");
+        sqlx::query(&drop_trigger_sql)
+            .execute(pool)
+            .await
+            .expect("drop usage_events commit failure trigger");
+
+        let drop_function_sql = format!("DROP FUNCTION IF EXISTS cn_user.{function_name}()");
+        sqlx::query(&drop_function_sql)
+            .execute(pool)
+            .await
+            .expect("drop usage_events commit failure function");
+    }
+
     fn assert_quota_exceeded_response(
         payload: &Value,
         metric: &str,
@@ -1997,6 +2069,88 @@ mod api_contract_tests {
             .with_state(test_state().await);
         let status = request_status(app, "/v1/search?topic=kukuri:topic1").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn search_quota_commit_failure_on_success_path_returns_db_error_and_rolls_back() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = format!("kukuri:search-commit-success-{}", Uuid::new_v4().simple());
+        let request_id = format!("search-commit-success-{}", Uuid::new_v4());
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "index.search_requests", "day", 10).await;
+
+        let (trigger_name, function_name) =
+            install_usage_events_commit_failure_trigger(&pool, &request_id).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let path = format!("/v1/search?topic={topic_id}&q=commit-failure");
+        let (status, payload) =
+            get_json_with_headers(app, &path, &token, &[("x-request-id", request_id.as_str())])
+                .await;
+
+        remove_usage_events_commit_failure_trigger(&pool, &trigger_name, &function_name).await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("DB_ERROR")
+        );
+        assert_eq!(
+            usage_event_count_for_request_id(&pool, &pubkey, "index.search_requests", &request_id)
+                .await,
+            0
+        );
+        assert_eq!(
+            usage_counter_daily_count(&pool, &pubkey, "index.search_requests").await,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn search_quota_commit_failure_on_quota_exceeded_path_returns_db_error_and_rolls_back() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = format!("kukuri:search-commit-exceeded-{}", Uuid::new_v4().simple());
+        let request_id = format!("search-commit-exceeded-{}", Uuid::new_v4());
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        assign_active_plan_limit(&pool, &pubkey, "index.search_requests", "day", 0).await;
+
+        let (trigger_name, function_name) =
+            install_usage_events_commit_failure_trigger(&pool, &request_id).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let path = format!("/v1/search?topic={topic_id}&q=quota-exceeded");
+        let (status, payload) =
+            get_json_with_headers(app, &path, &token, &[("x-request-id", request_id.as_str())])
+                .await;
+
+        remove_usage_events_commit_failure_trigger(&pool, &trigger_name, &function_name).await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("DB_ERROR")
+        );
+        assert_eq!(
+            usage_event_count_for_request_id(&pool, &pubkey, "index.search_requests", &request_id)
+                .await,
+            0
+        );
+        assert_eq!(
+            usage_counter_daily_count(&pool, &pubkey, "index.search_requests").await,
+            0
+        );
     }
 
     #[tokio::test]

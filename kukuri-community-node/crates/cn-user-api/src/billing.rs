@@ -162,7 +162,13 @@ pub(crate) async fn consume_quota(
         .execute(&mut *tx)
         .await
         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
-        tx.commit().await.ok();
+        tx.commit().await.map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
 
         metrics::inc_quota_exceeded(crate::SERVICE_NAME, metric);
         return Err(quota_exceeded_error(metric, current, limit));
@@ -191,7 +197,13 @@ pub(crate) async fn consume_quota(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    tx.commit().await.ok();
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
     Ok(())
 }
 
