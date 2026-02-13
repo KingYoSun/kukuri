@@ -153,3 +153,48 @@ pub fn matches_filter(filter: &RelayFilter, event: &cn_core::nostr::RawEvent) ->
 
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_filters_rejects_missing_topic_filter_with_stable_reason() {
+        let err = parse_filters(&[json!({ "kinds": [1] })]).expect_err("must reject without #t");
+        assert_eq!(err.to_string(), "missing #t filter");
+    }
+
+    #[test]
+    fn parse_filters_rejects_too_many_filters_with_stable_reason() {
+        let filters = (0..=MAX_FILTERS)
+            .map(|_| json!({ "#t": ["kukuri:global"] }))
+            .collect::<Vec<_>>();
+        let err = parse_filters(&filters).expect_err("must reject too many filters");
+        assert_eq!(err.to_string(), "too many filters");
+    }
+
+    #[test]
+    fn parse_filters_rejects_too_many_filter_values_with_stable_reason() {
+        let authors = (0..=MAX_FILTER_VALUES)
+            .map(|i| format!("pubkey-{i}"))
+            .collect::<Vec<_>>();
+        let err = parse_filters(&[json!({
+            "#t": ["kukuri:global"],
+            "authors": authors
+        })])
+        .expect_err("must reject too many values");
+        assert_eq!(err.to_string(), "too many filter values");
+    }
+
+    #[test]
+    fn parse_filters_clamps_limit_to_maximum() {
+        let filters = parse_filters(&[json!({
+            "#t": ["kukuri:global"],
+            "limit": MAX_LIMIT + 100
+        })])
+        .expect("filter should parse");
+        assert_eq!(filters.len(), 1);
+        assert_eq!(filters[0].limit, Some(MAX_LIMIT));
+    }
+}

@@ -167,7 +167,7 @@
 
 - [x] `cn-bootstrap`: `services_bootstrap.md` の 39000/39001 配布経路要件（gossip/DHT を発見ヒントとして併用）に合わせ、HTTP配布（DB正）に加えて「更新ヒントの publish 経路」を実装する。少なくとも publish 成功/失敗時のメトリクスと統合テスト（通知受信→HTTP再取得）を追加する。
 - [x] `cn-relay`: `ops_runbook.md` の `/healthz` ready 要件に合わせ、DB到達性だけでなく relay 依存（gossip 参加状態・topic購読同期状態）の劣化を `degraded/unavailable` として返せるようにする。あわせて `/healthz` 契約テストを拡張する。
-- [ ] `cn-relay`: `services_relay.md` / `topic_subscription_design.md` の REQ 制約（`#t` 必須・filter上限・limit上限）に対して、`filters.rs` の単体テストを追加し、拒否理由（`missing #t filter` / `too many filters` / `too many filter values`）の互換を固定する。
+- [x] `cn-relay`: `services_relay.md` / `topic_subscription_design.md` の REQ 制約（`#t` 必須・filter上限・limit上限）に対して、`filters.rs` の単体テストを追加し、拒否理由（`missing #t filter` / `too many filters` / `too many filter values`）の互換を固定する。
 - [ ] `cn-user-api`: `rate_limit_design.md` の 429 契約（`RATE_LIMITED` + `Retry-After`）に対する回帰テストが不足しているため、`/v1/auth/challenge` `/v1/auth/verify` `/v1/bootstrap/*` と protected API の境界テストを追加する。
 - [ ] OpenAPI運用: `api_server_stack.md` の「OpenAPI 生成物を CI で差分検知」要件に合わせ、`apps/admin-console/openapi/*.json` と `src/generated/admin-api.ts` の更新漏れを検知する CI ジョブ（生成→`git diff --exit-code`）を追加する。
 
