@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use nostr_sdk::prelude::Keys;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
@@ -96,6 +97,10 @@ fn stdout_trimmed(output: &Output) -> String {
         .to_string()
 }
 
+fn stdout_text(output: &Output) -> String {
+    String::from_utf8(output.stdout.clone()).expect("stdout is utf-8")
+}
+
 fn parse_json_stdout(output: &Output) -> Value {
     serde_json::from_str(&stdout_trimmed(output)).expect("stdout is json")
 }
@@ -152,6 +157,27 @@ async fn cleanup_node_key_audits(pool: &Pool<Postgres>, pubkeys: &[&str]) {
         .await
         .expect("cleanup node key audit");
     }
+}
+
+async fn cleanup_admin_user_and_audits(pool: &Pool<Postgres>, username: &str) {
+    let target = format!("admin_user:{username}");
+    sqlx::query("DELETE FROM cn_admin.audit_logs WHERE target = $1")
+        .bind(&target)
+        .execute(pool)
+        .await
+        .expect("cleanup admin audit logs");
+    sqlx::query(
+        "DELETE FROM cn_admin.admin_sessions          WHERE admin_user_id IN (SELECT admin_user_id FROM cn_admin.admin_users WHERE username = $1)",
+    )
+    .bind(username)
+    .execute(pool)
+    .await
+    .expect("cleanup admin sessions");
+    sqlx::query("DELETE FROM cn_admin.admin_users WHERE username = $1")
+        .bind(username)
+        .execute(pool)
+        .await
+        .expect("cleanup admin user");
 }
 
 #[tokio::test]
@@ -463,4 +489,229 @@ async fn access_control_rotate_revoke_updates_db_audit_and_preserves_output_shap
 
     cleanup_access_control_rows(&pool, &topic_id).await;
     let _ = fs::remove_file(&node_key_path);
+}
+
+#[tokio::test]
+async fn cli_smoke_covers_migrate_config_admin_openapi_and_p2p_commands() {
+    let _guard = acquire_integration_test_lock().await;
+    let pool = connect_pool().await;
+    ensure_migrated(&pool).await;
+    let db_url = database_url();
+
+    let migrate_output = run_cn(&["migrate"], &db_url, None);
+    assert_success(&migrate_output, "migrate");
+    let audit_table: Option<String> =
+        sqlx::query_scalar("SELECT to_regclass('cn_admin.audit_logs')::text")
+            .fetch_one(&pool)
+            .await
+            .expect("load audit table regclass");
+    assert_eq!(audit_table.as_deref(), Some("cn_admin.audit_logs"));
+
+    let config_seed_output = run_cn(&["config", "seed"], &db_url, None);
+    assert_success(&config_seed_output, "config seed");
+    let service_config_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_admin.service_configs")
+            .fetch_one(&pool)
+            .await
+            .expect("count service configs");
+    assert!(
+        service_config_count > 0,
+        "config seed should ensure cn_admin.service_configs is populated"
+    );
+
+    let admin_count_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cn_admin.admin_users")
+        .fetch_one(&pool)
+        .await
+        .expect("count admin users before bootstrap");
+    let bootstrap_username = format!("cli_smoke_bootstrap_{}", unique_suffix());
+    let bootstrap_output = run_cn(
+        &[
+            "admin",
+            "bootstrap",
+            "--username",
+            bootstrap_username.as_str(),
+            "--password",
+            "bootstrap-smoke-pass",
+        ],
+        &db_url,
+        None,
+    );
+    assert_success(&bootstrap_output, "admin bootstrap");
+    let admin_count_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cn_admin.admin_users")
+        .fetch_one(&pool)
+        .await
+        .expect("count admin users after bootstrap");
+    let bootstrap_user_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cn_admin.admin_users WHERE username = $1)")
+            .bind(&bootstrap_username)
+            .fetch_one(&pool)
+            .await
+            .expect("check bootstrap user existence");
+    assert!(
+        admin_count_after >= admin_count_before,
+        "admin count should not decrease"
+    );
+    if bootstrap_user_exists {
+        assert_eq!(
+            admin_count_after,
+            admin_count_before + 1,
+            "bootstrap should add one admin when new user is inserted"
+        );
+    } else {
+        assert_eq!(
+            admin_count_after, admin_count_before,
+            "bootstrap should be no-op when an admin already exists"
+        );
+    }
+
+    let reset_username = format!("cli_smoke_reset_{}", unique_suffix());
+    sqlx::query(
+        "INSERT INTO cn_admin.admin_users          (admin_user_id, username, password_hash, is_active)          VALUES ($1, $2, $3, TRUE)",
+    )
+    .bind(format!("admin-{}", unique_suffix()))
+    .bind(&reset_username)
+    .bind("before-reset")
+    .execute(&pool)
+    .await
+    .expect("insert reset-password fixture user");
+    let reset_output = run_cn(
+        &[
+            "admin",
+            "reset-password",
+            "--username",
+            reset_username.as_str(),
+            "--password",
+            "after-reset",
+        ],
+        &db_url,
+        None,
+    );
+    assert_success(&reset_output, "admin reset-password");
+    let password_hash_after: String =
+        sqlx::query_scalar("SELECT password_hash FROM cn_admin.admin_users WHERE username = $1")
+            .bind(&reset_username)
+            .fetch_one(&pool)
+            .await
+            .expect("load password hash after reset");
+    assert_ne!(password_hash_after, "before-reset");
+
+    let openapi_user_path = temp_path("openapi_user_api.json");
+    let openapi_user_path_arg = openapi_user_path.to_string_lossy().to_string();
+    let openapi_user_output = run_cn(
+        &[
+            "openapi",
+            "export",
+            "--service",
+            "user-api",
+            "--output",
+            openapi_user_path_arg.as_str(),
+            "--pretty",
+        ],
+        &db_url,
+        None,
+    );
+    assert_success(&openapi_user_output, "openapi export --service user-api");
+    let openapi_user_doc: Value = serde_json::from_str(
+        &fs::read_to_string(&openapi_user_path).expect("read user-api openapi output"),
+    )
+    .expect("parse user-api openapi output");
+    assert!(
+        openapi_user_doc
+            .get("openapi")
+            .and_then(Value::as_str)
+            .is_some(),
+        "OpenAPI document must include openapi version"
+    );
+    assert!(
+        openapi_user_doc
+            .get("paths")
+            .and_then(Value::as_object)
+            .is_some_and(|paths| !paths.is_empty()),
+        "OpenAPI document must include non-empty paths"
+    );
+
+    let openapi_admin_path = temp_path("openapi_admin_api.json");
+    let openapi_admin_path_arg = openapi_admin_path.to_string_lossy().to_string();
+    let openapi_admin_output = run_cn(
+        &[
+            "openapi",
+            "export",
+            "--service",
+            "admin-api",
+            "--output",
+            openapi_admin_path_arg.as_str(),
+        ],
+        &db_url,
+        None,
+    );
+    assert_success(&openapi_admin_output, "openapi export --service admin-api");
+
+    let p2p_help_output = run_cn(&["p2p", "--help"], &db_url, None);
+    assert_success(&p2p_help_output, "p2p --help");
+    let p2p_help = stdout_text(&p2p_help_output);
+    for expected in ["node-id", "bootstrap", "relay", "connect"] {
+        assert!(
+            p2p_help.contains(expected),
+            "p2p help output must include `{expected}` subcommand"
+        );
+    }
+
+    let secret_key = BASE64_STANDARD.encode([7u8; 32]);
+    let p2p_node_id_output_1 = run_cn(
+        &[
+            "p2p",
+            "node-id",
+            "--bind",
+            "127.0.0.1:0",
+            "--log-level",
+            "error",
+            "--secret-key",
+            secret_key.as_str(),
+        ],
+        &db_url,
+        None,
+    );
+    assert_success(&p2p_node_id_output_1, "p2p node-id first run");
+    let node_id_1 = stdout_trimmed(&p2p_node_id_output_1);
+    assert_hex_pubkey(&node_id_1);
+
+    let p2p_node_id_output_2 = run_cn(
+        &[
+            "p2p",
+            "node-id",
+            "--bind",
+            "127.0.0.1:0",
+            "--log-level",
+            "error",
+            "--secret-key",
+            secret_key.as_str(),
+        ],
+        &db_url,
+        None,
+    );
+    assert_success(&p2p_node_id_output_2, "p2p node-id second run");
+    let node_id_2 = stdout_trimmed(&p2p_node_id_output_2);
+    assert_eq!(
+        node_id_1, node_id_2,
+        "p2p node-id should stay deterministic for the same secret key"
+    );
+
+    let bootstrap_help_output = run_cn(&["bootstrap", "--help"], &db_url, None);
+    assert_success(&bootstrap_help_output, "bootstrap --help");
+    assert!(
+        stdout_text(&bootstrap_help_output).contains("Usage: cn bootstrap"),
+        "bootstrap help output should document top-level `cn bootstrap`"
+    );
+
+    let relay_help_output = run_cn(&["relay", "--help"], &db_url, None);
+    assert_success(&relay_help_output, "relay --help");
+    assert!(
+        stdout_text(&relay_help_output).contains("Usage: cn relay"),
+        "relay help output should document top-level `cn relay`"
+    );
+
+    cleanup_admin_user_and_audits(&pool, &reset_username).await;
+    cleanup_admin_user_and_audits(&pool, &bootstrap_username).await;
+    let _ = fs::remove_file(&openapi_user_path);
+    let _ = fs::remove_file(&openapi_admin_path);
 }
