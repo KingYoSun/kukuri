@@ -53,7 +53,7 @@ docker run --rm --network kukuri_community-node-network \
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
   -e MEILI_URL=http://community-node-meilisearch:7700 \
   -e MEILI_MASTER_KEY=change-me \
-  -v "${PWD}:/workspace" \
+  -v "$(git rev-parse --show-toplevel):/workspace" \
   -w /workspace/kukuri-community-node \
   kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
 ```
@@ -67,7 +67,7 @@ docker run --rm --network kukuri_community-node-network `
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn `
   -e MEILI_URL=http://community-node-meilisearch:7700 `
   -e MEILI_MASTER_KEY=change-me `
-  -v ${PWD}:/workspace `
+  -v $(git rev-parse --show-toplevel):/workspace `
   -w /workspace/kukuri-community-node `
   kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
 ```

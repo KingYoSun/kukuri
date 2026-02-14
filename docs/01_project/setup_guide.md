@@ -217,7 +217,7 @@ pnpm build              # フロントエンドのみビルド
 pnpm test               # Linux/macOS/WSL2 でのフロントエンドテスト
 cargo test              # Linux/macOS/WSL2 での Rust テスト
 docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
-docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "${PWD}:/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli" # community-node テスト/ビルド（全OS既定）
+docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli" # community-node テスト/ビルド（全OS既定）
 
 # リント/フォーマット
 pnpm lint               # ESLint実行
