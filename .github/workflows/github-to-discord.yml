@@ -8,9 +8,17 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
+concurrency:
+  group: >-
+    discord-hook-${{ github.workflow }}-${{ github.event_name }}-
+    ${{ github.event.issue.node_id || github.event.pull_request.node_id || github.run_id }}-
+    ${{ github.event.comment.id || github.event.review.id || github.event.issue.updated_at || github.event.pull_request.updated_at || github.run_attempt }}
+  cancel-in-progress: true
 jobs:
   notify:
     runs-on: ubuntu-latest
+    # bot投稿除外（actor名とsender.typeの両方で判定）
+    if: ${{ !endsWith(github.actor, '[bot]') && github.event.sender.type != 'Bot' }}
     steps:
       - name: Build message
         id: msg
@@ -25,33 +33,32 @@ jobs:
             let summary = "";
 
             if (event === "issues") {
-            title = `[Issue ${p.action}] #${p.issue.number}: ${p.issue.title}`;
-            url = p.issue.html_url;
-            summary = (p.issue.body || "").slice(0, 200).replace(/\n/g, " ");
+              title = `[Issue ${p.action}] #${p.issue.number}: ${p.issue.title}`;
+              url = p.issue.html_url;
+              summary = (p.issue.body || "").slice(0, 200).replace(/\n/g, " ");
             } else if (event === "issue_comment") {
-            title = `[Issue Comment] #${p.issue.number}: ${p.issue.title}`;
-            url = p.comment.html_url;
-            summary = (p.comment.body || "").slice(0, 200).replace(/\n/g, " ");
+              title = `[Issue Comment] #${p.issue.number}: ${p.issue.title}`;
+              url = p.comment.html_url;
+              summary = (p.comment.body || "").slice(0, 200).replace(/\n/g, " ");
             } else if (event === "pull_request_review") {
-            title = `[PR Review ${p.review.state}] #${p.pull_request.number}: ${p.pull_request.title}`;
-            url = p.review.html_url || p.pull_request.html_url;
-            summary = (p.review.body || "(no review body)").slice(0, 200).replace(/\n/g, " ");
+              title = `[PR Review ${p.review.state}] #${p.pull_request.number}: ${p.pull_request.title}`;
+              url = p.review.html_url || p.pull_request.html_url;
+              summary = (p.review.body || "(no review body)").slice(0, 200).replace(/\n/g, " ");
             } else if (event === "pull_request_review_comment") {
-            title = `[PR Review Comment] #${p.pull_request.number}: ${p.pull_request.title}`;
-            url = p.comment.html_url;
-            summary = (p.comment.body || "").slice(0, 200).replace(/\n/g, " ");
+              title = `[PR Review Comment] #${p.pull_request.number}: ${p.pull_request.title}`;
+              url = p.comment.html_url;
+              summary = (p.comment.body || "").slice(0, 200).replace(/\n/g, " ");
             } else {
-            title = `[${event}]`;
-            url = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
-            summary = "Unhandled event";
+              title = `[${event}]`;
+              url = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+              summary = "Unhandled event";
             }
             const content =
-            `📣 **${title}**\n` +
-            `👤 by: **${actor}**\n` +
-            `🔗 ${url}\n` +
-            `📝 ${summary}\n\n` +
-            `@here ぼっちゃん: トリアージして対応方針をお願いします。`;
-
+              `📣 **${title}**\n` +
+              `👤 by: **${actor}**\n` +
+              `🔗 ${url}\n` +
+              `📝 ${summary}\n\n` +
+              `@here ぼっちゃん: トリアージして対応方針をお願いします。`;
             core.setOutput("content", content);
       - name: Send to Discord
         env:
