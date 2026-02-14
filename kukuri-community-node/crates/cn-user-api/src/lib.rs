@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{oneshot, RwLock};
 use utoipa::ToSchema;
 
 mod auth;
@@ -349,7 +349,16 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
 }
 
 fn spawn_bootstrap_hint_listener(pool: Pool<Postgres>, store: Arc<BootstrapHintStore>) {
+    std::mem::drop(spawn_bootstrap_hint_listener_task(pool, store, None));
+}
+
+fn spawn_bootstrap_hint_listener_task(
+    pool: Pool<Postgres>,
+    store: Arc<BootstrapHintStore>,
+    ready_sender: Option<oneshot::Sender<()>>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        let mut ready_sender = ready_sender;
         loop {
             let mut listener = match PgListener::connect_with(&pool).await {
                 Ok(listener) => listener,
@@ -374,6 +383,10 @@ fn spawn_bootstrap_hint_listener(pool: Pool<Postgres>, store: Arc<BootstrapHintS
                 tokio::time::sleep(Duration::from_secs(BOOTSTRAP_HINT_LISTENER_RETRY_SECONDS))
                     .await;
                 continue;
+            }
+
+            if let Some(sender) = ready_sender.take() {
+                let _ = sender.send(());
             }
 
             loop {
@@ -407,7 +420,7 @@ fn spawn_bootstrap_hint_listener(pool: Pool<Postgres>, store: Arc<BootstrapHintS
 
             tokio::time::sleep(Duration::from_secs(BOOTSTRAP_HINT_LISTENER_RETRY_SECONDS)).await;
         }
-    });
+    })
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
@@ -452,7 +465,7 @@ mod tests {
     use serde_json::json;
     use sqlx::postgres::PgPoolOptions;
     use std::sync::OnceLock;
-    use tokio::sync::{Mutex, OnceCell};
+    use tokio::sync::{oneshot, Mutex, OnceCell};
     use tokio::time::{sleep, timeout};
 
     static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
@@ -493,7 +506,14 @@ mod tests {
         let pool = test_pool().await;
         let store = Arc::new(BootstrapHintStore::default());
 
-        spawn_bootstrap_hint_listener(pool.clone(), store.clone());
+        let (ready_sender, ready_receiver) = oneshot::channel();
+        let listener_task =
+            spawn_bootstrap_hint_listener_task(pool.clone(), store.clone(), Some(ready_sender));
+
+        timeout(Duration::from_secs(5), ready_receiver)
+            .await
+            .expect("bootstrap hint listener should subscribe within timeout")
+            .expect("bootstrap hint listener readiness sender dropped");
 
         let expected_hint = json!({
             "schema": "kukuri-bootstrap-update-hint-v1",
@@ -501,32 +521,25 @@ mod tests {
             "refresh_paths": ["/v1/bootstrap/nodes", "/v1/bootstrap/topics/topic-1/services"]
         });
 
-        let notify_deadline = std::time::Instant::now() + Duration::from_secs(3);
-        let mut received = None;
-        while std::time::Instant::now() < notify_deadline {
-            sqlx::query("SELECT pg_notify($1, $2)")
-                .bind(BOOTSTRAP_HINT_CHANNEL)
-                .bind(expected_hint.to_string())
-                .execute(&pool)
-                .await
-                .expect("notify bootstrap hint");
-
-            if let Ok(Some(snapshot)) = timeout(Duration::from_millis(200), async {
-                loop {
-                    if let Some(snapshot) = store.latest_after(0).await {
-                        return Some(snapshot);
-                    }
-                    sleep(Duration::from_millis(20)).await;
-                }
-            })
+        sqlx::query("SELECT pg_notify($1, $2)")
+            .bind(BOOTSTRAP_HINT_CHANNEL)
+            .bind(expected_hint.to_string())
+            .execute(&pool)
             .await
-            {
-                received = Some(snapshot);
-                break;
-            }
-        }
+            .expect("notify bootstrap hint");
 
-        let snapshot = received.expect("bootstrap hint notification should be observed");
+        let snapshot = timeout(Duration::from_secs(3), async {
+            loop {
+                if let Some(snapshot) = store.latest_after(0).await {
+                    return snapshot;
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("bootstrap hint notification should be observed");
+
+        listener_task.abort();
         assert!(
             snapshot.seq >= 1,
             "seq should advance at least once after notify"
