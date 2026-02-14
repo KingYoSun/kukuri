@@ -1,6 +1,6 @@
 # CI Required Checks ポリシー
 
-最終更新日: 2026年02月11日
+最終更新日: 2026年02月14日
 
 ## 目的
 - GitHub Actions の待ち時間を短縮し、PR のレビュー待ち時間を最小化する。
@@ -11,6 +11,7 @@
 - 重厚セットは `push`（`main` / `develop`）と `nightly` を中心に実行する。
 - docs-only 変更（`docs/**` のみ）では重い Docker ジョブをスキップする。
 - 同一ブランチの古い実行は `concurrency.cancel-in-progress: true` で自動キャンセルする。
+- `Community Node Tests` のローカル再現は OS を問わずコンテナ経路を既定とする（`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features`）。
 
 ## PR向け高速セット（Required Checks）
 - `Format Check`

@@ -53,7 +53,7 @@
      - `docs/03_implementation/p2p_mainline_runbook.md` 記載の採取コマンドで必要ログを収集し、`phase5_ci_path_audit.md` に載っているテスト ID と対応付けられる。
   10. **Ops/CI ガード**
       - `gh act --workflows .github/workflows/test.yml --job format-check` / `--job native-test-linux` が成功し、`.act-artifacts/` に最新ログが保存される。
-      - Windows ホストでは必ず `./scripts/test-docker.ps1 ts|rust|all`（必要に応じて `--scenario trending-feed` など）を経由して Vitest / Cargo / ESLint / integration を再実行し、`test-results/` ディレクトリが更新される。
+      - Community Node テストは OS を問わずコンテナ経路を既定とし、`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker run --rm --network kukuri_community-node-network ... kukuri-test-runner ... cargo test --workspace --all-features` を実行して `test-results/` を更新する。Windows の Tauri 側検証は従来どおり `./scripts/test-docker.ps1 ts|rust|all`（必要に応じて `--scenario trending-feed` など）を利用する。
       - 2026年01月28日: desktop-e2e の Meilisearch 認証ヘッダ修正。`./scripts/test-docker.ps1 e2e-community-node` 通過、`gh act` の format-check / native-test-linux 実行済み。
       - 2026年01月29日: desktop-e2e（community node）で `onboarding.key-management.spec.ts` のアカウント切替がタイムアウトするため、DOM 直接クリック＋bridge フォールバックへ調整。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走。
       - 2026年02月02日: `authStore.bootstrapTopics` の public topic join を非同期化（オンボーディング遅延対策）。`./scripts/test-docker.ps1 e2e` を完走（14 specs pass, 13分37秒、`tmp/logs/desktop-e2e/20260202-115045.log`）。`gh act --job format-check` / `--job native-test-linux` を完走。

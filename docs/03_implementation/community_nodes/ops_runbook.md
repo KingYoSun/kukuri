@@ -24,6 +24,14 @@
 - **最小開示**: ログ/監査は必要最小限（本文・識別子を不用意に残さない）
 - **停止できる設計**: LLM/バックフィル/低優先topicは止められる（運用で破綻しない）
 
+### 0.1 Community Node テスト実行の既定コマンド（全OS共通）
+
+- community-node の回帰確認は Linux/macOS/Windows すべてでコンテナ経路を既定とする。`cd kukuri-community-node && cargo test ...` のホスト直実行はデバッグ用途に限定する。
+- 依存サービス起動:
+  - `docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch`
+- テスト + ビルド:
+  - `docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "${PWD}:/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"`
+
 ## 1. 監視 / メトリクス / ログ
 
 ### 1.1 収集方針
