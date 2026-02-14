@@ -491,7 +491,8 @@ mod api_contract_tests {
             .route("/v1/bootstrap/hints/latest", get(get_bootstrap_hint))
             .with_state(state);
 
-        let (first_status, _) = request_status_and_headers(app.clone(), "/v1/bootstrap/hints/latest").await;
+        let (first_status, _) =
+            request_status_and_headers(app.clone(), "/v1/bootstrap/hints/latest").await;
         assert_eq!(first_status, StatusCode::NO_CONTENT);
 
         let (status, headers) = request_status_and_headers(app, "/v1/bootstrap/hints/latest").await;
@@ -503,5 +504,4 @@ mod api_contract_tests {
             .unwrap_or(0);
         assert!(retry_after >= 1, "Retry-After must be >= 1: {retry_after}");
     }
-
 }
