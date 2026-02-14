@@ -445,3 +445,92 @@ async fn openapi_json(headers: HeaderMap) -> impl IntoResponse {
     let server_url = openapi::infer_server_url(&headers);
     Json(openapi::document(server_url.as_deref()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use sqlx::postgres::PgPoolOptions;
+    use std::sync::OnceLock;
+    use tokio::sync::{Mutex, OnceCell};
+    use tokio::time::{sleep, timeout};
+
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:5432/cn".to_string())
+    }
+
+    fn db_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    async fn ensure_migrated(pool: &Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run community-node migrations");
+            })
+            .await;
+    }
+
+    async fn test_pool() -> Pool<Postgres> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        pool
+    }
+
+    #[tokio::test]
+    async fn spawn_bootstrap_hint_listener_receives_pg_notify_and_updates_store() {
+        let _guard = db_test_lock().lock().await;
+        let pool = test_pool().await;
+        let store = Arc::new(BootstrapHintStore::default());
+
+        spawn_bootstrap_hint_listener(pool.clone(), store.clone());
+
+        let expected_hint = json!({
+            "schema": "kukuri-bootstrap-update-hint-v1",
+            "service": "cn-bootstrap",
+            "refresh_paths": ["/v1/bootstrap/nodes", "/v1/bootstrap/topics/topic-1/services"]
+        });
+
+        let notify_deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let mut received = None;
+        while std::time::Instant::now() < notify_deadline {
+            sqlx::query("SELECT pg_notify($1, $2)")
+                .bind(BOOTSTRAP_HINT_CHANNEL)
+                .bind(expected_hint.to_string())
+                .execute(&pool)
+                .await
+                .expect("notify bootstrap hint");
+
+            if let Ok(Some(snapshot)) = timeout(Duration::from_millis(200), async {
+                loop {
+                    if let Some(snapshot) = store.latest_after(0).await {
+                        return Some(snapshot);
+                    }
+                    sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            {
+                received = Some(snapshot);
+                break;
+            }
+        }
+
+        let snapshot = received.expect("bootstrap hint notification should be observed");
+        assert!(
+            snapshot.seq >= 1,
+            "seq should advance at least once after notify"
+        );
+        assert_eq!(snapshot.hint, expected_hint);
+    }
+}
