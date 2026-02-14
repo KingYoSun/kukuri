@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{oneshot, RwLock};
 
 use crate::config::RelayRuntimeConfig;
 use crate::ingest::{ingest_event, IngestContext, IngestSource};
@@ -49,7 +49,7 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
         }
     });
 
-    spawn_bootstrap_hint_bridge(state.clone());
+    let _bootstrap_hint_ready = spawn_bootstrap_hint_bridge(state.clone());
 
     Ok(())
 }
@@ -198,7 +198,8 @@ fn bootstrap_hint_notify_channel() -> String {
         .unwrap_or_else(|| DEFAULT_BOOTSTRAP_HINT_NOTIFY_CHANNEL.to_string())
 }
 
-pub(crate) fn spawn_bootstrap_hint_bridge(state: AppState) {
+pub(crate) fn spawn_bootstrap_hint_bridge(state: AppState) -> oneshot::Receiver<()> {
+    let (ready_tx, ready_rx) = oneshot::channel();
     tokio::spawn(async move {
         let channel = bootstrap_hint_notify_channel();
         let mut listener = match PgListener::connect_with(&state.pool).await {
@@ -212,6 +213,7 @@ pub(crate) fn spawn_bootstrap_hint_bridge(state: AppState) {
             tracing::warn!(error = %err, channel = %channel, "bootstrap hint bridge failed to listen");
             return;
         }
+        let _ = ready_tx.send(());
 
         loop {
             let notification = match listener.recv().await {
@@ -237,6 +239,7 @@ pub(crate) fn spawn_bootstrap_hint_bridge(state: AppState) {
             }
         }
     });
+    ready_rx
 }
 
 async fn publish_bootstrap_events_to_topic(state: &AppState, topic_id: &str) -> Result<()> {

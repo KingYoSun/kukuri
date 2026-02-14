@@ -1916,6 +1916,7 @@ mod community_node_handler_tests {
     use std::time::Duration;
     use tiny_http::{Header, Response, Server};
     use tokio::sync::Mutex;
+    use tokio::time::timeout;
 
     #[derive(Default)]
     struct InMemorySecureStorage {
@@ -2058,16 +2059,17 @@ mod community_node_handler_tests {
         mpsc::Receiver<CapturedRequest>,
         thread::JoinHandle<()>,
     ) {
-        let expected_requests = responses.len();
         let server = Server::http("127.0.0.1:0").expect("server");
         let base_url = format!("http://{}", server.server_addr());
         let (tx, rx) = mpsc::channel();
         let handle = thread::spawn(move || {
-            for (request, response_spec) in server
-                .incoming_requests()
-                .take(expected_requests)
-                .zip(responses.into_iter())
-            {
+            for response_spec in responses.into_iter() {
+                let request = match server.recv_timeout(Duration::from_secs(5)) {
+                    Ok(Some(request)) => request,
+                    Ok(None) => break,
+                    Err(_) => break,
+                };
+
                 let url = request.url();
                 let parsed = Url::parse(&format!("http://localhost{url}")).expect("request url");
                 let params = parsed
@@ -2336,7 +2338,7 @@ mod community_node_handler_tests {
         assert!(!items.is_empty());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn refresh_bootstrap_from_hint_refetches_nodes_and_topic_services() {
         let handler = test_handler();
         let topic_id = format!(
@@ -2399,30 +2401,22 @@ mod community_node_handler_tests {
         };
         handler.save_config(&config).await.expect("save config");
 
-        handler
-            .refresh_bootstrap_from_hint(Some(&topic_id))
-            .await
-            .expect("refresh from hint");
+        timeout(
+            Duration::from_secs(10),
+            handler.refresh_bootstrap_from_hint(Some(&topic_id)),
+        )
+        .await
+        .expect("refresh from hint timeout")
+        .expect("refresh from hint");
 
-        let nodes = handler.list_bootstrap_nodes().await.expect("list nodes");
-        let node_items = nodes
-            .get("items")
-            .and_then(|value| value.as_array())
-            .expect("node items");
-        assert_eq!(node_items.len(), 1);
-
-        let services = handler
-            .list_bootstrap_services(CommunityNodeBootstrapServicesRequest {
-                base_url: None,
-                topic_id: topic_id.clone(),
-            })
-            .await
-            .expect("list services");
-        let service_items = services
-            .get("items")
-            .and_then(|value| value.as_array())
-            .expect("service items");
-        assert_eq!(service_items.len(), 1);
+        let cache = handler.load_bootstrap_cache().await.expect("load cache");
+        assert_eq!(cache.nodes.items.len(), 1);
+        let cached_service_items = cache
+            .services
+            .get(&topic_id)
+            .map(|entry| entry.items.len())
+            .unwrap_or_default();
+        assert_eq!(cached_service_items, 1);
 
         let req1 = rx.recv_timeout(Duration::from_secs(2)).expect("request 1");
         assert_eq!(req1.path, "/v1/bootstrap/nodes");
@@ -2430,7 +2424,14 @@ mod community_node_handler_tests {
         let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
         assert_eq!(req2.path, service_path);
 
-        handle.join().expect("server");
+        timeout(
+            Duration::from_secs(3),
+            tokio::task::spawn_blocking(move || handle.join()),
+        )
+        .await
+        .expect("server join timeout")
+        .expect("server join task panicked")
+        .expect("server thread panicked");
     }
 
     #[tokio::test]
