@@ -4,6 +4,7 @@ use cn_core::{metrics, topic};
 use futures_util::StreamExt;
 use iroh::{protocol::Router, Endpoint, SecretKey};
 use iroh_gossip::{api::Event, Gossip, TopicId};
+use sqlx::postgres::PgListener;
 use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -14,6 +15,14 @@ use tokio::sync::RwLock;
 use crate::config::RelayRuntimeConfig;
 use crate::ingest::{ingest_event, IngestContext, IngestSource};
 use crate::{AppState, RelayConfig};
+
+const DEFAULT_BOOTSTRAP_HINT_NOTIFY_CHANNEL: &str = "cn_bootstrap_hint";
+
+#[derive(Debug, serde::Deserialize)]
+struct BootstrapHintPayload {
+    #[serde(default)]
+    changed_topic_ids: Vec<String>,
+}
 
 pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
     let endpoint = build_endpoint(&config).await?;
@@ -36,6 +45,8 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
             tokio::time::sleep(poll_interval).await;
         }
     });
+
+    spawn_bootstrap_hint_bridge(state.clone());
 
     Ok(())
 }
@@ -174,6 +185,106 @@ async fn sync_topics(
     }
 
     Ok(())
+}
+
+fn bootstrap_hint_notify_channel() -> String {
+    std::env::var("RELAY_BOOTSTRAP_HINT_CHANNEL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_BOOTSTRAP_HINT_NOTIFY_CHANNEL.to_string())
+}
+
+pub(crate) fn spawn_bootstrap_hint_bridge(state: AppState) {
+    tokio::spawn(async move {
+        let channel = bootstrap_hint_notify_channel();
+        let mut listener = match PgListener::connect_with(&state.pool).await {
+            Ok(listener) => listener,
+            Err(err) => {
+                tracing::warn!(error = %err, "bootstrap hint bridge failed to connect listener");
+                return;
+            }
+        };
+        if let Err(err) = listener.listen(&channel).await {
+            tracing::warn!(error = %err, channel = %channel, "bootstrap hint bridge failed to listen");
+            return;
+        }
+
+        loop {
+            let notification = match listener.recv().await {
+                Ok(notification) => notification,
+                Err(err) => {
+                    tracing::warn!(error = %err, "bootstrap hint bridge receive error");
+                    continue;
+                }
+            };
+
+            let hint: BootstrapHintPayload = match serde_json::from_str(notification.payload()) {
+                Ok(payload) => payload,
+                Err(err) => {
+                    tracing::debug!(error = %err, payload = notification.payload(), "skip invalid bootstrap hint payload");
+                    continue;
+                }
+            };
+
+            for topic_id in hint.changed_topic_ids {
+                if let Err(err) = publish_bootstrap_events_to_topic(&state, &topic_id).await {
+                    tracing::warn!(error = %err, topic_id = %topic_id, "bootstrap hint bridge publish failed");
+                }
+            }
+        }
+    });
+}
+
+async fn publish_bootstrap_events_to_topic(state: &AppState, topic_id: &str) -> Result<()> {
+    let sender = {
+        let guard = state.gossip_senders.read().await;
+        guard.get(topic_id).cloned()
+    };
+    let Some(sender) = sender else {
+        return Ok(());
+    };
+
+    let rows = sqlx::query(
+        "SELECT event_json FROM cn_bootstrap.events
+         WHERE is_active = TRUE
+           AND expires_at > EXTRACT(EPOCH FROM NOW())::BIGINT
+           AND (
+               (kind = 39000 AND d_tag = 'descriptor')
+               OR (kind = 39001 AND topic_id = $1)
+           )",
+    )
+    .bind(topic_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    for row in rows {
+        let value: serde_json::Value = row.try_get("event_json")?;
+        let payload = serde_json::to_vec(&value)?;
+        if send_with_retry(&sender, payload).await {
+            metrics::inc_gossip_sent(super::SERVICE_NAME);
+        }
+    }
+
+    Ok(())
+}
+
+async fn send_with_retry(sender: &iroh_gossip::api::GossipSender, payload: Vec<u8>) -> bool {
+    const RETRIES: usize = 3;
+    let mut attempt = 0;
+    loop {
+        match sender.broadcast(payload.clone().into()).await {
+            Ok(_) => return true,
+            Err(err) => {
+                attempt += 1;
+                if attempt >= RETRIES {
+                    tracing::debug!(error = %err, "bootstrap hint bridge broadcast retries exhausted");
+                    return false;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        }
+    }
 }
 
 async fn load_node_topics(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<HashSet<String>> {

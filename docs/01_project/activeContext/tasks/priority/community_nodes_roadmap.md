@@ -200,11 +200,11 @@
 
 ## 未実装/不足事項（2026年02月14日 監査追記）
 
-- [ ] （継続）`cn-bootstrap` hint 受信経路は未実装。`pg_notify('cn_bootstrap_hint')` は DB 内通知のため、クライアント再取得トリガには **受信ブリッジ実装方針の確定**（relay/gossip bridge か User API push channel か）が必要。
-- [ ] 受信ブリッジ方針決定後、以下を1タスクとして実装する:
-  - [ ] hint 受信で `/v1/bootstrap/nodes` と `/v1/bootstrap/topics/{topic_id}/services` を再取得し、キャッシュを更新する
-  - [ ] 取りこぼし前提のため、既存 `next_refresh_at` ポーリングと併用する
-  - [ ] 実ノードE2E（通知受信→HTTP再取得→キャッシュ更新反映）を追加する
+- [x] （解消）Manager 決定により v1 は **A) relay/gossip bridge のみ** を採用（B: User API push は defer）。
+- [x] 受信ブリッジ（A）を実装し、以下を満たす:
+  - [x] hint 受信で `/v1/bootstrap/nodes` と `/v1/bootstrap/topics/{topic_id}/services` を再取得し、キャッシュを更新する
+  - [x] 取りこぼし前提のため、既存 `next_refresh_at` ポーリングと併用する
+  - [x] relay 側で `pg_notify('cn_bootstrap_hint')` を gossip ヒント配信へ橋渡しし、受信で HTTP 再取得が動作する統合テストを追加する
 
 ## 参照（設計）
 
