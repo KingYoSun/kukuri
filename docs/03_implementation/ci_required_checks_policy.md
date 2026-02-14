@@ -11,7 +11,7 @@
 - 重厚セットは `push`（`main` / `develop`）と `nightly` を中心に実行する。
 - docs-only 変更（`docs/**` のみ）では重い Docker ジョブをスキップする。
 - 同一ブランチの古い実行は `concurrency.cancel-in-progress: true` で自動キャンセルする。
-- `Community Node Tests` のローカル再現は OS を問わずコンテナ経路を既定とする（`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features`）。
+- `Community Node Tests` のローカル再現は OS を問わずコンテナ経路を既定とする（`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features`）。
 
 ## PR向け高速セット（Required Checks）
 - `Format Check`

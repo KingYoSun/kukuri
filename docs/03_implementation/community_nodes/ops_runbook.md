@@ -29,6 +29,8 @@
 - community-node の回帰確認は Linux/macOS/Windows すべてでコンテナ経路を既定とする。`cd kukuri-community-node && cargo test ...` のホスト直実行はデバッグ用途に限定する。
 - 依存サービス起動:
   - `docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch`
+- test-runner イメージビルド:
+  - `docker compose -f docker-compose.test.yml build test-runner`
 - テスト + ビルド:
   - `docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"`
 

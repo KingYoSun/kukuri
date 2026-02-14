@@ -48,6 +48,9 @@ community-node（`kukuri-community-node`）のテスト/ビルド検証は Linux
 # 依存サービス起動
 docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
 
+# test-runner イメージをビルド
+docker compose -f docker-compose.test.yml build test-runner
+
 # community-node テスト + cn-cli ビルド
 docker run --rm --network kukuri_community-node-network \
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
@@ -61,6 +64,9 @@ docker run --rm --network kukuri_community-node-network \
 ```powershell
 # 依存サービス起動
 docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+
+# test-runner イメージをビルド
+docker compose -f docker-compose.test.yml build test-runner
 
 # community-node テスト + cn-cli ビルド
 docker run --rm --network kukuri_community-node-network `

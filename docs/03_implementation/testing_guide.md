@@ -4,7 +4,7 @@
 
 このドキュメントでは、Kukuriプロジェクトのテスト戦略、実装方法、実行手順について説明します。
 
-> 補足: `kukuri-community-node` のテスト実行は Linux/macOS/Windows すべてでコンテナ経路を既定とします（`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features`）。
+> 補足: `kukuri-community-node` のテスト実行は Linux/macOS/Windows すべてでコンテナ経路を既定とします（`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features`）。
 
 ## テスト構成
 
@@ -181,6 +181,7 @@ cargo clippy           # Rustリントチェック
 
 # Community node（全OS既定: コンテナ）
 docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml build test-runner
 docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
 
 # E2Eテスト
