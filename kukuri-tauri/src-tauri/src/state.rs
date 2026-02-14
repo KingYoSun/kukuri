@@ -728,6 +728,27 @@ impl AppState {
                             let handler = Arc::clone(&community_node_handler);
                             let event_clone = evt.clone();
                             tauri::async_runtime::spawn(async move {
+                                let hint_topic = if event_clone.kind == 39001 {
+                                    event_clone.tags.iter().find_map(|tag| {
+                                        if tag.len() >= 2 && tag[0] == "t" {
+                                            Some(tag[1].clone())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                } else {
+                                    None
+                                };
+                                if let Err(err) = handler
+                                    .refresh_bootstrap_from_hint(hint_topic.as_deref())
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        error = %err,
+                                        kind = event_clone.kind,
+                                        "bootstrap hint refresh failed"
+                                    );
+                                }
                                 if let Err(err) = handler.ingest_bootstrap_event(&event_clone).await
                                 {
                                     tracing::warn!(

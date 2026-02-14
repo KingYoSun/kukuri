@@ -642,6 +642,52 @@ impl CommunityNodeHandler {
         }))
     }
 
+    pub async fn refresh_bootstrap_from_hint(
+        &self,
+        topic_id: Option<&str>,
+    ) -> Result<(), AppError> {
+        let Some(config) = self.load_config().await? else {
+            return Ok(());
+        };
+        let nodes = select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap)
+            .unwrap_or_default();
+        if nodes.is_empty() {
+            return Ok(());
+        }
+
+        let now = Utc::now().timestamp();
+        let mut cache = self.load_bootstrap_cache().await?;
+
+        if let Ok(result) = self.aggregate_bootstrap(nodes.clone(), "/v1/bootstrap/nodes").await {
+            let mut entry = cache.nodes.clone();
+            entry.items = sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &result.items, now, None);
+            entry.next_refresh_at = result.next_refresh_at;
+            entry.updated_at = Some(now);
+            entry.stale = false;
+            cache.nodes = entry;
+        }
+
+        if let Some(topic_id) = topic_id {
+            let path = format!("/v1/bootstrap/topics/{}/services", topic_id);
+            if let Ok(result) = self.aggregate_bootstrap(nodes, &path).await {
+                let mut entry = cache.services.get(topic_id).cloned().unwrap_or_default();
+                entry.items = sanitize_bootstrap_items(
+                    TOPIC_SERVICE_KIND,
+                    &result.items,
+                    now,
+                    Some(topic_id),
+                );
+                entry.next_refresh_at = result.next_refresh_at;
+                entry.updated_at = Some(now);
+                entry.stale = false;
+                cache.services.insert(topic_id.to_string(), entry);
+            }
+        }
+
+        self.save_bootstrap_cache(&cache).await?;
+        Ok(())
+    }
+
     pub async fn ingest_bootstrap_event(
         &self,
         event: &crate::domain::entities::Event,
@@ -2285,6 +2331,103 @@ mod community_node_handler_tests {
             .and_then(|value| value.as_array())
             .expect("items array");
         assert!(!items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn refresh_bootstrap_from_hint_refetches_nodes_and_topic_services() {
+        let handler = test_handler();
+        let topic_id = format!(
+            "kukuri:hint-bridge-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        );
+        let now = Utc::now().timestamp();
+
+        let keys = Keys::generate();
+        let exp_str = (now + 3600).to_string();
+        let descriptor = EventBuilder::new(
+            Kind::Custom(NODE_DESCRIPTOR_KIND),
+            json!({
+                "schema": "kukuri-node-desc-v1",
+                "name": "Hint Bridge Node",
+                "roles": ["bootstrap"],
+                "endpoints": {"http": "https://node.example"}
+            })
+            .to_string(),
+        )
+        .tags(vec![
+            Tag::parse(["d", "descriptor"]).expect("d"),
+            Tag::parse(["k", "kukuri"]).expect("k"),
+            Tag::parse(["ver", "1"]).expect("ver"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+            Tag::parse(["role", "bootstrap"]).expect("role"),
+        ])
+        .sign_with_keys(&keys)
+        .expect("sign descriptor");
+
+        let topic_service = build_bootstrap_topic_service_event(&topic_id, "hint-bridge");
+        let service_path = format!("/v1/bootstrap/topics/{topic_id}/services");
+        let responses = vec![
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [serde_json::to_value(&descriptor).expect("descriptor json")],
+                    "next_refresh_at": now + 3600,
+                }),
+            ),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [topic_service],
+                    "next_refresh_at": now + 3600,
+                }),
+            ),
+        ];
+        let (base_url, rx, handle) = spawn_json_sequence_server(responses);
+        let config = CommunityNodeConfig {
+            nodes: vec![build_config_node(
+                base_url.clone(),
+                CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                },
+            )],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        handler
+            .refresh_bootstrap_from_hint(Some(&topic_id))
+            .await
+            .expect("refresh from hint");
+
+        let nodes = handler.list_bootstrap_nodes().await.expect("list nodes");
+        let node_items = nodes
+            .get("items")
+            .and_then(|value| value.as_array())
+            .expect("node items");
+        assert_eq!(node_items.len(), 1);
+
+        let services = handler
+            .list_bootstrap_services(CommunityNodeBootstrapServicesRequest {
+                base_url: None,
+                topic_id: topic_id.clone(),
+            })
+            .await
+            .expect("list services");
+        let service_items = services
+            .get("items")
+            .and_then(|value| value.as_array())
+            .expect("service items");
+        assert_eq!(service_items.len(), 1);
+
+        let req1 = rx.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/bootstrap/nodes");
+
+        let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, service_path);
+
+        handle.join().expect("server");
     }
 
     #[tokio::test]

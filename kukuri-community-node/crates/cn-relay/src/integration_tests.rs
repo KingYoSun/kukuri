@@ -1,4 +1,5 @@
 use super::AppState;
+use crate::gossip;
 use crate::ingest::ACCESS_CONTROL_P2P_ONLY_REASON;
 use crate::ws;
 use axum::body::to_bytes;
@@ -2897,4 +2898,108 @@ async fn rate_limit_rejects_second_event_at_boundary() {
     );
 
     server_handle.abort();
+}
+
+#[tokio::test]
+async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
+    let _guard = acquire_integration_test_lock().await;
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:relay-bootstrap-hint-it-{}", Uuid::new_v4());
+    let state = build_state(pool.clone());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let (gossip_sender, mut harness) = setup_gossip(&topic_id).await;
+    {
+        let mut senders = state.gossip_senders.write().await;
+        senders.insert(topic_id.clone(), gossip_sender);
+    }
+
+    let keys = Keys::generate();
+    let descriptor = nostr::build_signed_event(
+        &keys,
+        39000,
+        vec![
+            vec!["d".to_string(), "descriptor".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+            vec!["exp".to_string(), (Timestamp::now().as_u64() + 3600).to_string()],
+        ],
+        json!({"schema": "kukuri-node-desc-v1"}).to_string(),
+    )
+    .expect("build descriptor event");
+    let topic_service = nostr::build_signed_event(
+        &keys,
+        39001,
+        vec![
+            vec!["d".to_string(), format!("{}:relay:public", topic_id)],
+            vec!["t".to_string(), topic_id.clone()],
+            vec!["role".to_string(), "relay".to_string()],
+            vec!["scope".to_string(), "public".to_string()],
+            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
+            vec!["ver".to_string(), KIP_VERSION.to_string()],
+            vec!["exp".to_string(), (Timestamp::now().as_u64() + 3600).to_string()],
+        ],
+        json!({"schema": "kukuri-topic-service-v1"}).to_string(),
+    )
+    .expect("build topic service event");
+
+    sqlx::query(
+        "INSERT INTO cn_bootstrap.events
+            (event_id, kind, d_tag, topic_id, role, scope, event_json, created_at, expires_at, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)",
+    )
+    .bind(&descriptor.id)
+    .bind(39000_i32)
+    .bind("descriptor")
+    .bind(Option::<String>::None)
+    .bind(Option::<String>::None)
+    .bind(Option::<String>::None)
+    .bind(serde_json::to_value(&descriptor).expect("descriptor json"))
+    .bind(descriptor.created_at)
+    .bind(descriptor.created_at + 3600)
+    .execute(&pool)
+    .await
+    .expect("insert descriptor");
+
+    sqlx::query(
+        "INSERT INTO cn_bootstrap.events
+            (event_id, kind, d_tag, topic_id, role, scope, event_json, created_at, expires_at, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)",
+    )
+    .bind(&topic_service.id)
+    .bind(39001_i32)
+    .bind(format!("{}:relay:public", topic_id))
+    .bind(Some(topic_id.clone()))
+    .bind(Some("relay".to_string()))
+    .bind(Some("public".to_string()))
+    .bind(serde_json::to_value(&topic_service).expect("topic service json"))
+    .bind(topic_service.created_at)
+    .bind(topic_service.created_at + 3600)
+    .execute(&pool)
+    .await
+    .expect("insert topic service");
+
+    gossip::spawn_bootstrap_hint_bridge(state.clone());
+
+    let payload = json!({
+        "schema": "kukuri-bootstrap-update-hint-v1",
+        "changed_topic_ids": [topic_id]
+    })
+    .to_string();
+    sqlx::query("SELECT pg_notify('cn_bootstrap_hint', $1)")
+        .bind(payload)
+        .execute(&pool)
+        .await
+        .expect("notify bootstrap hint");
+
+    wait_for_gossip_event(&mut harness.receiver, WAIT_TIMEOUT, &descriptor.id).await;
+    wait_for_gossip_event(&mut harness.receiver, WAIT_TIMEOUT, &topic_service.id).await;
+
+    let _ = timeout(WAIT_TIMEOUT, harness.router_a.shutdown()).await;
+    let _ = timeout(WAIT_TIMEOUT, harness.router_b.shutdown()).await;
 }
