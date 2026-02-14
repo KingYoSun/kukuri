@@ -2927,7 +2927,10 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
             vec!["d".to_string(), "descriptor".to_string()],
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
-            vec!["exp".to_string(), (Timestamp::now().as_u64() + 3600).to_string()],
+            vec![
+                "exp".to_string(),
+                (Timestamp::now().as_u64() + 3600).to_string(),
+            ],
         ],
         json!({"schema": "kukuri-node-desc-v1"}).to_string(),
     )
@@ -2942,7 +2945,10 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
             vec!["scope".to_string(), "public".to_string()],
             vec!["k".to_string(), KIP_NAMESPACE.to_string()],
             vec!["ver".to_string(), KIP_VERSION.to_string()],
-            vec!["exp".to_string(), (Timestamp::now().as_u64() + 3600).to_string()],
+            vec![
+                "exp".to_string(),
+                (Timestamp::now().as_u64() + 3600).to_string(),
+            ],
         ],
         json!({"schema": "kukuri-topic-service-v1"}).to_string(),
     )

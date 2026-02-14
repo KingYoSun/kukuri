@@ -649,8 +649,8 @@ impl CommunityNodeHandler {
         let Some(config) = self.load_config().await? else {
             return Ok(());
         };
-        let nodes = select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap)
-            .unwrap_or_default();
+        let nodes =
+            select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap).unwrap_or_default();
         if nodes.is_empty() {
             return Ok(());
         }
@@ -658,7 +658,10 @@ impl CommunityNodeHandler {
         let now = Utc::now().timestamp();
         let mut cache = self.load_bootstrap_cache().await?;
 
-        if let Ok(result) = self.aggregate_bootstrap(nodes.clone(), "/v1/bootstrap/nodes").await {
+        if let Ok(result) = self
+            .aggregate_bootstrap(nodes.clone(), "/v1/bootstrap/nodes")
+            .await
+        {
             let mut entry = cache.nodes.clone();
             entry.items = sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &result.items, now, None);
             entry.next_refresh_at = result.next_refresh_at;

@@ -37,9 +37,12 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
         Arc::new(RwLock::new(HashMap::new()));
     let poll_interval = Duration::from_secs(config.topic_poll_seconds);
 
+    let sync_state = state.clone();
     tokio::spawn(async move {
         loop {
-            if let Err(err) = sync_topics(&state, &gossip, &senders, &tasks, &node_topics).await {
+            if let Err(err) =
+                sync_topics(&sync_state, &gossip, &senders, &tasks, &node_topics).await
+            {
                 tracing::warn!(error = %err, "gossip topic sync failed");
             }
             tokio::time::sleep(poll_interval).await;

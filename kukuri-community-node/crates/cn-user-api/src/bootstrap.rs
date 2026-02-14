@@ -203,10 +203,30 @@ mod api_contract_tests {
     use cn_core::service_config;
     use nostr_sdk::prelude::Keys;
     use sqlx::postgres::PgPoolOptions;
+    use sqlx::{Pool, Postgres};
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tokio::sync::OnceCell;
     use tower::ServiceExt;
+    use uuid::Uuid;
+
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:5432/cn".to_string())
+    }
+
+    async fn ensure_migrated(pool: &Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run migrations");
+            })
+            .await;
+    }
 
     fn test_state_with_auth_mode(auth_mode: &str) -> crate::AppState {
         let pool = PgPoolOptions::new()
@@ -244,6 +264,49 @@ mod api_contract_tests {
 
     fn test_state() -> crate::AppState {
         test_state_with_auth_mode("required")
+    }
+
+    async fn test_state_with_auth_mode_and_user_config(
+        auth_mode: &str,
+        user_config_json: serde_json::Value,
+    ) -> crate::AppState {
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        crate::billing::ensure_default_plan(&pool)
+            .await
+            .expect("seed plans");
+
+        let jwt_config = cn_core::auth::JwtConfig {
+            issuer: "http://localhost".to_string(),
+            audience: crate::TOKEN_AUDIENCE.to_string(),
+            secret: "test-secret".to_string(),
+            ttl_seconds: 3600,
+        };
+        let user_config = service_config::static_handle(user_config_json);
+        let bootstrap_config = service_config::static_handle(serde_json::json!({
+            "auth": { "mode": auth_mode }
+        }));
+        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
+            .expect("meili");
+        let export_dir = PathBuf::from(format!("tmp/test_exports/{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&export_dir).expect("create test export dir");
+
+        crate::AppState {
+            pool,
+            jwt_config,
+            public_base_url: "http://localhost".to_string(),
+            user_config,
+            bootstrap_config,
+            rate_limiter: Arc::new(cn_core::rate_limit::RateLimiter::new()),
+            node_keys: Keys::generate(),
+            export_dir,
+            hmac_secret: b"test-secret".to_vec(),
+            meili,
+            bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
+        }
     }
 
     async fn request_status_and_headers(app: Router, uri: &str) -> (StatusCode, HeaderMap) {
@@ -356,5 +419,89 @@ mod api_contract_tests {
 
         let (status, _) = request_status_and_body(app, "/v1/bootstrap/hints/latest?since=1").await;
         assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+    #[tokio::test]
+    async fn bootstrap_hint_latest_requires_auth_when_enabled() {
+        let app = Router::new()
+            .route("/v1/bootstrap/hints/latest", get(get_bootstrap_hint))
+            .with_state(test_state());
+
+        let (status, headers) = request_status_and_headers(app, "/v1/bootstrap/hints/latest").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            headers
+                .get(header::WWW_AUTHENTICATE)
+                .and_then(|value| value.to_str().ok()),
+            Some(r#"Bearer realm="cn-user-api""#)
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_hint_latest_requires_consents_when_missing() {
+        let state = test_state_with_auth_mode_and_user_config(
+            "required",
+            serde_json::json!({ "rate_limit": { "enabled": false } }),
+        )
+        .await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        let (token, _) = cn_core::auth::issue_token(&pubkey, &state.jwt_config).expect("token");
+        let policy_id = format!("terms-{}", Uuid::new_v4());
+        sqlx::query(
+            "INSERT INTO cn_admin.policies \
+                (policy_id, type, version, locale, title, content_md, content_hash, published_at, effective_at, is_current) \
+             VALUES ($1, 'terms', 'v1', 'ja-JP', 'Terms', '# Terms', $2, NOW(), NOW(), TRUE)",
+        )
+        .bind(&policy_id)
+        .bind(format!("sha256:{policy_id}"))
+        .execute(&state.pool)
+        .await
+        .expect("insert current policy");
+
+        let app = Router::new()
+            .route("/v1/bootstrap/hints/latest", get(get_bootstrap_hint))
+            .with_state(state);
+        let mut request = Request::builder()
+            .method("GET")
+            .uri("/v1/bootstrap/hints/latest")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::PRECONDITION_REQUIRED);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_hint_latest_rate_limited_returns_retry_after() {
+        let state = test_state_with_auth_mode_and_user_config(
+            "off",
+            serde_json::json!({
+                "rate_limit": {
+                    "enabled": true,
+                    "public_per_minute": 1,
+                    "protected_per_minute": 120,
+                    "auth_per_minute": 20
+                }
+            }),
+        )
+        .await;
+        let app = Router::new()
+            .route("/v1/bootstrap/hints/latest", get(get_bootstrap_hint))
+            .with_state(state);
+
+        let (first_status, _) =
+            request_status_and_headers(app.clone(), "/v1/bootstrap/hints/latest").await;
+        assert_eq!(first_status, StatusCode::NO_CONTENT);
+
+        let (status, headers) = request_status_and_headers(app, "/v1/bootstrap/hints/latest").await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        let retry_after = headers
+            .get(header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(0);
+        assert!(retry_after >= 1, "Retry-After must be >= 1: {retry_after}");
     }
 }
