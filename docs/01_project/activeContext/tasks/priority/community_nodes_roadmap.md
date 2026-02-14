@@ -198,6 +198,14 @@
 - [x] `cn-moderation`: `outbox_notify_semantics.md` の consumer 要件（起動時catch-up、NOTIFY起床、offsetコミット、リプレイ）に対する統合テストを追加する。`load_last_seq`/`commit_last_seq`/`fetch_outbox_batch` 経路の回帰を検知できるようにし、at-least-once 前提の冪等性を検証する。
 - [ ] `cn-bootstrap` + クライアント経路: `services_bootstrap.md` の「通知受信→HTTP再取得」運用を実装側で閉じる。`pg_notify('cn_bootstrap_hint')` publish のみで止まっているため、受信側（bridge または client）の再取得トリガ実装と E2E テスト（hint受信で `/v1/bootstrap/*` キャッシュ更新）を追加する。
 
+## 未実装/不足事項（2026年02月14日 監査追記）
+
+- [ ] （継続）`cn-bootstrap` hint 受信経路は未実装。`pg_notify('cn_bootstrap_hint')` は DB 内通知のため、クライアント再取得トリガには **受信ブリッジ実装方針の確定**（relay/gossip bridge か User API push channel か）が必要。
+- [ ] 受信ブリッジ方針決定後、以下を1タスクとして実装する:
+  - [ ] hint 受信で `/v1/bootstrap/nodes` と `/v1/bootstrap/topics/{topic_id}/services` を再取得し、キャッシュを更新する
+  - [ ] 取りこぼし前提のため、既存 `next_refresh_at` ポーリングと併用する
+  - [ ] 実ノードE2E（通知受信→HTTP再取得→キャッシュ更新反映）を追加する
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
