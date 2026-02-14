@@ -59,6 +59,17 @@ const createQueryClient = () =>
     },
   });
 
+const waitForCommunityConfigLoad = async () => {
+  await waitFor(() => {
+    expect(communityNodeApiMock.getConfig).toHaveBeenCalled();
+  });
+
+  const firstCall = communityNodeApiMock.getConfig.mock.results[0];
+  if (firstCall) {
+    await firstCall.value;
+  }
+};
+
 const renderWithClient = (query: string) => {
   const client = createQueryClient();
   return render(
@@ -133,6 +144,7 @@ describe('PostSearchResults', () => {
     });
 
     renderWithClient('alice');
+    await waitForCommunityConfigLoad();
 
     expect(await screen.findByText('1件の投稿が見つかりました')).toBeInTheDocument();
     expect(screen.getByTestId('post-card')).toHaveTextContent('Alice のローカル投稿');
@@ -169,6 +181,7 @@ describe('PostSearchResults', () => {
     });
 
     renderWithClient('alice');
+    await waitForCommunityConfigLoad();
 
     expect(await screen.findByTestId('community-node-search-results')).toBeInTheDocument();
     expect(screen.getByTestId('community-node-search-summary')).toHaveTextContent(
