@@ -13,7 +13,7 @@ concurrency:
     discord-hook-${{ github.workflow }}-${{ github.event_name }}-
     ${{ github.event.issue.node_id || github.event.pull_request.node_id || github.run_id }}-
     ${{ github.event.comment.id || github.event.review.id || github.event.issue.updated_at || github.event.pull_request.updated_at || github.run_attempt }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   notify:
     runs-on: ubuntu-latest

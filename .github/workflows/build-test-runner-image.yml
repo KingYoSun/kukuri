@@ -24,7 +24,7 @@ permissions:
 
 concurrency:
   group: build-test-runner-image-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
