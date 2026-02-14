@@ -17,8 +17,7 @@ concurrency:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    # bot投稿除外（actor名とsender.typeの両方で判定）
-    if: ${{ !endsWith(github.actor, '[bot]') && github.event.sender.type != 'Bot' }}
+    # PR上のCodex/connector botレビュー通知も流すため、bot送信も許可する
     steps:
       - name: Build message
         id: msg
