@@ -1913,10 +1913,32 @@ mod community_node_handler_tests {
     use std::collections::HashMap;
     use std::sync::mpsc;
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use tiny_http::{Header, Response, Server};
     use tokio::sync::Mutex;
     use tokio::time::timeout;
+
+    const MOCK_SERVER_RECV_TIMEOUT: Duration = Duration::from_secs(2);
+
+    fn join_with_timeout(
+        handle: thread::JoinHandle<()>,
+        timeout_duration: Duration,
+    ) -> Result<(), String> {
+        let deadline = Instant::now() + timeout_duration;
+        while !handle.is_finished() {
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "server join timed out after {:?}",
+                    timeout_duration
+                ));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        handle
+            .join()
+            .map_err(|_| "server thread panicked".to_string())
+    }
 
     #[derive(Default)]
     struct InMemorySecureStorage {
@@ -2064,7 +2086,7 @@ mod community_node_handler_tests {
         let (tx, rx) = mpsc::channel();
         let handle = thread::spawn(move || {
             for response_spec in responses.into_iter() {
-                let request = match server.recv_timeout(Duration::from_secs(5)) {
+                let request = match server.recv_timeout(MOCK_SERVER_RECV_TIMEOUT) {
                     Ok(Some(request)) => request,
                     Ok(None) => break,
                     Err(_) => break,
@@ -2424,14 +2446,7 @@ mod community_node_handler_tests {
         let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
         assert_eq!(req2.path, service_path);
 
-        timeout(
-            Duration::from_secs(3),
-            tokio::task::spawn_blocking(move || handle.join()),
-        )
-        .await
-        .expect("server join timeout")
-        .expect("server join task panicked")
-        .expect("server thread panicked");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join timeout");
     }
 
     #[tokio::test]
