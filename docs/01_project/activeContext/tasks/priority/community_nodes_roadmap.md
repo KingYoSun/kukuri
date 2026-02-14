@@ -206,6 +206,10 @@
   - [x] 取りこぼし前提のため、既存 `next_refresh_at` ポーリングと併用する
   - [x] relay 側で `pg_notify('cn_bootstrap_hint')` を gossip ヒント配信へ橋渡しし、受信で HTTP 再取得が動作する統合テストを追加する
 
+## 未実装/不足事項（2026年02月14日 ドキュメント運用追記）
+
+- [x] Community Node テストコマンドを全OSでコンテナ既定に統一し、`README` / `docker_test_environment.md` / `ops_runbook.md` / `ci_required_checks_policy.md` / `AGENTS.md` / タスク文書の記載差分を解消する（Issue #5 ドキュメント整備）。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）

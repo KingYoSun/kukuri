@@ -252,7 +252,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 ## 10. ブートストラップ CLI / UI 連携（2025年11月09日追加）
 
 ### 10.1 `cn-cli` ブートストラップノード手順
-1. ビルド: `cd kukuri-community-node && cargo build --release -p cn-cli`。Docker を使う場合は `docker compose -f docker-compose.yml up -d kukuri-bootstrap` もしくは `./scripts/start-bootstrap-nodes.ps1 -Mode bootstrap` を実行する。
+1. `docker compose -f docker-compose.test.yml build test-runner` を実行後、ビルド（既定はコンテナ経路）: `docker run --rm -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo build --release -p cn-cli"`。bootstrap ノード実行は `docker compose -f docker-compose.yml up -d kukuri-bootstrap` もしくは `./scripts/start-bootstrap-nodes.ps1 -Mode bootstrap` を利用する。
    - PoC では CLI が書き出す JSON の保管場所を明示する。`--export-path` 未指定時は下表の既定パスへ保存されるため、Tauri アプリと CLI は同じ OS アカウントで実行すること。
 
      | OS | 既定パス (`dirs::data_dir()/kukuri/p2p_bootstrap_nodes.json`) | 備考 |
@@ -272,7 +272,7 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 4. ブートストラップノードのヘルスチェック:
    - Bash: `./scripts/test-docker.sh p2p --bootstrap <node_id@host:port>` → 自動で `p2p-bootstrap` コンテナを起動し、正常終了後に停止。
    - PowerShell: `./scripts/test-docker.ps1 rust -Bootstrap "<node_id@host:port>"`。
-5. CLI 実装の回帰テストは `cargo test --package cn-cli -- test_bootstrap_runbook` を新設。Runbook に従った設定値（bind/peers/env優先順位）が崩れていないかを CI で検証する。
+5. `docker compose -f docker-compose.test.yml build test-runner` を実行後、CLI 実装の回帰テストは `docker run --rm -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "source /usr/local/cargo/env && cargo test --package cn-cli -- test_bootstrap_runbook"` を既定とする。Runbook に従った設定値（bind/peers/env優先順位）が崩れていないかを CI で検証する。
 
 ### 10.2 Settings / RelayStatus との連携
 - サイドバーの `RelayStatus` カードに `Runbook` リンクを追加し、本ドキュメント（GitHub: `docs/03_implementation/p2p_mainline_runbook.md`）を即座に開けるようにした。`再試行` ボタンと自動バックオフ更新は `refreshRelaySnapshot`（`src/components/RelayStatus.tsx`）で `useAuthStore.updateRelayStatus` と `p2pApi.getBootstrapConfig` を同時実行するため、CLI が `p2p_bootstrap_nodes.json`（旧 `cli_bootstrap_nodes.json` も可）を更新した直後でも UI が再取得できる。テスト: `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx`。

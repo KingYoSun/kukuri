@@ -13,7 +13,7 @@
 - アプリビルド: `pnpm tauri build`（Windowsクロス: `--runner cargo-xwin`）
 - TypeScript: `pnpm test` / `pnpm test:coverage` / `pnpm lint` / `pnpm format`
 - Rust(kukuri-tauri): `cd kukuri-tauri/src-tauri && cargo test && cargo clippy -D warnings`
-- Rust(kukuri-community-node): `cd kukuri-community-node && cargo test --workspace --all-features && cargo build --release -p cn-cli`
+- Rust(kukuri-community-node): コンテナ実行を既定とする。`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` 実行後、`docker compose -f docker-compose.test.yml build test-runner` を実行し、`docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"` を実行
 - Dockerテスト: `docker compose -f docker-compose.test.yml up --build test-runner`
 - Windows必須: `./scripts/test-docker.ps1 all|rust|ts|lint|integration|e2e`（PowerShell から Docker 内で実行する。ホスト上で `cargo test` / `pnpm test` を直接叩くのは厳禁）
 
@@ -28,7 +28,7 @@
 ## テスト指針
 - 単体・結合: Vitest + Testing Library（`*.test.ts(x)` または `__tests__/`）
 - 統合: `kukuri-tauri/src/test/integration` は `pnpm test:integration`
-- Rust: `cargo test`（`kukuri-tauri/src-tauri` と `kukuri-community-node`）
+- Rust: `kukuri-tauri/src-tauri` は `cargo test`、`kukuri-community-node` は上記コンテナコマンドで実行
 - 変更時は必ずテスト追加/更新とカバレッジ確認
 - Windows 環境は `./scripts/test-docker.ps1 <suite>` を必ず使用する。`STATUS_ENTRYPOINT_NOT_FOUND` / DLL ロードエラー回避のため、`pnpm test` や `cargo test` をホストで直接実行することは禁止（Docker 経由のみ許可）。
 
@@ -47,6 +47,7 @@
 - 依存追加: 追加時は最新安定版を確認して採用。
 - フロントのエラー処理: `console.error` は禁止。`docs/03_implementation/error_handling_guidelines.md` の `errorHandler` を使用。
 - Windowsテスト: DLL 等の理由でホスト実行が必ず失敗するため、PowerShell では常に `./scripts/test-docker.ps1 <suite>` を用いて Docker 経由で実行（例: `./scripts/test-docker.ps1 rust`, `./scripts/test-docker.ps1 ts`, `./scripts/test-docker.ps1 all -Scenario trending-feed`）。ユーザーからの明示がない限りホストで `pnpm test` / `cargo test` を呼ばない。
+- Community Nodeテスト方針: Linux/macOS/Windows すべてでコンテナ経路を既定とし、`cd kukuri-community-node && cargo test ...` のホスト直実行は既定手順にしない。
 - 各セッションの作業完了時、ファイルが変更されている場合は `gh act --workflows .github/workflows/test.yml --job format-check` と `--job native-test-linux` と `--job community-node-tests` を実行し、成功または既知の理由で失敗したログを収集して報告する（`NPM_CONFIG_PREFIX=/tmp/npm-global` などの実行に必要な環境設定も忘れないこと）。
 - ただし `./docs` 配下のみの更新ではテスト実行・`gh act` 実行は不要（テスト影響なし）。
 - ファイル編集時は既存ファイルのエンコーディング（UTF-8/LF）を必ず維持し、スクリプトでのバイト列操作でも UTF-8 を明示して読み書きすること（Shift_JIS など別エンコーディングでの保存禁止）。

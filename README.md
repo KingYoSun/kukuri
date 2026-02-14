@@ -48,9 +48,21 @@ pnpm test
 # Rust tests (Linux/macOS/WSL2)
 cd kukuri-tauri/src-tauri
 cargo test
+
+# Community node tests/build (default on all OS: containerized)
+docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml build test-runner
+docker run --rm --network kukuri_community-node-network \
+  -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
+  -e MEILI_URL=http://community-node-meilisearch:7700 \
+  -e MEILI_MASTER_KEY=change-me \
+  -v "$(git rev-parse --show-toplevel):/workspace" \
+  -w /workspace/kukuri-community-node \
+  kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
 ```
 
-> **Windows**: Use `./scripts/test-docker.ps1 <suite>` instead of running `pnpm test` / `cargo test` directly on the host.
+> Community node tests are containerized by default on every OS.  
+> **Windows**: For Tauri tests too, use `./scripts/test-docker.ps1 <suite>` instead of host-direct `pnpm test` / `cargo test`.
 
 ## Monorepo layout
 
@@ -67,7 +79,7 @@ cargo test
 | --- | --- | --- | --- |
 | Desktop app | `kukuri-tauri/` | Tauri + React client | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test` |
 | Rust core (Tauri) | `kukuri-tauri/src-tauri/` | Rust backend, migrations, SQLite | `cd kukuri-tauri/src-tauri && cargo test` |
-| Community node | `kukuri-community-node/` | Community node services + `cn` CLI (`p2p bootstrap/relay`) | `cd kukuri-community-node && docker compose up -d` / `cargo test --workspace --all-features` |
+| Community node | `kukuri-community-node/` | Community node services + `cn` CLI (`p2p bootstrap/relay`) | Containerized default: `docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features` |
 
 ## Development workflow
 
@@ -89,9 +101,15 @@ cargo test
 cargo clippy -D warnings
 
 # Community node / cn-cli
-cd kukuri-community-node
-cargo test --workspace --all-features
-cargo build --release -p cn-cli
+docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml build test-runner
+docker run --rm --network kukuri_community-node-network \
+  -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
+  -e MEILI_URL=http://community-node-meilisearch:7700 \
+  -e MEILI_MASTER_KEY=change-me \
+  -v "$(git rev-parse --show-toplevel):/workspace" \
+  -w /workspace/kukuri-community-node \
+  kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
 ```
 
 ### Docker test runner
@@ -137,7 +155,7 @@ graph TD
 
 ## CI
 
-CI is defined in `./.github/workflows/test.yml` and includes Docker test suites, native Linux tests (Rust + TS), community node tests, format checks, Windows build checks, and desktop E2E scenarios.
+CI is defined in `./.github/workflows/test.yml` and includes Docker test suites, native Linux tests (Rust + TS), community node tests, format checks, Windows build checks, and desktop E2E scenarios. Community node local verification should follow the same container-first command path as above.
 
 ## Contributing & Support
 

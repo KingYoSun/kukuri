@@ -1,11 +1,11 @@
 # Docker環境でのテスト実行ガイド
 
 **作成日**: 2025年08月05日
-**最終更新**: 2025年12月26日
+**最終更新**: 2026年02月14日
 
 ## 概要
 
-Windows環境でのDLL不足によるテスト実行エラーを解決するため、Docker環境でのテスト実行環境を構築しました。この環境により、すべてのプラットフォームで一貫したテスト実行が可能になります。
+テスト実行を OS 非依存で統一するため、Docker ベースのテスト経路を標準化しています。現在は Windows の DLL 問題回避だけでなく、Linux/macOS の community-node テストも含めてコンテナ実行を既定としています。
 
 ## 背景
 
@@ -39,6 +39,44 @@ kukuri/
 ### 前提条件
 - Docker Desktop がインストールされていること
 - Docker が起動していること
+
+### 重要: community-node テストは全OSでコンテナ実行を既定化
+community-node（`kukuri-community-node`）のテスト/ビルド検証は Linux/macOS/Windows すべてで下記コンテナコマンドを既定とします。`cd kukuri-community-node && cargo test ...` のホスト直実行はデバッグ用途を除き既定手順にしません。
+
+#### Community Node テスト（全OS共通）
+```bash
+# 依存サービス起動
+docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+
+# test-runner イメージをビルド
+docker compose -f docker-compose.test.yml build test-runner
+
+# community-node テスト + cn-cli ビルド
+docker run --rm --network kukuri_community-node-network \
+  -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
+  -e MEILI_URL=http://community-node-meilisearch:7700 \
+  -e MEILI_MASTER_KEY=change-me \
+  -v "$(git rev-parse --show-toplevel):/workspace" \
+  -w /workspace/kukuri-community-node \
+  kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
+```
+
+```powershell
+# 依存サービス起動
+docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+
+# test-runner イメージをビルド
+docker compose -f docker-compose.test.yml build test-runner
+
+# community-node テスト + cn-cli ビルド
+docker run --rm --network kukuri_community-node-network `
+  -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn `
+  -e MEILI_URL=http://community-node-meilisearch:7700 `
+  -e MEILI_MASTER_KEY=change-me `
+  -v $(git rev-parse --show-toplevel):/workspace `
+  -w /workspace/kukuri-community-node `
+  kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
+```
 
 ### 重要：Windows環境での推奨事項
 Windows環境でDLLエラーによりネイティブでのテストが実行できない場合は、**必ずDockerを使用してテストを実行してください**。
@@ -184,6 +222,7 @@ GitHub Actionsでの自動テスト実行が設定されています。Windows �
 2. **native-test-linux**: Linux環境でのネイティブテスト
 3. **format-check**: フォーマットチェック
 4. **build-test-windows**: Windows環境でのビルドチェック（テストは実行しない）
+5. **community-node-tests** 相当のローカル再現: 本ドキュメント「Community Node テスト（全OS共通）」のコマンドを使用し、OS を問わずコンテナ経路で揃える
 
 ### ワークフローの実行タイミング
 - mainまたはdevelopブランチへのpush時
