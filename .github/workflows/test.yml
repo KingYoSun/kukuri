@@ -106,14 +106,60 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Resolve test-runner image name
+        id: docker-test-image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_name="$(docker compose --project-name kukuri_tests -f docker-compose.test.yml config --images | grep -E 'test-runner$' | head -n1 || true)"
+          if [[ -z "$image_name" ]]; then
+            image_name="kukuri_tests-test-runner"
+          fi
+          echo "image_name=${image_name}" >>"$GITHUB_OUTPUT"
+          echo "Resolved test-runner image: ${image_name}"
+
+      - name: Log test-runner image info (before)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_name="${{ steps.docker-test-image.outputs.image_name }}"
+          echo "KUKURI_TEST_RUNNER_IMAGE is intentionally empty in docker-test job."
+          echo "Target test-runner image: ${image_name}"
+          docker image ls --digests --no-trunc "$image_name" || true
+          if docker image inspect "$image_name" >/dev/null 2>&1; then
+            docker image inspect "$image_name" --format 'ImageID={{ .Id }}'
+            docker image inspect "$image_name" --format 'RepoTags={{ join .RepoTags ", " }}'
+            docker image inspect "$image_name" --format 'RepoDigests={{ join .RepoDigests ", " }}'
+            docker image inspect "$image_name" | jq '.[0] | {Id, RepoTags, RepoDigests, Created, Size, Architecture, Os}'
+          else
+            echo "No local image found for ${image_name} before suite execution."
+          fi
+
       - name: Run all tests in Docker
         timeout-minutes: 90
         env:
-          KUKURI_TEST_RUNNER_IMAGE: ${{ needs.change-scope.outputs.test_runner_image }}
+          KUKURI_TEST_RUNNER_IMAGE: ''
         run: |
           set -euo pipefail
           chmod +x scripts/test-docker.sh
           timeout --signal=TERM --kill-after=5m 85m ./scripts/test-docker.sh all
+
+      - name: Log test-runner image info (after)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_name="${{ steps.docker-test-image.outputs.image_name }}"
+          echo "Target test-runner image: ${image_name}"
+          docker image ls --digests --no-trunc "$image_name" || true
+          if docker image inspect "$image_name" >/dev/null 2>&1; then
+            docker image inspect "$image_name" --format 'ImageID={{ .Id }}'
+            docker image inspect "$image_name" --format 'RepoTags={{ join .RepoTags ", " }}'
+            docker image inspect "$image_name" --format 'RepoDigests={{ join .RepoDigests ", " }}'
+            docker image inspect "$image_name" | jq '.[0] | {Id, RepoTags, RepoDigests, Created, Size, Architecture, Os}'
+          else
+            echo "No local image found for ${image_name} after suite execution."
+          fi
 
       - name: Collect Docker diagnostics on failure
         if: failure() || cancelled()
