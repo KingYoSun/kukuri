@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: nightly-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: 20
