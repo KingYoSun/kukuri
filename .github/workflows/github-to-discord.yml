@@ -75,7 +75,7 @@ jobs:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CONTENT: ${{ steps.msg.outputs.content }}
         run: |
-          payload=$(jq -n --arg content "$CONTENT" '{content: $content}')
+          payload=$(jq -n --arg content "$CONTENT" '{content: $content, flags: 4}')
           curl -sS -X POST "$WEBHOOK_URL" \
           -H "Content-Type: application/json" \
           -d "$payload"
