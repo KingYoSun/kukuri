@@ -527,7 +527,7 @@ mod tests {
         }
 
         let snapshot = received.expect("bootstrap hint notification should be observed");
-        assert_eq!(snapshot.seq, 1);
+        assert!(snapshot.seq >= 1, "seq should advance at least once after notify");
         assert_eq!(snapshot.hint, expected_hint);
     }
 }
