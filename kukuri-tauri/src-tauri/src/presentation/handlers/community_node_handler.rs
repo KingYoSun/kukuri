@@ -2058,16 +2058,17 @@ mod community_node_handler_tests {
         mpsc::Receiver<CapturedRequest>,
         thread::JoinHandle<()>,
     ) {
-        let expected_requests = responses.len();
         let server = Server::http("127.0.0.1:0").expect("server");
         let base_url = format!("http://{}", server.server_addr());
         let (tx, rx) = mpsc::channel();
         let handle = thread::spawn(move || {
-            for (request, response_spec) in server
-                .incoming_requests()
-                .take(expected_requests)
-                .zip(responses.into_iter())
-            {
+            for response_spec in responses.into_iter() {
+                let request = match server.recv_timeout(Duration::from_secs(5)) {
+                    Ok(Some(request)) => request,
+                    Ok(None) => break,
+                    Err(_) => break,
+                };
+
                 let url = request.url();
                 let parsed = Url::parse(&format!("http://localhost{url}")).expect("request url");
                 let params = parsed
