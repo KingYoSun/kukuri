@@ -405,6 +405,47 @@ async fn wait_for_gossip_event(receiver: &mut GossipReceiver, wait: Duration, ex
     });
 }
 
+async fn wait_for_gossip_events(
+    receiver: &mut GossipReceiver,
+    wait: Duration,
+    expected_ids: &[&str],
+) {
+    let mut remaining_ids = expected_ids
+        .iter()
+        .map(|id| (*id).to_string())
+        .collect::<HashSet<_>>();
+    let mut last_received_id: Option<String> = None;
+
+    let result = timeout(wait, async {
+        while !remaining_ids.is_empty() {
+            let event = receiver.next().await.expect("gossip receiver closed");
+            let event = event.expect("gossip event");
+            match event {
+                GossipEvent::Received(message) => {
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&message.content).expect("gossip json");
+                    let raw = nostr::parse_event(&value).expect("gossip event");
+                    let received_id = raw.id.to_string();
+                    last_received_id = Some(received_id.clone());
+                    remaining_ids.remove(&received_id);
+                }
+                GossipEvent::Lagged => continue,
+                _ => {}
+            }
+        }
+    })
+    .await;
+
+    result.unwrap_or_else(|_| {
+        panic!(
+            "gossip timeout: expected_ids={:?}, remaining_ids={:?}, last_received_id={}",
+            expected_ids,
+            remaining_ids,
+            last_received_id.as_deref().unwrap_or("<none>")
+        )
+    });
+}
+
 async fn assert_no_ws_event(ws: &mut WsStream, wait: Duration, label: &str) {
     let _ = timeout(wait, async {
         while let Some(message) = ws.next().await {
@@ -2990,7 +3031,11 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
     .await
     .expect("insert topic service");
 
-    gossip::spawn_bootstrap_hint_bridge(state.clone());
+    let bootstrap_ready = gossip::spawn_bootstrap_hint_bridge(state.clone());
+    timeout(WAIT_TIMEOUT, bootstrap_ready)
+        .await
+        .expect("bootstrap hint bridge ready timeout")
+        .expect("bootstrap hint bridge ready");
 
     let payload = json!({
         "schema": "kukuri-bootstrap-update-hint-v1",
@@ -3003,8 +3048,12 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
         .await
         .expect("notify bootstrap hint");
 
-    wait_for_gossip_event(&mut harness.receiver, WAIT_TIMEOUT, &descriptor.id).await;
-    wait_for_gossip_event(&mut harness.receiver, WAIT_TIMEOUT, &topic_service.id).await;
+    wait_for_gossip_events(
+        &mut harness.receiver,
+        WAIT_TIMEOUT,
+        &[descriptor.id.as_str(), topic_service.id.as_str()],
+    )
+    .await;
 
     let _ = timeout(WAIT_TIMEOUT, harness.router_a.shutdown()).await;
     let _ = timeout(WAIT_TIMEOUT, harness.router_b.shutdown()).await;
