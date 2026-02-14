@@ -10,11 +10,13 @@ use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::json;
 use serde_json::Value;
-use sqlx::{Pool, Postgres};
+use sqlx::{postgres::PgListener, Pool, Postgres};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
 mod auth;
@@ -30,6 +32,8 @@ mod openapi_contract_tests;
 
 const SERVICE_NAME: &str = "cn-user-api";
 const TOKEN_AUDIENCE: &str = "kukuri-community-node:user-api";
+const BOOTSTRAP_HINT_CHANNEL: &str = "cn_bootstrap_hint";
+const BOOTSTRAP_HINT_LISTENER_RETRY_SECONDS: u64 = 2;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -43,6 +47,42 @@ pub(crate) struct AppState {
     export_dir: PathBuf,
     hmac_secret: Vec<u8>,
     meili: meili::MeiliClient,
+    bootstrap_hints: Arc<BootstrapHintStore>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct BootstrapHintSnapshot {
+    pub seq: u64,
+    pub received_at: i64,
+    pub hint: Value,
+}
+
+#[derive(Default)]
+pub(crate) struct BootstrapHintStore {
+    seq: AtomicU64,
+    latest: RwLock<Option<BootstrapHintSnapshot>>,
+}
+
+impl BootstrapHintStore {
+    pub(crate) async fn push_hint(&self, hint: Value) -> BootstrapHintSnapshot {
+        let seq = self.seq.fetch_add(1, Ordering::Relaxed) + 1;
+        let snapshot = BootstrapHintSnapshot {
+            seq,
+            received_at: cn_core::auth::unix_seconds().unwrap_or(0) as i64,
+            hint,
+        };
+        let mut latest = self.latest.write().await;
+        *latest = Some(snapshot.clone());
+        snapshot
+    }
+
+    pub(crate) async fn latest_after(&self, since: u64) -> Option<BootstrapHintSnapshot> {
+        let latest = self.latest.read().await;
+        latest
+            .as_ref()
+            .filter(|snapshot| snapshot.seq > since)
+            .cloned()
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -219,6 +259,9 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
     };
 
     let meili_client = meili::MeiliClient::new(config.meili_url, config.meili_master_key)?;
+    let bootstrap_hints = Arc::new(BootstrapHintStore::default());
+    spawn_bootstrap_hint_listener(pool.clone(), bootstrap_hints.clone());
+
     let state = AppState {
         pool,
         jwt_config,
@@ -230,6 +273,7 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
         export_dir: config.export_dir,
         hmac_secret: config.hmac_secret,
         meili: meili_client,
+        bootstrap_hints,
     };
 
     let router = Router::new()
@@ -246,6 +290,10 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
         .route("/v1/consents/status", get(policies::get_consent_status))
         .route("/v1/consents", post(policies::accept_consents))
         .route("/v1/bootstrap/nodes", get(bootstrap::get_bootstrap_nodes))
+        .route(
+            "/v1/bootstrap/hints/latest",
+            get(bootstrap::get_bootstrap_hint),
+        )
         .route(
             "/v1/bootstrap/topics/{topic_id}/services",
             get(bootstrap::get_bootstrap_services),
@@ -298,6 +346,68 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
 
     let router = http::apply_standard_layers(router, SERVICE_NAME);
     server::serve(config.addr, router).await
+}
+
+fn spawn_bootstrap_hint_listener(pool: Pool<Postgres>, store: Arc<BootstrapHintStore>) {
+    tokio::spawn(async move {
+        loop {
+            let mut listener = match PgListener::connect_with(&pool).await {
+                Ok(listener) => listener,
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        channel = BOOTSTRAP_HINT_CHANNEL,
+                        "failed to connect bootstrap hint listener"
+                    );
+                    tokio::time::sleep(Duration::from_secs(BOOTSTRAP_HINT_LISTENER_RETRY_SECONDS))
+                        .await;
+                    continue;
+                }
+            };
+
+            if let Err(err) = listener.listen(BOOTSTRAP_HINT_CHANNEL).await {
+                tracing::warn!(
+                    error = %err,
+                    channel = BOOTSTRAP_HINT_CHANNEL,
+                    "failed to subscribe bootstrap hint channel"
+                );
+                tokio::time::sleep(Duration::from_secs(BOOTSTRAP_HINT_LISTENER_RETRY_SECONDS))
+                    .await;
+                continue;
+            }
+
+            loop {
+                match listener.recv().await {
+                    Ok(notification) => {
+                        let payload = notification.payload();
+                        match serde_json::from_str::<Value>(payload) {
+                            Ok(hint) => {
+                                store.push_hint(hint).await;
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    error = %err,
+                                    payload = payload,
+                                    channel = BOOTSTRAP_HINT_CHANNEL,
+                                    "failed to parse bootstrap hint payload"
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            error = %err,
+                            channel = BOOTSTRAP_HINT_CHANNEL,
+                            "bootstrap hint listener disconnected"
+                        );
+                        break;
+                    }
+                }
+            }
+
+            tokio::time::sleep(Duration::from_secs(BOOTSTRAP_HINT_LISTENER_RETRY_SECONDS)).await;
+        }
+    });
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {

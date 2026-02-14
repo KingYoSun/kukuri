@@ -68,6 +68,12 @@ const findEventByKind = (items: unknown[], kind: number): Record<string, unknown
   return null;
 };
 
+const extractEventIdByKind = (items: unknown[], kind: number): string | null => {
+  const event = findEventByKind(items, kind) ?? (items[0] as Record<string, unknown> | undefined);
+  const id = event?.id;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+};
+
 describe('Community Node bootstrap/relay endpoints', () => {
   before(async () => {
     await waitForAppReady();
@@ -141,5 +147,24 @@ describe('Community Node bootstrap/relay endpoints', () => {
     expect(serviceContent?.topic).toBe(topicId);
     expect(['relay', 'bootstrap']).toContain(serviceContent?.role);
     expect(['public', 'friend_plus', 'friend', 'invite']).toContain(serviceContent?.scope);
+
+    const initialServiceEventId = extractEventIdByKind(serviceItems, 39001);
+    expect(initialServiceEventId).not.toBeNull();
+
+    let refreshedServicesPayload: Record<string, unknown> = servicesPayload;
+    await browser.waitUntil(
+      async () => {
+        refreshedServicesPayload = await communityNodeListBootstrapServices(topicId);
+        const refreshedItems = extractItems(refreshedServicesPayload);
+        const refreshedId = extractEventIdByKind(refreshedItems, 39001);
+        return refreshedId !== null && refreshedId !== initialServiceEventId;
+      },
+      {
+        timeout: 90000,
+        interval: 2000,
+        timeoutMsg:
+          'bootstrap hint受信後に /v1/bootstrap/topics/{topic_id}/services のキャッシュが更新されませんでした',
+      },
+    );
   });
 });

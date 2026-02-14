@@ -1,14 +1,21 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
 use cn_core::service_config;
+use serde::Deserialize;
 use serde_json::json;
 use sqlx::Row;
 
 use crate::auth::{current_rate_limit, enforce_rate_limit, require_auth};
 use crate::policies::require_consents;
 use crate::{ApiError, ApiResult, AppState};
+
+#[derive(Debug, Default, Deserialize)]
+pub struct BootstrapHintQuery {
+    #[serde(default)]
+    since: Option<u64>,
+}
 
 pub async fn get_bootstrap_nodes(
     State(state): State<AppState>,
@@ -46,6 +53,39 @@ pub async fn get_bootstrap_services(
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
     respond_with_events(&headers, rows).await
+}
+
+pub async fn get_bootstrap_hint(
+    State(state): State<AppState>,
+    Query(query): Query<BootstrapHintQuery>,
+    headers: HeaderMap,
+    connect: axum::extract::ConnectInfo<std::net::SocketAddr>,
+) -> ApiResult<impl IntoResponse> {
+    apply_bootstrap_auth(&state, &headers).await?;
+    apply_public_rate_limit(&state, connect).await?;
+
+    let since = query.since.unwrap_or(0);
+    let latest = state.bootstrap_hints.latest_after(since).await;
+    if let Some(snapshot) = latest {
+        let mut response = Json(json!({
+            "seq": snapshot.seq,
+            "received_at": snapshot.received_at,
+            "hint": snapshot.hint,
+        }))
+        .into_response();
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        );
+        return Ok(response);
+    }
+
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store"),
+    );
+    Ok(response)
 }
 
 async fn apply_bootstrap_auth(state: &AppState, headers: &HeaderMap) -> ApiResult<()> {
@@ -168,7 +208,7 @@ mod api_contract_tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    fn test_state() -> crate::AppState {
+    fn test_state_with_auth_mode(auth_mode: &str) -> crate::AppState {
         let pool = PgPoolOptions::new()
             .connect_lazy("postgres://postgres:postgres@localhost/postgres")
             .expect("lazy pool");
@@ -182,7 +222,7 @@ mod api_contract_tests {
             "rate_limit": { "enabled": false }
         }));
         let bootstrap_config = service_config::static_handle(serde_json::json!({
-            "auth": { "mode": "required" }
+            "auth": { "mode": auth_mode }
         }));
         let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
             .expect("meili");
@@ -198,7 +238,12 @@ mod api_contract_tests {
             export_dir: PathBuf::from("tmp/test_exports"),
             hmac_secret: b"test-secret".to_vec(),
             meili,
+            bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
         }
+    }
+
+    fn test_state() -> crate::AppState {
+        test_state_with_auth_mode("required")
     }
 
     async fn request_status_and_headers(app: Router, uri: &str) -> (StatusCode, HeaderMap) {
@@ -212,6 +257,25 @@ mod api_contract_tests {
             .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
         let response = app.oneshot(request).await.expect("response");
         (response.status(), response.headers().clone())
+    }
+
+    async fn request_status_and_body(app: Router, uri: &str) -> (StatusCode, String) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = response.into_body();
+        let bytes = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .expect("read body");
+        let text = String::from_utf8(bytes.to_vec()).expect("utf8 body");
+        (status, text)
     }
 
     #[tokio::test]
@@ -246,5 +310,51 @@ mod api_contract_tests {
                 .and_then(|value| value.to_str().ok()),
             Some(r#"Bearer realm="cn-user-api""#)
         );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_hint_latest_contract_no_content_without_updates() {
+        let app = Router::new()
+            .route("/v1/bootstrap/hints/latest", get(get_bootstrap_hint))
+            .with_state(test_state_with_auth_mode("off"));
+        let (status, headers) = request_status_and_headers(app, "/v1/bootstrap/hints/latest").await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(
+            headers
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("no-store")
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_hint_latest_contract_returns_latest_payload_after_since() {
+        let state = test_state_with_auth_mode("off");
+        state
+            .bootstrap_hints
+            .push_hint(serde_json::json!({
+                "schema": "kukuri-bootstrap-update-hint-v1",
+                "refresh_paths": ["/v1/bootstrap/nodes"]
+            }))
+            .await;
+        let app = Router::new()
+            .route("/v1/bootstrap/hints/latest", get(get_bootstrap_hint))
+            .with_state(state);
+
+        let (status, body) =
+            request_status_and_body(app.clone(), "/v1/bootstrap/hints/latest?since=0").await;
+        assert_eq!(status, StatusCode::OK);
+        let payload: serde_json::Value = serde_json::from_str(&body).expect("hint payload");
+        assert_eq!(payload.get("seq").and_then(|value| value.as_u64()), Some(1));
+        assert_eq!(
+            payload
+                .get("hint")
+                .and_then(|value| value.get("schema"))
+                .and_then(|value| value.as_str()),
+            Some("kukuri-bootstrap-update-hint-v1")
+        );
+
+        let (status, _) = request_status_and_body(app, "/v1/bootstrap/hints/latest?since=1").await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
     }
 }

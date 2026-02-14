@@ -872,6 +872,7 @@ mod api_contract_tests {
             export_dir,
             hmac_secret: b"test-secret".to_vec(),
             meili,
+            bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
         }
     }
 

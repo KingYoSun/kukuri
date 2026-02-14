@@ -36,6 +36,7 @@ const KIP_VERSION: &str = "1";
 const KIP_NODE_DESCRIPTOR_SCHEMA: &str = "kukuri-node-desc-v1";
 const KIP_TOPIC_SERVICE_SCHEMA: &str = "kukuri-topic-service-v1";
 const KIP_ATTESTATION_SCHEMA: &str = "kukuri-attest-v1";
+const KIP_BOOTSTRAP_HINT_SCHEMA: &str = "kukuri-bootstrap-update-hint-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CommunityNodeConfig {
@@ -89,6 +90,8 @@ struct BootstrapCache {
     nodes: BootstrapCacheEntry,
     #[serde(default)]
     services: HashMap<String, BootstrapCacheEntry>,
+    #[serde(default)]
+    hint_cursors: HashMap<String, BootstrapHintCursorEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -101,6 +104,12 @@ struct BootstrapCacheEntry {
     updated_at: Option<i64>,
     #[serde(default)]
     stale: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct BootstrapHintCursorEntry {
+    #[serde(default)]
+    last_seq: u64,
 }
 
 impl From<StoredTrustAnchor> for CommunityNodeTrustAnchorState {
@@ -144,6 +153,27 @@ struct BootstrapHttpResponse {
     items: Vec<serde_json::Value>,
     #[serde(default)]
     next_refresh_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BootstrapHintHttpResponse {
+    seq: u64,
+    #[allow(dead_code)]
+    #[serde(default)]
+    received_at: Option<i64>,
+    hint: BootstrapHintPayload,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct BootstrapHintPayload {
+    #[serde(default)]
+    schema: Option<String>,
+    #[serde(default)]
+    descriptor_changed: bool,
+    #[serde(default)]
+    changed_topic_ids: Vec<String>,
+    #[serde(default)]
+    refresh_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -499,6 +529,8 @@ impl CommunityNodeHandler {
             select_nodes_for_role(&config, None, CommunityNodeRole::Bootstrap).unwrap_or_default();
         let now = Utc::now().timestamp();
         let mut cache = self.load_bootstrap_cache().await?;
+        self.refresh_bootstrap_cache_from_hints(&mut cache, &nodes, None)
+            .await;
         let mut entry = cache.nodes.clone();
         let mut items = sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &entry.items, now, None);
         entry.items = items.clone();
@@ -559,6 +591,8 @@ impl CommunityNodeHandler {
         let path = format!("/v1/bootstrap/topics/{}/services", topic_id);
         let now = Utc::now().timestamp();
         let mut cache = self.load_bootstrap_cache().await?;
+        self.refresh_bootstrap_cache_from_hints(&mut cache, &nodes, Some(&topic_id))
+            .await;
         let mut entry = cache.services.get(&topic_id).cloned().unwrap_or_default();
         let mut items =
             sanitize_bootstrap_items(TOPIC_SERVICE_KIND, &entry.items, now, Some(&topic_id));
@@ -1000,6 +1034,71 @@ impl CommunityNodeHandler {
         })
     }
 
+    async fn refresh_bootstrap_cache_from_hints(
+        &self,
+        cache: &mut BootstrapCache,
+        nodes: &[&CommunityNodeConfigNode],
+        requested_topic_id: Option<&str>,
+    ) {
+        for node in nodes {
+            let since = cache
+                .hint_cursors
+                .get(&node.base_url)
+                .map(|cursor| cursor.last_seq)
+                .unwrap_or(0);
+            let hint_response = match self.fetch_bootstrap_hint(node, since).await {
+                Ok(response) => response,
+                Err(_) => continue,
+            };
+            let Some(hint_response) = hint_response else {
+                continue;
+            };
+
+            apply_bootstrap_hint_to_cache(cache, &hint_response.hint, requested_topic_id);
+            cache.hint_cursors.insert(
+                node.base_url.clone(),
+                BootstrapHintCursorEntry {
+                    last_seq: hint_response.seq,
+                },
+            );
+        }
+    }
+
+    async fn fetch_bootstrap_hint(
+        &self,
+        node: &CommunityNodeConfigNode,
+        since: u64,
+    ) -> Result<Option<BootstrapHintHttpResponse>, AppError> {
+        let path = format!("/v1/bootstrap/hints/latest?since={since}");
+        let url = build_url(&node.base_url, &path);
+        let builder = self
+            .authorized_request(node, Method::GET, url, false)
+            .await?;
+
+        let response = builder
+            .send()
+            .await
+            .map_err(|err| AppError::Network(err.to_string()))?;
+        let status = response.status();
+        if status == StatusCode::NO_CONTENT {
+            return Ok(None);
+        }
+        let body = response
+            .text()
+            .await
+            .map_err(|err| AppError::Network(err.to_string()))?;
+
+        if !status.is_success() {
+            return Err(AppError::Network(format!(
+                "Community node error ({status}): {body}"
+            )));
+        }
+
+        let parsed = serde_json::from_str::<BootstrapHintHttpResponse>(&body)
+            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+        Ok(Some(parsed))
+    }
+
     async fn request_auth_challenge(
         &self,
         base_url: &str,
@@ -1400,6 +1499,51 @@ fn should_refresh_bootstrap(entry: &BootstrapCacheEntry, now: i64) -> bool {
         }
     }
     false
+}
+
+fn apply_bootstrap_hint_to_cache(
+    cache: &mut BootstrapCache,
+    hint: &BootstrapHintPayload,
+    requested_topic_id: Option<&str>,
+) {
+    if hint.schema.as_deref() != Some(KIP_BOOTSTRAP_HINT_SCHEMA) {
+        return;
+    }
+
+    let refresh_nodes = hint.descriptor_changed
+        || hint
+            .refresh_paths
+            .iter()
+            .any(|path| path == "/v1/bootstrap/nodes");
+    if refresh_nodes {
+        cache.nodes.stale = true;
+    }
+
+    let refresh_services = hint
+        .refresh_paths
+        .iter()
+        .any(|path| path == "/v1/bootstrap/topics/{topic_id}/services");
+    if !refresh_services {
+        return;
+    }
+
+    if hint.changed_topic_ids.is_empty() {
+        for entry in cache.services.values_mut() {
+            entry.stale = true;
+        }
+        if let Some(topic_id) = requested_topic_id {
+            cache
+                .services
+                .entry(topic_id.to_string())
+                .or_default()
+                .stale = true;
+        }
+        return;
+    }
+
+    for topic_id in &hint.changed_topic_ids {
+        cache.services.entry(topic_id.clone()).or_default().stale = true;
+    }
 }
 
 fn sanitize_bootstrap_items(
@@ -1805,6 +1949,25 @@ mod community_node_handler_tests {
         params: HashMap<String, String>,
     }
 
+    #[derive(Debug)]
+    struct MockHttpResponse {
+        status: u16,
+        body: Option<serde_json::Value>,
+    }
+
+    impl MockHttpResponse {
+        fn json(status: u16, body: serde_json::Value) -> Self {
+            Self {
+                status,
+                body: Some(body),
+            }
+        }
+
+        fn empty(status: u16) -> Self {
+            Self { status, body: None }
+        }
+    }
+
     fn spawn_json_server(
         response_body: serde_json::Value,
     ) -> (
@@ -1833,6 +1996,53 @@ mod community_node_handler_tests {
                 response.add_header(
                     Header::from_bytes("Content-Type", "application/json").expect("header"),
                 );
+                let _ = request.respond(response);
+            }
+        });
+        (base_url, rx, handle)
+    }
+
+    fn spawn_json_sequence_server(
+        responses: Vec<MockHttpResponse>,
+    ) -> (
+        String,
+        mpsc::Receiver<CapturedRequest>,
+        thread::JoinHandle<()>,
+    ) {
+        let expected_requests = responses.len();
+        let server = Server::http("127.0.0.1:0").expect("server");
+        let base_url = format!("http://{}", server.server_addr());
+        let (tx, rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            for (request, response_spec) in server
+                .incoming_requests()
+                .take(expected_requests)
+                .zip(responses.into_iter())
+            {
+                let url = request.url();
+                let parsed = Url::parse(&format!("http://localhost{url}")).expect("request url");
+                let params = parsed
+                    .query_pairs()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect();
+                let captured = CapturedRequest {
+                    path: parsed.path().to_string(),
+                    params,
+                };
+                let _ = tx.send(captured);
+
+                let mut response = match response_spec.body {
+                    Some(body) => {
+                        let mut response = Response::from_string(body.to_string());
+                        response.add_header(
+                            Header::from_bytes("Content-Type", "application/json")
+                                .expect("json content-type header"),
+                        );
+                        response
+                    }
+                    None => Response::from_string(String::new()),
+                };
+                response = response.with_status_code(response_spec.status);
                 let _ = request.respond(response);
             }
         });
@@ -1873,6 +2083,35 @@ mod community_node_handler_tests {
             .sign_with_keys(&keys)
             .expect("sign");
         serde_json::to_value(event).expect("event json")
+    }
+
+    fn build_bootstrap_topic_service_event(topic_id: &str, marker: &str) -> serde_json::Value {
+        let keys = Keys::generate();
+        let exp = Utc::now().timestamp() + 600;
+        let d_tag = format!("topic_service:{topic_id}:bootstrap:public");
+        let exp_str = exp.to_string();
+        let tags = vec![
+            Tag::parse(["d", d_tag.as_str()]).expect("d"),
+            Tag::parse(["t", topic_id]).expect("t"),
+            Tag::parse(["role", "bootstrap"]).expect("role"),
+            Tag::parse(["scope", "public"]).expect("scope"),
+            Tag::parse(["k", "kukuri"]).expect("k"),
+            Tag::parse(["ver", "1"]).expect("ver"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+        ];
+        let content = json!({
+            "schema": "kukuri-topic-service-v1",
+            "topic": topic_id,
+            "role": "bootstrap",
+            "scope": "public",
+            "marker": marker,
+        })
+        .to_string();
+        let event = EventBuilder::new(Kind::Custom(TOPIC_SERVICE_KIND), content)
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("sign");
+        serde_json::to_value(event).expect("bootstrap topic service event json")
     }
 
     #[tokio::test]
@@ -2046,6 +2285,115 @@ mod community_node_handler_tests {
             .and_then(|value| value.as_array())
             .expect("items array");
         assert!(!items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_bootstrap_services_refetches_when_hint_endpoint_reports_update() {
+        let handler = test_handler();
+        let topic_id = format!(
+            "kukuri:hint-refresh-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        );
+        let service_path = format!("/v1/bootstrap/topics/{topic_id}/services");
+        let initial_event = build_bootstrap_topic_service_event(&topic_id, "initial");
+        let refreshed_event = build_bootstrap_topic_service_event(&topic_id, "refreshed");
+        let now = Utc::now().timestamp();
+        let responses = vec![
+            MockHttpResponse::empty(204),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [initial_event],
+                    "next_refresh_at": now + 3600,
+                }),
+            ),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "seq": 1,
+                    "received_at": now,
+                    "hint": {
+                        "schema": KIP_BOOTSTRAP_HINT_SCHEMA,
+                        "descriptor_changed": false,
+                        "changed_topic_ids": [topic_id.clone()],
+                        "refresh_paths": [
+                            "/v1/bootstrap/nodes",
+                            "/v1/bootstrap/topics/{topic_id}/services"
+                        ]
+                    }
+                }),
+            ),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [refreshed_event],
+                    "next_refresh_at": now + 3600,
+                }),
+            ),
+        ];
+        let (base_url, rx, handle) = spawn_json_sequence_server(responses);
+        let config = CommunityNodeConfig {
+            nodes: vec![build_config_node(
+                base_url.clone(),
+                CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                },
+            )],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        let first = handler
+            .list_bootstrap_services(CommunityNodeBootstrapServicesRequest {
+                base_url: None,
+                topic_id: topic_id.clone(),
+            })
+            .await
+            .expect("first bootstrap services");
+        let first_id = first
+            .get("items")
+            .and_then(|value| value.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("id"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string())
+            .expect("first event id");
+
+        let second = handler
+            .list_bootstrap_services(CommunityNodeBootstrapServicesRequest {
+                base_url: None,
+                topic_id: topic_id.clone(),
+            })
+            .await
+            .expect("second bootstrap services");
+        let second_id = second
+            .get("items")
+            .and_then(|value| value.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("id"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string())
+            .expect("second event id");
+
+        assert_ne!(first_id, second_id);
+
+        let req1 = rx.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/bootstrap/hints/latest");
+        assert_eq!(req1.params.get("since"), Some(&"0".to_string()));
+
+        let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, service_path);
+
+        let req3 = rx.recv_timeout(Duration::from_secs(2)).expect("request 3");
+        assert_eq!(req3.path, "/v1/bootstrap/hints/latest");
+        assert_eq!(req3.params.get("since"), Some(&"0".to_string()));
+
+        let req4 = rx.recv_timeout(Duration::from_secs(2)).expect("request 4");
+        assert_eq!(req4.path, service_path);
+
+        handle.join().expect("server");
     }
 
     #[tokio::test]

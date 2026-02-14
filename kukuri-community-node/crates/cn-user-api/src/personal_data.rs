@@ -1045,6 +1045,7 @@ mod tests {
             export_dir: PathBuf::from("tmp/test_exports"),
             hmac_secret: b"test-secret".to_vec(),
             meili,
+            bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
         }
     }
 
