@@ -210,6 +210,12 @@
 
 - [x] Community Node テストコマンドを全OSでコンテナ既定に統一し、`README` / `docker_test_environment.md` / `ops_runbook.md` / `ci_required_checks_policy.md` / `AGENTS.md` / タスク文書の記載差分を解消する（Issue #5 ドキュメント整備）。
 
+## 未実装/不足事項（2026年02月15日 監査追記）
+
+- [ ] CI 実装を Runbook 方針へ統一する。`docs/03_implementation/community_nodes/ops_runbook.md` は「community-node 回帰確認は全OSでコンテナ経路を既定」としているが、`.github/workflows/test.yml` の `community-node-tests` ジョブはホスト上で `cd kukuri-community-node && cargo test --workspace --all-features` を実行している。`test-runner` コンテナ経路（`cargo test --workspace --all-features` + `cargo build --release -p cn-cli`）へ置き換え、CI/Runbook/AGENTS の運用を一致させる。
+- [ ] Admin Console の `ServicesPage` で bootstrap 認証遷移フォームの回帰テストを追加する。現行テストは relay の auth transition を中心に検証しており、bootstrap 側（`auth.mode` / `enforce_at` / `grace_seconds` / `ws_auth_timeout_seconds`）の保存・バリデーション・version 衝突時の更新契約が未固定。
+- [ ] `kukuri-tauri/src-tauri/src/state.rs` の 39000/39001 受信経路（`refresh_bootstrap_from_hint` + `ingest_bootstrap_event` 呼び出し）の統合テストを追加する。`community_node_handler.rs` 単体では hint 再取得を検証済みだが、P2P受信ハンドラ経由の連携（state 層）の回帰検知が不足しているため、gossip受信を含む導線テストで固定する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
