@@ -224,14 +224,21 @@
 
 ## 未実装/不足事項（2026年02月15日 調査追記）
 
-- [ ] `cn-user-api` の bootstrap hint 受信 API（`GET /v1/bootstrap/hints/latest`）を OpenAPI/設計ドキュメントへ正式反映する。
+- [x] `cn-user-api` の bootstrap hint 受信 API（`GET /v1/bootstrap/hints/latest`）を OpenAPI/設計ドキュメントへ正式反映する。
   - `kukuri-community-node/crates/cn-user-api/src/lib.rs` にはルート実装があるが、`kukuri-community-node/crates/cn-user-api/src/openapi.rs` と `apps/admin-console/openapi/user-api.json` には未収載のため、仕様と生成物がずれている。
   - `docs/03_implementation/community_nodes/services_bootstrap.md` / `docs/03_implementation/community_nodes/user_api.md` に endpoint と利用条件（auth/consent/rate-limit）を追記する。
   - `kukuri-community-node/crates/cn-user-api/src/openapi_contract_tests.rs` に `/v1/bootstrap/hints/latest` の path 互換チェックを追加する。
-- [ ] 実ノード community-node E2E で `skip` が成功扱いのまま通過しないガードを追加する。
+- [x] 実ノード community-node E2E で `skip` が成功扱いのまま通過しないガードを追加する。
   - `kukuri-tauri/tests/e2e/specs/community-node*.spec.ts` は `SCENARIO` / `E2E_COMMUNITY_NODE_URL` 未設定時に `this.skip()` する設計で、`scripts/docker/run-desktop-e2e.sh` は `pnpm e2e:ci` の終了コードのみで成否判定しているため、設定不備時に実質未実行でも緑化し得る。
   - `SCENARIO=community-node-e2e` 実行時は community-node spec の pending/skip を失敗扱いにするか、最低実行件数を検証するチェックを `wdio` または `scripts/docker/run-desktop-e2e.sh` に追加する。
   - 追加ガードが `scripts/test-docker.sh e2e-community-node` / `scripts/test-docker.ps1 e2e-community-node` / `.github/workflows/test.yml` の `desktop-e2e` で有効化されることをテストで固定する。
+
+## 未実装/不足事項（2026年02月15日 再調査追記）
+
+- [ ] `cn-user-api`: `topic_subscription_design.md` の DoS 要件（申請の同時保留数上限 per pubkey）を実装する。現状 `create_subscription_request` は `check_topic_limit`（active 件数）しか見ておらず pending 件数を制御していないため、上限判定と拒否レスポンス契約（status code / error code / details）を定義して反映する。
+- [ ] `cn-user-api` 契約テスト: 申請の同時保留数上限を追加検証する（上限未満で受理、上限到達時に拒否、approve/reject 後に再申請可能）。
+- [ ] `cn-admin-api` + `cn-user-api` + `cn-relay`: `topic_subscription_design.md` の DoS 要件（node-level の同時取込 topic 数上限）を実装する。現状 `approve_subscription_request` は `cn_admin.node_subscriptions` を無制限で upsert するため、上限設定と承認時の超過拒否フローを追加する。
+- [ ] テスト補完: node-level topic 上限の回帰テストを追加する（`cn-admin-api` 契約テストで承認拒否契約を固定、`cn-relay` 統合テストで上限超過時に新規 topic subscribe が増えないことを検証）。
 
 ## 参照（設計）
 
