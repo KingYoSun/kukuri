@@ -222,6 +222,17 @@
   - **タスク**: `kukuri-tauri/src-tauri/tests/p2p_bootstrap_integration.rs` を追加し、P2P受信ハンドラ経由の連携を検証
   - **PR**: `feat/p2p-bootstrap-integration-test` ブランチで実装
 
+## 未実装/不足事項（2026年02月15日 調査追記）
+
+- [ ] `cn-user-api` の bootstrap hint 受信 API（`GET /v1/bootstrap/hints/latest`）を OpenAPI/設計ドキュメントへ正式反映する。
+  - `kukuri-community-node/crates/cn-user-api/src/lib.rs` にはルート実装があるが、`kukuri-community-node/crates/cn-user-api/src/openapi.rs` と `apps/admin-console/openapi/user-api.json` には未収載のため、仕様と生成物がずれている。
+  - `docs/03_implementation/community_nodes/services_bootstrap.md` / `docs/03_implementation/community_nodes/user_api.md` に endpoint と利用条件（auth/consent/rate-limit）を追記する。
+  - `kukuri-community-node/crates/cn-user-api/src/openapi_contract_tests.rs` に `/v1/bootstrap/hints/latest` の path 互換チェックを追加する。
+- [ ] 実ノード community-node E2E で `skip` が成功扱いのまま通過しないガードを追加する。
+  - `kukuri-tauri/tests/e2e/specs/community-node*.spec.ts` は `SCENARIO` / `E2E_COMMUNITY_NODE_URL` 未設定時に `this.skip()` する設計で、`scripts/docker/run-desktop-e2e.sh` は `pnpm e2e:ci` の終了コードのみで成否判定しているため、設定不備時に実質未実行でも緑化し得る。
+  - `SCENARIO=community-node-e2e` 実行時は community-node spec の pending/skip を失敗扱いにするか、最低実行件数を検証するチェックを `wdio` または `scripts/docker/run-desktop-e2e.sh` に追加する。
+  - 追加ガードが `scripts/test-docker.sh e2e-community-node` / `scripts/test-docker.ps1 e2e-community-node` / `.github/workflows/test.yml` の `desktop-e2e` で有効化されることをテストで固定する。
+
 ## 参照（設計）
 
 - `docs/03_implementation/community_nodes/summary.md`（全体方針とマイルストーン）
