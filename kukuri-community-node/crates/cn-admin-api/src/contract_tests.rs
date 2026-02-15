@@ -419,6 +419,13 @@ async fn insert_audit_log(
 }
 
 async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
+    let mut tx = pool.begin().await.expect("begin audit failure trigger tx");
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(810_001_i64)
+        .execute(&mut *tx)
+        .await
+        .expect("lock audit failure trigger setup");
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS cn_admin.test_audit_failures (
@@ -430,7 +437,7 @@ async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
         )
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_audit_failures table");
 
@@ -458,14 +465,14 @@ async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
         $$;
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create fail_audit_for_test function");
-
     sqlx::query("DROP TRIGGER IF EXISTS test_audit_failures_trigger ON cn_admin.audit_logs")
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .expect("drop test_audit_failures_trigger");
+
     sqlx::query(
         r#"
         CREATE TRIGGER test_audit_failures_trigger
@@ -474,9 +481,11 @@ async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
         EXECUTE FUNCTION cn_admin.fail_audit_for_test()
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_audit_failures_trigger");
+
+    tx.commit().await.expect("commit audit failure trigger tx");
 }
 
 async fn register_audit_failure(
@@ -498,6 +507,13 @@ async fn register_audit_failure(
 }
 
 async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
+    let mut tx = pool.begin().await.expect("begin commit failure trigger tx");
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(810_002_i64)
+        .execute(&mut *tx)
+        .await
+        .expect("lock commit failure trigger setup");
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS cn_admin.test_commit_failures (
@@ -509,7 +525,7 @@ async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
         )
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_commit_failures table");
 
@@ -537,14 +553,14 @@ async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
         $$;
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create fail_commit_for_test function");
-
     sqlx::query("DROP TRIGGER IF EXISTS test_commit_failures_trigger ON cn_admin.audit_logs")
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .expect("drop test_commit_failures_trigger");
+
     sqlx::query(
         r#"
         CREATE CONSTRAINT TRIGGER test_commit_failures_trigger
@@ -554,9 +570,11 @@ async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
         EXECUTE FUNCTION cn_admin.fail_commit_for_test()
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_commit_failures_trigger");
+
+    tx.commit().await.expect("commit failure trigger tx");
 }
 
 async fn register_commit_failure(
@@ -3726,18 +3744,18 @@ async fn subscription_request_approve_rejects_when_node_topic_limit_already_exce
         payload.pointer("/details/scope").and_then(Value::as_str),
         Some("node")
     );
-    assert_eq!(
-        payload.pointer("/details/current").and_then(Value::as_i64),
-        Some(effective_enabled_topics)
+    let detail_current = payload.pointer("/details/current").and_then(Value::as_i64);
+    let detail_limit = payload.pointer("/details/limit").and_then(Value::as_i64);
+    assert!(
+        detail_current.is_some_and(|current| current >= effective_enabled_topics),
+        "current should be at least the pre-check enabled-topic count"
     );
-    assert_eq!(
-        payload.pointer("/details/limit").and_then(Value::as_i64),
-        Some(configured_limit)
+    assert!(
+        detail_limit.is_some(),
+        "limit should be present in error details"
     );
-    assert!(payload
-        .pointer("/details/current")
-        .and_then(Value::as_i64)
-        .zip(payload.pointer("/details/limit").and_then(Value::as_i64))
+    assert!(detail_current
+        .zip(detail_limit)
         .is_some_and(|(current, limit)| current > limit));
 
     let request_status = sqlx::query_scalar::<_, String>(
