@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（M3: Index v1）
 
-最終更新日: 2026年01月24日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: relay の outbox を入力として Meilisearch を同期し、User API から検索/トレンド（発見体験）を提供できる状態にする。
 

@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（M5: Trust v1）
 
-最終更新日: 2026年01月24日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: Apache AGE を用いた trust 計算（2方式）と attestation（39010）発行を実装し、User API から参照できる状態にする。
 

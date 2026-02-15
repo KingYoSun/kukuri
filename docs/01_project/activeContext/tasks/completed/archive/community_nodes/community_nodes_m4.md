@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（M4: Moderation v1/v2準備）
 
-最終更新日: 2026年01月24日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: report（39005）受理と label（39006）発行を実装し、運用者がルールベースで抑制できる状態にする。LLM は v2 として差し込める形にする。
 

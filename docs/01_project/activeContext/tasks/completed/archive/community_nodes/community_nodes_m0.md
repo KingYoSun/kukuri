@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（M0: KIP-0001 仕様固定 + kip_types）
 
-最終更新日: 2026年01月26日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: KIP-0001 v0.1 を確定し、KIPイベントの共通型/検証基盤を用意する。
 

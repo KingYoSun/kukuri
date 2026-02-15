@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（Client: ノード採用/鍵/暗号投稿）
 
-最終更新日: 2026年02月03日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: Community Node 連携に必要な UI/ストア/暗号投稿/鍵管理をクライアントに実装する。
 

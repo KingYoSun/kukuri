@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（M2: bootstrap/relay 統合）
 
-最終更新日: 2026年01月24日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: M1 の雛形に対し、コミュニティノードの「取込・配信・広告（capability）」の中核（relay/bootstrap）を実装し、以降の index/moderation/trust の土台を完成させる。
 

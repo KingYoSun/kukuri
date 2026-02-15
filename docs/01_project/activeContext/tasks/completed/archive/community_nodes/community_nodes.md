@@ -1,6 +1,9 @@
 # Community Nodes 実装タスク（M1）
 
-最終更新日: 2026年01月23日
+最終更新日: 2026年02月15日
+
+ステータス: 完了（2026年02月15日）
+運用: 参照用に保持。新規着手は `docs/01_project/activeContext/tasks/priority/critical.md` から管理する。
 
 目的: `docs/03_implementation/community_nodes/*` の設計に基づき、次セッションから実装に着手できるように具体タスクを整理する。
 
