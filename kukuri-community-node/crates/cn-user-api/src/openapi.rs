@@ -1,10 +1,18 @@
 #![allow(dead_code)]
 
 use axum::http::HeaderMap;
+use serde::Serialize;
 use utoipa::openapi::server::ServerBuilder;
-use utoipa::OpenApi;
+use utoipa::{OpenApi, ToSchema};
 
 use crate::{ErrorResponse, HealthStatus};
+
+#[derive(Serialize, ToSchema)]
+pub struct BootstrapHintLatestResponse {
+    pub seq: u64,
+    pub received_at: i64,
+    pub hint: serde_json::Value,
+}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -19,6 +27,7 @@ use crate::{ErrorResponse, HealthStatus};
         consent_status_doc,
         consent_accept_doc,
         bootstrap_nodes_doc,
+        bootstrap_hint_latest_doc,
         bootstrap_services_doc,
         subscription_request_doc,
         subscription_list_doc,
@@ -35,7 +44,7 @@ use crate::{ErrorResponse, HealthStatus};
         personal_delete_create_doc,
         personal_delete_get_doc
     ),
-    components(schemas(HealthStatus, ErrorResponse)),
+    components(schemas(HealthStatus, ErrorResponse, BootstrapHintLatestResponse)),
     tags(
         (name = "user-api", description = "Kukuri community node user API")
     )
@@ -139,6 +148,24 @@ fn consent_accept_doc() {}
     responses((status = 200, body = serde_json::Value), (status = 401, body = ErrorResponse))
 )]
 fn bootstrap_nodes_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/bootstrap/hints/latest",
+    params((
+        "since" = Option<u64>,
+        Query,
+        description = "Return a hint only when latest seq is greater than this value"
+    )),
+    responses(
+        (status = 200, body = BootstrapHintLatestResponse),
+        (status = 204),
+        (status = 401, body = ErrorResponse),
+        (status = 428, body = ErrorResponse),
+        (status = 429, body = ErrorResponse)
+    )
+)]
+fn bootstrap_hint_latest_doc() {}
 
 #[utoipa::path(
     get,

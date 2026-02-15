@@ -16,6 +16,7 @@
 - **HTTP（外部公開は User API に集約）**
   - `GET /v1/bootstrap/nodes`（node descriptor の一覧/差分）
   - `GET /v1/bootstrap/topics/:topic/services`（topic_service の一覧）
+  - `GET /v1/bootstrap/hints/latest?since=<seq>`（更新ヒント。新規がなければ `204`）
 - **イベント（KIP）**
   - 39000/39001 を定期発行し、クライアントは gossip/DHT/既知URL 経由で収集できる
 
@@ -38,6 +39,7 @@ v1 では「**DB上の広告設定**」を入力として `bootstrap` が 39000/
 
 1. **DB（正）**: 署名済み event JSON と失効判定（`exp`）の根拠
 2. **HTTP（正）**: `User API` の `GET /v1/bootstrap/*`（配布I/Fの正。差分取得/キャッシュ制御をここで提供）
+   - 更新通知の短経路として `GET /v1/bootstrap/hints/latest` を提供するが、最終整合は `nodes/services` を再取得して行う
 3. **gossip（ヒント）**: 39000/39001 の更新通知・加速（取りこぼし前提）
 4. **DHT（ヒント）**: node の HTTP endpoint 発見（必要なら descriptor hash 程度）
 5. **既知URL（シード）**: 手動固定/配布された接続先（HTTP取得の起点）
