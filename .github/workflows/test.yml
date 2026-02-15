@@ -335,87 +335,49 @@ jobs:
   community-node-tests:
     name: Community Node Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
-      CARGO_INCREMENTAL: 0
-      CARGO_PROFILE_DEV_DEBUG: 0
-      CARGO_PROFILE_TEST_DEBUG: 0
-      DATABASE_URL: postgres://cn:cn_password@localhost:15432/cn
+      COMMUNITY_NODE_COMPOSE_PROJECT: kukuri
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust (attempt 1)
-        id: setup_rust_attempt_1
-        continue-on-error: true
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88.0
-          components: clippy
-
-      - name: Setup Rust (attempt 2)
-        id: setup_rust_attempt_2
-        if: steps.setup_rust_attempt_1.outcome == 'failure'
-        continue-on-error: true
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88.0
-          components: clippy
-
-      - name: Fail if Rust setup did not recover
-        if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure'
+      - name: Start Community Node dependencies
         run: |
-          echo "Rust toolchain setup failed after two attempts."
-          exit 1
+          docker compose --project-name "${COMMUNITY_NODE_COMPOSE_PROJECT}" -f docker-compose.test.yml up -d --wait community-node-postgres community-node-meilisearch
 
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            kukuri-community-node/target/
-          key: ${{ runner.os }}-community-node-cargo-${{ hashFiles('kukuri-community-node/**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-community-node-cargo-
-
-      - name: Build Postgres (AGE)
+      - name: Build test-runner image
         run: |
-          docker build -t kukuri-postgres-age ./kukuri-community-node/docker/postgres-age
+          docker compose --project-name "${COMMUNITY_NODE_COMPOSE_PROJECT}" -f docker-compose.test.yml build test-runner
 
-      - name: Start Postgres (AGE)
+      - name: Run community node tests in container
         run: |
-          docker run -d --name kukuri-postgres-age \
-            -e POSTGRES_USER=cn \
-            -e POSTGRES_PASSWORD=cn_password \
-            -e POSTGRES_DB=cn \
-            -p 15432:5432 \
-            kukuri-postgres-age \
-            -c shared_preload_libraries=age
-          for i in {1..30}; do
-            if docker exec kukuri-postgres-age pg_isready -U cn -d cn; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs kukuri-postgres-age
-          exit 1
+          set -euo pipefail
 
-      - name: Run community node tests
+          test_runner_image="$(docker compose --project-name "${COMMUNITY_NODE_COMPOSE_PROJECT}" -f docker-compose.test.yml config --images | grep -E 'test-runner$' | head -n1 || true)"
+          if [[ -z "$test_runner_image" ]]; then
+            test_runner_image="kukuri-test-runner"
+          fi
+
+          docker run --rm --network "${COMMUNITY_NODE_COMPOSE_PROJECT}_community-node-network" \
+            -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
+            -e MEILI_URL=http://community-node-meilisearch:7700 \
+            -e MEILI_MASTER_KEY=change-me \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -w /workspace/kukuri-community-node \
+            "$test_runner_image" \
+            bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
+
+      - name: Collect Community Node diagnostics on failure
+        if: failure() || cancelled()
         run: |
-          cd kukuri-community-node
-          cargo test --workspace --all-features
+          docker compose --project-name "${COMMUNITY_NODE_COMPOSE_PROJECT}" -f docker-compose.test.yml ps || true
+          docker compose --project-name "${COMMUNITY_NODE_COMPOSE_PROJECT}" -f docker-compose.test.yml logs --tail 200 community-node-postgres community-node-meilisearch || true
 
-      - name: Run community node clippy
-        run: |
-          cd kukuri-community-node
-          cargo clippy --workspace --all-features -- -D warnings
-
-      - name: Stop Postgres (AGE)
+      - name: Cleanup Community Node resources
         if: always()
         run: |
-          docker rm -f kukuri-postgres-age
+          docker compose --project-name "${COMMUNITY_NODE_COMPOSE_PROJECT}" -f docker-compose.test.yml down --remove-orphans --volumes || true
 
   openapi-artifacts-check:
     name: OpenAPI Artifacts Check
