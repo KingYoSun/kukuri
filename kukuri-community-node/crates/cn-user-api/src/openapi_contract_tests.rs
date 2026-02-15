@@ -72,6 +72,17 @@ async fn openapi_contract_contains_user_paths() {
         .is_some());
     assert!(payload.pointer("/paths/~1v1~1search/get").is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1topic-subscription-requests/post/responses/429")
+        .is_some());
+    assert_eq!(
+        payload
+            .pointer(
+                "/paths/~1v1~1topic-subscription-requests/post/responses/429/content/application~1json/schema/$ref"
+            )
+            .and_then(Value::as_str),
+        Some("#/components/schemas/ErrorResponse")
+    );
+    assert!(payload
         .pointer("/paths/~1v1~1personal-data-deletion-requests/post")
         .is_some());
 }

@@ -235,8 +235,10 @@
 
 ## 未実装/不足事項（2026年02月15日 再調査追記）
 
-- [ ] `cn-user-api`: `topic_subscription_design.md` の DoS 要件（申請の同時保留数上限 per pubkey）を実装する。現状 `create_subscription_request` は `check_topic_limit`（active 件数）しか見ておらず pending 件数を制御していないため、上限判定と拒否レスポンス契約（status code / error code / details）を定義して反映する。
+- [x] `cn-user-api`: `topic_subscription_design.md` の DoS 要件（申請の同時保留数上限 per pubkey）を実装する。現状 `create_subscription_request` は `check_topic_limit`（active 件数）しか見ておらず pending 件数を制御していないため、上限判定と拒否レスポンス契約（status code / error code / details）を定義して反映する。
+  - 2026年02月15日: `create_subscription_request` に pending 件数上限（`subscription_request.max_pending_per_pubkey`）を実装し、`429` / `PENDING_SUBSCRIPTION_REQUEST_LIMIT_REACHED` / `details(metric,current,limit,scope)` を固定。
 - [ ] `cn-user-api` 契約テスト: 申請の同時保留数上限を追加検証する（上限未満で受理、上限到達時に拒否、approve/reject 後に再申請可能）。
+  - 2026年02月15日: 最小回帰として「上限到達時の拒否」1ケースは追加済み。approve/reject 後の再申請を含む広範シナリオ行列は次PRで実施。
 - [ ] `cn-admin-api` + `cn-user-api` + `cn-relay`: `topic_subscription_design.md` の DoS 要件（node-level の同時取込 topic 数上限）を実装する。現状 `approve_subscription_request` は `cn_admin.node_subscriptions` を無制限で upsert するため、上限設定と承認時の超過拒否フローを追加する。
 - [ ] テスト補完: node-level topic 上限の回帰テストを追加する（`cn-admin-api` 契約テストで承認拒否契約を固定、`cn-relay` 統合テストで上限超過時に新規 topic subscribe が増えないことを検証）。
 

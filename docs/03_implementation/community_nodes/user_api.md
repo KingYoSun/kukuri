@@ -169,6 +169,8 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 ### topic購読
 
 - `POST /v1/topic-subscription-requests`
+  - DoS ガード（pending 同時保留数上限）に到達した場合は `429 Too Many Requests` を返す。
+  - エラー契約: `code="PENDING_SUBSCRIPTION_REQUEST_LIMIT_REACHED"` と `details.metric/current/limit/scope`。
 - `GET /v1/topic-subscriptions`
 - `DELETE /v1/topic-subscriptions/:topic_id`（解約/停止）
 

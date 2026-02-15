@@ -179,7 +179,13 @@ fn bootstrap_services_doc() {}
     post,
     path = "/v1/topic-subscription-requests",
     request_body = serde_json::Value,
-    responses((status = 200, body = serde_json::Value))
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 401, body = ErrorResponse),
+        (status = 402, body = ErrorResponse),
+        (status = 428, body = ErrorResponse),
+        (status = 429, body = ErrorResponse)
+    )
 )]
 fn subscription_request_doc() {}
 

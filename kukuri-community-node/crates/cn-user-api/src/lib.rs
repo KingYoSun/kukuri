@@ -224,6 +224,9 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
             "auth_per_minute": 20,
             "public_per_minute": 120,
             "protected_per_minute": 120
+        },
+        "subscription_request": {
+            "max_pending_per_pubkey": 5
         }
     });
     let bootstrap_default = json!({
