@@ -14,6 +14,10 @@ use crate::billing::{check_topic_limit, consume_quota};
 use crate::policies::require_consents;
 use crate::{ApiError, ApiResult, AppState};
 
+const DEFAULT_MAX_PENDING_SUBSCRIPTION_REQUESTS_PER_PUBKEY: i64 = 5;
+const TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT: &[u8] =
+    b"cn-user-api.topic-subscription-request.pending-limit";
+
 #[derive(Deserialize)]
 pub struct SubscriptionRequestPayload {
     pub topic_id: String,
@@ -86,12 +90,35 @@ pub async fn create_subscription_request(
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC", err.to_string()))?;
     check_topic_limit(&state.pool, &auth.pubkey).await?;
 
+    let max_pending_requests = max_pending_subscription_requests_per_pubkey(&state).await;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let (lock_key_high, lock_key_low) = advisory_lock_keys_for_pubkey(&auth.pubkey);
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(lock_key_high)
+        .bind(lock_key_low)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
     let existing = sqlx::query_scalar::<_, String>(
         "SELECT status FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
     )
     .bind(&topic_id)
     .bind(&auth.pubkey)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
@@ -102,6 +129,28 @@ pub async fn create_subscription_request(
         }));
     }
 
+    let pending_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_user.topic_subscription_requests WHERE requester_pubkey = $1 AND status = 'pending'",
+    )
+    .bind(&auth.pubkey)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    if pending_count >= max_pending_requests {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "PENDING_SUBSCRIPTION_REQUEST_LIMIT_REACHED",
+            "pending subscription request limit reached",
+        )
+        .with_details(json!({
+            "metric": "topic_subscription_requests.pending",
+            "scope": "pubkey",
+            "current": pending_count,
+            "limit": max_pending_requests
+        })));
+    }
+
     let request_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO cn_user.topic_subscription_requests          (request_id, requester_pubkey, topic_id, requested_services, status)          VALUES ($1, $2, $3, $4, 'pending')",
@@ -110,14 +159,45 @@ pub async fn create_subscription_request(
     .bind(&auth.pubkey)
     .bind(&topic_id)
     .bind(serde_json::to_value(&payload.requested_services).unwrap_or(json!([])))
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     Ok(Json(SubscriptionRequestResponse {
         request_id,
         status: "pending".to_string(),
     }))
+}
+
+fn advisory_lock_keys_for_pubkey(pubkey: &str) -> (i32, i32) {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT);
+    hasher.update(pubkey.as_bytes());
+    let digest = hasher.finalize();
+    let bytes = digest.as_bytes();
+    (
+        i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        i32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+    )
+}
+
+async fn max_pending_subscription_requests_per_pubkey(state: &AppState) -> i64 {
+    let snapshot = state.user_config.get().await;
+    snapshot
+        .config_json
+        .get("subscription_request")
+        .and_then(|value| value.get("max_pending_per_pubkey"))
+        .and_then(|value| value.as_i64())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_MAX_PENDING_SUBSCRIPTION_REQUESTS_PER_PUBKEY)
 }
 
 pub async fn list_topic_subscriptions(
@@ -778,7 +858,7 @@ async fn ensure_subscription(
 
 #[cfg(test)]
 mod trust_subject_tests {
-    use super::parse_trust_subject;
+    use super::{advisory_lock_keys_for_pubkey, parse_trust_subject};
     use nostr_sdk::prelude::Keys;
 
     #[test]
@@ -792,6 +872,26 @@ mod trust_subject_tests {
     #[test]
     fn parse_trust_subject_rejects_invalid_prefix() {
         assert!(parse_trust_subject("npub1example").is_err());
+    }
+
+    #[test]
+    fn advisory_lock_keys_are_stable_for_same_pubkey() {
+        let pubkey = Keys::generate().public_key().to_hex();
+        let first = advisory_lock_keys_for_pubkey(&pubkey);
+        let second = advisory_lock_keys_for_pubkey(&pubkey);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn advisory_lock_keys_differ_for_different_pubkeys() {
+        let pubkey_a = Keys::generate().public_key().to_hex();
+        let mut pubkey_b = Keys::generate().public_key().to_hex();
+        while pubkey_b == pubkey_a {
+            pubkey_b = Keys::generate().public_key().to_hex();
+        }
+        let first = advisory_lock_keys_for_pubkey(&pubkey_a);
+        let second = advisory_lock_keys_for_pubkey(&pubkey_b);
+        assert_ne!(first, second);
     }
 }
 
@@ -1225,6 +1325,34 @@ mod api_contract_tests {
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(0);
         assert!(retry_after >= 1, "Retry-After must be >= 1: {retry_after}");
+    }
+
+    fn assert_pending_subscription_request_limit_response(
+        payload: &Value,
+        expected_current: i64,
+        expected_limit: i64,
+    ) {
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("PENDING_SUBSCRIPTION_REQUEST_LIMIT_REACHED")
+        );
+        let details = payload
+            .get("details")
+            .and_then(Value::as_object)
+            .expect("pending request limit details");
+        assert_eq!(
+            details.get("metric").and_then(Value::as_str),
+            Some("topic_subscription_requests.pending")
+        );
+        assert_eq!(details.get("scope").and_then(Value::as_str), Some("pubkey"));
+        assert_eq!(
+            details.get("current").and_then(Value::as_i64),
+            Some(expected_current)
+        );
+        assert_eq!(
+            details.get("limit").and_then(Value::as_i64),
+            Some(expected_limit)
+        );
     }
 
     fn prometheus_counter_value(body: &str, metric: &str, required_labels: &[(&str, &str)]) -> f64 {
@@ -2535,6 +2663,67 @@ mod api_contract_tests {
         .fetch_one(&pool)
         .await
         .expect("count topic subscription requests");
+        assert_eq!(request_count, 0);
+    }
+
+    #[tokio::test]
+    async fn topic_subscription_pending_request_limit_contract_too_many_requests() {
+        let state = test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
+            "http://localhost:7700",
+            "off",
+            json!({
+                "rate_limit": { "enabled": false },
+                "subscription_request": { "max_pending_per_pubkey": 1 }
+            }),
+        )
+        .await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let existing_pending_topic_id =
+            format!("kukuri:pending-existing-{}", Uuid::new_v4().simple());
+        let request_topic_id = format!("kukuri:pending-limit-{}", Uuid::new_v4().simple());
+
+        ensure_consents(&pool, &pubkey).await;
+        sqlx::query(
+            "INSERT INTO cn_user.topic_subscription_requests              (request_id, requester_pubkey, topic_id, requested_services, status)              VALUES ($1, $2, $3, $4, 'pending')",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(&pubkey)
+        .bind(&existing_pending_topic_id)
+        .bind(json!(["relay", "index"]))
+        .execute(&pool)
+        .await
+        .expect("insert pending subscription request");
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/topic-subscription-requests",
+                post(create_subscription_request),
+            )
+            .with_state(state);
+
+        let (status, payload) = post_json(
+            app,
+            "/v1/topic-subscription-requests",
+            &token,
+            json!({
+                "topic_id": request_topic_id,
+                "requested_services": ["relay", "index"]
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_pending_subscription_request_limit_response(&payload, 1, 1);
+
+        let request_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_user.topic_subscription_requests WHERE requester_pubkey = $1 AND topic_id = $2",
+        )
+        .bind(&pubkey)
+        .bind(&request_topic_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count denied topic subscription request");
         assert_eq!(request_count, 0);
     }
 

@@ -155,6 +155,8 @@
 
 - 購読申請の rate limit（IP + pubkey）
 - 申請の同時保留数上限（per pubkey）
+  - `cn-user-api` は `POST /v1/topic-subscription-requests` で pending 件数を判定し、上限到達時は `429 Too Many Requests` を返す。
+  - エラー契約: `code="PENDING_SUBSCRIPTION_REQUEST_LIMIT_REACHED"`、`details.metric="topic_subscription_requests.pending"`、`details.current`、`details.limit`、`details.scope="pubkey"`。
+  - 上限値は `cn_admin.service_configs(service='user-api').config_json.subscription_request.max_pending_per_pubkey` で設定し、未設定時のデフォルトは `5`。
 - node-level の同時取込 topic 数上限（ノード運用者の資源制約）
 - 自動承認する場合は、支払い/クレジット/招待capability等の担保が必要
-
