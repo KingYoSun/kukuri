@@ -27,6 +27,9 @@ pub mod ops {
 
 #[doc(hidden)]
 pub mod test_support {
+    pub mod state {
+        pub use crate::state::{AppState, handle_bootstrap_gossip_event};
+    }
     pub mod application {
         pub use crate::application::ports;
         pub use crate::application::services;
@@ -47,6 +50,7 @@ pub mod test_support {
     }
     pub mod presentation {
         pub use crate::presentation::dto;
+        pub use crate::presentation::handlers;
     }
     pub mod shared {
         pub use crate::shared::{config, error};

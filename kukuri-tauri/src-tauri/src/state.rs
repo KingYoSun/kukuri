@@ -72,6 +72,42 @@ use tokio::time::{Duration, sleep};
 const P2P_DEDUP_MAX: usize = 8192;
 const DEFAULT_SYNC_INTERVAL_SECS: u64 = 30;
 
+pub async fn handle_bootstrap_gossip_event(
+    handler: Arc<CommunityNodeHandler>,
+    event: crate::domain::entities::Event,
+) {
+    let hint_topic = if event.kind == 39001 {
+        event.tags.iter().find_map(|tag| {
+            if tag.len() >= 2 && tag[0] == "t" {
+                Some(tag[1].clone())
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    };
+
+    if let Err(err) = handler
+        .refresh_bootstrap_from_hint(hint_topic.as_deref())
+        .await
+    {
+        tracing::warn!(
+            error = %err,
+            kind = event.kind,
+            "bootstrap hint refresh failed"
+        );
+    }
+
+    if let Err(err) = handler.ingest_bootstrap_event(&event).await {
+        tracing::warn!(
+            error = %err,
+            kind = event.kind,
+            "bootstrap gossip event ingestion failed"
+        );
+    }
+}
+
 /// P2P関連の状態
 pub struct P2PState {
     /// Message event channel
@@ -728,35 +764,7 @@ impl AppState {
                             let handler = Arc::clone(&community_node_handler);
                             let event_clone = evt.clone();
                             tauri::async_runtime::spawn(async move {
-                                let hint_topic = if event_clone.kind == 39001 {
-                                    event_clone.tags.iter().find_map(|tag| {
-                                        if tag.len() >= 2 && tag[0] == "t" {
-                                            Some(tag[1].clone())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                } else {
-                                    None
-                                };
-                                if let Err(err) = handler
-                                    .refresh_bootstrap_from_hint(hint_topic.as_deref())
-                                    .await
-                                {
-                                    tracing::warn!(
-                                        error = %err,
-                                        kind = event_clone.kind,
-                                        "bootstrap hint refresh failed"
-                                    );
-                                }
-                                if let Err(err) = handler.ingest_bootstrap_event(&event_clone).await
-                                {
-                                    tracing::warn!(
-                                        error = %err,
-                                        kind = event_clone.kind,
-                                        "bootstrap gossip event ingestion failed"
-                                    );
-                                }
+                                handle_bootstrap_gossip_event(handler, event_clone).await;
                             });
                         }
 
