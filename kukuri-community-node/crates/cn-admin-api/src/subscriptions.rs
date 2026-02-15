@@ -2,12 +2,15 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::Row;
 use utoipa::ToSchema;
 
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
+
+const NODE_SUBSCRIPTION_LIMIT_LOCK_CONTEXT: &[u8] =
+    b"cn-admin-api.subscription-request.approve.node-subscription-limit";
 
 #[derive(Deserialize)]
 pub struct SubscriptionRequestQuery {
@@ -187,6 +190,8 @@ pub async fn approve_subscription_request(
     let requester_pubkey: String = row.try_get("requester_pubkey")?;
     let topic_id: String = row.try_get("topic_id")?;
 
+    enforce_node_subscription_topic_limit(&mut tx, &topic_id).await?;
+
     sqlx::query(
         "UPDATE cn_user.topic_subscription_requests          SET status = 'approved', review_note = $1, reviewed_at = NOW()          WHERE request_id = $2",
     )
@@ -232,6 +237,99 @@ pub async fn approve_subscription_request(
     })?;
 
     Ok(Json(serde_json::json!({ "status": "approved" })))
+}
+
+async fn enforce_node_subscription_topic_limit(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    topic_id: &str,
+) -> ApiResult<()> {
+    let (lock_key_high, lock_key_low) = advisory_lock_keys_for_node_subscription_limit();
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(lock_key_high)
+        .bind(lock_key_low)
+        .execute(&mut **tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
+    let existing_enabled = sqlx::query_scalar::<_, bool>(
+        "SELECT enabled FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(topic_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    if existing_enabled == Some(true) {
+        return Ok(());
+    }
+
+    let relay_config = sqlx::query_scalar::<_, Value>(
+        "SELECT config_json FROM cn_admin.service_configs WHERE service = 'relay'",
+    )
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    let max_topics = relay_config
+        .as_ref()
+        .map(cn_core::service_config::max_concurrent_node_topics_from_json)
+        .unwrap_or(cn_core::service_config::DEFAULT_MAX_CONCURRENT_NODE_TOPICS);
+
+    let current_enabled_topics = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE enabled = TRUE",
+    )
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    if current_enabled_topics >= max_topics {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "NODE_SUBSCRIPTION_TOPIC_LIMIT_REACHED",
+            "node-level concurrent topic ingest limit reached",
+        )
+        .with_details(json!({
+            "metric": "node_subscriptions.enabled_topics",
+            "scope": "node",
+            "current": current_enabled_topics,
+            "limit": max_topics
+        })));
+    }
+
+    Ok(())
+}
+
+fn advisory_lock_keys_for_node_subscription_limit() -> (i32, i32) {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(NODE_SUBSCRIPTION_LIMIT_LOCK_CONTEXT);
+    let digest = hasher.finalize();
+    let bytes = digest.as_bytes();
+    (
+        i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        i32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+    )
 }
 
 pub async fn reject_subscription_request(

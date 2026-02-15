@@ -135,6 +135,9 @@ pub async fn run(config: RelayConfig) -> Result<()> {
                 "msgs_per_minute": 600
             }
         },
+        "node_subscription": {
+            "max_concurrent_topics": cn_core::service_config::DEFAULT_MAX_CONCURRENT_NODE_TOPICS
+        },
         "retention": {
             "events_days": 30,
             "tombstone_days": 180,
@@ -190,13 +193,18 @@ async fn evaluate_relay_ready_status(state: &AppState) -> ReadyStatus {
         return ReadyStatus::Unavailable;
     }
 
-    let desired_topics = match load_enabled_topics(&state.pool).await {
-        Ok(topics) => topics,
-        Err(err) => {
-            tracing::warn!(error = %err, "healthz failed to load enabled topics");
-            return ReadyStatus::Unavailable;
-        }
-    };
+    let config_snapshot = state.config.get().await;
+    let runtime = config::RelayRuntimeConfig::from_json(&config_snapshot.config_json);
+    let desired_topics =
+        match load_enabled_topics(&state.pool, runtime.node_subscription.max_concurrent_topics)
+            .await
+        {
+            Ok(topics) => topics,
+            Err(err) => {
+                tracing::warn!(error = %err, "healthz failed to load enabled topics");
+                return ReadyStatus::Unavailable;
+            }
+        };
 
     let node_topics = state.node_topics.read().await.clone();
     let gossip_topics = {
@@ -260,10 +268,16 @@ fn evaluate_topic_sync(
     }
 }
 
-async fn load_enabled_topics(pool: &Pool<Postgres>) -> Result<HashSet<String>, sqlx::Error> {
-    let rows = sqlx::query("SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE")
-        .fetch_all(pool)
-        .await?;
+async fn load_enabled_topics(
+    pool: &Pool<Postgres>,
+    max_concurrent_topics: i64,
+) -> Result<HashSet<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE ORDER BY updated_at DESC, topic_id ASC LIMIT $1",
+    )
+    .bind(max_concurrent_topics)
+    .fetch_all(pool)
+    .await?;
 
     let mut topics = HashSet::new();
     for row in rows {

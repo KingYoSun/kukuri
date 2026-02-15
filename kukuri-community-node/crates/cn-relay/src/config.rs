@@ -1,4 +1,6 @@
-use cn_core::service_config::{auth_config_from_json, AuthConfig};
+use cn_core::service_config::{
+    auth_config_from_json, max_concurrent_node_topics_from_json, AuthConfig,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -7,6 +9,7 @@ pub struct RelayRuntimeConfig {
     pub auth: AuthConfig,
     pub limits: RelayLimits,
     pub rate_limit: RelayRateLimit,
+    pub node_subscription: RelayNodeSubscription,
     pub retention: RelayRetention,
 }
 
@@ -25,16 +28,23 @@ pub struct RelayRateLimit {
     pub gossip_msgs_per_minute: u64,
 }
 
+#[derive(Clone)]
+pub struct RelayNodeSubscription {
+    pub max_concurrent_topics: i64,
+}
+
 impl RelayRuntimeConfig {
     pub fn from_json(value: &Value) -> Self {
         let auth = auth_config_from_json(value);
         let limits = RelayLimits::from_json(value);
         let rate_limit = RelayRateLimit::from_json(value);
+        let node_subscription = RelayNodeSubscription::from_json(value);
         let retention = RelayRetention::from_json(value);
         Self {
             auth,
             limits,
             rate_limit,
+            node_subscription,
             retention,
         }
     }
@@ -93,6 +103,14 @@ impl RelayRateLimit {
             ws_reqs_per_minute: ws.and_then(|w| w.reqs_per_minute).unwrap_or(60),
             ws_conns_per_minute: ws.and_then(|w| w.conns_per_minute).unwrap_or(30),
             gossip_msgs_per_minute: gossip.and_then(|g| g.msgs_per_minute).unwrap_or(600),
+        }
+    }
+}
+
+impl RelayNodeSubscription {
+    fn from_json(value: &Value) -> Self {
+        Self {
+            max_concurrent_topics: max_concurrent_node_topics_from_json(value),
         }
     }
 }

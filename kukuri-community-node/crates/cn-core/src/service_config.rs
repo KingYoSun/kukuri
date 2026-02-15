@@ -130,6 +130,17 @@ pub fn auth_config_from_json(value: &Value) -> AuthConfig {
     }
 }
 
+pub const DEFAULT_MAX_CONCURRENT_NODE_TOPICS: i64 = 100;
+
+pub fn max_concurrent_node_topics_from_json(value: &Value) -> i64 {
+    value
+        .get("node_subscription")
+        .and_then(|section| section.get("max_concurrent_topics"))
+        .and_then(Value::as_i64)
+        .filter(|limit| *limit > 0)
+        .unwrap_or(DEFAULT_MAX_CONCURRENT_NODE_TOPICS)
+}
+
 pub async fn watch_service_config(
     pool: Pool<Postgres>,
     service: &'static str,
@@ -433,6 +444,36 @@ mod tests {
             ws_auth_timeout_seconds: 10,
         };
         assert_eq!(required.disconnect_deadline(), Some(1_700_000_900));
+    }
+
+    #[test]
+    fn max_concurrent_node_topics_from_json_uses_default_and_override() {
+        assert_eq!(
+            max_concurrent_node_topics_from_json(&json!({})),
+            DEFAULT_MAX_CONCURRENT_NODE_TOPICS
+        );
+        assert_eq!(
+            max_concurrent_node_topics_from_json(
+                &json!({ "node_subscription": { "max_concurrent_topics": 12 } })
+            ),
+            12
+        );
+    }
+
+    #[test]
+    fn max_concurrent_node_topics_from_json_rejects_non_positive_values() {
+        assert_eq!(
+            max_concurrent_node_topics_from_json(
+                &json!({ "node_subscription": { "max_concurrent_topics": 0 } })
+            ),
+            DEFAULT_MAX_CONCURRENT_NODE_TOPICS
+        );
+        assert_eq!(
+            max_concurrent_node_topics_from_json(
+                &json!({ "node_subscription": { "max_concurrent_topics": -3 } })
+            ),
+            DEFAULT_MAX_CONCURRENT_NODE_TOPICS
+        );
     }
 
     #[tokio::test]

@@ -86,7 +86,10 @@ async fn sync_topics(
     tasks: &Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     node_topics: &Arc<RwLock<HashSet<String>>>,
 ) -> Result<()> {
-    let desired = load_node_topics(&state.pool).await?;
+    let runtime_snapshot = state.config.get().await;
+    let runtime = RelayRuntimeConfig::from_json(&runtime_snapshot.config_json);
+    let desired =
+        load_node_topics(&state.pool, runtime.node_subscription.max_concurrent_topics).await?;
     {
         let mut guard = node_topics.write().await;
         *guard = desired.clone();
@@ -293,10 +296,16 @@ async fn send_with_retry(sender: &iroh_gossip::api::GossipSender, payload: Vec<u
     }
 }
 
-async fn load_node_topics(pool: &sqlx::Pool<sqlx::Postgres>) -> Result<HashSet<String>> {
-    let rows = sqlx::query("SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE")
-        .fetch_all(pool)
-        .await?;
+async fn load_node_topics(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    max_concurrent_topics: i64,
+) -> Result<HashSet<String>> {
+    let rows = sqlx::query(
+        "SELECT topic_id FROM cn_admin.node_subscriptions WHERE enabled = TRUE ORDER BY updated_at DESC, topic_id ASC LIMIT $1",
+    )
+    .bind(max_concurrent_topics)
+    .fetch_all(pool)
+    .await?;
     let mut topics = HashSet::new();
     for row in rows {
         let topic_id: String = row.try_get("topic_id")?;
