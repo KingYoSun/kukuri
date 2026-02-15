@@ -419,6 +419,13 @@ async fn insert_audit_log(
 }
 
 async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
+    let mut tx = pool.begin().await.expect("begin audit failure trigger tx");
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(810_001_i64)
+        .execute(&mut *tx)
+        .await
+        .expect("lock audit failure trigger setup");
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS cn_admin.test_audit_failures (
@@ -430,7 +437,7 @@ async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
         )
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_audit_failures table");
 
@@ -458,14 +465,14 @@ async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
         $$;
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create fail_audit_for_test function");
-
     sqlx::query("DROP TRIGGER IF EXISTS test_audit_failures_trigger ON cn_admin.audit_logs")
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .expect("drop test_audit_failures_trigger");
+
     sqlx::query(
         r#"
         CREATE TRIGGER test_audit_failures_trigger
@@ -474,9 +481,11 @@ async fn ensure_audit_failure_trigger(pool: &Pool<Postgres>) {
         EXECUTE FUNCTION cn_admin.fail_audit_for_test()
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_audit_failures_trigger");
+
+    tx.commit().await.expect("commit audit failure trigger tx");
 }
 
 async fn register_audit_failure(
@@ -498,6 +507,13 @@ async fn register_audit_failure(
 }
 
 async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
+    let mut tx = pool.begin().await.expect("begin commit failure trigger tx");
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(810_002_i64)
+        .execute(&mut *tx)
+        .await
+        .expect("lock commit failure trigger setup");
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS cn_admin.test_commit_failures (
@@ -509,7 +525,7 @@ async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
         )
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_commit_failures table");
 
@@ -537,14 +553,14 @@ async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
         $$;
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create fail_commit_for_test function");
-
     sqlx::query("DROP TRIGGER IF EXISTS test_commit_failures_trigger ON cn_admin.audit_logs")
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .expect("drop test_commit_failures_trigger");
+
     sqlx::query(
         r#"
         CREATE CONSTRAINT TRIGGER test_commit_failures_trigger
@@ -554,9 +570,11 @@ async fn ensure_commit_failure_trigger(pool: &Pool<Postgres>) {
         EXECUTE FUNCTION cn_admin.fail_commit_for_test()
         "#,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("create test_commit_failures_trigger");
+
+    tx.commit().await.expect("commit failure trigger tx");
 }
 
 async fn register_commit_failure(
@@ -3617,6 +3635,128 @@ async fn subscription_request_approve_rejects_when_node_topic_limit_reached() {
         payload.pointer("/details/limit").and_then(Value::as_i64),
         Some(effective_enabled_topics)
     );
+
+    let request_status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM cn_user.topic_subscription_requests WHERE request_id = $1",
+    )
+    .bind(&request_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch request status after over-limit failure");
+    assert_eq!(request_status, "pending");
+
+    let topic_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
+    )
+    .bind(&topic_id)
+    .bind(&requester_pubkey)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count topic subscriptions after over-limit failure");
+    assert_eq!(topic_subscription_count, 0);
+
+    let node_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&topic_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count node subscriptions after over-limit failure");
+    assert_eq!(node_subscription_count, 0);
+
+    upsert_service_config(
+        &state.pool,
+        "relay",
+        json!({
+            "node_subscription": {
+                "max_concurrent_topics": cn_core::service_config::DEFAULT_MAX_CONCURRENT_NODE_TOPICS
+            }
+        }),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn subscription_request_approve_rejects_when_node_topic_limit_already_exceeded() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+
+    let mut effective_enabled_topics = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE enabled = TRUE",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .expect("count existing enabled node subscriptions");
+    while effective_enabled_topics < 2 {
+        let existing_topic_id = format!("kukuri:topic:limit-exceeded-existing:{}", Uuid::new_v4());
+        sqlx::query(
+            "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count) VALUES ($1, TRUE, 1)",
+        )
+        .bind(&existing_topic_id)
+        .execute(&state.pool)
+        .await
+        .expect("insert existing enabled node subscription");
+        effective_enabled_topics += 1;
+    }
+
+    let configured_limit = effective_enabled_topics - 1;
+    upsert_service_config(
+        &state.pool,
+        "relay",
+        json!({
+            "node_subscription": {
+                "max_concurrent_topics": configured_limit
+            }
+        }),
+    )
+    .await;
+
+    let requester_pubkey = Keys::generate().public_key().to_hex();
+    let topic_id = format!("kukuri:topic:limit-exceeded-over:{}", Uuid::new_v4());
+    let request_id =
+        insert_subscription_request(&state.pool, &requester_pubkey, &topic_id, json!(["search"]))
+            .await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/subscription-requests/{request_id}/approve",
+            post(subscriptions::approve_subscription_request),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) = post_json(
+        app,
+        &format!("/v1/admin/subscription-requests/{request_id}/approve"),
+        json!({ "review_note": "over-limit approval should fail when current > limit" }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("NODE_SUBSCRIPTION_TOPIC_LIMIT_REACHED")
+    );
+    assert_eq!(
+        payload.pointer("/details/metric").and_then(Value::as_str),
+        Some("node_subscriptions.enabled_topics")
+    );
+    assert_eq!(
+        payload.pointer("/details/scope").and_then(Value::as_str),
+        Some("node")
+    );
+    let detail_current = payload.pointer("/details/current").and_then(Value::as_i64);
+    let detail_limit = payload.pointer("/details/limit").and_then(Value::as_i64);
+    assert!(
+        detail_current.is_some_and(|current| current >= effective_enabled_topics),
+        "current should be at least the pre-check enabled-topic count"
+    );
+    assert!(
+        detail_limit.is_some(),
+        "limit should be present in error details"
+    );
+    assert!(detail_current
+        .zip(detail_limit)
+        .is_some_and(|(current, limit)| current > limit));
 
     let request_status = sqlx::query_scalar::<_, String>(
         "SELECT status FROM cn_user.topic_subscription_requests WHERE request_id = $1",

@@ -6,8 +6,19 @@ pub fn parse_health_targets(
     list_env: &str,
     fallback: &[(&str, &str, &str)],
 ) -> HashMap<String, String> {
+    parse_health_targets_with(list_env, fallback, |key| std::env::var(key).ok())
+}
+
+fn parse_health_targets_with<F>(
+    list_env: &str,
+    fallback: &[(&str, &str, &str)],
+    mut get_env: F,
+) -> HashMap<String, String>
+where
+    F: FnMut(&str) -> Option<String>,
+{
     let mut targets = HashMap::new();
-    if let Ok(raw) = std::env::var(list_env) {
+    if let Some(raw) = get_env(list_env) {
         for entry in raw.split(',') {
             if let Some((name, url)) = entry.split_once('=') {
                 if !name.trim().is_empty() && !url.trim().is_empty() {
@@ -21,7 +32,7 @@ pub fn parse_health_targets(
         if targets.contains_key(*name) {
             continue;
         }
-        let value = std::env::var(env).unwrap_or_else(|_| (*default_url).to_string());
+        let value = get_env(env).unwrap_or_else(|| (*default_url).to_string());
         targets.insert((*name).to_string(), value);
     }
 
@@ -71,30 +82,21 @@ pub async fn ensure_endpoint_reachable(client: &Client, dependency: &str, url: &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().expect("lock")
-    }
-
-    fn set_env_var(key: &str, value: &str) {
-        // SAFETY: tests serialize env access via a global mutex.
-        unsafe { std::env::set_var(key, value) };
-    }
-
-    fn remove_env_var(key: &str) {
-        // SAFETY: tests serialize env access via a global mutex.
-        unsafe { std::env::remove_var(key) };
-    }
 
     #[test]
     fn parse_health_targets_prefers_explicit_map_and_fills_fallback() {
-        let _guard = env_lock();
-        set_env_var("TEST_HEALTH_TARGETS", "relay=http://relay:8082/healthz");
-        set_env_var("TEST_USER_HEALTH_URL", "http://user-api:8080/healthz");
+        let env = HashMap::from([
+            (
+                "TEST_HEALTH_TARGETS".to_string(),
+                "relay=http://relay:8082/healthz".to_string(),
+            ),
+            (
+                "TEST_USER_HEALTH_URL".to_string(),
+                "http://user-api:8080/healthz".to_string(),
+            ),
+        ]);
 
-        let targets = parse_health_targets(
+        let targets = parse_health_targets_with(
             "TEST_HEALTH_TARGETS",
             &[
                 (
@@ -108,6 +110,7 @@ mod tests {
                     "http://default-user/healthz",
                 ),
             ],
+            |key| env.get(key).cloned(),
         );
 
         assert_eq!(
@@ -118,8 +121,5 @@ mod tests {
             targets.get("user-api"),
             Some(&"http://user-api:8080/healthz".to_string())
         );
-
-        remove_env_var("TEST_HEALTH_TARGETS");
-        remove_env_var("TEST_USER_HEALTH_URL");
     }
 }
