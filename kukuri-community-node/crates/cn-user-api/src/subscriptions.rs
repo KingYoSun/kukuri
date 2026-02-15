@@ -15,6 +15,8 @@ use crate::policies::require_consents;
 use crate::{ApiError, ApiResult, AppState};
 
 const DEFAULT_MAX_PENDING_SUBSCRIPTION_REQUESTS_PER_PUBKEY: i64 = 5;
+const TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT: &[u8] =
+    b"cn-user-api.topic-subscription-request.pending-limit";
 
 #[derive(Deserialize)]
 pub struct SubscriptionRequestPayload {
@@ -97,8 +99,10 @@ pub async fn create_subscription_request(
         )
     })?;
 
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(&auth.pubkey)
+    let (lock_key_high, lock_key_low) = advisory_lock_keys_for_pubkey(&auth.pubkey);
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(lock_key_high)
+        .bind(lock_key_low)
         .execute(&mut *tx)
         .await
         .map_err(|err| {
@@ -171,6 +175,18 @@ pub async fn create_subscription_request(
         request_id,
         status: "pending".to_string(),
     }))
+}
+
+fn advisory_lock_keys_for_pubkey(pubkey: &str) -> (i32, i32) {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT);
+    hasher.update(pubkey.as_bytes());
+    let digest = hasher.finalize();
+    let bytes = digest.as_bytes();
+    (
+        i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        i32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+    )
 }
 
 async fn max_pending_subscription_requests_per_pubkey(state: &AppState) -> i64 {
@@ -842,7 +858,7 @@ async fn ensure_subscription(
 
 #[cfg(test)]
 mod trust_subject_tests {
-    use super::parse_trust_subject;
+    use super::{advisory_lock_keys_for_pubkey, parse_trust_subject};
     use nostr_sdk::prelude::Keys;
 
     #[test]
@@ -856,6 +872,26 @@ mod trust_subject_tests {
     #[test]
     fn parse_trust_subject_rejects_invalid_prefix() {
         assert!(parse_trust_subject("npub1example").is_err());
+    }
+
+    #[test]
+    fn advisory_lock_keys_are_stable_for_same_pubkey() {
+        let pubkey = Keys::generate().public_key().to_hex();
+        let first = advisory_lock_keys_for_pubkey(&pubkey);
+        let second = advisory_lock_keys_for_pubkey(&pubkey);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn advisory_lock_keys_differ_for_different_pubkeys() {
+        let pubkey_a = Keys::generate().public_key().to_hex();
+        let mut pubkey_b = Keys::generate().public_key().to_hex();
+        while pubkey_b == pubkey_a {
+            pubkey_b = Keys::generate().public_key().to_hex();
+        }
+        let first = advisory_lock_keys_for_pubkey(&pubkey_a);
+        let second = advisory_lock_keys_for_pubkey(&pubkey_b);
+        assert_ne!(first, second);
     }
 }
 
