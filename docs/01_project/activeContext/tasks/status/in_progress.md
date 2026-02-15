@@ -13,9 +13,8 @@
 ### 2026年02月15日 Issue #22 Community Nodes 再監査（DoS上限要件）
 
 - 目的: `docs/03_implementation/community_nodes` と `community_nodes_roadmap.md` を再監査し、commit `b865ec92115efffb97768c1ed009292104ce1aeb` 起点の未完タスクと追加不足を確定する。
-- 状態: 監査完了（実装タスク4件を `tasks/priority/community_nodes_roadmap.md` の「2026年02月15日 再調査追記」に起票済み）。Task1（`cn-user-api` pending 同時保留数上限 + 拒否契約 + 最小回帰）は `feat/issue22-pending-request-limit` で実装完了。PR #23 のレビュー指摘（`pg_advisory_xact_lock(hashtext($1))` の衝突リスク）に対して、同ブランチで 2 キー advisory lock へ差し替える追補修正を適用済み。
+- 状態: 監査完了（実装タスク4件を `tasks/priority/community_nodes_roadmap.md` の「2026年02月15日 再調査追記」に起票済み）。Task1（`cn-user-api` pending 同時保留数上限 + 拒否契約 + 最小回帰）は `feat/issue22-pending-request-limit` で実装完了。PR #23 のレビュー指摘（`pg_advisory_xact_lock(hashtext($1))` の衝突リスク）に対して、同ブランチで 2 キー advisory lock へ差し替える追補修正を適用済み。続いて Task2（`cn-user-api` 契約テスト拡張: under-limit 受理 / at-limit 拒否 / approve・reject 後の再申請）を `feat/issue22-pending-limit-contract-tests` で実装完了。PR #24 の `OpenAPI Artifacts Check` 失敗は `apps/admin-console/openapi/user-api.json` の末尾改行差分であることを特定し、生成物に合わせるフォローアップ修正を適用済み。
 - 次アクション（1タスク=1PR）:
-  - `cn-user-api` 契約テスト（同時保留数上限の広範シナリオ行列）
   - node-level 同時取込 topic 数上限の実装（`cn-admin-api` + `cn-user-api` + `cn-relay`）
   - node-level 上限の回帰テスト（`cn-admin-api` 契約 + `cn-relay` 統合）
 
