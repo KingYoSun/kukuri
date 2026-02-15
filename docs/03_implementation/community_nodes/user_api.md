@@ -158,6 +158,7 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 
 - `GET /v1/bootstrap/nodes`（node descriptor の一覧/差分）
 - `GET /v1/bootstrap/topics/:topic/services`（topic_service の一覧）
+- `GET /v1/bootstrap/hints/latest?since=<seq>`（更新ヒントの最新スナップショット。新規がなければ `204`）
 
 配布ポリシー（v1）:
 - 39000/39001 は `bootstrap` が署名生成し、DB に保存された **署名済み event JSON** を配布する（User API は生成しない）

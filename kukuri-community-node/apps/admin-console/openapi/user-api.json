@@ -131,6 +131,73 @@
         }
       }
     },
+    "/v1/bootstrap/hints/latest": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "bootstrap_hint_latest_doc",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Return a hint only when latest seq is greater than this value",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapHintLatestResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/bootstrap/nodes": {
       "get": {
         "tags": [
@@ -828,6 +895,26 @@
   },
   "components": {
     "schemas": {
+      "BootstrapHintLatestResponse": {
+        "type": "object",
+        "required": [
+          "seq",
+          "received_at",
+          "hint"
+        ],
+        "properties": {
+          "hint": {},
+          "received_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
