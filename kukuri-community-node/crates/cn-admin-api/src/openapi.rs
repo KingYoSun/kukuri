@@ -443,7 +443,11 @@ fn subscription_requests_list_doc() {}
     path = "/v1/admin/subscription-requests/{request_id}/approve",
     params(("request_id" = String, Path, description = "Subscription request identifier")),
     request_body = ReviewRequest,
-    responses((status = 200, body = StatusResponse), (status = 404, body = ErrorResponse))
+    responses(
+        (status = 200, body = StatusResponse),
+        (status = 404, body = ErrorResponse),
+        (status = 429, body = ErrorResponse)
+    )
 )]
 fn subscription_requests_approve_doc() {}
 
