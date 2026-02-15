@@ -3659,6 +3659,128 @@ async fn subscription_request_approve_rejects_when_node_topic_limit_reached() {
 }
 
 #[tokio::test]
+async fn subscription_request_approve_rejects_when_node_topic_limit_already_exceeded() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+
+    let mut effective_enabled_topics = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE enabled = TRUE",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .expect("count existing enabled node subscriptions");
+    while effective_enabled_topics < 2 {
+        let existing_topic_id = format!("kukuri:topic:limit-exceeded-existing:{}", Uuid::new_v4());
+        sqlx::query(
+            "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count) VALUES ($1, TRUE, 1)",
+        )
+        .bind(&existing_topic_id)
+        .execute(&state.pool)
+        .await
+        .expect("insert existing enabled node subscription");
+        effective_enabled_topics += 1;
+    }
+
+    let configured_limit = effective_enabled_topics - 1;
+    upsert_service_config(
+        &state.pool,
+        "relay",
+        json!({
+            "node_subscription": {
+                "max_concurrent_topics": configured_limit
+            }
+        }),
+    )
+    .await;
+
+    let requester_pubkey = Keys::generate().public_key().to_hex();
+    let topic_id = format!("kukuri:topic:limit-exceeded-over:{}", Uuid::new_v4());
+    let request_id =
+        insert_subscription_request(&state.pool, &requester_pubkey, &topic_id, json!(["search"]))
+            .await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/subscription-requests/{request_id}/approve",
+            post(subscriptions::approve_subscription_request),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) = post_json(
+        app,
+        &format!("/v1/admin/subscription-requests/{request_id}/approve"),
+        json!({ "review_note": "over-limit approval should fail when current > limit" }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("NODE_SUBSCRIPTION_TOPIC_LIMIT_REACHED")
+    );
+    assert_eq!(
+        payload.pointer("/details/metric").and_then(Value::as_str),
+        Some("node_subscriptions.enabled_topics")
+    );
+    assert_eq!(
+        payload.pointer("/details/scope").and_then(Value::as_str),
+        Some("node")
+    );
+    assert_eq!(
+        payload.pointer("/details/current").and_then(Value::as_i64),
+        Some(effective_enabled_topics)
+    );
+    assert_eq!(
+        payload.pointer("/details/limit").and_then(Value::as_i64),
+        Some(configured_limit)
+    );
+    assert!(payload
+        .pointer("/details/current")
+        .and_then(Value::as_i64)
+        .zip(payload.pointer("/details/limit").and_then(Value::as_i64))
+        .is_some_and(|(current, limit)| current > limit));
+
+    let request_status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM cn_user.topic_subscription_requests WHERE request_id = $1",
+    )
+    .bind(&request_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("fetch request status after over-limit failure");
+    assert_eq!(request_status, "pending");
+
+    let topic_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
+    )
+    .bind(&topic_id)
+    .bind(&requester_pubkey)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count topic subscriptions after over-limit failure");
+    assert_eq!(topic_subscription_count, 0);
+
+    let node_subscription_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&topic_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("count node subscriptions after over-limit failure");
+    assert_eq!(node_subscription_count, 0);
+
+    upsert_service_config(
+        &state.pool,
+        "relay",
+        json!({
+            "node_subscription": {
+                "max_concurrent_topics": cn_core::service_config::DEFAULT_MAX_CONCURRENT_NODE_TOPICS
+            }
+        }),
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn plans_subscriptions_usage_contract_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;

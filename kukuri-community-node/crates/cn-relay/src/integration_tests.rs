@@ -909,6 +909,72 @@ async fn healthz_contract_topic_sync_degraded_shape_compatible() {
 }
 
 #[tokio::test]
+async fn node_subscription_limit_prevents_desired_topic_growth_when_over_limit() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    sqlx::query("UPDATE cn_admin.node_subscriptions SET enabled = FALSE")
+        .execute(&pool)
+        .await
+        .expect("disable existing node subscriptions");
+
+    let base_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time before unix epoch")
+        .as_secs() as i64;
+    let first_topic_id = format!("kukuri:relay-node-limit-first-it-{}", Uuid::new_v4());
+    let second_topic_id = format!("kukuri:relay-node-limit-second-it-{}", Uuid::new_v4());
+    let third_topic_id = format!("kukuri:relay-node-limit-third-it-{}", Uuid::new_v4());
+
+    for (topic_id, updated_at) in [
+        (first_topic_id.as_str(), base_epoch),
+        (second_topic_id.as_str(), base_epoch + 1),
+    ] {
+        sqlx::query(
+            "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+             VALUES ($1, TRUE, 1, to_timestamp($2))
+             ON CONFLICT (topic_id) DO UPDATE
+                 SET enabled = TRUE, ref_count = EXCLUDED.ref_count, updated_at = EXCLUDED.updated_at",
+        )
+        .bind(topic_id)
+        .bind(updated_at)
+        .execute(&pool)
+        .await
+        .expect("insert limited topic subscription");
+    }
+
+    let initial_desired_topics = super::load_enabled_topics(&pool, 1)
+        .await
+        .expect("load initial limited topics");
+    assert_eq!(initial_desired_topics.len(), 1);
+    assert!(initial_desired_topics.contains(&second_topic_id));
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, to_timestamp($2))
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE, ref_count = EXCLUDED.ref_count, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(&third_topic_id)
+    .bind(base_epoch + 2)
+    .execute(&pool)
+    .await
+    .expect("insert over-limit topic subscription");
+
+    let over_limit_desired_topics = super::load_enabled_topics(&pool, 1)
+        .await
+        .expect("load over-limit topics");
+    assert_eq!(over_limit_desired_topics.len(), 1);
+    assert!(over_limit_desired_topics.contains(&third_topic_id));
+    assert!(!over_limit_desired_topics.contains(&first_topic_id));
+}
+
+#[tokio::test]
 async fn metrics_contract_required_metrics_shape_compatible() {
     let _guard = acquire_integration_test_lock().await;
 
