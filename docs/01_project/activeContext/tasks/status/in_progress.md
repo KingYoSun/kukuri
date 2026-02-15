@@ -10,6 +10,16 @@
 
 ## 現在のタスク
 
+### 2026年02月15日 Issue #22 Community Nodes 再監査（DoS上限要件）
+
+- 目的: `docs/03_implementation/community_nodes` と `community_nodes_roadmap.md` を再監査し、commit `b865ec92115efffb97768c1ed009292104ce1aeb` 起点の未完タスクと追加不足を確定する。
+- 状態: 監査完了（実装タスク4件を `tasks/priority/community_nodes_roadmap.md` の「2026年02月15日 再調査追記」に起票済み）。
+- 次アクション（1タスク=1PR）:
+  - `cn-user-api` の申請同時保留数上限（per pubkey）実装 + 拒否契約の反映
+  - `cn-user-api` 契約テスト（同時保留数上限）
+  - node-level 同時取込 topic 数上限の実装（`cn-admin-api` + `cn-user-api` + `cn-relay`）
+  - node-level 上限の回帰テスト（`cn-admin-api` 契約 + `cn-relay` 統合）
+
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。
