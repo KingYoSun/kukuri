@@ -150,6 +150,65 @@ describe('ServicesPage', () => {
     expect(api.updateServiceConfig).not.toHaveBeenCalled();
   });
 
+  it('bootstrap auth 遷移フォームの初期表示と保存 payload 契約を維持する', async () => {
+    renderWithQueryClient(<ServicesPage />);
+
+    const bootstrapHeading = await screen.findByRole('heading', { name: 'bootstrap Auth Transition' });
+    const bootstrapCard = bootstrapHeading.closest('.card');
+    expect(bootstrapCard).not.toBeNull();
+    const bootstrapScope = within(bootstrapCard as HTMLElement);
+
+    expect(bootstrapScope.getByLabelText('Auth mode')).toHaveValue('required');
+    expect(bootstrapScope.getByLabelText('Enforce timing')).toHaveValue('immediate');
+    expect(bootstrapScope.getByLabelText('Grace seconds')).toHaveValue(600);
+    expect(bootstrapScope.getByLabelText('WS auth timeout seconds')).toHaveValue(8);
+    expect(bootstrapScope.queryByText('Relay Runtime Signals')).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.selectOptions(bootstrapScope.getByLabelText('Enforce timing'), 'scheduled');
+    fireEvent.change(bootstrapScope.getByLabelText('Enforce at'), {
+      target: { value: '2026-02-14T09:45' }
+    });
+    fireEvent.change(bootstrapScope.getByLabelText('Grace seconds'), { target: { value: '1800' } });
+    fireEvent.change(bootstrapScope.getByLabelText('WS auth timeout seconds'), {
+      target: { value: '15' }
+    });
+    await user.click(bootstrapScope.getByRole('button', { name: 'Save auth transition' }));
+
+    const expectedEnforceAt = Math.floor(new Date('2026-02-14T09:45').getTime() / 1000);
+    await waitFor(() => {
+      expect(api.updateServiceConfig).toHaveBeenCalledWith(
+        'bootstrap',
+        expect.objectContaining({
+          auth: expect.objectContaining({
+            mode: 'required',
+            enforce_at: expectedEnforceAt,
+            grace_seconds: 1800,
+            ws_auth_timeout_seconds: 15
+          })
+        }),
+        2
+      );
+    });
+  });
+
+  it('bootstrap auth 遷移フォームは不正入力を保存しない', async () => {
+    renderWithQueryClient(<ServicesPage />);
+
+    const bootstrapHeading = await screen.findByRole('heading', { name: 'bootstrap Auth Transition' });
+    const bootstrapCard = bootstrapHeading.closest('.card');
+    expect(bootstrapCard).not.toBeNull();
+    const bootstrapScope = within(bootstrapCard as HTMLElement);
+
+    const user = userEvent.setup();
+    await user.selectOptions(bootstrapScope.getByLabelText('Enforce timing'), 'scheduled');
+    fireEvent.change(bootstrapScope.getByLabelText('Enforce at'), { target: { value: '' } });
+    await user.click(bootstrapScope.getByRole('button', { name: 'Save auth transition' }));
+
+    expect(await bootstrapScope.findByText('Enforce at must be a valid datetime.')).toBeInTheDocument();
+    expect(api.updateServiceConfig).not.toHaveBeenCalled();
+  });
+
   it('relay/bootstrap 以外は従来の JSON 編集と秘匿キー検証を維持する', async () => {
     renderWithQueryClient(<ServicesPage />);
 
