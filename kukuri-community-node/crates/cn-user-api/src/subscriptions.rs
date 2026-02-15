@@ -1076,6 +1076,54 @@ mod api_contract_tests {
         .expect("insert subscription");
     }
 
+    async fn insert_pending_subscription_request(
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+        topic_id: &str,
+    ) -> String {
+        let request_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO cn_user.topic_subscription_requests              (request_id, requester_pubkey, topic_id, requested_services, status)              VALUES ($1, $2, $3, $4, 'pending')",
+        )
+        .bind(&request_id)
+        .bind(pubkey)
+        .bind(topic_id)
+        .bind(json!(["relay", "index"]))
+        .execute(pool)
+        .await
+        .expect("insert pending subscription request");
+        request_id
+    }
+
+    async fn update_subscription_request_status(
+        pool: &Pool<Postgres>,
+        request_id: &str,
+        status: &str,
+    ) {
+        let result = sqlx::query(
+            "UPDATE cn_user.topic_subscription_requests SET status = $1, reviewed_at = NOW() WHERE request_id = $2",
+        )
+        .bind(status)
+        .bind(request_id)
+        .execute(pool)
+        .await
+        .expect("update subscription request status");
+        assert_eq!(result.rows_affected(), 1);
+    }
+
+    async fn pending_subscription_request_count_for_pubkey(
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+    ) -> i64 {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_user.topic_subscription_requests WHERE requester_pubkey = $1 AND status = 'pending'",
+        )
+        .bind(pubkey)
+        .fetch_one(pool)
+        .await
+        .expect("count pending subscription requests")
+    }
+
     async fn ensure_active_subscriber(pool: &Pool<Postgres>, pubkey: &str) {
         sqlx::query(
             "INSERT INTO cn_user.subscriber_accounts \
@@ -2667,13 +2715,13 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
-    async fn topic_subscription_pending_request_limit_contract_too_many_requests() {
+    async fn topic_subscription_pending_request_limit_contract_accepts_under_limit_requests() {
         let state = test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
             "http://localhost:7700",
             "off",
             json!({
                 "rate_limit": { "enabled": false },
-                "subscription_request": { "max_pending_per_pubkey": 1 }
+                "subscription_request": { "max_pending_per_pubkey": 2 }
             }),
         )
         .await;
@@ -2684,16 +2732,73 @@ mod api_contract_tests {
         let request_topic_id = format!("kukuri:pending-limit-{}", Uuid::new_v4().simple());
 
         ensure_consents(&pool, &pubkey).await;
-        sqlx::query(
-            "INSERT INTO cn_user.topic_subscription_requests              (request_id, requester_pubkey, topic_id, requested_services, status)              VALUES ($1, $2, $3, $4, 'pending')",
+        insert_pending_subscription_request(&pool, &pubkey, &existing_pending_topic_id).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/topic-subscription-requests",
+                post(create_subscription_request),
+            )
+            .with_state(state);
+
+        let (status, payload) = post_json(
+            app,
+            "/v1/topic-subscription-requests",
+            &token,
+            json!({
+                "topic_id": request_topic_id,
+                "requested_services": ["relay", "index"]
+            }),
         )
-        .bind(Uuid::new_v4().to_string())
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(payload
+            .get("request_id")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty() && value != "existing"));
+        assert_eq!(
+            payload.get("status").and_then(Value::as_str),
+            Some("pending")
+        );
+
+        let request_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM cn_user.topic_subscription_requests WHERE requester_pubkey = $1 AND topic_id = $2",
+        )
         .bind(&pubkey)
-        .bind(&existing_pending_topic_id)
-        .bind(json!(["relay", "index"]))
-        .execute(&pool)
+        .bind(&request_topic_id)
+        .fetch_one(&pool)
         .await
-        .expect("insert pending subscription request");
+        .expect("count accepted topic subscription request");
+        assert_eq!(request_count, 1);
+        assert_eq!(
+            pending_subscription_request_count_for_pubkey(&pool, &pubkey).await,
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn topic_subscription_pending_request_limit_contract_rejects_at_limit() {
+        let state = test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
+            "http://localhost:7700",
+            "off",
+            json!({
+                "rate_limit": { "enabled": false },
+                "subscription_request": { "max_pending_per_pubkey": 2 }
+            }),
+        )
+        .await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let existing_pending_topic_id_1 =
+            format!("kukuri:pending-existing-a-{}", Uuid::new_v4().simple());
+        let existing_pending_topic_id_2 =
+            format!("kukuri:pending-existing-b-{}", Uuid::new_v4().simple());
+        let request_topic_id = format!("kukuri:pending-limit-{}", Uuid::new_v4().simple());
+
+        ensure_consents(&pool, &pubkey).await;
+        insert_pending_subscription_request(&pool, &pubkey, &existing_pending_topic_id_1).await;
+        insert_pending_subscription_request(&pool, &pubkey, &existing_pending_topic_id_2).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
@@ -2714,7 +2819,7 @@ mod api_contract_tests {
         )
         .await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
-        assert_pending_subscription_request_limit_response(&payload, 1, 1);
+        assert_pending_subscription_request_limit_response(&payload, 2, 2);
 
         let request_count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM cn_user.topic_subscription_requests WHERE requester_pubkey = $1 AND topic_id = $2",
@@ -2725,6 +2830,99 @@ mod api_contract_tests {
         .await
         .expect("count denied topic subscription request");
         assert_eq!(request_count, 0);
+        assert_eq!(
+            pending_subscription_request_count_for_pubkey(&pool, &pubkey).await,
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn topic_subscription_pending_request_limit_contract_allows_rerequest_after_approve_or_reject(
+    ) {
+        for reviewed_status in ["approved", "rejected"] {
+            let state = test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
+                "http://localhost:7700",
+                "off",
+                json!({
+                    "rate_limit": { "enabled": false },
+                    "subscription_request": { "max_pending_per_pubkey": 1 }
+                }),
+            )
+            .await;
+            let pool = state.pool.clone();
+            let pubkey = Keys::generate().public_key().to_hex();
+            let initial_pending_topic_id = format!(
+                "kukuri:pending-rerequest-{}-initial-{}",
+                reviewed_status,
+                Uuid::new_v4().simple()
+            );
+            let blocked_topic_id = format!(
+                "kukuri:pending-rerequest-{}-blocked-{}",
+                reviewed_status,
+                Uuid::new_v4().simple()
+            );
+            let reopened_topic_id = format!(
+                "kukuri:pending-rerequest-{}-reopened-{}",
+                reviewed_status,
+                Uuid::new_v4().simple()
+            );
+
+            ensure_consents(&pool, &pubkey).await;
+            let request_id =
+                insert_pending_subscription_request(&pool, &pubkey, &initial_pending_topic_id)
+                    .await;
+
+            let token = issue_token(&state.jwt_config, &pubkey);
+            let app = Router::new()
+                .route(
+                    "/v1/topic-subscription-requests",
+                    post(create_subscription_request),
+                )
+                .with_state(state);
+
+            let (blocked_status, blocked_payload) = post_json(
+                app.clone(),
+                "/v1/topic-subscription-requests",
+                &token,
+                json!({
+                    "topic_id": blocked_topic_id,
+                    "requested_services": ["relay", "index"]
+                }),
+            )
+            .await;
+            assert_eq!(blocked_status, StatusCode::TOO_MANY_REQUESTS);
+            assert_pending_subscription_request_limit_response(&blocked_payload, 1, 1);
+
+            update_subscription_request_status(&pool, &request_id, reviewed_status).await;
+            assert_eq!(
+                pending_subscription_request_count_for_pubkey(&pool, &pubkey).await,
+                0
+            );
+
+            let (reopen_status, reopen_payload) = post_json(
+                app,
+                "/v1/topic-subscription-requests",
+                &token,
+                json!({
+                    "topic_id": reopened_topic_id,
+                    "requested_services": ["relay", "index"]
+                }),
+            )
+            .await;
+            assert_eq!(
+                reopen_status,
+                StatusCode::OK,
+                "re-request should be accepted after status={reviewed_status}"
+            );
+            assert_eq!(
+                reopen_payload.get("status").and_then(Value::as_str),
+                Some("pending")
+            );
+            assert_eq!(
+                pending_subscription_request_count_for_pubkey(&pool, &pubkey).await,
+                1
+            );
+        }
     }
 
     #[tokio::test]
