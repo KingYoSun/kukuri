@@ -8,7 +8,15 @@ import type { Options } from '@wdio/types';
 import { startDriver, stopDriver } from './helpers/tauriDriver.ts';
 import { startCommunityNodeMock, stopCommunityNodeMock } from './helpers/communityNodeMock.ts';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const resolveE2EDirname = (): string => {
+  try {
+    return fileURLToPath(new URL('.', import.meta.url));
+  } catch {
+    return resolve(process.cwd(), 'tests', 'e2e');
+  }
+};
+
+const __dirname = resolveE2EDirname();
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
 const OUTPUT_DIR = join(PROJECT_ROOT, 'tests', 'e2e', 'output');
 const P2P_BOOTSTRAP_PATH =
@@ -24,11 +32,15 @@ process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
 process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
 process.env.KUKURI_P2P_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
 process.env.KUKURI_CLI_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
+const FORBID_PENDING = process.env.E2E_FORBID_PENDING === '1';
 
 const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
 console.info(`[wdio.desktop] driver port resolved to ${process.env.TAURI_DRIVER_PORT}`);
 console.info(`[wdio.desktop] p2p bootstrap path resolved to ${P2P_BOOTSTRAP_PATH}`);
+if (FORBID_PENDING) {
+  console.info('[wdio.desktop] pending/skip tests are forbidden for this run');
+}
 
 function runScript(command: string, args: string[]): void {
   const child = spawnSync(command, args, {
@@ -145,6 +157,7 @@ export const config: Options.Testrunner = {
   mochaOpts: {
     ui: 'bdd',
     timeout: 60000,
+    forbidPending: FORBID_PENDING,
   },
   hostname: '127.0.0.1',
   capabilities: [

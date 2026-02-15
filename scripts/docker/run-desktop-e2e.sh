@@ -6,9 +6,13 @@ OUTPUT_DIR="$APP_DIR/tests/e2e/output"
 SCENARIO_NAME="${SCENARIO:-desktop-e2e}"
 RESULT_DIR="/app/test-results/desktop-e2e"
 LOG_DIR="/app/tmp/logs/desktop-e2e"
+export E2E_FORBID_PENDING=0
+export E2E_COMMUNITY_NODE_P2P_INVITE=0
 if [[ "$SCENARIO_NAME" == "community-node-e2e" ]]; then
   RESULT_DIR="/app/test-results/community-node-e2e"
   LOG_DIR="/app/tmp/logs/community-node-e2e"
+  export E2E_FORBID_PENDING=1
+  export E2E_COMMUNITY_NODE_P2P_INVITE=1
 fi
 
 mkdir -p "$RESULT_DIR" "$LOG_DIR" "$OUTPUT_DIR"
@@ -25,6 +29,9 @@ echo "=== ${SCENARIO_NAME}: building debug bundle ==="
 pnpm e2e:build
 
 echo "=== ${SCENARIO_NAME}: running pnpm e2e:ci ==="
+if [[ "$E2E_FORBID_PENDING" == "1" ]]; then
+  echo "=== ${SCENARIO_NAME}: enforcing pending/skip as failures ==="
+fi
 E2E_COMMAND=(pnpm e2e:ci)
 export E2E_SKIP_BUILD=1
 if [[ -z "${TAURI_DRIVER_PORT:-}" ]]; then
