@@ -10,25 +10,6 @@
 
 ## 現在のタスク
 
-### Issue #5 残タスク（2026年02月15日 監査追記）
-
-以下の3タスクが未完了です。1タスク=1PRで実装します。
-
-- [ ] **Task 1**: CI 実装を Runbook 方針へ統一する。
-  - **目的**: `ops_runbook.md` に「community-node 回帰確認は全OSでコンテナ経路を既定」と記載されているが、CI の `community-node-tests` ジョブはホスト実行で `cargo test --workspace --all-features` を実行している。
-  - **修正**: `test-runner` コンテナ経路（`cargo test --workspace --all-features` + `cargo build --release -p cn-cli`）へ置き換え、CI/Runbook/AGENTS の運用を一致させる。
-  - **参照**: `.github/workflows/test.yml` の `community-node-tests` ジョブ。
-
-- [ ] **Task 2**: Admin Console の `ServicesPage` で bootstrap 認証遷移フォームの回帰テストを追加する。
-  - **目的**: 現行テストは relay の auth transition を中心に検証しており、bootstrap 側（`auth.mode` / `enforce_at` / `grace_seconds` / `ws_auth_timeout_seconds`）の保存・バリデーション・version 衝突時の更新契約が未固定。
-  - **修正**: `ServicesPage.test.tsx` に bootstrap 側フォームの初期表示・保存・バリデーション・version 衝突テストを追加（`feat/issue5-task2-bootstrap-auth-transition-tests` で PR作成予定）。
-  - **参照**: `kukuri-community-node/apps/admin-console/src/pages/ServicesPage.test.tsx`。
-
-- [ ] **Task 3**: `kukuri-tauri/src-tauri/src/state.rs` の 39000/39001 受信経路（`refresh_bootstrap_from_hint` + `ingest_bootstrap_event` 呼び出し）の統合テストを追加する。
-  - **目的**: `community_node_handler.rs` 単体では hint 再取得を検証済みだが、P2P受信ハンドラ経由の連携（state 層）の回帰検知が不足しているため、gossip受信を含む導線テストで固定する。
-  - **修正**: `state.rs` の gossip hint 受信→HTTP再取得→ingest 呼び出し経路をテストする統合テストを追加。
-  - **参照**: `kukuri-tauri/src-tauri/src/state.rs` の `refresh_bootstrap_from_hint` / `ingest_bootstrap_event`。
-
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。
