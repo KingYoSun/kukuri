@@ -68,7 +68,7 @@ jobs:
               `👤 by: **${actor}**\n` +
               `🔗 ${url}\n` +
               `📝 ${summary}\n\n` +
-              `ぼっちゃん: トリアージして対応方針をお願いします。`;
+              `ぼっちゃん: kukuri-dev-directorスキルに従って次の行動に移って`;
             core.setOutput("content", content);
       - name: Send to Discord
         env:
