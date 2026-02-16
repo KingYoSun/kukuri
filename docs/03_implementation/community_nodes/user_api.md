@@ -176,10 +176,16 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 
 詳細: `docs/03_implementation/community_nodes/topic_subscription_design.md`
 
-### 検索/トレンド（index）
+### 検索/サジェスト/トレンド（index）
 
+- `GET /v1/communities/suggest?q=...&limit=...`
 - `GET /v1/search?topic=...&q=...`
 - `GET /v1/trending?topic=...`
+
+補足:
+- `/v1/communities/suggest` の `q` は `search_normalizer` で正規化し、空文字になった場合は `items=[]` を返す。
+- `/v1/communities/suggest` と `/v1/search` の `limit` は `1..50` に clamp（未指定は 20）。
+- `/v1/communities/suggest` で `suggest_read_backend=pg` かつ Stage-A 候補が 0 件の場合、`legacy_fallback` へ自動フォールバックする。
 
 ### モデレーション（moderation）
 
@@ -198,6 +204,23 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 - `GET /v1/personal-data-export-requests/:export_request_id/download`
 - `POST /v1/personal-data-deletion-requests`
 - `GET /v1/personal-data-deletion-requests/:deletion_request_id`
+
+## 検索/サジェスト runtime flag 運用メモ
+
+正本は `cn_search.runtime_flags`。`cn-user-api` / `cn-index` はこのテーブルを参照して挙動を切り替える。
+
+| flag_name | 値 | 対象 | 実装時挙動 |
+|---|---|---|---|
+| `search_read_backend` | `meili` / `pg` | `/v1/search`（`cn-user-api`） | 主 read backend を切替。未知値・読取失敗時は `meili` フォールバック。 |
+| `search_write_mode` | `meili_only` / `dual` / `pg_only` | 検索索引書込（`cn-index`） | outbox からの書込先を切替。未知値・読取失敗時は `meili_only`。 |
+| `suggest_read_backend` | `legacy` / `pg` | `/v1/communities/suggest`（Stage-A） | 候補生成の backend を切替。未知値・読取失敗時は `legacy`。 |
+| `suggest_rerank_mode` | `shadow` / `enabled` | `/v1/communities/suggest`（Stage-B） | `enabled` で rerank 順を応答順に適用。`shadow` は Stage-A 順を維持しつつ `stage_b_rank` と比較メトリクスを記録。 |
+| `suggest_relation_weights` | JSON | `/v1/communities/suggest`（Stage-B） | relation score 重み。JSON 不正時は既定値へフォールバック。 |
+| `shadow_sample_rate` | `0` - `100` | `/v1/search` と `/v1/communities/suggest` | sampled shadow 比較率。数値以外は `0`、`100` 超は `100` に丸める。 |
+
+運用メモ:
+- read backend（`search_read_backend` / `suggest_read_backend`）は二値フラグであり比率適用しない。5% / 25% / 50% のカナリア段階は `shadow_sample_rate` で実施する。
+- 切替 SQL は `INSERT ... ON CONFLICT (flag_name) DO UPDATE` で更新する（詳細手順: `docs/01_project/activeContext/search_pg_migration/PR-07_cutover_runbook.md`）。
 
 ## 課金/利用量計測（最小モデル）
 
