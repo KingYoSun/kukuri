@@ -10,10 +10,11 @@ use cn_core::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{postgres::PgListener, Pool, Postgres, QueryBuilder, Row};
-use std::collections::{HashMap, HashSet};
+use sqlx::{postgres::PgListener, Pool, Postgres, QueryBuilder, Row, Transaction};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::SystemTime;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
@@ -25,6 +26,21 @@ const SERVICE_NAME: &str = "cn-index";
 const CONSUMER_NAME: &str = "index-v1";
 const OUTBOX_CHANNEL: &str = "cn_relay_outbox";
 const REINDEX_CHANNEL: &str = "cn_index_reindex";
+const SUGGEST_GRAPH_NAME: &str = "kukuri_cn_suggest";
+const GRAPH_SYNC_CONSUMER_NAME: &str = "index-age-suggest-v1";
+
+const MEMBER_OF_WEIGHT: f64 = 1.0;
+const FOLLOWS_COMMUNITY_WEIGHT: f64 = 0.7;
+const VIEWED_COMMUNITY_WEIGHT: f64 = 0.2;
+const FOLLOWS_USER_WEIGHT: f64 = 0.5;
+
+#[derive(Debug, Clone, Default)]
+struct AffinitySignal {
+    is_member: bool,
+    is_following_community: bool,
+    last_seen_at: Option<i64>,
+    friends_member_count: usize,
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -56,6 +72,7 @@ struct OutboxRow {
     op: String,
     event_id: String,
     topic_id: String,
+    kind: i32,
     effective_key: Option<String>,
 }
 
@@ -131,11 +148,14 @@ pub async fn run(config: IndexConfig) -> Result<()> {
 
     let pool = db::connect(&config.database_url).await?;
     let meili_client = meili::MeiliClient::new(config.meili_url, config.meili_master_key)?;
+    ensure_suggest_graph(&pool).await?;
+    bootstrap_suggest_graph_if_needed(&pool).await?;
     let default_config = json!({
         "enabled": true,
         "consumer": { "batch_size": 200, "poll_interval_seconds": 5 },
         "reindex": { "poll_interval_seconds": 30 },
-        "expiration": { "sweep_interval_seconds": 300 }
+        "expiration": { "sweep_interval_seconds": 300 },
+        "graph_affinity": { "recompute_interval_seconds": 300 }
     });
     let config_handle = service_config::watch_service_config(
         pool.clone(),
@@ -170,6 +190,7 @@ pub async fn run(config: IndexConfig) -> Result<()> {
     spawn_outbox_consumer(state.clone());
     spawn_reindex_worker(state.clone());
     spawn_expiration_sweep(state.clone());
+    spawn_affinity_recompute_worker(state.clone());
 
     let router = Router::new()
         .route("/healthz", get(healthz))
@@ -415,6 +436,26 @@ fn spawn_expiration_sweep(state: AppState) {
     });
 }
 
+fn spawn_affinity_recompute_worker(state: AppState) {
+    tokio::spawn(async move {
+        loop {
+            let snapshot = state.config.get().await;
+            let runtime = config::IndexRuntimeConfig::from_json(&snapshot.config_json);
+            if runtime.enabled {
+                if let Err(err) = recompute_user_community_affinity(&state.pool).await {
+                    if !is_missing_graph_sync_tables(&err) {
+                        tracing::warn!(error = %err, "user_community_affinity recompute failed");
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(
+                runtime.affinity_recompute_seconds.max(30),
+            ))
+            .await;
+        }
+    });
+}
+
 async fn connect_listener(pool: &Pool<Postgres>, channel: &str) -> Result<PgListener> {
     let mut listener = PgListener::connect_with(pool).await?;
     listener.listen(channel).await?;
@@ -468,7 +509,7 @@ async fn fetch_outbox_batch(
     batch_size: i64,
 ) -> Result<Vec<OutboxRow>> {
     let rows = sqlx::query(
-        "SELECT seq, op, event_id, topic_id, effective_key          FROM cn_relay.events_outbox          WHERE seq > $1          ORDER BY seq ASC          LIMIT $2",
+        "SELECT seq, op, event_id, topic_id, kind, effective_key          FROM cn_relay.events_outbox          WHERE seq > $1          ORDER BY seq ASC          LIMIT $2",
     )
     .bind(last_seq)
     .bind(batch_size)
@@ -482,21 +523,814 @@ async fn fetch_outbox_batch(
             op: row.try_get("op")?,
             event_id: row.try_get("event_id")?,
             topic_id: row.try_get("topic_id")?,
+            kind: row.try_get("kind")?,
             effective_key: row.try_get("effective_key")?,
         });
     }
     Ok(batch)
 }
 
-async fn handle_outbox_row(state: &AppState, row: &OutboxRow) -> Result<()> {
+async fn ensure_suggest_graph(pool: &Pool<Postgres>) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    init_age_session(&mut tx).await?;
+
+    let exists = sqlx::query_scalar::<_, i32>("SELECT 1 FROM ag_catalog.ag_graph WHERE name = $1")
+        .bind(SUGGEST_GRAPH_NAME)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+    if !exists {
+        sqlx::query("SELECT ag_catalog.create_graph($1)")
+            .bind(SUGGEST_GRAPH_NAME)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    let marker_user = suggest_marker("user");
+    let marker_community = suggest_marker("community");
+    let marker_peer = suggest_marker("peer");
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+    let create_member = format!(
+        "CREATE (u:User {{id: '{marker_user}'}})-[:MEMBER_OF {{updated_at: {now}, weight: {MEMBER_OF_WEIGHT}}}]->(c:Community {{id: '{marker_community}'}})"
+    );
+    cypher_execute(&mut tx, &create_member).await?;
+    let delete_member = format!(
+        "MATCH (u:User {{id: '{marker_user}'}})-[e:MEMBER_OF]->(c:Community {{id: '{marker_community}'}}) DELETE e, u, c"
+    );
+    cypher_execute(&mut tx, &delete_member).await?;
+
+    let create_follow = format!(
+        "CREATE (u:User {{id: '{marker_user}'}})-[:FOLLOWS_COMMUNITY {{updated_at: {now}, weight: {FOLLOWS_COMMUNITY_WEIGHT}}}]->(c:Community {{id: '{marker_community}'}})"
+    );
+    cypher_execute(&mut tx, &create_follow).await?;
+    let delete_follow = format!(
+        "MATCH (u:User {{id: '{marker_user}'}})-[e:FOLLOWS_COMMUNITY]->(c:Community {{id: '{marker_community}'}}) DELETE e, u, c"
+    );
+    cypher_execute(&mut tx, &delete_follow).await?;
+
+    let create_view = format!(
+        "CREATE (u:User {{id: '{marker_user}'}})-[:VIEWED_COMMUNITY {{last_seen_at: {now}, weight: {VIEWED_COMMUNITY_WEIGHT}}}]->(c:Community {{id: '{marker_community}'}})"
+    );
+    cypher_execute(&mut tx, &create_view).await?;
+    let delete_view = format!(
+        "MATCH (u:User {{id: '{marker_user}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{marker_community}'}}) DELETE e, u, c"
+    );
+    cypher_execute(&mut tx, &delete_view).await?;
+
+    let create_user_follow = format!(
+        "CREATE (u:User {{id: '{marker_user}'}})-[:FOLLOWS_USER {{updated_at: {now}, weight: {FOLLOWS_USER_WEIGHT}}}]->(p:User {{id: '{marker_peer}'}})"
+    );
+    cypher_execute(&mut tx, &create_user_follow).await?;
+    let delete_user_follow = format!(
+        "MATCH (u:User {{id: '{marker_user}'}})-[e:FOLLOWS_USER]->(p:User {{id: '{marker_peer}'}}) DELETE e, u, p"
+    );
+    cypher_execute(&mut tx, &delete_user_follow).await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn bootstrap_suggest_graph_if_needed(pool: &Pool<Postgres>) -> Result<()> {
+    let existing = match load_graph_sync_last_seq(pool).await {
+        Ok(existing) => existing,
+        Err(err) if is_missing_graph_sync_tables(&err) => {
+            tracing::warn!(
+                error = %err,
+                "graph sync tables unavailable; skip suggest graph bootstrap"
+            );
+            return Ok(());
+        }
+        Err(err) => return Err(err),
+    };
+    if existing.is_some() {
+        return Ok(());
+    }
+
+    let max_seq =
+        sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(pool)
+            .await?;
+    let mut tx = pool.begin().await?;
+    init_age_session(&mut tx).await?;
+    rebuild_suggest_graph_snapshot(&mut tx).await?;
+    upsert_graph_sync_last_seq_tx(&mut tx, max_seq).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn load_graph_sync_last_seq(pool: &Pool<Postgres>) -> Result<Option<i64>> {
+    let last_seq = sqlx::query_scalar::<_, i64>(
+        "SELECT last_seq FROM cn_search.graph_sync_offsets WHERE consumer = $1",
+    )
+    .bind(GRAPH_SYNC_CONSUMER_NAME)
+    .fetch_optional(pool)
+    .await?;
+    Ok(last_seq)
+}
+
+async fn upsert_graph_sync_last_seq_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    last_seq: i64,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_search.graph_sync_offsets (consumer, last_seq, updated_at) \
+         VALUES ($1, $2, NOW()) \
+         ON CONFLICT (consumer) DO UPDATE \
+         SET last_seq = EXCLUDED.last_seq, updated_at = NOW()",
+    )
+    .bind(GRAPH_SYNC_CONSUMER_NAME)
+    .bind(last_seq)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn rebuild_suggest_graph_snapshot(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+    clear_suggest_graph_edges(tx).await?;
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+    let membership_rows = sqlx::query(
+        "SELECT pubkey, topic_id \
+         FROM cn_user.topic_memberships \
+         WHERE status = 'active'",
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    for row in membership_rows {
+        let user_id: String = row.try_get("pubkey")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+        upsert_member_of_edge(tx, &user_id, &community_id, now).await?;
+    }
+
+    let follow_rows = sqlx::query(
+        "SELECT subscriber_pubkey AS user_id, topic_id \
+         FROM cn_user.topic_subscriptions \
+         WHERE status = 'active'",
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    for row in follow_rows {
+        let user_id: String = row.try_get("user_id")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+        upsert_follows_community_edge(tx, &user_id, &community_id, now).await?;
+    }
+
+    let follow_event_rows = sqlx::query(
+        "SELECT raw_json \
+         FROM cn_relay.events \
+         WHERE kind = 3 \
+           AND is_deleted = FALSE \
+           AND is_current = TRUE \
+           AND is_ephemeral = FALSE \
+           AND (expires_at IS NULL OR expires_at > $1)",
+    )
+    .bind(now)
+    .fetch_all(&mut **tx)
+    .await?;
+    for row in follow_event_rows {
+        let raw_json: serde_json::Value = row.try_get("raw_json")?;
+        let raw = nostr::parse_event(&raw_json)?;
+        replace_follows_user_edges(tx, &raw.pubkey, &raw.tag_values("p"), raw.created_at).await?;
+    }
+
+    let view_rows = sqlx::query(
+        "SELECT e.pubkey, t.topic_id, MAX(e.created_at) AS last_seen_at \
+         FROM cn_relay.events e \
+         JOIN cn_relay.event_topics t \
+           ON t.event_id = e.event_id \
+         WHERE e.is_deleted = FALSE \
+           AND e.is_current = TRUE \
+           AND e.is_ephemeral = FALSE \
+           AND (e.expires_at IS NULL OR e.expires_at > $1) \
+         GROUP BY e.pubkey, t.topic_id",
+    )
+    .bind(now)
+    .fetch_all(&mut **tx)
+    .await?;
+    for row in view_rows {
+        let user_id: String = row.try_get("pubkey")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+        let last_seen_at: i64 = row.try_get("last_seen_at")?;
+        upsert_viewed_community_edge(tx, &user_id, &community_id, last_seen_at).await?;
+    }
+
+    Ok(())
+}
+
+async fn clear_suggest_graph_edges(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+    for label in [
+        "MEMBER_OF",
+        "FOLLOWS_COMMUNITY",
+        "VIEWED_COMMUNITY",
+        "FOLLOWS_USER",
+    ] {
+        let query = format!("MATCH ()-[e:{label}]->() DELETE e");
+        cypher_execute(tx, &query).await?;
+    }
+    Ok(())
+}
+
+async fn sync_suggest_graph_for_outbox_row(pool: &Pool<Postgres>, row: &OutboxRow) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    init_age_session(&mut tx).await?;
+    let event = load_event(pool, &row.event_id).await?;
+
     match row.op.as_str() {
+        "upsert" => {
+            if let Some(event) = &event {
+                let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+                let is_active = !event.is_deleted
+                    && event.is_current
+                    && !event.is_ephemeral
+                    && event
+                        .expires_at
+                        .map(|expires| expires > now)
+                        .unwrap_or(true);
+
+                if let Some(community_id) =
+                    community_search_terms::community_id_from_topic_id(&row.topic_id)
+                {
+                    refresh_membership_and_follow_edges(
+                        &mut tx,
+                        &event.raw.pubkey,
+                        &row.topic_id,
+                        &community_id,
+                        event.raw.created_at,
+                    )
+                    .await?;
+                    if is_active {
+                        upsert_viewed_community_edge(
+                            &mut tx,
+                            &event.raw.pubkey,
+                            &community_id,
+                            event.raw.created_at,
+                        )
+                        .await?;
+                    } else {
+                        refresh_viewed_community_edge_from_current(
+                            &mut tx,
+                            &event.raw.pubkey,
+                            &row.topic_id,
+                            &community_id,
+                        )
+                        .await?;
+                    }
+                }
+
+                if row.kind == 3 {
+                    if is_active {
+                        replace_follows_user_edges(
+                            &mut tx,
+                            &event.raw.pubkey,
+                            &event.raw.tag_values("p"),
+                            event.raw.created_at,
+                        )
+                        .await?;
+                    } else {
+                        refresh_follows_user_edges_from_current(&mut tx, &event.raw.pubkey).await?;
+                    }
+                }
+            }
+        }
+        "delete" => {
+            if let Some(event) = &event {
+                if let Some(community_id) =
+                    community_search_terms::community_id_from_topic_id(&row.topic_id)
+                {
+                    refresh_membership_and_follow_edges(
+                        &mut tx,
+                        &event.raw.pubkey,
+                        &row.topic_id,
+                        &community_id,
+                        event.raw.created_at,
+                    )
+                    .await?;
+                    refresh_viewed_community_edge_from_current(
+                        &mut tx,
+                        &event.raw.pubkey,
+                        &row.topic_id,
+                        &community_id,
+                    )
+                    .await?;
+                }
+                if row.kind == 3 {
+                    refresh_follows_user_edges_from_current(&mut tx, &event.raw.pubkey).await?;
+                }
+            }
+        }
+        _ => {}
+    }
+
+    upsert_graph_sync_last_seq_tx(&mut tx, row.seq).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn refresh_membership_and_follow_edges(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    topic_id: &str,
+    community_id: &str,
+    event_timestamp: i64,
+) -> Result<()> {
+    let has_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS( \
+           SELECT 1 FROM cn_user.topic_memberships \
+           WHERE topic_id = $1 AND pubkey = $2 AND status = 'active' \
+         )",
+    )
+    .bind(topic_id)
+    .bind(user_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_member {
+        upsert_member_of_edge(tx, user_id, community_id, event_timestamp).await?;
+    } else {
+        delete_member_of_edge(tx, user_id, community_id).await?;
+    }
+
+    let has_follow = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS( \
+           SELECT 1 FROM cn_user.topic_subscriptions \
+           WHERE topic_id = $1 AND subscriber_pubkey = $2 AND status = 'active' \
+         )",
+    )
+    .bind(topic_id)
+    .bind(user_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_follow {
+        upsert_follows_community_edge(tx, user_id, community_id, event_timestamp).await?;
+    } else {
+        delete_follows_community_edge(tx, user_id, community_id).await?;
+    }
+
+    Ok(())
+}
+
+async fn refresh_follows_user_edges_from_current(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+) -> Result<()> {
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let row = sqlx::query(
+        "SELECT raw_json \
+         FROM cn_relay.events \
+         WHERE kind = 3 \
+           AND pubkey = $1 \
+           AND is_deleted = FALSE \
+           AND is_current = TRUE \
+           AND is_ephemeral = FALSE \
+           AND (expires_at IS NULL OR expires_at > $2) \
+         ORDER BY created_at DESC, event_id DESC \
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(now)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if let Some(row) = row {
+        let raw_json: serde_json::Value = row.try_get("raw_json")?;
+        let raw = nostr::parse_event(&raw_json)?;
+        replace_follows_user_edges(tx, &raw.pubkey, &raw.tag_values("p"), raw.created_at).await?;
+    } else {
+        replace_follows_user_edges(tx, user_id, &[], now).await?;
+    }
+    Ok(())
+}
+
+async fn refresh_viewed_community_edge_from_current(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    topic_id: &str,
+    community_id: &str,
+) -> Result<()> {
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let last_seen_at = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(e.created_at) \
+         FROM cn_relay.events e \
+         JOIN cn_relay.event_topics t \
+           ON t.event_id = e.event_id \
+         WHERE e.pubkey = $1 \
+           AND t.topic_id = $2 \
+           AND e.is_deleted = FALSE \
+           AND e.is_current = TRUE \
+           AND e.is_ephemeral = FALSE \
+           AND (e.expires_at IS NULL OR e.expires_at > $3)",
+    )
+    .bind(user_id)
+    .bind(topic_id)
+    .bind(now)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if let Some(last_seen_at) = last_seen_at {
+        upsert_viewed_community_edge(tx, user_id, community_id, last_seen_at).await?;
+    } else {
+        delete_viewed_community_edge(tx, user_id, community_id).await?;
+    }
+    Ok(())
+}
+
+async fn replace_follows_user_edges(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    targets: &[String],
+    updated_at: i64,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let clear_query =
+        format!("MATCH (u:User {{id: '{escaped_user_id}'}})-[e:FOLLOWS_USER]->(:User) DELETE e");
+    cypher_execute(tx, &clear_query).await?;
+
+    let mut dedup_targets = BTreeSet::new();
+    for target in targets {
+        let trimmed = target.trim();
+        if trimmed.is_empty() || trimmed == user_id {
+            continue;
+        }
+        dedup_targets.insert(trimmed.to_string());
+    }
+    for target in dedup_targets {
+        upsert_follows_user_edge(tx, user_id, &target, updated_at).await?;
+    }
+    Ok(())
+}
+
+async fn upsert_member_of_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+    updated_at: i64,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MERGE (u:User {{id: '{escaped_user_id}'}}) \
+         MERGE (c:Community {{id: '{escaped_community_id}'}}) \
+         MERGE (u)-[e:MEMBER_OF]->(c) \
+         SET e.updated_at = {updated_at}, e.weight = {MEMBER_OF_WEIGHT}"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn delete_member_of_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MATCH (u:User {{id: '{escaped_user_id}'}})-[e:MEMBER_OF]->(c:Community {{id: '{escaped_community_id}'}}) DELETE e"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn upsert_follows_community_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+    updated_at: i64,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MERGE (u:User {{id: '{escaped_user_id}'}}) \
+         MERGE (c:Community {{id: '{escaped_community_id}'}}) \
+         MERGE (u)-[e:FOLLOWS_COMMUNITY]->(c) \
+         SET e.updated_at = {updated_at}, e.weight = {FOLLOWS_COMMUNITY_WEIGHT}"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn delete_follows_community_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MATCH (u:User {{id: '{escaped_user_id}'}})-[e:FOLLOWS_COMMUNITY]->(c:Community {{id: '{escaped_community_id}'}}) DELETE e"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn upsert_viewed_community_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+    last_seen_at: i64,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MERGE (u:User {{id: '{escaped_user_id}'}}) \
+         MERGE (c:Community {{id: '{escaped_community_id}'}}) \
+         MERGE (u)-[e:VIEWED_COMMUNITY]->(c) \
+         SET e.last_seen_at = CASE \
+               WHEN e.last_seen_at IS NULL OR e.last_seen_at < {last_seen_at} \
+               THEN {last_seen_at} \
+               ELSE e.last_seen_at \
+             END, \
+             e.weight = {VIEWED_COMMUNITY_WEIGHT}"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn delete_viewed_community_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MATCH (u:User {{id: '{escaped_user_id}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_community_id}'}}) DELETE e"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn upsert_follows_user_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    target_user_id: &str,
+    updated_at: i64,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_target_user_id = escape_cypher_literal(target_user_id);
+    let query = format!(
+        "MERGE (u:User {{id: '{escaped_user_id}'}}) \
+         MERGE (p:User {{id: '{escaped_target_user_id}'}}) \
+         MERGE (u)-[e:FOLLOWS_USER]->(p) \
+         SET e.updated_at = {updated_at}, e.weight = {FOLLOWS_USER_WEIGHT}"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn recompute_user_community_affinity(pool: &Pool<Postgres>) -> Result<()> {
+    let membership_rows = sqlx::query(
+        "SELECT pubkey, topic_id \
+         FROM cn_user.topic_memberships \
+         WHERE status = 'active'",
+    )
+    .fetch_all(pool)
+    .await?;
+    let follow_rows = sqlx::query(
+        "SELECT subscriber_pubkey AS user_id, topic_id \
+         FROM cn_user.topic_subscriptions \
+         WHERE status = 'active'",
+    )
+    .fetch_all(pool)
+    .await?;
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let view_rows = sqlx::query(
+        "SELECT e.pubkey, t.topic_id, MAX(e.created_at) AS last_seen_at \
+         FROM cn_relay.events e \
+         JOIN cn_relay.event_topics t \
+           ON t.event_id = e.event_id \
+         WHERE e.is_deleted = FALSE \
+           AND e.is_current = TRUE \
+           AND e.is_ephemeral = FALSE \
+           AND (e.expires_at IS NULL OR e.expires_at > $1) \
+         GROUP BY e.pubkey, t.topic_id",
+    )
+    .bind(now)
+    .fetch_all(pool)
+    .await?;
+    let follow_user_rows = sqlx::query(
+        "SELECT raw_json \
+         FROM cn_relay.events \
+         WHERE kind = 3 \
+           AND is_deleted = FALSE \
+           AND is_current = TRUE \
+           AND is_ephemeral = FALSE \
+           AND (expires_at IS NULL OR expires_at > $1)",
+    )
+    .bind(now)
+    .fetch_all(pool)
+    .await?;
+
+    let mut by_pair: HashMap<(String, String), AffinitySignal> = HashMap::new();
+    let mut communities_by_member: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for row in membership_rows {
+        let user_id: String = row.try_get("pubkey")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+        communities_by_member
+            .entry(user_id.clone())
+            .or_default()
+            .insert(community_id.clone());
+        let signal = by_pair.entry((user_id, community_id)).or_default();
+        signal.is_member = true;
+    }
+
+    for row in follow_rows {
+        let user_id: String = row.try_get("user_id")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+        let signal = by_pair.entry((user_id, community_id)).or_default();
+        signal.is_following_community = true;
+    }
+
+    for row in view_rows {
+        let user_id: String = row.try_get("pubkey")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+        let last_seen_at: i64 = row.try_get("last_seen_at")?;
+        let signal = by_pair.entry((user_id, community_id)).or_default();
+        signal.last_seen_at = signal
+            .last_seen_at
+            .map(|current| current.max(last_seen_at))
+            .or(Some(last_seen_at));
+    }
+
+    let mut follow_targets_by_user: HashMap<String, HashSet<String>> = HashMap::new();
+    for row in follow_user_rows {
+        let raw_json: serde_json::Value = row.try_get("raw_json")?;
+        let raw = nostr::parse_event(&raw_json)?;
+        let mut dedup_targets = HashSet::new();
+        for target in raw.tag_values("p") {
+            let trimmed = target.trim();
+            if trimmed.is_empty() || trimmed == raw.pubkey {
+                continue;
+            }
+            dedup_targets.insert(trimmed.to_string());
+        }
+        follow_targets_by_user
+            .entry(raw.pubkey.clone())
+            .or_default()
+            .extend(dedup_targets);
+    }
+
+    for (user_id, targets) in follow_targets_by_user {
+        let mut friends_per_community: HashMap<String, usize> = HashMap::new();
+        for target in targets {
+            let Some(member_communities) = communities_by_member.get(&target) else {
+                continue;
+            };
+            for community_id in member_communities {
+                *friends_per_community
+                    .entry(community_id.clone())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        for (community_id, count) in friends_per_community {
+            let signal = by_pair.entry((user_id.clone(), community_id)).or_default();
+            signal.friends_member_count = signal.friends_member_count.max(count);
+        }
+    }
+
+    let mut rows: Vec<((String, String), AffinitySignal)> = by_pair.into_iter().collect();
+    rows.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM cn_search.user_community_affinity")
+        .execute(&mut *tx)
+        .await?;
+    for ((user_id, community_id), signal) in rows {
+        let relation_score = relation_score_from_signal(&signal);
+        let signals_json = json!({
+            "is_member": signal.is_member,
+            "is_following_community": signal.is_following_community,
+            "last_seen_at": signal.last_seen_at,
+            "friends_member_count": signal.friends_member_count,
+            "weights": {
+                "member_of": MEMBER_OF_WEIGHT,
+                "follows_community": FOLLOWS_COMMUNITY_WEIGHT,
+                "viewed_community": VIEWED_COMMUNITY_WEIGHT,
+                "follows_user": FOLLOWS_USER_WEIGHT
+            }
+        });
+        sqlx::query(
+            "INSERT INTO cn_search.user_community_affinity \
+             (user_id, community_id, relation_score, signals_json, computed_at) \
+             VALUES ($1, $2, $3, $4, NOW()) \
+             ON CONFLICT (user_id, community_id) DO UPDATE SET \
+               relation_score = EXCLUDED.relation_score, \
+               signals_json = EXCLUDED.signals_json, \
+               computed_at = NOW()",
+        )
+        .bind(user_id)
+        .bind(community_id)
+        .bind(relation_score)
+        .bind(signals_json)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+fn relation_score_from_signal(signal: &AffinitySignal) -> f64 {
+    let mut score = 0.0_f64;
+    if signal.is_member {
+        score += MEMBER_OF_WEIGHT;
+    }
+    if signal.is_following_community {
+        score += FOLLOWS_COMMUNITY_WEIGHT;
+    }
+    if signal.last_seen_at.is_some() {
+        score += VIEWED_COMMUNITY_WEIGHT;
+    }
+    let friend_score = (signal.friends_member_count.min(5) as f64 / 5.0) * FOLLOWS_USER_WEIGHT;
+    score + friend_score
+}
+
+async fn init_age_session(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+    sqlx::query("LOAD 'age'").execute(&mut **tx).await?;
+    sqlx::query(r#"SET search_path = ag_catalog, "$user", public"#)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn cypher_execute(tx: &mut Transaction<'_, Postgres>, query: &str) -> Result<()> {
+    let statement = format!(
+        "SELECT * FROM cypher('{SUGGEST_GRAPH_NAME}', $cypher${query}$cypher$) AS (v agtype)"
+    );
+    let _ = sqlx::query(&statement).fetch_all(&mut **tx).await?;
+    Ok(())
+}
+
+fn escape_cypher_literal(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('\'', "\\'")
+}
+
+fn suggest_marker(prefix: &str) -> String {
+    let nanos = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    format!("__{prefix}_{}_{}", std::process::id(), nanos)
+}
+
+fn is_missing_graph_sync_tables(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<sqlx::Error>()
+            .map(is_missing_relation_or_schema)
+            .unwrap_or(false)
+    })
+}
+
+fn is_missing_relation_or_schema(err: &sqlx::Error) -> bool {
+    match err {
+        sqlx::Error::Database(db_err) => {
+            matches!(db_err.code().as_deref(), Some("42P01") | Some("3F000"))
+        }
+        _ => false,
+    }
+}
+
+async fn handle_outbox_row(state: &AppState, row: &OutboxRow) -> Result<()> {
+    let result = match row.op.as_str() {
         "upsert" => handle_upsert(state, row).await,
         "delete" => handle_delete(state, row).await,
         other => {
             tracing::warn!(op = other, "unknown outbox op");
             Ok(())
         }
+    };
+
+    result?;
+    if let Err(err) = sync_suggest_graph_for_outbox_row(&state.pool, row).await {
+        if is_missing_graph_sync_tables(&err) {
+            tracing::warn!(
+                error = %err,
+                "graph sync tables unavailable; skipping suggest graph synchronization"
+            );
+            return Ok(());
+        }
+        return Err(err);
     }
+
+    Ok(())
 }
 
 async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {

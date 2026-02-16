@@ -68,6 +68,12 @@ async fn ensure_migrated(pool: &Pool<Postgres>) {
             cn_core::migrations::run(pool)
                 .await
                 .expect("run migrations");
+            ensure_suggest_graph(pool)
+                .await
+                .expect("ensure suggest graph");
+            bootstrap_suggest_graph_if_needed(pool)
+                .await
+                .expect("bootstrap suggest graph");
         })
         .await;
 }
@@ -96,6 +102,99 @@ fn raw_event(event_id: &str, topic_id: &str, created_at: i64, content: &str) -> 
         content: content.to_string(),
         sig: "sig".to_string(),
     }
+}
+
+fn raw_event_with_pubkey(
+    event_id: &str,
+    pubkey: &str,
+    topic_id: &str,
+    created_at: i64,
+    kind: u32,
+    content: &str,
+    mut tags: Vec<Vec<String>>,
+) -> nostr::RawEvent {
+    tags.push(vec!["t".to_string(), topic_id.to_string()]);
+    nostr::RawEvent {
+        id: event_id.to_string(),
+        pubkey: pubkey.to_string(),
+        created_at,
+        kind,
+        tags,
+        content: content.to_string(),
+        sig: "sig".to_string(),
+    }
+}
+
+async fn insert_topic_membership(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+    pubkey: &str,
+    status: &str,
+) {
+    sqlx::query(
+        "INSERT INTO cn_user.topic_memberships (topic_id, scope, pubkey, status) \
+         VALUES ($1, 'public', $2, $3) \
+         ON CONFLICT (topic_id, scope, pubkey) \
+         DO UPDATE SET status = EXCLUDED.status, revoked_at = NULL, revoked_reason = NULL",
+    )
+    .bind(topic_id)
+    .bind(pubkey)
+    .bind(status)
+    .execute(pool)
+    .await
+    .expect("insert topic membership");
+}
+
+async fn insert_topic_subscription(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+    pubkey: &str,
+    status: &str,
+) {
+    sqlx::query(
+        "INSERT INTO cn_user.topic_subscriptions (topic_id, subscriber_pubkey, status) \
+         VALUES ($1, $2, $3) \
+         ON CONFLICT (topic_id, subscriber_pubkey) \
+         DO UPDATE SET status = EXCLUDED.status, ended_at = NULL",
+    )
+    .bind(topic_id)
+    .bind(pubkey)
+    .bind(status)
+    .execute(pool)
+    .await
+    .expect("insert topic subscription");
+}
+
+async fn reset_suggest_graph(pool: &Pool<Postgres>) {
+    let mut tx = pool.begin().await.expect("begin graph cleanup tx");
+    init_age_session(&mut tx)
+        .await
+        .expect("init age for graph cleanup");
+    clear_suggest_graph_edges(&mut tx)
+        .await
+        .expect("clear suggest graph edges");
+    tx.commit().await.expect("commit graph cleanup tx");
+}
+
+async fn count_suggest_graph_edges(pool: &Pool<Postgres>, query: &str) -> i64 {
+    let mut tx = pool.begin().await.expect("begin graph count tx");
+    init_age_session(&mut tx)
+        .await
+        .expect("init age for graph count");
+    let statement = format!(
+        "SELECT count_value::text AS count_value \
+         FROM cypher('{SUGGEST_GRAPH_NAME}', $cypher${query}$cypher$) \
+         AS (count_value agtype)"
+    );
+    let count_raw: String = sqlx::query_scalar(&statement)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("fetch suggest graph edge count");
+    tx.commit().await.expect("commit graph count tx");
+    count_raw
+        .trim_matches('"')
+        .parse::<i64>()
+        .expect("parse agtype count")
 }
 
 async fn insert_event(
@@ -276,6 +375,27 @@ async fn cleanup_records(
         .execute(pool)
         .await
         .expect("cleanup topic subscription");
+    sqlx::query("DELETE FROM cn_user.topic_subscriptions WHERE topic_id = $1")
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("cleanup user topic subscriptions");
+    sqlx::query("DELETE FROM cn_user.topic_memberships WHERE topic_id = $1")
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("cleanup topic memberships");
+    sqlx::query("DELETE FROM cn_search.user_community_affinity WHERE community_id = $1")
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("cleanup user community affinity");
+    sqlx::query("DELETE FROM cn_search.graph_sync_offsets WHERE consumer = $1")
+        .bind(GRAPH_SYNC_CONSUMER_NAME)
+        .execute(pool)
+        .await
+        .expect("cleanup graph sync offsets");
+    reset_suggest_graph(pool).await;
 }
 
 async fn mock_health() -> StatusCode {
@@ -877,6 +997,275 @@ async fn outbox_dual_write_preserves_post_search_documents_per_topic() {
 
     meili_handle.abort();
     let _ = meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn outbox_graph_sync_updates_age_edges_and_affinity() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    reset_suggest_graph(&pool).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_PG_ONLY,
+    )
+    .await;
+
+    let topic_id = format!("kukuri:index-it:{}", next_id("topic"));
+    let actor_pubkey = "a".repeat(64);
+    let friend_pubkey = "b".repeat(64);
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let post_event = raw_event_with_pubkey(
+        &next_id("event-graph-post"),
+        &actor_pubkey,
+        &topic_id,
+        now,
+        1,
+        "graph sync post",
+        Vec::new(),
+    );
+    let contact_event = raw_event_with_pubkey(
+        &next_id("event-graph-contact"),
+        &actor_pubkey,
+        &topic_id,
+        now + 1,
+        3,
+        "",
+        vec![vec!["p".to_string(), friend_pubkey.clone()]],
+    );
+
+    cleanup_records(
+        &pool,
+        &topic_id,
+        &[post_event.id.clone(), contact_event.id.clone()],
+        &[],
+    )
+    .await;
+
+    insert_event(&pool, &topic_id, &post_event, None).await;
+    insert_event(&pool, &topic_id, &contact_event, None).await;
+    insert_topic_membership(&pool, &topic_id, &actor_pubkey, "active").await;
+    insert_topic_membership(&pool, &topic_id, &friend_pubkey, "active").await;
+    insert_topic_subscription(&pool, &topic_id, &actor_pubkey, "active").await;
+
+    let state = build_state(pool.clone(), "http://localhost:7700");
+    let seq_post = insert_outbox_row(&pool, "upsert", &topic_id, &post_event, None).await;
+    let seq_contact = insert_outbox_row(&pool, "upsert", &topic_id, &contact_event, None).await;
+    let start_seq = std::cmp::min(seq_post, seq_contact) - 1;
+    let rows = fetch_outbox_batch(&pool, start_seq, 10)
+        .await
+        .expect("fetch graph sync outbox rows");
+    assert_eq!(rows.len(), 2);
+    for row in &rows {
+        handle_outbox_row(&state, row)
+            .await
+            .expect("handle graph sync outbox row");
+    }
+
+    let escaped_actor = escape_cypher_literal(&actor_pubkey);
+    let escaped_friend = escape_cypher_literal(&friend_pubkey);
+    let escaped_topic = escape_cypher_literal(&topic_id);
+
+    let member_edge_count = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:MEMBER_OF]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(member_edge_count, 1);
+
+    let follow_community_edge_count = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:FOLLOWS_COMMUNITY]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(follow_community_edge_count, 1);
+
+    let viewed_edge_count = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(viewed_edge_count, 1);
+
+    let follows_user_edge_count = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:FOLLOWS_USER]->(p:User {{id: '{escaped_friend}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(follows_user_edge_count, 1);
+
+    recompute_user_community_affinity(&pool)
+        .await
+        .expect("recompute user community affinity");
+    let row = sqlx::query(
+        "SELECT relation_score, signals_json \
+         FROM cn_search.user_community_affinity \
+         WHERE user_id = $1 AND community_id = $2",
+    )
+    .bind(&actor_pubkey)
+    .bind(&topic_id)
+    .fetch_one(&pool)
+    .await
+    .expect("load recomputed affinity row");
+    let relation_score: f64 = row.try_get("relation_score").expect("relation_score");
+    let signals_json: Value = row.try_get("signals_json").expect("signals_json");
+
+    assert!(
+        (relation_score - 2.0).abs() < 1e-9,
+        "unexpected relation_score: {relation_score}"
+    );
+    assert_eq!(signals_json.get("is_member"), Some(&json!(true)));
+    assert_eq!(
+        signals_json.get("is_following_community"),
+        Some(&json!(true))
+    );
+    assert_eq!(signals_json.get("friends_member_count"), Some(&json!(1)));
+
+    cleanup_records(
+        &pool,
+        &topic_id,
+        &[post_event.id.clone(), contact_event.id.clone()],
+        &[],
+    )
+    .await;
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn outbox_graph_sync_kind3_delete_is_idempotent() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    reset_suggest_graph(&pool).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_PG_ONLY,
+    )
+    .await;
+
+    let topic_id = format!("kukuri:index-it:{}", next_id("topic"));
+    let actor_pubkey = "c".repeat(64);
+    let target_pubkey_a = "d".repeat(64);
+    let target_pubkey_b = "e".repeat(64);
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let contact_event = raw_event_with_pubkey(
+        &next_id("event-kind3-contact"),
+        &actor_pubkey,
+        &topic_id,
+        now,
+        3,
+        "",
+        vec![
+            vec!["p".to_string(), target_pubkey_a.clone()],
+            vec!["p".to_string(), target_pubkey_b.clone()],
+        ],
+    );
+    cleanup_records(&pool, &topic_id, &[contact_event.id.clone()], &[]).await;
+    insert_event(&pool, &topic_id, &contact_event, None).await;
+
+    let state = build_state(pool.clone(), "http://localhost:7700");
+    let upsert_seq = insert_outbox_row(&pool, "upsert", &topic_id, &contact_event, None).await;
+    let upsert_rows = fetch_outbox_batch(&pool, upsert_seq - 1, 10)
+        .await
+        .expect("fetch kind3 upsert rows");
+    assert_eq!(upsert_rows.len(), 1);
+    handle_outbox_row(&state, &upsert_rows[0])
+        .await
+        .expect("handle kind3 upsert row");
+    handle_outbox_row(&state, &upsert_rows[0])
+        .await
+        .expect("rehandle kind3 upsert row");
+
+    let escaped_actor = escape_cypher_literal(&actor_pubkey);
+    let escaped_topic = escape_cypher_literal(&topic_id);
+    let follow_edge_count_after_upsert = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:FOLLOWS_USER]->(:User) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(follow_edge_count_after_upsert, 2);
+    let viewed_edge_count_after_upsert = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(viewed_edge_count_after_upsert, 1);
+
+    sqlx::query(
+        "UPDATE cn_relay.events \
+         SET is_deleted = TRUE, is_current = FALSE \
+         WHERE event_id = $1",
+    )
+    .bind(&contact_event.id)
+    .execute(&pool)
+    .await
+    .expect("mark contact event deleted");
+
+    let delete_seq = insert_outbox_row(&pool, "delete", &topic_id, &contact_event, None).await;
+    let delete_rows = fetch_outbox_batch(&pool, delete_seq - 1, 10)
+        .await
+        .expect("fetch kind3 delete rows");
+    assert_eq!(delete_rows.len(), 1);
+    handle_outbox_row(&state, &delete_rows[0])
+        .await
+        .expect("handle kind3 delete row");
+    handle_outbox_row(&state, &delete_rows[0])
+        .await
+        .expect("rehandle kind3 delete row");
+
+    let follow_edge_count_after_delete = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:FOLLOWS_USER]->(:User) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(follow_edge_count_after_delete, 0);
+    let viewed_edge_count_after_delete = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(viewed_edge_count_after_delete, 0);
+
+    cleanup_records(&pool, &topic_id, &[contact_event.id.clone()], &[]).await;
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+    )
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
