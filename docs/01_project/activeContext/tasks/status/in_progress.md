@@ -90,9 +90,10 @@
 ### 2026年02月16日 Issue #27 最終再監査フォローアップ（ドキュメント整合）
 
 - 目的: Issue #27 クローズ前に、検索PG移行の運用/設計ドキュメントと実装の齟齬を解消する。
-- 状態: 着手（最終再監査で抽出した残タスクを順次反映）。
+- 状態: 着手（残タスク 3件）。
+- 進捗メモ:
+  - 2026年02月16日: 残タスク #1（`PR-02_post_search_pgroonga.md` の `(post_id, topic_id)` 主キー・`ON CONFLICT` 記述同期）を完了し、`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_followup_pr02_key_conflict_doc_sync.md` に反映。
 - 残タスク:
-  1. `PR-02_post_search_pgroonga.md` の DDL と backfill 手順を `(post_id, topic_id)` 主キー・`ON CONFLICT (post_id, topic_id)` 前提へ更新する。
-  2. `docs/03_implementation/community_nodes/user_api.md` に `/v1/communities/suggest` と検索ランタイムフラグ運用を追記する。
-  3. `docs/03_implementation/community_nodes/services_index.md` の Meili-only 記述を、Issue #27 後の dual-write/backfill/shadow/cutover 運用へ更新する。
-  4. `docs/03_implementation/community_nodes/ops_runbook.md` の PG cutover 監視説明を、`shadow_sample_rate` カナリア→100% read 切替の順序に合わせて明確化する。
+  1. `docs/03_implementation/community_nodes/user_api.md` に `/v1/communities/suggest` と検索ランタイムフラグ運用を追記する。
+  2. `docs/03_implementation/community_nodes/services_index.md` の Meili-only 記述を、Issue #27 後の dual-write/backfill/shadow/cutover 運用へ更新する。
+  3. `docs/03_implementation/community_nodes/ops_runbook.md` の PG cutover 監視説明を、`shadow_sample_rate` カナリア→100% read 切替の順序に合わせて明確化する。
