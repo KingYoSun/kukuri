@@ -45,6 +45,13 @@ struct ReindexJobRow {
     completed_at: Option<i64>,
 }
 
+struct BackfillJobRow {
+    status: String,
+    processed_rows: i64,
+    high_watermark_seq: Option<i64>,
+    error_message: Option<String>,
+}
+
 fn lock_tests() -> MutexGuard<'static, ()> {
     TEST_LOCK
         .get_or_init(|| Mutex::new(()))
@@ -84,6 +91,7 @@ fn build_state(pool: Pool<Postgres>, meili_url: &str) -> AppState {
         config: service_config::static_handle(json!({})),
         meili: meili::MeiliClient::new(meili_url.to_string(), None).expect("meili client"),
         index_cache: Arc::new(RwLock::new(HashSet::new())),
+        dual_write_retry_rows: Arc::new(RwLock::new(HashSet::new())),
         health_targets: Arc::new(HashMap::new()),
         health_client: reqwest::Client::new(),
     }
@@ -321,6 +329,121 @@ async fn fetch_reindex_job(pool: &Pool<Postgres>, job_id: &str) -> ReindexJobRow
     }
 }
 
+async fn insert_backfill_job(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    target: &str,
+    high_watermark_seq: Option<i64>,
+) {
+    sqlx::query(
+        "INSERT INTO cn_search.backfill_jobs \
+         (job_id, target, status, high_watermark_seq, processed_rows, updated_at) \
+         VALUES ($1, $2, 'pending', $3, 0, NOW())",
+    )
+    .bind(job_id)
+    .bind(target)
+    .bind(high_watermark_seq)
+    .execute(pool)
+    .await
+    .expect("insert backfill job");
+}
+
+async fn fetch_backfill_job(pool: &Pool<Postgres>, job_id: &str) -> BackfillJobRow {
+    let row = sqlx::query(
+        "SELECT status, processed_rows, high_watermark_seq, error_message \
+         FROM cn_search.backfill_jobs \
+         WHERE job_id = $1",
+    )
+    .bind(job_id)
+    .fetch_one(pool)
+    .await
+    .expect("fetch backfill job");
+
+    BackfillJobRow {
+        status: row.try_get("status").expect("status"),
+        processed_rows: row.try_get("processed_rows").expect("processed_rows"),
+        high_watermark_seq: row
+            .try_get("high_watermark_seq")
+            .expect("high_watermark_seq"),
+        error_message: row.try_get("error_message").expect("error_message"),
+    }
+}
+
+async fn upsert_backfill_checkpoint_for_test(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    cursor: &BackfillCursor,
+) {
+    let serialized = serde_json::to_string(cursor).expect("serialize cursor");
+    sqlx::query(
+        "INSERT INTO cn_search.backfill_checkpoints \
+         (job_id, shard_key, last_cursor, updated_at) \
+         VALUES ($1, $2, $3, NOW()) \
+         ON CONFLICT (job_id, shard_key) DO UPDATE \
+         SET last_cursor = EXCLUDED.last_cursor, updated_at = NOW()",
+    )
+    .bind(job_id)
+    .bind(BACKFILL_DEFAULT_SHARD_KEY)
+    .bind(serialized)
+    .execute(pool)
+    .await
+    .expect("upsert backfill checkpoint");
+}
+
+async fn install_post_search_failure_trigger(
+    pool: &Pool<Postgres>,
+    post_id: &str,
+) -> (String, String) {
+    let suffix = next_id("dualwritefail").replace('-', "_");
+    let function_name = format!("test_post_search_fail_fn_{suffix}");
+    let trigger_name = format!("test_post_search_fail_trigger_{suffix}");
+    let escaped_post_id = post_id.replace('\'', "''");
+    let function_sql = format!(
+        "CREATE OR REPLACE FUNCTION {function_name}() RETURNS trigger AS $$ \
+         BEGIN \
+             IF NEW.post_id = '{escaped_post_id}' THEN \
+                 RAISE EXCEPTION 'forced post_search_documents failure for {escaped_post_id}'; \
+             END IF; \
+             RETURN NEW; \
+         END; \
+         $$ LANGUAGE plpgsql"
+    );
+    sqlx::query(&function_sql)
+        .execute(pool)
+        .await
+        .expect("create post_search failure function");
+
+    let trigger_sql = format!(
+        "CREATE TRIGGER {trigger_name} \
+         BEFORE INSERT OR UPDATE ON cn_search.post_search_documents \
+         FOR EACH ROW EXECUTE FUNCTION {function_name}()"
+    );
+    sqlx::query(&trigger_sql)
+        .execute(pool)
+        .await
+        .expect("create post_search failure trigger");
+
+    (trigger_name, function_name)
+}
+
+async fn remove_post_search_failure_trigger(
+    pool: &Pool<Postgres>,
+    trigger_name: &str,
+    function_name: &str,
+) {
+    let drop_trigger_sql =
+        format!("DROP TRIGGER IF EXISTS {trigger_name} ON cn_search.post_search_documents");
+    sqlx::query(&drop_trigger_sql)
+        .execute(pool)
+        .await
+        .expect("drop post_search failure trigger");
+    let drop_function_sql = format!("DROP FUNCTION IF EXISTS {function_name}()");
+    sqlx::query(&drop_function_sql)
+        .execute(pool)
+        .await
+        .expect("drop post_search failure function");
+}
+
 async fn cleanup_records(
     pool: &Pool<Postgres>,
     topic_id: &str,
@@ -329,6 +452,16 @@ async fn cleanup_records(
 ) {
     if !job_ids.is_empty() {
         let job_refs: Vec<&str> = job_ids.iter().map(String::as_str).collect();
+        sqlx::query("DELETE FROM cn_search.backfill_checkpoints WHERE job_id = ANY($1)")
+            .bind(&job_refs)
+            .execute(pool)
+            .await
+            .expect("cleanup backfill checkpoints");
+        sqlx::query("DELETE FROM cn_search.backfill_jobs WHERE job_id = ANY($1)")
+            .bind(&job_refs)
+            .execute(pool)
+            .await
+            .expect("cleanup backfill jobs");
         sqlx::query("DELETE FROM cn_index.reindex_jobs WHERE job_id = ANY($1)")
             .bind(&job_refs)
             .execute(pool)
@@ -816,6 +949,92 @@ async fn outbox_dual_write_updates_meili_and_post_search_documents() {
 
     cleanup_records(&pool, &topic_id, &[event.id.clone()], &[]).await;
 
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+    )
+    .await;
+
+    meili_handle.abort();
+    let _ = meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn outbox_dual_write_retries_after_pg_side_failure_and_recovers() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_DUAL,
+    )
+    .await;
+
+    let topic_id = format!("kukuri:index-it:{}", next_id("topic"));
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let event_id = next_id("event-dual-retry");
+    let event = raw_event(&event_id, &topic_id, now, "dual write retry payload");
+    insert_event(&pool, &topic_id, &event, None).await;
+
+    let uid = meili::topic_index_uid(&topic_id);
+    let (meili_url, meili_state, meili_handle) = spawn_mock_meili().await;
+    let state = build_state(pool.clone(), &meili_url);
+
+    let (trigger_name, function_name) = install_post_search_failure_trigger(&pool, &event_id).await;
+    let upsert_seq = insert_outbox_row(&pool, "upsert", &topic_id, &event, None).await;
+    let upsert_rows = fetch_outbox_batch(&pool, upsert_seq - 1, 10)
+        .await
+        .expect("fetch upsert rows");
+    assert_eq!(upsert_rows.len(), 1);
+
+    let err = handle_outbox_row(&state, &upsert_rows[0])
+        .await
+        .expect_err("expected dual-write marker failure");
+    assert!(
+        err.is::<DualWriteFailureMarker>(),
+        "unexpected error type: {err}"
+    );
+    assert_eq!(
+        index_document_ids(&meili_state, &uid).await,
+        vec![event_id.clone()]
+    );
+    let pg_count_before_retry: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) \
+         FROM cn_search.post_search_documents \
+         WHERE post_id = $1 AND topic_id = $2",
+    )
+    .bind(&event_id)
+    .bind(&topic_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count pg rows before retry");
+    assert_eq!(pg_count_before_retry, 0);
+
+    remove_post_search_failure_trigger(&pool, &trigger_name, &function_name).await;
+
+    handle_outbox_row(&state, &upsert_rows[0])
+        .await
+        .expect("retry should recover dual-write row");
+    let pg_count_after_retry: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) \
+         FROM cn_search.post_search_documents \
+         WHERE post_id = $1 AND topic_id = $2 AND is_deleted = FALSE",
+    )
+    .bind(&event_id)
+    .bind(&topic_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count pg rows after retry");
+    assert_eq!(pg_count_after_retry, 1);
+
+    cleanup_records(&pool, &topic_id, &[event.id.clone()], &[]).await;
     set_search_runtime_flags(
         &pool,
         cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
@@ -1427,6 +1646,144 @@ async fn reindex_job_transitions_pending_running_failed_on_meili_error() {
 
     failing_meili_handle.abort();
     let _ = failing_meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn backfill_job_resumes_from_checkpoint_and_completes_post_search_documents() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    // Use a high-sort topic key so cursor-resume assertions are isolated from other test fixtures.
+    let topic_id = format!("~~~~index-backfill-it:{}", next_id("topic"));
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let event_a = raw_event(
+        &next_id("event-backfill-a"),
+        &topic_id,
+        now,
+        "backfill-event-a",
+    );
+    let event_b = raw_event(
+        &next_id("event-backfill-b"),
+        &topic_id,
+        now + 1,
+        "backfill-event-b",
+    );
+    let event_c = raw_event(
+        &next_id("event-backfill-c"),
+        &topic_id,
+        now + 2,
+        "backfill-event-c",
+    );
+    insert_event(&pool, &topic_id, &event_a, None).await;
+    insert_event(&pool, &topic_id, &event_b, None).await;
+    insert_event(&pool, &topic_id, &event_c, None).await;
+
+    insert_outbox_row(&pool, "upsert", &topic_id, &event_a, None).await;
+    insert_outbox_row(&pool, "upsert", &topic_id, &event_b, None).await;
+    insert_outbox_row(&pool, "upsert", &topic_id, &event_c, None).await;
+    let high_watermark_seq: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(seq), 0) FROM cn_relay.events_outbox")
+            .fetch_one(&pool)
+            .await
+            .expect("fetch high watermark");
+
+    let backfill_job_id = next_id("backfill-resume");
+    insert_backfill_job(
+        &pool,
+        &backfill_job_id,
+        BACKFILL_TARGET_POST_SEARCH_DOCUMENTS,
+        Some(high_watermark_seq),
+    )
+    .await;
+
+    let doc_a = build_post_search_document(&event_a, &topic_id);
+    upsert_post_search_document(&pool, &doc_a)
+        .await
+        .expect("seed backfill checkpoint document");
+    sqlx::query(
+        "UPDATE cn_search.backfill_jobs SET processed_rows = 1, updated_at = NOW() WHERE job_id = $1",
+    )
+    .bind(&backfill_job_id)
+    .execute(&pool)
+    .await
+    .expect("seed backfill processed rows");
+    upsert_backfill_checkpoint_for_test(
+        &pool,
+        &backfill_job_id,
+        &BackfillCursor {
+            topic_id: topic_id.clone(),
+            created_at: event_a.created_at,
+            event_id: event_a.id.clone(),
+        },
+    )
+    .await;
+
+    let claimed = claim_backfill_job(&pool, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS)
+        .await
+        .expect("claim backfill job")
+        .expect("expected pending backfill job");
+    assert_eq!(claimed.job_id, backfill_job_id);
+    assert_eq!(claimed.target, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS);
+    assert_eq!(claimed.high_watermark_seq, Some(high_watermark_seq));
+    assert_eq!(claimed.processed_rows, 1);
+
+    let state = build_state(pool.clone(), "http://localhost:7700");
+    run_backfill_job(&state, claimed)
+        .await
+        .expect("run backfill job");
+
+    let succeeded = fetch_backfill_job(&pool, &backfill_job_id).await;
+    assert_eq!(succeeded.status, "succeeded");
+    assert_eq!(succeeded.processed_rows, 3);
+    assert_eq!(succeeded.high_watermark_seq, Some(high_watermark_seq));
+    assert!(succeeded.error_message.is_none());
+
+    let rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) \
+         FROM cn_search.post_search_documents \
+         WHERE topic_id = $1 \
+           AND post_id = ANY($2) \
+           AND is_deleted = FALSE",
+    )
+    .bind(&topic_id)
+    .bind(vec![
+        event_a.id.clone(),
+        event_b.id.clone(),
+        event_c.id.clone(),
+    ])
+    .fetch_one(&pool)
+    .await
+    .expect("count backfilled documents");
+    assert_eq!(rows, 3);
+
+    let checkpoint_raw: String = sqlx::query_scalar(
+        "SELECT last_cursor \
+         FROM cn_search.backfill_checkpoints \
+         WHERE job_id = $1 \
+           AND shard_key = $2",
+    )
+    .bind(&backfill_job_id)
+    .bind(BACKFILL_DEFAULT_SHARD_KEY)
+    .fetch_one(&pool)
+    .await
+    .expect("fetch checkpoint");
+    let checkpoint: BackfillCursor =
+        serde_json::from_str(&checkpoint_raw).expect("parse checkpoint cursor");
+    assert_eq!(checkpoint.topic_id, topic_id);
+    assert_eq!(checkpoint.event_id, event_c.id);
+
+    cleanup_records(
+        &pool,
+        &topic_id,
+        &[event_a.id.clone(), event_b.id.clone(), event_c.id.clone()],
+        &[backfill_job_id],
+    )
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]

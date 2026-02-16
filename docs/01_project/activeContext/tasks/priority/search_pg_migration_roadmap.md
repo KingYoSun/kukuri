@@ -37,9 +37,9 @@
 
 ## PR-06 dual-write + backfill + shadow-read
 
-- [ ] `cn_search.backfill_jobs` / `cn_search.backfill_checkpoints` / `cn_search.shadow_read_logs` を追加する migration を作成する。
-- [ ] 書込モード `meili_only -> dual -> pg_only` を実装し、片系失敗時の再送と監査ログを追加する。
-- [ ] shadow-read 比較（overlap@10/latency delta）を保存し、段階的サンプル率制御を実装する。
+- [x] `cn_search.backfill_jobs` / `cn_search.backfill_checkpoints` / `cn_search.shadow_read_logs` を追加する migration を作成する。
+- [x] 書込モード `meili_only -> dual -> pg_only` を実装し、片系失敗時の再送と監査ログを追加する。
+- [x] shadow-read 比較（overlap@10/latency delta）を保存し、段階的サンプル率制御を実装する。
 
 ## PR-07 cutover / runbook
 

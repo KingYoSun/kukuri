@@ -88,6 +88,20 @@ impl SuggestRerankMode {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct SearchRuntimeConfig {
+    backend: SearchReadBackend,
+    shadow_sample_rate: u8,
+}
+
+#[derive(Debug, Clone)]
+struct SearchBackendPayload {
+    items: Vec<Value>,
+    total: u64,
+    next_cursor: Option<String>,
+    event_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct SuggestRelationWeights {
     is_member: f64,
     is_following_community: f64,
@@ -423,16 +437,102 @@ pub async fn search(
         .as_deref()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
-    let backend = load_search_read_backend(&state.pool).await;
+    let runtime = load_search_runtime_config(&state.pool).await;
+    let search_query = query.q.clone();
+    let query_norm =
+        search_normalizer::normalize_search_text(search_query.as_deref().unwrap_or(""));
+    let shadow_sampled =
+        should_sample_shadow(runtime.shadow_sample_rate, &auth.pubkey, &query_norm);
 
-    if backend == SearchReadBackend::Pg {
-        return search_with_pg_backend(&state, &topic, query.q, limit, offset).await;
+    let primary_started = Instant::now();
+    let primary = match runtime.backend {
+        SearchReadBackend::Pg => {
+            search_with_pg_backend(&state, &topic, search_query.clone(), limit, offset).await?
+        }
+        SearchReadBackend::Meili => {
+            search_with_meili_backend(&state, &topic, search_query.clone(), limit, offset).await?
+        }
+    };
+    let primary_latency_ms = duration_millis_i32(primary_started.elapsed());
+
+    if shadow_sampled {
+        let shadow_started = Instant::now();
+        let shadow_result = match runtime.backend {
+            SearchReadBackend::Pg => {
+                search_with_meili_backend(&state, &topic, search_query.clone(), limit, offset).await
+            }
+            SearchReadBackend::Meili => {
+                search_with_pg_backend(&state, &topic, search_query.clone(), limit, offset).await
+            }
+        };
+        let shadow_latency_ms = duration_millis_i32(shadow_started.elapsed());
+
+        match shadow_result {
+            Ok(shadow) => {
+                let (meili_ids, pg_ids, latency_meili_ms, latency_pg_ms, primary_backend) =
+                    match runtime.backend {
+                        SearchReadBackend::Meili => (
+                            primary.event_ids.clone(),
+                            shadow.event_ids.clone(),
+                            primary_latency_ms,
+                            shadow_latency_ms,
+                            "meili",
+                        ),
+                        SearchReadBackend::Pg => (
+                            shadow.event_ids.clone(),
+                            primary.event_ids.clone(),
+                            shadow_latency_ms,
+                            primary_latency_ms,
+                            "pg",
+                        ),
+                    };
+                let overlap_at_10 = search_shadow_overlap_at_k(&meili_ids, &pg_ids, 10);
+                cn_core::metrics::observe_shadow_overlap_at_10(
+                    crate::SERVICE_NAME,
+                    "/v1/search",
+                    primary_backend,
+                    overlap_at_10,
+                );
+                cn_core::metrics::observe_shadow_latency_delta_ms(
+                    crate::SERVICE_NAME,
+                    "/v1/search",
+                    (latency_pg_ms - latency_meili_ms) as f64,
+                );
+                record_search_shadow_read_log(
+                    &state.pool,
+                    &auth.pubkey,
+                    &query_norm,
+                    &meili_ids,
+                    &pg_ids,
+                    overlap_at_10,
+                    latency_meili_ms,
+                    latency_pg_ms,
+                )
+                .await;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = ?err,
+                    backend = match runtime.backend {
+                        SearchReadBackend::Meili => "pg",
+                        SearchReadBackend::Pg => "meili",
+                    },
+                    "search shadow-read comparison failed"
+                );
+            }
+        }
     }
 
-    search_with_meili_backend(&state, &topic, query.q, limit, offset).await
+    Ok(Json(json!({
+        "topic": topic,
+        "query": search_query,
+        "items": primary.items,
+        "next_cursor": primary.next_cursor,
+        "total": primary.total
+    })))
 }
 
-async fn load_search_read_backend(pool: &sqlx::Pool<Postgres>) -> SearchReadBackend {
+async fn load_search_runtime_config(pool: &sqlx::Pool<Postgres>) -> SearchRuntimeConfig {
     let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
         Ok(flags) => flags,
         Err(err) => {
@@ -440,11 +540,14 @@ async fn load_search_read_backend(pool: &sqlx::Pool<Postgres>) -> SearchReadBack
                 error = %err,
                 "failed to load search runtime flags; fallback to meili read backend"
             );
-            return SearchReadBackend::Meili;
+            return SearchRuntimeConfig {
+                backend: SearchReadBackend::Meili,
+                shadow_sample_rate: 0,
+            };
         }
     };
 
-    if flags
+    let backend = if flags
         .search_read_backend
         .trim()
         .eq_ignore_ascii_case(search_runtime_flags::SEARCH_READ_BACKEND_PG)
@@ -452,6 +555,11 @@ async fn load_search_read_backend(pool: &sqlx::Pool<Postgres>) -> SearchReadBack
         SearchReadBackend::Pg
     } else {
         SearchReadBackend::Meili
+    };
+
+    SearchRuntimeConfig {
+        backend,
+        shadow_sample_rate: parse_shadow_sample_rate(&flags.shadow_sample_rate),
     }
 }
 
@@ -461,7 +569,7 @@ async fn search_with_meili_backend(
     query: Option<String>,
     limit: usize,
     offset: usize,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<SearchBackendPayload> {
     let uid = cn_core::meili::topic_index_uid(topic);
     let search_result = match state
         .meili
@@ -472,13 +580,12 @@ async fn search_with_meili_backend(
         Err(err) => {
             let message = err.to_string();
             if message.contains("404") {
-                return Ok(Json(json!({
-                    "topic": topic,
-                    "query": query,
-                    "items": [],
-                    "next_cursor": null,
-                    "total": 0
-                })));
+                return Ok(SearchBackendPayload {
+                    items: Vec::new(),
+                    total: 0,
+                    next_cursor: None,
+                    event_ids: Vec::new(),
+                });
             }
             return Err(ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -503,14 +610,14 @@ async fn search_with_meili_backend(
     } else {
         None
     };
+    let event_ids = collect_search_event_ids(&hits);
 
-    Ok(Json(json!({
-        "topic": topic,
-        "query": query,
-        "items": hits,
-        "next_cursor": next_cursor,
-        "total": total
-    })))
+    Ok(SearchBackendPayload {
+        items: hits,
+        total,
+        next_cursor,
+        event_ids,
+    })
 }
 
 async fn search_with_pg_backend(
@@ -519,7 +626,7 @@ async fn search_with_pg_backend(
     query: Option<String>,
     limit: usize,
     offset: usize,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<SearchBackendPayload> {
     let query_raw = query.as_deref().unwrap_or("");
     let query_norm = search_normalizer::normalize_search_text(query_raw);
     let normalizer_version = search_normalizer::SEARCH_NORMALIZER_VERSION;
@@ -628,12 +735,15 @@ async fn search_with_pg_backend(
     };
 
     let mut items = Vec::new();
+    let mut event_ids = Vec::new();
     for row in rows {
         let content: String = row.try_get("body_raw")?;
         let tags: Vec<String> = row.try_get("hashtags_norm")?;
         let created_at: i64 = row.try_get("created_at")?;
+        let post_id: String = row.try_get("post_id")?;
+        event_ids.push(post_id.clone());
         items.push(json!({
-            "event_id": row.try_get::<String, _>("post_id")?,
+            "event_id": post_id,
             "topic_id": row.try_get::<String, _>("topic_id")?,
             "kind": 1,
             "author": row.try_get::<String, _>("author_id")?,
@@ -653,13 +763,81 @@ async fn search_with_pg_backend(
         None
     };
 
-    Ok(Json(json!({
-        "topic": topic,
-        "query": query,
-        "items": items,
-        "next_cursor": next_cursor,
-        "total": total
-    })))
+    Ok(SearchBackendPayload {
+        items,
+        total,
+        next_cursor,
+        event_ids,
+    })
+}
+
+fn collect_search_event_ids(items: &[Value]) -> Vec<String> {
+    items
+        .iter()
+        .filter_map(|item| item.get("event_id").and_then(Value::as_str))
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn search_shadow_overlap_at_k(meili_ids: &[String], pg_ids: &[String], top_k: usize) -> f64 {
+    if top_k == 0 {
+        return 1.0;
+    }
+    let meili_top: HashSet<&str> = meili_ids.iter().take(top_k).map(String::as_str).collect();
+    let pg_top: HashSet<&str> = pg_ids.iter().take(top_k).map(String::as_str).collect();
+    let overlap = meili_top.intersection(&pg_top).count();
+    overlap as f64 / top_k as f64
+}
+
+fn duration_millis_i32(duration: std::time::Duration) -> i32 {
+    duration.as_millis().min(i32::MAX as u128) as i32
+}
+
+async fn record_search_shadow_read_log(
+    pool: &sqlx::Pool<Postgres>,
+    user_id: &str,
+    query_norm: &str,
+    meili_ids: &[String],
+    pg_ids: &[String],
+    overlap_at_10: f64,
+    latency_meili_ms: i32,
+    latency_pg_ms: i32,
+) {
+    let result = sqlx::query(
+        "INSERT INTO cn_search.shadow_read_logs \
+         (endpoint, user_id, query_norm, meili_ids, pg_ids, overlap_at_10, latency_meili_ms, latency_pg_ms) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+    )
+    .bind("/v1/search")
+    .bind(user_id)
+    .bind(query_norm)
+    .bind(meili_ids)
+    .bind(pg_ids)
+    .bind(overlap_at_10)
+    .bind(latency_meili_ms)
+    .bind(latency_pg_ms)
+    .execute(pool)
+    .await;
+
+    if let Err(err) = result {
+        if is_missing_shadow_read_logs_table(&err) {
+            tracing::warn!(
+                error = %err,
+                "cn_search.shadow_read_logs unavailable; skipping shadow-read persistence"
+            );
+            return;
+        }
+        tracing::warn!(error = %err, "failed to persist search shadow-read log");
+    }
+}
+
+fn is_missing_shadow_read_logs_table(err: &sqlx::Error) -> bool {
+    match err {
+        sqlx::Error::Database(db_err) => {
+            matches!(db_err.code().as_deref(), Some("42P01") | Some("3F000"))
+        }
+        _ => false,
+    }
 }
 
 pub async fn community_suggest(
@@ -5853,6 +6031,185 @@ mod api_contract_tests {
             cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn search_shadow_read_logs_overlap_and_latency_when_sampled() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
+        let topic_id = format!("kukuri:search-shadow-{}", Uuid::new_v4().simple());
+        let meili_event_a = Uuid::new_v4().to_string();
+        let meili_event_b = Uuid::new_v4().to_string();
+        let pg_event_c = Uuid::new_v4().to_string();
+        let query_raw = "shadow";
+        let query_norm = search_normalizer::normalize_search_text(query_raw);
+
+        let (meili_url, meili_handle) = spawn_mock_meili(json!({
+            "hits": [
+                {
+                    "event_id": meili_event_a.clone(),
+                    "topic_id": topic_id.clone(),
+                    "content": "shadow result meili a"
+                },
+                {
+                    "event_id": meili_event_b.clone(),
+                    "topic_id": topic_id.clone(),
+                    "content": "shadow result meili b"
+                }
+            ],
+            "estimatedTotalHits": 2
+        }))
+        .await;
+
+        let state = test_state_with_meili_url(&meili_url).await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
+        set_shadow_sample_rate(&pool, "100").await;
+
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let hashtags_norm: Vec<String> = Vec::new();
+        let mentions_norm: Vec<String> = Vec::new();
+        let community_terms_norm = search_normalizer::normalize_search_terms([topic_id.as_str()]);
+
+        let body_a = "shadow result pg a";
+        let body_a_norm = search_normalizer::normalize_search_text(body_a);
+        let search_text_a = search_normalizer::build_search_text(
+            &body_a_norm,
+            &hashtags_norm,
+            &mentions_norm,
+            &community_terms_norm,
+        );
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(&meili_event_a)
+        .bind(&topic_id)
+        .bind(&pubkey)
+        .bind(body_a)
+        .bind(&body_a_norm)
+        .bind(&hashtags_norm)
+        .bind(&mentions_norm)
+        .bind(&community_terms_norm)
+        .bind(&search_text_a)
+        .bind(now)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
+        .execute(&pool)
+        .await
+        .expect("insert pg shadow doc a");
+
+        let body_c = "shadow result pg c";
+        let body_c_norm = search_normalizer::normalize_search_text(body_c);
+        let search_text_c = search_normalizer::build_search_text(
+            &body_c_norm,
+            &hashtags_norm,
+            &mentions_norm,
+            &community_terms_norm,
+        );
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(&pg_event_c)
+        .bind(&topic_id)
+        .bind(&pubkey)
+        .bind(body_c)
+        .bind(&body_c_norm)
+        .bind(&hashtags_norm)
+        .bind(&mentions_norm)
+        .bind(&community_terms_norm)
+        .bind(&search_text_c)
+        .bind(now - 1)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
+        .execute(&pool)
+        .await
+        .expect("insert pg shadow doc c");
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/search?topic={topic_id}&q={query_raw}&limit=2"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload.get("total").and_then(Value::as_u64), Some(2));
+
+        let shadow_row = sqlx::query(
+            "SELECT meili_ids, pg_ids, overlap_at_10, latency_meili_ms, latency_pg_ms \
+             FROM cn_search.shadow_read_logs \
+             WHERE endpoint = '/v1/search' AND user_id = $1 AND query_norm = $2 \
+             ORDER BY id DESC \
+             LIMIT 1",
+        )
+        .bind(&pubkey)
+        .bind(&query_norm)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch search shadow log row");
+        let meili_ids: Vec<String> = shadow_row.try_get("meili_ids").expect("meili_ids");
+        let pg_ids: Vec<String> = shadow_row.try_get("pg_ids").expect("pg_ids");
+        let overlap_at_10: f64 = shadow_row.try_get("overlap_at_10").expect("overlap_at_10");
+        let latency_meili_ms: i32 = shadow_row
+            .try_get("latency_meili_ms")
+            .expect("latency_meili_ms");
+        let latency_pg_ms: i32 = shadow_row.try_get("latency_pg_ms").expect("latency_pg_ms");
+
+        assert_eq!(meili_ids.len(), 2);
+        assert!(meili_ids.iter().any(|id| id == &meili_event_a));
+        assert!(meili_ids.iter().any(|id| id == &meili_event_b));
+        assert!(pg_ids.iter().any(|id| id == &meili_event_a));
+        assert!(pg_ids.iter().any(|id| id == &pg_event_c));
+        assert!(
+            (0.0..=1.0).contains(&overlap_at_10),
+            "unexpected overlap_at_10: {overlap_at_10}"
+        );
+        assert!(latency_meili_ms >= 0, "unexpected meili latency");
+        assert!(latency_pg_ms >= 0, "unexpected pg latency");
+
+        sqlx::query(
+            "DELETE FROM cn_search.post_search_documents \
+             WHERE topic_id = $1 AND post_id = ANY($2)",
+        )
+        .bind(&topic_id)
+        .bind(vec![meili_event_a.clone(), pg_event_c.clone()])
+        .execute(&pool)
+        .await
+        .expect("cleanup search shadow docs");
+        sqlx::query(
+            "DELETE FROM cn_search.shadow_read_logs \
+             WHERE endpoint = '/v1/search' AND user_id = $1 AND query_norm = $2",
+        )
+        .bind(&pubkey)
+        .bind(&query_norm)
+        .execute(&pool)
+        .await
+        .expect("cleanup search shadow logs");
+
+        set_shadow_sample_rate(&pool, "0").await;
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
+
+        meili_handle.abort();
+        let _ = meili_handle.await;
     }
 
     #[tokio::test]
