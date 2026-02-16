@@ -21,6 +21,8 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     # PR上のCodex/connector botレビュー通知も流すため、bot送信も許可する
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     steps:
       - name: Build message
         id: msg
@@ -71,11 +73,15 @@ jobs:
               `ぼっちゃん: kukuri-dev-directorスキルに従って次の行動に移って`;
             core.setOutput("content", content);
       - name: Send to Discord
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
         env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WEBHOOK_URL: ${{ env.DISCORD_WEBHOOK_URL }}
           CONTENT: ${{ steps.msg.outputs.content }}
         run: |
           payload=$(jq -n --arg content "$CONTENT" '{content: $content, flags: 4}')
           curl -sS -X POST "$WEBHOOK_URL" \
           -H "Content-Type: application/json" \
           -d "$payload"
+      - name: Skip Discord POST (webhook not configured)
+        if: ${{ env.DISCORD_WEBHOOK_URL == '' }}
+        run: echo "DISCORD_WEBHOOK_URL is empty; skipping Discord notification."
