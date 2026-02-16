@@ -7,6 +7,7 @@
 
 ## 変更内容
 - `cn_search.post_search_documents` を追加。
+- `post_search_documents` の一意キーを `(post_id, topic_id)` とし、同一 `post_id` の multi-topic 行を保持する。
 - 既存 outbox 消費時に検索ドキュメントを upsert/delete する処理を追加。
 - 検索語正規化と文書正規化を同一関数で統一する。
 - `/v1/search` に PG 実装を追加し、フラグで read 経路を選択可能にする。
@@ -14,7 +15,7 @@
 ## DDL/インデックス
 ```sql
 CREATE TABLE IF NOT EXISTS cn_search.post_search_documents (
-    post_id TEXT PRIMARY KEY,
+    post_id TEXT NOT NULL,
     topic_id TEXT NOT NULL,
     author_id TEXT NOT NULL,
     visibility TEXT NOT NULL,
@@ -29,7 +30,8 @@ CREATE TABLE IF NOT EXISTS cn_search.post_search_documents (
     created_at BIGINT NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     normalizer_version SMALLINT NOT NULL DEFAULT 1,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (post_id, topic_id)
 );
 
 CREATE INDEX IF NOT EXISTS post_search_text_pgroonga_idx
@@ -42,6 +44,10 @@ ON cn_search.post_search_documents (topic_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS post_search_visibility_idx
 ON cn_search.post_search_documents (visibility, is_deleted);
 ```
+
+- migration 履歴:
+  - `20260216030000_m7_post_search_documents.sql` でテーブルを導入。
+  - `20260216040000_m8_post_search_documents_topic_key.sql` で主キーを `(post_id, topic_id)` へ更新。
 
 ## 正規化方針（多言語混在）
 - NFKC 正規化（全角/半角ゆれ吸収）。
@@ -82,7 +88,7 @@ LIMIT :limit OFFSET :offset;
 ## 移行/バックフィル手順
 1. high-watermark として `MAX(cn_relay.events_outbox.seq)` を取得。
 2. `created_at,event_id` 昇順のチャンクで `cn_relay.events(kind=1)` を取り込み。
-3. `ON CONFLICT (post_id) DO UPDATE` で冪等 upsert する。
+3. `ON CONFLICT (post_id, topic_id) DO UPDATE` で冪等 upsert する。
 4. high-watermark 以降は outbox dual-write で追従。
 5. backlog が 0 になるまで catch-up を繰り返す。
 
@@ -100,4 +106,3 @@ LIMIT :limit OFFSET :offset;
 - `search_query_latency_ms`（P50/P95/P99）。
 - `search_index_lag_seconds`（イベント発生から検索反映まで）。
 - `search_zero_result_rate`（クエリ長別）。
-

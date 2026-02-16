@@ -85,3 +85,15 @@
   - 2026年02月16日: PR #33 fix loop（stale `running` backfill reclaim）を完了し、`claim_backfill_job` の stale lease 再取得、lease fencing（`started_at` トークン）と回帰テストを追加。`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr33_stale_running_backfill_reclaim_fix_loop.md` に反映。
   - 2026年02月16日: PR-07（cutover runbook/finalization）を完了し、カナリア切替手順、PG検索監視ダッシュボード項目、品質/性能ゲート閾値、5分以内ロールバック手順、Meili 段階撤去条件を Runbook 化。`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr07_cutover_runbook_finalization.md` に反映。
   - 2026年02月16日: PR #34 fix loop（cutover runbook review comments）を完了し、5%/25%/50% 手順を `shadow_sample_rate` 段階へ修正、zero-result SQL を `created_at` へ修正、Index lag consumer ラベルを `index-v1` へ修正。`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr34_cutover_runbook_fix_loop.md` に反映。
+  - 2026年02月16日: Issue #27 最終再監査を実施（`chore/issue27-final-reaudit`）。実装面は整合したが、PG検索関連ドキュメントに 4件の整合タスクを抽出し、`progressReports/2026-02-16_issue27_final_reaudit.md` へ記録。
+
+### 2026年02月16日 Issue #27 最終再監査フォローアップ（ドキュメント整合）
+
+- 目的: Issue #27 クローズ前に、検索PG移行の運用/設計ドキュメントと実装の齟齬を解消する。
+- 状態: 着手（残タスク 3件）。
+- 進捗メモ:
+  - 2026年02月16日: 残タスク #1（`PR-02_post_search_pgroonga.md` の `(post_id, topic_id)` 主キー・`ON CONFLICT` 記述同期）を完了し、`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_followup_pr02_key_conflict_doc_sync.md` に反映。
+- 残タスク:
+  1. `docs/03_implementation/community_nodes/user_api.md` に `/v1/communities/suggest` と検索ランタイムフラグ運用を追記する。
+  2. `docs/03_implementation/community_nodes/services_index.md` の Meili-only 記述を、Issue #27 後の dual-write/backfill/shadow/cutover 運用へ更新する。
+  3. `docs/03_implementation/community_nodes/ops_runbook.md` の PG cutover 監視説明を、`shadow_sample_rate` カナリア→100% read 切替の順序に合わせて明確化する。
