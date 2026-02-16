@@ -18,7 +18,10 @@
     "account": "アカウント",
     "noOtherAccounts": "他のアカウントがありません",
     "addAnotherAccount": "別のアカウントを追加",
+    "adding": "追加中...",
     "removeAccount": "アカウントを削除",
+    "conflict": "競合",
+    "count": "件",
     "logout": "ログアウト",
     "removeAccountConfirm": "このアカウントを削除してもよろしいですか？"
   },

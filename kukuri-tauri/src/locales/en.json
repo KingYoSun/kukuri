@@ -18,7 +18,10 @@
     "account": "Account",
     "noOtherAccounts": "No other accounts",
     "addAnotherAccount": "Add another account",
+    "adding": "Adding...",
     "removeAccount": "Remove account",
+    "conflict": "Conflict",
+    "count": " items",
     "logout": "Logout",
     "removeAccountConfirm": "Are you sure you want to remove this account?"
   },
