@@ -11,7 +11,10 @@ pub const FLAG_SUGGEST_READ_BACKEND: &str = "suggest_read_backend";
 pub const FLAG_SHADOW_SAMPLE_RATE: &str = "shadow_sample_rate";
 
 pub const SEARCH_READ_BACKEND_MEILI: &str = "meili";
+pub const SEARCH_READ_BACKEND_PG: &str = "pg";
 pub const SEARCH_WRITE_MODE_MEILI_ONLY: &str = "meili_only";
+pub const SEARCH_WRITE_MODE_DUAL: &str = "dual";
+pub const SEARCH_WRITE_MODE_PG_ONLY: &str = "pg_only";
 pub const SUGGEST_READ_BACKEND_LEGACY: &str = "legacy";
 pub const SHADOW_SAMPLE_RATE_DISABLED: &str = "0";
 
@@ -295,7 +298,7 @@ mod tests {
             .await
             .expect("load search runtime flags");
 
-        assert_eq!(flags.search_read_backend, "pg");
+        assert_eq!(flags.search_read_backend, SEARCH_READ_BACKEND_PG);
         assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, "25");

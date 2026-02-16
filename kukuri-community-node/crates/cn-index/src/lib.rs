@@ -5,8 +5,8 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    config as env_config, db, health, http, logging, meili, metrics, nostr, search_runtime_flags,
-    server, service_config,
+    config as env_config, db, health, http, logging, meili, metrics, nostr, search_normalizer,
+    search_runtime_flags, server, service_config,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -70,6 +70,41 @@ struct IndexDocument {
     summary: String,
     content: String,
     tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchWriteMode {
+    MeiliOnly,
+    Dual,
+    PgOnly,
+}
+
+impl SearchWriteMode {
+    fn writes_meili(self) -> bool {
+        !matches!(self, SearchWriteMode::PgOnly)
+    }
+
+    fn writes_pg(self) -> bool {
+        !matches!(self, SearchWriteMode::MeiliOnly)
+    }
+}
+
+#[derive(Debug)]
+struct PostSearchDocument {
+    post_id: String,
+    topic_id: String,
+    author_id: String,
+    visibility: String,
+    body_raw: String,
+    body_norm: String,
+    hashtags_norm: Vec<String>,
+    mentions_norm: Vec<String>,
+    community_terms_norm: Vec<String>,
+    search_text: String,
+    language_hint: Option<String>,
+    popularity_score: f64,
+    created_at: i64,
+    normalizer_version: i16,
 }
 
 pub fn load_config() -> Result<IndexConfig> {
@@ -465,8 +500,9 @@ async fn handle_outbox_row(state: &AppState, row: &OutboxRow) -> Result<()> {
 }
 
 async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
+    let write_mode = load_search_write_mode(&state.pool).await;
     let Some(event) = load_event(&state.pool, &row.event_id).await? else {
-        return handle_delete(state, row).await;
+        return handle_delete_with_mode(state, row, write_mode).await;
     };
 
     let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
@@ -478,17 +514,29 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
         if let Some(expired_at) = event.expires_at.filter(|exp| *exp <= now) {
             record_expired_event(&state.pool, &row.event_id, &row.topic_id, expired_at).await?;
         }
-        return handle_delete(state, row).await;
+        return handle_delete_with_mode(state, row, write_mode).await;
     }
 
-    let uid = ensure_topic_index(state, &row.topic_id).await?;
     let doc = build_document(&event.raw, &row.topic_id);
-    state.meili.upsert_documents(&uid, &[doc]).await?;
+    if write_mode.writes_meili() {
+        let uid = ensure_topic_index(state, &row.topic_id).await?;
+        state.meili.upsert_documents(&uid, &[doc]).await?;
+    }
+    if write_mode.writes_pg() {
+        let pg_document = build_post_search_document(&event.raw, &row.topic_id);
+        upsert_post_search_document(&state.pool, &pg_document).await?;
+    }
 
     if let Some(key) = row.effective_key.as_deref() {
         let stale_ids = find_stale_versions(&state.pool, &row.topic_id, key, &row.event_id).await?;
         if !stale_ids.is_empty() {
-            state.meili.delete_documents(&uid, &stale_ids).await?;
+            if write_mode.writes_meili() {
+                let uid = ensure_topic_index(state, &row.topic_id).await?;
+                state.meili.delete_documents(&uid, &stale_ids).await?;
+            }
+            if write_mode.writes_pg() {
+                mark_post_search_documents_deleted(&state.pool, &stale_ids, &row.topic_id).await?;
+            }
         }
     }
 
@@ -496,8 +544,163 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
 }
 
 async fn handle_delete(state: &AppState, row: &OutboxRow) -> Result<()> {
-    let uid = ensure_topic_index(state, &row.topic_id).await?;
-    state.meili.delete_document(&uid, &row.event_id).await?;
+    let write_mode = load_search_write_mode(&state.pool).await;
+    handle_delete_with_mode(state, row, write_mode).await
+}
+
+async fn handle_delete_with_mode(
+    state: &AppState,
+    row: &OutboxRow,
+    write_mode: SearchWriteMode,
+) -> Result<()> {
+    if write_mode.writes_meili() {
+        let uid = ensure_topic_index(state, &row.topic_id).await?;
+        state.meili.delete_document(&uid, &row.event_id).await?;
+    }
+    if write_mode.writes_pg() {
+        mark_post_search_document_deleted(&state.pool, &row.event_id, &row.topic_id).await?;
+    }
+    Ok(())
+}
+
+async fn load_search_write_mode(pool: &Pool<Postgres>) -> SearchWriteMode {
+    let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
+        Ok(flags) => flags,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "failed to load search runtime flags; fallback to meili_only write mode"
+            );
+            return SearchWriteMode::MeiliOnly;
+        }
+    };
+
+    match flags.search_write_mode.trim().to_ascii_lowercase().as_str() {
+        search_runtime_flags::SEARCH_WRITE_MODE_DUAL => SearchWriteMode::Dual,
+        search_runtime_flags::SEARCH_WRITE_MODE_PG_ONLY => SearchWriteMode::PgOnly,
+        _ => SearchWriteMode::MeiliOnly,
+    }
+}
+
+fn build_post_search_document(raw: &nostr::RawEvent, topic_id: &str) -> PostSearchDocument {
+    let body_raw = raw.content.clone();
+    let body_norm = search_normalizer::normalize_search_text(&body_raw);
+    let hashtags_norm = search_normalizer::normalize_search_terms(raw.tag_values("t"));
+    let mentions_norm = search_normalizer::normalize_search_terms(raw.tag_values("p"));
+    let community_terms_norm = search_normalizer::normalize_search_terms([topic_id]);
+    let search_text = search_normalizer::build_search_text(
+        &body_norm,
+        &hashtags_norm,
+        &mentions_norm,
+        &community_terms_norm,
+    );
+    let visibility = raw
+        .first_tag_value("visibility")
+        .map(|value| search_normalizer::normalize_search_text(&value))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "public".to_string());
+    let language_hint = raw
+        .first_tag_value("lang")
+        .or_else(|| raw.first_tag_value("language"))
+        .map(|value| search_normalizer::normalize_search_text(&value))
+        .filter(|value| !value.is_empty());
+
+    PostSearchDocument {
+        post_id: raw.id.clone(),
+        topic_id: topic_id.to_string(),
+        author_id: raw.pubkey.clone(),
+        visibility,
+        body_raw,
+        body_norm,
+        hashtags_norm,
+        mentions_norm,
+        community_terms_norm,
+        search_text,
+        language_hint,
+        popularity_score: 0.0,
+        created_at: raw.created_at,
+        normalizer_version: search_normalizer::SEARCH_NORMALIZER_VERSION,
+    }
+}
+
+async fn upsert_post_search_document(
+    pool: &Pool<Postgres>,
+    document: &PostSearchDocument,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_search.post_search_documents \
+         (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, $14, NOW()) \
+         ON CONFLICT (post_id, topic_id) DO UPDATE SET \
+           author_id = EXCLUDED.author_id, \
+           visibility = EXCLUDED.visibility, \
+           body_raw = EXCLUDED.body_raw, \
+           body_norm = EXCLUDED.body_norm, \
+           hashtags_norm = EXCLUDED.hashtags_norm, \
+           mentions_norm = EXCLUDED.mentions_norm, \
+           community_terms_norm = EXCLUDED.community_terms_norm, \
+           search_text = EXCLUDED.search_text, \
+           language_hint = EXCLUDED.language_hint, \
+           popularity_score = EXCLUDED.popularity_score, \
+           created_at = EXCLUDED.created_at, \
+           is_deleted = FALSE, \
+           normalizer_version = EXCLUDED.normalizer_version, \
+           updated_at = NOW()",
+    )
+    .bind(&document.post_id)
+    .bind(&document.topic_id)
+    .bind(&document.author_id)
+    .bind(&document.visibility)
+    .bind(&document.body_raw)
+    .bind(&document.body_norm)
+    .bind(&document.hashtags_norm)
+    .bind(&document.mentions_norm)
+    .bind(&document.community_terms_norm)
+    .bind(&document.search_text)
+    .bind(&document.language_hint)
+    .bind(document.popularity_score)
+    .bind(document.created_at)
+    .bind(document.normalizer_version)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn mark_post_search_document_deleted(
+    pool: &Pool<Postgres>,
+    post_id: &str,
+    topic_id: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE cn_search.post_search_documents \
+         SET is_deleted = TRUE, updated_at = NOW() \
+         WHERE post_id = $1 AND topic_id = $2",
+    )
+    .bind(post_id)
+    .bind(topic_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn mark_post_search_documents_deleted(
+    pool: &Pool<Postgres>,
+    post_ids: &[String],
+    topic_id: &str,
+) -> Result<()> {
+    if post_ids.is_empty() {
+        return Ok(());
+    }
+
+    sqlx::query(
+        "UPDATE cn_search.post_search_documents \
+         SET is_deleted = TRUE, updated_at = NOW() \
+         WHERE post_id = ANY($1) AND topic_id = $2",
+    )
+    .bind(post_ids)
+    .bind(topic_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -816,6 +1019,7 @@ async fn update_job_failed(pool: &Pool<Postgres>, job_id: &str, error: &str) -> 
 
 async fn expire_events_once(state: &AppState) -> Result<()> {
     let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let write_mode = load_search_write_mode(&state.pool).await;
     loop {
         let rows = sqlx::query(
             "SELECT e.event_id, t.topic_id, e.expires_at          FROM cn_relay.events e          JOIN cn_relay.event_topics t            ON e.event_id = t.event_id          LEFT JOIN cn_index.expired_events x            ON x.event_id = e.event_id AND x.topic_id = t.topic_id          WHERE e.expires_at IS NOT NULL            AND e.expires_at <= $1            AND e.is_deleted = FALSE            AND e.is_ephemeral = FALSE            AND e.is_current = TRUE            AND x.event_id IS NULL          LIMIT 200",
@@ -832,8 +1036,13 @@ async fn expire_events_once(state: &AppState) -> Result<()> {
             let event_id: String = row.try_get("event_id")?;
             let topic_id: String = row.try_get("topic_id")?;
             let expires_at: i64 = row.try_get("expires_at")?;
-            let uid = ensure_topic_index(state, &topic_id).await?;
-            state.meili.delete_document(&uid, &event_id).await?;
+            if write_mode.writes_meili() {
+                let uid = ensure_topic_index(state, &topic_id).await?;
+                state.meili.delete_document(&uid, &event_id).await?;
+            }
+            if write_mode.writes_pg() {
+                mark_post_search_document_deleted(&state.pool, &event_id, &topic_id).await?;
+            }
             record_expired_event(&state.pool, &event_id, &topic_id, expires_at).await?;
         }
     }

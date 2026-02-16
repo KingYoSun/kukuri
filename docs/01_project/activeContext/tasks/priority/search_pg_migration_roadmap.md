@@ -12,10 +12,10 @@
 
 ## PR-02 投稿検索ドキュメント（PGroonga）
 
-- [ ] `cn_search.post_search_documents` と PGroonga index を追加する migration を作成する。
-- [ ] outbox 消費で `post_search_documents` へ upsert/delete する dual-write（Meili + PG）を実装する。
-- [ ] `/v1/search` に PG検索実装を追加し、`search_read_backend` で切替可能にする。
-- [ ] 正規化関数（NFKC/記号処理/normalizer_version）と回帰テストを追加する。
+- [x] `cn_search.post_search_documents` と PGroonga index を追加する migration を作成する。
+- [x] outbox 消費で `post_search_documents` へ upsert/delete する dual-write（Meili + PG）を実装する。
+- [x] `/v1/search` に PG検索実装を追加し、`search_read_backend` で切替可能にする。
+- [x] 正規化関数（NFKC/記号処理/normalizer_version）と回帰テストを追加する。
 
 ## PR-03 コミュニティ候補生成（pg_trgm + prefix）
 
