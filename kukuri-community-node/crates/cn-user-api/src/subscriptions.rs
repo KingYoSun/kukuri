@@ -2,6 +2,8 @@ use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use cn_core::nostr;
+use cn_core::search_normalizer;
+use cn_core::search_runtime_flags;
 use cn_core::topic::normalize_topic_id;
 use cn_kip_types::{validate_kip_event, ValidationOptions};
 use nostr_sdk::prelude::PublicKey;
@@ -44,6 +46,12 @@ pub struct SearchQuery {
     pub q: Option<String>,
     pub limit: Option<usize>,
     pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchReadBackend {
+    Meili,
+    Pg,
 }
 
 #[derive(Deserialize)]
@@ -320,10 +328,49 @@ pub async fn search(
         .as_deref()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
-    let uid = cn_core::meili::topic_index_uid(&topic);
+    let backend = load_search_read_backend(&state.pool).await;
+
+    if backend == SearchReadBackend::Pg {
+        return search_with_pg_backend(&state, &topic, query.q, limit, offset).await;
+    }
+
+    search_with_meili_backend(&state, &topic, query.q, limit, offset).await
+}
+
+async fn load_search_read_backend(pool: &sqlx::Pool<Postgres>) -> SearchReadBackend {
+    let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
+        Ok(flags) => flags,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "failed to load search runtime flags; fallback to meili read backend"
+            );
+            return SearchReadBackend::Meili;
+        }
+    };
+
+    if flags
+        .search_read_backend
+        .trim()
+        .eq_ignore_ascii_case(search_runtime_flags::SEARCH_READ_BACKEND_PG)
+    {
+        SearchReadBackend::Pg
+    } else {
+        SearchReadBackend::Meili
+    }
+}
+
+async fn search_with_meili_backend(
+    state: &AppState,
+    topic: &str,
+    query: Option<String>,
+    limit: usize,
+    offset: usize,
+) -> ApiResult<Json<serde_json::Value>> {
+    let uid = cn_core::meili::topic_index_uid(topic);
     let search_result = match state
         .meili
-        .search(&uid, query.q.as_deref().unwrap_or(""), limit, offset)
+        .search(&uid, query.as_deref().unwrap_or(""), limit, offset)
         .await
     {
         Ok(value) => value,
@@ -332,7 +379,7 @@ pub async fn search(
             if message.contains("404") {
                 return Ok(Json(json!({
                     "topic": topic,
-                    "query": query.q,
+                    "query": query,
                     "items": [],
                     "next_cursor": null,
                     "total": 0
@@ -364,11 +411,180 @@ pub async fn search(
 
     Ok(Json(json!({
         "topic": topic,
-        "query": query.q,
+        "query": query,
         "items": hits,
         "next_cursor": next_cursor,
         "total": total
     })))
+}
+
+async fn search_with_pg_backend(
+    state: &AppState,
+    topic: &str,
+    query: Option<String>,
+    limit: usize,
+    offset: usize,
+) -> ApiResult<Json<serde_json::Value>> {
+    let query_raw = query.as_deref().unwrap_or("");
+    let query_norm = search_normalizer::normalize_search_text(query_raw);
+    let normalizer_version = search_normalizer::SEARCH_NORMALIZER_VERSION;
+
+    let total = if query_norm.is_empty() {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) \
+             FROM cn_search.post_search_documents d \
+             WHERE d.topic_id = $1 \
+               AND d.visibility = 'public' \
+               AND d.is_deleted = FALSE \
+               AND d.normalizer_version = $2",
+        )
+        .bind(topic)
+        .bind(normalizer_version)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?
+    } else {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) \
+             FROM cn_search.post_search_documents d \
+             WHERE d.topic_id = $1 \
+               AND d.visibility = 'public' \
+               AND d.is_deleted = FALSE \
+               AND d.normalizer_version = $2 \
+               AND d.search_text &@~ $3",
+        )
+        .bind(topic)
+        .bind(normalizer_version)
+        .bind(&query_norm)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?
+    };
+
+    let rows = if query_norm.is_empty() {
+        sqlx::query(
+            "SELECT d.post_id, d.topic_id, d.author_id, d.body_raw, d.hashtags_norm, d.created_at \
+             FROM cn_search.post_search_documents d \
+             WHERE d.topic_id = $1 \
+               AND d.visibility = 'public' \
+               AND d.is_deleted = FALSE \
+               AND d.normalizer_version = $2 \
+             ORDER BY d.created_at DESC \
+             LIMIT $3 OFFSET $4",
+        )
+        .bind(topic)
+        .bind(normalizer_version)
+        .bind(limit as i64)
+        .bind(offset as i64)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?
+    } else {
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as f64;
+        sqlx::query(
+            "SELECT d.post_id, d.topic_id, d.author_id, d.body_raw, d.hashtags_norm, d.created_at, \
+                    ( \
+                      0.55 * pgroonga_score(tableoid, ctid) + \
+                      0.25 * exp(-((($1 - d.created_at::double precision) / 3600.0) / 72.0)) + \
+                      0.20 * LEAST(1.0, LN(1 + d.popularity_score) / LN(101.0)) \
+                    ) AS final_score \
+             FROM cn_search.post_search_documents d \
+             WHERE d.topic_id = $2 \
+               AND d.visibility = 'public' \
+               AND d.is_deleted = FALSE \
+               AND d.normalizer_version = $3 \
+               AND d.search_text &@~ $4 \
+             ORDER BY final_score DESC, d.created_at DESC \
+             LIMIT $5 OFFSET $6",
+        )
+        .bind(now)
+        .bind(topic)
+        .bind(normalizer_version)
+        .bind(&query_norm)
+        .bind(limit as i64)
+        .bind(offset as i64)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?
+    };
+
+    let mut items = Vec::new();
+    for row in rows {
+        let content: String = row.try_get("body_raw")?;
+        let tags: Vec<String> = row.try_get("hashtags_norm")?;
+        let created_at: i64 = row.try_get("created_at")?;
+        items.push(json!({
+            "event_id": row.try_get::<String, _>("post_id")?,
+            "topic_id": row.try_get::<String, _>("topic_id")?,
+            "kind": 1,
+            "author": row.try_get::<String, _>("author_id")?,
+            "created_at": created_at,
+            "title": search_result_title(&content),
+            "summary": search_result_summary(&content),
+            "content": content,
+            "tags": tags
+        }));
+    }
+
+    let total = total.max(0) as u64;
+    let next_offset = offset + items.len();
+    let next_cursor = if (next_offset as u64) < total {
+        Some(next_offset.to_string())
+    } else {
+        None
+    };
+
+    Ok(Json(json!({
+        "topic": topic,
+        "query": query,
+        "items": items,
+        "next_cursor": next_cursor,
+        "total": total
+    })))
+}
+
+fn search_result_title(content: &str) -> String {
+    let first_line = content.lines().next().unwrap_or("").trim();
+    truncate_chars(first_line, 80)
+}
+
+fn search_result_summary(content: &str) -> String {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    truncate_chars(trimmed, 200)
+}
+
+fn truncate_chars(value: &str, max: usize) -> String {
+    if value.chars().count() <= max {
+        return value.to_string();
+    }
+    value.chars().take(max).collect()
 }
 
 pub async fn trending(
@@ -1074,6 +1290,32 @@ mod api_contract_tests {
         .execute(pool)
         .await
         .expect("insert subscription");
+    }
+
+    async fn set_search_runtime_flags(pool: &Pool<Postgres>, read_backend: &str, write_mode: &str) {
+        sqlx::query(
+            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) \
+             VALUES ($1, $2, 'contract-test') \
+             ON CONFLICT (flag_name) DO UPDATE \
+             SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(cn_core::search_runtime_flags::FLAG_SEARCH_READ_BACKEND)
+        .bind(read_backend)
+        .execute(pool)
+        .await
+        .expect("upsert search_read_backend flag");
+
+        sqlx::query(
+            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) \
+             VALUES ($1, $2, 'contract-test') \
+             ON CONFLICT (flag_name) DO UPDATE \
+             SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(cn_core::search_runtime_flags::FLAG_SEARCH_WRITE_MODE)
+        .bind(write_mode)
+        .execute(pool)
+        .await
+        .expect("upsert search_write_mode flag");
     }
 
     async fn insert_pending_subscription_request(
@@ -4160,6 +4402,124 @@ mod api_contract_tests {
             .and_then(|item| item.get("event_id"))
             .and_then(Value::as_str)
             .is_some());
+    }
+
+    #[tokio::test]
+    async fn search_contract_pg_backend_switch_normalization_and_version_filter() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let topic_id = format!("kukuri:search-pg-{}", Uuid::new_v4());
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_PG,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
+
+        let current_post_id = Uuid::new_v4().to_string();
+        let stale_post_id = Uuid::new_v4().to_string();
+        let body_raw = "Ｈｅｌｌｏ PG Search #Rust";
+        let body_norm = search_normalizer::normalize_search_text(body_raw);
+        let hashtags_norm = vec!["rust".to_string()];
+        let mentions_norm: Vec<String> = Vec::new();
+        let community_terms_norm = search_normalizer::normalize_search_terms([topic_id.as_str()]);
+        let search_text = search_normalizer::build_search_text(
+            &body_norm,
+            &hashtags_norm,
+            &mentions_norm,
+            &community_terms_norm,
+        );
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(&current_post_id)
+        .bind(&topic_id)
+        .bind(&pubkey)
+        .bind(body_raw)
+        .bind(&body_norm)
+        .bind(&hashtags_norm)
+        .bind(&mentions_norm)
+        .bind(&community_terms_norm)
+        .bind(&search_text)
+        .bind(now)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
+        .execute(&pool)
+        .await
+        .expect("insert current normalized document");
+
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(&stale_post_id)
+        .bind(&topic_id)
+        .bind(&pubkey)
+        .bind("hello old normalizer")
+        .bind("hello old normalizer")
+        .bind(Vec::<String>::new())
+        .bind(Vec::<String>::new())
+        .bind(Vec::<String>::new())
+        .bind("hello old normalizer")
+        .bind(now - 1)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION - 1)
+        .execute(&pool)
+        .await
+        .expect("insert stale normalizer document");
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/search?topic={topic_id}&q=ｈｅｌｌｏ"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("total").and_then(Value::as_u64),
+            Some(1),
+            "expected only current normalizer version document to match"
+        );
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items
+                .first()
+                .and_then(|item| item.get("event_id"))
+                .and_then(Value::as_str),
+            Some(current_post_id.as_str())
+        );
+
+        sqlx::query("DELETE FROM cn_search.post_search_documents WHERE post_id = ANY($1)")
+            .bind(vec![current_post_id, stale_post_id])
+            .execute(&pool)
+            .await
+            .expect("cleanup pg search documents");
+
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
     }
 
     #[tokio::test]

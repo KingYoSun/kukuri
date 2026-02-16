@@ -13,6 +13,7 @@ pub mod moderation;
 pub mod node_key;
 pub mod nostr;
 pub mod rate_limit;
+pub mod search_normalizer;
 pub mod search_runtime_flags;
 pub mod server;
 pub mod service_config;
