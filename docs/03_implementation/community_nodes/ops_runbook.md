@@ -103,7 +103,10 @@
 ### 1.5 検索 PG cutover 監視（Issue #27 / PR-07）
 
 - 参照 Runbook: `docs/01_project/activeContext/search_pg_migration/PR-07_cutover_runbook.md`
-- cutover 期間（`search_read_backend=pg` の段階適用中）は、以下を Dashboard の必須パネルとして扱う。
+- cutover は次の順序で実施する（`search_read_backend` / `suggest_read_backend` は二値フラグで、比率解釈しない）。
+  1. 5%/25%/50% canary: `search_read_backend='meili'` / `suggest_read_backend='legacy'` を維持し、`shadow_sample_rate` のみ `5 -> 25 -> 50` へ引き上げる。
+  2. 100% cutover: 各カナリア段階の 24h 品質/性能ゲート通過後に、`search_read_backend='pg'` / `suggest_read_backend='pg'` へ一括切替する。
+- 上記のカナリア期間と 100% cutover 直後は、以下を Dashboard の必須パネルとして扱う。
   - Search latency: `http_request_duration_seconds{service=\"cn-user-api\",route=\"/v1/search\"}`（p50/p95/p99）
   - Search error rate: `http_requests_total{service=\"cn-user-api\",route=\"/v1/search\",status=~\"5..\"}` / 総リクエスト
   - Suggest latency: `suggest_stage_a_latency_ms{service=\"cn-user-api\"}` / `suggest_stage_b_latency_ms{service=\"cn-user-api\"}`
