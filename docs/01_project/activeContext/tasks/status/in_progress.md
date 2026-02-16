@@ -10,6 +10,12 @@
 
 ## 現在のタスク
 
+### 2026年02月16日 Issue #50 github-to-discord webhook guard
+
+- 目的: `.github/workflows/github-to-discord.yml` で `DISCORD_WEBHOOK_URL` 未設定時に通知ステップが失敗しないよう、明示的な条件分岐で Discord POST をスキップする。
+- 状態: PR作成準備完了（レビュー待ち）。
+- 参照: `https://github.com/KingYoSun/kukuri/issues/50`
+
 ### 2025年11月20日 MVP動作確認シナリオ整理
 
 - 目的: Phase 5 Exit Criteria 全項目（`docs/01_project/design_doc.md` / `phase5_user_flow_summary.md`）が実際のアプリ体験として再現できることを確認する。
