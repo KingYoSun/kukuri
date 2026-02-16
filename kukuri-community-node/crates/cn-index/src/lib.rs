@@ -779,6 +779,14 @@ async fn sync_suggest_graph_for_outbox_row(pool: &Pool<Postgres>, row: &OutboxRo
                             event.raw.created_at,
                         )
                         .await?;
+                    } else {
+                        refresh_viewed_community_edge_from_current(
+                            &mut tx,
+                            &event.raw.pubkey,
+                            &row.topic_id,
+                            &community_id,
+                        )
+                        .await?;
                     }
                 }
 
@@ -808,6 +816,13 @@ async fn sync_suggest_graph_for_outbox_row(pool: &Pool<Postgres>, row: &OutboxRo
                         &row.topic_id,
                         &community_id,
                         event.raw.created_at,
+                    )
+                    .await?;
+                    refresh_viewed_community_edge_from_current(
+                        &mut tx,
+                        &event.raw.pubkey,
+                        &row.topic_id,
+                        &community_id,
                     )
                     .await?;
                 }
@@ -893,6 +908,39 @@ async fn refresh_follows_user_edges_from_current(
         replace_follows_user_edges(tx, &raw.pubkey, &raw.tag_values("p"), raw.created_at).await?;
     } else {
         replace_follows_user_edges(tx, user_id, &[], now).await?;
+    }
+    Ok(())
+}
+
+async fn refresh_viewed_community_edge_from_current(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    topic_id: &str,
+    community_id: &str,
+) -> Result<()> {
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let last_seen_at = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(e.created_at) \
+         FROM cn_relay.events e \
+         JOIN cn_relay.event_topics t \
+           ON t.event_id = e.event_id \
+         WHERE e.pubkey = $1 \
+           AND t.topic_id = $2 \
+           AND e.is_deleted = FALSE \
+           AND e.is_current = TRUE \
+           AND e.is_ephemeral = FALSE \
+           AND (e.expires_at IS NULL OR e.expires_at > $3)",
+    )
+    .bind(user_id)
+    .bind(topic_id)
+    .bind(now)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if let Some(last_seen_at) = last_seen_at {
+        upsert_viewed_community_edge(tx, user_id, community_id, last_seen_at).await?;
+    } else {
+        delete_viewed_community_edge(tx, user_id, community_id).await?;
     }
     Ok(())
 }
@@ -1000,6 +1048,19 @@ async fn upsert_viewed_community_edge(
                ELSE e.last_seen_at \
              END, \
              e.weight = {VIEWED_COMMUNITY_WEIGHT}"
+    );
+    cypher_execute(tx, &query).await
+}
+
+async fn delete_viewed_community_edge(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    community_id: &str,
+) -> Result<()> {
+    let escaped_user_id = escape_cypher_literal(user_id);
+    let escaped_community_id = escape_cypher_literal(community_id);
+    let query = format!(
+        "MATCH (u:User {{id: '{escaped_user_id}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_community_id}'}}) DELETE e"
     );
     cypher_execute(tx, &query).await
 }

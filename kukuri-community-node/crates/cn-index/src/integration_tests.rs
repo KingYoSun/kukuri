@@ -1202,6 +1202,7 @@ async fn outbox_graph_sync_kind3_delete_is_idempotent() {
         .expect("rehandle kind3 upsert row");
 
     let escaped_actor = escape_cypher_literal(&actor_pubkey);
+    let escaped_topic = escape_cypher_literal(&topic_id);
     let follow_edge_count_after_upsert = count_suggest_graph_edges(
         &pool,
         &format!(
@@ -1210,6 +1211,14 @@ async fn outbox_graph_sync_kind3_delete_is_idempotent() {
     )
     .await;
     assert_eq!(follow_edge_count_after_upsert, 2);
+    let viewed_edge_count_after_upsert = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(viewed_edge_count_after_upsert, 1);
 
     sqlx::query(
         "UPDATE cn_relay.events \
@@ -1241,6 +1250,14 @@ async fn outbox_graph_sync_kind3_delete_is_idempotent() {
     )
     .await;
     assert_eq!(follow_edge_count_after_delete, 0);
+    let viewed_edge_count_after_delete = count_suggest_graph_edges(
+        &pool,
+        &format!(
+            "MATCH (u:User {{id: '{escaped_actor}'}})-[e:VIEWED_COMMUNITY]->(c:Community {{id: '{escaped_topic}'}}) RETURN count(e) AS count_value"
+        ),
+    )
+    .await;
+    assert_eq!(viewed_edge_count_after_delete, 0);
 
     cleanup_records(&pool, &topic_id, &[contact_event.id.clone()], &[]).await;
     set_search_runtime_flags(
