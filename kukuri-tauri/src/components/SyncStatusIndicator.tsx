@@ -59,7 +59,10 @@ type CacheDocSummary = {
   payloadBytes?: number;
 };
 
-const getActionCategoryLabel = (category: PendingActionCategory, t: (key: string) => string): string => {
+const getActionCategoryLabel = (
+  category: PendingActionCategory,
+  t: (key: string) => string,
+): string => {
   const labels: Record<PendingActionCategory, string> = {
     topic: t('syncStatus.actionCategory.topic'),
     post: t('syncStatus.actionCategory.post'),
@@ -652,7 +655,7 @@ export function SyncStatusIndicator() {
                 ) : (
                   <WifiOff className="h-4 w-4 text-muted-foreground" />
                 )}
-{t('syncStatus.connectionStatus')}
+                {t('syncStatus.connectionStatus')}
               </h4>
               <p className="text-sm text-muted-foreground">
                 {isOnline ? t('syncStatus.online') : t('syncStatus.offline')}
@@ -687,7 +690,9 @@ export function SyncStatusIndicator() {
               {retryMetrics ? (
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{t('syncStatus.success')} / {t('syncStatus.failure')}</span>
+                    <span>
+                      {t('syncStatus.success')} / {t('syncStatus.failure')}
+                    </span>
                     <span>
                       <span className="font-semibold text-emerald-600 dark:text-emerald-300">
                         {retryMetrics.totalSuccess}
@@ -715,7 +720,9 @@ export function SyncStatusIndicator() {
                               : 'border-rose-500 text-rose-600 dark:text-rose-300',
                           )}
                         >
-                          {retryMetrics.lastOutcome === 'success' ? t('syncStatus.success') : t('syncStatus.failure')}
+                          {retryMetrics.lastOutcome === 'success'
+                            ? t('syncStatus.success')
+                            : t('syncStatus.failure')}
                         </Badge>
                       </div>
                       <dl className="mt-1 space-y-1 text-muted-foreground">
@@ -762,8 +769,8 @@ export function SyncStatusIndicator() {
               {scheduledRetry && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t('syncStatus.nextRetry')} #{scheduledRetry.jobId} {t('syncStatus.willRetry')}{' '}
-                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}
-                  （{scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
+                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}（
+                  {scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
                 </p>
               )}
             </div>
@@ -774,7 +781,10 @@ export function SyncStatusIndicator() {
                 <h4 className="font-medium mb-2">{t('syncStatus.syncProgressTitle')}</h4>
                 <Progress value={syncStatus.progress} className="mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  {t('syncStatus.syncingItems', { synced: syncStatus.syncedItems, total: syncStatus.totalItems })}
+                  {t('syncStatus.syncingItems', {
+                    synced: syncStatus.syncedItems,
+                    total: syncStatus.totalItems,
+                  })}
                 </p>
               </div>
             )}
@@ -792,21 +802,23 @@ export function SyncStatusIndicator() {
                     data-testid="offline-action-summary"
                   >
                     <p className="mb-1 font-medium text-muted-foreground/80">
-{t('syncStatus.offlineActionsBreakdown')}
+                      {t('syncStatus.offlineActionsBreakdown')}
                     </p>
                     <div className="space-y-1">
                       {pendingActionSummary.categories.slice(0, 4).map((category) => (
                         <div className="flex items-center justify-between" key={category.category}>
-                          <span>
-                            {getActionCategoryLabel(category.category, t)}
+                          <span>{getActionCategoryLabel(category.category, t)}</span>
+                          <span className="font-semibold text-foreground">
+                            {t('syncStatus.itemsCount', { count: category.count })}
                           </span>
-                          <span className="font-semibold text-foreground">{t('syncStatus.itemsCount', { count: category.count })}</span>
                         </div>
                       ))}
                     </div>
                     {pendingActionSummary.categories.length > 4 && (
                       <p className="mt-1 text-[11px] text-muted-foreground/80">
-                        {t('syncStatus.otherCategories', { count: pendingActionSummary.categories.length - 4 })}
+                        {t('syncStatus.otherCategories', {
+                          count: pendingActionSummary.categories.length - 4,
+                        })}
                       </p>
                     )}
                   </div>
@@ -829,7 +841,9 @@ export function SyncStatusIndicator() {
                       onClick={() => handleOpenConflictDialog(index)}
                     >
                       <p className="font-medium">{conflict.localAction.actionType}</p>
-                      <p className="text-xs text-muted-foreground">{t('syncStatus.clickToResolve')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t('syncStatus.clickToResolve')}
+                      </p>
                     </div>
                   ))}
                   {syncStatus.conflicts.length > 3 && (
@@ -870,7 +884,7 @@ export function SyncStatusIndicator() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium flex items-center gap-2">
                   <Database className="h-4 w-4 text-primary" />
-{t('syncStatus.cacheStatus')}
+                  {t('syncStatus.cacheStatus')}
                 </h4>
                 <Button
                   variant="ghost"
@@ -892,7 +906,10 @@ export function SyncStatusIndicator() {
               {cacheStatus ? (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    {t('syncStatus.cacheTotalStale', { total: cacheStatus.total_items, stale: cacheStatus.stale_items })}
+                    {t('syncStatus.cacheTotalStale', {
+                      total: cacheStatus.total_items,
+                      stale: cacheStatus.stale_items,
+                    })}
                   </p>
                   <div className="space-y-2 mt-2">
                     {(cacheStatus.cache_types ?? []).map((type) => {
@@ -907,7 +924,8 @@ export function SyncStatusIndicator() {
                             <div>
                               <p className="font-medium">{formatCacheTypeLabel(type.cache_type)}</p>
                               <p className="text-xs text-muted-foreground">
-                                {t('syncStatus.lastSync')} {formatCacheLastSynced(type.last_synced_at)}
+                                {t('syncStatus.lastSync')}{' '}
+                                {formatCacheLastSynced(type.last_synced_at)}
                               </p>
                             </div>
                             {type.is_stale && (
@@ -920,12 +938,19 @@ export function SyncStatusIndicator() {
                                 }}
                                 disabled={!isOnline || queueingType === type.cache_type}
                               >
-                                {queueingType === type.cache_type ? t('common.adding') : t('syncStatus.syncQueue')}
+                                {queueingType === type.cache_type
+                                  ? t('common.adding')
+                                  : t('syncStatus.syncQueue')}
                               </Button>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {type.item_count}{t('syncStatus.itemsCount', { count: type.item_count }).replace(/^\d+/, '').trim()} / {type.is_stale ? t('syncStatus.needsResync') : t('syncStatus.upToDate')}
+                            {type.item_count}
+                            {t('syncStatus.itemsCount', { count: type.item_count })
+                              .replace(/^\d+/, '')
+                              .trim()}{' '}
+                            /{' '}
+                            {type.is_stale ? t('syncStatus.needsResync') : t('syncStatus.upToDate')}
                           </p>
                           {metadataSummary &&
                             (() => {
@@ -957,7 +982,9 @@ export function SyncStatusIndicator() {
                               className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-900/10 dark:text-amber-100"
                               data-testid={`cache-doc-${type.cache_type}`}
                             >
-                              <p className="font-medium text-foreground">{t('syncStatus.docBlobCache')}</p>
+                              <p className="font-medium text-foreground">
+                                {t('syncStatus.docBlobCache')}
+                              </p>
                               <div className="mt-1 space-y-1 text-amber-900 dark:text-amber-50">
                                 {typeof docSummary.docVersion !== 'undefined' && (
                                   <div className="flex items-center justify-between gap-2">
@@ -1012,7 +1039,8 @@ export function SyncStatusIndicator() {
                   <div className="flex items-center gap-2">
                     {lastQueuedItemId && (
                       <span className="text-[11px] text-muted-foreground">
-                        {t('syncStatus.latest')} #<code className="font-mono text-xs">{lastQueuedItemId}</code>
+                        {t('syncStatus.latest')} #
+                        <code className="font-mono text-xs">{lastQueuedItemId}</code>
                       </span>
                     )}
                     <Button
@@ -1045,9 +1073,7 @@ export function SyncStatusIndicator() {
               )}
               {queueItemsToRender.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {isQueueItemsLoading
-                    ? t('syncStatus.fetchingQueue')
-                    : t('syncStatus.noQueueYet')}
+                  {isQueueItemsLoading ? t('syncStatus.fetchingQueue') : t('syncStatus.noQueueYet')}
                 </p>
               ) : (
                 <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
@@ -1097,7 +1123,7 @@ export function SyncStatusIndicator() {
                         </div>
                         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                           <span>
-{t('syncStatus.retry')} {item.retry_count}/{item.max_retries}
+                            {t('syncStatus.retry')} {item.retry_count}/{item.max_retries}
                           </span>
                           {requestedBy && (
                             <span>
@@ -1107,10 +1133,15 @@ export function SyncStatusIndicator() {
                               </code>
                             </span>
                           )}
-                          {source && <span>{t('syncStatus.source')} {source}</span>}
+                          {source && (
+                            <span>
+                              {t('syncStatus.source')} {source}
+                            </span>
+                          )}
                           {requestedAt && (
                             <span title={requestedAt}>
-                              {t('syncStatus.requested')} {formatMetadataTimestamp(requestedAt) ?? requestedAt}
+                              {t('syncStatus.requested')}{' '}
+                              {formatMetadataTimestamp(requestedAt) ?? requestedAt}
                             </span>
                           )}
                         </div>

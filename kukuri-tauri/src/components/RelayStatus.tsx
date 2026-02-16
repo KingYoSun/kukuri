@@ -190,7 +190,7 @@ export function RelayStatus() {
                       detailsOpen ? 'rotate-0' : '-rotate-90'
                     }`}
                   />
-{t('relayStatus.title')}
+                  {t('relayStatus.title')}
                 </Button>
               </CollapsibleTrigger>
               <Button variant="link" size="sm" className="-ml-1 h-auto px-0 text-xs" asChild>
@@ -222,7 +222,8 @@ export function RelayStatus() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-1" data-testid="relay-last-updated">
-            {t('relayStatus.lastUpdated')}: {lastUpdatedLabel} / {t('relayStatus.nextRefresh')}: {nextRefreshLabel}
+            {t('relayStatus.lastUpdated')}: {lastUpdatedLabel} / {t('relayStatus.nextRefresh')}:{' '}
+            {nextRefreshLabel}
           </p>
         </CardHeader>
         <CollapsibleContent>
@@ -232,7 +233,9 @@ export function RelayStatus() {
                 <AlertCircle className="mt-0.5 h-4 w-4" />
                 <div>
                   <p>{t('relayStatus.fetchFailed')}</p>
-                  <p className="text-[11px] text-destructive/80">{t('relayStatus.details')}: {relayStatusError}</p>
+                  <p className="text-[11px] text-destructive/80">
+                    {t('relayStatus.details')}: {relayStatusError}
+                  </p>
                 </div>
               </div>
             )}
@@ -244,12 +247,24 @@ export function RelayStatus() {
                   const status = statusRaw.startsWith('error') ? 'error' : statusRaw;
                   const { badgeClass, label } =
                     status === 'connected'
-                      ? { badgeClass: 'bg-green-100 text-green-800', label: t('relayStatus.connected') }
+                      ? {
+                          badgeClass: 'bg-green-100 text-green-800',
+                          label: t('relayStatus.connected'),
+                        }
                       : status === 'connecting'
-                        ? { badgeClass: 'bg-yellow-100 text-yellow-800', label: t('relayStatus.connecting') }
+                        ? {
+                            badgeClass: 'bg-yellow-100 text-yellow-800',
+                            label: t('relayStatus.connecting'),
+                          }
                         : status === 'disconnected'
-                          ? { badgeClass: 'bg-gray-100 text-gray-800', label: t('relayStatus.disconnected') }
-                          : { badgeClass: 'bg-red-100 text-red-800', label: t('relayStatus.error') };
+                          ? {
+                              badgeClass: 'bg-gray-100 text-gray-800',
+                              label: t('relayStatus.disconnected'),
+                            }
+                          : {
+                              badgeClass: 'bg-red-100 text-red-800',
+                              label: t('relayStatus.error'),
+                            };
 
                   return (
                     <div
@@ -286,7 +301,10 @@ export function RelayStatus() {
                     data-testid="relay-effective-count"
                     data-count={effectiveNodes.length}
                   >
-                    {t('relayStatus.applied')}: {effectiveNodes.length > 0 ? effectiveNodes.length : t('relayStatus.sourceNone')}
+                    {t('relayStatus.applied')}:{' '}
+                    {effectiveNodes.length > 0
+                      ? effectiveNodes.length
+                      : t('relayStatus.sourceNone')}
                   </span>
                 </div>
                 <Button
@@ -313,7 +331,9 @@ export function RelayStatus() {
                 data-cli-updated-ms={bootstrapInfo?.cliUpdatedAtMs ?? null}
               >
                 {t('relayStatus.cliProvided')}:{' '}
-                {cliAvailable ? t('relayStatus.cliInfo', { count: cliNodes.length, time: cliLastUpdatedLabel }) : t('relayStatus.notFetched')}
+                {cliAvailable
+                  ? t('relayStatus.cliInfo', { count: cliNodes.length, time: cliLastUpdatedLabel })
+                  : t('relayStatus.notFetched')}
               </div>
               {envLocked && (
                 <p className="text-[11px] text-muted-foreground" data-testid="relay-cli-locked">

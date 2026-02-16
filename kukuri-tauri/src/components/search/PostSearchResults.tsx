@@ -114,9 +114,7 @@ function LocalPostSearchResults({ query }: PostSearchResultsProps) {
 
   if (!query) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        {t('search.enterKeyword')}
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.enterKeyword')}</div>
     );
   }
 
@@ -134,14 +132,18 @@ function LocalPostSearchResults({ query }: PostSearchResultsProps) {
     return (
       <div className="text-center py-12">
         <p className="text-lg font-medium">{t('search.noPostResults')}</p>
-        <p className="text-muted-foreground mt-2">{t('search.noPostResultsDescription', { query })}</p>
+        <p className="text-muted-foreground mt-2">
+          {t('search.noPostResultsDescription', { query })}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t('search.postsFound', { count: results.length })}</p>
+      <p className="text-sm text-muted-foreground">
+        {t('search.postsFound', { count: results.length })}
+      </p>
       <div className="space-y-4">
         {results.map((post) => (
           <SearchResultPost key={post.id} post={post} />
@@ -204,18 +206,12 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
 
   if (!trimmedQuery) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        {t('search.enterKeyword')}
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.enterKeyword')}</div>
     );
   }
 
   if (!topicId) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        {t('search.selectTopic')}
-      </div>
-    );
+    return <div className="text-center py-12 text-muted-foreground">{t('search.selectTopic')}</div>;
   }
 
   if (isInitialLoading) {
@@ -228,9 +224,7 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
 
   if (searchQuery.isError) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        {t('search.searchFailed')}
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.searchFailed')}</div>
     );
   }
 
@@ -238,7 +232,9 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
     return (
       <div className="text-center py-12" data-testid="community-node-search-empty">
         <p className="text-lg font-medium">{t('search.noPostResults')}</p>
-        <p className="text-muted-foreground mt-2">{t('search.noPostResultsDescription', { query: trimmedQuery })}</p>
+        <p className="text-muted-foreground mt-2">
+          {t('search.noPostResultsDescription', { query: trimmedQuery })}
+        </p>
       </div>
     );
   }
@@ -257,7 +253,9 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">{t('search.communityNodeSearch', { query: trimmedQuery })}</p>
+        <p className="text-xs text-muted-foreground">
+          {t('search.communityNodeSearch', { query: trimmedQuery })}
+        </p>
       </div>
       <div className="space-y-4">
         {normalizedHits.map((hit, index) => (
@@ -292,7 +290,8 @@ function CommunityNodeSearchResultCard({
   index: number;
 }) {
   const { t } = useTranslation();
-  const title = hit.title || hit.summary || hit.content || t('search.searchResult', { index: index + 1 });
+  const title =
+    hit.title || hit.summary || hit.content || t('search.searchResult', { index: index + 1 });
   const summary = hit.summary || hit.content;
   const createdAtText = hit.createdAt ? new Date(hit.createdAt * 1000).toLocaleString() : 'unknown';
   const authorLabel = hit.author ? `pubkey:${hit.author}` : t('search.unknownAuthor');

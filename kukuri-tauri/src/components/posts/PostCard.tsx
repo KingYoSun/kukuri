@@ -763,7 +763,8 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
           <div className="space-y-4">
             <div className="rounded-md border p-3 text-xs text-muted-foreground">
               <p className="font-medium text-foreground">
-                {t('posts.reportTarget')}: {post.author.displayName || post.author.name || t('posts.user')}
+                {t('posts.reportTarget')}:{' '}
+                {post.author.displayName || post.author.name || t('posts.user')}
               </p>
               <p className="break-all">event: {post.id}</p>
             </div>
@@ -824,9 +825,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
             <AlertDialogTitle data-testid={`${baseTestId}-confirm-title`}>
               {t('posts.deleteConfirm')}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('posts.deleteConfirmDescription')}
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t('posts.deleteConfirmDescription')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletePostMutation.isPending}>

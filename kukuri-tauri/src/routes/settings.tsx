@@ -226,9 +226,7 @@ function SettingsPage() {
             />
           </div>
           {!currentUser && (
-            <p className="text-xs text-muted-foreground">
-              {t('settings.privacy.loginRequired')}
-            </p>
+            <p className="text-xs text-muted-foreground">{t('settings.privacy.loginRequired')}</p>
           )}
           {savingField && (
             <p className="text-xs text-muted-foreground">{t('settings.privacy.saving')}</p>

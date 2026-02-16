@@ -196,13 +196,9 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
 
   return (
     <div className="space-y-4" data-testid="user-search-results">
-      {showIdle && (
-        <p className="text-sm text-muted-foreground">{t('search.enterKeywordUser')}</p>
-      )}
+      {showIdle && <p className="text-sm text-muted-foreground">{t('search.enterKeywordUser')}</p>}
 
-      {showReady && (
-        <p className="text-sm text-muted-foreground">{t('search.readyToSearch')}</p>
-      )}
+      {showReady && <p className="text-sm text-muted-foreground">{t('search.readyToSearch')}</p>}
 
       {errorKey && (
         <SearchErrorState
@@ -218,11 +214,17 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
           data-testid="user-search-summary"
         >
           <p className="text-xs text-muted-foreground">
-            {t('search.searchTarget', { query: sanitizedQuery ? `「${sanitizedQuery}」` : t('search.noKeyword') })}
+            {t('search.searchTarget', {
+              query: sanitizedQuery ? `「${sanitizedQuery}」` : t('search.noKeyword'),
+            })}
           </p>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t('search.sortOrder')}
-            <div className="flex items-center gap-1" role="group" aria-label={t('search.sortOrderAria')}>
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label={t('search.sortOrderAria')}
+            >
               {sortOptions.map((option) => (
                 <Button
                   key={option.value}

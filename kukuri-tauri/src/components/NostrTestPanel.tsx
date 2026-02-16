@@ -259,7 +259,8 @@ export function NostrTestPanel() {
                           {event.author.slice(0, 16)}...
                         </div>
                         <div>
-                          <span className="text-muted-foreground">{t('nostrTest.kind')}:</span> {event.kind}
+                          <span className="text-muted-foreground">{t('nostrTest.kind')}:</span>{' '}
+                          {event.kind}
                           {event.kind === 1 && ' (TextNote)'}
                           {event.kind === 7 && ' (Reaction)'}
                         </div>

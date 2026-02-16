@@ -30,7 +30,12 @@ export function Header() {
         className="h-16 border-b bg-background px-6 flex items-center justify-between"
       >
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={t('nav.toggleMenu')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            aria-label={t('nav.toggleMenu')}
+          >
             <Menu className="h-5 w-5" />
           </Button>
           <h1

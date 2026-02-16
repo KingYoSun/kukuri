@@ -332,9 +332,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
           <TabsContent value="export" className="space-y-4 pt-4">
             <Alert variant="destructive">
               <AlertTitle>{t('settings.account.doNotShare')}</AlertTitle>
-              <AlertDescription>
-                {t('settings.account.doNotShareDescription')}
-              </AlertDescription>
+              <AlertDescription>{t('settings.account.doNotShareDescription')}</AlertDescription>
             </Alert>
 
             <div className="space-y-3">
@@ -370,7 +368,9 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       disabled={isCopying}
                       data-testid="key-copy-button"
                     >
-                      {isCopying ? t('settings.account.copying') : t('settings.account.copyToClipboard')}
+                      {isCopying
+                        ? t('settings.account.copying')
+                        : t('settings.account.copyToClipboard')}
                     </Button>
                     <Button
                       type="button"
@@ -394,9 +394,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
           <TabsContent value="import" className="space-y-4 pt-4">
             <Alert>
               <AlertTitle>{t('settings.account.restoreFromBackup')}</AlertTitle>
-              <AlertDescription>
-                {t('settings.account.restoreDescription')}
-              </AlertDescription>
+              <AlertDescription>{t('settings.account.restoreDescription')}</AlertDescription>
             </Alert>
 
             <div className="space-y-3">
@@ -432,7 +430,9 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                 disabled={isImporting || !canImport}
                 data-testid="key-import-button"
               >
-                {isImporting ? t('settings.account.importing') : t('settings.account.addToSecureStorage')}
+                {isImporting
+                  ? t('settings.account.importing')
+                  : t('settings.account.addToSecureStorage')}
               </Button>
 
               <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">

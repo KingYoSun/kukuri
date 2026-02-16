@@ -61,9 +61,7 @@ export function OfflineIndicator() {
               <>
                 <WifiOff className="h-4 w-4" />
                 <span className="text-sm font-medium">{t('offline.offlineMode')}</span>
-                <span className="text-xs opacity-90">
-                  {t('offline.changesSaved')}
-                </span>
+                <span className="text-xs opacity-90">{t('offline.changesSaved')}</span>
               </>
             )}
           </div>
@@ -105,7 +103,9 @@ export function OfflineIndicator() {
               <TooltipContent>
                 <div className="space-y-1 text-xs text-muted-foreground">
                   {isSyncing && <p>{t('offline.syncingStatus')}</p>}
-                  {pendingCount > 0 && <p>{t('offline.pendingActions', { count: pendingCount })}</p>}
+                  {pendingCount > 0 && (
+                    <p>{t('offline.pendingActions', { count: pendingCount })}</p>
+                  )}
                   <p>{t('offline.checkDetails')}</p>
                 </div>
               </TooltipContent>

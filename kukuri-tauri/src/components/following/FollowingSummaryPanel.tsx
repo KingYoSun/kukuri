@@ -21,11 +21,14 @@ export function FollowingSummaryPanel({
 }: FollowingSummaryPanelProps) {
   const { t } = useTranslation();
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
-  const postsCount = posts.length > 0 || data ? t('following.summary.items', { count: posts.length }) : null;
+  const postsCount =
+    posts.length > 0 || data ? t('following.summary.items', { count: posts.length }) : null;
 
   const uniqueAuthors =
     posts.length > 0
-      ? t('following.summary.people', { count: new Set(posts.map((post) => post.author.npub || post.author.pubkey)).size })
+      ? t('following.summary.people', {
+          count: new Set(posts.map((post) => post.author.npub || post.author.pubkey)).size,
+        })
       : data
         ? t('following.summary.zeroPeople')
         : null;
@@ -37,7 +40,12 @@ export function FollowingSummaryPanel({
     formatRelativeTimeInfo(latestServerTime);
   const updatedLagLabel = formatLagLabel(latestServerTime);
 
-  const remainingPages = data || hasNextPage ? (hasNextPage ? t('following.summary.hasRemaining') : t('following.summary.noRemaining')) : null;
+  const remainingPages =
+    data || hasNextPage
+      ? hasNextPage
+        ? t('following.summary.hasRemaining')
+        : t('following.summary.noRemaining')
+      : null;
 
   const showLoadingState = (condition: boolean) => (isLoading || isFetching) && condition;
 

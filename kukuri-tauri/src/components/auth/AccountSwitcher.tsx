@@ -193,9 +193,7 @@ export function AccountSwitcher() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('common.removeAccount')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('common.removeAccountConfirm')}
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t('common.removeAccountConfirm')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>

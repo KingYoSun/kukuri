@@ -69,8 +69,12 @@ export function LoginForm() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t('auth.back')}
           </Button>
-          <CardTitle>{isAuthenticated ? t('common.addAnotherAccount') : t('auth.loginTitle')}</CardTitle>
-          <CardDescription>{isAuthenticated ? t('auth.addAccountDescription') : t('auth.loginDescription')}</CardDescription>
+          <CardTitle>
+            {isAuthenticated ? t('common.addAnotherAccount') : t('auth.loginTitle')}
+          </CardTitle>
+          <CardDescription>
+            {isAuthenticated ? t('auth.addAccountDescription') : t('auth.loginDescription')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -96,9 +100,7 @@ export function LoginForm() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t('auth.nsecHint')}
-              </p>
+              <p className="text-xs text-muted-foreground">{t('auth.nsecHint')}</p>
             </div>
 
             {!isAuthenticated && (
@@ -118,15 +120,17 @@ export function LoginForm() {
             )}
 
             <div className="bg-warning/10 border border-warning rounded-md p-3">
-              <p className="text-sm text-warning-foreground">
-                {t('auth.nsecWarning')}
-              </p>
+              <p className="text-sm text-warning-foreground">{t('auth.nsecWarning')}</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading 
-                ? (isAuthenticated ? t('auth.addingAccount') : t('auth.loggingIn'))
-                : (isAuthenticated ? t('common.addAnotherAccount') : t('auth.login'))}
+              {isLoading
+                ? isAuthenticated
+                  ? t('auth.addingAccount')
+                  : t('auth.loggingIn')
+                : isAuthenticated
+                  ? t('common.addAnotherAccount')
+                  : t('auth.login')}
             </Button>
           </form>
         </CardContent>

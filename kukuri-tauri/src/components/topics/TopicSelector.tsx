@@ -160,8 +160,10 @@ export function TopicSelector({
                       const displayDescription = isPublicTopic
                         ? i18n.t('topics.publicTimeline')
                         : topic.description;
-                      return displayDescription && (
-                        <div className="text-xs text-muted-foreground">{displayDescription}</div>
+                      return (
+                        displayDescription && (
+                          <div className="text-xs text-muted-foreground">{displayDescription}</div>
+                        )
                       );
                     })()}
                   </div>

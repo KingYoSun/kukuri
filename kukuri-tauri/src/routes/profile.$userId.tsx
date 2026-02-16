@@ -45,7 +45,9 @@ type ProfileListPage = {
   totalCount: number;
 };
 
-const getFollowSortOptions = (t: (key: string) => string): Array<{ value: FollowListSort; label: string }> => [
+const getFollowSortOptions = (
+  t: (key: string) => string,
+): Array<{ value: FollowListSort; label: string }> => [
   { value: 'recent', label: t('profile.sortRecent') },
   { value: 'oldest', label: t('profile.sortOldest') },
   { value: 'name_asc', label: t('profile.sortNameAsc') },
@@ -651,7 +653,9 @@ function ProfilePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">{t('profile.posts')}</h2>
-          <span className="text-sm text-muted-foreground">{t('profile.postsCount', { count: posts.length })}</span>
+          <span className="text-sm text-muted-foreground">
+            {t('profile.postsCount', { count: posts.length })}
+          </span>
         </div>
         {postsQuery.isLoading ? (
           <div className="flex justify-center py-8">

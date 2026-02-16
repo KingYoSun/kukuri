@@ -37,7 +37,9 @@ interface PostComposerProps {
   quotedPost?: string;
 }
 
-const getScopeOptions = (t: (key: string) => string): Array<{ value: PostScope; label: string; description: string }> => [
+const getScopeOptions = (
+  t: (key: string) => string,
+): Array<{ value: PostScope; label: string; description: string }> => [
   {
     value: 'public',
     label: t('posts.composer.scope.public'),
@@ -409,8 +411,16 @@ export function PostComposer({
             {/* Reply/Quote indicator */}
             {(replyTo || quotedPost) && (
               <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                {replyTo && <div>{t('posts.composer.replyingTo')}: {replyTo}</div>}
-                {quotedPost && <div>{t('posts.composer.quoting')}: {quotedPost}</div>}
+                {replyTo && (
+                  <div>
+                    {t('posts.composer.replyingTo')}: {replyTo}
+                  </div>
+                )}
+                {quotedPost && (
+                  <div>
+                    {t('posts.composer.quoting')}: {quotedPost}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -18,21 +18,26 @@ export function TrendingSummaryPanel({
   isPostsFetching = false,
 }: TrendingSummaryPanelProps) {
   const { t } = useTranslation();
-  const topicsCount = topics && topics.topics ? t('trending.summary.items', { count: topics.topics.length }) : null;
+  const topicsCount =
+    topics && topics.topics ? t('trending.summary.items', { count: topics.topics.length }) : null;
 
   const previewPostsCount =
     posts?.topics != null
-      ? t('trending.summary.items', { count: posts.topics.reduce((total, topic) => total + topic.posts.length, 0) })
+      ? t('trending.summary.items', {
+          count: posts.topics.reduce((total, topic) => total + topic.posts.length, 0),
+        })
       : topics && topics.topics.length === 0
         ? t('trending.summary.zeroItems')
         : null;
 
   const averageScore =
     topics && topics.topics.length > 0
-      ? t('trending.summary.points', { score: (
-          topics.topics.reduce((total, topic) => total + topic.trendingScore, 0) /
-          topics.topics.length
-        ).toFixed(1) })
+      ? t('trending.summary.points', {
+          score: (
+            topics.topics.reduce((total, topic) => total + topic.trendingScore, 0) /
+            topics.topics.length
+          ).toFixed(1),
+        })
       : topics && topics.topics.length === 0
         ? t('trending.summary.zeroPoints')
         : null;

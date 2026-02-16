@@ -252,7 +252,9 @@ export function PeerConnectionPanel() {
                         <p className="text-xs text-muted-foreground">
                           {new Date(conn.timestamp).toLocaleString()}
                           {conn.status === 'failed' && (
-                            <span className="ml-2 text-red-500">{t('p2pPanel.connectionFailed')}</span>
+                            <span className="ml-2 text-red-500">
+                              {t('p2pPanel.connectionFailed')}
+                            </span>
                           )}
                         </p>
                       </div>

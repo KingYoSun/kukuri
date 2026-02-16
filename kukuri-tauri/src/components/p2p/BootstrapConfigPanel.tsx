@@ -134,7 +134,9 @@ export function BootstrapConfigPanel() {
               ))}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">{t('bootstrapPanel.source')}: {sourceLabel}</p>
+          <p className="text-xs text-muted-foreground">
+            {t('bootstrapPanel.source')}: {sourceLabel}
+          </p>
           {envLocked && (
             <p className="text-xs text-muted-foreground">{t('bootstrapPanel.envLockedHint')}</p>
           )}
@@ -211,7 +213,11 @@ export function BootstrapConfigPanel() {
 
         <div className="pt-2">
           <Button onClick={save} disabled={saving || envLocked}>
-            {envLocked ? t('bootstrapPanel.envLocked') : saving ? t('bootstrapPanel.saving') : t('bootstrapPanel.save')}
+            {envLocked
+              ? t('bootstrapPanel.envLocked')
+              : saving
+                ? t('bootstrapPanel.saving')
+                : t('bootstrapPanel.save')}
           </Button>
         </div>
       </CardContent>

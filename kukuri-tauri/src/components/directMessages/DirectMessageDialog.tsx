@@ -263,7 +263,7 @@ export function DirectMessageDialog() {
   const showTopSpinner = hasLoadedAtLeastOnePage && isFetchingNextPage;
 
   const sendMessage = useCallback(
-      async (
+    async (
       rawContent: string,
       options: { retryingClientId?: string; preserveDraft?: boolean } = {},
     ) => {
@@ -371,7 +371,9 @@ export function DirectMessageDialog() {
       <DialogContent className="max-w-xl space-y-4">
         <DialogHeader>
           <DialogTitle>{t('dm.dialogTitle')}</DialogTitle>
-          <p className="text-sm text-muted-foreground break-all">{t('dm.recipient')}: {activeConversationNpub}</p>
+          <p className="text-sm text-muted-foreground break-all">
+            {t('dm.recipient')}: {activeConversationNpub}
+          </p>
         </DialogHeader>
         <div ref={scrollAreaWrapperRef}>
           <ScrollArea className="h-72 rounded-md border border-border">
@@ -416,9 +418,7 @@ export function DirectMessageDialog() {
                   {t('dm.loadingHistory')}
                 </div>
               ) : messages.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t('dm.noMessagesYet')}
-                </p>
+                <p className="text-sm text-muted-foreground">{t('dm.noMessagesYet')}</p>
               ) : (
                 messages.map((message) => {
                   const isSelf = message.senderNpub === currentUser?.npub;

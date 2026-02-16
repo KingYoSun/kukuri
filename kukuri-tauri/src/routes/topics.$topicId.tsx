@@ -42,7 +42,9 @@ function TopicPage() {
       ? {
           id: pendingTopic.pending_id,
           name: pendingTopic.name,
-          description: isPublicTopic ? i18n.t('topics.publicTimeline') : (pendingTopic.description ?? ''),
+          description: isPublicTopic
+            ? i18n.t('topics.publicTimeline')
+            : (pendingTopic.description ?? ''),
           tags: [],
           memberCount: 0,
           postCount: 0,
@@ -65,7 +67,7 @@ function TopicPage() {
       visibility: 'public',
       isJoined: joinedTopics.includes(topicId),
     };
-  
+
   const isJoined = useMemo(() => joinedTopics.includes(topicId), [joinedTopics, topicId]);
 
   if (!topic) {
@@ -95,9 +97,7 @@ function TopicPage() {
             <span>•</span>
             <span>
               {t('topics.lastUpdated')}:{' '}
-              {topic.lastActive
-                ? new Date(topic.lastActive * 1000).toLocaleDateString()
-                : '-'}
+              {topic.lastActive ? new Date(topic.lastActive * 1000).toLocaleDateString() : '-'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -151,9 +151,7 @@ function TopicPage() {
         ) : !posts || posts.length === 0 ? (
           <Alert>
             <AlertDescription>
-              {isJoined
-                ? t('topics.noPostsYet')
-                : t('topics.joinToSeePosts')}
+              {isJoined ? t('topics.noPostsYet') : t('topics.joinToSeePosts')}
             </AlertDescription>
           </Alert>
         ) : (

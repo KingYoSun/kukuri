@@ -47,13 +47,11 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const createTopicFormSchema = (t: (key: string) => string) => z.object({
-  name: z
-    .string()
-    .min(1, t('topics.form.nameRequired'))
-    .max(50, t('topics.form.nameMaxLength')),
-  description: z.string().max(200, t('topics.form.descriptionMaxLength')).optional(),
-});
+const createTopicFormSchema = (t: (key: string) => string) =>
+  z.object({
+    name: z.string().min(1, t('topics.form.nameRequired')).max(50, t('topics.form.nameMaxLength')),
+    description: z.string().max(200, t('topics.form.descriptionMaxLength')).optional(),
+  });
 
 type TopicFormValues = {
   name: string;
@@ -284,7 +282,9 @@ export function TopicFormModal({
               </Button>
               <Button type="submit" disabled={isSubmitting} data-testid="topic-submit-button">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {mode === 'create' || mode === 'create-from-composer' ? t('topics.form.create') : t('topics.form.update')}
+                {mode === 'create' || mode === 'create-from-composer'
+                  ? t('topics.form.create')
+                  : t('topics.form.update')}
               </Button>
             </DialogFooter>
           </form>

@@ -26,7 +26,9 @@ export const useTopics = () => {
       const topicsWithStats = await Promise.all(
         apiTopics.map(async (topic) => {
           const isPublicTopic = topic.id === DEFAULT_PUBLIC_TOPIC_ID;
-          const description = isPublicTopic ? i18n.t('topics.publicTimeline') : (topic.description ?? '');
+          const description = isPublicTopic
+            ? i18n.t('topics.publicTimeline')
+            : (topic.description ?? '');
           try {
             const stats = await TauriApi.getTopicStats(topic.id);
             return {

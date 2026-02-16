@@ -113,7 +113,10 @@ export function P2PStatus() {
     if (!lastStatusFetchedAt) {
       return t('p2pStatus.notFetched');
     }
-    return formatDistanceToNow(lastStatusFetchedAt, { addSuffix: true, locale: getDateFnsLocale() });
+    return formatDistanceToNow(lastStatusFetchedAt, {
+      addSuffix: true,
+      locale: getDateFnsLocale(),
+    });
   }, [lastStatusFetchedAt, t]);
 
   const nextRefreshLabel = useMemo(() => {
@@ -141,15 +144,19 @@ export function P2PStatus() {
                     detailsOpen ? 'rotate-0' : '-rotate-90'
                   }`}
                 />
-{t('p2pStatus.title')}
+                {t('p2pStatus.title')}
               </Button>
             </CollapsibleTrigger>
             {getConnectionIcon()}
           </div>
           <CardDescription className="text-xs">{t('p2pStatus.description')}</CardDescription>
           <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>{t('p2pStatus.lastUpdated')}: {lastUpdatedLabel}</span>
-            <span>{t('p2pStatus.nextRefresh')}: {nextRefreshLabel}</span>
+            <span>
+              {t('p2pStatus.lastUpdated')}: {lastUpdatedLabel}
+            </span>
+            <span>
+              {t('p2pStatus.nextRefresh')}: {nextRefreshLabel}
+            </span>
           </div>
           <div className="mt-2 flex justify-end">
             <Button
@@ -245,7 +252,9 @@ export function P2PStatus() {
                 {/* メトリクスサマリ */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{t('p2pStatus.gossipMetrics')}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {t('p2pStatus.gossipMetrics')}
+                    </span>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -318,7 +327,9 @@ export function P2PStatus() {
                   <>
                     <Separator />
                     <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">{t('p2pStatus.networkAddress')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t('p2pStatus.networkAddress')}
+                      </p>
                       <code className="text-xs font-mono break-all bg-muted/50 rounded px-2 py-1 block">
                         {nodeAddr}
                       </code>
@@ -338,7 +349,9 @@ export function P2PStatus() {
             {connectionStatus === 'connecting' && (
               <div className="text-center py-4">
                 <CircleIcon className="h-8 w-8 text-yellow-500 animate-pulse mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">{t('p2pStatus.connectingToNetwork')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t('p2pStatus.connectingToNetwork')}
+                </p>
               </div>
             )}
           </CardContent>

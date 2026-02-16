@@ -45,9 +45,7 @@ export function FollowingPage() {
         <Alert variant="destructive" className="max-w-2xl mx-auto">
           <AlertTitle>{t('following.errorTitle')}</AlertTitle>
           <AlertDescription className="flex flex-col gap-4">
-            <span>
-              {error instanceof Error ? error.message : t('common.loading')}
-            </span>
+            <span>{error instanceof Error ? error.message : t('common.loading')}</span>
             <Button variant="outline" onClick={() => refetch()}>
               {t('common.retry')}
             </Button>

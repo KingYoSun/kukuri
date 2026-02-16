@@ -97,9 +97,7 @@ export function TrendingPage() {
         <Alert variant="destructive" className="max-w-2xl mx-auto">
           <AlertTitle>{t('trending.errorTitle')}</AlertTitle>
           <AlertDescription className="flex flex-col gap-4">
-            <span>
-              {topicsError instanceof Error ? topicsError.message : t('common.loading')}
-            </span>
+            <span>{topicsError instanceof Error ? topicsError.message : t('common.loading')}</span>
             <Button variant="outline" onClick={() => refetchTopics()}>
               {t('common.retry')}
             </Button>
@@ -182,8 +180,12 @@ export function TrendingPage() {
                   const displayDescription = isPublicTopic
                     ? i18n.t('topics.publicTimeline')
                     : topic.description;
-                  return displayDescription && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">{displayDescription}</p>
+                  return (
+                    displayDescription && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {displayDescription}
+                      </p>
+                    )
                   );
                 })()}
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -201,7 +203,9 @@ export function TrendingPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground">{t('trending.latestPosts')}</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground">
+                  {t('trending.latestPosts')}
+                </h3>
                 {topic.posts.length > 0 ? (
                   <ul className="space-y-2" data-testid={`trending-topic-${topic.topicId}-posts`}>
                     {topic.posts.map((post) => (
@@ -211,7 +215,9 @@ export function TrendingPage() {
                       >
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <ArrowUpRight className="h-3 w-3" />
-                          <span>{post.author.displayName || post.author.name || t('trending.user')}</span>
+                          <span>
+                            {post.author.displayName || post.author.name || t('trending.user')}
+                          </span>
                           <span aria-hidden>·</span>
                           <span>
                             {formatDistanceToNow(new Date(post.created_at * 1000), {

@@ -25,9 +25,8 @@ export function TopicCard({ topic }: TopicCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const displayDescription = topic.id === DEFAULT_PUBLIC_TOPIC_ID
-    ? i18n.t('topics.publicTimeline')
-    : topic.description;
+  const displayDescription =
+    topic.id === DEFAULT_PUBLIC_TOPIC_ID ? i18n.t('topics.publicTimeline') : topic.description;
 
   const lastActiveText = topic.lastActive
     ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
@@ -88,7 +87,11 @@ export function TopicCard({ topic }: TopicCardProps) {
             onClick={handleJoinToggle}
             disabled={isLoading}
             aria-pressed={isJoined}
-            aria-label={isJoined ? `「${topic.name}」 ${t('topics.leave')}` : `「${topic.name}」 ${t('topics.join')}`}
+            aria-label={
+              isJoined
+                ? `「${topic.name}」 ${t('topics.leave')}`
+                : `「${topic.name}」 ${t('topics.join')}`
+            }
           >
             {isLoading && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
             {isJoined ? t('topics.joined') : t('topics.join')}

@@ -183,7 +183,10 @@ export function ConflictResolutionDialog({
             {t('sync.conflictResolution.title')}
           </DialogTitle>
           <DialogDescription>
-            {t('sync.conflictResolution.conflictCount', { current: currentIndex + 1, total: conflicts.length })}
+            {t('sync.conflictResolution.conflictCount', {
+              current: currentIndex + 1,
+              total: conflicts.length,
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -197,7 +200,9 @@ export function ConflictResolutionDialog({
               className={cn('grid w-full gap-2', showDocTab ? 'grid-cols-2' : 'grid-cols-1')}
             >
               <TabsTrigger value="summary">{t('sync.conflictResolution.summary')}</TabsTrigger>
-              {showDocTab && <TabsTrigger value="doc">{t('sync.conflictResolution.docBlob')}</TabsTrigger>}
+              {showDocTab && (
+                <TabsTrigger value="doc">{t('sync.conflictResolution.docBlob')}</TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="summary" className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -207,7 +212,9 @@ export function ConflictResolutionDialog({
                       <Monitor className="h-4 w-4" />
                       {t('sync.conflictResolution.localChanges')}
                     </CardTitle>
-                    <CardDescription className="text-xs">{t('sync.conflictResolution.localChangesDescription')}</CardDescription>
+                    <CardDescription className="text-xs">
+                      {t('sync.conflictResolution.localChangesDescription')}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-xs text-muted-foreground mb-2 space-y-1">
@@ -287,7 +294,9 @@ export function ConflictResolutionDialog({
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">{t('sync.conflictResolution.selectResolution')}</CardTitle>
+                  <CardTitle className="text-sm">
+                    {t('sync.conflictResolution.selectResolution')}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <RadioGroup
@@ -335,7 +344,9 @@ export function ConflictResolutionDialog({
             {showDocTab && (
               <TabsContent value="doc">
                 {docComparisonRows.every((row) => !row.local && !row.remote) ? (
-                  <p className="text-sm text-muted-foreground">{t('sync.conflictResolution.noDocBlobInfo')}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t('sync.conflictResolution.noDocBlobInfo')}
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     {docComparisonRows.map((row) => {
@@ -350,7 +361,9 @@ export function ConflictResolutionDialog({
                           </p>
                           <div className="grid grid-cols-2 gap-3 text-xs">
                             <div>
-                              <p className="text-muted-foreground mb-0.5">{t('sync.conflictResolution.local')}</p>
+                              <p className="text-muted-foreground mb-0.5">
+                                {t('sync.conflictResolution.local')}
+                              </p>
                               <p
                                 className={cn('font-medium break-all', differ && 'text-amber-600')}
                               >
@@ -358,7 +371,9 @@ export function ConflictResolutionDialog({
                               </p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground mb-0.5">{t('sync.conflictResolution.remote')}</p>
+                              <p className="text-muted-foreground mb-0.5">
+                                {t('sync.conflictResolution.remote')}
+                              </p>
                               <p
                                 className={cn('font-medium break-all', differ && 'text-amber-600')}
                               >
@@ -381,7 +396,9 @@ export function ConflictResolutionDialog({
             {t('sync.conflictResolution.skip')}
           </Button>
           <Button onClick={handleResolve} disabled={isResolving}>
-            {isResolving ? t('sync.conflictResolution.applying') : t('sync.conflictResolution.apply')}
+            {isResolving
+              ? t('sync.conflictResolution.applying')
+              : t('sync.conflictResolution.apply')}
           </Button>
         </DialogFooter>
       </DialogContent>

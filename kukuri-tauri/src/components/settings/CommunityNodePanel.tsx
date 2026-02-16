@@ -379,7 +379,9 @@ export function CommunityNodePanel() {
         <div className="space-y-3">
           <div>
             <p className="font-medium">{t('communityNodePanel.trustAnchor')}</p>
-            <p className="text-sm text-muted-foreground">{t('communityNodePanel.trustAnchorHint')}</p>
+            <p className="text-sm text-muted-foreground">
+              {t('communityNodePanel.trustAnchorHint')}
+            </p>
           </div>
           <Select
             value={trustAnchorAttester}
@@ -399,9 +401,7 @@ export function CommunityNodePanel() {
             </SelectContent>
           </Select>
           {trustAnchorAttester === 'auto' ? (
-            <p className="text-xs text-muted-foreground">
-              {t('communityNodePanel.autoModeHint')}
-            </p>
+            <p className="text-xs text-muted-foreground">{t('communityNodePanel.autoModeHint')}</p>
           ) : trustAnchorNode ? (
             <p
               className="text-xs text-muted-foreground"
@@ -481,7 +481,11 @@ export function CommunityNodePanel() {
                         <Badge variant="outline">{t('communityNodePanel.unauthenticated')}</Badge>
                       )}
                       {node.pubkey && <span>pubkey: {node.pubkey}</span>}
-                      {expiresAt && <span>{t('communityNodePanel.expiresAt')} {expiresAt}</span>}
+                      {expiresAt && (
+                        <span>
+                          {t('communityNodePanel.expiresAt')} {expiresAt}
+                        </span>
+                      )}
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="flex items-center justify-between">
@@ -498,7 +502,9 @@ export function CommunityNodePanel() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label htmlFor={`community-node-role-trust-${index}`}>{t('communityNodePanel.roleTrust')}</Label>
+                        <Label htmlFor={`community-node-role-trust-${index}`}>
+                          {t('communityNodePanel.roleTrust')}
+                        </Label>
                         <Switch
                           id={`community-node-role-trust-${index}`}
                           data-testid={`community-node-role-trust-${index}`}
@@ -509,7 +515,9 @@ export function CommunityNodePanel() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label htmlFor={`community-node-role-search-${index}`}>{t('communityNodePanel.roleSearch')}</Label>
+                        <Label htmlFor={`community-node-role-search-${index}`}>
+                          {t('communityNodePanel.roleSearch')}
+                        </Label>
                         <Switch
                           id={`community-node-role-search-${index}`}
                           data-testid={`community-node-role-search-${index}`}
@@ -538,7 +546,9 @@ export function CommunityNodePanel() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t('communityNodePanel.noNodesRegistered')}</p>
+            <p className="text-sm text-muted-foreground">
+              {t('communityNodePanel.noNodesRegistered')}
+            </p>
           )}
         </div>
 
@@ -593,7 +603,9 @@ export function CommunityNodePanel() {
             className="rounded-md border p-3 text-xs text-muted-foreground"
             data-testid="community-node-consents"
           >
-            {consentsQuery.data ? JSON.stringify(consentsQuery.data, null, 2) : t('communityNodePanel.notFetched')}
+            {consentsQuery.data
+              ? JSON.stringify(consentsQuery.data, null, 2)
+              : t('communityNodePanel.notFetched')}
           </div>
           <Button
             variant="outline"
@@ -609,9 +621,7 @@ export function CommunityNodePanel() {
 
         <div className="space-y-3">
           <p className="font-medium">{t('communityNodePanel.inviteP2PTitle')}</p>
-          <p className="text-sm text-muted-foreground">
-            {t('communityNodePanel.inviteP2PHint')}
-          </p>
+          <p className="text-sm text-muted-foreground">{t('communityNodePanel.inviteP2PHint')}</p>
           <Textarea
             placeholder={t('communityNodePanel.invitePlaceholder')}
             rows={6}
@@ -677,7 +687,9 @@ export function CommunityNodePanel() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t('communityNodePanel.noPendingJoinRequest')}</p>
+            <p className="text-sm text-muted-foreground">
+              {t('communityNodePanel.noPendingJoinRequest')}
+            </p>
           )}
         </div>
         <Separator />

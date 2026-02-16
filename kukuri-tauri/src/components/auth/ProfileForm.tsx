@@ -194,7 +194,7 @@ export function ProfileForm({
             {values.name ? getInitials(values.name) : <User className="h-12 w-12" />}
           </AvatarFallback>
         </Avatar>
-          <Button
+        <Button
           type="button"
           variant="outline"
           size="sm"
@@ -209,7 +209,8 @@ export function ProfileForm({
           {t('auth.imageFormatHint')}
           {selectedAvatar && (
             <span className="ml-1">
-              {selectedAvatar.fileName}（{formatFileSize(selectedAvatar.sizeBytes)}）{t('auth.selectedImage')}
+              {selectedAvatar.fileName}（{formatFileSize(selectedAvatar.sizeBytes)}）
+              {t('auth.selectedImage')}
             </span>
           )}
         </p>
@@ -272,9 +273,7 @@ export function ProfileForm({
             placeholder={t('auth.nip05Placeholder')}
             disabled={isSubmitting}
           />
-          <p className="text-xs text-muted-foreground">
-            {t('auth.nip05Hint')}
-          </p>
+          <p className="text-xs text-muted-foreground">{t('auth.nip05Hint')}</p>
         </div>
       </div>
 

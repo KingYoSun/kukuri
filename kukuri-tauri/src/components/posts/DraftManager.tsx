@@ -43,7 +43,8 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
 
   const formatDate = (date: Date) => {
     const locale = getCurrentLocale();
-    const formatStr = locale === 'ja' ? 'M月d日 HH:mm' : locale === 'zh-CN' ? 'M月d日 HH:mm' : 'MMM d, HH:mm';
+    const formatStr =
+      locale === 'ja' ? 'M月d日 HH:mm' : locale === 'zh-CN' ? 'M月d日 HH:mm' : 'MMM d, HH:mm';
     return format(new Date(date), formatStr, { locale: getDateFnsLocale() });
   };
 
@@ -106,7 +107,9 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
 
                         <div className="flex items-center gap-1 ml-auto">
                           <Clock className="w-3 h-3" />
-                          <span>{t('drafts.updated')}: {formatDate(draft.updatedAt)}</span>
+                          <span>
+                            {t('drafts.updated')}: {formatDate(draft.updatedAt)}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -151,9 +154,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('drafts.deleteTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('drafts.deleteDescription')}
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t('drafts.deleteDescription')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
@@ -172,9 +173,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('drafts.clearAllTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('drafts.clearAllDescription')}
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t('drafts.clearAllDescription')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>

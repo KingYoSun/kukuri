@@ -74,9 +74,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
         <CardContent>
           <div className="text-center py-8 space-y-4">
             <NetworkIcon className="h-12 w-12 text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground">
-              {t('topicMesh.notJoined')}
-            </p>
+            <p className="text-sm text-muted-foreground">{t('topicMesh.notJoined')}</p>
             <Button onClick={handleJoinTopic} disabled={isRefreshing}>
               {isRefreshing ? (
                 <>
@@ -140,7 +138,9 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
         {/* 接続ピア一覧 */}
         {topicStats && topicStats.connected_peers.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground">{t('topicMesh.connectedPeersList')}</h4>
+            <h4 className="text-sm font-medium text-muted-foreground">
+              {t('topicMesh.connectedPeersList')}
+            </h4>
             <ScrollArea className="h-32 w-full rounded-md border">
               <div className="p-2 space-y-2">
                 {topicStats.connected_peers.map((peerId: string) => (
@@ -167,7 +167,9 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
           <>
             <Separator />
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-muted-foreground">{t('topicMesh.recentMessages')}</h4>
+              <h4 className="text-sm font-medium text-muted-foreground">
+                {t('topicMesh.recentMessages')}
+              </h4>
               <ScrollArea className="h-48 w-full rounded-md border">
                 <div className="p-2 space-y-2">
                   {messages.slice(0, 10).map((message: P2PMessage) => (
@@ -194,9 +196,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
           <div className="text-center py-8">
             <NetworkIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">{t('topicMesh.noPeersConnected')}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t('topicMesh.waitingForNodes')}
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{t('topicMesh.waitingForNodes')}</p>
           </div>
         )}
       </CardContent>

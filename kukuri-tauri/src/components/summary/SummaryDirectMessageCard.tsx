@@ -18,7 +18,12 @@ export const SummaryDirectMessageCard = ({ testIdPrefix }: SummaryDirectMessageC
     latestMessage ? latestMessage.createdAt : null,
   );
   const helperText = latestMessage
-    ? [display ?? helper, latestConversationNpub ? t('summary.dmConversation', { npub: latestConversationNpub }) : null]
+    ? [
+        display ?? helper,
+        latestConversationNpub
+          ? t('summary.dmConversation', { npub: latestConversationNpub })
+          : null,
+      ]
         .filter(Boolean)
         .join(' / ') || t('summary.dmNoHistory')
     : t('summary.dmNoHistory');

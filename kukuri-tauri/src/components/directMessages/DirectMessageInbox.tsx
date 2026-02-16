@@ -383,9 +383,7 @@ export function DirectMessageInbox() {
       <DialogContent className="max-w-lg space-y-4">
         <DialogHeader>
           <DialogTitle>{t('dm.inboxTitle')}</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            {t('dm.inboxDescription')}
-          </p>
+          <p className="text-sm text-muted-foreground">{t('dm.inboxDescription')}</p>
         </DialogHeader>
 
         <div className="rounded-md border border-border p-4 space-y-3">
@@ -405,9 +403,7 @@ export function DirectMessageInbox() {
               {validationError}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              {t('dm.targetHint')}
-            </p>
+            <p className="text-xs text-muted-foreground">{t('dm.targetHint')}</p>
           )}
         </div>
 
@@ -456,7 +452,9 @@ export function DirectMessageInbox() {
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted-foreground">{t('dm.recentConversations')}</h2>
+            <h2 className="text-sm font-medium text-muted-foreground">
+              {t('dm.recentConversations')}
+            </h2>
             <Button
               size="sm"
               variant="outline"
@@ -492,11 +490,16 @@ export function DirectMessageInbox() {
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>
-              {t('dm.showing', { filtered: filteredConversationEntries.length, total: conversationEntries.length })}
+              {t('dm.showing', {
+                filtered: filteredConversationEntries.length,
+                total: conversationEntries.length,
+              })}
             </span>
             <div className="flex items-center gap-2">
               {conversationQuery && autoCompleteConversationNpub ? (
-                <span>{t('dm.openWithEnter', { npub: formatNpub(autoCompleteConversationNpub) })}</span>
+                <span>
+                  {t('dm.openWithEnter', { npub: formatNpub(autoCompleteConversationNpub) })}
+                </span>
               ) : null}
               {hasNextPage ? (
                 <Button
@@ -513,9 +516,7 @@ export function DirectMessageInbox() {
             </div>
           </div>
           {isConversationsError && hasConversations ? (
-            <div className="text-[11px] text-destructive/80">
-              {t('dm.fetchFailed')}
-            </div>
+            <div className="text-[11px] text-destructive/80">{t('dm.fetchFailed')}</div>
           ) : null}
           <div
             ref={conversationListRef}
@@ -529,9 +530,7 @@ export function DirectMessageInbox() {
               </div>
             ) : showErrorState ? (
               <div className="p-4 space-y-2">
-                <p className="text-sm text-destructive">
-                  {t('dm.fetchConversationsFailed')}
-                </p>
+                <p className="text-sm text-destructive">{t('dm.fetchConversationsFailed')}</p>
                 <Button size="sm" variant="outline" onClick={() => refetchConversations()}>
                   {t('dm.retry')}
                 </Button>
@@ -542,9 +541,7 @@ export function DirectMessageInbox() {
                 ) : null}
               </div>
             ) : !hasConversations ? (
-              <div className="p-4 text-sm text-muted-foreground">
-                {t('dm.noConversations')}
-              </div>
+              <div className="p-4 text-sm text-muted-foreground">{t('dm.noConversations')}</div>
             ) : !hasFilteredConversations ? (
               <div className="p-4 text-sm text-muted-foreground" data-testid="dm-inbox-no-results">
                 {t('dm.noMatchingConversations', { query: conversationQuery })}
@@ -627,9 +624,12 @@ export function DirectMessageInbox() {
                       </p>
                       <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
                         <span>
-                          {t('dm.lastReceived')}: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
+                          {t('dm.lastReceived')}:{' '}
+                          {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
                         </span>
-                        {activeConversationNpub === entry.npub ? <span>{t('dm.opening')}</span> : null}
+                        {activeConversationNpub === entry.npub ? (
+                          <span>{t('dm.opening')}</span>
+                        ) : null}
                       </div>
                       {entry.lastReadAt > 0 ? (
                         <div
@@ -753,9 +753,12 @@ export function DirectMessageInbox() {
                       </p>
                       <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
                         <span>
-                          {t('dm.lastReceived')}: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
+                          {t('dm.lastReceived')}:{' '}
+                          {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
                         </span>
-                        {activeConversationNpub === entry.npub ? <span>{t('dm.opening')}</span> : null}
+                        {activeConversationNpub === entry.npub ? (
+                          <span>{t('dm.opening')}</span>
+                        ) : null}
                       </div>
                       {entry.lastReadAt > 0 ? (
                         <div

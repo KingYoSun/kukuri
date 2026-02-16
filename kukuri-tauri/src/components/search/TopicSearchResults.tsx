@@ -35,9 +35,7 @@ export function TopicSearchResults({ query }: TopicSearchResultsProps) {
 
   if (!query) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        {t('search.enterKeyword')}
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.enterKeyword')}</div>
     );
   }
 
@@ -55,14 +53,18 @@ export function TopicSearchResults({ query }: TopicSearchResultsProps) {
     return (
       <div className="text-center py-12">
         <p className="text-lg font-medium">{t('search.noTopicResults')}</p>
-        <p className="text-muted-foreground mt-2">{t('search.noTopicResultsDescription', { query })}</p>
+        <p className="text-muted-foreground mt-2">
+          {t('search.noTopicResultsDescription', { query })}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t('search.topicsFound', { count: results.length })}</p>
+      <p className="text-sm text-muted-foreground">
+        {t('search.topicsFound', { count: results.length })}
+      </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {results.map((topic) => (
           <SearchResultTopic key={topic.id} topic={topic} query={query} />

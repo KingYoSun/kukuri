@@ -87,9 +87,15 @@ export function P2PDebugPanel() {
         <Badge variant="outline">{total}</Badge>
       </div>
       <div className="grid gap-0.5 text-[10px] text-muted-foreground">
-        <span>{t('p2pDebug.failures')}: {detail?.failures ?? 0}</span>
-        <span>{t('p2pDebug.lastSuccess')}: {formatTimestamp(detail?.last_success_ms)}</span>
-        <span>{t('p2pDebug.lastFailure')}: {formatTimestamp(detail?.last_failure_ms)}</span>
+        <span>
+          {t('p2pDebug.failures')}: {detail?.failures ?? 0}
+        </span>
+        <span>
+          {t('p2pDebug.lastSuccess')}: {formatTimestamp(detail?.last_success_ms)}
+        </span>
+        <span>
+          {t('p2pDebug.lastFailure')}: {formatTimestamp(detail?.last_failure_ms)}
+        </span>
       </div>
     </div>
   );
@@ -275,7 +281,11 @@ export function P2PDebugPanel() {
                 {metrics ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {renderMetricCard(t('p2pDebug.joins'), metrics.gossip.joins, metrics.gossip.join_details)}
+                      {renderMetricCard(
+                        t('p2pDebug.joins'),
+                        metrics.gossip.joins,
+                        metrics.gossip.join_details,
+                      )}
                       {renderMetricCard(
                         t('p2pDebug.leaves'),
                         metrics.gossip.leaves,
@@ -295,35 +305,46 @@ export function P2PDebugPanel() {
                     <div className="rounded-md border p-3 space-y-2 text-xs sm:text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">{t('p2pDebug.mainlineDht')}</span>
-                        <Badge variant="outline">{t('p2pDebug.peersLabel')} {metrics.mainline.connected_peers}</Badge>
+                        <Badge variant="outline">
+                          {t('p2pDebug.peersLabel')} {metrics.mainline.connected_peers}
+                        </Badge>
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">{t('p2pDebug.connectionAttempts')}</span>
+                          <span className="text-muted-foreground">
+                            {t('p2pDebug.connectionAttempts')}
+                          </span>
                           <span>
                             {metrics.mainline.connection_attempts}（{t('p2pDebug.success')}
                             {metrics.mainline.connection_successes} / {t('p2pDebug.failure')}
                             {metrics.mainline.connection_failures}）
                           </span>
                           <span className="text-muted-foreground">
-                            {t('p2pDebug.lastSuccess')}: {formatTimestamp(metrics.mainline.connection_last_success_ms)}
+                            {t('p2pDebug.lastSuccess')}:{' '}
+                            {formatTimestamp(metrics.mainline.connection_last_success_ms)}
                           </span>
                           <span className="text-muted-foreground">
-                            {t('p2pDebug.lastFailure')}: {formatTimestamp(metrics.mainline.connection_last_failure_ms)}
+                            {t('p2pDebug.lastFailure')}:{' '}
+                            {formatTimestamp(metrics.mainline.connection_last_failure_ms)}
                           </span>
                         </div>
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">{t('p2pDebug.routingSuccessRate')}</span>
+                          <span className="text-muted-foreground">
+                            {t('p2pDebug.routingSuccessRate')}
+                          </span>
                           <span>
-                            {formatPercent(metrics.mainline.routing_success_rate)}（{t('p2pDebug.success')}
+                            {formatPercent(metrics.mainline.routing_success_rate)}（
+                            {t('p2pDebug.success')}
                             {metrics.mainline.routing_successes} / {t('p2pDebug.failure')}
                             {metrics.mainline.routing_failures}）
                           </span>
                           <span className="text-muted-foreground">
-                            {t('p2pDebug.lastSuccess')}: {formatTimestamp(metrics.mainline.routing_last_success_ms)}
+                            {t('p2pDebug.lastSuccess')}:{' '}
+                            {formatTimestamp(metrics.mainline.routing_last_success_ms)}
                           </span>
                           <span className="text-muted-foreground">
-                            {t('p2pDebug.lastFailure')}: {formatTimestamp(metrics.mainline.routing_last_failure_ms)}
+                            {t('p2pDebug.lastFailure')}:{' '}
+                            {formatTimestamp(metrics.mainline.routing_last_failure_ms)}
                           </span>
                         </div>
                         <div className="space-y-0.5">
@@ -335,43 +356,52 @@ export function P2PDebugPanel() {
                           </span>
                         </div>
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">{t('p2pDebug.lastReconnect')}</span>
-                          <span>
-                            {t('p2pDebug.success')}: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
+                          <span className="text-muted-foreground">
+                            {t('p2pDebug.lastReconnect')}
                           </span>
                           <span>
-                            {t('p2pDebug.failure')}: {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}
+                            {t('p2pDebug.success')}:{' '}
+                            {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
+                          </span>
+                          <span>
+                            {t('p2pDebug.failure')}:{' '}
+                            {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}
                           </span>
                         </div>
                       </div>
                       <Separator className="my-2" />
                       <div className="space-y-0.5 text-muted-foreground">
-                        <span className="text-muted-foreground">{t('p2pDebug.bootstrapStatus')}</span>
+                        <span className="text-muted-foreground">
+                          {t('p2pDebug.bootstrapStatus')}
+                        </span>
                         <span>
-                          {t('p2pDebug.bootstrapEnv')} {metrics.mainline.bootstrap.env_uses} / {t('p2pDebug.bootstrapUser')}{' '}
-                          {metrics.mainline.bootstrap.user_uses} / {t('p2pDebug.bootstrapBundle')}{' '}
-                          {metrics.mainline.bootstrap.bundle_uses} / {t('p2pDebug.bootstrapFallback')}{' '}
+                          {t('p2pDebug.bootstrapEnv')} {metrics.mainline.bootstrap.env_uses} /{' '}
+                          {t('p2pDebug.bootstrapUser')} {metrics.mainline.bootstrap.user_uses} /{' '}
+                          {t('p2pDebug.bootstrapBundle')} {metrics.mainline.bootstrap.bundle_uses} /{' '}
+                          {t('p2pDebug.bootstrapFallback')}{' '}
                           {metrics.mainline.bootstrap.fallback_uses}
                         </span>
                         <span>
-                          {t('p2pDebug.lastSource')}: {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
+                          {t('p2pDebug.lastSource')}:{' '}
+                          {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
                         </span>
                         <span>
-                          {t('p2pDebug.appliedAt')}: {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
+                          {t('p2pDebug.appliedAt')}:{' '}
+                          {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
                         </span>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {t('p2pDebug.metricsNotFetched')}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t('p2pDebug.metricsNotFetched')}</p>
                 )}
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{t('p2pDebug.nostrSubscriptionStatus')}</span>
+                  <span className="text-sm font-medium">
+                    {t('p2pDebug.nostrSubscriptionStatus')}
+                  </span>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -386,7 +416,9 @@ export function P2PDebugPanel() {
                 )}
                 <div className="grid gap-2">
                   {subscriptions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{t('p2pDebug.noSubscriptionInfo')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('p2pDebug.noSubscriptionInfo')}
+                    </p>
                   ) : (
                     subscriptions.map((subscription) => (
                       <div
@@ -402,10 +434,17 @@ export function P2PDebugPanel() {
                           <Badge variant="outline">{subscription.status}</Badge>
                         </div>
                         <div className="grid gap-0.5 text-[10px] text-muted-foreground">
-                          <span>{t('p2pDebug.lastSynced')}: {formatTimestamp(subscription.lastSyncedAt)}</span>
-                          <span>{t('p2pDebug.lastAttempt')}: {formatTimestamp(subscription.lastAttemptAt)}</span>
+                          <span>
+                            {t('p2pDebug.lastSynced')}: {formatTimestamp(subscription.lastSyncedAt)}
+                          </span>
+                          <span>
+                            {t('p2pDebug.lastAttempt')}:{' '}
+                            {formatTimestamp(subscription.lastAttemptAt)}
+                          </span>
                           {subscription.failureCount > 0 && (
-                            <span>{t('p2pDebug.failureCount')}: {subscription.failureCount}</span>
+                            <span>
+                              {t('p2pDebug.failureCount')}: {subscription.failureCount}
+                            </span>
                           )}
                           {subscription.errorMessage && (
                             <span className="text-destructive">
@@ -467,9 +506,13 @@ export function P2PDebugPanel() {
                         <div className="space-y-1">
                           <code className="text-xs font-mono">{topic.topic_id}</code>
                           <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                            <span>{t('p2pDebug.peerLabel')}: {topic.peer_count}</span>
+                            <span>
+                              {t('p2pDebug.peerLabel')}: {topic.peer_count}
+                            </span>
                             <span>•</span>
-                            <span>{t('p2pDebug.messageCount')}: {topic.message_count}</span>
+                            <span>
+                              {t('p2pDebug.messageCount')}: {topic.message_count}
+                            </span>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -544,7 +587,9 @@ export function P2PDebugPanel() {
             <ScrollArea className="h-64 w-full rounded-md border">
               <div className="p-2 space-y-1">
                 {logs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-4">{t('p2pDebug.noLogs')}</p>
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    {t('p2pDebug.noLogs')}
+                  </p>
                 ) : (
                   logs.map((log, index) => (
                     <pre key={index} className="text-xs font-mono text-muted-foreground">

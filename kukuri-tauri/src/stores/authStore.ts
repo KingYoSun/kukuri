@@ -152,7 +152,12 @@ interface AuthStore extends AuthState {
   switchAccount: (npub: string) => Promise<void>;
   removeAccount: (npub: string) => Promise<void>;
   loadAccounts: () => Promise<void>;
-  addAccount: (nsec: string, name?: string, displayName?: string, picture?: string) => Promise<void>;
+  addAccount: (
+    nsec: string,
+    name?: string,
+    displayName?: string,
+    picture?: string,
+  ) => Promise<void>;
   generateNewKeypair: (
     saveToSecureStorage?: boolean,
     options?: GenerateKeypairOptions,

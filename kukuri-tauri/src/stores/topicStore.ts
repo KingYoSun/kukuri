@@ -439,9 +439,10 @@ export const useTopicStore = create<TopicStore>()(
             return { currentTopic: null };
           }
 
-          const normalizedTopic = topic.id === DEFAULT_PUBLIC_TOPIC_ID
-            ? { ...topic, description: i18n.t('topics.publicTimeline') }
-            : topic;
+          const normalizedTopic =
+            topic.id === DEFAULT_PUBLIC_TOPIC_ID
+              ? { ...topic, description: i18n.t('topics.publicTimeline') }
+              : topic;
 
           const topicId = normalizeTopicId(normalizedTopic.id);
           const unread = new Map(state.topicUnreadCounts);
