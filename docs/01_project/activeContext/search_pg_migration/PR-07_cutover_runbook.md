@@ -6,7 +6,7 @@
 - cutover 後の監視・一次切り分け・ロールバック・段階撤去を同一 Runbook で扱う。
 
 ## スコープ
-- カナリア切替（5% -> 25% -> 50% -> 100%）
+- カナリア検証（`shadow_sample_rate`: 5% -> 25% -> 50%）と 100% cutover
 - 監視ダッシュボード項目（search/suggest/index lag/zero-result/filter drop）
 - 5分以内のロールバック手順
 - Meilisearch 依存の段階撤去条件と手順
@@ -15,6 +15,7 @@
 - 書込は `search_write_mode=dual` で運用し、read 切替中も片系欠損を防ぐ。
 - shadow-read 指標（`shadow_overlap_at_10` / `shadow_latency_delta_ms`）が収集できる状態で開始する。
 - フラグ正本は `cn_search.runtime_flags` とし、変更者は `updated_by` に運用IDを残す。
+- `search_read_backend` / `suggest_read_backend` は二値フラグであり比率解釈されない。5%/25%/50% 段階は `shadow_sample_rate` で実施し、read backend 切替は 100% 段階のみで行う。
 
 ## 品質/性能ゲート（PR-07で固定）
 
@@ -24,7 +25,7 @@
 - 性能: 検索 P95 `<= 180ms`（`/v1/search`）
 - 性能: サジェスト P95 `<= 80ms`（`suggest_stage_a_latency_ms` + `suggest_stage_b_latency_ms`）
 - 安定性: API 5xx 率 `< 1%`
-- 反映遅延: `outbox_backlog{consumer="index-search-v1"} < 1,000` を維持
+- 反映遅延: `outbox_backlog{consumer="index-v1"} < 1,000` を維持
 
 ### 判定期間
 - 各カナリア段階で最低 24h 観測。
@@ -48,25 +49,41 @@ ORDER BY flag_name;
 2. write モード確認: `search_write_mode='dual'`
 3. shadow サンプル率確認: `shadow_sample_rate >= 5`
 
-### 1. 5% カナリア
+### 1. 5% カナリア（shadow-read）
 1. 以下を実行:
 ```sql
 BEGIN;
 INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by)
 VALUES
-  ('search_read_backend', 'pg', 'ops-cutover-5pct'),
-  ('suggest_read_backend', 'pg', 'ops-cutover-5pct')
+  ('search_read_backend', 'meili', 'ops-canary-5pct'),
+  ('suggest_read_backend', 'legacy', 'ops-canary-5pct'),
+  ('shadow_sample_rate', '5', 'ops-canary-5pct')
+ON CONFLICT (flag_name)
+DO UPDATE SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by;
+COMMIT;
+```
+2. 24h 監視し、品質/性能ゲートを判定する（この段階は primary read を旧経路のまま維持）。
+
+### 2. 25% / 50% カナリア拡大（shadow-read）
+- 5% と同じ SQL で `shadow_sample_rate` を `25` → `50` へ更新する（`updated_by` 例: `ops-canary-25pct` / `ops-canary-50pct`）。
+- この段階は `search_read_backend='meili'` / `suggest_read_backend='legacy'` を維持する。
+- 各段階で 24h 観測し、閾値未達の場合はロールバックする。
+
+### 3. 100% cutover（primary read を PG へ切替）
+1. 以下を実行:
+```sql
+BEGIN;
+INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by)
+VALUES
+  ('search_read_backend', 'pg', 'ops-cutover-100pct'),
+  ('suggest_read_backend', 'pg', 'ops-cutover-100pct')
 ON CONFLICT (flag_name)
 DO UPDATE SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by;
 COMMIT;
 ```
 2. 24h 監視し、品質/性能ゲートを判定する。
 
-### 2. 25% / 50% / 100% 拡大
-- 5% と同じ手順で `updated_by` を段階ごとに変える（例: `ops-cutover-25pct`）。
-- 各段階で 24h 観測し、閾値未達の場合はロールバックする。
-
-### 3. 100% 後の運用
+### 4. 100% 後の運用
 - 7-14 日は Meili を standby 維持。
 - 期間中は `search_write_mode=dual` を維持し、再切戻し余地を残す。
 
@@ -78,15 +95,15 @@ COMMIT;
 - Suggest latency: `suggest_stage_a_latency_ms{service="cn-user-api"}` / `suggest_stage_b_latency_ms{service="cn-user-api"}`
 - Suggest filter drop: `suggest_block_filter_drop_count{service="cn-user-api",backend="pg"}`
 - Shadow quality: `shadow_overlap_at_10{service="cn-user-api",endpoint="/v1/search"}` / `shadow_latency_delta_ms{service="cn-user-api",endpoint="/v1/search"}`
-- Index lag: `outbox_backlog{service="cn-index",consumer="index-search-v1"}`
-- Outbox health: `outbox_consumer_batches_total{service="cn-index",consumer="index-search-v1",result="error"}`
+- Index lag: `outbox_backlog{service="cn-index",consumer="index-v1"}`
+- Outbox health: `outbox_consumer_batches_total{service="cn-index",consumer="index-v1",result="error"}`
 
 ### Zero-result 監視（運用SQL）
 > 備考: 現行は専用メトリクス未実装のため、shadow ログを代理指標として使用する。
 
 ```sql
 SELECT
-  date_trunc('hour', recorded_at) AS hour,
+  date_trunc('hour', created_at) AS hour,
   COUNT(*) AS sampled_total,
   SUM(CASE WHEN cardinality(pg_ids) = 0 THEN 1 ELSE 0 END) AS zero_results,
   ROUND(
@@ -95,7 +112,7 @@ SELECT
   ) AS zero_result_rate
 FROM cn_search.shadow_read_logs
 WHERE endpoint = '/v1/search'
-  AND recorded_at >= NOW() - INTERVAL '24 hours'
+  AND created_at >= NOW() - INTERVAL '24 hours'
 GROUP BY 1
 ORDER BY 1 DESC;
 ```
@@ -106,7 +123,7 @@ ORDER BY 1 DESC;
    - `shadow_overlap_at_10`
    - `shadow_latency_delta_ms`
    - `suggest_block_filter_drop_count`
-   - `outbox_backlog{consumer="index-search-v1"}`
+   - `outbox_backlog{consumer="index-v1"}`
 3. E2E で以下を実施し結果を保存:
    - 検索（hit / miss / multi-topic）
    - サジェスト（prefix / trgm / block-mute）

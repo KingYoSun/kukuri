@@ -109,7 +109,7 @@
   - Suggest latency: `suggest_stage_a_latency_ms{service=\"cn-user-api\"}` / `suggest_stage_b_latency_ms{service=\"cn-user-api\"}`
   - Suggest filter drop: `suggest_block_filter_drop_count{service=\"cn-user-api\",backend=\"pg\"}`
   - Shadow quality: `shadow_overlap_at_10` / `shadow_latency_delta_ms`
-  - Index lag: `outbox_backlog{service=\"cn-index\",consumer=\"index-search-v1\"}`
+  - Index lag: `outbox_backlog{service=\"cn-index\",consumer=\"index-v1\"}`
 - zero-result は専用メトリクスが未実装のため、`cn_search.shadow_read_logs` を代理指標として SQL で収集する。
 - 閾値は PR-07 Runbook の品質/性能ゲート（`overlap@10 >= 0.70`, `NDCG@10 >= 0.90`, 検索 P95 `<= 180ms`, サジェスト P95 `<= 80ms`）に揃える。
 
