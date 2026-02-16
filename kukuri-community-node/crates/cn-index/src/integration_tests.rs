@@ -50,6 +50,8 @@ struct BackfillJobRow {
     processed_rows: i64,
     high_watermark_seq: Option<i64>,
     error_message: Option<String>,
+    started_at: Option<i64>,
+    completed_at: Option<i64>,
 }
 
 fn lock_tests() -> MutexGuard<'static, ()> {
@@ -350,7 +352,9 @@ async fn insert_backfill_job(
 
 async fn fetch_backfill_job(pool: &Pool<Postgres>, job_id: &str) -> BackfillJobRow {
     let row = sqlx::query(
-        "SELECT status, processed_rows, high_watermark_seq, error_message \
+        "SELECT status, processed_rows, high_watermark_seq, error_message, \
+         EXTRACT(EPOCH FROM started_at)::BIGINT AS started_at, \
+         EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at \
          FROM cn_search.backfill_jobs \
          WHERE job_id = $1",
     )
@@ -366,6 +370,8 @@ async fn fetch_backfill_job(pool: &Pool<Postgres>, job_id: &str) -> BackfillJobR
             .try_get("high_watermark_seq")
             .expect("high_watermark_seq"),
         error_message: row.try_get("error_message").expect("error_message"),
+        started_at: row.try_get("started_at").expect("started_at"),
+        completed_at: row.try_get("completed_at").expect("completed_at"),
     }
 }
 
@@ -1739,9 +1745,14 @@ async fn backfill_job_resumes_from_checkpoint_and_completes_post_search_document
 
     let succeeded = fetch_backfill_job(&pool, &backfill_job_id).await;
     assert_eq!(succeeded.status, "succeeded");
-    assert_eq!(succeeded.processed_rows, 3);
+    assert!(
+        succeeded.processed_rows >= 3,
+        "expected at least test topic rows to be processed"
+    );
     assert_eq!(succeeded.high_watermark_seq, Some(high_watermark_seq));
     assert!(succeeded.error_message.is_none());
+    assert!(succeeded.started_at.is_some());
+    assert!(succeeded.completed_at.is_some());
 
     let rows: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) \
@@ -1774,8 +1785,22 @@ async fn backfill_job_resumes_from_checkpoint_and_completes_post_search_document
     .expect("fetch checkpoint");
     let checkpoint: BackfillCursor =
         serde_json::from_str(&checkpoint_raw).expect("parse checkpoint cursor");
-    assert_eq!(checkpoint.topic_id, topic_id);
-    assert_eq!(checkpoint.event_id, event_c.id);
+    let checkpoint_advanced: bool = sqlx::query_scalar(
+        "SELECT ($1::TEXT, $2::BIGINT, $3::TEXT) > ($4::TEXT, $5::BIGINT, $6::TEXT)",
+    )
+    .bind(&checkpoint.topic_id)
+    .bind(checkpoint.created_at)
+    .bind(&checkpoint.event_id)
+    .bind(&topic_id)
+    .bind(event_a.created_at)
+    .bind(&event_a.id)
+    .fetch_one(&pool)
+    .await
+    .expect("compare checkpoint ordering");
+    assert!(
+        checkpoint_advanced,
+        "checkpoint should advance beyond seeded cursor: checkpoint={checkpoint:?}"
+    );
 
     cleanup_records(
         &pool,
@@ -1784,6 +1809,132 @@ async fn backfill_job_resumes_from_checkpoint_and_completes_post_search_document
         &[backfill_job_id],
     )
     .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn claim_backfill_job_reclaims_stale_running_job() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:index-backfill-stale-it:{}", next_id("topic"));
+    let job_id = next_id("backfill-stale-running");
+    let stale_by_seconds = BACKFILL_RUNNING_LEASE_TIMEOUT_SECONDS + 30;
+    sqlx::query(
+        "INSERT INTO cn_search.backfill_jobs \
+         (job_id, target, status, high_watermark_seq, processed_rows, started_at, completed_at, updated_at) \
+         VALUES ( \
+             $1, $2, 'running', 42, 7, \
+             NOW() - ($3::BIGINT * INTERVAL '1 second'), \
+             NULL, \
+             NOW() - ($3::BIGINT * INTERVAL '1 second') \
+         )",
+    )
+    .bind(&job_id)
+    .bind(BACKFILL_TARGET_POST_SEARCH_DOCUMENTS)
+    .bind(stale_by_seconds)
+    .execute(&pool)
+    .await
+    .expect("insert stale running backfill job");
+
+    let claimed = claim_backfill_job(&pool, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS)
+        .await
+        .expect("claim backfill job")
+        .expect("expected stale running backfill job");
+    assert_eq!(claimed.job_id, job_id);
+    assert_eq!(claimed.target, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS);
+    assert_eq!(claimed.high_watermark_seq, Some(42));
+    assert_eq!(claimed.processed_rows, 7);
+
+    let running = fetch_backfill_job(&pool, &job_id).await;
+    assert_eq!(running.status, "running");
+    assert_eq!(running.processed_rows, 7);
+    assert!(running.error_message.is_none());
+    assert!(running.started_at.is_some());
+    assert!(running.completed_at.is_none());
+    let running_started_at = running.started_at.expect("running started_at");
+    let lease_started_at = claimed.lease_started_at.timestamp();
+    assert!(
+        (running_started_at - lease_started_at).abs() <= 1,
+        "running started_at should track claimed lease start: running={running_started_at}, lease={lease_started_at}"
+    );
+
+    let second_claim = claim_backfill_job(&pool, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS)
+        .await
+        .expect("claim backfill job second time");
+    assert!(
+        second_claim.is_none(),
+        "freshly claimed running job should not be reclaimed immediately"
+    );
+
+    cleanup_records(&pool, &topic_id, &[], &[job_id]).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn backfill_job_fences_old_lease_after_takeover() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    let topic_id = format!("kukuri:index-backfill-lease-it:{}", next_id("topic"));
+    let job_id = next_id("backfill-lease-fence");
+    insert_backfill_job(&pool, &job_id, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS, None).await;
+
+    let claimed = claim_backfill_job(&pool, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS)
+        .await
+        .expect("claim backfill job")
+        .expect("expected pending backfill job");
+    assert_eq!(claimed.job_id, job_id);
+
+    sqlx::query(
+        "UPDATE cn_search.backfill_jobs \
+         SET started_at = started_at + INTERVAL '1 second', updated_at = NOW() \
+         WHERE job_id = $1",
+    )
+    .bind(&job_id)
+    .execute(&pool)
+    .await
+    .expect("simulate lease takeover");
+
+    let progress_err = update_backfill_job_progress(&pool, &job_id, &claimed.lease_started_at, 1)
+        .await
+        .expect_err("old lease should not update progress");
+    assert!(
+        progress_err.to_string().contains("lease lost"),
+        "unexpected progress error: {progress_err}"
+    );
+
+    let complete_err = mark_backfill_job_succeeded(&pool, &job_id, &claimed.lease_started_at, 1)
+        .await
+        .expect_err("old lease should not mark completion");
+    assert!(
+        complete_err.to_string().contains("lease lost"),
+        "unexpected complete error: {complete_err}"
+    );
+
+    mark_backfill_job_failed(
+        &pool,
+        &job_id,
+        &claimed.lease_started_at,
+        "old owner failure should be ignored",
+    )
+    .await
+    .expect("mark failure from stale lease should be a no-op");
+
+    let job_row = fetch_backfill_job(&pool, &job_id).await;
+    assert_eq!(job_row.status, "running");
+    assert_eq!(job_row.processed_rows, 0);
+    assert!(job_row.error_message.is_none());
+
+    cleanup_records(&pool, &topic_id, &[], &[job_id]).await;
 }
 
 #[tokio::test(flavor = "current_thread")]

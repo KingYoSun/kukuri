@@ -10,6 +10,7 @@ use cn_core::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{postgres::PgListener, Pool, Postgres, QueryBuilder, Row, Transaction};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::net::SocketAddr;
@@ -30,6 +31,7 @@ const SUGGEST_GRAPH_NAME: &str = "kukuri_cn_suggest";
 const GRAPH_SYNC_CONSUMER_NAME: &str = "index-age-suggest-v1";
 const BACKFILL_TARGET_POST_SEARCH_DOCUMENTS: &str = "post_search_documents";
 const BACKFILL_DEFAULT_SHARD_KEY: &str = "all";
+const BACKFILL_RUNNING_LEASE_TIMEOUT_SECONDS: i64 = 5 * 60;
 
 const MEMBER_OF_WEIGHT: f64 = 1.0;
 const FOLLOWS_COMMUNITY_WEIGHT: f64 = 0.7;
@@ -1949,6 +1951,7 @@ struct BackfillJob {
     target: String,
     high_watermark_seq: Option<i64>,
     processed_rows: i64,
+    lease_started_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2148,13 +2151,20 @@ async fn claim_backfill_job(pool: &Pool<Postgres>, target: &str) -> Result<Optio
     let row = sqlx::query(
         "SELECT job_id, target, high_watermark_seq, processed_rows \
          FROM cn_search.backfill_jobs \
-         WHERE status IN ('pending', 'failed') \
-           AND target = $1 \
+         WHERE target = $1 \
+           AND ( \
+                 status IN ('pending', 'failed') \
+                 OR ( \
+                      status = 'running' \
+                      AND updated_at <= NOW() - ($2::BIGINT * INTERVAL '1 second') \
+                 ) \
+               ) \
          ORDER BY updated_at ASC \
          LIMIT 1 \
          FOR UPDATE SKIP LOCKED",
     )
     .bind(target)
+    .bind(BACKFILL_RUNNING_LEASE_TIMEOUT_SECONDS)
     .fetch_optional(&mut *tx)
     .await?;
     let Some(row) = row else {
@@ -2167,17 +2177,18 @@ async fn claim_backfill_job(pool: &Pool<Postgres>, target: &str) -> Result<Optio
     let high_watermark_seq: Option<i64> = row.try_get("high_watermark_seq")?;
     let processed_rows: i64 = row.try_get("processed_rows")?;
 
-    sqlx::query(
+    let lease_started_at = sqlx::query_scalar::<_, DateTime<Utc>>(
         "UPDATE cn_search.backfill_jobs \
          SET status = 'running', \
-             started_at = COALESCE(started_at, NOW()), \
+             started_at = NOW(), \
              completed_at = NULL, \
              error_message = NULL, \
              updated_at = NOW() \
-         WHERE job_id = $1",
+         WHERE job_id = $1 \
+         RETURNING started_at",
     )
     .bind(&job_id)
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
 
@@ -2186,6 +2197,7 @@ async fn claim_backfill_job(pool: &Pool<Postgres>, target: &str) -> Result<Optio
         target,
         high_watermark_seq,
         processed_rows,
+        lease_started_at,
     }))
 }
 
@@ -2195,7 +2207,13 @@ async fn run_backfill_job(state: &AppState, job: BackfillJob) -> Result<()> {
     let target = job.target.clone();
     let result = run_backfill_job_impl(state, &job, started_at).await;
     if let Err(err) = &result {
-        let _ = mark_backfill_job_failed(&state.pool, &job_id, &err.to_string()).await;
+        let _ = mark_backfill_job_failed(
+            &state.pool,
+            &job_id,
+            &job.lease_started_at,
+            &err.to_string(),
+        )
+        .await;
         metrics::set_backfill_eta_seconds(SERVICE_NAME, target.as_str(), 0.0);
     }
     result
@@ -2257,7 +2275,13 @@ async fn run_backfill_job_impl(
             )
             .await?;
         }
-        update_backfill_job_progress(&state.pool, &job.job_id, processed_rows).await?;
+        update_backfill_job_progress(
+            &state.pool,
+            &job.job_id,
+            &job.lease_started_at,
+            processed_rows,
+        )
+        .await?;
         metrics::set_backfill_processed_rows(SERVICE_NAME, job.target.as_str(), processed_rows);
         metrics::set_backfill_eta_seconds(
             SERVICE_NAME,
@@ -2266,7 +2290,13 @@ async fn run_backfill_job_impl(
         );
     }
 
-    mark_backfill_job_succeeded(&state.pool, &job.job_id, processed_rows).await?;
+    mark_backfill_job_succeeded(
+        &state.pool,
+        &job.job_id,
+        &job.lease_started_at,
+        processed_rows,
+    )
+    .await?;
     metrics::set_backfill_processed_rows(SERVICE_NAME, job.target.as_str(), processed_rows);
     metrics::set_backfill_eta_seconds(SERVICE_NAME, job.target.as_str(), 0.0);
     Ok(())
@@ -2443,53 +2473,81 @@ async fn upsert_backfill_checkpoint(
 async fn update_backfill_job_progress(
     pool: &Pool<Postgres>,
     job_id: &str,
+    lease_started_at: &DateTime<Utc>,
     processed_rows: i64,
 ) -> Result<()> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE cn_search.backfill_jobs \
          SET processed_rows = $1, updated_at = NOW() \
-         WHERE job_id = $2",
+         WHERE job_id = $2 \
+           AND status = 'running' \
+           AND started_at = $3",
     )
     .bind(processed_rows.max(0))
     .bind(job_id)
+    .bind(lease_started_at)
     .execute(pool)
     .await?;
+    if result.rows_affected() == 0 {
+        anyhow::bail!("backfill lease lost while updating progress: job_id={job_id}");
+    }
     Ok(())
 }
 
 async fn mark_backfill_job_succeeded(
     pool: &Pool<Postgres>,
     job_id: &str,
+    lease_started_at: &DateTime<Utc>,
     processed_rows: i64,
 ) -> Result<()> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE cn_search.backfill_jobs \
          SET status = 'succeeded', \
              processed_rows = $1, \
              completed_at = NOW(), \
              updated_at = NOW() \
-         WHERE job_id = $2",
+         WHERE job_id = $2 \
+           AND status = 'running' \
+           AND started_at = $3",
     )
     .bind(processed_rows.max(0))
     .bind(job_id)
+    .bind(lease_started_at)
     .execute(pool)
     .await?;
+    if result.rows_affected() == 0 {
+        anyhow::bail!("backfill lease lost before completion: job_id={job_id}");
+    }
     Ok(())
 }
 
-async fn mark_backfill_job_failed(pool: &Pool<Postgres>, job_id: &str, error: &str) -> Result<()> {
-    sqlx::query(
+async fn mark_backfill_job_failed(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    lease_started_at: &DateTime<Utc>,
+    error: &str,
+) -> Result<()> {
+    let result = sqlx::query(
         "UPDATE cn_search.backfill_jobs \
          SET status = 'failed', \
              error_message = $1, \
              completed_at = NOW(), \
              updated_at = NOW() \
-         WHERE job_id = $2",
+         WHERE job_id = $2 \
+           AND status = 'running' \
+           AND started_at = $3",
     )
     .bind(error)
     .bind(job_id)
+    .bind(lease_started_at)
     .execute(pool)
     .await?;
+    if result.rows_affected() == 0 {
+        tracing::warn!(
+            job_id = %job_id,
+            "skip marking backfill job failed because lease ownership changed"
+        );
+    }
     Ok(())
 }
 
