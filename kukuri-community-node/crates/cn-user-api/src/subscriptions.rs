@@ -1682,8 +1682,54 @@ mod api_contract_tests {
             .bind(term.is_primary)
             .execute(pool)
             .await
-            .expect("insert community search term");
+                .expect("insert community search term");
         }
+    }
+
+    async fn run_alias_backfill_for_topic(pool: &Pool<Postgres>, topic_id: &str) {
+        sqlx::query(
+            "WITH source_topics AS ( \
+                 SELECT topic_id \
+                 FROM cn_admin.node_subscriptions \
+                 WHERE topic_id = $1 \
+                 UNION \
+                 SELECT topic_id \
+                 FROM cn_user.topic_subscriptions \
+                 WHERE status = 'active' \
+                   AND topic_id = $1 \
+             ), \
+             normalized_terms AS ( \
+                 SELECT \
+                     topic_id, \
+                     TRIM(REGEXP_REPLACE(LOWER(topic_id), '[^[:alnum:]#@]+', ' ', 'g')) AS name_norm, \
+                     TRIM( \
+                         REGEXP_REPLACE( \
+                             LOWER(REGEXP_REPLACE(topic_id, '^kukuri:(tauri:)?', '')), \
+                             '[^[:alnum:]#@]+', \
+                             ' ', \
+                             'g' \
+                         ) \
+                     ) AS alias_norm \
+                 FROM source_topics \
+             ) \
+             INSERT INTO cn_search.community_search_terms \
+                 (community_id, term_type, term_raw, term_norm, is_primary) \
+             SELECT \
+                 topic_id, \
+                 'alias', \
+                 topic_id, \
+                 alias_norm, \
+                 TRUE \
+             FROM normalized_terms \
+             WHERE alias_norm <> '' \
+               AND alias_norm <> name_norm \
+               AND LOWER(TRIM(topic_id)) !~ '^kukuri:[0-9a-f]{64}$' \
+             ON CONFLICT (community_id, term_type, term_norm) DO NOTHING",
+        )
+        .bind(topic_id)
+        .execute(pool)
+        .await
+        .expect("run community search alias backfill");
     }
 
     async fn insert_pending_subscription_request(
@@ -5235,6 +5281,70 @@ mod api_contract_tests {
         .execute(&pool)
         .await
         .expect("cleanup legacy suggest topic subscription");
+    }
+
+    #[tokio::test]
+    async fn community_search_alias_backfill_skips_kukuri_hashed_tail_topics() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        let hashed_tail = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let hashed_topic_id = format!("kukuri:{hashed_tail}");
+        let normal_topic_id = format!("kukuri:tauri:pr30-backfill-{}", Uuid::new_v4().simple());
+
+        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = ANY($1)")
+            .bind(vec![hashed_topic_id.clone(), normal_topic_id.clone()])
+            .execute(&pool)
+            .await
+            .expect("cleanup existing community search terms");
+
+        insert_topic_subscription(&pool, &hashed_topic_id, &pubkey).await;
+        insert_topic_subscription(&pool, &normal_topic_id, &pubkey).await;
+
+        run_alias_backfill_for_topic(&pool, &hashed_topic_id).await;
+        run_alias_backfill_for_topic(&pool, &normal_topic_id).await;
+
+        let hashed_alias_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) \
+             FROM cn_search.community_search_terms \
+             WHERE community_id = $1 \
+               AND term_type = 'alias'",
+        )
+        .bind(&hashed_topic_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count hashed alias terms");
+        assert_eq!(hashed_alias_count, 0);
+
+        let normal_alias_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) \
+             FROM cn_search.community_search_terms \
+             WHERE community_id = $1 \
+               AND term_type = 'alias'",
+        )
+        .bind(&normal_topic_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count normal alias terms");
+        assert!(normal_alias_count > 0);
+
+        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = ANY($1)")
+            .bind(vec![hashed_topic_id.clone(), normal_topic_id.clone()])
+            .execute(&pool)
+            .await
+            .expect("cleanup community search terms");
+
+        sqlx::query(
+            "DELETE FROM cn_user.topic_subscriptions \
+             WHERE topic_id = ANY($1) \
+               AND subscriber_pubkey = $2",
+        )
+        .bind(vec![hashed_topic_id, normal_topic_id])
+        .bind(&pubkey)
+        .execute(&pool)
+        .await
+        .expect("cleanup topic subscriptions");
     }
 
     #[tokio::test]

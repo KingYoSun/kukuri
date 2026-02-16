@@ -82,4 +82,5 @@ SELECT
 FROM normalized_terms
 WHERE alias_norm <> ''
   AND alias_norm <> name_norm
+  AND LOWER(TRIM(topic_id)) !~ '^kukuri:[0-9a-f]{64}$'
 ON CONFLICT (community_id, term_type, term_norm) DO NOTHING;
