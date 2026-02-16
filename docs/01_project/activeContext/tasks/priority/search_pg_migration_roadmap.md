@@ -43,11 +43,11 @@
 
 ## PR-07 cutover / runbook
 
-- [ ] `search_read_backend` / `suggest_read_backend` のカナリア切替手順を Runbook 化する。
-- [ ] PG検索向け監視項目（latency/index lag/zero-result/filter drop）をダッシュボードへ追加する。
-- [ ] Meili 依存の compose/test/env を段階撤去する条件と手順を Runbook に明文化する。
+- [x] `search_read_backend` / `suggest_read_backend` のカナリア切替手順を Runbook 化する。
+- [x] PG検索向け監視項目（latency/index lag/zero-result/filter drop）をダッシュボードへ追加する。
+- [x] Meili 依存の compose/test/env を段階撤去する条件と手順を Runbook に明文化する。
 
 ## 共通ゲート（着手前に固定）
 
-- [ ] 品質ゲートの閾値（overlap@10, NDCG@10, P95 latency）を文書で固定する。
-- [ ] rollback 手順（5分以内復旧）を運用コマンド単位で検証し、証跡を残す。
+- [x] 品質ゲートの閾値（overlap@10, NDCG@10, P95 latency）を文書で固定する。
+- [x] rollback 手順（5分以内復旧）を運用コマンド単位で検証し、証跡を残す。
