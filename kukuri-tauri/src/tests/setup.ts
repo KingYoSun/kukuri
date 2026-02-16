@@ -1,9 +1,22 @@
 import '@testing-library/jest-dom';
-import { vi, afterEach } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
+import i18n from '@/i18n';
 
 // リセット関数のセット
 const storeResetFns = new Set<() => void>();
+const TEST_LOCALE = 'ja';
+
+if (typeof window !== 'undefined' && window.localStorage) {
+  window.localStorage.setItem('kukuri-locale', TEST_LOCALE);
+}
+
+beforeEach(async () => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem('kukuri-locale', TEST_LOCALE);
+  }
+  await i18n.changeLanguage(TEST_LOCALE);
+});
 
 // zustand/middlewareをモック
 vi.mock('zustand/middleware', () => ({

@@ -9,6 +9,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import { SecureStorageApi } from '@/lib/api/secureStorage';
 import * as nostrApi from '@/lib/api/nostr';
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
+import i18n from '@/i18n';
 
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
@@ -272,8 +273,8 @@ describe('authStore - Multiple Account Management', () => {
 
       expect(mockSecureStorageApi.addAccount).toHaveBeenCalledWith({
         nsec: 'nsec123',
-        name: 'ユーザー',
-        display_name: 'ユーザー',
+        name: i18n.t('auth.newUser'),
+        display_name: i18n.t('auth.newUser'),
         picture: '',
       });
       expect(mockTauriApi.login).toHaveBeenCalledWith({ nsec: 'nsec123' });

@@ -850,14 +850,14 @@ export const useAuthStore = create<AuthStore>()(
             errorHandler.info('Account added successfully', 'AuthStore.addAccount', {
               npub: user.npub,
             });
-          } catch (storageError) {
+          } catch {
             // Fallback to local storage if secure storage fails
           }
           upsertFallbackAccount(accountMetadata, nsec);
 
           try {
             await useAuthStore.getState().loadAccounts();
-          } catch (loadError) {
+          } catch {
             // Silently ignore reload failure - account is already added via fallback
           }
         } catch (error) {

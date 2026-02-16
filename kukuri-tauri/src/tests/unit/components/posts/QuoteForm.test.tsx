@@ -12,6 +12,7 @@ import {
   mockUseAuthStore,
 } from './__utils__/postFormTestUtils';
 import { QuoteForm } from '@/components/posts/QuoteForm';
+import i18n from '@/i18n';
 
 describe('QuoteForm', () => {
   const mockProfile = createMockProfile();
@@ -59,8 +60,8 @@ describe('QuoteForm', () => {
   it('引用フォームを表示する', () => {
     renderWithQueryClient(<QuoteForm post={mockPost} />);
 
-    expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
-    expect(screen.getByText('引用して投稿')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'))).toBeInTheDocument();
+    expect(screen.getByText(i18n.t('posts.quote.submit'))).toBeInTheDocument();
     expect(screen.getByText('Ctrl+Enter または ⌘+Enter で送信')).toBeInTheDocument();
   });
 
@@ -82,15 +83,15 @@ describe('QuoteForm', () => {
 
   it('空の内容では送信ボタンが無効', () => {
     renderWithQueryClient(<QuoteForm post={mockPost} />);
-    expect(screen.getByText('引用して投稿')).toBeDisabled();
+    expect(screen.getByText(i18n.t('posts.quote.submit'))).toBeDisabled();
   });
 
   it('内容を入力すると送信ボタンが有効になる', async () => {
     const user = userEvent.setup();
     renderWithQueryClient(<QuoteForm post={mockPost} />);
 
-    const textarea = screen.getByPlaceholderText('コメントを追加...');
-    const submitButton = screen.getByText('引用して投稿');
+    const textarea = screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'));
+    const submitButton = screen.getByText(i18n.t('posts.quote.submit'));
 
     await user.type(textarea, 'これは引用コメントです');
     expect(submitButton).not.toBeDisabled();
@@ -101,8 +102,11 @@ describe('QuoteForm', () => {
     const onSuccess = vi.fn();
     renderWithQueryClient(<QuoteForm post={mockPost} onSuccess={onSuccess} />);
 
-    await user.type(screen.getByPlaceholderText('コメントを追加...'), 'これは引用コメントです');
-    await user.click(screen.getByText('引用して投稿'));
+    await user.type(
+      screen.getByPlaceholderText(i18n.t('posts.quote.placeholder')),
+      'これは引用コメントです',
+    );
+    await user.click(screen.getByText(i18n.t('posts.quote.submit')));
 
     await waitFor(() => {
       expect(mockCreatePost).toHaveBeenCalledWith(
@@ -113,7 +117,7 @@ describe('QuoteForm', () => {
           scope: undefined,
         },
       );
-      expect(mockToast.success).toHaveBeenCalledWith('引用投稿を作成しました');
+      expect(mockToast.success).toHaveBeenCalledWith(i18n.t('posts.quote.success'));
       expect(onSuccess).toHaveBeenCalled();
     });
   });
@@ -123,8 +127,11 @@ describe('QuoteForm', () => {
     const postWithoutTopic: Post = { ...mockPost, topicId: undefined };
     renderWithQueryClient(<QuoteForm post={postWithoutTopic} />);
 
-    await user.type(screen.getByPlaceholderText('コメントを追加...'), 'これは引用コメントです');
-    await user.click(screen.getByText('引用して投稿'));
+    await user.type(
+      screen.getByPlaceholderText(i18n.t('posts.quote.placeholder')),
+      'これは引用コメントです',
+    );
+    await user.click(screen.getByText(i18n.t('posts.quote.submit')));
 
     await waitFor(() => {
       expect(mockTauriApi.createPost).toHaveBeenCalledWith({
@@ -143,7 +150,7 @@ describe('QuoteForm', () => {
     const user = userEvent.setup();
     renderWithQueryClient(<QuoteForm post={mockPost} />);
 
-    const textarea = screen.getByPlaceholderText('コメントを追加...');
+    const textarea = screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'));
     await user.type(textarea, 'これは引用コメントです');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
@@ -168,8 +175,8 @@ describe('QuoteForm', () => {
     mockCreatePost.mockReturnValue(promise);
 
     renderWithQueryClient(<QuoteForm post={mockPost} />);
-    const textarea = screen.getByPlaceholderText('コメントを追加...');
-    const submitButton = screen.getByText('引用して投稿');
+    const textarea = screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'));
+    const submitButton = screen.getByText(i18n.t('posts.quote.submit'));
 
     await user.type(textarea, 'これは引用コメントです');
     await user.click(submitButton);

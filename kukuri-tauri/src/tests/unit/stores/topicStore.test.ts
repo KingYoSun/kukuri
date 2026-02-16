@@ -4,6 +4,7 @@ import type { Topic } from '@/stores/types';
 import { TauriApi } from '@/lib/api/tauri';
 import * as nostrApi from '@/lib/api/nostr';
 import { errorHandler } from '@/lib/errorHandler';
+import i18n from '@/i18n';
 
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 vi.mock('@/lib/api/tauri');
@@ -247,7 +248,7 @@ describe('useTopicStore', () => {
         expect.objectContaining({
           context: 'TopicStore.joinTopic',
           showToast: true,
-          toastTitle: 'トピックへの参加に失敗しました',
+          toastTitle: i18n.t('topics.joinFailed'),
         }),
       );
     });
@@ -335,7 +336,7 @@ describe('useTopicStore', () => {
         expect.objectContaining({
           context: 'TopicStore.leaveTopic',
           showToast: true,
-          toastTitle: 'トピックからの離脱に失敗しました',
+          toastTitle: i18n.t('topics.leaveFailed'),
         }),
       );
     });

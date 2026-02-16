@@ -59,7 +59,7 @@ describe('WelcomeScreen', () => {
 
     // ボタン
     expect(screen.getByRole('button', { name: '新規アカウント作成' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '既存アカウントでログイン' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '既存の鍵でログイン' })).toBeInTheDocument();
   });
 
   it('新規アカウント作成ボタンがクリックされた時、鍵ペアを生成してプロフィール設定画面に遷移する', async () => {
@@ -112,7 +112,7 @@ describe('WelcomeScreen', () => {
 
     render(<WelcomeScreen />);
 
-    const loginButton = screen.getByRole('button', { name: '既存アカウントでログイン' });
+    const loginButton = screen.getByRole('button', { name: '既存の鍵でログイン' });
     await user.click(loginButton);
 
     // ログイン画面への遷移（同期的に発生するはずなので、waitForは不要）

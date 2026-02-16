@@ -3,14 +3,10 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
 
 vi.mock('@/stores/offlineStore');
 vi.mock('date-fns', () => ({
   formatDistanceToNow: vi.fn(),
-}));
-vi.mock('date-fns/locale', () => ({
-  ja: {},
 }));
 
 describe('OfflineIndicator', () => {
@@ -124,7 +120,9 @@ describe('OfflineIndicator', () => {
       lastSyncedAt,
       expect.objectContaining({
         addSuffix: true,
-        locale: ja,
+        locale: expect.objectContaining({
+          code: 'ja',
+        }),
       }),
     );
   });

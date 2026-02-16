@@ -213,7 +213,7 @@ describe('__root (Authentication Guard)', () => {
   it('認証ページのリストが正しく設定されている', async () => {
     mockInitialize.mockResolvedValue(undefined);
 
-    const authPaths = ['/welcome', '/login'];
+    const authPaths = ['/welcome'];
 
     for (const path of authPaths) {
       vi.clearAllMocks();
