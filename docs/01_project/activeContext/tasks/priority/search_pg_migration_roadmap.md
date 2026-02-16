@@ -6,9 +6,9 @@
 
 ## PR-01 拡張導入と移行フラグ基盤
 
-- [ ] `kukuri-community-node/docker/postgres-age/Dockerfile` に PGroonga 導入手順を追加し、`docker compose` build で再現性を確認する。
-- [ ] migration を追加し、`pg_trgm` / `pgroonga` / `age` の extension と `cn_search.runtime_flags` を作成する。
-- [ ] 検索フラグの正本を `cn_admin.service_configs` か `cn_search.runtime_flags` のどちらかに確定し、`cn-user-api` / `cn-index` の読取実装を統一する。
+- [x] `kukuri-community-node/docker/postgres-age/Dockerfile` に PGroonga 導入手順を追加し、`docker compose` build で再現性を確認する。
+- [x] migration を追加し、`pg_trgm` / `pgroonga` / `age` の extension と `cn_search.runtime_flags` を作成する。
+- [x] 検索フラグの正本を `cn_search.runtime_flags` に確定し、`cn-user-api` / `cn-index` の読取実装を `cn-core::search_runtime_flags` へ統一する。
 
 ## PR-02 投稿検索ドキュメント（PGroonga）
 
