@@ -1,6 +1,6 @@
 [title] 作業中タスク（in_progress）
 
-最終更新日: 2026年02月15日
+最終更新日: 2026年02月16日
 
 ## 方針（2025年09月15日 更新）
 
@@ -61,3 +61,12 @@
       - 2026年02月03日: community node の labels/trust 署名検証で pubkey ミスマッチを回避する修正を反映。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走（ログは `tmp/logs/gh-act-*.log`）。
       - 2026年02月15日: PR #26（Issue #22 Task4）CI fix loop 対応として、`cn-core` の環境変数テストを非 `set_var/remove_var` 化し、`cn-admin-api` 契約テストの trigger 初期化を advisory lock で直列化。`gh act --job format-check` / `--job native-test-linux` / `--job community-node-tests` を完走（ログ: `tmp/logs/gh-act-*-issue22-pr26-fix-loop.log`）。
       - 2026年02月15日: Issue #22 最終再監査（PR #23/#24/#25/#26 マージ後）で strict gate を再評価し、Gate1-6 すべて PASS、追加実装タスク 0 を確認。Issue #22 はクローズ可能。
+
+### 2026年02月16日 Issue #27 検索PG移行計画の初期監査（完了）
+
+- 目的: `docs/01_project/activeContext/search_pg_migration/` の PR-01..PR-07 を現行実装へ突合し、実装前ギャップを明確化する。
+- 状態: 完了（`docs/01_project/activeContext/tasks/completed/2026-02-16.md` に移管）。
+- 実施メモ:
+  - 監査結果: `docs/01_project/activeContext/search_pg_migration/issue27_initial_audit_2026-02-16.md`
+  - 未着手タスク起票: `docs/01_project/activeContext/tasks/priority/search_pg_migration_roadmap.md`
+  - 進捗レポート: `docs/01_project/progressReports/2026-02-16_issue27_search_pg_migration_audit.md`
