@@ -25,9 +25,9 @@
 
 ## PR-04 AGE グラフ拡張 + 同期
 
-- [ ] suggest 用グラフ設計（graph名、Node/Edge、trust 既存グラフとの分離方針）を確定する。
-- [ ] `cn_search.graph_sync_offsets` / `cn_search.user_community_affinity` を追加し、同期ワーカーを実装する。
-- [ ] outbox 差分同期 + affinity 再計算ジョブ（checkpoint 再開可能）を追加する。
+- [x] suggest 用グラフ設計（graph名、Node/Edge、trust 既存グラフとの分離方針）を確定する。
+- [x] `cn_search.graph_sync_offsets` / `cn_search.user_community_affinity` を追加し、同期ワーカーを実装する。
+- [x] outbox 差分同期 + affinity 再計算ジョブ（checkpoint 再開可能）を追加する。
 
 ## PR-05 2段階サジェスト（候補生成 + 再ランキング）
 

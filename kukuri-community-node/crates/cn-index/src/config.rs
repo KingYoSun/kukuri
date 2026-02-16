@@ -8,6 +8,7 @@ pub struct IndexRuntimeConfig {
     pub consumer_poll_seconds: u64,
     pub reindex_poll_seconds: u64,
     pub expiration_sweep_seconds: u64,
+    pub affinity_recompute_seconds: u64,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +27,11 @@ struct ExpirationSection {
     sweep_interval_seconds: Option<u64>,
 }
 
+#[derive(Deserialize)]
+struct GraphAffinitySection {
+    recompute_interval_seconds: Option<u64>,
+}
+
 impl IndexRuntimeConfig {
     pub fn from_json(value: &Value) -> Self {
         let enabled = value
@@ -41,6 +47,9 @@ impl IndexRuntimeConfig {
         let expiration = value
             .get("expiration")
             .and_then(|v| serde_json::from_value::<ExpirationSection>(v.clone()).ok());
+        let graph_affinity = value
+            .get("graph_affinity")
+            .and_then(|v| serde_json::from_value::<GraphAffinitySection>(v.clone()).ok());
         Self {
             enabled,
             consumer_batch_size: consumer.as_ref().and_then(|c| c.batch_size).unwrap_or(200),
@@ -55,6 +64,10 @@ impl IndexRuntimeConfig {
             expiration_sweep_seconds: expiration
                 .as_ref()
                 .and_then(|e| e.sweep_interval_seconds)
+                .unwrap_or(300),
+            affinity_recompute_seconds: graph_affinity
+                .as_ref()
+                .and_then(|g| g.recompute_interval_seconds)
                 .unwrap_or(300),
         }
     }
