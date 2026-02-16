@@ -13,12 +13,17 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres, Row};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::Arc;
-use tokio::sync::OnceCell;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{Mutex, OnceCell};
 use tower::ServiceExt;
 use uuid::Uuid;
 
 static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+fn relay_subscription_approval_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 fn database_url() -> String {
     std::env::var("DATABASE_URL")
@@ -1792,6 +1797,7 @@ async fn admin_mutations_fail_when_audit_log_write_fails() {
 
 #[tokio::test]
 async fn transactional_admin_mutations_rollback_when_audit_log_write_fails() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let app = Router::new()
@@ -2061,6 +2067,7 @@ async fn transactional_admin_mutations_rollback_when_audit_log_write_fails() {
 
 #[tokio::test]
 async fn transactional_admin_mutations_rollback_when_commit_fails() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let app = Router::new()
@@ -3357,6 +3364,7 @@ async fn moderation_rule_test_contract_success() {
 
 #[tokio::test]
 async fn subscription_requests_and_node_subscriptions_contract_success() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let requester_approve = Keys::generate().public_key().to_hex();
@@ -3562,6 +3570,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
 
 #[tokio::test]
 async fn subscription_request_approve_rejects_when_node_topic_limit_reached() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
 
@@ -3678,6 +3687,7 @@ async fn subscription_request_approve_rejects_when_node_topic_limit_reached() {
 
 #[tokio::test]
 async fn subscription_request_approve_rejects_when_node_topic_limit_already_exceeded() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
 

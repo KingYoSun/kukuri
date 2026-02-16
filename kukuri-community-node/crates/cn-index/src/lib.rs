@@ -5,7 +5,8 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    config as env_config, db, health, http, logging, meili, metrics, nostr, server, service_config,
+    config as env_config, db, health, http, logging, meili, metrics, nostr, search_runtime_flags,
+    server, service_config,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -106,6 +107,12 @@ pub async fn run(config: IndexConfig) -> Result<()> {
         "index",
         default_config,
         Duration::from_secs(config.config_poll_seconds),
+    )
+    .await?;
+    let _search_runtime_flags = search_runtime_flags::watch_search_runtime_flags(
+        pool.clone(),
+        Duration::from_secs(config.config_poll_seconds),
+        SERVICE_NAME,
     )
     .await?;
     let health_targets = Arc::new(health::parse_health_targets(

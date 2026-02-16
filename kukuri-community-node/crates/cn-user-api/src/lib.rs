@@ -5,7 +5,10 @@ use axum::http::{HeaderMap, HeaderValue};
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use cn_core::{config, db, http, logging, meili, metrics, node_key, server, service_config};
+use cn_core::{
+    config, db, http, logging, meili, metrics, node_key, search_runtime_flags, server,
+    service_config,
+};
 use nostr_sdk::prelude::Keys;
 use serde::Serialize;
 use serde_json::json;
@@ -249,6 +252,12 @@ pub async fn run(config: UserApiConfig) -> Result<()> {
         "bootstrap",
         bootstrap_default,
         Duration::from_secs(config.config_poll_seconds),
+    )
+    .await?;
+    let _search_runtime_flags = search_runtime_flags::watch_search_runtime_flags(
+        pool.clone(),
+        Duration::from_secs(config.config_poll_seconds),
+        SERVICE_NAME,
     )
     .await?;
 
