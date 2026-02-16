@@ -1,6 +1,7 @@
 use crate::domain::entities::Event;
 use crate::infrastructure::crypto::signature_service::SignatureService;
 use async_trait::async_trait;
+use chrono::TimeZone;
 use nostr_sdk::prelude::*;
 
 /// デフォルトの署名サービス実装
@@ -54,6 +55,16 @@ impl SignatureService for DefaultSignatureService {
         let signed_event = event_builder.sign_with_keys(&keys)?;
         event.sig = signed_event.sig.to_string();
         event.id = signed_event.id.to_hex();
+        let signed_created_at = signed_event.created_at.as_secs() as i64;
+        event.created_at = chrono::Utc
+            .timestamp_opt(signed_created_at, 0)
+            .single()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid signed event created_at: {signed_created_at}"),
+                )
+            })?;
 
         Ok(())
     }

@@ -1128,11 +1128,12 @@ mod api_contract_tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU16, Ordering};
     use std::sync::Arc;
-    use tokio::sync::OnceCell;
+    use tokio::sync::{Mutex, OnceCell};
     use tower::ServiceExt;
     use uuid::Uuid;
 
     static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+    static SEARCH_BACKEND_TEST_LOCK: OnceCell<Mutex<()>> = OnceCell::const_new();
 
     fn database_url() -> String {
         std::env::var("DATABASE_URL")
@@ -1147,6 +1148,14 @@ mod api_contract_tests {
                     .expect("run migrations");
             })
             .await;
+    }
+
+    async fn lock_search_backend_contract_tests() -> tokio::sync::MutexGuard<'static, ()> {
+        SEARCH_BACKEND_TEST_LOCK
+            .get_or_init(|| async { Mutex::new(()) })
+            .await
+            .lock()
+            .await
     }
 
     async fn test_state_with_meili_url_bootstrap_auth_mode_and_user_config(
@@ -4347,6 +4356,7 @@ mod api_contract_tests {
 
     #[tokio::test]
     async fn search_contract_success_shape_compatible() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
         let topic_id = format!("kukuri:search-{}", Uuid::new_v4());
         let (meili_url, meili_handle) = spawn_mock_meili(json!({
             "hits": [
@@ -4362,6 +4372,12 @@ mod api_contract_tests {
 
         let state = test_state_with_meili_url(&meili_url).await;
         let pool = state.pool.clone();
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
         let pubkey = Keys::generate().public_key().to_hex();
         ensure_consents(&pool, &pubkey).await;
         insert_topic_subscription(&pool, &topic_id, &pubkey).await;
@@ -4406,6 +4422,7 @@ mod api_contract_tests {
 
     #[tokio::test]
     async fn search_contract_pg_backend_switch_normalization_and_version_filter() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
         let state = test_state().await;
         let pool = state.pool.clone();
         let topic_id = format!("kukuri:search-pg-{}", Uuid::new_v4());
@@ -4524,6 +4541,7 @@ mod api_contract_tests {
 
     #[tokio::test]
     async fn search_contract_pg_backend_preserves_multi_topic_rows_for_same_post_id() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
         let state = test_state().await;
         let pool = state.pool.clone();
         let topic_a = format!("kukuri:search-pg-topic-a-{}", Uuid::new_v4().simple());

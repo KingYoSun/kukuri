@@ -74,3 +74,4 @@
   - 2026年02月16日: PR #28 Community Node Tests fix loop対応（`cn-admin-api` 契約テスト直列化）を完了し、`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr28_community_node_tests_fix_loop.md` へ反映。`gh act` の `format-check` / `native-test-linux` / `community-node-tests` も pass。
   - 2026年02月16日: PR-02（投稿検索ドキュメント + PGroonga read/write 切替）を完了し、`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr02_post_search_pgroonga.md` へ反映。
   - 2026年02月16日: PR #29 fix loop（`post_search_documents` の primary key 競合）対応として、`(post_id, topic_id)` キー化・`ON CONFLICT` 修正・multi-topic 回帰テストを実装。`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr29_post_search_topic_key_fix_loop.md` に反映。
+  - 2026年02月16日: PR #29 fix loop second pass（Run `22050188054`）として、`default_signature_service` の署名時刻同期と `cn-user-api` 検索契約テストの runtime flag 競合直列化を実施。`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr29_second_pass_ci_fix_loop.md` に反映。
