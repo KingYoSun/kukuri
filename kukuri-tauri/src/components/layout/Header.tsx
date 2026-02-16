@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Bell, Menu, MessageCircle, Plus } from 'lucide-react';
 import { useUIStore, useTopicStore } from '@/stores';
@@ -11,6 +12,7 @@ import { DirectMessageInbox } from '@/components/directMessages/DirectMessageInb
 import { useDirectMessageBootstrap } from '@/hooks/useDirectMessageBootstrap';
 
 export function Header() {
+  const { t } = useTranslation();
   const { toggleSidebar } = useUIStore();
   const { setCurrentTopic } = useTopicStore();
   const navigate = useNavigate();
@@ -28,7 +30,7 @@ export function Header() {
         className="h-16 border-b bg-background px-6 flex items-center justify-between"
       >
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="メニュー切り替え">
+          <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={t('nav.toggleMenu')}>
             <Menu className="h-5 w-5" />
           </Button>
           <h1
@@ -50,7 +52,7 @@ export function Header() {
             variant="ghost"
             size="icon"
             className="relative"
-            aria-label="ダイレクトメッセージ"
+            aria-label={t('nav.directMessage')}
             onClick={() => {
               const target = activeConversationNpub ?? latestConversationNpub;
               if (target) {
@@ -70,14 +72,14 @@ export function Header() {
           <Button
             variant="outline"
             size="icon"
-            aria-label="新しいダイレクトメッセージ"
+            aria-label={t('nav.newDirectMessage')}
             onClick={openInbox}
             data-testid="open-dm-inbox-button"
           >
             <Plus className="h-5 w-5" />
           </Button>
 
-          <Button variant="ghost" size="icon" aria-label="通知">
+          <Button variant="ghost" size="icon" aria-label={t('nav.notifications')}>
             <Bell className="h-5 w-5" />
           </Button>
 

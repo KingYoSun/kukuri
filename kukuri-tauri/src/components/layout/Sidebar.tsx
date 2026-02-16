@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -10,25 +11,25 @@ import { useNavigate, useLocation } from '@tanstack/react-router';
 import { RelayStatus } from '@/components/RelayStatus';
 import { P2PStatus } from '@/components/P2PStatus';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchTrendingCategory, prefetchFollowingCategory } from '@/hooks/useTrendingFeeds';
 import { TopicFormModal } from '@/components/topics/TopicFormModal';
 import type { Topic } from '@/stores';
+import { getDateFnsLocale } from '@/i18n';
 
 interface SidebarCategoryItem {
   key: SidebarCategory;
-  name: string;
+  nameKey: string;
   icon: typeof List;
   path: string;
 }
 
-const categories: SidebarCategoryItem[] = [
-  { key: 'topics', name: 'トピック一覧', icon: List, path: '/topics' },
-  { key: 'search', name: '検索', icon: Search, path: '/search' },
-  { key: 'trending', name: 'トレンド', icon: TrendingUp, path: '/trending' },
-  { key: 'following', name: 'フォロー中', icon: Users, path: '/following' },
+const categoryKeys: SidebarCategoryItem[] = [
+  { key: 'topics', nameKey: 'nav.topics', icon: List, path: '/topics' },
+  { key: 'search', nameKey: 'nav.search', icon: Search, path: '/search' },
+  { key: 'trending', nameKey: 'nav.trending', icon: TrendingUp, path: '/trending' },
+  { key: 'following', nameKey: 'nav.following', icon: Users, path: '/following' },
 ];
 
 const deriveCategoryFromPath = (pathname: string): SidebarCategory | null => {
@@ -48,6 +49,7 @@ const deriveCategoryFromPath = (pathname: string): SidebarCategory | null => {
 };
 
 export function Sidebar() {
+  const { t } = useTranslation();
   const { topics, joinedTopics, currentTopic, setCurrentTopic, topicUnreadCounts } =
     useTopicStore();
   const [showTopicCreationDialog, setShowTopicCreationDialog] = useState(false);
@@ -163,16 +165,18 @@ export function Sidebar() {
             <div className="p-4">
               <Button className="w-full" variant="default" onClick={handleCreatePost}>
                 <Plus className="mr-2 h-4 w-4" />
-                新規投稿
+                {t('nav.newPost')}
               </Button>
             </div>
 
             <Separator />
 
             <div className="p-4">
-              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">カテゴリー</h3>
+              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                {t('nav.category')}
+              </h3>
               <div className="space-y-1">
-                {categories.map((category) => (
+                {categoryKeys.map((category) => (
                   <Button
                     key={category.key}
                     variant={activeSidebarCategory === category.key ? 'secondary' : 'ghost'}
@@ -185,7 +189,7 @@ export function Sidebar() {
                     onClick={() => handleCategoryClick(category)}
                   >
                     <category.icon className="mr-2 h-4 w-4" />
-                    {category.name}
+                    {t(category.nameKey)}
                   </Button>
                 ))}
               </div>
@@ -194,18 +198,20 @@ export function Sidebar() {
             <Separator />
 
             <div className="p-4" data-testid="topics-list">
-              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">参加中のトピック</h3>
+              <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                {t('nav.joinedTopics')}
+              </h3>
               <div className="space-y-1">
                 {joinedTopicsList.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">参加中のトピックはありません</p>
+                  <p className="text-sm text-muted-foreground">{t('nav.noJoinedTopics')}</p>
                 ) : (
                   joinedTopicsList.map((topic) => {
                     const lastActiveText = topic.lastActive
                       ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
                           addSuffix: false,
-                          locale: ja,
+                          locale: getDateFnsLocale(),
                         })
-                      : '未投稿';
+                      : t('nav.noPostsYet');
 
                     return (
                       <Button
@@ -253,7 +259,7 @@ export function Sidebar() {
                 data-testid="open-settings-button"
               >
                 <Settings className="mr-2 h-4 w-4" />
-                設定
+                {t('nav.settings')}
               </Button>
             </div>
           </div>

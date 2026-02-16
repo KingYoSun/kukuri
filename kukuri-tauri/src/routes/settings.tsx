@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createFileRoute } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useUIStore, usePrivacySettingsStore } from '@/stores';
 import { useAuthStore } from '@/stores/authStore';
 import { NostrTestPanel } from '@/components/NostrTestPanel';
@@ -17,12 +25,14 @@ import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { KeyManagementDialog } from '@/components/settings/KeyManagementDialog';
+import { SUPPORTED_LOCALES, getCurrentLocale, type SupportedLocale } from '@/i18n';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 });
 
 function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const { theme, setTheme } = useUIStore();
   const {
     publicProfile,
@@ -43,7 +53,7 @@ function SettingsPage() {
 
   const persistPrivacy = async (field: 'public' | 'online', value: boolean) => {
     if (!currentUser) {
-      toast.error('プライバシー設定を変更するにはログインが必要です');
+      toast.error(t('settings.toast.privacyLoginRequired'));
       return;
     }
     const payload = {
@@ -71,13 +81,13 @@ function SettingsPage() {
           metadata: { field },
         });
       }
-      toast.success('プライバシー設定を更新しました');
+      toast.success(t('settings.toast.privacyUpdated'));
     } catch (error) {
       errorHandler.log('SettingsPage.updatePrivacyFailed', error, {
         context: 'SettingsPage.persistPrivacy',
         metadata: { field },
       });
-      toast.error('プライバシー設定の更新に失敗しました');
+      toast.error(t('settings.toast.privacyUpdateFailed'));
     } finally {
       setSavingField(null);
     }
@@ -87,7 +97,7 @@ function SettingsPage() {
     (field: 'public' | 'online') =>
     (checked: boolean): void => {
       if (!currentUser) {
-        toast.error('プライバシー設定を変更するにはログインが必要です');
+        toast.error(t('settings.toast.privacyLoginRequired'));
         return;
       }
       if (field === 'public') {
@@ -98,57 +108,94 @@ function SettingsPage() {
       void persistPrivacy(field, checked);
     };
 
+  const currentLocale = getCurrentLocale();
+  const handleLocaleChange = (value: string) => {
+    const locale = value as SupportedLocale;
+    localStorage.setItem('kukuri-locale', locale);
+    void i18n.changeLanguage(locale);
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6" data-testid="settings-page">
-      <h1 className="text-3xl font-bold">設定</h1>
+      <h1 className="text-3xl font-bold">{t('settings.title')}</h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>外観</CardTitle>
-          <CardDescription>アプリケーションの見た目をカスタマイズします</CardDescription>
+          <CardTitle>{t('settings.appearance.title')}</CardTitle>
+          <CardDescription>{t('settings.appearance.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <Label htmlFor="dark-mode">ダークモード</Label>
+            <Label htmlFor="dark-mode">{t('settings.appearance.darkMode')}</Label>
             <Switch
               id="dark-mode"
               checked={theme === 'dark'}
               onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="language" className="text-base font-medium">
+                {t('settings.appearance.language')}
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                {t('settings.appearance.languageDescription')}
+              </p>
+            </div>
+            <Select
+              value={currentLocale}
+              onValueChange={handleLocaleChange}
+              data-testid="settings-language-select"
+            >
+              <SelectTrigger id="language" className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_LOCALES.map((locale) => (
+                  <SelectItem key={locale} value={locale}>
+                    {t(`common.language.${locale === 'zh-CN' ? 'zhCN' : locale}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>アカウント</CardTitle>
-          <CardDescription>アカウント情報と設定を管理します</CardDescription>
+          <CardTitle>{t('settings.account.title')}</CardTitle>
+          <CardDescription>{t('settings.account.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">プロフィール編集</p>
-              <p className="text-sm text-muted-foreground">表示名、自己紹介、アバター画像を編集</p>
+              <p className="font-medium">{t('settings.account.profileEdit')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t('settings.account.profileEditDescription')}
+              </p>
             </div>
             <Button
               variant="outline"
               onClick={() => setProfileDialogOpen(true)}
               data-testid="open-profile-dialog"
             >
-              編集
+              {t('settings.account.edit')}
             </Button>
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">鍵管理</p>
-              <p className="text-sm text-muted-foreground">秘密鍵のバックアップとインポート</p>
+              <p className="font-medium">{t('settings.account.keyManagement')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t('settings.account.keyManagementDescription')}
+              </p>
             </div>
             <Button
               variant="outline"
               onClick={() => setKeyDialogOpen(true)}
               data-testid="open-key-dialog"
             >
-              管理
+              {t('settings.account.manage')}
             </Button>
           </div>
         </CardContent>
@@ -156,12 +203,12 @@ function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>プライバシー</CardTitle>
-          <CardDescription>プライバシー設定を管理します</CardDescription>
+          <CardTitle>{t('settings.privacy.title')}</CardTitle>
+          <CardDescription>{t('settings.privacy.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <Label htmlFor="public-profile">プロフィールを公開</Label>
+            <Label htmlFor="public-profile">{t('settings.privacy.publicProfile')}</Label>
             <Switch
               id="public-profile"
               checked={publicProfile}
@@ -170,7 +217,7 @@ function SettingsPage() {
             />
           </div>
           <div className="flex items-center justify-between">
-            <Label htmlFor="show-online">オンライン状態を表示</Label>
+            <Label htmlFor="show-online">{t('settings.privacy.showOnlineStatus')}</Label>
             <Switch
               id="show-online"
               checked={showOnlineStatus}
@@ -180,11 +227,11 @@ function SettingsPage() {
           </div>
           {!currentUser && (
             <p className="text-xs text-muted-foreground">
-              ログインするとプライバシー設定を変更できます
+              {t('settings.privacy.loginRequired')}
             </p>
           )}
           {savingField && (
-            <p className="text-xs text-muted-foreground">プライバシー設定を保存しています…</p>
+            <p className="text-xs text-muted-foreground">{t('settings.privacy.saving')}</p>
           )}
         </CardContent>
       </Card>
@@ -198,8 +245,8 @@ function SettingsPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>開発者ツール - Nostr</CardTitle>
-              <CardDescription>Nostrプロトコルのテストとデバッグ</CardDescription>
+              <CardTitle>{t('settings.devTools.nostrTitle')}</CardTitle>
+              <CardDescription>{t('settings.devTools.nostrDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               <NostrTestPanel />

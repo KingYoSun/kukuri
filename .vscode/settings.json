@@ -1,6 +1,5 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
   },
@@ -11,6 +10,15 @@
     "typescriptreact"
   ],
   "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.preferences.useLabelDetailsInCompletionEntries": true,
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true,
+  "[typescript]": {
+    "editor.defaultFormatter": null
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": null
+  },
   "files.exclude": {
     "**/node_modules": true,
     "**/target": true,
@@ -30,13 +38,13 @@
     "editor.formatOnSave": true
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": null
   },
   "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": null
   },
   "[markdown]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": null
   },
   "rust-analyzer.cargo.features": "all",
   "rust-analyzer.checkOnSave.command": "clippy",

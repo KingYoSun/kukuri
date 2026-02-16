@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   Dialog,
@@ -28,6 +29,7 @@ interface ProfileEditDialogProps {
 }
 
 export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps) {
+  const { t } = useTranslation();
   const { currentUser, updateUser } = useAuthStore();
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,12 +67,12 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
   const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
     if (!profile.name.trim()) {
-      toast.error('名前を入力してください');
+      toast.error(t('auth.enterName'));
       return;
     }
 
     if (!currentUser) {
-      toast.error('アカウント情報が見つかりません');
+      toast.error(t('auth.accountNotFound'));
       return;
     }
 
@@ -85,7 +87,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
       if (profile.avatarFile) {
         if (!currentUser.npub) {
-          toast.error('アバターのアップロードに必要な情報が不足しています');
+          toast.error(t('auth.avatarUploadInfoMissing'));
           hasError = true;
         } else {
           try {
@@ -165,13 +167,13 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       }
 
       if (hasError) {
-        toast.error('プロフィールの更新に失敗しました');
+        toast.error(t('auth.profileUpdateFailed'));
       } else {
-        toast.success('プロフィールを更新しました');
+        toast.success(t('auth.profileUpdated'));
       }
     } catch (error) {
       hasError = true;
-      toast.error('プロフィールの更新に失敗しました');
+      toast.error(t('auth.profileUpdateFailed'));
       errorHandler.log('ProfileEditDialog.submitFailed', error, {
         context: 'ProfileEditDialog.handleSubmit',
       });
@@ -184,15 +186,15 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl space-y-6">
         <DialogHeader>
-          <DialogTitle>プロフィール編集</DialogTitle>
-          <DialogDescription>表示情報と自己紹介を更新します</DialogDescription>
+          <DialogTitle>{t('auth.editProfile')}</DialogTitle>
+          <DialogDescription>{t('auth.editProfileDescription')}</DialogDescription>
         </DialogHeader>
         <ProfileForm
           initialValues={initialValues}
           onSubmit={handleSubmit}
           onCancel={handleClose}
-          cancelLabel="キャンセル"
-          submitLabel={isSubmitting ? '保存中...' : '保存'}
+          cancelLabel={t('auth.cancel')}
+          submitLabel={isSubmitting ? t('auth.saving') : t('auth.save')}
           isSubmitting={isSubmitting}
           onSubmitFinally={handleSubmitFinally}
         />

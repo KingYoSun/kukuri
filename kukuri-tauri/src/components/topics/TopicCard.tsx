@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -5,28 +6,35 @@ import { Users, MessageSquare, Clock, Hash, Loader2 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import type { Topic } from '@/stores';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
 import { useTopicStore } from '@/stores';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useMemo } from 'react';
+import { getDateFnsLocale } from '@/i18n';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
+import i18n from '@/i18n';
 
 interface TopicCardProps {
   topic: Topic;
 }
 
 export function TopicCard({ topic }: TopicCardProps) {
+  const { t } = useTranslation();
   const { joinedTopics, joinTopic, leaveTopic, setCurrentTopic } = useTopicStore();
   const navigate = useNavigate();
   const isJoined = useMemo(() => joinedTopics.includes(topic.id), [joinedTopics, topic.id]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  const displayDescription = topic.id === DEFAULT_PUBLIC_TOPIC_ID
+    ? i18n.t('topics.publicTimeline')
+    : topic.description;
+
   const lastActiveText = topic.lastActive
     ? formatDistanceToNow(new Date(topic.lastActive * 1000), {
         addSuffix: true,
-        locale: ja,
+        locale: getDateFnsLocale(),
       })
-    : '活動なし';
+    : t('topics.noActivity');
 
   const handleTopicClick = () => {
     setCurrentTopic(topic);
@@ -39,22 +47,20 @@ export function TopicCard({ topic }: TopicCardProps) {
       if (isJoined) {
         await leaveTopic(topic.id);
         toast({
-          title: 'トピックから離脱しました',
-          description: `「${topic.name}」から離脱しました`,
+          title: t('topics.leaveSuccess'),
+          description: `「${topic.name}」`,
         });
       } else {
         await joinTopic(topic.id);
         toast({
-          title: 'トピックに参加しました',
-          description: `「${topic.name}」に参加しました`,
+          title: t('topics.joinSuccess'),
+          description: `「${topic.name}」`,
         });
       }
     } catch {
       toast({
-        title: 'エラー',
-        description: isJoined
-          ? 'トピックから離脱できませんでした'
-          : 'トピックに参加できませんでした',
+        title: t('common.error'),
+        description: isJoined ? t('topics.leaveFailed') : t('topics.joinFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -74,7 +80,7 @@ export function TopicCard({ topic }: TopicCardProps) {
               <Hash className="h-4 w-4 text-muted-foreground" />
               {topic.name}
             </h3>
-            <CardDescription className="mt-1">{topic.description}</CardDescription>
+            <CardDescription className="mt-1">{displayDescription}</CardDescription>
           </div>
           <Button
             variant={isJoined ? 'secondary' : 'default'}
@@ -82,10 +88,10 @@ export function TopicCard({ topic }: TopicCardProps) {
             onClick={handleJoinToggle}
             disabled={isLoading}
             aria-pressed={isJoined}
-            aria-label={isJoined ? `「${topic.name}」から離脱` : `「${topic.name}」に参加`}
+            aria-label={isJoined ? `「${topic.name}」 ${t('topics.leave')}` : `「${topic.name}」 ${t('topics.join')}`}
           >
             {isLoading && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
-            {isJoined ? '参加中' : '参加'}
+            {isJoined ? t('topics.joined') : t('topics.join')}
           </Button>
         </div>
       </CardHeader>
@@ -93,11 +99,11 @@ export function TopicCard({ topic }: TopicCardProps) {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-1">
             <Users className="h-4 w-4" />
-            <span>{topic.memberCount} メンバー</span>
+            <span>{t('topics.members', { count: topic.memberCount })}</span>
           </div>
           <div className="flex items-center gap-1">
             <MessageSquare className="h-4 w-4" />
-            <span>{topic.postCount} 投稿</span>
+            <span>{t('topics.postsCount', { count: topic.postCount })}</span>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="h-4 w-4" />

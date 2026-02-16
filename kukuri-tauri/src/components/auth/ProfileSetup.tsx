@@ -1,4 +1,5 @@
-﻿import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
@@ -11,10 +12,13 @@ import { ProfileForm, type ProfileFormSubmitPayload, type ProfileFormValues } fr
 import { TauriApi } from '@/lib/api/tauri';
 import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
 import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
+import { useTheme } from '@/hooks/useTheme';
 
 export function ProfileSetup() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { currentUser, updateUser } = useAuthStore();
+  useTheme(); // Apply theme to HTML element
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(true);
@@ -51,7 +55,7 @@ export function ProfileSetup() {
 
   const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
     if (!profile.name.trim()) {
-      toast.error('名前を入力してください');
+      toast.error(t('auth.enterName'));
       return;
     }
 
@@ -160,13 +164,13 @@ export function ProfileSetup() {
         useOfflineStore.getState().updateLastSyncedAt();
       }
       if (hasError) {
-        toast.error('プロフィールは保存しましたが、一部の同期に失敗しました');
+        toast.error(t('auth.profileSavedPartialSyncFailed'));
       } else {
-        toast.success('プロフィールを設定しました');
+        toast.success(t('auth.profileSetupSuccess'));
       }
       shouldNavigateRef.current = true;
     } catch (error) {
-      toast.error('プロフィールの設定に失敗しました');
+      toast.error(t('auth.profileSetupFailed'));
       errorHandler.log('Profile setup failed', error, {
         context: 'ProfileSetup.handleSubmit',
       });
@@ -190,8 +194,8 @@ export function ProfileSetup() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle>プロフィール設定</CardTitle>
-          <CardDescription>あなたの情報を設定しましょう</CardDescription>
+          <CardTitle>{t('auth.profileSetup')}</CardTitle>
+          <CardDescription>{t('auth.profileSetupDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <ProfileForm
@@ -211,8 +215,8 @@ export function ProfileSetup() {
               }
             }}
             onSkip={handleSkip}
-            skipLabel="後で設定"
-            submitLabel={isLoading ? '保存中...' : '設定を完了'}
+            skipLabel={t('auth.setupLater')}
+            submitLabel={isLoading ? t('auth.saving') : t('auth.completeSetup')}
             isSubmitting={isLoading}
           />
         </CardContent>
