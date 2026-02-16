@@ -3822,7 +3822,7 @@ mod api_contract_tests {
         insert_topic_subscription(&pool, &existing_topic_id, &subscriber_pubkey).await;
         assign_active_plan_limit(&pool, &subscriber_pubkey, "max_topics", "limit", 1).await;
 
-        let (status, payload) = post_json(
+        let (status, payload) = post_json_with_consent_retry(
             app.clone(),
             "/v1/topic-subscription-requests",
             &token,
@@ -3830,6 +3830,8 @@ mod api_contract_tests {
                 "topic_id": quota_topic_id,
                 "requested_services": ["relay", "index"]
             }),
+            &pool,
+            &subscriber_pubkey,
         )
         .await;
         assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
