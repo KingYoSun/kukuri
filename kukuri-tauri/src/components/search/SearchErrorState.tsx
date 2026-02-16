@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Clock } from 'lucide-react';
 
@@ -12,33 +13,13 @@ interface SearchErrorStateProps {
   onCooldownComplete?: () => void;
 }
 
-const ERROR_MESSAGES: Record<
-  UserSearchErrorKey,
-  { title: string; description: string; showRetry: boolean }
-> = {
-  'UserSearch.invalid_query': {
-    title: '検索キーワードが短すぎます',
-    description: '2文字以上入力してください',
-    showRetry: false,
-  },
-  'UserSearch.fetch_failed': {
-    title: 'ユーザー検索に失敗しました',
-    description: 'ネットワーク状況を確認して、再試行してください',
-    showRetry: true,
-  },
-  'UserSearch.rate_limited': {
-    title: 'リクエストが多すぎます',
-    description: '一定時間後に再試行してください',
-    showRetry: true,
-  },
-};
-
 export function SearchErrorState({
   errorKey,
   retryAfterSeconds = null,
   onRetry,
   onCooldownComplete,
 }: SearchErrorStateProps) {
+  const { t } = useTranslation();
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(retryAfterSeconds);
 
   useEffect(() => {
@@ -59,17 +40,19 @@ export function SearchErrorState({
     return () => clearTimeout(timer);
   }, [remainingSeconds, onCooldownComplete]);
 
-  const { title, description, showRetry } = ERROR_MESSAGES[errorKey];
+  const title = t(`search.error.${errorKey}.title`);
+  const description = t(`search.error.${errorKey}.description`);
+  const showRetry = errorKey !== 'UserSearch.invalid_query';
 
   const retryLabel = useMemo(() => {
     if (errorKey !== 'UserSearch.rate_limited' || remainingSeconds === null) {
-      return '再試行';
+      return t('search.error.retry');
     }
     if (remainingSeconds <= 0) {
-      return '再試行';
+      return t('search.error.retry');
     }
-    return `再試行 (${remainingSeconds}s)`;
-  }, [errorKey, remainingSeconds]);
+    return t('search.error.retryWithSeconds', { seconds: remainingSeconds });
+  }, [errorKey, remainingSeconds, t]);
 
   const isRetryDisabled = errorKey === 'UserSearch.rate_limited' && (remainingSeconds ?? 0) > 0;
 

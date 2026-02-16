@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useAuthStore, usePostStore } from '@/stores';
 import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDisplay';
 import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
@@ -22,6 +23,7 @@ export function ReplyForm({
   onSuccess,
   autoFocus = true,
 }: ReplyFormProps) {
+  const { t } = useTranslation();
   const { currentUser } = useAuthStore();
   const { createPost } = usePostStore();
   const { content, setContent, isPending, handleSubmit, handleKeyboardSubmit } = usePostActionForm({
@@ -38,10 +40,10 @@ export function ReplyForm({
         scope,
       });
     },
-    successMessage: '返信を投稿しました',
-    emptyErrorMessage: '返信内容を入力してください',
+    successMessage: t('posts.reply.success'),
+    emptyErrorMessage: t('posts.reply.contentRequired'),
     errorContext: 'ReplyForm',
-    errorToastTitle: '返信の投稿に失敗しました',
+    errorToastTitle: t('posts.reply.failed'),
     invalidations: [{ queryKey: ['timeline'] }, topicId ? { queryKey: ['posts', topicId] } : null],
     onSuccess,
   });
@@ -58,10 +60,10 @@ export function ReplyForm({
       avatarSrc={avatarSrc}
       initials={initials}
       content={content}
-      placeholder="返信を入力..."
+      placeholder={t('posts.reply.placeholder')}
       autoFocus={autoFocus}
       isPending={isPending}
-      submitLabel="返信する"
+      submitLabel={t('posts.reply.submit')}
       onSubmit={handleSubmit}
       onContentChange={setContent}
       onShortcut={handleKeyboardSubmit}

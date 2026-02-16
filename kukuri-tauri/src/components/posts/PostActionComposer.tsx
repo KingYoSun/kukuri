@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -35,11 +36,13 @@ export const PostActionComposer = ({
   onContentChange,
   onShortcut,
   onCancel,
-  hintText = 'Ctrl+Enter または ⌘+Enter で送信',
+  hintText,
   children,
   dataTestId,
   submitDataTestId,
 }: PostActionComposerProps) => {
+  const { t } = useTranslation();
+  const defaultHintText = hintText ?? t('posts.composer.hint');
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <div className="flex gap-3">
@@ -60,7 +63,7 @@ export const PostActionComposer = ({
           />
           {children}
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">{hintText}</p>
+            <p className="text-xs text-muted-foreground">{defaultHintText}</p>
             <div className="flex gap-2">
               {onCancel && (
                 <Button
@@ -71,7 +74,7 @@ export const PostActionComposer = ({
                   disabled={isPending}
                 >
                   <X className="mr-1 h-4 w-4" />
-                  キャンセル
+                  {t('common.cancel')}
                 </Button>
               )}
               <Button
@@ -83,7 +86,7 @@ export const PostActionComposer = ({
                 {isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    投稿中...
+                    {t('posts.composer.posting')}
                   </>
                 ) : (
                   submitLabel

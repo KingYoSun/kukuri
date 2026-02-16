@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Wifi, WifiOff } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -8,6 +9,7 @@ import { cn } from '@/lib/utils';
  * ネットワーク接続状態とリアルタイム更新の状態を表示
  */
 export function RealtimeIndicator() {
+  const { t } = useTranslation();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastUpdate, setLastUpdate] = useState(new Date());
 
@@ -44,10 +46,10 @@ export function RealtimeIndicator() {
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
 
-    if (seconds < 10) return '接続中';
-    if (seconds < 60) return `${seconds}秒前`;
-    if (minutes < 60) return `${minutes}分前`;
-    return '1時間以上前';
+    if (seconds < 10) return t('realtime.connecting');
+    if (seconds < 60) return t('realtime.secondsAgo', { seconds });
+    if (minutes < 60) return t('realtime.minutesAgo', { minutes });
+    return t('realtime.overAnHourAgo');
   };
 
   return (
@@ -63,14 +65,14 @@ export function RealtimeIndicator() {
             )}
           >
             {isOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            <span>{isOnline ? getRelativeTime() : 'オフライン'}</span>
+            <span>{isOnline ? getRelativeTime() : t('realtime.offline')}</span>
           </div>
         </TooltipTrigger>
         <TooltipContent>
           <p>
             {isOnline
-              ? `リアルタイム更新: ${lastUpdate.toLocaleTimeString('ja-JP')}`
-              : 'インターネット接続がありません'}
+              ? t('realtime.realtimeUpdate', { time: lastUpdate.toLocaleTimeString() })
+              : t('realtime.noInternetConnection')}
           </p>
         </TooltipContent>
       </Tooltip>

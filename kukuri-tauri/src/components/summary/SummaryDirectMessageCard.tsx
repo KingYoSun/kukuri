@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import { Button } from '@/components/ui/button';
 import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
@@ -9,6 +10,7 @@ interface SummaryDirectMessageCardProps {
 }
 
 export const SummaryDirectMessageCard = ({ testIdPrefix }: SummaryDirectMessageCardProps) => {
+  const { t } = useTranslation();
   const { unreadTotal, latestMessage, latestConversationNpub } = useDirectMessageBadge();
   const openInbox = useDirectMessageStore((state) => state.openInbox);
 
@@ -16,15 +18,15 @@ export const SummaryDirectMessageCard = ({ testIdPrefix }: SummaryDirectMessageC
     latestMessage ? latestMessage.createdAt : null,
   );
   const helperText = latestMessage
-    ? [display ?? helper, latestConversationNpub ? `会話: ${latestConversationNpub}` : null]
+    ? [display ?? helper, latestConversationNpub ? t('summary.dmConversation', { npub: latestConversationNpub }) : null]
         .filter(Boolean)
-        .join(' / ') || '受信履歴なし'
-    : '受信履歴なし';
+        .join(' / ') || t('summary.dmNoHistory')
+    : t('summary.dmNoHistory');
 
   return (
     <SummaryMetricCard
-      label="DM未読"
-      value={`${unreadTotal.toLocaleString()}件`}
+      label={t('summary.dmUnread')}
+      value={t('summary.dmItems', { count: unreadTotal })}
       helperText={helperText}
       isLoading={false}
       testId={`${testIdPrefix}-direct-messages`}
@@ -36,7 +38,7 @@ export const SummaryDirectMessageCard = ({ testIdPrefix }: SummaryDirectMessageC
           className="w-full"
           data-testid={`${testIdPrefix}-direct-messages-cta`}
         >
-          DM Inbox を開く
+          {t('summary.dmOpenInbox')}
         </Button>
       }
     />

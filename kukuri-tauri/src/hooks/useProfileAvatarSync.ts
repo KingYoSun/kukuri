@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   TauriApi,
@@ -15,6 +15,7 @@ import {
   registerProfileAvatarSyncWorker,
   type ProfileAvatarSyncJobPayload,
 } from '@/serviceWorker/profileAvatarSyncBridge';
+import i18n from '@/i18n';
 
 interface UseProfileAvatarSyncOptions {
   autoStart?: boolean;
@@ -183,7 +184,7 @@ export function useProfileAvatarSync(
             context: 'useProfileAvatarSync.syncNow',
             metadata: { npub, jobId: syncOptions?.jobId },
           });
-          setError('プロフィール画像の同期に失敗しました');
+          setError(i18n.t('profile.avatarSyncFailed'));
           setLastSyncedAt(attemptedAt);
           useOfflineStore.getState().updateLastSyncedAt();
           throw err;

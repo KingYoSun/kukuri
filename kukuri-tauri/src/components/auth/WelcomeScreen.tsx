@@ -1,13 +1,17 @@
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
+import { useTheme } from '@/hooks/useTheme';
 
 export function WelcomeScreen() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { generateNewKeypair } = useAuthStore();
+  useTheme(); // Apply theme to HTML element
 
   const handleCreateAccount = async () => {
     errorHandler.info('Starting account creation...', 'WelcomeScreen.handleCreateAccount');
@@ -20,17 +24,18 @@ export function WelcomeScreen() {
         'WelcomeScreen.handleCreateAccount',
         {
           hasNsec: Boolean(result?.nsec),
-          isAuthenticated: authState?.isLoggedIn ?? false,
+          isAuthenticated: authState?.isAuthenticated ?? false,
           currentNpub: authState?.currentUser?.npub ?? null,
         },
       );
+      await new Promise((resolve) => setTimeout(resolve, 0));
       await navigate({ to: '/profile-setup' });
       errorHandler.info(
         'Navigation to /profile-setup requested',
         'WelcomeScreen.handleCreateAccount',
       );
     } catch (error) {
-      toast.error('アカウントの作成に失敗しました');
+      toast.error(t('auth.createAccountFailed'));
       errorHandler.log('Failed to create account', error, {
         context: 'WelcomeScreen.handleCreateAccount',
       });
@@ -52,17 +57,15 @@ export function WelcomeScreen() {
             <span className="text-2xl font-bold text-primary-foreground">K</span>
           </div>
           <div>
-            <CardTitle className="text-3xl font-bold">kukuriへようこそ</CardTitle>
-            <CardDescription className="mt-2">
-              分散型トピック中心ソーシャルアプリケーション
-            </CardDescription>
+            <CardTitle className="text-3xl font-bold">{t('auth.welcomeTitle')}</CardTitle>
+            <CardDescription className="mt-2">{t('auth.welcomeSubtitle')}</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2 text-sm text-muted-foreground">
-            <p>・トピックベースのタイムラインで情報を共有</p>
-            <p>・P2Pネットワークによる検閲耐性</p>
-            <p>・Nostrプロトコルによる分散型アーキテクチャ</p>
+            <p>・{t('auth.welcomeBullet1')}</p>
+            <p>・{t('auth.welcomeBullet2')}</p>
+            <p>・{t('auth.welcomeBullet3')}</p>
           </div>
           <div className="space-y-3">
             <Button
@@ -71,7 +74,7 @@ export function WelcomeScreen() {
               size="lg"
               data-testid="welcome-create-account"
             >
-              新規アカウント作成
+              {t('auth.createAccount')}
             </Button>
             <Button
               onClick={handleLogin}
@@ -80,7 +83,7 @@ export function WelcomeScreen() {
               size="lg"
               data-testid="welcome-login"
             >
-              既存アカウントでログイン
+              {t('auth.loginWithExisting')}
             </Button>
           </div>
         </CardContent>

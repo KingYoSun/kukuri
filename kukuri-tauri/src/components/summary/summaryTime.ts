@@ -1,5 +1,6 @@
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale } from '@/i18n';
+import i18n from '@/i18n';
 
 export const formatRelativeTimeInfo = (timestamp: number | null | undefined) => {
   if (!timestamp) {
@@ -8,8 +9,8 @@ export const formatRelativeTimeInfo = (timestamp: number | null | undefined) => 
 
   const date = new Date(timestamp);
   return {
-    display: formatDistanceToNow(date, { addSuffix: true, locale: ja }),
-    helper: date.toLocaleString('ja-JP'),
+    display: formatDistanceToNow(date, { addSuffix: true, locale: getDateFnsLocale() }),
+    helper: date.toLocaleString(),
   };
 };
 
@@ -19,5 +20,5 @@ export const formatLagLabel = (timestamp: number | null | undefined) => {
   }
 
   const lagSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  return `ラグ ${lagSeconds.toLocaleString()}秒`;
+  return i18n.t('summary.lag', { seconds: lagSeconds.toLocaleString() });
 };
