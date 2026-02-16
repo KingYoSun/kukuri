@@ -32,6 +32,7 @@ pub struct BootstrapHintLatestResponse {
         subscription_request_doc,
         subscription_list_doc,
         subscription_delete_doc,
+        community_suggest_doc,
         search_doc,
         trending_doc,
         report_doc,
@@ -203,6 +204,17 @@ fn subscription_list_doc() {}
     responses((status = 200, body = serde_json::Value), (status = 404, body = ErrorResponse))
 )]
 fn subscription_delete_doc() {}
+
+#[utoipa::path(
+    get,
+    path = "/v1/communities/suggest",
+    params(
+        ("q" = String, Query, description = "Normalized suggest query"),
+        ("limit" = Option<i64>, Query, description = "Result limit")
+    ),
+    responses((status = 200, body = serde_json::Value))
+)]
+fn community_suggest_doc() {}
 
 #[utoipa::path(
     get,

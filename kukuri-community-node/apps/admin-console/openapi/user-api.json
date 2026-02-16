@@ -265,6 +265,46 @@
         }
       }
     },
+    "/v1/communities/suggest": {
+      "get": {
+        "tags": [
+          "crate"
+        ],
+        "operationId": "community_suggest_doc",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Normalized suggest query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Result limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/consents": {
       "post": {
         "tags": [

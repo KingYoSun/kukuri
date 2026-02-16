@@ -16,6 +16,7 @@ pub const SEARCH_WRITE_MODE_MEILI_ONLY: &str = "meili_only";
 pub const SEARCH_WRITE_MODE_DUAL: &str = "dual";
 pub const SEARCH_WRITE_MODE_PG_ONLY: &str = "pg_only";
 pub const SUGGEST_READ_BACKEND_LEGACY: &str = "legacy";
+pub const SUGGEST_READ_BACKEND_PG: &str = "pg";
 pub const SHADOW_SAMPLE_RATE_DISABLED: &str = "0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
