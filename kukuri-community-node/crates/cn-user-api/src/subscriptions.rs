@@ -4523,6 +4523,167 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn search_contract_pg_backend_preserves_multi_topic_rows_for_same_post_id() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let topic_a = format!("kukuri:search-pg-topic-a-{}", Uuid::new_v4().simple());
+        let topic_b = format!("kukuri:search-pg-topic-b-{}", Uuid::new_v4().simple());
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_a, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_b, &pubkey).await;
+
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_PG,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
+
+        let shared_post_id = Uuid::new_v4().to_string();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let body_a = "Shared multi topic body for topic A";
+        let body_a_norm = search_normalizer::normalize_search_text(body_a);
+        let hashtags_a = vec!["shared".to_string(), "topica".to_string()];
+        let mentions_a: Vec<String> = Vec::new();
+        let community_terms_a = search_normalizer::normalize_search_terms([topic_a.as_str()]);
+        let search_text_a = search_normalizer::build_search_text(
+            &body_a_norm,
+            &hashtags_a,
+            &mentions_a,
+            &community_terms_a,
+        );
+
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(&shared_post_id)
+        .bind(&topic_a)
+        .bind(&pubkey)
+        .bind(body_a)
+        .bind(&body_a_norm)
+        .bind(&hashtags_a)
+        .bind(&mentions_a)
+        .bind(&community_terms_a)
+        .bind(&search_text_a)
+        .bind(now)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
+        .execute(&pool)
+        .await
+        .expect("insert topic A search document");
+
+        let body_b = "Shared multi topic body for topic B";
+        let body_b_norm = search_normalizer::normalize_search_text(body_b);
+        let hashtags_b = vec!["shared".to_string(), "topicb".to_string()];
+        let mentions_b: Vec<String> = Vec::new();
+        let community_terms_b = search_normalizer::normalize_search_terms([topic_b.as_str()]);
+        let search_text_b = search_normalizer::build_search_text(
+            &body_b_norm,
+            &hashtags_b,
+            &mentions_b,
+            &community_terms_b,
+        );
+
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(&shared_post_id)
+        .bind(&topic_b)
+        .bind(&pubkey)
+        .bind(body_b)
+        .bind(&body_b_norm)
+        .bind(&hashtags_b)
+        .bind(&mentions_b)
+        .bind(&community_terms_b)
+        .bind(&search_text_b)
+        .bind(now - 1)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
+        .execute(&pool)
+        .await
+        .expect("insert topic B search document");
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+
+        let (status_a, payload_a) = get_json_with_consent_retry(
+            app.clone(),
+            &format!("/v1/search?topic={topic_a}&q=shared"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(status_a, StatusCode::OK);
+        assert_eq!(payload_a.get("total").and_then(Value::as_u64), Some(1));
+        let items_a = payload_a
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items_a.len(), 1);
+        let item_a = items_a.first().expect("topic A item");
+        assert_eq!(
+            item_a.get("event_id").and_then(Value::as_str),
+            Some(shared_post_id.as_str())
+        );
+        assert_eq!(
+            item_a.get("topic_id").and_then(Value::as_str),
+            Some(topic_a.as_str())
+        );
+        assert_eq!(item_a.get("content").and_then(Value::as_str), Some(body_a));
+
+        let (status_b, payload_b) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/search?topic={topic_b}&q=shared"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(status_b, StatusCode::OK);
+        assert_eq!(payload_b.get("total").and_then(Value::as_u64), Some(1));
+        let items_b = payload_b
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items_b.len(), 1);
+        let item_b = items_b.first().expect("topic B item");
+        assert_eq!(
+            item_b.get("event_id").and_then(Value::as_str),
+            Some(shared_post_id.as_str())
+        );
+        assert_eq!(
+            item_b.get("topic_id").and_then(Value::as_str),
+            Some(topic_b.as_str())
+        );
+        assert_eq!(item_b.get("content").and_then(Value::as_str), Some(body_b));
+
+        sqlx::query(
+            "DELETE FROM cn_search.post_search_documents \
+             WHERE post_id = $1 AND topic_id = ANY($2)",
+        )
+        .bind(&shared_post_id)
+        .bind(vec![topic_a, topic_b])
+        .execute(&pool)
+        .await
+        .expect("cleanup multi topic post search documents");
+
+        set_search_runtime_flags(
+            &pool,
+            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+        )
+        .await;
+    }
+
+    #[tokio::test]
     async fn submit_report_contract_success_shape_compatible() {
         let state = test_state().await;
         let pool = state.pool.clone();

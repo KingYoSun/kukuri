@@ -535,7 +535,7 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
                 state.meili.delete_documents(&uid, &stale_ids).await?;
             }
             if write_mode.writes_pg() {
-                mark_post_search_documents_deleted(&state.pool, &stale_ids).await?;
+                mark_post_search_documents_deleted(&state.pool, &stale_ids, &row.topic_id).await?;
             }
         }
     }
@@ -558,7 +558,7 @@ async fn handle_delete_with_mode(
         state.meili.delete_document(&uid, &row.event_id).await?;
     }
     if write_mode.writes_pg() {
-        mark_post_search_document_deleted(&state.pool, &row.event_id).await?;
+        mark_post_search_document_deleted(&state.pool, &row.event_id, &row.topic_id).await?;
     }
     Ok(())
 }
@@ -631,8 +631,7 @@ async fn upsert_post_search_document(
         "INSERT INTO cn_search.post_search_documents \
          (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, $14, NOW()) \
-         ON CONFLICT (post_id) DO UPDATE SET \
-           topic_id = EXCLUDED.topic_id, \
+         ON CONFLICT (post_id, topic_id) DO UPDATE SET \
            author_id = EXCLUDED.author_id, \
            visibility = EXCLUDED.visibility, \
            body_raw = EXCLUDED.body_raw, \
@@ -667,13 +666,18 @@ async fn upsert_post_search_document(
     Ok(())
 }
 
-async fn mark_post_search_document_deleted(pool: &Pool<Postgres>, post_id: &str) -> Result<()> {
+async fn mark_post_search_document_deleted(
+    pool: &Pool<Postgres>,
+    post_id: &str,
+    topic_id: &str,
+) -> Result<()> {
     sqlx::query(
         "UPDATE cn_search.post_search_documents \
          SET is_deleted = TRUE, updated_at = NOW() \
-         WHERE post_id = $1",
+         WHERE post_id = $1 AND topic_id = $2",
     )
     .bind(post_id)
+    .bind(topic_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -682,6 +686,7 @@ async fn mark_post_search_document_deleted(pool: &Pool<Postgres>, post_id: &str)
 async fn mark_post_search_documents_deleted(
     pool: &Pool<Postgres>,
     post_ids: &[String],
+    topic_id: &str,
 ) -> Result<()> {
     if post_ids.is_empty() {
         return Ok(());
@@ -690,9 +695,10 @@ async fn mark_post_search_documents_deleted(
     sqlx::query(
         "UPDATE cn_search.post_search_documents \
          SET is_deleted = TRUE, updated_at = NOW() \
-         WHERE post_id = ANY($1)",
+         WHERE post_id = ANY($1) AND topic_id = $2",
     )
     .bind(post_ids)
+    .bind(topic_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -1035,7 +1041,7 @@ async fn expire_events_once(state: &AppState) -> Result<()> {
                 state.meili.delete_document(&uid, &event_id).await?;
             }
             if write_mode.writes_pg() {
-                mark_post_search_document_deleted(&state.pool, &event_id).await?;
+                mark_post_search_document_deleted(&state.pool, &event_id, &topic_id).await?;
             }
             record_expired_event(&state.pool, &event_id, &topic_id, expires_at).await?;
         }

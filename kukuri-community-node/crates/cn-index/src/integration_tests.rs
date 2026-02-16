@@ -703,6 +703,95 @@ async fn outbox_dual_write_updates_meili_and_post_search_documents() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn outbox_dual_write_preserves_post_search_documents_per_topic() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_DUAL,
+    )
+    .await;
+
+    let topic_a = format!("kukuri:index-it:{}:a", next_id("topic"));
+    let topic_b = format!("kukuri:index-it:{}:b", next_id("topic"));
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let event_id = next_id("event-multi-topic");
+    let mut event = raw_event(&event_id, &topic_a, now, "shared multi topic post");
+    event.tags.push(vec!["t".to_string(), "shared".to_string()]);
+
+    insert_event(&pool, &topic_a, &event, None).await;
+    insert_event(&pool, &topic_b, &event, None).await;
+
+    let uid_a = meili::topic_index_uid(&topic_a);
+    let uid_b = meili::topic_index_uid(&topic_b);
+    let (meili_url, meili_state, meili_handle) = spawn_mock_meili().await;
+    let state = build_state(pool.clone(), &meili_url);
+
+    let upsert_seq_a = insert_outbox_row(&pool, "upsert", &topic_a, &event, None).await;
+    let upsert_seq_b = insert_outbox_row(&pool, "upsert", &topic_b, &event, None).await;
+    let start_seq = std::cmp::min(upsert_seq_a, upsert_seq_b) - 1;
+    let upsert_rows = fetch_outbox_batch(&pool, start_seq, 10)
+        .await
+        .expect("fetch upsert rows");
+    assert_eq!(upsert_rows.len(), 2);
+    for row in &upsert_rows {
+        handle_outbox_row(&state, row)
+            .await
+            .expect("handle multi topic upsert row");
+    }
+
+    assert_eq!(
+        index_document_ids(&meili_state, &uid_a).await,
+        vec![event_id.clone()]
+    );
+    assert_eq!(
+        index_document_ids(&meili_state, &uid_b).await,
+        vec![event_id]
+    );
+
+    let rows = sqlx::query(
+        "SELECT topic_id, is_deleted \
+         FROM cn_search.post_search_documents \
+         WHERE post_id = $1",
+    )
+    .bind(&event.id)
+    .fetch_all(&pool)
+    .await
+    .expect("fetch multi topic post search rows");
+    assert_eq!(rows.len(), 2);
+    let mut actual_topics = Vec::new();
+    for row in rows {
+        let topic_id: String = row.try_get("topic_id").expect("topic_id");
+        let is_deleted: bool = row.try_get("is_deleted").expect("is_deleted");
+        actual_topics.push(topic_id);
+        assert!(!is_deleted);
+    }
+    actual_topics.sort();
+    let mut expected_topics = vec![topic_a.clone(), topic_b.clone()];
+    expected_topics.sort();
+    assert_eq!(actual_topics, expected_topics);
+
+    cleanup_records(&pool, &topic_a, &[event.id.clone()], &[]).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+    )
+    .await;
+
+    meili_handle.abort();
+    let _ = meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn reindex_job_transitions_pending_running_succeeded_and_updates_meili() {
     let _guard = lock_tests();
 
