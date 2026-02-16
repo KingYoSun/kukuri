@@ -1,4 +1,5 @@
-﻿import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,7 +21,7 @@ const fallbackMessageId = () => `dm_${Date.now()}_${Math.random().toString(36).s
 
 const formatTimestamp = (timestamp: number) => {
   try {
-    return new Intl.DateTimeFormat('ja-JP', {
+    return new Intl.DateTimeFormat(undefined, {
       hour: '2-digit',
       minute: '2-digit',
     }).format(new Date(timestamp));
@@ -30,6 +31,7 @@ const formatTimestamp = (timestamp: number) => {
 };
 
 export function DirectMessageDialog() {
+  const { t } = useTranslation();
   const currentUser = useAuthStore((state) => state.currentUser);
   const isDialogOpen = useDirectMessageStore((state) => state.isDialogOpen);
   const activeConversationNpub = useDirectMessageStore((state) => state.activeConversationNpub);
@@ -261,12 +263,12 @@ export function DirectMessageDialog() {
   const showTopSpinner = hasLoadedAtLeastOnePage && isFetchingNextPage;
 
   const sendMessage = useCallback(
-    async (
+      async (
       rawContent: string,
       options: { retryingClientId?: string; preserveDraft?: boolean } = {},
     ) => {
       if (!activeConversationNpub || !currentUser) {
-        toast.error('メッセージを送信するにはログインが必要です。');
+        toast.error(t('dm.loginRequired'));
         return;
       }
 
@@ -311,10 +313,10 @@ export function DirectMessageDialog() {
           clientMessageId,
           response?.eventId ?? null,
         );
-        toast.success('メッセージを送信しました。');
+        toast.success(t('dm.sendSuccess'));
       } catch (error) {
         failOptimisticMessage(activeConversationNpub, clientMessageId, error);
-        toast.error('メッセージの送信に失敗しました。');
+        toast.error(t('dm.sendFailedMessage'));
         errorHandler.log('DirectMessageDialog.sendFailed', error, {
           context: options.retryingClientId
             ? 'DirectMessageDialog.retrySend'
@@ -368,8 +370,8 @@ export function DirectMessageDialog() {
     <Dialog open={isDialogOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-xl space-y-4">
         <DialogHeader>
-          <DialogTitle>ダイレクトメッセージ</DialogTitle>
-          <p className="text-sm text-muted-foreground break-all">宛先: {activeConversationNpub}</p>
+          <DialogTitle>{t('dm.dialogTitle')}</DialogTitle>
+          <p className="text-sm text-muted-foreground break-all">{t('dm.recipient')}: {activeConversationNpub}</p>
         </DialogHeader>
         <div ref={scrollAreaWrapperRef}>
           <ScrollArea className="h-72 rounded-md border border-border">
@@ -385,19 +387,19 @@ export function DirectMessageDialog() {
                       void fetchNextPage();
                     }}
                   >
-                    過去のメッセージを読み込む
+                    {t('dm.loadPastMessages')}
                   </Button>
                 </div>
               )}
               {showTopSpinner && (
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>過去のメッセージを読み込み中…</span>
+                  <span>{t('dm.loadingPastMessages')}</span>
                 </div>
               )}
               {isHistoryError && (
                 <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  <span>メッセージ履歴の取得に失敗しました。</span>
+                  <span>{t('dm.historyFetchFailed')}</span>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -405,17 +407,17 @@ export function DirectMessageDialog() {
                       void refetchHistory();
                     }}
                   >
-                    再試行
+                    {t('dm.retry')}
                   </Button>
                 </div>
               )}
               {initialLoading ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  メッセージ履歴を読み込み中…
+                  {t('dm.loadingHistory')}
                 </div>
               ) : messages.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  まだメッセージはありません。最初のメッセージを送信してみましょう。
+                  {t('dm.noMessagesYet')}
                 </p>
               ) : (
                 messages.map((message) => {
@@ -441,9 +443,9 @@ export function DirectMessageDialog() {
                       <span className="text-xs text-muted-foreground">
                         {formatTimestamp(message.createdAt)}
                         {message.status === 'pending'
-                          ? ' ・送信中'
+                          ? ` ・${t('dm.sending')}`
                           : message.status === 'failed'
-                            ? ' ・送信失敗'
+                            ? ` ・${t('dm.sendFailed')}`
                             : ''}
                       </span>
                       {isSelf && message.status === 'failed' && (
@@ -456,7 +458,7 @@ export function DirectMessageDialog() {
                             void handleRetry(message);
                           }}
                         >
-                          再送
+                          {t('dm.retrySend')}
                         </Button>
                       )}
                     </div>
@@ -471,7 +473,7 @@ export function DirectMessageDialog() {
             ref={textareaRef}
             value={messageDraft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="メッセージを入力してください…"
+            placeholder={t('dm.messagePlaceholder')}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
@@ -483,10 +485,10 @@ export function DirectMessageDialog() {
           />
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={handleClose}>
-              キャンセル
+              {t('dm.cancel')}
             </Button>
             <Button onClick={() => void handleSend()} disabled={isSendDisabled}>
-              {isSending ? '送信中…' : '送信'}
+              {isSending ? t('dm.sendingStatus') : t('dm.send')}
             </Button>
           </div>
         </div>

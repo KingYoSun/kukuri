@@ -1,4 +1,5 @@
 import { createRootRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { useTopics, useP2P, useProfileAvatarSync } from '@/hooks';
@@ -10,9 +11,27 @@ import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
 
 const PROTECTED_PATHS = ['/topics', '/settings', '/profile-setup'];
-const AUTH_REDIRECT_PATHS = ['/welcome', '/login'];
-const AUTH_LAYOUT_PATHS = [...AUTH_REDIRECT_PATHS, '/profile-setup'];
+const AUTH_REDIRECT_PATHS = ['/welcome'];
+const AUTH_LAYOUT_PATHS = ['/welcome', '/login', '/profile-setup'];
 const clampText = (value: string, max = 500) => (value.length > max ? value.slice(0, max) : value);
+
+function RootLoadingMessage() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <p className="text-muted-foreground">{t('root.initializing')}</p>
+    </div>
+  );
+}
+
+function RootRedirectingMessage() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <p className="text-muted-foreground">{t('root.redirecting')}</p>
+    </div>
+  );
+}
 
 function RootErrorComponent({ error }: { error: unknown }) {
   useEffect(() => {
@@ -28,9 +47,10 @@ function RootErrorComponent({ error }: { error: unknown }) {
 
   const message = error instanceof Error ? error.message : String(error);
 
+  const { t } = useTranslation();
   return (
     <div className="p-6" data-testid="root-error-boundary">
-      <h1 className="text-lg font-semibold">Something went wrong.</h1>
+      <h1 className="text-lg font-semibold">{t('root.errorTitle')}</h1>
       {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
     </div>
   );
@@ -75,11 +95,7 @@ function RootComponent() {
   }, [isAuthenticated, isInitializing, navigate, location.pathname]);
 
   if (isInitializing) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-muted-foreground">初期化中...</p>
-      </div>
-    );
+    return <RootLoadingMessage />;
   }
 
   const pathname = location.pathname;
@@ -87,11 +103,7 @@ function RootComponent() {
   const isProtectedRoute = isRootPath || PROTECTED_PATHS.some((path) => pathname.startsWith(path));
 
   if (!isAuthenticated && isProtectedRoute) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-muted-foreground">リダイレクト中...</p>
-      </div>
-    );
+    return <RootRedirectingMessage />;
   }
 
   const isAuthPage = AUTH_LAYOUT_PATHS.includes(pathname);
@@ -108,6 +120,7 @@ function RootComponent() {
 }
 
 function MainAppShell() {
+  const { t } = useTranslation();
   const { data: topics, isLoading } = useTopics();
   const { initialized: p2pInitialized } = useP2P();
 
@@ -125,12 +138,11 @@ function MainAppShell() {
   useEffect(() => {
     errorHandler.info(`P2P initialized: ${p2pInitialized}`, 'RootRoute.p2pEffect');
   }, [p2pInitialized]);
-
   if (isLoading) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center h-screen">
-          <p className="text-muted-foreground">読み込み中...</p>
+          <p className="text-muted-foreground">{t('common.loading')}</p>
         </div>
       </MainLayout>
     );

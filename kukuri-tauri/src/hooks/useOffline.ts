@@ -3,6 +3,7 @@ import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
+import i18n from '@/i18n';
 import type { SaveOfflineActionRequest } from '@/types/offline';
 import { OfflineActionType, EntityType } from '@/types/offline';
 
@@ -32,14 +33,14 @@ export function useOffline() {
   // オンライン/オフライン状態の変化を監視
   useEffect(() => {
     const handleOnline = () => {
-      toast.success('オンラインになりました。データを同期しています...');
+      toast.success(i18n.t('offline.onlineRestoredSyncing'));
       if (currentUser?.npub && pendingActions.length > 0) {
         syncPendingActions(currentUser.npub);
       }
     };
 
     const handleOffline = () => {
-      toast.info('オフラインモードです。変更は後で同期されます。');
+      toast.info(i18n.t('offline.offlineModeChangesQueued'));
     };
 
     // 初期状態のチェック
@@ -92,7 +93,7 @@ export function useOffline() {
 
       // オフライン時は通知を表示
       if (!isOnline) {
-        toast.info('アクションが保存されました。オンライン時に同期されます。');
+        toast.info(i18n.t('offline.actionSavedWillSync'));
       }
     },
     [currentUser?.npub, saveOfflineAction, isOnline],
@@ -101,30 +102,30 @@ export function useOffline() {
   // 手動同期トリガー
   const triggerSync = useCallback(async () => {
     if (!currentUser?.npub) {
-      toast.error('ログインが必要です');
+      toast.error(i18n.t('offline.loginRequired'));
       return;
     }
 
     if (!isOnline) {
-      toast.warning('オフラインのため同期できません');
+      toast.warning(i18n.t('offline.cannotSyncOffline'));
       return;
     }
 
     if (isSyncing) {
-      toast.info('すでに同期中です');
+      toast.info(i18n.t('offline.alreadySyncing'));
       return;
     }
 
     if (pendingActions.length === 0) {
-      toast.info('同期するアクションはありません');
+      toast.info(i18n.t('offline.noActionsToSync'));
       return;
     }
 
     try {
       await syncPendingActions(currentUser.npub);
-      toast.success('同期が完了しました');
+      toast.success(i18n.t('offline.syncCompleted'));
     } catch (error) {
-      toast.error('同期に失敗しました');
+      toast.error(i18n.t('offline.syncFailed'));
       errorHandler.log('Sync failed', error, {
         context: 'useOffline.triggerSync',
       });

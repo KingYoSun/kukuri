@@ -1,5 +1,5 @@
+import { useTranslation } from 'react-i18next';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
 import { Quote } from 'lucide-react';
 
 import { PostActionComposer } from '@/components/posts/PostActionComposer';
@@ -9,6 +9,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDisplay';
 import { useAuthStore, usePostStore } from '@/stores';
 import type { Post } from '@/stores';
+import { getDateFnsLocale } from '@/i18n';
 
 interface QuoteFormProps {
   post: Post;
@@ -18,6 +19,7 @@ interface QuoteFormProps {
 }
 
 export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: QuoteFormProps) {
+  const { t } = useTranslation();
   const { currentUser } = useAuthStore();
   const { createPost } = usePostStore();
   const { content, setContent, isPending, handleSubmit, handleKeyboardSubmit } = usePostActionForm({
@@ -44,10 +46,10 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
         scope: post.scope,
       });
     },
-    successMessage: '引用投稿を作成しました',
-    emptyErrorMessage: 'コメントを入力してください',
+    successMessage: t('posts.quote.success'),
+    emptyErrorMessage: t('posts.quote.contentRequired'),
     errorContext: 'QuoteForm',
-    errorToastTitle: '引用投稿の作成に失敗しました',
+    errorToastTitle: t('posts.quote.failed'),
     invalidations: [
       { queryKey: ['timeline'] },
       post.topicId ? { queryKey: ['posts', post.topicId] } : null,
@@ -57,7 +59,7 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
 
   const timeAgo = formatDistanceToNow(new Date(post.created_at * 1000), {
     addSuffix: true,
-    locale: ja,
+    locale: getDateFnsLocale(),
   });
 
   if (!currentUser) {
@@ -72,10 +74,10 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
       avatarSrc={avatarSrc}
       initials={initials}
       content={content}
-      placeholder="コメントを追加..."
+      placeholder={t('posts.quote.placeholder')}
       autoFocus={autoFocus}
       isPending={isPending}
-      submitLabel="引用して投稿"
+      submitLabel={t('posts.quote.submit')}
       onSubmit={handleSubmit}
       onContentChange={setContent}
       onShortcut={handleKeyboardSubmit}
@@ -90,7 +92,7 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
             <div className="flex-1 space-y-1">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-medium">
-                  {post.author.displayName || post.author.name || 'ユーザー'}
+                  {post.author.displayName || post.author.name || t('posts.user')}
                 </span>
                 <span>·</span>
                 <span>{timeAgo}</span>

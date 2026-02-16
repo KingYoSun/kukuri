@@ -10,6 +10,7 @@ import type { Post } from '@/stores/types';
 import { pubkeyToNpub } from '@/lib/utils/nostr';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
+import i18n from '@/i18n';
 
 interface P2PMessageEvent {
   topic_id: string;
@@ -47,8 +48,8 @@ export function useP2PEventListener() {
           id: message.author,
           pubkey: message.author,
           npub: await pubkeyToNpub(message.author),
-          name: 'P2P繝ｦ繝ｼ繧�E�繝ｼ',
-          displayName: 'P2P繝ｦ繝ｼ繧�E�繝ｼ',
+          name: i18n.t('p2p.unknownUser'),
+          displayName: i18n.t('p2p.unknownUser'),
           about: '',
           picture: '',
           nip05: '',
@@ -189,7 +190,7 @@ export function useP2PEventListener() {
         errorHandler.log('P2P error', error, {
           context: 'useP2PEventListener',
           showToast: true,
-          toastTitle: 'P2Pネットワークエラー',
+          toastTitle: i18n.t('p2p.networkError'),
         });
         useP2PStore.getState().clearError();
       },

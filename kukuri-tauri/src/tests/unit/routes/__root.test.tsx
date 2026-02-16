@@ -1,9 +1,14 @@
+/// <reference types="vitest/globals" />
+/// <reference types="@testing-library/jest-dom" />
+import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { MockedFunction } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { Route } from '@/routes/__root';
 import { useAuthStore } from '@/stores/authStore';
 import { useTopics, useP2P, useAuth } from '@/hooks';
 import { errorHandler } from '@/lib/errorHandler';
+import i18n from '@/i18n';
 
 // モック
 const mockNavigate = vi.fn();
@@ -54,28 +59,29 @@ Object.defineProperty(window, 'location', {
 
 describe('__root (Authentication Guard)', () => {
   const mockInitialize = vi.fn();
-  const RootComponent = Route.component;
+  const RootComponent = (Route as any).component;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('ja');
     vi.clearAllMocks();
     mockLocation.pathname = '/';
 
     // デフォルトのモック設定
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: false,
       initialize: mockInitialize,
     });
 
-    (useTopics as vi.Mock).mockReturnValue({
+    (useTopics as MockedFunction<any>).mockReturnValue({
       data: [],
       isLoading: false,
     });
 
-    (useP2P as vi.Mock).mockReturnValue({
+    (useP2P as MockedFunction<any>).mockReturnValue({
       initialized: false,
     });
 
-    (useAuth as vi.Mock).mockReturnValue({});
+    (useAuth as MockedFunction<any>).mockReturnValue({});
   });
 
   afterEach(() => {
@@ -98,7 +104,7 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: false,
       initialize: mockInitialize,
     });
@@ -115,7 +121,7 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/welcome';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: true,
       initialize: mockInitialize,
     });
@@ -132,7 +138,7 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/topics';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: false,
       initialize: mockInitialize,
     });
@@ -148,7 +154,7 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: true,
       initialize: mockInitialize,
     });
@@ -165,12 +171,12 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: true,
       initialize: mockInitialize,
     });
 
-    (useTopics as vi.Mock).mockReturnValue({
+    (useTopics as MockedFunction<any>).mockReturnValue({
       data: null,
       isLoading: true,
     });
@@ -191,7 +197,7 @@ describe('__root (Authentication Guard)', () => {
       vi.clearAllMocks();
       mockLocation.pathname = path;
 
-      (useAuthStore as unknown as vi.Mock).mockReturnValue({
+      (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
         isAuthenticated: false,
         initialize: mockInitialize,
       });
@@ -213,7 +219,7 @@ describe('__root (Authentication Guard)', () => {
       vi.clearAllMocks();
       mockLocation.pathname = path;
 
-      (useAuthStore as unknown as vi.Mock).mockReturnValue({
+      (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
         isAuthenticated: true,
         initialize: mockInitialize,
       });
@@ -230,7 +236,7 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/profile-setup';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: true,
       initialize: mockInitialize,
     });
@@ -249,12 +255,12 @@ describe('__root (Authentication Guard)', () => {
 
     const mockTopics = [{ id: '1', name: 'Test Topic' }];
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: true,
       initialize: mockInitialize,
     });
 
-    (useTopics as vi.Mock).mockReturnValue({
+    (useTopics as MockedFunction<any>).mockReturnValue({
       data: mockTopics,
       isLoading: false,
     });
@@ -270,12 +276,12 @@ describe('__root (Authentication Guard)', () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
 
-    (useAuthStore as unknown as vi.Mock).mockReturnValue({
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
       isAuthenticated: true,
       initialize: mockInitialize,
     });
 
-    (useP2P as vi.Mock).mockReturnValue({
+    (useP2P as MockedFunction<any>).mockReturnValue({
       initialized: true,
     });
 
