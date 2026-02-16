@@ -100,6 +100,19 @@
 - Meilisearch 同期停止（index consumer の停止）
 - LLM 連続失敗/予算上限到達（LLM自動停止に落ちているか）
 
+### 1.5 検索 PG cutover 監視（Issue #27 / PR-07）
+
+- 参照 Runbook: `docs/01_project/activeContext/search_pg_migration/PR-07_cutover_runbook.md`
+- cutover 期間（`search_read_backend=pg` の段階適用中）は、以下を Dashboard の必須パネルとして扱う。
+  - Search latency: `http_request_duration_seconds{service=\"cn-user-api\",route=\"/v1/search\"}`（p50/p95/p99）
+  - Search error rate: `http_requests_total{service=\"cn-user-api\",route=\"/v1/search\",status=~\"5..\"}` / 総リクエスト
+  - Suggest latency: `suggest_stage_a_latency_ms{service=\"cn-user-api\"}` / `suggest_stage_b_latency_ms{service=\"cn-user-api\"}`
+  - Suggest filter drop: `suggest_block_filter_drop_count{service=\"cn-user-api\",backend=\"pg\"}`
+  - Shadow quality: `shadow_overlap_at_10` / `shadow_latency_delta_ms`
+  - Index lag: `outbox_backlog{service=\"cn-index\",consumer=\"index-search-v1\"}`
+- zero-result は専用メトリクスが未実装のため、`cn_search.shadow_read_logs` を代理指標として SQL で収集する。
+- 閾値は PR-07 Runbook の品質/性能ゲート（`overlap@10 >= 0.70`, `NDCG@10 >= 0.90`, 検索 P95 `<= 180ms`, サジェスト P95 `<= 80ms`）に揃える。
+
 ## 2. バックアップ / リストア
 
 ### 2.1 何が正か（優先度）
