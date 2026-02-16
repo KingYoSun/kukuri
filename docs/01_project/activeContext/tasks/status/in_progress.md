@@ -71,3 +71,4 @@
   - 未着手タスク起票: `docs/01_project/activeContext/tasks/priority/search_pg_migration_roadmap.md`
   - 進捗レポート: `docs/01_project/progressReports/2026-02-16_issue27_search_pg_migration_audit.md`
   - 2026年02月16日: PR-01（拡張導入とランタイムフラグ基盤）完了に伴い、`tasks/completed/2026-02-16.md` へ追記して本ファイルから作業中エントリを削除。
+  - 2026年02月16日: PR #28 Community Node Tests fix loop対応（`cn-admin-api` 契約テスト直列化）を完了し、`tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue27_pr28_community_node_tests_fix_loop.md` へ反映。`gh act` の `format-check` / `native-test-linux` / `community-node-tests` も pass。
