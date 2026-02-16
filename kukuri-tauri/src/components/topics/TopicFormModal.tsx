@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
@@ -46,15 +47,16 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const topicFormSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'トピック名は必須です')
-    .max(50, 'トピック名は50文字以内で入力してください'),
-  description: z.string().max(200, '説明は200文字以内で入力してください').optional(),
-});
+const createTopicFormSchema = (t: (key: string) => string) =>
+  z.object({
+    name: z.string().min(1, t('topics.form.nameRequired')).max(50, t('topics.form.nameMaxLength')),
+    description: z.string().max(200, t('topics.form.descriptionMaxLength')).optional(),
+  });
 
-type TopicFormValues = z.infer<typeof topicFormSchema>;
+type TopicFormValues = {
+  name: string;
+  description?: string;
+};
 
 type TopicFormMode = 'create' | 'edit' | 'create-from-composer';
 
@@ -75,6 +77,7 @@ export function TopicFormModal({
   onCreated,
   autoJoin = false,
 }: TopicFormModalProps) {
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { createTopic, updateTopicRemote, joinTopic, queueTopicCreation } = useTopicStore();
   const isOnline = useOfflineStore((state) => state.isOnline);
@@ -83,7 +86,7 @@ export function TopicFormModal({
   const { toast } = useToast();
 
   const form = useForm<TopicFormValues>({
-    resolver: zodResolver(topicFormSchema),
+    resolver: zodResolver(createTopicFormSchema(t)),
     defaultValues: {
       name: '',
       description: '',
@@ -143,8 +146,8 @@ export function TopicFormModal({
           watchPendingTopic(pending.pending_id);
         }
         toast({
-          title: '作成をキューに追加しました',
-          description: 'オフラインのため接続回復後に自動で処理されます。',
+          title: t('topics.form.queuedTitle'),
+          description: t('topics.form.queuedDescription'),
         });
         onOpenChange(false);
         form.reset();
@@ -159,8 +162,8 @@ export function TopicFormModal({
             await joinTopic(createdTopic.id);
           } catch (error) {
             toast({
-              title: 'エラー',
-              description: 'トピックの参加に失敗しました。再試行してください。',
+              title: t('topics.form.errorTitle'),
+              description: t('topics.form.joinFailedDescription'),
               variant: 'destructive',
             });
             throw error;
@@ -168,15 +171,15 @@ export function TopicFormModal({
         }
 
         toast({
-          title: '成功',
-          description: 'トピックを作成し参加しました',
+          title: t('topics.form.successTitle'),
+          description: t('topics.form.createSuccessDescription'),
         });
         onCreated?.(createdTopic);
       } else if (mode === 'edit' && topic) {
         await updateTopicRemote(topic.id, values.name, values.description || '');
         toast({
-          title: '成功',
-          description: 'トピックを更新しました',
+          title: t('topics.form.successTitle'),
+          description: t('topics.form.updateSuccessDescription'),
         });
       }
 
@@ -189,8 +192,8 @@ export function TopicFormModal({
           watchPendingTopic(pending.pending_id);
         }
         toast({
-          title: '作成をオフラインでキューしました',
-          description: '接続復旧後に同期します。',
+          title: t('topics.form.offlineQueuedTitle'),
+          description: t('topics.form.offlineQueuedDescription'),
         });
         onOpenChange(false);
         form.reset();
@@ -198,7 +201,7 @@ export function TopicFormModal({
         errorHandler.log('Failed to create topic', fallbackError || error, {
           context: 'TopicFormModal.onSubmit',
           showToast: true,
-          toastTitle: 'トピックの作成に失敗しました',
+          toastTitle: t('topics.form.createFailed'),
         });
       }
     } finally {
@@ -212,17 +215,17 @@ export function TopicFormModal({
         <DialogHeader>
           <DialogTitle>
             {mode === 'edit'
-              ? 'トピックを編集'
+              ? t('topics.form.editTitle')
               : mode === 'create-from-composer'
-                ? '投稿用の新しいトピックを追加'
-                : '新しいトピックを追加'}
+                ? t('topics.form.createFromComposerTitle')
+                : t('topics.form.createTitle')}
           </DialogTitle>
           <DialogDescription>
             {mode === 'create'
-              ? 'トピックの名前と説明を入力してください'
+              ? t('topics.form.createDescription')
               : mode === 'create-from-composer'
-                ? '投稿に紐づけるためのトピックを作成し、選択状態で追加します。'
-                : 'トピックの情報を更新します'}
+                ? t('topics.form.createFromComposerDescription')
+                : t('topics.form.editDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -233,10 +236,10 @@ export function TopicFormModal({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>トピック名 *</FormLabel>
+                  <FormLabel>{t('topics.form.nameLabel')}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="例: プログラミング"
+                      placeholder={t('topics.form.namePlaceholder')}
                       {...field}
                       disabled={isSubmitting}
                       data-testid="topic-name-input"
@@ -252,17 +255,17 @@ export function TopicFormModal({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>説明</FormLabel>
+                  <FormLabel>{t('topics.form.descriptionLabel')}</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="このトピックに関する説明を入力してください"
+                      placeholder={t('topics.form.descriptionPlaceholder')}
                       rows={3}
                       {...field}
                       disabled={isSubmitting}
                       data-testid="topic-description-input"
                     />
                   </FormControl>
-                  <FormDescription>200文字以内で入力してください</FormDescription>
+                  <FormDescription>{t('topics.form.descriptionHint')}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -275,11 +278,13 @@ export function TopicFormModal({
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
               >
-                キャンセル
+                {t('topics.form.cancel')}
               </Button>
               <Button type="submit" disabled={isSubmitting} data-testid="topic-submit-button">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {mode === 'create' || mode === 'create-from-composer' ? '作成' : '更新'}
+                {mode === 'create' || mode === 'create-from-composer'
+                  ? t('topics.form.create')
+                  : t('topics.form.update')}
               </Button>
             </DialogFooter>
           </form>

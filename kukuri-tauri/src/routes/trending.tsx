@@ -1,3 +1,6 @@
+import { useTranslation } from 'react-i18next';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
+import i18n from '@/i18n';
 import { useMemo } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
@@ -12,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, ArrowUpRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale } from '@/i18n';
 
 interface TopicWithPosts extends TrendingTopicSummary {
   posts: {
@@ -27,6 +30,7 @@ interface TopicWithPosts extends TrendingTopicSummary {
 }
 
 export function TrendingPage() {
+  const { t } = useTranslation();
   const {
     data: topicsData,
     isLoading: topicsLoading,
@@ -91,15 +95,11 @@ export function TrendingPage() {
     return (
       <div className="container mx-auto px-4 py-8" data-testid="trending-error">
         <Alert variant="destructive" className="max-w-2xl mx-auto">
-          <AlertTitle>トレンド情報の取得に失敗しました</AlertTitle>
+          <AlertTitle>{t('trending.errorTitle')}</AlertTitle>
           <AlertDescription className="flex flex-col gap-4">
-            <span>
-              {topicsError instanceof Error
-                ? topicsError.message
-                : 'しばらく時間をおいてから再度お試しください。'}
-            </span>
+            <span>{topicsError instanceof Error ? topicsError.message : t('common.loading')}</span>
             <Button variant="outline" onClick={() => refetchTopics()}>
-              再試行
+              {t('common.retry')}
             </Button>
           </AlertDescription>
         </Alert>
@@ -112,10 +112,10 @@ export function TrendingPage() {
       <div className="container mx-auto px-4 py-8" data-testid="trending-empty">
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
-            <CardTitle>トレンドはまだありません</CardTitle>
+            <CardTitle>{t('trending.emptyTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="text-muted-foreground">
-            新しくトピックに参加すると、トレンド一覧が充実します。気になるトピックを探してみましょう。
+            {t('trending.emptyDescription')}
           </CardContent>
         </Card>
       </div>
@@ -133,28 +133,26 @@ export function TrendingPage() {
         />
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">トレンド</h1>
+            <h1 className="text-3xl font-bold">{t('trending.title')}</h1>
             {topicsData?.generatedAt && (
               <p className="text-sm text-muted-foreground">
-                更新:
+                {t('trending.updated')}:
                 {formatDistanceToNow(new Date(topicsData.generatedAt), {
                   addSuffix: true,
-                  locale: ja,
+                  locale: getDateFnsLocale(),
                 })}
               </p>
             )}
           </div>
           {postsIsError && (
             <Alert variant="destructive" className="max-w-md" data-testid="trending-posts-error">
-              <AlertTitle>投稿プレビューの取得に失敗しました</AlertTitle>
+              <AlertTitle>{t('trending.fetchPreviewFailed')}</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
                 <span>
-                  {postsError instanceof Error
-                    ? postsError.message
-                    : '投稿プレビューを再取得してください。'}
+                  {postsError instanceof Error ? postsError.message : t('common.loading')}
                 </span>
                 <Button variant="outline" size="sm" onClick={() => refetchPosts()}>
-                  再試行
+                  {t('common.retry')}
                 </Button>
               </AlertDescription>
             </Alert>
@@ -173,16 +171,26 @@ export function TrendingPage() {
                     <CardTitle className="text-xl">{topic.name}</CardTitle>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-muted-foreground">スコア</div>
+                    <div className="text-sm text-muted-foreground">{t('trending.score')}</div>
                     <div className="text-lg font-semibold">{topic.trendingScore.toFixed(1)}</div>
                   </div>
                 </div>
-                {topic.description && (
-                  <p className="text-sm text-muted-foreground line-clamp-2">{topic.description}</p>
-                )}
+                {(() => {
+                  const isPublicTopic = topic.topicId === DEFAULT_PUBLIC_TOPIC_ID;
+                  const displayDescription = isPublicTopic
+                    ? i18n.t('topics.publicTimeline')
+                    : topic.description;
+                  return (
+                    displayDescription && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {displayDescription}
+                      </p>
+                    )
+                  );
+                })()}
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                  <span>参加者 {topic.memberCount}</span>
-                  <span>投稿 {topic.postCount}</span>
+                  <span>{t('trending.members', { count: topic.memberCount })}</span>
+                  <span>{t('trending.posts', { count: topic.postCount })}</span>
                   {topic.scoreChange !== null && (
                     <span
                       data-testid={`trending-score-change-${topic.topicId}`}
@@ -195,7 +203,9 @@ export function TrendingPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground">最新の投稿</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground">
+                  {t('trending.latestPosts')}
+                </h3>
                 {topic.posts.length > 0 ? (
                   <ul className="space-y-2" data-testid={`trending-topic-${topic.topicId}-posts`}>
                     {topic.posts.map((post) => (
@@ -205,17 +215,19 @@ export function TrendingPage() {
                       >
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <ArrowUpRight className="h-3 w-3" />
-                          <span>{post.author.displayName || post.author.name || 'ユーザー'}</span>
+                          <span>
+                            {post.author.displayName || post.author.name || t('trending.user')}
+                          </span>
                           <span aria-hidden>·</span>
                           <span>
                             {formatDistanceToNow(new Date(post.created_at * 1000), {
                               addSuffix: true,
-                              locale: ja,
+                              locale: getDateFnsLocale(),
                             })}
                           </span>
                         </div>
                         <p className="mt-2 line-clamp-3 text-sm text-primary-foreground/90">
-                          {post.content || '投稿本文は省略されています。'}
+                          {post.content || t('trending.postContentOmitted')}
                         </p>
                       </li>
                     ))}
@@ -225,7 +237,7 @@ export function TrendingPage() {
                     className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground"
                     data-testid={`trending-topic-${topic.topicId}-empty`}
                   >
-                    このトピックの投稿はまだありません。最初の投稿をしてみましょう。
+                    {t('trending.noPostsInTopic')}
                   </p>
                 )}
               </CardContent>

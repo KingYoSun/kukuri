@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState, useCallback, useEffect } from 'react';
 import { p2pApi } from '@/lib/api/p2p';
 import type { GossipMetricsSection, P2PMetrics } from '@/lib/api/p2p';
@@ -22,6 +23,7 @@ const formatPercent = (value: number) => {
 };
 
 export function P2PDebugPanel() {
+  const { t } = useTranslation();
   const {
     nodeId,
     nodeAddr,
@@ -60,17 +62,17 @@ export function P2PDebugPanel() {
   const bootstrapSourceLabel = (source: string | null | undefined) => {
     switch (source) {
       case 'env':
-        return '環境変数';
+        return t('p2pDebug.sourceEnv');
       case 'user':
-        return 'ユーザー設定';
+        return t('p2pDebug.sourceUser');
       case 'bundle':
-        return '同梱設定';
+        return t('p2pDebug.sourceBundle');
       case 'fallback':
-        return 'フォールバック';
+        return t('p2pDebug.sourceFallback');
       case 'none':
-        return 'n0 デフォルト';
+        return t('p2pDebug.sourceNone');
       default:
-        return '未適用';
+        return t('p2pDebug.sourceNotApplied');
     }
   };
 
@@ -85,9 +87,15 @@ export function P2PDebugPanel() {
         <Badge variant="outline">{total}</Badge>
       </div>
       <div className="grid gap-0.5 text-[10px] text-muted-foreground">
-        <span>失敗: {detail?.failures ?? 0}</span>
-        <span>最終成功: {formatTimestamp(detail?.last_success_ms)}</span>
-        <span>最終失敗: {formatTimestamp(detail?.last_failure_ms)}</span>
+        <span>
+          {t('p2pDebug.failures')}: {detail?.failures ?? 0}
+        </span>
+        <span>
+          {t('p2pDebug.lastSuccess')}: {formatTimestamp(detail?.last_success_ms)}
+        </span>
+        <span>
+          {t('p2pDebug.lastFailure')}: {formatTimestamp(detail?.last_failure_ms)}
+        </span>
       </div>
     </div>
   );
@@ -111,7 +119,7 @@ export function P2PDebugPanel() {
       setNewTopicId('');
       setSelectedTopic(newTopicId.trim());
     } catch (error) {
-      errorHandler.log('トピック参加に失敗しました', error, {
+      errorHandler.log(t('p2pDebug.topicJoinFailed'), error, {
         context: 'P2PDebugPanel.handleJoinTopic',
       });
       addLog(`Failed to join topic: ${error}`);
@@ -133,7 +141,7 @@ export function P2PDebugPanel() {
           setSelectedTopic('');
         }
       } catch (error) {
-        errorHandler.log('トピック離脱に失敗しました', error, {
+        errorHandler.log(t('p2pDebug.topicLeaveFailed'), error, {
           context: 'P2PDebugPanel.handleLeaveTopic',
         });
         addLog(`Failed to leave topic: ${error}`);
@@ -156,7 +164,7 @@ export function P2PDebugPanel() {
       addLog(`Message broadcast successfully`);
       setMessageContent('');
     } catch (error) {
-      errorHandler.log('メッセージ送信に失敗しました', error, {
+      errorHandler.log(t('p2pDebug.messageSendFailed'), error, {
         context: 'P2PDebugPanel.handleBroadcast',
       });
       addLog(`Failed to broadcast: ${error}`);
@@ -173,7 +181,7 @@ export function P2PDebugPanel() {
         `Metrics updated: gossip join=${m.gossip.joins}/${m.gossip.join_details.failures} fail, routing=${formatPercent(m.mainline.routing_success_rate)} (${m.mainline.routing_successes}/${m.mainline.routing_failures}), reconnect=${m.mainline.reconnect_successes}/${m.mainline.reconnect_failures}`,
       );
     } catch (e) {
-      errorHandler.log('P2Pメトリクスの取得に失敗しました', e, {
+      errorHandler.log(t('p2pDebug.metricsFetchFailed'), e, {
         context: 'P2PDebugPanel.handleRefreshMetrics',
       });
       addLog(`Failed to fetch metrics: ${e}`);
@@ -210,24 +218,23 @@ export function P2PDebugPanel() {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <NetworkIcon className="h-5 w-5" />
-          <span>P2P Debug Panel</span>
+          <span>{t('p2pDebug.title')}</span>
         </CardTitle>
-        <CardDescription>P2P機能のテストとデバッグ（開発環境のみ）</CardDescription>
+        <CardDescription>{t('p2pDebug.subtitle')}</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="status" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="status">状態</TabsTrigger>
-            <TabsTrigger value="topics">トピック</TabsTrigger>
-            <TabsTrigger value="broadcast">送信</TabsTrigger>
-            <TabsTrigger value="logs">ログ</TabsTrigger>
+            <TabsTrigger value="status">{t('p2pDebug.state')}</TabsTrigger>
+            <TabsTrigger value="topics">{t('p2pDebug.topicsTab')}</TabsTrigger>
+            <TabsTrigger value="broadcast">{t('p2pDebug.send')}</TabsTrigger>
+            <TabsTrigger value="logs">{t('nostrTest.execLog')}</TabsTrigger>
           </TabsList>
 
-          {/* 状態タブ */}
           <TabsContent value="status" className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">接続状態</span>
+                <span className="text-sm font-medium">{t('p2pDebug.connectionStatus')}</span>
                 <div className="flex items-center space-x-2">
                   {connectionStatus === 'connected' ? (
                     <WifiIcon className="h-4 w-4 text-green-500" />
@@ -241,143 +248,167 @@ export function P2PDebugPanel() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-sm font-medium">ノードID</span>
+                <span className="text-sm font-medium">{t('p2pDebug.nodeId')}</span>
                 <code className="text-xs font-mono bg-muted rounded px-2 py-1 block break-all">
                   {nodeId || 'N/A'}
                 </code>
               </div>
 
               <div className="space-y-1">
-                <span className="text-sm font-medium">ノードアドレス</span>
+                <span className="text-sm font-medium">{t('p2pDebug.nodeAddr')}</span>
                 <code className="text-xs font-mono bg-muted rounded px-2 py-1 block break-all">
                   {nodeAddr || 'N/A'}
                 </code>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">接続ピア数</span>
+                <span className="text-sm font-medium">{t('p2pDebug.peerCount')}</span>
                 <Badge variant="outline">{peers.length}</Badge>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">参加トピック数</span>
+                <span className="text-sm font-medium">{t('p2pDebug.topicCount')}</span>
                 <Badge variant="outline">{activeTopics.length}</Badge>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Gossipメトリクス</span>
+                  <span className="text-sm font-medium">{t('p2pDebug.gossipMetrics')}</span>
                   <Button variant="secondary" size="sm" onClick={handleRefreshMetrics}>
-                    メトリクス更新
+                    {t('p2pDebug.metricsRefresh')}
                   </Button>
                 </div>
                 {metrics ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {renderMetricCard('Joins', metrics.gossip.joins, metrics.gossip.join_details)}
                       {renderMetricCard(
-                        'Leaves',
+                        t('p2pDebug.joins'),
+                        metrics.gossip.joins,
+                        metrics.gossip.join_details,
+                      )}
+                      {renderMetricCard(
+                        t('p2pDebug.leaves'),
                         metrics.gossip.leaves,
                         metrics.gossip.leave_details,
                       )}
                       {renderMetricCard(
-                        'Broadcasts',
+                        t('p2pDebug.broadcasts'),
                         metrics.gossip.broadcasts_sent,
                         metrics.gossip.broadcast_details,
                       )}
                       {renderMetricCard(
-                        'Received',
+                        t('p2pDebug.received'),
                         metrics.gossip.messages_received,
                         metrics.gossip.receive_details,
                       )}
                     </div>
                     <div className="rounded-md border p-3 space-y-2 text-xs sm:text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Mainline DHT</span>
-                        <Badge variant="outline">ピア {metrics.mainline.connected_peers}</Badge>
+                        <span className="text-sm font-medium">{t('p2pDebug.mainlineDht')}</span>
+                        <Badge variant="outline">
+                          {t('p2pDebug.peersLabel')} {metrics.mainline.connected_peers}
+                        </Badge>
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">接続試行</span>
+                          <span className="text-muted-foreground">
+                            {t('p2pDebug.connectionAttempts')}
+                          </span>
                           <span>
-                            {metrics.mainline.connection_attempts}（成功
-                            {metrics.mainline.connection_successes} / 失敗
+                            {metrics.mainline.connection_attempts}（{t('p2pDebug.success')}
+                            {metrics.mainline.connection_successes} / {t('p2pDebug.failure')}
                             {metrics.mainline.connection_failures}）
                           </span>
                           <span className="text-muted-foreground">
-                            最終成功: {formatTimestamp(metrics.mainline.connection_last_success_ms)}
+                            {t('p2pDebug.lastSuccess')}:{' '}
+                            {formatTimestamp(metrics.mainline.connection_last_success_ms)}
                           </span>
                           <span className="text-muted-foreground">
-                            最終失敗: {formatTimestamp(metrics.mainline.connection_last_failure_ms)}
+                            {t('p2pDebug.lastFailure')}:{' '}
+                            {formatTimestamp(metrics.mainline.connection_last_failure_ms)}
                           </span>
                         </div>
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">ルーティング成功率</span>
+                          <span className="text-muted-foreground">
+                            {t('p2pDebug.routingSuccessRate')}
+                          </span>
                           <span>
-                            {formatPercent(metrics.mainline.routing_success_rate)}（成功
-                            {metrics.mainline.routing_successes} / 失敗
+                            {formatPercent(metrics.mainline.routing_success_rate)}（
+                            {t('p2pDebug.success')}
+                            {metrics.mainline.routing_successes} / {t('p2pDebug.failure')}
                             {metrics.mainline.routing_failures}）
                           </span>
                           <span className="text-muted-foreground">
-                            最終成功: {formatTimestamp(metrics.mainline.routing_last_success_ms)}
+                            {t('p2pDebug.lastSuccess')}:{' '}
+                            {formatTimestamp(metrics.mainline.routing_last_success_ms)}
                           </span>
                           <span className="text-muted-foreground">
-                            最終失敗: {formatTimestamp(metrics.mainline.routing_last_failure_ms)}
+                            {t('p2pDebug.lastFailure')}:{' '}
+                            {formatTimestamp(metrics.mainline.routing_last_failure_ms)}
                           </span>
                         </div>
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">再接続</span>
+                          <span className="text-muted-foreground">{t('p2pDebug.reconnect')}</span>
                           <span>
-                            {metrics.mainline.reconnect_attempts}（成功
-                            {metrics.mainline.reconnect_successes} / 失敗
+                            {metrics.mainline.reconnect_attempts}（{t('p2pDebug.success')}
+                            {metrics.mainline.reconnect_successes} / {t('p2pDebug.failure')}
                             {metrics.mainline.reconnect_failures}）
                           </span>
                         </div>
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground">最終再接続</span>
-                          <span>
-                            成功: {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
+                          <span className="text-muted-foreground">
+                            {t('p2pDebug.lastReconnect')}
                           </span>
                           <span>
-                            失敗: {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}
+                            {t('p2pDebug.success')}:{' '}
+                            {formatTimestamp(metrics.mainline.last_reconnect_success_ms)}
+                          </span>
+                          <span>
+                            {t('p2pDebug.failure')}:{' '}
+                            {formatTimestamp(metrics.mainline.last_reconnect_failure_ms)}
                           </span>
                         </div>
                       </div>
                       <Separator className="my-2" />
                       <div className="space-y-0.5 text-muted-foreground">
-                        <span className="text-muted-foreground">ブートストラップ適用状況</span>
+                        <span className="text-muted-foreground">
+                          {t('p2pDebug.bootstrapStatus')}
+                        </span>
                         <span>
-                          環境 {metrics.mainline.bootstrap.env_uses} / ユーザー{' '}
-                          {metrics.mainline.bootstrap.user_uses} / 同梱{' '}
-                          {metrics.mainline.bootstrap.bundle_uses} / フォールバック{' '}
+                          {t('p2pDebug.bootstrapEnv')} {metrics.mainline.bootstrap.env_uses} /{' '}
+                          {t('p2pDebug.bootstrapUser')} {metrics.mainline.bootstrap.user_uses} /{' '}
+                          {t('p2pDebug.bootstrapBundle')} {metrics.mainline.bootstrap.bundle_uses} /{' '}
+                          {t('p2pDebug.bootstrapFallback')}{' '}
                           {metrics.mainline.bootstrap.fallback_uses}
                         </span>
                         <span>
-                          最終ソース: {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
+                          {t('p2pDebug.lastSource')}:{' '}
+                          {bootstrapSourceLabel(metrics.mainline.bootstrap.last_source)}
                         </span>
                         <span>
-                          適用時刻: {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
+                          {t('p2pDebug.appliedAt')}:{' '}
+                          {formatTimestamp(metrics.mainline.bootstrap.last_applied_ms)}
                         </span>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    メトリクスはまだ取得されていません
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t('p2pDebug.metricsNotFetched')}</p>
                 )}
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Nostr購読状態</span>
+                  <span className="text-sm font-medium">
+                    {t('p2pDebug.nostrSubscriptionStatus')}
+                  </span>
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={refreshSubscriptions}
                     disabled={isSubscriptionLoading}
                   >
-                    {isSubscriptionLoading ? '更新中…' : '再取得'}
+                    {isSubscriptionLoading ? t('p2pDebug.refreshing') : t('p2pDebug.refresh')}
                   </Button>
                 </div>
                 {subscriptionError && (
@@ -385,7 +416,9 @@ export function P2PDebugPanel() {
                 )}
                 <div className="grid gap-2">
                   {subscriptions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">購読情報はまだありません。</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('p2pDebug.noSubscriptionInfo')}
+                    </p>
                   ) : (
                     subscriptions.map((subscription) => (
                       <div
@@ -401,14 +434,21 @@ export function P2PDebugPanel() {
                           <Badge variant="outline">{subscription.status}</Badge>
                         </div>
                         <div className="grid gap-0.5 text-[10px] text-muted-foreground">
-                          <span>最終同期: {formatTimestamp(subscription.lastSyncedAt)}</span>
-                          <span>最終試行: {formatTimestamp(subscription.lastAttemptAt)}</span>
+                          <span>
+                            {t('p2pDebug.lastSynced')}: {formatTimestamp(subscription.lastSyncedAt)}
+                          </span>
+                          <span>
+                            {t('p2pDebug.lastAttempt')}:{' '}
+                            {formatTimestamp(subscription.lastAttemptAt)}
+                          </span>
                           {subscription.failureCount > 0 && (
-                            <span>失敗回数: {subscription.failureCount}</span>
+                            <span>
+                              {t('p2pDebug.failureCount')}: {subscription.failureCount}
+                            </span>
                           )}
                           {subscription.errorMessage && (
                             <span className="text-destructive">
-                              エラー: {subscription.errorMessage}
+                              {t('p2pDebug.errorLabel')}: {subscription.errorMessage}
                             </span>
                           )}
                         </div>
@@ -422,7 +462,7 @@ export function P2PDebugPanel() {
                 <div className="bg-red-50 dark:bg-red-950 rounded p-3 space-y-2">
                   <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
                   <Button variant="ghost" size="sm" onClick={clearError}>
-                    エラーをクリア
+                    {t('p2pDebug.clearError')}
                   </Button>
                 </div>
               )}
@@ -432,17 +472,17 @@ export function P2PDebugPanel() {
           {/* トピックタブ */}
           <TabsContent value="topics" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="topic-id">新しいトピックに参加</Label>
+              <Label htmlFor="topic-id">{t('p2pDebug.joinNewTopic')}</Label>
               <div className="flex space-x-2">
                 <Input
                   id="topic-id"
-                  placeholder="トピックID (例: test-topic)"
+                  placeholder={t('p2pDebug.topicIdPlaceholder')}
                   value={newTopicId}
                   onChange={(e) => setNewTopicId(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleJoinTopic()}
                 />
                 <Button onClick={handleJoinTopic} disabled={!newTopicId.trim() || isLoading}>
-                  参加
+                  {t('p2pDebug.join')}
                 </Button>
               </div>
             </div>
@@ -450,12 +490,12 @@ export function P2PDebugPanel() {
             <Separator />
 
             <div className="space-y-2">
-              <h4 className="text-sm font-medium">参加中のトピック</h4>
+              <h4 className="text-sm font-medium">{t('p2pDebug.joinedTopics')}</h4>
               <ScrollArea className="h-48 w-full rounded-md border">
                 <div className="p-2 space-y-2">
                   {activeTopics.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      参加中のトピックはありません
+                      {t('p2pDebug.noJoinedTopics')}
                     </p>
                   ) : (
                     activeTopics.map((topic) => (
@@ -466,9 +506,13 @@ export function P2PDebugPanel() {
                         <div className="space-y-1">
                           <code className="text-xs font-mono">{topic.topic_id}</code>
                           <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                            <span>ピア: {topic.peer_count}</span>
+                            <span>
+                              {t('p2pDebug.peerLabel')}: {topic.peer_count}
+                            </span>
                             <span>•</span>
-                            <span>メッセージ: {topic.message_count}</span>
+                            <span>
+                              {t('p2pDebug.messageCount')}: {topic.message_count}
+                            </span>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -477,7 +521,7 @@ export function P2PDebugPanel() {
                             size="sm"
                             onClick={() => setSelectedTopic(topic.topic_id)}
                           >
-                            選択
+                            {t('p2pDebug.select')}
                           </Button>
                           <Button
                             variant="ghost"
@@ -501,16 +545,16 @@ export function P2PDebugPanel() {
             {selectedTopic ? (
               <>
                 <div className="space-y-2">
-                  <Label>送信先トピック</Label>
+                  <Label>{t('p2pDebug.sendToTopic')}</Label>
                   <code className="text-sm font-mono bg-muted rounded px-2 py-1 block">
                     {selectedTopic}
                   </code>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="message">メッセージ</Label>
+                  <Label htmlFor="message">{t('p2pDebug.message')}</Label>
                   <Input
                     id="message"
-                    placeholder="送信するメッセージを入力"
+                    placeholder={t('p2pDebug.messagePlaceholder')}
                     value={messageContent}
                     onChange={(e) => setMessageContent(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleBroadcast()}
@@ -522,12 +566,12 @@ export function P2PDebugPanel() {
                   className="w-full"
                 >
                   <SendIcon className="mr-2 h-4 w-4" />
-                  ブロードキャスト
+                  {t('p2pDebug.broadcast')}
                 </Button>
               </>
             ) : (
               <div className="text-center py-8">
-                <p className="text-sm text-muted-foreground">トピックを選択してください</p>
+                <p className="text-sm text-muted-foreground">{t('p2pDebug.selectTopicFirst')}</p>
               </div>
             )}
           </TabsContent>
@@ -535,15 +579,17 @@ export function P2PDebugPanel() {
           {/* ログタブ */}
           <TabsContent value="logs" className="space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">デバッグログ</h4>
+              <h4 className="text-sm font-medium">{t('p2pDebug.debugLog')}</h4>
               <Button variant="ghost" size="sm" onClick={() => setLogs([])}>
-                クリア
+                {t('p2pDebug.clear')}
               </Button>
             </div>
             <ScrollArea className="h-64 w-full rounded-md border">
               <div className="p-2 space-y-1">
                 {logs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-4">ログはありません</p>
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    {t('p2pDebug.noLogs')}
+                  </p>
                 ) : (
                   logs.map((log, index) => (
                     <pre key={index} className="text-xs font-mono text-muted-foreground">

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Upload, User } from 'lucide-react';
@@ -64,13 +65,14 @@ export function ProfileForm({
   initialValues,
   onSubmit,
   onCancel,
-  cancelLabel = 'キャンセル',
+  cancelLabel,
   onSkip,
-  skipLabel = '後で設定',
-  submitLabel = '保存',
+  skipLabel,
+  submitLabel,
   isSubmitting = false,
   onSubmitFinally,
 }: ProfileFormProps) {
+  const { t } = useTranslation();
   const [values, setValues] = useState<ProfileFormValues>(initialValues);
   const [avatarPreview, setAvatarPreview] = useState<string>(initialValues.picture || '');
   const [selectedAvatar, setSelectedAvatar] = useState<ProfileFormAvatarFile | null>(null);
@@ -118,7 +120,7 @@ export function ProfileForm({
       const filePath = Array.isArray(selection) ? selection[0] : selection;
       const format = resolveMimeType(filePath);
       if (!format) {
-        toast.error('対応していない画像形式です（png/jpg/jpeg/gif/webp）');
+        toast.error(t('auth.unsupportedImageFormat'));
         return;
       }
 
@@ -126,7 +128,7 @@ export function ProfileForm({
       const bytes = rawBytes instanceof Uint8Array ? rawBytes : Uint8Array.from(rawBytes);
       applyAvatarSelection(extractFileName(filePath), format, bytes);
     } catch (error) {
-      toast.error('画像の読み込みに失敗しました');
+      toast.error(t('auth.imageLoadFailed'));
       errorHandler.log('ProfileForm.avatarLoadFailed', error, {
         context: 'ProfileForm.handleAvatarSelect',
       });
@@ -137,11 +139,11 @@ export function ProfileForm({
 
   const applyAvatarSelection = (fileName: string, format: string, bytes: Uint8Array) => {
     if (bytes.byteLength === 0) {
-      toast.error('画像の読み込みに失敗しました');
+      toast.error(t('auth.imageLoadFailed'));
       return false;
     }
     if (bytes.byteLength > MAX_PROFILE_AVATAR_BYTES) {
-      toast.error('画像サイズが大きすぎます（最大2MBまで）');
+      toast.error(t('auth.imageTooLarge'));
       return false;
     }
 
@@ -201,78 +203,77 @@ export function ProfileForm({
           data-testid="profile-avatar-upload"
         >
           <Upload className="mr-2 h-4 w-4" />
-          {isAvatarLoading ? '読み込み中...' : '画像をアップロード'}
+          {isAvatarLoading ? t('auth.uploadingImage') : t('auth.uploadImage')}
         </Button>
         <p className="text-xs text-muted-foreground">
-          PNG/JPG/GIF/WEBP（最大2MB）をご利用ください。
+          {t('auth.imageFormatHint')}
           {selectedAvatar && (
             <span className="ml-1">
-              {selectedAvatar.fileName}（{formatFileSize(selectedAvatar.sizeBytes)}）を選択中
+              {selectedAvatar.fileName}（{formatFileSize(selectedAvatar.sizeBytes)}）
+              {t('auth.selectedImage')}
             </span>
           )}
         </p>
-        <p className="text-xs text-muted-foreground">またはURLを下に入力</p>
+        <p className="text-xs text-muted-foreground">{t('auth.orEnterUrl')}</p>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name">名前 *</Label>
+          <Label htmlFor="name">{t('auth.nameRequired')}</Label>
           <Input
             id="name"
             value={values.name}
             onChange={(event) => setValues({ ...values, name: event.target.value })}
-            placeholder="表示名"
+            placeholder={t('auth.displayNamePlaceholder')}
             data-testid="profile-name"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="displayName">表示名</Label>
+          <Label htmlFor="displayName">{t('auth.displayName')}</Label>
           <Input
             id="displayName"
             value={values.displayName}
             onChange={(event) => setValues({ ...values, displayName: event.target.value })}
-            placeholder="@handle（省略可）"
+            placeholder={t('auth.displayNameOptional')}
             data-testid="profile-display-name"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="about">自己紹介</Label>
+          <Label htmlFor="about">{t('auth.bio')}</Label>
           <Textarea
             id="about"
             value={values.about}
             onChange={(event) => setValues({ ...values, about: event.target.value })}
-            placeholder="あなたについて教えてください"
+            placeholder={t('auth.aboutPlaceholder')}
             rows={3}
             data-testid="profile-about"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="picture">アバター画像URL</Label>
+          <Label htmlFor="picture">{t('auth.avatarUrlLabel')}</Label>
           <Input
             id="picture"
             type="url"
             value={values.picture}
             onChange={handlePictureChange}
-            placeholder="https://example.com/avatar.jpg"
+            placeholder={t('auth.avatarUrlPlaceholder')}
             disabled={isSubmitting}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="nip05">NIP-05認証</Label>
+          <Label htmlFor="nip05">{t('auth.nip05Label')}</Label>
           <Input
             id="nip05"
             value={values.nip05}
             onChange={(event) => setValues({ ...values, nip05: event.target.value })}
-            placeholder="user@example.com"
+            placeholder={t('auth.nip05Placeholder')}
             disabled={isSubmitting}
           />
-          <p className="text-xs text-muted-foreground">
-            Nostr認証用のメールアドレス形式の識別子（省略可）
-          </p>
+          <p className="text-xs text-muted-foreground">{t('auth.nip05Hint')}</p>
         </div>
       </div>
 
@@ -286,7 +287,7 @@ export function ProfileForm({
             disabled={isSubmitting}
             data-testid="profile-cancel"
           >
-            {cancelLabel}
+            {cancelLabel ?? t('auth.cancel')}
           </Button>
         )}
         {onSkip && (
@@ -298,7 +299,7 @@ export function ProfileForm({
             disabled={isSubmitting}
             data-testid="profile-skip"
           >
-            {skipLabel}
+            {skipLabel ?? t('auth.setupLater')}
           </Button>
         )}
         <Button
@@ -307,7 +308,7 @@ export function ProfileForm({
           disabled={isSubmitting}
           data-testid="profile-submit"
         >
-          {submitLabel}
+          {submitLabel ?? t('auth.save')}
         </Button>
       </div>
     </form>

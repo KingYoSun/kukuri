@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
@@ -9,10 +10,13 @@ import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { errorHandler } from '@/lib/errorHandler';
+import { useTheme } from '@/hooks/useTheme';
 
 export function LoginForm() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { loginWithNsec } = useAuthStore();
+  const { loginWithNsec, addAccount, isAuthenticated } = useAuthStore();
+  useTheme(); // Apply theme to HTML element
   const [nsec, setNsec] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [saveToSecureStorage, setSaveToSecureStorage] = useState(true);
@@ -22,24 +26,30 @@ export function LoginForm() {
     e.preventDefault();
 
     if (!nsec.trim()) {
-      toast.error('秘密鍵（nsec）を入力してください');
+      toast.error(t('auth.enterNsec'));
       return;
     }
 
     // NIP-19準拠のnsec形式チェック
     if (!nsec.startsWith('nsec1')) {
-      toast.error('無効な形式です。nsec1で始まる秘密鍵を入力してください');
+      toast.error(t('auth.invalidNsecFormat'));
       return;
     }
 
     setIsLoading(true);
     try {
-      await loginWithNsec(nsec, saveToSecureStorage);
-      toast.success('ログインしました');
-      await navigate({ to: '/' });
+      if (isAuthenticated) {
+        await addAccount(nsec);
+        toast.success(t('auth.accountAddedSuccess'));
+        await navigate({ to: '/' });
+      } else {
+        await loginWithNsec(nsec, saveToSecureStorage);
+        toast.success(t('auth.loginSuccess'));
+        await navigate({ to: '/' });
+      }
     } catch (error) {
-      toast.error('ログインに失敗しました。秘密鍵を確認してください');
-      errorHandler.log('Login failed', error, {
+      toast.error(isAuthenticated ? t('auth.addAccountFailed') : t('auth.loginFailedCheckNsec'));
+      errorHandler.log(isAuthenticated ? 'Add account failed' : 'Login failed', error, {
         context: 'LoginForm.handleSubmit',
       });
     } finally {
@@ -48,7 +58,7 @@ export function LoginForm() {
   };
 
   const handleBack = () => {
-    navigate({ to: '/welcome' });
+    navigate({ to: isAuthenticated ? '/' : '/welcome' });
   };
 
   return (
@@ -57,22 +67,26 @@ export function LoginForm() {
         <CardHeader>
           <Button variant="ghost" size="sm" onClick={handleBack} className="w-fit -ml-2 mb-2">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            戻る
+            {t('auth.back')}
           </Button>
-          <CardTitle>ログイン</CardTitle>
-          <CardDescription>既存のアカウントでログインします</CardDescription>
+          <CardTitle>
+            {isAuthenticated ? t('common.addAnotherAccount') : t('auth.loginTitle')}
+          </CardTitle>
+          <CardDescription>
+            {isAuthenticated ? t('auth.addAccountDescription') : t('auth.loginDescription')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="nsec">秘密鍵（nsec）</Label>
+              <Label htmlFor="nsec">{t('auth.nsecLabel')}</Label>
               <div className="relative">
                 <Input
                   id="nsec"
                   type={showPassword ? 'text' : 'password'}
                   value={nsec}
                   onChange={(e) => setNsec(e.target.value)}
-                  placeholder="nsec1..."
+                  placeholder={t('auth.nsecPlaceholder')}
                   className="pr-10"
                   autoComplete="off"
                 />
@@ -86,33 +100,37 @@ export function LoginForm() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                nsec1で始まるNostr秘密鍵を入力してください
-              </p>
+              <p className="text-xs text-muted-foreground">{t('auth.nsecHint')}</p>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="save-to-secure-storage"
-                checked={saveToSecureStorage}
-                onCheckedChange={(checked) => setSaveToSecureStorage(checked as boolean)}
-              />
-              <Label
-                htmlFor="save-to-secure-storage"
-                className="text-sm font-normal cursor-pointer"
-              >
-                アカウントを安全に保存して、次回から自動的にログインする
-              </Label>
-            </div>
+            {!isAuthenticated && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="save-to-secure-storage"
+                  checked={saveToSecureStorage}
+                  onCheckedChange={(checked) => setSaveToSecureStorage(checked as boolean)}
+                />
+                <Label
+                  htmlFor="save-to-secure-storage"
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  {t('auth.saveAccount')}
+                </Label>
+              </div>
+            )}
 
             <div className="bg-warning/10 border border-warning rounded-md p-3">
-              <p className="text-sm text-warning-foreground">
-                ⚠️ 秘密鍵は絶対に他人に教えないでください
-              </p>
+              <p className="text-sm text-warning-foreground">{t('auth.nsecWarning')}</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'ログイン中...' : 'ログイン'}
+              {isLoading
+                ? isAuthenticated
+                  ? t('auth.addingAccount')
+                  : t('auth.loggingIn')
+                : isAuthenticated
+                  ? t('common.addAnotherAccount')
+                  : t('auth.login')}
             </Button>
           </form>
         </CardContent>

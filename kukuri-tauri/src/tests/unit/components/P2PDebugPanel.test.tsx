@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { P2PDebugPanel } from '@/components/P2PDebugPanel';
 import { useP2P, UseP2PReturn } from '@/hooks/useP2P';
 import { useNostrSubscriptions } from '@/hooks/useNostrSubscriptions';
+import i18n from '@/i18n';
 
 // useP2Pフックのモック
 vi.mock('@/hooks/useP2P');
@@ -312,11 +313,11 @@ describe('P2PDebugPanel', () => {
       const user = userEvent.setup();
       render(<P2PDebugPanel />);
 
-      const logsTab = screen.getByText('ログ');
+      const logsTab = screen.getByText(i18n.t('nostrTest.execLog'));
       await user.click(logsTab);
 
       await waitFor(() => {
-        expect(screen.getByText('ログはありません')).toBeInTheDocument();
+        expect(screen.getByText(i18n.t('p2pDebug.noLogs'))).toBeInTheDocument();
       });
     });
 
@@ -339,7 +340,7 @@ describe('P2PDebugPanel', () => {
       await user.click(joinButton);
 
       // ログタブに切り替え
-      const logsTab = screen.getByText('ログ');
+      const logsTab = screen.getByText(i18n.t('nostrTest.execLog'));
       await user.click(logsTab);
 
       await waitFor(() => {
@@ -364,18 +365,18 @@ describe('P2PDebugPanel', () => {
       await user.click(screen.getByRole('button', { name: '参加' }));
 
       // ログタブに切り替え
-      const logsTab = screen.getByText('ログ');
+      const logsTab = screen.getByText(i18n.t('nostrTest.execLog'));
       await user.click(logsTab);
 
       await waitFor(() => {
-        expect(screen.queryByText('ログはありません')).not.toBeInTheDocument();
+        expect(screen.queryByText(i18n.t('p2pDebug.noLogs'))).not.toBeInTheDocument();
       });
 
       const clearButton = screen.getByRole('button', { name: 'クリア' });
       await user.click(clearButton);
 
       await waitFor(() => {
-        expect(screen.getByText('ログはありません')).toBeInTheDocument();
+        expect(screen.getByText(i18n.t('p2pDebug.noLogs'))).toBeInTheDocument();
       });
     });
   });

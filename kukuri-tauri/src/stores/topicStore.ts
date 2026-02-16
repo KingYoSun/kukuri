@@ -4,6 +4,7 @@ import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { TauriApi, type PendingTopic } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
+import i18n from '@/i18n';
 import { OfflineActionType, EntityType } from '@/types/offline';
 import { useComposerStore } from './composerStore';
 import { useOfflineStore } from './offlineStore';
@@ -105,7 +106,7 @@ export const useTopicStore = create<TopicStore>()(
             topicsWithDefault.set(DEFAULT_PUBLIC_TOPIC_ID, {
               id: DEFAULT_PUBLIC_TOPIC_ID,
               name: '#public',
-              description: '公開タイムライン',
+              description: i18n.t('topics.publicTimeline'),
               tags: [],
               memberCount: 0,
               postCount: 0,
@@ -114,6 +115,14 @@ export const useTopicStore = create<TopicStore>()(
               visibility: 'public',
               isJoined: true,
             });
+          } else {
+            const publicTopic = topicsWithDefault.get(DEFAULT_PUBLIC_TOPIC_ID);
+            if (publicTopic) {
+              topicsWithDefault.set(DEFAULT_PUBLIC_TOPIC_ID, {
+                ...publicTopic,
+                description: i18n.t('topics.publicTimeline'),
+              });
+            }
           }
           const joinedFromPayload = topics
             .filter((topic) => topic.isJoined)
@@ -196,18 +205,21 @@ export const useTopicStore = create<TopicStore>()(
       fetchTopics: async () => {
         try {
           const apiTopics = await TauriApi.getTopics();
-          let topics: Topic[] = (apiTopics ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            description: t.description,
-            createdAt: new Date(t.created_at * 1000),
-            memberCount: t.member_count ?? 0,
-            postCount: t.post_count ?? 0,
-            isActive: true,
-            tags: [],
-            visibility: t.visibility ?? 'public',
-            isJoined: Boolean(t.is_joined),
-          }));
+          let topics: Topic[] = (apiTopics ?? []).map((t) => {
+            const isPublicTopic = t.id === DEFAULT_PUBLIC_TOPIC_ID;
+            return {
+              id: t.id,
+              name: t.name,
+              description: isPublicTopic ? i18n.t('topics.publicTimeline') : (t.description ?? ''),
+              createdAt: new Date(t.created_at * 1000),
+              memberCount: t.member_count ?? 0,
+              postCount: t.post_count ?? 0,
+              isActive: true,
+              tags: [],
+              visibility: t.visibility ?? 'public',
+              isJoined: Boolean(t.is_joined),
+            };
+          });
           get().setTopics(topics);
           const refreshPendingTopics = get().refreshPendingTopics;
           if (typeof refreshPendingTopics === 'function') {
@@ -217,7 +229,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to fetch topics', error, {
             context: 'TopicStore.fetchTopics',
             showToast: true,
-            toastTitle: 'トピックの取得に失敗しました',
+            toastTitle: i18n.t('topics.fetchFailed'),
           });
           throw error;
         }
@@ -277,7 +289,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to queue topic creation', error, {
             context: 'TopicStore.queueTopicCreation',
             showToast: true,
-            toastTitle: 'トピックの作成予約に失敗しました',
+            toastTitle: i18n.t('topics.queueCreationFailed'),
           });
           throw error;
         }
@@ -307,7 +319,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to create topic', error, {
             context: 'TopicStore.createTopic',
             showToast: true,
-            toastTitle: 'トピックの作成に失敗しました',
+            toastTitle: i18n.t('topics.createFailed'),
           });
           throw error;
         }
@@ -344,7 +356,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to update topic', error, {
             context: 'TopicStore.updateTopicRemote',
             showToast: true,
-            toastTitle: 'トピックの更新に失敗しました',
+            toastTitle: i18n.t('topics.updateFailed'),
           });
           throw error;
         }
@@ -415,7 +427,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to delete topic', error, {
             context: 'TopicStore.deleteTopicRemote',
             showToast: true,
-            toastTitle: 'トピックの削除に失敗しました',
+            toastTitle: i18n.t('topics.deleteFailed'),
           });
           throw error;
         }
@@ -427,7 +439,12 @@ export const useTopicStore = create<TopicStore>()(
             return { currentTopic: null };
           }
 
-          const topicId = normalizeTopicId(topic.id);
+          const normalizedTopic =
+            topic.id === DEFAULT_PUBLIC_TOPIC_ID
+              ? { ...topic, description: i18n.t('topics.publicTimeline') }
+              : topic;
+
+          const topicId = normalizeTopicId(normalizedTopic.id);
           const unread = new Map(state.topicUnreadCounts);
           unread.set(topicId, 0);
 
@@ -435,7 +452,7 @@ export const useTopicStore = create<TopicStore>()(
           lastRead.set(topicId, Math.floor(Date.now() / 1000));
 
           return {
-            currentTopic: { ...topic, id: topicId },
+            currentTopic: { ...normalizedTopic, id: topicId },
             topicUnreadCounts: unread,
             topicLastReadAt: lastRead,
           };
@@ -504,7 +521,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to join topic', error, {
             context: 'TopicStore.joinTopic',
             showToast: true,
-            toastTitle: 'トピックへの参加に失敗しました',
+            toastTitle: i18n.t('topics.joinFailed'),
           });
           throw error;
         }
@@ -572,7 +589,7 @@ export const useTopicStore = create<TopicStore>()(
           errorHandler.log('Failed to leave topic', error, {
             context: 'TopicStore.leaveTopic',
             showToast: true,
-            toastTitle: 'トピックからの離脱に失敗しました',
+            toastTitle: i18n.t('topics.leaveFailed'),
           });
           throw error;
         }

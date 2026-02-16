@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import type { PendingActionSummary, PendingActionCategory } from '@/hooks/useSyncManager';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,7 @@ import {
   History,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale, i18n } from '@/i18n';
 import type { CacheTypeStatus, SyncQueueItem, OfflineRetryMetrics } from '@/types/offline';
 import { OfflineActionType } from '@/types/offline';
 import { cn } from '@/lib/utils';
@@ -58,13 +59,19 @@ type CacheDocSummary = {
   payloadBytes?: number;
 };
 
-const ACTION_CATEGORY_LABELS: Record<PendingActionCategory, string> = {
-  topic: 'トピック',
-  post: '投稿/リアクション',
-  follow: 'フォロー',
-  dm: 'DM',
-  profile: 'プロフィール',
-  other: 'その他',
+const getActionCategoryLabel = (
+  category: PendingActionCategory,
+  t: (key: string) => string,
+): string => {
+  const labels: Record<PendingActionCategory, string> = {
+    topic: t('syncStatus.actionCategory.topic'),
+    post: t('syncStatus.actionCategory.post'),
+    follow: t('syncStatus.actionCategory.follow'),
+    dm: t('syncStatus.actionCategory.dm'),
+    profile: t('syncStatus.actionCategory.profile'),
+    other: t('syncStatus.actionCategory.other'),
+  };
+  return labels[category];
 };
 
 type QueueTelemetryEntry = {
@@ -231,7 +238,7 @@ function formatMetadataTimestamp(value?: string) {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return formatDistanceToNow(date, { addSuffix: true, locale: ja });
+  return formatDistanceToNow(date, { addSuffix: true, locale: getDateFnsLocale() });
 }
 
 function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
@@ -240,7 +247,7 @@ function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
   if (summary.cacheType) {
     rows.push({
       key: 'cacheType',
-      label: '対象キャッシュ',
+      label: i18n.t('syncStatus.targetCache'),
       value: summary.cacheType,
     });
   }
@@ -248,7 +255,7 @@ function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
   if (summary.requestedBy) {
     rows.push({
       key: 'requestedBy',
-      label: '最終要求者',
+      label: i18n.t('syncStatus.lastRequester'),
       value: (
         <code className="rounded bg-muted/50 px-1 py-0.5 font-mono text-[11px]">
           {summary.requestedBy}
@@ -261,7 +268,7 @@ function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
     const formatted = formatMetadataTimestamp(summary.requestedAt) ?? summary.requestedAt;
     rows.push({
       key: 'requestedAt',
-      label: '要求時刻',
+      label: i18n.t('syncStatus.requestedAt'),
       value: (
         <span title={summary.requestedAt}>
           {formatted}
@@ -276,7 +283,7 @@ function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
   if (typeof summary.queueItemId === 'number') {
     rows.push({
       key: 'queueItemId',
-      label: 'キュー ID',
+      label: i18n.t('syncStatus.queueId'),
       value: `#${summary.queueItemId}`,
     });
   }
@@ -284,7 +291,7 @@ function metadataRowsFromSummary(summary: CacheMetadataSummary): MetadataRow[] {
   if (summary.source) {
     rows.push({
       key: 'source',
-      label: '発行元',
+      label: i18n.t('syncStatus.source'),
       value: summary.source,
     });
   }
@@ -314,22 +321,22 @@ function getQueueStatusPresentation(status: string): QueueStatusPresentation {
   switch (status) {
     case 'pending':
       return {
-        label: '待機中',
+        label: i18n.t('syncStatus.pending'),
         className: 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200',
       };
     case 'processing':
       return {
-        label: '処理中',
+        label: i18n.t('syncStatus.processing'),
         className: 'bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200',
       };
     case 'completed':
       return {
-        label: '完了',
+        label: i18n.t('syncStatus.completed'),
         className: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200',
       };
     case 'failed':
       return {
-        label: '失敗',
+        label: i18n.t('syncStatus.failure'),
         className: 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200',
       };
     default:
@@ -359,15 +366,15 @@ function getCacheDocSummary(type: CacheTypeStatus): CacheDocSummary | null {
 
 function formatRetryTimestamp(value?: number | null) {
   if (!value) {
-    return '記録なし';
+    return i18n.t('syncStatus.noRecord');
   }
   const date = new Date(value);
-  return formatDistanceToNow(date, { addSuffix: true, locale: ja });
+  return formatDistanceToNow(date, { addSuffix: true, locale: getDateFnsLocale() });
 }
 
 function formatDuration(ms?: number | null) {
   if (!ms) {
-    return '未計測';
+    return i18n.t('syncStatus.notMeasured');
   }
   if (ms < 1000) {
     return `${ms}ms`;
@@ -377,7 +384,7 @@ function formatDuration(ms?: number | null) {
 
 function formatBackoff(ms?: number | null) {
   if (!ms) {
-    return '未設定';
+    return i18n.t('syncStatus.notSet');
   }
   if (ms < 1000) {
     return `${ms}ms`;
@@ -386,6 +393,7 @@ function formatBackoff(ms?: number | null) {
 }
 
 export function SyncStatusIndicator() {
+  const { t } = useTranslation();
   const {
     syncStatus,
     triggerManualSync,
@@ -458,7 +466,7 @@ export function SyncStatusIndicator() {
       const postId =
         getPayloadString(item.payload, 'postId') || getPayloadString(item.payload, 'entityId');
       if (!postId) {
-        toast.error('削除対象の投稿IDを取得できませんでした');
+        toast.error(t('syncStatus.deletePostIdNotFound'));
         return;
       }
       const topicId = getPayloadString(item.payload, 'topicId');
@@ -473,7 +481,7 @@ export function SyncStatusIndicator() {
           topicId,
           authorPubkey,
         });
-        toast.success('削除の再送を開始しました');
+        toast.success(t('syncStatus.deleteRetryStarted'));
         await refreshQueueItems();
       } catch (error) {
         errorHandler.log('SyncQueue.post_delete_retry_failed', error, {
@@ -483,7 +491,7 @@ export function SyncStatusIndicator() {
             postId,
           },
         });
-        toast.error('削除の再送に失敗しました');
+        toast.error(i18n.t('syncStatus.deleteRetryFailed'));
       } finally {
         setRetryingItemId(null);
       }
@@ -536,34 +544,34 @@ export function SyncStatusIndicator() {
 
   const getSyncStatusText = () => {
     if (!isOnline) {
-      return 'オフライン';
+      return t('syncStatus.offline');
     }
 
     if (syncStatus.isSyncing) {
-      return `同期中... (${syncStatus.syncedItems}/${syncStatus.totalItems})`;
+      return `${t('syncStatus.syncProgress')}... (${syncStatus.syncedItems}/${syncStatus.totalItems})`;
     }
 
     if (syncStatus.conflicts.length > 0) {
-      return `競合: ${syncStatus.conflicts.length}件`;
+      return `${t('common.conflict')}: ${syncStatus.conflicts.length}${t('common.count')}`;
     }
 
     if (syncStatus.error) {
-      return '同期エラー';
+      return t('syncStatus.syncError');
     }
 
     if (pendingActionsCount === 0) {
-      return '同期済み';
+      return t('syncStatus.synced');
     }
 
-    return `未同期: ${pendingActionsCount}件`;
+    return `${t('syncStatus.unsynced')}: ${pendingActionsCount}${t('common.count')}`;
   };
 
   const formatCacheTypeLabel = (cacheType: string) => {
     switch (cacheType) {
       case 'sync_queue':
-        return '同期キュー';
+        return t('syncStatus.syncQueue');
       case 'offline_actions':
-        return 'オフラインアクション';
+        return t('syncStatus.offlineActions');
       default:
         return cacheType;
     }
@@ -571,11 +579,11 @@ export function SyncStatusIndicator() {
 
   const formatCacheLastSynced = (timestamp?: number | null) => {
     if (!timestamp) {
-      return '記録なし';
+      return t('syncStatus.noRecord');
     }
     return formatDistanceToNow(new Date(timestamp * 1000), {
       addSuffix: true,
-      locale: ja,
+      locale: getDateFnsLocale(),
     });
   };
 
@@ -616,8 +624,8 @@ export function SyncStatusIndicator() {
                     <AlertTriangle className="h-4 w-4" />
                     <span>
                       {docConflictCount > 0
-                        ? `Doc/Blobの競合 ${docConflictCount}件`
-                        : `競合 ${syncStatus.conflicts.length}件`}
+                        ? t('syncStatus.docBlobConflicts', { count: docConflictCount })
+                        : t('syncStatus.conflicts', { count: syncStatus.conflicts.length })}
                     </span>
                   </div>
                   {firstConflict && (
@@ -627,13 +635,13 @@ export function SyncStatusIndicator() {
                       className="h-7 px-2 text-xs"
                       onClick={() => handleOpenConflictDialog(0)}
                     >
-                      詳細を確認
+                      {t('syncStatus.viewDetails')}
                     </Button>
                   )}
                 </div>
                 {docConflictCount > 0 && (
                   <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">
-                    Doc/Blob の差分は競合ダイアログの「Doc/Blob」タブで比較できます。
+                    {t('syncStatus.docBlobDiffHint')}
                   </p>
                 )}
               </div>
@@ -647,10 +655,10 @@ export function SyncStatusIndicator() {
                 ) : (
                   <WifiOff className="h-4 w-4 text-muted-foreground" />
                 )}
-                接続状態
+                {t('syncStatus.connectionStatus')}
               </h4>
               <p className="text-sm text-muted-foreground">
-                {isOnline ? 'オンライン' : 'オフライン'}
+                {isOnline ? t('syncStatus.online') : t('syncStatus.offline')}
               </p>
             </div>
 
@@ -658,12 +666,12 @@ export function SyncStatusIndicator() {
               <div className="mb-2 flex items-center justify-between">
                 <h4 className="font-medium flex items-center gap-2">
                   <History className="h-4 w-4 text-primary" />
-                  再送メトリクス
+                  {t('syncStatus.retryMetrics')}
                 </h4>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="再送メトリクスを更新"
+                  aria-label={t('syncStatus.updateRetryMetrics')}
                   onClick={() => {
                     void refreshRetryMetrics();
                   }}
@@ -682,7 +690,9 @@ export function SyncStatusIndicator() {
               {retryMetrics ? (
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>成功 / 失敗</span>
+                    <span>
+                      {t('syncStatus.success')} / {t('syncStatus.failure')}
+                    </span>
                     <span>
                       <span className="font-semibold text-emerald-600 dark:text-emerald-300">
                         {retryMetrics.totalSuccess}
@@ -694,13 +704,13 @@ export function SyncStatusIndicator() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>連続失敗</span>
+                    <span>{t('syncStatus.consecutiveFailure')}</span>
                     <span>{retryMetrics.consecutiveFailure}</span>
                   </div>
                   {retryMetrics.lastOutcome && (
                     <div className="rounded border border-border/60 p-2 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">直近の再送</span>
+                        <span className="font-medium">{t('syncStatus.lastRetry')}</span>
                         <Badge
                           variant="outline"
                           className={cn(
@@ -710,37 +720,39 @@ export function SyncStatusIndicator() {
                               : 'border-rose-500 text-rose-600 dark:text-rose-300',
                           )}
                         >
-                          {retryMetrics.lastOutcome === 'success' ? '成功' : '失敗'}
+                          {retryMetrics.lastOutcome === 'success'
+                            ? t('syncStatus.success')
+                            : t('syncStatus.failure')}
                         </Badge>
                       </div>
                       <dl className="mt-1 space-y-1 text-muted-foreground">
                         <div className="flex items-center justify-between">
-                          <dt>ID</dt>
-                          <dd>{retryMetrics.lastJobId ?? '記録なし'}</dd>
+                          <dt>{t('syncStatus.id')}</dt>
+                          <dd>{retryMetrics.lastJobId ?? t('syncStatus.noRecord')}</dd>
                         </div>
                         <div className="flex items-center justify-between">
-                          <dt>理由</dt>
-                          <dd>{retryMetrics.lastJobReason ?? '未設定'}</dd>
+                          <dt>{t('syncStatus.reason')}</dt>
+                          <dd>{retryMetrics.lastJobReason ?? t('syncStatus.notSet')}</dd>
                         </div>
                         <div className="flex items-center justify-between">
-                          <dt>試行 / 上限</dt>
+                          <dt>{t('syncStatus.attempts')}</dt>
                           <dd>
                             {typeof retryMetrics.lastRetryCount === 'number' &&
                             typeof retryMetrics.lastMaxRetries === 'number'
                               ? `${retryMetrics.lastRetryCount}/${retryMetrics.lastMaxRetries}`
-                              : '記録なし'}
+                              : t('syncStatus.noRecord')}
                           </dd>
                         </div>
                         <div className="flex items-center justify-between">
-                          <dt>Backoff</dt>
+                          <dt>{t('syncStatus.backoff')}</dt>
                           <dd>{formatBackoff(retryMetrics.lastBackoffMs)}</dd>
                         </div>
                         <div className="flex items-center justify-between">
-                          <dt>実行時間</dt>
+                          <dt>{t('syncStatus.executionTime')}</dt>
                           <dd>{formatDuration(retryMetrics.lastDurationMs)}</dd>
                         </div>
                         <div className="flex items-center justify-between">
-                          <dt>計測</dt>
+                          <dt>{t('syncStatus.measurement')}</dt>
                           <dd>{formatRetryTimestamp(retryMetrics.lastTimestampMs)}</dd>
                         </div>
                       </dl>
@@ -750,15 +762,15 @@ export function SyncStatusIndicator() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {isRetryMetricsLoading
-                    ? '再送メトリクスを取得しています…'
-                    : '再送メトリクスはまだ記録されていません'}
+                    ? t('syncStatus.fetchingRetryMetrics')
+                    : t('syncStatus.noRetryMetricsYet')}
                 </p>
               )}
               {scheduledRetry && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  次回 #{scheduledRetry.jobId} を{' '}
-                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}
-                  に再送 （{scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
+                  {t('syncStatus.nextRetry')} #{scheduledRetry.jobId} {t('syncStatus.willRetry')}{' '}
+                  {formatMetadataTimestamp(scheduledRetry.nextRunAt) ?? scheduledRetry.nextRunAt}（
+                  {scheduledRetry.retryCount + 1}/{scheduledRetry.maxRetries}）
                 </p>
               )}
             </div>
@@ -766,10 +778,13 @@ export function SyncStatusIndicator() {
             {/* 同期進捗 */}
             {syncStatus.isSyncing && (
               <div>
-                <h4 className="font-medium mb-2">同期進捗</h4>
+                <h4 className="font-medium mb-2">{t('syncStatus.syncProgressTitle')}</h4>
                 <Progress value={syncStatus.progress} className="mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  {syncStatus.syncedItems} / {syncStatus.totalItems} 件を同期中
+                  {t('syncStatus.syncingItems', {
+                    synced: syncStatus.syncedItems,
+                    total: syncStatus.totalItems,
+                  })}
                 </p>
               </div>
             )}
@@ -777,9 +792,9 @@ export function SyncStatusIndicator() {
             {/* 未同期アクション */}
             {pendingActionsCount > 0 && !syncStatus.isSyncing && (
               <div>
-                <h4 className="font-medium mb-2">未同期アクション</h4>
+                <h4 className="font-medium mb-2">{t('syncStatus.pendingActionsTitle')}</h4>
                 <p className="text-sm text-muted-foreground">
-                  {pendingActionsCount}件のアクションが同期待ちです
+                  {t('syncStatus.pendingActionsCount', { count: pendingActionsCount })}
                 </p>
                 {pendingActionSummary.total > 0 && (
                   <div
@@ -787,21 +802,23 @@ export function SyncStatusIndicator() {
                     data-testid="offline-action-summary"
                   >
                     <p className="mb-1 font-medium text-muted-foreground/80">
-                      オフライン操作の内訳（Nightly）
+                      {t('syncStatus.offlineActionsBreakdown')}
                     </p>
                     <div className="space-y-1">
                       {pendingActionSummary.categories.slice(0, 4).map((category) => (
                         <div className="flex items-center justify-between" key={category.category}>
-                          <span>
-                            {ACTION_CATEGORY_LABELS[category.category] ?? category.category}
+                          <span>{getActionCategoryLabel(category.category, t)}</span>
+                          <span className="font-semibold text-foreground">
+                            {t('syncStatus.itemsCount', { count: category.count })}
                           </span>
-                          <span className="font-semibold text-foreground">{category.count}件</span>
                         </div>
                       ))}
                     </div>
                     {pendingActionSummary.categories.length > 4 && (
                       <p className="mt-1 text-[11px] text-muted-foreground/80">
-                        他 {pendingActionSummary.categories.length - 4} カテゴリ
+                        {t('syncStatus.otherCategories', {
+                          count: pendingActionSummary.categories.length - 4,
+                        })}
                       </p>
                     )}
                   </div>
@@ -814,7 +831,7 @@ export function SyncStatusIndicator() {
               <div>
                 <h4 className="font-medium mb-2 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                  競合検出
+                  {t('syncStatus.conflictDetectedTitle')}
                 </h4>
                 <div className="space-y-2">
                   {syncStatus.conflicts.slice(0, 3).map((conflict, index) => (
@@ -824,12 +841,14 @@ export function SyncStatusIndicator() {
                       onClick={() => handleOpenConflictDialog(index)}
                     >
                       <p className="font-medium">{conflict.localAction.actionType}</p>
-                      <p className="text-xs text-muted-foreground">クリックして解決</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t('syncStatus.clickToResolve')}
+                      </p>
                     </div>
                   ))}
                   {syncStatus.conflicts.length > 3 && (
                     <p className="text-sm text-muted-foreground">
-                      他 {syncStatus.conflicts.length - 3} 件の競合
+                      {t('syncStatus.otherConflicts', { count: syncStatus.conflicts.length - 3 })}
                     </p>
                   )}
                 </div>
@@ -841,7 +860,7 @@ export function SyncStatusIndicator() {
               <div>
                 <h4 className="font-medium mb-2 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-red-500" />
-                  同期エラー
+                  {t('syncStatus.syncErrorTitle')}
                 </h4>
                 <p className="text-sm text-red-600 dark:text-red-400">{syncStatus.error}</p>
               </div>
@@ -850,11 +869,11 @@ export function SyncStatusIndicator() {
             {/* 最終同期時刻 */}
             {syncStatus.lastSyncTime && (
               <div>
-                <h4 className="font-medium mb-2">最終同期</h4>
+                <h4 className="font-medium mb-2">{t('syncStatus.lastSyncTitle')}</h4>
                 <p className="text-sm text-muted-foreground">
                   {formatDistanceToNow(syncStatus.lastSyncTime, {
                     addSuffix: true,
-                    locale: ja,
+                    locale: getDateFnsLocale(),
                   })}
                 </p>
               </div>
@@ -865,12 +884,12 @@ export function SyncStatusIndicator() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium flex items-center gap-2">
                   <Database className="h-4 w-4 text-primary" />
-                  キャッシュ状態
+                  {t('syncStatus.cacheStatus')}
                 </h4>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="キャッシュ情報を更新"
+                  aria-label={t('syncStatus.updateCacheInfo')}
                   onClick={() => {
                     void refreshCacheStatus();
                   }}
@@ -887,7 +906,10 @@ export function SyncStatusIndicator() {
               {cacheStatus ? (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    合計 {cacheStatus.total_items}件 / ステール {cacheStatus.stale_items}件
+                    {t('syncStatus.cacheTotalStale', {
+                      total: cacheStatus.total_items,
+                      stale: cacheStatus.stale_items,
+                    })}
                   </p>
                   <div className="space-y-2 mt-2">
                     {(cacheStatus.cache_types ?? []).map((type) => {
@@ -902,7 +924,8 @@ export function SyncStatusIndicator() {
                             <div>
                               <p className="font-medium">{formatCacheTypeLabel(type.cache_type)}</p>
                               <p className="text-xs text-muted-foreground">
-                                最終同期 {formatCacheLastSynced(type.last_synced_at)}
+                                {t('syncStatus.lastSync')}{' '}
+                                {formatCacheLastSynced(type.last_synced_at)}
                               </p>
                             </div>
                             {type.is_stale && (
@@ -915,12 +938,19 @@ export function SyncStatusIndicator() {
                                 }}
                                 disabled={!isOnline || queueingType === type.cache_type}
                               >
-                                {queueingType === type.cache_type ? '追加中…' : '再送キュー'}
+                                {queueingType === type.cache_type
+                                  ? t('common.adding')
+                                  : t('syncStatus.syncQueue')}
                               </Button>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {type.item_count}件 / {type.is_stale ? '要再同期' : '最新'}
+                            {type.item_count}
+                            {t('syncStatus.itemsCount', { count: type.item_count })
+                              .replace(/^\d+/, '')
+                              .trim()}{' '}
+                            /{' '}
+                            {type.is_stale ? t('syncStatus.needsResync') : t('syncStatus.upToDate')}
                           </p>
                           {metadataSummary &&
                             (() => {
@@ -952,7 +982,9 @@ export function SyncStatusIndicator() {
                               className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-900/10 dark:text-amber-100"
                               data-testid={`cache-doc-${type.cache_type}`}
                             >
-                              <p className="font-medium text-foreground">Doc/Blob キャッシュ</p>
+                              <p className="font-medium text-foreground">
+                                {t('syncStatus.docBlobCache')}
+                              </p>
                               <div className="mt-1 space-y-1 text-amber-900 dark:text-amber-50">
                                 {typeof docSummary.docVersion !== 'undefined' && (
                                   <div className="flex items-center justify-between gap-2">
@@ -990,8 +1022,8 @@ export function SyncStatusIndicator() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {isCacheStatusLoading
-                    ? 'キャッシュ情報を取得しています…'
-                    : 'キャッシュ情報がまだありません'}
+                    ? t('syncStatus.fetchingCache')
+                    : t('syncStatus.noCacheYet')}
                 </p>
               )}
             </div>
@@ -1002,18 +1034,19 @@ export function SyncStatusIndicator() {
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="font-medium flex items-center gap-2">
                     <History className="h-4 w-4 text-primary" />
-                    再送キュー履歴
+                    {t('syncStatus.retryQueueHistory')}
                   </h4>
                   <div className="flex items-center gap-2">
                     {lastQueuedItemId && (
                       <span className="text-[11px] text-muted-foreground">
-                        最新 #<code className="font-mono text-xs">{lastQueuedItemId}</code>
+                        {t('syncStatus.latest')} #
+                        <code className="font-mono text-xs">{lastQueuedItemId}</code>
                       </span>
                     )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="再送キューを更新"
+                      aria-label={t('syncStatus.updateRetryQueue')}
                       onClick={() => {
                         void refreshQueueItems();
                       }}
@@ -1030,9 +1063,9 @@ export function SyncStatusIndicator() {
                 <Input
                   value={queueFilter}
                   onChange={(event) => setQueueFilter(event.target.value)}
-                  placeholder="Queue ID / cacheType を検索"
+                  placeholder={t('syncStatus.filterRetryQueue')}
                   className="h-8 text-xs"
-                  aria-label="再送キューをフィルタ"
+                  aria-label={t('syncStatus.filterRetryQueue')}
                 />
               </div>
               {queueItemsError && (
@@ -1040,9 +1073,7 @@ export function SyncStatusIndicator() {
               )}
               {queueItemsToRender.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {isQueueItemsLoading
-                    ? '再送キューを取得しています…'
-                    : '再送キューはまだ登録されていません'}
+                  {isQueueItemsLoading ? t('syncStatus.fetchingQueue') : t('syncStatus.noQueueYet')}
                 </p>
               ) : (
                 <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
@@ -1081,7 +1112,7 @@ export function SyncStatusIndicator() {
                               )}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {item.action_type}・更新 {updatedLabel}
+                              {item.action_type}・{t('syncStatus.updated')} {updatedLabel}
                             </p>
                           </div>
                           <Badge
@@ -1092,20 +1123,25 @@ export function SyncStatusIndicator() {
                         </div>
                         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                           <span>
-                            再試行 {item.retry_count}/{item.max_retries}
+                            {t('syncStatus.retry')} {item.retry_count}/{item.max_retries}
                           </span>
                           {requestedBy && (
                             <span>
-                              要求者{' '}
+                              {t('syncStatus.requester')}{' '}
                               <code className="font-mono text-[11px]">
                                 {formatRequester(requestedBy)}
                               </code>
                             </span>
                           )}
-                          {source && <span>発行元 {source}</span>}
+                          {source && (
+                            <span>
+                              {t('syncStatus.source')} {source}
+                            </span>
+                          )}
                           {requestedAt && (
                             <span title={requestedAt}>
-                              要求 {formatMetadataTimestamp(requestedAt) ?? requestedAt}
+                              {t('syncStatus.requested')}{' '}
+                              {formatMetadataTimestamp(requestedAt) ?? requestedAt}
                             </span>
                           )}
                         </div>
@@ -1132,7 +1168,7 @@ export function SyncStatusIndicator() {
                                     'animate-spin',
                                 )}
                               />
-                              削除を再送
+                              {t('syncStatus.retryDelete')}
                             </Button>
                           </div>
                         )}
@@ -1153,7 +1189,7 @@ export function SyncStatusIndicator() {
               size="sm"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              今すぐ同期
+              {t('syncStatus.syncNow')}
             </Button>
           </div>
         </PopoverContent>

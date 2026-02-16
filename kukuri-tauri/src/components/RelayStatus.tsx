@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { AlertCircle, ChevronDown, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale } from '@/i18n';
 import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -22,6 +23,7 @@ type BootstrapInfoState = {
 };
 
 export function RelayStatus() {
+  const { t } = useTranslation();
   const {
     relayStatus,
     updateRelayStatus,
@@ -56,7 +58,7 @@ export function RelayStatus() {
         cliUpdatedAtMs: config.cli_updated_at_ms ?? null,
       });
     } catch (error) {
-      errorHandler.log('ブートストラップ設定の取得に失敗しました', error);
+      errorHandler.log(t('relayStatus.fetchBootstrapFailed'), error);
     } finally {
       setBootstrapLoading(false);
     }
@@ -89,39 +91,39 @@ export function RelayStatus() {
 
   const lastUpdatedLabel = useMemo(() => {
     if (!lastRelayStatusFetchedAt) {
-      return '未取得';
+      return t('relayStatus.notFetched');
     }
     return formatDistanceToNow(lastRelayStatusFetchedAt, {
       addSuffix: true,
-      locale: ja,
+      locale: getDateFnsLocale(),
     });
-  }, [lastRelayStatusFetchedAt]);
+  }, [lastRelayStatusFetchedAt, t]);
 
   const cliLastUpdatedLabel = useMemo(() => {
     if (!bootstrapInfo?.cliUpdatedAtMs) {
-      return '未取得';
+      return t('relayStatus.notFetched');
     }
     return formatDistanceToNow(bootstrapInfo.cliUpdatedAtMs, {
       addSuffix: true,
-      locale: ja,
+      locale: getDateFnsLocale(),
     });
-  }, [bootstrapInfo?.cliUpdatedAtMs]);
+  }, [bootstrapInfo?.cliUpdatedAtMs, t]);
 
   const nextRefreshLabel = useMemo(() => {
     if (relayStatusBackoffMs <= 0) {
       return '—';
     }
     if (relayStatusBackoffMs >= 600_000) {
-      return '約10分';
+      return t('relayStatus.about10min');
     }
     if (relayStatusBackoffMs >= 300_000) {
-      return '約5分';
+      return t('relayStatus.about5min');
     }
     if (relayStatusBackoffMs >= 120_000) {
-      return '約2分';
+      return t('relayStatus.about2min');
     }
-    return '約30秒';
-  }, [relayStatusBackoffMs]);
+    return t('relayStatus.about30sec');
+  }, [relayStatusBackoffMs, t]);
 
   const effectiveNodes = bootstrapInfo?.effectiveNodes ?? [];
   const cliNodes = bootstrapInfo?.cliNodes ?? [];
@@ -147,14 +149,14 @@ export function RelayStatus() {
       setApplyingCli(true);
       await p2pApi.applyCliBootstrapNodes();
       await refreshRelaySnapshot();
-      errorHandler.log('CLIブートストラップリストを適用しました', undefined, {
+      errorHandler.log(t('relayStatus.applyCliSuccess'), undefined, {
         showToast: true,
-        toastTitle: '最新リストを適用',
+        toastTitle: t('relayStatus.applyLatestListTitle'),
       });
     } catch (error) {
-      errorHandler.log('最新リストの適用に失敗しました', error, {
+      errorHandler.log(t('relayStatus.applyFailed'), error, {
         showToast: true,
-        toastTitle: '適用に失敗しました',
+        toastTitle: t('relayStatus.applyFailed'),
       });
     } finally {
       setApplyingCli(false);
@@ -163,15 +165,15 @@ export function RelayStatus() {
 
   const bootstrapSourceLabel = useMemo(() => {
     const allLabels: Record<string, string> = {
-      env: '環境変数 (KUKURI_BOOTSTRAP_PEERS)',
-      user: 'ユーザー設定',
-      bundle: '同梱設定ファイル',
-      fallback: 'フォールバック',
-      none: 'n0 デフォルト',
+      env: t('relayStatus.sourceEnv'),
+      user: t('relayStatus.sourceUser'),
+      bundle: t('relayStatus.sourceBundle'),
+      fallback: t('relayStatus.sourceFallback'),
+      none: t('relayStatus.sourceNone'),
     };
     const key = bootstrapInfo?.source ?? 'none';
     return allLabels[key] ?? allLabels.none;
-  }, [bootstrapInfo?.source]);
+  }, [bootstrapInfo?.source, t]);
 
   const hasRelays = relayStatus.length > 0;
 
@@ -188,7 +190,7 @@ export function RelayStatus() {
                       detailsOpen ? 'rotate-0' : '-rotate-90'
                     }`}
                   />
-                  リレー接続状態
+                  {t('relayStatus.title')}
                 </Button>
               </CollapsibleTrigger>
               <Button variant="link" size="sm" className="-ml-1 h-auto px-0 text-xs" asChild>
@@ -212,15 +214,16 @@ export function RelayStatus() {
               {isFetchingRelayStatus ? (
                 <>
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  更新中…
+                  {t('relayStatus.refreshing')}
                 </>
               ) : (
-                '再試行'
+                t('relayStatus.retry')
               )}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-1" data-testid="relay-last-updated">
-            最終更新: {lastUpdatedLabel} / 次回再取得: {nextRefreshLabel}
+            {t('relayStatus.lastUpdated')}: {lastUpdatedLabel} / {t('relayStatus.nextRefresh')}:{' '}
+            {nextRefreshLabel}
           </p>
         </CardHeader>
         <CollapsibleContent>
@@ -229,8 +232,10 @@ export function RelayStatus() {
               <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4" />
                 <div>
-                  <p>リレー状態の取得に失敗しました。</p>
-                  <p className="text-[11px] text-destructive/80">詳細: {relayStatusError}</p>
+                  <p>{t('relayStatus.fetchFailed')}</p>
+                  <p className="text-[11px] text-destructive/80">
+                    {t('relayStatus.details')}: {relayStatusError}
+                  </p>
                 </div>
               </div>
             )}
@@ -242,12 +247,24 @@ export function RelayStatus() {
                   const status = statusRaw.startsWith('error') ? 'error' : statusRaw;
                   const { badgeClass, label } =
                     status === 'connected'
-                      ? { badgeClass: 'bg-green-100 text-green-800', label: '接続済み' }
+                      ? {
+                          badgeClass: 'bg-green-100 text-green-800',
+                          label: t('relayStatus.connected'),
+                        }
                       : status === 'connecting'
-                        ? { badgeClass: 'bg-yellow-100 text-yellow-800', label: '接続中' }
+                        ? {
+                            badgeClass: 'bg-yellow-100 text-yellow-800',
+                            label: t('relayStatus.connecting'),
+                          }
                         : status === 'disconnected'
-                          ? { badgeClass: 'bg-gray-100 text-gray-800', label: '切断' }
-                          : { badgeClass: 'bg-red-100 text-red-800', label: 'エラー' };
+                          ? {
+                              badgeClass: 'bg-gray-100 text-gray-800',
+                              label: t('relayStatus.disconnected'),
+                            }
+                          : {
+                              badgeClass: 'bg-red-100 text-red-800',
+                              label: t('relayStatus.error'),
+                            };
 
                   return (
                     <div
@@ -267,7 +284,7 @@ export function RelayStatus() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground" data-testid="relay-status-empty">
-                接続中のリレーはありません。
+                {t('relayStatus.noRelays')}
               </p>
             )}
             <div
@@ -277,14 +294,17 @@ export function RelayStatus() {
               <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
                 <div className="flex flex-col">
                   <span data-testid="relay-bootstrap-source">
-                    ブートストラップソース: {bootstrapSourceLabel}
+                    {t('relayStatus.bootstrapSource')}: {bootstrapSourceLabel}
                   </span>
                   <span
                     className="text-[11px]"
                     data-testid="relay-effective-count"
                     data-count={effectiveNodes.length}
                   >
-                    適用中: {effectiveNodes.length > 0 ? effectiveNodes.length : 'n0 デフォルト'}
+                    {t('relayStatus.applied')}:{' '}
+                    {effectiveNodes.length > 0
+                      ? effectiveNodes.length
+                      : t('relayStatus.sourceNone')}
                   </span>
                 </div>
                 <Button
@@ -297,10 +317,10 @@ export function RelayStatus() {
                   {applyingCli ? (
                     <>
                       <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                      切替中…
+                      {t('relayStatus.switching')}
                     </>
                   ) : (
-                    '最新リストを適用'
+                    t('relayStatus.applyLatestList')
                   )}
                 </Button>
               </div>
@@ -310,13 +330,15 @@ export function RelayStatus() {
                 data-cli-count={cliNodes.length}
                 data-cli-updated-ms={bootstrapInfo?.cliUpdatedAtMs ?? null}
               >
-                CLI 提供:{' '}
-                {cliAvailable ? `${cliNodes.length}件 / 更新: ${cliLastUpdatedLabel}` : '未取得'}
+                {t('relayStatus.cliProvided')}:{' '}
+                {cliAvailable
+                  ? t('relayStatus.cliInfo', { count: cliNodes.length, time: cliLastUpdatedLabel })
+                  : t('relayStatus.notFetched')}
               </div>
               {envLocked && (
                 <p className="text-[11px] text-muted-foreground" data-testid="relay-cli-locked">
                   <code className="font-mono text-[11px]">KUKURI_BOOTSTRAP_PEERS</code>{' '}
-                  が設定されているため CLIリストを適用できません。
+                  {t('relayStatus.cliLocked')}
                 </p>
               )}
             </div>

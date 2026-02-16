@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
 import type { TrendingPostsResult, TrendingTopicsResult } from '@/hooks/useTrendingFeeds';
 import { SummaryDirectMessageCard } from '@/components/summary/SummaryDirectMessageCard';
@@ -16,23 +17,29 @@ export function TrendingSummaryPanel({
   isTopicsFetching = false,
   isPostsFetching = false,
 }: TrendingSummaryPanelProps) {
-  const topicsCount = topics && topics.topics ? `${topics.topics.length.toLocaleString()}件` : null;
+  const { t } = useTranslation();
+  const topicsCount =
+    topics && topics.topics ? t('trending.summary.items', { count: topics.topics.length }) : null;
 
   const previewPostsCount =
     posts?.topics != null
-      ? `${posts.topics.reduce((total, topic) => total + topic.posts.length, 0).toLocaleString()}件`
+      ? t('trending.summary.items', {
+          count: posts.topics.reduce((total, topic) => total + topic.posts.length, 0),
+        })
       : topics && topics.topics.length === 0
-        ? '0件'
+        ? t('trending.summary.zeroItems')
         : null;
 
   const averageScore =
     topics && topics.topics.length > 0
-      ? `${(
-          topics.topics.reduce((total, topic) => total + topic.trendingScore, 0) /
-          topics.topics.length
-        ).toFixed(1)}pt`
+      ? t('trending.summary.points', {
+          score: (
+            topics.topics.reduce((total, topic) => total + topic.trendingScore, 0) /
+            topics.topics.length
+          ).toFixed(1),
+        })
       : topics && topics.topics.length === 0
-        ? '0pt'
+        ? t('trending.summary.zeroPoints')
         : null;
 
   const { display: updatedDisplay, helper: updatedHelper } = formatRelativeTimeInfo(
@@ -51,35 +58,35 @@ export function TrendingSummaryPanel({
       data-testid="trending-summary-panel"
     >
       <SummaryMetricCard
-        label="トレンドトピック"
+        label={t('trending.summary.trendTopics')}
         value={topicsCount}
         isLoading={isTopicsFetching && !topics}
-        helperText="今表示中のトレンド対象数"
+        helperText={t('trending.summary.trendTopicsHelper')}
         testId="trending-summary-topics"
       />
       <SummaryMetricCard
-        label="プレビュー投稿"
+        label={t('trending.summary.previewPosts')}
         value={previewPostsCount}
         isLoading={isPostsFetching && !posts}
-        helperText="最新プレビューの合計件数"
+        helperText={t('trending.summary.previewPostsHelper')}
         testId="trending-summary-posts"
       />
       <SummaryMetricCard
-        label="平均スコア"
+        label={t('trending.summary.averageScore')}
         value={averageScore}
         isLoading={isTopicsFetching && !topics}
-        helperText="全トレンドの平均スコア"
+        helperText={t('trending.summary.averageScoreHelper')}
         testId="trending-summary-score"
       />
       <SummaryMetricCard
-        label="最終更新"
+        label={t('trending.summary.lastUpdated')}
         value={updatedDisplay}
         helperText={[updatedHelper, topicsLagLabel].filter(Boolean).join(' / ') || null}
         isLoading={isTopicsFetching && !topics}
         testId="trending-summary-updated"
       />
       <SummaryMetricCard
-        label="プレビュー更新"
+        label={t('trending.summary.previewUpdated')}
         value={previewUpdatedDisplay}
         helperText={[previewUpdatedHelper, previewLagLabel].filter(Boolean).join(' / ') || null}
         isLoading={isPostsFetching && !posts}

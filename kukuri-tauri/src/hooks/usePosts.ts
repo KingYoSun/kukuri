@@ -10,6 +10,7 @@ import { useOfflineStore } from '@/stores/offlineStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
 import { toast } from 'sonner';
+import i18n from '@/i18n';
 
 // すべての投稿を取得
 export const usePosts = () => {
@@ -144,9 +145,9 @@ export const useDeletePost = () => {
         authorPubkey,
       });
       if (isOnline) {
-        toast.success('投稿を削除しました');
+        toast.success(i18n.t('posts.deleted'));
       } else {
-        toast.success('削除は接続復旧後に反映されます');
+        toast.success(i18n.t('posts.deleteQueued'));
         errorHandler.info('Post.delete_offline_enqueued', 'useDeletePost');
       }
     },
@@ -160,7 +161,7 @@ export const useDeletePost = () => {
             }
           : undefined,
       });
-      toast.error('投稿の削除に失敗しました');
+      toast.error(i18n.t('posts.deleteFailed'));
     },
   });
 

@@ -7,6 +7,7 @@ import {
   useInfiniteQuery,
   type InfiniteData,
 } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,11 +45,13 @@ type ProfileListPage = {
   totalCount: number;
 };
 
-const FOLLOW_SORT_OPTIONS: Array<{ value: FollowListSort; label: string }> = [
-  { value: 'recent', label: '最新順' },
-  { value: 'oldest', label: '古い順' },
-  { value: 'name_asc', label: '名前順 (A→Z)' },
-  { value: 'name_desc', label: '名前順 (Z→A)' },
+const getFollowSortOptions = (
+  t: (key: string) => string,
+): Array<{ value: FollowListSort; label: string }> => [
+  { value: 'recent', label: t('profile.sortRecent') },
+  { value: 'oldest', label: t('profile.sortOldest') },
+  { value: 'name_asc', label: t('profile.sortNameAsc') },
+  { value: 'name_desc', label: t('profile.sortNameDesc') },
 ];
 
 const FOLLOW_PAGE_SIZE = 25;
@@ -68,6 +71,7 @@ function matchesProfileSearch(profile: Profile, search?: string) {
 }
 
 function ProfilePage() {
+  const { t } = useTranslation();
   const { userId } = Route.useParams();
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -220,9 +224,9 @@ function ProfilePage() {
         context: 'ProfilePage.followersQuery',
         metadata: { userId: profile?.npub ?? userId },
       });
-      toast.error('フォロワーの取得に失敗しました');
+      toast.error(t('profile.fetchFollowersFailed'));
     }
-  }, [followersQuery.isError, followersQuery.error, profile?.npub, userId]);
+  }, [followersQuery.isError, followersQuery.error, profile?.npub, userId, t]);
 
   useEffect(() => {
     if (followingQuery.isError && followingQuery.error) {
@@ -230,9 +234,9 @@ function ProfilePage() {
         context: 'ProfilePage.followingQuery',
         metadata: { userId: profile?.npub ?? userId },
       });
-      toast.error('フォロー中ユーザーの取得に失敗しました');
+      toast.error(t('profile.fetchFollowingFailed'));
     }
-  }, [followingQuery.isError, followingQuery.error, profile?.npub, userId]);
+  }, [followingQuery.isError, followingQuery.error, profile?.npub, userId, t]);
 
   const followers = followersData?.pages.flatMap((page) => page.items) ?? [];
   const following = followingData?.pages.flatMap((page) => page.items) ?? [];
@@ -267,7 +271,7 @@ function ProfilePage() {
   const followMutation = useMutation<void, unknown, Profile>({
     mutationFn: async (target) => {
       if (!currentUser) {
-        throw new Error('ログインが必要です');
+        throw new Error(t('profile.loginRequired'));
       }
       await TauriApi.followUser(currentUser.npub, target.npub);
       if (target.pubkey) {
@@ -354,25 +358,25 @@ function ProfilePage() {
           },
         );
       }
-      toast.success(`${target.displayName || target.npub} をフォローしました`);
+      toast.success(t('profile.followSuccess', { name: target.displayName || target.npub }));
     },
     onError: (error, target) => {
-      if (error instanceof Error && error.message === 'ログインが必要です') {
-        toast.error('フォローするにはログインが必要です');
+      if (error instanceof Error && error.message === t('profile.loginRequired')) {
+        toast.error(t('profile.followLoginRequired'));
         return;
       }
       errorHandler.log('ProfilePage.followFailed', error, {
         context: 'ProfilePage.followMutation',
         metadata: { targetNpub: target.npub },
       });
-      toast.error('フォローに失敗しました');
+      toast.error(t('profile.followFailed'));
     },
   });
 
   const unfollowMutation = useMutation<void, unknown, Profile>({
     mutationFn: async (target) => {
       if (!currentUser) {
-        throw new Error('ログインが必要です');
+        throw new Error(t('profile.loginRequired'));
       }
       await TauriApi.unfollowUser(currentUser.npub, target.npub);
     },
@@ -422,18 +426,18 @@ function ProfilePage() {
           (prev = []) => prev.filter((item) => item.npub !== target.npub),
         );
       }
-      toast.success(`${target.displayName || target.npub} のフォローを解除しました`);
+      toast.success(t('profile.unfollowSuccess', { name: target.displayName || target.npub }));
     },
     onError: (error, target) => {
-      if (error instanceof Error && error.message === 'ログインが必要です') {
-        toast.error('フォロー解除にはログインが必要です');
+      if (error instanceof Error && error.message === t('profile.loginRequired')) {
+        toast.error(t('profile.unfollowLoginRequired'));
         return;
       }
       errorHandler.log('ProfilePage.unfollowFailed', error, {
         context: 'ProfilePage.unfollowMutation',
         metadata: { targetNpub: target.npub },
       });
-      toast.error('フォロー解除に失敗しました');
+      toast.error(t('profile.unfollowFailed'));
     },
   });
 
@@ -454,12 +458,12 @@ function ProfilePage() {
   const followerCount = followersLoading ? null : followersTotalCount;
   const followingCount = followingLoading ? null : followingTotalCount;
   const followButtonLabel = isCurrentUser
-    ? 'あなた'
+    ? t('profile.you')
     : !canFollow
-      ? 'ログインが必要'
+      ? t('profile.loginRequired')
       : isFollowing
-        ? 'フォロー中'
-        : 'フォロー';
+        ? t('profile.followingStatus')
+        : t('profile.follow');
   const isFollowProcessing =
     (followMutation.isPending && followMutation.variables?.npub === profile?.npub) ||
     (unfollowMutation.isPending && unfollowMutation.variables?.npub === profile?.npub);
@@ -469,18 +473,18 @@ function ProfilePage() {
       return;
     }
     if (!currentUser) {
-      toast.error('メッセージを送信するにはログインが必要です。');
+      toast.error(t('profile.messageLoginRequired'));
       return;
     }
     openDirectMessage(profile.npub);
-  }, [currentUser, openDirectMessage, profile]);
+  }, [currentUser, openDirectMessage, profile, t]);
 
   const handleCopyNpub = async (npub: string) => {
     try {
       await navigator.clipboard.writeText(npub);
-      toast.success('npub をコピーしました');
+      toast.success(t('profile.copyNpubSuccess'));
     } catch {
-      toast.error('コピーに失敗しました');
+      toast.error(t('profile.copyFailed'));
     }
   };
 
@@ -500,17 +504,16 @@ function ProfilePage() {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          ユーザー検索に戻る
+          {t('profile.backToSearch')}
         </Link>
 
         <Card>
           <CardHeader>
-            <CardTitle>ユーザーが見つかりませんでした</CardTitle>
+            <CardTitle>{t('profile.userNotFound')}</CardTitle>
           </CardHeader>
           <CardContent className="text-muted-foreground">
             <p className="text-sm leading-relaxed">
-              指定されたユーザー（{userId}）のプロフィール情報が取得できませんでした。Nostr
-              ネットワークの同期状況をご確認ください。
+              {t('profile.userNotFoundDescription', { userId })}
             </p>
           </CardContent>
         </Card>
@@ -528,7 +531,7 @@ function ProfilePage() {
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        ユーザー検索に戻る
+        {t('profile.backToSearch')}
       </Link>
 
       <Card>
@@ -539,7 +542,7 @@ function ProfilePage() {
           </Avatar>
           <div className="flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold">{profile.displayName || 'ユーザー'}</h1>
+              <h1 className="text-2xl font-bold">{profile.displayName || t('profile.user')}</h1>
               {profile.nip05 && <Badge variant="secondary">{profile.nip05}</Badge>}
             </div>
             {profile.name && <p className="text-sm text-muted-foreground">@{profile.name}</p>}
@@ -549,7 +552,7 @@ function ProfilePage() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleCopyNpub(profile.npub)}
-                aria-label="npubをコピー"
+                aria-label={t('profile.copyNpub')}
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -557,11 +560,11 @@ function ProfilePage() {
             <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
               <span>
                 <span className="font-semibold text-foreground">{followerCount ?? '…'}</span>{' '}
-                フォロワー
+                {t('profile.followers')}
               </span>
               <span>
                 <span className="font-semibold text-foreground">{followingCount ?? '…'}</span>{' '}
-                フォロー中
+                {t('profile.following')}
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -589,7 +592,7 @@ function ProfilePage() {
                 onClick={() => handleOpenDirectMessage()}
               >
                 <MessageCircle className="h-4 w-4 mr-2" />
-                メッセージ
+                {t('profile.message')}
               </Button>
             </div>
           </div>
@@ -598,34 +601,34 @@ function ProfilePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>フォロー関係</CardTitle>
+          <CardTitle>{t('profile.followRelations')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2">
           <UserList
-            title="フォロワー"
+            title={t('profile.followers')}
             users={followers}
             isLoading={followersLoading}
-            emptyText="フォロワーはいません。"
+            emptyText={t('profile.noFollowers')}
             onLoadMore={handleFollowersLoadMore}
             hasNextPage={Boolean(followersHasNext)}
             isFetchingNextPage={followersFetchingNext}
             sort={followersSort}
-            sortOptions={FOLLOW_SORT_OPTIONS}
+            sortOptions={getFollowSortOptions(t)}
             onSortChange={setFollowersSort}
             searchTerm={followersSearchInput}
             onSearchChange={setFollowersSearchInput}
             totalCount={followersTotalCount}
           />
           <UserList
-            title="フォロー中"
+            title={t('profile.following')}
             users={following}
             isLoading={followingLoading}
-            emptyText="フォロー中のユーザーはいません。"
+            emptyText={t('profile.noFollowing')}
             onLoadMore={handleFollowingLoadMore}
             hasNextPage={Boolean(followingHasNext)}
             isFetchingNextPage={followingFetchingNext}
             sort={followingSort}
-            sortOptions={FOLLOW_SORT_OPTIONS}
+            sortOptions={getFollowSortOptions(t)}
             onSortChange={setFollowingSort}
             searchTerm={followingSearchInput}
             onSearchChange={setFollowingSearchInput}
@@ -636,21 +639,23 @@ function ProfilePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>自己紹介</CardTitle>
+          <CardTitle>{t('profile.bio')}</CardTitle>
         </CardHeader>
         <CardContent>
           {profile.about ? (
             <p className="whitespace-pre-wrap leading-relaxed">{profile.about}</p>
           ) : (
-            <p className="text-sm text-muted-foreground">自己紹介はまだありません。</p>
+            <p className="text-sm text-muted-foreground">{t('profile.noBio')}</p>
           )}
         </CardContent>
       </Card>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">投稿</h2>
-          <span className="text-sm text-muted-foreground">{posts.length}件</span>
+          <h2 className="text-xl font-semibold">{t('profile.posts')}</h2>
+          <span className="text-sm text-muted-foreground">
+            {t('profile.postsCount', { count: posts.length })}
+          </span>
         </div>
         {postsQuery.isLoading ? (
           <div className="flex justify-center py-8">
@@ -659,7 +664,7 @@ function ProfilePage() {
         ) : posts.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              まだ投稿がありません。
+              {t('profile.noPosts')}
             </CardContent>
           </Card>
         ) : (
@@ -707,6 +712,7 @@ function UserList({
   onSearchChange,
   totalCount,
 }: UserListProps) {
+  const { t } = useTranslation();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -742,13 +748,13 @@ function UserList({
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-sm font-semibold text-foreground">{title}</h3>
           <span className="text-xs text-muted-foreground">
-            表示中 {users.length} / {totalCount} 件
+            {t('profile.showing', { current: users.length, total: totalCount })}
           </span>
         </div>
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <Select value={sort} onValueChange={(value) => onSortChange(value as FollowListSort)}>
             <SelectTrigger className="md:w-40">
-              <SelectValue placeholder="並び替え" />
+              <SelectValue placeholder={t('profile.sort')} />
             </SelectTrigger>
             <SelectContent>
               {sortOptions.map((option) => (
@@ -761,16 +767,16 @@ function UserList({
           <Input
             value={searchTerm}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="ユーザーを検索..."
+            placeholder={t('profile.searchUsers')}
             className="md:w-48"
-            aria-label={`${title}の検索`}
+            aria-label={t('profile.searchUsersLabel', { title })}
           />
         </div>
       </div>
       {isLoading ? (
         <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          読み込み中…
+          {t('profile.loading')}
         </div>
       ) : users.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">{emptyText}</p>
@@ -791,7 +797,7 @@ function UserList({
                     params={{ userId: user.npub || user.id }}
                     className="text-sm font-medium hover:underline"
                   >
-                    {user.displayName || user.name || 'ユーザー'}
+                    {user.displayName || user.name || t('profile.user')}
                   </Link>
                   <p className="text-xs text-muted-foreground break-all">{user.npub}</p>
                 </div>
@@ -802,11 +808,11 @@ function UserList({
           {isFetchingNextPage && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>さらに読み込み中…</span>
+              <span>{t('profile.loadingMore')}</span>
             </div>
           )}
           {!hasNextPage && users.length > 0 && (
-            <div className="text-xs text-muted-foreground">すべてのユーザーを表示しました。</div>
+            <div className="text-xs text-muted-foreground">{t('profile.allUsersShown')}</div>
           )}
         </div>
       )}

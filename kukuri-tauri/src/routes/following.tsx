@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useFollowingFeedQuery } from '@/hooks/useTrendingFeeds';
@@ -7,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale } from '@/i18n';
 
 export function FollowingPage() {
+  const { t } = useTranslation();
   const {
     data,
     isLoading,
@@ -25,6 +27,7 @@ export function FollowingPage() {
   const posts = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data?.pages]);
 
   const isInitialLoading = isLoading && !data;
+  const dateFnsLocale = getDateFnsLocale();
 
   if (isInitialLoading) {
     return (
@@ -40,15 +43,11 @@ export function FollowingPage() {
     return (
       <div className="container mx-auto px-4 py-8" data-testid="following-error">
         <Alert variant="destructive" className="max-w-2xl mx-auto">
-          <AlertTitle>フォロー中フィードの取得に失敗しました</AlertTitle>
+          <AlertTitle>{t('following.errorTitle')}</AlertTitle>
           <AlertDescription className="flex flex-col gap-4">
-            <span>
-              {error instanceof Error
-                ? error.message
-                : 'ネットワーク状況を確認し、再度お試しください。'}
-            </span>
+            <span>{error instanceof Error ? error.message : t('common.loading')}</span>
             <Button variant="outline" onClick={() => refetch()}>
-              再試行
+              {t('common.retry')}
             </Button>
           </AlertDescription>
         </Alert>
@@ -61,11 +60,9 @@ export function FollowingPage() {
       <div className="container mx-auto px-4 py-8" data-testid="following-empty">
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
-            <CardTitle>フォロー中の投稿はまだありません</CardTitle>
+            <CardTitle>{t('following.empty')}</CardTitle>
           </CardHeader>
-          <CardContent className="text-muted-foreground">
-            新しいユーザーをフォローすると、ここに最新の投稿が表示されます。検索ページで興味のあるユーザーを探してみましょう。
-          </CardContent>
+          <CardContent className="text-muted-foreground">{t('following.description')}</CardContent>
         </Card>
       </div>
     );
@@ -81,10 +78,8 @@ export function FollowingPage() {
           hasNextPage={Boolean(hasNextPage)}
         />
         <header className="space-y-1">
-          <h1 className="text-3xl font-bold">フォロー中</h1>
-          <p className="text-sm text-muted-foreground">
-            フォローしているユーザーの最新投稿をまとめて確認できます。
-          </p>
+          <h1 className="text-3xl font-bold">{t('following.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('following.description')}</p>
         </header>
 
         <section className="space-y-3" data-testid="following-posts">
@@ -93,19 +88,19 @@ export function FollowingPage() {
               <CardHeader>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span className="font-semibold">
-                    {post.author.displayName || post.author.name || 'ユーザー'}
+                    {post.author.displayName || post.author.name || t('following.user')}
                   </span>
                   <span className="text-muted-foreground">
                     {formatDistanceToNow(new Date(post.created_at * 1000), {
                       addSuffix: true,
-                      locale: ja,
+                      locale: dateFnsLocale,
                     })}
                   </span>
                 </div>
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-relaxed text-primary-foreground/90">
-                  {post.content || '投稿本文は表示できません。'}
+                  {post.content || t('following.postContentNotAvailable')}
                 </p>
               </CardContent>
             </Card>
@@ -120,7 +115,7 @@ export function FollowingPage() {
               variant="secondary"
               data-testid="following-load-more"
             >
-              {isFetchingNextPage ? '読み込み中...' : 'さらに読み込む'}
+              {isFetchingNextPage ? t('common.loading') : t('common.loadMore')}
             </Button>
           </div>
         )}

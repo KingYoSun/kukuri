@@ -5,6 +5,7 @@ import { useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import { GlobalComposer } from '@/components/posts/GlobalComposer';
 import { DirectMessageDialog } from '@/components/directMessages/DirectMessageDialog';
+import { useTheme } from '@/hooks/useTheme';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -12,6 +13,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const { sidebarOpen } = useUIStore();
+  useTheme(); // Apply theme to HTML element
 
   return (
     <div className="h-screen flex flex-col bg-background">

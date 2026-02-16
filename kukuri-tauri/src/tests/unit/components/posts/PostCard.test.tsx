@@ -17,6 +17,7 @@ import {
 } from './__utils__/postCardTestUtils';
 
 import { PostCard } from '@/components/posts/PostCard';
+import i18n from '@/i18n';
 
 const buildPost = (overrides: Partial<Post> = {}): Post => ({
   ...mockPost,
@@ -328,8 +329,8 @@ describe('PostCard', () => {
 
       // 引用フォームが表示される
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
-        expect(screen.getByText('引用して投稿')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'))).toBeInTheDocument();
+        expect(screen.getByText(i18n.t('posts.quote.submit'))).toBeInTheDocument();
         // 引用元の投稿内容が表示される（元の投稿と引用カード内の2つ）
         const allContents = container.querySelectorAll('.whitespace-pre-wrap');
         expect(allContents).toHaveLength(2); // 元の投稿 + 引用カード内の表示
@@ -354,7 +355,7 @@ describe('PostCard', () => {
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'))).toBeInTheDocument();
       });
 
       // キャンセルボタンをクリック - getAllByTextを使用して最初のボタンを選択
@@ -363,7 +364,9 @@ describe('PostCard', () => {
 
       // 引用フォームが非表示になる
       await waitFor(() => {
-        expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
+        expect(
+          screen.queryByPlaceholderText(i18n.t('posts.quote.placeholder')),
+        ).not.toBeInTheDocument();
       });
     });
 
@@ -378,15 +381,15 @@ describe('PostCard', () => {
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'))).toBeInTheDocument();
       });
 
       // コメントを入力
-      const textarea = screen.getByPlaceholderText('コメントを追加...');
+      const textarea = screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'));
       fireEvent.change(textarea, { target: { value: 'これは引用コメントです' } });
 
       // 送信ボタンをクリック
-      const submitButton = screen.getByText('引用して投稿');
+      const submitButton = screen.getByText(i18n.t('posts.quote.submit'));
       fireEvent.click(submitButton);
 
       await waitFor(() => {
@@ -394,7 +397,7 @@ describe('PostCard', () => {
           quotedPost: '1',
           scope: undefined,
         });
-        expect(toast.success).toHaveBeenCalledWith('引用投稿を作成しました');
+        expect(toast.success).toHaveBeenCalledWith(i18n.t('posts.quote.success'));
       });
     });
 
@@ -408,14 +411,14 @@ describe('PostCard', () => {
       fireEvent.click(quoteButton);
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'))).toBeInTheDocument();
       });
 
       // コメントを入力して送信
-      const textarea = screen.getByPlaceholderText('コメントを追加...');
+      const textarea = screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'));
       fireEvent.change(textarea, { target: { value: 'これは引用コメントです' } });
 
-      const submitButton = screen.getByText('引用して投稿');
+      const submitButton = screen.getByText(i18n.t('posts.quote.submit'));
       fireEvent.click(submitButton);
 
       // フォームが閉じるまで待つ（成功メッセージが表示されることも確認）
@@ -425,7 +428,9 @@ describe('PostCard', () => {
 
       await waitFor(
         () => {
-          expect(screen.queryByPlaceholderText('コメントを追加...')).not.toBeInTheDocument();
+          expect(
+            screen.queryByPlaceholderText(i18n.t('posts.quote.placeholder')),
+          ).not.toBeInTheDocument();
         },
         { timeout: 3000 },
       );
@@ -449,7 +454,7 @@ describe('PostCard', () => {
       // 返信フォームが閉じて引用フォームが開く
       await waitFor(() => {
         expect(screen.queryByPlaceholderText('返信を入力...')).not.toBeInTheDocument();
-        expect(screen.getByPlaceholderText('コメントを追加...')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(i18n.t('posts.quote.placeholder'))).toBeInTheDocument();
       });
     });
   });

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TopicCard } from '@/components/topics/TopicCard';
 import type { Topic } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
+import i18n from '@/i18n';
 
 // zustand storeのモック
 const mockJoinedTopics: string[] = [];
@@ -65,8 +66,12 @@ describe('TopicCard', () => {
 
     expect(screen.getByText(mockTopic.name)).toBeInTheDocument();
     expect(screen.getByText(mockTopic.description)).toBeInTheDocument();
-    expect(screen.getByText(`${mockTopic.memberCount} メンバー`)).toBeInTheDocument();
-    expect(screen.getByText(`${mockTopic.postCount} 投稿`)).toBeInTheDocument();
+    expect(
+      screen.getByText(i18n.t('topics.members', { count: mockTopic.memberCount })),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(i18n.t('topics.postsCount', { count: mockTopic.postCount })),
+    ).toBeInTheDocument();
   });
 
   it('タグを正しく表示する', () => {
@@ -110,7 +115,10 @@ describe('TopicCard', () => {
 
     const joinButton = screen.getByText('参加');
     expect(joinButton).toHaveAttribute('aria-pressed', 'false');
-    expect(joinButton).toHaveAttribute('aria-label', `「${mockTopic.name}」に参加`);
+    expect(joinButton).toHaveAttribute(
+      'aria-label',
+      `「${mockTopic.name}」 ${i18n.t('topics.join')}`,
+    );
   });
 
   it('参加中ボタンにアクセシビリティ属性が設定される', () => {
@@ -120,7 +128,10 @@ describe('TopicCard', () => {
 
     const joinedButton = screen.getByText('参加中');
     expect(joinedButton).toHaveAttribute('aria-pressed', 'true');
-    expect(joinedButton).toHaveAttribute('aria-label', `「${mockTopic.name}」から離脱`);
+    expect(joinedButton).toHaveAttribute(
+      'aria-label',
+      `「${mockTopic.name}」 ${i18n.t('topics.leave')}`,
+    );
   });
 
   it('ローディング中はボタンが無効化される', async () => {

@@ -6,6 +6,7 @@ import type { SyncStatus } from '@/hooks/useSyncManager';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { OfflineActionType } from '@/types/offline';
 import { errorHandler } from '@/lib/errorHandler';
+import i18n from '@/i18n';
 
 const { mockManualRetryDelete, toastMock } = vi.hoisted(() => {
   return {
@@ -179,7 +180,9 @@ describe('SyncStatusIndicator', () => {
 
       render(<SyncStatusIndicator />);
 
-      expect(screen.getByText('同期中... (3/10)')).toBeInTheDocument();
+      expect(
+        screen.getByText(`${i18n.t('syncStatus.syncProgress')}... (3/10)`),
+      ).toBeInTheDocument();
     });
 
     it('再送メトリクスを表示', async () => {
@@ -413,7 +416,7 @@ describe('SyncStatusIndicator', () => {
 
       await waitFor(() => {
         expect(screen.getByText('キャッシュ状態')).toBeInTheDocument();
-        expect(screen.getByText('同期キュー')).toBeInTheDocument();
+        expect(screen.getAllByText(i18n.t('syncStatus.syncQueue')).length).toBeGreaterThan(0);
       });
 
       const refreshButton = screen.getByLabelText('キャッシュ情報を更新');
@@ -439,7 +442,7 @@ describe('SyncStatusIndicator', () => {
       fireEvent.click(button);
 
       await waitFor(() => {
-        const queueButton = screen.getByText('再送キュー');
+        const queueButton = screen.getByRole('button', { name: i18n.t('syncStatus.syncQueue') });
         fireEvent.click(queueButton);
       });
 
@@ -617,7 +620,9 @@ describe('SyncStatusIndicator', () => {
       fireEvent.click(screen.getByRole('button'));
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Queue ID / cacheType を検索')).toBeInTheDocument();
+        expect(
+          screen.getByPlaceholderText(i18n.t('syncStatus.filterRetryQueue')),
+        ).toBeInTheDocument();
       });
 
       const highlighted = screen.getByTestId('queue-item-1');
@@ -658,7 +663,7 @@ describe('SyncStatusIndicator', () => {
       render(<SyncStatusIndicator />);
       fireEvent.click(screen.getByRole('button'));
 
-      const input = await screen.findByPlaceholderText('Queue ID / cacheType を検索');
+      const input = await screen.findByPlaceholderText(i18n.t('syncStatus.filterRetryQueue'));
       fireEvent.change(input, { target: { value: 'metadata' } });
 
       await waitFor(() => {

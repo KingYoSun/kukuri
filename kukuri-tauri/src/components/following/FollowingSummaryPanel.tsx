@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { InfiniteData } from '@tanstack/react-query';
 
 import { SummaryMetricCard } from '@/components/summary/SummaryMetricCard';
@@ -18,14 +19,18 @@ export function FollowingSummaryPanel({
   isFetching = false,
   hasNextPage = false,
 }: FollowingSummaryPanelProps) {
+  const { t } = useTranslation();
   const posts = data?.pages.flatMap((page) => page.items) ?? [];
-  const postsCount = posts.length > 0 || data ? `${posts.length.toLocaleString()}件` : null;
+  const postsCount =
+    posts.length > 0 || data ? t('following.summary.items', { count: posts.length }) : null;
 
   const uniqueAuthors =
     posts.length > 0
-      ? `${new Set(posts.map((post) => post.author.npub || post.author.pubkey)).size.toLocaleString()}人`
+      ? t('following.summary.people', {
+          count: new Set(posts.map((post) => post.author.npub || post.author.pubkey)).size,
+        })
       : data
-        ? '0人'
+        ? t('following.summary.zeroPeople')
         : null;
 
   const latestServerTime = data
@@ -35,7 +40,12 @@ export function FollowingSummaryPanel({
     formatRelativeTimeInfo(latestServerTime);
   const updatedLagLabel = formatLagLabel(latestServerTime);
 
-  const remainingPages = data || hasNextPage ? (hasNextPage ? 'あり' : 'なし') : null;
+  const remainingPages =
+    data || hasNextPage
+      ? hasNextPage
+        ? t('following.summary.hasRemaining')
+        : t('following.summary.noRemaining')
+      : null;
 
   const showLoadingState = (condition: boolean) => (isLoading || isFetching) && condition;
 
@@ -45,31 +55,31 @@ export function FollowingSummaryPanel({
       data-testid="following-summary-panel"
     >
       <SummaryMetricCard
-        label="取得済み投稿"
+        label={t('following.summary.fetchedPosts')}
         value={postsCount}
         isLoading={showLoadingState(!postsCount)}
-        helperText="現在の表示件数"
+        helperText={t('following.summary.fetchedPostsHelper')}
         testId="following-summary-posts"
       />
       <SummaryMetricCard
-        label="ユニーク投稿者"
+        label={t('following.summary.uniqueAuthors')}
         value={uniqueAuthors}
         isLoading={showLoadingState(!uniqueAuthors)}
-        helperText="表示中の投稿者数"
+        helperText={t('following.summary.uniqueAuthorsHelper')}
         testId="following-summary-authors"
       />
       <SummaryMetricCard
-        label="最終更新"
+        label={t('following.summary.lastUpdated')}
         value={updatedDisplay}
         helperText={[updatedHelper, updatedLagLabel].filter(Boolean).join(' / ') || null}
         isLoading={showLoadingState(!updatedDisplay)}
         testId="following-summary-updated"
       />
       <SummaryMetricCard
-        label="残ページ"
+        label={t('following.summary.remainingPages')}
         value={remainingPages}
         isLoading={isFetching && !data}
-        helperText="追加ロードの必要有無"
+        helperText={t('following.summary.remainingPagesHelper')}
         testId="following-summary-remaining"
       />
       <SummaryDirectMessageCard testIdPrefix="following-summary" />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Loader2, UserCheck, UserPlus } from 'lucide-react';
@@ -38,6 +39,7 @@ interface UserSearchResultsProps {
 }
 
 export function UserSearchResults({ query, onInputMetaChange }: UserSearchResultsProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((state) => state.currentUser);
   const [sort, setSort] = useState<UserSearchSort>('relevance');
@@ -114,7 +116,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
   const followMutation = useMutation<void, unknown, Profile>({
     mutationFn: async (target) => {
       if (!currentUser) {
-        throw new Error('ログインしてから操作してください');
+        throw new Error(t('search.loginToOperate'));
       }
       await TauriApi.followUser(currentUser.npub, target.npub);
       if (target.pubkey) {
@@ -131,13 +133,13 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
           return [...prev, target];
         },
       );
-      toast.success(`${target.displayName || target.npub} をフォローしました`);
+      toast.success(t('search.followSuccess', { name: target.displayName || target.npub }));
     },
     onError: (error, target) => {
       const message =
-        error instanceof Error && error.message === 'ログインしてから操作してください'
-          ? 'ログインが必要です'
-          : 'フォローに失敗しました';
+        error instanceof Error && error.message === t('search.loginToOperate')
+          ? t('search.loginRequired')
+          : t('search.followFailed');
       toast.error(message);
       errorHandler.log('UserSearch.follow_failed', error, {
         context: 'UserSearchResults.followMutation',
@@ -149,7 +151,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
   const unfollowMutation = useMutation<void, unknown, Profile>({
     mutationFn: async (target) => {
       if (!currentUser) {
-        throw new Error('ログインしてから操作してください');
+        throw new Error(t('search.loginToOperate'));
       }
       await TauriApi.unfollowUser(currentUser.npub, target.npub);
     },
@@ -158,13 +160,13 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
         ['social', 'following', currentUser?.npub],
         (prev = []) => prev.filter((profile) => profile.npub !== target.npub),
       );
-      toast.success(`${target.displayName || target.npub} のフォローを解除しました`);
+      toast.success(t('search.unfollowSuccess', { name: target.displayName || target.npub }));
     },
     onError: (error, target) => {
       const message =
-        error instanceof Error && error.message === 'ログインしてから操作してください'
-          ? 'ログインが必要です'
-          : 'フォロー解除に失敗しました';
+        error instanceof Error && error.message === t('search.loginToOperate')
+          ? t('search.loginRequired')
+          : t('search.unfollowFailed');
       toast.error(message);
       errorHandler.log('UserSearch.unfollow_failed', error, {
         context: 'UserSearchResults.unfollowMutation',
@@ -188,19 +190,15 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
   const showSortControls = sanitizedQuery.length > 0;
   const isSortDisabled = sanitizedQuery.length < 2;
   const sortOptions: Array<{ value: UserSearchSort; label: string }> = [
-    { value: 'relevance', label: '関連度順' },
-    { value: 'recency', label: '最新順' },
+    { value: 'relevance', label: t('search.sortRelevance') },
+    { value: 'recency', label: t('search.sortRecency') },
   ];
 
   return (
     <div className="space-y-4" data-testid="user-search-results">
-      {showIdle && (
-        <p className="text-sm text-muted-foreground">検索キーワードを入力してください。</p>
-      )}
+      {showIdle && <p className="text-sm text-muted-foreground">{t('search.enterKeywordUser')}</p>}
 
-      {showReady && (
-        <p className="text-sm text-muted-foreground">入力を確定すると検索が始まります。</p>
-      )}
+      {showReady && <p className="text-sm text-muted-foreground">{t('search.readyToSearch')}</p>}
 
       {errorKey && (
         <SearchErrorState
@@ -216,11 +214,17 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
           data-testid="user-search-summary"
         >
           <p className="text-xs text-muted-foreground">
-            検索対象: {sanitizedQuery ? `「${sanitizedQuery}」` : 'キーワード未入力'}
+            {t('search.searchTarget', {
+              query: sanitizedQuery ? `「${sanitizedQuery}」` : t('search.noKeyword'),
+            })}
           </p>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            並び順
-            <div className="flex items-center gap-1" role="group" aria-label="ユーザー検索の並び順">
+            {t('search.sortOrder')}
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label={t('search.sortOrderAria')}
+            >
               {sortOptions.map((option) => (
                 <Button
                   key={option.value}
@@ -244,16 +248,16 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
       {showInitialLoading && (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>検索しています...</span>
+          <span>{t('search.searching')}</span>
         </div>
       )}
 
       {showEmpty && (
         <div className="text-center py-12">
-          <p className="text-lg font-medium">該当するユーザーが見つかりませんでした</p>
+          <p className="text-lg font-medium">{t('search.noUserResults')}</p>
           {sanitizedQuery && (
             <p className="text-muted-foreground mt-2">
-              「{sanitizedQuery}」に一致するユーザーはいません。
+              {t('search.noUserResultsDescription', { query: sanitizedQuery })}
             </p>
           )}
         </div>
@@ -263,16 +267,16 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
         <>
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-3">
-              <span>{totalCount.toLocaleString()} 件ヒット</span>
-              {tookMs > 0 && <span>{tookMs} ms</span>}
+              <span>{t('search.hits', { count: totalCount })}</span>
+              {tookMs > 0 && <span>{t('search.ms', { ms: tookMs })}</span>}
             </div>
             {!showSortControls && (
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide">
-                並び順
+                {t('search.sortOrder')}
                 <div
                   className="flex items-center gap-1"
                   role="group"
-                  aria-label="ユーザー検索の並び順"
+                  aria-label={t('search.sortOrderAria')}
                 >
                   {sortOptions.map((option) => (
                     <Button
@@ -319,7 +323,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
                 disabled={isFetchingNextPage}
                 data-testid="user-search-load-more"
               >
-                {isFetchingNextPage ? '読み込み中...' : 'さらに表示'}
+                {isFetchingNextPage ? t('search.loading') : t('search.loadMore')}
               </Button>
             </div>
           )}
@@ -329,7 +333,7 @@ export function UserSearchResults({ query, onInputMetaChange }: UserSearchResult
       {isFetching && results.length > 0 && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>更新中...</span>
+          <span>{t('search.updating')}</span>
         </div>
       )}
     </div>
@@ -355,15 +359,16 @@ function UserCard({
   onFollow,
   onUnfollow,
 }: UserCardProps) {
+  const { t } = useTranslation();
   const avatarSrc = resolveUserAvatarSrc(user);
   const initials = getInitials(user.displayName || user.name || 'U');
   const followLabel = isSelf
-    ? '自分です'
+    ? t('search.myself')
     : isFollowing
-      ? 'フォロー中'
+      ? t('search.following')
       : canFollow
-        ? 'フォロー'
-        : 'ログインが必要です';
+        ? t('search.follow')
+        : t('search.loginRequired');
 
   const handleClick = () => {
     if (isProcessing || isSelf || !canFollow) {
@@ -390,7 +395,7 @@ function UserCard({
               params={{ userId: user.npub || user.id }}
               className="font-semibold hover:underline"
             >
-              {user.displayName || user.name || 'ユーザー'}
+              {user.displayName || user.name || t('search.user')}
             </Link>
             {user.nip05 && <p className="text-sm text-muted-foreground">{user.nip05}</p>}
             {user.about && (

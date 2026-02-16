@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
@@ -88,6 +89,7 @@ export function PostSearchResults({ query }: PostSearchResultsProps) {
 }
 
 function LocalPostSearchResults({ query }: PostSearchResultsProps) {
+  const { t } = useTranslation();
   const { data: allPosts, isLoading } = usePosts();
 
   const searchResults = useQuery({
@@ -112,9 +114,7 @@ function LocalPostSearchResults({ query }: PostSearchResultsProps) {
 
   if (!query) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        検索キーワードを入力してください
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.enterKeyword')}</div>
     );
   }
 
@@ -131,15 +131,19 @@ function LocalPostSearchResults({ query }: PostSearchResultsProps) {
   if (results.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-lg font-medium">検索結果が見つかりませんでした</p>
-        <p className="text-muted-foreground mt-2">「{query}」に一致する投稿はありません</p>
+        <p className="text-lg font-medium">{t('search.noPostResults')}</p>
+        <p className="text-muted-foreground mt-2">
+          {t('search.noPostResultsDescription', { query })}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{results.length}件の投稿が見つかりました</p>
+      <p className="text-sm text-muted-foreground">
+        {t('search.postsFound', { count: results.length })}
+      </p>
       <div className="space-y-4">
         {results.map((post) => (
           <SearchResultPost key={post.id} post={post} />
@@ -150,6 +154,7 @@ function LocalPostSearchResults({ query }: PostSearchResultsProps) {
 }
 
 function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
+  const { t } = useTranslation();
   const { currentTopic, joinedTopics, topics } = useTopicStore();
   const trimmedQuery = query.trim();
   const debouncedQuery = useDebounce(trimmedQuery, 300);
@@ -201,18 +206,12 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
 
   if (!trimmedQuery) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        検索キーワードを入力してください
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.enterKeyword')}</div>
     );
   }
 
   if (!topicId) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        検索対象のトピックを選択してください
-      </div>
-    );
+    return <div className="text-center py-12 text-muted-foreground">{t('search.selectTopic')}</div>;
   }
 
   if (isInitialLoading) {
@@ -225,17 +224,17 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
 
   if (searchQuery.isError) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        検索に失敗しました。設定や接続状況を確認してください。
-      </div>
+      <div className="text-center py-12 text-muted-foreground">{t('search.searchFailed')}</div>
     );
   }
 
   if (normalizedHits.length === 0) {
     return (
       <div className="text-center py-12" data-testid="community-node-search-empty">
-        <p className="text-lg font-medium">検索結果が見つかりませんでした</p>
-        <p className="text-muted-foreground mt-2">「{trimmedQuery}」に一致する投稿はありません</p>
+        <p className="text-lg font-medium">{t('search.noPostResults')}</p>
+        <p className="text-muted-foreground mt-2">
+          {t('search.noPostResultsDescription', { query: trimmedQuery })}
+        </p>
       </div>
     );
   }
@@ -247,14 +246,16 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
           className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
           data-testid="community-node-search-summary"
         >
-          <span>{total.toLocaleString()}件の投稿が見つかりました</span>
+          <span>{t('search.postsFound', { count: total })}</span>
           {topicName && (
             <Badge variant="outline">
               {topicName} ({topicId})
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">Community Node 検索: 「{trimmedQuery}」</p>
+        <p className="text-xs text-muted-foreground">
+          {t('search.communityNodeSearch', { query: trimmedQuery })}
+        </p>
       </div>
       <div className="space-y-4">
         {normalizedHits.map((hit, index) => (
@@ -273,7 +274,7 @@ function CommunityNodePostSearchResults({ query }: PostSearchResultsProps) {
             disabled={searchQuery.isFetchingNextPage}
             data-testid="community-node-search-load-more"
           >
-            {searchQuery.isFetchingNextPage ? '読み込み中...' : 'さらに表示'}
+            {searchQuery.isFetchingNextPage ? t('search.loading') : t('search.loadMore')}
           </Button>
         </div>
       )}
@@ -288,10 +289,12 @@ function CommunityNodeSearchResultCard({
   hit: NormalizedSearchHit;
   index: number;
 }) {
-  const title = hit.title || hit.summary || hit.content || `検索結果 ${index + 1}`;
+  const { t } = useTranslation();
+  const title =
+    hit.title || hit.summary || hit.content || t('search.searchResult', { index: index + 1 });
   const summary = hit.summary || hit.content;
   const createdAtText = hit.createdAt ? new Date(hit.createdAt * 1000).toLocaleString() : 'unknown';
-  const authorLabel = hit.author ? `pubkey:${hit.author}` : 'unknown author';
+  const authorLabel = hit.author ? `pubkey:${hit.author}` : t('search.unknownAuthor');
 
   return (
     <Card

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import * as nostrApi from '@/lib/api/nostr';
@@ -19,6 +21,7 @@ interface NostrEventPayload {
 }
 
 export function NostrTestPanel() {
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [testContent, setTestContent] = useState('');
   const [topicId, setTopicId] = useState('kukuri-test');
@@ -36,7 +39,7 @@ export function NostrTestPanel() {
 
     // Nostrイベントをリッスン
     const unlisten = listen<NostrEventPayload>('nostr://event', (event) => {
-      addResult(`📨 イベント受信: ${event.payload.id}`);
+      addResult(`📨 ${i18n.t('nostrTest.eventReceived')}: ${event.payload.id}`);
       setReceivedEvents((prev) => [event.payload, ...prev.slice(0, 19)]);
     });
 
@@ -47,23 +50,23 @@ export function NostrTestPanel() {
 
   const handleTestTextNote = async () => {
     if (!testContent.trim()) {
-      toast.error('テキストを入力してください');
+      toast.error(t('nostrTest.enterText'));
       return;
     }
 
     setIsLoading(true);
     try {
       const eventId = await nostrApi.publishTextNote(testContent);
-      addResult(`✅ テキストノート送信成功: ${eventId}`);
-      toast.success('テキストノートを送信しました');
+      addResult(`✅ ${t('nostrTest.logTextNoteOk')}: ${eventId}`);
+      toast.success(t('nostrTest.textNoteSent'));
       setTestContent('');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '不明なエラー';
-      errorHandler.log('テキストノート送信に失敗しました', error, {
+      const message = error instanceof Error ? error.message : t('nostrTest.unknownError');
+      errorHandler.log(t('nostrTest.textNoteSendFailed'), error, {
         context: 'NostrTestPanel.handleTestTextNote',
       });
-      addResult(`❌ テキストノート送信失敗: ${message}`);
-      toast.error('送信に失敗しました');
+      addResult(`❌ ${t('nostrTest.logTextNoteFail')}: ${message}`);
+      toast.error(t('nostrTest.sendFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -71,23 +74,23 @@ export function NostrTestPanel() {
 
   const handleTestTopicPost = async () => {
     if (!testContent.trim()) {
-      toast.error('テキストを入力してください');
+      toast.error(t('nostrTest.enterText'));
       return;
     }
 
     setIsLoading(true);
     try {
       const eventId = await nostrApi.publishTopicPost(topicId, testContent);
-      addResult(`✅ トピック投稿送信成功 (${topicId}): ${eventId}`);
-      toast.success('トピック投稿を送信しました');
+      addResult(`✅ ${t('nostrTest.logTopicPostOk')} (${topicId}): ${eventId}`);
+      toast.success(t('nostrTest.topicPostSent'));
       setTestContent('');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '不明なエラー';
-      errorHandler.log('トピック投稿送信に失敗しました', error, {
+      const message = error instanceof Error ? error.message : t('nostrTest.unknownError');
+      errorHandler.log(t('nostrTest.topicPostSendFailed'), error, {
         context: 'NostrTestPanel.handleTestTopicPost',
       });
-      addResult(`❌ トピック投稿送信失敗: ${message}`);
-      toast.error('送信に失敗しました');
+      addResult(`❌ ${t('nostrTest.logTopicPostFail')}: ${message}`);
+      toast.error(t('nostrTest.sendFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -97,36 +100,36 @@ export function NostrTestPanel() {
     setIsLoading(true);
     try {
       await nostrApi.subscribeToTopic(topicId);
-      addResult(`✅ トピック購読成功: ${topicId}`);
-      toast.success('トピックを購読しました');
+      addResult(`✅ ${t('nostrTest.logSubscribeOk')}: ${topicId}`);
+      toast.success(t('nostrTest.topicSubscribed'));
     } catch (error) {
-      const message = error instanceof Error ? error.message : '不明なエラー';
-      errorHandler.log('トピック購読に失敗しました', error, {
+      const message = error instanceof Error ? error.message : t('nostrTest.unknownError');
+      errorHandler.log(t('nostrTest.topicSubscribeFailed'), error, {
         context: 'NostrTestPanel.handleSubscribeTopic',
       });
-      addResult(`❌ トピック購読失敗: ${message}`);
-      toast.error('購読に失敗しました');
+      addResult(`❌ ${t('nostrTest.logSubscribeFail')}: ${message}`);
+      toast.error(t('nostrTest.subscribeFailed'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleTestReaction = async () => {
-    const testEventId = prompt('リアクションを送信するイベントIDを入力してください:');
+    const testEventId = prompt(t('nostrTest.reactionPrompt'));
     if (!testEventId) return;
 
     setIsLoading(true);
     try {
       const reactionId = await nostrApi.sendReaction(testEventId, '+');
-      addResult(`✅ リアクション送信成功: ${reactionId}`);
-      toast.success('リアクションを送信しました');
+      addResult(`✅ ${t('nostrTest.logReactionOk')}: ${reactionId}`);
+      toast.success(t('nostrTest.reactionSent'));
     } catch (error) {
-      const message = error instanceof Error ? error.message : '不明なエラー';
-      errorHandler.log('リアクション送信に失敗しました', error, {
+      const message = error instanceof Error ? error.message : t('nostrTest.unknownError');
+      errorHandler.log(t('nostrTest.reactionSendFailed'), error, {
         context: 'NostrTestPanel.handleTestReaction',
       });
-      addResult(`❌ リアクション送信失敗: ${message}`);
-      toast.error('送信に失敗しました');
+      addResult(`❌ ${t('nostrTest.logReactionFail')}: ${message}`);
+      toast.error(t('nostrTest.sendFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -136,7 +139,7 @@ export function NostrTestPanel() {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-muted-foreground">ログインしてください</p>
+          <p className="text-muted-foreground">{t('nostrTest.loginRequired')}</p>
         </CardContent>
       </Card>
     );
@@ -145,22 +148,22 @@ export function NostrTestPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nostrイベント送受信テスト</CardTitle>
+        <CardTitle>{t('nostrTest.title')}</CardTitle>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="send" className="w-full">
           <TabsList>
-            <TabsTrigger value="send">送信テスト</TabsTrigger>
-            <TabsTrigger value="subscribe">購読テスト</TabsTrigger>
-            <TabsTrigger value="log">実行ログ</TabsTrigger>
-            <TabsTrigger value="received">受信イベント</TabsTrigger>
+            <TabsTrigger value="send">{t('nostrTest.sendTest')}</TabsTrigger>
+            <TabsTrigger value="subscribe">{t('nostrTest.subscribeTest')}</TabsTrigger>
+            <TabsTrigger value="log">{t('nostrTest.execLog')}</TabsTrigger>
+            <TabsTrigger value="received">{t('nostrTest.receivedEvents')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="send" className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">テスト内容</label>
+              <label className="text-sm font-medium">{t('nostrTest.testContent')}</label>
               <Input
-                placeholder="テストメッセージを入力"
+                placeholder={t('nostrTest.testMessagePlaceholder')}
                 value={testContent}
                 onChange={(e) => setTestContent(e.target.value)}
                 disabled={isLoading}
@@ -168,9 +171,9 @@ export function NostrTestPanel() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">トピックID（トピック投稿用）</label>
+              <label className="text-sm font-medium">{t('nostrTest.topicIdLabel')}</label>
               <Input
-                placeholder="トピックID"
+                placeholder={t('nostrTest.topicIdPlaceholder')}
                 value={topicId}
                 onChange={(e) => setTopicId(e.target.value)}
                 disabled={isLoading}
@@ -183,26 +186,26 @@ export function NostrTestPanel() {
                 disabled={isLoading || !testContent.trim()}
                 size="sm"
               >
-                テキストノート送信
+                {t('nostrTest.textNoteSend')}
               </Button>
               <Button
                 onClick={handleTestTopicPost}
                 disabled={isLoading || !testContent.trim()}
                 size="sm"
               >
-                トピック投稿送信
+                {t('nostrTest.topicPostSend')}
               </Button>
               <Button onClick={handleTestReaction} disabled={isLoading} size="sm" variant="outline">
-                リアクション送信
+                {t('nostrTest.reactionSend')}
               </Button>
             </div>
           </TabsContent>
 
           <TabsContent value="subscribe" className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">購読するトピックID</label>
+              <label className="text-sm font-medium">{t('nostrTest.subscribeTopicIdLabel')}</label>
               <Input
-                placeholder="トピックID"
+                placeholder={t('nostrTest.topicIdPlaceholder')}
                 value={topicId}
                 onChange={(e) => setTopicId(e.target.value)}
                 disabled={isLoading}
@@ -214,16 +217,16 @@ export function NostrTestPanel() {
               disabled={isLoading || !topicId.trim()}
               size="sm"
             >
-              トピックを購読
+              {t('nostrTest.subscribeTopic')}
             </Button>
           </TabsContent>
 
           <TabsContent value="log">
             <div className="space-y-2">
-              <div className="text-sm font-medium mb-2">実行結果ログ</div>
+              <div className="text-sm font-medium mb-2">{t('nostrTest.execResultLog')}</div>
               <div className="bg-muted p-3 rounded-md h-64 overflow-y-auto font-mono text-xs">
                 {results.length === 0 ? (
-                  <p className="text-muted-foreground">まだ実行結果がありません</p>
+                  <p className="text-muted-foreground">{t('nostrTest.noResultsYet')}</p>
                 ) : (
                   results.map((result, index) => (
                     <div key={index} className="mb-1">
@@ -238,11 +241,11 @@ export function NostrTestPanel() {
           <TabsContent value="received">
             <div className="space-y-2">
               <div className="text-sm font-medium mb-2">
-                受信イベント ({receivedEvents.length}件)
+                {t('nostrTest.receivedEventsCount', { count: receivedEvents.length })}
               </div>
               <div className="bg-muted p-3 rounded-md h-64 overflow-y-auto">
                 {receivedEvents.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">まだイベントを受信していません</p>
+                  <p className="text-muted-foreground text-sm">{t('nostrTest.noEventsYet')}</p>
                 ) : (
                   <div className="space-y-3">
                     {receivedEvents.map((event, index) => (
@@ -252,16 +255,17 @@ export function NostrTestPanel() {
                           ...
                         </div>
                         <div>
-                          <span className="text-muted-foreground">著者:</span>{' '}
+                          <span className="text-muted-foreground">{t('nostrTest.author')}:</span>{' '}
                           {event.author.slice(0, 16)}...
                         </div>
                         <div>
-                          <span className="text-muted-foreground">種類:</span> {event.kind}
+                          <span className="text-muted-foreground">{t('nostrTest.kind')}:</span>{' '}
+                          {event.kind}
                           {event.kind === 1 && ' (TextNote)'}
                           {event.kind === 7 && ' (Reaction)'}
                         </div>
                         <div className="mt-1">
-                          <span className="text-muted-foreground">内容:</span>{' '}
+                          <span className="text-muted-foreground">{t('nostrTest.content')}:</span>{' '}
                           {event.content.slice(0, 100)}
                           {event.content.length > 100 && '...'}
                         </div>

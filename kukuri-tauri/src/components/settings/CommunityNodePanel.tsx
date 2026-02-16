@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -37,6 +38,7 @@ const formatAttesterLabel = (node: CommunityNodeConfigNodeResponse) => {
 };
 
 export function CommunityNodePanel() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [actionNodeBaseUrl, setActionNodeBaseUrl] = useState('');
@@ -115,7 +117,7 @@ export function CommunityNodePanel() {
       errorHandler.log('Failed to load community node trust anchor', trustAnchorQuery.error, {
         context: 'CommunityNodePanel.trustAnchor',
         showToast: true,
-        toastTitle: 'Trust Anchor の取得に失敗しました',
+        toastTitle: t('communityNodePanel.toastTrustAnchorFetchFailed'),
       });
     }
   }, [trustAnchorQuery.isError, trustAnchorQuery.error]);
@@ -125,7 +127,7 @@ export function CommunityNodePanel() {
       errorHandler.log('Failed to load pending join requests', pendingJoinRequestsQuery.error, {
         context: 'CommunityNodePanel.joinRequests',
         showToast: true,
-        toastTitle: 'join.request 縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆',
+        toastTitle: t('communityNodePanel.toastJoinApproveFailed'),
       });
     }
   }, [pendingJoinRequestsQuery.isError, pendingJoinRequestsQuery.error]);
@@ -144,12 +146,12 @@ export function CommunityNodePanel() {
   const handleAddNode = async () => {
     const trimmed = newBaseUrl.trim();
     if (!trimmed) {
-      toast.error('Base URLを入力してください');
+      toast.error(t('communityNodePanel.toastEnterBaseUrl'));
       return;
     }
     const normalized = trimmed.replace(/\/+$/, '');
     if (nodes.some((node) => node.base_url === normalized)) {
-      toast.error('同じBase URLのノードが既に登録されています');
+      toast.error(t('communityNodePanel.toastDuplicateBaseUrl'));
       return;
     }
     try {
@@ -163,12 +165,12 @@ export function CommunityNodePanel() {
       await communityNodeApi.setConfig(nextNodes);
       await refreshCommunityData();
       setNewBaseUrl('');
-      toast.success('Community Node を追加しました');
+      toast.success(t('communityNodePanel.toastAddSuccess'));
     } catch (error) {
       errorHandler.log('Community node config update failed', error, {
         context: 'CommunityNodePanel.addNode',
         showToast: true,
-        toastTitle: 'Community Node の追加に失敗しました',
+        toastTitle: t('communityNodePanel.toastAddFailed'),
       });
     }
   };
@@ -179,12 +181,12 @@ export function CommunityNodePanel() {
       await refreshCommunityData();
       setNewBaseUrl('');
       setActionNodeBaseUrl('');
-      toast.success('Community Node 設定をクリアしました');
+      toast.success(t('communityNodePanel.toastClearSuccess'));
     } catch (error) {
       errorHandler.log('Community node config clear failed', error, {
         context: 'CommunityNodePanel.clearConfig',
         showToast: true,
-        toastTitle: 'Community Node 設定のクリアに失敗しました',
+        toastTitle: t('communityNodePanel.toastClearFailed'),
       });
     }
   };
@@ -194,12 +196,12 @@ export function CommunityNodePanel() {
       const nextNodes = nodes.filter((node) => node.base_url !== baseUrl);
       await communityNodeApi.setConfig(serializeNodes(nextNodes));
       await refreshCommunityData();
-      toast.success('Community Node を削除しました');
+      toast.success(t('communityNodePanel.toastRemoveSuccess'));
     } catch (error) {
       errorHandler.log('Community node remove failed', error, {
         context: 'CommunityNodePanel.removeNode',
         showToast: true,
-        toastTitle: 'Community Node の削除に失敗しました',
+        toastTitle: t('communityNodePanel.toastRemoveFailed'),
       });
     }
   };
@@ -208,12 +210,12 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.authenticate(baseUrl);
       await refreshCommunityData();
-      toast.success('Community Node 認証を更新しました');
+      toast.success(t('communityNodePanel.toastAuthSuccess'));
     } catch (error) {
       errorHandler.log('Community node auth failed', error, {
         context: 'CommunityNodePanel.authenticate',
         showToast: true,
-        toastTitle: 'Community Node 認証に失敗しました',
+        toastTitle: t('communityNodePanel.toastAuthFailed'),
       });
     }
   };
@@ -222,12 +224,12 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.clearToken(baseUrl);
       await refreshCommunityData();
-      toast.success('Community Node トークンを削除しました');
+      toast.success(t('communityNodePanel.toastTokenCleared'));
     } catch (error) {
       errorHandler.log('Community node token clear failed', error, {
         context: 'CommunityNodePanel.clearToken',
         showToast: true,
-        toastTitle: 'Community Node トークン削除に失敗しました',
+        toastTitle: t('communityNodePanel.toastTokenClearFailed'),
       });
     }
   };
@@ -243,7 +245,7 @@ export function CommunityNodePanel() {
       errorHandler.log('Community node role update failed', error, {
         context: 'CommunityNodePanel.updateRoles',
         showToast: true,
-        toastTitle: 'Community Node ロール更新に失敗しました',
+        toastTitle: t('communityNodePanel.toastRoleUpdateFailed'),
       });
     }
   };
@@ -262,14 +264,14 @@ export function CommunityNodePanel() {
       errorHandler.log('Community node trust anchor update failed', error, {
         context: 'CommunityNodePanel.trustAnchorUpdate',
         showToast: true,
-        toastTitle: 'Trust Anchor の更新に失敗しました',
+        toastTitle: t('communityNodePanel.toastTrustAnchorUpdateFailed'),
       });
     }
   };
 
   const handleRequestJoin = async () => {
     if (!inviteJson.trim()) {
-      toast.error('招待イベントJSONを入力してください');
+      toast.error(t('communityNodePanel.toastEnterInviteJson'));
       return;
     }
     try {
@@ -278,12 +280,12 @@ export function CommunityNodePanel() {
         invite_event_json: payload,
       });
       await refreshCommunityData();
-      toast.success('P2P 参加リクエストを送信しました');
+      toast.success(t('communityNodePanel.toastJoinRequestSent'));
     } catch (error) {
       errorHandler.log('Community node join request failed', error, {
         context: 'CommunityNodePanel.requestJoin',
         showToast: true,
-        toastTitle: 'P2P 参加リクエストに失敗しました',
+        toastTitle: t('communityNodePanel.toastJoinRequestFailed'),
       });
     }
   };
@@ -292,12 +294,12 @@ export function CommunityNodePanel() {
     try {
       await accessControlApi.approveJoinRequest({ event_id: eventId });
       await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
-      toast.success('join.request 繧定ｿｽ蜉縺励∪縺励◆');
+      toast.success(t('communityNodePanel.toastJoinApproved'));
     } catch (error) {
       errorHandler.log('Community node join approval failed', error, {
         context: 'CommunityNodePanel.approveJoinRequest',
         showToast: true,
-        toastTitle: 'join.request 縺ｮ險ｭ螳壹↓螟ｱ謨励＠縺ｾ縺励◆',
+        toastTitle: t('communityNodePanel.toastJoinApproveFailed'),
       });
     }
   };
@@ -306,19 +308,19 @@ export function CommunityNodePanel() {
     try {
       await accessControlApi.rejectJoinRequest({ event_id: eventId });
       await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
-      toast.success('join.request 繧定ｿｽ蜉縺励∪縺励◆');
+      toast.success(t('communityNodePanel.toastJoinRejected'));
     } catch (error) {
       errorHandler.log('Community node join rejection failed', error, {
         context: 'CommunityNodePanel.rejectJoinRequest',
         showToast: true,
-        toastTitle: 'join.request 縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆',
+        toastTitle: t('communityNodePanel.toastJoinRejectFailed'),
       });
     }
   };
 
   const handleAcceptConsents = async () => {
     if (!selectedNode?.base_url) {
-      toast.error('操作対象のノードを選択してください');
+      toast.error(t('communityNodePanel.toastSelectActionNode'));
       return;
     }
     try {
@@ -327,12 +329,12 @@ export function CommunityNodePanel() {
         accept_all_current: true,
       });
       await refreshCommunityData();
-      toast.success('同意状況を更新しました');
+      toast.success(t('communityNodePanel.toastConsentUpdated'));
     } catch (error) {
       errorHandler.log('Community node consent update failed', error, {
         context: 'CommunityNodePanel.acceptConsents',
         showToast: true,
-        toastTitle: '同意状況の更新に失敗しました',
+        toastTitle: t('communityNodePanel.toastConsentUpdateFailed'),
       });
     }
   };
@@ -340,16 +342,16 @@ export function CommunityNodePanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Community Node</CardTitle>
-        <CardDescription>コミュニティノードとの連携設定を管理します。</CardDescription>
+        <CardTitle>{t('communityNodePanel.title')}</CardTitle>
+        <CardDescription>{t('communityNodePanel.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
-          <Label htmlFor="community-node-base-url">Base URL</Label>
+          <Label htmlFor="community-node-base-url">{t('communityNodePanel.baseUrl')}</Label>
           <Input
             id="community-node-base-url"
             data-testid="community-node-base-url"
-            placeholder="https://community.example"
+            placeholder={t('communityNodePanel.baseUrlPlaceholder')}
             value={newBaseUrl}
             onChange={(e) => setNewBaseUrl(e.target.value)}
           />
@@ -359,7 +361,7 @@ export function CommunityNodePanel() {
               onClick={handleAddNode}
               data-testid="community-node-save-config"
             >
-              追加
+              {t('communityNodePanel.add')}
             </Button>
             <Button
               variant="ghost"
@@ -367,7 +369,7 @@ export function CommunityNodePanel() {
               data-testid="community-node-clear-config"
               disabled={nodes.length === 0}
             >
-              全削除
+              {t('communityNodePanel.clearAll')}
             </Button>
           </div>
         </div>
@@ -376,8 +378,10 @@ export function CommunityNodePanel() {
 
         <div className="space-y-3">
           <div>
-            <p className="font-medium">Trust Anchor (attester)</p>
-            <p className="text-sm text-muted-foreground">trust に使う attester を選択します。</p>
+            <p className="font-medium">{t('communityNodePanel.trustAnchor')}</p>
+            <p className="text-sm text-muted-foreground">
+              {t('communityNodePanel.trustAnchorHint')}
+            </p>
           </div>
           <Select
             value={trustAnchorAttester}
@@ -385,10 +389,10 @@ export function CommunityNodePanel() {
             disabled={trustAttesterOptions.length === 0}
           >
             <SelectTrigger data-testid="community-node-trust-anchor">
-              <SelectValue placeholder="自動" />
+              <SelectValue placeholder={t('communityNodePanel.auto')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="auto">自動 (複数ノード平均)</SelectItem>
+              <SelectItem value="auto">{t('communityNodePanel.autoMode')}</SelectItem>
               {trustAttesterOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -397,9 +401,7 @@ export function CommunityNodePanel() {
             </SelectContent>
           </Select>
           {trustAnchorAttester === 'auto' ? (
-            <p className="text-xs text-muted-foreground">
-              自動モード: trust ノードの平均値を使用します。
-            </p>
+            <p className="text-xs text-muted-foreground">{t('communityNodePanel.autoModeHint')}</p>
           ) : trustAnchorNode ? (
             <p
               className="text-xs text-muted-foreground"
@@ -409,7 +411,7 @@ export function CommunityNodePanel() {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              選択中の attester が見つかりません。認証済みの trust ノードを選択してください。
+              {t('communityNodePanel.attesterNotFound')}
             </p>
           )}
         </div>
@@ -419,9 +421,9 @@ export function CommunityNodePanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">採用ノード</p>
+              <p className="font-medium">{t('communityNodePanel.adoptedNodes')}</p>
               <p className="text-sm text-muted-foreground">
-                role ごとに採用するノードを切り替えます。
+                {t('communityNodePanel.adoptedNodesHint')}
               </p>
             </div>
           </div>
@@ -445,7 +447,7 @@ export function CommunityNodePanel() {
                           onClick={() => handleAuthenticate(node.base_url)}
                           data-testid={`community-node-authenticate-${index}`}
                         >
-                          認証
+                          {t('communityNodePanel.authenticate')}
                         </Button>
                         <Button
                           size="sm"
@@ -454,7 +456,7 @@ export function CommunityNodePanel() {
                           disabled={!node.has_token}
                           data-testid={`community-node-clear-token-${index}`}
                         >
-                          トークン削除
+                          {t('communityNodePanel.clearToken')}
                         </Button>
                         <Button
                           size="sm"
@@ -462,7 +464,7 @@ export function CommunityNodePanel() {
                           onClick={() => handleRemoveNode(node.base_url)}
                           data-testid={`community-node-remove-${index}`}
                         >
-                          削除
+                          {t('communityNodePanel.remove')}
                         </Button>
                       </div>
                     </div>
@@ -472,19 +474,23 @@ export function CommunityNodePanel() {
                       data-has-token={node.has_token ? 'true' : 'false'}
                       data-pubkey={node.pubkey ?? ''}
                     >
-                      <span>認証状態:</span>
+                      <span>{t('communityNodePanel.authStatus')}</span>
                       {node.has_token ? (
-                        <Badge variant="secondary">有効</Badge>
+                        <Badge variant="secondary">{t('communityNodePanel.valid')}</Badge>
                       ) : (
-                        <Badge variant="outline">未認証</Badge>
+                        <Badge variant="outline">{t('communityNodePanel.unauthenticated')}</Badge>
                       )}
                       {node.pubkey && <span>pubkey: {node.pubkey}</span>}
-                      {expiresAt && <span>有効期限: {expiresAt}</span>}
+                      {expiresAt && (
+                        <span>
+                          {t('communityNodePanel.expiresAt')} {expiresAt}
+                        </span>
+                      )}
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="flex items-center justify-between">
                         <Label htmlFor={`community-node-role-labels-${index}`}>
-                          ラベル/モデレーション
+                          {t('communityNodePanel.roleLabels')}
                         </Label>
                         <Switch
                           id={`community-node-role-labels-${index}`}
@@ -496,7 +502,9 @@ export function CommunityNodePanel() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label htmlFor={`community-node-role-trust-${index}`}>信頼スコア</Label>
+                        <Label htmlFor={`community-node-role-trust-${index}`}>
+                          {t('communityNodePanel.roleTrust')}
+                        </Label>
                         <Switch
                           id={`community-node-role-trust-${index}`}
                           data-testid={`community-node-role-trust-${index}`}
@@ -507,7 +515,9 @@ export function CommunityNodePanel() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label htmlFor={`community-node-role-search-${index}`}>検索連携</Label>
+                        <Label htmlFor={`community-node-role-search-${index}`}>
+                          {t('communityNodePanel.roleSearch')}
+                        </Label>
                         <Switch
                           id={`community-node-role-search-${index}`}
                           data-testid={`community-node-role-search-${index}`}
@@ -519,7 +529,7 @@ export function CommunityNodePanel() {
                       </div>
                       <div className="flex items-center justify-between">
                         <Label htmlFor={`community-node-role-bootstrap-${index}`}>
-                          ブートストラップ
+                          {t('communityNodePanel.bootstrap')}
                         </Label>
                         <Switch
                           id={`community-node-role-bootstrap-${index}`}
@@ -536,7 +546,9 @@ export function CommunityNodePanel() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">登録済みのノードはありません。</p>
+            <p className="text-sm text-muted-foreground">
+              {t('communityNodePanel.noNodesRegistered')}
+            </p>
           )}
         </div>
 
@@ -545,9 +557,9 @@ export function CommunityNodePanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">アクセス制御 (スコープ)</p>
+              <p className="font-medium">{t('communityNodePanel.accessControl')}</p>
               <p className="text-sm text-muted-foreground">
-                暗号化投稿のスコープ選択を有効化します。
+                {t('communityNodePanel.accessControlHint')}
               </p>
             </div>
             <Switch
@@ -561,14 +573,14 @@ export function CommunityNodePanel() {
         <Separator />
 
         <div className="space-y-3">
-          <p className="font-medium">操作対象ノード</p>
+          <p className="font-medium">{t('communityNodePanel.actionNode')}</p>
           <Select
             value={actionNodeBaseUrl}
             onValueChange={setActionNodeBaseUrl}
             disabled={nodes.length === 0}
           >
             <SelectTrigger data-testid="community-node-action-node">
-              <SelectValue placeholder="ノードを選択" />
+              <SelectValue placeholder={t('communityNodePanel.selectNode')} />
             </SelectTrigger>
             <SelectContent>
               {nodes.map((node) => (
@@ -579,19 +591,21 @@ export function CommunityNodePanel() {
             </SelectContent>
           </Select>
           {!selectedNode && (
-            <p className="text-xs text-muted-foreground">操作対象のノードがありません。</p>
+            <p className="text-xs text-muted-foreground">{t('communityNodePanel.noActionNode')}</p>
           )}
         </div>
 
         <Separator />
 
         <div className="space-y-3">
-          <p className="font-medium">同意ステータス</p>
+          <p className="font-medium">{t('communityNodePanel.consentStatus')}</p>
           <div
             className="rounded-md border p-3 text-xs text-muted-foreground"
             data-testid="community-node-consents"
           >
-            {consentsQuery.data ? JSON.stringify(consentsQuery.data, null, 2) : '未取得'}
+            {consentsQuery.data
+              ? JSON.stringify(consentsQuery.data, null, 2)
+              : t('communityNodePanel.notFetched')}
           </div>
           <Button
             variant="outline"
@@ -599,19 +613,17 @@ export function CommunityNodePanel() {
             disabled={!selectedNode?.has_token}
             data-testid="community-node-accept-consents"
           >
-            同意を更新
+            {t('communityNodePanel.updateConsent')}
           </Button>
         </div>
 
         <Separator />
 
         <div className="space-y-3">
-          <p className="font-medium">招待参加（P2P）</p>
-          <p className="text-sm text-muted-foreground">
-            invite.capability を貼り付けて join.request を送信します。鍵はP2P経由で届きます。
-          </p>
+          <p className="font-medium">{t('communityNodePanel.inviteP2PTitle')}</p>
+          <p className="text-sm text-muted-foreground">{t('communityNodePanel.inviteP2PHint')}</p>
           <Textarea
-            placeholder="invite.capability のイベントJSON"
+            placeholder={t('communityNodePanel.invitePlaceholder')}
             rows={6}
             value={inviteJson}
             onChange={(e) => setInviteJson(e.target.value)}
@@ -622,16 +634,16 @@ export function CommunityNodePanel() {
             disabled={!enableAccessControl}
             data-testid="community-node-request-join"
           >
-            参加リクエストを送信
+            {t('communityNodePanel.sendJoinRequest')}
           </Button>
         </div>
 
         <Separator />
 
         <div className="space-y-3">
-          <p className="font-medium">join.request 受信一覧</p>
+          <p className="font-medium">{t('communityNodePanel.joinRequestInbox')}</p>
           <p className="text-sm text-muted-foreground">
-            受信した join.request を確認して、鍵配布の承認/却下を行います。
+            {t('communityNodePanel.joinRequestInboxHint')}
           </p>
           {pendingJoinRequestsQuery.data?.items &&
           pendingJoinRequestsQuery.data.items.length > 0 ? (
@@ -658,7 +670,7 @@ export function CommunityNodePanel() {
                         disabled={!enableAccessControl}
                         data-testid={`community-node-join-approve-${item.event_id}`}
                       >
-                        承認して鍵配布
+                        {t('communityNodePanel.approveAndDistribute')}
                       </Button>
                       <Button
                         size="sm"
@@ -667,7 +679,7 @@ export function CommunityNodePanel() {
                         disabled={!enableAccessControl}
                         data-testid={`community-node-join-reject-${item.event_id}`}
                       >
-                        却下
+                        {t('communityNodePanel.reject')}
                       </Button>
                     </div>
                   </div>
@@ -675,13 +687,15 @@ export function CommunityNodePanel() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">保留中の join.request はありません。</p>
+            <p className="text-sm text-muted-foreground">
+              {t('communityNodePanel.noPendingJoinRequest')}
+            </p>
           )}
         </div>
         <Separator />
 
         <div className="space-y-3">
-          <p className="font-medium">保存済み鍵</p>
+          <p className="font-medium">{t('communityNodePanel.savedKeys')}</p>
           {groupKeysQuery.data && groupKeysQuery.data.length > 0 ? (
             <div className="space-y-2">
               {groupKeysQuery.data.map((entry) => (
@@ -698,7 +712,7 @@ export function CommunityNodePanel() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">保存済み鍵はありません。</p>
+            <p className="text-sm text-muted-foreground">{t('communityNodePanel.noSavedKeys')}</p>
           )}
         </div>
       </CardContent>

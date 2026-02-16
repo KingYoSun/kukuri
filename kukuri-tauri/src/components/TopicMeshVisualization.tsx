@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useP2P } from '@/hooks/useP2P';
 import type { P2PMessage } from '@/stores/p2pStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +21,7 @@ interface TopicMeshVisualizationProps {
 }
 
 export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps) {
+  const { t } = useTranslation();
   const { getTopicStats, getTopicMessages, isJoinedTopic, joinTopic, leaveTopic } = useP2P();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -65,24 +67,22 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
         <CardHeader>
           <CardTitle className="text-lg flex items-center space-x-2">
             <NetworkIcon className="h-5 w-5" />
-            <span>トピックメッシュ</span>
+            <span>{t('topicMesh.title')}</span>
           </CardTitle>
-          <CardDescription>P2Pネットワークの接続状況</CardDescription>
+          <CardDescription>{t('topicMesh.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 space-y-4">
             <NetworkIcon className="h-12 w-12 text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground">
-              このトピックのP2Pネットワークに参加していません
-            </p>
+            <p className="text-sm text-muted-foreground">{t('topicMesh.notJoined')}</p>
             <Button onClick={handleJoinTopic} disabled={isRefreshing}>
               {isRefreshing ? (
                 <>
                   <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin" />
-                  接続中...
+                  {t('topicMesh.connecting')}
                 </>
               ) : (
-                'P2Pネットワークに参加'
+                t('topicMesh.joinNetwork')
               )}
             </Button>
           </div>
@@ -98,9 +98,9 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
           <div>
             <CardTitle className="text-lg flex items-center space-x-2">
               <NetworkIcon className="h-5 w-5" />
-              <span>トピックメッシュ</span>
+              <span>{t('topicMesh.title')}</span>
             </CardTitle>
-            <CardDescription>P2Pネットワークの接続状況</CardDescription>
+            <CardDescription>{t('topicMesh.description')}</CardDescription>
           </div>
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="sm" onClick={() => setAutoRefresh(!autoRefresh)}>
@@ -109,7 +109,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
               />
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLeaveTopic} disabled={isRefreshing}>
-              切断
+              {t('topicMesh.disconnect')}
             </Button>
           </div>
         </div>
@@ -120,14 +120,14 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
           <div className="space-y-2">
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <UsersIcon className="h-4 w-4" />
-              <span>接続ピア数</span>
+              <span>{t('topicMesh.connectedPeers')}</span>
             </div>
             <p className="text-2xl font-bold">{topicStats?.peer_count || 0}</p>
           </div>
           <div className="space-y-2">
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <MessageSquareIcon className="h-4 w-4" />
-              <span>メッセージ数</span>
+              <span>{t('topicMesh.messageCount')}</span>
             </div>
             <p className="text-2xl font-bold">{topicStats?.message_count || 0}</p>
           </div>
@@ -138,7 +138,9 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
         {/* 接続ピア一覧 */}
         {topicStats && topicStats.connected_peers.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground">接続中のピア</h4>
+            <h4 className="text-sm font-medium text-muted-foreground">
+              {t('topicMesh.connectedPeersList')}
+            </h4>
             <ScrollArea className="h-32 w-full rounded-md border">
               <div className="p-2 space-y-2">
                 {topicStats.connected_peers.map((peerId: string) => (
@@ -151,7 +153,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
                       <code className="text-xs font-mono">{peerId.slice(0, 16)}...</code>
                     </div>
                     <Badge variant="outline" className="text-xs">
-                      接続中
+                      {t('topicMesh.connected')}
                     </Badge>
                   </div>
                 ))}
@@ -165,7 +167,9 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
           <>
             <Separator />
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-muted-foreground">最近のP2Pメッセージ</h4>
+              <h4 className="text-sm font-medium text-muted-foreground">
+                {t('topicMesh.recentMessages')}
+              </h4>
               <ScrollArea className="h-48 w-full rounded-md border">
                 <div className="p-2 space-y-2">
                   {messages.slice(0, 10).map((message: P2PMessage) => (
@@ -191,10 +195,8 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
         {(!topicStats || (topicStats.peer_count === 0 && topicStats.message_count === 0)) && (
           <div className="text-center py-8">
             <NetworkIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">まだピアに接続されていません</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              他のノードがこのトピックに参加するのを待っています...
-            </p>
+            <p className="text-sm text-muted-foreground">{t('topicMesh.noPeersConnected')}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('topicMesh.waitingForNodes')}</p>
           </div>
         )}
       </CardContent>
