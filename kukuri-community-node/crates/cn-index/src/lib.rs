@@ -10,6 +10,7 @@ use cn_core::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{postgres::PgListener, Pool, Postgres, QueryBuilder, Row, Transaction};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::net::SocketAddr;
@@ -28,6 +29,9 @@ const OUTBOX_CHANNEL: &str = "cn_relay_outbox";
 const REINDEX_CHANNEL: &str = "cn_index_reindex";
 const SUGGEST_GRAPH_NAME: &str = "kukuri_cn_suggest";
 const GRAPH_SYNC_CONSUMER_NAME: &str = "index-age-suggest-v1";
+const BACKFILL_TARGET_POST_SEARCH_DOCUMENTS: &str = "post_search_documents";
+const BACKFILL_DEFAULT_SHARD_KEY: &str = "all";
+const BACKFILL_RUNNING_LEASE_TIMEOUT_SECONDS: i64 = 5 * 60;
 
 const MEMBER_OF_WEIGHT: f64 = 1.0;
 const FOLLOWS_COMMUNITY_WEIGHT: f64 = 0.7;
@@ -48,6 +52,7 @@ struct AppState {
     config: service_config::ServiceConfigHandle,
     meili: meili::MeiliClient,
     index_cache: Arc<RwLock<HashSet<String>>>,
+    dual_write_retry_rows: Arc<RwLock<HashSet<i64>>>,
     health_targets: Arc<HashMap<String, String>>,
     health_client: reqwest::Client,
 }
@@ -124,6 +129,17 @@ struct PostSearchDocument {
     normalizer_version: i16,
 }
 
+#[derive(Debug)]
+struct DualWriteFailureMarker;
+
+impl std::fmt::Display for DualWriteFailureMarker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("dual-write side failure")
+    }
+}
+
+impl std::error::Error for DualWriteFailureMarker {}
+
 pub fn load_config() -> Result<IndexConfig> {
     let addr = env_config::socket_addr_from_env("INDEX_ADDR", "0.0.0.0:8084")?;
     let database_url = env_config::required_env("DATABASE_URL")?;
@@ -183,12 +199,14 @@ pub async fn run(config: IndexConfig) -> Result<()> {
         config: config_handle,
         meili: meili_client,
         index_cache: Arc::new(RwLock::new(HashSet::new())),
+        dual_write_retry_rows: Arc::new(RwLock::new(HashSet::new())),
         health_targets,
         health_client,
     };
 
     spawn_outbox_consumer(state.clone());
     spawn_reindex_worker(state.clone());
+    spawn_backfill_worker(state.clone());
     spawn_expiration_sweep(state.clone());
     spawn_affinity_recompute_worker(state.clone());
 
@@ -301,16 +319,37 @@ fn spawn_outbox_consumer(state: AppState) {
                     );
                     let mut failed = false;
                     for row in &batch {
-                        if let Err(err) = handle_outbox_row(&state, row).await {
-                            tracing::warn!(
-                                error = %err,
-                                seq = row.seq,
-                                "outbox processing failed"
-                            );
-                            failed = true;
-                            break;
+                        match handle_outbox_row(&state, row).await {
+                            Ok(()) => {
+                                let mut retry_rows = state.dual_write_retry_rows.write().await;
+                                if retry_rows.remove(&row.seq) {
+                                    metrics::inc_search_dual_write_retry(
+                                        SERVICE_NAME,
+                                        row.op.as_str(),
+                                    );
+                                    tracing::info!(
+                                        seq = row.seq,
+                                        op = %row.op,
+                                        event_id = %row.event_id,
+                                        topic_id = %row.topic_id,
+                                        "dual-write replay recovered failed row"
+                                    );
+                                }
+                                last_seq = row.seq;
+                            }
+                            Err(err) => {
+                                if err.is::<DualWriteFailureMarker>() {
+                                    state.dual_write_retry_rows.write().await.insert(row.seq);
+                                }
+                                tracing::warn!(
+                                    error = %err,
+                                    seq = row.seq,
+                                    "outbox processing failed"
+                                );
+                                failed = true;
+                                break;
+                            }
                         }
-                        last_seq = row.seq;
                     }
                     if failed {
                         metrics::inc_outbox_consumer_batch_total(
@@ -412,6 +451,43 @@ fn spawn_reindex_worker(state: AppState) {
                 Err(err) => {
                     tracing::warn!(error = %err, "reindex job claim failed");
                     tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+            }
+        }
+    });
+}
+
+fn spawn_backfill_worker(state: AppState) {
+    tokio::spawn(async move {
+        loop {
+            let snapshot = state.config.get().await;
+            let runtime = config::IndexRuntimeConfig::from_json(&snapshot.config_json);
+            if !runtime.enabled {
+                tokio::time::sleep(Duration::from_secs(runtime.reindex_poll_seconds.max(5))).await;
+                continue;
+            }
+
+            match claim_backfill_job(&state.pool, BACKFILL_TARGET_POST_SEARCH_DOCUMENTS).await {
+                Ok(Some(job)) => {
+                    if let Err(err) = run_backfill_job(&state, job).await {
+                        tracing::error!(error = %err, "backfill job failed");
+                    }
+                }
+                Ok(None) => {
+                    tokio::time::sleep(Duration::from_secs(runtime.reindex_poll_seconds.max(5)))
+                        .await;
+                }
+                Err(err) => {
+                    if is_missing_backfill_tables(&err) {
+                        tracing::warn!(
+                            error = %err,
+                            "backfill tables unavailable; skipping backfill worker iteration"
+                        );
+                        tokio::time::sleep(Duration::from_secs(30)).await;
+                    } else {
+                        tracing::warn!(error = %err, "backfill job claim failed");
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                    }
                 }
             }
         }
@@ -1299,6 +1375,15 @@ fn is_missing_graph_sync_tables(err: &anyhow::Error) -> bool {
     })
 }
 
+fn is_missing_backfill_tables(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<sqlx::Error>()
+            .map(is_missing_relation_or_schema)
+            .unwrap_or(false)
+    })
+}
+
 fn is_missing_relation_or_schema(err: &sqlx::Error) -> bool {
     match err {
         sqlx::Error::Database(db_err) => {
@@ -1354,26 +1439,92 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
     upsert_community_search_terms(&state.pool, &row.topic_id).await?;
 
     let doc = build_document(&event.raw, &row.topic_id);
+    let mut dual_write_failure = None;
+    let mut meili_uid: Option<String> = None;
+    let mut meili_upsert_succeeded = false;
     if write_mode.writes_meili() {
-        let uid = ensure_topic_index(state, &row.topic_id).await?;
-        state.meili.upsert_documents(&uid, &[doc]).await?;
+        match ensure_topic_index(state, &row.topic_id).await {
+            Ok(uid) => {
+                meili_uid = Some(uid.clone());
+                if let Err(err) = state.meili.upsert_documents(&uid, &[doc]).await {
+                    capture_write_side_failure(
+                        write_mode,
+                        row,
+                        "meili",
+                        "upsert",
+                        err,
+                        &mut dual_write_failure,
+                    )?;
+                } else {
+                    meili_upsert_succeeded = true;
+                }
+            }
+            Err(err) => {
+                capture_write_side_failure(
+                    write_mode,
+                    row,
+                    "meili",
+                    "upsert",
+                    err,
+                    &mut dual_write_failure,
+                )?;
+            }
+        }
     }
+
+    let mut pg_upsert_succeeded = false;
     if write_mode.writes_pg() {
         let pg_document = build_post_search_document(&event.raw, &row.topic_id);
-        upsert_post_search_document(&state.pool, &pg_document).await?;
+        if let Err(err) = upsert_post_search_document(&state.pool, &pg_document).await {
+            capture_write_side_failure(
+                write_mode,
+                row,
+                "pg",
+                "upsert",
+                err,
+                &mut dual_write_failure,
+            )?;
+        } else {
+            pg_upsert_succeeded = true;
+        }
     }
 
     if let Some(key) = row.effective_key.as_deref() {
         let stale_ids = find_stale_versions(&state.pool, &row.topic_id, key, &row.event_id).await?;
         if !stale_ids.is_empty() {
-            if write_mode.writes_meili() {
-                let uid = ensure_topic_index(state, &row.topic_id).await?;
-                state.meili.delete_documents(&uid, &stale_ids).await?;
+            if write_mode.writes_meili() && meili_upsert_succeeded {
+                if let Some(uid) = meili_uid.as_deref() {
+                    if let Err(err) = state.meili.delete_documents(uid, &stale_ids).await {
+                        capture_write_side_failure(
+                            write_mode,
+                            row,
+                            "meili",
+                            "delete_stale",
+                            err,
+                            &mut dual_write_failure,
+                        )?;
+                    }
+                }
             }
-            if write_mode.writes_pg() {
-                mark_post_search_documents_deleted(&state.pool, &stale_ids, &row.topic_id).await?;
+            if write_mode.writes_pg() && pg_upsert_succeeded {
+                if let Err(err) =
+                    mark_post_search_documents_deleted(&state.pool, &stale_ids, &row.topic_id).await
+                {
+                    capture_write_side_failure(
+                        write_mode,
+                        row,
+                        "pg",
+                        "delete_stale",
+                        err,
+                        &mut dual_write_failure,
+                    )?;
+                }
             }
         }
+    }
+
+    if let Some(err) = dual_write_failure {
+        return Err(err);
     }
 
     Ok(())
@@ -1389,13 +1540,86 @@ async fn handle_delete_with_mode(
     row: &OutboxRow,
     write_mode: SearchWriteMode,
 ) -> Result<()> {
+    let mut dual_write_failure = None;
+
     if write_mode.writes_meili() {
-        let uid = ensure_topic_index(state, &row.topic_id).await?;
-        state.meili.delete_document(&uid, &row.event_id).await?;
+        match ensure_topic_index(state, &row.topic_id).await {
+            Ok(uid) => {
+                if let Err(err) = state.meili.delete_document(&uid, &row.event_id).await {
+                    capture_write_side_failure(
+                        write_mode,
+                        row,
+                        "meili",
+                        "delete",
+                        err,
+                        &mut dual_write_failure,
+                    )?;
+                }
+            }
+            Err(err) => {
+                capture_write_side_failure(
+                    write_mode,
+                    row,
+                    "meili",
+                    "delete",
+                    err,
+                    &mut dual_write_failure,
+                )?;
+            }
+        }
     }
     if write_mode.writes_pg() {
-        mark_post_search_document_deleted(&state.pool, &row.event_id, &row.topic_id).await?;
+        if let Err(err) =
+            mark_post_search_document_deleted(&state.pool, &row.event_id, &row.topic_id).await
+        {
+            capture_write_side_failure(
+                write_mode,
+                row,
+                "pg",
+                "delete",
+                err,
+                &mut dual_write_failure,
+            )?;
+        }
     }
+
+    if let Some(err) = dual_write_failure {
+        return Err(err);
+    }
+
+    Ok(())
+}
+
+fn capture_write_side_failure(
+    write_mode: SearchWriteMode,
+    row: &OutboxRow,
+    backend: &'static str,
+    operation: &'static str,
+    source: anyhow::Error,
+    dual_write_failure: &mut Option<anyhow::Error>,
+) -> Result<()> {
+    if write_mode != SearchWriteMode::Dual {
+        return Err(source);
+    }
+
+    metrics::inc_search_dual_write_error(SERVICE_NAME, backend, operation);
+    tracing::warn!(
+        backend = backend,
+        operation = operation,
+        seq = row.seq,
+        event_id = %row.event_id,
+        topic_id = %row.topic_id,
+        error = %source,
+        "dual-write side failed; outbox replay will retry failed side"
+    );
+
+    if dual_write_failure.is_none() {
+        *dual_write_failure = Some(anyhow::Error::new(DualWriteFailureMarker).context(format!(
+            "dual-write side failed (backend={backend}, operation={operation}, seq={}, event_id={}, topic_id={}): {source}",
+            row.seq, row.event_id, row.topic_id
+        )));
+    }
+
     Ok(())
 }
 
@@ -1721,6 +1945,30 @@ struct ReindexJob {
     cutoff_seq: i64,
 }
 
+#[derive(Debug)]
+struct BackfillJob {
+    job_id: String,
+    target: String,
+    high_watermark_seq: Option<i64>,
+    processed_rows: i64,
+    lease_started_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BackfillCursor {
+    topic_id: String,
+    created_at: i64,
+    event_id: String,
+}
+
+#[derive(Debug)]
+struct BackfillSourceRow {
+    topic_id: String,
+    created_at: i64,
+    event_id: String,
+    raw: nostr::RawEvent,
+}
+
 async fn claim_reindex_job(pool: &Pool<Postgres>) -> Result<Option<ReindexJob>> {
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
@@ -1896,6 +2144,430 @@ async fn update_job_failed(pool: &Pool<Postgres>, job_id: &str, error: &str) -> 
     .execute(pool)
     .await?;
     Ok(())
+}
+
+async fn claim_backfill_job(pool: &Pool<Postgres>, target: &str) -> Result<Option<BackfillJob>> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query(
+        "SELECT job_id, target, high_watermark_seq, processed_rows \
+         FROM cn_search.backfill_jobs \
+         WHERE target = $1 \
+           AND ( \
+                 status IN ('pending', 'failed') \
+                 OR ( \
+                      status = 'running' \
+                      AND updated_at <= NOW() - ($2::BIGINT * INTERVAL '1 second') \
+                 ) \
+               ) \
+         ORDER BY updated_at ASC \
+         LIMIT 1 \
+         FOR UPDATE SKIP LOCKED",
+    )
+    .bind(target)
+    .bind(BACKFILL_RUNNING_LEASE_TIMEOUT_SECONDS)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(row) = row else {
+        tx.commit().await?;
+        return Ok(None);
+    };
+
+    let job_id: String = row.try_get("job_id")?;
+    let target: String = row.try_get("target")?;
+    let high_watermark_seq: Option<i64> = row.try_get("high_watermark_seq")?;
+    let processed_rows: i64 = row.try_get("processed_rows")?;
+
+    let lease_started_at = sqlx::query_scalar::<_, DateTime<Utc>>(
+        "UPDATE cn_search.backfill_jobs \
+         SET status = 'running', \
+             started_at = NOW(), \
+             completed_at = NULL, \
+             error_message = NULL, \
+             updated_at = NOW() \
+         WHERE job_id = $1 \
+         RETURNING started_at",
+    )
+    .bind(&job_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    Ok(Some(BackfillJob {
+        job_id,
+        target,
+        high_watermark_seq,
+        processed_rows,
+        lease_started_at,
+    }))
+}
+
+async fn run_backfill_job(state: &AppState, job: BackfillJob) -> Result<()> {
+    let started_at = Instant::now();
+    let job_id = job.job_id.clone();
+    let target = job.target.clone();
+    let result = run_backfill_job_impl(state, &job, started_at).await;
+    if let Err(err) = &result {
+        let _ = mark_backfill_job_failed(
+            &state.pool,
+            &job_id,
+            &job.lease_started_at,
+            &err.to_string(),
+        )
+        .await;
+        metrics::set_backfill_eta_seconds(SERVICE_NAME, target.as_str(), 0.0);
+    }
+    result
+}
+
+async fn run_backfill_job_impl(
+    state: &AppState,
+    job: &BackfillJob,
+    started_at: Instant,
+) -> Result<()> {
+    if job.target != BACKFILL_TARGET_POST_SEARCH_DOCUMENTS {
+        anyhow::bail!("unsupported backfill target: {}", job.target);
+    }
+
+    let total_rows = count_backfill_candidates(&state.pool, job.high_watermark_seq).await?;
+    let mut processed_rows = job.processed_rows.max(0);
+    let mut cursor =
+        load_backfill_checkpoint(&state.pool, &job.job_id, BACKFILL_DEFAULT_SHARD_KEY).await?;
+    let chunk_size = 200_i64;
+
+    metrics::set_backfill_processed_rows(SERVICE_NAME, job.target.as_str(), processed_rows);
+    metrics::set_backfill_eta_seconds(
+        SERVICE_NAME,
+        job.target.as_str(),
+        compute_backfill_eta_seconds(started_at, total_rows, processed_rows),
+    );
+
+    loop {
+        let chunk = fetch_backfill_chunk(
+            &state.pool,
+            cursor.as_ref(),
+            job.high_watermark_seq,
+            chunk_size,
+        )
+        .await?;
+        if chunk.is_empty() {
+            break;
+        }
+
+        for row in &chunk {
+            upsert_community_search_terms(&state.pool, &row.topic_id).await?;
+            let document = build_post_search_document(&row.raw, &row.topic_id);
+            upsert_post_search_document(&state.pool, &document).await?;
+        }
+
+        processed_rows += chunk.len() as i64;
+        let last_row = chunk.last().expect("chunk is not empty");
+        cursor = Some(BackfillCursor {
+            topic_id: last_row.topic_id.clone(),
+            created_at: last_row.created_at,
+            event_id: last_row.event_id.clone(),
+        });
+        if let Some(cursor) = cursor.as_ref() {
+            upsert_backfill_checkpoint(
+                &state.pool,
+                &job.job_id,
+                BACKFILL_DEFAULT_SHARD_KEY,
+                cursor,
+            )
+            .await?;
+        }
+        update_backfill_job_progress(
+            &state.pool,
+            &job.job_id,
+            &job.lease_started_at,
+            processed_rows,
+        )
+        .await?;
+        metrics::set_backfill_processed_rows(SERVICE_NAME, job.target.as_str(), processed_rows);
+        metrics::set_backfill_eta_seconds(
+            SERVICE_NAME,
+            job.target.as_str(),
+            compute_backfill_eta_seconds(started_at, total_rows, processed_rows),
+        );
+    }
+
+    mark_backfill_job_succeeded(
+        &state.pool,
+        &job.job_id,
+        &job.lease_started_at,
+        processed_rows,
+    )
+    .await?;
+    metrics::set_backfill_processed_rows(SERVICE_NAME, job.target.as_str(), processed_rows);
+    metrics::set_backfill_eta_seconds(SERVICE_NAME, job.target.as_str(), 0.0);
+    Ok(())
+}
+
+async fn count_backfill_candidates(
+    pool: &Pool<Postgres>,
+    high_watermark_seq: Option<i64>,
+) -> Result<i64> {
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) \
+         FROM cn_relay.events e \
+         JOIN cn_relay.event_topics t \
+           ON t.event_id = e.event_id \
+         WHERE e.is_deleted = FALSE \
+           AND e.is_current = TRUE \
+           AND e.is_ephemeral = FALSE \
+           AND (e.expires_at IS NULL OR e.expires_at > $1) \
+           AND ( \
+                 $2::BIGINT IS NULL \
+                 OR COALESCE( \
+                        ( \
+                            SELECT MIN(o.seq) \
+                            FROM cn_relay.events_outbox o \
+                            WHERE o.event_id = e.event_id \
+                              AND o.topic_id = t.topic_id \
+                        ), \
+                        0 \
+                    ) <= $2 \
+               )",
+    )
+    .bind(now)
+    .bind(high_watermark_seq)
+    .fetch_one(pool)
+    .await?;
+    Ok(count.max(0))
+}
+
+async fn fetch_backfill_chunk(
+    pool: &Pool<Postgres>,
+    cursor: Option<&BackfillCursor>,
+    high_watermark_seq: Option<i64>,
+    chunk_size: i64,
+) -> Result<Vec<BackfillSourceRow>> {
+    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let rows = if let Some(cursor) = cursor {
+        sqlx::query(
+            "SELECT t.topic_id, e.created_at, e.event_id, e.raw_json \
+             FROM cn_relay.events e \
+             JOIN cn_relay.event_topics t \
+               ON t.event_id = e.event_id \
+             WHERE e.is_deleted = FALSE \
+               AND e.is_current = TRUE \
+               AND e.is_ephemeral = FALSE \
+               AND (e.expires_at IS NULL OR e.expires_at > $1) \
+               AND ( \
+                     $2::BIGINT IS NULL \
+                     OR COALESCE( \
+                            ( \
+                                SELECT MIN(o.seq) \
+                                FROM cn_relay.events_outbox o \
+                                WHERE o.event_id = e.event_id \
+                                  AND o.topic_id = t.topic_id \
+                            ), \
+                            0 \
+                        ) <= $2 \
+                   ) \
+               AND (t.topic_id, e.created_at, e.event_id) > ($3, $4, $5) \
+             ORDER BY t.topic_id ASC, e.created_at ASC, e.event_id ASC \
+             LIMIT $6",
+        )
+        .bind(now)
+        .bind(high_watermark_seq)
+        .bind(&cursor.topic_id)
+        .bind(cursor.created_at)
+        .bind(&cursor.event_id)
+        .bind(chunk_size)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT t.topic_id, e.created_at, e.event_id, e.raw_json \
+             FROM cn_relay.events e \
+             JOIN cn_relay.event_topics t \
+               ON t.event_id = e.event_id \
+             WHERE e.is_deleted = FALSE \
+               AND e.is_current = TRUE \
+               AND e.is_ephemeral = FALSE \
+               AND (e.expires_at IS NULL OR e.expires_at > $1) \
+               AND ( \
+                     $2::BIGINT IS NULL \
+                     OR COALESCE( \
+                            ( \
+                                SELECT MIN(o.seq) \
+                                FROM cn_relay.events_outbox o \
+                                WHERE o.event_id = e.event_id \
+                                  AND o.topic_id = t.topic_id \
+                            ), \
+                            0 \
+                        ) <= $2 \
+                   ) \
+             ORDER BY t.topic_id ASC, e.created_at ASC, e.event_id ASC \
+             LIMIT $3",
+        )
+        .bind(now)
+        .bind(high_watermark_seq)
+        .bind(chunk_size)
+        .fetch_all(pool)
+        .await?
+    };
+
+    let mut batch = Vec::with_capacity(rows.len());
+    for row in rows {
+        let topic_id: String = row.try_get("topic_id")?;
+        let created_at: i64 = row.try_get("created_at")?;
+        let event_id: String = row.try_get("event_id")?;
+        let raw_json: serde_json::Value = row.try_get("raw_json")?;
+        let raw: nostr::RawEvent = serde_json::from_value(raw_json)?;
+        batch.push(BackfillSourceRow {
+            topic_id,
+            created_at,
+            event_id,
+            raw,
+        });
+    }
+    Ok(batch)
+}
+
+async fn load_backfill_checkpoint(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    shard_key: &str,
+) -> Result<Option<BackfillCursor>> {
+    let cursor = sqlx::query_scalar::<_, String>(
+        "SELECT last_cursor \
+         FROM cn_search.backfill_checkpoints \
+         WHERE job_id = $1 \
+           AND shard_key = $2",
+    )
+    .bind(job_id)
+    .bind(shard_key)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(cursor) = cursor else {
+        return Ok(None);
+    };
+    let parsed: BackfillCursor = serde_json::from_str(&cursor)?;
+    Ok(Some(parsed))
+}
+
+async fn upsert_backfill_checkpoint(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    shard_key: &str,
+    cursor: &BackfillCursor,
+) -> Result<()> {
+    let serialized = serde_json::to_string(cursor)?;
+    sqlx::query(
+        "INSERT INTO cn_search.backfill_checkpoints (job_id, shard_key, last_cursor, updated_at) \
+         VALUES ($1, $2, $3, NOW()) \
+         ON CONFLICT (job_id, shard_key) DO UPDATE \
+         SET last_cursor = EXCLUDED.last_cursor, updated_at = NOW()",
+    )
+    .bind(job_id)
+    .bind(shard_key)
+    .bind(serialized)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn update_backfill_job_progress(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    lease_started_at: &DateTime<Utc>,
+    processed_rows: i64,
+) -> Result<()> {
+    let result = sqlx::query(
+        "UPDATE cn_search.backfill_jobs \
+         SET processed_rows = $1, updated_at = NOW() \
+         WHERE job_id = $2 \
+           AND status = 'running' \
+           AND started_at = $3",
+    )
+    .bind(processed_rows.max(0))
+    .bind(job_id)
+    .bind(lease_started_at)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        anyhow::bail!("backfill lease lost while updating progress: job_id={job_id}");
+    }
+    Ok(())
+}
+
+async fn mark_backfill_job_succeeded(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    lease_started_at: &DateTime<Utc>,
+    processed_rows: i64,
+) -> Result<()> {
+    let result = sqlx::query(
+        "UPDATE cn_search.backfill_jobs \
+         SET status = 'succeeded', \
+             processed_rows = $1, \
+             completed_at = NOW(), \
+             updated_at = NOW() \
+         WHERE job_id = $2 \
+           AND status = 'running' \
+           AND started_at = $3",
+    )
+    .bind(processed_rows.max(0))
+    .bind(job_id)
+    .bind(lease_started_at)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        anyhow::bail!("backfill lease lost before completion: job_id={job_id}");
+    }
+    Ok(())
+}
+
+async fn mark_backfill_job_failed(
+    pool: &Pool<Postgres>,
+    job_id: &str,
+    lease_started_at: &DateTime<Utc>,
+    error: &str,
+) -> Result<()> {
+    let result = sqlx::query(
+        "UPDATE cn_search.backfill_jobs \
+         SET status = 'failed', \
+             error_message = $1, \
+             completed_at = NOW(), \
+             updated_at = NOW() \
+         WHERE job_id = $2 \
+           AND status = 'running' \
+           AND started_at = $3",
+    )
+    .bind(error)
+    .bind(job_id)
+    .bind(lease_started_at)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        tracing::warn!(
+            job_id = %job_id,
+            "skip marking backfill job failed because lease ownership changed"
+        );
+    }
+    Ok(())
+}
+
+fn compute_backfill_eta_seconds(started_at: Instant, total_rows: i64, processed_rows: i64) -> f64 {
+    let remaining_rows = total_rows.saturating_sub(processed_rows).max(0);
+    if remaining_rows == 0 || processed_rows <= 0 {
+        return 0.0;
+    }
+
+    let elapsed = started_at.elapsed().as_secs_f64();
+    if elapsed <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let rows_per_second = processed_rows as f64 / elapsed;
+    if rows_per_second <= f64::EPSILON {
+        return 0.0;
+    }
+
+    remaining_rows as f64 / rows_per_second
 }
 
 async fn expire_events_once(state: &AppState) -> Result<()> {
