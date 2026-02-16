@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ChevronDown, User, LogOut, Trash2 } from 'lucide-react';
 import { errorHandler } from '@/lib/errorHandler';
@@ -17,9 +28,12 @@ import { useNavigate } from '@tanstack/react-router';
 import { resolveAvatarSrc, resolveUserAvatarSrc } from '@/lib/profile/avatarDisplay';
 
 export function AccountSwitcher() {
+  const { t } = useTranslation();
   const { currentUser, accounts, switchAccount, removeAccount, logout } = useAuthStore();
   const navigate = useNavigate();
   const isSwitchingRef = useRef(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState<string | null>(null);
 
   if (!currentUser) {
     return null;
@@ -54,15 +68,22 @@ export function AccountSwitcher() {
     }
   };
 
-  const handleRemoveAccount = async (npub: string) => {
-    if (confirm('このアカウントを削除してもよろしいですか？')) {
-      try {
-        await removeAccount(npub);
-      } catch (error) {
-        errorHandler.log('Failed to remove account', error, {
-          context: 'AccountSwitcher.handleRemoveAccount',
-        });
-      }
+  const handleRemoveAccountClick = (npub: string) => {
+    setAccountToDelete(npub);
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!accountToDelete) return;
+    try {
+      await removeAccount(accountToDelete);
+    } catch (error) {
+      errorHandler.log('Failed to remove account', error, {
+        context: 'AccountSwitcher.handleConfirmDelete',
+      });
+    } finally {
+      setShowDeleteDialog(false);
+      setAccountToDelete(null);
     }
   };
 
@@ -87,7 +108,7 @@ export function AccountSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>アカウント</DropdownMenuLabel>
+        <DropdownMenuLabel>{t('common.account')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         {/* 現在のアカウント */}
@@ -101,7 +122,7 @@ export function AccountSwitcher() {
               <p className="text-sm font-medium truncate">{currentUser.displayName}</p>
               <p className="text-xs text-muted-foreground truncate">{currentUser.npub}</p>
             </div>
-            <div className="text-xs text-muted-foreground">現在</div>
+            <div className="text-xs text-muted-foreground">{t('common.current')}</div>
           </div>
         </DropdownMenuItem>
 
@@ -136,7 +157,7 @@ export function AccountSwitcher() {
 
         {accounts.length === 1 && (
           <DropdownMenuItem disabled>
-            <p className="text-sm text-muted-foreground">他のアカウントがありません</p>
+            <p className="text-sm text-muted-foreground">{t('common.noOtherAccounts')}</p>
           </DropdownMenuItem>
         )}
 
@@ -148,23 +169,45 @@ export function AccountSwitcher() {
           data-testid="account-menu-go-login"
         >
           <User className="mr-2 h-4 w-4" />
-          <span>別のアカウントを追加</span>
+          <span>{t('common.addAnotherAccount')}</span>
         </DropdownMenuItem>
 
         <DropdownMenuItem
-          onSelect={() => handleRemoveAccount(currentUser.npub)}
+          onSelect={(e) => {
+            e.preventDefault();
+            handleRemoveAccountClick(currentUser.npub);
+          }}
           className="text-destructive"
           data-testid="account-menu-remove-current"
         >
           <Trash2 className="mr-2 h-4 w-4" />
-          <span>アカウントを削除</span>
+          <span>{t('common.removeAccount')}</span>
         </DropdownMenuItem>
 
         <DropdownMenuItem onSelect={logout} data-testid="account-menu-logout">
           <LogOut className="mr-2 h-4 w-4" />
-          <span>ログアウト</span>
+          <span>{t('common.logout')}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('common.removeAccount')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('common.removeAccountConfirm')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DropdownMenu>
   );
 }

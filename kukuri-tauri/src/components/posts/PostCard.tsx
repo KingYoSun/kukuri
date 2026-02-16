@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale } from '@/i18n';
 import {
   Bookmark,
   Flag,
@@ -73,30 +74,22 @@ interface PostCardProps {
   'data-testid'?: string;
 }
 
-const scopeLabels: Record<string, string> = {
-  public: '公開',
-  friend_plus: 'フレンド+',
-  friend: 'フレンド',
-  invite: '招待',
-};
-
-const reportReasonOptions = [
-  { value: 'spam', label: 'スパム' },
-  { value: 'harassment', label: '嫌がらせ' },
-  { value: 'hate', label: 'ヘイト' },
-  { value: 'scam', label: '詐欺' },
-  { value: 'nsfw', label: 'センシティブ' },
-  { value: 'illegal', label: '違法' },
-  { value: 'other', label: 'その他' },
+const getReportReasonOptions = (t: (key: string) => string) => [
+  { value: 'spam', label: t('posts.reportReasons.spam') },
+  { value: 'harassment', label: t('posts.reportReasons.harassment') },
+  { value: 'hate', label: t('posts.reportReasons.hate') },
+  { value: 'scam', label: t('posts.reportReasons.scam') },
+  { value: 'nsfw', label: t('posts.reportReasons.nsfw') },
+  { value: 'illegal', label: t('posts.reportReasons.illegal') },
+  { value: 'other', label: t('posts.reportReasons.other') },
 ];
 
-const defaultReportReason = reportReasonOptions[0]?.value ?? 'spam';
-
-const formatScopeLabel = (scope?: string) => {
-  if (!scope) {
-    return scopeLabels.public;
+const formatScopeLabel = (scope: string | undefined, t: (key: string) => string) => {
+  if (!scope || scope === 'public') {
+    return t('posts.scope.public');
   }
-  return scopeLabels[scope] ?? scope;
+  const key = `posts.scope.${scope}` as const;
+  return t(key);
 };
 
 const shortenPubkey = (value: string) =>
@@ -170,6 +163,7 @@ const toNumber = (value: unknown): number | null => {
 };
 
 export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
+  const { t } = useTranslation();
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -177,6 +171,8 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
   const [boostCount, setBoostCount] = useState(post.boosts ?? 0);
   const [isBookmarkedLocal, setIsBookmarkedLocal] = useState(false);
+  const reportReasonOptions = getReportReasonOptions(t);
+  const defaultReportReason = reportReasonOptions[0]?.value ?? 'spam';
   const [reportReason, setReportReason] = useState(defaultReportReason);
 
   const queryClient = useQueryClient();
@@ -341,7 +337,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       });
     },
     onSuccess: () => {
-      toast.success('通報を受け付けました');
+      toast.success(t('posts.reportSuccess'));
       setShowReportDialog(false);
       setReportReason(defaultReportReason);
     },
@@ -349,7 +345,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       errorHandler.log('Failed to submit community node report', error, {
         context: 'PostCard.report',
         showToast: true,
-        toastTitle: '通報に失敗しました',
+        toastTitle: t('posts.reportFailed'),
       });
     },
   });
@@ -366,7 +362,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
 
   const handleOpenReportDialog = () => {
     if (!canReport) {
-      toast.error('Community Node が未設定です');
+      toast.error(t('posts.communityNodeNotConfigured'));
       return;
     }
     setShowReportDialog(true);
@@ -412,7 +408,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     likeMutation.mutate(undefined, {
       onError: () => {
         applyLikeUpdate(previousLikes);
-        toast.error('いいねに失敗しました');
+        toast.error(t('posts.likeFailed'));
       },
     });
   };
@@ -436,7 +432,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       if (post.topicId) {
         queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
       }
-      toast.success('ブーストしました');
+      toast.success(t('posts.boostSuccess'));
     },
   });
 
@@ -471,7 +467,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     boostMutation.mutate(undefined, {
       onError: () => {
         applyBoostUpdate(previousBoosts, post.isBoosted ?? false);
-        toast.error('ブーストに失敗しました');
+        toast.error(t('posts.boostFailed'));
       },
     });
   };
@@ -483,10 +479,10 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
       queryClient.invalidateQueries({ queryKey: ['posts', post.topicId] });
-      toast.success(isPostBookmarked ? 'ブックマークを解除しました' : 'ブックマークしました');
+      toast.success(isPostBookmarked ? t('posts.bookmarkRemoved') : t('posts.bookmarkAdded'));
     },
     onError: () => {
-      toast.error('ブックマークの操作に失敗しました');
+      toast.error(t('posts.bookmarkFailed'));
     },
   });
 
@@ -510,7 +506,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
 
   const timeAgo = formatDistanceToNow(new Date(post.created_at * 1000), {
     addSuffix: true,
-    locale: ja,
+    locale: getDateFnsLocale(),
   });
 
   const getInitials = (name: string) => {
@@ -538,7 +534,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="font-semibold">
-                  {post.author.displayName || post.author.name || 'ユーザー'}
+                  {post.author.displayName || post.author.name || t('posts.user')}
                 </h4>
                 <span className="text-sm text-muted-foreground">{timeAgo}</span>
                 {(post.isSynced === false || isPostPending) && (
@@ -554,12 +550,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                     {!isOnline ? (
                       <>
                         <WifiOff className="h-3 w-3" />
-                        オフライン保存
+                        {t('posts.offlineSaved')}
                       </>
                     ) : (
                       <>
                         <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-                        同期待ち
+                        {t('posts.syncPending')}
                       </>
                     )}
                   </Badge>
@@ -574,7 +570,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="投稿メニュー"
+                  aria-label={t('posts.postMenu')}
                   data-testid={`${baseTestId}-menu`}
                 >
                   <MoreVertical className="h-4 w-4" />
@@ -587,7 +583,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                     data-testid={`${baseTestId}-report`}
                   >
                     <Flag className="mr-2 h-4 w-4" />
-                    通報
+                    {t('posts.report')}
                   </DropdownMenuItem>
                 )}
                 {canDelete && (
@@ -597,7 +593,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                     data-testid={`${baseTestId}-delete`}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    削除
+                    {t('posts.delete')}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -618,7 +614,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 data-testid={`${baseTestId}-scope`}
                 data-scope={resolvedScope}
               >
-                {formatScopeLabel(resolvedScope)}
+                {formatScopeLabel(resolvedScope, t)}
               </Badge>
             )}
             {showEncryptedBadge && (
@@ -628,7 +624,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 data-testid={`${baseTestId}-encrypted`}
               >
                 <Lock className="h-3 w-3" />
-                暗号化
+                {t('posts.encrypted')}
               </Badge>
             )}
             {labelSummaries.slice(0, 3).map((label, index) => (
@@ -638,7 +634,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 data-testid={`${baseTestId}-label-${index}`}
                 data-label={label}
               >
-                ラベル: {label}
+                {t('posts.label')}: {label}
               </Badge>
             ))}
             {reportScore !== null && (
@@ -650,7 +646,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 data-attester={showAttesterLabel ? (trustAttesterLabel ?? '') : ''}
               >
                 <ShieldCheck className="h-3 w-3" />
-                信頼 {reportScore.toFixed(2)}
+                {t('posts.trust')} {reportScore.toFixed(2)}
                 {showAttesterLabel && (
                   <span className="text-[10px] text-muted-foreground">({trustAttesterLabel})</span>
                 )}
@@ -665,7 +661,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
                 data-attester={showAttesterLabel ? (trustAttesterLabel ?? '') : ''}
               >
                 <ShieldCheck className="h-3 w-3" />
-                通信 {densityScore.toFixed(2)}
+                {t('posts.communication')} {densityScore.toFixed(2)}
                 {showAttesterLabel && (
                   <span className="text-[10px] text-muted-foreground">({trustAttesterLabel})</span>
                 )}
@@ -761,24 +757,24 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       <Dialog open={showReportDialog} onOpenChange={handleReportDialogChange}>
         <DialogContent data-testid={`${baseTestId}-report-dialog`}>
           <DialogHeader>
-            <DialogTitle>通報</DialogTitle>
-            <DialogDescription>Community Node に通報理由を送信します。</DialogDescription>
+            <DialogTitle>{t('posts.reportTitle')}</DialogTitle>
+            <DialogDescription>{t('posts.reportDescription')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-md border p-3 text-xs text-muted-foreground">
               <p className="font-medium text-foreground">
-                対象: {post.author.displayName || post.author.name || 'ユーザー'}
+                {t('posts.reportTarget')}: {post.author.displayName || post.author.name || t('posts.user')}
               </p>
               <p className="break-all">event: {post.id}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={`${baseTestId}-report-reason`}>理由</Label>
+              <Label htmlFor={`${baseTestId}-report-reason`}>{t('posts.reportReason')}</Label>
               <Select value={reportReason} onValueChange={setReportReason}>
                 <SelectTrigger
                   id={`${baseTestId}-report-reason`}
                   data-testid={`${baseTestId}-report-reason`}
                 >
-                  <SelectValue placeholder="理由を選択" />
+                  <SelectValue placeholder={t('posts.reportReasonPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {reportReasonOptions.map((option) => (
@@ -802,7 +798,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               disabled={reportMutation.isPending}
               data-testid={`${baseTestId}-report-cancel`}
             >
-              キャンセル
+              {t('posts.cancel')}
             </Button>
             <Button
               type="button"
@@ -813,10 +809,10 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               {reportMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  送信中...
+                  {t('posts.reportSubmitting')}
                 </>
               ) : (
-                '通報する'
+                t('posts.reportSubmit')
               )}
             </Button>
           </DialogFooter>
@@ -826,15 +822,15 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle data-testid={`${baseTestId}-confirm-title`}>
-              投稿を削除しますか？
+              {t('posts.deleteConfirm')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              一度削除するとこの投稿は復元できません。よろしければ「削除する」を押してください。
+              {t('posts.deleteConfirmDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletePostMutation.isPending}>
-              キャンセル
+              {t('posts.cancel')}
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -847,7 +843,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               ) : (
                 <Trash2 className="mr-2 h-4 w-4" />
               )}
-              削除する
+              {t('posts.deleteAction')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

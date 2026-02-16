@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertDialog,
@@ -23,6 +24,7 @@ interface TopicDeleteDialogProps {
 }
 
 export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDialogProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
   const { deleteTopicRemote, leaveTopic, removeTopic, removePendingTopic, fetchTopics } =
@@ -64,14 +66,14 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
       await leaveTopic(topic.id);
       await deleteTopicRemote(topic.id);
       toast({
-        title: '成功',
-        description: 'トピックを削除しました',
+        title: t('topics.success'),
+        description: t('topics.deleteSuccess'),
       });
     } catch {
       ensureCleanup();
       toast({
-        title: '削除を完了しました',
-        description: 'ローカルのトピックを削除しました。同期は後続で再試行されます。',
+        title: t('topics.deleteCompleted'),
+        description: t('topics.deleteCompletedDescription'),
       });
     } finally {
       ensureCleanup();
@@ -101,14 +103,13 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>トピックを削除しますか？</AlertDialogTitle>
+          <AlertDialogTitle>{t('topics.deleteTopicTitle')}</AlertDialogTitle>
           <AlertDialogDescription>
-            「{topic.name}
-            」を削除します。この操作は取り消せません。トピックとすべての投稿も削除されます。
+            {t('topics.deleteTopicDescription', { name: topic.name })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+          <AlertDialogCancel disabled={isDeleting}>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isDeleting}
@@ -116,7 +117,7 @@ export function TopicDeleteDialog({ open, onOpenChange, topic }: TopicDeleteDial
             data-testid="topic-delete-confirm"
           >
             {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            削除
+            {t('common.delete')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
