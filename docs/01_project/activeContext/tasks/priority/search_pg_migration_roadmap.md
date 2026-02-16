@@ -31,9 +31,9 @@
 
 ## PR-05 2段階サジェスト（候補生成 + 再ランキング）
 
-- [ ] `/v1/communities/suggest`（または同等内部API）を追加し、Stage-A/Stage-B パイプラインを接続する。
-- [ ] block/mute/visibility 最終フィルタを SQL 側で適用し、既存仕様との回帰テストを追加する。
-- [ ] relation score 重みをランタイム設定化し、shadow計測モードを実装する。
+- [x] `/v1/communities/suggest`（または同等内部API）を追加し、Stage-A/Stage-B パイプラインを接続する。
+- [x] block/mute/visibility 最終フィルタを SQL 側で適用し、既存仕様との回帰テストを追加する。
+- [x] relation score 重みをランタイム設定化し、shadow計測モードを実装する。
 
 ## PR-06 dual-write + backfill + shadow-read
 

@@ -35,6 +35,9 @@ struct Metrics {
     outbox_consumer_batches_total: IntCounterVec,
     outbox_consumer_processing_duration_seconds: HistogramVec,
     outbox_consumer_batch_size: HistogramVec,
+    suggest_stage_a_latency_ms: HistogramVec,
+    suggest_stage_b_latency_ms: HistogramVec,
+    suggest_block_filter_drop_count: IntCounterVec,
 }
 
 pub const OUTBOX_CONSUMER_RESULT_SUCCESS: &str = "success";
@@ -211,6 +214,39 @@ fn metrics() -> &'static Metrics {
         )
         .expect("outbox_consumer_batch_size metric");
 
+        let suggest_stage_a_latency_ms = HistogramVec::new(
+            HistogramOpts::new(
+                "suggest_stage_a_latency_ms",
+                "Community suggest Stage-A latency in milliseconds",
+            )
+            .buckets(vec![
+                1.0, 2.5, 5.0, 10.0, 20.0, 50.0, 80.0, 120.0, 200.0, 400.0,
+            ]),
+            &["service", "backend"],
+        )
+        .expect("suggest_stage_a_latency_ms metric");
+
+        let suggest_stage_b_latency_ms = HistogramVec::new(
+            HistogramOpts::new(
+                "suggest_stage_b_latency_ms",
+                "Community suggest Stage-B latency in milliseconds",
+            )
+            .buckets(vec![
+                1.0, 2.5, 5.0, 10.0, 20.0, 50.0, 80.0, 120.0, 200.0, 400.0,
+            ]),
+            &["service", "mode"],
+        )
+        .expect("suggest_stage_b_latency_ms metric");
+
+        let suggest_block_filter_drop_count = IntCounterVec::new(
+            Opts::new(
+                "suggest_block_filter_drop_count",
+                "Filtered suggest candidates dropped by block or mute filters",
+            ),
+            &["service", "backend", "reason"],
+        )
+        .expect("suggest_block_filter_drop_count metric");
+
         registry
             .register(Box::new(cn_up.clone()))
             .expect("register cn_up");
@@ -282,6 +318,15 @@ fn metrics() -> &'static Metrics {
         registry
             .register(Box::new(outbox_consumer_batch_size.clone()))
             .expect("register outbox_consumer_batch_size");
+        registry
+            .register(Box::new(suggest_stage_a_latency_ms.clone()))
+            .expect("register suggest_stage_a_latency_ms");
+        registry
+            .register(Box::new(suggest_stage_b_latency_ms.clone()))
+            .expect("register suggest_stage_b_latency_ms");
+        registry
+            .register(Box::new(suggest_block_filter_drop_count.clone()))
+            .expect("register suggest_block_filter_drop_count");
 
         Metrics {
             registry,
@@ -308,6 +353,9 @@ fn metrics() -> &'static Metrics {
             outbox_consumer_batches_total,
             outbox_consumer_processing_duration_seconds,
             outbox_consumer_batch_size,
+            suggest_stage_a_latency_ms,
+            suggest_stage_b_latency_ms,
+            suggest_block_filter_drop_count,
         }
     })
 }
@@ -494,6 +542,43 @@ pub fn observe_outbox_consumer_batch_size(
         .outbox_consumer_batch_size
         .with_label_values(&[service_name, consumer])
         .observe(batch_size as f64);
+}
+
+pub fn observe_suggest_stage_a_latency_ms(
+    service_name: &'static str,
+    backend: &str,
+    duration: Duration,
+) {
+    metrics()
+        .suggest_stage_a_latency_ms
+        .with_label_values(&[service_name, backend])
+        .observe(duration.as_secs_f64() * 1000.0);
+}
+
+pub fn observe_suggest_stage_b_latency_ms(
+    service_name: &'static str,
+    mode: &str,
+    duration: Duration,
+) {
+    metrics()
+        .suggest_stage_b_latency_ms
+        .with_label_values(&[service_name, mode])
+        .observe(duration.as_secs_f64() * 1000.0);
+}
+
+pub fn inc_suggest_block_filter_drop_count(
+    service_name: &'static str,
+    backend: &str,
+    reason: &str,
+    count: u64,
+) {
+    if count == 0 {
+        return;
+    }
+    metrics()
+        .suggest_block_filter_drop_count
+        .with_label_values(&[service_name, backend, reason])
+        .inc_by(count);
 }
 
 pub fn metrics_response(service_name: &'static str) -> impl IntoResponse {

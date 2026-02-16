@@ -9,6 +9,8 @@ pub const FLAG_SEARCH_READ_BACKEND: &str = "search_read_backend";
 pub const FLAG_SEARCH_WRITE_MODE: &str = "search_write_mode";
 pub const FLAG_SUGGEST_READ_BACKEND: &str = "suggest_read_backend";
 pub const FLAG_SHADOW_SAMPLE_RATE: &str = "shadow_sample_rate";
+pub const FLAG_SUGGEST_RERANK_MODE: &str = "suggest_rerank_mode";
+pub const FLAG_SUGGEST_RELATION_WEIGHTS: &str = "suggest_relation_weights";
 
 pub const SEARCH_READ_BACKEND_MEILI: &str = "meili";
 pub const SEARCH_READ_BACKEND_PG: &str = "pg";
@@ -18,6 +20,10 @@ pub const SEARCH_WRITE_MODE_PG_ONLY: &str = "pg_only";
 pub const SUGGEST_READ_BACKEND_LEGACY: &str = "legacy";
 pub const SUGGEST_READ_BACKEND_PG: &str = "pg";
 pub const SHADOW_SAMPLE_RATE_DISABLED: &str = "0";
+pub const SUGGEST_RERANK_MODE_SHADOW: &str = "shadow";
+pub const SUGGEST_RERANK_MODE_ENABLED: &str = "enabled";
+pub const SUGGEST_RELATION_WEIGHTS_DEFAULT: &str =
+    "{\"is_member\":1.20,\"is_following_community\":0.80,\"friends_member_count\":0.35,\"two_hop_follow_count\":0.25,\"last_view_decay\":0.15,\"muted_or_blocked\":-1.00}";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRuntimeFlags {
@@ -25,6 +31,8 @@ pub struct SearchRuntimeFlags {
     pub search_write_mode: String,
     pub suggest_read_backend: String,
     pub shadow_sample_rate: String,
+    pub suggest_rerank_mode: String,
+    pub suggest_relation_weights: String,
 }
 
 impl Default for SearchRuntimeFlags {
@@ -34,6 +42,8 @@ impl Default for SearchRuntimeFlags {
             search_write_mode: SEARCH_WRITE_MODE_MEILI_ONLY.to_string(),
             suggest_read_backend: SUGGEST_READ_BACKEND_LEGACY.to_string(),
             shadow_sample_rate: SHADOW_SAMPLE_RATE_DISABLED.to_string(),
+            suggest_rerank_mode: SUGGEST_RERANK_MODE_SHADOW.to_string(),
+            suggest_relation_weights: SUGGEST_RELATION_WEIGHTS_DEFAULT.to_string(),
         }
     }
 }
@@ -129,6 +139,8 @@ pub fn log_search_runtime_flags(service: &str, trigger: &str, flags: &SearchRunt
         search_write_mode = %flags.search_write_mode,
         suggest_read_backend = %flags.suggest_read_backend,
         shadow_sample_rate = %flags.shadow_sample_rate,
+        suggest_rerank_mode = %flags.suggest_rerank_mode,
+        suggest_relation_weights = %flags.suggest_relation_weights,
         "search runtime flags loaded"
     );
 }
@@ -144,6 +156,8 @@ fn apply_flag_value(flags: &mut SearchRuntimeFlags, flag_name: &str, flag_value:
         FLAG_SEARCH_WRITE_MODE => flags.search_write_mode = value.to_string(),
         FLAG_SUGGEST_READ_BACKEND => flags.suggest_read_backend = value.to_string(),
         FLAG_SHADOW_SAMPLE_RATE => flags.shadow_sample_rate = value.to_string(),
+        FLAG_SUGGEST_RERANK_MODE => flags.suggest_rerank_mode = value.to_string(),
+        FLAG_SUGGEST_RELATION_WEIGHTS => flags.suggest_relation_weights = value.to_string(),
         _ => {}
     }
 }
@@ -237,6 +251,24 @@ mod tests {
         .execute(pool)
         .await
         .expect("upsert shadow_sample_rate");
+
+        sqlx::query(
+            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) VALUES ($1, $2, 'test') ON CONFLICT (flag_name) DO UPDATE SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(FLAG_SUGGEST_RERANK_MODE)
+        .bind(SUGGEST_RERANK_MODE_SHADOW)
+        .execute(pool)
+        .await
+        .expect("upsert suggest_rerank_mode");
+
+        sqlx::query(
+            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) VALUES ($1, $2, 'test') ON CONFLICT (flag_name) DO UPDATE SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(FLAG_SUGGEST_RELATION_WEIGHTS)
+        .bind(SUGGEST_RELATION_WEIGHTS_DEFAULT)
+        .execute(pool)
+        .await
+        .expect("upsert suggest_relation_weights");
     }
 
     #[test]
@@ -246,6 +278,11 @@ mod tests {
         assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, SHADOW_SAMPLE_RATE_DISABLED);
+        assert_eq!(flags.suggest_rerank_mode, SUGGEST_RERANK_MODE_SHADOW);
+        assert_eq!(
+            flags.suggest_relation_weights,
+            SUGGEST_RELATION_WEIGHTS_DEFAULT
+        );
     }
 
     #[tokio::test]
@@ -268,6 +305,11 @@ mod tests {
         assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, SHADOW_SAMPLE_RATE_DISABLED);
+        assert_eq!(flags.suggest_rerank_mode, SUGGEST_RERANK_MODE_SHADOW);
+        assert_eq!(
+            flags.suggest_relation_weights,
+            SUGGEST_RELATION_WEIGHTS_DEFAULT
+        );
     }
 
     #[tokio::test]
@@ -303,6 +345,11 @@ mod tests {
         assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, "25");
+        assert_eq!(flags.suggest_rerank_mode, SUGGEST_RERANK_MODE_SHADOW);
+        assert_eq!(
+            flags.suggest_relation_weights,
+            SUGGEST_RELATION_WEIGHTS_DEFAULT
+        );
 
         seed_flags(
             &pool,
