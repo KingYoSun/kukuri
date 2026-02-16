@@ -51,3 +51,12 @@
   9. **バックグラウンドジョブ / Runbook 連携**
      - `trending_metrics_job` / `nightly.topic-create` / `nightly.post-delete-cache` / `nightly.profile-avatar-sync` / `nightly.sync-status-indicator` の artefact が `.act-artifacts/` と `tmp/logs/*` に揃い、Runbook Chapter4/5/10 の参照先が欠落していない。
      - `docs/03_implementation/p2p_mainline_runbook.md` 記載の採取コマンドで必要ログを収集し、`phase5_ci_path_audit.md` に載っているテスト ID と対応付けられる。
+
+### 2026年02月16日 Issue #45 i18n整備（ja/en/zh-CN）
+
+- 目的: PR #41 監査コンテキストを踏まえ、i18n のキー不整合・locale drift・時刻ロケール不一致を解消する。
+- 状態: 着手（初期監査と実装PR分割計画は完了。次は実装PRを順次作成）。
+- 次アクション（1タスク=1PR）:
+  1. PR-1: 翻訳キー参照の未定義/不整合を修正（`posts.deleteSuccess` / `common.adding` / `common.conflict` / `common.count`）。
+  2. PR-2: localeファイルのドリフトを是正（`en` の `posts.submit` 追加、`zh-CN` の `bootstrapConfig.add` / `bootstrapConfig.noNodes` 追加）。
+  3. PR-3: 時刻表示を i18n 言語に統一（`toLocaleString`/`Intl.DateTimeFormat(undefined, ...)` を `i18n.language` ベースの共通ヘルパーへ集約）。
