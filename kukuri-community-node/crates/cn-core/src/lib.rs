@@ -1,6 +1,7 @@
 pub mod access_control;
 pub mod admin;
 pub mod auth;
+pub mod community_search_terms;
 pub mod config;
 pub mod db;
 pub mod health;

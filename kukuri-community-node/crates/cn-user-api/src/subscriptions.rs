@@ -1,6 +1,7 @@
 use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
+use cn_core::community_search_terms;
 use cn_core::nostr;
 use cn_core::search_normalizer;
 use cn_core::search_runtime_flags;
@@ -10,6 +11,8 @@ use nostr_sdk::prelude::PublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, QueryBuilder, Row};
+use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use crate::auth::{current_rate_limit, enforce_rate_limit, require_auth, AuthContext};
 use crate::billing::{check_topic_limit, consume_quota};
@@ -48,10 +51,31 @@ pub struct SearchQuery {
     pub cursor: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct CommunitySuggestQuery {
+    pub q: String,
+    pub limit: Option<usize>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SearchReadBackend {
     Meili,
     Pg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SuggestReadBackend {
+    Legacy,
+    Pg,
+}
+
+#[derive(Debug, Clone)]
+struct CommunityCandidate {
+    community_id: String,
+    exact_hit: bool,
+    prefix_hit: bool,
+    trgm_score: f64,
+    name_match_score: f64,
 }
 
 #[derive(Deserialize)]
@@ -565,6 +589,306 @@ async fn search_with_pg_backend(
         "next_cursor": next_cursor,
         "total": total
     })))
+}
+
+pub async fn community_suggest(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    Query(query): Query<CommunitySuggestQuery>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let auth = require_auth(&state, &headers).await?;
+    require_consents(&state, &auth).await?;
+    apply_protected_rate_limit(&state, &auth, addr).await?;
+
+    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    let query_norm = search_normalizer::normalize_search_text(&query.q);
+    let backend = load_suggest_read_backend(&state.pool).await;
+
+    if query_norm.is_empty() {
+        let backend_label = match backend {
+            SuggestReadBackend::Pg => "pg",
+            SuggestReadBackend::Legacy => "legacy",
+        };
+        return Ok(Json(json!({
+            "query": query.q,
+            "query_norm": query_norm,
+            "backend": backend_label,
+            "items": []
+        })));
+    }
+
+    let (backend_label, candidates) = match backend {
+        SuggestReadBackend::Pg => {
+            let pg_candidates =
+                fetch_pg_community_candidates(&state.pool, &query_norm, limit).await?;
+            if pg_candidates.is_empty() {
+                let fallback =
+                    fetch_legacy_community_candidates(&state.pool, &query_norm, limit).await?;
+                ("legacy_fallback", fallback)
+            } else {
+                ("pg", pg_candidates)
+            }
+        }
+        SuggestReadBackend::Legacy => (
+            "legacy",
+            fetch_legacy_community_candidates(&state.pool, &query_norm, limit).await?,
+        ),
+    };
+
+    let items: Vec<serde_json::Value> = candidates
+        .into_iter()
+        .map(|candidate| {
+            json!({
+                "community_id": candidate.community_id,
+                "name_match_score": candidate.name_match_score,
+                "prefix_hit": candidate.prefix_hit,
+                "exact_hit": candidate.exact_hit,
+                "trgm_score": candidate.trgm_score,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "query": query.q,
+        "query_norm": query_norm,
+        "backend": backend_label,
+        "items": items
+    })))
+}
+
+async fn load_suggest_read_backend(pool: &sqlx::Pool<Postgres>) -> SuggestReadBackend {
+    let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
+        Ok(flags) => flags,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "failed to load search runtime flags; fallback to legacy suggest backend"
+            );
+            return SuggestReadBackend::Legacy;
+        }
+    };
+
+    if flags
+        .suggest_read_backend
+        .trim()
+        .eq_ignore_ascii_case(search_runtime_flags::SUGGEST_READ_BACKEND_PG)
+    {
+        SuggestReadBackend::Pg
+    } else {
+        SuggestReadBackend::Legacy
+    }
+}
+
+async fn fetch_pg_community_candidates(
+    pool: &sqlx::Pool<Postgres>,
+    query_norm: &str,
+    limit: usize,
+) -> ApiResult<Vec<CommunityCandidate>> {
+    if query_norm.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let prefix_pattern = format!("{query_norm}%");
+    let query_len = query_norm.chars().count();
+    let rows = if query_len <= 2 {
+        match sqlx::query(
+            "SELECT community_id, \
+                    MAX((term_norm = $1)::int) AS exact_hit, \
+                    MAX((term_norm LIKE $2)::int) AS prefix_hit, \
+                    COALESCE(MAX(similarity(term_norm, $1)), 0.0) AS trgm_score \
+             FROM cn_search.community_search_terms \
+             WHERE term_norm LIKE $2 \
+                OR similarity(term_norm, $1) >= 0.7 \
+             GROUP BY community_id \
+             ORDER BY exact_hit DESC, prefix_hit DESC, trgm_score DESC, community_id ASC \
+             LIMIT $3",
+        )
+        .bind(query_norm)
+        .bind(&prefix_pattern)
+        .bind(limit as i64)
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(err) if is_missing_community_search_terms_table(&err) => return Ok(Vec::new()),
+            Err(err) => {
+                return Err(ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                ));
+            }
+        }
+    } else {
+        match sqlx::query(
+            "SELECT community_id, \
+                    MAX((term_norm = $1)::int) AS exact_hit, \
+                    MAX((term_norm LIKE $2)::int) AS prefix_hit, \
+                    COALESCE(MAX(similarity(term_norm, $1)), 0.0) AS trgm_score \
+             FROM cn_search.community_search_terms \
+             WHERE term_norm LIKE $2 \
+                OR term_norm % $1 \
+             GROUP BY community_id \
+             ORDER BY exact_hit DESC, prefix_hit DESC, trgm_score DESC, community_id ASC \
+             LIMIT $3",
+        )
+        .bind(query_norm)
+        .bind(&prefix_pattern)
+        .bind(limit as i64)
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(err) if is_missing_community_search_terms_table(&err) => return Ok(Vec::new()),
+            Err(err) => {
+                return Err(ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                ));
+            }
+        }
+    };
+
+    let mut candidates = Vec::new();
+    for row in rows {
+        let community_id: String = row.try_get("community_id")?;
+        let exact_hit = row.try_get::<i32, _>("exact_hit").unwrap_or(0) > 0;
+        let prefix_hit = row.try_get::<i32, _>("prefix_hit").unwrap_or(0) > 0;
+        let trgm_score = row
+            .try_get::<f64, _>("trgm_score")
+            .or_else(|_| row.try_get::<f32, _>("trgm_score").map(f64::from))
+            .unwrap_or(0.0);
+        let name_match_score = candidate_name_match_score(exact_hit, prefix_hit, trgm_score);
+        candidates.push(CommunityCandidate {
+            community_id,
+            exact_hit,
+            prefix_hit,
+            trgm_score,
+            name_match_score,
+        });
+    }
+    Ok(candidates)
+}
+
+async fn fetch_legacy_community_candidates(
+    pool: &sqlx::Pool<Postgres>,
+    query_norm: &str,
+    limit: usize,
+) -> ApiResult<Vec<CommunityCandidate>> {
+    if query_norm.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let community_ids = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT topic_id \
+         FROM ( \
+           SELECT topic_id FROM cn_admin.node_subscriptions \
+           UNION \
+           SELECT topic_id FROM cn_user.topic_subscriptions WHERE status = 'active' \
+         ) AS source_topics",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let mut by_community = HashMap::<String, CommunityCandidate>::new();
+    for topic_id in community_ids {
+        let Some(community_id) = community_search_terms::community_id_from_topic_id(&topic_id)
+        else {
+            continue;
+        };
+
+        let terms = community_search_terms::build_terms_from_topic_id(&community_id);
+        if terms.is_empty() {
+            continue;
+        }
+
+        let entry =
+            by_community
+                .entry(community_id.clone())
+                .or_insert_with(|| CommunityCandidate {
+                    community_id: community_id.clone(),
+                    exact_hit: false,
+                    prefix_hit: false,
+                    trgm_score: 0.0,
+                    name_match_score: 0.0,
+                });
+
+        for term in terms {
+            let exact_hit = term.term_norm == query_norm;
+            let prefix_hit = term.term_norm.starts_with(query_norm);
+            if !(exact_hit || prefix_hit) {
+                continue;
+            }
+
+            let term_score = if exact_hit { 1.0 } else { 0.8 };
+            entry.exact_hit |= exact_hit;
+            entry.prefix_hit |= prefix_hit;
+            if term_score > entry.trgm_score {
+                entry.trgm_score = term_score;
+            }
+            entry.name_match_score =
+                candidate_name_match_score(entry.exact_hit, entry.prefix_hit, entry.trgm_score);
+        }
+    }
+
+    let mut candidates: Vec<CommunityCandidate> = by_community
+        .into_values()
+        .filter(|candidate| candidate.exact_hit || candidate.prefix_hit)
+        .collect();
+    candidates.sort_by(compare_community_candidates);
+    candidates.truncate(limit);
+    Ok(candidates)
+}
+
+fn compare_community_candidates(left: &CommunityCandidate, right: &CommunityCandidate) -> Ordering {
+    right
+        .exact_hit
+        .cmp(&left.exact_hit)
+        .then_with(|| right.prefix_hit.cmp(&left.prefix_hit))
+        .then_with(|| {
+            right
+                .name_match_score
+                .partial_cmp(&left.name_match_score)
+                .unwrap_or(Ordering::Equal)
+        })
+        .then_with(|| {
+            right
+                .trgm_score
+                .partial_cmp(&left.trgm_score)
+                .unwrap_or(Ordering::Equal)
+        })
+        .then_with(|| left.community_id.cmp(&right.community_id))
+}
+
+fn candidate_name_match_score(exact_hit: bool, prefix_hit: bool, trgm_score: f64) -> f64 {
+    if exact_hit {
+        return 1.0;
+    }
+
+    let trgm_score = trgm_score.clamp(0.0, 1.0);
+    if prefix_hit {
+        trgm_score.max(0.75).min(0.99)
+    } else {
+        trgm_score
+    }
+}
+
+fn is_missing_community_search_terms_table(err: &sqlx::Error) -> bool {
+    match err {
+        sqlx::Error::Database(db_err) => {
+            matches!(db_err.code().as_deref(), Some("42P01") | Some("3F000"))
+        }
+        _ => false,
+    }
 }
 
 fn search_result_title(content: &str) -> String {
@@ -1325,6 +1649,41 @@ mod api_contract_tests {
         .execute(pool)
         .await
         .expect("upsert search_write_mode flag");
+    }
+
+    async fn set_suggest_runtime_flag(pool: &Pool<Postgres>, backend: &str) {
+        sqlx::query(
+            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) \
+             VALUES ($1, $2, 'contract-test') \
+             ON CONFLICT (flag_name) DO UPDATE \
+             SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
+        )
+        .bind(cn_core::search_runtime_flags::FLAG_SUGGEST_READ_BACKEND)
+        .bind(backend)
+        .execute(pool)
+        .await
+        .expect("upsert suggest_read_backend flag");
+    }
+
+    async fn insert_community_search_terms(pool: &Pool<Postgres>, community_id: &str) {
+        let terms = cn_core::community_search_terms::build_terms_from_topic_id(community_id);
+        for term in terms {
+            sqlx::query(
+                "INSERT INTO cn_search.community_search_terms \
+                 (community_id, term_type, term_raw, term_norm, is_primary, updated_at) \
+                 VALUES ($1, $2, $3, $4, $5, NOW()) \
+                 ON CONFLICT (community_id, term_type, term_norm) DO UPDATE \
+                 SET term_raw = EXCLUDED.term_raw, is_primary = EXCLUDED.is_primary, updated_at = NOW()",
+            )
+            .bind(community_id)
+            .bind(term.term_type)
+            .bind(term.term_raw)
+            .bind(term.term_norm)
+            .bind(term.is_primary)
+            .execute(pool)
+            .await
+            .expect("insert community search term");
+        }
     }
 
     async fn insert_pending_subscription_request(
@@ -4699,6 +5058,183 @@ mod api_contract_tests {
             cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn community_suggest_pg_backend_supports_exact_prefix_and_trgm() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        set_suggest_runtime_flag(
+            &pool,
+            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_PG,
+        )
+        .await;
+
+        let community_exact = "kukuri:tauri:pr03rustalpha";
+        let community_prefix = "kukuri:tauri:pr03rubybeta";
+        let community_other = "kukuri:tauri:pr03ravengamma";
+        insert_community_search_terms(&pool, community_exact).await;
+        insert_community_search_terms(&pool, community_prefix).await;
+        insert_community_search_terms(&pool, community_other).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/communities/suggest", get(community_suggest))
+            .with_state(state);
+
+        let (exact_status, exact_payload) = get_json_with_consent_retry(
+            app.clone(),
+            "/v1/communities/suggest?q=pr03rustalpha&limit=5",
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(exact_status, StatusCode::OK);
+        assert_eq!(
+            exact_payload.get("backend").and_then(Value::as_str),
+            Some("pg")
+        );
+        let exact_items = exact_payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(!exact_items.is_empty());
+        assert_eq!(
+            exact_items[0].get("community_id").and_then(Value::as_str),
+            Some(community_exact)
+        );
+        assert_eq!(
+            exact_items[0].get("exact_hit").and_then(Value::as_bool),
+            Some(true)
+        );
+
+        let (prefix_status, prefix_payload) = get_json_with_consent_retry(
+            app.clone(),
+            "/v1/communities/suggest?q=pr03ru&limit=5",
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(prefix_status, StatusCode::OK);
+        let prefix_items = prefix_payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(!prefix_items.is_empty());
+        assert_eq!(
+            prefix_items[0].get("prefix_hit").and_then(Value::as_bool),
+            Some(true)
+        );
+
+        let (trgm_status, trgm_payload) = get_json_with_consent_retry(
+            app,
+            "/v1/communities/suggest?q=pr03rutsalpha&limit=5",
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(trgm_status, StatusCode::OK);
+        let trgm_items = trgm_payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(!trgm_items.is_empty());
+        let typo_match = trgm_items
+            .iter()
+            .find(|item| item.get("community_id").and_then(Value::as_str) == Some(community_exact))
+            .cloned()
+            .expect("expected typo query to include trgm community candidate");
+        assert_eq!(
+            typo_match.get("exact_hit").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            typo_match.get("prefix_hit").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert!(
+            typo_match
+                .get("trgm_score")
+                .and_then(Value::as_f64)
+                .unwrap_or_default()
+                > 0.0
+        );
+
+        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = ANY($1)")
+            .bind(vec![
+                community_exact.to_string(),
+                community_prefix.to_string(),
+                community_other.to_string(),
+            ])
+            .execute(&pool)
+            .await
+            .expect("cleanup community suggest pg terms");
+        set_suggest_runtime_flag(
+            &pool,
+            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_LEGACY,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn community_suggest_legacy_backend_uses_topic_sources() {
+        let _search_backend_guard = lock_search_backend_contract_tests().await;
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        set_suggest_runtime_flag(
+            &pool,
+            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_LEGACY,
+        )
+        .await;
+
+        let topic_id = format!("kukuri:tauri:pr03legacy-{}", Uuid::new_v4().simple());
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/communities/suggest", get(community_suggest))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            "/v1/communities/suggest?q=pr03legacy&limit=5",
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("backend").and_then(Value::as_str),
+            Some("legacy")
+        );
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(items.iter().any(|item| {
+            item.get("community_id").and_then(Value::as_str) == Some(topic_id.as_str())
+        }));
+
+        sqlx::query(
+            "DELETE FROM cn_user.topic_subscriptions WHERE topic_id = $1 AND subscriber_pubkey = $2",
+        )
+        .bind(&topic_id)
+        .bind(&pubkey)
+        .execute(&pool)
+        .await
+        .expect("cleanup legacy suggest topic subscription");
     }
 
     #[tokio::test]

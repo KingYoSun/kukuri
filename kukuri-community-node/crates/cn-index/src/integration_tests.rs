@@ -249,6 +249,11 @@ async fn cleanup_records(
             .execute(pool)
             .await
             .expect("cleanup post search documents");
+        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = $1")
+            .bind(topic_id)
+            .execute(pool)
+            .await
+            .expect("cleanup community search terms");
         sqlx::query("DELETE FROM cn_relay.events_outbox WHERE event_id = ANY($1)")
             .bind(&event_refs)
             .execute(pool)
@@ -700,6 +705,89 @@ async fn outbox_dual_write_updates_meili_and_post_search_documents() {
 
     meili_handle.abort();
     let _ = meili_handle.await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn outbox_upsert_updates_community_search_terms() {
+    let _guard = lock_tests();
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_PG_ONLY,
+    )
+    .await;
+
+    let topic_id = format!("kukuri:tauri:rust-dev-{}", next_id("topic"));
+    let now = cn_core::auth::unix_seconds().expect("unix seconds") as i64;
+    let event = raw_event(
+        &next_id("event-community-terms"),
+        &topic_id,
+        now,
+        "community terms",
+    );
+    insert_event(&pool, &topic_id, &event, None).await;
+
+    let state = build_state(pool.clone(), "http://localhost:7700");
+    let upsert_seq = insert_outbox_row(&pool, "upsert", &topic_id, &event, None).await;
+    let upsert_rows = fetch_outbox_batch(&pool, upsert_seq - 1, 10)
+        .await
+        .expect("fetch upsert rows");
+    assert_eq!(upsert_rows.len(), 1);
+    handle_outbox_row(&state, &upsert_rows[0])
+        .await
+        .expect("handle upsert row");
+
+    let rows = sqlx::query(
+        "SELECT term_type, term_norm, is_primary \
+         FROM cn_search.community_search_terms \
+         WHERE community_id = $1",
+    )
+    .bind(&topic_id)
+    .fetch_all(&pool)
+    .await
+    .expect("fetch community search terms");
+
+    assert!(
+        !rows.is_empty(),
+        "expected generated community search terms"
+    );
+    let expected_terms = cn_core::community_search_terms::build_terms_from_topic_id(&topic_id);
+    for expected in expected_terms {
+        let matched = rows.iter().any(|row| {
+            row.try_get::<String, _>("term_type")
+                .map(|value| value == expected.term_type)
+                .unwrap_or(false)
+                && row
+                    .try_get::<String, _>("term_norm")
+                    .map(|value| value == expected.term_norm)
+                    .unwrap_or(false)
+                && row
+                    .try_get::<bool, _>("is_primary")
+                    .map(|value| value == expected.is_primary)
+                    .unwrap_or(false)
+        });
+        assert!(
+            matched,
+            "missing expected term {:?} for {topic_id}",
+            expected.term_norm
+        );
+    }
+
+    cleanup_records(&pool, &topic_id, &[event.id.clone()], &[]).await;
+
+    set_search_runtime_flags(
+        &pool,
+        cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
+        cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
+    )
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]

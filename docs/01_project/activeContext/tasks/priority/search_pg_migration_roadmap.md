@@ -19,9 +19,9 @@
 
 ## PR-03 コミュニティ候補生成（pg_trgm + prefix）
 
-- [ ] `cn_search.community_search_terms` と `gin_trgm_ops` / `text_pattern_ops` index を作成する migration を追加する。
-- [ ] 現行 `topic_id` モデルから `community_id` 候補へ変換するデータソース定義を確定する。
-- [ ] Stage-A 候補生成 API（prefix + trgm）を実装し、入力長別ロジック（1-2文字/3文字以上）をテストで固定する。
+- [x] `cn_search.community_search_terms` と `gin_trgm_ops` / `text_pattern_ops` index を作成する migration を追加する。
+- [x] 現行 `topic_id` モデルから `community_id` 候補へ変換するデータソース定義を確定する。
+- [x] Stage-A 候補生成 API（prefix + trgm）を実装し、入力長別ロジック（1-2文字/3文字以上）をテストで固定する。
 
 ## PR-04 AGE グラフ拡張 + 同期
 

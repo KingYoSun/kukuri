@@ -5,12 +5,12 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    config as env_config, db, health, http, logging, meili, metrics, nostr, search_normalizer,
-    search_runtime_flags, server, service_config,
+    community_search_terms, config as env_config, db, health, http, logging, meili, metrics, nostr,
+    search_normalizer, search_runtime_flags, server, service_config,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{postgres::PgListener, Pool, Postgres, Row};
+use sqlx::{postgres::PgListener, Pool, Postgres, QueryBuilder, Row};
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -517,6 +517,8 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
         return handle_delete_with_mode(state, row, write_mode).await;
     }
 
+    upsert_community_search_terms(&state.pool, &row.topic_id).await?;
+
     let doc = build_document(&event.raw, &row.topic_id);
     if write_mode.writes_meili() {
         let uid = ensure_topic_index(state, &row.topic_id).await?;
@@ -664,6 +666,51 @@ async fn upsert_post_search_document(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+async fn upsert_community_search_terms(pool: &Pool<Postgres>, topic_id: &str) -> Result<()> {
+    let Some(community_id) = community_search_terms::community_id_from_topic_id(topic_id) else {
+        return Ok(());
+    };
+
+    let terms = community_search_terms::build_terms_from_topic_id(&community_id);
+    if terms.is_empty() {
+        return Ok(());
+    }
+
+    let mut builder = QueryBuilder::<Postgres>::new(
+        "INSERT INTO cn_search.community_search_terms \
+         (community_id, term_type, term_raw, term_norm, is_primary, updated_at) ",
+    );
+    builder.push_values(terms.iter(), |mut b, term| {
+        b.push_bind(&community_id)
+            .push_bind(term.term_type)
+            .push_bind(&term.term_raw)
+            .push_bind(&term.term_norm)
+            .push_bind(term.is_primary)
+            .push("NOW()");
+    });
+    builder.push(
+        " ON CONFLICT (community_id, term_type, term_norm) DO UPDATE \
+          SET term_raw = EXCLUDED.term_raw, \
+              is_primary = EXCLUDED.is_primary, \
+              updated_at = NOW()",
+    );
+
+    match builder.build().execute(pool).await {
+        Ok(_) => Ok(()),
+        Err(err) if is_missing_community_search_terms_table(&err) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn is_missing_community_search_terms_table(err: &sqlx::Error) -> bool {
+    match err {
+        sqlx::Error::Database(db_err) => {
+            matches!(db_err.code().as_deref(), Some("42P01") | Some("3F000"))
+        }
+        _ => false,
+    }
 }
 
 async fn mark_post_search_document_deleted(
