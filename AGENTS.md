@@ -59,12 +59,16 @@
 - 開始時: `tasks/priority/critical.md` から対象を選び、`tasks/status/in_progress.md` に移動して着手を明示。
 - 作業中: 原則 `tasks/status/in_progress.md` のみを更新（進捗/メモ）。他ファイルは必要時のみ編集。
 - 完了時: `tasks/completed/YYYY-MM-DD.md` に完了内容を追記し、`in_progress.md` から削除。重要な変更は進捗レポートを作成。
+- `in_progress.md` 記載基準: 未完了タスクのみを残し、`状態: 完了` や `（完了）` の見出し・完了ログを残さない。完了記録は `tasks/completed/YYYY-MM-DD.md` と `docs/01_project/progressReports/` へ移管する。
+- `in_progress.md` クリーンアップ手順: 完了時は「`tasks/completed/YYYY-MM-DD.md` 追記 → `docs/01_project/progressReports/` 追加/更新 → `in_progress.md` から該当見出しを削除」の順で反映する。
 - ブロッカー: 発生時は `tasks/context/blockers.md` に追記し、解決後は削除。
 
 ### 作業完了チェックリスト
 - [ ] `tasks/completed/YYYY-MM-DD.md` に完了タスクを追記
 - [ ] `tasks/status/in_progress.md` から当該タスクを削除
 - [ ] 重要な変更について進捗レポートを作成
+- [ ] `tasks/status/in_progress.md` 内に `状態: 完了` / `（完了）` の見出しや行が残っていないことを確認
+- [ ] 完了タスクの移管先（`tasks/completed/YYYY-MM-DD.md` / `docs/01_project/progressReports/`）を記録していることを確認
 
 ## Nostr互換性の確認
 - NIP準拠: 実装時は `docs/nips/` の該当NIPを参照し、仕様順守を確認。
