@@ -145,7 +145,7 @@ export const useDeletePost = () => {
         authorPubkey,
       });
       if (isOnline) {
-        toast.success(i18n.t('posts.deleteSuccess'));
+        toast.success(i18n.t('posts.deleted'));
       } else {
         toast.success(i18n.t('posts.deleteQueued'));
         errorHandler.info('Post.delete_offline_enqueued', 'useDeletePost');

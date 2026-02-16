@@ -18,7 +18,10 @@
     "account": "账户",
     "noOtherAccounts": "没有其他账户",
     "addAnotherAccount": "添加另一个账户",
+    "adding": "添加中...",
     "removeAccount": "删除账户",
+    "conflict": "冲突",
+    "count": "项",
     "logout": "登出",
     "removeAccountConfirm": "确定要删除此账户吗？"
   },
