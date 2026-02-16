@@ -51,13 +51,3 @@
   9. **バックグラウンドジョブ / Runbook 連携**
      - `trending_metrics_job` / `nightly.topic-create` / `nightly.post-delete-cache` / `nightly.profile-avatar-sync` / `nightly.sync-status-indicator` の artefact が `.act-artifacts/` と `tmp/logs/*` に揃い、Runbook Chapter4/5/10 の参照先が欠落していない。
      - `docs/03_implementation/p2p_mainline_runbook.md` 記載の採取コマンドで必要ログを収集し、`phase5_ci_path_audit.md` に載っているテスト ID と対応付けられる。
-  10. **Ops/CI ガード**
-      - `gh act --workflows .github/workflows/test.yml --job format-check` / `--job native-test-linux` が成功し、`.act-artifacts/` に最新ログが保存される。
-      - Community Node テストは OS を問わずコンテナ経路を既定とし、`docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run --rm --network kukuri_community-node-network ... kukuri-test-runner ... cargo test --workspace --all-features` を実行して `test-results/` を更新する。Windows の Tauri 側検証は従来どおり `./scripts/test-docker.ps1 ts|rust|all`（必要に応じて `--scenario trending-feed` など）を利用する。
-      - 2026年01月28日: desktop-e2e の Meilisearch 認証ヘッダ修正。`./scripts/test-docker.ps1 e2e-community-node` 通過、`gh act` の format-check / native-test-linux 実行済み。
-      - 2026年01月29日: desktop-e2e（community node）で `onboarding.key-management.spec.ts` のアカウント切替がタイムアウトするため、DOM 直接クリック＋bridge フォールバックへ調整。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走。
-      - 2026年02月02日: `authStore.bootstrapTopics` の public topic join を非同期化（オンボーディング遅延対策）。`./scripts/test-docker.ps1 e2e` を完走（14 specs pass, 13分37秒、`tmp/logs/desktop-e2e/20260202-115045.log`）。`gh act --job format-check` / `--job native-test-linux` を完走。
-      - 2026年02月02日: `generateNewKeypair` の後段初期化（nostr/relay/accounts/topic/avatar）を defer 可能にし、`WelcomeScreen` からは defer で実行して `profile-setup` の表示を先に出す調整。`./scripts/test-docker.ps1 ts` / `./scripts/test-docker.ps1 rust` を完走（act/useRouter の警告は既知）。`gh act --job format-check` / `--job native-test-linux` を完走。
-      - 2026年02月03日: community node の labels/trust 署名検証で pubkey ミスマッチを回避する修正を反映。`./scripts/test-docker.ps1 e2e-community-node` と `gh act --job format-check` / `--job native-test-linux` を完走（ログは `tmp/logs/gh-act-*.log`）。
-      - 2026年02月15日: PR #26（Issue #22 Task4）CI fix loop 対応として、`cn-core` の環境変数テストを非 `set_var/remove_var` 化し、`cn-admin-api` 契約テストの trigger 初期化を advisory lock で直列化。`gh act --job format-check` / `--job native-test-linux` / `--job community-node-tests` を完走（ログ: `tmp/logs/gh-act-*-issue22-pr26-fix-loop.log`）。
-      - 2026年02月15日: Issue #22 最終再監査（PR #23/#24/#25/#26 マージ後）で strict gate を再評価し、Gate1-6 すべて PASS、追加実装タスク 0 を確認。Issue #22 はクローズ可能。
