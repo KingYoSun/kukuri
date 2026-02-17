@@ -82,8 +82,8 @@ export function OfflineIndicator() {
                   className={cn(
                     'w-full rounded-full px-4 py-2 shadow-lg border transition-colors text-sm',
                     isOnline
-                      ? 'bg-white text-gray-700 border-gray-200'
-                      : 'bg-orange-100 text-orange-800 border-orange-200',
+                      ? 'bg-card text-card-foreground border-border'
+                      : 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-100 dark:border-orange-700/50',
                   )}
                   data-testid="offline-indicator-pill"
                 >

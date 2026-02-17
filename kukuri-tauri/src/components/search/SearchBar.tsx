@@ -95,7 +95,7 @@ export function SearchBar({
     validationState === 'error'
       ? 'text-destructive'
       : validationState === 'warning'
-        ? 'text-amber-600'
+        ? 'text-amber-600 dark:text-amber-400'
         : 'text-muted-foreground';
 
   return (

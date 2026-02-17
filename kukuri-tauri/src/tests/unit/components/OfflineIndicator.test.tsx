@@ -106,6 +106,23 @@ describe('OfflineIndicator', () => {
     expect(messages.length).toBeGreaterThan(0);
   });
 
+  it('オンライン時のピルはテーマトークンで描画される', () => {
+    mockUseOfflineStore.mockReturnValue({
+      isOnline: true,
+      lastSyncedAt: Date.now(),
+      pendingActions: [{ localId: '1', action: {}, createdAt: Date.now() }],
+      isSyncing: false,
+    });
+
+    render(<OfflineIndicator />);
+
+    expect(screen.getByTestId('offline-indicator-pill')).toHaveClass(
+      'bg-card',
+      'text-card-foreground',
+      'border-border',
+    );
+  });
+
   it('最終同期時刻が表示される', () => {
     const lastSyncedAt = Date.now() - 300000; // 5分前
     mockUseOfflineStore.mockReturnValue({

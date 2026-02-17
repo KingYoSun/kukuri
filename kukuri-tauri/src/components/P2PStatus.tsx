@@ -85,7 +85,7 @@ export function P2PStatus() {
       case 'error':
         return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
       default:
-        return <WifiOffIcon className="h-4 w-4 text-gray-500" />;
+        return <WifiOffIcon className="h-4 w-4 text-muted-foreground" />;
     }
   };
 

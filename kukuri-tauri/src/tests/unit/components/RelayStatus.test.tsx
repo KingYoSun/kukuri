@@ -117,9 +117,13 @@ describe('RelayStatus', () => {
     expect(screen.getByText('wss://relay4.example')).toBeInTheDocument();
 
     expect(screen.getByText('接続済み')).toHaveClass('bg-green-100');
+    expect(screen.getByText('接続済み')).toHaveClass('dark:bg-green-900/20');
     expect(screen.getByText('接続中')).toHaveClass('bg-yellow-100');
+    expect(screen.getByText('接続中')).toHaveClass('dark:bg-yellow-900/20');
     expect(screen.getByText('切断')).toHaveClass('bg-gray-100');
+    expect(screen.getByText('切断')).toHaveClass('dark:bg-gray-800');
     expect(screen.getByText('エラー')).toHaveClass('bg-red-100');
+    expect(screen.getByText('エラー')).toHaveClass('dark:bg-red-900/20');
   });
 
   it('triggers immediate fetch when no previous timestamp exists', async () => {
