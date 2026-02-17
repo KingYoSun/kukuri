@@ -61,10 +61,10 @@
 ### 2026年02月16日 Issue #45 i18n整備（ja/en/zh-CN）
 
 - 目的: PR #41 監査結果に基づき、i18n の未定義キー・locale drift・時刻ロケール不整合を段階的に解消する。
-- 状態: 進行中（PR-1本体 + PR #49 fix-loop 対応済み、残タスク: PR-2 / PR-3）。
+- 状態: 進行中（PR-1本体 + PR #49 fix-loop + PR-2 対応済み、残タスク: PR-3）。
 - 2026年02月16日: PR-1（i18nキー不整合修正）を実施し、`posts.deleteSuccess`→`posts.deleted` 統一と `common.adding/conflict/count` 追加を反映。記録は `tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue45_pr1_i18n_key_alignment.md` を参照。
 - 2026年02月16日: PR #49 の Format Check 失敗（Run `22070578309` / Job `63773790779`）を分析し、`pnpm format:check` が指摘した40ファイルに整形のみを適用して解消。記録は `tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue45_pr49_format_check_fix_loop.md` を参照。
 - 2026年02月16日: Run `22070890976` の `Native Test (Linux)` / `Docker Test Suite` 失敗を最小修正で解消（`tests/setup.ts` のロケール固定、`OfflineIndicator.test.tsx` の `date-fns/locale` mock整理、関連テストの i18n キー追従）。記録は `tasks/completed/2026-02-16.md` と `progressReports/2026-02-16_issue45_pr49_native_docker_fix_loop.md` を参照。
+- 2026年02月17日: PR-2（locale drift 是正）を実施し、`en.posts.submit` と `zh-CN.bootstrapConfig.add/noNodes` を追加。再発防止として `scripts/check-locale-keys.mjs` / `check:locale-keys` / `localeKeyDrift.test.ts` を追加。記録は `tasks/completed/2026-02-17.md` と `progressReports/2026-02-17_issue45_pr2_locale_drift_correction.md` を参照。
 - 次アクション（1タスク = 1PR）:
-  1. PR-2: locale ファイルのドリフト是正（`en` の `posts.submit` 追加、`zh-CN` の `bootstrapConfig.add` / `bootstrapConfig.noNodes` 追加）。
-  2. PR-3: 時刻表示を i18n 言語に統一（`toLocaleString` / `Intl.DateTimeFormat(undefined, ...)` を `i18n.language` ベース共通ヘルパーへ集約）。
+  1. PR-3: 時刻表示を i18n 言語に統一（`toLocaleString` / `Intl.DateTimeFormat(undefined, ...)` を `i18n.language` ベース共通ヘルパーへ集約）。

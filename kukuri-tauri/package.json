@@ -18,6 +18,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "check:tauri-commands": "node ../scripts/check-tauri-commands.mjs",
+    "check:locale-keys": "node ../scripts/check-locale-keys.mjs",
     "e2e:seed": "node ./tests/e2e/tools/seed-db.cjs",
     "e2e:build": "pnpm e2e:seed && pnpm tauri build --debug --no-bundle",
     "e2e": "wdio run ./tests/e2e/wdio.desktop.ts --maxWorkers 1 --workers 1",

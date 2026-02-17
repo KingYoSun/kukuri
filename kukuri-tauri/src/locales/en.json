@@ -407,6 +407,7 @@
     "deleteQueued": "Delete will sync when back online",
     "deleteFailed": "Failed to delete post",
     "placeholder": "Write a post...",
+    "submit": "Post",
     "user": "User",
     "offlineSaved": "Offline saved",
     "syncPending": "Sync pending",
