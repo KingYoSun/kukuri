@@ -24,6 +24,7 @@ RUN set -eux; \
         libayatana-appindicator3-dev \
         librsvg2-dev \
         xvfb \
+        xauth \
         curl \
         wget \
         file \
