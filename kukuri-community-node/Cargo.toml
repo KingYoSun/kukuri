@@ -33,7 +33,7 @@ hex = "0.4.3"
 httpdate = "1.0.3"
 iroh = { version = "0.95.1", features = ["discovery-pkarr-dht", "discovery-local-network"] }
 iroh-gossip = "0.95.0"
-jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 nostr-sdk = { version = "0.44.1", features = ["nip04", "nip44"] }
 reqwest = { version = "0.12.8", features = ["json", "rustls-tls"] }
 rand_core = "0.6.4"
