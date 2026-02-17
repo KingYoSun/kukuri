@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi, type DirectMessagePage } from '@/lib/api/tauri';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import { useAuthStore } from '@/stores/authStore';
 import {
   useDirectMessageStore,
@@ -19,16 +20,11 @@ import {
 
 const fallbackMessageId = () => `dm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const formatTimestamp = (timestamp: number) => {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(timestamp));
-  } catch {
-    return '';
-  }
-};
+const formatTimestamp = (timestamp: number) =>
+  formatDateTimeByI18n(timestamp, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 export function DirectMessageDialog() {
   const { t } = useTranslation();

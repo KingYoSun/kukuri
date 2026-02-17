@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import { useAuthStore } from '@/stores/authStore';
 import { useKeyManagementStore } from '@/stores/keyManagementStore';
 
@@ -38,7 +39,7 @@ const formatTimestamp = (value: number | null, t: (key: string) => string) => {
   if (!value) {
     return t('settings.account.notPerformed');
   }
-  return new Date(value).toLocaleString();
+  return formatDateTimeByI18n(value);
 };
 
 const buildDefaultFileName = (npub?: string | null) => {

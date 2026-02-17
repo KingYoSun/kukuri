@@ -17,6 +17,7 @@ import { useDirectMessageStore } from '@/stores/directMessageStore';
 import type { Profile } from '@/stores';
 import { useAuthStore } from '@/stores/authStore';
 import { errorHandler } from '@/lib/errorHandler';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
 import {
   TauriApi,
@@ -33,7 +34,7 @@ const formatRelativeTime = (timestamp: number | null | undefined) => {
   const date = new Date(timestamp);
   return {
     display: formatDistanceToNow(date, { addSuffix: true, locale: getDateFnsLocale() }),
-    helper: date.toLocaleString(),
+    helper: formatDateTimeByI18n(date),
   };
 };
 

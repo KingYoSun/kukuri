@@ -11,6 +11,7 @@ import { Copy, Loader2, WifiIcon, WifiOff } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { errorHandler } from '@/lib/errorHandler';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 
 interface PeerConnection {
   id: string;
@@ -250,7 +251,7 @@ export function PeerConnectionPanel() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-mono truncate">{conn.address}</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(conn.timestamp).toLocaleString()}
+                          {formatDateTimeByI18n(conn.timestamp)}
                           {conn.status === 'failed' && (
                             <span className="ml-2 text-red-500">
                               {t('p2pPanel.connectionFailed')}

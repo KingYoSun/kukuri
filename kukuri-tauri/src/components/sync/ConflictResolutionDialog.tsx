@@ -18,6 +18,7 @@ import { AlertCircle, GitBranch, Server, Monitor } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import {
   extractDocConflictDetails,
   formatBytesValue,
@@ -220,7 +221,7 @@ export function ConflictResolutionDialog({
                     <div className="text-xs text-muted-foreground mb-2 space-y-1">
                       <p>
                         {t('sync.conflictResolution.createdAt')}:{' '}
-                        {new Date(currentConflict.localAction.createdAt).toLocaleString()}
+                        {formatDateTimeByI18n(currentConflict.localAction.createdAt)}
                       </p>
                       <p>
                         {t('sync.conflictResolution.type')}:{' '}
@@ -251,7 +252,7 @@ export function ConflictResolutionDialog({
                         <div className="text-xs text-muted-foreground mb-2 space-y-1">
                           <p>
                             {t('sync.conflictResolution.createdAt')}:{' '}
-                            {new Date(currentConflict.remoteAction.createdAt).toLocaleString()}
+                            {formatDateTimeByI18n(currentConflict.remoteAction.createdAt)}
                           </p>
                           <p>
                             {t('sync.conflictResolution.type')}:{' '}
