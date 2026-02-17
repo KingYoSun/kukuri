@@ -10,4 +10,4 @@
 
 ## 現在のタスク
 
-- Issue #71 Phase E: 残課題整理（risk-later 未適用項目の棚卸しと follow-up Issue 要否判断）
+- （なし）
