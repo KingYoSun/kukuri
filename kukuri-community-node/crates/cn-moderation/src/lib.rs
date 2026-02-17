@@ -1230,8 +1230,7 @@ mod tests {
 
     #[test]
     fn rule_matches_tag_filters() {
-        let mut tags = Vec::new();
-        tags.push(vec!["t".to_string(), "topic-1".to_string()]);
+        let tags = vec![vec!["t".to_string(), "topic-1".to_string()]];
         let condition = RuleCondition {
             kinds: None,
             content_regex: None,

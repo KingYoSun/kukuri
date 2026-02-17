@@ -1,4 +1,5 @@
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 use tokio::runtime::Runtime;
 
 fn benchmark_single_vs_batch_posts(c: &mut Criterion) {
@@ -13,7 +14,7 @@ fn benchmark_single_vs_batch_posts(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("individual", size), size, |b, _| {
             b.to_async(&rt).iter(|| async {
                 // 個別取得のシミュレーション
-                for id in &post_ids {
+                for _id in &post_ids {
                     // DBアクセスのシミュレーション
                     tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
                 }

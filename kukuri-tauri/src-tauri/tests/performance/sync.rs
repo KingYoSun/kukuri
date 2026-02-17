@@ -47,7 +47,7 @@ async fn offline_reindex_throughput() -> Result<()> {
         )
         .write()?;
 
-    assert_eq!(report.offline_action_count as usize, ACTION_COUNT);
+    assert_eq!(report.offline_action_count, ACTION_COUNT);
     Ok(())
 }
 

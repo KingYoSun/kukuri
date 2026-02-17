@@ -61,7 +61,7 @@ pub fn build_params_for_index(index: usize) -> SaveOfflineActionParams {
         user_pubkey: PublicKey::from_hex_str(TEST_PUBKEY_HEX).expect("pubkey"),
         action_type: OfflineActionType::new("create_post".into()).expect("action type"),
         entity_type: EntityType::new("post".into()).expect("entity type"),
-        entity_id: EntityId::new(format!("post_{index:04}").into()).expect("entity id"),
+        entity_id: EntityId::new(format!("post_{index:04}")).expect("entity id"),
         payload: OfflinePayload::from_json_str(&payload.to_string()).expect("payload"),
     }
 }

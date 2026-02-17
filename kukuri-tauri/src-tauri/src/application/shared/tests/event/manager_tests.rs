@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::mocks::TestGossipService;
 use crate::application::ports::key_manager::KeyManager;
 use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;

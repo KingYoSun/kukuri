@@ -217,7 +217,7 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
     let peer_a = endpoint_a.id();
     let peer_b = endpoint_b.id();
     let topic_a = gossip_a
-        .subscribe(TopicId::from(topic_bytes.clone()), vec![peer_b])
+        .subscribe(TopicId::from(topic_bytes), vec![peer_b])
         .await
         .expect("subscribe a");
     let (sender_a, mut receiver_a) = topic_a.split();
@@ -3036,7 +3036,7 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
             vec![
                 "exp".to_string(),
-                (Timestamp::now().as_u64() + 3600).to_string(),
+                (Timestamp::now().as_secs() + 3600).to_string(),
             ],
         ],
         json!({"schema": "kukuri-node-desc-v1"}).to_string(),
@@ -3054,7 +3054,7 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
             vec![
                 "exp".to_string(),
-                (Timestamp::now().as_u64() + 3600).to_string(),
+                (Timestamp::now().as_secs() + 3600).to_string(),
             ],
         ],
         json!({"schema": "kukuri-topic-service-v1"}).to_string(),
