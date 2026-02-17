@@ -31,7 +31,9 @@ const selectFriendPlusScope = async () => {
   const scopeTrigger = await $('[data-testid="scope-selector"]');
   await scopeTrigger.waitForDisplayed({ timeout: 15000 });
   await scopeTrigger.click();
-  const friendPlusItem = await $(`//div[@data-slot="select-item" and contains(., "フレンド+")]`);
+  const friendPlusItem = await $(
+    '//div[@data-slot="select-item" and (contains(., "フレンド+") or contains(., "Friend+") or contains(., "好友+"))]',
+  );
   await friendPlusItem.waitForDisplayed({ timeout: 10000 });
   await friendPlusItem.click();
 };
@@ -152,13 +154,18 @@ describe('Community Node friend_plus flow', () => {
 
     await browser.execute((topicId: string) => {
       try {
-        window.history.pushState({}, '', `/topics/${encodeURIComponent(topicId)}`);
+        window.history.pushState({}, '', `/topics/${topicId}`);
       } catch {
-        window.location.replace(`/topics/${encodeURIComponent(topicId)}`);
+        window.location.replace(`/topics/${topicId}`);
       }
-    }, topic.id);
+    }, syncedTopic.id);
+    await browser.waitUntil(async () => (await browser.getUrl()).includes(`/topics/${syncedTopic.id}`), {
+      timeout: 20000,
+      interval: 300,
+      timeoutMsg: `Failed to navigate to topic route: ${syncedTopic.id}`,
+    });
 
-    const createPostButton = await $('//button[contains(., "投稿する")]');
+    const createPostButton = await $('[data-testid="create-post-button"]');
     await createPostButton.waitForDisplayed({ timeout: 20000 });
     await createPostButton.click();
 

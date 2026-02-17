@@ -13,6 +13,13 @@ import {
   type ProfileInfo,
 } from '../helpers/appActions';
 
+const dmButtonSelector = [
+  'button[aria-label="ダイレクトメッセージ"]',
+  'button[aria-label="Direct message"]',
+  'button[aria-label="Direct Message"]',
+  'button[aria-label="私信"]',
+].join(', ');
+
 describe('ダイレクトメッセージInbox', () => {
   before(async () => {
     await waitForAppReady();
@@ -60,7 +67,7 @@ describe('ダイレクトメッセージInbox', () => {
     console.info('DM snapshot after seed', seededSnapshot);
     expect(seededSnapshot.unreadTotal).toBeGreaterThan(0);
 
-    const dmButton = await $('button[aria-label="ダイレクトメッセージ"]');
+    const dmButton = await $(dmButtonSelector);
     await dmButton.waitForDisplayed({ timeout: 20000 });
     await browser.waitUntil(
       async () => {
@@ -96,7 +103,9 @@ describe('ダイレクトメッセージInbox', () => {
       await browser.keys('Escape');
       await inboxList.waitForDisplayed({ reverse: true, timeout: 15000 });
     } else {
-      console.info('Trending summary card for direct messages not found; skipping summary CTA check');
+      console.info(
+        'Trending summary card for direct messages not found; skipping summary CTA check',
+      );
     }
 
     await dmButton.click();
@@ -106,10 +115,11 @@ describe('ダイレクトメッセージInbox', () => {
     );
     const messages = await $$('[data-testid="direct-message-item"]');
     const messageContent = await messages[0]!.$('[data-testid="direct-message-content"]');
-    await browser.waitUntil(
-      async () => (await messageContent.getText()).includes(seeded.content),
-      { timeout: 20000, interval: 300, timeoutMsg: 'DM本文が取得できませんでした' },
-    );
+    await browser.waitUntil(async () => (await messageContent.getText()).includes(seeded.content), {
+      timeout: 20000,
+      interval: 300,
+      timeoutMsg: 'DM本文が取得できませんでした',
+    });
     const firstMessageText = await messageContent.getText();
     expect(firstMessageText).toContain(seeded.content);
 
