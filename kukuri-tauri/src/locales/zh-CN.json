@@ -765,6 +765,10 @@
     "connectionFailed": "连接失败",
     "reconnect": "重连"
   },
+  "bootstrapConfig": {
+    "add": "添加",
+    "noNodes": "未指定节点"
+  },
   "bootstrapPanel": {
     "title": "引导节点设置",
     "description": "默认使用 n0 提供的节点。如需可指定自定义引导节点（node_id@host:port）。",
