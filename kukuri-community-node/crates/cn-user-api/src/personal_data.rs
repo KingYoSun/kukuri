@@ -1134,16 +1134,15 @@ mod tests {
         .fetch_one(&mut *tx)
         .await
         .expect("check graph");
-        if !graph_exists {
-            if sqlx::query("SELECT ag_catalog.create_graph($1)")
+        if !graph_exists
+            && sqlx::query("SELECT ag_catalog.create_graph($1)")
                 .bind(TRUST_GRAPH_NAME)
                 .execute(&mut *tx)
                 .await
                 .is_err()
-            {
-                tx.rollback().await.ok();
-                return false;
-            }
+        {
+            tx.rollback().await.ok();
+            return false;
         }
 
         let event_id = Uuid::new_v4().to_string();
@@ -1562,7 +1561,7 @@ mod tests {
         let outbox_delete_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM cn_relay.events_outbox WHERE op = 'delete' AND reason = 'dsar' AND event_id = ANY($1)",
         )
-        .bind(&vec![event_id_a.clone(), event_id_b.clone()])
+        .bind(vec![event_id_a.clone(), event_id_b.clone()])
         .fetch_one(&state.pool)
         .await
         .expect("count outbox delete");
@@ -1591,14 +1590,14 @@ mod tests {
         .bind(format!("pubkey:{pubkey}"))
         .bind(format!("event:{event_id_a}"))
         .bind(format!("event:{event_id_b}"))
-        .bind(&vec![event_id_a.clone(), event_id_b.clone()])
+        .bind(vec![event_id_a.clone(), event_id_b.clone()])
         .fetch_one(&state.pool)
         .await
         .expect("count moderation labels");
         assert_eq!(moderation_label_count, 0);
         let moderation_job_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM cn_moderation.jobs WHERE event_id = ANY($1)")
-                .bind(&vec![event_id_a.clone(), event_id_b.clone()])
+                .bind(vec![event_id_a.clone(), event_id_b.clone()])
                 .fetch_one(&state.pool)
                 .await
                 .expect("count moderation jobs");
@@ -1653,7 +1652,7 @@ mod tests {
             "SELECT COUNT(*) FROM cn_index.reindex_jobs WHERE requested_by = $1 AND topic_id = ANY($2) AND status = 'pending'",
         )
         .bind(&requested_by)
-        .bind(&vec![topic_a.clone(), topic_b.clone()])
+        .bind(vec![topic_a.clone(), topic_b.clone()])
         .fetch_one(&state.pool)
         .await
         .expect("count reindex jobs");

@@ -189,12 +189,12 @@ mod tests {
     }
 
     fn sample_nostr_event_id(ch: char) -> NostrEventId {
-        let hex: String = std::iter::repeat(ch).take(64).collect();
+        let hex: String = std::iter::repeat_n(ch, 64).collect();
         NostrEventId::from_hex(&hex).expect("valid nostr id")
     }
 
     fn repeating_hex(ch: char, len: usize) -> String {
-        std::iter::repeat(ch).take(len).collect()
+        std::iter::repeat_n(ch, len).collect()
     }
 
     fn sample_domain_event() -> DomainEvent {

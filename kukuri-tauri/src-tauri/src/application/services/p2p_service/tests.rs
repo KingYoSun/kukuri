@@ -147,7 +147,7 @@ impl NetworkService for MockNetworkServ {
 
     async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
         let addresses = self.addresses.lock().unwrap();
-        Ok(addresses.clone().unwrap_or_else(std::vec::Vec::new))
+        Ok(addresses.clone().unwrap_or_default())
     }
 
     async fn join_dht_topic(&self, topic: &str) -> Result<(), AppError> {

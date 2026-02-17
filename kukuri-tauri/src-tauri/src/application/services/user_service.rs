@@ -338,10 +338,10 @@ mod tests {
                     entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
                 }
                 FollowListSort::NameAsc => {
-                    entries.sort_by(|a, b| name_key(a).cmp(&name_key(b)));
+                    entries.sort_by_key(name_key);
                 }
                 FollowListSort::NameDesc => {
-                    entries.sort_by(|a, b| name_key(b).cmp(&name_key(a)));
+                    entries.sort_by_key(|entry| std::cmp::Reverse(name_key(entry)));
                 }
             }
 

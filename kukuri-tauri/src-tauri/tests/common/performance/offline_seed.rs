@@ -22,7 +22,7 @@ pub async fn seed_offline_actions(service: &OfflineService, count: usize) -> Res
 pub async fn seed_cache_metadata(service: &OfflineService, count: usize) -> Result<()> {
     for i in 0..count {
         let update = CacheMetadataUpdate {
-            cache_key: CacheKey::new(format!("cache:test:{i}").into()).expect("cache key"),
+            cache_key: CacheKey::new(format!("cache:test:{i}")).expect("cache key"),
             cache_type: CacheType::new("posts".into()).expect("cache type"),
             metadata: Some(json!({ "version": i })),
             expiry: Some(Utc::now() + Duration::seconds((i as i64 % 3) + 1)),

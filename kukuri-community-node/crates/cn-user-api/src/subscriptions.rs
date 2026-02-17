@@ -1693,7 +1693,7 @@ fn candidate_name_match_score(exact_hit: bool, prefix_hit: bool, trgm_score: f64
 
     let trgm_score = trgm_score.clamp(0.0, 1.0);
     if prefix_hit {
-        trgm_score.max(0.75).min(0.99)
+        trgm_score.clamp(0.75, 0.99)
     } else {
         trgm_score
     }
