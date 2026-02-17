@@ -623,11 +623,11 @@ export async function seedDirectMessageConversation(params?: {
     }, params ?? {});
 
     if (fallback?.error) {
-      throw new Error(`${message} (fallback failed: ${fallback.error})`);
+      throw new Error(`${message} (fallback failed: ${fallback.error})`, { cause: error });
     }
     return (fallback.result ??
       ((): SeedDirectMessageConversationResult => {
-        throw new Error(`Bridge fallback returned no result: ${message}`);
+        throw new Error(`Bridge fallback returned no result: ${message}`, { cause: error });
       })()) as SeedDirectMessageConversationResult;
   }
 }

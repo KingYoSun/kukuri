@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router';
+import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,16 +16,9 @@ export const Route = createFileRoute('/topics')({
 
 export function TopicsPage() {
   const { t } = useTranslation();
-  let isDetailPage = false;
-  try {
-    const currentLocation = useLocation();
-    isDetailPage =
-      currentLocation.pathname.startsWith('/topics/') && currentLocation.pathname !== '/topics';
-  } catch {
-    const fallbackPath =
-      typeof window !== 'undefined' && window.location?.pathname ? window.location.pathname : '';
-    isDetailPage = fallbackPath.startsWith('/topics/') && fallbackPath !== '/topics';
-  }
+  const currentPathname =
+    typeof window !== 'undefined' && window.location?.pathname ? window.location.pathname : '';
+  const isDetailPage = currentPathname.startsWith('/topics/') && currentPathname !== '/topics';
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { data: topics, isLoading, error } = useTopics();

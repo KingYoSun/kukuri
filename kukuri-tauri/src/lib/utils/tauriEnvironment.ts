@@ -11,7 +11,7 @@ export const isTauriRuntime = (): boolean => {
 
   return Boolean(
     candidate.__TAURI_INTERNALS__?.transformCallback ||
-      candidate.__TAURI__ ||
-      candidate.__TAURI_IPC__,
+    candidate.__TAURI__ ||
+    candidate.__TAURI_IPC__,
   );
 };

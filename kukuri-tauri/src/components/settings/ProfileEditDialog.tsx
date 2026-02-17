@@ -172,7 +172,6 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         toast.success(t('auth.profileUpdated'));
       }
     } catch (error) {
-      hasError = true;
       toast.error(t('auth.profileUpdateFailed'));
       errorHandler.log('ProfileEditDialog.submitFailed', error, {
         context: 'ProfileEditDialog.handleSubmit',

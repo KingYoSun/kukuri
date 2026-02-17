@@ -827,12 +827,7 @@ export function registerE2EBridge(): void {
             }
           }
 
-          let pendingAfter: PendingTopic[] = [];
-          try {
-            pendingAfter = await TauriApi.listPendingTopics();
-          } catch {
-            pendingAfter = [];
-          }
+          const pendingAfter = await TauriApi.listPendingTopics().catch(() => [] as PendingTopic[]);
           try {
             await topicStore.fetchTopics();
             if (typeof topicStore.refreshPendingTopics === 'function') {
