@@ -151,19 +151,24 @@ describe('Community Node friend_plus flow', () => {
       topicId: TOPIC_ID,
     });
     expect(syncedTopic.id).toBe(topic.id);
+    const encodedTopicId = encodeURIComponent(syncedTopic.id);
 
     await browser.execute((topicId: string) => {
+      const encodedTopicId = encodeURIComponent(topicId);
       try {
-        window.history.pushState({}, '', `/topics/${topicId}`);
+        window.history.pushState({}, '', `/topics/${encodedTopicId}`);
       } catch {
-        window.location.replace(`/topics/${topicId}`);
+        window.location.replace(`/topics/${encodedTopicId}`);
       }
     }, syncedTopic.id);
-    await browser.waitUntil(async () => (await browser.getUrl()).includes(`/topics/${syncedTopic.id}`), {
-      timeout: 20000,
-      interval: 300,
-      timeoutMsg: `Failed to navigate to topic route: ${syncedTopic.id}`,
-    });
+    await browser.waitUntil(
+      async () => (await browser.getUrl()).includes(`/topics/${encodedTopicId}`),
+      {
+        timeout: 20000,
+        interval: 300,
+        timeoutMsg: `Failed to navigate to topic route: ${syncedTopic.id}`,
+      },
+    );
 
     const createPostButton = await $('[data-testid="create-post-button"]');
     await createPostButton.waitForDisplayed({ timeout: 20000 });

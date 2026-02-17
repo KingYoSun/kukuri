@@ -39,3 +39,24 @@ Issue #52（Run `22075452530` / Job `63789452806`）で失敗していた `Deskt
 - `tmp/logs/gh-act-format-check-issue52.log`
 - `tmp/logs/gh-act-native-test-linux-issue52.log`
 - `tmp/logs/gh-act-community-node-tests-issue52.log`
+
+## PR #54 レビュー追従（2026年02月17日）
+
+`https://github.com/KingYoSun/kukuri/pull/54#discussion_r2815371993` の指摘に対応し、`community-node.friend-plus` E2E のトピック遷移で `topicId` を再度 URL エンコードした。
+
+- 修正: `window.history.pushState` / `window.location.replace` の遷移先を `/topics/${encodeURIComponent(topicId)}` に統一。
+- 追従: `browser.waitUntil` のURL検証も `/topics/${encodedTopicId}` へ合わせ、特殊文字を含む `topicId` でも判定が一致するよう調整。
+
+追加検証:
+
+- `pnpm exec eslint tests/e2e/specs/community-node.friend-plus.spec.ts`（pass）
+- `pnpm exec prettier --check tests/e2e/specs/community-node.friend-plus.spec.ts`（整形後 pass）
+- `NPM_CONFIG_PREFIX=/tmp/npm-global XDG_CACHE_HOME=/tmp/xdg-cache DOCKER_CONFIG=/tmp/docker-config gh act --workflows .github/workflows/test.yml --job format-check`（pass）
+- `NPM_CONFIG_PREFIX=/tmp/npm-global XDG_CACHE_HOME=/tmp/xdg-cache DOCKER_CONFIG=/tmp/docker-config gh act --workflows .github/workflows/test.yml --job native-test-linux`（pass）
+- `NPM_CONFIG_PREFIX=/tmp/npm-global XDG_CACHE_HOME=/tmp/xdg-cache DOCKER_CONFIG=/tmp/docker-config gh act --workflows .github/workflows/test.yml --job community-node-tests`（pass）
+
+追加ログ:
+
+- `tmp/logs/gh-act-format-check-issue52-review-followup.log`
+- `tmp/logs/gh-act-native-test-linux-issue52-review-followup.log`
+- `tmp/logs/gh-act-community-node-tests-issue52-review-followup.log`
