@@ -45,7 +45,9 @@ const selectInviteScope = async () => {
   const scopeTrigger = await $('[data-testid="scope-selector"]');
   await scopeTrigger.waitForDisplayed({ timeout: 15000 });
   await scopeTrigger.click();
-  const inviteItem = await $(`//div[@data-slot="select-item" and contains(., "招待")]`);
+  const inviteItem = await $(
+    '//div[@data-slot="select-item" and (contains(., "招待") or contains(., "Invite") or contains(., "邀请"))]',
+  );
   await inviteItem.waitForDisplayed({ timeout: 10000 });
   await inviteItem.click();
 };

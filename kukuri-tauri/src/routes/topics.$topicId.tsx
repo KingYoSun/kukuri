@@ -102,7 +102,11 @@ function TopicPage() {
           </div>
           <div className="flex items-center gap-2">
             {isJoined && !showComposer && (
-              <Button onClick={() => setShowComposer(true)} size="sm">
+              <Button
+                onClick={() => setShowComposer(true)}
+                size="sm"
+                data-testid="create-post-button"
+              >
                 <PlusCircle className="h-4 w-4 mr-2" />
                 {t('topics.createPost')}
               </Button>
