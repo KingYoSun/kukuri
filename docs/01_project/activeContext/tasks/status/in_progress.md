@@ -10,4 +10,4 @@
 
 ## 現在のタスク
 
-- Issue #71 Phase B: `kukuri-community-node` Node risk-later 依存更新（Phase A 完了、次PRで着手予定）
+- Issue #71 Phase C: `kukuri-tauri` Rust Cargo risk-later 依存更新（Phase B 完了、次PRで着手予定）
