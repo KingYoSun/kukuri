@@ -13,7 +13,7 @@
 ### 2026年02月17日 Issue #40 M-03 kukuri-tauri package license MIT統一
 
 - 目的: `kukuri-tauri/package.json` に `"license": "MIT"` を追加し、Issue #40 の残タスクを解消する。
-- 状態: PR作成対応中（実装・検証完了、レビュー待ち）。
+- 状態: PR #62 作成済み（レビュー待ち）。
 - 参照: `https://github.com/KingYoSun/kukuri/issues/40`
 
 ### 2026年02月16日 Issue #50 github-to-discord webhook guard
