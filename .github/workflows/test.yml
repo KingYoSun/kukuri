@@ -212,7 +212,9 @@ jobs:
       - name: Run community node E2E scenario
         shell: pwsh
         env:
-          KUKURI_TEST_RUNNER_IMAGE: ${{ needs.change-scope.outputs.test_runner_image }}
+          # Prebuilt image can lag behind HEAD and execute stale E2E specs.
+          # Keep this empty so scripts/test-docker.ps1 builds from current checkout.
+          KUKURI_TEST_RUNNER_IMAGE: ''
         run: ./scripts/test-docker.ps1 e2e-community-node
 
       - name: Upload community node E2E artefacts
