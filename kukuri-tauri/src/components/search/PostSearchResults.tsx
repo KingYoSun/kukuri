@@ -15,6 +15,7 @@ import {
   type CommunityNodeSearchResponse,
 } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import { useTopicStore, type Post } from '@/stores';
 
 interface PostSearchResultsProps {
@@ -293,7 +294,7 @@ function CommunityNodeSearchResultCard({
   const title =
     hit.title || hit.summary || hit.content || t('search.searchResult', { index: index + 1 });
   const summary = hit.summary || hit.content;
-  const createdAtText = hit.createdAt ? new Date(hit.createdAt * 1000).toLocaleString() : 'unknown';
+  const createdAtText = hit.createdAt ? formatDateTimeByI18n(hit.createdAt * 1000) : 'unknown';
   const authorLabel = hit.author ? `pubkey:${hit.author}` : t('search.unknownAuthor');
 
   return (

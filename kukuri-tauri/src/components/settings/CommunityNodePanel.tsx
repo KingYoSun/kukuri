@@ -24,6 +24,7 @@ import {
   type CommunityNodeRoleKey,
 } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import { useCommunityNodeStore } from '@/stores/communityNodeStore';
 import { toast } from 'sonner';
 
@@ -431,7 +432,7 @@ export function CommunityNodePanel() {
             <div className="space-y-3">
               {nodes.map((node, index) => {
                 const expiresAt = node.token_expires_at
-                  ? new Date(node.token_expires_at * 1000).toLocaleString()
+                  ? formatDateTimeByI18n(node.token_expires_at * 1000)
                   : null;
                 return (
                   <div
@@ -650,9 +651,9 @@ export function CommunityNodePanel() {
             <div className="space-y-2" data-testid="community-node-join-requests">
               {pendingJoinRequestsQuery.data.items.map((item) => {
                 const requestedAt = item.requested_at
-                  ? new Date(item.requested_at * 1000).toLocaleString()
+                  ? formatDateTimeByI18n(item.requested_at * 1000)
                   : null;
-                const receivedAt = new Date(item.received_at * 1000).toLocaleString();
+                const receivedAt = formatDateTimeByI18n(item.received_at * 1000);
                 return (
                   <div key={item.event_id} className="rounded-md border p-3 text-sm space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -706,7 +707,7 @@ export function CommunityNodePanel() {
                   <div className="font-medium">{entry.topic_id}</div>
                   <div className="text-xs text-muted-foreground">
                     scope: {entry.scope} / epoch: {entry.epoch} / stored:{' '}
-                    {new Date(entry.stored_at * 1000).toLocaleString()}
+                    {formatDateTimeByI18n(entry.stored_at * 1000)}
                   </div>
                 </div>
               ))}

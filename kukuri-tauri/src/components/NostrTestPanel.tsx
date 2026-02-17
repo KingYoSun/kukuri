@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { listen } from '@tauri-apps/api/event';
 import { errorHandler } from '@/lib/errorHandler';
+import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 
 interface NostrEventPayload {
   id: string;
@@ -270,7 +271,7 @@ export function NostrTestPanel() {
                           {event.content.length > 100 && '...'}
                         </div>
                         <div className="text-muted-foreground text-xs mt-1">
-                          {new Date(event.created_at * 1000).toLocaleString()}
+                          {formatDateTimeByI18n(event.created_at * 1000)}
                         </div>
                       </div>
                     ))}
