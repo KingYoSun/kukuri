@@ -543,8 +543,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
       errorHandler.log('Failed to like post', error, {
         context: 'PostStore.likePost',
-        showToast: true,
-        toastTitle: '�����˂Ɏ��s���܂���',
+        showToast: false,
       });
       throw error;
     }

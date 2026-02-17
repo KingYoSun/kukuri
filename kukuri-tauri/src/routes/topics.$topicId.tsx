@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState, useMemo } from 'react';
 import { useTopicStore } from '@/stores';
@@ -17,12 +18,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TopicFormModal } from '@/components/topics/TopicFormModal';
 import { TopicDeleteDialog } from '@/components/topics/TopicDeleteDialog';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
+import i18n from '@/i18n';
 
 export const Route = createFileRoute('/topics/$topicId')({
   component: TopicPage,
 });
 
 function TopicPage() {
+  const { t } = useTranslation();
   const { topicId } = Route.useParams();
   const { topics, joinedTopics, currentTopic, pendingTopics } = useTopicStore();
   const { data: posts, isLoading, refetch } = usePostsByTopic(topicId);
@@ -31,13 +35,14 @@ function TopicPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const pendingTopic = pendingTopics.get(topicId);
+  const isPublicTopic = topicId === DEFAULT_PUBLIC_TOPIC_ID;
   const topic = topics.get(topicId) ??
     (currentTopic?.id === topicId ? currentTopic : undefined) ??
     (pendingTopic
       ? {
           id: pendingTopic.pending_id,
           name: pendingTopic.name,
-          description: pendingTopic.description ?? '',
+          description: isPublicTopic ? i18n.t('topics.publicTimeline') : (pendingTopic.description ?? ''),
           tags: [],
           memberCount: 0,
           postCount: 0,
@@ -50,7 +55,7 @@ function TopicPage() {
       : undefined) ?? {
       id: topicId,
       name: topicId,
-      description: '',
+      description: isPublicTopic ? i18n.t('topics.publicTimeline') : '',
       tags: [],
       memberCount: 0,
       postCount: 0,
@@ -60,12 +65,13 @@ function TopicPage() {
       visibility: 'public',
       isJoined: joinedTopics.includes(topicId),
     };
+  
   const isJoined = useMemo(() => joinedTopics.includes(topicId), [joinedTopics, topicId]);
 
   if (!topic) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">トピックが見つかりません</p>
+        <p className="text-muted-foreground">{t('topics.notFound')}</p>
       </div>
     );
   }
@@ -85,12 +91,12 @@ function TopicPage() {
         {topic.description && <p className="text-muted-foreground mb-4">{topic.description}</p>}
         <div className="flex items-center justify-between mt-4">
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>{topic.memberCount} メンバー</span>
+            <span>{t('topics.members', { count: topic.memberCount })}</span>
             <span>•</span>
             <span>
-              最終更新:{' '}
+              {t('topics.lastUpdated')}:{' '}
               {topic.lastActive
-                ? new Date(topic.lastActive * 1000).toLocaleDateString('ja-JP')
+                ? new Date(topic.lastActive * 1000).toLocaleDateString()
                 : '-'}
             </span>
           </div>
@@ -98,7 +104,7 @@ function TopicPage() {
             {isJoined && !showComposer && (
               <Button onClick={() => setShowComposer(true)} size="sm">
                 <PlusCircle className="h-4 w-4 mr-2" />
-                投稿する
+                {t('topics.createPost')}
               </Button>
             )}
             <DropdownMenu>
@@ -110,7 +116,7 @@ function TopicPage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={() => setShowEditModal(true)}>
                   <Edit className="h-4 w-4 mr-2" />
-                  編集
+                  {t('common.edit')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -119,7 +125,7 @@ function TopicPage() {
                   data-testid="topic-delete-menu"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  削除
+                  {t('common.delete')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -146,8 +152,8 @@ function TopicPage() {
           <Alert>
             <AlertDescription>
               {isJoined
-                ? 'まだ投稿がありません。最初の投稿をしてみましょう！'
-                : 'このトピックに参加すると投稿が表示されます。'}
+                ? t('topics.noPostsYet')
+                : t('topics.joinToSeePosts')}
             </AlertDescription>
           </Alert>
         ) : (

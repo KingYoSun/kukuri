@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SyncConflict } from '@/lib/sync/syncEngine';
 import { errorHandler } from '@/lib/errorHandler';
 import {
@@ -38,6 +39,7 @@ export function ConflictResolutionDialog({
   onClose,
   onResolve,
 }: ConflictResolutionDialogProps) {
+  const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [selectedResolution, setSelectedResolution] = useState<'local' | 'remote' | 'merge'>(
     'local',
@@ -143,10 +145,10 @@ export function ConflictResolutionDialog({
         onClose();
       }
     } catch (error) {
-      errorHandler.log('競合解決エラー', error, {
+      errorHandler.log(t('sync.conflictResolution.resolveError'), error, {
         context: 'ConflictResolutionDialog.handleResolve',
         showToast: true,
-        toastTitle: '競合の解決に失敗しました',
+        toastTitle: t('sync.conflictResolution.resolveFailed'),
       });
     } finally {
       setIsResolving(false);
@@ -178,10 +180,10 @@ export function ConflictResolutionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-yellow-500" />
-            同期の競合を解決
+            {t('sync.conflictResolution.title')}
           </DialogTitle>
           <DialogDescription>
-            競合 {currentIndex + 1} / {conflicts.length}
+            {t('sync.conflictResolution.conflictCount', { current: currentIndex + 1, total: conflicts.length })}
           </DialogDescription>
         </DialogHeader>
 
@@ -194,8 +196,8 @@ export function ConflictResolutionDialog({
             <TabsList
               className={cn('grid w-full gap-2', showDocTab ? 'grid-cols-2' : 'grid-cols-1')}
             >
-              <TabsTrigger value="summary">概要</TabsTrigger>
-              {showDocTab && <TabsTrigger value="doc">Doc/Blob</TabsTrigger>}
+              <TabsTrigger value="summary">{t('sync.conflictResolution.summary')}</TabsTrigger>
+              {showDocTab && <TabsTrigger value="doc">{t('sync.conflictResolution.docBlob')}</TabsTrigger>}
             </TabsList>
             <TabsContent value="summary" className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -203,18 +205,18 @@ export function ConflictResolutionDialog({
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm">
                       <Monitor className="h-4 w-4" />
-                      ローカルの変更
+                      {t('sync.conflictResolution.localChanges')}
                     </CardTitle>
-                    <CardDescription className="text-xs">あなたのデバイスでの変更</CardDescription>
+                    <CardDescription className="text-xs">{t('sync.conflictResolution.localChangesDescription')}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-xs text-muted-foreground mb-2 space-y-1">
                       <p>
-                        作成日時:{' '}
-                        {new Date(currentConflict.localAction.createdAt).toLocaleString('ja-JP')}
+                        {t('sync.conflictResolution.createdAt')}:{' '}
+                        {new Date(currentConflict.localAction.createdAt).toLocaleString()}
                       </p>
                       <p>
-                        タイプ:{' '}
+                        {t('sync.conflictResolution.type')}:{' '}
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
                           {currentConflict.localAction.actionType}
                         </code>
@@ -230,10 +232,10 @@ export function ConflictResolutionDialog({
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm">
                       <Server className="h-4 w-4" />
-                      リモートの変更
+                      {t('sync.conflictResolution.remoteChanges')}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      他のデバイスまたはサーバーでの変更
+                      {t('sync.conflictResolution.remoteChangesDescription')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -241,13 +243,11 @@ export function ConflictResolutionDialog({
                       <>
                         <div className="text-xs text-muted-foreground mb-2 space-y-1">
                           <p>
-                            作成日時:{' '}
-                            {new Date(currentConflict.remoteAction.createdAt).toLocaleString(
-                              'ja-JP',
-                            )}
+                            {t('sync.conflictResolution.createdAt')}:{' '}
+                            {new Date(currentConflict.remoteAction.createdAt).toLocaleString()}
                           </p>
                           <p>
-                            タイプ:{' '}
+                            {t('sync.conflictResolution.type')}:{' '}
                             <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
                               {currentConflict.remoteAction.actionType}
                             </code>
@@ -259,7 +259,7 @@ export function ConflictResolutionDialog({
                       </>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        リモート側の変更はありません。
+                        {t('sync.conflictResolution.noRemoteChanges')}
                       </p>
                     )}
                   </CardContent>
@@ -271,10 +271,10 @@ export function ConflictResolutionDialog({
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm">
                       <GitBranch className="h-4 w-4" />
-                      マージ結果のプレビュー
+                      {t('sync.conflictResolution.mergePreview')}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      両方の変更を組み合わせた結果
+                      {t('sync.conflictResolution.mergePreviewDescription')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -287,7 +287,7 @@ export function ConflictResolutionDialog({
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">解決方法を選択</CardTitle>
+                  <CardTitle className="text-sm">{t('sync.conflictResolution.selectResolution')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <RadioGroup
@@ -300,7 +300,7 @@ export function ConflictResolutionDialog({
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="local" id="local" />
                       <Label htmlFor="local" className="cursor-pointer">
-                        ローカルの変更を優先する
+                        {t('sync.conflictResolution.preferLocal')}
                       </Label>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -316,14 +316,14 @@ export function ConflictResolutionDialog({
                           !currentConflict.remoteAction && 'text-muted-foreground',
                         )}
                       >
-                        リモートの変更を優先する
+                        {t('sync.conflictResolution.preferRemote')}
                       </Label>
                     </div>
                     {currentConflict.mergedData && (
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="merge" id="merge" />
                         <Label htmlFor="merge" className="cursor-pointer">
-                          両方の変更をマージする
+                          {t('sync.conflictResolution.mergeBoth')}
                         </Label>
                       </div>
                     )}
@@ -335,7 +335,7 @@ export function ConflictResolutionDialog({
             {showDocTab && (
               <TabsContent value="doc">
                 {docComparisonRows.every((row) => !row.local && !row.remote) ? (
-                  <p className="text-sm text-muted-foreground">Doc/Blob 情報がありません。</p>
+                  <p className="text-sm text-muted-foreground">{t('sync.conflictResolution.noDocBlobInfo')}</p>
                 ) : (
                   <div className="space-y-3">
                     {docComparisonRows.map((row) => {
@@ -350,7 +350,7 @@ export function ConflictResolutionDialog({
                           </p>
                           <div className="grid grid-cols-2 gap-3 text-xs">
                             <div>
-                              <p className="text-muted-foreground mb-0.5">ローカル</p>
+                              <p className="text-muted-foreground mb-0.5">{t('sync.conflictResolution.local')}</p>
                               <p
                                 className={cn('font-medium break-all', differ && 'text-amber-600')}
                               >
@@ -358,7 +358,7 @@ export function ConflictResolutionDialog({
                               </p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground mb-0.5">リモート</p>
+                              <p className="text-muted-foreground mb-0.5">{t('sync.conflictResolution.remote')}</p>
                               <p
                                 className={cn('font-medium break-all', differ && 'text-amber-600')}
                               >
@@ -378,10 +378,10 @@ export function ConflictResolutionDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleSkip} disabled={isResolving}>
-            スキップ
+            {t('sync.conflictResolution.skip')}
           </Button>
           <Button onClick={handleResolve} disabled={isResolving}>
-            {isResolving ? '適用中...' : '適用'}
+            {isResolving ? t('sync.conflictResolution.applying') : t('sync.conflictResolution.apply')}
           </Button>
         </DialogFooter>
       </DialogContent>

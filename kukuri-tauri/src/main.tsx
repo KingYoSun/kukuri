@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { offlineSyncService } from './services/offlineSyncService';
+import './i18n';
 import './testing/e2eBootstrap';
 
 // Initialize offline sync service

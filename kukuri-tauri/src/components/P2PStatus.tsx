@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useP2P } from '@/hooks/useP2P';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -18,9 +19,10 @@ import {
   Loader2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale } from '@/i18n';
 
 export function P2PStatus() {
+  const { t } = useTranslation();
   const {
     initialized,
     nodeId,
@@ -92,15 +94,15 @@ export function P2PStatus() {
       case 'connected':
         return (
           <Badge variant="default" className="bg-green-500">
-            接続中
+            {t('p2pStatus.connected')}
           </Badge>
         );
       case 'connecting':
-        return <Badge variant="secondary">接続中...</Badge>;
+        return <Badge variant="secondary">{t('p2pStatus.connecting')}</Badge>;
       case 'error':
-        return <Badge variant="destructive">エラー</Badge>;
+        return <Badge variant="destructive">{t('p2pStatus.error')}</Badge>;
       default:
-        return <Badge variant="outline">未接続</Badge>;
+        return <Badge variant="outline">{t('p2pStatus.disconnected')}</Badge>;
     }
   };
 
@@ -109,23 +111,23 @@ export function P2PStatus() {
 
   const lastUpdatedLabel = useMemo(() => {
     if (!lastStatusFetchedAt) {
-      return '未取得';
+      return t('p2pStatus.notFetched');
     }
-    return formatDistanceToNow(lastStatusFetchedAt, { addSuffix: true, locale: ja });
-  }, [lastStatusFetchedAt]);
+    return formatDistanceToNow(lastStatusFetchedAt, { addSuffix: true, locale: getDateFnsLocale() });
+  }, [lastStatusFetchedAt, t]);
 
   const nextRefreshLabel = useMemo(() => {
     if (statusBackoffMs >= 600_000) {
-      return '約10分';
+      return t('p2pStatus.about10min');
     }
     if (statusBackoffMs >= 300_000) {
-      return '約5分';
+      return t('p2pStatus.about5min');
     }
     if (statusBackoffMs >= 120_000) {
-      return '約2分';
+      return t('p2pStatus.about2min');
     }
-    return '約30秒';
-  }, [statusBackoffMs]);
+    return t('p2pStatus.about30sec');
+  }, [statusBackoffMs, t]);
 
   return (
     <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
@@ -139,15 +141,15 @@ export function P2PStatus() {
                     detailsOpen ? 'rotate-0' : '-rotate-90'
                   }`}
                 />
-                P2P ネットワーク
+{t('p2pStatus.title')}
               </Button>
             </CollapsibleTrigger>
             {getConnectionIcon()}
           </div>
-          <CardDescription className="text-xs">分散型ネットワーク接続状態</CardDescription>
+          <CardDescription className="text-xs">{t('p2pStatus.description')}</CardDescription>
           <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>最終更新: {lastUpdatedLabel}</span>
-            <span>次回再取得: {nextRefreshLabel}</span>
+            <span>{t('p2pStatus.lastUpdated')}: {lastUpdatedLabel}</span>
+            <span>{t('p2pStatus.nextRefresh')}: {nextRefreshLabel}</span>
           </div>
           <div className="mt-2 flex justify-end">
             <Button
@@ -160,10 +162,10 @@ export function P2PStatus() {
               {isRefreshingStatus ? (
                 <>
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  更新中…
+                  {t('p2pStatus.refreshing')}
                 </>
               ) : (
-                '再取得'
+                t('p2pStatus.refresh')
               )}
             </Button>
           </div>
@@ -172,7 +174,7 @@ export function P2PStatus() {
           <CardContent className="space-y-4">
             {/* 接続状態 */}
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">状態</span>
+              <span className="text-sm text-muted-foreground">{t('p2pStatus.status')}</span>
               {getConnectionBadge()}
             </div>
 
@@ -185,7 +187,7 @@ export function P2PStatus() {
                     {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
                     {statusError && (
                       <p className="text-xs text-red-600 dark:text-red-400">
-                        状態取得エラー: {statusError}
+                        {t('p2pStatus.statusFetchError')}: {statusError}
                       </p>
                     )}
                     <div className="mt-1 flex flex-wrap gap-2">
@@ -196,7 +198,7 @@ export function P2PStatus() {
                           className="h-6 text-xs"
                           onClick={clearError}
                         >
-                          閉じる
+                          {t('p2pStatus.close')}
                         </Button>
                       )}
                       {statusError && (
@@ -207,7 +209,7 @@ export function P2PStatus() {
                           onClick={handleRefresh}
                           disabled={isRefreshingStatus}
                         >
-                          再取得
+                          {t('p2pStatus.refresh')}
                         </Button>
                       )}
                     </div>
@@ -224,7 +226,7 @@ export function P2PStatus() {
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2 text-xs">
                     <ServerIcon className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">ノードID</span>
+                    <span className="text-muted-foreground">{t('p2pStatus.nodeId')}</span>
                   </div>
                   <p className="text-xs font-mono break-all bg-muted/50 rounded px-2 py-1">
                     {nodeId?.slice(0, 16)}...
@@ -235,7 +237,7 @@ export function P2PStatus() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-sm">
                     <UsersIcon className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">接続ピア</span>
+                    <span className="text-muted-foreground">{t('p2pStatus.connectedPeers')}</span>
                   </div>
                   <span className="text-sm font-medium">{connectedPeerCount}</span>
                 </div>
@@ -243,7 +245,7 @@ export function P2PStatus() {
                 {/* メトリクスサマリ */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Gossipメトリクス</span>
+                    <span className="text-sm text-muted-foreground">{t('p2pStatus.gossipMetrics')}</span>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -251,7 +253,7 @@ export function P2PStatus() {
                       onClick={handleRefresh}
                       disabled={isRefreshingStatus}
                     >
-                      更新
+                      {t('p2pStatus.update')}
                     </Button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -279,7 +281,7 @@ export function P2PStatus() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 text-sm">
                       <NetworkIcon className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-muted-foreground">参加中のトピック</span>
+                      <span className="text-muted-foreground">{t('p2pStatus.joinedTopics')}</span>
                     </div>
                     <span className="text-sm font-medium">{activeTopics.length}</span>
                   </div>
@@ -316,7 +318,7 @@ export function P2PStatus() {
                   <>
                     <Separator />
                     <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">ネットワークアドレス</p>
+                      <p className="text-xs text-muted-foreground">{t('p2pStatus.networkAddress')}</p>
                       <code className="text-xs font-mono break-all bg-muted/50 rounded px-2 py-1 block">
                         {nodeAddr}
                       </code>
@@ -329,14 +331,14 @@ export function P2PStatus() {
             {!initialized && connectionStatus === 'disconnected' && (
               <div className="text-center py-4">
                 <WifiOffIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">P2Pネットワークに接続していません</p>
+                <p className="text-sm text-muted-foreground">{t('p2pStatus.notConnected')}</p>
               </div>
             )}
 
             {connectionStatus === 'connecting' && (
               <div className="text-center py-4">
                 <CircleIcon className="h-8 w-8 text-yellow-500 animate-pulse mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">ネットワークに接続中...</p>
+                <p className="text-sm text-muted-foreground">{t('p2pStatus.connectingToNetwork')}</p>
               </div>
             )}
           </CardContent>

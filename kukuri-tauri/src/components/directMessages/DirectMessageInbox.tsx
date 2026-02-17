@@ -1,10 +1,11 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
 import { Loader2, Search as SearchIcon } from 'lucide-react';
+import { getDateFnsLocale } from '@/i18n';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -31,8 +32,8 @@ const formatRelativeTime = (timestamp: number | null | undefined) => {
   }
   const date = new Date(timestamp);
   return {
-    display: formatDistanceToNow(date, { addSuffix: true, locale: ja }),
-    helper: date.toLocaleString('ja-JP'),
+    display: formatDistanceToNow(date, { addSuffix: true, locale: getDateFnsLocale() }),
+    helper: date.toLocaleString(),
   };
 };
 
@@ -53,6 +54,7 @@ type ConversationEntry = {
 const EMPTY_CONVERSATION_PAGES: DirectMessageConversationList[] = [];
 
 export function DirectMessageInbox() {
+  const { t } = useTranslation();
   const currentUser = useAuthStore((state) => state.currentUser);
   const isInboxOpen = useDirectMessageStore((state) => state.isInboxOpen);
   const closeInbox = useDirectMessageStore((state) => state.closeInbox);
@@ -264,7 +266,7 @@ export function DirectMessageInbox() {
           context: 'DirectMessageInbox.recipientSearch',
           metadata: { query },
         });
-        setSearchError('ユーザー検索に失敗しました');
+        setSearchError(t('dm.searchFailed'));
       } finally {
         if (!cancelled) {
           setIsSearching(false);
@@ -290,11 +292,11 @@ export function DirectMessageInbox() {
   const handleStartConversation = () => {
     const npub = targetNpub.trim();
     if (!npub) {
-      setValidationError('宛先の npub または ID を入力してください');
+      setValidationError(t('dm.enterTarget'));
       return;
     }
     if (currentUser?.npub === npub) {
-      setValidationError('自分自身にはメッセージを送信できません');
+      setValidationError(t('dm.cannotMessageSelf'));
       return;
     }
     setValidationError(null);
@@ -375,27 +377,27 @@ export function DirectMessageInbox() {
     <Dialog open={isInboxOpen} onOpenChange={(open) => (!open ? handleClose() : undefined)}>
       {isInboxOpen ? (
         <span className="sr-only" aria-live="polite">
-          ダイレクトメッセージ
+          {t('dm.directMessages')}
         </span>
       ) : null}
       <DialogContent className="max-w-lg space-y-4">
         <DialogHeader>
-          <DialogTitle>ダイレクトメッセージ</DialogTitle>
+          <DialogTitle>{t('dm.inboxTitle')}</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            既存の会話を開くか、宛先を指定して新しいメッセージを開始できます。
+            {t('dm.inboxDescription')}
           </p>
         </DialogHeader>
 
         <div className="rounded-md border border-border p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Input
-              placeholder="npub1... / ユーザーID"
+              placeholder={t('dm.targetPlaceholder')}
               value={targetNpub}
               onChange={(event) => setTargetNpub(event.target.value)}
               data-testid="dm-inbox-target-input"
             />
             <Button onClick={handleStartConversation} data-testid="dm-inbox-start-button">
-              新しいメッセージ
+              {t('dm.newMessage')}
             </Button>
           </div>
           {validationError ? (
@@ -404,7 +406,7 @@ export function DirectMessageInbox() {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              npub / ユーザーID を入力し、「新しいメッセージ」を押すとモーダルが開きます。
+              {t('dm.targetHint')}
             </p>
           )}
         </div>
@@ -413,13 +415,13 @@ export function DirectMessageInbox() {
           <div className="rounded-md border border-dashed border-border/70 p-3 space-y-2">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <SearchIcon className="h-3.5 w-3.5" />
-              候補
+              {t('dm.candidates')}
               {isSearching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
             {searchError ? (
               <p className="text-xs text-destructive">{searchError}</p>
             ) : searchResults.length === 0 ? (
-              <p className="text-xs text-muted-foreground">一致する候補が見つかりません</p>
+              <p className="text-xs text-muted-foreground">{t('dm.noCandidates')}</p>
             ) : (
               <ul className="space-y-1" data-testid="dm-inbox-suggestions">
                 {searchResults.slice(0, 5).map((profile) => {
@@ -454,7 +456,7 @@ export function DirectMessageInbox() {
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted-foreground">最近の会話</h2>
+            <h2 className="text-sm font-medium text-muted-foreground">{t('dm.recentConversations')}</h2>
             <Button
               size="sm"
               variant="outline"
@@ -464,16 +466,16 @@ export function DirectMessageInbox() {
               disabled={!latestConversationNpub}
               data-testid="dm-inbox-open-latest"
             >
-              最新の会話を開く
+              {t('dm.openLatest')}
             </Button>
           </div>
           <div className="flex items-center gap-2">
             <Input
-              placeholder="会話を検索 (npub / メッセージ本文)"
+              placeholder={t('dm.searchConversations')}
               value={conversationQuery}
               onChange={(event) => setConversationQuery(event.target.value)}
               onKeyDown={handleConversationSearchKeyDown}
-              aria-label="会話検索"
+              aria-label={t('dm.searchConversationsLabel')}
               data-testid="dm-inbox-conversation-search"
             />
             {conversationQuery ? (
@@ -484,17 +486,17 @@ export function DirectMessageInbox() {
                 onClick={() => setConversationQuery('')}
                 data-testid="dm-inbox-clear-search"
               >
-                クリア
+                {t('dm.clear')}
               </Button>
             ) : null}
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>
-              {filteredConversationEntries.length} 件 / 読み込み済み {conversationEntries.length} 件
+              {t('dm.showing', { filtered: filteredConversationEntries.length, total: conversationEntries.length })}
             </span>
             <div className="flex items-center gap-2">
               {conversationQuery && autoCompleteConversationNpub ? (
-                <span>Enter で {formatNpub(autoCompleteConversationNpub)} を開く</span>
+                <span>{t('dm.openWithEnter', { npub: formatNpub(autoCompleteConversationNpub) })}</span>
               ) : null}
               {hasNextPage ? (
                 <Button
@@ -505,14 +507,14 @@ export function DirectMessageInbox() {
                   disabled={isFetchingNextPage}
                   data-testid="dm-inbox-load-more"
                 >
-                  {isFetchingNextPage ? '読み込み中…' : 'さらに表示'}
+                  {isFetchingNextPage ? t('dm.loadingMore') : t('dm.loadMore')}
                 </Button>
               ) : null}
             </div>
           </div>
           {isConversationsError && hasConversations ? (
             <div className="text-[11px] text-destructive/80">
-              最新の会話一覧の取得に失敗しました。保存済みの会話を表示しています。
+              {t('dm.fetchFailed')}
             </div>
           ) : null}
           <div
@@ -523,15 +525,15 @@ export function DirectMessageInbox() {
             {showLoadingState ? (
               <div className="p-4 text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>会話を読み込んでいます…</span>
+                <span>{t('dm.loadingConversations')}</span>
               </div>
             ) : showErrorState ? (
               <div className="p-4 space-y-2">
                 <p className="text-sm text-destructive">
-                  会話の取得に失敗しました。時間をおいて再試行してください。
+                  {t('dm.fetchConversationsFailed')}
                 </p>
                 <Button size="sm" variant="outline" onClick={() => refetchConversations()}>
-                  再試行
+                  {t('dm.retry')}
                 </Button>
                 {conversationsError ? (
                   <p className="text-xs text-muted-foreground break-all">
@@ -541,11 +543,11 @@ export function DirectMessageInbox() {
               </div>
             ) : !hasConversations ? (
               <div className="p-4 text-sm text-muted-foreground">
-                まだ会話がありません。プロフィールから、または上の宛先入力から開始できます。
+                {t('dm.noConversations')}
               </div>
             ) : !hasFilteredConversations ? (
               <div className="p-4 text-sm text-muted-foreground" data-testid="dm-inbox-no-results">
-                “{conversationQuery}”に一致する会話が見つかりません。
+                {t('dm.noMatchingConversations', { query: conversationQuery })}
               </div>
             ) : shouldRenderFallbackList ? (
               <div className="divide-y divide-border/40">
@@ -589,7 +591,7 @@ export function DirectMessageInbox() {
                               className="text-[11px]"
                               data-testid={`dm-inbox-read-sync-${entry.npub}`}
                             >
-                              既読同期済み
+                              {t('dm.readSynced')}
                             </Badge>
                           ) : null}
                           {entry.unread > 0 ? (
@@ -614,27 +616,27 @@ export function DirectMessageInbox() {
                                 }}
                                 data-testid={`dm-inbox-mark-read-${entry.npub}`}
                               >
-                                既読にする
+                                {t('dm.markAsRead')}
                               </Button>
                             </>
                           ) : null}
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {entry.lastMessage?.content ?? 'メッセージはまだありません'}
+                        {entry.lastMessage?.content ?? t('dm.noMessages')}
                       </p>
                       <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
                         <span>
-                          最終受信: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
+                          {t('dm.lastReceived')}: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
                         </span>
-                        {activeConversationNpub === entry.npub ? <span>開いています</span> : null}
+                        {activeConversationNpub === entry.npub ? <span>{t('dm.opening')}</span> : null}
                       </div>
                       {entry.lastReadAt > 0 ? (
                         <div
                           className="text-[11px] text-muted-foreground"
                           data-testid={`dm-inbox-read-receipt-${entry.npub}`}
                         >
-                          既読同期: {lastReadTime.display ?? lastReadTime.helper ?? '---'}
+                          {t('dm.readSync')}: {lastReadTime.display ?? lastReadTime.helper ?? '---'}
                         </div>
                       ) : null}
                     </div>
@@ -663,10 +665,10 @@ export function DirectMessageInbox() {
                         {isFetchingNextPage ? (
                           <div className="flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>さらに読み込み中…</span>
+                            <span>{t('dm.loadingMore')}</span>
                           </div>
                         ) : (
-                          <span>これ以上の会話はありません</span>
+                          <span>{t('dm.moreConversations')}</span>
                         )}
                       </div>
                     );
@@ -715,7 +717,7 @@ export function DirectMessageInbox() {
                               className="text-[11px]"
                               data-testid={`dm-inbox-read-sync-${entry.npub}`}
                             >
-                              既読同期済み
+                              {t('dm.readSynced')}
                             </Badge>
                           ) : null}
                           {entry.unread > 0 ? (
@@ -740,27 +742,27 @@ export function DirectMessageInbox() {
                                 }}
                                 data-testid={`dm-inbox-mark-read-${entry.npub}`}
                               >
-                                既読にする
+                                {t('dm.markAsRead')}
                               </Button>
                             </>
                           ) : null}
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {entry.lastMessage?.content ?? 'メッセージはまだありません'}
+                        {entry.lastMessage?.content ?? t('dm.noMessages')}
                       </p>
                       <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
                         <span>
-                          最終受信: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
+                          {t('dm.lastReceived')}: {lastMessageTime.display ?? lastMessageTime.helper ?? '---'}
                         </span>
-                        {activeConversationNpub === entry.npub ? <span>開いています</span> : null}
+                        {activeConversationNpub === entry.npub ? <span>{t('dm.opening')}</span> : null}
                       </div>
                       {entry.lastReadAt > 0 ? (
                         <div
                           className="text-[11px] text-muted-foreground"
                           data-testid={`dm-inbox-read-receipt-${entry.npub}`}
                         >
-                          既読同期: {lastReadTime.display ?? lastReadTime.helper ?? '---'}
+                          {t('dm.readSync')}: {lastReadTime.display ?? lastReadTime.helper ?? '---'}
                         </div>
                       ) : null}
                     </div>

@@ -1,11 +1,12 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDraftStore } from '@/stores/draftStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { getDateFnsLocale, getCurrentLocale } from '@/i18n';
 import { FileText, Clock, Tag, Trash2, Edit } from 'lucide-react';
 import type { PostDraft } from '@/types/draft';
 import {
@@ -25,6 +26,7 @@ interface DraftManagerProps {
 }
 
 const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className }) => {
+  const { t } = useTranslation();
   const { drafts, deleteDraft, clearAllDrafts } = useDraftStore();
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
   const [clearAllConfirm, setClearAllConfirm] = React.useState(false);
@@ -40,7 +42,9 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
   };
 
   const formatDate = (date: Date) => {
-    return format(new Date(date), 'M月d日 HH:mm', { locale: ja });
+    const locale = getCurrentLocale();
+    const formatStr = locale === 'ja' ? 'M月d日 HH:mm' : locale === 'zh-CN' ? 'M月d日 HH:mm' : 'MMM d, HH:mm';
+    return format(new Date(date), formatStr, { locale: getDateFnsLocale() });
   };
 
   const getPreview = (content: string, maxLength = 100) => {
@@ -53,7 +57,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
       <Card className={cn('text-center', className)}>
         <CardContent className="py-12">
           <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">下書きはありません</p>
+          <p className="text-muted-foreground">{t('drafts.empty')}</p>
         </CardContent>
       </Card>
     );
@@ -64,14 +68,14 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
       <Card className={className}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">下書き一覧</CardTitle>
+            <CardTitle className="text-lg">{t('drafts.list')}</CardTitle>
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setClearAllConfirm(true)}
               className="text-destructive hover:text-destructive"
             >
-              すべて削除
+              {t('drafts.clearAll')}
             </Button>
           </div>
         </CardHeader>
@@ -88,7 +92,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
                     <div className="space-y-2">
                       {/* Content preview */}
                       <p className="text-sm line-clamp-2">
-                        {getPreview(draft.content) || '（内容なし）'}
+                        {getPreview(draft.content) || t('drafts.noContent')}
                       </p>
 
                       {/* Metadata */}
@@ -102,7 +106,7 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
 
                         <div className="flex items-center gap-1 ml-auto">
                           <Clock className="w-3 h-3" />
-                          <span>更新: {formatDate(draft.updatedAt)}</span>
+                          <span>{t('drafts.updated')}: {formatDate(draft.updatedAt)}</span>
                         </div>
                       </div>
                     </div>
@@ -146,18 +150,18 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>下書きを削除</AlertDialogTitle>
+            <AlertDialogTitle>{t('drafts.deleteTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              この下書きを削除してもよろしいですか？この操作は取り消せません。
+              {t('drafts.deleteDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              削除
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -167,18 +171,18 @@ const DraftManager: React.FC<DraftManagerProps> = ({ onSelectDraft, className })
       <AlertDialog open={clearAllConfirm} onOpenChange={setClearAllConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>すべての下書きを削除</AlertDialogTitle>
+            <AlertDialogTitle>{t('drafts.clearAllTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              すべての下書きを削除してもよろしいですか？この操作は取り消せません。
+              {t('drafts.clearAllDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleClearAll}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              すべて削除
+              {t('drafts.clearAll')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { open as showOpenDialog, save as showSaveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { toast } from 'sonner';
@@ -33,9 +34,9 @@ const NSEC_FILE_FILTERS = [
   },
 ];
 
-const formatTimestamp = (value: number | null) => {
+const formatTimestamp = (value: number | null, t: (key: string) => string) => {
   if (!value) {
-    return '未実施';
+    return t('settings.account.notPerformed');
   }
   return new Date(value).toLocaleString();
 };
@@ -60,6 +61,7 @@ const anonymizeNpub = (npub?: string | null) => {
 };
 
 export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogProps) {
+  const { t } = useTranslation();
   const currentUser = useAuthStore((state) => state.currentUser);
   const loginWithNsec = useAuthStore((state) => state.loginWithNsec);
   const recordAction = useKeyManagementStore((state) => state.recordAction);
@@ -90,7 +92,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
 
   const handleExport = async () => {
     if (!currentUser?.npub) {
-      toast.error('ログインしているアカウントが必要です');
+      toast.error(t('settings.account.loginRequired'));
       return;
     }
     setIsExporting(true);
@@ -106,12 +108,12 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       errorHandler.info('Private key exported successfully', 'KeyManagementDialog.export', {
         npub: currentUser.npub,
       });
-      toast.success('秘密鍵を取得しました。安全なオフライン環境に保管してください');
+      toast.success(t('settings.account.exportSuccess'));
     } catch (error) {
       errorHandler.log('Failed to export private key', error, {
         context: 'KeyManagementDialog.handleExport',
         showToast: true,
-        toastTitle: '秘密鍵の取得に失敗しました',
+        toastTitle: t('settings.account.exportFailed'),
       });
       recordAction({
         action: 'export',
@@ -122,7 +124,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       if (fallbackNsec) {
         setExportedKey(fallbackNsec);
         setIsKeyVisible(false);
-        toast.warning('繝ｭ繧ｰ繧､繝ｳ保存済みの鍵を表示しました（エクスポートに失敗）');
+        toast.warning(t('settings.account.exportFallback'));
         recordAction({
           action: 'export',
           status: 'success',
@@ -137,7 +139,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
 
   const handleSaveToFile = async () => {
     if (!exportedKey) {
-      toast.error('先に秘密鍵を取得してください');
+      toast.error(t('settings.account.exportFirst'));
       return;
     }
     setIsSaving(true);
@@ -145,7 +147,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       const targetPath = await showSaveDialog({
         filters: NSEC_FILE_FILTERS,
         defaultPath: buildDefaultFileName(currentUser?.npub),
-        title: '秘密鍵バックアップを保存',
+        title: t('settings.account.saveBackupTitle'),
       });
       if (!targetPath) {
         recordAction({
@@ -156,7 +158,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
         return;
       }
       await writeTextFile(targetPath, exportedKey);
-      toast.success('バックアップファイルを保存しました');
+      toast.success(t('settings.account.saveSuccess'));
       recordAction({
         action: 'export',
         status: 'success',
@@ -169,7 +171,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       errorHandler.log('Failed to save private key', error, {
         context: 'KeyManagementDialog.handleSaveToFile',
         showToast: true,
-        toastTitle: 'ファイルの保存に失敗しました',
+        toastTitle: t('settings.account.saveFailed'),
       });
       recordAction({
         action: 'export',
@@ -183,17 +185,17 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
 
   const handleCopy = async () => {
     if (!exportedKey) {
-      toast.error('先に秘密鍵を取得してください');
+      toast.error(t('settings.account.exportFirst'));
       return;
     }
     if (!navigator?.clipboard?.writeText) {
-      toast.error('クリップボードへコピーできませんでした');
+      toast.error(t('settings.account.copyNotSupported'));
       return;
     }
     setIsCopying(true);
     try {
       await navigator.clipboard.writeText(exportedKey);
-      toast.success('クリップボードへコピーしました（30秒以内に削除してください）');
+      toast.success(t('settings.account.copySuccess'));
       recordAction({
         action: 'export',
         status: 'success',
@@ -203,7 +205,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       errorHandler.log('Failed to copy private key', error, {
         context: 'KeyManagementDialog.handleCopy',
         showToast: true,
-        toastTitle: 'コピーに失敗しました',
+        toastTitle: t('settings.account.copyFailed'),
       });
       recordAction({
         action: 'export',
@@ -229,7 +231,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       const contents = await readTextFile(filePath);
       const trimmed = contents.trim();
       if (!trimmed.startsWith('nsec1')) {
-        toast.error('無効なファイルです（nsec1 で始まる秘密鍵を選択してください）');
+        toast.error(t('settings.account.invalidFile'));
         recordAction({
           action: 'import',
           status: 'error',
@@ -239,12 +241,12 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       }
       setImportedNsec(trimmed);
       setImportSource(filePath);
-      toast.success('秘密鍵ファイルを読み込みました');
+      toast.success(t('settings.account.fileLoaded'));
     } catch (error) {
       errorHandler.log('Failed to read private key file', error, {
         context: 'KeyManagementDialog.handleSelectFile',
         showToast: true,
-        toastTitle: 'ファイルの読み込みに失敗しました',
+        toastTitle: t('settings.account.fileLoadFailed'),
       });
       recordAction({
         action: 'import',
@@ -257,7 +259,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
   const handleImport = async () => {
     const trimmed = importedNsec.trim();
     if (!trimmed) {
-      toast.error('秘密鍵を入力するかファイルを読み込んでください');
+      toast.error(t('settings.account.enterOrLoadKey'));
       recordAction({
         action: 'import',
         status: 'cancelled',
@@ -266,7 +268,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       return;
     }
     if (!trimmed.startsWith('nsec1')) {
-      toast.error('秘密鍵の形式が正しくありません');
+      toast.error(t('settings.account.invalidFormat'));
       recordAction({
         action: 'import',
         status: 'error',
@@ -277,7 +279,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
     setIsImporting(true);
     try {
       await loginWithNsec(trimmed, true);
-      toast.success('秘密鍵をインポートし、セキュアストレージへ保存しました');
+      toast.success(t('settings.account.importSuccess'));
       recordAction({
         action: 'import',
         status: 'success',
@@ -292,7 +294,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
       errorHandler.log('Failed to import private key', error, {
         context: 'KeyManagementDialog.handleImport',
         showToast: true,
-        toastTitle: 'インポートに失敗しました',
+        toastTitle: t('settings.account.importFailed'),
       });
       recordAction({
         action: 'import',
@@ -308,9 +310,9 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl" data-testid="key-management-dialog">
         <DialogHeader className="space-y-2">
-          <DialogTitle>鍵管理</DialogTitle>
+          <DialogTitle>{t('settings.account.keyManagementTitle')}</DialogTitle>
           <DialogDescription>
-            バックアップと復元のフローを実行し、端末紛失時でもアカウントを取り戻せるようにします。
+            {t('settings.account.keyManagementDescriptionFull')}
           </DialogDescription>
         </DialogHeader>
 
@@ -320,29 +322,29 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
         >
           <TabsList className="grid grid-cols-2">
             <TabsTrigger value="export" data-testid="key-tab-export">
-              エクスポート
+              {t('settings.account.export')}
             </TabsTrigger>
             <TabsTrigger value="import" data-testid="key-tab-import">
-              インポート
+              {t('settings.account.import')}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="export" className="space-y-4 pt-4">
             <Alert variant="destructive">
-              <AlertTitle>誰にも共有しないでください</AlertTitle>
+              <AlertTitle>{t('settings.account.doNotShare')}</AlertTitle>
               <AlertDescription>
-                秘密鍵はアカウント乗っ取りに直結します。オフライン媒体（USB、紙など）にのみ保存し、オンラインストレージやチャットに貼り付けないでください。
+                {t('settings.account.doNotShareDescription')}
               </AlertDescription>
             </Alert>
 
             <div className="space-y-3">
               <Button onClick={handleExport} disabled={isExporting} data-testid="key-export-button">
-                {isExporting ? '取得中...' : '秘密鍵を取得'}
+                {isExporting ? t('settings.account.exporting') : t('settings.account.exportKey')}
               </Button>
 
               {exportedKey && (
                 <div className="space-y-3">
-                  <Label htmlFor="exported-nsec">秘密鍵</Label>
+                  <Label htmlFor="exported-nsec">{t('settings.account.privateKey')}</Label>
                   <div className="flex gap-2">
                     <Input
                       id="exported-nsec"
@@ -357,7 +359,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       onClick={() => setIsKeyVisible((value) => !value)}
                       data-testid="key-toggle-visibility"
                     >
-                      {isKeyVisible ? '非表示' : '表示'}
+                      {isKeyVisible ? t('settings.account.hide') : t('settings.account.show')}
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -368,7 +370,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       disabled={isCopying}
                       data-testid="key-copy-button"
                     >
-                      {isCopying ? 'コピー中...' : 'クリップボードにコピー'}
+                      {isCopying ? t('settings.account.copying') : t('settings.account.copyToClipboard')}
                     </Button>
                     <Button
                       type="button"
@@ -377,24 +379,23 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                       disabled={isSaving}
                       data-testid="key-save-button"
                     >
-                      {isSaving ? '保存中...' : 'ファイルに保存'}
+                      {isSaving ? t('settings.account.saving') : t('settings.account.saveToFile')}
                     </Button>
                   </div>
                 </div>
               )}
 
               <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                最終エクスポート: {formatTimestamp(lastExportedAt)}
+                {t('settings.account.lastExport')}: {formatTimestamp(lastExportedAt, t)}
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="import" className="space-y-4 pt-4">
             <Alert>
-              <AlertTitle>バックアップから復元する</AlertTitle>
+              <AlertTitle>{t('settings.account.restoreFromBackup')}</AlertTitle>
               <AlertDescription>
-                保存済みの `.nsec`
-                ファイルを読み込むか、秘密鍵を手動で入力してセキュアストレージに登録します。復旧後は不要なバックアップを破棄してください。
+                {t('settings.account.restoreDescription')}
               </AlertDescription>
             </Alert>
 
@@ -405,7 +406,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                   onClick={handleSelectFile}
                   data-testid="key-import-select-file"
                 >
-                  鍵ファイルを選択
+                  {t('settings.account.selectKeyFile')}
                 </Button>
                 {importSource && (
                   <span className="text-sm text-muted-foreground">
@@ -415,7 +416,7 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="imported-nsec">秘密鍵を貼り付け</Label>
+                <Label htmlFor="imported-nsec">{t('settings.account.pastePrivateKey')}</Label>
                 <Textarea
                   id="imported-nsec"
                   rows={3}
@@ -431,11 +432,11 @@ export function KeyManagementDialog({ open, onOpenChange }: KeyManagementDialogP
                 disabled={isImporting || !canImport}
                 data-testid="key-import-button"
               >
-                {isImporting ? 'インポート中...' : 'セキュアストレージに追加'}
+                {isImporting ? t('settings.account.importing') : t('settings.account.addToSecureStorage')}
               </Button>
 
               <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                最終インポート: {formatTimestamp(lastImportedAt)}
+                {t('settings.account.lastImport')}: {formatTimestamp(lastImportedAt, t)}
               </div>
             </div>
           </TabsContent>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState, useEffect } from 'react';
 import { useP2PStore } from '@/stores/p2pStore';
 import { p2pApi } from '@/lib/api/p2p';
@@ -19,6 +20,7 @@ interface PeerConnection {
 }
 
 export function PeerConnectionPanel() {
+  const { t } = useTranslation();
   const { nodeAddr, connectionStatus, initialize } = useP2PStore();
   const { toast } = useToast();
   const [peerAddress, setPeerAddress] = useState('');
@@ -58,13 +60,13 @@ export function PeerConnectionPanel() {
     try {
       await navigator.clipboard.writeText(text);
       toast({
-        title: 'コピーしました',
-        description: 'ピアアドレスをクリップボードにコピーしました',
+        title: t('p2pPanel.copied'),
+        description: t('p2pPanel.copyDesc'),
       });
     } catch (error) {
       errorHandler.log('Failed to copy to clipboard', error, {
         showToast: true,
-        toastTitle: 'コピーに失敗しました',
+        toastTitle: t('p2pPanel.copyFailed'),
       });
     }
   };
@@ -86,8 +88,8 @@ export function PeerConnectionPanel() {
 
     if (!trimmedAddress) {
       toast({
-        title: 'エラー',
-        description: 'ピアアドレスを入力してください',
+        title: t('common.error'),
+        description: t('p2pPanel.errorEnterAddress'),
         variant: 'destructive',
       });
       return;
@@ -95,8 +97,8 @@ export function PeerConnectionPanel() {
 
     if (!validatePeerAddress(trimmedAddress)) {
       toast({
-        title: 'エラー',
-        description: '無効なピアアドレス形式です',
+        title: t('common.error'),
+        description: t('p2pPanel.errorInvalidAddress'),
         variant: 'destructive',
       });
       return;
@@ -114,8 +116,8 @@ export function PeerConnectionPanel() {
       await p2pApi.connectToPeer(trimmedAddress);
 
       toast({
-        title: '接続成功',
-        description: 'ピアに接続しました',
+        title: t('p2pPanel.connectSuccess'),
+        description: t('p2pPanel.connectSuccessDesc'),
       });
 
       // 接続履歴に追加（最大10件）
@@ -138,7 +140,7 @@ export function PeerConnectionPanel() {
 
       errorHandler.log('Failed to connect to peer', error, {
         showToast: true,
-        toastTitle: '接続に失敗しました',
+        toastTitle: t('p2pPanel.connectFailed'),
       });
     } finally {
       setIsConnecting(false);
@@ -156,8 +158,8 @@ export function PeerConnectionPanel() {
     setConnectionHistory([]);
     localStorage.removeItem('p2p-connection-history');
     toast({
-      title: '履歴をクリアしました',
-      description: '接続履歴を削除しました',
+      title: t('p2pPanel.historyCleared'),
+      description: t('p2pPanel.historyClearedDesc'),
     });
   };
 
@@ -170,13 +172,12 @@ export function PeerConnectionPanel() {
           ) : (
             <WifiOff className="h-5 w-5 text-red-500" />
           )}
-          P2P接続設定
+          {t('p2pPanel.title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* 自分のピアアドレス */}
         <div className="space-y-2">
-          <Label>あなたのピアアドレス</Label>
+          <Label>{t('p2pPanel.yourAddress')}</Label>
           {nodeAddr ? (
             <div className="flex gap-2">
               <Input value={nodeAddr} readOnly className="font-mono text-sm" />
@@ -184,7 +185,7 @@ export function PeerConnectionPanel() {
                 size="icon"
                 variant="outline"
                 onClick={() => copyToClipboard(nodeAddr)}
-                title="コピー"
+                title={t('p2pPanel.copy')}
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -192,24 +193,21 @@ export function PeerConnectionPanel() {
           ) : (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              アドレスを取得中...
+              {t('p2pPanel.fetchingAddress')}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">
-            このアドレスを他のユーザーと共有することで、直接P2P接続を確立できます
-          </p>
+          <p className="text-xs text-muted-foreground">{t('p2pPanel.shareHint')}</p>
         </div>
 
         <Separator />
 
-        {/* ピアに接続 */}
         <div className="space-y-2">
-          <Label>ピアに接続</Label>
+          <Label>{t('p2pPanel.connectToPeer')}</Label>
           <div className="flex gap-2">
             <Input
               value={peerAddress}
               onChange={(e) => setPeerAddress(e.target.value)}
-              placeholder="/ip4/192.168.1.100/tcp/4001/p2p/QmXXX..."
+              placeholder={t('p2pPanel.peerAddressPlaceholder')}
               disabled={isConnecting}
               className="font-mono text-sm"
               onKeyDown={(e) => {
@@ -222,27 +220,24 @@ export function PeerConnectionPanel() {
               {isConnecting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  接続中
+                  {t('p2pPanel.connecting')}
                 </>
               ) : (
-                '接続'
+                t('p2pPanel.connect')
               )}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            接続したいピアのアドレスを入力してください
-          </p>
+          <p className="text-xs text-muted-foreground">{t('p2pPanel.peerAddressHint')}</p>
         </div>
 
-        {/* 接続履歴 */}
         {connectionHistory.length > 0 && (
           <>
             <Separator />
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>接続履歴</Label>
+                <Label>{t('p2pPanel.connectionHistory')}</Label>
                 <Button variant="ghost" size="sm" onClick={clearHistory} className="text-xs">
-                  履歴をクリア
+                  {t('p2pPanel.clearHistory')}
                 </Button>
               </div>
               <ScrollArea className="h-[200px] w-full rounded-md border p-4">
@@ -255,9 +250,9 @@ export function PeerConnectionPanel() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-mono truncate">{conn.address}</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(conn.timestamp).toLocaleString('ja-JP')}
+                          {new Date(conn.timestamp).toLocaleString()}
                           {conn.status === 'failed' && (
-                            <span className="ml-2 text-red-500">接続失敗</span>
+                            <span className="ml-2 text-red-500">{t('p2pPanel.connectionFailed')}</span>
                           )}
                         </p>
                       </div>
@@ -266,7 +261,7 @@ export function PeerConnectionPanel() {
                         variant="ghost"
                         onClick={() => handleReconnect(conn.address)}
                       >
-                        再接続
+                        {t('p2pPanel.reconnect')}
                       </Button>
                     </div>
                   ))}

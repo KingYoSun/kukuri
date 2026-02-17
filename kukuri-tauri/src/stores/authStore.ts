@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 
 import type { AuthState, User } from './types';
 import { TauriApi } from '@/lib/api/tauri';
@@ -11,6 +11,7 @@ import { withPersist } from './utils/persistHelpers';
 import { createAuthPersistConfig } from './config/persist';
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
+import i18n from '@/i18n';
 
 const DEFAULT_RELAY_STATUS_INTERVAL = 30_000;
 const RELAY_STATUS_BACKOFF_SEQUENCE = [120_000, 300_000, 600_000];
@@ -151,6 +152,7 @@ interface AuthStore extends AuthState {
   switchAccount: (npub: string) => Promise<void>;
   removeAccount: (npub: string) => Promise<void>;
   loadAccounts: () => Promise<void>;
+  addAccount: (nsec: string, name?: string, displayName?: string, picture?: string) => Promise<void>;
   generateNewKeypair: (
     saveToSecureStorage?: boolean,
     options?: GenerateKeypairOptions,
@@ -266,8 +268,8 @@ export const useAuthStore = create<AuthStore>()(
             id: response.public_key,
             pubkey: response.public_key,
             npub: response.npub,
-            name: 'ユーザー',
-            displayName: 'ユーザー',
+            name: i18n.t('auth.newUser'),
+            displayName: i18n.t('auth.newUser'),
             about: '',
             picture: '',
             nip05: '',
@@ -356,8 +358,8 @@ export const useAuthStore = create<AuthStore>()(
             id: response.public_key,
             pubkey: response.public_key,
             npub: response.npub,
-            name: '新規ユーザー',
-            displayName: '新規ユーザー',
+            name: i18n.t('auth.newUser'),
+            displayName: i18n.t('auth.newUser'),
             about: '',
             picture: '',
             nip05: '',
@@ -809,6 +811,55 @@ export const useAuthStore = create<AuthStore>()(
             context: 'AuthStore.removeAccount',
             showToast: true,
             toastTitle: 'アカウントの削除に失敗しました',
+          });
+          throw error;
+        }
+      },
+
+      addAccount: async (nsec: string, name?: string, displayName?: string, picture?: string) => {
+        try {
+          errorHandler.info('Adding new account', 'AuthStore.addAccount');
+          const response = await TauriApi.login({ nsec });
+          const user: User = {
+            id: response.public_key,
+            pubkey: response.public_key,
+            npub: response.npub,
+            name: name || i18n.t('auth.newUser'),
+            displayName: displayName || name || i18n.t('auth.newUser'),
+            about: '',
+            picture: picture || '',
+            nip05: '',
+            publicProfile: true,
+            showOnlineStatus: false,
+            avatar: null,
+          };
+          const accountMetadata = buildAccountMetadata(user);
+
+          try {
+            await SecureStorageApi.addAccount({
+              nsec,
+              name: user.name,
+              display_name: user.displayName,
+              picture: user.picture,
+            });
+            errorHandler.info('Account added successfully', 'AuthStore.addAccount', {
+              npub: user.npub,
+            });
+          } catch (storageError) {
+            // Fallback to local storage if secure storage fails
+          }
+          upsertFallbackAccount(accountMetadata, nsec);
+
+          try {
+            await useAuthStore.getState().loadAccounts();
+          } catch (loadError) {
+            // Silently ignore reload failure - account is already added via fallback
+          }
+        } catch (error) {
+          errorHandler.log('Failed to add account', error, {
+            context: 'AuthStore.addAccount',
+            showToast: true,
+            toastTitle: 'アカウントの追加に失敗しました',
           });
           throw error;
         }
