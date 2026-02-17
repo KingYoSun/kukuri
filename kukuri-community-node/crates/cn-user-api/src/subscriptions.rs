@@ -9,11 +9,10 @@ use cn_core::topic::normalize_topic_id;
 use cn_kip_types::{validate_kip_event, ValidationOptions};
 use nostr_sdk::prelude::PublicKey;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::{Postgres, QueryBuilder, Row};
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use std::collections::HashMap;
 
 use crate::auth::{current_rate_limit, enforce_rate_limit, require_auth, AuthContext};
 use crate::billing::{check_topic_limit, consume_quota};
@@ -23,8 +22,6 @@ use crate::{ApiError, ApiResult, AppState};
 const DEFAULT_MAX_PENDING_SUBSCRIPTION_REQUESTS_PER_PUBKEY: i64 = 5;
 const TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT: &[u8] =
     b"cn-user-api.topic-subscription-request.pending-limit";
-const SUGGEST_STAGE_A_LIMIT_MULTIPLIER: usize = 3;
-const SUGGEST_STAGE_A_MAX_LIMIT: usize = 100;
 
 #[derive(Deserialize)]
 pub struct SubscriptionRequestPayload {
@@ -72,66 +69,6 @@ enum SuggestReadBackend {
     Pg,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SuggestRerankMode {
-    Shadow,
-    Enabled,
-}
-
-impl SuggestRerankMode {
-    fn as_str(self) -> &'static str {
-        match self {
-            SuggestRerankMode::Shadow => "shadow",
-            SuggestRerankMode::Enabled => "enabled",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct SearchRuntimeConfig {
-    backend: SearchReadBackend,
-    shadow_sample_rate: u8,
-}
-
-#[derive(Debug, Clone)]
-struct SearchBackendPayload {
-    items: Vec<Value>,
-    total: u64,
-    next_cursor: Option<String>,
-    event_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct SuggestRelationWeights {
-    is_member: f64,
-    is_following_community: f64,
-    friends_member_count: f64,
-    two_hop_follow_count: f64,
-    last_view_decay: f64,
-    muted_or_blocked: f64,
-}
-
-impl Default for SuggestRelationWeights {
-    fn default() -> Self {
-        Self {
-            is_member: 1.20,
-            is_following_community: 0.80,
-            friends_member_count: 0.35,
-            two_hop_follow_count: 0.25,
-            last_view_decay: 0.15,
-            muted_or_blocked: -1.0,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct SuggestRuntimeConfig {
-    backend: SuggestReadBackend,
-    rerank_mode: SuggestRerankMode,
-    relation_weights: SuggestRelationWeights,
-    shadow_sample_rate: u8,
-}
-
 #[derive(Debug, Clone)]
 struct CommunityCandidate {
     community_id: String,
@@ -139,28 +76,6 @@ struct CommunityCandidate {
     prefix_hit: bool,
     trgm_score: f64,
     name_match_score: f64,
-}
-
-#[derive(Debug, Clone)]
-struct RerankedCommunityCandidate {
-    community_id: String,
-    exact_hit: bool,
-    prefix_hit: bool,
-    trgm_score: f64,
-    name_match_score: f64,
-    relation_score: f64,
-    global_popularity: f64,
-    recency_boost: f64,
-    final_suggest_score: f64,
-    stage_a_rank: i64,
-    stage_b_rank: i64,
-}
-
-#[derive(Debug, Clone)]
-struct SuggestRerankResult {
-    candidates: Vec<RerankedCommunityCandidate>,
-    blocked_or_muted_drop_count: usize,
-    visibility_drop_count: usize,
 }
 
 #[derive(Deserialize)]
@@ -437,102 +352,16 @@ pub async fn search(
         .as_deref()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
-    let runtime = load_search_runtime_config(&state.pool).await;
-    let search_query = query.q.clone();
-    let query_norm =
-        search_normalizer::normalize_search_text(search_query.as_deref().unwrap_or(""));
-    let shadow_sampled =
-        should_sample_shadow(runtime.shadow_sample_rate, &auth.pubkey, &query_norm);
+    let backend = load_search_read_backend(&state.pool).await;
 
-    let primary_started = Instant::now();
-    let primary = match runtime.backend {
-        SearchReadBackend::Pg => {
-            search_with_pg_backend(&state, &topic, search_query.clone(), limit, offset).await?
-        }
-        SearchReadBackend::Meili => {
-            search_with_meili_backend(&state, &topic, search_query.clone(), limit, offset).await?
-        }
-    };
-    let primary_latency_ms = duration_millis_i32(primary_started.elapsed());
-
-    if shadow_sampled {
-        let shadow_started = Instant::now();
-        let shadow_result = match runtime.backend {
-            SearchReadBackend::Pg => {
-                search_with_meili_backend(&state, &topic, search_query.clone(), limit, offset).await
-            }
-            SearchReadBackend::Meili => {
-                search_with_pg_backend(&state, &topic, search_query.clone(), limit, offset).await
-            }
-        };
-        let shadow_latency_ms = duration_millis_i32(shadow_started.elapsed());
-
-        match shadow_result {
-            Ok(shadow) => {
-                let (meili_ids, pg_ids, latency_meili_ms, latency_pg_ms, primary_backend) =
-                    match runtime.backend {
-                        SearchReadBackend::Meili => (
-                            primary.event_ids.clone(),
-                            shadow.event_ids.clone(),
-                            primary_latency_ms,
-                            shadow_latency_ms,
-                            "meili",
-                        ),
-                        SearchReadBackend::Pg => (
-                            shadow.event_ids.clone(),
-                            primary.event_ids.clone(),
-                            shadow_latency_ms,
-                            primary_latency_ms,
-                            "pg",
-                        ),
-                    };
-                let overlap_at_10 = search_shadow_overlap_at_k(&meili_ids, &pg_ids, 10);
-                cn_core::metrics::observe_shadow_overlap_at_10(
-                    crate::SERVICE_NAME,
-                    "/v1/search",
-                    primary_backend,
-                    overlap_at_10,
-                );
-                cn_core::metrics::observe_shadow_latency_delta_ms(
-                    crate::SERVICE_NAME,
-                    "/v1/search",
-                    (latency_pg_ms - latency_meili_ms) as f64,
-                );
-                record_search_shadow_read_log(
-                    &state.pool,
-                    &auth.pubkey,
-                    &query_norm,
-                    &meili_ids,
-                    &pg_ids,
-                    overlap_at_10,
-                    latency_meili_ms,
-                    latency_pg_ms,
-                )
-                .await;
-            }
-            Err(err) => {
-                tracing::warn!(
-                    error = ?err,
-                    backend = match runtime.backend {
-                        SearchReadBackend::Meili => "pg",
-                        SearchReadBackend::Pg => "meili",
-                    },
-                    "search shadow-read comparison failed"
-                );
-            }
-        }
+    if backend == SearchReadBackend::Pg {
+        return search_with_pg_backend(&state, &topic, query.q, limit, offset).await;
     }
 
-    Ok(Json(json!({
-        "topic": topic,
-        "query": search_query,
-        "items": primary.items,
-        "next_cursor": primary.next_cursor,
-        "total": primary.total
-    })))
+    search_with_meili_backend(&state, &topic, query.q, limit, offset).await
 }
 
-async fn load_search_runtime_config(pool: &sqlx::Pool<Postgres>) -> SearchRuntimeConfig {
+async fn load_search_read_backend(pool: &sqlx::Pool<Postgres>) -> SearchReadBackend {
     let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
         Ok(flags) => flags,
         Err(err) => {
@@ -540,14 +369,11 @@ async fn load_search_runtime_config(pool: &sqlx::Pool<Postgres>) -> SearchRuntim
                 error = %err,
                 "failed to load search runtime flags; fallback to meili read backend"
             );
-            return SearchRuntimeConfig {
-                backend: SearchReadBackend::Meili,
-                shadow_sample_rate: 0,
-            };
+            return SearchReadBackend::Meili;
         }
     };
 
-    let backend = if flags
+    if flags
         .search_read_backend
         .trim()
         .eq_ignore_ascii_case(search_runtime_flags::SEARCH_READ_BACKEND_PG)
@@ -555,11 +381,6 @@ async fn load_search_runtime_config(pool: &sqlx::Pool<Postgres>) -> SearchRuntim
         SearchReadBackend::Pg
     } else {
         SearchReadBackend::Meili
-    };
-
-    SearchRuntimeConfig {
-        backend,
-        shadow_sample_rate: parse_shadow_sample_rate(&flags.shadow_sample_rate),
     }
 }
 
@@ -569,7 +390,7 @@ async fn search_with_meili_backend(
     query: Option<String>,
     limit: usize,
     offset: usize,
-) -> ApiResult<SearchBackendPayload> {
+) -> ApiResult<Json<serde_json::Value>> {
     let uid = cn_core::meili::topic_index_uid(topic);
     let search_result = match state
         .meili
@@ -580,12 +401,13 @@ async fn search_with_meili_backend(
         Err(err) => {
             let message = err.to_string();
             if message.contains("404") {
-                return Ok(SearchBackendPayload {
-                    items: Vec::new(),
-                    total: 0,
-                    next_cursor: None,
-                    event_ids: Vec::new(),
-                });
+                return Ok(Json(json!({
+                    "topic": topic,
+                    "query": query,
+                    "items": [],
+                    "next_cursor": null,
+                    "total": 0
+                })));
             }
             return Err(ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -610,14 +432,14 @@ async fn search_with_meili_backend(
     } else {
         None
     };
-    let event_ids = collect_search_event_ids(&hits);
 
-    Ok(SearchBackendPayload {
-        items: hits,
-        total,
-        next_cursor,
-        event_ids,
-    })
+    Ok(Json(json!({
+        "topic": topic,
+        "query": query,
+        "items": hits,
+        "next_cursor": next_cursor,
+        "total": total
+    })))
 }
 
 async fn search_with_pg_backend(
@@ -626,7 +448,7 @@ async fn search_with_pg_backend(
     query: Option<String>,
     limit: usize,
     offset: usize,
-) -> ApiResult<SearchBackendPayload> {
+) -> ApiResult<Json<serde_json::Value>> {
     let query_raw = query.as_deref().unwrap_or("");
     let query_norm = search_normalizer::normalize_search_text(query_raw);
     let normalizer_version = search_normalizer::SEARCH_NORMALIZER_VERSION;
@@ -735,15 +557,12 @@ async fn search_with_pg_backend(
     };
 
     let mut items = Vec::new();
-    let mut event_ids = Vec::new();
     for row in rows {
         let content: String = row.try_get("body_raw")?;
         let tags: Vec<String> = row.try_get("hashtags_norm")?;
         let created_at: i64 = row.try_get("created_at")?;
-        let post_id: String = row.try_get("post_id")?;
-        event_ids.push(post_id.clone());
         items.push(json!({
-            "event_id": post_id,
+            "event_id": row.try_get::<String, _>("post_id")?,
             "topic_id": row.try_get::<String, _>("topic_id")?,
             "kind": 1,
             "author": row.try_get::<String, _>("author_id")?,
@@ -763,81 +582,13 @@ async fn search_with_pg_backend(
         None
     };
 
-    Ok(SearchBackendPayload {
-        items,
-        total,
-        next_cursor,
-        event_ids,
-    })
-}
-
-fn collect_search_event_ids(items: &[Value]) -> Vec<String> {
-    items
-        .iter()
-        .filter_map(|item| item.get("event_id").and_then(Value::as_str))
-        .map(ToString::to_string)
-        .collect()
-}
-
-fn search_shadow_overlap_at_k(meili_ids: &[String], pg_ids: &[String], top_k: usize) -> f64 {
-    if top_k == 0 {
-        return 1.0;
-    }
-    let meili_top: HashSet<&str> = meili_ids.iter().take(top_k).map(String::as_str).collect();
-    let pg_top: HashSet<&str> = pg_ids.iter().take(top_k).map(String::as_str).collect();
-    let overlap = meili_top.intersection(&pg_top).count();
-    overlap as f64 / top_k as f64
-}
-
-fn duration_millis_i32(duration: std::time::Duration) -> i32 {
-    duration.as_millis().min(i32::MAX as u128) as i32
-}
-
-async fn record_search_shadow_read_log(
-    pool: &sqlx::Pool<Postgres>,
-    user_id: &str,
-    query_norm: &str,
-    meili_ids: &[String],
-    pg_ids: &[String],
-    overlap_at_10: f64,
-    latency_meili_ms: i32,
-    latency_pg_ms: i32,
-) {
-    let result = sqlx::query(
-        "INSERT INTO cn_search.shadow_read_logs \
-         (endpoint, user_id, query_norm, meili_ids, pg_ids, overlap_at_10, latency_meili_ms, latency_pg_ms) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-    )
-    .bind("/v1/search")
-    .bind(user_id)
-    .bind(query_norm)
-    .bind(meili_ids)
-    .bind(pg_ids)
-    .bind(overlap_at_10)
-    .bind(latency_meili_ms)
-    .bind(latency_pg_ms)
-    .execute(pool)
-    .await;
-
-    if let Err(err) = result {
-        if is_missing_shadow_read_logs_table(&err) {
-            tracing::warn!(
-                error = %err,
-                "cn_search.shadow_read_logs unavailable; skipping shadow-read persistence"
-            );
-            return;
-        }
-        tracing::warn!(error = %err, "failed to persist search shadow-read log");
-    }
-}
-
-fn is_missing_shadow_read_logs_table(err: &sqlx::Error) -> bool {
-    match err {
-        sqlx::Error::Database(db_err) => {
-            matches!(db_err.code().as_deref(), Some("42P01") | Some("3F000"))
-        }
-        _ => false,
-    }
+    Ok(Json(json!({
+        "topic": topic,
+        "query": query,
+        "items": items,
+        "next_cursor": next_cursor,
+        "total": total
+    })))
 }
 
 pub async fn community_suggest(
@@ -845,18 +596,17 @@ pub async fn community_suggest(
     headers: axum::http::HeaderMap,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
     Query(query): Query<CommunitySuggestQuery>,
-) -> ApiResult<Json<Value>> {
+) -> ApiResult<Json<serde_json::Value>> {
     let auth = require_auth(&state, &headers).await?;
     require_consents(&state, &auth).await?;
     apply_protected_rate_limit(&state, &auth, addr).await?;
 
     let limit = query.limit.unwrap_or(20).clamp(1, 50);
-    let stage_a_limit = suggest_stage_a_limit(limit);
     let query_norm = search_normalizer::normalize_search_text(&query.q);
-    let runtime = load_suggest_runtime_config(&state.pool).await;
+    let backend = load_suggest_read_backend(&state.pool).await;
 
     if query_norm.is_empty() {
-        let backend_label = match runtime.backend {
+        let backend_label = match backend {
             SuggestReadBackend::Pg => "pg",
             SuggestReadBackend::Legacy => "legacy",
         };
@@ -864,20 +614,17 @@ pub async fn community_suggest(
             "query": query.q,
             "query_norm": query_norm,
             "backend": backend_label,
-            "rerank_mode": runtime.rerank_mode.as_str(),
             "items": []
         })));
     }
 
-    let stage_a_started = Instant::now();
-    let (backend_label, stage_a_candidates) = match runtime.backend {
+    let (backend_label, candidates) = match backend {
         SuggestReadBackend::Pg => {
             let pg_candidates =
-                fetch_pg_community_candidates(&state.pool, &query_norm, stage_a_limit).await?;
+                fetch_pg_community_candidates(&state.pool, &query_norm, limit).await?;
             if pg_candidates.is_empty() {
                 let fallback =
-                    fetch_legacy_community_candidates(&state.pool, &query_norm, stage_a_limit)
-                        .await?;
+                    fetch_legacy_community_candidates(&state.pool, &query_norm, limit).await?;
                 ("legacy_fallback", fallback)
             } else {
                 ("pg", pg_candidates)
@@ -885,19 +632,12 @@ pub async fn community_suggest(
         }
         SuggestReadBackend::Legacy => (
             "legacy",
-            fetch_legacy_community_candidates(&state.pool, &query_norm, stage_a_limit).await?,
+            fetch_legacy_community_candidates(&state.pool, &query_norm, limit).await?,
         ),
     };
-    let stage_a_elapsed = stage_a_started.elapsed();
-    cn_core::metrics::observe_suggest_stage_a_latency_ms(
-        crate::SERVICE_NAME,
-        backend_label,
-        stage_a_elapsed,
-    );
 
-    let mut items: Vec<Value> = stage_a_candidates
-        .iter()
-        .take(limit)
+    let items: Vec<serde_json::Value> = candidates
+        .into_iter()
         .map(|candidate| {
             json!({
                 "community_id": candidate.community_id,
@@ -909,131 +649,15 @@ pub async fn community_suggest(
         })
         .collect();
 
-    let mut blocked_or_muted_drop_count = 0usize;
-    let mut visibility_drop_count = 0usize;
-    let mut stage_b_latency_ms = 0.0_f64;
-    let mut shadow_sampled = false;
-    let mut shadow_topk_overlap = None;
-    let mut shadow_rank_drift_count = None;
-
-    if backend_label == "pg" && !stage_a_candidates.is_empty() {
-        let muted_or_blocked_ids =
-            fetch_muted_or_blocked_community_ids(&state.pool, &auth.pubkey).await?;
-        let stage_b_started = Instant::now();
-        let rerank_result = rerank_pg_community_candidates(
-            &state.pool,
-            &auth.pubkey,
-            &stage_a_candidates,
-            &muted_or_blocked_ids,
-            limit,
-            runtime.rerank_mode,
-            runtime.relation_weights,
-        )
-        .await?;
-        let stage_b_elapsed = stage_b_started.elapsed();
-        stage_b_latency_ms = stage_b_elapsed.as_secs_f64() * 1000.0;
-        cn_core::metrics::observe_suggest_stage_b_latency_ms(
-            crate::SERVICE_NAME,
-            runtime.rerank_mode.as_str(),
-            stage_b_elapsed,
-        );
-
-        blocked_or_muted_drop_count = rerank_result.blocked_or_muted_drop_count;
-        visibility_drop_count = rerank_result.visibility_drop_count;
-        cn_core::metrics::inc_suggest_block_filter_drop_count(
-            crate::SERVICE_NAME,
-            backend_label,
-            "block_or_mute",
-            blocked_or_muted_drop_count as u64,
-        );
-
-        shadow_sampled = runtime.rerank_mode == SuggestRerankMode::Shadow
-            && should_sample_shadow(runtime.shadow_sample_rate, &auth.pubkey, &query_norm);
-        if shadow_sampled {
-            let top_k = limit.min(10);
-            shadow_topk_overlap = Some(shadow_top_k_overlap(
-                &stage_a_candidates,
-                &rerank_result.candidates,
-                top_k,
-            ));
-            shadow_rank_drift_count = Some(
-                rerank_result
-                    .candidates
-                    .iter()
-                    .filter(|candidate| candidate.stage_a_rank != candidate.stage_b_rank)
-                    .count() as u64,
-            );
-        }
-
-        items = rerank_result
-            .candidates
-            .into_iter()
-            .map(|candidate| {
-                json!({
-                    "community_id": candidate.community_id,
-                    "name_match_score": candidate.name_match_score,
-                    "prefix_hit": candidate.prefix_hit,
-                    "exact_hit": candidate.exact_hit,
-                    "trgm_score": candidate.trgm_score,
-                    "relation_score": candidate.relation_score,
-                    "global_popularity": candidate.global_popularity,
-                    "recency_boost": candidate.recency_boost,
-                    "final_suggest_score": candidate.final_suggest_score,
-                    "stage_a_rank": candidate.stage_a_rank,
-                    "stage_b_rank": candidate.stage_b_rank,
-                })
-            })
-            .collect();
-    }
-
-    tracing::info!(
-        backend = backend_label,
-        rerank_mode = runtime.rerank_mode.as_str(),
-        stage_a_candidate_count = stage_a_candidates.len(),
-        result_count = items.len(),
-        blocked_or_muted_drop_count = blocked_or_muted_drop_count,
-        visibility_drop_count = visibility_drop_count,
-        shadow_sampled = shadow_sampled,
-        suggest_stage_a_latency_ms = stage_a_elapsed.as_secs_f64() * 1000.0,
-        suggest_stage_b_latency_ms = stage_b_latency_ms,
-        suggest_block_filter_drop_count = blocked_or_muted_drop_count,
-        "community suggest query processed"
-    );
-
-    let mut response = json!({
+    Ok(Json(json!({
         "query": query.q,
         "query_norm": query_norm,
         "backend": backend_label,
-        "rerank_mode": runtime.rerank_mode.as_str(),
-        "stage_a_candidate_count": stage_a_candidates.len(),
-        "blocked_or_muted_drop_count": blocked_or_muted_drop_count,
-        "visibility_drop_count": visibility_drop_count,
         "items": items
-    });
-
-    if shadow_sampled {
-        if let Some(object) = response.as_object_mut() {
-            object.insert(
-                "shadow_topk_overlap".to_string(),
-                json!(shadow_topk_overlap.unwrap_or(0.0)),
-            );
-            object.insert(
-                "shadow_rank_drift_count".to_string(),
-                json!(shadow_rank_drift_count.unwrap_or(0)),
-            );
-        }
-    }
-
-    Ok(Json(response))
+    })))
 }
 
-fn suggest_stage_a_limit(limit: usize) -> usize {
-    limit
-        .saturating_mul(SUGGEST_STAGE_A_LIMIT_MULTIPLIER)
-        .min(SUGGEST_STAGE_A_MAX_LIMIT)
-}
-
-async fn load_suggest_runtime_config(pool: &sqlx::Pool<Postgres>) -> SuggestRuntimeConfig {
+async fn load_suggest_read_backend(pool: &sqlx::Pool<Postgres>) -> SuggestReadBackend {
     let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
         Ok(flags) => flags,
         Err(err) => {
@@ -1041,16 +665,11 @@ async fn load_suggest_runtime_config(pool: &sqlx::Pool<Postgres>) -> SuggestRunt
                 error = %err,
                 "failed to load search runtime flags; fallback to legacy suggest backend"
             );
-            return SuggestRuntimeConfig {
-                backend: SuggestReadBackend::Legacy,
-                rerank_mode: SuggestRerankMode::Shadow,
-                relation_weights: SuggestRelationWeights::default(),
-                shadow_sample_rate: 0,
-            };
+            return SuggestReadBackend::Legacy;
         }
     };
 
-    let backend = if flags
+    if flags
         .suggest_read_backend
         .trim()
         .eq_ignore_ascii_case(search_runtime_flags::SUGGEST_READ_BACKEND_PG)
@@ -1058,443 +677,7 @@ async fn load_suggest_runtime_config(pool: &sqlx::Pool<Postgres>) -> SuggestRunt
         SuggestReadBackend::Pg
     } else {
         SuggestReadBackend::Legacy
-    };
-
-    SuggestRuntimeConfig {
-        backend,
-        rerank_mode: parse_suggest_rerank_mode(&flags.suggest_rerank_mode),
-        relation_weights: parse_suggest_relation_weights(&flags.suggest_relation_weights),
-        shadow_sample_rate: parse_shadow_sample_rate(&flags.shadow_sample_rate),
     }
-}
-
-fn parse_suggest_rerank_mode(value: &str) -> SuggestRerankMode {
-    if value
-        .trim()
-        .eq_ignore_ascii_case(search_runtime_flags::SUGGEST_RERANK_MODE_ENABLED)
-    {
-        SuggestRerankMode::Enabled
-    } else {
-        SuggestRerankMode::Shadow
-    }
-}
-
-fn parse_suggest_relation_weights(raw: &str) -> SuggestRelationWeights {
-    let default = SuggestRelationWeights::default();
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return default;
-    }
-
-    let value: Value = match serde_json::from_str(trimmed) {
-        Ok(value) => value,
-        Err(err) => {
-            tracing::warn!(
-                error = %err,
-                suggest_relation_weights = trimmed,
-                "invalid suggest_relation_weights; fallback to default"
-            );
-            return default;
-        }
-    };
-
-    let Some(object) = value.as_object() else {
-        tracing::warn!(
-            suggest_relation_weights = trimmed,
-            "suggest_relation_weights must be a JSON object; fallback to default"
-        );
-        return default;
-    };
-
-    SuggestRelationWeights {
-        is_member: parse_relation_weight(object, "is_member", default.is_member),
-        is_following_community: parse_relation_weight(
-            object,
-            "is_following_community",
-            default.is_following_community,
-        ),
-        friends_member_count: parse_relation_weight(
-            object,
-            "friends_member_count",
-            default.friends_member_count,
-        ),
-        two_hop_follow_count: parse_relation_weight(
-            object,
-            "two_hop_follow_count",
-            default.two_hop_follow_count,
-        ),
-        last_view_decay: parse_relation_weight(object, "last_view_decay", default.last_view_decay),
-        muted_or_blocked: parse_relation_weight(
-            object,
-            "muted_or_blocked",
-            default.muted_or_blocked,
-        ),
-    }
-}
-
-fn parse_relation_weight(object: &serde_json::Map<String, Value>, key: &str, default: f64) -> f64 {
-    object.get(key).and_then(Value::as_f64).unwrap_or(default)
-}
-
-fn parse_shadow_sample_rate(raw: &str) -> u8 {
-    raw.trim()
-        .parse::<u8>()
-        .map(|rate| rate.min(100))
-        .unwrap_or(0)
-}
-
-fn should_sample_shadow(rate: u8, viewer_id: &str, query_norm: &str) -> bool {
-    if rate >= 100 {
-        return true;
-    }
-    if rate == 0 {
-        return false;
-    }
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(viewer_id.as_bytes());
-    hasher.update(b":");
-    hasher.update(query_norm.as_bytes());
-    let digest = hasher.finalize();
-    let bytes = digest.as_bytes();
-    let bucket = u16::from_be_bytes([bytes[0], bytes[1]]) % 100;
-    bucket < rate as u16
-}
-
-fn shadow_top_k_overlap(
-    stage_a_candidates: &[CommunityCandidate],
-    reranked_candidates: &[RerankedCommunityCandidate],
-    top_k: usize,
-) -> f64 {
-    if top_k == 0 {
-        return 1.0;
-    }
-
-    let stage_a_top: HashSet<&str> = stage_a_candidates
-        .iter()
-        .take(top_k)
-        .map(|candidate| candidate.community_id.as_str())
-        .collect();
-
-    let mut stage_b_sorted: Vec<&RerankedCommunityCandidate> = reranked_candidates.iter().collect();
-    stage_b_sorted.sort_by_key(|candidate| candidate.stage_b_rank);
-    let stage_b_top: HashSet<&str> = stage_b_sorted
-        .into_iter()
-        .take(top_k)
-        .map(|candidate| candidate.community_id.as_str())
-        .collect();
-
-    let overlap = stage_a_top.intersection(&stage_b_top).count();
-    overlap as f64 / top_k as f64
-}
-
-async fn fetch_muted_or_blocked_community_ids(
-    pool: &sqlx::Pool<Postgres>,
-    viewer_id: &str,
-) -> ApiResult<Vec<String>> {
-    let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
-    let rows = sqlx::query(
-        "SELECT raw_json \
-         FROM cn_relay.events \
-         WHERE pubkey = $1 \
-           AND kind = 10000 \
-           AND is_deleted = FALSE \
-           AND is_current = TRUE \
-           AND is_ephemeral = FALSE \
-           AND (expires_at IS NULL OR expires_at > $2)",
-    )
-    .bind(viewer_id)
-    .bind(now)
-    .fetch_all(pool)
-    .await
-    .map_err(|err| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            err.to_string(),
-        )
-    })?;
-
-    let mut blocked_or_muted = HashSet::new();
-    for row in rows {
-        let raw_json: Value = row.try_get("raw_json")?;
-        let Ok(raw_event) = nostr::parse_event(&raw_json) else {
-            continue;
-        };
-
-        for topic_id in raw_event.topic_ids() {
-            if let Some(community_id) =
-                community_search_terms::community_id_from_topic_id(topic_id.trim())
-            {
-                blocked_or_muted.insert(community_id);
-            }
-        }
-
-        for address in raw_event.tag_values("a") {
-            if let Some(community_id) = extract_community_id_from_address_tag(address.trim()) {
-                blocked_or_muted.insert(community_id);
-            }
-        }
-    }
-
-    let mut community_ids: Vec<String> = blocked_or_muted.into_iter().collect();
-    community_ids.sort();
-    Ok(community_ids)
-}
-
-fn extract_community_id_from_address_tag(address: &str) -> Option<String> {
-    if address.starts_with("kukuri:") {
-        return community_search_terms::community_id_from_topic_id(address);
-    }
-
-    let mut parts = address.splitn(3, ':');
-    let _kind = parts.next()?;
-    let _author = parts.next()?;
-    let topic_like_id = parts.next()?.trim();
-    community_search_terms::community_id_from_topic_id(topic_like_id)
-}
-
-async fn rerank_pg_community_candidates(
-    pool: &sqlx::Pool<Postgres>,
-    viewer_id: &str,
-    stage_a_candidates: &[CommunityCandidate],
-    muted_or_blocked_ids: &[String],
-    limit: usize,
-    rerank_mode: SuggestRerankMode,
-    relation_weights: SuggestRelationWeights,
-) -> ApiResult<SuggestRerankResult> {
-    if stage_a_candidates.is_empty() {
-        return Ok(SuggestRerankResult {
-            candidates: Vec::new(),
-            blocked_or_muted_drop_count: 0,
-            visibility_drop_count: 0,
-        });
-    }
-
-    let stage_a_ids: Vec<String> = stage_a_candidates
-        .iter()
-        .map(|candidate| candidate.community_id.clone())
-        .collect();
-    let stage_a_name_scores: Vec<f64> = stage_a_candidates
-        .iter()
-        .map(|candidate| candidate.name_match_score)
-        .collect();
-    let stage_a_prefix_hits: Vec<bool> = stage_a_candidates
-        .iter()
-        .map(|candidate| candidate.prefix_hit)
-        .collect();
-    let stage_a_exact_hits: Vec<bool> = stage_a_candidates
-        .iter()
-        .map(|candidate| candidate.exact_hit)
-        .collect();
-    let stage_a_trgm_scores: Vec<f64> = stage_a_candidates
-        .iter()
-        .map(|candidate| candidate.trgm_score)
-        .collect();
-    let stage_a_ranks: Vec<i32> = (1..=stage_a_candidates.len() as i32).collect();
-    let now = cn_core::auth::unix_seconds().unwrap_or(0) as f64;
-
-    let blocked_or_muted_set: HashSet<&str> = muted_or_blocked_ids
-        .iter()
-        .map(|value| value.as_str())
-        .collect();
-    let blocked_or_muted_drop_count = stage_a_candidates
-        .iter()
-        .filter(|candidate| blocked_or_muted_set.contains(candidate.community_id.as_str()))
-        .count();
-
-    let rows = sqlx::query(
-        "WITH candidate AS ( \
-             SELECT * \
-             FROM unnest( \
-               $1::text[], \
-               $2::double precision[], \
-               $3::boolean[], \
-               $4::boolean[], \
-               $5::double precision[], \
-               $6::integer[] \
-             ) AS c(community_id, name_match_score, prefix_hit, exact_hit, trgm_score, stage_a_rank) \
-         ), \
-         viewer_following AS ( \
-             SELECT topic_id \
-             FROM cn_user.topic_subscriptions \
-             WHERE subscriber_pubkey = $7 \
-               AND status = 'active' \
-         ), \
-         viewer_membership AS ( \
-             SELECT topic_id \
-             FROM cn_user.topic_memberships \
-             WHERE pubkey = $7 \
-               AND status = 'active' \
-         ), \
-         joined AS ( \
-             SELECT \
-                 c.community_id, \
-                 c.name_match_score, \
-                 c.prefix_hit, \
-                 c.exact_hit, \
-                 c.trgm_score, \
-                 c.stage_a_rank, \
-                 (c.community_id = ANY($8::text[])) AS is_hidden, \
-                 COALESCE(ns.enabled, FALSE) AS is_public, \
-                 COALESCE(ns.ref_count, 0) AS ref_count, \
-                 (vf.topic_id IS NOT NULL) AS is_following_live, \
-                 (vm.topic_id IS NOT NULL) AS is_member_live, \
-                 COALESCE((a.signals_json ->> 'is_member')::boolean, FALSE) AS is_member_signal, \
-                 COALESCE((a.signals_json ->> 'is_following_community')::boolean, FALSE) AS is_following_signal, \
-                 COALESCE((a.signals_json ->> 'friends_member_count')::double precision, 0.0) AS friends_member_count, \
-                 COALESCE((a.signals_json ->> 'two_hop_follow_count')::double precision, 0.0) AS two_hop_follow_count, \
-                 COALESCE((a.signals_json ->> 'last_seen_at')::double precision, 0.0) AS last_seen_at \
-             FROM candidate c \
-             LEFT JOIN cn_search.user_community_affinity a \
-               ON a.user_id = $7 \
-              AND a.community_id = c.community_id \
-             LEFT JOIN cn_admin.node_subscriptions ns \
-               ON ns.topic_id = c.community_id \
-             LEFT JOIN viewer_following vf \
-               ON vf.topic_id = c.community_id \
-             LEFT JOIN viewer_membership vm \
-               ON vm.topic_id = c.community_id \
-         ), \
-         scored AS ( \
-             SELECT \
-                 community_id, \
-                 name_match_score, \
-                 prefix_hit, \
-                 exact_hit, \
-                 trgm_score, \
-                 stage_a_rank, \
-                 is_hidden, \
-                 is_public, \
-                 is_following_live, \
-                 is_member_live, \
-                 ( \
-                     $10 * CASE WHEN (is_member_live OR is_member_signal) THEN 1.0 ELSE 0.0 END + \
-                     $11 * CASE WHEN (is_following_live OR is_following_signal) THEN 1.0 ELSE 0.0 END + \
-                     $12 * LEAST(1.0, GREATEST(0.0, friends_member_count) / 5.0) + \
-                     $13 * LEAST(1.0, GREATEST(0.0, two_hop_follow_count) / 10.0) + \
-                     $14 * CASE \
-                           WHEN last_seen_at > 0.0 \
-                           THEN EXP(-(GREATEST(0.0, ($9 - last_seen_at) / 3600.0) / 168.0)) \
-                           ELSE 0.0 \
-                         END + \
-                     $15 * CASE WHEN is_hidden THEN 1.0 ELSE 0.0 END \
-                 ) AS relation_score, \
-                 LEAST(1.0, LN(1.0 + GREATEST(ref_count, 0)::double precision) / LN(101.0)) AS global_popularity, \
-                 CASE \
-                     WHEN last_seen_at > 0.0 \
-                     THEN EXP(-(GREATEST(0.0, ($9 - last_seen_at) / 3600.0) / 168.0)) \
-                     ELSE 0.0 \
-                 END AS recency_boost \
-             FROM joined \
-         ), \
-         filtered AS ( \
-             SELECT * \
-             FROM scored \
-             WHERE is_hidden = FALSE \
-               AND (is_public = TRUE OR is_following_live = TRUE OR is_member_live = TRUE) \
-         ), \
-         ranked AS ( \
-             SELECT \
-                 community_id, \
-                 name_match_score, \
-                 prefix_hit, \
-                 exact_hit, \
-                 trgm_score, \
-                 relation_score, \
-                 global_popularity, \
-                 recency_boost, \
-                 ( \
-                     0.40 * name_match_score + \
-                     0.45 * relation_score + \
-                     0.10 * global_popularity + \
-                     0.05 * recency_boost \
-                 ) AS final_suggest_score, \
-                stage_a_rank::bigint AS stage_a_rank, \
-                ROW_NUMBER() OVER ( \
-                    ORDER BY \
-                        ( \
-                             0.40 * name_match_score + \
-                             0.45 * relation_score + \
-                             0.10 * global_popularity + \
-                             0.05 * recency_boost \
-                         ) DESC, \
-                         stage_a_rank ASC, \
-                         community_id ASC \
-                 ) AS stage_b_rank, \
-                 COUNT(*) OVER () AS filtered_total_count \
-             FROM filtered \
-         ) \
-         SELECT \
-             community_id, \
-             name_match_score, \
-             prefix_hit, \
-             exact_hit, \
-             trgm_score, \
-             relation_score, \
-             global_popularity, \
-             recency_boost, \
-             final_suggest_score, \
-             stage_a_rank, \
-             stage_b_rank, \
-             filtered_total_count \
-         FROM ranked \
-         ORDER BY \
-             CASE WHEN $16 = 'enabled' THEN final_suggest_score ELSE NULL END DESC NULLS LAST, \
-             stage_a_rank ASC, \
-             community_id ASC \
-         LIMIT $17",
-    )
-    .bind(&stage_a_ids)
-    .bind(&stage_a_name_scores)
-    .bind(&stage_a_prefix_hits)
-    .bind(&stage_a_exact_hits)
-    .bind(&stage_a_trgm_scores)
-    .bind(&stage_a_ranks)
-    .bind(viewer_id)
-    .bind(muted_or_blocked_ids)
-    .bind(now)
-    .bind(relation_weights.is_member)
-    .bind(relation_weights.is_following_community)
-    .bind(relation_weights.friends_member_count)
-    .bind(relation_weights.two_hop_follow_count)
-    .bind(relation_weights.last_view_decay)
-    .bind(relation_weights.muted_or_blocked)
-    .bind(rerank_mode.as_str())
-    .bind(limit as i64)
-    .fetch_all(pool)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
-
-    let mut filtered_total_count = 0usize;
-    let mut reranked_candidates = Vec::with_capacity(rows.len());
-    for row in rows {
-        let filtered_total: i64 = row.try_get("filtered_total_count")?;
-        filtered_total_count = filtered_total.max(0) as usize;
-        reranked_candidates.push(RerankedCommunityCandidate {
-            community_id: row.try_get("community_id")?,
-            exact_hit: row.try_get("exact_hit")?,
-            prefix_hit: row.try_get("prefix_hit")?,
-            trgm_score: row.try_get("trgm_score")?,
-            name_match_score: row.try_get("name_match_score")?,
-            relation_score: row.try_get("relation_score")?,
-            global_popularity: row.try_get("global_popularity")?,
-            recency_boost: row.try_get("recency_boost")?,
-            final_suggest_score: row.try_get("final_suggest_score")?,
-            stage_a_rank: row.try_get("stage_a_rank")?,
-            stage_b_rank: row.try_get("stage_b_rank")?,
-        });
-    }
-
-    let visibility_drop_count = stage_a_candidates
-        .len()
-        .saturating_sub(blocked_or_muted_drop_count)
-        .saturating_sub(filtered_total_count);
-
-    Ok(SuggestRerankResult {
-        candidates: reranked_candidates,
-        blocked_or_muted_drop_count,
-        visibility_drop_count,
-    })
 }
 
 async fn fetch_pg_community_candidates(
@@ -2482,61 +1665,6 @@ mod api_contract_tests {
         .expect("upsert suggest_read_backend flag");
     }
 
-    async fn set_suggest_rerank_mode(pool: &Pool<Postgres>, mode: &str) {
-        sqlx::query(
-            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) \
-             VALUES ($1, $2, 'contract-test') \
-             ON CONFLICT (flag_name) DO UPDATE \
-             SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
-        )
-        .bind(cn_core::search_runtime_flags::FLAG_SUGGEST_RERANK_MODE)
-        .bind(mode)
-        .execute(pool)
-        .await
-        .expect("upsert suggest_rerank_mode flag");
-    }
-
-    async fn set_suggest_relation_weights(pool: &Pool<Postgres>, weights: &str) {
-        sqlx::query(
-            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) \
-             VALUES ($1, $2, 'contract-test') \
-             ON CONFLICT (flag_name) DO UPDATE \
-             SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
-        )
-        .bind(cn_core::search_runtime_flags::FLAG_SUGGEST_RELATION_WEIGHTS)
-        .bind(weights)
-        .execute(pool)
-        .await
-        .expect("upsert suggest_relation_weights flag");
-    }
-
-    async fn set_shadow_sample_rate(pool: &Pool<Postgres>, sample_rate: &str) {
-        sqlx::query(
-            "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) \
-             VALUES ($1, $2, 'contract-test') \
-             ON CONFLICT (flag_name) DO UPDATE \
-             SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
-        )
-        .bind(cn_core::search_runtime_flags::FLAG_SHADOW_SAMPLE_RATE)
-        .bind(sample_rate)
-        .execute(pool)
-        .await
-        .expect("upsert shadow_sample_rate flag");
-    }
-
-    async fn insert_node_subscription(pool: &Pool<Postgres>, topic_id: &str) {
-        sqlx::query(
-            "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count) \
-             VALUES ($1, TRUE, 5) \
-             ON CONFLICT (topic_id) DO UPDATE \
-             SET enabled = TRUE, ref_count = GREATEST(cn_admin.node_subscriptions.ref_count, 5), updated_at = NOW()",
-        )
-        .bind(topic_id)
-        .execute(pool)
-        .await
-        .expect("insert node subscription");
-    }
-
     async fn insert_community_search_terms(pool: &Pool<Postgres>, community_id: &str) {
         let terms = cn_core::community_search_terms::build_terms_from_topic_id(community_id);
         for term in terms {
@@ -2556,61 +1684,6 @@ mod api_contract_tests {
             .await
                 .expect("insert community search term");
         }
-    }
-
-    async fn insert_user_community_affinity(
-        pool: &Pool<Postgres>,
-        user_id: &str,
-        community_id: &str,
-        signals_json: Value,
-    ) {
-        sqlx::query(
-            "INSERT INTO cn_search.user_community_affinity \
-             (user_id, community_id, relation_score, signals_json, computed_at) \
-             VALUES ($1, $2, 0.0, $3, NOW()) \
-             ON CONFLICT (user_id, community_id) DO UPDATE \
-             SET relation_score = EXCLUDED.relation_score, \
-                 signals_json = EXCLUDED.signals_json, \
-                 computed_at = NOW()",
-        )
-        .bind(user_id)
-        .bind(community_id)
-        .bind(signals_json)
-        .execute(pool)
-        .await
-        .expect("insert user community affinity");
-    }
-
-    async fn insert_mute_event_for_community(
-        pool: &Pool<Postgres>,
-        user_id: &str,
-        community_id: &str,
-    ) {
-        let event_id = format!("mute-{}", Uuid::new_v4());
-        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
-        let tags = json!([["t", community_id]]);
-        let raw_json = json!({
-            "id": event_id,
-            "pubkey": user_id,
-            "kind": 10000,
-            "created_at": now,
-            "tags": tags,
-            "content": "",
-            "sig": "sig"
-        });
-        sqlx::query(
-            "INSERT INTO cn_relay.events (event_id, pubkey, kind, created_at, tags, content, sig, raw_json, is_deleted, is_ephemeral, is_current, expires_at) \
-             VALUES ($1, $2, 10000, $3, $4, '', 'sig', $5, FALSE, FALSE, TRUE, NULL) \
-             ON CONFLICT (event_id) DO NOTHING",
-        )
-        .bind(event_id)
-        .bind(user_id)
-        .bind(now)
-        .bind(tags)
-        .bind(raw_json)
-        .execute(pool)
-        .await
-        .expect("insert mute list event");
     }
 
     async fn run_alias_backfill_for_topic(pool: &Pool<Postgres>, topic_id: &str) {
@@ -3822,7 +2895,7 @@ mod api_contract_tests {
         insert_topic_subscription(&pool, &existing_topic_id, &subscriber_pubkey).await;
         assign_active_plan_limit(&pool, &subscriber_pubkey, "max_topics", "limit", 1).await;
 
-        let (status, payload) = post_json_with_consent_retry(
+        let (status, payload) = post_json(
             app.clone(),
             "/v1/topic-subscription-requests",
             &token,
@@ -3830,8 +2903,6 @@ mod api_contract_tests {
                 "topic_id": quota_topic_id,
                 "requested_services": ["relay", "index"]
             }),
-            &pool,
-            &subscriber_pubkey,
         )
         .await;
         assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
@@ -6036,185 +5107,6 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
-    async fn search_shadow_read_logs_overlap_and_latency_when_sampled() {
-        let _search_backend_guard = lock_search_backend_contract_tests().await;
-        let topic_id = format!("kukuri:search-shadow-{}", Uuid::new_v4().simple());
-        let meili_event_a = Uuid::new_v4().to_string();
-        let meili_event_b = Uuid::new_v4().to_string();
-        let pg_event_c = Uuid::new_v4().to_string();
-        let query_raw = "shadow";
-        let query_norm = search_normalizer::normalize_search_text(query_raw);
-
-        let (meili_url, meili_handle) = spawn_mock_meili(json!({
-            "hits": [
-                {
-                    "event_id": meili_event_a.clone(),
-                    "topic_id": topic_id.clone(),
-                    "content": "shadow result meili a"
-                },
-                {
-                    "event_id": meili_event_b.clone(),
-                    "topic_id": topic_id.clone(),
-                    "content": "shadow result meili b"
-                }
-            ],
-            "estimatedTotalHits": 2
-        }))
-        .await;
-
-        let state = test_state_with_meili_url(&meili_url).await;
-        let pool = state.pool.clone();
-        let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&pool, &pubkey).await;
-        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
-        set_search_runtime_flags(
-            &pool,
-            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
-            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
-        )
-        .await;
-        set_shadow_sample_rate(&pool, "100").await;
-
-        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
-        let hashtags_norm: Vec<String> = Vec::new();
-        let mentions_norm: Vec<String> = Vec::new();
-        let community_terms_norm = search_normalizer::normalize_search_terms([topic_id.as_str()]);
-
-        let body_a = "shadow result pg a";
-        let body_a_norm = search_normalizer::normalize_search_text(body_a);
-        let search_text_a = search_normalizer::build_search_text(
-            &body_a_norm,
-            &hashtags_norm,
-            &mentions_norm,
-            &community_terms_norm,
-        );
-        sqlx::query(
-            "INSERT INTO cn_search.post_search_documents \
-             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
-             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
-        )
-        .bind(&meili_event_a)
-        .bind(&topic_id)
-        .bind(&pubkey)
-        .bind(body_a)
-        .bind(&body_a_norm)
-        .bind(&hashtags_norm)
-        .bind(&mentions_norm)
-        .bind(&community_terms_norm)
-        .bind(&search_text_a)
-        .bind(now)
-        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
-        .execute(&pool)
-        .await
-        .expect("insert pg shadow doc a");
-
-        let body_c = "shadow result pg c";
-        let body_c_norm = search_normalizer::normalize_search_text(body_c);
-        let search_text_c = search_normalizer::build_search_text(
-            &body_c_norm,
-            &hashtags_norm,
-            &mentions_norm,
-            &community_terms_norm,
-        );
-        sqlx::query(
-            "INSERT INTO cn_search.post_search_documents \
-             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
-             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
-        )
-        .bind(&pg_event_c)
-        .bind(&topic_id)
-        .bind(&pubkey)
-        .bind(body_c)
-        .bind(&body_c_norm)
-        .bind(&hashtags_norm)
-        .bind(&mentions_norm)
-        .bind(&community_terms_norm)
-        .bind(&search_text_c)
-        .bind(now - 1)
-        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
-        .execute(&pool)
-        .await
-        .expect("insert pg shadow doc c");
-
-        let token = issue_token(&state.jwt_config, &pubkey);
-        let app = Router::new()
-            .route("/v1/search", get(search))
-            .with_state(state);
-        let (status, payload) = get_json_with_consent_retry(
-            app,
-            &format!("/v1/search?topic={topic_id}&q={query_raw}&limit=2"),
-            &token,
-            &pool,
-            &pubkey,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(payload.get("total").and_then(Value::as_u64), Some(2));
-
-        let shadow_row = sqlx::query(
-            "SELECT meili_ids, pg_ids, overlap_at_10, latency_meili_ms, latency_pg_ms \
-             FROM cn_search.shadow_read_logs \
-             WHERE endpoint = '/v1/search' AND user_id = $1 AND query_norm = $2 \
-             ORDER BY id DESC \
-             LIMIT 1",
-        )
-        .bind(&pubkey)
-        .bind(&query_norm)
-        .fetch_one(&pool)
-        .await
-        .expect("fetch search shadow log row");
-        let meili_ids: Vec<String> = shadow_row.try_get("meili_ids").expect("meili_ids");
-        let pg_ids: Vec<String> = shadow_row.try_get("pg_ids").expect("pg_ids");
-        let overlap_at_10: f64 = shadow_row.try_get("overlap_at_10").expect("overlap_at_10");
-        let latency_meili_ms: i32 = shadow_row
-            .try_get("latency_meili_ms")
-            .expect("latency_meili_ms");
-        let latency_pg_ms: i32 = shadow_row.try_get("latency_pg_ms").expect("latency_pg_ms");
-
-        assert_eq!(meili_ids.len(), 2);
-        assert!(meili_ids.iter().any(|id| id == &meili_event_a));
-        assert!(meili_ids.iter().any(|id| id == &meili_event_b));
-        assert!(pg_ids.iter().any(|id| id == &meili_event_a));
-        assert!(pg_ids.iter().any(|id| id == &pg_event_c));
-        assert!(
-            (0.0..=1.0).contains(&overlap_at_10),
-            "unexpected overlap_at_10: {overlap_at_10}"
-        );
-        assert!(latency_meili_ms >= 0, "unexpected meili latency");
-        assert!(latency_pg_ms >= 0, "unexpected pg latency");
-
-        sqlx::query(
-            "DELETE FROM cn_search.post_search_documents \
-             WHERE topic_id = $1 AND post_id = ANY($2)",
-        )
-        .bind(&topic_id)
-        .bind(vec![meili_event_a.clone(), pg_event_c.clone()])
-        .execute(&pool)
-        .await
-        .expect("cleanup search shadow docs");
-        sqlx::query(
-            "DELETE FROM cn_search.shadow_read_logs \
-             WHERE endpoint = '/v1/search' AND user_id = $1 AND query_norm = $2",
-        )
-        .bind(&pubkey)
-        .bind(&query_norm)
-        .execute(&pool)
-        .await
-        .expect("cleanup search shadow logs");
-
-        set_shadow_sample_rate(&pool, "0").await;
-        set_search_runtime_flags(
-            &pool,
-            cn_core::search_runtime_flags::SEARCH_READ_BACKEND_MEILI,
-            cn_core::search_runtime_flags::SEARCH_WRITE_MODE_MEILI_ONLY,
-        )
-        .await;
-
-        meili_handle.abort();
-        let _ = meili_handle.await;
-    }
-
-    #[tokio::test]
     async fn community_suggest_pg_backend_supports_exact_prefix_and_trgm() {
         let _search_backend_guard = lock_search_backend_contract_tests().await;
         let state = test_state().await;
@@ -6226,12 +5118,6 @@ mod api_contract_tests {
             cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_PG,
         )
         .await;
-        set_suggest_rerank_mode(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RERANK_MODE_SHADOW,
-        )
-        .await;
-        set_shadow_sample_rate(&pool, "0").await;
 
         let community_exact = "kukuri:tauri:pr03rustalpha";
         let community_prefix = "kukuri:tauri:pr03rubybeta";
@@ -6239,9 +5125,6 @@ mod api_contract_tests {
         insert_community_search_terms(&pool, community_exact).await;
         insert_community_search_terms(&pool, community_prefix).await;
         insert_community_search_terms(&pool, community_other).await;
-        insert_node_subscription(&pool, community_exact).await;
-        insert_node_subscription(&pool, community_prefix).await;
-        insert_node_subscription(&pool, community_other).await;
 
         let token = issue_token(&state.jwt_config, &pubkey);
         let app = Router::new()
@@ -6256,18 +5139,10 @@ mod api_contract_tests {
             &pubkey,
         )
         .await;
-        assert_eq!(
-            exact_status,
-            StatusCode::OK,
-            "unexpected exact payload: {exact_payload}"
-        );
+        assert_eq!(exact_status, StatusCode::OK);
         assert_eq!(
             exact_payload.get("backend").and_then(Value::as_str),
             Some("pg")
-        );
-        assert_eq!(
-            exact_payload.get("rerank_mode").and_then(Value::as_str),
-            Some("shadow")
         );
         let exact_items = exact_payload
             .get("items")
@@ -6292,11 +5167,7 @@ mod api_contract_tests {
             &pubkey,
         )
         .await;
-        assert_eq!(
-            prefix_status,
-            StatusCode::OK,
-            "unexpected prefix payload: {prefix_payload}"
-        );
+        assert_eq!(prefix_status, StatusCode::OK);
         let prefix_items = prefix_payload
             .get("items")
             .and_then(Value::as_array)
@@ -6316,11 +5187,7 @@ mod api_contract_tests {
             &pubkey,
         )
         .await;
-        assert_eq!(
-            trgm_status,
-            StatusCode::OK,
-            "unexpected trgm payload: {trgm_payload}"
-        );
+        assert_eq!(trgm_status, StatusCode::OK);
         let trgm_items = trgm_payload
             .get("items")
             .and_then(Value::as_array)
@@ -6357,15 +5224,6 @@ mod api_contract_tests {
             .execute(&pool)
             .await
             .expect("cleanup community suggest pg terms");
-        sqlx::query("DELETE FROM cn_admin.node_subscriptions WHERE topic_id = ANY($1)")
-            .bind(vec![
-                community_exact.to_string(),
-                community_prefix.to_string(),
-                community_other.to_string(),
-            ])
-            .execute(&pool)
-            .await
-            .expect("cleanup node subscriptions for suggest test");
         set_suggest_runtime_flag(
             &pool,
             cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_LEGACY,
@@ -6423,336 +5281,6 @@ mod api_contract_tests {
         .execute(&pool)
         .await
         .expect("cleanup legacy suggest topic subscription");
-    }
-
-    #[tokio::test]
-    async fn community_suggest_pg_rerank_enabled_prioritizes_affinity_and_visibility() {
-        let _search_backend_guard = lock_search_backend_contract_tests().await;
-        let state = test_state().await;
-        let pool = state.pool.clone();
-        let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&pool, &pubkey).await;
-        set_suggest_runtime_flag(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_PG,
-        )
-        .await;
-        set_suggest_rerank_mode(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RERANK_MODE_ENABLED,
-        )
-        .await;
-        set_suggest_relation_weights(
-            &pool,
-            r#"{"is_member":20.0,"is_following_community":0.0,"friends_member_count":0.0,"two_hop_follow_count":0.0,"last_view_decay":0.0,"muted_or_blocked":-1.0}"#,
-        )
-        .await;
-
-        let community_a = "kukuri:tauri:pr05rank-a";
-        let community_b = "kukuri:tauri:pr05rank-b";
-        let community_hidden = "kukuri:tauri:pr05rank-hidden";
-        insert_community_search_terms(&pool, community_a).await;
-        insert_community_search_terms(&pool, community_b).await;
-        insert_community_search_terms(&pool, community_hidden).await;
-        insert_node_subscription(&pool, community_a).await;
-        insert_node_subscription(&pool, community_b).await;
-        insert_user_community_affinity(
-            &pool,
-            &pubkey,
-            community_b,
-            json!({
-                "is_member": true,
-                "is_following_community": false,
-                "friends_member_count": 0,
-                "two_hop_follow_count": 0,
-                "last_seen_at": null
-            }),
-        )
-        .await;
-
-        let token = issue_token(&state.jwt_config, &pubkey);
-        let app = Router::new()
-            .route("/v1/communities/suggest", get(community_suggest))
-            .with_state(state);
-        let (status, payload) = get_json_with_consent_retry(
-            app,
-            "/v1/communities/suggest?q=pr05rank&limit=5",
-            &token,
-            &pool,
-            &pubkey,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(payload.get("backend").and_then(Value::as_str), Some("pg"));
-        assert_eq!(
-            payload.get("rerank_mode").and_then(Value::as_str),
-            Some("enabled")
-        );
-        assert_eq!(
-            payload
-                .get("blocked_or_muted_drop_count")
-                .and_then(Value::as_u64),
-            Some(0)
-        );
-        assert_eq!(
-            payload.get("visibility_drop_count").and_then(Value::as_u64),
-            Some(1)
-        );
-
-        let items = payload
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        assert!(items.len() >= 2);
-        assert_eq!(
-            items[0].get("community_id").and_then(Value::as_str),
-            Some(community_b)
-        );
-        assert!(
-            !items
-                .iter()
-                .any(|item| item.get("community_id").and_then(Value::as_str)
-                    == Some(community_hidden))
-        );
-
-        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = ANY($1)")
-            .bind(vec![
-                community_a.to_string(),
-                community_b.to_string(),
-                community_hidden.to_string(),
-            ])
-            .execute(&pool)
-            .await
-            .expect("cleanup suggest rerank terms");
-        sqlx::query("DELETE FROM cn_admin.node_subscriptions WHERE topic_id = ANY($1)")
-            .bind(vec![community_a.to_string(), community_b.to_string()])
-            .execute(&pool)
-            .await
-            .expect("cleanup suggest rerank node subscriptions");
-        sqlx::query(
-            "DELETE FROM cn_search.user_community_affinity WHERE user_id = $1 AND community_id = ANY($2)",
-        )
-        .bind(&pubkey)
-        .bind(vec![community_a.to_string(), community_b.to_string()])
-        .execute(&pool)
-        .await
-        .expect("cleanup suggest rerank affinity");
-        set_suggest_relation_weights(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RELATION_WEIGHTS_DEFAULT,
-        )
-        .await;
-        set_suggest_rerank_mode(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RERANK_MODE_SHADOW,
-        )
-        .await;
-        set_suggest_runtime_flag(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_LEGACY,
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    async fn community_suggest_pg_rerank_filters_muted_communities() {
-        let _search_backend_guard = lock_search_backend_contract_tests().await;
-        let state = test_state().await;
-        let pool = state.pool.clone();
-        let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&pool, &pubkey).await;
-        set_suggest_runtime_flag(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_PG,
-        )
-        .await;
-        set_suggest_rerank_mode(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RERANK_MODE_ENABLED,
-        )
-        .await;
-
-        let community_muted = "kukuri:tauri:pr05mute-a";
-        let community_allowed = "kukuri:tauri:pr05mute-b";
-        insert_community_search_terms(&pool, community_muted).await;
-        insert_community_search_terms(&pool, community_allowed).await;
-        insert_node_subscription(&pool, community_muted).await;
-        insert_node_subscription(&pool, community_allowed).await;
-        insert_mute_event_for_community(&pool, &pubkey, community_muted).await;
-
-        let token = issue_token(&state.jwt_config, &pubkey);
-        let app = Router::new()
-            .route("/v1/communities/suggest", get(community_suggest))
-            .with_state(state);
-        let (status, payload) = get_json_with_consent_retry(
-            app,
-            "/v1/communities/suggest?q=pr05mute&limit=5",
-            &token,
-            &pool,
-            &pubkey,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        let items = payload
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        assert!(items.iter().any(
-            |item| item.get("community_id").and_then(Value::as_str) == Some(community_allowed)
-        ));
-        assert!(!items
-            .iter()
-            .any(|item| item.get("community_id").and_then(Value::as_str) == Some(community_muted)));
-        assert_eq!(
-            payload
-                .get("blocked_or_muted_drop_count")
-                .and_then(Value::as_u64),
-            Some(1)
-        );
-
-        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = ANY($1)")
-            .bind(vec![
-                community_muted.to_string(),
-                community_allowed.to_string(),
-            ])
-            .execute(&pool)
-            .await
-            .expect("cleanup suggest mute terms");
-        sqlx::query("DELETE FROM cn_admin.node_subscriptions WHERE topic_id = ANY($1)")
-            .bind(vec![
-                community_muted.to_string(),
-                community_allowed.to_string(),
-            ])
-            .execute(&pool)
-            .await
-            .expect("cleanup suggest mute node subscriptions");
-        sqlx::query("DELETE FROM cn_relay.events WHERE pubkey = $1 AND kind = 10000")
-            .bind(&pubkey)
-            .execute(&pool)
-            .await
-            .expect("cleanup mute list events");
-        set_suggest_rerank_mode(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RERANK_MODE_SHADOW,
-        )
-        .await;
-        set_suggest_runtime_flag(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_LEGACY,
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    async fn community_suggest_pg_shadow_mode_preserves_stage_a_order_and_reports_shadow() {
-        let _search_backend_guard = lock_search_backend_contract_tests().await;
-        let state = test_state().await;
-        let pool = state.pool.clone();
-        let pubkey = Keys::generate().public_key().to_hex();
-        ensure_consents(&pool, &pubkey).await;
-        set_suggest_runtime_flag(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_PG,
-        )
-        .await;
-        set_suggest_rerank_mode(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RERANK_MODE_SHADOW,
-        )
-        .await;
-        set_shadow_sample_rate(&pool, "100").await;
-        set_suggest_relation_weights(
-            &pool,
-            r#"{"is_member":20.0,"is_following_community":0.0,"friends_member_count":0.0,"two_hop_follow_count":0.0,"last_view_decay":0.0,"muted_or_blocked":-1.0}"#,
-        )
-        .await;
-
-        let community_a = "kukuri:tauri:pr05shadow-a";
-        let community_b = "kukuri:tauri:pr05shadow-b";
-        insert_community_search_terms(&pool, community_a).await;
-        insert_community_search_terms(&pool, community_b).await;
-        insert_node_subscription(&pool, community_a).await;
-        insert_node_subscription(&pool, community_b).await;
-        insert_user_community_affinity(
-            &pool,
-            &pubkey,
-            community_b,
-            json!({
-                "is_member": true,
-                "is_following_community": false,
-                "friends_member_count": 0,
-                "two_hop_follow_count": 0,
-                "last_seen_at": null
-            }),
-        )
-        .await;
-
-        let token = issue_token(&state.jwt_config, &pubkey);
-        let app = Router::new()
-            .route("/v1/communities/suggest", get(community_suggest))
-            .with_state(state);
-        let (status, payload) = get_json_with_consent_retry(
-            app,
-            "/v1/communities/suggest?q=pr05shadow&limit=5",
-            &token,
-            &pool,
-            &pubkey,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(
-            payload.get("rerank_mode").and_then(Value::as_str),
-            Some("shadow")
-        );
-        assert!(payload.get("shadow_topk_overlap").is_some());
-        assert!(payload.get("shadow_rank_drift_count").is_some());
-        let items = payload
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        assert!(items.len() >= 2);
-        assert_eq!(
-            items[0].get("community_id").and_then(Value::as_str),
-            Some(community_a)
-        );
-        let stage_b_top = items
-            .iter()
-            .find(|item| item.get("stage_b_rank").and_then(Value::as_i64) == Some(1))
-            .and_then(|item| item.get("community_id").and_then(Value::as_str));
-        assert_eq!(stage_b_top, Some(community_b));
-
-        sqlx::query("DELETE FROM cn_search.community_search_terms WHERE community_id = ANY($1)")
-            .bind(vec![community_a.to_string(), community_b.to_string()])
-            .execute(&pool)
-            .await
-            .expect("cleanup suggest shadow terms");
-        sqlx::query("DELETE FROM cn_admin.node_subscriptions WHERE topic_id = ANY($1)")
-            .bind(vec![community_a.to_string(), community_b.to_string()])
-            .execute(&pool)
-            .await
-            .expect("cleanup suggest shadow node subscriptions");
-        sqlx::query(
-            "DELETE FROM cn_search.user_community_affinity WHERE user_id = $1 AND community_id = ANY($2)",
-        )
-        .bind(&pubkey)
-        .bind(vec![community_a.to_string(), community_b.to_string()])
-        .execute(&pool)
-        .await
-        .expect("cleanup suggest shadow affinity");
-        set_shadow_sample_rate(&pool, "0").await;
-        set_suggest_relation_weights(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_RELATION_WEIGHTS_DEFAULT,
-        )
-        .await;
-        set_suggest_runtime_flag(
-            &pool,
-            cn_core::search_runtime_flags::SUGGEST_READ_BACKEND_LEGACY,
-        )
-        .await;
     }
 
     #[tokio::test]

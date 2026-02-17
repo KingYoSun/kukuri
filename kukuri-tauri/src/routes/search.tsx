@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SearchBar } from '@/components/search/SearchBar';
 import { PostSearchResults } from '@/components/search/PostSearchResults';
@@ -15,6 +16,7 @@ export const Route = createFileRoute('/search')({
 type SearchTab = 'posts' | 'topics' | 'users';
 
 function SearchPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SearchTab>('posts');
   const [searchQuery, setSearchQuery] = useState('');
   const [userSearchMeta, setUserSearchMeta] = useState<UserSearchInputMeta | null>(null);
@@ -86,26 +88,26 @@ function SearchPage() {
       validationState = 'error';
       validationMessage =
         retryAfterSeconds && retryAfterSeconds > 0
-          ? `レート制限中です (${retryAfterSeconds}秒後に再試行できます)`
-          : 'レート制限中です。しばらく待ってから再検索してください';
+          ? t('search.rateLimitedRetry', { seconds: retryAfterSeconds })
+          : t('search.rateLimitedWait');
     } else if (errorKey === 'UserSearch.fetch_failed') {
       validationState = 'error';
-      validationMessage = '検索に失敗しました。ネットワークを確認して再試行してください';
+      validationMessage = t('search.fetchFailed');
     } else if (allowIncompleteActive && helperSearch) {
       validationState = 'warning';
-      validationMessage = '補助検索モード: キャッシュ優先で部分一致を表示しています';
+      validationMessage = t('search.helperSearchMode');
     } else if (
       sanitizedQuery.length > 0 &&
       (status === 'typing' || errorKey === 'UserSearch.invalid_query')
     ) {
       validationState = 'warning';
-      validationMessage = `検索キーワードは${MIN_USER_SEARCH_QUERY_LENGTH}文字以上入力してください`;
+      validationMessage = t('search.minQueryLength', { minLength: MIN_USER_SEARCH_QUERY_LENGTH });
     }
 
     const helperLabel = helperSearch
       ? helperSearch.kind === 'hashtag'
-        ? `タグ補助検索中: #${helperSearch.term}`
-        : `npub補助検索中: @${helperSearch.term}`
+        ? t('search.hashtagHelperSearch', { term: helperSearch.term })
+        : t('search.npubHelperSearch', { term: helperSearch.term })
       : undefined;
 
     return { validationState, validationMessage, helperLabel };
@@ -120,17 +122,17 @@ function SearchPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6" data-testid="search-page">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">検索</h1>
-        <p className="text-muted-foreground">投稿、トピック、ユーザーを検索できます</p>
+        <h1 className="text-3xl font-bold">{t('search.title')}</h1>
+        <p className="text-muted-foreground">{t('search.description')}</p>
       </div>
 
       <SearchBar
         placeholder={
           activeTab === 'posts'
-            ? '投稿を検索...'
+            ? t('search.searchPosts')
             : activeTab === 'topics'
-              ? 'トピックを検索...'
-              : 'ユーザーを検索...'
+              ? t('search.searchTopics')
+              : t('search.searchUsers')
         }
         value={searchQuery}
         onChange={setSearchQuery}
@@ -144,13 +146,13 @@ function SearchPage() {
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SearchTab)}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="posts" data-testid="search-tab-posts">
-            投稿
+            {t('search.posts')}
           </TabsTrigger>
           <TabsTrigger value="topics" data-testid="search-tab-topics">
-            トピック
+            {t('search.topics')}
           </TabsTrigger>
           <TabsTrigger value="users" data-testid="search-tab-users">
-            ユーザー
+            {t('search.users')}
           </TabsTrigger>
         </TabsList>
 

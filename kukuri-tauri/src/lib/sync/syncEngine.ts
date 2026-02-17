@@ -3,6 +3,7 @@ import { OfflineActionType } from '@/types/offline';
 import { TauriApi } from '@/lib/api/tauri';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { errorHandler } from '@/lib/errorHandler';
+import i18n from '@/i18n';
 
 export interface SyncConflict {
   localAction: OfflineAction;
@@ -48,7 +49,7 @@ export class SyncEngine {
     };
 
     if (this.isSyncing) {
-      throw new Error('同期処理が既に実行中です');
+      throw new Error(i18n.t('syncEngine.syncAlreadyRunning'));
     }
 
     this.isSyncing = true;
@@ -72,7 +73,7 @@ export class SyncEngine {
           result.failedActions.push(...topicResult.value.failedActions);
           result.totalProcessed += topicResult.value.totalProcessed;
         } else {
-          errorHandler.log('トピック同期エラー', topicResult.reason, {
+          errorHandler.log(i18n.t('syncEngine.topicSyncError'), topicResult.reason, {
             context: 'SyncEngine.performDifferentialSync',
           });
         }
@@ -143,7 +144,7 @@ export class SyncEngine {
           result.syncedActions.push(action);
         }
       } catch (error) {
-        errorHandler.log(`アクション同期エラー (${action.localId})`, error, {
+        errorHandler.log(i18n.t('syncEngine.actionSyncError', { localId: action.localId }), error, {
           context: 'SyncEngine.syncTopicActions',
         });
         result.failedActions.push(action);

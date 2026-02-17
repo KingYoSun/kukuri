@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, X } from 'lucide-react';
@@ -20,7 +21,7 @@ interface SearchBarProps {
 }
 
 export function SearchBar({
-  placeholder = '検索...',
+  placeholder,
   value: controlledValue,
   onChange,
   onSearch,
@@ -32,6 +33,8 @@ export function SearchBar({
   validationMessage,
   helperLabel,
 }: SearchBarProps) {
+  const { t } = useTranslation();
+  const defaultPlaceholder = placeholder ?? t('search.placeholder');
   const [internalValue, setInternalValue] = useState('');
   const value = controlledValue !== undefined ? controlledValue : internalValue;
   const debouncedValue = useDebounce(value, 300);
@@ -105,7 +108,7 @@ export function SearchBar({
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
+            placeholder={defaultPlaceholder}
             className={cn('pl-9 pr-9', inputValidationClass)}
             autoFocus={autoFocus}
             aria-invalid={validationState === 'error'}
@@ -117,12 +120,12 @@ export function SearchBar({
               variant="ghost"
               size="icon"
               className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
-              onClick={handleClear}
-              data-testid="search-clear"
-            >
-              <X className="h-3 w-3" />
-              <span className="sr-only">クリア</span>
-            </Button>
+            onClick={handleClear}
+            data-testid="search-clear"
+          >
+            <X className="h-3 w-3" />
+            <span className="sr-only">{t('common.clear')}</span>
+          </Button>
           )}
         </div>
         {(helperLabel || validationMessage) && (
@@ -142,7 +145,7 @@ export function SearchBar({
       </div>
       {showButton && (
         <Button type="submit" disabled={!value.trim()}>
-          検索
+          {t('search.search')}
         </Button>
       )}
     </form>

@@ -4,7 +4,7 @@
     "title": "cn-admin-api",
     "description": "",
     "license": {
-      "name": "MIT"
+      "name": "Apache-2.0"
     },
     "version": "0.1.0"
   },

@@ -900,7 +900,7 @@ mod tests {
 
     fn has_tag(tags: &[Vec<String>], name: &str, value: &str) -> bool {
         tags.iter().any(|tag| {
-            tag.get(0).map(|v| v.as_str()) == Some(name)
+            tag.first().map(|v| v.as_str()) == Some(name)
                 && tag.get(1).map(|v| v.as_str()) == Some(value)
         })
     }

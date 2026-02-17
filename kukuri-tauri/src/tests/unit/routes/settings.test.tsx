@@ -7,6 +7,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { TauriApi } from '@/lib/api/tauri';
 import { updateNostrMetadata } from '@/lib/api/nostr';
+import i18n from '@/i18n';
 
 vi.mock('@/components/NostrTestPanel', () => ({
   NostrTestPanel: () => <div>Nostr Panel</div>,
@@ -80,7 +81,8 @@ const renderSettingsPage = () => {
 };
 
 describe('SettingsPage', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('ja');
     localStorage.clear();
     mockPrivacyStore.publicProfile = true;
     mockPrivacyStore.showOnlineStatus = false;

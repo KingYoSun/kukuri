@@ -4,6 +4,8 @@ import { useTopicStore } from '@/stores';
 import type { Topic } from '@/stores';
 import { TauriApi } from '@/lib/api/tauri';
 import { errorHandler } from '@/lib/errorHandler';
+import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
+import i18n from '@/i18n';
 
 export const useTopics = () => {
   const { setTopics } = useTopicStore();
@@ -23,12 +25,14 @@ export const useTopics = () => {
 
       const topicsWithStats = await Promise.all(
         apiTopics.map(async (topic) => {
+          const isPublicTopic = topic.id === DEFAULT_PUBLIC_TOPIC_ID;
+          const description = isPublicTopic ? i18n.t('topics.publicTimeline') : (topic.description ?? '');
           try {
             const stats = await TauriApi.getTopicStats(topic.id);
             return {
               id: topic.id,
               name: topic.name,
-              description: topic.description ?? '',
+              description,
               tags: [],
               memberCount: stats.member_count,
               postCount: stats.post_count,
@@ -45,7 +49,7 @@ export const useTopics = () => {
             return {
               id: topic.id,
               name: topic.name,
-              description: topic.description ?? '',
+              description,
               tags: [],
               memberCount: topic.member_count ?? 0,
               postCount: topic.post_count ?? 0,
@@ -94,10 +98,11 @@ export const useTopic = (topicId: string) => {
         trending_score: 0,
       }));
 
+      const isPublicTopic = apiTopic.id === DEFAULT_PUBLIC_TOPIC_ID;
       return {
         id: apiTopic.id,
         name: apiTopic.name,
-        description: apiTopic.description ?? '',
+        description: isPublicTopic ? i18n.t('topics.publicTimeline') : (apiTopic.description ?? ''),
         tags: [],
         memberCount: stats.member_count,
         postCount: stats.post_count,

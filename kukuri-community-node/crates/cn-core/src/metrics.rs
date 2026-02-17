@@ -35,15 +35,6 @@ struct Metrics {
     outbox_consumer_batches_total: IntCounterVec,
     outbox_consumer_processing_duration_seconds: HistogramVec,
     outbox_consumer_batch_size: HistogramVec,
-    suggest_stage_a_latency_ms: HistogramVec,
-    suggest_stage_b_latency_ms: HistogramVec,
-    suggest_block_filter_drop_count: IntCounterVec,
-    backfill_processed_rows: IntGaugeVec,
-    backfill_eta_seconds: IntGaugeVec,
-    shadow_overlap_at_10: HistogramVec,
-    shadow_latency_delta_ms: HistogramVec,
-    search_dual_write_errors_total: IntCounterVec,
-    search_dual_write_retries_total: IntCounterVec,
 }
 
 pub const OUTBOX_CONSUMER_RESULT_SUCCESS: &str = "success";
@@ -220,97 +211,6 @@ fn metrics() -> &'static Metrics {
         )
         .expect("outbox_consumer_batch_size metric");
 
-        let suggest_stage_a_latency_ms = HistogramVec::new(
-            HistogramOpts::new(
-                "suggest_stage_a_latency_ms",
-                "Community suggest Stage-A latency in milliseconds",
-            )
-            .buckets(vec![
-                1.0, 2.5, 5.0, 10.0, 20.0, 50.0, 80.0, 120.0, 200.0, 400.0,
-            ]),
-            &["service", "backend"],
-        )
-        .expect("suggest_stage_a_latency_ms metric");
-
-        let suggest_stage_b_latency_ms = HistogramVec::new(
-            HistogramOpts::new(
-                "suggest_stage_b_latency_ms",
-                "Community suggest Stage-B latency in milliseconds",
-            )
-            .buckets(vec![
-                1.0, 2.5, 5.0, 10.0, 20.0, 50.0, 80.0, 120.0, 200.0, 400.0,
-            ]),
-            &["service", "mode"],
-        )
-        .expect("suggest_stage_b_latency_ms metric");
-
-        let suggest_block_filter_drop_count = IntCounterVec::new(
-            Opts::new(
-                "suggest_block_filter_drop_count",
-                "Filtered suggest candidates dropped by block or mute filters",
-            ),
-            &["service", "backend", "reason"],
-        )
-        .expect("suggest_block_filter_drop_count metric");
-
-        let backfill_processed_rows = IntGaugeVec::new(
-            Opts::new(
-                "backfill_processed_rows",
-                "Rows processed by backfill jobs for each target",
-            ),
-            &["service", "target"],
-        )
-        .expect("backfill_processed_rows metric");
-
-        let backfill_eta_seconds = IntGaugeVec::new(
-            Opts::new(
-                "backfill_eta_seconds",
-                "Estimated seconds until current backfill target completes",
-            ),
-            &["service", "target"],
-        )
-        .expect("backfill_eta_seconds metric");
-
-        let shadow_overlap_at_10 = HistogramVec::new(
-            HistogramOpts::new(
-                "shadow_overlap_at_10",
-                "Search shadow-read overlap@10 between primary and secondary backends",
-            )
-            .buckets(vec![0.0, 0.1, 0.25, 0.4, 0.5, 0.7, 0.85, 1.0]),
-            &["service", "endpoint", "primary_backend"],
-        )
-        .expect("shadow_overlap_at_10 metric");
-
-        let shadow_latency_delta_ms = HistogramVec::new(
-            HistogramOpts::new(
-                "shadow_latency_delta_ms",
-                "Absolute latency delta in milliseconds between primary and shadow backends",
-            )
-            .buckets(vec![
-                0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 120.0, 200.0, 400.0,
-            ]),
-            &["service", "endpoint"],
-        )
-        .expect("shadow_latency_delta_ms metric");
-
-        let search_dual_write_errors_total = IntCounterVec::new(
-            Opts::new(
-                "search_dual_write_errors_total",
-                "Total dual-write side failures by backend and operation",
-            ),
-            &["service", "backend", "operation"],
-        )
-        .expect("search_dual_write_errors_total metric");
-
-        let search_dual_write_retries_total = IntCounterVec::new(
-            Opts::new(
-                "search_dual_write_retries_total",
-                "Total successful retries after dual-write side failures",
-            ),
-            &["service", "operation"],
-        )
-        .expect("search_dual_write_retries_total metric");
-
         registry
             .register(Box::new(cn_up.clone()))
             .expect("register cn_up");
@@ -382,33 +282,6 @@ fn metrics() -> &'static Metrics {
         registry
             .register(Box::new(outbox_consumer_batch_size.clone()))
             .expect("register outbox_consumer_batch_size");
-        registry
-            .register(Box::new(suggest_stage_a_latency_ms.clone()))
-            .expect("register suggest_stage_a_latency_ms");
-        registry
-            .register(Box::new(suggest_stage_b_latency_ms.clone()))
-            .expect("register suggest_stage_b_latency_ms");
-        registry
-            .register(Box::new(suggest_block_filter_drop_count.clone()))
-            .expect("register suggest_block_filter_drop_count");
-        registry
-            .register(Box::new(backfill_processed_rows.clone()))
-            .expect("register backfill_processed_rows");
-        registry
-            .register(Box::new(backfill_eta_seconds.clone()))
-            .expect("register backfill_eta_seconds");
-        registry
-            .register(Box::new(shadow_overlap_at_10.clone()))
-            .expect("register shadow_overlap_at_10");
-        registry
-            .register(Box::new(shadow_latency_delta_ms.clone()))
-            .expect("register shadow_latency_delta_ms");
-        registry
-            .register(Box::new(search_dual_write_errors_total.clone()))
-            .expect("register search_dual_write_errors_total");
-        registry
-            .register(Box::new(search_dual_write_retries_total.clone()))
-            .expect("register search_dual_write_retries_total");
 
         Metrics {
             registry,
@@ -435,15 +308,6 @@ fn metrics() -> &'static Metrics {
             outbox_consumer_batches_total,
             outbox_consumer_processing_duration_seconds,
             outbox_consumer_batch_size,
-            suggest_stage_a_latency_ms,
-            suggest_stage_b_latency_ms,
-            suggest_block_filter_drop_count,
-            backfill_processed_rows,
-            backfill_eta_seconds,
-            shadow_overlap_at_10,
-            shadow_latency_delta_ms,
-            search_dual_write_errors_total,
-            search_dual_write_retries_total,
         }
     })
 }
@@ -630,101 +494,6 @@ pub fn observe_outbox_consumer_batch_size(
         .outbox_consumer_batch_size
         .with_label_values(&[service_name, consumer])
         .observe(batch_size as f64);
-}
-
-pub fn observe_suggest_stage_a_latency_ms(
-    service_name: &'static str,
-    backend: &str,
-    duration: Duration,
-) {
-    metrics()
-        .suggest_stage_a_latency_ms
-        .with_label_values(&[service_name, backend])
-        .observe(duration.as_secs_f64() * 1000.0);
-}
-
-pub fn observe_suggest_stage_b_latency_ms(
-    service_name: &'static str,
-    mode: &str,
-    duration: Duration,
-) {
-    metrics()
-        .suggest_stage_b_latency_ms
-        .with_label_values(&[service_name, mode])
-        .observe(duration.as_secs_f64() * 1000.0);
-}
-
-pub fn inc_suggest_block_filter_drop_count(
-    service_name: &'static str,
-    backend: &str,
-    reason: &str,
-    count: u64,
-) {
-    if count == 0 {
-        return;
-    }
-    metrics()
-        .suggest_block_filter_drop_count
-        .with_label_values(&[service_name, backend, reason])
-        .inc_by(count);
-}
-
-pub fn set_backfill_processed_rows(service_name: &'static str, target: &str, processed_rows: i64) {
-    metrics()
-        .backfill_processed_rows
-        .with_label_values(&[service_name, target])
-        .set(processed_rows.max(0));
-}
-
-pub fn set_backfill_eta_seconds(service_name: &'static str, target: &str, eta_seconds: f64) {
-    let eta = if eta_seconds.is_finite() {
-        eta_seconds.max(0.0)
-    } else {
-        0.0
-    };
-    metrics()
-        .backfill_eta_seconds
-        .with_label_values(&[service_name, target])
-        .set(eta.round() as i64);
-}
-
-pub fn observe_shadow_overlap_at_10(
-    service_name: &'static str,
-    endpoint: &str,
-    primary_backend: &str,
-    overlap: f64,
-) {
-    if !overlap.is_finite() {
-        return;
-    }
-    metrics()
-        .shadow_overlap_at_10
-        .with_label_values(&[service_name, endpoint, primary_backend])
-        .observe(overlap.clamp(0.0, 1.0));
-}
-
-pub fn observe_shadow_latency_delta_ms(service_name: &'static str, endpoint: &str, delta_ms: f64) {
-    if !delta_ms.is_finite() {
-        return;
-    }
-    metrics()
-        .shadow_latency_delta_ms
-        .with_label_values(&[service_name, endpoint])
-        .observe(delta_ms.abs());
-}
-
-pub fn inc_search_dual_write_error(service_name: &'static str, backend: &str, operation: &str) {
-    metrics()
-        .search_dual_write_errors_total
-        .with_label_values(&[service_name, backend, operation])
-        .inc();
-}
-
-pub fn inc_search_dual_write_retry(service_name: &'static str, operation: &str) {
-    metrics()
-        .search_dual_write_retries_total
-        .with_label_values(&[service_name, operation])
-        .inc();
 }
 
 pub fn metrics_response(service_name: &'static str) -> impl IntoResponse {

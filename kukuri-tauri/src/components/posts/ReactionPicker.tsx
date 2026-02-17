@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { SmilePlus } from 'lucide-react';
@@ -32,6 +33,7 @@ const POPULAR_REACTIONS = [
 ];
 
 export function ReactionPicker({ postId, topicId }: ReactionPickerProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -42,11 +44,11 @@ export function ReactionPicker({ postId, topicId }: ReactionPickerProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
       queryClient.invalidateQueries({ queryKey: ['posts', topicId] });
-      toast.success('リアクションを送信しました');
+      toast.success(t('posts.reaction.success'));
       setIsOpen(false);
     },
     onError: () => {
-      toast.error('リアクションの送信に失敗しました');
+      toast.error(t('posts.reaction.failed'));
     },
   });
 

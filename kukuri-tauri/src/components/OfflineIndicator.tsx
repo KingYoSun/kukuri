@@ -1,12 +1,14 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { WifiOff, Wifi } from 'lucide-react';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { formatDistanceToNow } from 'date-fns';
-import { ja } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getDateFnsLocale } from '@/i18n';
 
 export function OfflineIndicator() {
+  const { t } = useTranslation();
   const { isOnline, lastSyncedAt, pendingActions, isSyncing } = useOfflineStore();
   const [showBanner, setShowBanner] = React.useState(!isOnline);
   const [wasOffline, setWasOffline] = React.useState(!isOnline);
@@ -27,10 +29,10 @@ export function OfflineIndicator() {
   }, [isOnline, wasOffline]);
 
   const getLastSyncText = () => {
-    if (!lastSyncedAt) return '未同期';
+    if (!lastSyncedAt) return t('offline.notSynced');
     return formatDistanceToNow(lastSyncedAt, {
       addSuffix: true,
-      locale: ja,
+      locale: getDateFnsLocale(),
     });
   };
 
@@ -52,15 +54,15 @@ export function OfflineIndicator() {
             {isOnline ? (
               <>
                 <Wifi className="h-4 w-4" />
-                <span className="text-sm font-medium">オンラインに復帰しました</span>
-                {isSyncing && <span className="text-xs opacity-90">同期中...</span>}
+                <span className="text-sm font-medium">{t('offline.onlineRestored')}</span>
+                {isSyncing && <span className="text-xs opacity-90">{t('offline.syncing')}</span>}
               </>
             ) : (
               <>
                 <WifiOff className="h-4 w-4" />
-                <span className="text-sm font-medium">オフラインモード</span>
+                <span className="text-sm font-medium">{t('offline.offlineMode')}</span>
                 <span className="text-xs opacity-90">
-                  変更は保存され、オンライン時に同期されます
+                  {t('offline.changesSaved')}
                 </span>
               </>
             )}
@@ -90,21 +92,21 @@ export function OfflineIndicator() {
                   {isOnline ? (
                     <>
                       <Wifi className="h-4 w-4 inline mr-2" />
-                      最終同期 {getLastSyncText()}
+                      {t('offline.lastSync', { time: getLastSyncText() })}
                     </>
                   ) : (
                     <>
                       <WifiOff className="h-4 w-4 inline mr-2" />
-                      オフラインです（ヘッダー右上の SyncStatusIndicator で詳細を確認できます）
+                      {t('offline.offlineStatus')}
                     </>
                   )}
                 </button>
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  {isSyncing && <p>同期中です…</p>}
-                  {pendingCount > 0 && <p>未同期アクション: {pendingCount}件</p>}
-                  <p>詳細なステータスはヘッダー右上の SyncStatusIndicator から確認できます</p>
+                  {isSyncing && <p>{t('offline.syncingStatus')}</p>}
+                  {pendingCount > 0 && <p>{t('offline.pendingActions', { count: pendingCount })}</p>}
+                  <p>{t('offline.checkDetails')}</p>
                 </div>
               </TooltipContent>
             </Tooltip>

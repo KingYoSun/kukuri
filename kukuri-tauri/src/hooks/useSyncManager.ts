@@ -5,6 +5,7 @@ import { syncEngine, type SyncResult, type SyncConflict } from '@/lib/sync/syncE
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 import { offlineApi } from '@/api/offline';
+import i18n from '@/i18n';
 import type {
   CacheStatusResponse,
   OfflineAction,
@@ -278,7 +279,7 @@ export function useSyncManager() {
       errorHandler.log('Failed to fetch cache status', error, {
         context: 'useSyncManager.refreshCacheStatus',
       });
-      setCacheStatusError('キャッシュ状態の取得に失敗しました');
+      setCacheStatusError(i18n.t('syncStatus.cacheStatusFetchFailed'));
     } finally {
       setCacheStatusLoading(false);
     }
@@ -296,7 +297,7 @@ export function useSyncManager() {
       errorHandler.log('Failed to fetch sync queue items', error, {
         context: 'useSyncManager.refreshQueueItems',
       });
-      setQueueItemsError('再送キューの取得に失敗しました');
+      setQueueItemsError(i18n.t('syncStatus.queueItemsFetchFailed'));
     } finally {
       setQueueItemsLoading(false);
     }
@@ -312,7 +313,7 @@ export function useSyncManager() {
       errorHandler.log('Failed to fetch retry metrics', error, {
         context: 'useSyncManager.refreshRetryMetrics',
       });
-      setRetryMetricsError('再送メトリクスの取得に失敗しました');
+      setRetryMetricsError(i18n.t('syncStatus.retryMetricsFetchFailed'));
     } finally {
       setRetryMetricsLoading(false);
     }
@@ -332,7 +333,7 @@ export function useSyncManager() {
           },
           priority: 5,
         });
-        toast.success(`再送キューに追加しました (#${queueId})`);
+        toast.success(i18n.t('syncStatus.queueAdded', { queueId }));
         setLastQueuedItemId(queueId);
         await refreshCacheStatus();
         await refreshQueueItems();
@@ -341,7 +342,7 @@ export function useSyncManager() {
         errorHandler.log('Failed to enqueue sync request', error, {
           context: 'useSyncManager.enqueueSyncRequest',
         });
-        toast.error('再送キューへの追加に失敗しました');
+        toast.error(i18n.t('syncStatus.queueAddFailed'));
         throw error;
       } finally {
         setQueueingType((current) => (current === cacheType ? null : current));
@@ -440,13 +441,13 @@ export function useSyncManager() {
 
       if (result.failedActions.length > 0) {
         for (const action of result.failedActions) {
-          setSyncError(action.localId, '同期処理に失敗しました');
+          setSyncError(action.localId, i18n.t('syncStatus.syncFailed'));
         }
       }
 
       if (result.conflicts.length > 0) {
         for (const conflict of result.conflicts) {
-          setSyncError(conflict.localAction.localId, '競合が発生しています');
+          setSyncError(conflict.localAction.localId, i18n.t('syncStatus.conflictDetected'));
         }
       }
 
@@ -509,7 +510,7 @@ export function useSyncManager() {
           context: 'useSyncManager.recordRetryOutcome',
           metadata: { jobId: context.jobId },
         });
-        setRetryMetricsError('再送メトリクスの記録に失敗しました');
+        setRetryMetricsError(i18n.t('syncStatus.retryMetricsRecordFailed'));
       } finally {
         setScheduledRetry(null);
       }
@@ -523,17 +524,17 @@ export function useSyncManager() {
   const triggerManualSync = useCallback(
     async (options?: { job?: OfflineSyncWorkerJob; trigger?: 'manual' | 'worker' }) => {
       if (!isOnline) {
-        toast.error('オフラインのため同期できません');
+        toast.error(i18n.t('syncStatus.offlineCannotSync'));
         return;
       }
 
       if (syncStatus.isSyncing) {
-        toast.warning('同期処理が既に実行中です');
+        toast.warning(i18n.t('syncStatus.syncAlreadyRunning'));
         return;
       }
 
       if (pendingActions.length === 0) {
-        toast.info('同期するアクションがありません');
+        toast.info(i18n.t('syncStatus.noActionsToSync'));
         return;
       }
 
@@ -569,9 +570,9 @@ export function useSyncManager() {
         }));
 
         if (result.conflicts.length > 0) {
-          toast.warning(`${result.conflicts.length}件の競合が検出されました`);
+          toast.warning(i18n.t('syncStatus.conflictsDetected', { count: result.conflicts.length }));
         } else {
-          toast.success(`${result.syncedActions.length}件のアクションを同期しました`);
+          toast.success(i18n.t('syncStatus.actionsSynced', { count: result.syncedActions.length }));
         }
 
         await persistSyncStatuses(result);
@@ -580,15 +581,15 @@ export function useSyncManager() {
           failure: result.failedActions.length,
         });
       } catch (error) {
-        errorHandler.log('同期エラー', error, {
+        errorHandler.log(i18n.t('syncStatus.syncError'), error, {
           context: 'useSyncManager.triggerManualSync',
         });
         setSyncStatus((prev) => ({
           ...prev,
           isSyncing: false,
-          error: error instanceof Error ? error.message : '同期に失敗しました',
+          error: error instanceof Error ? error.message : i18n.t('syncStatus.syncFailedMessage'),
         }));
-        toast.error('同期に失敗しました');
+        toast.error(i18n.t('syncStatus.syncFailedMessage'));
         await submitRetryOutcome('failure', {
           success: 0,
           failure: pendingActions.length,
@@ -620,7 +621,7 @@ export function useSyncManager() {
         errorHandler.log('SyncEngine.applyActionUnavailable', null, {
           context: 'useSyncManager.resolveConflict',
         });
-        toast.error('競合の解決に失敗しました');
+        toast.error(i18n.t('syncStatus.resolveConflictFailed'));
         return;
       }
 
@@ -651,7 +652,7 @@ export function useSyncManager() {
       }
 
       if (!actionToApply) {
-        toast.error('競合の解決に失敗しました');
+        toast.error(i18n.t('syncStatus.resolveConflictFailed'));
         return;
       }
 
@@ -680,17 +681,17 @@ export function useSyncManager() {
 
         const successMessage =
           resolution === 'remote'
-            ? 'リモートの変更を適用しました'
+            ? i18n.t('syncStatus.remoteChangesApplied')
             : resolution === 'merge'
-              ? '変更をマージしました'
-              : 'ローカルの変更を適用しました';
+              ? i18n.t('syncStatus.changesMerged')
+              : i18n.t('syncStatus.localChangesApplied');
         toast.success(successMessage);
       } catch (error) {
         errorHandler.log('Failed to resolve sync conflict', error, {
           context: 'useSyncManager.resolveConflict',
           metadata: { conflictType: conflict.conflictType },
         });
-        toast.error('競合の解決に失敗しました');
+        toast.error(i18n.t('syncStatus.resolveConflictFailed'));
       }
     },
     [clearSyncError, persistSyncStatuses, removePendingAction, updateLastSyncedAt],

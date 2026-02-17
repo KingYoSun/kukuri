@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -36,26 +37,26 @@ interface PostComposerProps {
   quotedPost?: string;
 }
 
-const scopeOptions: Array<{ value: PostScope; label: string; description: string }> = [
+const getScopeOptions = (t: (key: string) => string): Array<{ value: PostScope; label: string; description: string }> => [
   {
     value: 'public',
-    label: '公開',
-    description: '公開範囲: 誰でも閲覧できます。',
+    label: t('posts.composer.scope.public'),
+    description: t('posts.composer.scope.publicDescription'),
   },
   {
     value: 'friend_plus',
-    label: 'フレンド+',
-    description: 'フレンド+範囲: 連鎖的な信頼関係に公開します。',
+    label: t('posts.composer.scope.friend_plus'),
+    description: t('posts.composer.scope.friend_plusDescription'),
   },
   {
     value: 'friend',
-    label: 'フレンド',
-    description: 'フレンド範囲: 承認済みのメンバーのみ閲覧できます。',
+    label: t('posts.composer.scope.friend'),
+    description: t('posts.composer.scope.friendDescription'),
   },
   {
     value: 'invite',
-    label: '招待',
-    description: '招待範囲: 招待コードを持つ相手のみ閲覧できます。',
+    label: t('posts.composer.scope.invite'),
+    description: t('posts.composer.scope.inviteDescription'),
   },
 ];
 
@@ -66,6 +67,7 @@ export function PostComposer({
   replyTo,
   quotedPost,
 }: PostComposerProps) {
+  const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState(topicId || '');
   const [selectedScope, setSelectedScope] = useState<PostScope>('public');
@@ -81,6 +83,7 @@ export function PostComposer({
   const { toast } = useToast();
   const applyTopicAndResume = useComposerStore((state) => state.applyTopicAndResume);
   const enableAccessControl = useCommunityNodeStore((state) => state.enableAccessControl);
+  const scopeOptions = getScopeOptions(t);
 
   useEffect(() => {
     if (topicId) {
@@ -159,8 +162,8 @@ export function PostComposer({
   const handleSubmit = async () => {
     if (!content.trim()) {
       toast({
-        title: 'エラー',
-        description: '投稿内容を入力してください',
+        title: t('common.error'),
+        description: t('posts.composer.contentRequired'),
         variant: 'destructive',
       });
       return;
@@ -168,8 +171,8 @@ export function PostComposer({
 
     if (!selectedTopicId) {
       toast({
-        title: 'エラー',
-        description: 'トピックを選択してください',
+        title: t('common.error'),
+        description: t('posts.composer.topicRequired'),
         variant: 'destructive',
       });
       return;
@@ -185,8 +188,8 @@ export function PostComposer({
       const isSynced = createdPost?.isSynced !== false;
 
       toast({
-        title: '成功',
-        description: isSynced ? '投稿を作成しました' : '投稿を同期待ちとして保存しました',
+        title: t('common.success'),
+        description: isSynced ? t('posts.composer.postCreated') : t('posts.composer.postQueued'),
       });
 
       // Clean up
@@ -218,8 +221,8 @@ export function PostComposer({
       // Save as draft before canceling
       autosave();
       toast({
-        title: '下書きを保存しました',
-        description: '下書き一覧から再開できます',
+        title: t('posts.composer.draftSaved'),
+        description: t('posts.composer.draftSavedDescription'),
       });
     }
     resetForm();
@@ -229,8 +232,8 @@ export function PostComposer({
   const handleSaveDraft = () => {
     autosave();
     toast({
-      title: '下書きを保存しました',
-      description: '下書き一覧から編集を再開できます',
+      title: t('posts.composer.draftSaved'),
+      description: t('posts.composer.draftSavedEditDescription'),
     });
   };
 
@@ -247,7 +250,7 @@ export function PostComposer({
       deleteDraft(currentDraftId);
       resetForm();
       toast({
-        title: '下書きを削除しました',
+        title: t('posts.composer.draftDeleted'),
       });
     }
   };
@@ -264,12 +267,12 @@ export function PostComposer({
     const MAX_SIZE = 5 * 1024 * 1024;
 
     if (file.size > MAX_SIZE) {
-      throw new Error('画像サイズは5MB以下にしてください');
+      throw new Error(t('posts.composer.imageSizeLimit'));
     }
 
     // 画像形式の確認
     if (!file.type.startsWith('image/')) {
-      throw new Error('画像ファイルを選択してください');
+      throw new Error(t('posts.composer.imageFileRequired'));
     }
 
     return new Promise((resolve, reject) => {
@@ -281,12 +284,12 @@ export function PostComposer({
           // データURLとして返す（base64エンコードされた画像）
           resolve(result);
         } else {
-          reject(new Error('画像の読み込みに失敗しました'));
+          reject(new Error(t('posts.composer.imageLoadFailed')));
         }
       };
 
       reader.onerror = () => {
-        reject(new Error('画像の読み込みに失敗しました'));
+        reject(new Error(t('posts.composer.imageLoadFailed')));
       };
 
       // Base64エンコードされたデータURLとして読み込む
@@ -301,10 +304,10 @@ export function PostComposer({
           <div className="flex items-center justify-between mb-4">
             <TabsList>
               <TabsTrigger value="simple" data-testid="composer-tab-simple">
-                シンプル
+                {t('posts.composer.simpleMode')}
               </TabsTrigger>
               <TabsTrigger value="markdown" data-testid="composer-tab-markdown">
-                Markdown
+                {t('posts.composer.markdownMode')}
               </TabsTrigger>
             </TabsList>
 
@@ -316,7 +319,7 @@ export function PostComposer({
                 data-testid="drafts-toggle"
               >
                 <FileText className="w-4 h-4 mr-1" />
-                下書き
+                {t('posts.composer.drafts')}
               </Button>
 
               {currentDraftId && (
@@ -344,21 +347,21 @@ export function PostComposer({
               value={selectedTopicId}
               onValueChange={setSelectedTopicId}
               disabled={!!topicId || isSubmitting}
-              placeholder="トピックを選択"
+              placeholder={t('posts.composer.topicPlaceholder')}
               onCreateTopicRequest={topicId ? undefined : () => setShowTopicCreationDialog(true)}
               dataTestId="topic-selector"
             />
 
             {enableAccessControl && (
               <div className="space-y-2">
-                <Label htmlFor="post-scope">公開範囲</Label>
+                <Label htmlFor="post-scope">{t('posts.composer.scopeLabel')}</Label>
                 <Select
                   value={selectedScope}
                   onValueChange={(value) => setSelectedScope(value as PostScope)}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger id="post-scope" data-testid="scope-selector">
-                    <SelectValue placeholder="公開範囲を選択" />
+                    <SelectValue placeholder={t('posts.composer.scopePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
                     {scopeOptions.map((option) => (
@@ -377,7 +380,7 @@ export function PostComposer({
             {/* Content editor */}
             <TabsContent value="simple" className="mt-0">
               <Textarea
-                placeholder="今何を考えていますか？"
+                placeholder={t('posts.composer.contentPlaceholder')}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 disabled={isSubmitting}
@@ -395,7 +398,7 @@ export function PostComposer({
               <MarkdownEditor
                 value={content}
                 onChange={setContent}
-                placeholder="Markdownで投稿を書く..."
+                placeholder={t('posts.composer.markdownPlaceholder')}
                 height={300}
                 preview="live"
                 onImageUpload={handleImageUpload}
@@ -406,8 +409,8 @@ export function PostComposer({
             {/* Reply/Quote indicator */}
             {(replyTo || quotedPost) && (
               <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                {replyTo && <div>返信先: {replyTo}</div>}
-                {quotedPost && <div>引用: {quotedPost}</div>}
+                {replyTo && <div>{t('posts.composer.replyingTo')}: {replyTo}</div>}
+                {quotedPost && <div>{t('posts.composer.quoting')}: {quotedPost}</div>}
               </div>
             )}
           </div>
@@ -417,13 +420,13 @@ export function PostComposer({
       <CardFooter className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {currentDraftId && (
-            <span className="text-xs text-muted-foreground">下書きを自動保存中...</span>
+            <span className="text-xs text-muted-foreground">{t('posts.composer.autosaving')}</span>
           )}
         </div>
 
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
-            キャンセル
+            {t('posts.cancel')}
           </Button>
 
           <Button
@@ -433,7 +436,7 @@ export function PostComposer({
             data-testid="save-draft-button"
           >
             <Save className="w-4 h-4 mr-1" />
-            下書き保存
+            {t('posts.composer.saveDraft')}
           </Button>
 
           <Button
@@ -446,7 +449,7 @@ export function PostComposer({
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            投稿する
+            {t('posts.composer.submit')}
           </Button>
         </div>
       </CardFooter>
