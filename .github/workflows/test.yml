@@ -18,6 +18,7 @@ concurrency:
 env:
   RUST_VERSION: 1.86
   NODE_VERSION: 20
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
   change-scope:
@@ -409,10 +410,18 @@ jobs:
         with:
           toolchain: 1.88.0
 
-      - name: Fail if Rust setup did not recover
+      - name: Setup Rust (attempt 3)
+        id: setup_rust_attempt_3
         if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure'
+        continue-on-error: true
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Fail if Rust setup did not recover
+        if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure' && steps.setup_rust_attempt_3.outcome == 'failure'
         run: |
-          echo "Rust toolchain setup failed after two attempts."
+          echo "Rust toolchain setup failed after three attempts."
           exit 1
 
       - name: Setup Node.js
