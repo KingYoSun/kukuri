@@ -33,6 +33,7 @@ main の CI Run `22101614830` で `OpenAPI Artifacts Check` と `Desktop E2E (Co
 
 ## 参照
 
+- PR #64: `https://github.com/KingYoSun/kukuri/pull/64`
 - tracking issue #63: `https://github.com/KingYoSun/kukuri/issues/63`
 - CI Run: `https://github.com/KingYoSun/kukuri/actions/runs/22101614830`
 - OpenAPI Artifacts Check (failed job): `https://github.com/KingYoSun/kukuri/actions/runs/22101614830/job/63872622145`
