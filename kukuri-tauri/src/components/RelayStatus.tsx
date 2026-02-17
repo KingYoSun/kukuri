@@ -248,21 +248,25 @@ export function RelayStatus() {
                   const { badgeClass, label } =
                     status === 'connected'
                       ? {
-                          badgeClass: 'bg-green-100 text-green-800',
+                          badgeClass:
+                            'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300',
                           label: t('relayStatus.connected'),
                         }
                       : status === 'connecting'
                         ? {
-                            badgeClass: 'bg-yellow-100 text-yellow-800',
+                            badgeClass:
+                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300',
                             label: t('relayStatus.connecting'),
                           }
                         : status === 'disconnected'
                           ? {
-                              badgeClass: 'bg-gray-100 text-gray-800',
+                              badgeClass:
+                                'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
                               label: t('relayStatus.disconnected'),
                             }
                           : {
-                              badgeClass: 'bg-red-100 text-red-800',
+                              badgeClass:
+                                'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300',
                               label: t('relayStatus.error'),
                             };
 

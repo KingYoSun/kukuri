@@ -194,7 +194,11 @@ export function TrendingPage() {
                   {topic.scoreChange !== null && (
                     <span
                       data-testid={`trending-score-change-${topic.topicId}`}
-                      className={topic.scoreChange >= 0 ? 'text-emerald-600' : 'text-red-600'}
+                      className={
+                        topic.scoreChange >= 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }
                     >
                       {topic.scoreChange >= 0 ? '+' : ''}
                       {topic.scoreChange.toFixed(1)}pt
