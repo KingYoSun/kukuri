@@ -183,7 +183,7 @@ docker compose -f docker-compose.test.yml down --rmi local --volumes
 ## Docker環境の詳細
 
 ### Dockerfile.test
-- ベースイメージ: `rust:1.86-bookworm` （edition2024のサポートのため）
+- ベースイメージ: `rust:1.89-bookworm` （project baseline toolchain に合わせるため）
 - Node.js 20.x と pnpm 9 をインストール
 - Tauri開発に必要なシステムパッケージをすべて含む
 - 依存関係のキャッシュを最適化
@@ -278,7 +278,7 @@ ERROR  packages field missing or empty
 error: failed to parse manifest
 feature `edition2024` is required
 ```
-→ Rust 1.86以上を使用（Dockerfileで`FROM rust:1.86-bookworm`を指定）
+→ Rust 1.89以上を使用（Dockerfileで`FROM rust:1.89-bookworm`を指定）
 
 ## メリット
 

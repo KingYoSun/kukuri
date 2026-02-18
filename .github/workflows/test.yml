@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUST_VERSION: 1.86
+  RUST_VERSION: 1.89
   NODE_VERSION: 20
   RUSTUP_MAX_RETRIES: 10
 
@@ -400,7 +400,7 @@ jobs:
         continue-on-error: true
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Setup Rust (attempt 2)
         id: setup_rust_attempt_2
@@ -408,7 +408,7 @@ jobs:
         continue-on-error: true
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Setup Rust (attempt 3)
         id: setup_rust_attempt_3
@@ -416,7 +416,7 @@ jobs:
         continue-on-error: true
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Fail if Rust setup did not recover
         if: steps.setup_rust_attempt_1.outcome == 'failure' && steps.setup_rust_attempt_2.outcome == 'failure' && steps.setup_rust_attempt_3.outcome == 'failure'
