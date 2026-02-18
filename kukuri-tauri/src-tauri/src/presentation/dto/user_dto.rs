@@ -38,15 +38,16 @@ impl crate::presentation::dto::Validate for SearchUsersRequest {
         if self.query.trim().is_empty() {
             return Err("検索キーワードを入力してください".to_string());
         }
-        if let Some(limit) = self.limit {
-            if limit == 0 || limit > 50 {
-                return Err("limit は 1〜50 の範囲で指定してください".to_string());
-            }
+        if let Some(limit) = self.limit
+            && (limit == 0 || limit > 50)
+        {
+            return Err("limit は 1〜50 の範囲で指定してください".to_string());
         }
-        if let Some(sort) = self.sort.as_deref() {
-            if sort != "relevance" && sort != "recency" {
-                return Err("sort は relevance または recency を指定してください".to_string());
-            }
+        if let Some(sort) = self.sort.as_deref()
+            && sort != "relevance"
+            && sort != "recency"
+        {
+            return Err("sort は relevance または recency を指定してください".to_string());
         }
         Ok(())
     }

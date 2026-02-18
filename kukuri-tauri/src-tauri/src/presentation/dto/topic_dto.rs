@@ -44,15 +44,16 @@ impl Validate for EnqueueTopicCreationRequest {
         if self.name.len() > 100 {
             return Err("トピック名は100文字以内で入力してください".to_string());
         }
-        if let Some(description) = &self.description {
-            if description.len() > 500 {
-                return Err("説明は500文字以内で入力してください".to_string());
-            }
+        if let Some(description) = &self.description
+            && description.len() > 500
+        {
+            return Err("説明は500文字以内で入力してください".to_string());
         }
-        if let Some(visibility) = &self.visibility {
-            if visibility != "public" && visibility != "private" {
-                return Err("visibility must be 'public' or 'private'".to_string());
-            }
+        if let Some(visibility) = &self.visibility
+            && visibility != "public"
+            && visibility != "private"
+        {
+            return Err("visibility must be 'public' or 'private'".to_string());
         }
 
         Ok(())
@@ -87,16 +88,18 @@ impl Validate for CreateTopicRequest {
         }
 
         // URLのバリデーション（もし提供されている場合）
-        if let Some(visibility) = &self.visibility {
-            if visibility != "public" && visibility != "private" {
-                return Err("visibility must be 'public' or 'private'".to_string());
-            }
+        if let Some(visibility) = &self.visibility
+            && visibility != "public"
+            && visibility != "private"
+        {
+            return Err("visibility must be 'public' or 'private'".to_string());
         }
 
-        if let Some(url) = &self.image_url {
-            if !url.is_empty() && !url.starts_with("http") {
-                return Err("無効な画像URLです".to_string());
-            }
+        if let Some(url) = &self.image_url
+            && !url.is_empty()
+            && !url.starts_with("http")
+        {
+            return Err("無効な画像URLです".to_string());
         }
 
         Ok(())
@@ -117,16 +120,16 @@ impl Validate for UpdateTopicRequest {
             return Err("トピックIDが必要です".to_string());
         }
 
-        if let Some(name) = &self.name {
-            if name.len() > 100 {
-                return Err("トピック名が長すぎます（最大100文字）".to_string());
-            }
+        if let Some(name) = &self.name
+            && name.len() > 100
+        {
+            return Err("トピック名が長すぎます（最大100文字）".to_string());
         }
 
-        if let Some(desc) = &self.description {
-            if desc.len() > 500 {
-                return Err("説明が長すぎます（最大500文字）".to_string());
-            }
+        if let Some(desc) = &self.description
+            && desc.len() > 500
+        {
+            return Err("説明が長すぎます（最大500文字）".to_string());
         }
 
         Ok(())
