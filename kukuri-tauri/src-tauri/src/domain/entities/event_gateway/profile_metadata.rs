@@ -90,31 +90,31 @@ impl ProfileMetadata {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if let Some(name) = self.name.as_ref() {
-            if name.chars().count() > Self::NAME_LIMIT {
-                return Err(format!(
-                    "Name is too long (max {} characters)",
-                    Self::NAME_LIMIT
-                ));
-            }
+        if let Some(name) = self.name.as_ref()
+            && name.chars().count() > Self::NAME_LIMIT
+        {
+            return Err(format!(
+                "Name is too long (max {} characters)",
+                Self::NAME_LIMIT
+            ));
         }
 
-        if let Some(display_name) = self.display_name.as_ref() {
-            if display_name.chars().count() > Self::DISPLAY_NAME_LIMIT {
-                return Err(format!(
-                    "Display name is too long (max {} characters)",
-                    Self::DISPLAY_NAME_LIMIT
-                ));
-            }
+        if let Some(display_name) = self.display_name.as_ref()
+            && display_name.chars().count() > Self::DISPLAY_NAME_LIMIT
+        {
+            return Err(format!(
+                "Display name is too long (max {} characters)",
+                Self::DISPLAY_NAME_LIMIT
+            ));
         }
 
-        if let Some(about) = self.about.as_ref() {
-            if about.chars().count() > Self::ABOUT_LIMIT {
-                return Err(format!(
-                    "About is too long (max {} characters)",
-                    Self::ABOUT_LIMIT
-                ));
-            }
+        if let Some(about) = self.about.as_ref()
+            && about.chars().count() > Self::ABOUT_LIMIT
+        {
+            return Err(format!(
+                "About is too long (max {} characters)",
+                Self::ABOUT_LIMIT
+            ));
         }
 
         if let Some(picture) = self.picture.as_ref() {
@@ -129,13 +129,15 @@ impl ProfileMetadata {
             Self::validate_url_length(website, "Website")?;
         }
 
+        if let Some(relays) = self.relays.as_ref()
+            && relays.len() > Self::MAX_RELAYS
+        {
+            return Err(format!(
+                "Relay list is too long (max {} entries)",
+                Self::MAX_RELAYS
+            ));
+        }
         if let Some(relays) = self.relays.as_ref() {
-            if relays.len() > Self::MAX_RELAYS {
-                return Err(format!(
-                    "Relay list is too long (max {} entries)",
-                    Self::MAX_RELAYS
-                ));
-            }
             for relay in relays {
                 relay.validate()?;
             }
