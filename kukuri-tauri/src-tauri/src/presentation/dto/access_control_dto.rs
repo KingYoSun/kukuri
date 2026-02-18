@@ -39,10 +39,10 @@ impl Validate for AccessControlJoinRequest {
             if topic.is_empty() {
                 return Err("topic_id is required when invite_event_json is absent".to_string());
             }
-            if let Some(scope) = self.scope.as_ref() {
-                if scope.trim().is_empty() {
-                    return Err("scope must not be empty when provided".to_string());
-                }
+            if let Some(scope) = self.scope.as_ref()
+                && scope.trim().is_empty()
+            {
+                return Err("scope must not be empty when provided".to_string());
             }
         }
         Ok(())
