@@ -4,6 +4,25 @@ import { TopicsPage } from '@/routes/topics';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Topic } from '@/stores';
 
+const { mockRouterLocation } = vi.hoisted(() => ({
+  mockRouterLocation: {
+    pathname: '/topics',
+  },
+}));
+
+vi.mock('@tanstack/react-router', async () => {
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router');
+  return {
+    ...actual,
+    Outlet: () => <div data-testid="topics-outlet" />,
+    useLocation: (options?: { select?: (location: { pathname: string }) => unknown }) => {
+      const location = { pathname: mockRouterLocation.pathname };
+      return options?.select ? options.select(location) : location;
+    },
+  };
+});
+
 const mockTopicsData: Topic[] = [
   {
     id: 'topic-1',
@@ -68,6 +87,7 @@ describe('Topics Page', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRouterLocation.pathname = '/topics';
     mockUseTopics.data = mockTopicsData;
     mockUseTopics.isLoading = false;
     mockUseTopics.error = null;
@@ -200,5 +220,14 @@ describe('Topics Page', () => {
     await waitFor(() => {
       expect(screen.getByTestId('topic-card-topic-2')).toBeInTheDocument();
     });
+  });
+
+  it('詳細ページのパスでは一覧の代わりにOutletを表示する', () => {
+    mockRouterLocation.pathname = '/topics/topic-1';
+
+    renderTopicsPage();
+
+    expect(screen.getByTestId('topics-outlet')).toBeInTheDocument();
+    expect(screen.queryByText('トピック一覧')).not.toBeInTheDocument();
   });
 });
