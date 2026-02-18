@@ -4,7 +4,7 @@ use crate::infrastructure::p2p::utils::{ParsedPeer, parse_peer_hint};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use futures::StreamExt;
-use iroh::{discovery::static_provider::StaticProvider, protocol::Router};
+use iroh::{address_lookup::MemoryLookup, protocol::Router};
 use iroh_gossip::{
     ALPN as GOSSIP_ALPN,
     api::{Event as GossipApiEvent, GossipSender, GossipTopic},
@@ -26,7 +26,7 @@ const METRICS_TARGET: &str = "kukuri::p2p::metrics";
 
 pub struct IrohGossipService {
     endpoint: Arc<iroh::Endpoint>,
-    static_discovery: Arc<StaticProvider>,
+    static_discovery: Arc<MemoryLookup>,
     gossip: Arc<Gossip>,
     _router: Arc<Router>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
@@ -42,7 +42,7 @@ struct TopicHandle {
 impl IrohGossipService {
     pub fn new(
         endpoint: Arc<iroh::Endpoint>,
-        static_discovery: Arc<StaticProvider>,
+        static_discovery: Arc<MemoryLookup>,
     ) -> Result<Self, AppError> {
         // Gossipインスタンスの作成
         let gossip = Gossip::builder().spawn((*endpoint).clone());
@@ -544,10 +544,10 @@ mod tests {
             return;
         }
         // エンドポイント作成（ローカル、ディスカバリ無し）
-        let static_discovery = Arc::new(StaticProvider::new());
+        let static_discovery = Arc::new(MemoryLookup::new());
         let endpoint = Arc::new(
-            Endpoint::builder()
-                .discovery(static_discovery.clone())
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(static_discovery.clone())
                 .bind()
                 .await
                 .unwrap(),
@@ -569,10 +569,10 @@ mod tests {
         if !should_run_p2p_tests("test_join_and_leave_topic") {
             return;
         }
-        let static_discovery = Arc::new(StaticProvider::new());
+        let static_discovery = Arc::new(MemoryLookup::new());
         let endpoint = Arc::new(
-            Endpoint::builder()
-                .discovery(static_discovery.clone())
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(static_discovery.clone())
                 .bind()
                 .await
                 .unwrap(),

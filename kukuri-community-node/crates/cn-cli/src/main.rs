@@ -2,15 +2,12 @@ use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use iroh::{
-    discovery::{
-        dns::DnsDiscovery,
-        mdns::MdnsDiscovery,
-        pkarr::{dht::DhtDiscovery, PkarrPublisher},
-        static_provider::StaticProvider,
+    address_lookup::{
+        DhtAddressLookup, DnsAddressLookup, MdnsAddressLookup, MemoryLookup, PkarrPublisher,
     },
     endpoint::Builder as EndpointBuilder,
     protocol::Router,
-    Endpoint, EndpointAddr, EndpointId, SecretKey,
+    Endpoint, EndpointAddr, EndpointId, RelayMode, SecretKey,
 };
 use iroh_gossip::net::Gossip;
 use serde_json::Value;
@@ -552,8 +549,8 @@ async fn handle_p2p(command: P2pCommand) -> Result<()> {
         P2pCommand::NodeId { args } => {
             init_logging(&args.log_level, args.json_logs)?;
             let bind_addr = SocketAddr::from_str(&args.bind)?;
-            let builder = Endpoint::builder();
-            let builder = apply_bind_address(builder, bind_addr);
+            let builder = Endpoint::empty_builder(RelayMode::Default);
+            let builder = apply_bind_address(builder, bind_addr)?;
             let builder = apply_secret_key(builder, &args.secret_key)?;
             let endpoint = builder.bind().await?;
             println!("{}", endpoint.id());
@@ -607,10 +604,10 @@ fn apply_secret_key(
     Ok(builder)
 }
 
-fn apply_bind_address(builder: EndpointBuilder, bind_addr: SocketAddr) -> EndpointBuilder {
+fn apply_bind_address(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {
     match bind_addr {
-        SocketAddr::V4(addr) => builder.bind_addr_v4(addr),
-        SocketAddr::V6(addr) => builder.bind_addr_v6(addr),
+        SocketAddr::V4(addr) => builder.bind_addr(addr).map_err(|e| anyhow!(e)),
+        SocketAddr::V6(addr) => builder.bind_addr(addr).map_err(|e| anyhow!(e)),
     }
 }
 
@@ -618,22 +615,21 @@ fn apply_discovery_services(
     mut builder: EndpointBuilder,
     enable_dht: bool,
     enable_mdns: bool,
-    static_discovery: &Arc<StaticProvider>,
+    static_discovery: &Arc<MemoryLookup>,
 ) -> EndpointBuilder {
-    builder = builder.clear_discovery();
-    builder = builder.discovery(PkarrPublisher::n0_dns());
-    builder = builder.discovery(DnsDiscovery::n0_dns());
+    builder = builder.address_lookup(PkarrPublisher::n0_dns());
+    builder = builder.address_lookup(DnsAddressLookup::n0_dns());
     if enable_dht {
-        builder = builder.discovery(
-            DhtDiscovery::builder()
+        builder = builder.address_lookup(
+            DhtAddressLookup::builder()
                 .include_direct_addresses(true)
                 .n0_dns_pkarr_relay(),
         );
     }
     if enable_mdns {
-        builder = builder.discovery(MdnsDiscovery::builder());
+        builder = builder.address_lookup(MdnsAddressLookup::builder());
     }
-    builder.discovery(static_discovery.clone())
+    builder.address_lookup(static_discovery.clone())
 }
 
 async fn run_bootstrap_node(
@@ -644,9 +640,9 @@ async fn run_bootstrap_node(
     info!("Starting DHT bootstrap node on {}", args.bind);
 
     let bind_addr = SocketAddr::from_str(&args.bind)?;
-    let static_discovery = Arc::new(StaticProvider::new());
-    let builder = Endpoint::builder();
-    let builder = apply_bind_address(builder, bind_addr);
+    let static_discovery = Arc::new(MemoryLookup::new());
+    let builder = Endpoint::empty_builder(RelayMode::Default);
+    let builder = apply_bind_address(builder, bind_addr)?;
     let builder = apply_secret_key(builder, &args.secret_key)?;
     let builder = apply_discovery_services(builder, true, false, &static_discovery);
     let endpoint = builder.bind().await?;
@@ -747,9 +743,9 @@ async fn run_relay_node(args: &P2pArgs, topics: &str) -> Result<()> {
     );
 
     let bind_addr = SocketAddr::from_str(&args.bind)?;
-    let static_discovery = Arc::new(StaticProvider::new());
-    let builder = Endpoint::builder();
-    let builder = apply_bind_address(builder, bind_addr);
+    let static_discovery = Arc::new(MemoryLookup::new());
+    let builder = Endpoint::empty_builder(RelayMode::Default);
+    let builder = apply_bind_address(builder, bind_addr)?;
     let builder = apply_secret_key(builder, &args.secret_key)?;
     let builder = apply_discovery_services(builder, true, false, &static_discovery);
     let endpoint = builder.bind().await?;
@@ -808,9 +804,9 @@ async fn run_connectivity_probe(
     );
 
     let bind_addr = SocketAddr::from_str(&args.bind)?;
-    let static_discovery = Arc::new(StaticProvider::new());
-    let builder = Endpoint::builder();
-    let builder = apply_bind_address(builder, bind_addr);
+    let static_discovery = Arc::new(MemoryLookup::new());
+    let builder = Endpoint::empty_builder(RelayMode::Default);
+    let builder = apply_bind_address(builder, bind_addr)?;
     let builder = apply_secret_key(builder, &args.secret_key)?;
     let builder = apply_discovery_services(builder, enable_dht, enable_mdns, &static_discovery);
     let endpoint = builder.bind().await?;

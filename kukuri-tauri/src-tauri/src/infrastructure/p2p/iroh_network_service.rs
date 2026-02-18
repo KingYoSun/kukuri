@@ -6,7 +6,7 @@ use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{Endpoint, EndpointAddr, discovery::static_provider::StaticProvider, protocol::Router};
+use iroh::{Endpoint, EndpointAddr, RelayMode, address_lookup::MemoryLookup, protocol::Router};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing;
@@ -14,7 +14,7 @@ use tracing;
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
     router: Arc<Router>,
-    static_discovery: Arc<StaticProvider>,
+    static_discovery: Arc<MemoryLookup>,
     connected: Arc<RwLock<bool>>,
     peers: Arc<RwLock<Vec<Peer>>>,
     stats: Arc<RwLock<NetworkStats>>,
@@ -34,10 +34,10 @@ impl IrohNetworkService {
         event_tx: Option<broadcast::Sender<P2PEvent>>,
     ) -> Result<Self, AppError> {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
-        let static_discovery = Arc::new(StaticProvider::new());
-        let builder = Endpoint::builder().secret_key(secret_key);
+        let static_discovery = Arc::new(MemoryLookup::new());
+        let builder = Endpoint::empty_builder(RelayMode::Default).secret_key(secret_key);
         let builder = discovery_options.apply_to_builder(builder);
-        let builder = builder.discovery(static_discovery.clone());
+        let builder = builder.address_lookup(static_discovery.clone());
         let endpoint = builder
             .bind()
             .await
@@ -92,7 +92,7 @@ impl IrohNetworkService {
         &self.endpoint
     }
 
-    pub fn static_discovery(&self) -> Arc<StaticProvider> {
+    pub fn static_discovery(&self) -> Arc<MemoryLookup> {
         Arc::clone(&self.static_discovery)
     }
 

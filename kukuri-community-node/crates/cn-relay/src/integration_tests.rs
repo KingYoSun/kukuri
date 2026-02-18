@@ -17,10 +17,9 @@ use cn_kip_types::{
     SCHEMA_INVITE_CAPABILITY, SCHEMA_JOIN_REQUEST, SCHEMA_KEY_ENVELOPE,
 };
 use futures_util::{SinkExt, StreamExt};
-use iroh::discovery::static_provider::StaticProvider;
-use iroh::endpoint::Connection;
+use iroh::address_lookup::MemoryLookup;
 use iroh::protocol::Router as IrohRouter;
-use iroh::Endpoint;
+use iroh::{Endpoint, RelayMode};
 use iroh_gossip::api::{Event as GossipEvent, GossipReceiver, GossipSender};
 use iroh_gossip::{Gossip, TopicId};
 use nostr_sdk::prelude::{EventBuilder, Keys, Kind, Tag, TagKind, Timestamp};
@@ -178,17 +177,16 @@ struct GossipHarness {
     _receiver_a: GossipReceiver,
     router_a: IrohRouter,
     router_b: IrohRouter,
-    _discovery: StaticProvider,
+    _discovery: MemoryLookup,
     _sender_b: GossipSender,
-    _conn_a: Connection,
-    _conn_b: Connection,
     _gossip_a: Gossip,
     _gossip_b: Gossip,
 }
 
 async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
-    let endpoint_a = Endpoint::builder()
-        .bind_addr_v4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+    let endpoint_a = Endpoint::empty_builder(RelayMode::Disabled)
+        .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+        .expect("bind addr a")
         .bind()
         .await
         .expect("endpoint a");
@@ -197,8 +195,9 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
         .accept(iroh_gossip::ALPN, gossip_a.clone())
         .spawn();
 
-    let endpoint_b = Endpoint::builder()
-        .bind_addr_v4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+    let endpoint_b = Endpoint::empty_builder(RelayMode::Disabled)
+        .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+        .expect("bind addr b")
         .bind()
         .await
         .expect("endpoint b");
@@ -207,11 +206,11 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
         .accept(iroh_gossip::ALPN, gossip_b.clone())
         .spawn();
 
-    let discovery = StaticProvider::new();
+    let discovery = MemoryLookup::new();
     discovery.add_endpoint_info(endpoint_a.addr());
     discovery.add_endpoint_info(endpoint_b.addr());
-    endpoint_a.discovery().add(discovery.clone());
-    endpoint_b.discovery().add(discovery.clone());
+    router_a.endpoint().address_lookup().add(discovery.clone());
+    router_b.endpoint().address_lookup().add(discovery.clone());
 
     let topic_bytes = cn_core::topic::topic_id_to_gossip_bytes(topic_id).expect("topic bytes");
     let peer_a = endpoint_a.id();
@@ -227,29 +226,6 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
         .await
         .expect("subscribe b");
     let (sender_b, mut receiver_b) = topic_b.split();
-
-    let conn_b = timeout(
-        WAIT_TIMEOUT,
-        endpoint_b.connect(endpoint_a.addr(), iroh_gossip::ALPN),
-    )
-    .await
-    .expect("connect b->a timeout")
-    .expect("connect b->a");
-    let conn_a = timeout(
-        WAIT_TIMEOUT,
-        endpoint_a.connect(endpoint_b.addr(), iroh_gossip::ALPN),
-    )
-    .await
-    .expect("connect a->b timeout")
-    .expect("connect a->b");
-    timeout(WAIT_TIMEOUT, sender_a.join_peers(vec![endpoint_b.id()]))
-        .await
-        .expect("join peers a timeout")
-        .expect("join peers a");
-    timeout(WAIT_TIMEOUT, sender_b.join_peers(vec![endpoint_a.id()]))
-        .await
-        .expect("join peers b timeout")
-        .expect("join peers b");
 
     timeout(WAIT_TIMEOUT, receiver_a.joined())
         .await
@@ -269,8 +245,6 @@ async fn setup_gossip(topic_id: &str) -> (GossipSender, GossipHarness) {
             router_b,
             _discovery: discovery,
             _sender_b: sender_b,
-            _conn_a: conn_a,
-            _conn_b: conn_b,
             _gossip_a: gossip_a,
             _gossip_b: gossip_b,
         },

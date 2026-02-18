@@ -56,7 +56,7 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
 
 async fn build_endpoint(config: &RelayConfig) -> Result<Endpoint> {
     let mut builder = Endpoint::builder();
-    builder = apply_bind(builder, config.p2p_bind_addr);
+    builder = apply_bind(builder, config.p2p_bind_addr)?;
     if let Some(secret) = &config.p2p_secret_key {
         let decoded = BASE64_STANDARD
             .decode(secret.trim())
@@ -72,10 +72,13 @@ async fn build_endpoint(config: &RelayConfig) -> Result<Endpoint> {
     Ok(endpoint)
 }
 
-fn apply_bind(builder: iroh::endpoint::Builder, addr: SocketAddr) -> iroh::endpoint::Builder {
+fn apply_bind(
+    builder: iroh::endpoint::Builder,
+    addr: SocketAddr,
+) -> Result<iroh::endpoint::Builder> {
     match addr {
-        SocketAddr::V4(v4) => builder.bind_addr_v4(v4),
-        SocketAddr::V6(v6) => builder.bind_addr_v6(v6),
+        SocketAddr::V4(v4) => builder.bind_addr(v4).map_err(|e| anyhow!(e)),
+        SocketAddr::V6(v6) => builder.bind_addr(v6).map_err(|e| anyhow!(e)),
     }
 }
 

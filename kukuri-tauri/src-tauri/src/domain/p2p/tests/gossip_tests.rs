@@ -4,7 +4,7 @@ mod tests {
     use crate::domain::p2p::generate_topic_id;
     use crate::infrastructure::p2p::gossip_service::GossipService;
     use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
-    use iroh::{Endpoint, discovery::static_provider::StaticProvider};
+    use iroh::{Endpoint, RelayMode, address_lookup::MemoryLookup};
     use std::sync::Arc;
 
     macro_rules! skip_unless_p2p_enabled {
@@ -17,9 +17,9 @@ mod tests {
     }
 
     async fn create_test_service() -> IrohGossipService {
-        let static_discovery = Arc::new(StaticProvider::new());
-        let endpoint = Endpoint::builder()
-            .discovery(static_discovery.clone())
+        let static_discovery = Arc::new(MemoryLookup::new());
+        let endpoint = Endpoint::empty_builder(RelayMode::Default)
+            .address_lookup(static_discovery.clone())
             .bind()
             .await
             .unwrap();
