@@ -14,6 +14,30 @@ Manager 判断（Option 1）に従い、Phase 3 は依存更新を優先して�
 - `cd kukuri-tauri/src-tauri && cargo update -p time --precise 0.3.45`
   - CI の Rust 1.86 と互換な `time` 系へ調整
 
+## 追補（Manager 指示: Cargo.toml 更新必須）
+
+Manager 指示「`Cargo.lock` 単体更新ではなく `Cargo.toml` も更新」を反映し、`kukuri-tauri/src-tauri/Cargo.toml` の直接依存制約を Rust 1.86 互換範囲で引き上げた。
+
+- 更新した直接依存（Cargo.toml）:
+  - `anyhow 1.0.100 -> 1.0.101`
+  - `blake3 1.8.2 -> 1.8.3`
+  - `bytes 1.11.0 -> 1.11.1`
+  - `chrono 0.4.42 -> 0.4.43`
+  - `futures 0.3.31 -> 0.3.32`
+  - `lru 0.16.2 -> 0.16.3`
+  - `serde_json 1.0.147 -> 1.0.149`
+  - `tauri-plugin-fs 2.4.4 -> 2.4.5`
+  - `tauri-plugin-opener 2.5.2 -> 2.5.3`
+  - `thiserror 2.0.17 -> 2.0.18`
+  - `tokio 1.48.0 -> 1.49.0`
+  - `uuid 1.19.0 -> 1.21.0`
+  - `criterion 0.8.1 -> 0.8.2`
+  - `tempfile 3.24.0 -> 3.25.0`
+- `cargo update` 再実行時に `time 0.3.47` 系へ上がると `rustc 1.88+` が必要になるため、`cargo update -p time --precise 0.3.45` で Rust 1.86 互換へ固定。
+- 今回据え置いた主な依存:
+  - `iroh` / `iroh-gossip`: 最新 `0.96.x` は `rust_version = 1.89` のため CI 制約（1.86）に抵触。
+  - `bincode` / `rand` / `rand_core` / `reqwest`: いずれもメジャー更新（`3.0` / `0.10` / `0.13`）で API 影響が大きく、依存更新 PR からは分離（risk-later）。
+
 ## 検証結果
 
 ### 直接検証
