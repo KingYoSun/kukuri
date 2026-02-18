@@ -30,7 +30,7 @@ describe('App auth flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuthStore.setState({ user: null, status: 'unknown', error: undefined });
-    vi.mocked(api.logout).mockResolvedValue(undefined);
+    vi.mocked(api.logout).mockResolvedValue({ status: 'ok' });
   });
 
   it('セッションブートストラップで未認証時はログイン画面を表示する', async () => {

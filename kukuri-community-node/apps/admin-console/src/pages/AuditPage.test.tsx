@@ -27,7 +27,7 @@ describe('AuditPage', () => {
     ]);
     vi.mocked(api.auditLogs).mockResolvedValue([
       {
-        audit_id: 'audit-1',
+        audit_id: 1,
         actor_admin_user_id: 'admin-1',
         action: 'policy.publish',
         target: 'policy:terms:2026-01',

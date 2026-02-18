@@ -421,7 +421,7 @@ export const api = {
       rule_id: string | null;
       source: string;
       issued_at: number;
-      review_status?: 'active' | 'disabled';
+      review_status: 'active' | 'disabled' | string;
       review_reason?: string | null;
       reviewed_by?: string | null;
       reviewed_at?: number | null;

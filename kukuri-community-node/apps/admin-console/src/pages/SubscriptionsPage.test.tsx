@@ -36,8 +36,8 @@ describe('SubscriptionsPage', () => {
         reviewed_at: null
       }
     ]);
-    vi.mocked(api.approveRequest).mockResolvedValue({ request_id: 'req-1', status: 'approved' });
-    vi.mocked(api.rejectRequest).mockResolvedValue({ request_id: 'req-1', status: 'rejected' });
+    vi.mocked(api.approveRequest).mockResolvedValue({ status: 'approved' });
+    vi.mocked(api.rejectRequest).mockResolvedValue({ status: 'rejected' });
     vi.mocked(api.nodeSubscriptions).mockResolvedValue([
       {
         topic_id: 'kukuri:topic:1',
@@ -95,12 +95,15 @@ describe('SubscriptionsPage', () => {
       }
     ]);
     vi.mocked(api.updateSubscription).mockResolvedValue({
-      subscription_id: 'sub-1',
-      subscriber_pubkey: 'b'.repeat(64),
-      plan_id: 'basic',
       status: 'paused'
     });
-    vi.mocked(api.usage).mockResolvedValue([{ metric: 'index.search_requests', day: '2026-02-01', count: 12 }]);
+    vi.mocked(api.usage).mockResolvedValue([
+      {
+        metric: 'index.search_requests',
+        day: '2026-02-01',
+        count: 12
+      }
+    ]);
   });
 
   it('主要操作を実行し、主要セクション表示を維持できる', async () => {

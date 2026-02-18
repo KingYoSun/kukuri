@@ -454,8 +454,9 @@ export const ModerationPage = () => {
         setRuleTestError('Tags must be a JSON array of string arrays.');
         return;
       }
-      tags = parsed.map((tag) =>
-        tag.map((entry) => (typeof entry === 'string' ? entry : String(entry)))
+      const parsedTags = parsed as unknown[][];
+      tags = parsedTags.map((tag) =>
+        tag.map((entry: unknown) => (typeof entry === 'string' ? entry : String(entry)))
       );
     } catch (err) {
       setRuleTestError(errorToMessage(err));

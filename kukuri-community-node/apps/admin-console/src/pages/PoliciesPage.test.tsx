@@ -59,10 +59,26 @@ describe('PoliciesPage', () => {
     });
     vi.mocked(api.publishPolicy).mockResolvedValue({
       policy_id: 'policy-1',
-      published_at: 1738809600
+      policy_type: 'terms',
+      version: '2026-01',
+      locale: 'ja-JP',
+      title: 'Terms Updated',
+      content_md: 'updated content',
+      content_hash: 'hash-3',
+      published_at: 1738809600,
+      effective_at: 1738809600,
+      is_current: false
     });
     vi.mocked(api.makeCurrentPolicy).mockResolvedValue({
       policy_id: 'policy-1',
+      policy_type: 'terms',
+      version: '2026-01',
+      locale: 'ja-JP',
+      title: 'Terms Updated',
+      content_md: 'updated content',
+      content_hash: 'hash-3',
+      published_at: 1738809600,
+      effective_at: 1738809600,
       is_current: true
     });
   });
