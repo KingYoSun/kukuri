@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn test_message_signing_and_verification() {
         // 秘密鍵を生成
-        let mut rng = rand::rng();
+        let mut rng = secp256k1::rand::rng();
         let secret_key = SecretKey::new(&mut rng);
 
         // メッセージを作成

@@ -218,7 +218,7 @@ impl DhtGossip {
 pub mod secret {
     use super::*;
     use keyring::Entry;
-    use rand::Rng;
+    use rand::RngExt;
 
     const SERVICE_NAME: &str = "kukuri";
     const SECRET_KEY: &str = "dht_secret";
