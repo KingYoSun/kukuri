@@ -1,7 +1,7 @@
 # kukuri テスト環境用 Dockerfile
 # Rust と Node.js の両方の環境を含むマルチステージビルド
 
-FROM rust:1.86-bookworm AS test-env
+FROM rust:1.89-bookworm AS test-env
 
 # 基本的なシステムパッケージのインストール
 RUN set -eux; \
