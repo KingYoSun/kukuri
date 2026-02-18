@@ -174,10 +174,10 @@ impl AccessControlService {
             vec!["ver".to_string(), KIP_VERSION.to_string()],
         ];
 
-        if let Some(invite_event) = invite_event_json.as_ref() {
-            if let Some(invite_id) = invite_event.get("id").and_then(|v| v.as_str()) {
-                tags.push(vec!["e".to_string(), invite_id.to_string()]);
-            }
+        if let Some(invite_event) = invite_event_json.as_ref()
+            && let Some(invite_id) = invite_event.get("id").and_then(|v| v.as_str())
+        {
+            tags.push(vec!["e".to_string(), invite_id.to_string()]);
         }
         if let Some(issuer) = issuer_pubkey.as_ref() {
             tags.push(vec!["p".to_string(), issuer.to_string()]);
@@ -375,10 +375,10 @@ impl AccessControlService {
         if event.pubkey == current_pubkey {
             return Ok(None);
         }
-        if let Ok(nostr_event) = to_nostr_event(event) {
-            if nostr_event.verify().is_err() {
-                return Ok(None);
-            }
+        if let Ok(nostr_event) = to_nostr_event(event)
+            && nostr_event.verify().is_err()
+        {
+            return Ok(None);
         }
 
         let tags = event.tags.clone();
@@ -397,10 +397,10 @@ impl AccessControlService {
             }
         }
         let target_pubkey = tag_value(&tags, "p");
-        if let Some(target) = target_pubkey.as_ref() {
-            if target != current_pubkey {
-                return Ok(None);
-            }
+        if let Some(target) = target_pubkey.as_ref()
+            && target != current_pubkey
+        {
+            return Ok(None);
         }
 
         let content: JoinRequestPayload = serde_json::from_str(&event.content)
@@ -411,39 +411,38 @@ impl AccessControlService {
                 "Invalid join.request schema",
             ));
         }
-        if let Some(topic) = content.topic.as_ref() {
-            if topic != &topic_id {
-                return Err(AppError::validation(
-                    ValidationFailureKind::Generic,
-                    "Join.request topic mismatch",
-                ));
-            }
+        if let Some(topic) = content.topic.as_ref()
+            && topic != &topic_id
+        {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Join.request topic mismatch",
+            ));
         }
-        if let Some(scope_value) = content.scope.as_ref() {
-            if scope_value != &scope {
-                return Err(AppError::validation(
-                    ValidationFailureKind::Generic,
-                    "Join.request scope mismatch",
-                ));
-            }
+        if let Some(scope_value) = content.scope.as_ref()
+            && scope_value != &scope
+        {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Join.request scope mismatch",
+            ));
         }
-        if let Some(requester) = content.requester.as_ref() {
-            if let Some(hex) = requester.strip_prefix("pubkey:") {
-                if hex != event.pubkey {
-                    return Err(AppError::validation(
-                        ValidationFailureKind::Generic,
-                        "Join.request requester mismatch",
-                    ));
-                }
-            }
+        if let Some(requester) = content.requester.as_ref()
+            && let Some(hex) = requester.strip_prefix("pubkey:")
+            && hex != event.pubkey
+        {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Join.request requester mismatch",
+            ));
         }
-        if let Some(requested_at) = content.requested_at {
-            if requested_at < 0 {
-                return Err(AppError::validation(
-                    ValidationFailureKind::Generic,
-                    "Join.request requested_at is invalid",
-                ));
-            }
+        if let Some(requested_at) = content.requested_at
+            && requested_at < 0
+        {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Join.request requested_at is invalid",
+            ));
         }
 
         let mut invite_event_id = None;
@@ -455,10 +454,10 @@ impl AccessControlService {
             let invite = validate_invite_event(&invite_json, Some(&topic_id))?;
             invite_event_id = Some(invite.event_id.clone());
             invite_max_uses = Some(invite.max_uses);
-            if let Some(target) = target_pubkey.as_ref() {
-                if invite.issuer_pubkey != *target {
-                    return Ok(None);
-                }
+            if let Some(target) = target_pubkey.as_ref()
+                && invite.issuer_pubkey != *target
+            {
+                return Ok(None);
             }
         }
         if scope == "friend_plus" {
@@ -490,10 +489,10 @@ impl AccessControlService {
             Ok(pair) => pair,
             Err(_) => return Ok(()),
         };
-        if let Ok(nostr_event) = to_nostr_event(event) {
-            if nostr_event.verify().is_err() {
-                return Ok(());
-            }
+        if let Ok(nostr_event) = to_nostr_event(event)
+            && nostr_event.verify().is_err()
+        {
+            return Ok(());
         }
 
         let tags = event.tags.clone();
@@ -842,13 +841,13 @@ fn validate_invite_event(
         .collect::<Vec<_>>();
     validate_kip_tags(&tags)?;
     let topic_id = require_tag_value(&tags, "t")?;
-    if let Some(expected) = expected_topic {
-        if expected != topic_id {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invite topic mismatch",
-            ));
-        }
+    if let Some(expected) = expected_topic
+        && expected != topic_id
+    {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite topic mismatch",
+        ));
     }
     let scope = require_tag_value(&tags, "scope")?;
     if scope != "invite" {
@@ -879,29 +878,29 @@ fn validate_invite_event(
             "Invalid invite schema",
         ));
     }
-    if let Some(topic) = payload.topic.as_ref() {
-        if topic != &topic_id {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invite topic mismatch",
-            ));
-        }
+    if let Some(topic) = payload.topic.as_ref()
+        && topic != &topic_id
+    {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite topic mismatch",
+        ));
     }
-    if let Some(scope) = payload.scope.as_ref() {
-        if scope != "invite" {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invite scope mismatch",
-            ));
-        }
+    if let Some(scope) = payload.scope.as_ref()
+        && scope != "invite"
+    {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite scope mismatch",
+        ));
     }
-    if let Some(expires) = payload.expires {
-        if expires <= Utc::now().timestamp() {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invite has expired",
-            ));
-        }
+    if let Some(expires) = payload.expires
+        && expires <= Utc::now().timestamp()
+    {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite has expired",
+        ));
     }
     let max_uses = payload.max_uses.unwrap_or(1);
     if max_uses <= 0 {
@@ -926,15 +925,14 @@ fn validate_invite_event(
         }
     }
 
-    if let Some(issuer) = payload.issuer.as_ref() {
-        if let Some(hex) = issuer.strip_prefix("pubkey:") {
-            if hex != event.pubkey.to_string() {
-                return Err(AppError::validation(
-                    ValidationFailureKind::Generic,
-                    "Invite issuer mismatch",
-                ));
-            }
-        }
+    if let Some(issuer) = payload.issuer.as_ref()
+        && let Some(hex) = issuer.strip_prefix("pubkey:")
+        && hex != event.pubkey.to_string()
+    {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite issuer mismatch",
+        ));
     }
 
     Ok(InviteValidation {
