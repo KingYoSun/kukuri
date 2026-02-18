@@ -65,12 +65,10 @@ jobs:
               url = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
               summary = "Unhandled event";
             }
-            const sanitizedSummary = `[UNTRUSTED_GITHUB_TEXT]\n${summary}\n[/UNTRUSTED_GITHUB_TEXT]`;
             const content =
               `📣 **${title}**\n` +
               `👤 by: **${actor}**\n` +
-              `🔗 ${url}\n` +
-              `📝 ${sanitizedSummary}`;
+              `🔗 ${url}`;
             core.setOutput("content", content);
       - name: Send to Discord
         if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
