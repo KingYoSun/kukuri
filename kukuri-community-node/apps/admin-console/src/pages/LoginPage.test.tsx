@@ -17,6 +17,7 @@ vi.mock('../lib/api', () => ({
 
 const adminUser = {
   admin_user_id: 'admin-1',
+  expires_at: 1738896000,
   username: 'admin'
 };
 

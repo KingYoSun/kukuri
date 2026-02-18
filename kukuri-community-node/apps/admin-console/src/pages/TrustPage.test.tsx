@@ -54,6 +54,7 @@ describe('TrustPage', () => {
         processed_targets: 0,
         total_targets: 10,
         requested_at: 1738809600,
+        requested_by: 'admin',
         started_at: null,
         completed_at: null,
         error_message: null
@@ -85,7 +86,16 @@ describe('TrustPage', () => {
     ]);
     vi.mocked(api.createTrustJob).mockResolvedValue({
       job_id: 'job-2',
-      status: 'pending'
+      job_type: 'communication_density',
+      subject_pubkey: 'c'.repeat(64),
+      status: 'pending',
+      processed_targets: 0,
+      total_targets: 0,
+      requested_at: 1738809601,
+      requested_by: 'admin',
+      started_at: null,
+      completed_at: null,
+      error_message: null
     });
     vi.mocked(api.updateTrustSchedule).mockResolvedValue({
       job_type: 'report_based',
