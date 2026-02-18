@@ -69,8 +69,7 @@ jobs:
             const content =
               `📣 **${title}**\n` +
               `👤 by: **${actor}**\n` +
-              `🔗 ${url}\n` +
-              `📝 ${sanitizedSummary}`;
+              `🔗 ${url}`;
             core.setOutput("content", content);
       - name: Send to Discord
         if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
