@@ -1,19 +1,18 @@
 {
-  "openapi": "3.0.3",
+  "openapi": "3.1.0",
   "info": {
     "title": "cn-admin-api",
     "description": "",
     "license": {
-      "name": "MIT"
+      "name": "MIT",
+      "identifier": "MIT"
     },
     "version": "0.1.0"
   },
   "paths": {
     "/healthz": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "healthz_doc",
         "responses": {
           "200": {
@@ -41,9 +40,7 @@
     },
     "/metrics": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "metrics_doc",
         "responses": {
           "200": {
@@ -61,9 +58,7 @@
     },
     "/v1/admin/access-control/distribution-results": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_distribution_results_doc",
         "parameters": [
           {
@@ -72,8 +67,7 @@
             "description": "Topic filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -82,8 +76,7 @@
             "description": "Scope filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -92,8 +85,7 @@
             "description": "Recipient pubkey filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -103,8 +95,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -113,8 +104,7 @@
             "description": "Status filter (pending|success|failed)",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -124,8 +114,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -158,9 +147,7 @@
     },
     "/v1/admin/access-control/invites": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_invites_list_doc",
         "parameters": [
           {
@@ -169,8 +156,7 @@
             "description": "Topic filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -179,8 +165,7 @@
             "description": "Status filter (active|revoked|expired|exhausted)",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -190,8 +175,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -222,9 +206,7 @@
         }
       },
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_invites_issue_doc",
         "requestBody": {
           "content": {
@@ -272,9 +254,7 @@
     },
     "/v1/admin/access-control/invites/{nonce}/revoke": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_invites_revoke_doc",
         "parameters": [
           {
@@ -313,9 +293,7 @@
     },
     "/v1/admin/access-control/memberships": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_memberships_doc",
         "parameters": [
           {
@@ -324,8 +302,7 @@
             "description": "Topic filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -334,8 +311,7 @@
             "description": "Scope filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -344,8 +320,7 @@
             "description": "Member pubkey filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -354,8 +329,7 @@
             "description": "Membership status filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -365,8 +339,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -399,9 +372,7 @@
     },
     "/v1/admin/access-control/revoke": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_revoke_doc",
         "requestBody": {
           "content": {
@@ -449,9 +420,7 @@
     },
     "/v1/admin/access-control/rotate": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "access_control_rotate_doc",
         "requestBody": {
           "content": {
@@ -489,9 +458,7 @@
     },
     "/v1/admin/audit-logs": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "audit_logs_list_doc",
         "parameters": [
           {
@@ -500,8 +467,7 @@
             "description": "Action filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -510,8 +476,7 @@
             "description": "Target filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -521,8 +486,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -532,8 +496,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -556,9 +519,7 @@
     },
     "/v1/admin/auth/login": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "auth_login_doc",
         "requestBody": {
           "content": {
@@ -596,9 +557,7 @@
     },
     "/v1/admin/auth/logout": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "auth_logout_doc",
         "responses": {
           "200": {
@@ -626,9 +585,7 @@
     },
     "/v1/admin/auth/me": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "auth_me_doc",
         "responses": {
           "200": {
@@ -656,9 +613,7 @@
     },
     "/v1/admin/dashboard": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "dashboard_doc",
         "responses": {
           "200": {
@@ -686,9 +641,7 @@
     },
     "/v1/admin/moderation/labels": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_labels_list_doc",
         "parameters": [
           {
@@ -697,8 +650,7 @@
             "description": "Target filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -707,8 +659,7 @@
             "description": "Topic filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -718,8 +669,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -728,8 +678,7 @@
             "description": "Review status filter (active|disabled)",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -739,8 +688,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -761,9 +709,7 @@
         }
       },
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_labels_create_doc",
         "requestBody": {
           "content": {
@@ -801,9 +747,7 @@
     },
     "/v1/admin/moderation/labels/{label_id}/rejudge": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_label_rejudge_doc",
         "parameters": [
           {
@@ -862,9 +806,7 @@
     },
     "/v1/admin/moderation/labels/{label_id}/review": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_label_review_doc",
         "parameters": [
           {
@@ -923,9 +865,7 @@
     },
     "/v1/admin/moderation/reports": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_reports_list_doc",
         "parameters": [
           {
@@ -934,8 +874,7 @@
             "description": "Target filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -944,8 +883,7 @@
             "description": "Reporter pubkey filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -955,8 +893,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -966,8 +903,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -990,9 +926,7 @@
     },
     "/v1/admin/moderation/rules": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_rules_list_doc",
         "parameters": [
           {
@@ -1001,8 +935,7 @@
             "description": "Enabled flag filter",
             "required": false,
             "schema": {
-              "type": "boolean",
-              "nullable": true
+              "type": "boolean"
             }
           },
           {
@@ -1012,8 +945,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -1023,8 +955,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -1045,9 +976,7 @@
         }
       },
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_rules_create_doc",
         "requestBody": {
           "content": {
@@ -1085,9 +1014,7 @@
     },
     "/v1/admin/moderation/rules/test": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_rules_test_doc",
         "requestBody": {
           "content": {
@@ -1125,9 +1052,7 @@
     },
     "/v1/admin/moderation/rules/{rule_id}": {
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_rules_update_doc",
         "parameters": [
           {
@@ -1174,9 +1099,7 @@
         }
       },
       "delete": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "moderation_rules_delete_doc",
         "parameters": [
           {
@@ -1215,9 +1138,7 @@
     },
     "/v1/admin/node-subscriptions": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "node_subscriptions_list_doc",
         "responses": {
           "200": {
@@ -1238,9 +1159,7 @@
     },
     "/v1/admin/node-subscriptions/{topic_id}": {
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "node_subscriptions_update_doc",
         "parameters": [
           {
@@ -1299,9 +1218,7 @@
     },
     "/v1/admin/personal-data-jobs": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "dsar_jobs_list_doc",
         "parameters": [
           {
@@ -1310,8 +1227,7 @@
             "description": "Job status filter (queued|running|completed|failed)",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -1320,8 +1236,7 @@
             "description": "Request type filter (export|deletion)",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -1330,8 +1245,7 @@
             "description": "Requester pubkey filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -1341,8 +1255,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -1375,9 +1288,7 @@
     },
     "/v1/admin/personal-data-jobs/{job_type}/{job_id}/cancel": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "dsar_jobs_cancel_doc",
         "parameters": [
           {
@@ -1445,9 +1356,7 @@
     },
     "/v1/admin/personal-data-jobs/{job_type}/{job_id}/retry": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "dsar_jobs_retry_doc",
         "parameters": [
           {
@@ -1515,9 +1424,7 @@
     },
     "/v1/admin/plans": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "plans_list_doc",
         "responses": {
           "200": {
@@ -1536,9 +1443,7 @@
         }
       },
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "plans_create_doc",
         "requestBody": {
           "content": {
@@ -1566,9 +1471,7 @@
     },
     "/v1/admin/plans/{plan_id}": {
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "plans_update_doc",
         "parameters": [
           {
@@ -1607,9 +1510,7 @@
     },
     "/v1/admin/policies": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_list_doc",
         "parameters": [
           {
@@ -1618,8 +1519,7 @@
             "description": "Filter by policy type",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -1628,8 +1528,7 @@
             "description": "Filter by locale",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           }
         ],
@@ -1650,9 +1549,7 @@
         }
       },
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_create_doc",
         "requestBody": {
           "content": {
@@ -1680,9 +1577,7 @@
     },
     "/v1/admin/policies/{policy_id}": {
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_update_doc",
         "parameters": [
           {
@@ -1731,9 +1626,7 @@
     },
     "/v1/admin/policies/{policy_id}/make-current": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_make_current_doc",
         "parameters": [
           {
@@ -1772,9 +1665,7 @@
     },
     "/v1/admin/policies/{policy_id}/publish": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_publish_doc",
         "parameters": [
           {
@@ -1823,9 +1714,7 @@
     },
     "/v1/admin/services": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "services_list_doc",
         "responses": {
           "200": {
@@ -1856,9 +1745,7 @@
     },
     "/v1/admin/services/{service}/config": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "services_get_config_doc",
         "parameters": [
           {
@@ -1895,9 +1782,7 @@
         }
       },
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "services_update_config_doc",
         "parameters": [
           {
@@ -1966,9 +1851,7 @@
     },
     "/v1/admin/subscription-requests": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscription_requests_list_doc",
         "parameters": [
           {
@@ -1977,8 +1860,7 @@
             "description": "Request status filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           }
         ],
@@ -2001,9 +1883,7 @@
     },
     "/v1/admin/subscription-requests/{request_id}/approve": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscription_requests_approve_doc",
         "parameters": [
           {
@@ -2062,9 +1942,7 @@
     },
     "/v1/admin/subscription-requests/{request_id}/reject": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscription_requests_reject_doc",
         "parameters": [
           {
@@ -2113,9 +1991,7 @@
     },
     "/v1/admin/subscriptions": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscriptions_list_doc",
         "parameters": [
           {
@@ -2124,8 +2000,7 @@
             "description": "Subscriber pubkey filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           }
         ],
@@ -2148,9 +2023,7 @@
     },
     "/v1/admin/subscriptions/{subscriber_pubkey}": {
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscriptions_upsert_doc",
         "parameters": [
           {
@@ -2189,9 +2062,7 @@
     },
     "/v1/admin/trust/jobs": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_jobs_list_doc",
         "parameters": [
           {
@@ -2200,8 +2071,7 @@
             "description": "Job status filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -2210,8 +2080,7 @@
             "description": "Job type filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -2220,8 +2089,7 @@
             "description": "Subject pubkey filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -2231,8 +2099,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -2253,9 +2120,7 @@
         }
       },
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_jobs_create_doc",
         "requestBody": {
           "content": {
@@ -2293,9 +2158,7 @@
     },
     "/v1/admin/trust/schedules": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_schedules_list_doc",
         "responses": {
           "200": {
@@ -2316,9 +2179,7 @@
     },
     "/v1/admin/trust/schedules/{job_type}": {
       "put": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_schedules_update_doc",
         "parameters": [
           {
@@ -2367,9 +2228,7 @@
     },
     "/v1/admin/trust/targets": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_targets_list_doc",
         "parameters": [
           {
@@ -2378,8 +2237,7 @@
             "description": "Subject pubkey filter (exact or partial)",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -2389,8 +2247,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -2413,9 +2270,7 @@
     },
     "/v1/admin/usage": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "usage_list_doc",
         "parameters": [
           {
@@ -2433,8 +2288,7 @@
             "description": "Metric filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -2444,8 +2298,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -2468,9 +2321,7 @@
     },
     "/v1/openapi.json": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "openapi_doc",
         "responses": {
           "200": {
@@ -2486,9 +2337,7 @@
     },
     "/v1/reindex": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "reindex_doc",
         "requestBody": {
           "content": {
@@ -2566,12 +2415,12 @@
             "type": "integer",
             "format": "int64"
           },
-          "diff_json": {
-            "nullable": true
-          },
+          "diff_json": {},
           "request_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "target": {
             "type": "string"
@@ -2673,8 +2522,10 @@
         ],
         "properties": {
           "reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "recipient_pubkey": {
             "type": "string"
@@ -2688,30 +2539,42 @@
         "type": "object",
         "properties": {
           "epoch": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "limit": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "pubkey": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "scope": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "topic_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2731,8 +2594,10 @@
             "format": "int64"
           },
           "reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "recipient_pubkey": {
             "type": "string"
@@ -2763,17 +2628,21 @@
         ],
         "properties": {
           "completed_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "created_at": {
             "type": "integer",
             "format": "int64"
           },
           "error_message": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "job_id": {
             "type": "string"
@@ -2799,9 +2668,7 @@
           "code": {
             "type": "string"
           },
-          "details": {
-            "nullable": true
-          },
+          "details": {},
           "message": {
             "type": "string"
           }
@@ -2857,9 +2724,11 @@
             "type": "string"
           },
           "revoked_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "scope": {
             "type": "string"
@@ -2884,18 +2753,24 @@
         ],
         "properties": {
           "expires_in_seconds": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "max_uses": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           },
           "nonce": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "scope": {
             "type": "string"
@@ -2909,8 +2784,10 @@
         "type": "object",
         "properties": {
           "reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2948,8 +2825,10 @@
             "type": "boolean"
           },
           "reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2964,20 +2843,26 @@
             "type": "string"
           },
           "review_reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "review_status": {
             "type": "string"
           },
           "reviewed_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "reviewed_by": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2997,9 +2882,11 @@
         ],
         "properties": {
           "confidence": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "exp": {
             "type": "integer",
@@ -3025,24 +2912,32 @@
             "type": "string"
           },
           "review_reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "review_status": {
             "type": "string"
           },
           "reviewed_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "reviewed_by": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "rule_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "source": {
             "type": "string"
@@ -3051,8 +2946,10 @@
             "type": "string"
           },
           "topic_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3102,9 +2999,11 @@
         ],
         "properties": {
           "confidence": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "exp": {
             "type": "integer",
@@ -3123,8 +3022,10 @@
             "type": "string"
           },
           "topic_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3161,13 +3062,17 @@
             "type": "string"
           },
           "revoked_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "revoked_reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "scope": {
             "type": "string"
@@ -3193,12 +3098,14 @@
             "type": "boolean"
           },
           "ingest_policy": {
-            "allOf": [
+            "oneOf": [
+              {
+                "type": "null"
+              },
               {
                 "$ref": "#/components/schemas/NodeSubscriptionIngestPolicy"
               }
-            ],
-            "nullable": true
+            ]
           },
           "ref_count": {
             "type": "integer",
@@ -3217,23 +3124,31 @@
         "type": "object",
         "properties": {
           "allow_backfill": {
-            "type": "boolean",
-            "nullable": true
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "max_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "max_events": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "retention_days": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -3247,12 +3162,14 @@
             "type": "boolean"
           },
           "ingest_policy": {
-            "allOf": [
+            "oneOf": [
+              {
+                "type": "null"
+              },
               {
                 "$ref": "#/components/schemas/NodeSubscriptionIngestPolicy"
               }
-            ],
-            "nullable": true
+            ]
           }
         }
       },
@@ -3434,9 +3351,11 @@
             "type": "string"
           },
           "effective_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "is_current": {
             "type": "boolean"
@@ -3451,9 +3370,11 @@
             "type": "string"
           },
           "published_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "title": {
             "type": "string"
@@ -3482,9 +3403,11 @@
         "type": "object",
         "properties": {
           "effective_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -3492,8 +3415,10 @@
         "type": "object",
         "properties": {
           "topic_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3524,28 +3449,38 @@
             "type": "boolean"
           },
           "current_total": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "delta": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "per_minute": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "previous_total": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "source_error": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "source_status": {
             "type": "string"
@@ -3588,8 +3523,10 @@
         "type": "object",
         "properties": {
           "review_note": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3605,8 +3542,10 @@
             "type": "string"
           },
           "reason": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "scope": {
             "type": "string"
@@ -3720,20 +3659,26 @@
           "action": {},
           "conditions": {},
           "description": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "is_enabled": {
-            "type": "boolean",
-            "nullable": true
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
           },
           "priority": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -3758,8 +3703,10 @@
             "format": "int64"
           },
           "description": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "is_enabled": {
             "type": "boolean"
@@ -3794,9 +3741,11 @@
         ],
         "properties": {
           "confidence": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "exp": {
             "type": "integer",
@@ -3842,12 +3791,14 @@
             "type": "boolean"
           },
           "preview": {
-            "allOf": [
+            "oneOf": [
+              {
+                "type": "null"
+              },
               {
                 "$ref": "#/components/schemas/RuleTestLabelPreview"
               }
-            ],
-            "nullable": true
+            ]
           },
           "reasons": {
             "type": "array",
@@ -3870,8 +3821,10 @@
             "type": "string"
           },
           "event_id": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "kind": {
             "type": "integer",
@@ -3929,9 +3882,7 @@
             "type": "integer",
             "format": "int64"
           },
-          "details": {
-            "nullable": true
-          },
+          "details": {},
           "status": {
             "type": "string"
           }
@@ -3949,12 +3900,14 @@
         "properties": {
           "config_json": {},
           "health": {
-            "allOf": [
+            "oneOf": [
+              {
+                "type": "null"
+              },
               {
                 "$ref": "#/components/schemas/ServiceHealth"
               }
-            ],
-            "nullable": true
+            ]
           },
           "service": {
             "type": "string"
@@ -4006,13 +3959,17 @@
             "type": "string"
           },
           "review_note": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "reviewed_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "status": {
             "type": "string"
@@ -4033,9 +3990,11 @@
         ],
         "properties": {
           "ended_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "plan_id": {
             "type": "string"
@@ -4080,8 +4039,10 @@
             "type": "string"
           },
           "subject_pubkey": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -4097,13 +4058,17 @@
         ],
         "properties": {
           "completed_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "error_message": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "job_id": {
             "type": "string"
@@ -4123,21 +4088,27 @@
             "type": "string"
           },
           "started_at": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "status": {
             "type": "string"
           },
           "subject_pubkey": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "total_targets": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -4195,49 +4166,67 @@
         ],
         "properties": {
           "communication_score": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "communication_window_end": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "communication_window_start": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "interaction_count": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "peer_count": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "report_count": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "report_score": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "report_window_end": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "report_window_start": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "subject_pubkey": {
             "type": "string"
@@ -4256,9 +4245,11 @@
         "properties": {
           "config_json": {},
           "expected_version": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },

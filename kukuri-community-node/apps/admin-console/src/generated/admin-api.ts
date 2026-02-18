@@ -927,7 +927,7 @@ export interface components {
         };
         NodeSubscription: {
             enabled: boolean;
-            ingest_policy?: components["schemas"]["NodeSubscriptionIngestPolicy"] | null;
+            ingest_policy?: null | components["schemas"]["NodeSubscriptionIngestPolicy"];
             /** Format: int64 */
             ref_count: number;
             topic_id: string;
@@ -945,7 +945,7 @@ export interface components {
         };
         NodeSubscriptionUpdate: {
             enabled: boolean;
-            ingest_policy?: components["schemas"]["NodeSubscriptionIngestPolicy"] | null;
+            ingest_policy?: null | components["schemas"]["NodeSubscriptionIngestPolicy"];
         };
         OutboxBacklogSignal: {
             alert: boolean;
@@ -1118,7 +1118,7 @@ export interface components {
         };
         RuleTestResponse: {
             matched: boolean;
-            preview?: components["schemas"]["RuleTestLabelPreview"] | null;
+            preview?: null | components["schemas"]["RuleTestLabelPreview"];
             reasons: string[];
         };
         RuleTestSampleEvent: {
@@ -1146,7 +1146,7 @@ export interface components {
         };
         ServiceInfo: {
             config_json: unknown;
-            health?: components["schemas"]["ServiceHealth"] | null;
+            health?: null | components["schemas"]["ServiceHealth"];
             service: string;
             /** Format: int64 */
             updated_at: number;
@@ -1313,17 +1313,17 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Topic filter */
-                topic_id?: string | null;
+                topic_id?: string;
                 /** @description Scope filter */
-                scope?: string | null;
+                scope?: string;
                 /** @description Recipient pubkey filter */
-                pubkey?: string | null;
+                pubkey?: string;
                 /** @description Epoch filter */
-                epoch?: number | null;
+                epoch?: number;
                 /** @description Status filter (pending|success|failed) */
-                status?: string | null;
+                status?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1353,11 +1353,11 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Topic filter */
-                topic_id?: string | null;
+                topic_id?: string;
                 /** @description Status filter (active|revoked|expired|exhausted) */
-                status?: string | null;
+                status?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1456,15 +1456,15 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Topic filter */
-                topic_id?: string | null;
+                topic_id?: string;
                 /** @description Scope filter */
-                scope?: string | null;
+                scope?: string;
                 /** @description Member pubkey filter */
-                pubkey?: string | null;
+                pubkey?: string;
                 /** @description Membership status filter */
-                status?: string | null;
+                status?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1564,13 +1564,13 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Action filter */
-                action?: string | null;
+                action?: string;
                 /** @description Target filter */
-                target?: string | null;
+                target?: string;
                 /** @description UNIX seconds lower bound */
-                since?: number | null;
+                since?: number;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1704,15 +1704,15 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Target filter */
-                target?: string | null;
+                target?: string;
                 /** @description Topic filter */
-                topic?: string | null;
+                topic?: string;
                 /** @description UNIX seconds lower bound */
-                since?: number | null;
+                since?: number;
                 /** @description Review status filter (active|disabled) */
-                review_status?: string | null;
+                review_status?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1849,13 +1849,13 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Target filter */
-                target?: string | null;
+                target?: string;
                 /** @description Reporter pubkey filter */
-                reporter_pubkey?: string | null;
+                reporter_pubkey?: string;
                 /** @description UNIX seconds lower bound */
-                since?: number | null;
+                since?: number;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -1877,11 +1877,11 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Enabled flag filter */
-                enabled?: boolean | null;
+                enabled?: boolean;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
                 /** @description Offset rows */
-                offset?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -2090,13 +2090,13 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Job status filter (queued|running|completed|failed) */
-                status?: string | null;
+                status?: string;
                 /** @description Request type filter (export|deletion) */
-                request_type?: string | null;
+                request_type?: string;
                 /** @description Requester pubkey filter */
-                requester_pubkey?: string | null;
+                requester_pubkey?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -2290,9 +2290,9 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter by policy type */
-                policy_type?: string | null;
+                policy_type?: string;
                 /** @description Filter by locale */
-                locale?: string | null;
+                locale?: string;
             };
             header?: never;
             path?: never;
@@ -2542,7 +2542,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Request status filter */
-                status?: string | null;
+                status?: string;
             };
             header?: never;
             path?: never;
@@ -2640,7 +2640,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Subscriber pubkey filter */
-                pubkey?: string | null;
+                pubkey?: string;
             };
             header?: never;
             path?: never;
@@ -2688,13 +2688,13 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Job status filter */
-                status?: string | null;
+                status?: string;
                 /** @description Job type filter */
-                job_type?: string | null;
+                job_type?: string;
                 /** @description Subject pubkey filter */
-                subject_pubkey?: string | null;
+                subject_pubkey?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -2800,9 +2800,9 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Subject pubkey filter (exact or partial) */
-                pubkey?: string | null;
+                pubkey?: string;
                 /** @description Max rows */
-                limit?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -2826,9 +2826,9 @@ export interface operations {
                 /** @description Subscriber pubkey */
                 pubkey: string;
                 /** @description Metric filter */
-                metric?: string | null;
+                metric?: string;
                 /** @description Range in days */
-                days?: number | null;
+                days?: number;
             };
             header?: never;
             path?: never;

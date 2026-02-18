@@ -1067,7 +1067,7 @@ async fn openapi_contract_contains_admin_paths() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         payload.get("openapi").and_then(Value::as_str),
-        Some("3.0.3")
+        Some("3.1.0")
     );
     assert!(payload
         .pointer("/paths/~1v1~1admin~1auth~1login/post")
