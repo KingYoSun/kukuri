@@ -167,35 +167,35 @@ impl AppConfig {
         if let Ok(v) = std::env::var("KUKURI_METRICS_ENABLED") {
             cfg.metrics.enabled = parse_bool(&v, cfg.metrics.enabled);
         }
-        if let Ok(v) = std::env::var("KUKURI_METRICS_INTERVAL_MINUTES") {
-            if let Some(value) = parse_u64(&v) {
-                cfg.metrics.interval_minutes = value.max(1);
-            }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_INTERVAL_MINUTES")
+            && let Some(value) = parse_u64(&v)
+        {
+            cfg.metrics.interval_minutes = value.max(1);
         }
-        if let Ok(v) = std::env::var("KUKURI_METRICS_TTL_HOURS") {
-            if let Some(value) = parse_u64(&v) {
-                cfg.metrics.ttl_hours = value.max(1);
-            }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_TTL_HOURS")
+            && let Some(value) = parse_u64(&v)
+        {
+            cfg.metrics.ttl_hours = value.max(1);
         }
-        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_POSTS") {
-            if let Some(value) = parse_f64(&v) {
-                cfg.metrics.score_weights.posts = value.max(0.0);
-            }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_POSTS")
+            && let Some(value) = parse_f64(&v)
+        {
+            cfg.metrics.score_weights.posts = value.max(0.0);
         }
-        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_UNIQUE_AUTHORS") {
-            if let Some(value) = parse_f64(&v) {
-                cfg.metrics.score_weights.unique_authors = value.max(0.0);
-            }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_UNIQUE_AUTHORS")
+            && let Some(value) = parse_f64(&v)
+        {
+            cfg.metrics.score_weights.unique_authors = value.max(0.0);
         }
-        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_BOOSTS") {
-            if let Some(value) = parse_f64(&v) {
-                cfg.metrics.score_weights.boosts = value.max(0.0);
-            }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_WEIGHT_BOOSTS")
+            && let Some(value) = parse_f64(&v)
+        {
+            cfg.metrics.score_weights.boosts = value.max(0.0);
         }
-        if let Ok(v) = std::env::var("KUKURI_METRICS_PROMETHEUS_PORT") {
-            if let Some(value) = parse_u16(&v) {
-                cfg.metrics.prometheus_port = if value == 0 { None } else { Some(value) };
-            }
+        if let Ok(v) = std::env::var("KUKURI_METRICS_PROMETHEUS_PORT")
+            && let Some(value) = parse_u16(&v)
+        {
+            cfg.metrics.prometheus_port = if value == 0 { None } else { Some(value) };
         }
         if let Ok(v) = std::env::var("KUKURI_METRICS_EMIT_HISTOGRAM") {
             cfg.metrics.emit_histogram = parse_bool(&v, cfg.metrics.emit_histogram);
@@ -219,10 +219,10 @@ impl AppConfig {
                 return Err("Metrics ttl_hours must be greater than 0".to_string());
             }
         }
-        if let Some(port) = self.metrics.prometheus_port {
-            if port == 0 {
-                return Err("Metrics prometheus_port must be greater than 0".to_string());
-            }
+        if let Some(port) = self.metrics.prometheus_port
+            && port == 0
+        {
+            return Err("Metrics prometheus_port must be greater than 0".to_string());
         }
         Ok(())
     }
