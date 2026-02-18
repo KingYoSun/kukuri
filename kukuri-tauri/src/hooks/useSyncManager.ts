@@ -625,7 +625,7 @@ export function useSyncManager() {
         return;
       }
 
-      let actionToApply: OfflineAction | null = null;
+      let actionToApply: OfflineAction | null;
       switch (resolution) {
         case 'local':
           actionToApply = conflict.localAction;

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps, ReactNode } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useAuthStore, useUIStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
@@ -21,26 +22,25 @@ vi.mock('@/lib/api/tauri', () => ({
 }));
 
 vi.mock('@/components/ui/dialog', async () => {
-  const React = await import('react');
   const passthrough =
     (slot: string) =>
-    ({ children, ...props }: React.ComponentProps<'div'>) => (
+    ({ children, ...props }: ComponentProps<'div'>) => (
       <div data-testid={slot} {...props}>
         {children}
       </div>
     );
   return {
-    Dialog: ({ open = true, children }: { open?: boolean; children: React.ReactNode }) =>
+    Dialog: ({ open = true, children }: { open?: boolean; children: ReactNode }) =>
       open ? <>{children}</> : null,
     DialogContent: passthrough('dialog-content'),
     DialogHeader: passthrough('dialog-header'),
     DialogTitle: passthrough('dialog-title'),
     DialogDescription: passthrough('dialog-description'),
     DialogFooter: passthrough('dialog-footer'),
-    DialogPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    DialogPortal: ({ children }: { children: ReactNode }) => <>{children}</>,
     DialogOverlay: passthrough('dialog-overlay'),
-    DialogTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    DialogClose: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    DialogTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+    DialogClose: ({ children }: { children: ReactNode }) => <>{children}</>,
   };
 });
 

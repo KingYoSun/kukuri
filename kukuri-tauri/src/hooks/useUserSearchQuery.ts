@@ -265,7 +265,7 @@ async function fetchSearchPage({
   sort: UserSearchSort;
   allowIncomplete: boolean;
 }): Promise<SearchUsersResponseDto> {
-  let response: SearchUsersResponseDto | null = null;
+  let response: SearchUsersResponseDto;
   try {
     response = await TauriApi.searchUsers({
       query,
@@ -306,19 +306,7 @@ async function fetchSearchPage({
     throw error;
   }
 
-  if (response && response.items.length > 0) {
-    return response;
-  }
-
-  return (
-    response ?? {
-      items: [],
-      nextCursor: null,
-      hasMore: false,
-      totalCount: 0,
-      tookMs: 0,
-    }
-  );
+  return response;
 }
 
 function sanitizeQuery(raw: string): string {

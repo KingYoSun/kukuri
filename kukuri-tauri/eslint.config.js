@@ -39,7 +39,10 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': [
         'warn',
-        { allowConstantExport: true },
+        {
+          allowConstantExport: true,
+          allowExportNames: ['Route'],
+        },
       ],
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
@@ -72,6 +75,12 @@ export default [
     rules: {
       'no-console': 'off',
       'no-undef': 'off',
+    },
+  },
+  {
+    files: ['src/routes/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
   prettierConfig,

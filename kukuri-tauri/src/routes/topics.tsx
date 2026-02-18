@@ -16,16 +16,10 @@ export const Route = createFileRoute('/topics')({
 
 export function TopicsPage() {
   const { t } = useTranslation();
-  let isDetailPage = false;
-  try {
-    const currentLocation = useLocation();
-    isDetailPage =
-      currentLocation.pathname.startsWith('/topics/') && currentLocation.pathname !== '/topics';
-  } catch {
-    const fallbackPath =
-      typeof window !== 'undefined' && window.location?.pathname ? window.location.pathname : '';
-    isDetailPage = fallbackPath.startsWith('/topics/') && fallbackPath !== '/topics';
-  }
+  const currentPathname = useLocation({
+    select: (location) => location.pathname,
+  });
+  const isDetailPage = currentPathname.startsWith('/topics/') && currentPathname !== '/topics';
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { data: topics, isLoading, error } = useTopics();

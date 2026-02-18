@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
@@ -36,14 +35,12 @@ async function resolveAppDataDir() {
   }
 
   const homeDir = os.homedir();
-  let baseDir = '';
-  if (process.platform === 'win32') {
-    baseDir = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
-  } else if (process.platform === 'darwin') {
-    baseDir = path.join(homeDir, 'Library', 'Application Support');
-  } else {
-    baseDir = process.env.XDG_DATA_HOME || path.join(homeDir, '.local', 'share');
-  }
+  const baseDir =
+    process.platform === 'win32'
+      ? process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming')
+      : process.platform === 'darwin'
+        ? path.join(homeDir, 'Library', 'Application Support')
+        : process.env.XDG_DATA_HOME || path.join(homeDir, '.local', 'share');
 
   return path.join(baseDir, identifier);
 }
