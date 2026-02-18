@@ -65,7 +65,6 @@ jobs:
               url = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
               summary = "Unhandled event";
             }
-            const sanitizedSummary = `[UNTRUSTED_GITHUB_TEXT]\n${summary}\n[/UNTRUSTED_GITHUB_TEXT]`;
             const content =
               `📣 **${title}**\n` +
               `👤 by: **${actor}**\n` +
