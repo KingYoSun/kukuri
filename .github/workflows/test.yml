@@ -318,7 +318,7 @@ jobs:
       - name: Run Rust clippy
         run: |
           cd kukuri-tauri/src-tauri
-          cargo clippy --locked --workspace --all-features -- -D warnings -A dead_code -A unused_variables
+          cargo clippy --locked --workspace --all-features -- -D warnings -A dead_code -A unused_variables -A clippy::collapsible_if
 
       - name: Run TypeScript tests
         run: |

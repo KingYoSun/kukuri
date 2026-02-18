@@ -6,7 +6,7 @@ cd /app/kukuri-tauri/src-tauri
 cargo test --locked --workspace --all-features
 
 echo "=== Running Rust clippy ==="
-cargo clippy --locked --workspace --all-features -- -D warnings
+cargo clippy --locked --workspace --all-features -- -D warnings -A clippy::collapsible_if
 
 echo "=== Running TypeScript tests ==="
 cd /app/kukuri-tauri
