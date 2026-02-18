@@ -1,19 +1,18 @@
 {
-  "openapi": "3.0.3",
+  "openapi": "3.1.0",
   "info": {
     "title": "cn-user-api",
     "description": "",
     "license": {
-      "name": "MIT"
+      "name": "MIT",
+      "identifier": "MIT"
     },
     "version": "0.1.0"
   },
   "paths": {
     "/healthz": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "healthz_doc",
         "responses": {
           "200": {
@@ -41,9 +40,7 @@
     },
     "/metrics": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "metrics_doc",
         "responses": {
           "200": {
@@ -61,9 +58,7 @@
     },
     "/v1/auth/challenge": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "auth_challenge_doc",
         "requestBody": {
           "content": {
@@ -97,9 +92,7 @@
     },
     "/v1/auth/verify": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "auth_verify_doc",
         "requestBody": {
           "content": {
@@ -133,9 +126,7 @@
     },
     "/v1/bootstrap/hints/latest": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "bootstrap_hint_latest_doc",
         "parameters": [
           {
@@ -146,7 +137,6 @@
             "schema": {
               "type": "integer",
               "format": "int64",
-              "nullable": true,
               "minimum": 0
             }
           }
@@ -200,9 +190,7 @@
     },
     "/v1/bootstrap/nodes": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "bootstrap_nodes_doc",
         "responses": {
           "200": {
@@ -228,9 +216,7 @@
     },
     "/v1/bootstrap/topics/{topic_id}/services": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "bootstrap_services_doc",
         "parameters": [
           {
@@ -267,9 +253,7 @@
     },
     "/v1/communities/suggest": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "community_suggest_doc",
         "parameters": [
           {
@@ -288,8 +272,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           }
         ],
@@ -307,9 +290,7 @@
     },
     "/v1/consents": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "consent_accept_doc",
         "requestBody": {
           "content": {
@@ -343,9 +324,7 @@
     },
     "/v1/consents/status": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "consent_status_doc",
         "responses": {
           "200": {
@@ -371,9 +350,7 @@
     },
     "/v1/labels": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "labels_doc",
         "parameters": [
           {
@@ -382,8 +359,7 @@
             "description": "Target filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -392,8 +368,7 @@
             "description": "Topic filter",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -403,8 +378,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -413,8 +387,7 @@
             "description": "Pagination cursor",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           }
         ],
@@ -432,9 +405,7 @@
     },
     "/v1/openapi.json": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "openapi_doc",
         "responses": {
           "200": {
@@ -450,9 +421,7 @@
     },
     "/v1/personal-data-deletion-requests": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "personal_delete_create_doc",
         "responses": {
           "200": {
@@ -468,9 +437,7 @@
     },
     "/v1/personal-data-deletion-requests/{deletion_request_id}": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "personal_delete_get_doc",
         "parameters": [
           {
@@ -507,9 +474,7 @@
     },
     "/v1/personal-data-export-requests": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "personal_export_create_doc",
         "responses": {
           "200": {
@@ -525,9 +490,7 @@
     },
     "/v1/personal-data-export-requests/{export_request_id}": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "personal_export_get_doc",
         "parameters": [
           {
@@ -564,9 +527,7 @@
     },
     "/v1/personal-data-export-requests/{export_request_id}/download": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "personal_export_download_doc",
         "parameters": [
           {
@@ -602,9 +563,7 @@
     },
     "/v1/policies/current": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_current_doc",
         "responses": {
           "200": {
@@ -620,9 +579,7 @@
     },
     "/v1/policies/{policy_type}/{version}": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "policies_version_doc",
         "parameters": [
           {
@@ -649,8 +606,7 @@
             "description": "Policy locale",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           }
         ],
@@ -678,9 +634,7 @@
     },
     "/v1/reports": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "report_doc",
         "requestBody": {
           "content": {
@@ -704,9 +658,7 @@
     },
     "/v1/search": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "search_doc",
         "parameters": [
           {
@@ -724,8 +676,7 @@
             "description": "Search query",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           },
           {
@@ -735,8 +686,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int64",
-              "nullable": true
+              "format": "int64"
             }
           },
           {
@@ -745,8 +695,7 @@
             "description": "Pagination cursor",
             "required": false,
             "schema": {
-              "type": "string",
-              "nullable": true
+              "type": "string"
             }
           }
         ],
@@ -764,9 +713,7 @@
     },
     "/v1/topic-subscription-requests": {
       "post": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscription_request_doc",
         "requestBody": {
           "content": {
@@ -830,9 +777,7 @@
     },
     "/v1/topic-subscriptions": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscription_list_doc",
         "responses": {
           "200": {
@@ -848,9 +793,7 @@
     },
     "/v1/topic-subscriptions/{topic_id}": {
       "delete": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "subscription_delete_doc",
         "parameters": [
           {
@@ -887,9 +830,7 @@
     },
     "/v1/trending": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trending_doc",
         "parameters": [
           {
@@ -916,9 +857,7 @@
     },
     "/v1/trust/communication-density": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_communication_doc",
         "parameters": [
           {
@@ -945,9 +884,7 @@
     },
     "/v1/trust/report-based": {
       "get": {
-        "tags": [
-          "crate"
-        ],
+        "tags": [],
         "operationId": "trust_report_doc",
         "parameters": [
           {
@@ -1005,9 +942,7 @@
           "code": {
             "type": "string"
           },
-          "details": {
-            "nullable": true
-          },
+          "details": {},
           "message": {
             "type": "string"
           }
