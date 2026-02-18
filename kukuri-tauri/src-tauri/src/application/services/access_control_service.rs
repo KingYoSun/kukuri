@@ -14,8 +14,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use nostr_sdk::prelude::{PublicKey, SecretKey, nip44};
-use rand::rngs::OsRng;
-use rand_core::TryRngCore;
+use rand::{TryRng, rngs::SysRng};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
@@ -561,7 +560,7 @@ impl AccessControlService {
         }
 
         let mut key_bytes = [0u8; 32];
-        OsRng
+        SysRng
             .try_fill_bytes(&mut key_bytes)
             .map_err(|err| AppError::Crypto(format!("Failed to generate group key: {err}")))?;
         let key_b64 = BASE64_STANDARD.encode(key_bytes);

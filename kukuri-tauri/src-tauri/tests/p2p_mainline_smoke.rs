@@ -5,7 +5,7 @@ use kukuri_lib::test_support::infrastructure::p2p::{
     DiscoveryOptions, NetworkService, gossip_service::GossipService,
 };
 use kukuri_lib::test_support::shared::config::{AppConfig, NetworkConfig as AppNetworkConfig};
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::sync::Arc;
 use tokio::time::{Duration, Instant, sleep};
 

@@ -4,7 +4,7 @@ use crate::infrastructure::p2p::{bootstrap_config, metrics};
 use crate::shared::config::AppConfig;
 use anyhow::Context;
 use base64::prelude::*;
-use rand_core::{OsRng, TryRngCore};
+use rand::{TryRng, rngs::SysRng};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tokio::fs;
@@ -122,7 +122,7 @@ impl P2PBootstrapper {
 
     async fn generate_and_store_secret(&self, path: &Path) -> anyhow::Result<iroh::SecretKey> {
         let mut secret_bytes = [0u8; 32];
-        OsRng
+        SysRng
             .try_fill_bytes(&mut secret_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to generate iroh secret key: {:?}", e))?;
         let encoded = BASE64_STANDARD.encode(secret_bytes);
