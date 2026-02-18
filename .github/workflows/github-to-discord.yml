@@ -70,7 +70,7 @@ jobs:
               `📣 **${title}**\n` +
               `👤 by: **${actor}**\n` +
               `🔗 ${url}\n` +
-              `📝 ${sanitizedSummarymmary}`;
+              `📝 ${sanitizedSummary}`;
             core.setOutput("content", content);
       - name: Send to Discord
         if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
