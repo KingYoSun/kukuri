@@ -69,8 +69,7 @@ jobs:
               `📣 **${title}**\n` +
               `👤 by: **${actor}**\n` +
               `🔗 ${url}\n` +
-              `📝 ${summary}\n\n` +
-              `ぼっちゃん: kukuri-dev-directorスキルに従って次の行動に移って`;
+              `📝 ${summary}`;
             core.setOutput("content", content);
       - name: Send to Discord
         if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
