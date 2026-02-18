@@ -1,7 +1,7 @@
 use crate::domain::p2p::P2PEvent;
 use crate::infrastructure::p2p::iroh_gossip_service::IrohGossipService;
 use crate::infrastructure::p2p::{DiscoveryOptions, gossip_service::GossipService};
-use iroh::{Endpoint, EndpointAddr, discovery::static_provider::StaticProvider};
+use iroh::{Endpoint, EndpointAddr, RelayMode, address_lookup::MemoryLookup};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -25,11 +25,12 @@ pub async fn create_service(ctx: &BootstrapContext) -> IrohGossipService {
         bind_addr,
         ctx.hints.join(", ")
     );
-    let static_discovery = Arc::new(StaticProvider::new());
+    let static_discovery = Arc::new(MemoryLookup::new());
     let builder = DiscoveryOptions::default()
-        .apply_to_builder(Endpoint::builder())
-        .discovery(static_discovery.clone())
-        .bind_addr_v4(bind_addr);
+        .apply_to_builder(Endpoint::empty_builder(RelayMode::Default))
+        .address_lookup(static_discovery.clone())
+        .bind_addr(bind_addr)
+        .expect("failed to configure bind addr");
     let endpoint = Arc::new(builder.bind().await.expect("failed to bind iroh endpoint"));
     endpoint.online().await;
     for addr in &ctx.node_addrs {
