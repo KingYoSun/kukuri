@@ -71,10 +71,10 @@ pub struct GetOfflineActionsRequest {
 
 impl Validate for GetOfflineActionsRequest {
     fn validate(&self) -> Result<(), String> {
-        if let Some(limit) = self.limit {
-            if limit <= 0 || limit > 1000 {
-                return Err("Limit must be between 1 and 1000".to_string());
-            }
+        if let Some(limit) = self.limit
+            && (limit <= 0 || limit > 1000)
+        {
+            return Err("Limit must be between 1 and 1000".to_string());
         }
         Ok(())
     }
@@ -136,10 +136,10 @@ pub struct ListSyncQueueItemsRequest {
 
 impl Validate for ListSyncQueueItemsRequest {
     fn validate(&self) -> Result<(), String> {
-        if let Some(limit) = self.limit {
-            if !(1..=200).contains(&limit) {
-                return Err("Limit must be between 1 and 200".to_string());
-            }
+        if let Some(limit) = self.limit
+            && !(1..=200).contains(&limit)
+        {
+            return Err("Limit must be between 1 and 200".to_string());
         }
         Ok(())
     }
@@ -174,10 +174,10 @@ impl Validate for AddToSyncQueueRequest {
         if self.action_type.is_empty() {
             return Err("Action type is required".to_string());
         }
-        if let Some(priority) = self.priority {
-            if !(0..=10).contains(&priority) {
-                return Err("Priority must be between 0 and 10".to_string());
-            }
+        if let Some(priority) = self.priority
+            && !(0..=10).contains(&priority)
+        {
+            return Err("Priority must be between 0 and 10".to_string());
         }
         Ok(())
     }
@@ -207,10 +207,10 @@ impl Validate for UpdateCacheMetadataRequest {
         if self.cache_type.is_empty() {
             return Err("Cache type is required".to_string());
         }
-        if let Some(ttl) = self.expiry_seconds {
-            if ttl <= 0 {
-                return Err("Expiry seconds must be positive".to_string());
-            }
+        if let Some(ttl) = self.expiry_seconds
+            && ttl <= 0
+        {
+            return Err("Expiry seconds must be positive".to_string());
         }
         Ok(())
     }
@@ -315,15 +315,15 @@ impl Validate for RecordOfflineRetryOutcomeRequest {
             "success" | "failure" => {}
             other => return Err(format!("Unsupported status: {other}")),
         }
-        if let Some(value) = self.retry_count {
-            if value < 0 {
-                return Err("retry_count must be >= 0".to_string());
-            }
+        if let Some(value) = self.retry_count
+            && value < 0
+        {
+            return Err("retry_count must be >= 0".to_string());
         }
-        if let Some(value) = self.max_retries {
-            if value <= 0 {
-                return Err("max_retries must be > 0".to_string());
-            }
+        if let Some(value) = self.max_retries
+            && value <= 0
+        {
+            return Err("max_retries must be > 0".to_string());
         }
         Ok(())
     }

@@ -10,4 +10,4 @@
 
 ## 現在のタスク
 
-- なし（進行中タスクはありません）
+- Issue #82 batch4 `clippy::collapsible_if` 解消（`access_control_service.rs` / `profile_metadata.rs` / `post_dto.rs` / `offline.rs`）
