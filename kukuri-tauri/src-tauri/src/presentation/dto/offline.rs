@@ -136,10 +136,8 @@ pub struct ListSyncQueueItemsRequest {
 
 impl Validate for ListSyncQueueItemsRequest {
     fn validate(&self) -> Result<(), String> {
-        if let Some(limit) = self.limit {
-            if !(1..=200).contains(&limit) {
-                return Err("Limit must be between 1 and 200".to_string());
-            }
+        if let Some(limit) = self.limit && !(1..=200).contains(&limit) {
+            return Err("Limit must be between 1 and 200".to_string());
         }
         Ok(())
     }

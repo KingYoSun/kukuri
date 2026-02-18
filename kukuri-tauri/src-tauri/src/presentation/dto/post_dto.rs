@@ -119,13 +119,11 @@ impl Validate for ListTrendingPostsRequest {
         if self.topic_ids.is_empty() {
             return Err("トピックIDを少なくとも1つ指定してください".to_string());
         }
-        if let Some(per_topic) = self.per_topic {
-            if per_topic == 0 {
-                return Err("トピックごとの取得件数は1以上を指定してください".to_string());
-            }
-            if per_topic > 20 {
-                return Err("トピックごとの取得件数は最大20件までです".to_string());
-            }
+        if let Some(per_topic) = self.per_topic && per_topic == 0 {
+            return Err("トピックごとの取得件数は1以上を指定してください".to_string());
+        }
+        if let Some(per_topic) = self.per_topic && per_topic > 20 {
+            return Err("トピックごとの取得件数は最大20件までです".to_string());
         }
         Ok(())
     }
@@ -154,13 +152,11 @@ pub struct ListFollowingFeedRequest {
 
 impl Validate for ListFollowingFeedRequest {
     fn validate(&self) -> Result<(), String> {
-        if let Some(limit) = self.limit {
-            if limit == 0 {
-                return Err("取得件数は1以上で指定してください".to_string());
-            }
-            if limit > 100 {
-                return Err("取得件数は最大100件までです".to_string());
-            }
+        if let Some(limit) = self.limit && limit == 0 {
+            return Err("取得件数は1以上で指定してください".to_string());
+        }
+        if let Some(limit) = self.limit && limit > 100 {
+            return Err("取得件数は最大100件までです".to_string());
         }
         Ok(())
     }

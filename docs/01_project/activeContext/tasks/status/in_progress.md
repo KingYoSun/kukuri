@@ -10,4 +10,4 @@
 
 ## 現在のタスク
 
-- なし（進行中タスクはありません）
+- Issue #82 batch4: `clippy::collapsible_if` 残件の追加解消（`tauri/src-tauri`）

@@ -909,13 +909,13 @@ fn validate_invite_event(
             "Invite max_uses must be positive",
         ));
     }
+    if let Some(nonce) = payload.nonce.as_ref() && nonce.trim().is_empty() {
+        return Err(AppError::validation(
+            ValidationFailureKind::Generic,
+            "Invite nonce is empty",
+        ));
+    }
     if let Some(nonce) = payload.nonce.as_ref() {
-        if nonce.trim().is_empty() {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Invite nonce is empty",
-            ));
-        }
         let expected = format!("invite:{nonce}");
         if invite_d != expected {
             return Err(AppError::validation(
