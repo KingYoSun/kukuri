@@ -1997,5 +1997,573 @@ mod trust_subject_tests {
     }
 }
 
-#[cfg(any())]
-mod api_contract_tests {}
+#[cfg(test)]
+mod api_contract_tests {
+    use super::*;
+    use axum::body::{to_bytes, Body};
+    use axum::extract::ConnectInfo;
+    use axum::http::{header, Request, StatusCode};
+    use axum::routing::get;
+    use axum::Router;
+    use cn_core::{search_normalizer, service_config};
+    use nostr_sdk::prelude::Keys;
+    use serde_json::{json, Value};
+    use sqlx::postgres::PgPoolOptions;
+    use sqlx::{Pool, Postgres};
+    use std::net::SocketAddr;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::OnceCell;
+    use tower::ServiceExt;
+    use uuid::Uuid;
+
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:5432/cn".to_string())
+    }
+
+    async fn ensure_migrated(pool: &Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run migrations");
+            })
+            .await;
+    }
+
+    async fn test_state() -> crate::AppState {
+        let pool = PgPoolOptions::new()
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        crate::billing::ensure_default_plan(&pool)
+            .await
+            .expect("seed plans");
+
+        let jwt_config = cn_core::auth::JwtConfig {
+            issuer: "http://localhost".to_string(),
+            audience: crate::TOKEN_AUDIENCE.to_string(),
+            secret: "test-secret".to_string(),
+            ttl_seconds: 3600,
+        };
+        let user_config = service_config::static_handle(json!({
+            "rate_limit": { "enabled": false },
+            "subscription_request": { "max_pending_per_pubkey": 5 }
+        }));
+        let bootstrap_config = service_config::static_handle(json!({
+            "auth": { "mode": "off" }
+        }));
+        let export_dir = PathBuf::from(format!("tmp/test_exports/{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&export_dir).expect("create test export dir");
+
+        crate::AppState {
+            pool,
+            jwt_config,
+            public_base_url: "http://localhost".to_string(),
+            user_config,
+            bootstrap_config,
+            rate_limiter: Arc::new(cn_core::rate_limit::RateLimiter::new()),
+            node_keys: Keys::generate(),
+            export_dir,
+            hmac_secret: b"test-secret".to_vec(),
+            bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
+        }
+    }
+
+    fn issue_token(config: &cn_core::auth::JwtConfig, pubkey: &str) -> String {
+        let (token, _) = cn_core::auth::issue_token(pubkey, config).expect("issue token");
+        token
+    }
+
+    async fn ensure_consents(pool: &Pool<Postgres>, pubkey: &str) {
+        for _ in 0..5 {
+            let missing_policies = sqlx::query_scalar::<_, String>(
+                "SELECT p.policy_id \
+                 FROM cn_admin.policies p \
+                 LEFT JOIN cn_user.policy_consents c \
+                   ON c.policy_id = p.policy_id AND c.accepter_pubkey = $1 \
+                 WHERE p.is_current = TRUE \
+                   AND p.type IN ('terms', 'privacy') \
+                   AND c.policy_id IS NULL",
+            )
+            .bind(pubkey)
+            .fetch_all(pool)
+            .await
+            .expect("fetch missing policies");
+
+            if missing_policies.is_empty() {
+                return;
+            }
+
+            for policy_id in missing_policies {
+                let consent_id = Uuid::new_v4().to_string();
+                sqlx::query(
+                    "INSERT INTO cn_user.policy_consents (consent_id, policy_id, accepter_pubkey) \
+                     VALUES ($1, $2, $3) \
+                     ON CONFLICT DO NOTHING",
+                )
+                .bind(consent_id)
+                .bind(policy_id)
+                .bind(pubkey)
+                .execute(pool)
+                .await
+                .expect("insert consent");
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+
+    async fn insert_topic_subscription(pool: &Pool<Postgres>, topic_id: &str, pubkey: &str) {
+        sqlx::query(
+            "INSERT INTO cn_user.topic_subscriptions (topic_id, subscriber_pubkey, status) \
+             VALUES ($1, $2, 'active') \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(topic_id)
+        .bind(pubkey)
+        .execute(pool)
+        .await
+        .expect("insert subscription");
+    }
+
+    async fn insert_post_search_document(
+        pool: &Pool<Postgres>,
+        post_id: &str,
+        topic_id: &str,
+        author_id: &str,
+        body_raw: &str,
+        hashtags_norm: &[String],
+        created_at: i64,
+        normalizer_version: i16,
+    ) {
+        let body_norm = search_normalizer::normalize_search_text(body_raw);
+        let mentions_norm: Vec<String> = Vec::new();
+        let community_terms_norm = search_normalizer::normalize_search_terms([topic_id]);
+        let search_text = search_normalizer::build_search_text(
+            &body_norm,
+            hashtags_norm,
+            &mentions_norm,
+            &community_terms_norm,
+        );
+
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, 'public', $4, $5, $6, $7, $8, $9, NULL, 0, $10, FALSE, $11, NOW())",
+        )
+        .bind(post_id)
+        .bind(topic_id)
+        .bind(author_id)
+        .bind(body_raw)
+        .bind(&body_norm)
+        .bind(hashtags_norm)
+        .bind(&mentions_norm)
+        .bind(&community_terms_norm)
+        .bind(&search_text)
+        .bind(created_at)
+        .bind(normalizer_version)
+        .execute(pool)
+        .await
+        .expect("insert post_search_documents row");
+    }
+
+    async fn request_status(app: Router, uri: &str) -> StatusCode {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        response.status()
+    }
+
+    async fn get_json(app: Router, uri: &str, token: &str) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: Value = serde_json::from_slice(&body).expect("json body");
+        (status, payload)
+    }
+
+    async fn get_json_with_consent_retry(
+        app: Router,
+        uri: &str,
+        token: &str,
+        pool: &Pool<Postgres>,
+        pubkey: &str,
+    ) -> (StatusCode, Value) {
+        let (status, payload) = get_json(app.clone(), uri, token).await;
+        if status == StatusCode::PRECONDITION_REQUIRED {
+            ensure_consents(pool, pubkey).await;
+            return get_json(app, uri, token).await;
+        }
+        (status, payload)
+    }
+
+    async fn get_text_public(app: Router, uri: &str) -> (StatusCode, Option<String>, String) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("request");
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))));
+        let response = app.oneshot(request).await.expect("response");
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(std::string::ToString::to_string);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (
+            status,
+            content_type,
+            String::from_utf8_lossy(&body).to_string(),
+        )
+    }
+
+    fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
+        let found = body.lines().any(|line| {
+            if !line.starts_with(metric_name) {
+                return false;
+            }
+            labels.iter().all(|(key, value)| {
+                let token = format!("{key}=\"{value}\"");
+                line.contains(&token)
+            })
+        });
+
+        assert!(
+            found,
+            "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn search_requires_auth() {
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(test_state().await);
+        let status = request_status(app, "/v1/search?topic=kukuri:topic1").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn search_contract_success_shape_compatible() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let topic_id = format!("kukuri:search-contract-{}", Uuid::new_v4().simple());
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+
+        let post_id = Uuid::new_v4().to_string();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        insert_post_search_document(
+            &pool,
+            &post_id,
+            &topic_id,
+            &pubkey,
+            "hello contract",
+            &["contract".to_string()],
+            now,
+            search_normalizer::SEARCH_NORMALIZER_VERSION,
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/search?topic={topic_id}&q=hello&limit=1"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("topic").and_then(Value::as_str),
+            Some(topic_id.as_str())
+        );
+        assert_eq!(payload.get("query").and_then(Value::as_str), Some("hello"));
+        assert_eq!(payload.get("total").and_then(Value::as_u64), Some(1));
+        assert_eq!(payload.get("next_cursor"), Some(&Value::Null));
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items
+                .first()
+                .and_then(|item| item.get("event_id"))
+                .and_then(Value::as_str),
+            Some(post_id.as_str())
+        );
+
+        sqlx::query("DELETE FROM cn_search.post_search_documents WHERE post_id = $1")
+            .bind(post_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup post search document");
+    }
+
+    #[tokio::test]
+    async fn search_contract_pg_backend_switch_normalization_and_version_filter() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let topic_id = format!("kukuri:search-pg-{}", Uuid::new_v4());
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_id, &pubkey).await;
+
+        let current_post_id = Uuid::new_v4().to_string();
+        let stale_post_id = Uuid::new_v4().to_string();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+
+        insert_post_search_document(
+            &pool,
+            &current_post_id,
+            &topic_id,
+            &pubkey,
+            "Ｈｅｌｌｏ PG Search #Rust",
+            &["rust".to_string()],
+            now,
+            search_normalizer::SEARCH_NORMALIZER_VERSION,
+        )
+        .await;
+
+        let stale_version = search_normalizer::SEARCH_NORMALIZER_VERSION.saturating_sub(1);
+        insert_post_search_document(
+            &pool,
+            &stale_post_id,
+            &topic_id,
+            &pubkey,
+            "hello old normalizer",
+            &[],
+            now - 1,
+            stale_version,
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/search?topic={topic_id}&q=ｈｅｌｌｏ"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("total").and_then(Value::as_u64),
+            Some(1),
+            "expected only current normalizer version document to match"
+        );
+        let items = payload
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items
+                .first()
+                .and_then(|item| item.get("event_id"))
+                .and_then(Value::as_str),
+            Some(current_post_id.as_str())
+        );
+
+        sqlx::query("DELETE FROM cn_search.post_search_documents WHERE post_id = ANY($1)")
+            .bind(vec![current_post_id, stale_post_id])
+            .execute(&pool)
+            .await
+            .expect("cleanup pg search documents");
+    }
+
+    #[tokio::test]
+    async fn search_contract_pg_backend_preserves_multi_topic_rows_for_same_post_id() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let topic_a = format!("kukuri:search-pg-topic-a-{}", Uuid::new_v4().simple());
+        let topic_b = format!("kukuri:search-pg-topic-b-{}", Uuid::new_v4().simple());
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_a, &pubkey).await;
+        insert_topic_subscription(&pool, &topic_b, &pubkey).await;
+
+        let shared_post_id = Uuid::new_v4().to_string();
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        insert_post_search_document(
+            &pool,
+            &shared_post_id,
+            &topic_a,
+            &pubkey,
+            "Shared multi topic body for topic A",
+            &["shared".to_string(), "topica".to_string()],
+            now,
+            search_normalizer::SEARCH_NORMALIZER_VERSION,
+        )
+        .await;
+        insert_post_search_document(
+            &pool,
+            &shared_post_id,
+            &topic_b,
+            &pubkey,
+            "Shared multi topic body for topic B",
+            &["shared".to_string(), "topicb".to_string()],
+            now - 1,
+            search_normalizer::SEARCH_NORMALIZER_VERSION,
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/search", get(search))
+            .with_state(state);
+
+        let (status_a, payload_a) = get_json_with_consent_retry(
+            app.clone(),
+            &format!("/v1/search?topic={topic_a}&q=shared"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(status_a, StatusCode::OK);
+        assert_eq!(payload_a.get("total").and_then(Value::as_u64), Some(1));
+        let items_a = payload_a
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items_a.len(), 1);
+        let item_a = items_a.first().expect("topic A item");
+        assert_eq!(
+            item_a.get("event_id").and_then(Value::as_str),
+            Some(shared_post_id.as_str())
+        );
+        assert_eq!(
+            item_a.get("topic_id").and_then(Value::as_str),
+            Some(topic_a.as_str())
+        );
+        assert_eq!(
+            item_a.get("content").and_then(Value::as_str),
+            Some("Shared multi topic body for topic A")
+        );
+
+        let (status_b, payload_b) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/search?topic={topic_b}&q=shared"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+        assert_eq!(status_b, StatusCode::OK);
+        assert_eq!(payload_b.get("total").and_then(Value::as_u64), Some(1));
+        let items_b = payload_b
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(items_b.len(), 1);
+        let item_b = items_b.first().expect("topic B item");
+        assert_eq!(
+            item_b.get("event_id").and_then(Value::as_str),
+            Some(shared_post_id.as_str())
+        );
+        assert_eq!(
+            item_b.get("topic_id").and_then(Value::as_str),
+            Some(topic_b.as_str())
+        );
+        assert_eq!(
+            item_b.get("content").and_then(Value::as_str),
+            Some("Shared multi topic body for topic B")
+        );
+
+        sqlx::query(
+            "DELETE FROM cn_search.post_search_documents \
+             WHERE post_id = $1 AND topic_id = ANY($2)",
+        )
+        .bind(&shared_post_id)
+        .bind(vec![topic_a, topic_b])
+        .execute(&pool)
+        .await
+        .expect("cleanup multi topic post search documents");
+    }
+
+    #[tokio::test]
+    async fn metrics_contract_prometheus_content_type_shape_compatible() {
+        let route = "/metrics-contract";
+        cn_core::metrics::record_http_request(
+            crate::SERVICE_NAME,
+            "GET",
+            route,
+            200,
+            std::time::Duration::from_millis(5),
+        );
+
+        let app = Router::new().route("/metrics", get(crate::metrics_endpoint));
+        let (status, content_type, body) = get_text_public(app, "/metrics").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(content_type.as_deref(), Some("text/plain; version=0.0.4"));
+        assert!(
+            body.contains("cn_up{service=\"cn-user-api\"} 1"),
+            "metrics body did not contain cn_up for cn-user-api: {body}"
+        );
+        assert_metric_line(
+            &body,
+            "http_requests_total",
+            &[
+                ("service", crate::SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
+        );
+        assert_metric_line(
+            &body,
+            "http_request_duration_seconds_bucket",
+            &[
+                ("service", crate::SERVICE_NAME),
+                ("route", route),
+                ("method", "GET"),
+                ("status", "200"),
+            ],
+        );
+    }
+}
